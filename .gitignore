@@ -1,0 +1,40 @@
+# Thông tin nhạy cảm: không bao giờ đưa lên kho mã
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+secrets/
+credentials*.json
+service-account*.json
+
+# Thư mục làm việc cục bộ, không thuộc mã nguồn
+uiux/
+scratch/
+**/scratch/
+
+# Phụ thuộc và sản phẩm build
+node_modules/
+dist/
+build/
+coverage/
+.next/
+.next-dev/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Dữ liệu PostgreSQL chạy cục bộ
+.local-db/
+
+# Nhật ký và tệp hệ thống
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

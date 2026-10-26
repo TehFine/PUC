@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: htx-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: htx
+      POSTGRES_PASSWORD: htx_dev_password
+      POSTGRES_DB: htx
+    ports:
+      - "5432:5432"
+    volumes:
+      - htx-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U htx -d htx"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  htx-db-data:
