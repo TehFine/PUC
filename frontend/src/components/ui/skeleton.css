@@ -1,0 +1,252 @@
+/* ─── Skeleton loading + thông báo mạng yếu ────────────────────────────────
+   Trạng thái mạng được NetworkStatus ghi vào <html data-net="good|slow|offline">.
+   • Mạng tốt: skeleton chỉ hiện sau ~180ms, nên tải nhanh sẽ không bị nháy.
+   • Mạng yếu / offline: skeleton hiện ngay lập tức, nhịp sáng chậm hơn để người dùng thấy trang đang tải. */
+
+.sk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sk-group {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  animation: sk-appear 0.3s ease both;
+  animation-delay: 180ms;
+}
+html[data-net="slow"] .sk-group,
+html[data-net="offline"] .sk-group {
+  animation-delay: 0s;
+}
+
+.sk {
+  --sk-base: rgba(20, 55, 47, 0.08);
+  --sk-shine: rgba(255, 255, 255, 0.75);
+  display: block;
+  width: var(--sk-w, 100%);
+  height: var(--sk-h, 14px);
+  border-radius: var(--sk-r, 8px);
+  background: linear-gradient(100deg, var(--sk-base) 30%, var(--sk-shine) 50%, var(--sk-base) 70%);
+  background-size: 300% 100%;
+  animation: sk-shimmer 1.5s ease-in-out infinite;
+}
+html[data-net="slow"] .sk,
+html[data-net="offline"] .sk {
+  animation-duration: 2.2s;
+}
+.sk-circle {
+  --sk-r: 999px;
+  flex: none;
+}
+
+.sk-lines {
+  display: grid;
+  gap: 9px;
+}
+.sk-lines .sk:last-child:not(:only-child) {
+  --sk-w: 62%;
+}
+
+.sk-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid rgba(20, 55, 47, 0.08);
+  box-shadow: 0 4px 16px rgba(20, 55, 47, 0.04);
+}
+.sk-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sk-card-head > .sk-lines {
+  flex: 1;
+}
+
+.sk-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.sk-stats > .sk-card {
+  padding: 14px;
+  gap: 10px;
+  box-shadow: none;
+}
+
+.sk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+.sk-row + .sk-row {
+  border-top: 1px solid rgba(20, 55, 47, 0.06);
+}
+.sk-row > .sk-lines {
+  flex: 1;
+}
+
+.sk-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 18px 16px 32px;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  max-width: 920px;
+  margin: 0 auto;
+}
+.sk-page-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sk-page-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.sk-tabs {
+  display: flex;
+  gap: 8px;
+  overflow: hidden;
+}
+.lp-sk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sk-map {
+  position: relative;
+  height: 100%;
+  min-height: min(60vh, 420px);
+}
+.sk-map > .sk {
+  height: 100%;
+  min-height: inherit;
+}
+.sk-map-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(20, 55, 47, 0.6);
+}
+
+/* Ảnh đang tải: hiện khung nhịp sáng phía sau, ảnh tải xong sẽ phủ lên.
+   Chỉ áp dụng cho ảnh chụp (next/image dạng fill, nền đục), không áp dụng cho logo trong suốt. */
+img[data-nimg="fill"] {
+  background-color: rgba(20, 55, 47, 0.07);
+  background-image: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.7) 50%, transparent 70%);
+  background-size: 300% 100%;
+  animation: sk-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Dải thông báo mạng yếu / mất kết nối */
+.net-toast {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(440px, calc(100vw - 24px));
+  width: max-content;
+  padding: 10px 16px 10px 12px;
+  border-radius: 999px;
+  background: rgba(20, 55, 47, 0.94);
+  color: #fff;
+  font-size: 13.5px;
+  line-height: 1.35;
+  box-shadow: 0 12px 32px rgba(20, 55, 47, 0.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transform: translateX(-50%);
+  animation: net-toast-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.net-toast.is-offline {
+  background: rgba(150, 52, 32, 0.95);
+}
+.net-toast.is-ok {
+  background: rgba(34, 120, 78, 0.95);
+}
+.net-toast-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f8f23a;
+  box-shadow: 0 0 0 0 rgba(248, 242, 58, 0.6);
+  animation: net-pulse 1.6s ease-out infinite;
+}
+.net-toast.is-offline .net-toast-dot {
+  background: #ffd0c4;
+  animation: none;
+}
+.net-toast.is-ok .net-toast-dot {
+  background: #b8e67c;
+  animation: none;
+}
+
+@keyframes sk-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+@keyframes sk-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes net-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@keyframes net-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(248, 242, 58, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(248, 242, 58, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk,
+  img[data-nimg="fill"],
+  .net-toast-dot {
+    animation: none !important;
+  }
+  .sk-group,
+  .net-toast {
+    animation-duration: 0.01s !important;
+  }
+}
