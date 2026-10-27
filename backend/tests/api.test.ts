@@ -173,6 +173,22 @@ describe("phân quyền theo vai trò", () => {
     expect(other.status).toBe(404);
   });
 
+  it("Số CCCD chỉ hiện đầy đủ với quản trị viên và cán bộ HTX; vai trò khác bị che và không dò được", async () => {
+    const full = await (await loggedIn(USERS.htx)).get("/api/households/1");
+    expect(full.body.cccd).toMatch(/^\d{12}$/);
+
+    for (const username of [USERS.villageOfficer, USERS.inspector]) {
+      const agent = await loggedIn(username);
+      const one = await agent.get("/api/households/1");
+      expect(one.body.cccd).toBe(`********${full.body.cccd.slice(-4)}`);
+      const list = await agent.get("/api/households");
+      expect(list.body.data.every((h: { cccd: string }) => /^\*+\d{4}$/.test(h.cccd))).toBe(true);
+      // Tìm theo CCCD đầy đủ không được trả kết quả (không dò được qua ô tìm kiếm).
+      const probe = await agent.get(`/api/households?q=${full.body.cccd}`);
+      expect(probe.body.total).toBe(0);
+    }
+  });
+
   it("Cán bộ Thôn không ghi nhật ký cho hộ ngoài thôn", async () => {
     const agent = await loggedIn(USERS.villageOfficer);
     const body = { entryOn: "2024-11-02", plotCode: "TH2-001", activity: "Tưới nước", recorder: "Cán bộ Thôn" };

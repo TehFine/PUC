@@ -17,6 +17,8 @@ export interface CrudConfig {
   from: string;
   orderBy: string;
   search?: string[];
+  /** Cột được tìm kiếm tùy theo người dùng (ví dụ ẩn cột nhạy cảm với một số vai trò); mặc định dùng `search`. */
+  searchFor?: (user: AuthUser) => string[];
   /** Tham số query -> cột SQL dùng so sánh bằng. */
   filters?: Record<string, string>;
   /** Trường có trong DTO nhưng không phải cột (ví dụ password). */
@@ -84,10 +86,11 @@ export abstract class BaseCrudService {
       conditions.push(`${column} = $${params.length}`);
     }
 
-    if (q && config.search?.length) {
+    const searchColumns = config.searchFor?.(user) ?? config.search;
+    if (q && searchColumns?.length) {
       params.push(`%${q.replace(/[\\%_]/g, "\\$&")}%`);
       const ref = `$${params.length}`;
-      conditions.push(`(${config.search.map((column) => `${column}::text ILIKE ${ref}`).join(" OR ")})`);
+      conditions.push(`(${searchColumns.map((column) => `${column}::text ILIKE ${ref}`).join(" OR ")})`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";

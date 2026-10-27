@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: htx_dev_password
       POSTGRES_DB: htx
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - htx-db-data:/var/lib/postgresql/data
     healthcheck:

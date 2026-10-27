@@ -77,6 +77,8 @@ Kiểm thử backend: `cd backend && npm test`.
 
 > **Lưu ý bảo mật:** các giá trị trong `.env.example` (mật khẩu CSDL, `JWT_ACCESS_SECRET`, `SEED_PASSWORD`) chỉ dùng cho phát triển. Khi triển khai thật phải đặt giá trị riêng, bật `COOKIE_SECURE=true` khi chạy HTTPS và không đưa tệp `.env` lên kho mã.
 
+> **Khi triển khai:** phải đặt một reverse proxy (Nginx/Caddy…) phía trước Next.js và **ghi đè** header `X-Forwarded-For` bằng địa chỉ IP thật của client (Nginx: `proxy_set_header X-Forwarded-For $remote_addr;`). Next.js chuyển tiếp nguyên giá trị header do client gửi, nếu không ghi đè thì kẻ tấn công đổi IP giả để vượt giới hạn tần suất đăng nhập/đăng ký. Không công khai cổng backend (4000) và cổng CSDL (5432) ra Internet.
+
 ## Tài liệu chi tiết
 
 - [backend/README.md](backend/README.md): API, phân quyền, bảo mật, cách thêm nhóm dữ liệu mới.

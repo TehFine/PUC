@@ -13,6 +13,9 @@
     "db:seed": "tsx src/database/cli.ts seed",
     "test": "jest --runInBand"
   },
+  "overrides": {
+    "multer": "^2.5.0"
+  },
   "dependencies": {
     "@nestjs/common": "^11.2.8",
     "@nestjs/config": "^4.0.4",
