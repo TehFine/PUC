@@ -36,7 +36,7 @@ import type {
 import MapToolbar from "./MapToolbar";
 import MapZoomControls from "./MapZoomControls";
 import ModeNote from "./ModeNote";
-import PlotDetails from "./PlotDetails";
+import PlotPopup from "./PlotPopup";
 import { usePlotLayers } from "./use-plot-layers";
 
 interface MapViewProps {
@@ -570,8 +570,8 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
     }
   };
 
-  const showPanel =
-    Boolean(selectedFeature || draft || comparison || message) || mode !== "idle";
+  const showPopup = Boolean(selectedFeature) && !draft && !comparison && mode === "idle";
+  const showPanel = Boolean(draft || comparison || message) || mode !== "idle";
 
   const { kicker: panelKicker, title: panelTitle } = panelHeading({
     mode,
@@ -655,13 +655,18 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
               />
             )}
 
-            {selectedFeature && !draft && !comparison && mode === "idle" && (
-              <PlotDetails feature={selectedFeature} overlaps={overlaps} onCompare={startCompare} />
-            )}
-
             {mode !== "idle" && !draft && !comparison && <ModeNote mode={mode} />}
           </div>
         </aside>
+      )}
+
+      {showPopup && selectedFeature && (
+        <PlotPopup
+          feature={selectedFeature}
+          overlaps={overlaps}
+          onCompare={startCompare}
+          onClose={() => setSelectedCode(null)}
+        />
       )}
 
       <input
