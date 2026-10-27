@@ -14,7 +14,7 @@ export default function PlotRow({ feature }: { feature: PlotFeature }) {
       <span className="zg-meta">
         {props.owner || "—"} · {formatHa(plotArea(feature))}
       </span>
-      <span className={`badge ${STATUS_BADGE[props.status]}`} style={{ fontSize: 9.5 }}>
+      <span className={`badge ${STATUS_BADGE[props.status]}`}>
         {STATUS_LABELS[props.status]}
       </span>
     </div>

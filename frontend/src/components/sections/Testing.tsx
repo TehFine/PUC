@@ -3,9 +3,11 @@
 import { useResource } from "@/hooks/use-resource";
 import { mapLabTest } from "@/lib/mappers";
 import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
+import { AXIS_TICK, CHART_COLORS, GRID_STROKE, TOOLTIP_STYLE } from "@/components/ui/chart-theme";
+import { AreaTrend, CapsuleDonutChart, type DonutItem } from "@/components/ui/charts/KpiCharts";
 
 const cdData = [
   { plot: "TH1", cd: 0.02 },
@@ -25,20 +27,10 @@ const residueData = [
   { name: "TH6", residue: 0.04 },
 ];
 
-const passData = [
-  { name: "Đạt",       value: 38, color: "#5ddc8c" },
-  { name: "Không đạt", value: 7,  color: "#ff8a7f" },
+const passData: DonutItem[] = [
+  { name: "Đạt chuẩn", value: 38, color: "#10b981" },
+  { name: "Không đạt", value: 7,  color: "#ef4444" },
 ];
-
-const TOOLTIP_STYLE = {
-  background: "rgba(9, 31, 19, 0.94)",
-  border: "1px solid rgba(198, 255, 211, 0.24)",
-  borderRadius: 10, color: "#f4fff7", fontSize: 12,
-  boxShadow: "0 12px 30px rgba(0, 0, 0, 0.28)",
-  backdropFilter: "blur(18px)",
-};
-
-const AXIS_TICK = { fill: "rgba(232, 252, 238, 0.75)", fontSize: 11 };
 
 export default function Testing() {
   const { data: testingData } = useResource("testing", mapLabTest);
@@ -60,13 +52,13 @@ export default function Testing() {
           <div className="chart-title">Cadmium (Cd) – mg/kg</div>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={cdData} margin={{ left: -20, right: 8, top: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(210, 255, 222, 0.12)" />
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
               <XAxis dataKey="plot" tick={AXIS_TICK} axisLine={false} tickLine={false} />
               <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Bar dataKey="cd" name="Cd (mg/kg)" radius={[2,2,0,0]}>
+              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(20, 55, 47, 0.05)" }} />
+              <Bar dataKey="cd" name="Cd (mg/kg)" radius={[6,6,0,0]}>
                 {cdData.map((e, i) => (
-                  <Cell key={i} fill={e.cd > 0.04 ? "#ff8a7f" : "#5ddc8c"} />
+                  <Cell key={i} fill={e.cd > 0.04 ? CHART_COLORS.bad : CHART_COLORS.ok} />
                 ))}
               </Bar>
             </BarChart>
@@ -78,29 +70,25 @@ export default function Testing() {
 
         <div className="chart-card">
           <div className="chart-title">Dư lượng thuốc BVTV – ppm</div>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={residueData} margin={{ left: -20, right: 8, top: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(210, 255, 222, 0.12)" />
-              <XAxis dataKey="name" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Line type="monotone" dataKey="residue" name="Dư lượng (ppm)" stroke="#e8be6a" strokeWidth={1.8} dot={{ fill: "#e8be6a", r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <AreaTrend
+            data={residueData.map((d) => ({ label: d.name, value: d.residue }))}
+            unit=" ppm"
+            formatValue={(v) => v.toFixed(2)}
+            highlight="max"
+            height={190}
+            caption="Mẫu TH3 ghi nhận mức 0.12 ppm (cần cách ly)"
+            ariaLabel="Dư lượng thuốc BVTV theo thôn"
+          />
         </div>
 
         <div className="chart-card">
           <div className="chart-title">Tỷ lệ mẫu đạt / không đạt</div>
-          <ResponsiveContainer width="100%" height={180}>
-            <PieChart>
-              <Pie data={passData} cx="50%" cy="50%" innerRadius={46} outerRadius={70} paddingAngle={2} dataKey="value">
-                {passData.map((e, i) => <Cell key={i} fill={e.color} />)}
-              </Pie>
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Legend wrapperStyle={{ fontSize: 11, color: "rgba(232, 252, 238, 0.82)" }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div style={{ fontSize: 11.5, color: "#9df6b6", textAlign: "center", fontWeight: 600 }}>
+          <CapsuleDonutChart
+            data={passData}
+            unit=" mẫu"
+            ariaLabel="Tỷ lệ mẫu kiểm nghiệm đạt chuẩn xuất khẩu"
+          />
+          <div style={{ fontSize: 12, color: "#277a48", textAlign: "center", fontWeight: 600, marginTop: 8 }}>
             84.4% mẫu đạt tiêu chuẩn xuất khẩu
           </div>
         </div>

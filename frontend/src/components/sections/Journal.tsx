@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useResource } from "@/hooks/use-resource";
 import { mapJournal, mapSpray, mapViolation } from "@/lib/mappers";
+import { ShareBar } from "@/components/ui/charts/KpiCharts";
 
 type Tab = "log" | "violations" | "spray";
 
@@ -27,20 +28,32 @@ export default function Journal() {
 
       <div className="compliance-kpi">
         <div className="comp-kpi-item ok">
-          <div className="comp-kpi-num">201</div>
-          <div className="comp-kpi-label">Hộ tuân thủ đầy đủ</div>
+          <div className="comp-kpi-head">
+            <div className="comp-kpi-num">201</div>
+            <div className="comp-kpi-label">Hộ tuân thủ đầy đủ</div>
+          </div>
+          <ShareBar value={201} total={248} tone="lime" ariaLabel="Hộ tuân thủ đầy đủ" />
         </div>
         <div className="comp-kpi-item warn">
-          <div className="comp-kpi-num">24</div>
-          <div className="comp-kpi-label">Hộ cần nhắc nhở</div>
+          <div className="comp-kpi-head">
+            <div className="comp-kpi-num">24</div>
+            <div className="comp-kpi-label">Hộ cần nhắc nhở</div>
+          </div>
+          <ShareBar value={24} total={248} tone="amber" ariaLabel="Hộ cần nhắc nhở" />
         </div>
         <div className="comp-kpi-item danger">
-          <div className="comp-kpi-num">3</div>
-          <div className="comp-kpi-label">Vi phạm nghiêm trọng</div>
+          <div className="comp-kpi-head">
+            <div className="comp-kpi-num">3</div>
+            <div className="comp-kpi-label">Vi phạm nghiêm trọng</div>
+          </div>
+          <ShareBar value={3} total={248} tone="rose" ariaLabel="Vi phạm nghiêm trọng" />
         </div>
         <div className="comp-kpi-item info">
-          <div className="comp-kpi-num">20</div>
-          <div className="comp-kpi-label">Chưa cập nhật &gt;15 ngày</div>
+          <div className="comp-kpi-head">
+            <div className="comp-kpi-num">20</div>
+            <div className="comp-kpi-label">Chưa cập nhật &gt;15 ngày</div>
+          </div>
+          <ShareBar value={20} total={248} tone="sky" ariaLabel="Chưa cập nhật trên 15 ngày" />
         </div>
       </div>
 

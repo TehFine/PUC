@@ -2,12 +2,21 @@
 
 import { useResource } from "@/hooks/use-resource";
 import { mapTraining } from "@/lib/mappers";
+import { KpiChartView, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
 
-const KPIS = [
-  { val: "6",     label: "Khóa học tổ chức",      sub: "Năm 2024"            },
-  { val: "248",   label: "Lượt nông dân tham dự", sub: "82% tỷ lệ tham gia"  },
-  { val: "183",   label: "Chứng nhận đã cấp",     sub: "VietGAP + GACC"      },
-  { val: "4.7/5", label: "Đánh giá trung bình",   sub: "Từ nông dân tham dự" },
+const MONTHS = ["T5", "T6", "T7", "T8", "T9", "T10"];
+const pts = (values: number[]): ChartPoint[] => values.map((value, i) => ({ label: MONTHS[i], value }));
+const oneDecimal = (v: number) => v.toFixed(1).replace(".", ",");
+
+const KPIS: { val: string; label: string; sub: string; chart: KpiChartSpec }[] = [
+  { val: "6",     label: "Khóa học tổ chức",      sub: "Năm 2024",
+    chart: { kind: "bars", tone: "lime", unit: " khóa", highlight: "max", data: pts([1, 2, 1, 0, 1, 1]) } },
+  { val: "248",   label: "Lượt nông dân tham dự", sub: "82% tỷ lệ tham gia",
+    chart: { kind: "area", tone: "ink", unit: " lượt", highlight: "max", caption: "Tỷ lệ tham gia các khóa đạt 82%", data: pts([30, 48, 41, 33, 52, 44]) } },
+  { val: "183",   label: "Chứng nhận đã cấp",     sub: "VietGAP + GACC",
+    chart: { kind: "gauge", tone: "lime", value: 74, caption: "183/248 lượt" } },
+  { val: "4.7/5", label: "Đánh giá trung bình",   sub: "Từ nông dân tham dự",
+    chart: { kind: "area", tone: "ink", unit: "/5", highlight: "last", formatValue: oneDecimal, caption: "Mức độ hài lòng đạt đỉnh 4.8 điểm", data: pts([4.4, 4.6, 4.5, 4.8, 4.6, 4.7]) } },
 ];
 
 export default function Training() {
@@ -26,11 +35,16 @@ export default function Training() {
       </div>
 
       <div className="kpi-grid-4">
-        {KPIS.map(({ val, label, sub }, i) => (
-          <div key={i} className="kpi-card">
-            <div className="kpi-val">{val}</div>
-            <div className="kpi-label">{label}</div>
-            <div className="kpi-trend up">{sub}</div>
+        {KPIS.map(({ val, label, sub, chart }, i) => (
+          <div key={i} className="kpi-card has-chart">
+            <div className="kpi-head">
+              <div className="kpi-val">{val}</div>
+              <div className="kpi-meta">
+                <div className="kpi-label">{label}</div>
+                <div className="kpi-trend up">{sub}</div>
+              </div>
+            </div>
+            <KpiChartView chart={chart} label={label} />
           </div>
         ))}
       </div>

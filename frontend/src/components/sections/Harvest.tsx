@@ -2,16 +2,25 @@
 
 import { useResource } from "@/hooks/use-resource";
 import { mapHarvest } from "@/lib/mappers";
+import { KpiChartView, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
 
 const statusClass: Record<string, string> = {
   green: "badge-green", gold: "badge-gold", blue: "badge-blue", red: "badge-red",
 };
 
-const KPIS = [
-  { val: "142 tấn", label: "Đã thu hoạch",         sub: "Vụ 2024"             },
-  { val: "38 lô",   label: "Lô hàng tạo ra",        sub: "28 lô đã xuất khẩu" },
-  { val: "6 DN",    label: "Doanh nghiệp thu mua",  sub: "Liên kết HTX"       },
-  { val: "8.2 tỷ",  label: "Tổng doanh thu (VND)",  sub: "Tăng 18% so vụ trước"  },
+const pts = (labels: string[], values: number[]): ChartPoint[] => values.map((value, i) => ({ label: labels[i], value }));
+const MONTHS = ["T5", "T6", "T7", "T8", "T9", "T10"];
+const oneDecimal = (v: number) => v.toFixed(1).replace(".", ",");
+
+const KPIS: { val: string; label: string; sub: string; chart: KpiChartSpec; suffix?: string }[] = [
+  { val: "142 tấn", label: "Đã thu hoạch",         sub: "Vụ 2024",
+    chart: { kind: "area", tone: "lime", unit: " tấn", highlight: "max", caption: "Sản lượng tập trung cao điểm tháng 8", data: pts(MONTHS, [12, 21, 28, 33, 26, 22]) } },
+  { val: "38 lô",   label: "Lô hàng tạo ra",        sub: "28 lô đã xuất khẩu",
+    chart: { kind: "gauge", tone: "lime", value: 74, caption: "28/38 lô xuất khẩu" } },
+  { val: "6 DN",    label: "Doanh nghiệp thu mua",  sub: "Liên kết HTX", suffix: "theo doanh nghiệp",
+    chart: { kind: "bars", tone: "ink", unit: " tấn", highlight: "max", data: pts(["DN1", "DN2", "DN3", "DN4", "DN5", "DN6"], [38, 31, 27, 22, 15, 9]) } },
+  { val: "8.2 tỷ",  label: "Tổng doanh thu (VND)",  sub: "Tăng 18% so vụ trước",
+    chart: { kind: "area", tone: "ink", unit: " tỷ", highlight: "max", formatValue: oneDecimal, caption: "Doanh thu tăng 18% so với vụ trước", data: pts(MONTHS, [0.7, 1.3, 1.9, 2.2, 1.2, 0.9]) } },
 ];
 
 export default function Harvest() {
@@ -30,11 +39,16 @@ export default function Harvest() {
       </div>
 
       <div className="kpi-grid-4">
-        {KPIS.map(({ val, label, sub }, i) => (
-          <div key={i} className="kpi-card">
-            <div className="kpi-val">{val}</div>
-            <div className="kpi-label">{label}</div>
-            <div className="kpi-trend up">{sub}</div>
+        {KPIS.map(({ val, label, sub, chart, suffix }, i) => (
+          <div key={i} className="kpi-card has-chart">
+            <div className="kpi-head">
+              <div className="kpi-val">{val}</div>
+              <div className="kpi-meta">
+                <div className="kpi-label">{label}</div>
+                <div className="kpi-trend up">{sub}</div>
+              </div>
+            </div>
+            <KpiChartView chart={chart} label={label} suffix={suffix} />
           </div>
         ))}
       </div>
