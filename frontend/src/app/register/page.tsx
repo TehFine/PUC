@@ -41,8 +41,19 @@ export default function RegisterPage() {
     };
   }, []);
 
-  const set = (key: keyof typeof form) => (event: { target: { value: string } }) =>
+  const set = (key: keyof typeof form) => (event: { target: { value: string } }) => {
+    if (error) setError(null);
     setForm((current) => ({ ...current, [key]: event.target.value }));
+  };
+
+  const isFieldInvalid = (field: "name" | "phone" | "password") => {
+    if (!error) return false;
+    const lower = error.toLowerCase();
+    if (field === "name") return lower.includes("họ tên");
+    if (field === "phone") return lower.includes("điện thoại");
+    if (field === "password") return lower.includes("mật khẩu");
+    return true;
+  };
 
   const validate = (): string | null => {
     if (!form.fullName.trim()) return "Vui lòng nhập họ tên.";
@@ -114,12 +125,28 @@ export default function RegisterPage() {
     <AuthShell variant="register" title="Đăng ký tài khoản hộ dân" subtitle="Điền thông tin bên dưới, cán bộ HTX sẽ duyệt và gắn tài khoản vào đúng hộ của bạn." wide>
       <form className="auth-form" onSubmit={onSubmit} noValidate>
         <AuthField id="register-name" label="Họ và tên chủ hộ">
-          <input id="register-name" className="auth-input" autoComplete="name" autoFocus placeholder="Ví dụ: Nguyễn Văn An" value={form.fullName} onChange={set("fullName")} />
+          <input
+            id="register-name"
+            className={`auth-input${isFieldInvalid("name") ? " is-error" : ""}`}
+            autoComplete="name"
+            autoFocus
+            placeholder="Ví dụ: Nguyễn Văn An"
+            value={form.fullName}
+            onChange={set("fullName")}
+          />
         </AuthField>
 
         <div className="auth-row">
           <AuthField id="register-phone" label="Số điện thoại" hint="Dùng để đăng nhập sau này.">
-            <input id="register-phone" className="auth-input" inputMode="tel" autoComplete="tel" placeholder="10 chữ số, bắt đầu bằng 0" value={form.phone} onChange={set("phone")} />
+            <input
+              id="register-phone"
+              className={`auth-input${isFieldInvalid("phone") ? " is-error" : ""}`}
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="10 chữ số, bắt đầu bằng 0"
+              value={form.phone}
+              onChange={set("phone")}
+            />
           </AuthField>
           <AuthField id="register-village" label="Thôn" optional>
             <select id="register-village" className="auth-input" value={form.villageId} onChange={set("villageId")}>
@@ -139,10 +166,24 @@ export default function RegisterPage() {
 
         <div className="auth-row">
           <AuthField id="register-password" label="Mật khẩu" hint="Tối thiểu 8 ký tự, có cả chữ và số.">
-            <PasswordInput id="register-password" show={showPassword} autoComplete="new-password" value={form.password} onChange={set("password")} />
+            <PasswordInput
+              id="register-password"
+              className={isFieldInvalid("password") ? "is-error" : ""}
+              show={showPassword}
+              autoComplete="new-password"
+              value={form.password}
+              onChange={set("password")}
+            />
           </AuthField>
           <AuthField id="register-confirm" label="Nhập lại mật khẩu">
-            <PasswordInput id="register-confirm" show={showPassword} autoComplete="new-password" value={form.confirm} onChange={set("confirm")} />
+            <PasswordInput
+              id="register-confirm"
+              className={isFieldInvalid("password") ? "is-error" : ""}
+              show={showPassword}
+              autoComplete="new-password"
+              value={form.confirm}
+              onChange={set("confirm")}
+            />
           </AuthField>
         </div>
 

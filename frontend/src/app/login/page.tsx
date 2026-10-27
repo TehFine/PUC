@@ -39,17 +39,31 @@ export default function LoginPage() {
         <AuthField id="login-username" label="Tên đăng nhập (số điện thoại)">
           <input
             id="login-username"
-            className="auth-input"
+            className={`auth-input${error ? " is-error" : ""}`}
             autoComplete="username"
             autoFocus
             placeholder="Ví dụ: 0912345678"
             value={username}
-            onChange={(event) => setUsername(event.target.value)}
+            onChange={(event) => {
+              setUsername(event.target.value);
+              if (error) setError(null);
+            }}
           />
         </AuthField>
 
         <AuthField id="login-password" label="Mật khẩu">
-          <PasswordInput id="login-password" show={showPassword} autoComplete="current-password" placeholder="Nhập mật khẩu" value={password} onChange={(event) => setPassword(event.target.value)} />
+          <PasswordInput
+            id="login-password"
+            className={error ? "is-error" : ""}
+            show={showPassword}
+            autoComplete="current-password"
+            placeholder="Nhập mật khẩu"
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              if (error) setError(null);
+            }}
+          />
         </AuthField>
 
         <ShowPasswordCheck id="login-show-password" checked={showPassword} onChange={setShowPassword} />

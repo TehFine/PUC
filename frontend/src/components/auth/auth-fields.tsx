@@ -15,8 +15,14 @@ export function AuthField({ id, label, optional, hint, children }: { id: string;
 }
 
 /** Ô mật khẩu: loại ô (ẩn/hiện) do trang điều khiển để một ô tích có thể áp dụng cho nhiều ô mật khẩu. */
-export function PasswordInput({ show, ...props }: { show: boolean } & Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "className">) {
-  return <input {...props} className="auth-input" type={show ? "text" : "password"} />;
+export function PasswordInput({
+  show,
+  className,
+  isError,
+  ...props
+}: { show: boolean; isError?: boolean } & Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const fullClass = ["auth-input", isError ? "is-error" : "", className].filter(Boolean).join(" ");
+  return <input {...props} className={fullClass} type={show ? "text" : "password"} />;
 }
 
 /** Ô tích "Hiện mật khẩu": vùng bấm lớn, dễ dùng cho người lớn tuổi. */
@@ -29,15 +35,13 @@ export function ShowPasswordCheck({ id, checked, onChange }: { id: string; check
   );
 }
 
-/** Thông báo lỗi dạng khung đỏ nhạt kèm biểu tượng. */
+/** Thông báo lỗi viền đỏ phát sáng kèm hiệu ứng rung lắc (không dùng icon). */
 export function AuthError({ children }: { children: ReactNode }) {
   return (
     <p className="auth-error" role="alert">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 8v5M12 16.2v.1" />
-      </svg>
-      <span>{children}</span>
+      {children}
     </p>
   );
 }
+
+
