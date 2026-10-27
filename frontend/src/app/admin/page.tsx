@@ -29,16 +29,41 @@ export type SectionId =
   | "journal" | "testing" | "harvest" | "training"
   | "reports" | "catalog" | "system" | "registrations";
 
+const SECTION_TITLES: Record<SectionId, string> = {
+  dashboard: "Tổng quan",
+  households: "Nông hộ",
+  zones: "Vùng trồng",
+  approval: "Duyệt hồ sơ",
+  registrations: "Đăng ký hộ",
+  journal: "Nhật ký",
+  testing: "Kiểm nghiệm",
+  harvest: "Lô hàng",
+  training: "Tập huấn",
+  reports: "Báo cáo",
+  catalog: "Danh mục",
+  system: "Hệ thống",
+};
+
 export default function Home() {
   const router = useRouter();
   const { status, session } = useAuth();
   const [active, setActive] = useState<SectionId>("dashboard");
+  const [isScrolled, setIsScrolled] = useState(false);
   const isFarmer = session?.user.role === "farmer";
 
   useEffect(() => {
     if (status === "anonymous") router.replace("/login");
     else if (status === "authenticated" && isFarmer) router.replace("/portal");
   }, [status, isFarmer, router]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setIsScrolled(window.scrollY > 24);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const navigate = (id: SectionId) => {
     setActive(id);
@@ -70,8 +95,17 @@ export default function Home() {
     <div className={`app-shell${active === "zones" ? " is-zones" : ""}`}>
       <ResponsiveTables />
       <div className="app-header">
-        <Link href={INTRO_PATH} className="header-home" aria-label="HTX Krông Búk – về trang giới thiệu" title="Về trang giới thiệu" />
+        <Link href={INTRO_PATH} className="header-home" aria-label="HTX Krông Búk – về trang giới thiệu" title="Về trang giới thiệu">
+          <span className="header-home-mark" aria-hidden="true" />
+          <span className="header-brand" aria-hidden="true">
+            <strong>HTX Krông Búk</strong>
+            <small>Khu quản trị</small>
+          </span>
+        </Link>
         <Sidebar active={active} onNavigate={navigate} />
+        <div className={`mobile-header-title ${isScrolled ? "is-scrolled" : ""}`} aria-hidden={!isScrolled}>
+          <span>{SECTION_TITLES[active] ?? "Tổng quan"}</span>
+        </div>
         <UserMenu />
       </div>
       <div className="main-content">

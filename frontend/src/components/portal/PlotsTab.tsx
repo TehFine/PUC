@@ -17,10 +17,10 @@ export default function PlotsTab() {
       <Card title="Thửa đất của tôi">
         <StateBlock loading={plots.loading} error={plots.error} />
         {plots.data && !plots.data.available && (
-          <EmptyState icon="🗺️">Dữ liệu bản đồ thửa đất chưa được bật trên hệ thống. Vui lòng liên hệ cán bộ HTX.</EmptyState>
+          <EmptyState icon="map">Dữ liệu bản đồ thửa đất chưa được bật trên hệ thống. Vui lòng liên hệ cán bộ HTX.</EmptyState>
         )}
         {plots.data?.available && plots.data.data.length === 0 && (
-          <EmptyState icon="🌳">Chưa có thửa đất nào được ghi nhận cho hộ của bạn. Bạn có thể gửi hồ sơ đăng ký thửa đất ở mục Hồ sơ.</EmptyState>
+          <EmptyState icon="plot">Chưa có thửa đất nào được ghi nhận cho hộ của bạn. Bạn có thể gửi hồ sơ đăng ký thửa đất ở mục Hồ sơ.</EmptyState>
         )}
         {plots.data?.available && plots.data.data.length > 0 && (
           <ul className="pt-list">
@@ -50,7 +50,7 @@ export default function PlotsTab() {
 
       <Card title="Sản lượng đã giao">
         <StateBlock loading={harvest.loading} error={harvest.error} />
-        {harvest.data && harvest.data.data.length === 0 && <EmptyState icon="📦">Chưa có lô thu hoạch nào của hộ bạn.</EmptyState>}
+        {harvest.data && harvest.data.data.length === 0 && <EmptyState icon="harvest">Chưa có lô thu hoạch nào của hộ bạn.</EmptyState>}
         {harvest.data && harvest.data.data.length > 0 && (
           <ul className="pt-list">
             {harvest.data.data.map((lot) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine, X } from "lucide-react";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
 
@@ -22,10 +23,29 @@ export function Card({ title, action, children }: { title?: string; action?: Rea
   );
 }
 
-export function EmptyState({ icon, children }: { icon: string; children: ReactNode }) {
+const EMPTY_ICONS = {
+  request: Send,
+  learn: GraduationCap,
+  search: Search,
+  diary: NotebookPen,
+  spray: FlaskConical,
+  map: Map,
+  plot: TreePine,
+  harvest: Package,
+  ok: CircleCheck,
+  calendar: CalendarDays,
+  lab: Microscope,
+};
+
+export type EmptyIconName = keyof typeof EMPTY_ICONS;
+
+export function EmptyState({ icon, children }: { icon: EmptyIconName; children: ReactNode }) {
+  const Icon = EMPTY_ICONS[icon];
   return (
     <div className="pt-empty">
-      <span aria-hidden="true">{icon}</span>
+      <span aria-hidden="true">
+        <Icon />
+      </span>
       <p>{children}</p>
     </div>
   );
@@ -61,7 +81,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         <header className="pt-sheet-head">
           <h2>{title}</h2>
           <button type="button" className="pt-icon-btn" onClick={onClose} aria-label="Đóng">
-            ✕
+            <X aria-hidden="true" />
           </button>
         </header>
         <div className="pt-sheet-body">{children}</div>

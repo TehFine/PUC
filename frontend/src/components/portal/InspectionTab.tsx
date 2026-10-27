@@ -15,7 +15,7 @@ export default function InspectionTab() {
     <div className="pt-stack">
       <Card title="Thông báo vi phạm">
         <StateBlock loading={violations.loading} error={violations.error} />
-        {violations.data && violations.data.data.length === 0 && <EmptyState icon="✅">Hộ bạn chưa có thông báo vi phạm nào.</EmptyState>}
+        {violations.data && violations.data.data.length === 0 && <EmptyState icon="ok">Hộ bạn chưa có thông báo vi phạm nào.</EmptyState>}
         {violations.data && violations.data.data.length > 0 && (
           <ul className="pt-list">
             {violations.data.data.map((item) => (
@@ -37,7 +37,7 @@ export default function InspectionTab() {
 
       <Card title="Lịch kiểm tra, lấy mẫu sắp tới">
         <StateBlock loading={schedule.loading} error={schedule.error} />
-        {schedule.data && schedule.data.data.length === 0 && <EmptyState icon="📅">Hiện chưa có lịch kiểm tra nào sắp tới.</EmptyState>}
+        {schedule.data && schedule.data.data.length === 0 && <EmptyState icon="calendar">Hiện chưa có lịch kiểm tra nào sắp tới.</EmptyState>}
         {schedule.data && schedule.data.data.length > 0 && (
           <ul className="pt-list">
             {schedule.data.data.map((item) => (
@@ -57,7 +57,7 @@ export default function InspectionTab() {
 
       <Card title="Kết quả kiểm nghiệm của vườn tôi">
         <StateBlock loading={tests.loading} error={tests.error} />
-        {tests.data && tests.data.data.length === 0 && <EmptyState icon="🔬">Chưa có kết quả kiểm nghiệm nào.</EmptyState>}
+        {tests.data && tests.data.data.length === 0 && <EmptyState icon="lab">Chưa có kết quả kiểm nghiệm nào.</EmptyState>}
         {tests.data && tests.data.data.length > 0 && (
           <ul className="pt-list">
             {tests.data.data.map((test) => (

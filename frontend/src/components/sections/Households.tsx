@@ -32,7 +32,6 @@ export default function Households() {
       <div className="page-header">
         <div>
           <h1>Quản lý Hộ Nông Dân</h1>
-          <div className="page-header-sub">248 hộ đăng ký · 6 thôn trong HTX Krong Buk</div>
         </div>
         <div className="header-actions">
           <button className="btn btn-outline">Import Excel</button>

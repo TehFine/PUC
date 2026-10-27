@@ -68,7 +68,7 @@ export default function RequestsTab() {
         }
       >
         <StateBlock loading={approvals.loading} error={approvals.error} />
-        {approvals.data && approvals.data.data.length === 0 && <EmptyState icon="📨">Bạn chưa gửi hồ sơ nào.</EmptyState>}
+        {approvals.data && approvals.data.data.length === 0 && <EmptyState icon="request">Bạn chưa gửi hồ sơ nào.</EmptyState>}
         {approvals.data && approvals.data.data.length > 0 && (
           <ul className="pt-list">
             {approvals.data.data.map((item) => {

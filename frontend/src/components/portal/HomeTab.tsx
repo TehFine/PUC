@@ -1,11 +1,13 @@
 "use client";
 
+import { ChevronRight, FlaskConical, NotebookPen, Send } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { daysSince, formatKg, HOUSEHOLD_STATUS, SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalList, PortalOverview, PortalScheduleItem } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
 import { Card, Pill, StateBlock } from "./ui";
+import HomeCharts from "./HomeCharts";
 
 interface Reminder {
   tone: "red" | "gold" | "blue" | "green";
@@ -79,26 +81,35 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
 
       <div className="pt-quick">
         <button type="button" className="pt-quick-btn" onClick={() => onNavigate("diary")}>
-          <span aria-hidden="true">📝</span> Ghi nhật ký
+          <span aria-hidden="true">
+            <NotebookPen />
+          </span>
+          Ghi nhật ký
         </button>
         <button type="button" className="pt-quick-btn" onClick={() => onNavigate("diary")}>
-          <span aria-hidden="true">🧪</span> Ghi phun thuốc
+          <span aria-hidden="true">
+            <FlaskConical />
+          </span>
+          Ghi phun thuốc
         </button>
         <button type="button" className="pt-quick-btn" onClick={() => onNavigate("requests")}>
-          <span aria-hidden="true">📨</span> Gửi hồ sơ
+          <span aria-hidden="true">
+            <Send />
+          </span>
+          Gửi hồ sơ
         </button>
       </div>
 
       <Card title="Nhắc nhở & thông báo">
         {reminders.length === 0 ? (
-          <p className="pt-muted">Mọi thứ đều ổn. Hiện chưa có nhắc nhở nào. 🌱</p>
+          <p className="pt-muted">Mọi thứ đều ổn. Hiện chưa có nhắc nhở nào.</p>
         ) : (
           <ul className="pt-reminders">
             {reminders.map((reminder) => (
               <li key={reminder.text}>
                 <button type="button" className={`pt-reminder pt-reminder-${reminder.tone}`} onClick={() => onNavigate(reminder.to)}>
                   <span>{reminder.text}</span>
-                  <span aria-hidden="true">›</span>
+                  <ChevronRight aria-hidden="true" size={18} />
                 </button>
               </li>
             ))}
@@ -123,6 +134,8 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
           </ul>
         </Card>
       )}
+
+      <HomeCharts />
 
       <p className="pt-muted pt-center">
         Cần hỗ trợ? Liên hệ trưởng thôn hoặc cán bộ HTX.

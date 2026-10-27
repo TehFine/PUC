@@ -21,7 +21,7 @@ function TrainingList() {
     <>
       <Card title="Lớp tập huấn sắp diễn ra">
         <StateBlock loading={loading} error={error} />
-        {!loading && !error && upcoming.length === 0 && <EmptyState icon="🎓">Chưa có lớp tập huấn nào sắp diễn ra.</EmptyState>}
+        {!loading && !error && upcoming.length === 0 && <EmptyState icon="learn">Chưa có lớp tập huấn nào sắp diễn ra.</EmptyState>}
         <ul className="pt-list">
           {upcoming.map((item) => (
             <li key={item.id} className="pt-row">
@@ -86,7 +86,7 @@ function PesticideList() {
           );
         })}
       </ul>
-      {!loading && !error && shown.length === 0 && <EmptyState icon="🔍">Không tìm thấy thuốc phù hợp.</EmptyState>}
+      {!loading && !error && shown.length === 0 && <EmptyState icon="search">Không tìm thấy thuốc phù hợp.</EmptyState>}
     </Card>
   );
 }

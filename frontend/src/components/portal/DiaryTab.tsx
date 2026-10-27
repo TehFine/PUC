@@ -197,7 +197,7 @@ export default function DiaryTab() {
         <StateBlock loading={active.loading} error={active.error} />
 
         {view === "journal" && journal.data && journal.data.data.length === 0 && (
-          <EmptyState icon="📝">Chưa có nhật ký nào. Bấm “+ Thêm” để ghi công việc đầu tiên.</EmptyState>
+          <EmptyState icon="diary">Chưa có nhật ký nào. Bấm “+ Thêm” để ghi công việc đầu tiên.</EmptyState>
         )}
         {view === "journal" && journal.data && journal.data.data.length > 0 && (
           <ul className="pt-list">
@@ -217,7 +217,7 @@ export default function DiaryTab() {
         )}
 
         {view === "spray" && spray.data && spray.data.data.length === 0 && (
-          <EmptyState icon="🧪">Chưa có lần phun thuốc nào được ghi.</EmptyState>
+          <EmptyState icon="spray">Chưa có lần phun thuốc nào được ghi.</EmptyState>
         )}
         {view === "spray" && spray.data && spray.data.data.length > 0 && (
           <ul className="pt-list">
