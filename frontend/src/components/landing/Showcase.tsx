@@ -1,6 +1,17 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import {
+  House,
+  TreePine,
+  NotebookPen,
+  ClipboardCheck,
+  Send,
+  BookOpen,
+  AlertCircle,
+  Calendar,
+  Package,
+} from "lucide-react";
 import { COMMUNE_OUTLINE, COMMUNE_RINGS, COMMUNE_ROAD, COMMUNE_VIEWBOX } from "./commune-data";
 
 type TabId = "map" | "diary" | "lab" | "portal";
@@ -207,27 +218,134 @@ function LabMock() {
 
 function PortalMock() {
   return (
-    <figure className="lp-phone">
-      <div className="lp-phone-screen">
-        <div className="lp-phone-hero">
-          <small>MÃ HỘ KB-VT-001-H001</small>
-          <strong>Nguyễn Văn An</strong>
-          <span>Thôn 1 · Đủ chuẩn xuất khẩu</span>
-          <div>
-            <p><b>3</b>Thửa</p>
-            <p><b>2,4</b>ha</p>
-            <p><b>0,6</b>tấn</p>
+    <figure className="lp-phone-wrapper" role="img" aria-label="Minh họa giao diện cổng hộ dân trên iPhone 14 Pro Max">
+      <div className="lp-phone">
+        {/* Nút bấm vật lý sườn máy iPhone 14 Pro Max */}
+        <span className="lp-phone-btn lp-phone-btn-switch" aria-hidden="true" />
+        <span className="lp-phone-btn lp-phone-btn-volup" aria-hidden="true" />
+        <span className="lp-phone-btn lp-phone-btn-voldown" aria-hidden="true" />
+        <span className="lp-phone-btn lp-phone-btn-power" aria-hidden="true" />
+
+        {/* Màn hình hiển thị tỉ lệ chuẩn 19.5:9 */}
+        <div className="lp-phone-screen">
+          {/* Thanh trạng thái iOS & Dynamic Island */}
+          <div className="lp-phone-status-bar" aria-hidden="true">
+            <span className="lp-phone-time">9:41</span>
+            <div className="lp-phone-island">
+              <span className="lp-phone-camera" />
+              <span className="lp-phone-sensor" />
+            </div>
+            <div className="lp-phone-icons">
+              <svg viewBox="0 0 17 12" width="14" height="10" fill="currentColor">
+                <rect x="0" y="8" width="2.8" height="4" rx="0.7" />
+                <rect x="4.5" y="5.5" width="2.8" height="6.5" rx="0.7" />
+                <rect x="9" y="3" width="2.8" height="9" rx="0.7" />
+                <rect x="13.5" y="0" width="2.8" height="12" rx="0.7" />
+              </svg>
+              <svg viewBox="0 0 16 12" width="13" height="10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M1.5 3.5 C5 0.5 11 0.5 14.5 3.5" />
+                <path d="M4 6.5 C6.5 4.5 9.5 4.5 12 6.5" />
+                <circle cx="8" cy="10" r="1.1" fill="currentColor" />
+              </svg>
+              <svg viewBox="0 0 24 12" width="19" height="9.5" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <rect x="1" y="1" width="19" height="10" rx="3" />
+                <rect x="2.5" y="2.5" width="15" height="7" rx="1.8" fill="currentColor" />
+                <path d="M22 4.5v3" strokeLinecap="round" strokeWidth="1.5" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Nội dung trang chủ Cổng hộ dân */}
+          <div className="lp-phone-content">
+            <div className="lp-phone-hero">
+              <div className="lp-phone-hero-top">
+                <span className="lp-phone-chip">MÃ HỘ KB-VT-001-H001</span>
+                <span className="lp-phone-live-dot" />
+              </div>
+              <strong>Nguyễn Văn An</strong>
+              <span className="lp-phone-sub">Thôn 1 · Đủ chuẩn xuất khẩu</span>
+              <div className="lp-phone-stats">
+                <div>
+                  <b>3</b>
+                  <span>Thửa đất</span>
+                </div>
+                <div>
+                  <b>2,4</b>
+                  <span>Hecta</span>
+                </div>
+                <div>
+                  <b>0,6</b>
+                  <span>Tấn quả</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="lp-phone-body">
+              <div className="lp-phone-section-label">Thông báo & nhắc nhở</div>
+              <ul className="lp-phone-notes">
+                <li className="warn">
+                  <span className="lp-note-icon-wrap" aria-hidden="true">
+                    <AlertCircle size={14} strokeWidth={2.2} />
+                  </span>
+                  <div className="lp-note-text">
+                    <strong>Chưa ghi nhật ký canh tác</strong>
+                    <p>Đã 8 ngày chưa ghi nhận hoạt động chăm sóc.</p>
+                  </div>
+                </li>
+                <li className="info">
+                  <span className="lp-note-icon-wrap" aria-hidden="true">
+                    <Calendar size={14} strokeWidth={2.2} />
+                  </span>
+                  <div className="lp-note-text">
+                    <strong>Lịch kiểm tra vùng trồng</strong>
+                    <p>28/10: Kiểm tra định kỳ vùng trồng Thôn 1.</p>
+                  </div>
+                </li>
+              </ul>
+
+              <div className="lp-phone-section-label">Lô hàng xuất khẩu gần nhất</div>
+              <div className="lp-phone-activity-card">
+                <span className="lp-act-icon-wrap" aria-hidden="true">
+                  <Package size={14} strokeWidth={2.2} />
+                </span>
+                <div className="lp-act-text">
+                  <div className="lp-act-head">
+                    <strong>Lô Ri6 #LH-08</strong>
+                    <span className="lp-act-badge">Đã nhận</span>
+                  </div>
+                  <p>24/10 · 1.250 kg · Cấp tem QR HTX</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Thanh dock điều hướng chuẩn icon SVG (không emoji) */}
+            <nav className="lp-phone-dock" aria-label="Các chức năng cổng hộ dân">
+              <span className="lp-dock-btn active" title="Trang chủ">
+                <House size={16} strokeWidth={2.2} />
+              </span>
+              <span className="lp-dock-btn" title="Thửa đất">
+                <TreePine size={16} strokeWidth={1.9} />
+              </span>
+              <span className="lp-dock-btn" title="Nhật ký">
+                <NotebookPen size={16} strokeWidth={1.9} />
+              </span>
+              <span className="lp-dock-btn" title="Kiểm tra">
+                <ClipboardCheck size={16} strokeWidth={1.9} />
+              </span>
+              <span className="lp-dock-btn" title="Hồ sơ & đề nghị">
+                <Send size={15} strokeWidth={1.9} />
+              </span>
+              <span className="lp-dock-btn" title="Kiến thức canh tác">
+                <BookOpen size={16} strokeWidth={1.9} />
+              </span>
+            </nav>
+
+            {/* Thanh chỉ báo Home Bar dưới đáy iOS */}
+            <div className="lp-phone-home-indicator" aria-hidden="true" />
           </div>
         </div>
-        <ul className="lp-phone-notes">
-          <li className="warn">Đã 8 ngày chưa ghi nhật ký canh tác.</li>
-          <li className="info">28/10: Kiểm tra định kỳ vùng trồng Thôn 1.</li>
-        </ul>
-        <nav className="lp-phone-tabs" aria-hidden="true">
-          <span className="on">🏡</span><span>🌳</span><span>📝</span><span>🔎</span><span>📨</span><span>📚</span>
-        </nav>
       </div>
-      <figcaption>Minh họa cổng hộ dân trên điện thoại</figcaption>
+      <figcaption className="lp-phone-caption">Minh họa cổng hộ dân trên iPhone 14 Pro Max</figcaption>
     </figure>
   );
 }

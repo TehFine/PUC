@@ -1070,101 +1070,422 @@ html:has(.lp) body {
   color: var(--lp-text);
 }
 
-.lp-phone {
+/* ── Realistic iPhone 14 Pro Max Mockup ── */
+.lp-phone-wrapper {
   margin: 0;
-  width: 280px;
-  max-width: 100%;
-  padding: 10px;
-  border-radius: 40px;
-  background: #1c1f1d;
-  box-shadow: 0 30px 60px rgba(20, 55, 47, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
-.lp-phone-screen {
-  border-radius: 30px;
-  overflow: hidden;
-  background: #fff;
-  min-height: 420px;
+
+.lp-phone {
+  position: relative;
+  margin: 0 auto;
+  width: 288px;
+  height: 596px;
+  max-width: 100%;
+  padding: 6.5px;
+  border-radius: 54px;
+  background: linear-gradient(180deg, #2f3230 0%, #191b1a 35%, #141615 100%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 
+    0 32px 72px -16px rgba(20, 55, 47, 0.35),
+    0 16px 36px -8px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
 }
+
+/* Speaker micro-grill */
+.lp-phone::before {
+  content: "";
+  position: absolute;
+  top: 3.5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 2.5px;
+  background: #0b0d0c;
+  border-radius: 2px;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.8), 0 0.5px 0.5px rgba(255, 255, 255, 0.12);
+  z-index: 10;
+}
+
+/* Hardware buttons on chassis (iPhone 14 Pro Max) */
+.lp-phone-btn {
+  position: absolute;
+  background: linear-gradient(to right, #383c39, #1a1c1b);
+  border-radius: 2px;
+  box-shadow: -1px 0 2px rgba(0, 0, 0, 0.4);
+}
+.lp-phone-btn-switch {
+  left: -3px;
+  top: 74px;
+  width: 3px;
+  height: 18px;
+}
+.lp-phone-btn-volup {
+  left: -3px;
+  top: 106px;
+  width: 3px;
+  height: 44px;
+}
+.lp-phone-btn-voldown {
+  left: -3px;
+  top: 160px;
+  width: 3px;
+  height: 44px;
+}
+.lp-phone-btn-power {
+  right: -3px;
+  top: 120px;
+  width: 3px;
+  height: 66px;
+  background: linear-gradient(to left, #383c39, #1a1c1b);
+  box-shadow: 1px 0 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Screen container - exact 19.5:9 proportion */
+.lp-phone-screen {
+  position: relative;
+  border-radius: 47px;
+  overflow: hidden;
+  background: #fbfdfa;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+/* Status Bar */
+.lp-phone-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px 0;
+  height: 40px;
+  position: relative;
+  z-index: 5;
+  color: #14372f;
+  background: #dcf0fa;
+}
+.lp-phone-time {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  padding-left: 2px;
+}
+.lp-phone-island {
+  position: absolute;
+  left: 50%;
+  top: 8.5px;
+  transform: translateX(-50%);
+  width: 82px;
+  height: 23px;
+  border-radius: 999px;
+  background: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  gap: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  z-index: 10;
+}
+.lp-phone-camera {
+  width: 7.5px;
+  height: 7.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #18283b 0%, #080c12 70%);
+  box-shadow: inset 0 0 1px rgba(0, 200, 255, 0.4);
+}
+.lp-phone-sensor {
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 50%;
+  background: #0a0d0c;
+}
+.lp-phone-icons {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #14372f;
+  padding-right: 2px;
+}
+
+/* Screen Content */
+.lp-phone-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: #fbfdfa;
+}
+
+/* Hero */
 .lp-phone-hero {
   display: grid;
-  gap: 4px;
-  padding: 28px 18px 18px;
-  background: linear-gradient(170deg, #cfe9f7, #dff3c4);
+  gap: 3px;
+  padding: 4px 16px 12px;
+  background: linear-gradient(175deg, #dcf0fa 0%, #e2f5ce 100%);
+  border-bottom: 1px solid rgba(20, 55, 47, 0.06);
 }
-.lp-phone-hero small {
-  font-size: 9.5px;
+.lp-phone-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.lp-phone-chip {
+  font-family: var(--font-mono, monospace);
+  font-size: 8.5px;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--lp-green-deep);
+  letter-spacing: 0.06em;
+  color: var(--lp-green-deep, #235926);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(20, 55, 47, 0.08);
+}
+.lp-phone-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
 }
 .lp-phone-hero strong {
   font-family: var(--lp-font-display);
   font-variation-settings: "wdth" 85;
-  font-size: 24px;
-  font-weight: 500;
-}
-.lp-phone-hero span {
-  font-size: 12px;
-  color: var(--lp-ink-soft);
-}
-.lp-phone-hero > div {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 12px;
-}
-.lp-phone-hero p {
-  display: grid;
-  padding: 8px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.75);
-  font-size: 10.5px;
-  color: var(--lp-text);
-}
-.lp-phone-hero b {
-  font-family: var(--lp-font-display);
   font-size: 21px;
   font-weight: 500;
-  color: var(--lp-ink);
+  color: var(--lp-ink, #14372f);
+  line-height: 1.15;
 }
+.lp-phone-sub {
+  font-size: 11px;
+  color: var(--lp-ink-soft, #355348);
+}
+.lp-phone-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.lp-phone-stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 6px rgba(20, 55, 47, 0.04);
+}
+.lp-phone-stats b {
+  font-family: var(--lp-font-display);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--lp-ink, #14372f);
+  line-height: 1;
+}
+.lp-phone-stats span {
+  font-size: 9.5px;
+  color: var(--lp-text-muted, #5f7a6f);
+  margin-top: 2px;
+}
+
+/* Body */
+.lp-phone-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: 2px;
+}
+
+.lp-phone-section-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--lp-text-muted, #5f7a6f);
+  padding: 6px 14px 2px;
+  margin: 0;
+}
+
+/* Notes List - ĐÃ BỎ CẠNH SÁNG 1 BÊN */
 .lp-phone-notes {
   display: grid;
-  gap: 8px;
-  padding: 14px;
-  flex: 1;
-  align-content: start;
+  gap: 6px;
+  padding: 0 12px;
+  margin: 0;
+  list-style: none;
 }
 .lp-phone-notes li {
-  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 10px;
   border-radius: 12px;
-  font-size: 12px;
-  background: #f1f6f9;
-  border-left: 3px solid #7aa7d6;
+  background: #ffffff;
+  border: 1px solid #e1e7e8;
+  box-shadow: 0 1.5px 5px rgba(20, 55, 47, 0.03);
 }
 .lp-phone-notes li.warn {
-  background: #fdf8dc;
-  border-left-color: #e3c52b;
+  background: #fffdf5;
+  border: 1px solid #eee4be;
 }
-.lp-phone-tabs {
+.lp-phone-notes li.info {
+  background: #f7fafc;
+  border: 1px solid #d5e4f1;
+}
+.lp-note-icon-wrap {
   display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.lp-phone-notes li.warn .lp-note-icon-wrap {
+  background: rgba(220, 168, 24, 0.16);
+  color: #b08208;
+}
+.lp-phone-notes li.info .lp-note-icon-wrap {
+  background: rgba(90, 150, 209, 0.16);
+  color: #2b70af;
+}
+.lp-note-text strong {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--lp-ink, #14372f);
+  line-height: 1.25;
+}
+.lp-note-text p {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: var(--lp-text-muted, #5f7a6f);
+  line-height: 1.35;
+}
+
+/* Activity card */
+.lp-phone-activity-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 12px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e1e7e8;
+  box-shadow: 0 1.5px 5px rgba(20, 55, 47, 0.03);
+}
+.lp-act-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: rgba(35, 89, 38, 0.1);
+  color: var(--lp-green-deep, #235926);
+  flex-shrink: 0;
+}
+.lp-act-text {
+  flex: 1;
+  min-width: 0;
+}
+.lp-act-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.lp-act-head strong {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--lp-ink, #14372f);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lp-act-badge {
+  font-size: 8.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef7ed;
+  color: #235926;
+  font-style: normal;
+}
+.lp-act-text p {
+  margin: 1px 0 0;
+  font-size: 9.5px;
+  color: var(--lp-text-muted, #5f7a6f);
+}
+
+/* Floating Navigation Dock (Farmer Portal Dock) */
+.lp-phone-dock {
+  display: flex;
+  align-items: center;
   justify-content: space-around;
-  padding: 10px 6px 14px;
-  border-top: 1px solid var(--lp-line);
-  font-size: 15px;
+  margin: auto 10px 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(20, 55, 47, 0.08);
+  box-shadow: 0 6px 18px rgba(20, 55, 47, 0.09);
 }
-.lp-phone-tabs span {
-  opacity: 0.4;
+.lp-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: rgba(20, 55, 47, 0.52);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.18s ease;
 }
-.lp-phone-tabs .on {
-  opacity: 1;
+.lp-dock-btn.active {
+  background: #14372f;
+  color: #e6fa60;
+  box-shadow: 0 4px 10px rgba(20, 55, 47, 0.25);
 }
-.lp-phone figcaption {
+
+/* Home Indicator Bar */
+.lp-phone-home-indicator {
+  width: 105px;
+  height: 4px;
+  border-radius: 999px;
+  background: #14372f;
+  opacity: 0.35;
+  margin: 4px auto 6px;
+}
+
+.lp-phone-caption {
   text-align: center;
-  border-top: 0;
-  padding-top: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  padding-top: 14px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lp-text-muted, #5f7a6f);
 }
 
 .lp-roles {
