@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, FlaskConical, NotebookPen, Send } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { daysSince, formatKg, HOUSEHOLD_STATUS, SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
@@ -53,92 +53,98 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
     <div className="pt-stack">
       <section className="pt-hero">
         <div className="pt-hero-top">
-          <div>
-            <p className="pt-hero-kicker">Mã hộ {household.code}</p>
+          <div className="pt-hero-main">
             <h1 className="pt-hero-title">{household.name}</h1>
             <p className="pt-hero-sub">
               {household.villageName}
-              {household.villageLeader ? ` · Trưởng thôn ${household.villageLeader}` : ""}
+              {household.villageLeader ? ` · Trưởng thôn: ${household.villageLeader}` : ""}
             </p>
           </div>
-          <Pill tone={status.tone}>{status.label}</Pill>
+          <div className="pt-hero-badge-wrap">
+            <span className="pt-hero-kicker">Mã hộ: {household.code}</span>
+            <Pill tone={status.tone}>{status.label}</Pill>
+          </div>
         </div>
         <dl className="pt-hero-stats">
-          <div>
-            <dt>Thửa đất</dt>
-            <dd>{household.plotCount}</dd>
+          <div className="pt-stat-item pt-stat-plots">
+            <dt>Thửa đất canh tác</dt>
+            <dd>{household.plotCount} <span className="pt-stat-unit">thửa</span></dd>
           </div>
-          <div>
-            <dt>Diện tích</dt>
-            <dd>{household.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha</dd>
+          <div className="pt-stat-item is-highlight pt-stat-area">
+            <dt>Tổng diện tích</dt>
+            <dd>{household.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} <span className="pt-stat-unit">ha</span></dd>
           </div>
-          <div>
-            <dt>Đã giao HTX</dt>
+          <div className="pt-stat-item pt-stat-yield">
+            <dt>Sản lượng đã giao HTX</dt>
             <dd>{formatKg(stats.harvestTotalKg)}</dd>
           </div>
         </dl>
       </section>
 
-      <div className="pt-quick">
-        <button type="button" className="pt-quick-btn" onClick={() => onNavigate("diary")}>
-          <span aria-hidden="true">
-            <NotebookPen />
-          </span>
-          Ghi nhật ký
-        </button>
-        <button type="button" className="pt-quick-btn" onClick={() => onNavigate("diary")}>
-          <span aria-hidden="true">
-            <FlaskConical />
-          </span>
-          Ghi phun thuốc
-        </button>
-        <button type="button" className="pt-quick-btn" onClick={() => onNavigate("requests")}>
-          <span aria-hidden="true">
-            <Send />
-          </span>
-          Gửi hồ sơ
-        </button>
-      </div>
-
-      <Card title="Nhắc nhở & thông báo">
-        {reminders.length === 0 ? (
-          <p className="pt-muted">Mọi thứ đều ổn. Hiện chưa có nhắc nhở nào.</p>
-        ) : (
-          <ul className="pt-reminders">
-            {reminders.map((reminder) => (
-              <li key={reminder.text}>
-                <button type="button" className={`pt-reminder pt-reminder-${reminder.tone}`} onClick={() => onNavigate(reminder.to)}>
-                  <span>{reminder.text}</span>
-                  <ChevronRight aria-hidden="true" size={18} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      {schedule.data && schedule.data.data.length > 0 && (
-        <Card title="Lịch kiểm tra sắp tới">
-          <ul className="pt-list">
-            {schedule.data.data.slice(0, 3).map((item) => (
-              <li key={item.id} className="pt-row">
-                <div className="pt-date">{formatDate(item.scheduledOn)}</div>
-                <div className="pt-row-main">
-                  <strong>{item.title}</strong>
-                  <span>
-                    {SCHEDULE_KIND[item.kind]} · {item.officer}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
 
       <HomeCharts />
 
-      <p className="pt-muted pt-center">
-        Cần hỗ trợ? Liên hệ trưởng thôn hoặc cán bộ HTX.
+      <div className="pt-home-grid">
+        <Card
+          title="Nhắc nhở & thông báo"
+          action={
+            reminders.length > 0 ? (
+              <span className="pt-badge-alert">{reminders.length} việc cần chú ý</span>
+            ) : undefined
+          }
+        >
+          {reminders.length === 0 ? (
+            <p className="pt-muted">Mọi thứ đều ổn. Hiện chưa có nhắc nhở nào.</p>
+          ) : (
+            <ul className="pt-reminders">
+              {reminders.map((reminder) => (
+                <li key={reminder.text}>
+                  <button type="button" className={`pt-reminder pt-reminder-${reminder.tone}`} onClick={() => onNavigate(reminder.to)}>
+                    <span>{reminder.text}</span>
+                    <ChevronRight aria-hidden="true" size={18} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card
+          title="Lịch kiểm tra sắp tới"
+          action={
+            schedule.data && schedule.data.data.length > 0 ? (
+              <button
+                type="button"
+                className="pt-btn-link"
+                onClick={() => onNavigate("inspection")}
+              >
+                Xem chi tiết &rarr;
+              </button>
+            ) : undefined
+          }
+        >
+          {(!schedule.data || schedule.data.data.length === 0) ? (
+            <p className="pt-muted">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
+          ) : (
+            <ul className="pt-list">
+              {schedule.data.data.slice(0, 3).map((item) => (
+                <li key={item.id} className="pt-row">
+                  <div className="pt-date">{formatDate(item.scheduledOn)}</div>
+                  <div className="pt-row-main">
+                    <strong>{item.title}</strong>
+                    <span>
+                      {SCHEDULE_KIND[item.kind]} · Cán bộ {item.officer}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      <p className="pt-muted pt-center" style={{ marginTop: 8 }}>
+        Cần hỗ trợ? Liên hệ Ban quản lý HTX Nông nghiệp Krông Búk hoặc Trưởng thôn.
       </p>
     </div>
   );

@@ -59,35 +59,62 @@ export default function RequestsTab() {
 
   return (
     <div className="pt-stack">
-      <Card
-        title="Hồ sơ đã gửi"
-        action={
-          <button type="button" className="pt-btn pt-btn-primary pt-btn-sm" onClick={() => setOpen(true)}>
-            + Gửi hồ sơ
-          </button>
-        }
-      >
-        <StateBlock loading={approvals.loading} error={approvals.error} />
-        {approvals.data && approvals.data.data.length === 0 && <EmptyState icon="request">Bạn chưa gửi hồ sơ nào.</EmptyState>}
-        {approvals.data && approvals.data.data.length > 0 && (
-          <ul className="pt-list">
-            {approvals.data.data.map((item) => {
-              const status = APPROVAL_STATUS[item.status];
-              return (
-                <li key={item.id} className="pt-row pt-row-wrap">
-                  <div className="pt-row-main">
-                    <strong>{item.requestType}</strong>
-                    <span>
-                      {item.code} · gửi {formatDate(item.submittedOn)} · {item.docsCount} giấy tờ
-                    </span>
-                  </div>
-                  <Pill tone={status.tone}>{status.label}</Pill>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
+      <div className="pt-grid-2">
+        <Card
+          title="Hồ sơ đã gửi"
+          action={
+            <button type="button" className="pt-btn pt-btn-primary pt-btn-sm" onClick={() => setOpen(true)}>
+              + Gửi hồ sơ
+            </button>
+          }
+        >
+          <StateBlock loading={approvals.loading} error={approvals.error} />
+          {approvals.data && approvals.data.data.length === 0 && <EmptyState icon="request">Bạn chưa gửi hồ sơ nào.</EmptyState>}
+          {approvals.data && approvals.data.data.length > 0 && (
+            <ul className="pt-list">
+              {approvals.data.data.map((item) => {
+                const status = APPROVAL_STATUS[item.status];
+                return (
+                  <li key={item.id} className="pt-row pt-row-wrap">
+                    <div className="pt-row-main">
+                      <strong>{item.requestType}</strong>
+                      <span>
+                        {item.code} · gửi {formatDate(item.submittedOn)} · {item.docsCount} giấy tờ
+                      </span>
+                    </div>
+                    <Pill tone={status.tone}>{status.label}</Pill>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+
+        <Card title="Quy trình giải quyết hồ sơ">
+          <div className="pt-guide-box">
+            <div className="pt-guide-item">
+              <div>
+                <strong>1. Nộp hồ sơ trực tuyến</strong>
+                <p>Khai báo loại thủ tục (cấp mã vùng trồng, đăng ký thửa mới, cập nhật diện tích) và số lượng giấy tờ kèm theo.</p>
+              </div>
+            </div>
+
+            <div className="pt-guide-item">
+              <div>
+                <strong>2. Thẩm tra và đối chiếu thực địa</strong>
+                <p>Cán bộ kỹ thuật HTX sẽ liên hệ tiếp nhận hồ sơ bản giấy và tiến hành kiểm tra đo đạc ranh giới thửa đất.</p>
+              </div>
+            </div>
+
+            <div className="pt-guide-item">
+              <div>
+                <strong>3. Phê duyệt và cấp mã quản lý</strong>
+                <p>Hồ sơ hợp lệ sẽ được HTX duyệt và cập nhật vào danh bạ số vùng trồng phục vụ giám sát xuất khẩu.</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
 
       {open && (
         <Sheet title="Gửi hồ sơ xin duyệt" onClose={() => setOpen(false)}>

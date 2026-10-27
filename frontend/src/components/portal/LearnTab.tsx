@@ -18,7 +18,7 @@ function TrainingList() {
   const upcoming = data.filter((item) => !item.completed);
   const done = data.filter((item) => item.completed);
   return (
-    <>
+    <div className="pt-grid-2">
       <Card title="Lớp tập huấn sắp diễn ra">
         <StateBlock loading={loading} error={error} />
         {!loading && !error && upcoming.length === 0 && <EmptyState icon="learn">Chưa có lớp tập huấn nào sắp diễn ra.</EmptyState>}
@@ -54,7 +54,7 @@ function TrainingList() {
           </ul>
         </Card>
       )}
-    </>
+    </div>
   );
 }
 

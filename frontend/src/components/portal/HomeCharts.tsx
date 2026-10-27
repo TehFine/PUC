@@ -53,14 +53,12 @@ export default function HomeCharts() {
   return (
     <div className="pt-charts">
       {hasActivity && (
-        <div className="pt-charts-wide">
-          <Card title="Hoạt động canh tác">
-            <p className="pt-chart-sub">Số lần ghi nhật ký theo tuần, {WEEKS} tuần gần nhất</p>
-            <div className="pt-chart is-bleed">
-              <AreaTrend data={activity} tone="lime" unit=" lần" highlight="last" height={170} caption="Tần suất ghi nhận đều đặn giúp đảm bảo tiêu chuẩn VietGAP" ariaLabel="Số lần ghi nhật ký theo tuần" />
-            </div>
-          </Card>
-        </div>
+        <Card title="Hoạt động canh tác">
+          <p className="pt-chart-sub">Số lần ghi nhật ký theo tuần, {WEEKS} tuần gần nhất</p>
+          <div className="pt-chart is-bleed">
+            <AreaTrend data={activity} tone="lime" unit=" lần" highlight="last" height={170} caption="Tần suất ghi nhận đều đặn giúp đảm bảo tiêu chuẩn VietGAP" ariaLabel="Số lần ghi nhật ký theo tuần" />
+          </div>
+        </Card>
       )}
 
       {lots.length > 0 && (

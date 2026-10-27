@@ -1,0 +1,413 @@
+"use client";
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  BookOpen,
+  ClipboardCheck,
+  House,
+  NotebookPen,
+  Send,
+  TreePine,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import type { PortalTabId } from "./PortalApp";
+
+export interface NavItemConfig {
+  id: PortalTabId;
+  label: string;
+  icon: LucideIcon;
+  color: string;
+  activeColor: string;
+  activeBg: string;
+  activeBorder: string;
+}
+
+export const NAV_ITEMS: NavItemConfig[] = [
+  {
+    id: "home",
+    label: "Trang chủ",
+    icon: House,
+    color: "#2e7d56",
+    activeColor: "#15803d",
+    activeBg: "rgba(34, 197, 94, 0.08)",
+    activeBorder: "#22c55e",
+  },
+  {
+    id: "plots",
+    label: "Thửa đất",
+    icon: TreePine,
+    color: "#15803d",
+    activeColor: "#16a34a",
+    activeBg: "rgba(22, 163, 74, 0.08)",
+    activeBorder: "#16a34a",
+  },
+  {
+    id: "diary",
+    label: "Nhật ký",
+    icon: NotebookPen,
+    color: "#d97706",
+    activeColor: "#b45309",
+    activeBg: "rgba(245, 158, 11, 0.08)",
+    activeBorder: "#f59e0b",
+  },
+  {
+    id: "inspection",
+    label: "Kiểm tra",
+    icon: ClipboardCheck,
+    color: "#db2777",
+    activeColor: "#e11d48",
+    activeBg: "rgba(236, 72, 153, 0.08)",
+    activeBorder: "#ec4899",
+  },
+  {
+    id: "requests",
+    label: "Hồ sơ",
+    icon: Send,
+    color: "#0284c7",
+    activeColor: "#0369a1",
+    activeBg: "rgba(2, 132, 199, 0.08)",
+    activeBorder: "#0284c7",
+  },
+  {
+    id: "learn",
+    label: "Kiến thức",
+    icon: BookOpen,
+    color: "#ea580c",
+    activeColor: "#c2410c",
+    activeBg: "rgba(234, 88, 12, 0.08)",
+    activeBorder: "#ea580c",
+  },
+];
+
+interface RadialNavWheelProps {
+  currentTab: PortalTabId;
+  onSelectTab: (tab: PortalTabId) => void;
+}
+
+const STEP_DEG = 6.8; // Góc giữa 2 mục kề nhau (độ), tương ứng khoảng 76px dọc
+const RADIUS = 640; // Bán kính hình tròn ảo (px)
+const PX_PER_STEP = 74; // Khoảng cách pixel xấp xỉ mỗi bước
+const SENSITIVITY = STEP_DEG / PX_PER_STEP; // Độ nhạy vuốt ngón tay: ~0.092 deg/px
+
+export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWheelProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [rotationDeg, setRotationDeg] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragStartYRef = useRef(0);
+  const dragStartRotRef = useRef(0);
+  const lastYRef = useRef(0);
+  const velocityRef = useRef(0);
+  const animFrameRef = useRef<number | null>(null);
+  const lastHapticIndexRef = useRef(-1);
+
+  // Tìm index của tab hiện tại trong danh sách 6 tab
+  const currentIndex = useMemo(() => {
+    const idx = NAV_ITEMS.findIndex((item) => item.id === currentTab);
+    return idx >= 0 ? idx : 0;
+  }, [currentTab]);
+
+  // Đồng bộ góc quay khi mở popup hoặc khi currentTab thay đổi
+  useEffect(() => {
+    if (!isDragging) {
+      setRotationDeg(currentIndex * STEP_DEG);
+    }
+  }, [currentIndex, isDragging]);
+
+  // Khi mở popup, đưa tab hiện tại vào giữa
+  const handleOpen = () => {
+    setRotationDeg(currentIndex * STEP_DEG);
+    lastHapticIndexRef.current = currentIndex;
+    setIsOpen(true);
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+  };
+
+  // Tính toán mục đang ở chính giữa gần nhất
+  const rawCenterIndex = rotationDeg / STEP_DEG;
+  const snappedIndex = Math.round(rawCenterIndex);
+
+  // Khi snap dừng lại ở đâu, chuyển sang tab đó
+  const triggerTabChange = useCallback(
+    (index: number) => {
+      const norm = ((index % NAV_ITEMS.length) + NAV_ITEMS.length) % NAV_ITEMS.length;
+      const targetTab = NAV_ITEMS[norm].id;
+      if (targetTab !== currentTab) {
+        onSelectTab(targetTab);
+        try {
+          if (typeof navigator !== "undefined" && navigator.vibrate) {
+            navigator.vibrate(16);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    },
+    [currentTab, onSelectTab]
+  );
+
+  // Xử lý kéo vuốt (Touch & Pointer)
+  const onPointerDown = (e: React.PointerEvent) => {
+    setIsDragging(true);
+    dragStartYRef.current = e.clientY;
+    dragStartRotRef.current = rotationDeg;
+    lastYRef.current = e.clientY;
+    velocityRef.current = 0;
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    try {
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    } catch {
+      // ignore synthetic pointer event errors
+    }
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!isDragging) return;
+    const dy = e.clientY - dragStartYRef.current;
+    // dy > 0: kéo xuống -> rotationDeg giảm (mục phía trên chạy xuống giữa)
+    const newRot = dragStartRotRef.current - dy * SENSITIVITY;
+    setRotationDeg(newRot);
+
+    velocityRef.current = (e.clientY - lastYRef.current) * SENSITIVITY;
+    lastYRef.current = e.clientY;
+
+    // Phản hồi rung haptic thời gian thực khi lướt qua mục mới
+    const currentNearest = Math.round(newRot / STEP_DEG);
+    const norm = ((currentNearest % NAV_ITEMS.length) + NAV_ITEMS.length) % NAV_ITEMS.length;
+    if (norm !== lastHapticIndexRef.current) {
+      lastHapticIndexRef.current = norm;
+      try {
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate(8);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const onPointerUp = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    // Quán tính nhẹ + hít nam châm (snap to nearest step)
+    const currentRot = rotationDeg - velocityRef.current * 4;
+    const targetSnap = Math.round(currentRot / STEP_DEG) * STEP_DEG;
+
+    // Animation trượt êm ái tới targetSnap
+    const startTime = performance.now();
+    const startRot = rotationDeg;
+    const duration = 280;
+
+    const animateSnap = (time: number) => {
+      const elapsed = time - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      // easeOutCubic
+      const ease = 1 - Math.pow(1 - progress, 3);
+      const nextRot = startRot + (targetSnap - startRot) * ease;
+      setRotationDeg(nextRot);
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animateSnap);
+      } else {
+        setRotationDeg(targetSnap);
+        const finalSnapIdx = Math.round(targetSnap / STEP_DEG);
+        triggerTabChange(finalSnapIdx);
+      }
+    };
+
+    animFrameRef.current = requestAnimationFrame(animateSnap);
+  };
+
+  // Click trực tiếp vào một mục trên vòng xoay
+  const handleItemClick = (virtualIdx: number) => {
+    const targetSnap = virtualIdx * STEP_DEG;
+    const startTime = performance.now();
+    const startRot = rotationDeg;
+    const duration = 260;
+
+    const animateClick = (time: number) => {
+      const elapsed = time - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      const nextRot = startRot + (targetSnap - startRot) * ease;
+      setRotationDeg(nextRot);
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animateClick);
+      } else {
+        setRotationDeg(targetSnap);
+        triggerTabChange(virtualIdx);
+      }
+    };
+
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    animFrameRef.current = requestAnimationFrame(animateClick);
+  };
+
+  // Tạo danh sách các mục hiển thị trong tầm nhìn (từ -4 đến +4 quanh snappedIndex)
+  const visibleItems = useMemo(() => {
+    const items = [];
+    for (let offset = -4; offset <= 4; offset++) {
+      const virtualIdx = snappedIndex + offset;
+      const normIdx = ((virtualIdx % NAV_ITEMS.length) + NAV_ITEMS.length) % NAV_ITEMS.length;
+      const itemConfig = NAV_ITEMS[normIdx];
+
+      // Góc lệch so với vị trí giữa: (virtualIdx * STEP_DEG - rotationDeg)
+      const deltaDeg = virtualIdx * STEP_DEG - rotationDeg;
+      const deltaRad = (deltaDeg * Math.PI) / 180;
+
+      // Tọa độ hình cung:
+      // Tâm nằm bên phải (X_center = SCREEN_W + X_OFFSET)
+      // Khi deltaDeg = 0: X_item nằm xa nhất về bên trái (xOffset = 0)
+      // Khi deltaDeg tăng: X_item lùi dần về bên phải (xOffset > 0)
+      const y = RADIUS * Math.sin(deltaRad);
+      const xOffset = RADIUS * (1 - Math.cos(deltaRad)); // lùi về bên phải mép màn hình
+
+      const distFromCenter = Math.abs(deltaDeg);
+      const isCenter = distFromCenter < STEP_DEG * 0.45;
+
+      // Độ mờ và scale theo khoảng cách góc
+      const opacity = Math.max(0.18, 1 - Math.pow(distFromCenter / (STEP_DEG * 4.2), 1.6));
+      const scale = Math.max(0.72, 1.1 - (distFromCenter / (STEP_DEG * 4)) * 0.38);
+
+      items.push({
+        virtualIdx,
+        itemConfig,
+        xOffset,
+        y,
+        isCenter,
+        opacity,
+        scale,
+        distFromCenter,
+      });
+    }
+    return items;
+  }, [snappedIndex, rotationDeg]);
+
+  return (
+    <>
+      {/* ── Nút nổi "Điều hướng" ở góc dưới bên phải (chỉ hiện trên Mobile) ── */}
+      <aside className="pt-radial-launcher-wrap" aria-label="Menu điều hướng di động">
+        <button
+          type="button"
+          id="portal-radial-toggle"
+          className="pt-radial-launcher"
+          onClick={handleOpen}
+          aria-expanded={isOpen}
+          aria-controls="portal-radial-drawer"
+          title="Mở menu xoay điều hướng"
+        >
+          <span className="pt-radial-launcher-label">Điều hướng</span>
+        </button>
+      </aside>
+
+      {/* ── Popup vòng xoay dạng trục tròn (Arc Wheel Navigation) ── */}
+      {isOpen && (
+        <div
+          id="portal-radial-drawer"
+          className="pt-radial-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleClose();
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Vòng xoay điều hướng chức năng"
+        >
+          <div
+            ref={containerRef}
+            className="pt-radial-container"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+          >
+            {/* Nút đóng góc trên */}
+            <div className="pt-radial-header">
+              <span className="pt-radial-title">Chuyển chức năng</span>
+              <button
+                type="button"
+                className="pt-radial-close-btn"
+                onClick={handleClose}
+                aria-label="Đóng điều hướng"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Vùng xoay trục tròn */}
+            <div className="pt-radial-stage">
+              {/* Đường vòng cung SVG cố định bên phải */}
+              <svg className="pt-radial-arc-svg" viewBox="0 0 160 700" preserveAspectRatio="none" aria-hidden="true">
+                <path
+                  d="M 160 40 A 640 640 0 0 0 160 660"
+                  fill="none"
+                  stroke="rgba(0, 0, 0, 0.12)"
+                  strokeWidth="1.5"
+                />
+              </svg>
+
+              {/* Vạch chỉ thị capsule nằm ngang ở vị trí trung tâm (Center Indicator) */}
+              <div className="pt-radial-center-indicator" aria-hidden="true" />
+
+              {/* Danh sách các nút chức năng xếp uốn cong theo cung tròn */}
+              <div className="pt-radial-wheel">
+                {visibleItems.map(
+                  ({ virtualIdx, itemConfig, xOffset, y, isCenter, opacity, scale }) => {
+                    const Icon = itemConfig.icon;
+                    return (
+                      <div
+                        key={virtualIdx}
+                        className={`pt-radial-item ${isCenter ? "is-center" : ""}`}
+                        style={{
+                          transform: `translate3d(${xOffset}px, ${y}px, 0) scale(${scale})`,
+                          opacity,
+                          zIndex: isCenter ? 20 : 10,
+                        }}
+                        onClick={() => handleItemClick(virtualIdx)}
+                      >
+                        {/* Nhãn tên chức năng nằm bên trái */}
+                        <div
+                          className={`pt-radial-label ${isCenter ? "is-active-label" : ""}`}
+                          style={{
+                            color: isCenter ? "#0f172a" : "#475569",
+                          }}
+                        >
+                          {itemConfig.label}
+                        </div>
+
+                        {/* Icon nằm trong capsule/oval trên đường cung */}
+                        <div
+                          className={`pt-radial-icon-box ${isCenter ? "is-active-icon" : ""}`}
+                          style={{
+                            borderColor: isCenter ? itemConfig.activeBorder : "transparent",
+                            backgroundColor: isCenter ? itemConfig.activeBg : "rgba(0, 0, 0, 0.04)",
+                            color: isCenter ? itemConfig.activeColor : itemConfig.color,
+                          }}
+                        >
+                          <Icon size={isCenter ? 24 : 20} strokeWidth={isCenter ? 2.2 : 1.9} />
+                        </div>
+                      </div>
+                    );
+                  }
+                )}
+              </div>
+            </div>
+
+            {/* Chỉ dẫn lướt xoay phía dưới */}
+            <div className="pt-radial-footer">
+              <span className="pt-radial-hint">Lướt lên / xuống để xoay bánh xe chức năng</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

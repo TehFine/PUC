@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { BookOpenCheck, CalendarCheck, Clock, ShieldAlert, Sparkles } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { useResource } from "@/hooks/use-resource";
 import { ApiError, api } from "@/lib/api-client";
@@ -186,58 +187,94 @@ export default function DiaryTab() {
         </button>
       </div>
 
-      <Card
-        title={view === "journal" ? "Nhật ký canh tác" : "Nhật ký phun thuốc"}
-        action={
-          <button type="button" className="pt-btn pt-btn-primary pt-btn-sm" onClick={() => setForm(view)}>
-            + Thêm
-          </button>
-        }
-      >
-        <StateBlock loading={active.loading} error={active.error} />
+      <div className="pt-grid-2">
+        <Card
+          title={view === "journal" ? "Nhật ký canh tác" : "Nhật ký phun thuốc"}
+          action={
+            <button type="button" className="pt-btn pt-btn-primary pt-btn-sm" onClick={() => setForm(view)}>
+              + Thêm
+            </button>
+          }
+        >
+          <StateBlock loading={active.loading} error={active.error} />
 
-        {view === "journal" && journal.data && journal.data.data.length === 0 && (
-          <EmptyState icon="diary">Chưa có nhật ký nào. Bấm “+ Thêm” để ghi công việc đầu tiên.</EmptyState>
-        )}
-        {view === "journal" && journal.data && journal.data.data.length > 0 && (
-          <ul className="pt-list">
-            {journal.data.data.map((entry) => (
-              <li key={entry.id} className="pt-row">
-                <div className="pt-date">{formatDate(entry.entryOn)}</div>
-                <div className="pt-row-main">
-                  <strong>{entry.activity}</strong>
-                  <span>
-                    Thửa {entry.plotCode} · {entry.recorder}
-                  </span>
-                  {entry.detail && <span>{entry.detail}</span>}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+          {view === "journal" && journal.data && journal.data.data.length === 0 && (
+            <EmptyState icon="diary">Chưa có nhật ký nào. Bấm “+ Thêm” để ghi công việc đầu tiên.</EmptyState>
+          )}
+          {view === "journal" && journal.data && journal.data.data.length > 0 && (
+            <ul className="pt-list">
+              {journal.data.data.map((entry) => (
+                <li key={entry.id} className="pt-row">
+                  <div className="pt-date">{formatDate(entry.entryOn)}</div>
+                  <div className="pt-row-main">
+                    <strong>{entry.activity}</strong>
+                    <span>
+                      Thửa {entry.plotCode} · {entry.recorder}
+                    </span>
+                    {entry.detail && <span>{entry.detail}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
 
-        {view === "spray" && spray.data && spray.data.data.length === 0 && (
-          <EmptyState icon="spray">Chưa có lần phun thuốc nào được ghi.</EmptyState>
-        )}
-        {view === "spray" && spray.data && spray.data.data.length > 0 && (
-          <ul className="pt-list">
-            {spray.data.data.map((record) => (
-              <li key={record.id} className="pt-row pt-row-wrap">
-                <div className="pt-date">{formatDate(record.sprayedOn)}</div>
-                <div className="pt-row-main">
-                  <strong>{record.pesticide}</strong>
-                  <span>
-                    {record.dose} · {record.areaHa} ha · cách ly {record.isolationDays} ngày
-                  </span>
-                  {record.source && <span>{record.source}</span>}
-                </div>
-                {record.mrlStatus === "pass" ? <Pill tone="green">Đạt</Pill> : <Pill tone="red">Không đạt</Pill>}
-                {record.pesticideStatus === "banned" && <Pill tone={PESTICIDE_STATUS.banned.tone}>Thuốc cấm</Pill>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+          {view === "spray" && spray.data && spray.data.data.length === 0 && (
+            <EmptyState icon="spray">Chưa có lần phun thuốc nào được ghi.</EmptyState>
+          )}
+          {view === "spray" && spray.data && spray.data.data.length > 0 && (
+            <ul className="pt-list">
+              {spray.data.data.map((record) => (
+                <li key={record.id} className="pt-row pt-row-wrap">
+                  <div className="pt-date">{formatDate(record.sprayedOn)}</div>
+                  <div className="pt-row-main">
+                    <strong>{record.pesticide}</strong>
+                    <span>
+                      {record.dose} · {record.areaHa} ha · cách ly {record.isolationDays} ngày
+                    </span>
+                    {record.source && <span>{record.source}</span>}
+                  </div>
+                  {record.mrlStatus === "pass" ? <Pill tone="green">Đạt</Pill> : <Pill tone="red">Không đạt</Pill>}
+                  {record.pesticideStatus === "banned" && <Pill tone={PESTICIDE_STATUS.banned.tone}>Thuốc cấm</Pill>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card title="Quy chuẩn nhật ký VietGAP">
+          <div className="pt-guide-box">
+            <div className="pt-guide-item">
+              <span className="pt-guide-icon icon-green">
+                <CalendarCheck size={20} />
+              </span>
+              <div>
+                <strong>Tần suất ghi nhận tối thiểu 7 ngày/lần</strong>
+                <p>Mỗi hoạt động tưới tiêu, bón phân, tỉa cành, bao trái cần được cập nhật đúng hạn để phục vụ kiểm tra vùng trồng.</p>
+              </div>
+            </div>
+
+            <div className="pt-guide-item">
+              <span className="pt-guide-icon icon-gold">
+                <Clock size={20} />
+              </span>
+              <div>
+                <strong>Thời gian cách ly trước thu hoạch (PHI)</strong>
+                <p>Tuyệt đối ngưng sử dụng phân thuốc trong thời gian cách ly quy định để tránh nguy cơ tồn dư vượt ngưỡng MRL.</p>
+              </div>
+            </div>
+
+            <div className="pt-guide-item">
+              <span className="pt-guide-icon icon-red">
+                <ShieldAlert size={20} />
+              </span>
+              <div>
+                <strong>Nghiêm cấm thuốc BVTV ngoài danh mục</strong>
+                <p>Không dùng chất tạo màu công nghiệp (Vàng O), hoạt chất Chlorpyrifos hoặc thuốc chưa có đăng ký kiểm định xuất khẩu.</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
 
       {form === "journal" && (
         <Sheet title="Ghi nhật ký canh tác" onClose={() => setForm(null)}>

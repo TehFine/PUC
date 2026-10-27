@@ -13,7 +13,7 @@ export default function PlotsTab() {
   const harvest = usePortal<PortalList<PortalHarvest>>("harvest");
 
   return (
-    <div className="pt-stack">
+    <div className="pt-grid-2">
       <Card title="Thửa đất của tôi">
         <StateBlock loading={plots.loading} error={plots.error} />
         {plots.data && !plots.data.available && (

@@ -13,47 +13,49 @@ export default function InspectionTab() {
 
   return (
     <div className="pt-stack">
-      <Card title="Thông báo vi phạm">
-        <StateBlock loading={violations.loading} error={violations.error} />
-        {violations.data && violations.data.data.length === 0 && <EmptyState icon="ok">Hộ bạn chưa có thông báo vi phạm nào.</EmptyState>}
-        {violations.data && violations.data.data.length > 0 && (
-          <ul className="pt-list">
-            {violations.data.data.map((item) => (
-              <li key={item.id} className={`pt-notice pt-notice-${item.severity}`}>
-                <div className="pt-notice-head">
-                  <strong>{item.title}</strong>
-                  {item.status === "resolved" ? <Pill tone="green">Đã khắc phục</Pill> : <Pill tone={item.severity === "critical" ? "red" : "gold"}>{item.severity === "critical" ? "Nghiêm trọng" : "Cảnh báo"}</Pill>}
-                </div>
-                <p className="pt-notice-meta">
-                  {formatDate(item.detectedOn)}
-                  {item.plotCode ? ` · Thửa ${item.plotCode}` : ""}
-                </p>
-                {item.description && <p>{item.description}</p>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <div className="pt-grid-2">
+        <Card title="Thông báo vi phạm">
+          <StateBlock loading={violations.loading} error={violations.error} />
+          {violations.data && violations.data.data.length === 0 && <EmptyState icon="ok">Hộ bạn chưa có thông báo vi phạm nào.</EmptyState>}
+          {violations.data && violations.data.data.length > 0 && (
+            <ul className="pt-list">
+              {violations.data.data.map((item) => (
+                <li key={item.id} className={`pt-notice pt-notice-${item.severity}`}>
+                  <div className="pt-notice-head">
+                    <strong>{item.title}</strong>
+                    {item.status === "resolved" ? <Pill tone="green">Đã khắc phục</Pill> : <Pill tone={item.severity === "critical" ? "red" : "gold"}>{item.severity === "critical" ? "Nghiêm trọng" : "Cảnh báo"}</Pill>}
+                  </div>
+                  <p className="pt-notice-meta">
+                    {formatDate(item.detectedOn)}
+                    {item.plotCode ? ` · Thửa ${item.plotCode}` : ""}
+                  </p>
+                  {item.description && <p>{item.description}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
 
-      <Card title="Lịch kiểm tra, lấy mẫu sắp tới">
-        <StateBlock loading={schedule.loading} error={schedule.error} />
-        {schedule.data && schedule.data.data.length === 0 && <EmptyState icon="calendar">Hiện chưa có lịch kiểm tra nào sắp tới.</EmptyState>}
-        {schedule.data && schedule.data.data.length > 0 && (
-          <ul className="pt-list">
-            {schedule.data.data.map((item) => (
-              <li key={item.id} className="pt-row">
-                <div className="pt-date">{formatDate(item.scheduledOn)}</div>
-                <div className="pt-row-main">
-                  <strong>{item.title}</strong>
-                  <span>
-                    {SCHEDULE_KIND[item.kind]} · {item.officer}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+        <Card title="Lịch kiểm tra, lấy mẫu sắp tới">
+          <StateBlock loading={schedule.loading} error={schedule.error} />
+          {schedule.data && schedule.data.data.length === 0 && <EmptyState icon="calendar">Hiện chưa có lịch kiểm tra nào sắp tới.</EmptyState>}
+          {schedule.data && schedule.data.data.length > 0 && (
+            <ul className="pt-list">
+              {schedule.data.data.map((item) => (
+                <li key={item.id} className="pt-row">
+                  <div className="pt-date">{formatDate(item.scheduledOn)}</div>
+                  <div className="pt-row-main">
+                    <strong>{item.title}</strong>
+                    <span>
+                      {SCHEDULE_KIND[item.kind]} · {item.officer}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
 
       <Card title="Kết quả kiểm nghiệm của vườn tôi">
         <StateBlock loading={tests.loading} error={tests.error} />
