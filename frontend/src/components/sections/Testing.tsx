@@ -4,7 +4,7 @@ import { useResource } from "@/hooks/use-resource";
 import { mapLabTest } from "@/lib/mappers";
 import {
   BarChart, Bar, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import { AXIS_TICK, CHART_COLORS, GRID_STROKE, TOOLTIP_STYLE } from "@/components/ui/chart-theme";
 import { AreaTrend, CapsuleDonutChart, type DonutItem } from "@/components/ui/charts/KpiCharts";
@@ -51,20 +51,66 @@ export default function Testing() {
         <div className="chart-card">
           <div className="chart-title">Cadmium (Cd) – mg/kg</div>
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={cdData} margin={{ left: -20, right: 8, top: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+            <BarChart data={cdData} margin={{ left: -20, right: 12, top: 8, bottom: 0 }}>
+              <defs>
+                <linearGradient id="cdOkGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#48bb78" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#2f855a" stopOpacity={0.88} />
+                </linearGradient>
+                <linearGradient id="cdBadGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f87171" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#e0674a" stopOpacity={0.92} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
               <XAxis dataKey="plot" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(20, 55, 47, 0.05)" }} />
-              <Bar dataKey="cd" name="Cd (mg/kg)" radius={[6,6,0,0]}>
+              <YAxis
+                domain={[0, 0.06]}
+                ticks={[0, 0.015, 0.03, 0.045, 0.06]}
+                tick={AXIS_TICK}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(val) => (val === 0 ? "0" : String(val))}
+              />
+              <Tooltip
+                contentStyle={TOOLTIP_STYLE}
+                cursor={{ fill: "rgba(20, 55, 47, 0.04)", radius: 6 }}
+                formatter={(val: any) => [`${val} mg/kg`, "Hàm lượng Cd"]}
+                labelFormatter={(lbl) => `Khu vực: ${lbl}`}
+              />
+              <ReferenceLine
+                y={0.05}
+                stroke="#e0674a"
+                strokeDasharray="3 3"
+                strokeWidth={1.2}
+                strokeOpacity={0.75}
+              />
+              <Bar
+                dataKey="cd"
+                name="Cd (mg/kg)"
+                barSize={14}
+                radius={[7, 7, 0, 0]}
+                background={{ fill: "rgba(20, 55, 47, 0.04)", radius: 7 }}
+              >
                 {cdData.map((e, i) => (
-                  <Cell key={i} fill={e.cd > 0.04 ? CHART_COLORS.bad : CHART_COLORS.ok} />
+                  <Cell key={i} fill={e.cd > 0.04 ? "url(#cdBadGrad)" : "url(#cdOkGrad)"} />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          <div style={{ fontSize: 10.5, color: "var(--text-muted)", textAlign: "center", marginTop: 6 }}>
-            Giới hạn GACC: 0.05 mg/kg · Đỏ = vượt ngưỡng
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 10, fontSize: 10.5, color: "var(--text-muted)", marginTop: 8 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#38a169", display: "inline-block" }} />
+              Đạt chuẩn (&le; 0.04)
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#e0674a", display: "inline-block" }} />
+              Vượt chuẩn (&gt; 0.04)
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#c0392b", fontWeight: 500 }}>
+              <span style={{ width: 12, height: 0, borderTop: "1.5px dashed #e0674a", display: "inline-block" }} />
+              GACC: 0.05 mg/kg
+            </span>
           </div>
         </div>
 

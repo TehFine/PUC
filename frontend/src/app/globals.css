@@ -790,6 +790,17 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+.card > .table-wrap,
+.card .table-wrap {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.card > .table-wrap thead th,
+.card .table-wrap thead th {
+  border-radius: 0 !important;
+}
+
 .zones-table { overflow-x: auto; }
 .zones-table table { min-width: 1000px; }
 
@@ -2667,46 +2678,88 @@ body {
     margin-bottom: 12px;
   }
   .kpi-card {
-    padding: 10px;
-    border-radius: 16px;
+    padding: 12px 13px;
+    border-radius: 18px;
+  }
+  .kpi-card::before {
+    border-radius: 18px;
+    clip-path: none;
   }
   .kpi-card.has-chart {
     --kpi-px: 10px;
     padding: 10px var(--kpi-px) 2px;
+    border-radius: 16px;
   }
-  .kpi-head {
+  .kpi-card.has-chart::before {
+    border-radius: 16px;
+    clip-path: none;
+  }
+
+  /* Thẻ số liệu không có biểu đồ: xếp tầng dọc, căn trái toàn bộ, số to rõ, chữ thẳng tắp cân đối */
+  .kpi-card:not(.has-chart) .kpi-head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 0;
+  }
+  .kpi-card:not(.has-chart) .kpi-val {
+    font-size: 24px;
+    line-height: 1.1;
+    margin-bottom: 2px;
+  }
+  .kpi-card:not(.has-chart) .kpi-meta {
+    align-items: flex-start;
+    text-align: left;
+    width: 100%;
+  }
+  .kpi-card:not(.has-chart) .kpi-label {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kpi-card:not(.has-chart) .kpi-trend {
+    text-align: left;
+    justify-content: flex-start;
+    font-size: 11px;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Thẻ có biểu đồ: căn giữa trục dọc */
+  .kpi-card.has-chart .kpi-head {
     gap: 6px;
     margin-bottom: 2px;
-    align-items: flex-start;
+    align-items: center;
   }
-  .kpi-val {
+  .kpi-card.has-chart .kpi-val {
     font-size: 19px;
     line-height: 1.1;
   }
-  .kpi-meta {
+  .kpi-card.has-chart .kpi-meta {
     align-items: flex-end;
     text-align: right;
   }
-  .kpi-label {
+  .kpi-card.has-chart .kpi-label {
     font-size: 11px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .kpi-meta .kpi-label {
-    max-width: 100%;
     text-align: right;
   }
-  .kpi-trend {
+  .kpi-card.has-chart .kpi-trend {
     font-size: 10px;
-    margin-top: 1px;
+    margin-top: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .kpi-meta .kpi-trend {
-    margin-top: 2px;
-    max-width: 100%;
     text-align: right;
     justify-content: flex-end;
   }

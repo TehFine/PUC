@@ -391,17 +391,10 @@ const G_CX = 100;
 const G_CY = 100;
 const G_R = 80;
 
-export function GaugeArc({ value, target, unit = "%", caption, tone = "lime", ariaLabel }: GaugeArcProps) {
+export function GaugeArc({ value, target: _target, unit = "%", caption, tone = "lime", ariaLabel }: GaugeArcProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const v = Math.min(Math.max(value, 0), 100);
-  const at = (pct: number, r = G_R) => {
-    const theta = Math.PI * (1 - pct / 100);
-    return { x: G_CX + r * Math.cos(theta), y: G_CY - r * Math.sin(theta) };
-  };
-  const end = at(v);
   const arc = `M${G_CX - G_R},${G_CY} A${G_R},${G_R} 0 0 1 ${G_CX + G_R},${G_CY}`;
-  const t1 = target !== undefined ? at(target, G_R - 11) : null;
-  const t2 = target !== undefined ? at(target, G_R + 11) : null;
 
   return (
     <div className="vc vc-gauge" data-tone={tone} role="img" aria-label={`${ariaLabel}: ${value}${unit}${caption ? `, ${caption}` : ""}`}>
@@ -414,9 +407,6 @@ export function GaugeArc({ value, target, unit = "%", caption, tone = "lime", ar
         </defs>
         <path className="vc-track" d={arc} pathLength={100} />
         <path className="vc-arc" d={arc} pathLength={100} stroke={`url(#${uid}g)`} strokeDasharray={`${v} 100`} />
-        {t1 && t2 && <line className="vc-target" x1={t1.x} y1={t1.y} x2={t2.x} y2={t2.y} />}
-        <circle className="vc-glow" cx={end.x} cy={end.y} r={11} />
-        <circle className="vc-dot" cx={end.x} cy={end.y} r={5.4} />
         <text className="vc-x" x={G_CX - G_R} y={G_CY + 15} textAnchor="middle">0</text>
         <text className="vc-x" x={G_CX + G_R} y={G_CY + 15} textAnchor="middle">100</text>
       </svg>
