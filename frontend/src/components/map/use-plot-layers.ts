@@ -48,7 +48,10 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
       const geo = L.geoJSON(feature, {
         style: plotStyle(feature.properties.source, feature.properties.code === selectedRef.current),
         onEachFeature: (_geoFeature: Feature, layer: Leaflet.Layer) => {
-          layer.bindTooltip(featureLabel(feature), {
+          // Leaflet gán chuỗi vào innerHTML; nhãn lấy từ dữ liệu nhập nên phải dùng textContent để chống XSS.
+          const label = document.createElement("span");
+          label.textContent = featureLabel(feature);
+          layer.bindTooltip(label, {
             permanent: true,
             direction: "center",
             offset: labelOffset,
