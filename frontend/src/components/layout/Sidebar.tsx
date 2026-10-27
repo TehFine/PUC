@@ -23,6 +23,7 @@ const topItems: NavItem[] = [
   { id: "testing", label: "Kiểm nghiệm", resource: "testing" },
   { id: "harvest", label: "Lô hàng", resource: "harvest" },
   { id: "training", label: "Tập huấn", resource: "training" },
+  { id: "news", label: "Bản tin" },
   { id: "reports", label: "Báo cáo" },
   { id: "catalog", label: "Danh mục", resource: "pesticides" },
 ];

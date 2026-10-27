@@ -46,9 +46,25 @@ export default function Season() {
           </div>
         ))}
       </div>
-      <p className="lp-season-note">
-        Thời điểm thực tế thay đổi theo giống, độ cao và thời tiết từng năm; hãy hỏi thêm cán bộ kỹ thuật của HTX.
-      </p>
+      <div className="lp-season-note">
+        <svg
+          className="lp-season-note-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 16v-4" />
+          <path d="M12 8h.01" />
+        </svg>
+        <span>
+          Thời điểm thực tế thay đổi theo giống, độ cao và thời tiết từng năm; hãy hỏi thêm cán bộ kỹ thuật của HTX.
+        </span>
+      </div>
     </div>
   );
 }

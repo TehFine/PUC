@@ -9,6 +9,7 @@ import Faq from "./Faq";
 import { display } from "./fonts";
 import HeroDash from "./HeroDash";
 import Nav from "./Nav";
+import News from "./News";
 import Season from "./Season";
 import Showcase from "./Showcase";
 import Stages from "./Stages";
@@ -64,8 +65,8 @@ function Section({
 /** Mũi tên nằm ở góc cắt chéo của thẻ ảnh/thẻ nội dung. */
 function Arrow() {
   return (
-    <svg className="lp-clip-arrow" viewBox="0 0 40 16" aria-hidden="true">
-      <path d="M1 8h38M32 1.5 39 8l-7 6.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <svg className="lp-clip-arrow" viewBox="0 0 42 16" aria-hidden="true" style={{ overflow: "visible" }}>
+      <path d="M1 8h36M30 2.5 37 8l-7 5.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -325,6 +326,16 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
         </Section>
 
         <Section
+          id="tin-tuc"
+          tone="white"
+          eyebrow="Bản tin nhà nông"
+          title="Tin tức, kỹ thuật & hoạt động vùng trồng"
+          intro="Cập nhật nhanh hướng dẫn bón phân, thuốc bảo vệ thực vật được phép, các buổi tập huấn thực địa và thông tin chỉ đạo mùa vụ từ HTX Krông Búk."
+        >
+          <News />
+        </Section>
+
+        <Section
           id="tra-cuu"
           eyebrow="Tra cứu"
           title="Danh mục thuốc, giống và lịch tập huấn"
@@ -391,6 +402,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
             <h2>Kiến thức</h2>
             <a href="#quy-trinh">Quy trình chăm sóc</a>
             <a href="#tieu-chuan">Tiêu chuẩn xuất khẩu</a>
+            <a href="#tin-tuc">Bản tin nhà nông</a>
             <a href="#hoi-dap">Hỏi đáp</a>
           </nav>
 

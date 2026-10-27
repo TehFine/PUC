@@ -8,9 +8,6 @@ import {
   ClipboardCheck,
   Send,
   BookOpen,
-  AlertCircle,
-  Calendar,
-  Package,
 } from "lucide-react";
 import { COMMUNE_OUTLINE, COMMUNE_RINGS, COMMUNE_ROAD, COMMUNE_VIEWBOX } from "./commune-data";
 
@@ -218,7 +215,7 @@ function LabMock() {
 
 function PortalMock() {
   return (
-    <figure className="lp-phone-wrapper" role="img" aria-label="Minh họa giao diện cổng hộ dân trên iPhone 14 Pro Max">
+    <figure className="lp-phone-wrapper" role="img" aria-label="Minh họa giao diện cổng hộ dân">
       <div className="lp-phone">
         {/* Nút bấm vật lý sườn máy iPhone 14 Pro Max */}
         <span className="lp-phone-btn lp-phone-btn-switch" aria-hidden="true" />
@@ -258,11 +255,10 @@ function PortalMock() {
           {/* Nội dung trang chủ Cổng hộ dân */}
           <div className="lp-phone-content">
             <div className="lp-phone-hero">
-              <div className="lp-phone-hero-top">
-                <span className="lp-phone-chip">MÃ HỘ KB-VT-001-H001</span>
-                <span className="lp-phone-live-dot" />
-              </div>
               <strong>Nguyễn Văn An</strong>
+              <div className="lp-phone-chip-wrap">
+                <span className="lp-phone-chip">MÃ HỘ KB-VT-001-H001</span>
+              </div>
               <span className="lp-phone-sub">Thôn 1 · Đủ chuẩn xuất khẩu</span>
               <div className="lp-phone-stats">
                 <div>
@@ -284,18 +280,12 @@ function PortalMock() {
               <div className="lp-phone-section-label">Thông báo & nhắc nhở</div>
               <ul className="lp-phone-notes">
                 <li className="warn">
-                  <span className="lp-note-icon-wrap" aria-hidden="true">
-                    <AlertCircle size={14} strokeWidth={2.2} />
-                  </span>
                   <div className="lp-note-text">
                     <strong>Chưa ghi nhật ký canh tác</strong>
                     <p>Đã 8 ngày chưa ghi nhận hoạt động chăm sóc.</p>
                   </div>
                 </li>
                 <li className="info">
-                  <span className="lp-note-icon-wrap" aria-hidden="true">
-                    <Calendar size={14} strokeWidth={2.2} />
-                  </span>
                   <div className="lp-note-text">
                     <strong>Lịch kiểm tra vùng trồng</strong>
                     <p>28/10: Kiểm tra định kỳ vùng trồng Thôn 1.</p>
@@ -305,9 +295,6 @@ function PortalMock() {
 
               <div className="lp-phone-section-label">Lô hàng xuất khẩu gần nhất</div>
               <div className="lp-phone-activity-card">
-                <span className="lp-act-icon-wrap" aria-hidden="true">
-                  <Package size={14} strokeWidth={2.2} />
-                </span>
                 <div className="lp-act-text">
                   <div className="lp-act-head">
                     <strong>Lô Ri6 #LH-08</strong>
@@ -345,7 +332,7 @@ function PortalMock() {
           </div>
         </div>
       </div>
-      <figcaption className="lp-phone-caption">Minh họa cổng hộ dân trên iPhone 14 Pro Max</figcaption>
+      <figcaption className="lp-phone-caption">Minh họa cổng hộ dân trên điện thoại</figcaption>
     </figure>
   );
 }

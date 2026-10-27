@@ -23,11 +23,13 @@ import Reports from "@/components/sections/Reports";
 import Catalog from "@/components/sections/Catalog";
 import SystemSettings from "@/components/sections/SystemSettings";
 import Registrations from "@/components/sections/Registrations";
+import NewsAdmin from "@/components/sections/NewsAdmin";
 
 export type SectionId =
   | "dashboard" | "households" | "zones" | "approval"
   | "journal" | "testing" | "harvest" | "training"
-  | "reports" | "catalog" | "system" | "registrations";
+  | "reports" | "catalog" | "system" | "registrations"
+  | "news";
 
 const SECTION_TITLES: Record<SectionId, string> = {
   dashboard: "Tổng quan",
@@ -42,6 +44,7 @@ const SECTION_TITLES: Record<SectionId, string> = {
   reports: "Báo cáo",
   catalog: "Danh mục",
   system: "Hệ thống",
+  news: "Bản tin",
 };
 
 export default function Home() {
@@ -84,6 +87,7 @@ export default function Home() {
       case "catalog":      return <Catalog />;
       case "system":       return <SystemSettings />;
       case "registrations": return <Registrations />;
+      case "news":         return <NewsAdmin />;
     }
   };
 
