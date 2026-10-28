@@ -10,20 +10,31 @@ import ResponsiveTables from "@/components/ui/ResponsiveTables";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { INTRO_PATH } from "@/lib/routes";
 
-// Lazy-load each section to prevent prerender issues
+import dynamic from "next/dynamic";
+import { Skeleton } from "@/components/ui/Skeleton";
+
+const TabLoading = () => (
+  <div style={{ padding: "24px 0" }}>
+    <Skeleton h={32} w={200} r={8} />
+    <div style={{ height: 16 }} />
+    <Skeleton h={140} r={14} />
+  </div>
+);
+
 import Dashboard from "@/components/sections/Dashboard";
 import Households from "@/components/sections/Households";
-import Zones from "@/components/sections/Zones";
 import Approval from "@/components/sections/Approval";
 import Journal from "@/components/sections/Journal";
 import Testing from "@/components/sections/Testing";
 import Harvest from "@/components/sections/Harvest";
 import Training from "@/components/sections/Training";
-import Reports from "@/components/sections/Reports";
 import Catalog from "@/components/sections/Catalog";
 import SystemSettings from "@/components/sections/SystemSettings";
 import Registrations from "@/components/sections/Registrations";
-import NewsAdmin from "@/components/sections/NewsAdmin";
+
+const Zones = dynamic(() => import("@/components/sections/Zones"), { ssr: false, loading: TabLoading });
+const NewsAdmin = dynamic(() => import("@/components/sections/NewsAdmin"), { ssr: false, loading: TabLoading });
+const Reports = dynamic(() => import("@/components/sections/Reports"), { ssr: false, loading: TabLoading });
 
 export type SectionId =
   | "dashboard" | "households" | "zones" | "approval"
@@ -61,7 +72,8 @@ export default function Home() {
 
   useEffect(() => {
     const onScroll = () => {
-      setIsScrolled(window.scrollY > 24);
+      const isPast = window.scrollY > 24;
+      setIsScrolled((prev) => (prev !== isPast ? isPast : prev));
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
