@@ -1536,10 +1536,10 @@
 /* Vạch chỉ thị capsule nằm ngang ở vị trí trung tâm (Center Indicator) */
 .pt-radial-center-indicator {
   position: absolute;
-  right: 64px;
+  right: 88px;
   top: 50%;
   transform: translateY(-50%);
-  width: 26px;
+  width: 28px;
   height: 8px;
   border-radius: 999px;
   background: #334155;
@@ -1560,14 +1560,14 @@
 .pt-radial-item {
   position: absolute;
   top: 0;
-  right: -24px; /* Đặt tâm của khung tròn 48px nằm chính xác trên đường cung tròn SVG */
+  right: 0px; /* Cạnh phải của icon box vừa đủ tiếp xúc đúng vào đường line vòng tròn */
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
   pointer-events: auto;
   cursor: pointer;
-  transform-origin: calc(100% - 24px) center;
+  transform-origin: 100% center;
   will-change: transform, opacity;
   margin-top: -24px; /* căn tâm giữa item */
 }
@@ -1596,7 +1596,7 @@
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
-/* Khung icon nằm trên đường cung tròn */
+/* Khung icon nằm ngoài đường cung tròn, cạnh phải tiếp xúc với đường tròn */
 .pt-radial-icon-box {
   width: 48px;
   height: 48px;
@@ -1608,12 +1608,13 @@
   border: 1.5px solid transparent;
   flex-shrink: 0;
   background: rgba(0, 0, 0, 0.035);
+  transform-origin: right center;
 }
 
 .pt-radial-icon-box.is-active-icon {
   border-width: 2.5px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
-  transform: scale(1.1);
+  transform: scale(1.06);
 }
 
 .pt-radial-footer {
