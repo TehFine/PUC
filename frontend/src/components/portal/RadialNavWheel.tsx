@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   ClipboardCheck,
@@ -91,8 +91,13 @@ const PX_PER_STEP = 74; // Khoảng cách pixel xấp xỉ mỗi bước
 const SENSITIVITY = STEP_DEG / PX_PER_STEP; // Độ nhạy vuốt ngón tay: ~0.092 deg/px
 
 export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWheelProps) {
+  const currentIndex = useMemo(() => {
+    const idx = NAV_ITEMS.findIndex((item) => item.id === currentTab);
+    return idx >= 0 ? idx : 0;
+  }, [currentTab]);
+
   const [isOpen, setIsOpen] = useState(false);
-  const [rotationDeg, setRotationDeg] = useState(0);
+  const [rotationDeg, setRotationDeg] = useState(() => currentIndex * STEP_DEG);
   const [isDragging, setIsDragging] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -101,30 +106,30 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   const lastYRef = useRef(0);
   const velocityRef = useRef(0);
   const animFrameRef = useRef<number | null>(null);
+  const dragRafRef = useRef<number | null>(null);
+  const latestRotRef = useRef(currentIndex * STEP_DEG);
   const lastHapticIndexRef = useRef(-1);
-
-  // Tìm index của tab hiện tại trong danh sách 6 tab
-  const currentIndex = useMemo(() => {
-    const idx = NAV_ITEMS.findIndex((item) => item.id === currentTab);
-    return idx >= 0 ? idx : 0;
-  }, [currentTab]);
-
-  // Đồng bộ góc quay khi mở popup hoặc khi currentTab thay đổi
-  useEffect(() => {
-    if (!isDragging) {
-      setRotationDeg(currentIndex * STEP_DEG);
-    }
-  }, [currentIndex, isDragging]);
+  const lastVibrateTimeRef = useRef(0);
 
   // Khi mở popup, đưa tab hiện tại vào giữa
   const handleOpen = () => {
-    setRotationDeg(currentIndex * STEP_DEG);
+    const initialRot = currentIndex * STEP_DEG;
+    latestRotRef.current = initialRot;
+    setRotationDeg(initialRot);
     lastHapticIndexRef.current = currentIndex;
     setIsOpen(true);
   };
 
   const handleClose = () => {
     setIsOpen(false);
+    if (dragRafRef.current !== null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
   };
 
   // Tính toán mục đang ở chính giữa gần nhất
@@ -155,11 +160,16 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     setIsDragging(true);
     dragStartYRef.current = e.clientY;
     dragStartRotRef.current = rotationDeg;
+    latestRotRef.current = rotationDeg;
     lastYRef.current = e.clientY;
     velocityRef.current = 0;
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
+    }
+    if (dragRafRef.current) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
     }
     try {
       (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -171,18 +181,26 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   const onPointerMove = (e: React.PointerEvent) => {
     if (!isDragging) return;
     const dy = e.clientY - dragStartYRef.current;
-    // dy > 0: kéo xuống -> rotationDeg giảm (mục phía trên chạy xuống giữa)
     const newRot = dragStartRotRef.current - dy * SENSITIVITY;
-    setRotationDeg(newRot);
 
     velocityRef.current = (e.clientY - lastYRef.current) * SENSITIVITY;
     lastYRef.current = e.clientY;
+    latestRotRef.current = newRot;
 
-    // Phản hồi rung haptic thời gian thực khi lướt qua mục mới
+    if (dragRafRef.current === null) {
+      dragRafRef.current = requestAnimationFrame(() => {
+        setRotationDeg(latestRotRef.current);
+        dragRafRef.current = null;
+      });
+    }
+
+    // Phản hồi rung haptic tiết kiệm pin (giới hạn tần suất rung tối đa 120ms/lần)
     const currentNearest = Math.round(newRot / STEP_DEG);
     const norm = ((currentNearest % NAV_ITEMS.length) + NAV_ITEMS.length) % NAV_ITEMS.length;
-    if (norm !== lastHapticIndexRef.current) {
+    const now = Date.now();
+    if (norm !== lastHapticIndexRef.current && now - lastVibrateTimeRef.current > 120) {
       lastHapticIndexRef.current = norm;
+      lastVibrateTimeRef.current = now;
       try {
         if (typeof navigator !== "undefined" && navigator.vibrate) {
           navigator.vibrate(8);
@@ -196,17 +214,22 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   const onPointerUp = () => {
     if (!isDragging) return;
     setIsDragging(false);
+    if (dragRafRef.current) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
 
     // Quán tính nhẹ + hít nam châm (snap to nearest step)
-    const currentRot = rotationDeg - velocityRef.current * 4;
+    const currentRot = latestRotRef.current - velocityRef.current * 4;
     const targetSnap = Math.round(currentRot / STEP_DEG) * STEP_DEG;
 
     // Animation trượt êm ái tới targetSnap
-    const startTime = performance.now();
+    let startTime: number | null = null;
     const startRot = rotationDeg;
     const duration = 280;
 
     const animateSnap = (time: number) => {
+      if (startTime === null) startTime = time;
       const elapsed = time - startTime;
       const progress = Math.min(1, elapsed / duration);
       // easeOutCubic
@@ -229,11 +252,12 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   // Click trực tiếp vào một mục trên vòng xoay
   const handleItemClick = (virtualIdx: number) => {
     const targetSnap = virtualIdx * STEP_DEG;
-    const startTime = performance.now();
+    let startTime: number | null = null;
     const startRot = rotationDeg;
     const duration = 260;
 
     const animateClick = (time: number) => {
+      if (startTime === null) startTime = time;
       const elapsed = time - startTime;
       const progress = Math.min(1, elapsed / duration);
       const ease = 1 - Math.pow(1 - progress, 3);

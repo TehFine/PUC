@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { BookOpenCheck, CalendarCheck, Clock, ShieldAlert, Sparkles } from "lucide-react";
+import { CalendarCheck, Clock, ShieldAlert } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { useResource } from "@/hooks/use-resource";
 import { ApiError, api } from "@/lib/api-client";
