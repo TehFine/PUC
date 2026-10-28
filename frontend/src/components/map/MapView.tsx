@@ -287,6 +287,7 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
         attributionControl: false,
         minZoom: 9,
         maxZoom: 19,
+        preferCanvas: true,
       }).setView(MAP_CENTER, 13);
 
       mapRef.current = map;

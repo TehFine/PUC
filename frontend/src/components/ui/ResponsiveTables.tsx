@@ -22,9 +22,11 @@ export default function ResponsiveTables() {
   useEffect(() => {
     let frame = 0;
 
+    const target = document.querySelector(".main-content") ?? document.body;
+
     const scan = () => {
       frame = 0;
-      document
+      target
         .querySelectorAll<HTMLTableElement>(".table-wrap table")
         .forEach(annotateTable);
     };
@@ -37,7 +39,7 @@ export default function ResponsiveTables() {
     scan();
 
     const observer = new MutationObserver(schedule);
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(target, { childList: true, subtree: true });
 
     return () => {
       observer.disconnect();

@@ -6,7 +6,7 @@ import {
   BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
-import { AXIS_TICK, CHART_COLORS, GRID_STROKE, TOOLTIP_STYLE } from "@/components/ui/chart-theme";
+import { AXIS_TICK, GRID_STROKE, TOOLTIP_STYLE } from "@/components/ui/chart-theme";
 import { AreaTrend, CapsuleDonutChart, type DonutItem } from "@/components/ui/charts/KpiCharts";
 
 const cdData = [
@@ -75,7 +75,7 @@ export default function Testing() {
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
                 cursor={{ fill: "rgba(20, 55, 47, 0.04)", radius: 6 }}
-                formatter={(val: any) => [`${val} mg/kg`, "Hàm lượng Cd"]}
+                formatter={(val: unknown) => [`${val} mg/kg`, "Hàm lượng Cd"]}
                 labelFormatter={(lbl) => `Khu vực: ${lbl}`}
               />
               <ReferenceLine

@@ -391,7 +391,7 @@ const G_CX = 100;
 const G_CY = 100;
 const G_R = 80;
 
-export function GaugeArc({ value, target: _target, unit = "%", caption, tone = "lime", ariaLabel }: GaugeArcProps) {
+export function GaugeArc({ value, unit = "%", caption, tone = "lime", ariaLabel }: GaugeArcProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const v = Math.min(Math.max(value, 0), 100);
   const arc = `M${G_CX - G_R},${G_CY} A${G_R},${G_R} 0 0 1 ${G_CX + G_R},${G_CY}`;
