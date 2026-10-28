@@ -86,10 +86,10 @@ interface RadialNavWheelProps {
   onSelectTab: (tab: PortalTabId) => void;
 }
 
-const STEP_DEG = 6.8; // Góc giữa 2 mục kề nhau (độ), tương ứng khoảng 76px dọc
-const RADIUS = 640; // Bán kính hình tròn ảo (px)
-const PX_PER_STEP = 74; // Khoảng cách pixel xấp xỉ mỗi bước
-const SENSITIVITY = STEP_DEG / PX_PER_STEP; // Độ nhạy vuốt ngón tay: ~0.092 deg/px
+const STEP_DEG = 11.2; // Góc giữa 2 mục kề nhau (độ), tương ứng khoảng 70px dọc
+const RADIUS = 360; // Bán kính hình tròn ảo (px) cong tròn rõ nét và cân đối hơn
+const PX_PER_STEP = 70; // Khoảng cách pixel xấp xỉ mỗi bước
+const SENSITIVITY = STEP_DEG / PX_PER_STEP; // Độ nhạy vuốt ngón tay: ~0.16 deg/px
 
 export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWheelProps) {
   const currentIndex = useMemo(() => {
@@ -386,9 +386,9 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       const isCenter = distFromCenter < STEP_DEG * 0.45;
 
       // Độ mờ giảm mượt mà về 0 ở biên, triệt tiêu hoàn toàn hiện tượng nhấp nháy giật khựng
-      const normDist = distFromCenter / (STEP_DEG * 5.2);
-      const opacity = Math.max(0, Math.min(1, 1 - Math.pow(normDist, 1.6)));
-      const scale = Math.max(0.72, 1.08 - Math.min(1, distFromCenter / (STEP_DEG * 4.2)) * 0.36);
+      const normDist = distFromCenter / (STEP_DEG * 4.6);
+      const opacity = Math.max(0, Math.min(1, 1 - Math.pow(normDist, 1.7)));
+      const scale = Math.max(0.74, 1.08 - Math.min(1, distFromCenter / (STEP_DEG * 3.8)) * 0.32);
 
       if (opacity > 0.01) {
         items.push({
@@ -459,12 +459,12 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
 
             {/* Vùng xoay trục tròn */}
             <div className="pt-radial-stage">
-              {/* Đường vòng cung SVG cố định bên phải */}
-              <svg className="pt-radial-arc-svg" viewBox="0 0 160 700" preserveAspectRatio="none" aria-hidden="true">
+              {/* Đường vòng cung SVG cố định bên phải (bán kính R=360 cong tròn rõ nét) */}
+              <svg className="pt-radial-arc-svg" viewBox="0 0 180 700" preserveAspectRatio="none" aria-hidden="true">
                 <path
-                  d="M 160 40 A 640 640 0 0 0 160 660"
+                  d="M 180 85 A 360 360 0 0 0 180 615"
                   fill="none"
-                  stroke="rgba(0, 0, 0, 0.12)"
+                  stroke="rgba(0, 0, 0, 0.13)"
                   strokeWidth="1.5"
                 />
               </svg>
