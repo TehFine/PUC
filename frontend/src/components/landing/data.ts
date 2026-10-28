@@ -3,11 +3,12 @@
 
 export const NAV_LINKS = [
   { href: "#he-thong", label: "Hệ thống" },
-  { href: "#ma-vung", label: "Mã vùng trồng" },
-  { href: "#quy-trinh", label: "Quy trình chăm sóc" },
-  { href: "#tieu-chuan", label: "Tiêu chuẩn xuất khẩu" },
-  { href: "#tin-tuc", label: "Bản tin" },
+  { href: "#ma-vung", label: "Vùng trồng" },
+  { href: "#quy-trinh", label: "Quy trình" },
+  { href: "#tap-huan", label: "Tập huấn" },
   { href: "#tra-cuu", label: "Tra cứu" },
+  { href: "#tieu-chuan", label: "Tiêu chuẩn" },
+  { href: "#tin-tuc", label: "Bản tin" },
   { href: "#hoi-dap", label: "Hỏi đáp" },
 ];
 

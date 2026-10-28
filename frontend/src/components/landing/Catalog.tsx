@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { usePublic, type PublicCatalog, type PublicPesticide } from "./use-public";
 
@@ -48,6 +48,17 @@ export default function Catalog() {
   const [tab, setTab] = useState<Tab>("pesticides");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+
+  useEffect(() => {
+    const handleSwitch = (e: Event) => {
+      const custom = e as CustomEvent<Tab>;
+      if (custom.detail && (custom.detail === "pesticides" || custom.detail === "varieties" || custom.detail === "training")) {
+        setTab(custom.detail);
+      }
+    };
+    window.addEventListener("lp:catalog-tab", handleSwitch);
+    return () => window.removeEventListener("lp:catalog-tab", handleSwitch);
+  }, []);
 
   const pesticides = useMemo(() => {
     const term = query.trim().toLowerCase();

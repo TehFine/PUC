@@ -6,13 +6,14 @@ import BannedList from "./BannedList";
 import Catalog from "./Catalog";
 import { CODE_PARTS, CODE_STEPS, EXPORT_CHECKLIST, STANDARDS } from "./data";
 import Faq from "./Faq";
-import { display } from "./fonts";
+import { display, heroSans } from "./fonts";
 import HeroDash from "./HeroDash";
 import Nav from "./Nav";
 import News from "./News";
 import Season from "./Season";
 import Showcase from "./Showcase";
 import Stages from "./Stages";
+import TrainingGallery from "./TrainingGallery";
 import "./landing.css";
 
 interface SectionImage {
@@ -121,7 +122,7 @@ function IconSprout() {
  */
 export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean }) {
   return (
-    <div className={`lp ${display.variable}`} id="top">
+    <div className={`lp ${display.variable} ${heroSans.variable}`} id="top">
       {autoEnter && <AutoEnter />}
       <svg width="0" height="0" aria-hidden="true" focusable="false" style={{ position: "absolute" }}>
         <defs>
@@ -139,8 +140,13 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
       <main>
         <section className="lp-hero" aria-labelledby="hero-title">
           <div className="lp-wrap lp-hero-copy">
-            <h1 id="hero-title">
-              Sầu riêng <em>minh bạch</em> từ vườn đến thị trường
+            <h1 id="hero-title" className="lp-hero-title">
+              <span className="lp-hero-title-dark">
+                Sầu riêng <em>minh bạch</em>
+              </span>{" "}
+              <span className="lp-hero-title-mute">
+                từ vườn đến thị trường
+              </span>
             </h1>
             <p className="lp-hero-lead">
               Tại HTX Krông Búk, Đắk Lắk, bà con ghi nhật ký chăm sóc vườn, theo dõi mã vùng trồng và kết quả kiểm nghiệm ngay trên điện thoại, để sầu riêng đạt chuẩn trước khi xuất khẩu.
@@ -171,8 +177,13 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
         <section id="gioi-thieu" className="lp-about" aria-labelledby="about-title">
           <div className="lp-wrap lp-about-copy">
             <span className="lp-pill lp-pill-green">Về hệ thống</span>
-            <h2 id="about-title">
-              Chăm sóc vườn <em>có ghi chép</em>, giữ trọn uy tín trái sầu riêng
+            <h2 id="about-title" className="lp-about-title">
+              <span className="lp-about-title-lead">
+                Chăm sóc vườn <em className="lp-nowrap">có ghi chép</em>,
+              </span>{" "}
+              <span className="lp-about-title-tail">
+                giữ trọn uy tín trái sầu riêng
+              </span>
             </h2>
             <p className="lp-intro">
               Từ ranh giới thửa đất, từng lần bón phân, phun thuốc đến kết quả kiểm nghiệm, mọi thứ đều được ghi lại để biết mỗi trái sầu riêng đến từ khu vườn nào.
@@ -275,8 +286,28 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
         </Section>
 
         <Section
-          id="tieu-chuan"
+          id="tap-huan"
+          tone="white"
+          eyebrow="Đồng hành cùng nhà nông"
+          title="Tập huấn thực địa & Hướng dẫn kỹ thuật"
+          intro="Hình ảnh thực tế các buổi tập huấn do Sở Nông nghiệp, cơ quan chuyên ngành và các kỹ sư nông học trực tiếp hướng dẫn bà con xã viên và cán bộ HTX về quy trình canh tác VietGAP, quản lý sâu bệnh và số hóa nhật ký vùng trồng."
+        >
+          <TrainingGallery />
+        </Section>
+
+        <Section
+          id="tra-cuu"
           tone="beige"
+          eyebrow="Tra cứu"
+          title="Danh mục thuốc, giống và lịch tập huấn"
+          intro="Dữ liệu được lấy trực tiếp từ hệ thống nên luôn trùng với danh mục mà cán bộ HTX đang áp dụng."
+        >
+          <Catalog />
+        </Section>
+
+        <Section
+          id="tieu-chuan"
+          tone="white"
           eyebrow="Tiêu chuẩn xuất khẩu"
           title="Điều cần đạt trước khi hàng rời vườn"
           intro="Những yêu cầu chính của nước nhập khẩu mà bà con cần nắm. Mỗi mục đều liên quan đến việc ghi chép và kiểm nghiệm trong hệ thống."
@@ -327,21 +358,12 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
 
         <Section
           id="tin-tuc"
-          tone="white"
+          tone="beige"
           eyebrow="Bản tin nhà nông"
           title="Tin tức, kỹ thuật & hoạt động vùng trồng"
           intro="Cập nhật nhanh hướng dẫn bón phân, thuốc bảo vệ thực vật được phép, các buổi tập huấn thực địa và thông tin chỉ đạo mùa vụ từ HTX Krông Búk."
         >
           <News />
-        </Section>
-
-        <Section
-          id="tra-cuu"
-          eyebrow="Tra cứu"
-          title="Danh mục thuốc, giống và lịch tập huấn"
-          intro="Dữ liệu được lấy trực tiếp từ hệ thống nên luôn trùng với danh mục mà cán bộ HTX đang áp dụng."
-        >
-          <Catalog />
         </Section>
 
         <Section id="hoi-dap" tone="mist" eyebrow="Hỏi đáp" title="Những câu hỏi thường gặp">
@@ -395,12 +417,13 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
             <a href="#gioi-thieu">Giới thiệu</a>
             <a href="#he-thong">Các chức năng quản lý</a>
             <a href="#ma-vung">Mã vùng trồng</a>
-            <a href="#tra-cuu">Tra cứu danh mục</a>
           </nav>
 
           <nav className="lp-footer-col" aria-label="Kiến thức">
             <h2>Kiến thức</h2>
             <a href="#quy-trinh">Quy trình chăm sóc</a>
+            <a href="#tap-huan">Tập huấn thực địa</a>
+            <a href="#tra-cuu">Tra cứu danh mục</a>
             <a href="#tieu-chuan">Tiêu chuẩn xuất khẩu</a>
             <a href="#tin-tuc">Bản tin nhà nông</a>
             <a href="#hoi-dap">Hỏi đáp</a>
