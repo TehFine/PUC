@@ -1410,6 +1410,20 @@
   overflow: hidden;
 }
 
+.pt-radial-backdrop.is-closing {
+  animation: pt-radial-backdrop-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes pt-radial-backdrop-out {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .pt-radial-container {
   position: fixed;
   inset: 0;
@@ -1429,6 +1443,23 @@
   box-shadow: none;
   border: none;
   animation: pt-radial-fade-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+.pt-radial-container.is-closing {
+  animation: pt-radial-retract 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes pt-radial-retract {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(100%, 0, 0);
+  }
 }
 
 @keyframes pt-radial-fade-in {

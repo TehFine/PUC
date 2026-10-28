@@ -98,6 +98,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   }, [currentTab]);
 
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [rotationDeg, setRotationDeg] = useState(() => currentIndex * STEP_DEG);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -111,9 +112,14 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   const latestRotRef = useRef(currentIndex * STEP_DEG);
   const lastHapticIndexRef = useRef(-1);
   const lastVibrateTimeRef = useRef(0);
+  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Khi mở popup, đưa tab hiện tại vào giữa
   const handleOpen = () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
+    setIsClosing(false);
     const initialRot = currentIndex * STEP_DEG;
     latestRotRef.current = initialRot;
     setRotationDeg(initialRot);
@@ -122,7 +128,10 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   };
 
   const handleClose = useCallback(() => {
-    setIsOpen(false);
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
     if (dragRafRef.current !== null) {
       cancelAnimationFrame(dragRafRef.current);
       dragRafRef.current = null;
@@ -131,7 +140,26 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
+    setIsClosing(true);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      setIsOpen(false);
+      setIsClosing(false);
+    }, 320);
   }, []);
+
+  // Tự động thu popup lại sau khi bánh xe dừng lại ở một tab
+  const scheduleAutoClose = useCallback(
+    (delay = 300) => {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+      }
+      autoCloseTimerRef.current = setTimeout(() => {
+        handleClose();
+      }, delay);
+    },
+    [handleClose]
+  );
 
   // Khóa cuộn trang nền và chặn kéo giật layout
   useEffect(() => {
@@ -212,6 +240,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
         setRotationDeg(targetSnap);
         const finalSnapIdx = Math.round(targetSnap / STEP_DEG);
         triggerTabChange(finalSnapIdx);
+        scheduleAutoClose(350);
       }, 130);
     };
 
@@ -220,13 +249,17 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       el.removeEventListener("wheel", handleWheel);
       clearTimeout(wheelTimeout);
     };
-  }, [isOpen, triggerTabChange]);
+  }, [isOpen, triggerTabChange, scheduleAutoClose]);
 
   // Xử lý kéo vuốt (Touch & Pointer)
   const onPointerDown = (e: React.PointerEvent) => {
     // Không kích hoạt kéo nếu bấm vào nút đóng
     if ((e.target as HTMLElement).closest(".pt-radial-close-btn")) {
       return;
+    }
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
     }
     hasDraggedRef.current = false;
     setIsDragging(true);
@@ -330,6 +363,8 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
         setRotationDeg(targetSnap);
         const finalSnapIdx = Math.round(targetSnap / STEP_DEG);
         triggerTabChange(finalSnapIdx);
+        // Tự động thu popup lại sau khi dừng quay ở tab
+        scheduleAutoClose(300);
       }
     };
 
@@ -339,6 +374,10 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   // Click trực tiếp vào một mục trên vòng xoay
   const handleItemClick = (virtualIdx: number) => {
     if (hasDraggedRef.current) return;
+    if (autoCloseTimerRef.current) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
     const targetSnap = virtualIdx * STEP_DEG;
     let startTime: number | null = null;
     const startRot = rotationDeg;
@@ -357,6 +396,8 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       } else {
         setRotationDeg(targetSnap);
         triggerTabChange(virtualIdx);
+        // Tự động thu popup lại sau khi click chọn tab
+        scheduleAutoClose(240);
       }
     };
 
@@ -428,7 +469,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       {isOpen && (
         <div
           id="portal-radial-drawer"
-          className="pt-radial-backdrop"
+          className={`pt-radial-backdrop ${isClosing ? "is-closing" : ""}`}
           onClick={(e) => {
             if (e.target === e.currentTarget) handleClose();
           }}
@@ -438,7 +479,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
         >
           <div
             ref={containerRef}
-            className="pt-radial-container"
+            className={`pt-radial-container ${isClosing ? "is-closing" : ""}`}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
