@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import "dotenv/config";
 import { loadConfig } from "../config/configuration";
 import { migrate } from "./migrate";
