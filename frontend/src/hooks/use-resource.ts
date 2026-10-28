@@ -5,14 +5,16 @@ import { api } from "@/lib/api-client";
 import type { ListResponse } from "@/types/api";
 
 const PAGE_SIZE = 500;
+const resourceCache = new Map<string, unknown>();
 
 /**
  * Tải danh sách từ `/api/<resource>` và chuyển từng bản ghi sang kiểu hiển thị bằng `mapper`.
  * `mapper` nên là hàm ở mức module (tham chiếu ổn định).
  */
 export function useResource<TDto, TView>(resource: string, mapper: (dto: TDto) => TView) {
-  const [data, setData] = useState<TView[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = resourceCache.get(resource) as TView[] | undefined;
+  const [data, setData] = useState<TView[]>(cached ?? []);
+  const [loading, setLoading] = useState(cached === undefined);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
@@ -21,27 +23,37 @@ export function useResource<TDto, TView>(resource: string, mapper: (dto: TDto) =
   );
 
   const refresh = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
-      setData(await load());
+      const fresh = await load();
+      resourceCache.set(resource, fresh);
+      setData(fresh);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được dữ liệu.");
     } finally {
       setLoading(false);
     }
-  }, [load]);
+  }, [load, resource]);
 
   useEffect(() => {
     let active = true;
     load()
-      .then((rows) => active && setData(rows))
-      .catch((err) => active && setError(err instanceof Error ? err.message : "Không tải được dữ liệu."))
+      .then((rows) => {
+        if (!active) return;
+        resourceCache.set(resource, rows);
+        setData(rows);
+      })
+      .catch((err) => {
+        if (!active) return;
+        if (!resourceCache.has(resource)) {
+          setError(err instanceof Error ? err.message : "Không tải được dữ liệu.");
+        }
+      })
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [load]);
+  }, [load, resource]);
 
   return { data, loading, error, refresh };
 }
