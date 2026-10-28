@@ -34,15 +34,15 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthShell variant="login" title="Đăng nhập" subtitle="Nhập số điện thoại và mật khẩu của bạn để vào cổng quản lý vùng trồng.">
+    <AuthShell variant="login" title="Đăng nhập" subtitle="Nhập tên đăng nhập hoặc số điện thoại và mật khẩu của bạn để vào hệ thống.">
       <form className="auth-form" onSubmit={onSubmit} noValidate>
-        <AuthField id="login-username" label="Tên đăng nhập (số điện thoại)">
+        <AuthField id="login-username" label="Tên đăng nhập hoặc Số điện thoại">
           <input
             id="login-username"
             className={`auth-input${error ? " is-error" : ""}`}
             autoComplete="username"
             autoFocus
-            placeholder="Ví dụ: 0912345678"
+            placeholder="Ví dụ: admin hoặc 0912345678"
             value={username}
             onChange={(event) => {
               setUsername(event.target.value);
