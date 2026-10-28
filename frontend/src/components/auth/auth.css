@@ -578,6 +578,13 @@ select.auth-input {
   }
 }
 
+@media (max-width: 640px) {
+  .auth-slide.is-active img {
+    animation: none;
+    transform: scale(1.02);
+  }
+}
+
 @media (max-width: 380px) {
   .auth-main {
     padding-inline: 16px;

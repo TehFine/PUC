@@ -43,12 +43,13 @@ export default function Stages() {
     if (Math.abs(distance) < 1) return;
 
     const duration = 540; // 540ms: nhịp nhàng, thanh thoát
-    const startTime = performance.now();
+    let startTime: number | null = null;
 
     // Easing nhanh lúc đầu và hãm dần đều khi gần về vị trí chính giữa màn hình (Quartic Ease-Out)
     const easeOutQuart = (t: number) => 1 - Math.pow(1 - t, 4);
 
     const step = (now: number) => {
+      if (startTime === null) startTime = now;
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / duration);
       const eased = easeOutQuart(progress);

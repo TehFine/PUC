@@ -2494,12 +2494,16 @@ body {
 @media (max-width: 900px) {
   .content-area { padding: 24px 16px calc(32px + env(safe-area-inset-bottom)); }
 
+  .app-header::before {
+    background: rgba(255, 255, 255, 0.98);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
   body.nav-open { overflow: hidden; }
   body.nav-open .app-header::before {
     display: block !important;
     background: rgba(255, 255, 255, 0.98);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     border-bottom-color: transparent;
   }
   body.nav-open .zones-topbar {
@@ -2517,10 +2521,20 @@ body {
     inset: 0;
     top: 56px;
     z-index: 110;
-    background: rgba(20, 55, 47, 0.28);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(15, 23, 42, 0.48);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     animation: fadeIn 0.18s ease;
+  }
+
+  .map-toolgroup,
+  .plotmap-zoom,
+  .plotmap-panel,
+  .plotmap-hint,
+  .zone-view-tabs,
+  .zones-left-col {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 
   .btn { min-height: 38px; padding: 8px 14px; font-size: 13px; }
@@ -3185,6 +3199,19 @@ body {
 @media (max-width: 900px) {
   .header-home { display: none !important; }
   .user-menu-panel { top: 54px; right: 14px; }
+  :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card) {
+    filter: none !important;
+    border-radius: 18px;
+    border: 1px solid rgba(20, 55, 47, 0.08);
+    box-shadow: 0 2px 10px rgba(20, 55, 47, 0.06);
+  }
+  :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card)::before {
+    clip-path: none !important;
+    border-radius: 18px;
+  }
+  .report-card::after {
+    display: none;
+  }
 }
 
 /* ─── THẺ CẮT CHÉO GÓC ────────────────────────────
