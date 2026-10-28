@@ -19,7 +19,12 @@ const ASIDE = {
     alt: "Vườn sầu riêng trên đất đỏ bazan và triền đồi Krông Búk, Đắk Lắk",
     heading: (
       <>
-        Sầu riêng <em>minh bạch</em> từ vườn đến thị trường
+        <span className="auth-title-bright">
+          Sầu riêng <em>minh bạch</em>
+        </span>{" "}
+        <span className="auth-title-mute">
+          từ vườn đến thị trường
+        </span>
       </>
     ),
     lead: "Đăng nhập để ghi nhật ký chăm sóc, xem mã vùng trồng và kết quả kiểm nghiệm ngay trên điện thoại.",

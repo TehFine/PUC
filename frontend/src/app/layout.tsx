@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { display } from "@/components/landing/fonts";
+import { display, heroSans } from "@/components/landing/fonts";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import NetworkStatus from "@/components/ui/NetworkStatus";
@@ -35,7 +35,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" suppressHydrationWarning>
-      <body className={`${inter.variable} ${display.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${display.variable} ${heroSans.variable} font-sans antialiased`}>
         <NetworkStatus />
         <AuthProvider>{children}</AuthProvider>
       </body>

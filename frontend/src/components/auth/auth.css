@@ -15,7 +15,7 @@
   --au-yellow: #f8f23a;
   --au-mist: #f3f7ee;
   --au-bad: #d9573a;
-  --au-display: var(--font-display), "Iowan Old Style", Georgia, serif;
+  --au-display: var(--font-hero-sans), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   min-height: 100vh;
   min-height: 100dvh;
@@ -93,10 +93,10 @@
 }
 .auth-brand-text strong {
   font-family: var(--au-display);
-  font-variation-settings: "wdth" 82;
-  font-weight: 400;
+  font-variation-settings: normal;
+  font-weight: 600;
   font-size: 1.55rem;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 .auth-brand-text span {
   font-size: 12.5px;
@@ -110,19 +110,32 @@
 .auth-aside h2 {
   margin: 0;
   max-width: 14em;
-  font-family: var(--au-display);
-  font-variation-settings: "wdth" 78;
-  font-weight: 400;
+  font-family: var(--font-hero-sans, var(--au-display));
+  font-variation-settings: normal;
+  font-weight: 600;
   font-size: clamp(2.1rem, 3.5vw, 3.3rem);
-  line-height: 1.04;
-  letter-spacing: -0.015em;
+  line-height: 1.06;
+  letter-spacing: -0.028em;
   color: #fff;
   text-wrap: balance;
 }
+.auth-title-bright {
+  display: block;
+  color: #ffffff;
+  font-weight: 600;
+}
+.auth-title-bright em,
 .auth-aside h2 em {
   font-style: italic;
+  font-weight: 650;
   color: var(--au-lime);
   padding-right: 0.05em;
+}
+.auth-title-mute {
+  display: block;
+  color: rgba(255, 255, 255, 0.46);
+  font-weight: 600;
+  letter-spacing: -0.028em;
 }
 .auth-aside-lead {
   max-width: 40ch;
@@ -226,11 +239,11 @@
 .auth-title {
   margin: 0 0 8px;
   font-family: var(--au-display);
-  font-variation-settings: "wdth" 78;
-  font-weight: 400;
+  font-variation-settings: normal;
+  font-weight: 600;
   font-size: clamp(2.2rem, 4vw, 3rem);
-  line-height: 1.04;
-  letter-spacing: -0.015em;
+  line-height: 1.08;
+  letter-spacing: -0.028em;
   color: var(--au-ink);
   text-wrap: balance;
 }
