@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   ClipboardCheck,
@@ -120,7 +120,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     setIsOpen(true);
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setIsOpen(false);
     if (dragRafRef.current !== null) {
       cancelAnimationFrame(dragRafRef.current);
@@ -130,7 +130,39 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
-  };
+  }, []);
+
+  // Khóa cuộn trang nền và chặn kéo giật layout
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevBodyTouchAction = document.body.style.touchAction;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    const preventDefaultTouch = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+    };
+
+    window.addEventListener("touchmove", preventDefaultTouch, { passive: false });
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+      document.body.style.touchAction = prevBodyTouchAction;
+      window.removeEventListener("touchmove", preventDefaultTouch);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, handleClose]);
 
   // Tính toán mục đang ở chính giữa gần nhất
   const rawCenterIndex = rotationDeg / STEP_DEG;
@@ -155,8 +187,47 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     [currentTab, onSelectTab]
   );
 
+  const hasDraggedRef = useRef(false);
+
+  // Hỗ trợ cuộn chuột mượt mà trên desktop/laptop không gây rung lắc
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!isOpen || !el) return;
+
+    let wheelTimeout: ReturnType<typeof setTimeout> | undefined;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const delta = e.deltaY;
+      const newRot = latestRotRef.current - delta * (SENSITIVITY * 0.5);
+      latestRotRef.current = newRot;
+      setRotationDeg(newRot);
+
+      clearTimeout(wheelTimeout);
+      wheelTimeout = setTimeout(() => {
+        const targetSnap = Math.round(latestRotRef.current / STEP_DEG) * STEP_DEG;
+        setRotationDeg(targetSnap);
+        const finalSnapIdx = Math.round(targetSnap / STEP_DEG);
+        triggerTabChange(finalSnapIdx);
+      }, 130);
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+      clearTimeout(wheelTimeout);
+    };
+  }, [isOpen, triggerTabChange]);
+
   // Xử lý kéo vuốt (Touch & Pointer)
   const onPointerDown = (e: React.PointerEvent) => {
+    // Không kích hoạt kéo nếu bấm vào nút đóng
+    if ((e.target as HTMLElement).closest(".pt-radial-close-btn")) {
+      return;
+    }
+    hasDraggedRef.current = false;
     setIsDragging(true);
     dragStartYRef.current = e.clientY;
     dragStartRotRef.current = rotationDeg;
@@ -172,7 +243,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       dragRafRef.current = null;
     }
     try {
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+      containerRef.current?.setPointerCapture?.(e.pointerId);
     } catch {
       // ignore synthetic pointer event errors
     }
@@ -181,9 +252,13 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   const onPointerMove = (e: React.PointerEvent) => {
     if (!isDragging) return;
     const dy = e.clientY - dragStartYRef.current;
+    if (Math.abs(dy) > 5) {
+      hasDraggedRef.current = true;
+    }
     const newRot = dragStartRotRef.current - dy * SENSITIVITY;
 
-    velocityRef.current = (e.clientY - lastYRef.current) * SENSITIVITY;
+    const instantV = (e.clientY - lastYRef.current) * SENSITIVITY;
+    velocityRef.current = velocityRef.current * 0.5 + instantV * 0.5;
     lastYRef.current = e.clientY;
     latestRotRef.current = newRot;
 
@@ -211,16 +286,27 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
     if (!isDragging) return;
     setIsDragging(false);
+    try {
+      containerRef.current?.releasePointerCapture?.(e.pointerId);
+    } catch {
+      // ignore
+    }
     if (dragRafRef.current) {
       cancelAnimationFrame(dragRafRef.current);
       dragRafRef.current = null;
     }
 
+    if (hasDraggedRef.current) {
+      setTimeout(() => {
+        hasDraggedRef.current = false;
+      }, 100);
+    }
+
     // Quán tính nhẹ + hít nam châm (snap to nearest step)
-    const currentRot = latestRotRef.current - velocityRef.current * 4;
+    const currentRot = latestRotRef.current - velocityRef.current * 3.5;
     const targetSnap = Math.round(currentRot / STEP_DEG) * STEP_DEG;
 
     // Animation trượt êm ái tới targetSnap
@@ -251,6 +337,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
 
   // Click trực tiếp vào một mục trên vòng xoay
   const handleItemClick = (virtualIdx: number) => {
+    if (hasDraggedRef.current) return;
     const targetSnap = virtualIdx * STEP_DEG;
     let startTime: number | null = null;
     const startRot = rotationDeg;
@@ -276,10 +363,10 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     animFrameRef.current = requestAnimationFrame(animateClick);
   };
 
-  // Tạo danh sách các mục hiển thị trong tầm nhìn (từ -4 đến +4 quanh snappedIndex)
+  // Tạo danh sách các mục hiển thị trong tầm nhìn (từ -6 đến +6 quanh snappedIndex)
   const visibleItems = useMemo(() => {
     const items = [];
-    for (let offset = -4; offset <= 4; offset++) {
+    for (let offset = -6; offset <= 6; offset++) {
       const virtualIdx = snappedIndex + offset;
       const normIdx = ((virtualIdx % NAV_ITEMS.length) + NAV_ITEMS.length) % NAV_ITEMS.length;
       const itemConfig = NAV_ITEMS[normIdx];
@@ -289,29 +376,31 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       const deltaRad = (deltaDeg * Math.PI) / 180;
 
       // Tọa độ hình cung:
-      // Tâm nằm bên phải (X_center = SCREEN_W + X_OFFSET)
       // Khi deltaDeg = 0: X_item nằm xa nhất về bên trái (xOffset = 0)
       // Khi deltaDeg tăng: X_item lùi dần về bên phải (xOffset > 0)
       const y = RADIUS * Math.sin(deltaRad);
-      const xOffset = RADIUS * (1 - Math.cos(deltaRad)); // lùi về bên phải mép màn hình
+      const xOffset = RADIUS * (1 - Math.cos(deltaRad));
 
       const distFromCenter = Math.abs(deltaDeg);
       const isCenter = distFromCenter < STEP_DEG * 0.45;
 
-      // Độ mờ và scale theo khoảng cách góc
-      const opacity = Math.max(0.18, 1 - Math.pow(distFromCenter / (STEP_DEG * 4.2), 1.6));
-      const scale = Math.max(0.72, 1.1 - (distFromCenter / (STEP_DEG * 4)) * 0.38);
+      // Độ mờ giảm mượt mà về 0 ở biên, triệt tiêu hoàn toàn hiện tượng nhấp nháy giật khựng
+      const normDist = distFromCenter / (STEP_DEG * 5.2);
+      const opacity = Math.max(0, Math.min(1, 1 - Math.pow(normDist, 1.6)));
+      const scale = Math.max(0.72, 1.08 - Math.min(1, distFromCenter / (STEP_DEG * 4.2)) * 0.36);
 
-      items.push({
-        virtualIdx,
-        itemConfig,
-        xOffset,
-        y,
-        isCenter,
-        opacity,
-        scale,
-        distFromCenter,
-      });
+      if (opacity > 0.01) {
+        items.push({
+          virtualIdx,
+          itemConfig,
+          xOffset,
+          y,
+          isCenter,
+          opacity,
+          scale,
+          distFromCenter,
+        });
+      }
     }
     return items;
   }, [snappedIndex, rotationDeg]);
