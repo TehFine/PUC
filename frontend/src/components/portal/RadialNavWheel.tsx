@@ -510,6 +510,9 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
                 />
               </svg>
 
+              {/* Thanh dock dài ngang nằm giữa màn hình (giống phần set timer trên iPhone) */}
+              <div className="pt-radial-selection-dock" aria-hidden="true" />
+
               {/* Vạch chỉ thị capsule nằm ngang ở vị trí trung tâm (Center Indicator) */}
               <div className="pt-radial-center-indicator" aria-hidden="true" />
 
