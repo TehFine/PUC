@@ -1586,7 +1586,6 @@
   font-size: 14.5px;
   font-weight: 500;
   white-space: nowrap;
-  transition: color 0.18s ease, font-size 0.18s ease, font-weight 0.18s ease;
   text-align: right;
   letter-spacing: -0.01em;
   color: #64748b;
@@ -1594,15 +1593,27 @@
   border-radius: 999px;
   background: transparent;
   border: 1px solid transparent;
+  transform: scale(0.96);
+  transform-origin: right center;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background-color 0.2s ease,
+              border-color 0.2s ease,
+              box-shadow 0.2s ease,
+              color 0.18s ease;
+  will-change: transform;
 }
+
+/* Phần dock nhỏ bao quanh tên tab khi được focus/chọn, scale ra nhẹ */
 .pt-radial-label.is-active-label {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #0f172a !important;
   letter-spacing: -0.015em;
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
+  background: #f1f5f9;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
+  padding: 7px 16px;
+  transform: scale(1.08);
 }
 
 /* Khung icon nằm ngoài đường cung tròn, cạnh phải tiếp xúc với đường tròn */
@@ -1613,17 +1624,22 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition: background-color 0.18s ease,
+              border-color 0.18s ease,
+              box-shadow 0.18s ease,
+              transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   border: 1.5px solid transparent;
   flex-shrink: 0;
   background: rgba(0, 0, 0, 0.035);
   transform-origin: right center;
+  transform: scale(1);
+  will-change: transform;
 }
 
 .pt-radial-icon-box.is-active-icon {
   border-width: 2.5px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
-  transform: scale(1.06);
+  transform: scale(1.08);
 }
 
 .pt-radial-footer {
