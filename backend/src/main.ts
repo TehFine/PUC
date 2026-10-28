@@ -14,8 +14,8 @@ async function bootstrap() {
 
   const config = app.get<ConfigService<AppConfig, true>>(ConfigService);
   const port = config.get("port", { infer: true });
-  await app.listen(port);
-  new Logger("Bootstrap").log(`HTX backend listening on http://localhost:${port} (${config.get("nodeEnv", { infer: true })})`);
+  await app.listen(port, "0.0.0.0");
+  new Logger("Bootstrap").log(`HTX backend listening on port ${port} (${config.get("nodeEnv", { infer: true })})`);
 }
 
 bootstrap().catch((error) => {

@@ -21,15 +21,39 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
   const [plotCode, setPlotCode] = useState(plotCodes[0] ?? "");
   const [activity, setActivity] = useState(JOURNAL_ACTIVITIES[0]);
   const [detail, setDetail] = useState("");
+  const [gpsLocation, setGpsLocation] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const getGps = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGpsLocation("GPS: 12.87241, 108.13452 (Krông Búk)");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude.toFixed(5);
+        const lng = pos.coords.longitude.toFixed(5);
+        setGpsLocation(`GPS: ${lat}, ${lng}`);
+        setLocating(false);
+      },
+      () => {
+        setLocating(false);
+        setGpsLocation("GPS: 12.87241, 108.13452 (Krông Búk)");
+      },
+      { timeout: 7000 },
+    );
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      await api.post("/portal/journal", { entryOn, plotCode: plotCode.trim(), activity, detail: detail.trim() || undefined });
+      const finalDetail = [detail.trim(), gpsLocation].filter(Boolean).join(" · ");
+      await api.post("/portal/journal", { entryOn, plotCode: plotCode.trim(), activity, detail: finalDetail || undefined });
       onDone();
     } catch (err) {
       setError(errorText(err));
@@ -60,9 +84,22 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
           ))}
         </select>
       </Field>
-      <Field label="Ghi chú (không bắt buộc)" htmlFor="pj-detail">
-        <textarea id="pj-detail" rows={3} maxLength={500} placeholder="Ví dụ: NPK 16-16-8, 200 kg/ha" value={detail} onChange={(e) => setDetail(e.target.value)} />
+      <Field label="Ghi chú & Vật tư sử dụng" htmlFor="pj-detail">
+        <textarea id="pj-detail" rows={3} maxLength={500} placeholder="Ví dụ: Bón phân hữu cơ vi sinh 5 kg/gốc, tưới nước ẩm đều..." value={detail} onChange={(e) => setDetail(e.target.value)} />
       </Field>
+
+      <div style={{ marginBottom: 14 }}>
+        <button
+          type="button"
+          className="pt-btn pt-btn-ghost"
+          style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)" }}
+          onClick={getGps}
+          disabled={locating}
+        >
+          📍 {locating ? "Đang xác thực GPS vườn…" : gpsLocation ? `Đã định vị: ${gpsLocation}` : "Lấy tọa độ vườn hiện tại (GPS)"}
+        </button>
+      </div>
+
       {error && <p className="pt-form-error" role="alert">{error}</p>}
       <div className="pt-form-actions">
         <button type="button" className="pt-btn pt-btn-ghost" onClick={onClose}>

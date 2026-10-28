@@ -41,7 +41,19 @@ export const PESTICIDE_STATUS = {
   banned: { label: "Bị cấm", tone: "red" },
 } as const satisfies Record<string, { label: string; tone: Tone }>;
 
-export const JOURNAL_ACTIVITIES = ["Tưới nước", "Bón phân", "Cắt cỏ", "Tỉa cành", "Phun thuốc", "Thu hoạch", "Khác"];
+export const JOURNAL_ACTIVITIES = [
+  "Tưới nước",
+  "Bón phân",
+  "Phun thuốc BVTV",
+  "Làm đất & Cải tạo đất",
+  "Xử lý ra hoa & Nuôi đọt",
+  "Thụ phấn bổ sung",
+  "Tỉa cành & Tỉa quả non",
+  "Bao trái sầu riêng",
+  "Cắt cỏ & Dọn vườn",
+  "Thu hoạch",
+  "Khác",
+];
 
 export const REQUEST_TYPES = [
   "Đăng ký vùng trồng mới",

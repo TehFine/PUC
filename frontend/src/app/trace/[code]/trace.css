@@ -1,0 +1,513 @@
+/* CSS cho trang Truy xuất nguồn gốc bằng mã QR (Chuẩn Nghị định thư GACC & TCVN) */
+
+.tr-root {
+  min-height: 100vh;
+  background: radial-gradient(circle at top center, #f4fbf6 0%, #edf5f0 40%, #e6efe9 100%);
+  color: #171b13;
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  padding-bottom: 64px;
+}
+
+.tr-wrap {
+  width: min(880px, calc(100% - 32px));
+  margin-inline: auto;
+}
+
+/* ─── Topbar ─── */
+.tr-topbar {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(20, 55, 47, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.tr-topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  gap: 12px;
+}
+
+.tr-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: #14372f;
+}
+
+.tr-brand-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #14372f;
+  color: #f8f23a;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(20, 55, 47, 0.2);
+}
+
+.tr-brand-text strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #14372f;
+  line-height: 1.2;
+}
+
+.tr-brand-text span {
+  font-size: 11px;
+  color: #556b63;
+  display: block;
+}
+
+.tr-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(22, 101, 52, 0.1);
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(22, 101, 52, 0.2);
+}
+
+.tr-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.25);
+  animation: tr-pulse 2s infinite ease-in-out;
+}
+
+@keyframes tr-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
+}
+
+/* ─── Hero Certificate Banner ─── */
+.tr-hero {
+  margin-top: 24px;
+  background: linear-gradient(135deg, #14372f 0%, #1a4a3f 60%, #205c4f 100%);
+  border-radius: 24px;
+  padding: 32px 28px;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 16px 36px rgba(20, 55, 47, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.tr-hero::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(248, 242, 58, 0.18) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.tr-hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(248, 242, 58, 0.2);
+  color: #f8f23a;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 242, 58, 0.35);
+  margin-bottom: 14px;
+}
+
+.tr-hero-title {
+  font-size: clamp(22px, 4vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0 0 10px;
+}
+
+.tr-hero-subtitle {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+  max-width: 580px;
+  line-height: 1.5;
+  margin: 0 0 24px;
+}
+
+.tr-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.tr-hero-kpi {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px 14px;
+  backdrop-filter: blur(8px);
+}
+
+.tr-hero-kpi-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.tr-hero-kpi-val {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.tr-hero-kpi-val.highlight {
+  color: #f8f23a;
+}
+
+/* ─── Card Sections ─── */
+.tr-card {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid rgba(20, 55, 47, 0.09);
+  box-shadow: 0 6px 20px rgba(20, 55, 47, 0.04);
+  padding: 24px;
+  margin-top: 20px;
+}
+
+.tr-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 12px;
+}
+
+.tr-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #14372f;
+  margin: 0;
+}
+
+.tr-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(20, 55, 47, 0.07);
+  color: #14372f;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+}
+
+/* ─── Information Rows ─── */
+.tr-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px 20px;
+}
+
+@media (max-width: 600px) {
+  .tr-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tr-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tr-info-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.tr-info-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+/* ─── Lab Test Pills / Badges ─── */
+.tr-tests-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.tr-test-card {
+  border-radius: 14px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(20, 55, 47, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.tr-test-card.is-pass {
+  background: #f0fdf4;
+  border-color: rgba(22, 163, 74, 0.25);
+}
+
+.tr-test-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #dcfce7;
+  color: #15803d;
+  margin-bottom: 8px;
+}
+
+.tr-test-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px;
+}
+
+.tr-test-desc {
+  font-size: 12px;
+  color: #475569;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.tr-test-meta {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(20, 55, 47, 0.12);
+  font-size: 11px;
+  color: #64748b;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ─── Households List ─── */
+.tr-hh-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.tr-hh-table th {
+  text-align: left;
+  padding: 10px 12px;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tr-hh-table td {
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+
+.tr-hh-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ─── Timeline ─── */
+.tr-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  position: relative;
+}
+
+.tr-timeline::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 17px;
+  width: 2px;
+  background: #e2e8f0;
+}
+
+.tr-timeline-item {
+  position: relative;
+  padding-left: 44px;
+  margin-bottom: 20px;
+}
+
+.tr-timeline-item:last-child {
+  margin-bottom: 0;
+}
+
+.tr-timeline-node {
+  position: absolute;
+  left: 8px;
+  top: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3px solid #14372f;
+  box-shadow: 0 0 0 3px rgba(20, 55, 47, 0.1);
+}
+
+.tr-timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.tr-timeline-activity {
+  font-size: 14px;
+  font-weight: 800;
+  color: #14372f;
+}
+
+.tr-timeline-date {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.tr-timeline-plot {
+  font-size: 11px;
+  background: #f1f5f9;
+  padding: 2px 7px;
+  border-radius: 5px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.tr-timeline-detail {
+  font-size: 13px;
+  color: #334155;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ─── Search Other Code Box ─── */
+.tr-search-box {
+  background: #f8fafc;
+  border-radius: 18px;
+  padding: 20px;
+  border: 1px dashed rgba(20, 55, 47, 0.18);
+  margin-top: 24px;
+  text-align: center;
+}
+
+.tr-search-form {
+  display: flex;
+  gap: 8px;
+  max-width: 440px;
+  margin: 12px auto 0;
+}
+
+.tr-search-input {
+  flex: 1;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  padding: 0 14px;
+  font-size: 14px;
+  background: #ffffff;
+  outline: none;
+  font-weight: 600;
+}
+
+.tr-search-input:focus {
+  border-color: #14372f;
+  box-shadow: 0 0 0 3px rgba(20, 55, 47, 0.15);
+}
+
+.tr-search-btn {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  background: #14372f;
+  color: #ffffff;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.tr-search-btn:hover {
+  background: #1c4b40;
+}
+
+/* ─── Print / Share Action ─── */
+.tr-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.tr-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+}
+
+.tr-action-btn:hover {
+  border-color: #14372f;
+  color: #14372f;
+}
+
+@media print {
+  .tr-topbar, .tr-search-box, .tr-actions {
+    display: none !important;
+  }
+  .tr-root {
+    background: #ffffff;
+    padding: 0;
+  }
+  .tr-hero {
+    box-shadow: none;
+    background: #14372f !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

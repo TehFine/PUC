@@ -97,12 +97,29 @@ export default function Harvest() {
                     </span>
                   </td>
                   <td>
-                    <button className="btn btn-outline btn-sm">{h.qr}</button>
+                    <a
+                      href={`/trace/${h.code}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-outline btn-sm"
+                      title="Xem trang quét mã QR truy xuất nguồn gốc"
+                      style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                    >
+                      📱 {h.qr}
+                    </a>
                   </td>
                   <td><span className={`badge ${statusClass[h.statusType]}`}>{h.status}</span></td>
                   <td>
                     <div style={{ display: "flex", gap: 5 }}>
-                      <button className="btn btn-outline btn-sm">Xem</button>
+                      <a
+                        href={`/trace/${h.code}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-outline btn-sm"
+                        style={{ textDecoration: "none" }}
+                      >
+                        Truy xuất QR
+                      </a>
                       <button className="btn btn-outline btn-sm">Chứng từ</button>
                     </div>
                   </td>

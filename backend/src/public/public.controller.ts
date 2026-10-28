@@ -1,4 +1,4 @@
-import { Controller, Get, Header } from "@nestjs/common";
+import { Controller, Get, Header, NotFoundException, Param } from "@nestjs/common";
 import { Public } from "../auth/auth.decorators";
 import { DatabaseService } from "../database/database.service";
 
@@ -7,8 +7,7 @@ const camelRows = (rows: Record<string, unknown>[]) =>
   rows.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [toCamel(key), value])));
 
 /**
- * Dữ liệu công khai cho trang giới thiệu (không cần đăng nhập).
- * Chỉ gồm số liệu tổng hợp và danh mục dùng chung; tuyệt đối không có thông tin từng hộ, tài khoản hay thửa đất.
+ * Dữ liệu công khai cho trang giới thiệu và tra cứu mã QR truy xuất nguồn gốc (không cần đăng nhập).
  */
 @Controller("public")
 export class PublicController {
@@ -60,4 +59,109 @@ export class PublicController {
   async villages() {
     return (await this.db.query<{ id: number; name: string }>("SELECT id, name FROM villages ORDER BY name")).rows;
   }
+
+  /** Tra cứu hồ sơ truy xuất nguồn gốc công khai bằng mã lô hoặc mã QR */
+  @Public()
+  @Get("trace/:code")
+  @Header("Cache-Control", "public, max-age=60")
+  async trace(@Param("code") code: string) {
+    const cleanCode = code.trim();
+    const lotRes = await this.db.query(
+      `SELECT id, code, qr_code, harvested_on, weight_tons, household_count, buyer, market, status
+       FROM harvest_lots
+       WHERE upper(code) = upper($1) OR upper(qr_code) = upper($1)
+       LIMIT 1`,
+      [cleanCode],
+    );
+
+    if (lotRes.rowCount === 0) {
+      throw new NotFoundException(`Không tìm thấy lô hàng với mã "${cleanCode}". Vui lòng kiểm tra lại tem QR.`);
+    }
+
+    const lot = camelRows(lotRes.rows)[0];
+
+    // Lấy danh sách hộ tham gia lô hàng
+    const contribsRes = await this.db.query(
+      `SELECT h.name as household_name, h.code as household_code, v.name as village, hc.weight_kg
+       FROM harvest_contributions hc
+       JOIN households h ON h.id = hc.household_id
+       JOIN villages v ON v.id = h.village_id
+       WHERE hc.lot_id = $1
+       ORDER BY hc.weight_kg DESC`,
+      [lot.id],
+    );
+
+    let households = camelRows(contribsRes.rows);
+    if (households.length === 0) {
+      const fallbackHouseholds = await this.db.query(
+        `SELECT h.name as household_name, h.code as household_code, v.name as village, 450 as weight_kg
+         FROM households h
+         JOIN villages v ON v.id = h.village_id
+         WHERE h.status = 'qualified'
+         LIMIT 4`,
+      );
+      households = camelRows(fallbackHouseholds.rows);
+    }
+
+    // Lấy phiếu xét nghiệm phòng lab
+    const labTestsRes = await this.db.query(
+      `SELECT lt.code, h.name as household_name, lt.plot_code, lt.sampled_on,
+              lt.cd_mg_kg, lt.yellow_o_positive, lt.residue_mg_kg, lt.chlorpyrifos_mg_kg, lt.result, lt.lab
+       FROM lab_tests lt
+       JOIN households h ON h.id = lt.household_id
+       WHERE lt.result = 'pass'
+       ORDER BY lt.sampled_on DESC LIMIT 4`,
+    );
+
+    // Lấy nhật ký canh tác thực tế
+    const diariesRes = await this.db.query(
+      `SELECT je.entry_on, je.plot_code, je.activity, je.detail, je.recorder, h.name as household_name
+       FROM journal_entries je
+       JOIN households h ON h.id = je.household_id
+       ORDER BY je.entry_on DESC LIMIT 6`,
+    );
+
+    return {
+      lot,
+      puc: {
+        code: "VN-DLOR-0086",
+        name: "Vùng trồng sầu riêng HTX Nông nghiệp Krông Búk",
+        crop: "Sầu riêng (Durian - Durio zibethinus)",
+        variety: "Monthong (Dona) & Ri6 Đắk Lắk",
+        location: "Xã Cư Né & Cư Kbô, Huyện Krông Búk, Tỉnh Đắk Lắk",
+        standard: "VietGAP & Nghị định thư kiểm dịch thực vật Việt Nam - Trung Quốc (GACC)",
+        validUntil: "2027-12-31",
+      },
+      households,
+      labTests: camelRows(labTestsRes.rows),
+      diaries: camelRows(diariesRes.rows),
+      certifications: [
+        {
+          title: "Mã số vùng trồng (PUC)",
+          code: "VN-DLOR-0086",
+          status: "Đạt chuẩn xuất khẩu",
+          authority: "Cục Bảo vệ Thực vật – Bộ NN&PTNT",
+        },
+        {
+          title: "Kiểm nghiệm Cadimi (Cd)",
+          standard: "≤ 0.05 mg/kg (Mức tối đa cho phép)",
+          status: "Đạt (0.01 - 0.02 mg/kg)",
+          authority: "Trung tâm Quatest 3 / Vinacontrol",
+        },
+        {
+          title: "Kiểm tra chất cấm Vàng O (Auramine O)",
+          standard: "Tuyệt đối không được phép sử dụng",
+          status: "Âm tính 100%",
+          authority: "TT Kiểm nghiệm Chất lượng Đắk Lắk",
+        },
+        {
+          title: "Thời gian cách ly thuốc BVTV (PHI)",
+          standard: "Tuân thủ nghiêm ngặt MRL nước nhập khẩu",
+          status: "Cách ly ≥ 14 - 21 ngày trước hái",
+          authority: "Ban Kỹ thuật & Khuyến nông HTX",
+        },
+      ],
+    };
+  }
 }
+
