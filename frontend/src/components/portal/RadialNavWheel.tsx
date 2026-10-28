@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowUpRight,
   BookOpen,
   ClipboardCheck,
   House,
@@ -418,6 +419,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
           aria-controls="portal-radial-drawer"
           title="Mở menu xoay điều hướng"
         >
+          <ArrowUpRight className="pt-radial-launcher-icon" size={17} strokeWidth={2.4} aria-hidden="true" />
           <span className="pt-radial-launcher-label">Điều hướng</span>
         </button>
       </aside>

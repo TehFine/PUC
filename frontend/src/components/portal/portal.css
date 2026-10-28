@@ -1326,7 +1326,7 @@
   }
 }
 
-/* ── Nút nổi "Điều hướng" ở góc dưới bên phải (Tông vàng hệ thống, bo vừa phải, cắt góc dưới) ── */
+/* ── Nút nổi "Điều hướng" ở góc dưới bên phải (Phong cách Capsule Action với icon mũi tên ↗) ── */
 .pt-radial-launcher-wrap {
   position: fixed;
   right: 18px;
@@ -1339,61 +1339,57 @@
 }
 
 .pt-radial-launcher {
-  --cut: 13px;
-  position: relative;
-  isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 11px 22px 11px 20px;
-  border: none;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 14.5px;
-  font-weight: 700;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px 0 12px;
+  border-radius: 9999px;
+  border: 1.5px solid #b9c7d4;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
   letter-spacing: -0.01em;
   cursor: pointer;
-  box-shadow: 0 4px 18px rgba(240, 219, 51, 0.42), 0 2px 6px rgba(20, 55, 47, 0.16);
-  border-radius: 14px 14px 0 14px;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.pt-radial-launcher::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: 14px 14px 0 14px;
-  background: linear-gradient(135deg, #faec57 0%, #eed524 100%);
-  border: 1px solid rgba(20, 55, 47, 0.18);
-  clip-path: polygon(
-    0 0,
-    100% 0,
-    100% calc(100% - var(--cut)),
-    calc(100% - var(--cut)) 100%,
-    0 100%
-  );
-  transition: background 0.2s ease;
+.pt-radial-launcher-icon {
+  color: #2563eb;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .pt-radial-launcher:hover {
-  transform: translateY(-2px) scale(1.03);
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+  background: #fbfdff;
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.14), 0 2px 6px rgba(15, 23, 42, 0.06);
 }
-.pt-radial-launcher:hover::before {
-  background: linear-gradient(135deg, #fdf066 0%, #f4dc30 100%);
+
+.pt-radial-launcher:hover .pt-radial-launcher-icon {
+  transform: translate(1.5px, -1.5px);
+  color: #1d4ed8;
 }
+
 .pt-radial-launcher:active {
-  transform: scale(0.96);
+  transform: translateY(1px) scale(0.97);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
 }
 
 .pt-radial-launcher-label {
   white-space: nowrap;
   font-family: inherit;
-  font-weight: 700;
-  font-size: 14.5px;
-  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+  color: #0f172a;
   letter-spacing: -0.01em;
 }
 
