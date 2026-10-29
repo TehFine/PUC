@@ -86,7 +86,11 @@ interface RadialNavWheelProps {
   onSelectTab: (tab: PortalTabId) => void;
 }
 
-const STEP_DEG = 12; // 12 độ mỗi bước, đúng 30 bước quanh vòng 360 độ (chia hết cho 6 tab)
+const STEP_DEG = 12; // 12 độ mỗi bước
+const MIN_INDEX = 0;
+const MAX_INDEX = NAV_ITEMS.length - 1; // 5
+const MIN_ROT = MIN_INDEX * STEP_DEG; // 0 độ (Trang chủ)
+const MAX_ROT = MAX_INDEX * STEP_DEG; // 60 độ (Kiến thức)
 const RADIUS = 350; // Bán kính hình tròn ảo (px)
 const PX_PER_STEP = 73; // Khoảng cách pixel xấp xỉ mỗi bước
 const SENSITIVITY = STEP_DEG / PX_PER_STEP; // Độ nhạy vuốt ngón tay: ~0.164 deg/px
@@ -259,15 +263,11 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     };
   }, [isOpen, handleClose]);
 
-  // Tính toán mục đang ở chính giữa gần nhất
-  const rawCenterIndex = rotationDeg / STEP_DEG;
-  const snappedIndex = Math.round(rawCenterIndex);
-
-  // Khi snap dừng lại ở đâu, chuyển sang tab đó
+  // Khi snap dừng lại ở đâu, chuyển sang tab đó (giới hạn chặt chẽ 0 đến MAX_INDEX)
   const triggerTabChange = useCallback(
     (index: number) => {
-      const norm = ((index % NAV_ITEMS.length) + NAV_ITEMS.length) % NAV_ITEMS.length;
-      const targetTab = NAV_ITEMS[norm].id;
+      const clampedIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, index));
+      const targetTab = NAV_ITEMS[clampedIdx].id;
       if (targetTab !== currentTab) {
         onSelectTab(targetTab);
         try {
@@ -284,7 +284,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
 
   const hasDraggedRef = useRef(false);
 
-  // Hỗ trợ cuộn chuột mượt mà trên desktop/laptop không gây rung lắc
+  // Hỗ trợ cuộn chuột mượt mà trên desktop/laptop với giới hạn 2 đầu
   useEffect(() => {
     const el = containerRef.current;
     if (!isOpen || !el) return;
@@ -296,16 +296,26 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       e.stopPropagation();
 
       const delta = e.deltaY;
-      const newRot = latestRotRef.current - delta * (SENSITIVITY * 0.5);
+      let newRot = latestRotRef.current - delta * (SENSITIVITY * 0.5);
+
+      // Cản lực và khóa cứng khi cuộn quá 2 đầu
+      if (newRot < MIN_ROT) {
+        newRot = Math.max(MIN_ROT - 1.5, newRot);
+      } else if (newRot > MAX_ROT) {
+        newRot = Math.min(MAX_ROT + 1.5, newRot);
+      }
+
       latestRotRef.current = newRot;
       setRotationDeg(newRot);
 
       clearTimeout(wheelTimeout);
       wheelTimeout = setTimeout(() => {
-        const targetSnap = Math.round(latestRotRef.current / STEP_DEG) * STEP_DEG;
+        const rawSnap = Math.round(latestRotRef.current / STEP_DEG);
+        const clampedSnapIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, rawSnap));
+        const targetSnap = clampedSnapIdx * STEP_DEG;
+        latestRotRef.current = targetSnap;
         setRotationDeg(targetSnap);
-        const finalSnapIdx = Math.round(targetSnap / STEP_DEG);
-        triggerTabChange(finalSnapIdx);
+        triggerTabChange(clampedSnapIdx);
         scheduleAutoClose(350);
       }, 130);
     };
@@ -330,8 +340,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     hasDraggedRef.current = false;
     setIsDragging(true);
     dragStartYRef.current = e.clientY;
-    dragStartRotRef.current = rotationDeg;
-    latestRotRef.current = rotationDeg;
+    dragStartRotRef.current = latestRotRef.current;
     lastYRef.current = e.clientY;
     velocityRef.current = 0;
     if (animFrameRef.current) {
@@ -352,10 +361,32 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   const onPointerMove = (e: React.PointerEvent) => {
     if (!isDragging) return;
     const dy = e.clientY - dragStartYRef.current;
-    if (Math.abs(dy) > 5) {
+    if (Math.abs(dy) > 4) {
       hasDraggedRef.current = true;
     }
-    const newRot = dragStartRotRef.current - dy * SENSITIVITY;
+
+    const rawRot = dragStartRotRef.current - dy * SENSITIVITY;
+    let newRot = rawRot;
+
+    // Giới hạn biên cứng: Khi chạm tới Tab đầu (0 - Trang chủ) hoặc Tab cuối (5 - Kiến thức), bánh xe khựng lại không lướt được nữa
+    const MAX_OVERSCROLL = 2.4; // Độ lún đàn hồi tối đa 2.4° trước khi dừng hẳn
+    const RESISTANCE = 0.12; // Cản lực 88%
+    const maxOverDeg = MAX_OVERSCROLL / RESISTANCE; // 20 độ kéo
+
+    if (rawRot < MIN_ROT) {
+      const over = MIN_ROT - rawRot;
+      newRot = MIN_ROT - Math.min(MAX_OVERSCROLL, over * RESISTANCE);
+      // Khóa mốc kéo để khi đảo chiều vuốt ngược lại, phản hồi tức thì không bị trễ
+      if (over > maxOverDeg) {
+        dragStartYRef.current = e.clientY - (dragStartRotRef.current - (MIN_ROT - maxOverDeg)) / SENSITIVITY;
+      }
+    } else if (rawRot > MAX_ROT) {
+      const over = rawRot - MAX_ROT;
+      newRot = MAX_ROT + Math.min(MAX_OVERSCROLL, over * RESISTANCE);
+      if (over > maxOverDeg) {
+        dragStartYRef.current = e.clientY - (dragStartRotRef.current - (MAX_ROT + maxOverDeg)) / SENSITIVITY;
+      }
+    }
 
     const instantV = (e.clientY - lastYRef.current) * SENSITIVITY;
     velocityRef.current = velocityRef.current * 0.5 + instantV * 0.5;
@@ -369,12 +400,11 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       });
     }
 
-    // Phản hồi rung haptic tiết kiệm pin (giới hạn tần suất rung tối đa 120ms/lần)
-    const currentNearest = Math.round(newRot / STEP_DEG);
-    const norm = ((currentNearest % NAV_ITEMS.length) + NAV_ITEMS.length) % NAV_ITEMS.length;
+    // Phản hồi rung haptic tiết kiệm pin (chỉ rung cho các tab hợp lệ 0-5)
+    const currentNearest = Math.max(MIN_INDEX, Math.min(MAX_INDEX, Math.round(newRot / STEP_DEG)));
     const now = Date.now();
-    if (norm !== lastHapticIndexRef.current && now - lastVibrateTimeRef.current > 120) {
-      lastHapticIndexRef.current = norm;
+    if (currentNearest !== lastHapticIndexRef.current && now - lastVibrateTimeRef.current > 120) {
+      lastHapticIndexRef.current = currentNearest;
       lastVibrateTimeRef.current = now;
       try {
         if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -406,29 +436,32 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     }
 
     // Quán tính nhẹ + hít nam châm (snap to nearest step)
-    const currentRot = latestRotRef.current - velocityRef.current * 3.5;
-    const targetSnap = Math.round(currentRot / STEP_DEG) * STEP_DEG;
+    // Giới hạn tuyệt đối trong phạm vi MIN_INDEX (0) đến MAX_INDEX (5)
+    const currentRot = latestRotRef.current - velocityRef.current * 3.0;
+    const rawSnapIdx = Math.round(currentRot / STEP_DEG);
+    const clampedSnapIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, rawSnapIdx));
+    const targetSnap = clampedSnapIdx * STEP_DEG;
 
     // Animation trượt êm ái tới targetSnap
     let startTime: number | null = null;
-    const startRot = rotationDeg;
-    const duration = 280;
+    const startRot = latestRotRef.current;
+    const duration = 260;
 
     const animateSnap = (time: number) => {
       if (startTime === null) startTime = time;
       const elapsed = time - startTime;
       const progress = Math.min(1, elapsed / duration);
-      // easeOutCubic
       const ease = 1 - Math.pow(1 - progress, 3);
       const nextRot = startRot + (targetSnap - startRot) * ease;
+      latestRotRef.current = nextRot;
       setRotationDeg(nextRot);
 
       if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(animateSnap);
       } else {
+        latestRotRef.current = targetSnap;
         setRotationDeg(targetSnap);
-        const finalSnapIdx = Math.round(targetSnap / STEP_DEG);
-        triggerTabChange(finalSnapIdx);
+        triggerTabChange(clampedSnapIdx);
         // Tự động thu popup lại sau khi dừng quay ở tab
         scheduleAutoClose(300);
       }
@@ -438,16 +471,17 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   };
 
   // Click trực tiếp vào một mục trên vòng xoay
-  const handleItemClick = (virtualIdx: number) => {
+  const handleItemClick = (idx: number) => {
     if (hasDraggedRef.current) return;
     if (autoCloseTimerRef.current) {
       clearTimeout(autoCloseTimerRef.current);
       autoCloseTimerRef.current = null;
     }
-    const targetSnap = virtualIdx * STEP_DEG;
+    const clampedIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, idx));
+    const targetSnap = clampedIdx * STEP_DEG;
     let startTime: number | null = null;
-    const startRot = rotationDeg;
-    const duration = 260;
+    const startRot = latestRotRef.current;
+    const duration = 240;
 
     const animateClick = (time: number) => {
       if (startTime === null) startTime = time;
@@ -455,13 +489,15 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       const progress = Math.min(1, elapsed / duration);
       const ease = 1 - Math.pow(1 - progress, 3);
       const nextRot = startRot + (targetSnap - startRot) * ease;
+      latestRotRef.current = nextRot;
       setRotationDeg(nextRot);
 
       if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(animateClick);
       } else {
+        latestRotRef.current = targetSnap;
         setRotationDeg(targetSnap);
-        triggerTabChange(virtualIdx);
+        triggerTabChange(clampedIdx);
         // Tự động thu popup lại sau khi click chọn tab
         scheduleAutoClose(240);
       }
@@ -471,16 +507,11 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     animFrameRef.current = requestAnimationFrame(animateClick);
   };
 
-  // Tạo danh sách các mục hiển thị trong tầm nhìn (từ -6 đến +6 quanh snappedIndex)
+  // Danh sách các tab hiển thị - KHÔNG LẶP VÔ TẬN: Chỉ hiển thị đúng các tab hiện có (0 đến 5)
   const visibleItems = useMemo(() => {
-    const items = [];
-    for (let offset = -6; offset <= 6; offset++) {
-      const virtualIdx = snappedIndex + offset;
-      const normIdx = ((virtualIdx % NAV_ITEMS.length) + NAV_ITEMS.length) % NAV_ITEMS.length;
-      const itemConfig = NAV_ITEMS[normIdx];
-
-      // Góc lệch so với vị trí giữa: (virtualIdx * STEP_DEG - rotationDeg)
-      const deltaDeg = virtualIdx * STEP_DEG - rotationDeg;
+    return NAV_ITEMS.map((itemConfig, idx) => {
+      // Góc lệch so với vị trí giữa: (idx * STEP_DEG - rotationDeg)
+      const deltaDeg = idx * STEP_DEG - rotationDeg;
       const deltaRad = (deltaDeg * Math.PI) / 180;
 
       // Tọa độ hình cung:
@@ -492,26 +523,23 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       const distFromCenter = Math.abs(deltaDeg);
       const isCenter = distFromCenter < STEP_DEG * 0.45;
 
-      // Độ mờ giảm mượt mà về 0 ở biên, triệt tiêu hoàn toàn hiện tượng nhấp nháy giật khựng
+      // Độ mờ và scale mượt mà
       const normDist = distFromCenter / (STEP_DEG * 4.6);
       const opacity = Math.max(0, Math.min(1, 1 - Math.pow(normDist, 1.7)));
       const scale = Math.max(0.74, 1.08 - Math.min(1, distFromCenter / (STEP_DEG * 3.8)) * 0.32);
 
-      if (opacity > 0.01) {
-        items.push({
-          virtualIdx,
-          itemConfig,
-          xOffset,
-          y,
-          isCenter,
-          opacity,
-          scale,
-          distFromCenter,
-        });
-      }
-    }
-    return items;
-  }, [snappedIndex, rotationDeg]);
+      return {
+        idx,
+        itemConfig,
+        xOffset,
+        y,
+        isCenter,
+        opacity,
+        scale,
+        distFromCenter,
+      };
+    });
+  }, [rotationDeg]);
 
   return (
     <>
@@ -655,21 +683,21 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
               {/* Thanh dock dài ngang nằm giữa màn hình (giống phần set timer trên iPhone) */}
               <div className="pt-radial-selection-dock" aria-hidden="true" />
 
-              {/* Danh sách các nút chức năng xếp uốn cong theo cung tròn */}
+              {/* Danh sách các nút chức năng xếp uốn cong theo cung tròn (đúng 6 tab, không lặp vô tận) */}
               <div className="pt-radial-wheel">
                 {visibleItems.map(
-                  ({ virtualIdx, itemConfig, xOffset, y, isCenter, opacity, scale }) => {
+                  ({ idx, itemConfig, xOffset, y, isCenter, opacity, scale }) => {
                     const Icon = itemConfig.icon;
                     return (
                       <div
-                        key={virtualIdx}
+                        key={itemConfig.id}
                         className={`pt-radial-item ${isCenter ? "is-center" : ""}`}
                         style={{
                           transform: `translate3d(${xOffset}px, ${y}px, 0) scale(${scale})`,
                           opacity,
                           zIndex: isCenter ? 20 : 10,
                         }}
-                        onClick={() => handleItemClick(virtualIdx)}
+                        onClick={() => handleItemClick(idx)}
                       >
                         {/* Nhãn tên chức năng nằm bên trái */}
                         <div
