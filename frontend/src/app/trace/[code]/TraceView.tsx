@@ -81,12 +81,17 @@ export default function TraceView() {
   const [searchCode, setSearchCode] = useState(code);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (!code) return;
-    let active = true;
+  const [prevCode, setPrevCode] = useState(code);
+  if (prevCode !== code) {
+    setPrevCode(code);
     setLoading(true);
     setError(null);
     setSearchCode(code);
+  }
+
+  useEffect(() => {
+    if (!code) return;
+    let active = true;
 
     fetch(`/api/public/trace/${encodeURIComponent(code)}`)
       .then((res) => {

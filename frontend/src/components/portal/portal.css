@@ -1522,25 +1522,28 @@
   cursor: grabbing;
 }
 
-/* Đường cong cung tròn SVG cố định mép phải */
-.pt-radial-arc-svg {
+/* Vòng chia vạch mặt đồng hồ và đường cong SVG cố định mép phải */
+.pt-radial-dial-svg {
   position: absolute;
   right: 0;
-  top: 0;
-  width: 180px;
-  height: 100%;
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* Thanh dock dài ngang nằm giữa màn hình (Sáng hơn, bo tròn mềm mại 26px, cao 66px, không dùng liquid glass) */
-.pt-radial-selection-dock {
-  position: absolute;
-  left: 16px;
-  right: 16px;
   top: 50%;
   transform: translateY(-50%);
-  height: 66px;
+  width: 320px;
+  height: 700px;
+  max-height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+
+/* Thanh dock dài ngang nằm giữa màn hình */
+.pt-radial-selection-dock {
+  position: absolute;
+  left: 14px;
+  right: 54px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 68px;
   border-radius: 26px;
   background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -1549,15 +1552,10 @@
   z-index: 3;
 }
 
-/* Vạch chỉ thị capsule nằm ngang ở vị trí trung tâm (Ẩn khi đã có thanh dock toàn hàng) */
-.pt-radial-center-indicator {
-  display: none;
-}
-
 /* Danh sách các nút chức năng xếp uốn cong theo cung tròn */
 .pt-radial-wheel {
   position: absolute;
-  right: 116px;
+  right: 92px; /* Khoảng cách an toàn 16px trước đường line tròn để icon không đè lên vạch */
   top: 50%;
   width: 0;
   height: 0;
@@ -1568,7 +1566,7 @@
 .pt-radial-item {
   position: absolute;
   top: 0;
-  right: 0px; /* Cạnh phải của icon box vừa đủ tiếp xúc đúng vào đường line vòng tròn */
+  right: 0px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1603,9 +1601,9 @@
   will-change: transform;
 }
 
-/* Phần dock nhỏ bao quanh tên tab khi được focus/chọn, scale ra nhẹ */
+/* Phần dock nhỏ bao quanh tên tab khi được focus/chọn */
 .pt-radial-label.is-active-label {
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 700;
   color: #0f172a !important;
   letter-spacing: -0.015em;
@@ -1616,7 +1614,7 @@
   transform: scale(1.08);
 }
 
-/* Khung icon nằm ngoài đường cung tròn, cạnh phải tiếp xúc với đường tròn */
+/* Khung icon nằm ngay sát phía trong đường cung tròn và vạch chia */
 .pt-radial-icon-box {
   width: 48px;
   height: 48px;
@@ -1628,9 +1626,10 @@
               border-color 0.18s ease,
               box-shadow 0.18s ease,
               transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  border: 1.5px solid transparent;
+  border: 1.5px solid rgba(15, 23, 42, 0.08);
   flex-shrink: 0;
-  background: rgba(15, 23, 42, 0.05);
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   transform-origin: right center;
   transform: scale(1);
   will-change: transform;
@@ -1638,8 +1637,8 @@
 
 .pt-radial-icon-box.is-active-icon {
   border-width: 2.5px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04);
-  transform: scale(1.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.05);
+  transform: scale(1.12);
 }
 
 .pt-radial-footer {

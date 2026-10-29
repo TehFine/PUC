@@ -86,10 +86,76 @@ interface RadialNavWheelProps {
   onSelectTab: (tab: PortalTabId) => void;
 }
 
-const STEP_DEG = 11.2; // Góc giữa 2 mục kề nhau (độ), tương ứng khoảng 70px dọc
-const RADIUS = 360; // Bán kính hình tròn ảo (px) cong tròn rõ nét và cân đối hơn
-const PX_PER_STEP = 70; // Khoảng cách pixel xấp xỉ mỗi bước
-const SENSITIVITY = STEP_DEG / PX_PER_STEP; // Độ nhạy vuốt ngón tay: ~0.16 deg/px
+const STEP_DEG = 12; // 12 độ mỗi bước, đúng 30 bước quanh vòng 360 độ (chia hết cho 6 tab)
+const RADIUS = 350; // Bán kính hình tròn ảo (px)
+const PX_PER_STEP = 73; // Khoảng cách pixel xấp xỉ mỗi bước
+const SENSITIVITY = STEP_DEG / PX_PER_STEP; // Độ nhạy vuốt ngón tay: ~0.164 deg/px
+
+// Cấu hình vòng chia vạch đồng hồ (Watch Dial Ticks)
+const DIAL_RADIUS = 350;
+const DIAL_STEP_DEG = 12;
+const DIAL_TICK_STEP = 1.5; // Mỗi vạch chia cách nhau 1.5° (8 vạch cho mỗi tab)
+const DIAL_VIEW_W = 320;
+const DIAL_VIEW_H = 700;
+const DIAL_ARC_RIGHT = 76; // Khoảng cách từ mép phải tới đường cong chính
+const DIAL_CX = DIAL_VIEW_W - DIAL_ARC_RIGHT + DIAL_RADIUS; // 320 - 76 + 350 = 594px
+const DIAL_CY = DIAL_VIEW_H / 2; // 350px
+
+interface DialTick {
+  key: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  type: "major" | "medium" | "minor";
+}
+
+function generateDialTicks(cx: number, cy: number, r: number): DialTick[] {
+  const ticks: DialTick[] = [];
+  const totalTicks = Math.round(360 / DIAL_TICK_STEP);
+
+  for (let i = 0; i < totalTicks; i++) {
+    const deg = i * DIAL_TICK_STEP;
+    // 180° là hướng sang trái (hướng về giữa màn hình)
+    const rad = ((180 + deg) * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    const isMajor = Math.abs(deg % DIAL_STEP_DEG) < 0.01;
+    const isMedium = !isMajor && Math.abs(deg % (DIAL_STEP_DEG / 2)) < 0.01;
+
+    let rInner: number;
+    let rOuter: number;
+    let type: "major" | "medium" | "minor";
+
+    if (isMajor) {
+      rInner = r;
+      rOuter = r + 16;
+      type = "major";
+    } else if (isMedium) {
+      rInner = r;
+      rOuter = r + 10;
+      type = "medium";
+    } else {
+      rInner = r;
+      rOuter = r + 6;
+      type = "minor";
+    }
+
+    ticks.push({
+      key: i,
+      x1: cx + rInner * cos,
+      y1: cy + rInner * sin,
+      x2: cx + rOuter * cos,
+      y2: cy + rOuter * sin,
+      type,
+    });
+  }
+
+  return ticks;
+}
+
+const DIAL_TICKS = generateDialTicks(DIAL_CX, DIAL_CY, DIAL_RADIUS);
 
 export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWheelProps) {
   const currentIndex = useMemo(() => {
@@ -500,21 +566,94 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
 
             {/* Vùng xoay trục tròn */}
             <div className="pt-radial-stage">
-              {/* Đường vòng cung SVG cố định bên phải (bán kính R=360 cong tròn rõ nét) */}
-              <svg className="pt-radial-arc-svg" viewBox="0 0 180 700" preserveAspectRatio="none" aria-hidden="true">
-                <path
-                  d="M 180 85 A 360 360 0 0 0 180 615"
+              {/* Vòng chia vạch kiểu mặt đồng hồ (Watch Dial Arc & Rotary Ticks) */}
+              <svg
+                className="pt-radial-dial-svg"
+                viewBox={`0 0 ${DIAL_VIEW_W} ${DIAL_VIEW_H}`}
+                preserveAspectRatio="xMaxYMid meet"
+                aria-hidden="true"
+              >
+                <defs>
+                  {/* Gradient mờ dần ở 2 đầu trên dưới của đường cung tròn */}
+                  <linearGradient id="pt-dial-fade" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#0f172a" stopOpacity="0" />
+                    <stop offset="16%" stopColor="#0f172a" stopOpacity="0.85" />
+                    <stop offset="50%" stopColor="#0f172a" stopOpacity="1" />
+                    <stop offset="84%" stopColor="#0f172a" stopOpacity="0.85" />
+                    <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+
+                {/* Đường line tròn chính (Arc track) */}
+                <circle
+                  cx={DIAL_CX}
+                  cy={DIAL_CY}
+                  r={DIAL_RADIUS}
                   fill="none"
-                  stroke="rgba(0, 0, 0, 0.13)"
+                  stroke="url(#pt-dial-fade)"
                   strokeWidth="1.5"
+                  opacity="0.3"
                 />
+
+                {/* Toàn bộ hệ thống vạch chia đồng hồ (xoay cơ học nhịp nhàng cùng rotationDeg) */}
+                <g
+                  transform={`rotate(${rotationDeg}, ${DIAL_CX}, ${DIAL_CY})`}
+                  style={{ willChange: "transform" }}
+                >
+                  {DIAL_TICKS.map((t) => (
+                    <line
+                      key={t.key}
+                      x1={t.x1}
+                      y1={t.y1}
+                      x2={t.x2}
+                      y2={t.y2}
+                      stroke={
+                        t.type === "major"
+                          ? "rgba(15, 23, 42, 0.72)"
+                          : t.type === "medium"
+                          ? "rgba(15, 23, 42, 0.45)"
+                          : "rgba(15, 23, 42, 0.22)"
+                      }
+                      strokeWidth={t.type === "major" ? 2.2 : t.type === "medium" ? 1.5 : 1}
+                      strokeLinecap="round"
+                    />
+                  ))}
+                </g>
+
+                {/* Kim chỉ thị trung tâm cố định (Master Center Index Marker - Vạch dài nhất kiểu 12h như ảnh) */}
+                <g className="pt-radial-needle-fixed">
+                  {/* Hiệu ứng hào quang nhẹ phía sau vạch trung tâm */}
+                  <line
+                    x1={DIAL_CX - DIAL_RADIUS}
+                    y1={DIAL_CY}
+                    x2={DIAL_CX - DIAL_RADIUS + 26}
+                    y2={DIAL_CY}
+                    stroke="rgba(34, 197, 94, 0.3)"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                  />
+                  {/* Vạch dài trung tâm sắc nét, vững chãi */}
+                  <line
+                    x1={DIAL_CX - DIAL_RADIUS}
+                    y1={DIAL_CY}
+                    x2={DIAL_CX - DIAL_RADIUS + 26}
+                    y2={DIAL_CY}
+                    stroke="#0f172a"
+                    strokeWidth="3.2"
+                    strokeLinecap="round"
+                  />
+                  {/* Điểm kim định vị tinh xảo ở gốc vạch */}
+                  <circle
+                    cx={DIAL_CX - DIAL_RADIUS + 1}
+                    cy={DIAL_CY}
+                    r="2.5"
+                    fill="#15803d"
+                  />
+                </g>
               </svg>
 
               {/* Thanh dock dài ngang nằm giữa màn hình (giống phần set timer trên iPhone) */}
               <div className="pt-radial-selection-dock" aria-hidden="true" />
-
-              {/* Vạch chỉ thị capsule nằm ngang ở vị trí trung tâm (Center Indicator) */}
-              <div className="pt-radial-center-indicator" aria-hidden="true" />
 
               {/* Danh sách các nút chức năng xếp uốn cong theo cung tròn */}
               <div className="pt-radial-wheel">
