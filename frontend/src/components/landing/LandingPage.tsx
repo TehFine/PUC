@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { QrCode } from "lucide-react";
 import AutoEnter from "./AutoEnter";
 import BannedList from "./BannedList";
 import Catalog from "./Catalog";
@@ -256,8 +257,27 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
             </div>
             <figure className="lp-photo lp-photo-scoop">
               <Image src="/landing/traceability.jpg" alt="Trái sầu riêng dán tem QR để biết nguồn gốc, đặt trên thùng gỗ" fill sizes="(max-width: 900px) 100vw, 44vw" />
-              <figcaption>Tem QR gắn lô hàng với mã vùng trồng. Ảnh minh họa.</figcaption>
-              <ScoopBadge />
+              <figcaption>
+                <span>Tem QR gắn lô hàng với mã vùng trồng.</span>
+                <Link
+                  href="/trace/LH-2024-038"
+                  target="_blank"
+                  className="lp-photo-qr-cta"
+                  title="Bấm để xem trang quét mã QR truy xuất nguồn gốc sản phẩm"
+                >
+                  <QrCode size={15} strokeWidth={2.4} aria-hidden="true" />
+                  <span>Quét mã QR truy xuất &rarr;</span>
+                </Link>
+              </figcaption>
+              <Link
+                href="/trace/LH-2024-038"
+                target="_blank"
+                className="lp-scoop-badge is-qr-badge"
+                title="Bấm vào để xem trang quét mã QR truy xuất nguồn gốc sản phẩm"
+                aria-label="Xem trang quét mã QR truy xuất nguồn gốc sản phẩm"
+              >
+                <QrCode size={20} strokeWidth={2.2} />
+              </Link>
             </figure>
           </div>
 

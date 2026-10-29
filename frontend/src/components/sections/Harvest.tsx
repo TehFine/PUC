@@ -3,6 +3,7 @@
 import { useResource } from "@/hooks/use-resource";
 import { mapHarvest } from "@/lib/mappers";
 import { KpiChartView, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
+import { QrCode } from "lucide-react";
 
 const statusClass: Record<string, string> = {
   green: "badge-green", gold: "badge-gold", blue: "badge-blue", red: "badge-red",
@@ -103,9 +104,10 @@ export default function Harvest() {
                       rel="noopener noreferrer"
                       className="btn btn-outline btn-sm"
                       title="Xem trang quét mã QR truy xuất nguồn gốc"
-                      style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                      style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 600, color: "#166534" }}
                     >
-                      📱 {h.qr}
+                      <QrCode size={14} strokeWidth={2.2} />
+                      <span>{h.qr}</span>
                     </a>
                   </td>
                   <td><span className={`badge ${statusClass[h.statusType]}`}>{h.status}</span></td>
@@ -116,9 +118,10 @@ export default function Harvest() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn btn-outline btn-sm"
-                        style={{ textDecoration: "none" }}
+                        style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
                       >
-                        Truy xuất QR
+                        <QrCode size={13} strokeWidth={2.2} />
+                        <span>Truy xuất QR</span>
                       </a>
                       <button className="btn btn-outline btn-sm">Chứng từ</button>
                     </div>

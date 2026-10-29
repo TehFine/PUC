@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { QrCode } from "lucide-react";
 import AuthSlides from "./AuthSlides";
 import "./auth.css";
 
@@ -101,16 +102,28 @@ export default function AuthShell({ variant, title, subtitle, wide = false, hide
             </span>
             Trang chủ
           </Link>
-          {!hideSwitch && (
-            <Link href={other.href} className="auth-alt">
-              <span>
-                {other.text} <strong>{other.action}</strong>
-              </span>
-              <span className="auth-arrow" aria-hidden="true">
-                →
-              </span>
+          <div className="auth-top-actions">
+            <Link
+              id="auth-qr-trace"
+              href="/trace/LH-2024-038"
+              target="_blank"
+              className="auth-qr-link"
+              title="Quét mã QR để xem trang truy xuất nguồn gốc sản phẩm"
+            >
+              <QrCode size={15} strokeWidth={2.2} />
+              <span>Quét QR</span>
             </Link>
-          )}
+            {!hideSwitch && (
+              <Link href={other.href} className="auth-alt">
+                <span>
+                  {other.text} <strong>{other.action}</strong>
+                </span>
+                <span className="auth-arrow" aria-hidden="true">
+                  →
+                </span>
+              </Link>
+            )}
+          </div>
         </div>
 
         <div className={`auth-panel${wide ? " is-wide" : ""}`}>
