@@ -53,7 +53,16 @@ export default function UserMenu() {
         <div className="user-menu-panel" role="menu">
           <strong>{fullName}</strong>
           <span>{ROLE_LABELS[role]}</span>
-          <button id="logout-button" type="button" role="menuitem" className="btn btn-outline btn-sm" onClick={() => void logout()}>
+          <button
+            id="logout-button"
+            type="button"
+            role="menuitem"
+            className="btn btn-outline btn-sm"
+            onClick={() => {
+              setOpen(false);
+              void logout();
+            }}
+          >
             Đăng xuất
           </button>
         </div>

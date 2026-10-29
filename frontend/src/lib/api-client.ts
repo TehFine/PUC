@@ -14,6 +14,9 @@ export class ApiError extends Error {
 /** Sự kiện phát ra khi phiên đăng nhập hết hạn và không làm mới được. */
 export const AUTH_EXPIRED_EVENT = "auth:expired";
 
+/** Sự kiện phát ra khi người dùng đăng xuất khỏi hệ thống. */
+export const AUTH_LOGOUT_EVENT = "auth:logout";
+
 let refreshing: Promise<boolean> | null = null;
 
 // Dùng chung một lần làm mới cho nhiều request 401 đồng thời (refresh token xoay vòng, chỉ dùng được một lần).

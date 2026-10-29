@@ -1,7 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, ApiError, AUTH_EXPIRED_EVENT } from "@/lib/api-client";
+import { api, ApiError, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import type { Action, AuthSession } from "@/types/api";
 
 type Status = "loading" | "authenticated" | "anonymous";
@@ -18,6 +19,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [status, setStatus] = useState<Status>("loading");
   const [session, setSession] = useState<AuthSession | null>(null);
 
@@ -57,8 +59,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSession(null);
       setStatus("anonymous");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
+        try {
+          sessionStorage.clear();
+        } catch {}
+      }
+      router.replace("/login");
     }
-  }, []);
+  }, [router]);
 
   const can = useCallback(
     (resource: string, action: Action) => session?.permissions[resource]?.includes(action) ?? false,
