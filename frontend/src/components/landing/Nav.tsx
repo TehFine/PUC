@@ -3,7 +3,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { QrCode } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { homePathFor } from "@/lib/routes";
 import { NAV_LINKS } from "./data";
@@ -40,28 +39,9 @@ export default function Nav() {
               {link.label}
             </a>
           ))}
-          <Link
-            href="/trace/LH-2024-038"
-            className="lp-link-qr-mobile"
-            onClick={() => setOpen(false)}
-            title="Xem trang quét mã QR truy xuất nguồn gốc sản phẩm"
-          >
-            <QrCode size={16} />
-            <span>Quét mã QR truy xuất</span>
-          </Link>
         </nav>
 
         <div className="lp-auth">
-          <Link
-            id="landing-nav-qr"
-            href="/trace/LH-2024-038"
-            target="_blank"
-            className="lp-btn lp-btn-qr"
-            title="Quét mã QR để xem truy xuất nguồn gốc sản phẩm"
-          >
-            <QrCode size={16} strokeWidth={2.2} />
-            <span>Quét QR</span>
-          </Link>
           {authenticated ? (
             <>
               <Link id="landing-enter" href={homePathFor(session?.user.role)} className="lp-btn lp-btn-solid">
