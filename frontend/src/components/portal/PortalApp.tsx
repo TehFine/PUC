@@ -16,7 +16,7 @@ import {
   UserCheck,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { usePortal } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
@@ -53,6 +53,11 @@ export default function PortalApp() {
 
   const currentTabItem = useMemo(() => TABS.find((t) => t.id === tab) || TABS[0], [tab]);
 
+  const navigate = useCallback((next: PortalTabId) => {
+    setTab(next);
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
   useEffect(() => {
     if (status === "anonymous") router.replace("/login");
     else if (status === "authenticated" && session?.user.role !== "farmer") router.replace("/admin");
@@ -82,11 +87,6 @@ export default function PortalApp() {
   if (status !== "authenticated" || session?.user.role !== "farmer") {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
   }
-
-  const navigate = (next: PortalTabId) => {
-    setTab(next);
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  };
 
   const household = overview?.household;
   const displayName = household?.name || session?.user.fullName || "Hộ thành viên";

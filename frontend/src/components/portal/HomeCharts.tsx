@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useMemo } from "react";
 import { usePortal } from "@/hooks/use-portal";
 import { daysSince } from "@/lib/portal-labels";
 import { AreaTrend, GaugeArc, SoftBars, type ChartPoint } from "@/components/ui/charts/KpiCharts";
@@ -33,20 +34,25 @@ export default function HomeCharts() {
   const journal = usePortal<PortalList<PortalJournalEntry>>("journal");
   const harvest = usePortal<PortalList<PortalHarvest>>("harvest");
 
-  const entries = journal.data?.data ?? [];
-  const counts = weeklyCounts(entries);
-  const activity: ChartPoint[] = counts.map((value, i) => ({ label: shortDate((WEEKS - i) * 7 - 1), value }));
-  const hasActivity = journal.data !== null;
-  const activeWeeks = counts.slice(-4).filter((c) => c > 0).length;
+  const { activity, hasActivity, activeWeeks, lots } = useMemo(() => {
+    const entries = journal.data?.data ?? [];
+    const counts = weeklyCounts(entries);
+    const activity: ChartPoint[] = counts.map((value, i) => ({ label: shortDate((WEEKS - i) * 7 - 1), value }));
+    const hasActivity = journal.data !== null;
+    const activeWeeks = counts.slice(-4).filter((c) => c > 0).length;
 
-  const lots = [...(harvest.data?.data ?? [])]
-    .sort((a, b) => a.harvestedOn.localeCompare(b.harvestedOn))
-    .slice(-6)
-    .map((lot) => {
-      const [, month, day] = lot.harvestedOn.split("-");
-      return { label: `${day}/${month}`, value: lot.weightKg };
-    });
-  const formatKgValue = (v: number) => v.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+    const lots = [...(harvest.data?.data ?? [])]
+      .sort((a, b) => a.harvestedOn.localeCompare(b.harvestedOn))
+      .slice(-6)
+      .map((lot) => {
+        const [, month, day] = lot.harvestedOn.split("-");
+        return { label: `${day}/${month}`, value: lot.weightKg };
+      });
+
+    return { activity, hasActivity, activeWeeks, lots };
+  }, [journal.data, harvest.data]);
+
+  const formatKgValue = useCallback((v: number) => v.toLocaleString("vi-VN", { maximumFractionDigits: 1 }), []);
 
   if (!hasActivity && lots.length === 0) return null;
 
