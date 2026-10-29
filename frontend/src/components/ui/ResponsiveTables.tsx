@@ -38,7 +38,26 @@ export default function ResponsiveTables() {
 
     scan();
 
-    const observer = new MutationObserver(schedule);
+    const observer = new MutationObserver((mutations) => {
+      let hasTableMutation = false;
+      for (let i = 0; i < mutations.length; i++) {
+        const added = mutations[i].addedNodes;
+        for (let j = 0; j < added.length; j++) {
+          const node = added[j];
+          if (node.nodeType === 1) {
+            const el = node as Element;
+            if (el.tagName === "TABLE" || el.querySelector?.("table")) {
+              hasTableMutation = true;
+              break;
+            }
+          }
+        }
+        if (hasTableMutation) break;
+      }
+      if (hasTableMutation) {
+        schedule();
+      }
+    });
     observer.observe(target, { childList: true, subtree: true });
 
     return () => {
