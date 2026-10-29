@@ -6,12 +6,17 @@
 
 .pt-app {
   --pt-gap: 16px;
+  --font-display-stack: var(--font-hero-sans), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body-stack: var(--font-inter), -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-body-stack);
   position: relative;
   isolation: isolate;
   min-height: 100vh;
   min-height: 100dvh;
   padding-bottom: calc(112px + env(safe-area-inset-bottom));
   color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Nền cố định: trời xanh nhạt chuyển dần sang trắng ngà như phần mở đầu trang giới thiệu */
@@ -88,11 +93,11 @@
 .pt-brand strong {
   display: block;
   font-family: var(--font-display-stack);
-  font-variation-settings: "wdth" 85;
-  font-weight: 500;
-  font-size: 21px;
-  line-height: 1.05;
-  letter-spacing: -0.01em;
+  font-variation-settings: normal;
+  font-weight: 700;
+  font-size: 19px;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
   white-space: nowrap;
 }
 .pt-brand span:not(.pt-brand-mark) {
@@ -281,10 +286,12 @@
 
 .pt-profile-name {
   font-family: var(--font-display-stack);
+  font-variation-settings: normal;
   font-size: 16.5px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
   line-height: 1.25;
+  letter-spacing: -0.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -428,10 +435,10 @@
     padding: 8px 18px;
     border-radius: 999px;
     font-family: var(--font-display-stack);
-    font-variation-settings: "wdth" 85;
-    font-size: 15px;
-    font-weight: 500;
-    letter-spacing: -0.01em;
+    font-variation-settings: normal;
+    font-size: 14.5px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
     white-space: nowrap;
   }
   .pt-tab svg { display: none; }
@@ -522,11 +529,11 @@
 .pt-hero-title {
   margin: 6px 0 6px;
   font-family: var(--font-display-stack);
-  font-variation-settings: "wdth" 82;
-  font-size: clamp(2.1rem, 3.4vw, 3.3rem);
-  font-weight: 600;
+  font-variation-settings: normal;
+  font-size: clamp(2rem, 3.2vw, 3.1rem);
+  font-weight: 750;
   line-height: 1.08;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.03em;
   color: var(--ink);
 }
 .pt-hero-sub {
@@ -717,11 +724,11 @@
 .pt-stat-item dd {
   margin: 6px 0 0;
   font-family: var(--font-display-stack);
-  font-variation-settings: "wdth" 82;
+  font-variation-settings: normal;
   font-size: clamp(1.4rem, 2.2vw, 2.1rem);
-  font-weight: 600;
+  font-weight: 750;
   line-height: 1.08;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
   color: var(--stat-text-dd);
 }
 .pt-stat-unit {
@@ -919,11 +926,11 @@
   align-items: center;
   gap: 10px;
   font-family: var(--font-display-stack);
-  font-variation-settings: "wdth" 85;
-  font-size: 1.55rem;
-  font-weight: 500;
+  font-variation-settings: normal;
+  font-size: 1.35rem;
+  font-weight: 700;
   line-height: 1.15;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
   color: var(--ink);
 }
 .pt-badge-alert {
@@ -1155,11 +1162,11 @@
 .pt-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px 10px; }
 .pt-sheet-head h2 {
   font-family: var(--font-display-stack);
-  font-variation-settings: "wdth" 85;
-  font-size: 1.7rem;
-  font-weight: 400;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
+  font-variation-settings: normal;
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
   color: var(--ink);
 }
 .pt-sheet-body { padding: 6px 22px calc(22px + env(safe-area-inset-bottom)); overflow-y: auto; }
@@ -1342,12 +1349,12 @@
     margin: 0;
     padding: 0;
     font-family: var(--font-display-stack);
-    font-variation-settings: "wdth" 85;
-    font-size: 21px;
-    font-weight: 600;
+    font-variation-settings: normal;
+    font-size: 19px;
+    font-weight: 700;
     line-height: 1.15;
     color: var(--ink);
-    letter-spacing: -0.015em;
+    letter-spacing: -0.025em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1525,11 +1532,11 @@
 }
 .pt-radial-title {
   font-family: var(--font-display-stack);
-  font-variation-settings: "wdth" 85;
-  font-size: 19px;
-  font-weight: 600;
+  font-variation-settings: normal;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--ink);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 .pt-radial-close-btn {
   display: grid;
@@ -1622,12 +1629,13 @@
 
 /* Nhãn tên tab bên trái */
 .pt-radial-label {
-  font-family: inherit;
+  font-family: var(--font-display-stack);
+  font-variation-settings: normal;
   font-size: 14.5px;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   text-align: right;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: #475569;
   padding: 6px 14px;
   border-radius: 999px;
@@ -1648,7 +1656,7 @@
   font-size: 15.5px;
   font-weight: 700;
   color: #0f172a !important;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   background: #f1f5f9;
   border: 1px solid rgba(15, 23, 42, 0.09);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
