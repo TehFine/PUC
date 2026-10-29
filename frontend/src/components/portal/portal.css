@@ -105,6 +105,11 @@
   color: var(--text-secondary);
 }
 
+/* Tiêu đề tab mobile ẩn mặc định trên Desktop */
+.pt-mobile-tab-title {
+  display: none;
+}
+
 .pt-main {
   width: 100%;
   max-width: 1360px;
@@ -1312,6 +1317,43 @@
 @media (max-width: 999px) {
   .pt-tabs {
     display: none !important;
+  }
+  .pt-topbar-inner {
+    display: grid;
+    grid-template-columns: 44px 1fr 44px;
+    align-items: center;
+    gap: 12px;
+  }
+  .pt-brand {
+    justify-self: start;
+    gap: 0;
+  }
+  .pt-brand-text {
+    display: none !important;
+  }
+  .pt-mobile-tab-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-width: 0;
+  }
+  .pt-mobile-tab-name {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-display-stack);
+    font-variation-settings: "wdth" 85;
+    font-size: 21px;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--ink);
+    letter-spacing: -0.015em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pt-topbar-right {
+    justify-self: end;
   }
   .pt-app {
     padding-bottom: calc(76px + env(safe-area-inset-bottom));

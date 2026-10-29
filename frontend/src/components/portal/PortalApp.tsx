@@ -16,7 +16,7 @@ import {
   UserCheck,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { usePortal } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
@@ -50,6 +50,8 @@ export default function PortalApp() {
   const [tab, setTab] = useState<PortalTabId>("home");
   const [profileOpen, setProfileOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  const currentTabItem = useMemo(() => TABS.find((t) => t.id === tab) || TABS[0], [tab]);
 
   useEffect(() => {
     if (status === "anonymous") router.replace("/login");
@@ -104,11 +106,16 @@ export default function PortalApp() {
             <span className="pt-brand-mark" aria-hidden="true">
               <Image src="/logo.png" alt="" width={30} height={30} />
             </span>
-            <div>
+            <div className="pt-brand-text">
               <strong>HTX Krông Búk</strong>
               <span>Cổng hộ dân</span>
             </div>
           </Link>
+
+          {/* Tiêu đề tab đang chọn trên Mobile (thay thế cụm chữ HTX Krông Búk / Cổng hộ dân) */}
+          <div className="pt-mobile-tab-title" aria-live="polite">
+            <span className="pt-mobile-tab-name">{currentTabItem.label}</span>
+          </div>
 
           <nav className="pt-tabs" aria-label="Chức năng">
             {TABS.map((item) => {
