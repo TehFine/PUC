@@ -193,7 +193,7 @@ export class PortalService {
 
   async harvest(user: AuthUser) {
     const { rows } = await this.db.query(
-      `SELECT c.id, l.code AS lot_code, l.harvested_on, c.weight_kg, l.buyer, l.market, l.status
+      `SELECT c.id, l.code AS lot_code, l.qr_code, l.harvested_on, c.weight_kg, l.buyer, l.market, l.status
        FROM harvest_contributions c JOIN harvest_lots l ON l.id = c.lot_id
        WHERE c.household_id = $1 ORDER BY l.harvested_on DESC, c.id DESC LIMIT 100`,
       [this.householdIdOf(user)],

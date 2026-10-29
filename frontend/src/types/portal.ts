@@ -98,6 +98,7 @@ export interface PortalViolation {
 export interface PortalHarvest {
   id: number;
   lotCode: string;
+  qrCode?: string | null;
   harvestedOn: string;
   weightKg: number;
   buyer: string;

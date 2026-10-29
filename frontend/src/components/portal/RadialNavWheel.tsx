@@ -1,23 +1,22 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowUpRight,
-  BookOpen,
-  ClipboardCheck,
-  House,
-  NotebookPen,
-  Send,
-  TreePine,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowUpRight, X } from "lucide-react";
 import type { PortalTabId } from "./PortalApp";
+import {
+  HouseCircleCheckIcon,
+  LandLayerLocationIcon,
+  DocumentWriterIcon,
+  AuditIcon,
+  PersonCvIcon,
+  BrainQuestionMarkIcon,
+  type RadialIconProps,
+} from "./RadialIcons";
 
 export interface NavItemConfig {
   id: PortalTabId;
   label: string;
-  icon: LucideIcon;
+  icon: React.ComponentType<RadialIconProps>;
   color: string;
   activeColor: string;
   activeBg: string;
@@ -28,7 +27,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     id: "home",
     label: "Trang chủ",
-    icon: House,
+    icon: HouseCircleCheckIcon,
     color: "#2e7d56",
     activeColor: "#15803d",
     activeBg: "rgba(34, 197, 94, 0.08)",
@@ -37,7 +36,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     id: "plots",
     label: "Thửa đất",
-    icon: TreePine,
+    icon: LandLayerLocationIcon,
     color: "#15803d",
     activeColor: "#16a34a",
     activeBg: "rgba(22, 163, 74, 0.08)",
@@ -46,7 +45,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     id: "diary",
     label: "Nhật ký",
-    icon: NotebookPen,
+    icon: DocumentWriterIcon,
     color: "#d97706",
     activeColor: "#b45309",
     activeBg: "rgba(245, 158, 11, 0.08)",
@@ -55,7 +54,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     id: "inspection",
     label: "Kiểm tra",
-    icon: ClipboardCheck,
+    icon: AuditIcon,
     color: "#db2777",
     activeColor: "#e11d48",
     activeBg: "rgba(236, 72, 153, 0.08)",
@@ -64,7 +63,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     id: "requests",
     label: "Hồ sơ",
-    icon: Send,
+    icon: PersonCvIcon,
     color: "#0284c7",
     activeColor: "#0369a1",
     activeBg: "rgba(2, 132, 199, 0.08)",
@@ -73,7 +72,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     id: "learn",
     label: "Kiến thức",
-    icon: BookOpen,
+    icon: BrainQuestionMarkIcon,
     color: "#ea580c",
     activeColor: "#c2410c",
     activeBg: "rgba(234, 88, 12, 0.08)",
@@ -215,12 +214,12 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     closeTimerRef.current = setTimeout(() => {
       setIsOpen(false);
       setIsClosing(false);
-    }, 320);
+    }, 260);
   }, []);
 
-  // Tự động thu popup lại sau khi bánh xe dừng lại ở một tab
+  // Tự động thu popup lại sau khi bánh xe dừng lại ở một tab với nhịp dừng vừa vặn
   const scheduleAutoClose = useCallback(
-    (delay = 300) => {
+    (delay = 360) => {
       if (autoCloseTimerRef.current) {
         clearTimeout(autoCloseTimerRef.current);
       }
@@ -282,6 +281,42 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     [currentTab, onSelectTab]
   );
 
+  // Hàm xoay bánh xe mượt mà tới góc mục tiêu theo nhịp điệu êm dịu, không giật gấp
+  const animateToRotation = useCallback(
+    (targetRot: number, targetIdx: number, duration = 380, autoCloseDelay = 360) => {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
+      let startTime: number | null = null;
+      const startRot = latestRotRef.current;
+
+      const step = (time: number) => {
+        if (startTime === null) startTime = time;
+        const elapsed = time - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        // Easing Quartic ease-out: lướt êm, giảm tốc mềm mại và hít nhẹ nhàng vào dock
+        const ease = 1 - Math.pow(1 - progress, 3.5);
+        const nextRot = startRot + (targetRot - startRot) * ease;
+        latestRotRef.current = nextRot;
+        setRotationDeg(nextRot);
+
+        if (progress < 1) {
+          animFrameRef.current = requestAnimationFrame(step);
+        } else {
+          latestRotRef.current = targetRot;
+          setRotationDeg(targetRot);
+          triggerTabChange(targetIdx);
+          // Khoảng dừng nhịp điệu (dwell time) để người dùng kịp quan sát tab đã chọn trước khi thu drawer
+          scheduleAutoClose(autoCloseDelay);
+        }
+      };
+
+      animFrameRef.current = requestAnimationFrame(step);
+    },
+    [triggerTabChange, scheduleAutoClose]
+  );
+
   const hasDraggedRef = useRef(false);
 
   // Hỗ trợ cuộn chuột mượt mà trên desktop/laptop với giới hạn 2 đầu
@@ -313,11 +348,8 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
         const rawSnap = Math.round(latestRotRef.current / STEP_DEG);
         const clampedSnapIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, rawSnap));
         const targetSnap = clampedSnapIdx * STEP_DEG;
-        latestRotRef.current = targetSnap;
-        setRotationDeg(targetSnap);
-        triggerTabChange(clampedSnapIdx);
-        scheduleAutoClose(350);
-      }, 130);
+        animateToRotation(targetSnap, clampedSnapIdx, 340, 360);
+      }, 140);
     };
 
     el.addEventListener("wheel", handleWheel, { passive: false });
@@ -325,7 +357,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       el.removeEventListener("wheel", handleWheel);
       clearTimeout(wheelTimeout);
     };
-  }, [isOpen, triggerTabChange, scheduleAutoClose]);
+  }, [isOpen, animateToRotation]);
 
   // Xử lý kéo vuốt (Touch & Pointer)
   const onPointerDown = (e: React.PointerEvent) => {
@@ -442,32 +474,8 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     const clampedSnapIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, rawSnapIdx));
     const targetSnap = clampedSnapIdx * STEP_DEG;
 
-    // Animation trượt êm ái tới targetSnap
-    let startTime: number | null = null;
-    const startRot = latestRotRef.current;
-    const duration = 260;
-
-    const animateSnap = (time: number) => {
-      if (startTime === null) startTime = time;
-      const elapsed = time - startTime;
-      const progress = Math.min(1, elapsed / duration);
-      const ease = 1 - Math.pow(1 - progress, 3);
-      const nextRot = startRot + (targetSnap - startRot) * ease;
-      latestRotRef.current = nextRot;
-      setRotationDeg(nextRot);
-
-      if (progress < 1) {
-        animFrameRef.current = requestAnimationFrame(animateSnap);
-      } else {
-        latestRotRef.current = targetSnap;
-        setRotationDeg(targetSnap);
-        triggerTabChange(clampedSnapIdx);
-        // Tự động thu popup lại sau khi dừng quay ở tab
-        scheduleAutoClose(300);
-      }
-    };
-
-    animFrameRef.current = requestAnimationFrame(animateSnap);
+    // Animation xoay trượt êm dịu, không giật gấp, dừng lại vừa nhịp
+    animateToRotation(targetSnap, clampedSnapIdx, 380, 360);
   };
 
   // Click trực tiếp vào một mục trên vòng xoay
@@ -479,32 +487,8 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     }
     const clampedIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, idx));
     const targetSnap = clampedIdx * STEP_DEG;
-    let startTime: number | null = null;
-    const startRot = latestRotRef.current;
-    const duration = 240;
-
-    const animateClick = (time: number) => {
-      if (startTime === null) startTime = time;
-      const elapsed = time - startTime;
-      const progress = Math.min(1, elapsed / duration);
-      const ease = 1 - Math.pow(1 - progress, 3);
-      const nextRot = startRot + (targetSnap - startRot) * ease;
-      latestRotRef.current = nextRot;
-      setRotationDeg(nextRot);
-
-      if (progress < 1) {
-        animFrameRef.current = requestAnimationFrame(animateClick);
-      } else {
-        latestRotRef.current = targetSnap;
-        setRotationDeg(targetSnap);
-        triggerTabChange(clampedIdx);
-        // Tự động thu popup lại sau khi click chọn tab
-        scheduleAutoClose(240);
-      }
-    };
-
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    animFrameRef.current = requestAnimationFrame(animateClick);
+    // Xoay trượt nhịp nhàng tới tab được bấm
+    animateToRotation(targetSnap, clampedIdx, 380, 360);
   };
 
   // Danh sách các tab hiển thị - KHÔNG LẶP VÔ TẬN: Chỉ hiển thị đúng các tab hiện có (0 đến 5)
@@ -525,7 +509,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
 
       // Độ mờ và scale mượt mà
       const normDist = distFromCenter / (STEP_DEG * 4.6);
-      const opacity = Math.max(0, Math.min(1, 1 - Math.pow(normDist, 1.7)));
+      const opacity = Math.max(0.35, Math.min(1, 1 - Math.pow(normDist, 1.7)));
       const scale = Math.max(0.74, 1.08 - Math.min(1, distFromCenter / (STEP_DEG * 3.8)) * 0.32);
 
       return {
@@ -605,9 +589,9 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
                   {/* Gradient mờ dần ở 2 đầu trên dưới của đường cung tròn */}
                   <linearGradient id="pt-dial-fade" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#0f172a" stopOpacity="0" />
-                    <stop offset="16%" stopColor="#0f172a" stopOpacity="0.85" />
-                    <stop offset="50%" stopColor="#0f172a" stopOpacity="1" />
-                    <stop offset="84%" stopColor="#0f172a" stopOpacity="0.85" />
+                    <stop offset="16%" stopColor="#0f172a" stopOpacity="0.75" />
+                    <stop offset="50%" stopColor="#0f172a" stopOpacity="0.95" />
+                    <stop offset="84%" stopColor="#0f172a" stopOpacity="0.75" />
                     <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
                   </linearGradient>
                 </defs>
@@ -620,7 +604,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
                   fill="none"
                   stroke="url(#pt-dial-fade)"
                   strokeWidth="1.5"
-                  opacity="0.3"
+                  opacity="0.32"
                 />
 
                 {/* Toàn bộ hệ thống vạch chia đồng hồ (xoay cơ học nhịp nhàng cùng rotationDeg) */}
@@ -656,7 +640,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
                     y1={DIAL_CY}
                     x2={DIAL_CX - DIAL_RADIUS + 26}
                     y2={DIAL_CY}
-                    stroke="rgba(34, 197, 94, 0.3)"
+                    stroke="rgba(34, 197, 94, 0.35)"
                     strokeWidth="6"
                     strokeLinecap="round"
                   />
@@ -703,7 +687,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
                         <div
                           className={`pt-radial-label ${isCenter ? "is-active-label" : ""}`}
                           style={{
-                            color: isCenter ? "#0f172a" : "#475569",
+                            color: isCenter ? "#0f172a" : "#334155",
                           }}
                         >
                           {itemConfig.label}
@@ -714,11 +698,11 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
                           className={`pt-radial-icon-box ${isCenter ? "is-active-icon" : ""}`}
                           style={{
                             borderColor: isCenter ? itemConfig.activeBorder : "transparent",
-                            backgroundColor: isCenter ? itemConfig.activeBg : "rgba(0, 0, 0, 0.04)",
+                            backgroundColor: isCenter ? itemConfig.activeBg : "#ffffff",
                             color: isCenter ? itemConfig.activeColor : itemConfig.color,
                           }}
                         >
-                          <Icon size={isCenter ? 24 : 20} strokeWidth={isCenter ? 2.2 : 1.9} />
+                          <Icon size={isCenter ? 24 : 20} />
                         </div>
                       </div>
                     );

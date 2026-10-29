@@ -93,21 +93,21 @@ export default function RequestsTab() {
         <Card title="Quy trình giải quyết hồ sơ">
           <div className="pt-guide-box">
             <div className="pt-guide-item">
-              <div>
+              <div className="pt-guide-content">
                 <strong>1. Nộp hồ sơ trực tuyến</strong>
                 <p>Khai báo loại thủ tục (cấp mã vùng trồng, đăng ký thửa mới, cập nhật diện tích) và số lượng giấy tờ kèm theo.</p>
               </div>
             </div>
 
             <div className="pt-guide-item">
-              <div>
+              <div className="pt-guide-content">
                 <strong>2. Thẩm tra và đối chiếu thực địa</strong>
                 <p>Cán bộ kỹ thuật HTX sẽ liên hệ tiếp nhận hồ sơ bản giấy và tiến hành kiểm tra đo đạc ranh giới thửa đất.</p>
               </div>
             </div>
 
             <div className="pt-guide-item">
-              <div>
+              <div className="pt-guide-content">
                 <strong>3. Phê duyệt và cấp mã quản lý</strong>
                 <p>Hồ sơ hợp lệ sẽ được HTX duyệt và cập nhật vào danh bạ số vùng trồng phục vụ giám sát xuất khẩu.</p>
               </div>

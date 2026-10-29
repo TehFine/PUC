@@ -280,21 +280,21 @@ export default function DiaryTab() {
         <Card title="Quy chuẩn nhật ký VietGAP">
           <div className="pt-guide-box">
             <div className="pt-guide-item">
-              <div>
+              <div className="pt-guide-content">
                 <strong>Tần suất ghi nhận tối thiểu 7 ngày/lần</strong>
                 <p>Mỗi hoạt động tưới tiêu, bón phân, tỉa cành, bao trái cần được cập nhật đúng hạn để phục vụ kiểm tra vùng trồng.</p>
               </div>
             </div>
 
             <div className="pt-guide-item">
-              <div>
+              <div className="pt-guide-content">
                 <strong>Thời gian cách ly trước thu hoạch (PHI)</strong>
                 <p>Tuyệt đối ngưng sử dụng phân thuốc trong thời gian cách ly quy định để tránh nguy cơ tồn dư vượt ngưỡng MRL.</p>
               </div>
             </div>
 
             <div className="pt-guide-item">
-              <div>
+              <div className="pt-guide-content">
                 <strong>Nghiêm cấm thuốc BVTV ngoài danh mục</strong>
                 <p>Không dùng chất tạo màu công nghiệp (Vàng O), hoạt chất Chlorpyrifos hoặc thuốc chưa có đăng ký kiểm định xuất khẩu.</p>
               </div>

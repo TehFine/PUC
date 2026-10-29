@@ -240,12 +240,14 @@ export default function PortalApp() {
       </header>
 
       <main className="pt-main">
-        {tab === "home" && <HomeTab onNavigate={navigate} />}
-        {tab === "plots" && <PlotsTab />}
-        {tab === "diary" && <DiaryTab />}
-        {tab === "inspection" && <InspectionTab />}
-        {tab === "requests" && <RequestsTab />}
-        {tab === "learn" && <LearnTab />}
+        <div key={tab} className="pt-tab-pane">
+          {tab === "home" && <HomeTab onNavigate={navigate} />}
+          {tab === "plots" && <PlotsTab />}
+          {tab === "diary" && <DiaryTab />}
+          {tab === "inspection" && <InspectionTab />}
+          {tab === "requests" && <RequestsTab />}
+          {tab === "learn" && <LearnTab />}
+        </div>
       </main>
 
       {/* Điều hướng trục tròn dạng bánh xe uốn cong trên Mobile */}
