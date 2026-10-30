@@ -16,7 +16,7 @@ import {
   UserCheck,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { usePortal } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
@@ -30,6 +30,7 @@ import LearnTab from "./LearnTab";
 import PlotsTab from "./PlotsTab";
 import RequestsTab from "./RequestsTab";
 import RadialNavWheel from "./RadialNavWheel";
+import { SupportFooter, SystemSupportModal } from "./SystemSupport";
 
 export type PortalTabId = "home" | "plots" | "diary" | "inspection" | "requests" | "learn";
 
@@ -48,14 +49,49 @@ export default function PortalApp() {
   const { status, session, logout } = useAuth();
   const { data: overview } = usePortal<PortalOverview>("overview");
   const [tab, setTab] = useState<PortalTabId>("home");
+  const [visitedTabs, setVisitedTabs] = useState<Set<PortalTabId>>(() => new Set(["home"]));
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileClosing, setProfileClosing] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  const openSupport = useCallback(() => setSupportOpen(true), []);
+  const closeSupport = useCallback(() => setSupportOpen(false), []);
 
   const currentTabItem = useMemo(() => TABS.find((t) => t.id === tab) || TABS[0], [tab]);
 
   const navigate = useCallback((next: PortalTabId) => {
-    setTab(next);
+    startTransition(() => {
+      setVisitedTabs((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
+      setTab(next);
+    });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
+  const closeProfile = useCallback(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    setProfileClosing(true);
+    closeTimerRef.current = setTimeout(() => {
+      setProfileOpen(false);
+      setProfileClosing(false);
+    }, 200);
+  }, []);
+
+  const toggleProfile = useCallback(() => {
+    if (profileOpen) {
+      closeProfile();
+    } else {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      setProfileClosing(false);
+      setProfileOpen(true);
+    }
+  }, [profileOpen, closeProfile]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -63,16 +99,16 @@ export default function PortalApp() {
     else if (status === "authenticated" && session?.user.role !== "farmer") router.replace("/admin");
   }, [status, session, router]);
 
-  // Đóng popup khi click ngoài hoặc nhấn ESC
+  // Đóng popup khi click ngoài hoặc nhấn ESC (chạy qua closeProfile để có animation đóng êm)
   useEffect(() => {
     if (!profileOpen) return;
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
-        setProfileOpen(false);
+        closeProfile();
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setProfileOpen(false);
+      if (e.key === "Escape") closeProfile();
     };
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("touchstart", handleClickOutside, { passive: true });
@@ -82,7 +118,7 @@ export default function PortalApp() {
       document.removeEventListener("touchstart", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [profileOpen]);
+  }, [profileOpen, closeProfile]);
 
   if (status !== "authenticated" || session?.user.role !== "farmer") {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
@@ -137,12 +173,21 @@ export default function PortalApp() {
           </nav>
 
           <div className="pt-topbar-right" ref={profileMenuRef}>
+            {/* Lớp nền mờ (Backdrop Scrim) làm mờ hậu cảnh để người dùng focus vào popup profile */}
+            {(profileOpen || profileClosing) && (
+              <div
+                className={`pt-profile-backdrop ${profileClosing ? "is-closing" : ""}`}
+                onClick={closeProfile}
+                aria-hidden="true"
+              />
+            )}
+
             {/* Avatar chỉ là 1 hình tròn duy nhất, click vào bật popup */}
             <button
               id="portal-profile-toggle"
               type="button"
               className={`pt-avatar-btn ${profileOpen ? "is-active" : ""}`}
-              onClick={() => setProfileOpen((prev) => !prev)}
+              onClick={toggleProfile}
               aria-expanded={profileOpen}
               aria-haspopup="dialog"
               title={`Hồ sơ: ${displayName}`}
@@ -151,10 +196,10 @@ export default function PortalApp() {
             </button>
 
             {/* Popup chi tiết tài khoản khi bấm vào avatar */}
-            {profileOpen && (
+            {(profileOpen || profileClosing) && (
               <div
                 id="portal-profile-dropdown"
-                className="pt-profile-popup"
+                className={`pt-profile-popup ${profileClosing ? "is-closing" : ""}`}
                 role="dialog"
                 aria-modal="true"
                 aria-label="Thông tin tài khoản hộ dân"
@@ -225,7 +270,7 @@ export default function PortalApp() {
                     type="button"
                     className="pt-profile-logout-btn"
                     onClick={() => {
-                      setProfileOpen(false);
+                      closeProfile();
                       void logout();
                     }}
                   >
@@ -240,15 +285,50 @@ export default function PortalApp() {
       </header>
 
       <main className="pt-main">
-        <div key={tab} className="pt-tab-pane">
-          {tab === "home" && <HomeTab onNavigate={navigate} />}
-          {tab === "plots" && <PlotsTab />}
-          {tab === "diary" && <DiaryTab />}
-          {tab === "inspection" && <InspectionTab />}
-          {tab === "requests" && <RequestsTab />}
-          {tab === "learn" && <LearnTab />}
-        </div>
+        {visitedTabs.has("home") && (
+          <div className={`pt-tab-pane ${tab === "home" ? "is-active" : "is-hidden"}`}>
+            <HomeTab onNavigate={navigate} />
+            <SupportFooter onOpen={openSupport} />
+          </div>
+        )}
+        {visitedTabs.has("plots") && (
+          <div className={`pt-tab-pane ${tab === "plots" ? "is-active" : "is-hidden"}`}>
+            <PlotsTab />
+            <SupportFooter onOpen={openSupport} />
+          </div>
+        )}
+        {visitedTabs.has("diary") && (
+          <div className={`pt-tab-pane ${tab === "diary" ? "is-active" : "is-hidden"}`}>
+            <DiaryTab />
+            <SupportFooter onOpen={openSupport} />
+          </div>
+        )}
+        {visitedTabs.has("inspection") && (
+          <div className={`pt-tab-pane ${tab === "inspection" ? "is-active" : "is-hidden"}`}>
+            <InspectionTab />
+            <SupportFooter onOpen={openSupport} />
+          </div>
+        )}
+        {visitedTabs.has("requests") && (
+          <div className={`pt-tab-pane ${tab === "requests" ? "is-active" : "is-hidden"}`}>
+            <RequestsTab />
+            <SupportFooter onOpen={openSupport} />
+          </div>
+        )}
+        {visitedTabs.has("learn") && (
+          <div className={`pt-tab-pane ${tab === "learn" ? "is-active" : "is-hidden"}`}>
+            <LearnTab />
+            <SupportFooter onOpen={openSupport} />
+          </div>
+        )}
       </main>
+
+      {/* Hộp thoại hỗ trợ hệ thống (tối giản, thông tin rõ ràng) */}
+      <SystemSupportModal
+        open={supportOpen}
+        onClose={closeSupport}
+        household={overview?.household}
+      />
 
       {/* Điều hướng trục tròn dạng bánh xe uốn cong trên Mobile */}
       <RadialNavWheel currentTab={tab} onSelectTab={navigate} />
