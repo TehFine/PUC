@@ -282,11 +282,19 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
               </div>
             </div>
 
-            <p className="pt-hero-bio">
-              {household.villageName}
-              {household.villageLeader ? ` · Trưởng thôn: ${household.villageLeader}` : ""}
-              {" · Hộ canh tác sầu riêng VietGAP liên kết Hợp tác xã Krông Búk, Đắk Lắk."}
-            </p>
+            <div className="pt-hero-bio-block">
+              <div className="pt-hero-bio-line">{household.villageName}</div>
+              {household.villageLeader && (
+                <>
+                  <div className="pt-hero-bio-sep" aria-hidden="true" />
+                  <div className="pt-hero-bio-line">Trưởng thôn: {household.villageLeader}</div>
+                </>
+              )}
+              <div className="pt-hero-bio-sep" aria-hidden="true" />
+              <div className="pt-hero-bio-line">
+                Hộ canh tác sầu riêng VietGAP liên kết Hợp tác xã Krông Búk, Đắk Lắk.
+              </div>
+            </div>
 
             <div className="pt-hero-bottom">
               <div className="pt-hero-bottom-left">
