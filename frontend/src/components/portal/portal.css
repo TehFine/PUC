@@ -1011,7 +1011,7 @@
 }
 
 .pt-hero-body {
-  padding: 14px 24px 24px;
+  padding: 14px 25px 24px;
   box-sizing: border-box;
 }
 
@@ -1285,7 +1285,7 @@
     letter-spacing: 0.03em;
   }
   .pt-hero-body {
-    padding: 10px 18px 20px;
+    padding: 10px 25px 20px;
     box-sizing: border-box;
   }
   .pt-hero-farmer-name {
@@ -1300,6 +1300,12 @@
   .pt-hero-meta-col {
     padding: 0 10px;
     gap: 4px;
+  }
+  .pt-hero-meta-col:first-child {
+    padding-left: 0;
+  }
+  .pt-hero-meta-col:last-child {
+    padding-right: 0;
   }
   .pt-hero-meta-title {
     font-size: 11.5px;
@@ -1367,11 +1373,11 @@
     border-radius: 26px;
   }
   .pt-widget-topbar {
-    padding: 16px 18px 14px;
+    padding: 16px 24px 14px;
   }
   .pt-widget-sheet {
     border-radius: 22px;
-    padding: 18px 18px 22px;
+    padding: 18px 24px 22px;
   }
   .pt-widget-sheet-title {
     font-size: 19px;
