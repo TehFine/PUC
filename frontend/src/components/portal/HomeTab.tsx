@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useLayoutEffect, useMemo, useEffect } from "react";
-import { Plus } from "lucide-react";
+import { Plus, ChevronRight } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { daysSince, formatKg, HOUSEHOLD_STATUS, SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
@@ -58,112 +58,67 @@ function getHeroPath(w: number, h: number, badgeW: number, badgeH: number, badge
   ].join(" ");
 }
 
-interface TaskItem {
+interface ActionItem {
   id: string;
   title: string;
-  done: boolean;
   to: PortalTabId;
 }
 
-function buildTasks(
+function buildActionItems(
   overview: PortalOverview,
-  upcoming: PortalScheduleItem | undefined,
-  localOverrides: Record<string, boolean>
-): TaskItem[] {
+  upcoming: PortalScheduleItem | undefined
+): ActionItem[] {
   const { stats, lastTest } = overview;
   const idle = daysSince(stats.lastJournalOn);
-  const items: TaskItem[] = [];
+  const items: ActionItem[] = [];
 
-  // 1. Mã số vùng trồng hợp lệ
-  items.push({
-    id: "puc-code",
-    title: "Mã vùng trồng PUC-KRB-001 hợp lệ",
-    done: localOverrides["puc-code"] ?? true,
-    to: "plots",
-  });
-
-  // 2. Hồ sơ nông hộ
-  items.push({
-    id: "profile",
-    title: "Hồ sơ nông hộ hoàn tất",
-    done: localOverrides["profile"] ?? true,
-    to: "plots",
-  });
-
-  // 3. Mẫu kiểm nghiệm VietGAP (nếu đạt)
-  if (lastTest?.result !== "fail") {
-    items.push({
-      id: "test-pass",
-      title: "Mẫu kiểm nghiệm đạt chuẩn VietGAP",
-      done: localOverrides["test-pass"] ?? true,
-      to: "inspection",
-    });
-  }
-
-  // 4. Trạng thái nhật ký: tiêu đề ngắn gọn theo yêu cầu:
+  // 1. Nhật ký canh tác: tiêu đề ngắn gọn theo yêu cầu:
   // "nếu chưa ghi nhật ký thì để là chưa ghi nhật ký, còn cụ thể là bao nhiêu thì sẽ để chi tiết trong tab nhật ký sau"
   if (idle === null || idle >= 7) {
     items.push({
       id: "diary",
       title: "Chưa ghi nhật ký",
-      done: localOverrides["diary"] ?? false,
-      to: "diary",
-    });
-  } else {
-    items.push({
-      id: "diary",
-      title: "Đã ghi nhật ký canh tác",
-      done: localOverrides["diary"] ?? true,
       to: "diary",
     });
   }
 
-  // 5. Vi phạm nếu có
+  // 2. Vi phạm quy chuẩn cần khắc phục
   if (stats.openViolations > 0) {
     items.push({
       id: "violations",
       title: "Khắc phục vi phạm",
-      done: localOverrides["violations"] ?? false,
       to: "inspection",
     });
   }
 
-  // 6. Kiểm tra mẫu không đạt nếu có
+  // 3. Kiểm tra mẫu không đạt
   if (lastTest?.result === "fail") {
     items.push({
       id: "test-fail",
       title: "Kiểm tra mẫu chưa đạt",
-      done: localOverrides["test-fail"] ?? false,
       to: "inspection",
     });
   }
 
-  // 7. Lịch kiểm tra sắp tới nếu có
+  // 4. Lịch kiểm tra sắp tới
   if (upcoming) {
     items.push({
       id: "upcoming",
       title: "Lịch kiểm tra sắp tới",
-      done: localOverrides["upcoming"] ?? false,
       to: "inspection",
     });
   }
 
-  // 8. Hồ sơ chờ phê duyệt nếu có
+  // 5. Hồ sơ chờ phê duyệt
   if (stats.pendingApprovals > 0) {
     items.push({
       id: "approvals",
       title: "Hồ sơ chờ phê duyệt",
-      done: localOverrides["approvals"] ?? false,
       to: "requests",
     });
   }
 
-  // Sắp xếp: các việc đã xong (done = true) lên trên, các việc cần làm (done = false) ở dưới
-  // Giống chính xác phong cách thiết kế widget trong hình ảnh tham khảo
-  return items.sort((a, b) => {
-    if (a.done === b.done) return 0;
-    return a.done ? -1 : 1;
-  });
+  return items;
 }
 
 export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId) => void }) {
@@ -238,7 +193,6 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
   }, [overview.data]);
 
   const upcoming = schedule.data?.data[0];
-  const [localDone, setLocalDone] = useState<Record<string, boolean>>({});
   const [timeStr, setTimeStr] = useState<string>("14:17");
 
   useEffect(() => {
@@ -253,10 +207,10 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
     return () => clearInterval(timer);
   }, []);
 
-  const tasks = useMemo<TaskItem[]>(() => {
+  const actionItems = useMemo<ActionItem[]>(() => {
     if (!overview.data) return [];
-    return buildTasks(overview.data, upcoming, localDone);
-  }, [overview.data, upcoming, localDone]);
+    return buildActionItems(overview.data, upcoming);
+  }, [overview.data, upcoming]);
 
   const pathD = useMemo(
     () => getHeroPath(dims.w, dims.h, dims.badgeW, dims.badgeH, dims.badgeRight),
@@ -371,53 +325,43 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         </div>
 
         <div className="pt-widget-sheet">
-          <h3 className="pt-widget-sheet-title">Nhiệm vụ hôm nay</h3>
+          <h3 className="pt-widget-sheet-title">Cần làm ngay</h3>
 
-          <ul className="pt-widget-list" role="list">
-            {tasks.map((task) => (
-              <li key={task.id}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="pt-widget-item"
-                  onClick={() => onNavigate(task.to)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onNavigate(task.to);
-                    }
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="pt-widget-check-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLocalDone((prev) => ({
-                        ...prev,
-                        [task.id]: !(prev[task.id] ?? task.done),
-                      }));
+          {actionItems.length === 0 ? (
+            <p className="pt-muted" style={{ padding: "4px 2px 14px", margin: 0 }}>
+              Mọi thứ đều ổn. Hiện chưa có việc cần làm ngay.
+            </p>
+          ) : (
+            <ul className="pt-widget-list" role="list">
+              {actionItems.map((item) => (
+                <li key={item.id}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="pt-widget-item"
+                    onClick={() => onNavigate(item.to)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onNavigate(item.to);
+                      }
                     }}
-                    title={task.done ? "Đánh dấu chưa hoàn thành" : "Đánh dấu đã hoàn thành"}
-                    aria-label={`${task.done ? "Hoàn thành" : "Chưa hoàn thành"}: ${task.title}`}
                   >
-                    {task.done ? (
-                      <span className="pt-widget-check pt-widget-check-done" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3.5 8.5 6.5 11.5 12.5 5" />
-                        </svg>
-                      </span>
-                    ) : (
-                      <span className="pt-widget-check pt-widget-check-pending" aria-hidden="true" />
-                    )}
-                  </button>
-                  <span className={`pt-widget-item-text ${task.done ? "pt-widget-text-done" : "pt-widget-text-pending"}`}>
-                    {task.title}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
+                    <img
+                      src="/clock-timer.png"
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="pt-widget-clock-icon"
+                      aria-hidden="true"
+                    />
+                    <span className="pt-widget-item-text">{item.title}</span>
+                    <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <button
             type="button"
