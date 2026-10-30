@@ -228,4 +228,138 @@ export class PortalService {
     );
     return camelRows(rows)[0];
   }
+
+  /** Lấy danh sách đợt cấp tem và chi tiết tem của hộ (Quy trình 1 - Bước 4 & Quy trình 2 - CheckVN) */
+  async stamps(user: AuthUser) {
+    const householdId = this.householdIdOf(user);
+
+    // Thống kê tem của hộ
+    const statsRes = await this.db.query<{ total: string; activated: string; allocated: string }>(
+      `SELECT
+         count(*)::int as total,
+         count(*) filter (where status = 'activated')::int as activated,
+         count(*) filter (where status = 'allocated')::int as allocated
+       FROM farmer_stamps
+       WHERE household_id = $1`,
+      [householdId],
+    );
+
+    const stats = {
+      totalAllocated: Number(statsRes.rows[0]?.total ?? 0),
+      totalActivated: Number(statsRes.rows[0]?.activated ?? 0),
+      remaining: Number(statsRes.rows[0]?.allocated ?? 0),
+    };
+
+    // Danh sách đợt cấp tem
+    const allocs = await this.db.query(
+      `SELECT id, allocation_code, allocated_on, season, max_quota_stamps, quantity_allocated, from_serial, to_serial, status, notes
+       FROM farmer_stamp_allocations
+       WHERE household_id = $1
+       ORDER BY allocated_on DESC, id DESC`,
+      [householdId],
+    );
+
+    // Danh sách 50 tem gần nhất
+    const stamps = await this.db.query(
+      `SELECT id, allocation_id, plot_code, serial_code, status, activated_at, fruit_weight_kg, grade, photo_url, harvest_date
+       FROM farmer_stamps
+       WHERE household_id = $1
+       ORDER BY status = 'allocated' DESC, id DESC
+       LIMIT 50`,
+      [householdId],
+    );
+
+    return {
+      stats,
+      allocations: camelRows(allocs.rows),
+      stamps: camelRows(stamps.rows),
+    };
+  }
+
+  /** Nông hộ tự kích hoạt tem dán quả sầu riêng (Quy trình 1 - Bước 5 & Quy trình 2 - Nguyên tắc 3, 4) */
+  async activateStamp(dto: import("./dto/portal.dto").ActivatePortalStampDto, user: AuthUser, context: ClientContext) {
+    const householdId = this.householdIdOf(user);
+    const cleanSerial = dto.serialCode.trim();
+
+    // 1. Kiểm tra tem tồn tại
+    const stampRes = await this.db.query<{ id: number; household_id: number; status: string; serial_code: string }>(
+      `SELECT id, household_id, status, serial_code FROM farmer_stamps WHERE upper(serial_code) = upper($1) LIMIT 1`,
+      [cleanSerial],
+    );
+
+    if (stampRes.rowCount === 0) {
+      throw notFound(`Không tìm thấy mã tem "${cleanSerial}" trên hệ thống.`);
+    }
+
+    const stamp = stampRes.rows[0];
+
+    // 2. Chống trà trộn / hoán đổi tem (Quy trình 2 - Nguyên tắc 4):
+    // Chỉ có chính hộ được cấp mới có quyền kích hoạt tem của mình
+    if (Number(stamp.household_id) !== householdId) {
+      throw forbidden(`Tem "${cleanSerial}" thuộc về hộ nông dân khác. Hệ thống ngăn chặn việc kích hoạt chéo hoặc hoán đổi tem!`);
+    }
+
+    // 3. Kiểm tra tem đã kích hoạt trước đó chưa
+    if (stamp.status === "activated") {
+      throw badRequest(`Tem "${cleanSerial}" đã được kích hoạt trước đó.`);
+    }
+
+    // 4. Kích hoạt tem
+    const today = todayVn();
+    const updated = await this.db.query(
+      `UPDATE farmer_stamps
+       SET
+         status = 'activated',
+         activated_at = now(),
+         plot_code = $1,
+         fruit_weight_kg = $2,
+         grade = $3,
+         photo_url = $4,
+         harvest_date = $5
+       WHERE id = $6
+       RETURNING id, allocation_id, plot_code, serial_code, status, activated_at, fruit_weight_kg, grade, photo_url, harvest_date`,
+      [dto.plotCode, dto.fruitWeightKg, dto.grade ?? "A", dto.photoUrl ?? null, today, stamp.id],
+    );
+
+    await this.audit.write(
+      { ip: context.ip, user },
+      { action: "Nông hộ kích hoạt tem quả", object: stamp.serial_code, detail: `Lô ${dto.plotCode}, khối lượng ${dto.fruitWeightKg} kg, hạng ${dto.grade ?? "A"}` },
+    );
+
+    return camelRows(updated.rows)[0];
+  }
+
+  /** Lấy danh sách khai báo thu hái tại vườn của hộ */
+  async harvestDeclarations(user: AuthUser) {
+    const householdId = this.householdIdOf(user);
+    const { rows } = await this.db.query(
+      `SELECT id, plot_code, harvested_on, weight_kg, grade_a_kg, grade_b_kg, quality_rating, photo_url, note, created_at
+       FROM harvest_declarations
+       WHERE household_id = $1
+       ORDER BY harvested_on DESC, id DESC LIMIT 50`,
+      [householdId],
+    );
+    return { data: camelRows(rows) };
+  }
+
+  /** Nông hộ tự khai báo nhật ký thu hái tại vườn (Quy trình 1 - Bước 3) */
+  async addHarvestDeclaration(dto: import("./dto/portal.dto").CreateHarvestDeclarationDto, user: AuthUser, context: ClientContext) {
+    const householdId = this.householdIdOf(user);
+    const date = dto.harvestedOn || todayVn();
+
+    const { rows } = await this.db.query(
+      `INSERT INTO harvest_declarations
+         (household_id, plot_code, harvested_on, weight_kg, grade_a_kg, grade_b_kg, quality_rating, note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, plot_code, harvested_on, weight_kg, grade_a_kg, grade_b_kg, quality_rating, photo_url, note, created_at`,
+      [householdId, dto.plotCode, date, dto.weightKg, dto.gradeAKg ?? 0, dto.gradeBKg ?? 0, dto.qualityRating || "Loại 1 (VIP)", dto.note ?? null],
+    );
+
+    await this.audit.write(
+      { ip: context.ip, user },
+      { action: "Nông hộ khai báo thu hái", object: dto.plotCode, detail: `Sản lượng ${dto.weightKg} kg, ngày ${date}` },
+    );
+
+    return camelRows(rows)[0];
+  }
 }

@@ -47,3 +47,48 @@ export class CreatePortalApprovalDto {
   @Count()
   docsCount?: number;
 }
+
+/** Hộ dân tự kích hoạt tem dán quả sầu riêng tại vườn (Hình 1 - Bước 5 & Hình 2 - Nguyên tắc 3 & 4). */
+export class ActivatePortalStampDto {
+  @Text(40)
+  serialCode!: string;
+
+  @Text(30)
+  plotCode!: string;
+
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @IsPositive()
+  fruitWeightKg!: number;
+
+  @OptionalText(10)
+  grade?: "A" | "B" | "C";
+
+  @OptionalText(300)
+  photoUrl?: string;
+}
+
+/** Hộ dân tự khai báo nhật ký thu hái tại vườn (Hình 1 - Bước 3). */
+export class CreateHarvestDeclarationDto {
+  @Text(30)
+  plotCode!: string;
+
+  @OptionalField()
+  @IsoDate()
+  harvestedOn?: string;
+
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @IsPositive()
+  weightKg!: number;
+
+  @OptionalField()
+  gradeAKg?: number;
+
+  @OptionalField()
+  gradeBKg?: number;
+
+  @OptionalText(50)
+  qualityRating?: string;
+
+  @OptionalText(300)
+  note?: string;
+}

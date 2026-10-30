@@ -24,6 +24,8 @@ export const RESOURCES = [
   "plot-measurements",
   "portal",
   "registrations",
+  "contracts",
+  "enterprises",
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -69,6 +71,8 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   portal: { read: FARMER, create: FARMER },
   // Duyệt tài khoản hộ dân tự đăng ký (xem, duyệt = update, từ chối = delete).
   registrations: { read: HTX, update: HTX, delete: HTX },
+  contracts: { read: STAFF, create: HTX, update: HTX, delete: ADMIN },
+  enterprises: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
 };
 
 export function can(role: Role, resource: ResourceKey, action: Action): boolean {

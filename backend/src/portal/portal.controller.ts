@@ -81,4 +81,36 @@ export class PortalController {
   addApproval(@Body(strictPipe(CreatePortalApprovalDto)) dto: CreatePortalApprovalDto, @CurrentUser() user: AuthUser, @Ip() ip: string) {
     return this.service.addApproval(dto, user, { ip });
   }
+
+  @Get("stamps")
+  @Authorize("portal", "read")
+  stamps(@CurrentUser() user: AuthUser) {
+    return this.service.stamps(user);
+  }
+
+  @Post("stamps/activate")
+  @Authorize("portal", "create")
+  activateStamp(
+    @Body() dto: import("./dto/portal.dto").ActivatePortalStampDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.service.activateStamp(dto, user, { ip });
+  }
+
+  @Get("harvest-declarations")
+  @Authorize("portal", "read")
+  harvestDeclarations(@CurrentUser() user: AuthUser) {
+    return this.service.harvestDeclarations(user);
+  }
+
+  @Post("harvest-declarations")
+  @Authorize("portal", "create")
+  addHarvestDeclaration(
+    @Body() dto: import("./dto/portal.dto").CreateHarvestDeclarationDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.service.addHarvestDeclaration(dto, user, { ip });
+  }
 }

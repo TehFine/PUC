@@ -14,6 +14,8 @@ import { VarietiesModule } from "./varieties/varieties.module";
 import { VillagesModule } from "./villages/villages.module";
 import { AccountsModule } from "./accounts/accounts.module";
 import { AuditLogModule } from "./audit-log/audit-log.module";
+import { EnterprisesModule } from "./enterprises/enterprises.module";
+import { ContractsModule } from "./contracts/contracts.module";
 
 /** Các nhóm dữ liệu nghiệp vụ (mỗi nhóm một module: controller + service + DTO). */
 @Module({
@@ -33,6 +35,8 @@ import { AuditLogModule } from "./audit-log/audit-log.module";
     VillagesModule,
     AccountsModule,
     AuditLogModule,
+    EnterprisesModule,
+    ContractsModule,
   ],
 })
 export class ResourcesModule {}
