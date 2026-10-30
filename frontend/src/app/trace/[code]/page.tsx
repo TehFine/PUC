@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { connection } from "next/server";
 import TraceView from "./TraceView";
 
 export async function generateMetadata({ params }: { params: Promise<{ code: string }> }): Promise<Metadata> {
@@ -15,6 +16,11 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
   };
 }
 
+async function DynamicMarker() {
+  await connection();
+  return null;
+}
+
 export default function TracePage() {
   return (
     <Suspense
@@ -24,6 +30,7 @@ export default function TracePage() {
         </div>
       }
     >
+      <DynamicMarker />
       <TraceView />
     </Suspense>
   );
