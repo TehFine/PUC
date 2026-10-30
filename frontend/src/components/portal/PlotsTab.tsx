@@ -95,24 +95,23 @@ export default function PlotsTab() {
       {/* Sheet hiển thị chi tiết mã QR của từng lô sản phẩm của hộ */}
       {selectedLotForQr && (
         <Sheet
-          title="Mã QR Truy Xuất Nguồn Gốc"
+          title="Mã QR lô hàng"
           onClose={() => setSelectedLotForQr(null)}
         >
           <div className="pt-qr-modal-body">
             <div className="pt-qr-modal-card">
               <div className="pt-qr-badge">
-                <QrCode size={14} strokeWidth={2.2} aria-hidden="true" />
                 <span>TEM ĐIỆN TỬ VÙNG TRỒNG PUC</span>
               </div>
               <h3 className="pt-qr-modal-title">Sầu Riêng Krông Búk</h3>
               <p className="pt-qr-modal-sub">
-                Lô sản phẩm: <strong>{selectedLotForQr.lotCode}</strong>
-                {selectedLotForQr.qrCode ? ` · Mã tem: ${selectedLotForQr.qrCode}` : ""}
+                Lô: <strong>{selectedLotForQr.lotCode}</strong>
+                {selectedLotForQr.qrCode ? ` · Tem: ${selectedLotForQr.qrCode}` : ""}
               </p>
 
               <div className="pt-qr-visual-box">
                 <div className="pt-qr-frame">
-                  <QrCode size={150} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />
+                  <QrCode size={135} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />
                   <div className="pt-qr-center-tag">PUC</div>
                 </div>
                 <div className="pt-qr-code-text">{selectedLotForQr.qrCode || selectedLotForQr.lotCode}</div>
@@ -120,7 +119,7 @@ export default function PlotsTab() {
 
               <div className="pt-qr-meta-grid">
                 <div className="pt-qr-meta-item">
-                  <span className="pt-qr-meta-label">Sản lượng đóng góp</span>
+                  <span className="pt-qr-meta-label">Sản lượng</span>
                   <strong className="pt-qr-meta-val">{formatKg(selectedLotForQr.weightKg)}</strong>
                 </div>
                 <div className="pt-qr-meta-item">
@@ -128,11 +127,11 @@ export default function PlotsTab() {
                   <strong className="pt-qr-meta-val">{formatDate(selectedLotForQr.harvestedOn)}</strong>
                 </div>
                 <div className="pt-qr-meta-item">
-                  <span className="pt-qr-meta-label">Đơn vị thu mua</span>
+                  <span className="pt-qr-meta-label">Bên thu mua</span>
                   <strong className="pt-qr-meta-val">{selectedLotForQr.buyer}</strong>
                 </div>
                 <div className="pt-qr-meta-item">
-                  <span className="pt-qr-meta-label">Thị trường xuất khẩu</span>
+                  <span className="pt-qr-meta-label">Thị trường</span>
                   <strong className="pt-qr-meta-val">{selectedLotForQr.market}</strong>
                 </div>
               </div>
@@ -143,8 +142,8 @@ export default function PlotsTab() {
                 rel="noopener noreferrer"
                 className="pt-btn pt-btn-primary pt-qr-open-btn"
               >
-                <span>Xem toàn bộ hồ sơ truy xuất nguồn gốc</span>
-                <ArrowUpRight size={16} strokeWidth={2.4} aria-hidden="true" />
+                <span>Xem hồ sơ truy xuất</span>
+                <ArrowUpRight size={17} strokeWidth={2.4} aria-hidden="true" />
               </a>
             </div>
           </div>
