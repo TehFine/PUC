@@ -28,7 +28,10 @@ function useWidth<T extends HTMLElement>() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)));
+    const ro = new ResizeObserver(([entry]) => {
+      const w = Math.round(entry?.contentRect?.width ?? 0);
+      if (w > 0) setWidth(w);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);

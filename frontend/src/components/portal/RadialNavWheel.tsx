@@ -97,7 +97,6 @@ const SENSITIVITY = STEP_DEG / PX_PER_STEP; // Độ nhạy vuốt ngón tay: ~0
 // Cấu hình vòng chia vạch đồng hồ (Watch Dial Ticks)
 const DIAL_RADIUS = 350;
 const DIAL_STEP_DEG = 12;
-const DIAL_TICK_STEP = 1.5; // Mỗi vạch chia cách nhau 1.5° (8 vạch cho mỗi tab)
 const DIAL_VIEW_W = 320;
 const DIAL_VIEW_H = 700;
 const DIAL_ARC_RIGHT = 76; // Khoảng cách từ mép phải tới đường cong chính
@@ -115,11 +114,13 @@ interface DialTick {
 
 function generateDialTicks(cx: number, cy: number, r: number): DialTick[] {
   const ticks: DialTick[] = [];
-  const totalTicks = Math.round(360 / DIAL_TICK_STEP);
+  // Chỉ tạo các vạch trong cung góc có thể hiển thị trên màn hình (-30° đến 105°)
+  // Giảm từ 240 vạch xuống ~68 vạch, tiết kiệm 72% chi phí vẽ SVG cho GPU thiết bị yếu
+  const minDeg = -30;
+  const maxDeg = 105;
+  const step = 2.0;
 
-  for (let i = 0; i < totalTicks; i++) {
-    const deg = i * DIAL_TICK_STEP;
-    // 180° là hướng sang trái (hướng về giữa màn hình)
+  for (let deg = minDeg; deg <= maxDeg; deg += step) {
     const rad = ((180 + deg) * Math.PI) / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
@@ -146,7 +147,7 @@ function generateDialTicks(cx: number, cy: number, r: number): DialTick[] {
     }
 
     ticks.push({
-      key: i,
+      key: Math.round(deg * 10),
       x1: cx + rInner * cos,
       y1: cy + rInner * sin,
       x2: cx + rOuter * cos,
@@ -214,12 +215,12 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     closeTimerRef.current = setTimeout(() => {
       setIsOpen(false);
       setIsClosing(false);
-    }, 260);
+    }, 180);
   }, []);
 
-  // Tự động thu popup lại sau khi bánh xe dừng lại ở một tab với nhịp dừng vừa vặn
+  // Tự động thu popup lại sau khi bánh xe dừng lại ở một tab nhanh chóng, tránh trễ
   const scheduleAutoClose = useCallback(
-    (delay = 360) => {
+    (delay = 120) => {
       if (autoCloseTimerRef.current) {
         clearTimeout(autoCloseTimerRef.current);
       }
@@ -283,7 +284,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
 
   // Hàm xoay bánh xe mượt mà tới góc mục tiêu theo nhịp điệu êm dịu, không giật gấp
   const animateToRotation = useCallback(
-    (targetRot: number, targetIdx: number, duration = 380, autoCloseDelay = 360) => {
+    (targetRot: number, targetIdx: number, duration = 240, autoCloseDelay = 120) => {
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;
@@ -307,7 +308,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
           latestRotRef.current = targetRot;
           setRotationDeg(targetRot);
           triggerTabChange(targetIdx);
-          // Khoảng dừng nhịp điệu (dwell time) để người dùng kịp quan sát tab đã chọn trước khi thu drawer
+          // Khoảng dừng nhịp điệu vừa vặn trước khi thu drawer
           scheduleAutoClose(autoCloseDelay);
         }
       };
@@ -348,8 +349,8 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
         const rawSnap = Math.round(latestRotRef.current / STEP_DEG);
         const clampedSnapIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, rawSnap));
         const targetSnap = clampedSnapIdx * STEP_DEG;
-        animateToRotation(targetSnap, clampedSnapIdx, 340, 360);
-      }, 140);
+        animateToRotation(targetSnap, clampedSnapIdx, 240, 120);
+      }, 100);
     };
 
     el.addEventListener("wheel", handleWheel, { passive: false });
@@ -475,7 +476,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     const targetSnap = clampedSnapIdx * STEP_DEG;
 
     // Animation xoay trượt êm dịu, không giật gấp, dừng lại vừa nhịp
-    animateToRotation(targetSnap, clampedSnapIdx, 380, 360);
+    animateToRotation(targetSnap, clampedSnapIdx, 240, 120);
   };
 
   // Click trực tiếp vào một mục trên vòng xoay
@@ -487,8 +488,8 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     }
     const clampedIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, idx));
     const targetSnap = clampedIdx * STEP_DEG;
-    // Xoay trượt nhịp nhàng tới tab được bấm
-    animateToRotation(targetSnap, clampedIdx, 380, 360);
+    // Xoay trượt nhịp nhàng tới tab được bấm và đóng nhanh gọn
+    animateToRotation(targetSnap, clampedIdx, 220, 100);
   };
 
   // Danh sách các tab hiển thị - KHÔNG LẶP VÔ TẬN: Chỉ hiển thị đúng các tab hiện có (0 đến 5)
