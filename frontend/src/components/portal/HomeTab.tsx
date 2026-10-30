@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useLayoutEffect, useMemo } from "react";
-import { ChevronRight } from "lucide-react";
+import { useRef, useState, useLayoutEffect, useMemo, useEffect } from "react";
+import { Plus } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { daysSince, formatKg, HOUSEHOLD_STATUS, SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
@@ -58,31 +58,112 @@ function getHeroPath(w: number, h: number, badgeW: number, badgeH: number, badge
   ].join(" ");
 }
 
-interface Reminder {
-  tone: "red" | "gold" | "blue" | "green";
-  text: string;
+interface TaskItem {
+  id: string;
+  title: string;
+  done: boolean;
   to: PortalTabId;
 }
 
-function buildReminders(overview: PortalOverview, upcoming: PortalScheduleItem | undefined): Reminder[] {
+function buildTasks(
+  overview: PortalOverview,
+  upcoming: PortalScheduleItem | undefined,
+  localOverrides: Record<string, boolean>
+): TaskItem[] {
   const { stats, lastTest } = overview;
-  const reminders: Reminder[] = [];
-  if (stats.openViolations > 0) {
-    reminders.push({ tone: "red", text: `Có ${stats.openViolations} thông báo vi phạm cần khắc phục.`, to: "inspection" });
-  }
   const idle = daysSince(stats.lastJournalOn);
-  if (idle === null) reminders.push({ tone: "gold", text: "Bạn chưa ghi nhật ký canh tác lần nào.", to: "diary" });
-  else if (idle >= 7) reminders.push({ tone: "gold", text: `Đã ${idle} ngày chưa ghi nhật ký canh tác (quy định tối thiểu 7 ngày/lần).`, to: "diary" });
+  const items: TaskItem[] = [];
+
+  // 1. Mã số vùng trồng hợp lệ
+  items.push({
+    id: "puc-code",
+    title: "Mã vùng trồng PUC-KRB-001 hợp lệ",
+    done: localOverrides["puc-code"] ?? true,
+    to: "plots",
+  });
+
+  // 2. Hồ sơ nông hộ
+  items.push({
+    id: "profile",
+    title: "Hồ sơ nông hộ hoàn tất",
+    done: localOverrides["profile"] ?? true,
+    to: "plots",
+  });
+
+  // 3. Mẫu kiểm nghiệm VietGAP (nếu đạt)
+  if (lastTest?.result !== "fail") {
+    items.push({
+      id: "test-pass",
+      title: "Mẫu kiểm nghiệm đạt chuẩn VietGAP",
+      done: localOverrides["test-pass"] ?? true,
+      to: "inspection",
+    });
+  }
+
+  // 4. Trạng thái nhật ký: tiêu đề ngắn gọn theo yêu cầu:
+  // "nếu chưa ghi nhật ký thì để là chưa ghi nhật ký, còn cụ thể là bao nhiêu thì sẽ để chi tiết trong tab nhật ký sau"
+  if (idle === null || idle >= 7) {
+    items.push({
+      id: "diary",
+      title: "Chưa ghi nhật ký",
+      done: localOverrides["diary"] ?? false,
+      to: "diary",
+    });
+  } else {
+    items.push({
+      id: "diary",
+      title: "Đã ghi nhật ký canh tác",
+      done: localOverrides["diary"] ?? true,
+      to: "diary",
+    });
+  }
+
+  // 5. Vi phạm nếu có
+  if (stats.openViolations > 0) {
+    items.push({
+      id: "violations",
+      title: "Khắc phục vi phạm",
+      done: localOverrides["violations"] ?? false,
+      to: "inspection",
+    });
+  }
+
+  // 6. Kiểm tra mẫu không đạt nếu có
   if (lastTest?.result === "fail") {
-    reminders.push({ tone: "red", text: `Mẫu ${lastTest.code} (${lastTest.plotCode}) chưa đạt. Liên hệ cán bộ HTX để được hướng dẫn.`, to: "inspection" });
+    items.push({
+      id: "test-fail",
+      title: "Kiểm tra mẫu chưa đạt",
+      done: localOverrides["test-fail"] ?? false,
+      to: "inspection",
+    });
   }
+
+  // 7. Lịch kiểm tra sắp tới nếu có
   if (upcoming) {
-    reminders.push({ tone: "blue", text: `${formatDate(upcoming.scheduledOn)}: ${upcoming.title}.`, to: "inspection" });
+    items.push({
+      id: "upcoming",
+      title: "Lịch kiểm tra sắp tới",
+      done: localOverrides["upcoming"] ?? false,
+      to: "inspection",
+    });
   }
+
+  // 8. Hồ sơ chờ phê duyệt nếu có
   if (stats.pendingApprovals > 0) {
-    reminders.push({ tone: "blue", text: `${stats.pendingApprovals} hồ sơ của bạn đang chờ HTX duyệt.`, to: "requests" });
+    items.push({
+      id: "approvals",
+      title: "Hồ sơ chờ phê duyệt",
+      done: localOverrides["approvals"] ?? false,
+      to: "requests",
+    });
   }
-  return reminders;
+
+  // Sắp xếp: các việc đã xong (done = true) lên trên, các việc cần làm (done = false) ở dưới
+  // Giống chính xác phong cách thiết kế widget trong hình ảnh tham khảo
+  return items.sort((a, b) => {
+    if (a.done === b.done) return 0;
+    return a.done ? -1 : 1;
+  });
 }
 
 export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId) => void }) {
@@ -157,10 +238,25 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
   }, [overview.data]);
 
   const upcoming = schedule.data?.data[0];
-  const reminders = useMemo<Reminder[]>(() => {
+  const [localDone, setLocalDone] = useState<Record<string, boolean>>({});
+  const [timeStr, setTimeStr] = useState<string>("14:17");
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, "0");
+      const m = String(now.getMinutes()).padStart(2, "0");
+      setTimeStr(`${h}:${m}`);
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const tasks = useMemo<TaskItem[]>(() => {
     if (!overview.data) return [];
-    return buildReminders(overview.data, upcoming);
-  }, [overview.data, upcoming]);
+    return buildTasks(overview.data, upcoming, localDone);
+  }, [overview.data, upcoming, localDone]);
 
   const pathD = useMemo(
     () => getHeroPath(dims.w, dims.h, dims.badgeW, dims.badgeH, dims.badgeRight),
@@ -257,30 +353,83 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         </section>
       </div>
 
-      {/* Thẻ Nhắc nhở đặt ngay dưới thẻ profile theo yêu cầu người dùng */}
-      <Card
-        title="Nhắc nhở"
-        action={
-          reminders.length > 0 ? (
-            <span className="pt-badge-alert">{reminders.length} việc cần chú ý</span>
-          ) : undefined
-        }
-      >
-        {reminders.length === 0 ? (
-          <p className="pt-muted">Mọi thứ đều ổn. Hiện chưa có nhắc nhở nào.</p>
-        ) : (
-          <ul className="pt-reminders">
-            {reminders.map((reminder) => (
-              <li key={reminder.text}>
-                <button type="button" className={`pt-reminder pt-reminder-${reminder.tone}`} onClick={() => onNavigate(reminder.to)}>
-                  <span>{reminder.text}</span>
-                  <ChevronRight aria-hidden="true" size={18} />
-                </button>
+      {/* Widget Nhắc nhở theo phong cách Tasks for Today */}
+      <section className="pt-reminders-widget" aria-label="Nhắc nhở và nhiệm vụ hôm nay">
+        <div className="pt-widget-topbar">
+          <div className="pt-widget-topbar-info">
+            <h2 className="pt-widget-topbar-title">Nhắc nhở</h2>
+            <span className="pt-widget-topbar-time">{timeStr}</span>
+          </div>
+          <button
+            type="button"
+            className="pt-widget-topbar-btn"
+            onClick={() => onNavigate("diary")}
+            title="Xem chi tiết nhật ký canh tác"
+          >
+            Chi tiết
+          </button>
+        </div>
+
+        <div className="pt-widget-sheet">
+          <h3 className="pt-widget-sheet-title">Nhiệm vụ hôm nay</h3>
+
+          <ul className="pt-widget-list" role="list">
+            {tasks.map((task) => (
+              <li key={task.id}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="pt-widget-item"
+                  onClick={() => onNavigate(task.to)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onNavigate(task.to);
+                    }
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="pt-widget-check-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLocalDone((prev) => ({
+                        ...prev,
+                        [task.id]: !(prev[task.id] ?? task.done),
+                      }));
+                    }}
+                    title={task.done ? "Đánh dấu chưa hoàn thành" : "Đánh dấu đã hoàn thành"}
+                    aria-label={`${task.done ? "Hoàn thành" : "Chưa hoàn thành"}: ${task.title}`}
+                  >
+                    {task.done ? (
+                      <span className="pt-widget-check pt-widget-check-done" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3.5 8.5 6.5 11.5 12.5 5" />
+                        </svg>
+                      </span>
+                    ) : (
+                      <span className="pt-widget-check pt-widget-check-pending" aria-hidden="true" />
+                    )}
+                  </button>
+                  <span className={`pt-widget-item-text ${task.done ? "pt-widget-text-done" : "pt-widget-text-pending"}`}>
+                    {task.title}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
-        )}
-      </Card>
+
+          <button
+            type="button"
+            className="pt-widget-plus-btn"
+            onClick={() => onNavigate("diary")}
+            title="Thêm nhật ký canh tác"
+            aria-label="Thêm nhật ký canh tác"
+          >
+            <Plus size={22} strokeWidth={2.4} aria-hidden="true" />
+          </button>
+        </div>
+      </section>
 
       {/* Thẻ Lịch kiểm tra đặt ngay dưới thẻ Nhắc nhở với tiêu đề cô đọng */}
       <Card
