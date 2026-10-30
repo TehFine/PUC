@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useLayoutEffect, useMemo, useEffect } from "react";
-import { Plus, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { daysSince, formatKg, HOUSEHOLD_STATUS, SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
@@ -362,16 +362,6 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
               ))}
             </ul>
           )}
-
-          <button
-            type="button"
-            className="pt-widget-plus-btn"
-            onClick={() => onNavigate("diary")}
-            title="Thêm nhật ký canh tác"
-            aria-label="Thêm nhật ký canh tác"
-          >
-            <Plus size={22} strokeWidth={2.4} aria-hidden="true" />
-          </button>
         </div>
       </section>
 
