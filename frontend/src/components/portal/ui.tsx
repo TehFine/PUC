@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine, X } from "lucide-react";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
@@ -62,10 +62,23 @@ export function StateBlock({ loading, error, variant = "cards" }: { loading: boo
   return null;
 }
 
+const SheetCloseContext = createContext<(() => void) | null>(null);
+export const useSheetClose = () => useContext(SheetCloseContext);
+
 /** Hộp thoại dạng bảng trượt từ dưới lên (trên máy tính hiển thị giữa màn hình). */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const [closing, setClosing] = useState(false);
+
+  const handleClose = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 220);
+  }, [closing, onClose]);
+
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && handleClose();
     document.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -73,20 +86,30 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
     };
-  }, [onClose]);
+  }, [handleClose]);
 
   return (
-    <div className="pt-sheet-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="pt-sheet" role="dialog" aria-modal="true" aria-label={title}>
-        <header className="pt-sheet-head">
-          <h2>{title}</h2>
-          <button type="button" className="pt-icon-btn" onClick={onClose} aria-label="Đóng">
-            <X aria-hidden="true" />
-          </button>
-        </header>
-        <div className="pt-sheet-body">{children}</div>
+    <SheetCloseContext.Provider value={handleClose}>
+      <div
+        className={`pt-sheet-backdrop ${closing ? "is-closing" : ""}`}
+        onMouseDown={(event) => event.target === event.currentTarget && handleClose()}
+      >
+        <div
+          className={`pt-sheet ${closing ? "is-closing" : ""}`}
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+        >
+          <header className="pt-sheet-head">
+            <h2>{title}</h2>
+            <button type="button" className="pt-icon-btn" onClick={handleClose} aria-label="Đóng">
+              <X aria-hidden="true" />
+            </button>
+          </header>
+          <div className="pt-sheet-body">{children}</div>
+        </div>
       </div>
-    </div>
+    </SheetCloseContext.Provider>
   );
 }
 

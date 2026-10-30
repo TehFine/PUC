@@ -8,7 +8,7 @@ import { JOURNAL_ACTIVITIES, PESTICIDE_STATUS, todayIso } from "@/lib/portal-lab
 import { formatDate } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type { PortalJournalEntry, PortalList, PortalPlots, PortalSprayRecord } from "@/types/portal";
-import { Card, EmptyState, Field, Pill, Sheet, StateBlock } from "./ui";
+import { Card, EmptyState, Field, Pill, Sheet, StateBlock, useSheetClose } from "./ui";
 
 const keep = (pesticide: PesticideDto) => pesticide;
 
@@ -16,6 +16,7 @@ const errorText = (error: unknown) =>
   error instanceof ApiError || error instanceof Error ? error.message : "Không lưu được. Vui lòng thử lại.";
 
 function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDone: () => void; onClose: () => void }) {
+  const sheetClose = useSheetClose();
   const [entryOn, setEntryOn] = useState(todayIso());
   const [plotCode, setPlotCode] = useState(plotCodes[0] ?? "");
   const [activity, setActivity] = useState(JOURNAL_ACTIVITIES[0]);
@@ -101,7 +102,7 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
 
       {error && <p className="pt-form-error" role="alert">{error}</p>}
       <div className="pt-form-actions">
-        <button type="button" className="pt-btn pt-btn-ghost" onClick={onClose}>
+        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose}>
           Hủy
         </button>
         <button type="submit" className="pt-btn pt-btn-primary" disabled={saving || !plotCode.trim()}>
@@ -113,6 +114,7 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
 }
 
 function SprayForm({ plotsHint, onDone, onClose }: { plotsHint: string; onDone: () => void; onClose: () => void }) {
+  const sheetClose = useSheetClose();
   const pesticides = useResource<PesticideDto, PesticideDto>("pesticides", keep);
   const [sprayedOn, setSprayedOn] = useState(todayIso());
   const [pesticideId, setPesticideId] = useState("");
@@ -183,7 +185,7 @@ function SprayForm({ plotsHint, onDone, onClose }: { plotsHint: string; onDone: 
       <p className="pt-hint">{plotsHint}</p>
       {error && <p className="pt-form-error" role="alert">{error}</p>}
       <div className="pt-form-actions">
-        <button type="button" className="pt-btn pt-btn-ghost" onClick={onClose}>
+        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose}>
           Hủy
         </button>
         <button type="submit" className="pt-btn pt-btn-primary" disabled={saving || !pesticideId || !dose.trim() || !areaHa}>
