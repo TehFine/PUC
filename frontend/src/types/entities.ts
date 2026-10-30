@@ -87,6 +87,7 @@ export interface LabTest {
 }
 
 export interface HarvestLot {
+  id?: number;
   code: string;
   date: string;
   weight: string;
@@ -96,6 +97,54 @@ export interface HarvestLot {
   qr: string;
   status: string;
   statusType: string;
+  packhouseCode?: string;
+  transporter?: string;
+  vehiclePlate?: string;
+  temperatureC?: number;
+  avgBrix?: number;
+  gradeAPct?: number;
+  enterpriseName?: string;
+  contractCode?: string;
+}
+
+export interface Enterprise {
+  id: number;
+  code: string;
+  name: string;
+  taxCode?: string;
+  representative?: string;
+  phone?: string;
+  address?: string;
+  packhouseCode?: string;
+  status: "active" | "inactive";
+}
+
+export interface Contract {
+  id: number;
+  code: string;
+  enterpriseId: number;
+  enterpriseName?: string;
+  packhouseCode?: string;
+  title: string;
+  signedOn: string;
+  validUntil: string;
+  targetTons: number;
+  priceGuarantee?: string;
+  market: string;
+  status: "active" | "completed" | "expired";
+  notes?: string;
+}
+
+export interface HarvestItem {
+  id: number;
+  lotId: number;
+  itemType: "fruit" | "box";
+  serialCode: string;
+  weightKg?: number;
+  grade?: "A" | "B" | "C";
+  printedAt?: string;
+  status: string;
+  createdAt: string;
 }
 
 export interface TrainingCourse {

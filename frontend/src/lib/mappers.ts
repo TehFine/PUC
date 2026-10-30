@@ -172,6 +172,7 @@ export function mapLabTest(dto: LabTestDto): LabTest {
 export function mapHarvest(dto: HarvestDto): HarvestLot {
   const [status, statusType] = label(HARVEST_STATUS, dto.status);
   return {
+    id: dto.id,
     code: dto.code,
     date: formatDate(dto.harvestedOn),
     weight: formatNumber(dto.weightTons, 3),
@@ -181,6 +182,46 @@ export function mapHarvest(dto: HarvestDto): HarvestLot {
     qr: dto.qrCode ?? "—",
     status,
     statusType,
+    packhouseCode: dto.packhouseCode,
+    transporter: dto.transporter,
+    vehiclePlate: dto.vehiclePlate,
+    temperatureC: dto.temperatureC,
+    avgBrix: dto.avgBrix,
+    gradeAPct: dto.gradeAPct,
+    enterpriseName: dto.enterpriseName,
+    contractCode: dto.contractCode,
+  };
+}
+
+export function mapEnterprise(dto: import("@/types/api").EnterpriseDto): import("@/types/entities").Enterprise {
+  return {
+    id: dto.id,
+    code: dto.code,
+    name: dto.name,
+    taxCode: dto.taxCode ?? undefined,
+    representative: dto.representative ?? undefined,
+    phone: dto.phone ?? undefined,
+    address: dto.address ?? undefined,
+    packhouseCode: dto.packhouseCode ?? undefined,
+    status: dto.status,
+  };
+}
+
+export function mapContract(dto: import("@/types/api").ContractDto): import("@/types/entities").Contract {
+  return {
+    id: dto.id,
+    code: dto.code,
+    enterpriseId: dto.enterpriseId,
+    enterpriseName: dto.enterpriseName,
+    packhouseCode: dto.packhouseCode ?? undefined,
+    title: dto.title,
+    signedOn: formatDate(dto.signedOn),
+    validUntil: formatDate(dto.validUntil),
+    targetTons: dto.targetTons,
+    priceGuarantee: dto.priceGuarantee ?? undefined,
+    market: dto.market,
+    status: dto.status,
+    notes: dto.notes ?? undefined,
   };
 }
 

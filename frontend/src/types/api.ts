@@ -124,6 +124,63 @@ export interface HarvestDto {
   market: string;
   qrCode: string | null;
   status: "exported" | "delivered" | "in_transit" | "sampling";
+  enterpriseId?: number;
+  enterpriseName?: string;
+  contractId?: number;
+  contractCode?: string;
+  packhouseCode?: string;
+  gradeAPct?: number;
+  gradeBPct?: number;
+  gradeCPct?: number;
+  avgBrix?: number;
+  treatmentMethod?: string;
+  transporter?: string;
+  vehiclePlate?: string;
+  temperatureC?: number;
+  departedAt?: string;
+  estimatedArrival?: string;
+}
+
+export interface EnterpriseDto {
+  id: number;
+  code: string;
+  name: string;
+  taxCode: string | null;
+  representative: string | null;
+  phone: string | null;
+  address: string | null;
+  packhouseCode: string | null;
+  status: "active" | "inactive";
+  createdAt: string;
+}
+
+export interface ContractDto {
+  id: number;
+  code: string;
+  enterpriseId: number;
+  enterpriseName: string;
+  packhouseCode: string | null;
+  title: string;
+  signedOn: string;
+  validUntil: string;
+  targetTons: number;
+  priceGuarantee: string | null;
+  market: string;
+  status: "active" | "completed" | "expired";
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface HarvestItemDto {
+  id: number;
+  lotId: number;
+  itemType: "fruit" | "box";
+  serialCode: string;
+  weightKg: number | null;
+  grade: "A" | "B" | "C" | null;
+  printedAt: string | null;
+  status: string;
+  createdAt: string;
 }
 
 export interface TrainingDto {
