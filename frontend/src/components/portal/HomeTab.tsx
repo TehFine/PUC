@@ -348,8 +348,6 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         </div>
 
         <div className="pt-widget-sheet">
-          <h3 className="pt-widget-sheet-title">Cần làm ngay</h3>
-
           {actionItems.length === 0 ? (
             <p className="pt-muted" style={{ padding: "4px 2px 14px", margin: 0 }}>
               Mọi thứ đều ổn. Hiện chưa có việc cần làm ngay.
