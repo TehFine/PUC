@@ -1070,7 +1070,7 @@
   white-space: nowrap;
 }
 
-/* Description / Bio block with centered subtle divider */
+/* Description / Bio block with subtle full-width divider */
 .pt-hero-bio,
 .pt-hero-bio-block {
   margin-bottom: 22px;
@@ -1079,26 +1079,34 @@
 }
 
 .pt-hero-bio-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   font-size: 13.5px;
   line-height: 1.55;
   color: #475569;
   font-weight: 450;
 }
 
+.pt-hero-bio-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #0f172a;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.pt-hero-bio-text {
+  flex: 1;
+  min-width: 0;
+}
+
 .pt-hero-bio-sep {
-  width: 48%;
-  max-width: 220px;
-  min-width: 130px;
+  width: 100%;
   height: 1px;
-  margin: 10px auto;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(15, 23, 42, 0.12) 20%,
-    rgba(15, 23, 42, 0.12) 80%,
-    transparent 100%
-  );
-  border-radius: 1px;
+  margin: 10px 0;
+  background: rgba(15, 23, 42, 0.08);
 }
 
 /* Bottom highlight row: Salary & Apply Now */
@@ -1306,12 +1314,16 @@
   .pt-hero-bio-line {
     font-size: 12px;
     line-height: 1.5;
+    gap: 8px;
+  }
+  .pt-hero-bio-dot {
+    width: 4.5px;
+    height: 4.5px;
+    margin-top: 6.5px;
   }
   .pt-hero-bio-sep {
-    width: 48%;
-    max-width: 160px;
-    min-width: 100px;
-    margin: 7px auto;
+    width: 100%;
+    margin: 7px 0;
   }
   .pt-hero-bottom {
     padding-top: 14px;
