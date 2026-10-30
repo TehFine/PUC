@@ -113,6 +113,7 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
       if (!shellRef.current) return;
       const w = shellRef.current.offsetWidth;
       const h = shellRef.current.offsetHeight;
+      if (w === 0 || h === 0) return;
       const bW = badgeRef.current?.offsetWidth ?? 180;
       const bH = badgeRef.current?.offsetHeight ?? 38;
       const badgeRight = 0; // Thẳng hàng với mép ngoài bên phải của thẻ
@@ -133,12 +134,17 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
 
     updateDims();
 
-    const ro = new ResizeObserver(() => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        updateDims();
-      });
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          if (rafId !== null) cancelAnimationFrame(rafId);
+          rafId = requestAnimationFrame(() => {
+            rafId = null;
+            updateDims();
+          });
+          break;
+        }
+      }
     });
 
     ro.observe(shellRef.current);
@@ -251,71 +257,67 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         </section>
       </div>
 
+      {/* Thẻ Nhắc nhở đặt ngay dưới thẻ profile theo yêu cầu người dùng */}
+      <Card
+        title="Nhắc nhở"
+        action={
+          reminders.length > 0 ? (
+            <span className="pt-badge-alert">{reminders.length} việc cần chú ý</span>
+          ) : undefined
+        }
+      >
+        {reminders.length === 0 ? (
+          <p className="pt-muted">Mọi thứ đều ổn. Hiện chưa có nhắc nhở nào.</p>
+        ) : (
+          <ul className="pt-reminders">
+            {reminders.map((reminder) => (
+              <li key={reminder.text}>
+                <button type="button" className={`pt-reminder pt-reminder-${reminder.tone}`} onClick={() => onNavigate(reminder.to)}>
+                  <span>{reminder.text}</span>
+                  <ChevronRight aria-hidden="true" size={18} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
+      {/* Thẻ Lịch kiểm tra đặt ngay dưới thẻ Nhắc nhở với tiêu đề cô đọng */}
+      <Card
+        title="Lịch kiểm tra"
+        action={
+          schedule.data && schedule.data.data.length > 0 ? (
+            <button
+              type="button"
+              className="pt-btn-link"
+              onClick={() => onNavigate("inspection")}
+            >
+              Xem tất cả &rarr;
+            </button>
+          ) : undefined
+        }
+      >
+        {(!schedule.data || schedule.data.data.length === 0) ? (
+          <p className="pt-muted">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
+        ) : (
+          <ul className="pt-list">
+            {schedule.data.data.slice(0, 3).map((item) => (
+              <li key={item.id} className="pt-row">
+                <div className="pt-date">{formatDate(item.scheduledOn)}</div>
+                <div className="pt-row-main">
+                  <strong>{item.title}</strong>
+                  <span>
+                    {SCHEDULE_KIND[item.kind]} · Cán bộ {item.officer}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* Biểu đồ canh tác & sản lượng */}
       <HomeCharts />
-
-      <div className="pt-home-grid">
-        <Card
-          title="Nhắc nhở & thông báo"
-          action={
-            reminders.length > 0 ? (
-              <span className="pt-badge-alert">{reminders.length} việc cần chú ý</span>
-            ) : undefined
-          }
-        >
-          {reminders.length === 0 ? (
-            <p className="pt-muted">Mọi thứ đều ổn. Hiện chưa có nhắc nhở nào.</p>
-          ) : (
-            <ul className="pt-reminders">
-              {reminders.map((reminder) => (
-                <li key={reminder.text}>
-                  <button type="button" className={`pt-reminder pt-reminder-${reminder.tone}`} onClick={() => onNavigate(reminder.to)}>
-                    <span>{reminder.text}</span>
-                    <ChevronRight aria-hidden="true" size={18} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card
-          title="Lịch kiểm tra sắp tới"
-          action={
-            schedule.data && schedule.data.data.length > 0 ? (
-              <button
-                type="button"
-                className="pt-btn-link"
-                onClick={() => onNavigate("inspection")}
-              >
-                Xem chi tiết &rarr;
-              </button>
-            ) : undefined
-          }
-        >
-          {(!schedule.data || schedule.data.data.length === 0) ? (
-            <p className="pt-muted">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
-          ) : (
-            <ul className="pt-list">
-              {schedule.data.data.slice(0, 3).map((item) => (
-                <li key={item.id} className="pt-row">
-                  <div className="pt-date">{formatDate(item.scheduledOn)}</div>
-                  <div className="pt-row-main">
-                    <strong>{item.title}</strong>
-                    <span>
-                      {SCHEDULE_KIND[item.kind]} · Cán bộ {item.officer}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-
-      <p className="pt-muted pt-center" style={{ marginTop: 8 }}>
-        Cần hỗ trợ? Liên hệ Ban quản lý HTX Nông nghiệp Krông Búk hoặc Trưởng thôn.
-      </p>
     </div>
   );
 }

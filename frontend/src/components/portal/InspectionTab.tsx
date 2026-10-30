@@ -36,7 +36,7 @@ export default function InspectionTab() {
           )}
         </Card>
 
-        <Card title="Lịch kiểm tra, lấy mẫu sắp tới">
+        <Card title="Lịch kiểm tra">
           <StateBlock loading={schedule.loading} error={schedule.error} />
           {schedule.data && schedule.data.data.length === 0 && <EmptyState icon="calendar">Hiện chưa có lịch kiểm tra nào sắp tới.</EmptyState>}
           {schedule.data && schedule.data.data.length > 0 && (
@@ -57,7 +57,7 @@ export default function InspectionTab() {
         </Card>
       </div>
 
-      <Card title="Kết quả kiểm nghiệm của vườn tôi">
+      <Card title="Kết quả kiểm nghiệm">
         <StateBlock loading={tests.loading} error={tests.error} />
         {tests.data && tests.data.data.length === 0 && <EmptyState icon="lab">Chưa có kết quả kiểm nghiệm nào.</EmptyState>}
         {tests.data && tests.data.data.length > 0 && (
