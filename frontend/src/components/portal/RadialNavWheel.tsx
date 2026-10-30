@@ -10,6 +10,7 @@ import {
   AuditIcon,
   PersonCvIcon,
   BrainQuestionMarkIcon,
+  QrTagIcon,
   type RadialIconProps,
 } from "./RadialIcons";
 
@@ -50,6 +51,15 @@ export const NAV_ITEMS: NavItemConfig[] = [
     activeColor: "#b45309",
     activeBg: "rgba(245, 158, 11, 0.08)",
     activeBorder: "#f59e0b",
+  },
+  {
+    id: "stamps",
+    label: "Tem & Thu hái",
+    icon: QrTagIcon,
+    color: "#059669",
+    activeColor: "#047857",
+    activeBg: "rgba(5, 150, 105, 0.08)",
+    activeBorder: "#059669",
   },
   {
     id: "inspection",

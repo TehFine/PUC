@@ -114,10 +114,29 @@ export function BrainQuestionMarkIcon({ size = 24, className, ...props }: Radial
   );
 }
 
+/** 7. Tem nguồn gốc & Thu hái - tag.svg */
+export function QrTagIcon({ size = 24, className, ...props }: RadialIconProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M10.59 2.59A2 2 0 0 0 9.17 2H4a2 2 0 0 0-2 2v5.17a2 2 0 0 0 .59 1.41l9.83 9.83a2 2 0 0 0 2.83 0l5.17-5.17a2 2 0 0 0 0-2.83L10.59 2.59zM7 7a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" />
+    </svg>
+  );
+}
+
 export const RADIAL_ICONS: Record<PortalTabId, React.ComponentType<RadialIconProps>> = {
   home: HouseCircleCheckIcon,
   plots: LandLayerLocationIcon,
   diary: DocumentWriterIcon,
+  stamps: QrTagIcon,
   inspection: AuditIcon,
   requests: PersonCvIcon,
   learn: BrainQuestionMarkIcon,

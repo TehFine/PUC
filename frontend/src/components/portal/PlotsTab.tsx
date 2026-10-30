@@ -1,19 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowUpRight, QrCode } from "lucide-react";
+import { ArrowUpRight, QrCode, Tag } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { formatKg, HARVEST_STATUS, PLOT_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
-import type { PortalHarvest, PortalList, PortalPlots } from "@/types/portal";
+import type { PortalHarvest, PortalList, PortalOverview, PortalPlot, PortalPlots } from "@/types/portal";
 import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
+import GardenSignboardModal from "./GardenSignboardModal";
 
 const SOURCE_LABEL = { declared: "Tự khai báo", measured: "Đo thực địa", cadastral: "Địa chính", demo: "Mẫu" } as const;
 
 export default function PlotsTab() {
   const plots = usePortal<PortalPlots>("plots");
   const harvest = usePortal<PortalList<PortalHarvest>>("harvest");
+  const overview = usePortal<PortalOverview>("overview");
   const [selectedLotForQr, setSelectedLotForQr] = useState<PortalHarvest | null>(null);
+  const [signboardPlot, setSignboardPlot] = useState<PortalPlot | null>(null);
 
   return (
     <div className="pt-grid-2">
@@ -30,7 +33,7 @@ export default function PlotsTab() {
             {plots.data.data.map((plot) => {
               const status = PLOT_STATUS[plot.status];
               return (
-                <li key={plot.code} className="pt-row pt-row-wrap">
+                <li key={plot.code} className="pt-row pt-row-wrap" style={{ alignItems: "center" }}>
                   <div className="pt-row-main">
                     <strong>{plot.code}</strong>
                     <span>
@@ -43,7 +46,18 @@ export default function PlotsTab() {
                       {SOURCE_LABEL[plot.source]}
                     </span>
                   </div>
-                  <Pill tone={status.tone}>{status.label}</Pill>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="pt-qr-lot-btn"
+                      onClick={() => setSignboardPlot(plot)}
+                      title={`In biển cắm đầu lô vườn QR cho mã ${plot.code}`}
+                    >
+                      <QrCode size={13} strokeWidth={2.2} aria-hidden="true" />
+                      <span>Biển cắm vườn (QR)</span>
+                    </button>
+                    <Pill tone={status.tone}>{status.label}</Pill>
+                  </div>
                 </li>
               );
             })}
@@ -92,62 +106,119 @@ export default function PlotsTab() {
         )}
       </Card>
 
-      {/* Sheet hiển thị chi tiết mã QR của từng lô sản phẩm của hộ */}
+      {/* Sheet hiển thị chi tiết mã QR của từng lô sản phẩm dạng thẻ vé Ticket Voucher */}
       {selectedLotForQr && (
         <Sheet
-          title="Mã QR lô hàng"
+          title="Tem điện tử lô hàng"
           onClose={() => setSelectedLotForQr(null)}
         >
           <div className="pt-qr-modal-body">
-            <div className="pt-qr-modal-card">
-              <div className="pt-qr-badge">
-                <span>TEM ĐIỆN TỬ VÙNG TRỒNG PUC</span>
-              </div>
-              <h3 className="pt-qr-modal-title">Sầu Riêng Krông Búk</h3>
-              <p className="pt-qr-modal-sub">
-                Lô: <strong>{selectedLotForQr.lotCode}</strong>
-                {selectedLotForQr.qrCode ? ` · Tem: ${selectedLotForQr.qrCode}` : ""}
-              </p>
+            <div className="pt-ticket-container">
+              <div className="pt-ticket-card">
+                {/* ── 1. ĐẦU VÉ: ICON ĂN MỪNG & TIÊU ĐỀ ── */}
+                <div className="pt-ticket-head">
+                  <div className="pt-ticket-popper-wrap" aria-hidden="true">
+                    <span className="pt-ticket-popper-icon">🎉</span>
+                  </div>
+                  <h3 className="pt-ticket-title">Tem điện tử hợp lệ!</h3>
+                  <p className="pt-ticket-sub">
+                    Lô sầu riêng đã được cấp mã truy xuất nguồn gốc chính thức
+                  </p>
+                </div>
 
-              <div className="pt-qr-visual-box">
-                <div className="pt-qr-frame">
-                  <QrCode size={135} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />
-                  <div className="pt-qr-center-tag">PUC</div>
+                {/* Đường gạch đứt ngăn cách mờ */}
+                <div className="pt-ticket-sub-divider" aria-hidden="true" />
+
+                {/* ── 2. THÔNG TIN LÔ HÀNG (PHÍA TRÊN) ── */}
+                <div className="pt-ticket-body">
+                  <div className="pt-ticket-grid">
+                    <div className="pt-ticket-col">
+                      <span className="pt-ticket-label">MÃ LÔ HÀNG</span>
+                      <strong className="pt-ticket-val">{selectedLotForQr.lotCode}</strong>
+                    </div>
+                    <div className="pt-ticket-col pt-ticket-col-right">
+                      <span className="pt-ticket-label">SẢN LƯỢNG</span>
+                      <strong className="pt-ticket-val pt-ticket-val-accent">{formatKg(selectedLotForQr.weightKg)}</strong>
+                    </div>
+
+                    <div className="pt-ticket-col">
+                      <span className="pt-ticket-label">NGÀY THU HOẠCH</span>
+                      <strong className="pt-ticket-val">{formatDate(selectedLotForQr.harvestedOn)}</strong>
+                    </div>
+                    <div className="pt-ticket-col pt-ticket-col-right">
+                      <span className="pt-ticket-label">THỊ TRƯỜNG</span>
+                      <strong className="pt-ticket-val">{selectedLotForQr.market}</strong>
+                    </div>
+                  </div>
+
+                  {/* Thẻ đơn vị hợp tác / chứng nhận (kiểu thẻ Mastercard trong ảnh mẫu) */}
+                  <div className="pt-ticket-entity-box">
+                    <div className="pt-ticket-entity-badge" aria-hidden="true">
+                      <span className="pt-ticket-badge-circle pt-badge-green">PUC</span>
+                      <span className="pt-ticket-badge-circle pt-badge-gold">VG</span>
+                    </div>
+                    <div className="pt-ticket-entity-info">
+                      <div className="pt-ticket-entity-name">{selectedLotForQr.buyer}</div>
+                      <div className="pt-ticket-entity-meta">Vùng trồng PUC-KRB-001 · VietGAP</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="pt-qr-code-text">{selectedLotForQr.qrCode || selectedLotForQr.lotCode}</div>
+
+                {/* ── 3. ĐƯỜNG RÃNH XÉ VÉ (NOTCHES 2 BÊN & ĐƯỜNG ĐỨT NÉT) ── */}
+                <div className="pt-ticket-perforation">
+                  <div className="pt-ticket-notch pt-ticket-notch-l" aria-hidden="true" />
+                  <div className="pt-ticket-dash-line" aria-hidden="true" />
+                  <div className="pt-ticket-notch pt-ticket-notch-r" aria-hidden="true" />
+                </div>
+
+                {/* ── 4. CUỐNG VÉ: MÃ QR CODE (NẰM Ở VỊ TRÍ MÃ BARCODE TRONG ẢNH MẪU) ── */}
+                <div className="pt-ticket-stub">
+                  <div className="pt-ticket-qr-wrap">
+                    <div className="pt-qr-frame">
+                      <QrCode size={145} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />
+                      <div className="pt-qr-center-tag">PUC</div>
+                    </div>
+                    <div className="pt-ticket-barcode-num">
+                      <span>{selectedLotForQr.qrCode || selectedLotForQr.lotCode}</span>
+                    </div>
+                    <p className="pt-ticket-scan-hint">
+                      Quét mã QR để kiểm tra nguồn gốc & nhật ký canh tác
+                    </p>
+                  </div>
+                </div>
+
+                {/* ── 5. CẠNH RĂNG CƯA ĐÁY VÉ (SCALLOPED BOTTOM TEETH) ── */}
+                <div className="pt-ticket-scallop-bottom" aria-hidden="true">
+                  <svg viewBox="0 0 320 14" preserveAspectRatio="none" className="pt-ticket-scallop-svg">
+                    <path
+                      d="M0,0 L320,0 L320,2 A20,12 0 0,1 280,2 A20,12 0 0,1 240,2 A20,12 0 0,1 200,2 A20,12 0 0,1 160,2 A20,12 0 0,1 120,2 A20,12 0 0,1 80,2 A20,12 0 0,1 40,2 A20,12 0 0,1 0,2 Z"
+                      fill="#ffffff"
+                    />
+                  </svg>
+                </div>
               </div>
 
-              <div className="pt-qr-meta-grid">
-                <div className="pt-qr-meta-item">
-                  <span className="pt-qr-meta-label">Sản lượng</span>
-                  <strong className="pt-qr-meta-val">{formatKg(selectedLotForQr.weightKg)}</strong>
-                </div>
-                <div className="pt-qr-meta-item">
-                  <span className="pt-qr-meta-label">Ngày thu hoạch</span>
-                  <strong className="pt-qr-meta-val">{formatDate(selectedLotForQr.harvestedOn)}</strong>
-                </div>
-                <div className="pt-qr-meta-item">
-                  <span className="pt-qr-meta-label">Bên thu mua</span>
-                  <strong className="pt-qr-meta-val">{selectedLotForQr.buyer}</strong>
-                </div>
-                <div className="pt-qr-meta-item">
-                  <span className="pt-qr-meta-label">Thị trường</span>
-                  <strong className="pt-qr-meta-val">{selectedLotForQr.market}</strong>
-                </div>
-              </div>
-
+              {/* Nút hành động xem toàn bộ hồ sơ truy xuất */}
               <a
                 href={`/trace/${encodeURIComponent(selectedLotForQr.lotCode)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="pt-btn pt-btn-primary pt-qr-open-btn"
+                className="pt-btn pt-btn-primary pt-ticket-open-btn"
               >
-                <span>Xem hồ sơ truy xuất</span>
+                <span>Xem toàn bộ hồ sơ truy xuất</span>
                 <ArrowUpRight size={17} strokeWidth={2.4} aria-hidden="true" />
               </a>
             </div>
           </div>
         </Sheet>
+      )}
+
+      {signboardPlot && (
+        <GardenSignboardModal
+          plot={signboardPlot}
+          householdName={overview.data?.household.name || "Hộ nông dân Krông Búk"}
+          onClose={() => setSignboardPlot(null)}
+        />
       )}
     </div>
   );
