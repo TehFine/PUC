@@ -7,7 +7,7 @@ import { daysSince, formatKg, HOUSEHOLD_STATUS, SCHEDULE_KIND } from "@/lib/port
 import { formatDate } from "@/utils/format";
 import type { PortalList, PortalOverview, PortalScheduleItem } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
-import { Card, StateBlock } from "./ui";
+import { StateBlock } from "./ui";
 import HomeCharts from "./HomeCharts";
 
 function getHeroPath(w: number, h: number, badgeW: number, badgeH: number, badgeRight: number): string {
@@ -58,22 +58,59 @@ function getHeroPath(w: number, h: number, badgeW: number, badgeH: number, badge
   ].join(" ");
 }
 
+function getScheduleKicker(item: PortalScheduleItem): string {
+  if (item.title && item.title.toLowerCase().startsWith("lấy mẫu")) {
+    return "Lấy mẫu";
+  }
+  return SCHEDULE_KIND[item.kind] ?? "Kiểm tra";
+}
+
+function getConciseScheduleTitle(title: string): string {
+  if (!title) return "Đợt kiểm tra";
+  let cleaned = title
+    .replace(/^Kiểm tra định kỳ\s+/i, "")
+    .replace(/^Kiểm tra đột xuất\s+/i, "")
+    .replace(/^Kiểm tra thực địa\s+/i, "Thực địa ")
+    .replace(/^Lấy mẫu kiểm nghiệm\s+/i, "")
+    .replace(/^Lấy mẫu\s+/i, "")
+    .replace(/^Phúc tra hộ vi phạm\s+/i, "Hộ vi phạm ")
+    .replace(/^Phúc tra\s+/i, "")
+    .trim();
+  if (cleaned.toLowerCase().startsWith("kiểm tra ")) {
+    cleaned = cleaned.replace(/^kiểm tra\s+/i, "");
+  }
+  return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : title;
+}
+
+function getRelativeScheduleNote(dateStr: string): string {
+  if (!dateStr) return "(Dự kiến)";
+  const target = new Date(dateStr);
+  if (isNaN(target.getTime())) return "(Dự kiến)";
+  const now = new Date();
+  target.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "(Hôm nay)";
+  if (diffDays === 1) return "(Ngày mai)";
+  if (diffDays > 1 && diffDays <= 30) return `(Còn ${diffDays} ngày)`;
+  if (diffDays > 30) return "(Tháng tới)";
+  if (diffDays === -1) return "(Hôm qua)";
+  if (diffDays < -1) return "(Đã diễn ra)";
+  return "(Dự kiến)";
+}
+
 interface ActionItem {
   id: string;
   title: string;
   to: PortalTabId;
 }
 
-function buildActionItems(
-  overview: PortalOverview,
-  upcoming: PortalScheduleItem | undefined
-): ActionItem[] {
+function buildActionItems(overview: PortalOverview): ActionItem[] {
   const { stats, lastTest } = overview;
   const idle = daysSince(stats.lastJournalOn);
   const items: ActionItem[] = [];
 
-  // 1. Nhật ký canh tác: tiêu đề ngắn gọn theo yêu cầu:
-  // "nếu chưa ghi nhật ký thì để là chưa ghi nhật ký, còn cụ thể là bao nhiêu thì sẽ để chi tiết trong tab nhật ký sau"
+  // 1. Nhật ký canh tác: việc cần làm khi quá hạn ghi nhật ký
   if (idle === null || idle >= 7) {
     items.push({
       id: "diary",
@@ -100,24 +137,6 @@ function buildActionItems(
     });
   }
 
-  // 4. Lịch kiểm tra sắp tới
-  if (upcoming) {
-    items.push({
-      id: "upcoming",
-      title: "Lịch kiểm tra sắp tới",
-      to: "inspection",
-    });
-  }
-
-  // 5. Hồ sơ chờ phê duyệt
-  if (stats.pendingApprovals > 0) {
-    items.push({
-      id: "approvals",
-      title: "Hồ sơ chờ phê duyệt",
-      to: "requests",
-    });
-  }
-
   return items;
 }
 
@@ -136,8 +155,8 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
   }>({
     w: 800,
     h: 360,
-    badgeW: 185,
-    badgeH: 38,
+    badgeW: 215,
+    badgeH: 60,
     badgeRight: 0,
   });
 
@@ -150,8 +169,8 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
       const w = shellRef.current.offsetWidth;
       const h = shellRef.current.offsetHeight;
       if (w === 0 || h === 0) return;
-      const bW = badgeRef.current?.offsetWidth ?? 180;
-      const bH = badgeRef.current?.offsetHeight ?? 38;
+      const bW = badgeRef.current?.offsetWidth ?? 215;
+      const bH = badgeRef.current?.offsetHeight ?? 60;
       const badgeRight = 0; // Thẳng hàng với mép ngoài bên phải của thẻ
 
       setDims((prev) => {
@@ -192,7 +211,6 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
     };
   }, [overview.data]);
 
-  const upcoming = schedule.data?.data[0];
   const [timeStr, setTimeStr] = useState<string>("14:17");
 
   useEffect(() => {
@@ -209,8 +227,8 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
 
   const actionItems = useMemo<ActionItem[]>(() => {
     if (!overview.data) return [];
-    return buildActionItems(overview.data, upcoming);
-  }, [overview.data, upcoming]);
+    return buildActionItems(overview.data);
+  }, [overview.data]);
 
   const pathD = useMemo(
     () => getHeroPath(dims.w, dims.h, dims.badgeW, dims.badgeH, dims.badgeRight),
@@ -386,39 +404,67 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         </div>
       </section>
 
-      {/* Thẻ Lịch kiểm tra đặt ngay dưới thẻ Nhắc nhở với tiêu đề cô đọng */}
-      <Card
-        title="Lịch kiểm tra"
-        action={
-          schedule.data && schedule.data.data.length > 0 ? (
+      {/* Lịch kiểm tra hiển thị trực tiếp trên nền giao diện (không dùng thẻ bao quanh) */}
+      <section className="pt-schedule-section" aria-labelledby="schedule-heading">
+        <div className="pt-schedule-header">
+          <h2 id="schedule-heading" className="pt-schedule-title">
+            Lịch kiểm tra
+          </h2>
+          {schedule.data && schedule.data.data.length > 0 && (
             <button
               type="button"
-              className="pt-btn-link"
+              className="pt-schedule-link"
               onClick={() => onNavigate("inspection")}
             >
               Xem tất cả &rarr;
             </button>
-          ) : undefined
-        }
-      >
+          )}
+        </div>
+
         {(!schedule.data || schedule.data.data.length === 0) ? (
-          <p className="pt-muted">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
+          <p className="pt-muted pt-schedule-empty">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
         ) : (
-          <ul className="pt-list">
-            {schedule.data.data.slice(0, 3).map((item) => (
-              <li key={item.id} className="pt-row">
-                <div className="pt-date">{formatDate(item.scheduledOn)}</div>
-                <div className="pt-row-main">
-                  <strong>{item.title}</strong>
-                  <span>
-                    {SCHEDULE_KIND[item.kind]} · Cán bộ {item.officer}
-                  </span>
+          <div className="pt-timeline" role="list">
+            {schedule.data.data.slice(0, 4).map((item, idx, arr) => {
+              const isFirst = idx === 0;
+              const isLast = idx === arr.length - 1 && arr.length > 1;
+              const kicker = getScheduleKicker(item);
+              const conciseTitle = getConciseScheduleTitle(item.title);
+              const relNote = getRelativeScheduleNote(item.scheduledOn);
+              const formattedDate = formatDate(item.scheduledOn);
+
+              return (
+                <div
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  className={`pt-timeline-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
+                  onClick={() => onNavigate("inspection")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onNavigate("inspection");
+                    }
+                  }}
+                  title="Nhấn để xem chi tiết đợt kiểm tra trong tab riêng"
+                >
+                  <div className="pt-timeline-track" aria-hidden="true">
+                    <div className={`pt-timeline-node ${isFirst ? "is-active" : ""} ${isLast ? "is-target" : ""}`} />
+                  </div>
+                  <div className="pt-timeline-content">
+                    <span className="pt-timeline-kicker">{kicker}</span>
+                    <h3 className="pt-timeline-title">{conciseTitle}</h3>
+                  </div>
+                  <div className="pt-timeline-meta">
+                    <span className="pt-timeline-date">{formattedDate}</span>
+                    {relNote && <span className="pt-timeline-rel">{relNote}</span>}
+                  </div>
                 </div>
-              </li>
-            ))}
-          </ul>
+              );
+            })}
+          </div>
         )}
-      </Card>
+      </section>
 
       {/* Biểu đồ canh tác & sản lượng */}
       <HomeCharts />

@@ -950,7 +950,8 @@
     drop-shadow(0 2px 6px rgba(15, 23, 42, 0.04));
 }
 
-/* Badge trạng thái đặt lọt khít khao vào góc khuyết lõm trên bên phải (ĐẠT CHUẨN XUẤT KHẨU) */
+/* Badge trạng thái đặt lọt khít khao vào góc khuyết lõm trên bên phải (ĐẠT CHUẨN XUẤT KHẨU)
+ * Căn khoảng cách lề 24px đồng bộ tuyệt đối với cạnh dưới của thẻ */
 .pt-hero-notch-badge {
   position: absolute;
   top: 0;
@@ -963,8 +964,8 @@
   color: var(--ink);
   border: 1px solid rgba(20, 55, 47, 0.14);
   border-radius: 9999px;
-  padding: 0 18px;
-  height: 38px;
+  padding: 0 24px;
+  height: 60px;
   box-sizing: border-box;
   font-family: var(--font-hero-sans), var(--font-inter), system-ui, -apple-system, sans-serif;
   font-size: 13px;
@@ -995,10 +996,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  width: 200px;
-  max-width: calc(100% - var(--hero-badge-w, 185px) - 10px);
-  padding: 0;
+  height: var(--hero-badge-h, 60px);
+  width: var(--hero-badge-w, 215px);
+  max-width: calc(100% - var(--hero-badge-w, 215px) - 10px);
+  padding: 0 24px;
   box-sizing: border-box;
 }
 
@@ -1266,17 +1267,17 @@
   .pt-hero-notch-badge {
     top: 0;
     right: 0;
-    padding: 0 12px;
-    height: 34px;
+    padding: 0 18px;
+    height: 50px;
     font-size: 11px;
     letter-spacing: 0.03em;
   }
   .pt-hero-top {
-    height: 34px;
-    width: calc(100% - var(--hero-badge-w, 160px));
+    height: var(--hero-badge-h, 50px);
+    width: calc(100% - var(--hero-badge-w, 175px));
     max-width: none;
     margin-bottom: 0;
-    padding: 0;
+    padding: 0 16px;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -1789,6 +1790,264 @@
 .pt-reminder-gold { background: #fdf6e1; color: #6d4a10; border: 1px solid rgba(216, 162, 28, 0.18); }
 .pt-reminder-blue { background: var(--sky-soft); color: #1f4f86; border: 1px solid rgba(90, 169, 214, 0.2); }
 .pt-reminder-green { background: #eef8e3; color: var(--ink); border: 1px solid rgba(46, 125, 86, 0.16); }
+
+/* ── Lịch kiểm tra nằm trực tiếp dưới nền giao diện (Không dùng thẻ bọc) ── */
+.pt-schedule-section {
+  position: relative;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 4px 6px 8px;
+  box-sizing: border-box;
+}
+
+.pt-schedule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 6px 12px;
+}
+
+.pt-schedule-title {
+  font-family: var(--font-display-stack);
+  font-size: 1.35rem;
+  font-weight: 750;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.pt-schedule-link {
+  background: transparent;
+  border: none;
+  color: #16a34a;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: color 0.15s ease, transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pt-schedule-link:hover {
+  color: #15803d;
+  transform: translateX(2px);
+}
+
+.pt-schedule-empty {
+  padding: 8px 10px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+/* ── Lịch kiểm tra dạng Timeline dọc theo phong cách hành trình (Trip Stops Info) ── */
+.pt-timeline {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0;
+}
+
+.pt-timeline-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 10px 10px 18px;
+  border-radius: 14px;
+  cursor: pointer;
+  text-decoration: none;
+  background: transparent;
+  transition: background-color 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
+  user-select: none;
+}
+
+.pt-timeline-item:hover {
+  background-color: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 4px 14px rgba(20, 55, 47, 0.04);
+}
+
+.pt-timeline-item:focus-visible {
+  outline: 2px solid #16a34a;
+  outline-offset: 2px;
+}
+
+/* Cột track bên trái chứa Node tròn và Đường nối dọc */
+.pt-timeline-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 22px;
+  flex-shrink: 0;
+  padding-top: 3px;
+  align-self: stretch;
+}
+
+/* Đường nối thẳng đứng xuống node tiếp theo */
+.pt-timeline-track::after {
+  content: "";
+  position: absolute;
+  top: 22px;
+  bottom: -18px;
+  width: 2px;
+  background-color: #cbd5e1;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+/* Item đầu tiên: đường nối có gradient từ xanh lá xuống xám như hình mẫu */
+.pt-timeline-item.is-first .pt-timeline-track::after {
+  background: linear-gradient(180deg, #16a34a 0%, #cbd5e1 100%);
+}
+
+/* Item cuối cùng: không có đường nối kéo xuống */
+.pt-timeline-item.is-last .pt-timeline-track::after,
+.pt-timeline-item:last-child .pt-timeline-track::after {
+  display: none;
+}
+
+/* Node tròn */
+.pt-timeline-node {
+  position: relative;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 2.5px solid #cbd5e1;
+  background-color: #ffffff;
+  z-index: 2;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* Node đầu tiên: viền xanh lá đậm nổi bật như 'Pickup' */
+.pt-timeline-node.is-active {
+  width: 19px;
+  height: 19px;
+  border-width: 3.5px;
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3.5px rgba(22, 163, 74, 0.16);
+}
+
+/* Node đích cuối: vòng tròn tâm điểm (bullseye) như 'Dropoff' */
+.pt-timeline-node.is-target {
+  width: 19px;
+  height: 19px;
+  border-width: 2px;
+  border-color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pt-timeline-node.is-target::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #64748b;
+}
+
+.pt-timeline-item:hover .pt-timeline-node {
+  transform: scale(1.08);
+}
+
+/* Cột giữa: Kicker + Title cô đọng */
+.pt-timeline-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pt-timeline-kicker {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.pt-timeline-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Cột phải: Ngày giờ + Ghi chú thời gian */
+.pt-timeline-meta {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.pt-timeline-date {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-timeline-rel {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: #64748b;
+  line-height: 1.25;
+}
+
+@media (max-width: 640px) {
+  .pt-schedule-section {
+    padding: 2px 2px 6px;
+  }
+  .pt-schedule-header {
+    padding: 0 4px 10px;
+  }
+  .pt-schedule-title {
+    font-size: 1.2rem;
+  }
+  .pt-schedule-link {
+    font-size: 13px;
+  }
+  .pt-timeline-item {
+    gap: 12px;
+    padding: 8px 6px 16px;
+  }
+  .pt-timeline-title {
+    font-size: 14.5px;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .pt-timeline-date {
+    font-size: 14.5px;
+  }
+  .pt-timeline-rel {
+    font-size: 11.5px;
+  }
+}
 
 /* Thông báo vi phạm / kết quả kiểm nghiệm */
 .pt-notice, .pt-test {
