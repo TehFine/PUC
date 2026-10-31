@@ -70,6 +70,15 @@ export default function PortalApp() {
       setTab(next);
     });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+    setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }, 120);
+    setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }, 260);
   }, []);
 
   const closeProfile = useCallback(() => {

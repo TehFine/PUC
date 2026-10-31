@@ -171,6 +171,8 @@ function generateDialTicks(cx: number, cy: number, r: number): DialTick[] {
 
 const DIAL_TICKS = generateDialTicks(DIAL_CX, DIAL_CY, DIAL_RADIUS);
 
+const RETRACT_DURATION_MS = 220; // 220ms đồng bộ hoàn hảo với CSS animation pt-radial-retract
+
 export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWheelProps) {
   const currentIndex = useMemo(() => {
     const idx = NAV_ITEMS.findIndex((item) => item.id === currentTab);
@@ -183,6 +185,8 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   const [isDragging, setIsDragging] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const pointerDownTargetRef = useRef<HTMLElement | null>(null);
+  const dragStartXRef = useRef(0);
   const dragStartYRef = useRef(0);
   const dragStartRotRef = useRef(0);
   const lastYRef = useRef(0);
@@ -220,12 +224,15 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
-    setIsClosing(true);
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = setTimeout(() => {
-      setIsOpen(false);
-      setIsClosing(false);
-    }, 180);
+    setIsClosing((prev) => {
+      if (prev) return prev;
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = setTimeout(() => {
+        setIsOpen(false);
+        setIsClosing(false);
+      }, RETRACT_DURATION_MS);
+      return true;
+    });
   }, []);
 
   // Tự động thu popup lại sau khi bánh xe dừng lại ở một tab nhanh chóng, tránh trễ
@@ -270,6 +277,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       document.body.style.touchAction = prevBodyTouchAction;
       window.removeEventListener("touchmove", preventDefaultTouch);
       window.removeEventListener("keydown", handleKeyDown);
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     };
   }, [isOpen, handleClose]);
 
@@ -380,8 +388,10 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       clearTimeout(autoCloseTimerRef.current);
       autoCloseTimerRef.current = null;
     }
+    pointerDownTargetRef.current = e.target as HTMLElement;
     hasDraggedRef.current = false;
     setIsDragging(true);
+    dragStartXRef.current = e.clientX;
     dragStartYRef.current = e.clientY;
     dragStartRotRef.current = latestRotRef.current;
     lastYRef.current = e.clientY;
@@ -404,8 +414,13 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   const onPointerMove = (e: React.PointerEvent) => {
     if (!isDragging) return;
     const dy = e.clientY - dragStartYRef.current;
-    if (Math.abs(dy) > 4) {
-      hasDraggedRef.current = true;
+    const dx = e.clientX - dragStartXRef.current;
+    if (!hasDraggedRef.current) {
+      if (Math.abs(dy) > 8 || Math.abs(dx) > 8) {
+        hasDraggedRef.current = true;
+      } else {
+        return; // Tránh rung lắc bánh xe khi người dùng bấm vào nền hoặc chỉ chạm nhẹ
+      }
     }
 
     const rawRot = dragStartRotRef.current - dy * SENSITIVITY;
@@ -472,14 +487,29 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       dragRafRef.current = null;
     }
 
+    // Nếu người dùng KHÔNG cuộn, KHÔNG lướt mà bấm vào phần nền (không bấm trúng tên các tab)
+    if (!hasDraggedRef.current) {
+      const downTarget = pointerDownTargetRef.current;
+      const upTarget = e.target as HTMLElement;
+
+      const isItem = downTarget?.closest(".pt-radial-item") || upTarget?.closest(".pt-radial-item");
+      const isCloseBtn = downTarget?.closest(".pt-radial-close-btn") || upTarget?.closest(".pt-radial-close-btn");
+
+      // Nếu bấm vào nền (không trúng tab item và không trúng nút đóng) -> Thu lại nhanh chóng!
+      if (!isItem && !isCloseBtn) {
+        handleClose();
+        return;
+      }
+      return;
+    }
+
     if (hasDraggedRef.current) {
       setTimeout(() => {
         hasDraggedRef.current = false;
       }, 100);
     }
 
-    // Quán tính nhẹ + hít nam châm (snap to nearest step)
-    // Giới hạn tuyệt đối trong phạm vi MIN_INDEX (0) đến MAX_INDEX (5)
+    // Quán tính nhẹ + hít nam châm (snap to nearest step) khi có vuốt/lướt:
     const currentRot = latestRotRef.current - velocityRef.current * 3.0;
     const rawSnapIdx = Math.round(currentRot / STEP_DEG);
     const clampedSnapIdx = Math.max(MIN_INDEX, Math.min(MAX_INDEX, rawSnapIdx));
@@ -573,6 +603,13 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onClick={(e) => {
+              if (hasDraggedRef.current) return;
+              const target = e.target as HTMLElement;
+              if (!target.closest(".pt-radial-item") && !target.closest(".pt-radial-close-btn")) {
+                handleClose();
+              }
+            }}
           >
             {/* Nút đóng góc trên */}
             <div className="pt-radial-header">
