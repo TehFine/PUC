@@ -305,6 +305,63 @@
     0 2px 6px -1px rgba(15, 23, 42, 0.04);
 }
 
+/* ── DẤU MỘC WATERMARK "ĐÃ XUẤT" NẰM CHÉO THẺ ── */
+.pt-asset-watermark {
+  position: absolute;
+  top: 50%;
+  left: 36%;
+  transform: translate(-50%, -50%) rotate(-13deg);
+  pointer-events: none;
+  user-select: none;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pt-asset-watermark-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 14px 5px;
+  border: 2px solid rgba(220, 38, 38, 0.32);
+  border-radius: 6px;
+  box-shadow: 
+    inset 0 0 0 1px rgba(220, 38, 38, 0.2),
+    0 0 0 1px rgba(220, 38, 38, 0.08);
+  background: rgba(254, 242, 242, 0.32);
+  mix-blend-mode: multiply;
+  text-align: center;
+  transition: transform 0.2s ease;
+}
+
+.pt-asset-card:hover .pt-asset-watermark-inner {
+  transform: scale(1.03);
+}
+
+.pt-asset-watermark-title {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Impact", "Arial Black", "Arial-BoldMT", sans-serif;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: rgba(220, 38, 38, 0.36);
+  text-transform: uppercase;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.pt-asset-watermark-sub {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: rgba(220, 38, 38, 0.3);
+  text-transform: uppercase;
+  margin-top: 2px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 /* ── CỘT TRÁI: THÔNG TIN LÔ HÀNG ── */
 .pt-asset-left {
   flex: 1;
@@ -313,6 +370,8 @@
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .pt-asset-top-row {
@@ -440,6 +499,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .pt-asset-qr-btn {
@@ -556,15 +617,26 @@
     padding: 12px 14px;
     gap: 12px;
   }
+  .pt-asset-watermark {
+    left: 40%;
+    transform: translate(-50%, -50%) rotate(-12deg);
+  }
+  .pt-asset-watermark-inner {
+    padding: 3px 10px 4px;
+    border-width: 1.8px;
+  }
+  .pt-asset-watermark-title {
+    font-size: 13px;
+    letter-spacing: 0.14em;
+  }
+  .pt-asset-watermark-sub {
+    font-size: 7px;
+  }
   .pt-asset-code-val {
     font-size: 14px;
   }
   .pt-asset-weight-val {
     font-size: 14px;
-  }
-  .pt-asset-status-badge {
-    font-size: 10px;
-    padding: 2px 7px;
   }
   .pt-asset-id-label {
     font-size: 10px;

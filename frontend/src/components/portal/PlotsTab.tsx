@@ -340,6 +340,16 @@ function HarvestAssetTagCard({ lot, onOpenModal }: HarvestAssetTagCardProps) {
 
   return (
     <div className="pt-asset-card" data-status={lot.status}>
+      {/* ── WATERMARK DẤU MỘC XUẤT HÀNG NẰM CHÉO THẺ ── */}
+      <div className="pt-asset-watermark" aria-hidden="true">
+        <div className="pt-asset-watermark-inner">
+          <span className="pt-asset-watermark-title">
+            {lot.status === "exported" || lot.status === "delivered" ? "ĐÃ XUẤT" : status.label}
+          </span>
+          <span className="pt-asset-watermark-sub">XUẤT KHO · EXPORTED</span>
+        </div>
+      </div>
+
       {/* ── BÊN TRÁI: THÔNG TIN LÔ HÀNG ── */}
       <div className="pt-asset-left">
         <div className="pt-asset-top-row">
@@ -348,9 +358,6 @@ function HarvestAssetTagCard({ lot, onOpenModal }: HarvestAssetTagCardProps) {
             <span className="pt-asset-code-divider">·</span>
             <span className="pt-asset-weight-val">{formatKg(lot.weightKg)}</span>
           </div>
-          <span className={`pt-asset-status-badge tone-${status.tone}`}>
-            {status.label}
-          </span>
         </div>
 
         {/* Phần chân thẻ: ASSET ID & thông tin bên dưới */}
