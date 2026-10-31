@@ -26,7 +26,10 @@ export interface PortalOverview {
 }
 
 export interface PortalPlot {
+  id?: number;
   code: string;
+  sheet?: string | null;
+  parcel?: string | null;
   village: string | null;
   zoneCode: string | null;
   variety: string | null;
@@ -34,6 +37,9 @@ export interface PortalPlot {
   areaHa: number;
   source: "declared" | "measured" | "cadastral" | "demo";
   status: PlotStatus;
+  lat?: number | null;
+  lng?: number | null;
+  geometryJson?: string | null;
 }
 
 export interface PortalPlots {

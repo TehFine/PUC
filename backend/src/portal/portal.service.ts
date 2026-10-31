@@ -81,7 +81,10 @@ export class PortalService {
     if (!exists) return { data: [], available: false };
 
     const { rows } = await this.db.query(
-      `SELECT p.code, p.village, p.zone_code, p.variety, p.planted_year, p.area_ha, p.source, p.status
+      `SELECT p.id, p.code, p.sheet_no AS sheet, p.parcel_no AS parcel, p.village, p.zone_code, p.variety, p.planted_year, p.area_ha, p.source, p.status,
+              ST_AsGeoJSON(p.geom) AS geometry_json,
+              ST_Y(ST_Centroid(p.geom)) AS lat,
+              ST_X(ST_Centroid(p.geom)) AS lng
        FROM plots p JOIN households h ON h.id = $1 AND lower(p.owner_name) = lower(h.name)
        ORDER BY p.code`,
       [id],
