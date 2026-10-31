@@ -138,7 +138,7 @@ body {
 
 .app-header > * { pointer-events: auto; }
 
-/* Lớp nền trắng mờ giống thanh điều hướng của trang giới thiệu */
+/* Lớp nền trắng mờ: chỉ đổ bóng cạnh dưới tạo chiều sâu, không hắt bóng lên cạnh trên để liền mạch với nền sáng */
 .app-header::before {
   content: "";
   position: absolute;
@@ -147,7 +147,10 @@ body {
   pointer-events: none;
   background: rgba(255, 255, 255, 0.82);
   border-bottom: 1px solid var(--border);
-  box-shadow: 0 8px 30px rgba(20, 55, 47, 0.05);
+  box-shadow:
+    0 12px 24px -10px rgba(20, 55, 47, 0.08),
+    0 4px 6px -3px rgba(20, 55, 47, 0.04);
+  clip-path: inset(0 0 -40px 0);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
 }
