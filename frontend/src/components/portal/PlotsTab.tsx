@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUpRight, QrCode } from "lucide-react";
+import QRCode from "qrcode";
 import { usePortal } from "@/hooks/use-portal";
 import { formatKg, HARVEST_STATUS, PLOT_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
@@ -50,132 +51,92 @@ export default function PlotsTab() {
             </>
           )}
           {plots.data?.available && plots.data.data.length > 0 && (
-            <div className="pt-plots-tree">
-              {/* Header cây thửa đất với dấu tròn đen và đường line dọc đi xuống */}
-              <div className="pt-plots-tree-head">
-                <div className="pt-plots-tree-rail" aria-hidden="true">
-                  <div className="pt-plots-head-dot" />
-                  <div className="pt-plots-stem-line" />
-                </div>
-
+            <>
+              <div className="pt-plots-header">
                 <div className="pt-plots-header-info">
                   <h2 id="plots-heading" className="pt-plots-title">
                     Thửa đất của tôi
                   </h2>
-                  <span className="pt-plots-count">
-                    {plots.data.data.length} thửa
-                  </span>
                 </div>
               </div>
 
-              {/* Danh sách các thẻ con nối qua nhánh line uốn cong */}
-              <div className="pt-plots-tree-list" role="list">
-                {plots.data.data.map((plot, index, arr) => {
-                  const isLast = index === arr.length - 1;
-                  return (
-                    <div
-                      key={plot.code}
-                      className={`pt-plots-tree-item ${isLast ? "is-last" : ""}`}
-                    >
-                      <div className="pt-plots-tree-item-rail" aria-hidden="true">
-                        {!isLast && <div className="pt-plots-trunk-line" />}
-                        <div className="pt-plots-branch-curve" />
-                      </div>
+              <div className="pt-plot-card-list" role="list">
+                {plots.data.data.map((plot) => (
+                  <div
+                    key={plot.code}
+                    role="button"
+                    tabIndex={0}
+                    className="pt-plot-card pt-plot-reminder-card"
+                    onClick={() => setMapViewPlot(plot)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setMapViewPlot(plot);
+                      }
+                    }}
+                    title="Bấm vào thẻ để mở bản đồ toàn cảnh thửa đất"
+                    aria-label={`Thửa đất ${plot.code}, bấm để mở bản đồ toàn cảnh`}
+                  >
+                    {/* Icon map từ public/placeholder.png */}
+                    <img
+                      src="/placeholder.png"
+                      alt=""
+                      width={26}
+                      height={26}
+                      className="pt-plot-trifold-icon"
+                      aria-hidden="true"
+                    />
 
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        className="pt-plot-card pt-plot-reminder-card"
-                        onClick={() => setMapViewPlot(plot)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setMapViewPlot(plot);
-                          }
-                        }}
-                        title="Bấm vào thẻ để mở bản đồ toàn cảnh thửa đất"
-                        aria-label={`Thửa đất ${plot.code}, bấm để mở bản đồ toàn cảnh`}
-                      >
-                        {/* Icon map từ public/placeholder.png */}
-                        <img
-                          src="/placeholder.png"
-                          alt=""
-                          width={26}
-                          height={26}
-                          className="pt-plot-trifold-icon"
-                          aria-hidden="true"
-                        />
-
-                        {/* Nội dung thông tin thửa đất theo phong cách thẻ nhắc nhở */}
-                        <div className="pt-plot-card-body">
-                          <strong className="pt-plot-code">#{plot.code}</strong>
-                        </div>
-
-                        {/* Icon QR code ở cuối thẻ để người dùng bấm vào xem biển QR */}
-                        <div className="pt-plot-card-end">
-                          <button
-                            type="button"
-                            className="pt-plot-qr-action-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSignboardPlot(plot);
-                            }}
-                            title={`Xem và in biển cắm đầu lô vườn QR cho mã ${plot.code}`}
-                            aria-label={`Mã QR biển cắm vườn ${plot.code}`}
-                          >
-                            <QrCode size={18} strokeWidth={2.2} aria-hidden="true" />
-                            <span className="pt-plot-qr-action-label">Biển QR</span>
-                          </button>
-                        </div>
-                      </div>
+                    {/* Nội dung thông tin thửa đất theo phong cách thẻ nhắc nhở */}
+                    <div className="pt-plot-card-body">
+                      <strong className="pt-plot-code">#{plot.code}</strong>
                     </div>
-                  );
-                })}
+
+                    {/* Icon QR code ở cuối thẻ để người dùng bấm vào xem biển QR */}
+                    <div className="pt-plot-card-end">
+                      <button
+                        type="button"
+                        className="pt-plot-qr-action-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSignboardPlot(plot);
+                        }}
+                        title={`Xem và in biển cắm đầu lô vườn QR cho mã ${plot.code}`}
+                        aria-label={`Mã QR biển cắm vườn ${plot.code}`}
+                      >
+                        <QrCode size={18} strokeWidth={2.2} aria-hidden="true" />
+                        <span className="pt-plot-qr-action-label">Biển QR</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+            </>
           )}
         </section>
 
-      <Card title="Sản phẩm & Lô thu hoạch đã giao">
+      <section className="pt-plots-section pt-harvest-section" aria-labelledby="harvest-heading">
+        <div className="pt-plots-header">
+          <div className="pt-plots-header-info">
+            <h2 id="harvest-heading" className="pt-plots-title">
+              Lô thu hoạch
+            </h2>
+          </div>
+        </div>
         <StateBlock loading={harvest.loading} error={harvest.error} />
         {harvest.data && harvest.data.data.length === 0 && <EmptyState icon="harvest">Chưa có lô thu hoạch nào của hộ bạn.</EmptyState>}
         {harvest.data && harvest.data.data.length > 0 && (
-          <ul className="pt-list">
-            {harvest.data.data.map((lot) => {
-              const status = HARVEST_STATUS[lot.status];
-              return (
-                <li key={lot.id} className="pt-row pt-row-wrap pt-harvest-row">
-                  <div className="pt-row-main">
-                    <div className="pt-harvest-title-line">
-                      <strong>{formatKg(lot.weightKg)}</strong>
-                      <span className="pt-lot-code-tag">Lô {lot.lotCode}</span>
-                    </div>
-                    <span>
-                      Ngày thu hoạch: {formatDate(lot.harvestedOn)}
-                    </span>
-                    <span>
-                      {lot.buyer} · {lot.market}
-                    </span>
-                  </div>
-                  <div className="pt-harvest-actions">
-                    <button
-                      type="button"
-                      className="pt-qr-lot-btn"
-                      onClick={() => setSelectedLotForQr(lot)}
-                      title={`Xem mã QR truy xuất nguồn gốc lô ${lot.lotCode}`}
-                      aria-label={`Mã QR lô ${lot.lotCode}`}
-                    >
-                      <QrCode size={14} strokeWidth={2.2} aria-hidden="true" />
-                      <span>{lot.qrCode || "Mã QR"}</span>
-                    </button>
-                    <Pill tone={status.tone}>{status.label}</Pill>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="pt-asset-card-grid">
+            {harvest.data.data.map((lot) => (
+              <HarvestAssetTagCard
+                key={lot.id}
+                lot={lot}
+                onOpenModal={() => setSelectedLotForQr(lot)}
+              />
+            ))}
+          </div>
         )}
-      </Card>
+      </section>
 
       {/* Sheet hiển thị chi tiết mã QR của từng lô sản phẩm dạng thẻ vé Ticket Voucher */}
       {selectedLotForQr && (
@@ -246,8 +207,7 @@ export default function PlotsTab() {
                 <div className="pt-ticket-stub">
                   <div className="pt-ticket-qr-wrap">
                     <div className="pt-qr-frame">
-                      <QrCode size={145} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />
-                      <div className="pt-qr-center-tag">PUC</div>
+                      <TicketQrImage lotCode={selectedLotForQr.lotCode} qrCode={selectedLotForQr.qrCode} />
                     </div>
                     <div className="pt-ticket-barcode-num">
                       <span>{selectedLotForQr.qrCode || selectedLotForQr.lotCode}</span>
@@ -303,6 +263,139 @@ export default function PlotsTab() {
           }}
         />
       )}
+      </div>
+    </div>
+  );
+}
+
+function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string | null }) {
+  const [src, setSrc] = useState<string>("");
+
+  useEffect(() => {
+    let active = true;
+    const origin =
+      typeof window !== "undefined" && window.location.origin
+        ? window.location.origin
+        : "https://krongbuk.puc.vn";
+    const targetUrl = `${origin}/trace/${encodeURIComponent(qrCode || lotCode)}`;
+
+    QRCode.toDataURL(targetUrl, {
+      margin: 1,
+      width: 280,
+      color: { dark: "#0f172a", light: "#ffffff" },
+      errorCorrectionLevel: "H",
+    }).then((url) => {
+      if (active) setSrc(url);
+    }).catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [lotCode, qrCode]);
+
+  if (!src) {
+    return <QrCode size={145} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />;
+  }
+
+  return <img src={src} alt={`Mã QR ${lotCode}`} width={145} height={145} style={{ display: "block", borderRadius: 4 }} />;
+}
+
+interface HarvestAssetTagCardProps {
+  lot: PortalHarvest;
+  onOpenModal: () => void;
+}
+
+function HarvestAssetTagCard({ lot, onOpenModal }: HarvestAssetTagCardProps) {
+  const [qrSrc, setQrSrc] = useState<string>("");
+  const status = HARVEST_STATUS[lot.status];
+
+  useEffect(() => {
+    let active = true;
+    const origin =
+      typeof window !== "undefined" && window.location.origin
+        ? window.location.origin
+        : "https://krongbuk.puc.vn";
+    const targetUrl = `${origin}/trace/${encodeURIComponent(lot.qrCode || lot.lotCode)}`;
+
+    QRCode.toDataURL(targetUrl, {
+      margin: 1.5,
+      width: 320,
+      color: {
+        dark: "#0f172a",
+        light: "#ffffff",
+      },
+      errorCorrectionLevel: "M",
+    })
+      .then((url) => {
+        if (active) setQrSrc(url);
+      })
+      .catch((err) => {
+        console.error("Failed to generate asset QR code", err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [lot.qrCode, lot.lotCode]);
+
+  return (
+    <div className="pt-asset-card" data-status={lot.status}>
+      {/* ── BÊN TRÁI: THÔNG TIN LÔ HÀNG ── */}
+      <div className="pt-asset-left">
+        <div className="pt-asset-top-row">
+          <div className="pt-asset-code-line">
+            <span className="pt-asset-code-val">LÔ {lot.lotCode}</span>
+            <span className="pt-asset-code-divider">·</span>
+            <span className="pt-asset-weight-val">{formatKg(lot.weightKg)}</span>
+          </div>
+          <span className={`pt-asset-status-badge tone-${status.tone}`}>
+            {status.label}
+          </span>
+        </div>
+
+        {/* Phần chân thẻ: ASSET ID & thông tin bên dưới */}
+        <div className="pt-asset-footer">
+          <div className="pt-asset-id-group">
+            <span className="pt-asset-id-label">ASSET ID</span>
+            <strong className="pt-asset-id-val">{lot.qrCode || lot.lotCode}</strong>
+          </div>
+          <div className="pt-asset-meta">
+            <span>Ngày thu: {formatDate(lot.harvestedOn)}</span>
+            <span className="pt-asset-meta-dot">·</span>
+            <span>{lot.buyer} ({lot.market})</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── BÊN PHẢI: MÃ QR CODE VỪA BẤM ĐƯỢC VỪA QUÉT ĐƯỢC ── */}
+      <div className="pt-asset-right">
+        <button
+          type="button"
+          className="pt-asset-qr-btn"
+          onClick={onOpenModal}
+          title="Bấm để mở tem vé chi tiết hoặc dùng camera quét trực tiếp"
+          aria-label={`Mã QR lô ${lot.lotCode} - Bấm để mở tem chi tiết`}
+        >
+          <div className="pt-asset-qr-box">
+            {qrSrc ? (
+              <img
+                src={qrSrc}
+                alt={`Mã QR tra cứu lô ${lot.lotCode}`}
+                className="pt-asset-qr-img"
+              />
+            ) : (
+              <div className="pt-asset-qr-loading" aria-hidden="true">
+                <QrCode size={110} strokeWidth={1.8} />
+              </div>
+            )}
+            <div className="pt-asset-qr-overlay">
+              <span className="pt-asset-qr-badge">
+                <ArrowUpRight size={13} strokeWidth={2.5} aria-hidden="true" />
+                <span>Bấm mở</span>
+              </span>
+            </div>
+          </div>
+        </button>
       </div>
     </div>
   );
