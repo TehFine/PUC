@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
 import {
@@ -45,7 +46,29 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
   const [layerMode, setLayerMode] = useState<LayerMode>("satellite");
   const [ready, setReady] = useState(false);
-  const [infoExpanded, setInfoExpanded] = useState(true);
+  const [infoExpanded, setInfoExpanded] = useState(() => {
+    if (typeof window !== "undefined" && window.innerWidth <= 640) {
+      return false; // Trên di động: mặc định thu gọn để toàn bộ bản đồ tràn ngập màn hình
+    }
+    return true;
+  });
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
 
   const lat = plot.lat ?? 12.72245;
   const lng = plot.lng ?? 108.14746;
@@ -115,7 +138,12 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
             </div>
           `);
 
-          map.fitBounds(poly.getBounds(), { padding: [60, 60], maxZoom: 18 });
+          const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
+          map.fitBounds(poly.getBounds(), {
+            paddingTopLeft: [isMobile ? 70 : 60, 20],
+            paddingBottomRight: [20, isMobile ? 80 : 60],
+            maxZoom: 18,
+          });
         } catch {
           // Bỏ qua lỗi json
         }
@@ -184,14 +212,28 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   // Căn giữa lại thửa đất
   const resetBounds = () => {
     if (!mapRef.current) return;
+    const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
     if (polygonLayerRef.current) {
-      mapRef.current.fitBounds(polygonLayerRef.current.getBounds(), { padding: [60, 60], maxZoom: 18 });
+      mapRef.current.fitBounds(polygonLayerRef.current.getBounds(), {
+        paddingTopLeft: [isMobile ? 80 : 60, 20],
+        paddingBottomRight: [20, isMobile && infoExpanded ? 260 : 80],
+        maxZoom: 18,
+      });
     } else {
       mapRef.current.setView([lat, lng], 17);
     }
   };
 
-  return (
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [infoExpanded]);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="pt-mapmodal-fullscreen" role="dialog" aria-modal="true" aria-label={`Bản đồ thửa đất ${plot.code}`}>
       {/* 1. TOÀN CẢNH BẢN ĐỒ TRÀN VIỀN (100% VIEWPORT) */}
       <div ref={containerRef} className="pt-mapmodal-canvas-fullscreen" />
@@ -252,7 +294,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
       {/* 3. POPUP NỔI HIỂN THỊ THÔNG TIN THỬA ĐẤT CỦA HỘ ĐÓ */}
       <div className={`pt-mapmodal-floating-popup ${infoExpanded ? "is-expanded" : "is-minimized"}`}>
-        {/* Đầu popup: Tiêu đề + Nút thu gọn / mở rộng */}
+        {/* Đầu popup: Thanh kéo handle + Tiêu đề + Nút thu gọn / mở rộng */}
         <div
           className="pt-mapmodal-popup-header"
           onClick={() => setInfoExpanded((prev) => !prev)}
@@ -266,32 +308,35 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           }}
           title={infoExpanded ? "Thu gọn thông tin để xem trọn bản đồ" : "Mở rộng xem chi tiết thông tin thửa đất"}
         >
-          <div className="pt-mapmodal-popup-header-main">
-            <div className="pt-mapmodal-popup-title-line">
-              <span className="pt-mapmodal-popup-code">#{plot.code}</span>
-              {plot.variety && (
-                <span className="pt-mapmodal-popup-variety">{plot.variety}</span>
-              )}
-              <Pill tone={status.tone}>{status.label}</Pill>
+          <div className="pt-mapmodal-popup-handle" aria-hidden="true" />
+          <div className="pt-mapmodal-popup-header-row">
+            <div className="pt-mapmodal-popup-header-main">
+              <div className="pt-mapmodal-popup-title-line">
+                <span className="pt-mapmodal-popup-code">#{plot.code}</span>
+                {plot.variety && (
+                  <span className="pt-mapmodal-popup-variety">{plot.variety}</span>
+                )}
+                <Pill tone={status.tone}>{status.label}</Pill>
+              </div>
+              <div className="pt-mapmodal-popup-owner">
+                <span>Chủ hộ: <strong>{householdName}</strong></span>
+                <span className="pt-mapmodal-popup-dot">·</span>
+                <span>{plot.village || "Thôn 1"}, Krông Búk</span>
+              </div>
             </div>
-            <div className="pt-mapmodal-popup-owner">
-              <span>Chủ hộ: <strong>{householdName}</strong></span>
-              <span className="pt-mapmodal-popup-dot">·</span>
-              <span>{plot.village || "Thôn 1"}, Krông Búk</span>
-            </div>
-          </div>
 
-          <button
-            type="button"
-            className="pt-mapmodal-popup-toggle-btn"
-            aria-label={infoExpanded ? "Thu gọn thông tin" : "Mở rộng thông tin"}
-            onClick={(e) => {
-              e.stopPropagation();
-              setInfoExpanded((prev) => !prev);
-            }}
-          >
-            {infoExpanded ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-          </button>
+            <button
+              type="button"
+              className="pt-mapmodal-popup-toggle-btn"
+              aria-label={infoExpanded ? "Thu gọn thông tin" : "Mở rộng thông tin"}
+              onClick={(e) => {
+                e.stopPropagation();
+                setInfoExpanded((prev) => !prev);
+              }}
+            >
+              {infoExpanded ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+            </button>
+          </div>
         </div>
 
         {/* Nội dung chi tiết popup (ẩn khi thu gọn để xem map) */}
@@ -365,6 +410,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
