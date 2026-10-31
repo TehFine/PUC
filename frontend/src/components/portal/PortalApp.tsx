@@ -64,6 +64,15 @@ export default function PortalApp() {
 
   const currentTabItem = useMemo(() => TABS.find((t) => t.id === tab) || TABS[0], [tab]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get("tab") as PortalTabId;
+    if (tabParam && TABS.some((t) => t.id === tabParam)) {
+      setVisitedTabs((prev) => new Set(prev).add(tabParam));
+      setTab(tabParam);
+    }
+  }, []);
+
   const navigate = useCallback((next: PortalTabId) => {
     startTransition(() => {
       setVisitedTabs((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));

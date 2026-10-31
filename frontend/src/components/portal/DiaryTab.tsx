@@ -5,7 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { useResource } from "@/hooks/use-resource";
 import { ApiError, api } from "@/lib/api-client";
-import { JOURNAL_ACTIVITIES, PESTICIDE_STATUS, todayIso } from "@/lib/portal-labels";
+import { JOURNAL_ACTIVITIES, todayIso } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type { PortalJournalEntry, PortalList, PortalPlots, PortalSprayRecord } from "@/types/portal";
@@ -485,27 +485,13 @@ export default function DiaryTab() {
                       <img
                         src="/note.png?v=2"
                         alt=""
-                        width={22}
-                        height={22}
+                        width={20}
+                        height={20}
                         className="pt-widget-note-icon"
                         aria-hidden="true"
                       />
-                      <div className="pt-diary-item-content">
-                        <div className="pt-diary-item-top">
-                          <strong className="pt-diary-item-title">{entry.activity}</strong>
-                          <span className="pt-diary-item-date">{formatDate(entry.entryOn)}</span>
-                        </div>
-                        <div className="pt-diary-item-sub">
-                          <span className="pt-diary-spec-item">Thửa {entry.plotCode}</span>
-                          <span className="pt-diary-dot">·</span>
-                          <span className="pt-diary-spec-item">{entry.recorder}</span>
-                        </div>
-                        {entry.detail && (
-                          <div className="pt-diary-item-detail-line">
-                            {entry.detail}
-                          </div>
-                        )}
-                      </div>
+                      <span className="pt-widget-item-text">{entry.activity}</span>
+                      <span className="pt-diary-item-date">{formatDate(entry.entryOn)}</span>
                       <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
                     </div>
                   </li>
@@ -536,40 +522,13 @@ export default function DiaryTab() {
                       <img
                         src="/note.png?v=2"
                         alt=""
-                        width={22}
-                        height={22}
+                        width={20}
+                        height={20}
                         className="pt-widget-note-icon"
                         aria-hidden="true"
                       />
-                      <div className="pt-diary-item-content">
-                        <div className="pt-diary-item-top">
-                          <strong className="pt-diary-item-title">{record.pesticide}</strong>
-                          <span className="pt-diary-item-date">{formatDate(record.sprayedOn)}</span>
-                        </div>
-                        <div className="pt-diary-item-specs">
-                          <span className="pt-diary-spec-item">{record.dose}</span>
-                          <span className="pt-diary-dot">·</span>
-                          <span className="pt-diary-spec-item">Diện tích {record.areaHa} ha</span>
-                        </div>
-                        <div className="pt-diary-item-badges">
-                          {record.mrlStatus === "pass" ? (
-                            <Pill tone="green">Đạt MRL</Pill>
-                          ) : (
-                            <Pill tone="red">Không đạt MRL</Pill>
-                          )}
-                          {record.pesticideStatus === "banned" && (
-                            <Pill tone={PESTICIDE_STATUS.banned.tone}>Thuốc cấm</Pill>
-                          )}
-                          <span className="pt-pill pt-pill-gold">
-                            Cách ly {record.isolationDays} ngày
-                          </span>
-                          {record.source && (
-                            <span className="pt-diary-source-tag" title={record.source}>
-                              {record.source}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <span className="pt-widget-item-text">{record.pesticide}</span>
+                      <span className="pt-diary-item-date">{formatDate(record.sprayedOn)}</span>
                       <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
                     </div>
                   </li>
