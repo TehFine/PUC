@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ArrowUpRight,
   BookOpen,
   ClipboardCheck,
   House,
@@ -56,6 +57,7 @@ export default function PortalApp() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileClosing, setProfileClosing] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [navWheelOpen, setNavWheelOpen] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +76,7 @@ export default function PortalApp() {
   }, []);
 
   const navigate = useCallback((next: PortalTabId) => {
+    setNavWheelOpen(false);
     startTransition(() => {
       setVisitedTabs((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
       setTab(next);
@@ -159,6 +162,7 @@ export default function PortalApp() {
     <div className="pt-app">
       <header className="pt-topbar">
         <div className="pt-topbar-inner">
+          {/* Logo thương hiệu HTX Krông Búk (chỉ hiển thị trên màn hình Desktop/Laptop) */}
           <Link href={INTRO_PATH} className="pt-brand" aria-label="HTX Krông Búk – về trang giới thiệu" title="Về trang giới thiệu">
             <span className="pt-brand-mark" aria-hidden="true">
               <Image src="/logo.png" alt="" width={30} height={30} />
@@ -169,11 +173,12 @@ export default function PortalApp() {
             </div>
           </Link>
 
-          {/* Tiêu đề tab đang chọn trên Mobile (thay thế cụm chữ HTX Krông Búk / Cổng hộ dân) */}
+          {/* Tiêu đề tab đang chọn trên Mobile */}
           <div className="pt-mobile-tab-title" aria-live="polite">
             <span className="pt-mobile-tab-name">{currentTabItem.label}</span>
           </div>
 
+          {/* Thanh tab điều hướng chức năng trên Desktop/Laptop */}
           <nav className="pt-tabs" aria-label="Chức năng">
             {TABS.map((item) => {
               const Icon = item.icon;
@@ -193,8 +198,8 @@ export default function PortalApp() {
             })}
           </nav>
 
-          <div className="pt-topbar-right" ref={profileMenuRef}>
-            {/* Lớp nền mờ (Backdrop Scrim) làm mờ hậu cảnh để người dùng focus vào popup profile */}
+          {/* Cụm Avatar & Popup tài khoản (trên Desktop ở góc phải; trên Mobile tự động chuyển sang góc trái) */}
+          <div className="pt-topbar-profile" ref={profileMenuRef}>
             {(profileOpen || profileClosing) && (
               <div
                 className={`pt-profile-backdrop ${profileClosing ? "is-closing" : ""}`}
@@ -284,8 +289,19 @@ export default function PortalApp() {
                   </div>
                 </div>
 
-                {/* Footer: Nút đăng xuất được đẩy vào trong cụm popup avatar */}
+                {/* Footer: Về trang giới thiệu + Nút đăng xuất */}
                 <div className="pt-profile-footer">
+                  <Link
+                    href={INTRO_PATH}
+                    className="pt-profile-intro-btn"
+                    onClick={closeProfile}
+                    title="Về trang giới thiệu HTX Krông Búk"
+                  >
+                    <Image src="/logo.png" alt="" width={18} height={18} />
+                    <span>Trang giới thiệu HTX</span>
+                    <ArrowUpRight size={14} className="pt-profile-intro-arrow" aria-hidden="true" />
+                  </Link>
+
                   <button
                     id="portal-logout"
                     type="button"
@@ -301,6 +317,22 @@ export default function PortalApp() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Phần điều hướng trên mobile: Nút tròn có dấu mũi tên (chỉ hiện trên Mobile ở góc phải) */}
+          <div className="pt-topbar-nav">
+            <button
+              id="portal-radial-toggle"
+              type="button"
+              className={`pt-nav-btn ${navWheelOpen ? "is-active" : ""}`}
+              onClick={() => setNavWheelOpen((value) => !value)}
+              aria-expanded={navWheelOpen}
+              aria-controls="portal-radial-drawer"
+              title="Mở menu xoay điều hướng"
+              aria-label="Mở menu xoay điều hướng"
+            >
+              <ArrowUpRight className="pt-nav-icon" size={20} strokeWidth={2.4} aria-hidden="true" />
+            </button>
           </div>
         </div>
       </header>
@@ -358,7 +390,12 @@ export default function PortalApp() {
       />
 
       {/* Điều hướng trục tròn dạng bánh xe uốn cong trên Mobile */}
-      <RadialNavWheel currentTab={tab} onSelectTab={navigate} />
+      <RadialNavWheel
+        currentTab={tab}
+        onSelectTab={navigate}
+        open={navWheelOpen}
+        onClose={() => setNavWheelOpen(false)}
+      />
     </div>
   );
 }

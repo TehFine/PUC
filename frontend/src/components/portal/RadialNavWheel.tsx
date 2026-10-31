@@ -93,6 +93,9 @@ export const NAV_ITEMS: NavItemConfig[] = [
 interface RadialNavWheelProps {
   currentTab: PortalTabId;
   onSelectTab: (tab: PortalTabId) => void;
+  open?: boolean;
+  onClose?: () => void;
+  showFloatingLauncher?: boolean;
 }
 
 const STEP_DEG = 12; // 12 độ mỗi bước
@@ -173,7 +176,13 @@ const DIAL_TICKS = generateDialTicks(DIAL_CX, DIAL_CY, DIAL_RADIUS);
 
 const RETRACT_DURATION_MS = 220; // 220ms đồng bộ hoàn hảo với CSS animation pt-radial-retract
 
-export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWheelProps) {
+export default function RadialNavWheel({
+  currentTab,
+  onSelectTab,
+  open: propOpen,
+  onClose: propOnClose,
+  showFloatingLauncher = false,
+}: RadialNavWheelProps) {
   const currentIndex = useMemo(() => {
     const idx = NAV_ITEMS.findIndex((item) => item.id === currentTab);
     return idx >= 0 ? idx : 0;
@@ -200,7 +209,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Khi mở popup, đưa tab hiện tại vào giữa
-  const handleOpen = () => {
+  const handleOpen = useCallback(() => {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
     setIsClosing(false);
@@ -209,7 +218,7 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
     setRotationDeg(initialRot);
     lastHapticIndexRef.current = currentIndex;
     setIsOpen(true);
-  };
+  }, [currentIndex]);
 
   const handleClose = useCallback(() => {
     if (autoCloseTimerRef.current) {
@@ -230,10 +239,21 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
       closeTimerRef.current = setTimeout(() => {
         setIsOpen(false);
         setIsClosing(false);
+        propOnClose?.();
       }, RETRACT_DURATION_MS);
       return true;
     });
-  }, []);
+  }, [propOnClose]);
+
+  useEffect(() => {
+    if (propOpen !== undefined) {
+      if (propOpen && !isOpen) {
+        handleOpen();
+      } else if (!propOpen && isOpen && !isClosing) {
+        handleClose();
+      }
+    }
+  }, [propOpen, isOpen, isClosing, handleOpen, handleClose]);
 
   // Tự động thu popup lại sau khi bánh xe dừng lại ở một tab nhanh chóng, tránh trễ
   const scheduleAutoClose = useCallback(
@@ -568,21 +588,23 @@ export default function RadialNavWheel({ currentTab, onSelectTab }: RadialNavWhe
 
   return (
     <>
-      {/* ── Nút nổi "Điều hướng" ở góc dưới bên phải (chỉ hiện trên Mobile) ── */}
-      <aside className="pt-radial-launcher-wrap" aria-label="Menu điều hướng di động">
-        <button
-          type="button"
-          id="portal-radial-toggle"
-          className="pt-radial-launcher"
-          onClick={handleOpen}
-          aria-expanded={isOpen}
-          aria-controls="portal-radial-drawer"
-          title="Mở menu xoay điều hướng"
-        >
-          <ArrowUpRight className="pt-radial-launcher-icon" size={17} strokeWidth={2.4} aria-hidden="true" />
-          <span className="pt-radial-launcher-label">Điều hướng</span>
-        </button>
-      </aside>
+      {/* ── Nút nổi "Điều hướng" ở góc dưới bên phải (chỉ hiện khi showFloatingLauncher = true) ── */}
+      {showFloatingLauncher && (
+        <aside className="pt-radial-launcher-wrap" aria-label="Menu điều hướng di động">
+          <button
+            type="button"
+            id="portal-radial-floating-toggle"
+            className="pt-radial-launcher"
+            onClick={handleOpen}
+            aria-expanded={isOpen}
+            aria-controls="portal-radial-drawer"
+            title="Mở menu xoay điều hướng"
+          >
+            <ArrowUpRight className="pt-radial-launcher-icon" size={17} strokeWidth={2.4} aria-hidden="true" />
+            <span className="pt-radial-launcher-label">Điều hướng</span>
+          </button>
+        </aside>
+      )}
 
       {/* ── Popup vòng xoay dạng trục tròn (Arc Wheel Navigation) ── */}
       {isOpen && (

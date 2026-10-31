@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ROLE_LABELS } from "@/constants/roles";
+import { INTRO_PATH } from "@/lib/routes";
 
 const initials = (name: string) =>
   name
@@ -53,6 +56,15 @@ export default function UserMenu() {
         <div className="user-menu-panel" role="menu">
           <strong>{fullName}</strong>
           <span>{ROLE_LABELS[role]}</span>
+          <Link
+            href={INTRO_PATH}
+            className="user-menu-intro-link"
+            onClick={() => setOpen(false)}
+            title="Về trang giới thiệu HTX"
+          >
+            <span>Trang giới thiệu</span>
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </Link>
           <button
             id="logout-button"
             type="button"
