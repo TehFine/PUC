@@ -66,7 +66,17 @@ const SheetCloseContext = createContext<(() => void) | null>(null);
 export const useSheetClose = () => useContext(SheetCloseContext);
 
 /** Hộp thoại dạng bảng trượt từ dưới lên, hỗ trợ vuốt kéo xuống (swipe/drag down to dismiss) mượt mà */
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({
+  title,
+  onClose,
+  children,
+  className = "",
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
   const [closing, setClosing] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -288,7 +298,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       >
         <div
           ref={sheetRef}
-          className={`pt-sheet ${closing ? "is-closing" : ""}`}
+          className={`pt-sheet ${className} ${closing ? "is-closing" : ""}`.trim()}
           role="dialog"
           aria-modal="true"
           aria-label={title}

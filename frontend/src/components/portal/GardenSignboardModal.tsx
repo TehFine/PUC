@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { X, Printer, TreePine, QrCode } from "lucide-react";
+import { Printer, QrCode } from "lucide-react";
 import type { PortalPlot } from "@/types/portal";
+import { Sheet } from "./ui";
 
 interface Props {
   plot: PortalPlot;
@@ -28,24 +29,20 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
   };
 
   return (
-    <div className="signboard-overlay">
-      <div className="signboard-modal">
-        <div className="signboard-header no-print">
-          <div>
-            <div className="signboard-sub">Hình 1 - Bước 1: Gắn mã định danh lô canh tác</div>
-            <h3 className="signboard-title">Biển cắm đầu lô vườn QR – {plot.code}</h3>
-          </div>
-          <button type="button" className="signboard-close" onClick={onClose} aria-label="Đóng">
-            <X size={20} />
-          </button>
-        </div>
+    <Sheet
+      title={`Biển cắm đầu lô vườn QR – ${plot.code}`}
+      onClose={onClose}
+      className="pt-signboard-sheet"
+    >
+      <div className="signboard-sheet-content">
+        <div className="signboard-sub no-print">Hình 1 - Bước 1: Gắn mã định danh lô canh tác</div>
 
         <div className="signboard-toolbar no-print">
           <p className="signboard-note">
             Bà con in biển này ra khổ A4 hoặc ép plastic chống nước để cắm tại cọc mốc đầu lô đất canh tác.
           </p>
-          <button type="button" className="btn btn-primary btn-sm" onClick={handlePrint}>
-            <Printer size={15} />
+          <button type="button" className="signboard-print-btn" onClick={handlePrint}>
+            <Printer size={16} />
             <span>In biển cắm vườn</span>
           </button>
         </div>
@@ -120,40 +117,14 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
       </div>
 
       <style jsx global>{`
-        .signboard-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(14, 28, 22, 0.7);
-          backdrop-filter: blur(4px);
-          z-index: 1100;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
+        .pt-sheet.pt-signboard-sheet {
+          max-width: 740px;
         }
 
-        .signboard-modal {
-          background: #ffffff;
-          border-radius: 16px;
-          max-width: 780px;
-          width: 100%;
-          box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35);
-          overflow: hidden;
+        .signboard-sheet-content {
           display: flex;
           flex-direction: column;
-          max-height: 90vh;
-        }
-
-        .signboard-header {
-          padding: 16px 20px;
-          border-bottom: 1px solid #e2e8e5;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background: #f8faf9;
+          gap: 12px;
         }
 
         .signboard-sub {
@@ -161,48 +132,59 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           font-weight: 700;
           color: #166534;
           text-transform: uppercase;
-        }
-
-        .signboard-title {
-          font-size: 17px;
-          font-weight: 800;
-          color: #14372f;
-          margin: 2px 0 0;
-        }
-
-        .signboard-close {
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          border: 1px solid #d5ded9;
-          background: #fff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
+          letter-spacing: 0.4px;
         }
 
         .signboard-toolbar {
-          padding: 12px 20px;
-          background: #ffffff;
-          border-bottom: 1px solid #edf1ef;
+          padding: 12px 16px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 12px;
+          gap: 14px;
         }
+
         .signboard-note {
           margin: 0;
           font-size: 12.5px;
-          color: #556c62;
+          color: #475569;
+          line-height: 1.45;
+        }
+
+        .signboard-print-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          background: #f8f23a;
+          color: #14372f;
+          border: 1px solid rgba(20, 55, 47, 0.12);
+          border-radius: 999px;
+          padding: 8px 16px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          white-space: nowrap;
+          box-shadow: 0 4px 12px rgba(248, 242, 58, 0.45);
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+        }
+
+        .signboard-print-btn:hover {
+          background: #fcf65f;
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(248, 242, 58, 0.6);
         }
 
         .signboard-preview-wrap {
-          padding: 24px;
+          padding: 16px;
           background: #edf2ee;
-          overflow-y: auto;
+          border-radius: 16px;
           display: flex;
           justify-content: center;
+          overflow-x: hidden;
         }
 
         /* ─── Biển cắm chuẩn thiết kế thực địa ─── */
@@ -215,6 +197,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           padding: 20px 24px;
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
           color: #111;
+          box-sizing: border-box;
         }
 
         .plate-top {
@@ -277,7 +260,6 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           background: #ecfdf5;
           padding: 6px 10px;
           border-radius: 6px;
-          border-left: 4px solid #16a34a;
         }
         .big-code {
           font-family: monospace;
@@ -295,12 +277,14 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           padding: 10px;
           border-radius: 8px;
           background: #f8fafc;
+          box-sizing: border-box;
         }
 
         .plate-qr-img {
           width: 140px;
           height: 140px;
           border-radius: 4px;
+          display: block;
         }
 
         .plate-qr-caption {
@@ -308,6 +292,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           font-weight: 800;
           color: #15803d;
           margin-top: 6px;
+          text-align: center;
         }
 
         .plate-bottom {
@@ -325,34 +310,224 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           font-weight: 800;
         }
 
+        /* ─── Responsive cho màn hình di động (≤ 640px) ─── */
+        @media (max-width: 640px) {
+          .signboard-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+            padding: 10px 14px;
+          }
+
+          .signboard-print-btn {
+            width: 100%;
+            padding: 9px 16px;
+          }
+
+          .signboard-preview-wrap {
+            padding: 12px 8px;
+            border-radius: 12px;
+          }
+
+          .garden-signboard-plate {
+            padding: 14px 12px;
+            border-width: 3px;
+            border-radius: 10px;
+            max-width: 100%;
+          }
+
+          .plate-top {
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+          }
+
+          .plate-flag {
+            font-size: 10px;
+            letter-spacing: 0.4px;
+          }
+
+          .plate-org {
+            font-size: 11.5px;
+          }
+
+          .plate-main-title {
+            font-size: 14.5px;
+            line-height: 1.25;
+            letter-spacing: 0.2px;
+            margin-top: 4px;
+          }
+
+          .plate-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: stretch;
+          }
+
+          .plate-info {
+            gap: 6.5px;
+          }
+
+          .plate-row {
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+          }
+
+          .plate-lbl {
+            min-width: 0;
+            flex-shrink: 0;
+            color: #475569;
+          }
+
+          .plate-val {
+            text-align: right;
+            word-break: break-word;
+          }
+
+          .highlight-box {
+            padding: 6px 9px;
+          }
+
+          .big-code {
+            font-size: 15px;
+          }
+
+          .plate-qr-box {
+            margin: 6px auto 0;
+            width: 100%;
+            max-width: 220px;
+            padding: 10px;
+          }
+
+          .plate-qr-img {
+            width: 140px;
+            height: 140px;
+          }
+
+          .plate-qr-caption {
+            font-size: 9px;
+            margin-top: 5px;
+          }
+
+          .plate-bottom {
+            margin-top: 13px;
+            padding-top: 8px;
+            flex-direction: column;
+            gap: 6px;
+            text-align: center;
+            font-size: 9px;
+            line-height: 1.35;
+          }
+        }
+
+        /* ─── Tối ưu cho màn hình siêu nhỏ (≤ 380px như iPhone SE) ─── */
+        @media (max-width: 380px) {
+          .signboard-toolbar {
+            padding: 8px 10px;
+          }
+
+          .signboard-note {
+            font-size: 11.5px;
+          }
+
+          .signboard-preview-wrap {
+            padding: 8px 4px;
+          }
+
+          .garden-signboard-plate {
+            padding: 12px 10px;
+            border-width: 2.5px;
+          }
+
+          .plate-flag {
+            font-size: 9px;
+          }
+
+          .plate-org {
+            font-size: 10.5px;
+          }
+
+          .plate-main-title {
+            font-size: 13px;
+          }
+
+          .plate-row {
+            font-size: 11px;
+            gap: 6px;
+          }
+
+          .big-code {
+            font-size: 13.5px;
+          }
+
+          .plate-qr-box {
+            max-width: 190px;
+            padding: 8px;
+          }
+
+          .plate-qr-img {
+            width: 125px;
+            height: 125px;
+          }
+
+          .plate-bottom {
+            font-size: 8.5px;
+          }
+        }
+
         @media print {
           body * {
             visibility: hidden !important;
           }
-          .signboard-overlay,
           .garden-signboard-plate,
           .garden-signboard-plate * {
             visibility: visible !important;
           }
-          .no-print {
+          .no-print,
+          .pt-sheet-backdrop,
+          .pt-sheet-topbar {
             display: none !important;
           }
-          .signboard-overlay {
+          .garden-signboard-plate {
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
-            width: 100% !important;
-            background: #fff !important;
-            padding: 0 !important;
-          }
-          .garden-signboard-plate {
             box-shadow: none !important;
             width: 100% !important;
             max-width: 100% !important;
             border: 3px solid #000 !important;
+            padding: 20px 24px !important;
+          }
+          .plate-grid {
+            display: grid !important;
+            grid-template-columns: 1fr 190px !important;
+            gap: 16px !important;
+          }
+          .plate-row {
+            display: flex !important;
+            justify-content: flex-start !important;
+            gap: 8px !important;
+          }
+          .plate-lbl {
+            min-width: 150px !important;
+          }
+          .plate-val {
+            text-align: left !important;
+          }
+          .plate-qr-box {
+            max-width: none !important;
+            margin: 0 !important;
+          }
+          .plate-bottom {
+            flex-direction: row !important;
+            justify-content: space-between !important;
+            text-align: left !important;
           }
         }
       `}</style>
-    </div>
+    </Sheet>
   );
 }
