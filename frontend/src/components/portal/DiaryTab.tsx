@@ -218,8 +218,6 @@ interface VietgapRule {
   kicker: string;
   title: string;
   desc: string;
-  tone: "green" | "gold" | "red";
-  tag: string;
   nodeType: "active" | "warn" | "danger";
 }
 
@@ -229,8 +227,6 @@ const VIETGAP_RULES: VietgapRule[] = [
     kicker: "QUY TẮC 1 · ĐỊNH KỲ",
     title: "Ghi nhật ký 7 ngày/lần",
     desc: "Cập nhật đều đặn các việc tưới tiêu, bón phân, tỉa cành, bao trái phục vụ kiểm tra vùng trồng.",
-    tone: "green",
-    tag: "≥ 7 ngày",
     nodeType: "active",
   },
   {
@@ -238,8 +234,6 @@ const VIETGAP_RULES: VietgapRule[] = [
     kicker: "QUY TẮC 2 · CÁCH LY",
     title: "Cách ly trước thu hoạch",
     desc: "Ngưng dùng phân thuốc trước ngày thu hoạch đúng thời hạn (PHI) để không vượt tồn dư cho phép.",
-    tone: "gold",
-    tag: "Chuẩn PHI",
     nodeType: "warn",
   },
   {
@@ -247,8 +241,6 @@ const VIETGAP_RULES: VietgapRule[] = [
     kicker: "QUY TẮC 3 · AN TOÀN",
     title: "Cấm thuốc ngoài danh mục",
     desc: "Tuyệt đối không dùng chất nhuộm màu (Vàng O), hoạt chất cấm Chlorpyrifos hoặc thuốc chưa cấp phép.",
-    tone: "red",
-    tag: "Tuyệt đối cấm",
     nodeType: "danger",
   },
 ];
@@ -443,11 +435,6 @@ export default function DiaryTab() {
               <h2 className="pt-widget-topbar-title">
                 {view === "journal" ? "Nhật ký" : "Phun thuốc"}
               </h2>
-              {active.data?.data && (
-                <span className="pt-widget-topbar-count">
-                  {active.data.data.length} ghi chép
-                </span>
-              )}
             </div>
             <button
               type="button"
@@ -563,11 +550,8 @@ export default function DiaryTab() {
                   <div className="pt-timeline-track" aria-hidden="true">
                     <div className={`pt-timeline-node ${nodeClass}`} />
                   </div>
-                  <div className="pt-timeline-content">
-                    <div className="pt-vietgap-header-line">
-                      <span className="pt-timeline-kicker">{rule.kicker}</span>
-                      <Pill tone={rule.tone}>{rule.tag}</Pill>
-                    </div>
+                  <div className={`pt-timeline-content pt-vietgap-card pt-vietgap-card-${rule.id}`}>
+                    <span className="pt-timeline-kicker">{rule.kicker}</span>
                     <h3 className="pt-timeline-title">{rule.title}</h3>
                     <p className="pt-timeline-desc">{rule.desc}</p>
                   </div>
