@@ -324,13 +324,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4px 14px 5px;
-  border: 2px solid rgba(220, 38, 38, 0.32);
-  border-radius: 6px;
+  padding: 6px 18px 7px;
+  border: 2.5px solid rgba(220, 38, 38, 0.22);
+  border-radius: 8px;
   box-shadow: 
-    inset 0 0 0 1px rgba(220, 38, 38, 0.2),
-    0 0 0 1px rgba(220, 38, 38, 0.08);
-  background: rgba(254, 242, 242, 0.32);
+    inset 0 0 0 1px rgba(220, 38, 38, 0.14),
+    0 0 0 1px rgba(220, 38, 38, 0.05);
+  background: rgba(254, 242, 242, 0.18);
   mix-blend-mode: multiply;
   text-align: center;
   transition: transform 0.2s ease;
@@ -342,22 +342,22 @@
 
 .pt-asset-watermark-title {
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Impact", "Arial Black", "Arial-BoldMT", sans-serif;
-  font-size: 16px;
+  font-size: 23px;
   font-weight: 900;
   letter-spacing: 0.18em;
-  color: rgba(220, 38, 38, 0.36);
+  color: rgba(220, 38, 38, 0.22);
   text-transform: uppercase;
   line-height: 1.1;
   white-space: nowrap;
 }
 
 .pt-asset-watermark-sub {
-  font-size: 8px;
+  font-size: 9.5px;
   font-weight: 800;
-  letter-spacing: 0.2em;
-  color: rgba(220, 38, 38, 0.3);
+  letter-spacing: 0.22em;
+  color: rgba(220, 38, 38, 0.18);
   text-transform: uppercase;
-  margin-top: 2px;
+  margin-top: 2.5px;
   line-height: 1;
   white-space: nowrap;
 }
@@ -618,19 +618,19 @@
     gap: 12px;
   }
   .pt-asset-watermark {
-    left: 40%;
+    left: 38%;
     transform: translate(-50%, -50%) rotate(-12deg);
   }
   .pt-asset-watermark-inner {
-    padding: 3px 10px 4px;
-    border-width: 1.8px;
+    padding: 4px 13px 5px;
+    border-width: 2px;
   }
   .pt-asset-watermark-title {
-    font-size: 13px;
-    letter-spacing: 0.14em;
+    font-size: 17px;
+    letter-spacing: 0.16em;
   }
   .pt-asset-watermark-sub {
-    font-size: 7px;
+    font-size: 7.5px;
   }
   .pt-asset-code-val {
     font-size: 14px;
