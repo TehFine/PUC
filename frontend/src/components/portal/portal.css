@@ -42,7 +42,9 @@
   width: 100%;
   min-height: 64px;
   padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+  border-top: none !important;
   border-bottom: 1px solid var(--border);
+  box-shadow: none !important;
 }
 .pt-topbar::before {
   content: "";
@@ -50,20 +52,26 @@
   inset: 0;
   z-index: -1;
   background: rgba(255, 255, 255, 0.92);
+  /* Chỉ đổ bóng cạnh dưới tạo chiều sâu, toán học triệt tiêu hoàn toàn bóng cạnh trên */
   box-shadow:
-    0 12px 24px -10px rgba(20, 55, 47, 0.08),
-    0 4px 6px -3px rgba(20, 55, 47, 0.04);
-  clip-path: inset(0 0 -40px 0);
+    0 10px 12px -5px rgba(20, 55, 47, 0.08),
+    0 3px 4px -2px rgba(20, 55, 47, 0.03);
+  clip-path: polygon(-100vw 0, 200vw 0, 200vw 250%, -100vw 250%);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
-@media (max-width: 768px) {
+@media (max-width: 999px) {
+  .pt-topbar {
+    box-shadow: none !important;
+    border-top: none !important;
+  }
   .pt-topbar::before {
     background: rgba(255, 255, 255, 0.98);
+    /* Giao diện di động: bóng đổ thuần túy cạnh dưới, cạnh trên phẳng mượt liền mạch nền */
     box-shadow:
-      0 10px 18px -8px rgba(15, 23, 42, 0.08),
-      0 3px 6px -2px rgba(15, 23, 42, 0.04);
-    clip-path: inset(0 0 -30px 0);
+      0 10px 12px -5px rgba(15, 23, 42, 0.07),
+      0 3px 4px -2px rgba(15, 23, 42, 0.03);
+    clip-path: polygon(-100vw 0, 200vw 0, 200vw 250%, -100vw 250%);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -1377,7 +1385,11 @@
     border-radius: 26px;
   }
   .pt-widget-topbar {
-    padding: 16px 24px 14px;
+    padding: 14px 18px 12px;
+    gap: 8px;
+  }
+  .pt-widget-topbar-title {
+    font-size: 1.18rem;
   }
   .pt-widget-sheet {
     border-radius: 22px;
@@ -1499,13 +1511,15 @@
     align-items: stretch;
   }
   .pt-home-grid > .pt-card,
-  .pt-grid-2 > .pt-card {
+  .pt-grid-2 > .pt-card,
+  .pt-grid-2 > .pt-reminders-widget {
     height: 100%;
     display: flex;
     flex-direction: column;
   }
   .pt-home-grid > .pt-card > :last-child,
-  .pt-grid-2 > .pt-card > :last-child {
+  .pt-grid-2 > .pt-card > :last-child,
+  .pt-grid-2 > .pt-reminders-widget > .pt-widget-sheet {
     flex: 1;
   }
 }
@@ -1623,45 +1637,68 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px 14px;
+  gap: 12px;
+  padding: 18px 22px 14px;
   background: #ffffff;
   border-bottom: 1px solid rgba(20, 55, 47, 0.06);
 }
 
 .pt-widget-topbar-info {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
 }
 
 .pt-widget-topbar-title {
   font-family: var(--font-display-stack);
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   font-weight: 750;
   color: var(--ink);
   letter-spacing: -0.015em;
   margin: 0;
-  line-height: 1.25;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .pt-widget-topbar-time {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--text-secondary);
   line-height: 1.25;
+  white-space: nowrap;
+}
+
+.pt-widget-topbar-count {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(20, 55, 47, 0.06);
+  padding: 2.5px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
 .pt-widget-topbar-btn {
   background: rgba(20, 55, 47, 0.04);
   border: 1px solid rgba(20, 55, 47, 0.08);
   border-radius: 999px;
-  padding: 5px 14px;
-  font-size: 12.5px;
+  padding: 6px 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink);
   cursor: pointer;
   transition: all 0.18s ease;
-  line-height: 1.3;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pt-widget-topbar-btn:hover {
@@ -1764,6 +1801,453 @@
   color: var(--green-700);
   opacity: 1;
   transform: translateX(3px);
+}
+
+/* ── Icon note & mục nhật ký theo style thẻ nhắc nhở ── */
+.pt-widget-note-icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+  opacity: 0.88;
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+}
+
+.pt-widget-item .pt-widget-note-icon {
+  width: 20px;
+  height: 20px;
+  margin-top: 0;
+}
+
+.pt-diary-widget-item .pt-widget-note-icon {
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+}
+
+.pt-widget-item:hover .pt-widget-note-icon,
+.pt-diary-widget-item:hover .pt-widget-note-icon {
+  transform: scale(1.15) rotate(6deg);
+  opacity: 1;
+}
+
+.pt-diary-widget-list {
+  gap: 10px;
+}
+
+.pt-diary-widget-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(20, 55, 47, 0.06);
+  background: #ffffff;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.pt-diary-widget-item:hover {
+  background: rgba(20, 55, 47, 0.025);
+  border-color: rgba(20, 55, 47, 0.12);
+  transform: translateX(2px);
+  box-shadow: 0 3px 12px rgba(20, 55, 47, 0.04);
+}
+
+.pt-diary-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pt-diary-item-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pt-diary-item-title {
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--ink);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.pt-diary-item-date {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pt-diary-item-sub,
+.pt-diary-item-specs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.pt-diary-spec-item {
+  white-space: nowrap;
+}
+
+.pt-diary-dot,
+.pt-diary-spec-sep {
+  color: rgba(20, 55, 47, 0.28);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.pt-diary-item-detail-line {
+  font-size: 12.5px;
+  color: var(--ink);
+  opacity: 0.85;
+  line-height: 1.4;
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.pt-diary-item-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.pt-diary-source-tag {
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 2px;
+}
+
+.pt-diary-widget-item .pt-widget-item-arrow {
+  margin-top: 3px;
+  color: #94a3b8;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: transform 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+}
+
+.pt-diary-widget-item:hover .pt-widget-item-arrow {
+  color: var(--green-700);
+  opacity: 1;
+  transform: translateX(3px);
+}
+
+/* ── Chi tiết nhật ký / phun thuốc (Popup Slide-up Sheet) ── */
+.pt-diary-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 0 12px;
+}
+
+.pt-detail-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: rgba(20, 55, 47, 0.035);
+  border: 1px solid rgba(20, 55, 47, 0.08);
+  border-radius: 18px;
+}
+
+.pt-detail-hero-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(20, 55, 47, 0.06);
+  flex-shrink: 0;
+}
+
+.pt-detail-hero-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.pt-detail-hero-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pt-detail-hero-title {
+  font-family: var(--font-display-stack);
+  font-size: 1.25rem;
+  font-weight: 750;
+  color: var(--ink);
+  line-height: 1.3;
+  margin: 0;
+  word-break: break-word;
+}
+
+.pt-detail-hero-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pt-detail-badge-plot {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green-800);
+  background: rgba(39, 122, 72, 0.12);
+  padding: 2.5px 8px;
+  border-radius: 999px;
+}
+
+.pt-detail-date {
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-secondary);
+}
+
+.pt-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.pt-detail-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid rgba(20, 55, 47, 0.07);
+  border-radius: 14px;
+}
+
+.pt-detail-cell-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.pt-detail-cell-value {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+/* ── Nút lấy vị trí định vị vườn (GPS) ── */
+.pt-gps-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(20, 55, 47, 0.16);
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  line-height: 1.3;
+  box-shadow: 0 1px 4px rgba(20, 55, 47, 0.04);
+}
+
+.pt-gps-btn:hover:not(:disabled) {
+  background: rgba(20, 55, 47, 0.04);
+  border-color: var(--green-600);
+  color: var(--green-700);
+  box-shadow: 0 3px 8px rgba(20, 55, 47, 0.08);
+  transform: translateY(-1px);
+}
+
+.pt-gps-btn.is-active {
+  background: rgba(39, 122, 72, 0.08);
+  border-color: rgba(39, 122, 72, 0.3);
+  color: #1e6b3b;
+}
+
+.pt-gps-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.pt-gps-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+  opacity: 0.9;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pt-gps-btn:hover:not(:disabled) .pt-gps-icon {
+  transform: scale(1.15);
+  opacity: 1;
+}
+
+.pt-detail-gps-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(56, 132, 255, 0.06);
+  border: 1px solid rgba(56, 132, 255, 0.18);
+  border-radius: 14px;
+}
+
+.pt-detail-gps-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+  margin-top: 1px;
+}
+
+.pt-detail-gps-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e40af;
+  margin-bottom: 2px;
+}
+
+.pt-detail-gps-coords {
+  font-size: 12.5px;
+  font-family: monospace;
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.pt-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pt-detail-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+
+.pt-detail-content-box {
+  padding: 14px 16px;
+  background: #fbfbfa;
+  border: 1px solid rgba(20, 55, 47, 0.06);
+  border-radius: 14px;
+}
+
+.pt-detail-text {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  margin: 0;
+  word-break: break-word;
+}
+
+.pt-detail-empty {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  font-style: italic;
+}
+
+.pt-detail-compliance-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+}
+
+.pt-detail-compliance-box.is-safe {
+  background: rgba(39, 122, 72, 0.08);
+  border-color: rgba(39, 122, 72, 0.18);
+}
+
+.pt-detail-compliance-box.is-warning {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.18);
+}
+
+.pt-detail-compliance-icon {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.pt-detail-compliance-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+
+.pt-detail-compliance-desc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.pt-detail-footer {
+  margin-top: 6px;
+}
+
+.pt-btn-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 650;
+  border-radius: 14px;
+}
+
+.pt-widget-topbar-btn.is-primary {
+  background: var(--yellow, #ffc933);
+  border-color: rgba(20, 55, 47, 0.12);
+  color: var(--ink, #14372f);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(255, 201, 51, 0.28);
+}
+
+.pt-widget-topbar-btn.is-primary:hover {
+  background: #ffd55a;
+  color: var(--ink, #14372f);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(255, 201, 51, 0.38);
 }
 
 .pt-reminders { list-style: none; display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; }
@@ -2046,6 +2530,113 @@
   }
   .pt-timeline-rel {
     font-size: 11.5px;
+  }
+}
+
+/* ── Quy chuẩn nhật ký VietGAP theo phong cách Timeline hành trình (đồng bộ với Lịch kiểm tra trang chủ) ── */
+.pt-vietgap-section {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px 12px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+.pt-vietgap-timeline {
+  padding: 2px 0;
+}
+
+.pt-vietgap-timeline .pt-timeline-item {
+  cursor: default;
+  padding: 10px 10px 18px;
+}
+
+.pt-vietgap-timeline .pt-timeline-item:hover {
+  background-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 4px 14px rgba(20, 55, 47, 0.04);
+}
+
+/* Node cảnh báo màu hổ phách (Thời gian cách ly PHI) */
+.pt-timeline-node.is-warn {
+  width: 19px;
+  height: 19px;
+  border-width: 3px;
+  border-color: #d97706;
+  box-shadow: 0 0 0 3.5px rgba(217, 119, 6, 0.16);
+}
+
+/* Node cảnh báo đỏ nghiêm cấm (Danh mục thuốc cấm) */
+.pt-timeline-node.is-danger {
+  width: 19px;
+  height: 19px;
+  border-width: 2.5px;
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3.5px rgba(220, 38, 38, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pt-timeline-node.is-danger::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #dc2626;
+}
+
+/* Đường nối đổi màu theo cấp độ mức độ từ xanh -> cam -> đỏ */
+.pt-vietgap-timeline .pt-timeline-item.is-first .pt-timeline-track::after {
+  background: linear-gradient(180deg, #16a34a 0%, #d97706 100%);
+}
+
+.pt-vietgap-timeline .pt-timeline-item:nth-child(2) .pt-timeline-track::after {
+  background: linear-gradient(180deg, #d97706 0%, #dc2626 100%);
+}
+
+.pt-vietgap-timeline .pt-vietgap-header-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 3px;
+  flex-wrap: wrap;
+}
+
+.pt-vietgap-timeline .pt-timeline-title {
+  white-space: normal;
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.pt-timeline-desc {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 5px 0 0;
+}
+
+@media (max-width: 640px) {
+  .pt-vietgap-timeline .pt-timeline-item {
+    gap: 12px;
+    padding: 8px 4px 16px;
+  }
+  .pt-vietgap-timeline .pt-timeline-title {
+    font-size: 14.5px;
+  }
+  .pt-timeline-desc {
+    font-size: 13px;
+    line-height: 1.5;
   }
 }
 
@@ -3161,7 +3752,7 @@
 }
 
 .pt-radial-backdrop.is-closing {
-  animation: pt-radial-backdrop-out 0.26s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: pt-radial-backdrop-out 0.22s cubic-bezier(0.25, 1, 0.5, 1) forwards;
   pointer-events: none;
 }
 
@@ -3197,8 +3788,11 @@
 }
 
 .pt-radial-container.is-closing {
-  animation: pt-radial-retract 0.26s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: pt-radial-retract 0.22s cubic-bezier(0.25, 1, 0.5, 1) forwards;
   pointer-events: none;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 @keyframes pt-radial-retract {

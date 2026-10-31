@@ -386,11 +386,11 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
                     }}
                   >
                     <img
-                      src="/clock-timer.png"
+                      src={item.id === "diary" ? "/note.png?v=2" : "/clock-timer.png"}
                       alt=""
                       width={20}
                       height={20}
-                      className="pt-widget-clock-icon"
+                      className={item.id === "diary" ? "pt-widget-note-icon" : "pt-widget-clock-icon"}
                       aria-hidden="true"
                     />
                     <span className="pt-widget-item-text">{item.title}</span>

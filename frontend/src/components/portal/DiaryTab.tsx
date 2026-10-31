@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { useResource } from "@/hooks/use-resource";
 import { ApiError, api } from "@/lib/api-client";
@@ -8,7 +9,7 @@ import { JOURNAL_ACTIVITIES, PESTICIDE_STATUS, todayIso } from "@/lib/portal-lab
 import { formatDate } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type { PortalJournalEntry, PortalList, PortalPlots, PortalSprayRecord } from "@/types/portal";
-import { Card, EmptyState, Field, Pill, Sheet, StateBlock, useSheetClose } from "./ui";
+import { EmptyState, Field, Pill, Sheet, StateBlock, useSheetClose } from "./ui";
 
 const keep = (pesticide: PesticideDto) => pesticide;
 
@@ -91,12 +92,26 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
       <div style={{ marginBottom: 14 }}>
         <button
           type="button"
-          className="pt-btn pt-btn-ghost"
-          style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", border: "1px solid var(--border)" }}
+          className={`pt-gps-btn ${gpsLocation ? "is-active" : ""}`}
           onClick={getGps}
           disabled={locating}
+          title={gpsLocation ? `Đã định vị: ${gpsLocation}` : "Lấy vị trí định vị của vườn hiện tại"}
         >
-          📍 {locating ? "Đang xác thực GPS vườn…" : gpsLocation ? `Đã định vị: ${gpsLocation}` : "Lấy tọa độ vườn hiện tại (GPS)"}
+          <img
+            src="/location-pin.png"
+            alt=""
+            width={18}
+            height={18}
+            className="pt-gps-icon"
+            aria-hidden="true"
+          />
+          <span>
+            {locating
+              ? "Đang định vị…"
+              : gpsLocation
+              ? `Đã định vị: ${gpsLocation.replace("GPS: ", "").split(" (")[0]}`
+              : "Định vị vườn"}
+          </span>
         </button>
       </div>
 
@@ -198,9 +213,202 @@ function SprayForm({ plotsHint, onDone, onClose }: { plotsHint: string; onDone: 
 
 type View = "journal" | "spray";
 
+interface VietgapRule {
+  id: string;
+  kicker: string;
+  title: string;
+  desc: string;
+  tone: "green" | "gold" | "red";
+  tag: string;
+  nodeType: "active" | "warn" | "danger";
+}
+
+const VIETGAP_RULES: VietgapRule[] = [
+  {
+    id: "frequency",
+    kicker: "QUY TẮC 1 · ĐỊNH KỲ",
+    title: "Ghi nhật ký 7 ngày/lần",
+    desc: "Cập nhật đều đặn các việc tưới tiêu, bón phân, tỉa cành, bao trái phục vụ kiểm tra vùng trồng.",
+    tone: "green",
+    tag: "≥ 7 ngày",
+    nodeType: "active",
+  },
+  {
+    id: "phi",
+    kicker: "QUY TẮC 2 · CÁCH LY",
+    title: "Cách ly trước thu hoạch",
+    desc: "Ngưng dùng phân thuốc trước ngày thu hoạch đúng thời hạn (PHI) để không vượt tồn dư cho phép.",
+    tone: "gold",
+    tag: "Chuẩn PHI",
+    nodeType: "warn",
+  },
+  {
+    id: "banned",
+    kicker: "QUY TẮC 3 · AN TOÀN",
+    title: "Cấm thuốc ngoài danh mục",
+    desc: "Tuyệt đối không dùng chất nhuộm màu (Vàng O), hoạt chất cấm Chlorpyrifos hoặc thuốc chưa cấp phép.",
+    tone: "red",
+    tag: "Tuyệt đối cấm",
+    nodeType: "danger",
+  },
+];
+
+function JournalDetailModal({ entry, onClose }: { entry: PortalJournalEntry; onClose: () => void }) {
+  const hasGps = entry.detail?.includes("GPS:");
+  let cleanDetail = entry.detail || "";
+  let gpsText = "";
+  if (hasGps && entry.detail) {
+    const parts = entry.detail.split(" · ");
+    const gpsPart = parts.find((p) => p.startsWith("GPS:"));
+    gpsText = gpsPart ? gpsPart.replace("GPS:", "").trim() : "";
+    cleanDetail = parts.filter((p) => !p.startsWith("GPS:")).join(" · ");
+  }
+
+  return (
+    <div className="pt-diary-detail-body">
+      <div className="pt-detail-hero">
+        <div className="pt-detail-hero-icon-box">
+          <img src="/note.png?v=2" alt="" width={28} height={28} className="pt-detail-hero-icon" />
+        </div>
+        <div className="pt-detail-hero-info">
+          <h3 className="pt-detail-hero-title">{entry.activity}</h3>
+          <div className="pt-detail-hero-sub">
+            <span className="pt-detail-badge-plot">Thửa {entry.plotCode}</span>
+            <span className="pt-detail-date">{formatDate(entry.entryOn)}</span>
+            {entry.hasPhoto && <Pill tone="green">Có ảnh hiện trường</Pill>}
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-detail-grid">
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Thửa canh tác</span>
+          <span className="pt-detail-cell-value">Thửa {entry.plotCode}</span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Ngày thực hiện</span>
+          <span className="pt-detail-cell-value">{formatDate(entry.entryOn)}</span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Người ghi chép</span>
+          <span className="pt-detail-cell-value">{entry.recorder || "Chủ hộ"}</span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Mã ghi nhận</span>
+          <span className="pt-detail-cell-value">#NK-{entry.id}</span>
+        </div>
+      </div>
+
+      {gpsText && (
+        <div className="pt-detail-gps-box">
+          <img
+            src="/location-pin.png"
+            alt=""
+            width={18}
+            height={18}
+            className="pt-detail-gps-icon"
+            aria-hidden="true"
+          />
+          <div>
+            <div className="pt-detail-gps-title">Tọa độ vườn</div>
+            <div className="pt-detail-gps-coords">{gpsText}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="pt-detail-section">
+        <h4 className="pt-detail-section-title">Nội dung công việc & vật tư sử dụng</h4>
+        <div className="pt-detail-content-box">
+          {cleanDetail ? (
+            <p className="pt-detail-text">{cleanDetail}</p>
+          ) : (
+            <p className="pt-detail-empty">Không có ghi chú thêm cho lần canh tác này.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="pt-detail-footer">
+        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={onClose}>
+          Đóng chi tiết
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onClose: () => void }) {
+  const isPass = record.mrlStatus === "pass";
+  const isBanned = record.pesticideStatus === "banned";
+
+  return (
+    <div className="pt-diary-detail-body">
+      <div className="pt-detail-hero">
+        <div className="pt-detail-hero-icon-box">
+          <img src="/note.png?v=2" alt="" width={28} height={28} className="pt-detail-hero-icon" />
+        </div>
+        <div className="pt-detail-hero-info">
+          <h3 className="pt-detail-hero-title">{record.pesticide}</h3>
+          <div className="pt-detail-hero-sub">
+            <span className="pt-detail-date">{formatDate(record.sprayedOn)}</span>
+            {isPass ? <Pill tone="green">Đạt chuẩn MRL</Pill> : <Pill tone="red">Không đạt chuẩn</Pill>}
+            {isBanned && <Pill tone="red">Thuốc cấm</Pill>}
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-detail-grid">
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Liều lượng sử dụng</span>
+          <span className="pt-detail-cell-value">{record.dose}</span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Diện tích phun</span>
+          <span className="pt-detail-cell-value">{record.areaHa} ha</span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Thời gian cách ly (PHI)</span>
+          <span className="pt-detail-cell-value">{record.isolationDays} ngày</span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Ngày thực hiện phun</span>
+          <span className="pt-detail-cell-value">{formatDate(record.sprayedOn)}</span>
+        </div>
+      </div>
+
+      <div className="pt-detail-section">
+        <h4 className="pt-detail-section-title">Nguồn gốc & Đại lý cung cấp</h4>
+        <div className="pt-detail-content-box">
+          <p className="pt-detail-text">
+            {record.source || "Mua tại đại lý liên kết thuộc HTX Krông Búk"}
+          </p>
+        </div>
+      </div>
+
+      <div className={`pt-detail-compliance-box ${isPass && !isBanned ? "is-safe" : "is-warning"}`}>
+        <div className="pt-detail-compliance-title">
+          {isPass && !isBanned ? "Đáp ứng tiêu chuẩn xuất khẩu VietGAP" : "Cảnh báo an toàn dư lượng"}
+        </div>
+        <div className="pt-detail-compliance-desc">
+          {isPass && !isBanned
+            ? `Thời gian cách ly bắt buộc tối thiểu ${record.isolationDays} ngày trước thu hoạch để đảm bảo an toàn tuyệt đối.`
+            : "Hoạt chất nằm trong danh mục hạn chế hoặc không đạt tiêu chuẩn MRL. Vui lòng tham vấn cán bộ kỹ thuật."}
+        </div>
+      </div>
+
+      <div className="pt-detail-footer">
+        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={onClose}>
+          Đóng chi tiết
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DiaryTab() {
   const [view, setView] = useState<View>("journal");
   const [form, setForm] = useState<View | null>(null);
+  const [selectedJournal, setSelectedJournal] = useState<PortalJournalEntry | null>(null);
+  const [selectedSpray, setSelectedSpray] = useState<PortalSprayRecord | null>(null);
   const journal = usePortal<PortalList<PortalJournalEntry>>("journal");
   const spray = usePortal<PortalList<PortalSprayRecord>>("spray");
   const plots = usePortal<PortalPlots>("plots");
@@ -226,83 +434,189 @@ export default function DiaryTab() {
       </div>
 
       <div className="pt-grid-2">
-        <Card
-          title={view === "journal" ? "Nhật ký canh tác" : "Nhật ký phun thuốc"}
-          action={
-            <button type="button" className="pt-btn pt-btn-primary pt-btn-sm" onClick={() => setForm(view)}>
-              + Thêm
-            </button>
-          }
+        <section
+          className="pt-reminders-widget pt-diary-widget"
+          aria-label={view === "journal" ? "Nhật ký canh tác" : "Nhật ký phun thuốc"}
         >
-          <StateBlock loading={active.loading} error={active.error} />
-
-          {view === "journal" && journal.data && journal.data.data.length === 0 && (
-            <EmptyState icon="diary">Chưa có nhật ký nào. Bấm “+ Thêm” để ghi công việc đầu tiên.</EmptyState>
-          )}
-          {view === "journal" && journal.data && journal.data.data.length > 0 && (
-            <ul className="pt-list">
-              {journal.data.data.map((entry) => (
-                <li key={entry.id} className="pt-row">
-                  <div className="pt-date">{formatDate(entry.entryOn)}</div>
-                  <div className="pt-row-main">
-                    <strong>{entry.activity}</strong>
-                    <span>
-                      Thửa {entry.plotCode} · {entry.recorder}
-                    </span>
-                    {entry.detail && <span>{entry.detail}</span>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {view === "spray" && spray.data && spray.data.data.length === 0 && (
-            <EmptyState icon="spray">Chưa có lần phun thuốc nào được ghi.</EmptyState>
-          )}
-          {view === "spray" && spray.data && spray.data.data.length > 0 && (
-            <ul className="pt-list">
-              {spray.data.data.map((record) => (
-                <li key={record.id} className="pt-row pt-row-wrap">
-                  <div className="pt-date">{formatDate(record.sprayedOn)}</div>
-                  <div className="pt-row-main">
-                    <strong>{record.pesticide}</strong>
-                    <span>
-                      {record.dose} · {record.areaHa} ha · cách ly {record.isolationDays} ngày
-                    </span>
-                    {record.source && <span>{record.source}</span>}
-                  </div>
-                  {record.mrlStatus === "pass" ? <Pill tone="green">Đạt</Pill> : <Pill tone="red">Không đạt</Pill>}
-                  {record.pesticideStatus === "banned" && <Pill tone={PESTICIDE_STATUS.banned.tone}>Thuốc cấm</Pill>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card title="Quy chuẩn nhật ký VietGAP">
-          <div className="pt-guide-box">
-            <div className="pt-guide-item">
-              <div className="pt-guide-content">
-                <strong>Tần suất ghi nhận tối thiểu 7 ngày/lần</strong>
-                <p>Mỗi hoạt động tưới tiêu, bón phân, tỉa cành, bao trái cần được cập nhật đúng hạn để phục vụ kiểm tra vùng trồng.</p>
-              </div>
+          <div className="pt-widget-topbar">
+            <div className="pt-widget-topbar-info">
+              <h2 className="pt-widget-topbar-title">
+                {view === "journal" ? "Nhật ký" : "Phun thuốc"}
+              </h2>
+              {active.data?.data && (
+                <span className="pt-widget-topbar-count">
+                  {active.data.data.length} ghi chép
+                </span>
+              )}
             </div>
-
-            <div className="pt-guide-item">
-              <div className="pt-guide-content">
-                <strong>Thời gian cách ly trước thu hoạch (PHI)</strong>
-                <p>Tuyệt đối ngưng sử dụng phân thuốc trong thời gian cách ly quy định để tránh nguy cơ tồn dư vượt ngưỡng MRL.</p>
-              </div>
-            </div>
-
-            <div className="pt-guide-item">
-              <div className="pt-guide-content">
-                <strong>Nghiêm cấm thuốc BVTV ngoài danh mục</strong>
-                <p>Không dùng chất tạo màu công nghiệp (Vàng O), hoạt chất Chlorpyrifos hoặc thuốc chưa có đăng ký kiểm định xuất khẩu.</p>
-              </div>
-            </div>
+            <button
+              type="button"
+              className="pt-widget-topbar-btn is-primary"
+              onClick={() => setForm(view)}
+              title="Thêm ghi chép mới"
+            >
+              + Thêm mới
+            </button>
           </div>
-        </Card>
+
+          <div className="pt-widget-sheet">
+            <StateBlock loading={active.loading} error={active.error} />
+
+            {view === "journal" && journal.data && journal.data.data.length === 0 && (
+              <EmptyState icon="diary">Chưa có nhật ký nào. Bấm “+ Thêm mới” để ghi công việc đầu tiên.</EmptyState>
+            )}
+            {view === "journal" && journal.data && journal.data.data.length > 0 && (
+              <ul className="pt-widget-list pt-diary-widget-list" role="list">
+                {journal.data.data.map((entry) => (
+                  <li key={entry.id}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="pt-widget-item pt-diary-widget-item"
+                      onClick={() => setSelectedJournal(entry)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedJournal(entry);
+                        }
+                      }}
+                      title="Bấm để xem chi tiết nhật ký"
+                    >
+                      <img
+                        src="/note.png?v=2"
+                        alt=""
+                        width={22}
+                        height={22}
+                        className="pt-widget-note-icon"
+                        aria-hidden="true"
+                      />
+                      <div className="pt-diary-item-content">
+                        <div className="pt-diary-item-top">
+                          <strong className="pt-diary-item-title">{entry.activity}</strong>
+                          <span className="pt-diary-item-date">{formatDate(entry.entryOn)}</span>
+                        </div>
+                        <div className="pt-diary-item-sub">
+                          <span className="pt-diary-spec-item">Thửa {entry.plotCode}</span>
+                          <span className="pt-diary-dot">·</span>
+                          <span className="pt-diary-spec-item">{entry.recorder}</span>
+                        </div>
+                        {entry.detail && (
+                          <div className="pt-diary-item-detail-line">
+                            {entry.detail}
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {view === "spray" && spray.data && spray.data.data.length === 0 && (
+              <EmptyState icon="spray">Chưa có lần phun thuốc nào được ghi.</EmptyState>
+            )}
+            {view === "spray" && spray.data && spray.data.data.length > 0 && (
+              <ul className="pt-widget-list pt-diary-widget-list" role="list">
+                {spray.data.data.map((record) => (
+                  <li key={record.id}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="pt-widget-item pt-diary-widget-item"
+                      onClick={() => setSelectedSpray(record)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedSpray(record);
+                        }
+                      }}
+                      title="Bấm để xem chi tiết phun thuốc"
+                    >
+                      <img
+                        src="/note.png?v=2"
+                        alt=""
+                        width={22}
+                        height={22}
+                        className="pt-widget-note-icon"
+                        aria-hidden="true"
+                      />
+                      <div className="pt-diary-item-content">
+                        <div className="pt-diary-item-top">
+                          <strong className="pt-diary-item-title">{record.pesticide}</strong>
+                          <span className="pt-diary-item-date">{formatDate(record.sprayedOn)}</span>
+                        </div>
+                        <div className="pt-diary-item-specs">
+                          <span className="pt-diary-spec-item">{record.dose}</span>
+                          <span className="pt-diary-dot">·</span>
+                          <span className="pt-diary-spec-item">Diện tích {record.areaHa} ha</span>
+                        </div>
+                        <div className="pt-diary-item-badges">
+                          {record.mrlStatus === "pass" ? (
+                            <Pill tone="green">Đạt MRL</Pill>
+                          ) : (
+                            <Pill tone="red">Không đạt MRL</Pill>
+                          )}
+                          {record.pesticideStatus === "banned" && (
+                            <Pill tone={PESTICIDE_STATUS.banned.tone}>Thuốc cấm</Pill>
+                          )}
+                          <span className="pt-pill pt-pill-gold">
+                            Cách ly {record.isolationDays} ngày
+                          </span>
+                          {record.source && (
+                            <span className="pt-diary-source-tag" title={record.source}>
+                              {record.source}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        <section className="pt-schedule-section pt-vietgap-section" aria-labelledby="vietgap-heading">
+          <div className="pt-schedule-header">
+            <h2 id="vietgap-heading" className="pt-schedule-title">
+              Quy chuẩn VietGAP
+            </h2>
+          </div>
+          <div className="pt-timeline pt-vietgap-timeline" role="list">
+            {VIETGAP_RULES.map((rule, idx, arr) => {
+              const isFirst = idx === 0;
+              const isLast = idx === arr.length - 1;
+              const nodeClass =
+                rule.nodeType === "active"
+                  ? "is-active"
+                  : rule.nodeType === "warn"
+                  ? "is-warn"
+                  : "is-danger";
+
+              return (
+                <div
+                  key={rule.id}
+                  className={`pt-timeline-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
+                >
+                  <div className="pt-timeline-track" aria-hidden="true">
+                    <div className={`pt-timeline-node ${nodeClass}`} />
+                  </div>
+                  <div className="pt-timeline-content">
+                    <div className="pt-vietgap-header-line">
+                      <span className="pt-timeline-kicker">{rule.kicker}</span>
+                      <Pill tone={rule.tone}>{rule.tag}</Pill>
+                    </div>
+                    <h3 className="pt-timeline-title">{rule.title}</h3>
+                    <p className="pt-timeline-desc">{rule.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       </div>
 
       {form === "journal" && (
@@ -317,6 +631,18 @@ export default function DiaryTab() {
             onDone={done}
             onClose={() => setForm(null)}
           />
+        </Sheet>
+      )}
+
+      {selectedJournal && (
+        <Sheet title="Chi tiết nhật ký canh tác" onClose={() => setSelectedJournal(null)}>
+          <JournalDetailModal entry={selectedJournal} onClose={() => setSelectedJournal(null)} />
+        </Sheet>
+      )}
+
+      {selectedSpray && (
+        <Sheet title="Chi tiết lần phun thuốc" onClose={() => setSelectedSpray(null)}>
+          <SprayDetailModal record={selectedSpray} onClose={() => setSelectedSpray(null)} />
         </Sheet>
       )}
     </div>
