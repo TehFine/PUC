@@ -8,7 +8,6 @@ import { formatDate } from "@/utils/format";
 import type { PortalList, PortalOverview, PortalScheduleItem } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
 import { StateBlock } from "./ui";
-import HomeCharts from "./HomeCharts";
 
 function getHeroPath(w: number, h: number, badgeW: number, badgeH: number, badgeRight: number): string {
   const r = 28; // Corner radius
@@ -465,9 +464,6 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
           </div>
         )}
       </section>
-
-      {/* Biểu đồ canh tác & sản lượng */}
-      <HomeCharts />
     </div>
   );
 }

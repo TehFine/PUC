@@ -2929,51 +2929,6 @@
   .pt-tab, .pt-quick-btn, .pt-reminder, .pt-btn, .pt-icon-btn { transition: none; }
 }
 
-/* ── Biểu đồ trang chủ ── */
-.pt-charts {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 24px;
-}
-.pt-chart-sub {
-  margin: -2px 0 12px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-.pt-chart.is-bleed {
-  margin: 0 -26px -18px;
-  border-radius: 0 0 26px 26px;
-  overflow: hidden;
-}
-.pt-chart.is-gauge {
-  padding: 12px 0 20px;
-  display: flex;
-  justify-content: center;
-}
-
-@media (min-width: 1040px) {
-  .pt-charts {
-    grid-template-columns: 1.25fr 1.15fr 0.9fr;
-    align-items: stretch;
-  }
-  .pt-charts > .pt-card {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-  .pt-charts > .pt-card > :last-child {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-  }
-}
-@media (min-width: 720px) and (max-width: 1039px) {
-  .pt-charts {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
 /* ── Thẻ hướng dẫn quy trình / quy chuẩn (Tối ưu vuốt cuộn mượt mà trên Mobile) ── */
 .pt-guide-box {
   display: flex;
