@@ -207,30 +207,39 @@ export default function StampsTab({ overview, plots = [] }: Props) {
       </div>
 
       {/* ─── THANH ĐIỀU HƯỚNG CHẾ ĐỘ ─── */}
-      <div className="stamp-nav-tabs">
+      <div className="stamp-nav-tabs" role="tablist" aria-label="Chế độ tem và thu hái">
         <button
           type="button"
+          role="tab"
+          aria-selected={subTab === "activate"}
           className={`stamp-tab-btn ${subTab === "activate" ? "active" : ""}`}
           onClick={() => setSubTab("activate")}
         >
           <Tag size={15} />
-          <span>Kích hoạt tem quả</span>
+          <span className="tab-label-desktop">Kích hoạt tem quả</span>
+          <span className="tab-label-mobile">Kích hoạt tem</span>
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={subTab === "harvest_decl"}
           className={`stamp-tab-btn ${subTab === "harvest_decl" ? "active" : ""}`}
           onClick={() => setSubTab("harvest_decl")}
         >
           <Scale size={15} />
-          <span>Nhật ký thu hái tại vườn ({declarations.length})</span>
+          <span className="tab-label-desktop">Nhật ký thu hái tại vườn ({declarations.length})</span>
+          <span className="tab-label-mobile">Nhật ký thu hái ({declarations.length})</span>
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={subTab === "inventory"}
           className={`stamp-tab-btn ${subTab === "inventory" ? "active" : ""}`}
           onClick={() => setSubTab("inventory")}
         >
           <Package size={15} />
-          <span>Kho tem của tôi ({stamps.length})</span>
+          <span className="tab-label-desktop">Kho tem của tôi ({stamps.length})</span>
+          <span className="tab-label-mobile">Kho tem ({stamps.length})</span>
         </button>
       </div>
 
@@ -564,6 +573,13 @@ export default function StampsTab({ overview, plots = [] }: Props) {
       )}
 
       <style jsx>{`
+        .portal-tab-content {
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow-x: hidden;
+        }
+
         .stamp-stats-card {
           background: linear-gradient(135deg, #0d3829 0%, #15573f 100%);
           color: #ffffff;
@@ -572,6 +588,8 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           margin-bottom: 16px;
           border: 1px solid #16a34a;
           box-shadow: 0 10px 25px -5px rgba(22, 101, 52, 0.35);
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .stamp-stats-badge {
@@ -588,6 +606,9 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .stamp-household-meta {
           display: flex;
           justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px 12px;
           font-size: 13px;
           margin-bottom: 14px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.15);
@@ -603,8 +624,9 @@ export default function StampsTab({ overview, plots = [] }: Props) {
 
         .stamp-stats-grid {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 12px;
+          width: 100%;
         }
 
         .stamp-stat-item {
@@ -614,19 +636,24 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           padding: 10px 12px;
           display: flex;
           flex-direction: column;
+          min-width: 0;
+          box-sizing: border-box;
         }
         .stamp-stat-item .lbl {
           font-size: 11px;
           color: #cbd5e1;
+          line-height: 1.3;
         }
         .stamp-stat-item .val {
           font-size: 18px;
           font-weight: 800;
           margin: 2px 0;
+          white-space: nowrap;
         }
         .stamp-stat-item .sub {
           font-size: 10px;
           color: #94a3b8;
+          line-height: 1.25;
         }
         .color-green {
           color: #4ade80 !important;
@@ -644,10 +671,15 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           border-radius: 12px;
           border: 1px solid #e2e8e5;
           overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .stamp-nav-tabs::-webkit-scrollbar {
+          display: none;
         }
 
         .stamp-tab-btn {
-          flex: 1;
+          flex: 1 0 auto;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -667,6 +699,11 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           background: #ecfdf5;
           color: #15803d;
           font-weight: 700;
+          box-shadow: 0 1px 2px rgba(21, 128, 61, 0.1);
+        }
+
+        .tab-label-mobile {
+          display: none;
         }
 
         .portal-card {
@@ -676,12 +713,16 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           border: 1px solid #e2e8e5;
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
           margin-bottom: 16px;
+          width: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
         }
 
         .portal-card-head {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
+          gap: 12px;
           margin-bottom: 16px;
         }
 
@@ -690,11 +731,13 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           font-weight: 800;
           color: #14372f;
           margin: 0;
+          line-height: 1.35;
         }
         .portal-card-sub {
           font-size: 12.5px;
           color: #64748b;
-          margin: 3px 0 0;
+          margin: 4px 0 0;
+          line-height: 1.45;
         }
 
         .portal-form-group {
@@ -702,30 +745,48 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           flex-direction: column;
           gap: 5px;
           margin-bottom: 14px;
+          min-width: 0;
+          width: 100%;
+          box-sizing: border-box;
         }
         .portal-label {
           font-size: 12px;
           font-weight: 700;
           color: #334155;
+          line-height: 1.3;
         }
         .portal-input {
-          padding: 9px 12px;
+          padding: 10px 12px;
           border: 1px solid #cbd5e1;
           border-radius: 8px;
           font-size: 13.5px;
           color: #0f172a;
           background: #fff;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          min-width: 0;
+          outline: none;
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .portal-input:focus {
+          border-color: #10b981;
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
         }
 
         .portal-form-grid-2 {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
           gap: 12px;
+          width: 100%;
+          box-sizing: border-box;
         }
         .portal-form-grid-3 {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 12px;
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .portal-alert {
@@ -754,6 +815,8 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           border-radius: 12px;
           padding: 16px;
           margin-bottom: 18px;
+          width: 100%;
+          box-sizing: border-box;
         }
         .form-legend {
           display: flex;
@@ -778,7 +841,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         }
         .decl-card {
           background: #fcfdfc;
-          border: 1px solid #e2e8f0;
+          border: 1px solid #e2e8e5;
           border-left: 4px solid #16a34a;
           border-radius: 0 10px 10px 0;
           padding: 12px 14px;
@@ -818,6 +881,9 @@ export default function StampsTab({ overview, plots = [] }: Props) {
 
         .stamp-table-wrap {
           overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
         }
         .portal-table {
           width: 100%;
@@ -831,10 +897,12 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           color: #475569;
           font-weight: 700;
           border-bottom: 1px solid #e2e8f0;
+          white-space: nowrap;
         }
         .portal-table td {
           padding: 10px;
           border-bottom: 1px solid #f1f5f9;
+          white-space: nowrap;
         }
 
         .spin {
@@ -846,6 +914,127 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           }
           to {
             transform: rotate(360deg);
+          }
+        }
+
+        /* ─── TỐI ƯU TOÀN DIỆN CHO DI ĐỘNG (≤ 640px) ─── */
+        @media (max-width: 640px) {
+          .tab-label-desktop {
+            display: none;
+          }
+          .tab-label-mobile {
+            display: inline;
+          }
+
+          .stamp-stats-card {
+            padding: 14px 12px;
+            border-radius: 14px;
+            margin-bottom: 12px;
+          }
+          .stamp-stats-badge {
+            font-size: 9.5px;
+            letter-spacing: 0.3px;
+          }
+          .stamp-household-meta {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+          }
+          .stamp-household-meta strong {
+            font-size: 13.5px;
+          }
+          .stamp-household-meta span {
+            font-size: 11px;
+          }
+
+          .stamp-stats-grid {
+            gap: 6px;
+          }
+          .stamp-stat-item {
+            padding: 7px 6px;
+            border-radius: 8px;
+          }
+          .stamp-stat-item .lbl {
+            font-size: 9.5px;
+            min-height: 23px;
+            line-height: 1.2;
+          }
+          .stamp-stat-item .val {
+            font-size: 15px;
+            margin: 2px 0 1px;
+          }
+          .stamp-stat-item .sub {
+            font-size: 8px;
+            line-height: 1.15;
+          }
+
+          .stamp-nav-tabs {
+            gap: 6px;
+            padding: 4px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+          }
+          .stamp-tab-btn {
+            padding: 7.5px 10px;
+            font-size: 12px;
+            gap: 5px;
+          }
+
+          .portal-card {
+            padding: 14px 12px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+          }
+          .portal-card-head {
+            margin-bottom: 12px;
+            gap: 8px;
+          }
+          .portal-card-title {
+            font-size: 15px;
+          }
+          .portal-card-sub {
+            font-size: 11.5px;
+            margin-top: 3px;
+          }
+
+          /* Chuyển các lưới form 2 cột và 3 cột sang 1 cột toàn màn hình trên di động */
+          .portal-form-grid-2,
+          .portal-form-grid-3 {
+            grid-template-columns: 1fr;
+            gap: 0;
+          }
+
+          .portal-form-group {
+            margin-bottom: 11px;
+          }
+          .portal-label {
+            font-size: 11.5px;
+          }
+          .portal-input {
+            padding: 9px 11px;
+            font-size: 13.5px;
+            border-radius: 7px;
+          }
+
+          .harvest-decl-form {
+            padding: 12px 10px;
+            border-radius: 10px;
+          }
+          .form-btn-actions {
+            flex-direction: column-reverse;
+            gap: 8px;
+          }
+          .form-btn-actions .btn {
+            width: 100%;
+            justify-content: center;
+          }
+
+          .decl-weights {
+            flex-direction: column;
+            gap: 2px;
           }
         }
       `}</style>
