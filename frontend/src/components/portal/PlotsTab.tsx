@@ -51,13 +51,10 @@ export default function PlotsTab() {
           )}
           {plots.data?.available && plots.data.data.length > 0 && (
             <div className="pt-plots-tree">
-              {/* Header cây thửa đất với điểm mốc gốc (Origin Node) và đường line dọc đi xuống */}
+              {/* Header cây thửa đất với dấu tròn đen và đường line dọc đi xuống */}
               <div className="pt-plots-tree-head">
                 <div className="pt-plots-tree-rail" aria-hidden="true">
-                  <div className="pt-plots-origin-node">
-                    <span className="pt-plots-origin-halo" />
-                    <span className="pt-plots-origin-ring" />
-                  </div>
+                  <div className="pt-plots-head-dot" />
                   <div className="pt-plots-stem-line" />
                 </div>
 
@@ -71,7 +68,7 @@ export default function PlotsTab() {
                 </div>
               </div>
 
-              {/* Danh sách các thẻ con nối qua waypoint node */}
+              {/* Danh sách các thẻ con nối qua nhánh line uốn cong */}
               <div className="pt-plots-tree-list" role="list">
                 {plots.data.data.map((plot, index, arr) => {
                   const isLast = index === arr.length - 1;
@@ -81,14 +78,8 @@ export default function PlotsTab() {
                       className={`pt-plots-tree-item ${isLast ? "is-last" : ""}`}
                     >
                       <div className="pt-plots-tree-item-rail" aria-hidden="true">
-                        <div className="pt-plots-item-line-top" />
-                        <div className="pt-plots-waypoint-node">
-                          <span className="pt-plots-waypoint-ring">
-                            <span className="pt-plots-waypoint-dot" />
-                          </span>
-                        </div>
-                        <div className="pt-plots-branch-line" />
-                        {!isLast && <div className="pt-plots-item-line-bottom" />}
+                        {!isLast && <div className="pt-plots-trunk-line" />}
+                        <div className="pt-plots-branch-curve" />
                       </div>
 
                       <div

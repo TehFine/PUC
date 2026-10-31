@@ -4153,50 +4153,28 @@
   flex-shrink: 0;
 }
 
-/* Điểm mốc gốc (Origin Node): Vòng tròn xanh lá có hào quang tỏa sáng */
-.pt-plots-origin-node {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-}
-
-.pt-plots-origin-halo {
+/* Dấu tròn đen ngay trên đầu đường line, ngang cụm "Thửa đất của tôi" */
+.pt-plots-head-dot {
   position: absolute;
-  inset: 0;
+  left: 14px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: rgba(16, 185, 129, 0.18);
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
-  animation: pt-pulse-halo 3s ease-in-out infinite alternate;
-}
-
-@keyframes pt-pulse-halo {
-  0% { transform: scale(0.92); opacity: 0.7; }
-  100% { transform: scale(1.18); opacity: 1; }
-}
-
-.pt-plots-origin-ring {
-  position: relative;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 2.5px solid #10b981;
-  background: #ffffff;
-  box-shadow: 0 1.5px 4px rgba(16, 185, 129, 0.25);
+  background: #0f172a;
   z-index: 2;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
-/* Đường stem line dọc xuất phát từ đáy điểm mốc gốc chạy xuống */
+/* Đường stem line dọc xuất phát từ giữa tiêu đề chạy xuống nối vào cây con */
 .pt-plots-stem-line {
   position: absolute;
   left: 13px;
   width: 2px;
-  top: calc(50% + 7.5px);
+  top: 14px;
   bottom: -14px;
-  background: linear-gradient(180deg, #10b981 0%, #34d399 45%, #94a3b8 100%);
+  background: #94a3b8;
   z-index: 1;
 }
 
@@ -4222,75 +4200,42 @@
   position: relative;
   width: 28px;
   align-self: stretch;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
 }
 
-/* Đoạn line dọc từ trên chạy xuống điểm mốc */
-.pt-plots-item-line-top {
+/* Thân trunk dọc chạy xuyên qua các thẻ không phải thẻ cuối */
+.pt-plots-trunk-line {
   position: absolute;
   left: 13px;
   width: 2px;
   top: -14px;
-  height: calc(50% + 14px - 7.5px);
-  background: #94a3b8;
-  z-index: 1;
-  transition: background 0.25s ease;
-}
-
-/* Điểm mốc dừng (Waypoint Node): Vòng ngoài xám slate + chấm tròn ở giữa */
-.pt-plots-waypoint-node {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.pt-plots-waypoint-ring {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 2px solid #94a3b8;
-  background: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.pt-plots-waypoint-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #64748b;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Nhánh line ngang nối từ điểm mốc sang thẻ thửa đất */
-.pt-plots-branch-line {
-  position: absolute;
-  left: calc(50% + 7.5px);
-  right: -10px;
-  height: 2px;
-  top: calc(50% - 1px);
-  background: #cbd5e1;
-  z-index: 1;
-  transition: background 0.25s ease;
-}
-
-/* Đoạn line dọc chạy tiếp xuống thẻ bên dưới */
-.pt-plots-item-line-bottom {
-  position: absolute;
-  left: 13px;
-  width: 2px;
-  top: calc(50% + 7.5px);
   bottom: -14px;
   background: #94a3b8;
   z-index: 1;
+  transition: background 0.25s ease;
+}
+
+/* Nhánh uốn cong mềm mại rẽ phải vào thẻ (Curved branch) */
+.pt-plots-branch-curve {
+  position: absolute;
+  left: 13px;
+  top: calc(50% - 16px);
+  width: 25px;
+  height: 16px;
+  border-left: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  border-bottom-left-radius: 16px;
+  z-index: 2;
+  pointer-events: none;
+  box-sizing: border-box;
+  transition: border-color 0.25s ease;
+}
+
+/* Với thẻ cuối cùng: nhánh uốn nhận line từ trên xuống rồi rẽ ngang kết thúc, không chạy tiếp xuống đáy */
+.pt-plots-tree-item.is-last .pt-plots-branch-curve {
+  top: -14px;
+  height: calc(50% + 14px);
+  border-bottom-left-radius: 16px;
 }
 
 /* Thẻ thửa đất chiếm toàn bộ phần chiều rộng còn lại */
@@ -4299,28 +4244,15 @@
   min-width: 0;
 }
 
-/* Hiệu ứng khi hover/focus vào từng thẻ con: Đèn mốc và line bừng sáng */
-.pt-plots-tree-item:hover .pt-plots-waypoint-ring,
-.pt-plots-tree-item:focus-within .pt-plots-waypoint-ring {
+/* Hiệu ứng khi hover/focus vào từng thẻ con: Đổi màu nhánh kết nối sang xanh ngọc Emerald */
+.pt-plots-tree-item:hover .pt-plots-branch-curve,
+.pt-plots-tree-item:focus-within .pt-plots-branch-curve {
   border-color: #10b981;
-  box-shadow: 0 0 0 4.5px rgba(16, 185, 129, 0.2), 0 2px 6px rgba(16, 185, 129, 0.25);
-  transform: scale(1.08);
 }
 
-.pt-plots-tree-item:hover .pt-plots-waypoint-dot,
-.pt-plots-tree-item:focus-within .pt-plots-waypoint-dot {
-  background: #059669;
-  transform: scale(1.2);
-}
-
-.pt-plots-tree-item:hover .pt-plots-branch-line,
-.pt-plots-tree-item:focus-within .pt-plots-branch-line {
+.pt-plots-tree-item:hover .pt-plots-trunk-line,
+.pt-plots-tree-item:focus-within .pt-plots-trunk-line {
   background: #10b981;
-}
-
-.pt-plots-tree-item:hover .pt-plots-item-line-top,
-.pt-plots-tree-item:focus-within .pt-plots-item-line-top {
-  background: linear-gradient(180deg, #94a3b8 0%, #10b981 100%);
 }
 
 .pt-plot-card-list {
@@ -4984,19 +4916,15 @@
     height: 24px;
   }
 
-  .pt-plots-origin-halo {
-    inset: 1px;
-  }
-
-  .pt-plots-origin-ring {
-    width: 14px;
-    height: 14px;
-    border-width: 2.2px;
+  .pt-plots-head-dot {
+    left: 12px;
+    width: 7.5px;
+    height: 7.5px;
   }
 
   .pt-plots-stem-line {
     left: 11px;
-    top: calc(50% + 7px);
+    top: 12px;
     bottom: -11px;
   }
 
@@ -5012,31 +4940,24 @@
     width: 24px;
   }
 
-  .pt-plots-item-line-top {
+  .pt-plots-trunk-line {
     left: 11px;
     top: -11px;
-    height: calc(50% + 11px - 7px);
-  }
-
-  .pt-plots-waypoint-ring {
-    width: 14px;
-    height: 14px;
-  }
-
-  .pt-plots-waypoint-dot {
-    width: 4.5px;
-    height: 4.5px;
-  }
-
-  .pt-plots-branch-line {
-    left: calc(50% + 7px);
-    right: -8px;
-  }
-
-  .pt-plots-item-line-bottom {
-    left: 11px;
-    top: calc(50% + 7px);
     bottom: -11px;
+  }
+
+  .pt-plots-branch-curve {
+    left: 11px;
+    top: calc(50% - 14px);
+    width: 21px;
+    height: 14px;
+    border-bottom-left-radius: 14px;
+  }
+
+  .pt-plots-tree-item.is-last .pt-plots-branch-curve {
+    top: -11px;
+    height: calc(50% + 11px);
+    border-bottom-left-radius: 14px;
   }
 
   .pt-plot-code {
@@ -5162,13 +5083,16 @@
     height: 20px;
   }
 
-  .pt-plots-origin-ring {
-    width: 13px;
-    height: 13px;
+  .pt-plots-head-dot {
+    left: 10px;
+    width: 6.5px;
+    height: 6.5px;
   }
 
   .pt-plots-stem-line {
     left: 9px;
+    top: 10px;
+    bottom: -9px;
   }
 
   .pt-plots-tree-item {
@@ -5179,22 +5103,24 @@
     width: 20px;
   }
 
-  .pt-plots-item-line-top {
+  .pt-plots-trunk-line {
     left: 9px;
+    top: -9px;
+    bottom: -9px;
   }
 
-  .pt-plots-waypoint-ring {
-    width: 13px;
-    height: 13px;
-  }
-
-  .pt-plots-branch-line {
-    left: calc(50% + 6.5px);
-    right: -6px;
-  }
-
-  .pt-plots-item-line-bottom {
+  .pt-plots-branch-curve {
     left: 9px;
+    top: calc(50% - 12px);
+    width: 17px;
+    height: 12px;
+    border-bottom-left-radius: 12px;
+  }
+
+  .pt-plots-tree-item.is-last .pt-plots-branch-curve {
+    top: -9px;
+    height: calc(50% + 9px);
+    border-bottom-left-radius: 12px;
   }
 
   .pt-plot-reminder-card {
