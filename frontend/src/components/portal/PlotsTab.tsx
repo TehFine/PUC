@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowUpRight, QrCode, Tag } from "lucide-react";
+import { ArrowUpRight, QrCode } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { formatKg, HARVEST_STATUS, PLOT_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalHarvest, PortalList, PortalOverview, PortalPlot, PortalPlots } from "@/types/portal";
 import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
 import GardenSignboardModal from "./GardenSignboardModal";
+import PlotMapModal from "./PlotMapModal";
 
 const SOURCE_LABEL = { declared: "Tự khai báo", measured: "Đo thực địa", cadastral: "Địa chính", demo: "Mẫu" } as const;
 
@@ -17,53 +18,132 @@ export default function PlotsTab() {
   const overview = usePortal<PortalOverview>("overview");
   const [selectedLotForQr, setSelectedLotForQr] = useState<PortalHarvest | null>(null);
   const [signboardPlot, setSignboardPlot] = useState<PortalPlot | null>(null);
+  const [mapViewPlot, setMapViewPlot] = useState<PortalPlot | null>(null);
 
   return (
-    <div className="pt-grid-2">
-      <Card title="Thửa đất của tôi">
-        <StateBlock loading={plots.loading} error={plots.error} />
-        {plots.data && !plots.data.available && (
-          <EmptyState icon="map">Dữ liệu bản đồ thửa đất chưa được bật trên hệ thống. Vui lòng liên hệ cán bộ HTX.</EmptyState>
-        )}
-        {plots.data?.available && plots.data.data.length === 0 && (
-          <EmptyState icon="plot">Chưa có thửa đất nào được ghi nhận cho hộ của bạn. Bạn có thể gửi hồ sơ đăng ký thửa đất ở mục Hồ sơ.</EmptyState>
-        )}
-        {plots.data?.available && plots.data.data.length > 0 && (
-          <ul className="pt-list">
-            {plots.data.data.map((plot) => {
-              const status = PLOT_STATUS[plot.status];
-              return (
-                <li key={plot.code} className="pt-row pt-row-wrap" style={{ alignItems: "center" }}>
-                  <div className="pt-row-main">
-                    <strong>{plot.code}</strong>
-                    <span>
-                      {plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
-                      {plot.variety ? ` · ${plot.variety}` : ""}
-                      {plot.plantedYear ? ` · trồng ${plot.plantedYear}` : ""}
-                    </span>
-                    <span>
-                      {plot.zoneCode ? `Vùng ${plot.zoneCode} · ` : ""}
-                      {SOURCE_LABEL[plot.source]}
-                    </span>
+    <div className="pt-stack">
+      <div className="pt-grid-2">
+        <section className="pt-plots-section" aria-labelledby="plots-heading">
+          <StateBlock loading={plots.loading} error={plots.error} />
+          {plots.data && !plots.data.available && (
+            <>
+              <div className="pt-plots-header">
+                <div className="pt-plots-header-info">
+                  <h2 id="plots-heading" className="pt-plots-title">
+                    Thửa đất của tôi
+                  </h2>
+                </div>
+              </div>
+              <EmptyState icon="map">Dữ liệu bản đồ thửa đất chưa được bật trên hệ thống. Vui lòng liên hệ cán bộ HTX.</EmptyState>
+            </>
+          )}
+          {plots.data?.available && plots.data.data.length === 0 && (
+            <>
+              <div className="pt-plots-header">
+                <div className="pt-plots-header-info">
+                  <h2 id="plots-heading" className="pt-plots-title">
+                    Thửa đất của tôi
+                  </h2>
+                </div>
+              </div>
+              <EmptyState icon="plot">Chưa có thửa đất nào được ghi nhận cho hộ của bạn. Bạn có thể gửi hồ sơ đăng ký thửa đất ở mục Hồ sơ.</EmptyState>
+            </>
+          )}
+          {plots.data?.available && plots.data.data.length > 0 && (
+            <div className="pt-plots-tree">
+              {/* Header cây thửa đất với điểm mốc gốc (Origin Node) và đường line dọc đi xuống */}
+              <div className="pt-plots-tree-head">
+                <div className="pt-plots-tree-rail" aria-hidden="true">
+                  <div className="pt-plots-origin-node">
+                    <span className="pt-plots-origin-halo" />
+                    <span className="pt-plots-origin-ring" />
                   </div>
-                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      className="pt-qr-lot-btn"
-                      onClick={() => setSignboardPlot(plot)}
-                      title={`In biển cắm đầu lô vườn QR cho mã ${plot.code}`}
+                  <div className="pt-plots-stem-line" />
+                </div>
+
+                <div className="pt-plots-header-info">
+                  <h2 id="plots-heading" className="pt-plots-title">
+                    Thửa đất của tôi
+                  </h2>
+                  <span className="pt-plots-count">
+                    {plots.data.data.length} thửa
+                  </span>
+                </div>
+              </div>
+
+              {/* Danh sách các thẻ con nối qua waypoint node */}
+              <div className="pt-plots-tree-list" role="list">
+                {plots.data.data.map((plot, index, arr) => {
+                  const isLast = index === arr.length - 1;
+                  return (
+                    <div
+                      key={plot.code}
+                      className={`pt-plots-tree-item ${isLast ? "is-last" : ""}`}
                     >
-                      <QrCode size={13} strokeWidth={2.2} aria-hidden="true" />
-                      <span>Biển cắm vườn (QR)</span>
-                    </button>
-                    <Pill tone={status.tone}>{status.label}</Pill>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
+                      <div className="pt-plots-tree-item-rail" aria-hidden="true">
+                        <div className="pt-plots-item-line-top" />
+                        <div className="pt-plots-waypoint-node">
+                          <span className="pt-plots-waypoint-ring">
+                            <span className="pt-plots-waypoint-dot" />
+                          </span>
+                        </div>
+                        <div className="pt-plots-branch-line" />
+                        {!isLast && <div className="pt-plots-item-line-bottom" />}
+                      </div>
+
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="pt-plot-card pt-plot-reminder-card"
+                        onClick={() => setMapViewPlot(plot)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setMapViewPlot(plot);
+                          }
+                        }}
+                        title="Bấm vào thẻ để mở bản đồ toàn cảnh thửa đất"
+                        aria-label={`Thửa đất ${plot.code}, bấm để mở bản đồ toàn cảnh`}
+                      >
+                        {/* Icon map từ public/placeholder.png */}
+                        <img
+                          src="/placeholder.png"
+                          alt=""
+                          width={26}
+                          height={26}
+                          className="pt-plot-trifold-icon"
+                          aria-hidden="true"
+                        />
+
+                        {/* Nội dung thông tin thửa đất theo phong cách thẻ nhắc nhở */}
+                        <div className="pt-plot-card-body">
+                          <strong className="pt-plot-code">#{plot.code}</strong>
+                        </div>
+
+                        {/* Icon QR code ở cuối thẻ để người dùng bấm vào xem biển QR */}
+                        <div className="pt-plot-card-end">
+                          <button
+                            type="button"
+                            className="pt-plot-qr-action-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSignboardPlot(plot);
+                            }}
+                            title={`Xem và in biển cắm đầu lô vườn QR cho mã ${plot.code}`}
+                            aria-label={`Mã QR biển cắm vườn ${plot.code}`}
+                          >
+                            <QrCode size={18} strokeWidth={2.2} aria-hidden="true" />
+                            <span className="pt-plot-qr-action-label">Biển QR</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
 
       <Card title="Sản phẩm & Lô thu hoạch đã giao">
         <StateBlock loading={harvest.loading} error={harvest.error} />
@@ -220,6 +300,19 @@ export default function PlotsTab() {
           onClose={() => setSignboardPlot(null)}
         />
       )}
+
+      {mapViewPlot && (
+        <PlotMapModal
+          plot={mapViewPlot}
+          householdName={overview.data?.household.name || "Hộ nông dân Krông Búk"}
+          onClose={() => setMapViewPlot(null)}
+          onOpenSignboard={(p) => {
+            setMapViewPlot(null);
+            setSignboardPlot(p);
+          }}
+        />
+      )}
+      </div>
     </div>
   );
 }

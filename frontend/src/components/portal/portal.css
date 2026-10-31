@@ -1821,9 +1821,9 @@
 }
 
 .pt-diary-widget-item .pt-widget-note-icon {
-  width: 22px;
-  height: 22px;
-  margin-top: 2px;
+  width: 20px;
+  height: 20px;
+  margin-top: 0;
 }
 
 .pt-widget-item:hover .pt-widget-note-icon,
@@ -1833,20 +1833,21 @@
 }
 
 .pt-diary-widget-list {
-  gap: 10px;
+  gap: 6px;
 }
 
 .pt-diary-widget-item {
   display: flex;
-  align-items: flex-start;
-  gap: 13px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(20, 55, 47, 0.06);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(20, 55, 47, 0.05);
   background: #ffffff;
   width: 100%;
   box-sizing: border-box;
   text-align: left;
+  cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -1857,95 +1858,33 @@
   box-shadow: 0 3px 12px rgba(20, 55, 47, 0.04);
 }
 
-.pt-diary-item-content {
+.pt-diary-widget-item .pt-widget-item-text {
+  font-size: 14.5px;
+  font-weight: 550;
+  color: var(--ink);
+  line-height: 1.4;
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  transition: color 0.15s ease;
 }
 
-.pt-diary-item-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+.pt-diary-widget-item:hover .pt-widget-item-text {
+  color: var(--green-700);
 }
 
-.pt-diary-item-title {
-  font-size: 14.5px;
-  font-weight: 650;
-  color: var(--ink);
-  line-height: 1.35;
-  letter-spacing: -0.01em;
-}
-
-.pt-diary-item-date {
-  font-size: 12px;
-  font-weight: 550;
+.pt-diary-widget-item .pt-diary-item-date {
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
-}
-
-.pt-diary-item-sub,
-.pt-diary-item-specs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.pt-diary-spec-item {
-  white-space: nowrap;
-}
-
-.pt-diary-dot,
-.pt-diary-spec-sep {
-  color: rgba(20, 55, 47, 0.28);
-  font-weight: 700;
-  font-size: 11px;
-}
-
-.pt-diary-item-detail-line {
-  font-size: 12.5px;
-  color: var(--ink);
-  opacity: 0.85;
-  line-height: 1.4;
-  margin-top: 2px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: break-word;
-}
-
-.pt-diary-item-badges {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.pt-diary-source-tag {
-  font-size: 12px;
-  color: var(--text-secondary);
-  max-width: 180px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding-left: 2px;
 }
 
 .pt-diary-widget-item .pt-widget-item-arrow {
-  margin-top: 3px;
+  margin-top: 0;
   color: #94a3b8;
   flex-shrink: 0;
-  opacity: 0.55;
+  opacity: 0.6;
   transition: transform 0.18s ease, color 0.18s ease, opacity 0.18s ease;
 }
 
@@ -4133,4 +4072,1150 @@
   padding-top: 10px;
   border-top: 1px solid rgba(20, 55, 47, 0.06);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THẺ THỬA ĐẤT HIỆN ĐẠI (KIỂU GIAO HÀNG / ĐỊNH VỊ TRACKING)
+   ═══════════════════════════════════════════════════════════════════════ */
+.pt-plots-section {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.pt-plots-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 0 14px 0;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.pt-plots-header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pt-plots-title {
+  font-family: var(--font-display-stack);
+  font-size: 1.35rem;
+  font-weight: 750;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.pt-plots-count {
+  font-size: 12px;
+  font-weight: 650;
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  padding: 2.5px 8.5px;
+  border-radius: 999px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CẤU TRÚC ĐƯỜNG LINE DỌC KẾT NỐI TIÊU ĐỀ XUỐNG CÁC THỬA ĐẤT (TIMELINE TREE)
+   ═══════════════════════════════════════════════════════════════════════ */
+.pt-plots-tree {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
+}
+
+/* Header mốc gốc: Thửa đất của tôi */
+.pt-plots-tree-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  padding: 2px 0 14px 0;
+  box-sizing: border-box;
+}
+
+/* Trục rail dọc cho Header */
+.pt-plots-tree-rail {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Điểm mốc gốc (Origin Node): Vòng tròn xanh lá có hào quang tỏa sáng */
+.pt-plots-origin-node {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.pt-plots-origin-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.18);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+  animation: pt-pulse-halo 3s ease-in-out infinite alternate;
+}
+
+@keyframes pt-pulse-halo {
+  0% { transform: scale(0.92); opacity: 0.7; }
+  100% { transform: scale(1.18); opacity: 1; }
+}
+
+.pt-plots-origin-ring {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2.5px solid #10b981;
+  background: #ffffff;
+  box-shadow: 0 1.5px 4px rgba(16, 185, 129, 0.25);
+  z-index: 2;
+}
+
+/* Đường stem line dọc xuất phát từ đáy điểm mốc gốc chạy xuống */
+.pt-plots-stem-line {
+  position: absolute;
+  left: 13px;
+  width: 2px;
+  top: calc(50% + 7.5px);
+  bottom: -14px;
+  background: linear-gradient(180deg, #10b981 0%, #34d399 45%, #94a3b8 100%);
+  z-index: 1;
+}
+
+/* Danh sách các thẻ con */
+.pt-plots-tree-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+}
+
+/* Từng dòng thửa đất trong cây liên kết */
+.pt-plots-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  width: 100%;
+}
+
+/* Cột rail dọc của thẻ con */
+.pt-plots-tree-item-rail {
+  position: relative;
+  width: 28px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Đoạn line dọc từ trên chạy xuống điểm mốc */
+.pt-plots-item-line-top {
+  position: absolute;
+  left: 13px;
+  width: 2px;
+  top: -14px;
+  height: calc(50% + 14px - 7.5px);
+  background: #94a3b8;
+  z-index: 1;
+  transition: background 0.25s ease;
+}
+
+/* Điểm mốc dừng (Waypoint Node): Vòng ngoài xám slate + chấm tròn ở giữa */
+.pt-plots-waypoint-node {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pt-plots-waypoint-ring {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid #94a3b8;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pt-plots-waypoint-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #64748b;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Nhánh line ngang nối từ điểm mốc sang thẻ thửa đất */
+.pt-plots-branch-line {
+  position: absolute;
+  left: calc(50% + 7.5px);
+  right: -10px;
+  height: 2px;
+  top: calc(50% - 1px);
+  background: #cbd5e1;
+  z-index: 1;
+  transition: background 0.25s ease;
+}
+
+/* Đoạn line dọc chạy tiếp xuống thẻ bên dưới */
+.pt-plots-item-line-bottom {
+  position: absolute;
+  left: 13px;
+  width: 2px;
+  top: calc(50% + 7.5px);
+  bottom: -14px;
+  background: #94a3b8;
+  z-index: 1;
+}
+
+/* Thẻ thửa đất chiếm toàn bộ phần chiều rộng còn lại */
+.pt-plots-tree-item .pt-plot-reminder-card {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Hiệu ứng khi hover/focus vào từng thẻ con: Đèn mốc và line bừng sáng */
+.pt-plots-tree-item:hover .pt-plots-waypoint-ring,
+.pt-plots-tree-item:focus-within .pt-plots-waypoint-ring {
+  border-color: #10b981;
+  box-shadow: 0 0 0 4.5px rgba(16, 185, 129, 0.2), 0 2px 6px rgba(16, 185, 129, 0.25);
+  transform: scale(1.08);
+}
+
+.pt-plots-tree-item:hover .pt-plots-waypoint-dot,
+.pt-plots-tree-item:focus-within .pt-plots-waypoint-dot {
+  background: #059669;
+  transform: scale(1.2);
+}
+
+.pt-plots-tree-item:hover .pt-plots-branch-line,
+.pt-plots-tree-item:focus-within .pt-plots-branch-line {
+  background: #10b981;
+}
+
+.pt-plots-tree-item:hover .pt-plots-item-line-top,
+.pt-plots-tree-item:focus-within .pt-plots-item-line-top {
+  background: linear-gradient(180deg, #94a3b8 0%, #10b981 100%);
+}
+
+.pt-plot-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Thẻ thửa đất thiết kế theo phong cách thẻ nhắc nhở ở trang chủ */
+.pt-plot-reminder-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(20, 55, 47, 0.08);
+  border-radius: 18px;
+  padding: 13px 16px;
+  box-shadow: 0 2px 10px rgba(20, 55, 47, 0.035);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  width: 100%;
+  text-align: left;
+}
+
+.pt-plot-reminder-card:hover {
+  background: #fafdfc;
+  border-color: rgba(5, 150, 105, 0.35);
+  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.09);
+  transform: translateY(-2px);
+}
+
+.pt-plot-reminder-card:focus-visible {
+  outline: 2px solid var(--green-600);
+  outline-offset: 2px;
+}
+
+/* Icon trifold map từ public/trifold.png */
+.pt-plot-trifold-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+  opacity: 0.88;
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
+}
+
+.pt-plot-reminder-card:hover .pt-plot-trifold-icon {
+  transform: scale(1.15) rotate(5deg);
+  opacity: 1;
+}
+
+/* Thân thông tin thửa đất */
+.pt-plot-card-body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8.5px;
+  flex-wrap: wrap;
+}
+
+.pt-plot-code {
+  font-size: 15.5px;
+  font-weight: 750;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* Cuối thẻ: Nút QR Code */
+.pt-plot-card-end {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.pt-plot-qr-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #f0fdf4;
+  border: 1px solid rgba(22, 101, 52, 0.22);
+  color: #15803d;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.pt-plot-qr-action-btn:hover {
+  background: #15803d;
+  color: #ffffff;
+  border-color: #15803d;
+  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.26);
+  transform: scale(1.05);
+}
+
+.pt-plot-qr-action-btn:active {
+  transform: scale(0.97);
+}
+
+.pt-plot-minimap-loading {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 200%;
+  animation: pt-shimmer 1.5s infinite;
+}
+
+/* Overlay khi hover */
+.pt-plot-minimap-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 600;
+  background: rgba(6, 78, 59, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.pt-plot-minimap:hover .pt-plot-minimap-overlay {
+  opacity: 1;
+}
+
+.pt-plot-minimap-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #065f46;
+  font-size: 11.5px;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transform: translateY(4px);
+  transition: transform 0.18s ease;
+}
+
+.pt-plot-minimap:hover .pt-plot-minimap-expand-btn {
+  transform: translateY(0);
+}
+
+/* Pin marker trong mini map */
+.pt-minimap-marker-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pt-minimap-pin-pulse {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.35);
+  animation: pt-radar-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.pt-minimap-pin-arrow {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
+  transform: rotate(35deg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MODAL BẢN ĐỒ TOÀN CẢNH TRÀN VIỀN (FULLSCREEN EDGE-TO-EDGE)
+   ═══════════════════════════════════════════════════════════════════════ */
+.pt-mapmodal-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  background: #0f172a;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  animation: pt-modal-fade 0.22s ease-out;
+}
+
+.pt-mapmodal-canvas-fullscreen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.pt-mapmodal-canvas-fullscreen .leaflet-container {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: #1e293b;
+}
+
+.pt-mapmodal-loading-curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  animation: pt-modal-fade 0.3s reverse forwards;
+}
+
+/* Thanh điều hướng nổi trên đỉnh (Top Bar) */
+.pt-mapmodal-topbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.pt-mapmodal-top-tag {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.pt-mapmodal-top-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.pt-mapmodal-top-code {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #065f46;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.pt-mapmodal-top-sub {
+  font-size: 12.5px;
+  color: #475569;
+  font-weight: 550;
+  border-left: 1px solid #cbd5e1;
+  padding-left: 8px;
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-mapmodal-top-actions {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pt-mapmodal-layer-pill {
+  display: flex;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 3px;
+  border-radius: 999px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  gap: 2px;
+}
+
+.pt-mapmodal-pill-btn {
+  border: none;
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.pt-mapmodal-pill-btn.is-active {
+  background: #065f46;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(6, 95, 70, 0.35);
+}
+
+.pt-mapmodal-round-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #0f172a;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+}
+
+.pt-mapmodal-round-btn:hover {
+  background: #ffffff;
+  transform: scale(1.06);
+}
+
+.pt-mapmodal-close-round-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.18s ease;
+  flex-shrink: 0;
+}
+
+.pt-mapmodal-close-round-btn:hover {
+  background: #000000;
+  transform: scale(1.08);
+}
+
+/* Popup nổi hiển thị thông tin thửa đất của hộ đó */
+.pt-mapmodal-floating-popup {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  z-index: 1000;
+  width: 380px;
+  max-width: calc(100vw - 48px);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pt-mapmodal-popup-header {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  user-select: none;
+  background: #fcfdfc;
+  transition: background 0.15s ease;
+}
+
+.pt-mapmodal-popup-header:hover {
+  background: #f4fbf7;
+}
+
+.pt-mapmodal-popup-header-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pt-mapmodal-popup-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pt-mapmodal-popup-code {
+  font-size: 16px;
+  font-weight: 800;
+  color: #065f46;
+}
+
+.pt-mapmodal-popup-variety {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 7.5px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.pt-mapmodal-popup-owner {
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-mapmodal-popup-dot {
+  color: #cbd5e1;
+}
+
+.pt-mapmodal-popup-toggle-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(15, 23, 42, 0.05);
+  color: #475569;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.pt-mapmodal-popup-toggle-btn:hover {
+  background: rgba(15, 23, 42, 0.1);
+}
+
+.pt-mapmodal-popup-body {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pt-mapmodal-popup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+.pt-mapmodal-popup-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5px;
+}
+
+.pt-mapmodal-stat-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
+.pt-mapmodal-stat-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.pt-mapmodal-stat-sub {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.pt-mapmodal-coords-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: #059669;
+}
+
+.pt-mapmodal-popup-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.pt-mapmodal-popup-action-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.pt-mapmodal-action-gmaps {
+  background: #f0fdf4;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #065f46;
+}
+
+.pt-mapmodal-action-gmaps:hover {
+  background: #dcfce7;
+  transform: translateY(-1px);
+}
+
+.pt-mapmodal-action-qr {
+  background: #065f46;
+  border: 1px solid #065f46;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(6, 95, 70, 0.25);
+}
+
+.pt-mapmodal-action-qr:hover {
+  background: #047857;
+  transform: translateY(-1px);
+}
+
+/* Radar ping marker trong modal */
+.pt-mapmodal-pin-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pt-mapmodal-radar {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.4);
+  animation: pt-radar-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.pt-mapmodal-pin-core {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffffff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  border: 2px solid #059669;
+}
+
+/* Keyframe animations */
+@keyframes pt-radar-ping {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  80%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+@keyframes pt-pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.75;
+  }
+}
+
+@keyframes pt-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes pt-modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pt-modal-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Responsive cho card thửa đất trên màn hình di động: LUÔN GIỮ BỐ CỤC NGANG */
+@media (max-width: 640px) {
+  .pt-plots-header {
+    padding: 0 0 10px 0;
+  }
+
+  .pt-plots-title {
+    font-size: 1.25rem;
+  }
+
+  .pt-plot-reminder-card {
+    padding: 11px 13px;
+    gap: 11px;
+    border-radius: 16px;
+  }
+
+  .pt-plot-trifold-icon {
+    width: 23px;
+    height: 23px;
+  }
+
+  .pt-plots-tree-head {
+    gap: 8px;
+    padding-bottom: 11px;
+  }
+
+  .pt-plots-tree-rail {
+    width: 24px;
+    height: 24px;
+  }
+
+  .pt-plots-origin-halo {
+    inset: 1px;
+  }
+
+  .pt-plots-origin-ring {
+    width: 14px;
+    height: 14px;
+    border-width: 2.2px;
+  }
+
+  .pt-plots-stem-line {
+    left: 11px;
+    top: calc(50% + 7px);
+    bottom: -11px;
+  }
+
+  .pt-plots-tree-list {
+    gap: 11px;
+  }
+
+  .pt-plots-tree-item {
+    gap: 8px;
+  }
+
+  .pt-plots-tree-item-rail {
+    width: 24px;
+  }
+
+  .pt-plots-item-line-top {
+    left: 11px;
+    top: -11px;
+    height: calc(50% + 11px - 7px);
+  }
+
+  .pt-plots-waypoint-ring {
+    width: 14px;
+    height: 14px;
+  }
+
+  .pt-plots-waypoint-dot {
+    width: 4.5px;
+    height: 4.5px;
+  }
+
+  .pt-plots-branch-line {
+    left: calc(50% + 7px);
+    right: -8px;
+  }
+
+  .pt-plots-item-line-bottom {
+    left: 11px;
+    top: calc(50% + 7px);
+    bottom: -11px;
+  }
+
+  .pt-plot-code {
+    font-size: 14.5px;
+  }
+
+  .pt-plot-qr-action-btn {
+    padding: 5px 9px;
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  /* Map modal trên di động */
+  .pt-mapmodal-topbar {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    gap: 8px;
+  }
+
+  .pt-mapmodal-top-tag {
+    padding: 6px 12px;
+    flex-shrink: 0;
+  }
+
+  .pt-mapmodal-top-code {
+    font-size: 13.5px;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+
+  .pt-mapmodal-top-sub {
+    display: none;
+  }
+
+  .pt-mapmodal-top-actions {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .pt-mapmodal-layer-pill {
+    padding: 2.5px;
+    gap: 2px;
+  }
+
+  .pt-mapmodal-pill-btn {
+    padding: 4.5px 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  .pt-mapmodal-round-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .pt-mapmodal-close-round-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .pt-mapmodal-floating-popup {
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    max-height: 54vh;
+    border-radius: 20px;
+    overflow-y: auto;
+  }
+
+  .pt-mapmodal-floating-popup.is-minimized {
+    max-height: none;
+  }
+
+  .pt-mapmodal-popup-header {
+    padding: 11px 13px;
+  }
+
+  .pt-mapmodal-popup-body {
+    padding: 11px 13px 14px;
+    gap: 10px;
+  }
+
+  .pt-mapmodal-popup-actions {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .pt-mapmodal-popup-action-btn {
+    width: 100%;
+    padding: 8px 10px;
+  }
+}
+
+/* Tối ưu cho màn hình điện thoại siêu nhỏ (≤ 380px như iPhone SE) */
+@media (max-width: 380px) {
+  .pt-plots-tree-head {
+    gap: 6px;
+  }
+
+  .pt-plots-tree-rail {
+    width: 20px;
+    height: 20px;
+  }
+
+  .pt-plots-origin-ring {
+    width: 13px;
+    height: 13px;
+  }
+
+  .pt-plots-stem-line {
+    left: 9px;
+  }
+
+  .pt-plots-tree-item {
+    gap: 6px;
+  }
+
+  .pt-plots-tree-item-rail {
+    width: 20px;
+  }
+
+  .pt-plots-item-line-top {
+    left: 9px;
+  }
+
+  .pt-plots-waypoint-ring {
+    width: 13px;
+    height: 13px;
+  }
+
+  .pt-plots-branch-line {
+    left: calc(50% + 6.5px);
+    right: -6px;
+  }
+
+  .pt-plots-item-line-bottom {
+    left: 9px;
+  }
+
+  .pt-plot-reminder-card {
+    padding: 9px 10px;
+    gap: 9px;
+  }
+
+  .pt-plot-trifold-icon {
+    width: 21px;
+    height: 21px;
+  }
+
+  .pt-plot-code {
+    font-size: 13.5px;
+  }
+
+  .pt-plot-qr-action-btn {
+    padding: 4px 7px;
+    font-size: 10.5px;
+  }
+
+  .pt-plot-qr-action-label {
+    display: none;
+  }
+
+  .pt-mapmodal-topbar {
+    top: 10px;
+    left: 8px;
+    right: 8px;
+    gap: 5px;
+  }
+
+  .pt-mapmodal-top-tag {
+    padding: 5px 9px;
+  }
+
+  .pt-mapmodal-top-code {
+    font-size: 12px;
+  }
+
+  .pt-mapmodal-pill-btn {
+    padding: 3.5px 7px;
+    font-size: 10.5px;
+  }
+
+  .pt-mapmodal-round-btn,
+  .pt-mapmodal-close-round-btn {
+    width: 29px;
+    height: 29px;
+  }
+}
+
 
