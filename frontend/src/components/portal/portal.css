@@ -1654,7 +1654,7 @@
     padding-right: 16px;
   }
   .pt-main {
-    padding: 28px 16px 48px;
+    padding: 34px 16px 48px;
   }
   .pt-hero-svg {
     transform: translateZ(0);
@@ -1882,7 +1882,7 @@
     padding-right: 16px;
   }
   .pt-main {
-    padding: 24px 16px 48px;
+    padding: 30px 14px 48px;
   }
   .pt-card {
     padding: 16px 14px 14px;
@@ -4565,8 +4565,20 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   THẺ THỬA ĐẤT HIỆN ĐẠI (KIỂU GIAO HÀNG / ĐỊNH VỊ TRACKING)
-   ═══════════════════════════════════════════════════════════════════════ */
+.pt-plots-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
+}
+
+@media (min-width: 920px) {
+  .pt-plots-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    align-items: flex-start;
+  }
+}
+
 .pt-plots-section {
   position: relative;
   width: 100%;
@@ -4575,6 +4587,32 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+}
+
+/* Khoảng cách thoáng đãng trên mobile cho Thửa đất của tôi và đường phân cách Lô thu hoạch */
+@media (max-width: 919px) {
+  .pt-plots-section:first-child {
+    padding-top: 8px;
+  }
+  .pt-plots-grid {
+    gap: 38px;
+  }
+  .pt-harvest-section {
+    padding-top: 28px;
+    border-top: 1px solid rgba(20, 55, 47, 0.08);
+  }
+}
+
+@media (max-width: 640px) {
+  .pt-plots-section:first-child {
+    padding-top: 12px;
+  }
+  .pt-plots-grid {
+    gap: 40px;
+  }
+  .pt-harvest-section {
+    padding-top: 32px;
+  }
 }
 
 .pt-plots-header {

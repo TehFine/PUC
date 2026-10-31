@@ -23,7 +23,7 @@ export default function PlotsTab() {
 
   return (
     <div className="pt-stack">
-      <div className="pt-grid-2">
+      <div className="pt-grid-2 pt-plots-grid">
         <section className="pt-plots-section" aria-labelledby="plots-heading">
           <StateBlock loading={plots.loading} error={plots.error} />
           {plots.data && !plots.data.available && (
