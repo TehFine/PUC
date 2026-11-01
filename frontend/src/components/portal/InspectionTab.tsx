@@ -1,32 +1,9 @@
 "use client";
 
 import { usePortal } from "@/hooks/use-portal";
-import { SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalLabTest, PortalList, PortalScheduleItem } from "@/types/portal";
 import { Card, EmptyState, Pill, StateBlock } from "./ui";
-
-function TransferForkIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="18" r="3" />
-      <circle cx="6" cy="6" r="3" />
-      <circle cx="18" cy="6" r="3" />
-      <path d="M18 9v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9" />
-      <path d="M12 12v3" />
-    </svg>
-  );
-}
 
 function getRelativeScheduleNote(dateStr: string): string {
   if (!dateStr) return "";
@@ -94,7 +71,12 @@ export default function InspectionTab() {
 
   return (
     <div className="pt-stack">
-      <Card title="Lịch kiểm tra">
+      <section className="pt-schedule-section" aria-labelledby="inspection-schedule-heading">
+        <div className="pt-schedule-header">
+          <h2 id="inspection-schedule-heading" className="pt-schedule-title">
+            Lịch kiểm tra
+          </h2>
+        </div>
         <StateBlock loading={schedule.loading} error={schedule.error} />
         {schedule.data && schedule.data.data.length === 0 && (
           <EmptyState icon="calendar">Hiện chưa có lịch kiểm tra nào sắp tới.</EmptyState>
@@ -105,7 +87,6 @@ export default function InspectionTab() {
               const theme = ROUTE_THEMES[idx % ROUTE_THEMES.length];
               const isLast = idx === arr.length - 1;
               const rel = getRelativeScheduleNote(item.scheduledOn);
-              const kindLabel = SCHEDULE_KIND[item.kind] ?? "Kiểm tra";
 
               return (
                 <div key={item.id} className="pt-transit-step">
@@ -138,12 +119,6 @@ export default function InspectionTab() {
                         <h3 className="pt-transit-title" style={{ color: theme.titleColor }}>
                           {item.title}
                         </h3>
-                        <span
-                          className="pt-transit-tag"
-                          style={{ backgroundColor: theme.tagBg, color: theme.tagColor }}
-                        >
-                          {kindLabel}
-                        </span>
                       </div>
 
                       <div className="pt-transit-meta-row">
@@ -160,16 +135,12 @@ export default function InspectionTab() {
                     </div>
                   </div>
 
-                  {/* Đoạn nối chuyển tiếp giữa 2 chặng (Transfer node + Dotted line) */}
+                  {/* Đoạn nối chuyển tiếp giữa 2 chặng (Dotted line với các dấu chấm bình thường) */}
                   {!isLast && (
                     <div className="pt-transit-transfer" aria-hidden="true">
                       <div className="pt-transit-transfer-empty" />
                       <div className="pt-transit-transfer-track">
                         <div className="pt-transit-mini-dot" />
-                        <div className="pt-transit-mini-dot" />
-                        <div className="pt-transit-transfer-node" title="Chuyển tiếp kỳ đánh giá">
-                          <TransferForkIcon />
-                        </div>
                         <div className="pt-transit-mini-dot" />
                         <div className="pt-transit-mini-dot" />
                       </div>
@@ -183,7 +154,7 @@ export default function InspectionTab() {
             })}
           </div>
         )}
-      </Card>
+      </section>
 
       <Card title="Kết quả kiểm nghiệm">
         <StateBlock loading={tests.loading} error={tests.error} />
