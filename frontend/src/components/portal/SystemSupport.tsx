@@ -1,6 +1,42 @@
 import { Sheet } from "./ui";
 import type { PortalOverview } from "@/types/portal";
 
+interface FaqItem {
+  id: string;
+  kicker: string;
+  title: string;
+  desc: string;
+  nodeType: "active" | "warn" | "danger";
+  cardClass: string;
+}
+
+const FAQ_ITEMS: FaqItem[] = [
+  {
+    id: "frequency",
+    kicker: "HỖ TRỢ 1 · NGOẠI TUYẾN",
+    title: "Ghi nhật ký khi mất kết nối mạng",
+    desc: "Hệ thống tự động lưu trên điện thoại và đồng bộ ngay khi có lại kết nối mạng 4G/Wifi.",
+    nodeType: "active",
+    cardClass: "pt-vietgap-card-frequency",
+  },
+  {
+    id: "phi",
+    kicker: "HỖ TRỢ 2 · THÔNG TIN THỬA",
+    title: "Cần điều chỉnh diện tích, mã số thửa đất",
+    desc: "Vui lòng liên hệ trực tiếp cán bộ HTX hoặc Trưởng thôn để được hỗ trợ cập nhật thông tin thửa đất.",
+    nodeType: "warn",
+    cardClass: "pt-vietgap-card-phi",
+  },
+  {
+    id: "banned",
+    kicker: "HỖ TRỢ 3 · TÀI KHOẢN",
+    title: "Quên mật khẩu hoặc đổi số điện thoại",
+    desc: "Liên hệ Ban quản trị HTX hoặc Trưởng thôn để được kiểm tra và cấp lại mật khẩu đăng nhập.",
+    nodeType: "danger",
+    cardClass: "pt-vietgap-card-banned",
+  },
+];
+
 export function SupportFooter({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="pt-support-footer">
@@ -56,21 +92,35 @@ export function SystemSupportModal({
         </section>
 
         <section className="pt-support-sec">
-          <h3 className="pt-support-sec-title">Hướng dẫn thường gặp</h3>
-          <ul className="pt-support-faq">
-            <li>
-              <strong>Ghi nhật ký khi mất kết nối mạng</strong>
-              <p>Hệ thống tự động lưu trên điện thoại và đồng bộ ngay khi có lại kết nối mạng 4G/Wifi.</p>
-            </li>
-            <li>
-              <strong>Cần điều chỉnh diện tích, mã số thửa đất</strong>
-              <p>Vui lòng chuyển sang tab Hồ sơ để gửi yêu cầu cập nhật hoặc liên hệ trực tiếp cán bộ HTX.</p>
-            </li>
-            <li>
-              <strong>Quên mật khẩu hoặc đổi số điện thoại</strong>
-              <p>Liên hệ Ban quản trị HTX hoặc Trưởng thôn để được kiểm tra và cấp lại mật khẩu đăng nhập.</p>
-            </li>
-          </ul>
+          <h3 className="pt-support-sec-title">Thắc mắc thường gặp</h3>
+          <div className="pt-timeline pt-vietgap-timeline" role="list">
+            {FAQ_ITEMS.map((item, idx, arr) => {
+              const isFirst = idx === 0;
+              const isLast = idx === arr.length - 1;
+              const nodeClass =
+                item.nodeType === "active"
+                  ? "is-active"
+                  : item.nodeType === "warn"
+                  ? "is-warn"
+                  : "is-danger";
+
+              return (
+                <div
+                  key={item.id}
+                  className={`pt-timeline-item pt-vietgap-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
+                >
+                  <div className="pt-timeline-track" aria-hidden="true">
+                    <div className={`pt-timeline-node ${nodeClass}`} />
+                  </div>
+                  <div className={`pt-timeline-content pt-vietgap-card ${item.cardClass}`}>
+                    <span className="pt-timeline-kicker">{item.kicker}</span>
+                    <h4 className="pt-timeline-title">{item.title}</h4>
+                    <p className="pt-timeline-desc">{item.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         <div className="pt-support-system-info">
