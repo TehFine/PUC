@@ -3,59 +3,187 @@
 import { usePortal } from "@/hooks/use-portal";
 import { SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
-import type { PortalLabTest, PortalList, PortalScheduleItem, PortalViolation } from "@/types/portal";
+import type { PortalLabTest, PortalList, PortalScheduleItem } from "@/types/portal";
 import { Card, EmptyState, Pill, StateBlock } from "./ui";
 
+function TransferForkIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="18" r="3" />
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="18" cy="6" r="3" />
+      <path d="M18 9v2a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9" />
+      <path d="M12 12v3" />
+    </svg>
+  );
+}
+
+function getRelativeScheduleNote(dateStr: string): string {
+  if (!dateStr) return "";
+  const target = new Date(dateStr);
+  if (isNaN(target.getTime())) return "";
+  const now = new Date();
+  target.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "Hôm nay";
+  if (diffDays === 1) return "Ngày mai";
+  if (diffDays > 1 && diffDays <= 30) return `Còn ${diffDays} ngày`;
+  if (diffDays > 30) return "Tháng tới";
+  if (diffDays === -1) return "Hôm qua";
+  if (diffDays < -1) return "Đã diễn ra";
+  return "";
+}
+
+const ROUTE_THEMES = [
+  {
+    badge: "L1",
+    badgeBg: "#f59e0b",
+    badgeColor: "#ffffff",
+    capsuleBg: "linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%)",
+    tagBg: "#fef3c7",
+    tagColor: "#b45309",
+    titleColor: "#92400e",
+    defaultNote: "Kiểm tra thực địa độ che phủ, hệ thống tưới và ghi chép nhật ký canh tác của hộ.",
+  },
+  {
+    badge: "L2",
+    badgeBg: "#f43f5e",
+    badgeColor: "#ffffff",
+    capsuleBg: "linear-gradient(180deg, #f43f5e 0%, #fb7185 100%)",
+    tagBg: "#ffe4e6",
+    tagColor: "#be123c",
+    titleColor: "#9f1239",
+    defaultNote: "Lấy mẫu quả và đất ngẫu nhiên gửi phòng Lab phân tích tồn dư hóa chất & kim loại nặng.",
+  },
+  {
+    badge: "L3",
+    badgeBg: "#10b981",
+    badgeColor: "#ffffff",
+    capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
+    tagBg: "#d1fae5",
+    tagColor: "#047857",
+    titleColor: "#065f46",
+    defaultNote: "Tái thẩm định điều kiện cơ sở hạ tầng, kho vật tư và nghiệm thu kết quả đánh giá vùng trồng.",
+  },
+  {
+    badge: "L4",
+    badgeBg: "#3b82f6",
+    badgeColor: "#ffffff",
+    capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
+    tagBg: "#dbeafe",
+    tagColor: "#1d4ed8",
+    titleColor: "#1e40af",
+    defaultNote: "Giám sát đột xuất tuân thủ thời gian cách ly trước ngày thu hoạch xuất khẩu.",
+  },
+];
+
 export default function InspectionTab() {
-  const violations = usePortal<PortalList<PortalViolation>>("violations");
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
   const tests = usePortal<PortalList<PortalLabTest>>("lab-tests");
 
   return (
     <div className="pt-stack">
-      <div className="pt-grid-2">
-        <Card title="Thông báo vi phạm">
-          <StateBlock loading={violations.loading} error={violations.error} />
-          {violations.data && violations.data.data.length === 0 && <EmptyState icon="ok">Hộ bạn chưa có thông báo vi phạm nào.</EmptyState>}
-          {violations.data && violations.data.data.length > 0 && (
-            <ul className="pt-list">
-              {violations.data.data.map((item) => (
-                <li key={item.id} className={`pt-notice pt-notice-${item.severity}`}>
-                  <div className="pt-notice-head">
-                    <strong>{item.title}</strong>
-                    {item.status === "resolved" ? <Pill tone="green">Đã khắc phục</Pill> : <Pill tone={item.severity === "critical" ? "red" : "gold"}>{item.severity === "critical" ? "Nghiêm trọng" : "Cảnh báo"}</Pill>}
-                  </div>
-                  <p className="pt-notice-meta">
-                    {formatDate(item.detectedOn)}
-                    {item.plotCode ? ` · Thửa ${item.plotCode}` : ""}
-                  </p>
-                  {item.description && <p>{item.description}</p>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+      <Card title="Lịch kiểm tra">
+        <StateBlock loading={schedule.loading} error={schedule.error} />
+        {schedule.data && schedule.data.data.length === 0 && (
+          <EmptyState icon="calendar">Hiện chưa có lịch kiểm tra nào sắp tới.</EmptyState>
+        )}
+        {schedule.data && schedule.data.data.length > 0 && (
+          <div className="pt-transit-timeline" role="list">
+            {schedule.data.data.map((item, idx, arr) => {
+              const theme = ROUTE_THEMES[idx % ROUTE_THEMES.length];
+              const isLast = idx === arr.length - 1;
+              const rel = getRelativeScheduleNote(item.scheduledOn);
+              const kindLabel = SCHEDULE_KIND[item.kind] ?? "Kiểm tra";
 
-        <Card title="Lịch kiểm tra">
-          <StateBlock loading={schedule.loading} error={schedule.error} />
-          {schedule.data && schedule.data.data.length === 0 && <EmptyState icon="calendar">Hiện chưa có lịch kiểm tra nào sắp tới.</EmptyState>}
-          {schedule.data && schedule.data.data.length > 0 && (
-            <ul className="pt-list">
-              {schedule.data.data.map((item) => (
-                <li key={item.id} className="pt-row">
-                  <div className="pt-date">{formatDate(item.scheduledOn)}</div>
-                  <div className="pt-row-main">
-                    <strong>{item.title}</strong>
-                    <span>
-                      {SCHEDULE_KIND[item.kind]} · {item.officer}
-                    </span>
+              return (
+                <div key={item.id} className="pt-transit-step">
+                  <div className="pt-transit-segment">
+                    {/* Cột 1: Badge tròn chặng kiểm tra (L1, L2,...) */}
+                    <div className="pt-transit-badge-col">
+                      <div
+                        className="pt-transit-badge"
+                        style={{ backgroundColor: theme.badgeBg, color: theme.badgeColor }}
+                        aria-hidden="true"
+                      >
+                        {theme.badge}
+                      </div>
+                    </div>
+
+                    {/* Cột 2: Trục Timeline dải capsule dày + 2 chấm trắng nhỏ */}
+                    <div className="pt-transit-track-col" aria-hidden="true">
+                      <div
+                        className="pt-transit-capsule"
+                        style={{ background: theme.capsuleBg }}
+                      >
+                        <div className="pt-transit-dot" />
+                        <div className="pt-transit-dot" />
+                      </div>
+                    </div>
+
+                    {/* Cột 3: Khối nội dung màu sáng thanh lịch */}
+                    <div className="pt-transit-content">
+                      <div className="pt-transit-head">
+                        <h3 className="pt-transit-title" style={{ color: theme.titleColor }}>
+                          {item.title}
+                        </h3>
+                        <span
+                          className="pt-transit-tag"
+                          style={{ backgroundColor: theme.tagBg, color: theme.tagColor }}
+                        >
+                          {kindLabel}
+                        </span>
+                      </div>
+
+                      <div className="pt-transit-meta-row">
+                        <span className="pt-transit-meta-item">
+                          <span className="pt-transit-date-highlight">{formatDate(item.scheduledOn)}</span>
+                          {rel && <span className="pt-transit-rel-badge">({rel})</span>}
+                        </span>
+                        <span className="pt-transit-meta-item">
+                          Cán bộ: <strong>{item.officer}</strong>
+                        </span>
+                      </div>
+
+                      <p className="pt-transit-desc">{theme.defaultNote}</p>
+                    </div>
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
+
+                  {/* Đoạn nối chuyển tiếp giữa 2 chặng (Transfer node + Dotted line) */}
+                  {!isLast && (
+                    <div className="pt-transit-transfer" aria-hidden="true">
+                      <div className="pt-transit-transfer-empty" />
+                      <div className="pt-transit-transfer-track">
+                        <div className="pt-transit-mini-dot" />
+                        <div className="pt-transit-mini-dot" />
+                        <div className="pt-transit-transfer-node" title="Chuyển tiếp kỳ đánh giá">
+                          <TransferForkIcon />
+                        </div>
+                        <div className="pt-transit-mini-dot" />
+                        <div className="pt-transit-mini-dot" />
+                      </div>
+                      <div className="pt-transit-transfer-text">
+                        <span>Chuyển tiếp kỳ giám sát kế tiếp</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       <Card title="Kết quả kiểm nghiệm">
         <StateBlock loading={tests.loading} error={tests.error} />
