@@ -7,6 +7,7 @@ interface FaqItem {
   title: string;
   desc: string;
   nodeType: "active" | "warn" | "danger";
+  capsuleBg: string;
   cardClass: string;
 }
 
@@ -17,6 +18,7 @@ const FAQ_ITEMS: FaqItem[] = [
     title: "Ghi nhật ký khi mất kết nối mạng",
     desc: "Hệ thống tự động lưu trên điện thoại và đồng bộ ngay khi có lại kết nối mạng 4G/Wifi.",
     nodeType: "active",
+    capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
     cardClass: "pt-vietgap-card-frequency",
   },
   {
@@ -25,6 +27,7 @@ const FAQ_ITEMS: FaqItem[] = [
     title: "Cần điều chỉnh diện tích, mã số thửa đất",
     desc: "Vui lòng liên hệ trực tiếp cán bộ HTX hoặc Trưởng thôn để được hỗ trợ cập nhật thông tin thửa đất.",
     nodeType: "warn",
+    capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
     cardClass: "pt-vietgap-card-phi",
   },
   {
@@ -33,6 +36,7 @@ const FAQ_ITEMS: FaqItem[] = [
     title: "Quên mật khẩu hoặc đổi số điện thoại",
     desc: "Liên hệ Ban quản trị HTX hoặc Trưởng thôn để được kiểm tra và cấp lại mật khẩu đăng nhập.",
     nodeType: "danger",
+    capsuleBg: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)",
     cardClass: "pt-vietgap-card-banned",
   },
 ];
@@ -93,30 +97,42 @@ export function SystemSupportModal({
 
         <section className="pt-support-sec">
           <h3 className="pt-support-sec-title">Thắc mắc thường gặp</h3>
-          <div className="pt-timeline pt-vietgap-timeline" role="list">
+          <div className="pt-vietgap-timeline" role="list">
             {FAQ_ITEMS.map((item, idx, arr) => {
-              const isFirst = idx === 0;
               const isLast = idx === arr.length - 1;
-              const nodeClass =
-                item.nodeType === "active"
-                  ? "is-active"
-                  : item.nodeType === "warn"
-                  ? "is-warn"
-                  : "is-danger";
 
               return (
-                <div
-                  key={item.id}
-                  className={`pt-timeline-item pt-vietgap-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
-                >
-                  <div className="pt-timeline-track" aria-hidden="true">
-                    <div className={`pt-timeline-node ${nodeClass}`} />
+                <div key={item.id} className="pt-vietgap-step">
+                  <div className="pt-vietgap-segment">
+                    {/* Cột Trục Timeline dải capsule dày + chấm tròn trắng đồng bộ */}
+                    <div className="pt-vietgap-track-col" aria-hidden="true">
+                      <div
+                        className="pt-vietgap-capsule"
+                        style={{ background: item.capsuleBg }}
+                      >
+                        <div className="pt-vietgap-dot" />
+                        <div className="pt-vietgap-dot" />
+                      </div>
+                    </div>
+
+                    {/* Khối nội dung thẻ hỗ trợ */}
+                    <div className={`pt-vietgap-content pt-vietgap-card ${item.cardClass}`}>
+                      <span className="pt-timeline-kicker">{item.kicker}</span>
+                      <h4 className="pt-timeline-title">{item.title}</h4>
+                      <p className="pt-timeline-desc">{item.desc}</p>
+                    </div>
                   </div>
-                  <div className={`pt-timeline-content pt-vietgap-card ${item.cardClass}`}>
-                    <span className="pt-timeline-kicker">{item.kicker}</span>
-                    <h4 className="pt-timeline-title">{item.title}</h4>
-                    <p className="pt-timeline-desc">{item.desc}</p>
-                  </div>
+
+                  {/* Đoạn nối chuyển tiếp giữa các mục hỗ trợ */}
+                  {!isLast && (
+                    <div className="pt-vietgap-transfer" aria-hidden="true">
+                      <div className="pt-vietgap-transfer-track">
+                        <div className="pt-vietgap-mini-dot" />
+                        <div className="pt-vietgap-mini-dot" />
+                        <div className="pt-vietgap-mini-dot" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

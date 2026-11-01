@@ -219,6 +219,8 @@ interface VietgapRule {
   title: string;
   desc: string;
   nodeType: "active" | "warn" | "danger";
+  capsuleBg: string;
+  cardClass: string;
 }
 
 const VIETGAP_RULES: VietgapRule[] = [
@@ -228,6 +230,8 @@ const VIETGAP_RULES: VietgapRule[] = [
     title: "Ghi nhật ký 7 ngày/lần",
     desc: "Cập nhật đều đặn các việc tưới tiêu, bón phân, tỉa cành, bao trái phục vụ kiểm tra vùng trồng.",
     nodeType: "active",
+    capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
+    cardClass: "pt-vietgap-card-frequency",
   },
   {
     id: "phi",
@@ -235,6 +239,8 @@ const VIETGAP_RULES: VietgapRule[] = [
     title: "Cách ly trước thu hoạch",
     desc: "Ngưng dùng phân thuốc trước ngày thu hoạch đúng thời hạn (PHI) để không vượt tồn dư cho phép.",
     nodeType: "warn",
+    capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
+    cardClass: "pt-vietgap-card-phi",
   },
   {
     id: "banned",
@@ -242,6 +248,8 @@ const VIETGAP_RULES: VietgapRule[] = [
     title: "Cấm thuốc ngoài danh mục",
     desc: "Tuyệt đối không dùng chất nhuộm màu (Vàng O), hoạt chất cấm Chlorpyrifos hoặc thuốc chưa cấp phép.",
     nodeType: "danger",
+    capsuleBg: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)",
+    cardClass: "pt-vietgap-card-banned",
   },
 ];
 
@@ -531,30 +539,42 @@ export default function DiaryTab() {
               Quy chuẩn VietGAP
             </h2>
           </div>
-          <div className="pt-timeline pt-vietgap-timeline" role="list">
+          <div className="pt-vietgap-timeline" role="list">
             {VIETGAP_RULES.map((rule, idx, arr) => {
-              const isFirst = idx === 0;
               const isLast = idx === arr.length - 1;
-              const nodeClass =
-                rule.nodeType === "active"
-                  ? "is-active"
-                  : rule.nodeType === "warn"
-                  ? "is-warn"
-                  : "is-danger";
 
               return (
-                <div
-                  key={rule.id}
-                  className={`pt-timeline-item pt-vietgap-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
-                >
-                  <div className="pt-timeline-track" aria-hidden="true">
-                    <div className={`pt-timeline-node ${nodeClass}`} />
+                <div key={rule.id} className="pt-vietgap-step">
+                  <div className="pt-vietgap-segment">
+                    {/* Cột Trục Timeline dải capsule dày + chấm tròn trắng đồng bộ */}
+                    <div className="pt-vietgap-track-col" aria-hidden="true">
+                      <div
+                        className="pt-vietgap-capsule"
+                        style={{ background: rule.capsuleBg }}
+                      >
+                        <div className="pt-vietgap-dot" />
+                        <div className="pt-vietgap-dot" />
+                      </div>
+                    </div>
+
+                    {/* Khối nội dung thẻ quy chuẩn */}
+                    <div className={`pt-vietgap-content pt-vietgap-card ${rule.cardClass}`}>
+                      <span className="pt-timeline-kicker">{rule.kicker}</span>
+                      <h3 className="pt-timeline-title">{rule.title}</h3>
+                      <p className="pt-timeline-desc">{rule.desc}</p>
+                    </div>
                   </div>
-                  <div className={`pt-timeline-content pt-vietgap-card pt-vietgap-card-${rule.id}`}>
-                    <span className="pt-timeline-kicker">{rule.kicker}</span>
-                    <h3 className="pt-timeline-title">{rule.title}</h3>
-                    <p className="pt-timeline-desc">{rule.desc}</p>
-                  </div>
+
+                  {/* Đoạn nối chuyển tiếp giữa các quy chuẩn (Dotted line với các dấu chấm mini) */}
+                  {!isLast && (
+                    <div className="pt-vietgap-transfer" aria-hidden="true">
+                      <div className="pt-vietgap-transfer-track">
+                        <div className="pt-vietgap-mini-dot" />
+                        <div className="pt-vietgap-mini-dot" />
+                        <div className="pt-vietgap-mini-dot" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

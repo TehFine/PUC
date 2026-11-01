@@ -38,6 +38,7 @@ interface HarvestRule {
   title: string;
   desc: string;
   nodeType: "active" | "warn" | "danger";
+  capsuleBg: string;
   cardClass: string;
 }
 
@@ -48,6 +49,7 @@ const HARVEST_RULES: HarvestRule[] = [
     title: "Đăng ký ngày cắt & sản lượng dự kiến",
     desc: "Bà con nông dân đăng ký ngày dự kiến thu hoạch và sản lượng ước tính trên cổng để HTX bố trí lịch kiểm định.",
     nodeType: "active",
+    capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
     cardClass: "pt-vietgap-card-frequency",
   },
   {
@@ -56,6 +58,7 @@ const HARVEST_RULES: HarvestRule[] = [
     title: "Thẩm định tồn dư BVTV & Phân loại quả",
     desc: "Cán bộ kỹ thuật HTX cùng Kiểm tra viên KCS trực tiếp về vườn kiểm tra cách ly thuốc BVTV (thời gian PHI) và cân đo phân loại.",
     nodeType: "warn",
+    capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
     cardClass: "pt-vietgap-card-phi",
   },
   {
@@ -64,6 +67,7 @@ const HARVEST_RULES: HarvestRule[] = [
     title: "Kích hoạt tem niêm phong điện tử",
     desc: "HTX nghiệm thu xuất khẩu chính ngạch và kích hoạt tem niêm phong điện tử truy xuất nguồn gốc khi đóng gói xuất xưởng.",
     nodeType: "danger",
+    capsuleBg: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)",
     cardClass: "pt-vietgap-card-banned",
   },
 ];
@@ -154,30 +158,42 @@ export default function StampsTab({ overview, plots = [] }: Props) {
             Quy chuẩn thu hoạch
           </h2>
         </div>
-        <div className="pt-timeline pt-vietgap-timeline" role="list">
+        <div className="pt-vietgap-timeline" role="list">
           {HARVEST_RULES.map((rule, idx, arr) => {
-            const isFirst = idx === 0;
             const isLast = idx === arr.length - 1;
-            const nodeClass =
-              rule.nodeType === "active"
-                ? "is-active"
-                : rule.nodeType === "warn"
-                ? "is-warn"
-                : "is-danger";
 
             return (
-              <div
-                key={rule.id}
-                className={`pt-timeline-item pt-vietgap-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
-              >
-                <div className="pt-timeline-track" aria-hidden="true">
-                  <div className={`pt-timeline-node ${nodeClass}`} />
+              <div key={rule.id} className="pt-vietgap-step">
+                <div className="pt-vietgap-segment">
+                  {/* Cột Trục Timeline dải capsule dày + chấm tròn trắng đồng bộ */}
+                  <div className="pt-vietgap-track-col" aria-hidden="true">
+                    <div
+                      className="pt-vietgap-capsule"
+                      style={{ background: rule.capsuleBg }}
+                    >
+                      <div className="pt-vietgap-dot" />
+                      <div className="pt-vietgap-dot" />
+                    </div>
+                  </div>
+
+                  {/* Khối nội dung thẻ quy chuẩn */}
+                  <div className={`pt-vietgap-content pt-vietgap-card ${rule.cardClass}`}>
+                    <span className="pt-timeline-kicker">{rule.kicker}</span>
+                    <h3 className="pt-timeline-title">{rule.title}</h3>
+                    <p className="pt-timeline-desc">{rule.desc}</p>
+                  </div>
                 </div>
-                <div className={`pt-timeline-content pt-vietgap-card ${rule.cardClass}`}>
-                  <span className="pt-timeline-kicker">{rule.kicker}</span>
-                  <h3 className="pt-timeline-title">{rule.title}</h3>
-                  <p className="pt-timeline-desc">{rule.desc}</p>
-                </div>
+
+                {/* Đoạn nối chuyển tiếp giữa các quy chuẩn (Dotted line với các dấu chấm mini) */}
+                {!isLast && (
+                  <div className="pt-vietgap-transfer" aria-hidden="true">
+                    <div className="pt-vietgap-transfer-track">
+                      <div className="pt-vietgap-mini-dot" />
+                      <div className="pt-vietgap-mini-dot" />
+                      <div className="pt-vietgap-mini-dot" />
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -654,11 +670,19 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .decl-add-btn {
           flex-shrink: 0;
           white-space: nowrap;
-          padding: 6.5px 14px;
-          font-size: 12.5px;
-          border-radius: 999px;
-          box-shadow: 0 2px 8px rgba(22, 163, 74, 0.2);
+          padding: 8px 16px;
+          font-size: 13px;
+          font-weight: 700;
+          border-radius: 18px;
+          border: none !important;
+          outline: none !important;
+          background: #e05326 !important;
+          color: #ffffff !important;
+          box-shadow: 0 3px 10px rgba(224, 83, 38, 0.28);
           margin-top: 1px;
+        }
+        .decl-add-btn:hover {
+          background: #cf461b !important;
         }
 
         .harvest-decl-form {
@@ -726,33 +750,34 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 6px;
-          border-radius: 10px;
-          font-weight: 600;
+          gap: 7px;
+          border-radius: 18px;
+          font-weight: 700;
           cursor: pointer;
-          transition: all 0.15s ease;
-          border: none;
-          outline: none;
+          transition: all 0.18s ease;
+          border: none !important;
+          outline: none !important;
           text-decoration: none;
+          user-select: none;
         }
         .btn-sm {
-          padding: 8px 14px;
+          padding: 9px 16px;
           font-size: 13px;
         }
         .btn-primary {
-          background: #16a34a;
+          background: #e05326;
           color: #ffffff;
-          box-shadow: 0 2px 8px rgba(22, 163, 74, 0.2);
+          box-shadow: 0 4px 14px rgba(224, 83, 38, 0.28);
         }
         .btn-primary:hover {
-          background: #15803d;
+          background: #cf461b;
         }
         .btn-secondary {
-          background: #f1f5f9;
+          background: #f1f3f8;
           color: #475569;
         }
         .btn-secondary:hover {
-          background: #e2e8f0;
+          background: #e4e7ed;
           color: #0f172a;
         }
 
