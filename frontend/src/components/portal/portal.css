@@ -1044,14 +1044,22 @@
   width: 100%;
   max-width: 360px;
   padding: 14px 20px;
-  border-radius: 999px;
+  border-radius: 20px;
   font-size: 15px;
   font-weight: 700;
   justify-content: center;
   gap: 8px;
   text-decoration: none;
   box-sizing: border-box;
-  box-shadow: 0 6px 20px rgba(248, 242, 58, 0.45);
+  border: none !important;
+  outline: none !important;
+  background: #e05326 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(224, 83, 38, 0.28);
+}
+.pt-ticket-open-btn:hover {
+  background: #cf461b !important;
+  box-shadow: 0 6px 18px rgba(224, 83, 38, 0.38);
 }
 
 /* Nút Avatar hình tròn duy nhất */
@@ -1060,7 +1068,7 @@
   place-items: center;
   border: 0;
   background: transparent;
-  padding: 2px;
+  padding: 0;
   cursor: pointer;
   border-radius: 50%;
   outline: none;
@@ -1078,20 +1086,22 @@
 }
 
 .pt-avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: var(--yellow);
   color: var(--ink);
-  font-weight: 700;
-  font-size: 14.5px;
-  letter-spacing: -0.01em;
-  display: grid;
-  place-items: center;
-  border: 2px solid #ffffff;
-  box-shadow: 0 3px 10px rgba(20, 55, 47, 0.12), 0 1px 3px rgba(0, 0, 0, 0.06);
+  font-weight: 800;
+  font-size: 13.5px;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   flex-shrink: 0;
-  transition: box-shadow 0.2s ease;
+  user-select: none;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 /* Lớp phủ mờ (Backdrop Scrim) làm mờ hậu cảnh để người dùng focus vào popup profile */
@@ -1197,13 +1207,16 @@
   border-radius: 50%;
   background: var(--yellow);
   color: var(--ink);
-  font-weight: 700;
+  font-weight: 800;
   font-size: 18px;
-  display: grid;
-  place-items: center;
-  border: 2px solid #ffffff;
-  box-shadow: 0 4px 14px rgba(240, 219, 51, 0.4);
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
   flex-shrink: 0;
+  user-select: none;
 }
 
 .pt-profile-head-info {
@@ -1306,23 +1319,23 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 11px 16px;
   margin-bottom: 8px;
-  border-radius: 14px;
-  border: 1px solid rgba(20, 55, 47, 0.1);
-  background: rgba(20, 55, 47, 0.04);
+  border-radius: 16px;
+  border: none !important;
+  outline: none !important;
+  background: #f1f3f8;
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  transition: background 0.18s ease, transform 0.18s ease;
 }
 .pt-profile-intro-btn:hover {
-  background: rgba(20, 55, 47, 0.08);
-  border-color: rgba(20, 55, 47, 0.2);
+  background: #e4e7ed;
   transform: translateY(-1px);
 }
 .pt-profile-intro-arrow {
@@ -1500,7 +1513,7 @@
   justify-content: center;
   background: var(--yellow);
   color: var(--ink);
-  border: 1px solid rgba(20, 55, 47, 0.14);
+  border: none;
   border-radius: 9999px;
   padding: 0 24px;
   height: 60px;
@@ -1692,24 +1705,26 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #15803d;
+  background: #e05326;
   color: #ffffff;
-  border: none;
-  border-radius: 999px;
+  border: none !important;
+  outline: none !important;
+  border-radius: 18px;
   padding: 11px 24px;
   font-family: var(--font-hero-sans), var(--font-inter), system-ui, -apple-system, sans-serif;
   font-size: 14.5px;
   font-weight: 700;
   letter-spacing: -0.01em;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(21, 128, 61, 0.28);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 14px rgba(224, 83, 38, 0.28);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
   white-space: nowrap;
 }
 
 .pt-hero-cta-btn:hover {
+  background: #cf461b;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(21, 128, 61, 0.4);
+  box-shadow: 0 6px 20px rgba(224, 83, 38, 0.38);
 }
 
 .pt-hero-cta-btn:active {
@@ -2057,10 +2072,10 @@
 /* ── Thẻ / danh sách ── */
 .pt-card {
   padding: 24px 26px 18px;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 26px;
   background: #fff;
-  box-shadow: 0 4px 20px rgba(20, 55, 47, 0.04);
+  box-shadow: 0 4px 24px rgba(20, 55, 47, 0.05);
 }
 .pt-card-head {
   display: flex;
@@ -2156,8 +2171,8 @@
   position: relative;
   background: #ffffff;
   border-radius: 26px;
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 20px rgba(20, 55, 47, 0.04);
+  border: none;
+  box-shadow: 0 4px 24px rgba(20, 55, 47, 0.05);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2214,12 +2229,12 @@
 }
 
 .pt-widget-topbar-btn {
-  background: rgba(20, 55, 47, 0.04);
-  border: none;
-  outline: none;
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 12px;
+  background: #f1f3f8;
+  border: none !important;
+  outline: none !important;
+  border-radius: 16px;
+  padding: 7px 15px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
   cursor: pointer;
@@ -2233,8 +2248,8 @@
 }
 
 .pt-widget-topbar-btn:hover {
-  background: rgba(20, 55, 47, 0.08);
-  color: var(--green-700);
+  background: #e4e7ed;
+  color: var(--ink);
 }
 
 .pt-widget-topbar-btn:active {
@@ -2538,31 +2553,31 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 18px;
-  border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid rgba(20, 55, 47, 0.16);
-  font-size: 14px;
+  padding: 10px 18px;
+  border-radius: 18px;
+  background: #edf7f1;
+  border: none !important;
+  outline: none !important;
+  font-size: 13.5px;
   font-weight: 650;
-  color: var(--ink);
+  color: #166534;
   cursor: pointer;
   transition: all 0.18s ease;
   line-height: 1.3;
-  box-shadow: 0 1px 4px rgba(20, 55, 47, 0.04);
+  box-shadow: 0 1px 4px rgba(22, 101, 52, 0.08);
 }
 
 .pt-gps-btn:hover:not(:disabled) {
-  background: rgba(20, 55, 47, 0.04);
-  border-color: var(--green-600);
-  color: var(--green-700);
-  box-shadow: 0 3px 8px rgba(20, 55, 47, 0.08);
+  background: #dcfce7;
+  color: #14532d;
+  box-shadow: 0 3px 8px rgba(22, 101, 52, 0.14);
   transform: translateY(-1px);
 }
 
 .pt-gps-btn.is-active {
-  background: rgba(39, 122, 72, 0.08);
-  border-color: rgba(39, 122, 72, 0.3);
-  color: #1e6b3b;
+  background: #dcfce7;
+  color: #14532d;
+  box-shadow: 0 2px 6px rgba(22, 101, 52, 0.15);
 }
 
 .pt-gps-btn:disabled {
@@ -2699,28 +2714,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
-  font-size: 14px;
-  font-weight: 650;
-  border-radius: 14px;
+  padding: 13px 20px;
+  font-size: 14.5px;
+  font-weight: 700;
+  border-radius: 20px;
 }
 
 .pt-widget-topbar-btn.is-primary {
-  background: var(--yellow, #ffc933);
+  background: #e05326 !important;
   border: none !important;
   outline: none !important;
-  color: var(--ink, #14372f);
+  color: #ffffff !important;
   font-weight: 700;
-  box-shadow: 0 2px 6px rgba(255, 201, 51, 0.28);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(224, 83, 38, 0.25);
 }
 
 .pt-widget-topbar-btn.is-primary:hover {
-  background: #ffd55a;
+  background: #cf461b !important;
   border: none !important;
   outline: none !important;
-  color: var(--ink, #14372f);
+  color: #ffffff !important;
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(255, 201, 51, 0.38);
+  box-shadow: 0 4px 12px rgba(224, 83, 38, 0.35);
 }
 
 .pt-reminders { list-style: none; display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; }
@@ -2755,6 +2771,11 @@
   margin: 4px 0 0;
   padding: 4px 6px 8px;
   box-sizing: border-box;
+}
+
+.pt-schedule-section + .pt-schedule-section {
+  margin-top: 18px;
+  padding-top: 8px;
 }
 
 .pt-schedule-header {
@@ -3020,30 +3041,92 @@
 }
 
 .pt-vietgap-timeline {
-  padding: 2px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  padding: 4px 0;
+  box-sizing: border-box;
   touch-action: pan-y;
 }
 
-.pt-vietgap-timeline .pt-timeline-item,
-.pt-vietgap-item {
-  cursor: default;
-  padding: 4px 0 12px;
-  background: transparent !important;
-  box-shadow: none !important;
-  border-radius: 0;
-  gap: 14px;
+.pt-vietgap-step {
+  display: flex;
+  flex-direction: column;
   touch-action: pan-y;
   -webkit-tap-highlight-color: transparent;
 }
 
-.pt-vietgap-timeline .pt-timeline-track {
-  padding-top: 14px;
+.pt-vietgap-segment {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: stretch;
+  position: relative;
   touch-action: pan-y;
 }
 
-.pt-vietgap-timeline .pt-timeline-track::after {
-  top: 33px;
-  bottom: -12px;
+.pt-vietgap-track-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: stretch;
+  position: relative;
+  padding: 5px 0;
+  touch-action: pan-y;
+}
+
+/* Trục Timeline dải capsule dày theo phong cách Lịch kiểm tra */
+.pt-vietgap-capsule {
+  position: relative;
+  width: 11px;
+  height: 100%;
+  min-height: 84px;
+  border-radius: 999px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), 0 2px 5px rgba(0, 0, 0, 0.07);
+}
+
+.pt-vietgap-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+/* Đoạn nối chuyển tiếp giữa các quy chuẩn: 3 dấu chấm mini thẳng hàng với trục capsule */
+.pt-vietgap-transfer {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 0;
+  touch-action: pan-y;
+}
+
+.pt-vietgap-transfer-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 0;
+  touch-action: pan-y;
+}
+
+.pt-vietgap-mini-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background-color: #cbd5e1;
+  flex-shrink: 0;
 }
 
 /* Thẻ màu bao quanh phần nội dung của từng quy tắc VietGAP (không outline, màu nhạt nhẹ nhàng) */
@@ -3070,7 +3153,8 @@
     transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .pt-vietgap-timeline .pt-timeline-item:hover .pt-vietgap-card,
-  .pt-vietgap-item:hover .pt-vietgap-card {
+  .pt-vietgap-item:hover .pt-vietgap-card,
+  .pt-vietgap-step:hover .pt-vietgap-card {
     transform: translateY(-1px);
   }
 }
@@ -3118,69 +3202,18 @@
   margin: 5px 0 0;
 }
 
-/* Node 1: Xanh dương hài hòa với thẻ 1 */
-.pt-vietgap-timeline .pt-timeline-node.is-active {
-  width: 19px;
-  height: 19px;
-  border-width: 3.5px;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3.5px rgba(37, 99, 235, 0.16);
-}
-
-/* Node 2: Xanh lá mint hài hòa với thẻ 2 */
-.pt-vietgap-timeline .pt-timeline-node.is-warn {
-  width: 19px;
-  height: 19px;
-  border-width: 3.5px;
-  border-color: #16a34a;
-  box-shadow: 0 0 0 3.5px rgba(22, 163, 74, 0.16);
-}
-
-/* Node 3: Cam đào hài hòa với thẻ 3 */
-.pt-vietgap-timeline .pt-timeline-node.is-danger {
-  width: 19px;
-  height: 19px;
-  border-width: 2.5px;
-  border-color: #ea580c;
-  box-shadow: 0 0 0 3.5px rgba(234, 88, 12, 0.16);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.pt-timeline-node.is-danger::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #ea580c;
-}
-
-/* Đường nối đổi màu theo cấp độ mức độ từ xanh dương -> xanh lá -> cam đào */
-.pt-vietgap-timeline .pt-timeline-item.is-first .pt-timeline-track::after {
-  background: linear-gradient(180deg, #2563eb 0%, #16a34a 100%);
-}
-
-.pt-vietgap-timeline .pt-timeline-item:nth-child(2) .pt-timeline-track::after {
-  background: linear-gradient(180deg, #16a34a 0%, #ea580c 100%);
-}
-
 /* ── Tối ưu triệt để trên Mobile & Màn hình cảm ứng:
       Đảm bảo khi ngón tay vô tình chạm/đặt vào bất kỳ thẻ con nào thì trang vẫn lướt cuộn 100% mượt mà ── */
 @media (pointer: coarse), (max-width: 920px) {
   .pt-vietgap-section,
   .pt-vietgap-timeline,
-  .pt-vietgap-timeline .pt-timeline-item,
-  .pt-vietgap-item {
+  .pt-vietgap-step,
+  .pt-vietgap-segment {
     touch-action: pan-y !important;
   }
 
-  .pt-vietgap-timeline .pt-timeline-item,
-  .pt-vietgap-item {
+  .pt-vietgap-step,
+  .pt-vietgap-segment {
     cursor: default !important;
     transform: none !important;
     transition: none !important;
@@ -3190,8 +3223,8 @@
     -webkit-tap-highlight-color: transparent !important;
   }
 
-  .pt-vietgap-timeline .pt-timeline-item:hover,
-  .pt-vietgap-item:hover {
+  .pt-vietgap-step:hover,
+  .pt-vietgap-segment:hover {
     background: transparent !important;
     box-shadow: none !important;
     transform: none !important;
@@ -3215,18 +3248,29 @@
     user-select: none !important;
   }
 
-  .pt-vietgap-timeline .pt-timeline-track,
-  .pt-vietgap-timeline .pt-timeline-node {
+  .pt-vietgap-track-col,
+  .pt-vietgap-capsule,
+  .pt-vietgap-transfer,
+  .pt-vietgap-transfer-track {
     pointer-events: none !important;
     touch-action: pan-y !important;
   }
 }
 
 @media (max-width: 640px) {
-  .pt-vietgap-timeline .pt-timeline-item,
-  .pt-vietgap-item {
-    gap: 12px;
-    padding: 3px 0 10px;
+  .pt-vietgap-segment,
+  .pt-vietgap-transfer {
+    grid-template-columns: 18px 1fr;
+    gap: 10px;
+  }
+  .pt-vietgap-capsule {
+    width: 10px;
+    padding: 6px 0;
+    min-height: 76px;
+  }
+  .pt-vietgap-dot {
+    width: 3.5px;
+    height: 3.5px;
   }
   .pt-vietgap-card {
     padding: 12px 15px 13px;
@@ -3640,68 +3684,354 @@
   font-style: italic;
 }
 
-/* Lớp tập huấn & Giống cây thẻ hiện đại */
-.pt-training-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 16px 18px;
-  border-radius: 18px;
-  background: #ffffff;
-  border: 1px solid rgba(20, 55, 47, 0.08);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+/* ── Lớp tập huấn theo phong cách Transit Timeline & Popup chi tiết ── */
+.pt-training-section {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
-.pt-training-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+
+.pt-training-interactive-content {
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease, border-color 0.18s ease;
 }
-.pt-training-date {
-  flex-shrink: 0;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: #e8f5e9;
-  color: #15803d;
-  font-size: 12px;
+
+.pt-training-interactive-content:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  border-color: rgba(20, 55, 47, 0.18);
+}
+
+.pt-training-interactive-content:active {
+  transform: scale(0.99);
+}
+
+.pt-training-seat-badge {
+  font-size: 11px;
   font-weight: 700;
-  text-align: center;
-  line-height: 1.25;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: -0.01em;
 }
-.pt-training-main {
+
+.pt-training-brief-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(20, 55, 47, 0.08);
+}
+
+.pt-training-curriculum-hint {
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   flex: 1;
   min-width: 0;
 }
-.pt-training-title {
-  margin: 0 0 6px;
-  font-size: 15.5px;
-  font-weight: 700;
-  color: var(--ink);
-  line-height: 1.35;
-}
-.pt-training-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+
+.pt-training-cta-hint {
   font-size: 12.5px;
-  color: #475569;
-}
-.pt-training-detail-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.pt-training-badge-slot {
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  margin-top: 4px;
-  font-size: 11.5px;
+  transition: transform 0.18s ease;
+}
+
+.pt-training-interactive-content:hover .pt-training-cta-hint {
+  transform: translateX(2px);
+}
+
+.pt-training-done-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.pt-training-done-row:hover {
+  background-color: rgba(20, 55, 47, 0.03);
+}
+
+/* ── Popup chi tiết lớp tập huấn (TrainingDetailModal) ── */
+.pt-training-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0 10px;
+}
+
+.pt-training-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(20, 55, 47, 0.08);
+}
+
+.pt-training-hero-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+}
+
+.pt-training-hero-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pt-training-hero-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.pt-training-status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #166534;
+  background: #edf7f1;
+  padding: 2.5px 8px;
+  border-radius: 999px;
+}
+
+.pt-training-code-pill {
+  font-size: 11px;
   font-weight: 600;
-  color: #0284c7;
-  background: #f0f9ff;
-  padding: 2px 8px;
-  border-radius: 6px;
-  width: fit-content;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2.5px 8px;
+  border-radius: 999px;
+  font-family: ui-monospace, monospace;
+}
+
+.pt-training-hero-title {
+  font-size: 18.5px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.3;
+  margin: 0 0 4px;
+}
+
+.pt-training-hero-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.pt-training-progress-box {
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid rgba(20, 55, 47, 0.05);
+}
+
+.pt-training-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.pt-training-progress-label {
+  color: #334155;
+}
+
+.pt-training-progress-percent {
+  font-weight: 700;
+  color: #166534;
+}
+
+.pt-training-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.pt-training-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.pt-training-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.pt-training-cell {
+  background: #ffffff;
+  border: 1px solid rgba(20, 55, 47, 0.08);
+  border-radius: 14px;
+  padding: 10px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pt-training-cell-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.pt-training-cell-value {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.pt-training-cell-sub {
+  font-size: 11.5px;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+.pt-training-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pt-training-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.pt-training-modules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pt-training-module-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f8fafc;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(20, 55, 47, 0.05);
+}
+
+.pt-training-module-idx {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.pt-training-module-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pt-training-module-text strong {
+  display: block;
+  font-size: 13px;
+  color: #0f172a;
+  line-height: 1.35;
+  margin-bottom: 2px;
+}
+
+.pt-training-module-text p {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.pt-training-alert-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 14px;
+  padding: 11px 14px;
+  font-size: 12.5px;
+  color: #92400e;
+  line-height: 1.45;
+}
+
+.pt-training-alert-box strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+  color: #78350f;
+}
+
+.pt-training-alert-box p {
+  margin: 0;
+}
+
+.pt-training-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(20, 55, 47, 0.08);
+}
+
+@media (max-width: 520px) {
+  .pt-training-grid {
+    grid-template-columns: 1fr;
+  }
+  .pt-training-hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .pt-training-hero-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+  .pt-training-hero-title {
+    font-size: 16.5px;
+  }
 }
 
 .pt-variety-card {
@@ -3835,32 +4165,51 @@
 }
 .pt-search:focus { outline: none; border-color: var(--green-600); background: #fff; box-shadow: 0 0 0 4px rgba(184, 230, 124, 0.45); }
 
-/* Nút */
+/* Nút phong cách Squircle bo góc 20px, không outline, phối màu ấm áp tinh tế */
 .pt-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 12px 22px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+  gap: 8px;
+  padding: 13px 24px;
+  border: none !important;
+  outline: none !important;
+  border-radius: 20px;
   font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.25;
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
 }
 .pt-btn:hover:not(:disabled) { transform: translateY(-1px); }
 .pt-btn:active { transform: scale(0.97); }
-.pt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.pt-btn:focus-visible { outline: 2px solid var(--green-600); outline-offset: 2px; }
-.pt-btn-sm { padding: 8px 15px; font-size: 12.5px; }
-.pt-btn-primary { background: var(--yellow); border-color: rgba(20, 55, 47, 0.08); color: var(--ink); box-shadow: 0 6px 20px rgba(248, 242, 58, 0.45); }
-.pt-btn-primary:hover:not(:disabled) { background: #fcf65f; box-shadow: 0 10px 28px rgba(248, 242, 58, 0.65); }
-.pt-btn-ghost { background: rgba(255, 255, 255, 0.7); border-color: rgba(20, 55, 47, 0.26); color: var(--ink); }
-.pt-btn-ghost:hover:not(:disabled) { background: #fff; border-color: var(--ink); }
-.pt-btn svg { width: 16px; height: 16px; stroke-width: 1.9; }
+.pt-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.pt-btn:focus-visible { outline: 2px solid #e05326; outline-offset: 2px; }
+.pt-btn-sm { padding: 9px 16px; font-size: 13px; border-radius: 16px; }
+.pt-btn-primary {
+  background: #e05326 !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(224, 83, 38, 0.28);
+}
+.pt-btn-primary:hover:not(:disabled) {
+  background: #d0461b !important;
+  box-shadow: 0 6px 18px rgba(224, 83, 38, 0.38);
+}
+.pt-btn-ghost {
+  background: #f1f3f8 !important;
+  border: none !important;
+  color: var(--ink) !important;
+  box-shadow: none !important;
+}
+.pt-btn-ghost:hover:not(:disabled) {
+  background: #e4e7ed !important;
+  color: var(--ink) !important;
+}
+.pt-btn svg { width: 16px; height: 16px; stroke-width: 2; }
 .pt-icon-btn {
   display: grid;
   place-items: center;
@@ -4644,23 +4993,25 @@
 }
 
 .pt-support-btn {
-  background: transparent;
-  border: 1px solid rgba(20, 55, 47, 0.16);
-  color: var(--text-secondary);
+  background: #f1f3f8;
+  border: none !important;
+  outline: none !important;
+  color: #475569;
   font-family: inherit;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
-  padding: 8px 18px;
-  border-radius: 999px;
+  padding: 10px 20px;
+  border-radius: 18px;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: all 0.18s ease;
 }
 
 .pt-support-btn:hover {
   color: var(--ink);
-  border-color: rgba(20, 55, 47, 0.35);
-  background-color: rgba(20, 55, 47, 0.04);
+  background: #e5e8f0;
+  transform: translateY(-1px);
 }
 
 .pt-support-btn:active {
@@ -5923,8 +6274,8 @@
 
 .pt-transit-segment {
   display: grid;
-  grid-template-columns: 36px 30px 1fr;
-  gap: 14px;
+  grid-template-columns: 28px 20px 1fr;
+  gap: 10px;
   align-items: stretch;
   position: relative;
 }
@@ -5934,20 +6285,20 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding-top: 6px;
+  padding-top: 5px;
 }
 
 .pt-transit-badge {
-  width: 32px;
-  height: 32px;
+  width: 25px;
+  height: 25px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
   flex-shrink: 0;
   user-select: none;
 }
@@ -5958,27 +6309,27 @@
   align-items: center;
   justify-content: stretch;
   position: relative;
-  padding: 6px 0;
+  padding: 5px 0;
 }
 
 .pt-transit-capsule {
   position: relative;
-  width: 16px;
+  width: 11px;
   height: 100%;
-  min-height: 88px;
+  min-height: 84px;
   border-radius: 999px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 0;
+  padding: 7px 0;
   box-sizing: border-box;
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), 0 2px 5px rgba(0, 0, 0, 0.07);
 }
 
 .pt-transit-dot {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background-color: #ffffff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -5987,46 +6338,84 @@
 
 .pt-transit-content {
   background: #ffffff;
-  border: 1px solid rgba(20, 55, 47, 0.08);
-  border-radius: 18px;
-  padding: 14px 18px;
+  border: none;
+  border-radius: 16px;
+  padding: 12px 15px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
   margin-bottom: 6px;
   box-sizing: border-box;
+}
+
+/* Thẻ lớp tập huấn tinh gọn nằm trực tiếp trên nền giao diện theo style lịch kiểm tra (Image 1) */
+.pt-training-clean-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: transparent;
+  transition: background-color 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.pt-training-clean-card:hover {
+  background-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 3px 12px rgba(20, 55, 47, 0.04);
+}
+
+.pt-training-clean-card:focus-visible {
+  outline: 2px solid #16a34a;
+  outline-offset: 2px;
+}
+
+/* Trong khu vực lớp tập huấn: Bỏ cột dot T1/T2, dùng 2 cột tinh gọn (trục capsule 20px + nội dung 1fr) */
+.pt-training-section .pt-transit-segment {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.pt-training-section .pt-transit-transfer {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.pt-training-section .pt-transit-capsule {
+  min-height: 48px;
+  padding: 6px 0;
 }
 
 .pt-transit-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .pt-transit-title {
-  font-size: 15.5px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.35;
   margin: 0;
-}
-
-.pt-transit-tag {
-  font-size: 11.5px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 999px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  letter-spacing: -0.01em;
 }
 
 .pt-transit-meta-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 14px;
+  gap: 6px 12px;
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.4;
@@ -6035,7 +6424,7 @@
 .pt-transit-meta-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .pt-transit-date-highlight {
@@ -6044,11 +6433,11 @@
 }
 
 .pt-transit-rel-badge {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   color: #2563eb;
   background: #eff6ff;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 6px;
 }
 
@@ -6063,10 +6452,10 @@
 
 .pt-transit-transfer {
   display: grid;
-  grid-template-columns: 36px 30px 1fr;
-  gap: 14px;
+  grid-template-columns: 28px 20px 1fr;
+  gap: 10px;
   align-items: center;
-  padding: 6px 0;
+  padding: 5px 0;
 }
 
 .pt-transit-transfer-empty {
@@ -6078,7 +6467,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
+  padding: 4px 0;
 }
 
 .pt-transit-mini-dot {
@@ -6089,23 +6479,8 @@
   flex-shrink: 0;
 }
 
-.pt-transit-transfer-node {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background-color: #ffffff;
-  border: 1.5px solid #cbd5e1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #475569;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-  flex-shrink: 0;
-  margin: 2px 0;
-}
-
 .pt-transit-transfer-text {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   color: #64748b;
   display: flex;
@@ -6117,35 +6492,44 @@
 @media (max-width: 480px) {
   .pt-transit-segment,
   .pt-transit-transfer {
-    grid-template-columns: 28px 24px 1fr;
-    gap: 10px;
+    grid-template-columns: 24px 16px 1fr;
+    gap: 8px;
   }
   .pt-transit-badge {
-    width: 28px;
-    height: 28px;
-    font-size: 11.5px;
-  }
-  .pt-transit-capsule {
-    width: 14px;
-    padding: 8px 0;
-    min-height: 80px;
-  }
-  .pt-transit-dot {
-    width: 5px;
-    height: 5px;
-  }
-  .pt-transit-content {
-    padding: 12px 14px;
-    border-radius: 16px;
-  }
-  .pt-transit-title {
-    font-size: 14.5px;
-  }
-  .pt-transit-transfer-node {
     width: 22px;
     height: 22px;
+    font-size: 10px;
+  }
+  .pt-transit-capsule {
+    width: 10px;
+    padding: 6px 0;
+    min-height: 76px;
+  }
+  .pt-transit-dot {
+    width: 3.5px;
+    height: 3.5px;
+  }
+  .pt-transit-content {
+    padding: 11px 13px;
+    border-radius: 14px;
+  }
+  .pt-transit-title {
+    font-size: 14px;
+  }
+  .pt-training-section .pt-transit-segment,
+  .pt-training-section .pt-transit-transfer {
+    grid-template-columns: 16px 1fr;
+    gap: 8px;
+  }
+  .pt-training-section .pt-transit-capsule {
+    min-height: 44px;
+  }
+  .pt-training-clean-card {
+    padding: 6px 8px;
+    gap: 10px;
   }
 }
+
 
 
 

@@ -3,11 +3,14 @@
 import { useRef, useState, useLayoutEffect, useMemo, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
+import { useResource } from "@/hooks/use-resource";
 import { daysSince, formatKg, HOUSEHOLD_STATUS, SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
+import type { TrainingDto } from "@/types/api";
 import type { PortalList, PortalOverview, PortalScheduleItem } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
-import { StateBlock } from "./ui";
+import { Sheet, StateBlock } from "./ui";
+import { getTrainingKicker, TrainingDetailModal } from "./LearnTab";
 
 function getHeroPath(w: number, h: number, badgeW: number, badgeH: number, badgeRight: number): string {
   const r = 28; // Corner radius
@@ -81,7 +84,9 @@ function getConciseScheduleTitle(title: string): string {
   return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : title;
 }
 
-function getRelativeScheduleNote(dateStr: string): string {
+const keepTraining = (item: TrainingDto) => item;
+
+function getRelativeScheduleNote(dateStr: string | null | undefined): string {
   if (!dateStr) return "(Dự kiến)";
   const target = new Date(dateStr);
   if (isNaN(target.getTime())) return "(Dự kiến)";
@@ -142,6 +147,31 @@ function buildActionItems(overview: PortalOverview): ActionItem[] {
 export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId) => void }) {
   const overview = usePortal<PortalOverview>("overview");
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
+  const training = useResource<TrainingDto, TrainingDto>("training", keepTraining);
+  const [selectedTraining, setSelectedTraining] = useState<TrainingDto | null>(null);
+
+  // Chỉ đưa những lịch tập huấn trong vòng thời gian khoảng 10 ngày trở lại để tránh làm rối màn hình trang chủ
+  const urgentTrainings = useMemo(() => {
+    if (!training.data || training.data.length === 0) return [];
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    return training.data
+      .filter((item) => {
+        if (item.completed || !item.heldOn) return false;
+        const target = new Date(item.heldOn);
+        if (isNaN(target.getTime())) return false;
+        const tgt = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+        const diffDays = Math.round((tgt.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return diffDays >= 0 && diffDays <= 10;
+      })
+      .sort((a, b) => {
+        const tA = a.heldOn ? new Date(a.heldOn).getTime() : 0;
+        const tB = b.heldOn ? new Date(b.heldOn).getTime() : 0;
+        return tA - tB;
+      });
+  }, [training.data]);
 
   const shellRef = useRef<HTMLDivElement>(null);
   const badgeRef = useRef<HTMLDivElement>(null);
@@ -271,8 +301,6 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
           <path
             d={pathD}
             fill="url(#ptHeroGrad)"
-            stroke="rgba(15, 23, 42, 0.08)"
-            strokeWidth="1.2"
           />
         </svg>
 
@@ -464,6 +492,84 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
           </div>
         )}
       </section>
+
+      {/* Lớp tập huấn sắp diễn ra hiển thị trực tiếp trên nền giao diện, thiết kế theo style lịch kiểm tra, lọc trong vòng 10 ngày */}
+      <section className="pt-schedule-section" aria-labelledby="training-schedule-heading">
+        <div className="pt-schedule-header">
+          <h2 id="training-schedule-heading" className="pt-schedule-title">
+            Lớp tập huấn sắp tới
+          </h2>
+          {training.data && training.data.length > 0 && (
+            <button
+              type="button"
+              className="pt-schedule-link"
+              onClick={() => onNavigate("learn")}
+            >
+              Xem tất cả &rarr;
+            </button>
+          )}
+        </div>
+
+        {urgentTrainings.length === 0 ? (
+          <p className="pt-muted pt-schedule-empty">
+            {training.loading
+              ? "Đang tải lịch tập huấn..."
+              : "Hiện không có lớp tập huấn nào diễn ra trong 10 ngày tới."}
+          </p>
+        ) : (
+          <div className="pt-timeline" role="list">
+            {urgentTrainings.slice(0, 4).map((item, idx, arr) => {
+              const isFirst = idx === 0;
+              const isLast = idx === arr.length - 1 && arr.length > 1;
+              const kicker = getTrainingKicker(item.title);
+              const relNote = item.heldOn ? getRelativeScheduleNote(item.heldOn) : "";
+              const formattedDate = formatDate(item.heldOn);
+
+              return (
+                <div
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  className={`pt-timeline-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
+                  onClick={() => setSelectedTraining(item)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedTraining(item);
+                    }
+                  }}
+                  title="Nhấn để xem chi tiết khóa tập huấn và đăng ký"
+                >
+                  <div className="pt-timeline-track" aria-hidden="true">
+                    <div className={`pt-timeline-node ${isFirst ? "is-active" : ""} ${isLast ? "is-target" : ""}`} />
+                  </div>
+                  <div className="pt-timeline-content">
+                    <span className="pt-timeline-kicker">{kicker}</span>
+                    <h3 className="pt-timeline-title">{item.title}</h3>
+                  </div>
+                  <div className="pt-timeline-meta">
+                    <span className="pt-timeline-date">{formattedDate}</span>
+                    {relNote && <span className="pt-timeline-rel">{relNote}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Popup chi tiết khóa tập huấn khi bấm vào item từ trang chủ */}
+      {selectedTraining && (
+        <Sheet
+          title="Thông tin lớp tập huấn"
+          onClose={() => setSelectedTraining(null)}
+        >
+          <TrainingDetailModal
+            item={selectedTraining}
+            onClose={() => setSelectedTraining(null)}
+          />
+        </Sheet>
+      )}
     </div>
   );
 }
