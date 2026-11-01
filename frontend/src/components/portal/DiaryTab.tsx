@@ -545,7 +545,7 @@ export default function DiaryTab() {
               return (
                 <div
                   key={rule.id}
-                  className={`pt-timeline-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
+                  className={`pt-timeline-item pt-vietgap-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
                 >
                   <div className="pt-timeline-track" aria-hidden="true">
                     <div className={`pt-timeline-node ${nodeClass}`} />

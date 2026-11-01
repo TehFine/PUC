@@ -12,6 +12,7 @@ import {
   MapPin,
   NotebookPen,
   Phone,
+  Scale,
   Send,
   Tag,
   TreePine,
@@ -30,20 +31,18 @@ import HomeTab from "./HomeTab";
 import InspectionTab from "./InspectionTab";
 import LearnTab from "./LearnTab";
 import PlotsTab from "./PlotsTab";
-import RequestsTab from "./RequestsTab";
 import StampsTab from "./StampsTab";
 import RadialNavWheel from "./RadialNavWheel";
 import { SupportFooter, SystemSupportModal } from "./SystemSupport";
 
-export type PortalTabId = "home" | "plots" | "diary" | "stamps" | "inspection" | "requests" | "learn";
+export type PortalTabId = "home" | "plots" | "diary" | "stamps" | "inspection" | "learn";
 
 const TABS: { id: PortalTabId; label: string; icon: LucideIcon }[] = [
   { id: "home", label: "Trang chủ", icon: House },
   { id: "plots", label: "Thửa đất", icon: TreePine },
   { id: "diary", label: "Nhật ký", icon: NotebookPen },
-  { id: "stamps", label: "Tem & Thu hái", icon: Tag },
+  { id: "stamps", label: "Thu hoạch", icon: Scale },
   { id: "inspection", label: "Kiểm tra", icon: ClipboardCheck },
-  { id: "requests", label: "Hồ sơ", icon: Send },
   { id: "learn", label: "Kiến thức", icon: BookOpen },
 ];
 
@@ -365,12 +364,6 @@ export default function PortalApp() {
         {visitedTabs.has("inspection") && (
           <div className={`pt-tab-pane ${tab === "inspection" ? "is-active" : "is-hidden"}`}>
             <InspectionTab />
-            <SupportFooter onOpen={openSupport} />
-          </div>
-        )}
-        {visitedTabs.has("requests") && (
-          <div className={`pt-tab-pane ${tab === "requests" ? "is-active" : "is-hidden"}`}>
-            <RequestsTab />
             <SupportFooter onOpen={openSupport} />
           </div>
         )}

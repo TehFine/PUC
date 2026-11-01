@@ -245,7 +245,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       <div className="pt-mapmodal-topbar">
         {/* Huy hiệu mã thửa nổi bật góc trái */}
         <div className="pt-mapmodal-top-tag">
-          <strong className="pt-mapmodal-top-code">#{plot.code}</strong>
+          <strong className="pt-mapmodal-top-code">{plot.code}</strong>
           <span className="pt-mapmodal-top-sub">{householdName}</span>
         </div>
 
@@ -312,7 +312,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           <div className="pt-mapmodal-popup-header-row">
             <div className="pt-mapmodal-popup-header-main">
               <div className="pt-mapmodal-popup-title-line">
-                <span className="pt-mapmodal-popup-code">#{plot.code}</span>
+                <span className="pt-mapmodal-popup-code">{plot.code}</span>
                 {plot.variety && (
                   <span className="pt-mapmodal-popup-variety">{plot.variety}</span>
                 )}
@@ -400,10 +400,10 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                   type="button"
                   className="pt-mapmodal-popup-action-btn pt-mapmodal-action-qr"
                   onClick={() => onOpenSignboard(plot)}
-                  title="Xem và in biển cắm đầu lô vườn QR"
+                  title="Xem và in biển cắm vườn"
                 >
                   <QrCode size={15} strokeWidth={2.2} />
-                  <span>Biển cắm vườn QR</span>
+                  <span>Biển cắm vườn</span>
                 </button>
               )}
             </div>

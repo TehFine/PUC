@@ -138,6 +138,5 @@ export const RADIAL_ICONS: Record<PortalTabId, React.ComponentType<RadialIconPro
   diary: DocumentWriterIcon,
   stamps: QrTagIcon,
   inspection: AuditIcon,
-  requests: PersonCvIcon,
   learn: BrainQuestionMarkIcon,
 };

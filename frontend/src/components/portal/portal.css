@@ -305,18 +305,19 @@
     0 2px 6px -1px rgba(15, 23, 42, 0.04);
 }
 
-/* ── DẤU MỘC WATERMARK "ĐÃ XUẤT" NẰM CHÉO THẺ ── */
+/* ── DẤU MỘC WATERMARK KIỂM SOÁT XUẤT HÀNG (DỜI SANG PHẢI, MỜ NHẸ, KHÔNG RỐI CHỮ) ── */
 .pt-asset-watermark {
   position: absolute;
   top: 50%;
-  left: 36%;
-  transform: translate(-50%, -50%) rotate(-13deg);
+  right: 120px;
+  transform: translateY(-50%) rotate(-13deg);
   pointer-events: none;
   user-select: none;
   z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  max-width: 260px;
 }
 
 .pt-asset-watermark-inner {
@@ -324,138 +325,127 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 6px 18px 7px;
-  border: 2.5px solid rgba(220, 38, 38, 0.22);
+  padding: 5px 16px 6px;
+  border: 1.5px double rgba(220, 38, 38, 0.14);
   border-radius: 8px;
   box-shadow: 
-    inset 0 0 0 1px rgba(220, 38, 38, 0.14),
-    0 0 0 1px rgba(220, 38, 38, 0.05);
-  background: rgba(254, 242, 242, 0.18);
+    inset 0 0 0 1px rgba(220, 38, 38, 0.05),
+    0 0 0 1px rgba(220, 38, 38, 0.02);
+  background: rgba(254, 242, 242, 0.06);
   mix-blend-mode: multiply;
   text-align: center;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
 .pt-asset-card:hover .pt-asset-watermark-inner {
-  transform: scale(1.03);
+  transform: scale(1.02);
+  border-color: rgba(220, 38, 38, 0.24);
 }
 
 .pt-asset-watermark-title {
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Impact", "Arial Black", "Arial-BoldMT", sans-serif;
   font-size: 23px;
-  font-weight: 900;
-  letter-spacing: 0.18em;
-  color: rgba(220, 38, 38, 0.22);
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  color: rgba(220, 38, 38, 0.14);
   text-transform: uppercase;
   line-height: 1.1;
   white-space: nowrap;
 }
 
+.pt-asset-card:hover .pt-asset-watermark-title {
+  color: rgba(220, 38, 38, 0.25);
+}
+
 .pt-asset-watermark-sub {
-  font-size: 9.5px;
+  font-size: 8px;
   font-weight: 800;
-  letter-spacing: 0.22em;
-  color: rgba(220, 38, 38, 0.18);
+  letter-spacing: 0.16em;
+  color: rgba(220, 38, 38, 0.12);
   text-transform: uppercase;
-  margin-top: 2.5px;
+  margin-top: 2px;
   line-height: 1;
   white-space: nowrap;
 }
 
-/* ── CỘT TRÁI: THÔNG TIN LÔ HÀNG ── */
+.pt-asset-card:hover .pt-asset-watermark-sub {
+  color: rgba(220, 38, 38, 0.22);
+}
+
+/* ── CỘT TRÁI: THÔNG TIN TEM LÔ HÀNG (CHỮ THUẦN THANH LỊCH, KHÔNG BADGE) ── */
 .pt-asset-left {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 10px;
+  justify-content: center;
+  gap: 5px;
   min-width: 0;
   position: relative;
   z-index: 2;
 }
 
-.pt-asset-top-row {
+/* Dòng 1: Tiêu đề nông sản & Đơn vị & Mã PUC */
+.pt-asset-sub-title {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 5px;
+  flex-wrap: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  color: #15803d;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Dòng mã lô & sản lượng nằm trực tiếp trên nền thẻ */
+.pt-asset-dot {
+  color: #94a3b8;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+/* Dòng 2: Mã lô & KLT (Tiêu điểm to rõ, không bị rớt dòng) */
 .pt-asset-code-line {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: baseline;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  margin: 1px 0;
 }
 
 .pt-asset-code-val {
-  font-size: 16px;
+  font-size: 16.5px;
   font-weight: 900;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   color: #0f172a;
   text-transform: uppercase;
-  font-family: inherit;
+  white-space: nowrap;
 }
 
 .pt-asset-code-divider {
-  color: #94a3b8;
+  color: #cbd5e1;
   font-weight: 700;
   font-size: 14px;
 }
 
 .pt-asset-weight-val {
-  font-size: 16px;
+  font-size: 16.5px;
   font-weight: 800;
   letter-spacing: 0.01em;
-  color: #15803d;
-}
-
-.pt-asset-status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2.5px 8.5px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: #16a34a;
   white-space: nowrap;
 }
 
-.pt-asset-status-badge.tone-success {
-  background: #ecfdf5;
-  color: #15803d;
-  border: 1px solid rgba(22, 101, 52, 0.18);
-}
-
-.pt-asset-status-badge.tone-neutral {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-}
-
-.pt-asset-status-badge.tone-info {
-  background: #f0f9ff;
-  color: #0369a1;
-  border: 1px solid rgba(3, 105, 161, 0.2);
-}
-
-.pt-asset-status-badge.tone-warn {
-  background: #fffbeb;
-  color: #b45309;
-  border: 1px solid rgba(180, 83, 9, 0.2);
-}
-
-/* Phần chân thẻ: ASSET ID & thông tin bên dưới */
-.pt-asset-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
+/* Dòng 3: Mã truy xuất (Chữ thuần không viền khung) */
 .pt-asset-id-group {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -465,19 +455,20 @@
 .pt-asset-id-label {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: #64748b;
   text-transform: uppercase;
 }
 
 .pt-asset-id-val {
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.04em;
   color: #0f172a;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+/* Dòng 4: Ngày thu hoạch & Nơi nhận */
 .pt-asset-meta {
   font-size: 11.5px;
   color: #64748b;
@@ -491,6 +482,8 @@
 .pt-asset-meta-dot {
   opacity: 0.5;
 }
+
+
 
 /* ── CỘT PHẢI: MÃ QR CODE (VỪA BẤM VỪA QUÉT ĐƯỢC) ── */
 .pt-asset-right {
@@ -537,7 +530,7 @@
   height: 122px;
   background: #ffffff;
   border-radius: 10px;
-  padding: 4px;
+  padding: 6px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -612,49 +605,101 @@
 /* ── GIỮ FORM NGANG TRÊN THIẾT BỊ DI ĐỘNG (MOBILE) ── */
 @media (max-width: 540px) {
   .pt-asset-card {
-    flex-direction: row; /* Luôn giữ form ngang */
+    flex-direction: row;
     align-items: center;
-    padding: 12px 14px;
-    gap: 12px;
+    padding: 10px 12px;
+    gap: 10px;
+    border-radius: 14px;
   }
+
+  .pt-asset-hide-mobile {
+    display: none !important;
+  }
+
+  .pt-asset-left {
+    gap: 3.5px;
+  }
+
+  /* Watermark trên mobile: Dời sang phía phải, mờ nhẹ 0.11 */
   .pt-asset-watermark {
-    left: 38%;
-    transform: translate(-50%, -50%) rotate(-12deg);
+    top: 50%;
+    right: 68px;
+    left: auto;
+    transform: translateY(-50%) rotate(-10deg);
+    max-width: 175px;
   }
+
   .pt-asset-watermark-inner {
-    padding: 4px 13px 5px;
-    border-width: 2px;
+    padding: 2.5px 8px 3px;
+    border-width: 1.2px;
+    border-color: rgba(220, 38, 38, 0.11);
+    background: rgba(254, 242, 242, 0.04);
+    border-radius: 5px;
   }
+
   .pt-asset-watermark-title {
-    font-size: 17px;
-    letter-spacing: 0.16em;
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    color: rgba(220, 38, 38, 0.12);
   }
+
   .pt-asset-watermark-sub {
-    font-size: 7.5px;
+    font-size: 6px;
+    letter-spacing: 0.1em;
+    color: rgba(220, 38, 38, 0.10);
+    margin-top: 1px;
   }
+
+  .pt-asset-sub-title {
+    font-size: 9px;
+    letter-spacing: 0.02em;
+    gap: 3.5px;
+    white-space: nowrap;
+  }
+
+  .pt-asset-code-line {
+    gap: 6px;
+    margin: 0;
+  }
+
   .pt-asset-code-val {
-    font-size: 14px;
+    font-size: 13.5px;
   }
+
+  .pt-asset-code-divider {
+    font-size: 11px;
+  }
+
   .pt-asset-weight-val {
-    font-size: 14px;
+    font-size: 13.5px;
   }
+
+  .pt-asset-id-group {
+    gap: 5px;
+  }
+
   .pt-asset-id-label {
-    font-size: 10px;
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
   }
+
   .pt-asset-id-val {
     font-size: 12px;
   }
+
   .pt-asset-meta {
-    font-size: 10.5px;
-    gap: 4px;
-  }
-  .pt-asset-qr-box {
-    width: 96px;
-    height: 96px;
-    padding: 3px;
-  }
-  .pt-asset-qr-subtext {
     font-size: 9.5px;
+    line-height: 1.3;
+    gap: 3px;
+  }
+
+  /* Khung QR Code thu gọn vừa vặn trên màn hình mobile */
+  .pt-asset-qr-box {
+    width: 82px;
+    height: 82px;
+    padding: 3px;
+    border-radius: 8px;
+    flex-shrink: 0;
   }
 }
 
@@ -716,9 +761,12 @@
   box-shadow: 0 4px 14px rgba(234, 179, 8, 0.28);
 }
 
+.pt-ticket-check-icon,
 .pt-ticket-popper-icon {
-  font-size: 26px;
-  line-height: 1;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
 }
 
 .pt-ticket-title {
@@ -912,15 +960,28 @@
 
 .pt-qr-frame {
   position: relative;
-  width: 155px;
-  height: 155px;
-  display: grid;
-  place-items: center;
+  width: 156px;
+  height: 156px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: #ffffff;
-  padding: 8px;
+  padding: 10px;
   border-radius: 18px;
   border: 1.5px solid rgba(15, 23, 42, 0.08);
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.pt-qr-frame-img {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
 }
 
 .pt-qr-code-icon {
@@ -2955,23 +3016,29 @@
   border: none;
   box-shadow: none;
   box-sizing: border-box;
+  touch-action: pan-y;
 }
 
 .pt-vietgap-timeline {
   padding: 2px 0;
+  touch-action: pan-y;
 }
 
-.pt-vietgap-timeline .pt-timeline-item {
+.pt-vietgap-timeline .pt-timeline-item,
+.pt-vietgap-item {
   cursor: default;
   padding: 4px 0 12px;
   background: transparent !important;
   box-shadow: none !important;
   border-radius: 0;
   gap: 14px;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .pt-vietgap-timeline .pt-timeline-track {
   padding-top: 14px;
+  touch-action: pan-y;
 }
 
 .pt-vietgap-timeline .pt-timeline-track::after {
@@ -2992,11 +3059,20 @@
   outline: none !important;
   box-shadow: none !important;
   box-sizing: border-box;
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.pt-vietgap-timeline .pt-timeline-item:hover .pt-vietgap-card {
-  transform: translateY(-1px);
+/* Chỉ kích hoạt hiệu ứng dịch chuyển hover trên chuột Desktop, triệt tiêu hoàn toàn nhảy vị trí trên cảm ứng mobile */
+@media (hover: hover) and (pointer: fine) {
+  .pt-vietgap-card {
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .pt-vietgap-timeline .pt-timeline-item:hover .pt-vietgap-card,
+  .pt-vietgap-item:hover .pt-vietgap-card {
+    transform: translateY(-1px);
+  }
 }
 
 /* 3 màu thẻ pastel nhạt nhạt nhẹ nhàng không viền outline */
@@ -3093,8 +3169,62 @@
   background: linear-gradient(180deg, #16a34a 0%, #ea580c 100%);
 }
 
+/* ── Tối ưu triệt để trên Mobile & Màn hình cảm ứng:
+      Đảm bảo khi ngón tay vô tình chạm/đặt vào bất kỳ thẻ con nào thì trang vẫn lướt cuộn 100% mượt mà ── */
+@media (pointer: coarse), (max-width: 920px) {
+  .pt-vietgap-section,
+  .pt-vietgap-timeline,
+  .pt-vietgap-timeline .pt-timeline-item,
+  .pt-vietgap-item {
+    touch-action: pan-y !important;
+  }
+
+  .pt-vietgap-timeline .pt-timeline-item,
+  .pt-vietgap-item {
+    cursor: default !important;
+    transform: none !important;
+    transition: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  .pt-vietgap-timeline .pt-timeline-item:hover,
+  .pt-vietgap-item:hover {
+    background: transparent !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  .pt-vietgap-card {
+    touch-action: pan-y !important;
+    pointer-events: none !important; /* Xuyên thấu thao tác cảm ứng trực tiếp xuống trang, không chặn cử chỉ vuốt cuộn */
+    transform: none !important;
+    transition: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  .pt-vietgap-card * {
+    pointer-events: none !important;
+    touch-action: pan-y !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
+
+  .pt-vietgap-timeline .pt-timeline-track,
+  .pt-vietgap-timeline .pt-timeline-node {
+    pointer-events: none !important;
+    touch-action: pan-y !important;
+  }
+}
+
 @media (max-width: 640px) {
-  .pt-vietgap-timeline .pt-timeline-item {
+  .pt-vietgap-timeline .pt-timeline-item,
+  .pt-vietgap-item {
     gap: 12px;
     padding: 3px 0 10px;
   }
@@ -5773,5 +5903,4 @@
     height: 29px;
   }
 }
-
 

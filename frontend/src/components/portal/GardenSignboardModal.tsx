@@ -30,7 +30,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
   return (
     <Sheet
-      title={`Biển cắm đầu lô vườn QR – ${plot.code}`}
+      title={`Biển cắm vườn – ${plot.code}`}
       onClose={onClose}
       className="pt-signboard-sheet"
     >

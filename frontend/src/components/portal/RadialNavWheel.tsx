@@ -54,7 +54,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   },
   {
     id: "stamps",
-    label: "Tem & Thu hái",
+    label: "Thu hoạch",
     icon: QrTagIcon,
     color: "#059669",
     activeColor: "#047857",
@@ -69,15 +69,6 @@ export const NAV_ITEMS: NavItemConfig[] = [
     activeColor: "#e11d48",
     activeBg: "rgba(236, 72, 153, 0.08)",
     activeBorder: "#ec4899",
-  },
-  {
-    id: "requests",
-    label: "Hồ sơ",
-    icon: PersonCvIcon,
-    color: "#0284c7",
-    activeColor: "#0369a1",
-    activeBg: "rgba(2, 132, 199, 0.08)",
-    activeBorder: "#0284c7",
   },
   {
     id: "learn",
