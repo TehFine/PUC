@@ -76,5 +76,11 @@ export async function seedDemoFarmers(
      WHERE (SELECT count(*) FROM inspection_schedule WHERE scheduled_on >= current_date) = 1`,
   );
 
+  // Cập nhật ngày tổ chức các lớp tập huấn sắp tới gần với ngày hiện tại
+  await pool.query(`UPDATE training_courses SET held_on = current_date + 3 WHERE id = 1`);
+  await pool.query(`UPDATE training_courses SET held_on = current_date + 7 WHERE id = 2`);
+  await pool.query(`UPDATE training_courses SET held_on = current_date + 14 WHERE id = 3`);
+  await pool.query(`UPDATE training_courses SET held_on = current_date + 25 WHERE id = 4`);
+
   if (created.length > 0) log(`✔ Đã tạo tài khoản hộ dân mẫu: ${created.join(", ")}.`);
 }
