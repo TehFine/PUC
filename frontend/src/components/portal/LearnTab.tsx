@@ -486,8 +486,8 @@ export function PesticideDetailModal({
 
   return (
     <div className="pt-pesticide-modal-body">
-      {/* 1. Khung hiển thị CHỈ chứa duy nhất hình ảnh chai thuốc */}
-      <div className="pt-pesticide-showcase-frame">
+      {/* 1. Hình ảnh chai thuốc lớn, đứng trực tiếp trên nền không khung bao quanh */}
+      <div className="pt-pesticide-showcase-wrap">
         <img
           src={imgSrc}
           alt={item.name}
