@@ -13,7 +13,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { Card, EmptyState, Sheet, StateBlock } from "./ui";
+import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
 
 const keepTraining = (item: TrainingDto) => item;
 const keepPesticide = (item: PesticideDto) => item;
@@ -22,6 +22,7 @@ const keepVariety = (item: VarietyDto) => item;
 type View = "training" | "pesticides" | "fertilizers" | "varieties";
 type StatusFilter = "all" | "allowed" | "restricted" | "banned";
 type FertilizerFilter = "all" | "organic" | "npk" | "foliar" | "microbial" | "restricted";
+type VarietyFilter = "all" | "export" | "native" | "premium" | "new";
 
 function getRelativeScheduleNote(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -1429,42 +1430,461 @@ function FertilizerList() {
   );
 }
 
-function VarietyList() {
-  const { data, loading, error } = useResource<VarietyDto, VarietyDto>("varieties", keepVariety);
+export const DEFAULT_VARIETIES: VarietyDto[] = [
+  {
+    id: 1,
+    name: "Sầu riêng Monthong (Dona)",
+    category: "export",
+    origin: "Thái Lan (Thuần hóa tại Tây Nguyên & Nam Bộ)",
+    weightRange: "2.5 – 5.0 kg/trái",
+    harvestYears: "115 – 125 ngày (Từ xả nhụy)",
+    description: "Giống sầu riêng xuất khẩu số 1 của Việt Nam sang thị trường Trung Quốc theo Nghị định thư GACC. Trái thon dài, vỏ mỏng vàng đồng, cơm dày vàng ngà, hạt lép trên 85%, vị ngọt thanh béo ngậy, cơm khô ráo dễ cấp đông và bảo quản vận chuyển đường dài.",
+    image: "/varieties/monthong.png",
+    fleshColor: "Vàng ngà (kem sáng)",
+    seedRate: "Hạt lép > 85%",
+    brix: "32 – 35% (Ngọt thanh béo ngậy)",
+    yieldPerHa: "18 – 25 tấn/ha",
+    status: "allowed",
+    marketPotential: "Thị trường xuất khẩu chính ngạch ưa chuộng nhất, chiếm 75% kim ngạch sầu riêng Việt Nam",
+    morphology: [
+      "Quả hình bầu dục hoặc quả lê thon dài, cuống to và cứng cáp",
+      "Gai nhọn, dày, mật độ gai phân bố đồng đều từ cuống đến đáy",
+      "Vỏ quả mỏng 1.0 – 1.2 cm, chuyển từ xanh sang vàng đồng khi chín",
+      "Tỷ lệ cơm đạt 32 – 35% trọng lượng trái, thịt ráo không dính tay",
+    ],
+    farmingTechniques: {
+      density: "8m × 8m hoặc 9m × 9m (120 – 150 cây/ha)",
+      pollination: "Bắt buộc thụ phấn nhân tạo bổ sung lúc 18h00 – 20h30 để quả tròn đều 5 hộc, chống méo hộc",
+      thinning: "Tỉa hoa làm 3 đợt, tỉa trái làm 2 đợt; cây 6–8 năm chỉ tuyển giữ 60–80 quả đều đẹp nhất",
+      specialNotes: "Dễ bị thối đít quả và nứt gai vào mùa mưa; cần bón đủ Canxi-Bo định kỳ, cấm dùng phân Kali đỏ (KCl)",
+    },
+  },
+  {
+    id: 2,
+    name: "Sầu riêng Ri 6",
+    category: "native",
+    origin: "Việt Nam (Lai tạo bởi ông Sáu Ri - Vĩnh Long)",
+    weightRange: "2.0 – 3.8 kg/trái",
+    harvestYears: "95 – 105 ngày (Từ xả nhụy)",
+    description: "Giống sầu riêng bản địa xuất sắc đạt nhiều giải thưởng quốc gia. Quả thuôn tròn đều, cơm vàng óng ánh như tơ, hạt lép 75 – 80%, vị ngọt đậm đà béo thơm nồng nàn đặc trưng, chín sớm hơn Monthong khoảng 20 ngày giúp bà con đón đầu vụ mùa giá cao.",
+    image: "/varieties/ri6.png",
+    fleshColor: "Vàng ươm đậm (mỡ gà óng ả)",
+    seedRate: "Hạt lép 75 – 80%",
+    brix: "34 – 38% (Ngọt đậm đà, béo ngậy)",
+    yieldPerHa: "16 – 22 tấn/ha",
+    status: "allowed",
+    marketPotential: "Tiêu thụ nội địa cực mạnh và xuất khẩu quả tươi rất được ưa chuộng nhờ mùi vị đậm đà",
+    morphology: [
+      "Quả dáng thuôn tròn cân đối, rãnh múi phân định rõ ràng 5 hộc",
+      "Gai to, thưa, nở phẳng khi trái đẫy đà chuẩn bị chín",
+      "Vỏ mỏng, khi chín giữ màu vàng xanh tự nhiên, đáy quả nhọn nhẹ",
+      "Cơm vàng đậm bóng mịn, dẻo quánh, hạt lép nhiều, khô ráo",
+    ],
+    farmingTechniques: {
+      density: "8m × 8m (150 cây/ha), cây phát triển tán dù phân cành thấp",
+      pollination: "Thụ phấn nhân tạo giúp đậu đều 5 hộc, hạn chế rụng sinh lý",
+      thinning: "Tỉa bớt cành tăm, giữ chùm hoa ở vị trí 1/3 cành tính từ thân chính ra",
+      specialNotes: "Dễ bị sượng nước (cháy múi) nếu thừa đạm lúc quả lớn; tuyệt đối không dùng phân Kali đỏ (KCl)",
+    },
+  },
+  {
+    id: 3,
+    name: "Sầu riêng Musang King (D197)",
+    category: "premium",
+    origin: "Malaysia (Bang Kelantan / Pahang)",
+    weightRange: "1.5 – 3.0 kg/trái",
+    harvestYears: "105 – 115 ngày (Từ xả nhụy)",
+    description: "Được mệnh danh là 'Vua của các loại sầu riêng' với giá trị kinh tế thương phẩm cao nhất thế giới. Cơm có màu vàng nghệ rực rỡ, kết cấu dẻo dính mịn như bơ sữa, vị ngọt ngào kèm hậu vị đắng nhẹ tinh tế khó quên.",
+    image: "/varieties/musangking.png",
+    fleshColor: "Vàng nghệ đậm (đặc trưng)",
+    seedRate: "Hạt lép dẹp 90 – 95%",
+    brix: "38 – 42% (Ngọt béo sâu, hậu đắng nhẹ)",
+    yieldPerHa: "14 – 18 tấn/ha",
+    status: "encouraged",
+    marketPotential: "Phân khúc siêu cao cấp, giá bán cao gấp 2 – 3 lần sầu riêng thông thường",
+    morphology: [
+      "Đáy quả có biểu tượng ngôi sao 5 cánh màu nâu phẳng rõ rệt",
+      "Cuống phẳng, có vòng khấc ngăn cách cuống và thân trái rõ rệt",
+      "Gai hình kim tự tháp dẹt, tương đối phẳng và cách xa nhau",
+      "Hạt cực nhỏ, dẹt như lá bài; tỷ lệ cơm sử dụng đạt trên 90%",
+    ],
+    farmingTechniques: {
+      density: "9m × 9m (120 cây/ha); cây ưa độ ẩm nhưng cực kỳ kỵ úng nước",
+      pollination: "Bắt buộc thụ phấn chéo bằng phấn hoa Ri6 hoặc Monthong để tăng tỷ lệ đậu trái",
+      thinning: "Chỉ giữ quả dạng cân đối, loại bỏ sớm các quả có rãnh méo hoặc cuống teo",
+      specialNotes: "Thích hợp thu hoạch khi trái chín rụng tự nhiên hoặc cắt già ở độ chín trên 90%",
+    },
+  },
+  {
+    id: 4,
+    name: "Sầu riêng Black Thorn (D200 - Gai Đen)",
+    category: "new",
+    origin: "Malaysia (Vùng Penang)",
+    weightRange: "1.8 – 3.5 kg/trái",
+    harvestYears: "100 – 110 ngày (Từ xả nhụy)",
+    description: "Giống sầu riêng quý hiếm đỉnh cao đang được nhân rộng tại Việt Nam. Điểm nhận diện là chóp gai có màu nâu đen và đáy lõm tròn. Cơm màu đỏ cam bắt mắt, vị béo thơm kem custard, ngọt thanh tao không gắt cổ.",
+    image: "/varieties/blackthorn.png",
+    fleshColor: "Cam đỏ đậm (hồng điều bắt mắt)",
+    seedRate: "Hạt lép 80 – 85%",
+    brix: "36 – 40% (Béo ngậy sánh mịn như mousse)",
+    yieldPerHa: "15 – 20 tấn/ha",
+    status: "encouraged",
+    marketPotential: "Xu hướng tiêu dùng cao cấp mới, được thị trường Trung Quốc và Singapore săn đón",
+    morphology: [
+      "Quả hình tròn đều như trái banh, đầu các chóp gai có màu sẫm đen",
+      "Đáy quả có một điểm lõm tròn màu đen đặc trưng (Black Thorn)",
+      "Múi thịt dày, màu sắc từ cam nhạt đến cam đỏ sậm óng ả",
+      "Cơm có màng bọc mịn màng, khi cắn tan trong miệng như kem mousse",
+    ],
+    farmingTechniques: {
+      density: "8m × 8m hoặc 8m × 9m; sinh trưởng khỏe, cành tán vươn rộng",
+      pollination: "Cần kết hợp thụ phấn chéo để quả tròn đều và múi phân bố 5 hộc đầy",
+      thinning: "Tỉa chồi vượt thường xuyên, tạo tán thông thoáng hạn chế nấm Phytophthora",
+      specialNotes: "Vỏ mỏng nên cần bón bổ sung Kali Sunfat và Silic hữu cơ trước thu hoạch 30 ngày để vỏ cứng cáp",
+    },
+  },
+];
+
+export function getVarietyImage(v: VarietyDto): string {
+  if (v.image) return v.image;
+  const name = (v.name || "").toLowerCase();
+  if (name.includes("monthong") || name.includes("dona")) return "/varieties/monthong.png";
+  if (name.includes("ri") || name.includes("ri6") || name.includes("ri 6") || name.includes("ri 7")) return "/varieties/ri6.png";
+  if (name.includes("musang") || name.includes("d197")) return "/varieties/musangking.png";
+  if (name.includes("thorn") || name.includes("gai đen") || name.includes("d200")) return "/varieties/blackthorn.png";
+  return "/varieties/monthong.png";
+}
+
+function VarietyDetailModal({
+  item,
+  onClose,
+}: {
+  item: VarietyDto;
+  onClose: () => void;
+}) {
+  const imgSrc = getVarietyImage(item);
+  const isExport = item.category === "export";
+  const isPremium = item.category === "premium" || item.category === "new";
+
   return (
-    <section className="pt-variety-section" aria-labelledby="variety-heading">
-      <div className="pt-variety-header">
-        <h2 id="variety-heading" className="pt-variety-title">
-          Giống sầu riêng
+    <div className="pt-pesticide-modal-body">
+      {/* 1. Header: Ảnh lớn, Tên giống & Phân loại */}
+      <div className="pt-pesticide-modal-hero">
+        <div className="pt-pesticide-modal-hero-left">
+          <img
+            src={imgSrc}
+            alt={item.name}
+            className="pt-pesticide-modal-img"
+          />
+        </div>
+        <div className="pt-pesticide-modal-hero-right">
+          <span className="pt-pesticide-modal-sub">
+            {item.category === "export"
+              ? "Giống xuất khẩu chủ lực"
+              : item.category === "native"
+              ? "Giống bản địa chất lượng cao"
+              : item.category === "premium"
+              ? "Giống nhập khẩu cao cấp"
+              : "Giống mới tiềm năng"}
+          </span>
+          <h3 className="pt-pesticide-modal-title">{item.name}</h3>
+          <p className="pt-pesticide-modal-mfg">
+            Xuất xứ: {item.origin || "Việt Nam"} · Mã giống: VAR-0{item.id}
+          </p>
+          <div style={{ marginTop: 8 }}>
+            <Pill tone={isExport ? "green" : isPremium ? "blue" : "gold"}>
+              {isExport ? "Chuẩn xuất khẩu GACC & VietGAP" : "Khuyến khích mở rộng vùng trồng"}
+            </Pill>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Đặc tính chất lượng & Phẩm chất cơm múi */}
+      <div className="pt-pesticide-efficacy-card">
+        <div className="pt-efficacy-row">
+          <span className="pt-efficacy-label">Đặc tính chất lượng nổi bật</span>
+          <p className="pt-efficacy-desc">{item.description}</p>
+        </div>
+
+        {item.morphology && item.morphology.length > 0 && (
+          <div className="pt-efficacy-row">
+            <span className="pt-efficacy-label">Đặc điểm hình thái & Nhận diện quả</span>
+            <ul className="pt-efficacy-bullet-list">
+              {item.morphology.map((m, idx) => (
+                <li key={idx} className="pt-efficacy-bullet-item">
+                  {m}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="pt-efficacy-timing">
+          <span>Màu sắc cơm & Múi:</span>
+          <strong>{item.fleshColor || "Vàng đậm, cơm dày hạt lép"}</strong>
+        </div>
+
+        <div className="pt-efficacy-timing">
+          <span>Tỷ lệ hạt lép & Độ ngọt Brix:</span>
+          <strong style={{ color: "#2563eb" }}>
+            {item.seedRate || "Hạt lép > 80%"} · Brix: {item.brix || "32 – 36%"}
+          </strong>
+        </div>
+      </div>
+
+      {/* 3. Lưới thông số nông học & Năng suất */}
+      <div className="pt-pesticide-modal-specs">
+        <h4 className="pt-pesticide-modal-section-title">Thông số nông học & Năng suất</h4>
+        <div className="pt-pesticide-specs-grid">
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Trọng lượng trái</span>
+            <strong className="pt-pesticide-spec-value">{item.weightRange || "2.5 – 4.5 kg/trái"}</strong>
+            <span className="pt-pesticide-spec-hint">Chuẩn loại 1 xuất khẩu</span>
+          </div>
+
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Thời gian sinh trưởng</span>
+            <strong className="pt-pesticide-spec-value pt-spec-highlight">
+              {item.harvestYears || "110 – 125 ngày"}
+            </strong>
+            <span className="pt-pesticide-spec-hint">Từ ngày xả nhụy đến cắt già</span>
+          </div>
+
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Năng suất bình quân</span>
+            <strong className="pt-pesticide-spec-value">
+              {item.yieldPerHa || "18 – 25 tấn/ha"}
+            </strong>
+            <span className="pt-pesticide-spec-hint">Giai đoạn kinh doanh ổn định</span>
+          </div>
+
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Tiềm năng thị trường</span>
+            <strong className="pt-pesticide-spec-value">
+              {isExport ? "Xuất khẩu số 1 TQ" : isPremium ? "Giá bán vượt trội" : "Tiêu thụ nội địa mạnh"}
+            </strong>
+            <span className="pt-pesticide-spec-hint">{item.marketPotential || "Được thị trường ưa chuộng"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Quy trình kỹ thuật canh tác & Chăm sóc đặc thù */}
+      {item.farmingTechniques && (
+        <div className="pt-instruction-dosage-box">
+          <div className="pt-instruction-title">
+            <span>Kỹ thuật canh tác & Chăm sóc giống sầu riêng</span>
+          </div>
+          <div className="pt-instruction-item">
+            <span className="pt-instruction-step-lbl">Mật độ & Khoảng cách trồng:</span>
+            <span className="pt-instruction-step-val">{item.farmingTechniques.density}</span>
+          </div>
+          <div className="pt-instruction-item">
+            <span className="pt-instruction-step-lbl">Kỹ thuật thụ phấn bổ sung:</span>
+            <span className="pt-instruction-step-val">{item.farmingTechniques.pollination}</span>
+          </div>
+          <div className="pt-instruction-item">
+            <span className="pt-instruction-step-lbl">Quy trình tỉa hoa & Nuôi trái:</span>
+            <span className="pt-instruction-step-val">{item.farmingTechniques.thinning}</span>
+          </div>
+          <div className="pt-instruction-item">
+            <span className="pt-instruction-step-lbl">Lưu ý sinh lý & Phòng sượng cơm:</span>
+            <span className="pt-instruction-step-val">{item.farmingTechniques.specialNotes}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Cảnh báo & Khuyến cáo mã số vùng trồng PUC */}
+      <div className="pt-pesticide-alert-box pt-pesticide-alert-allowed">
+        <div className="pt-pesticide-alert-content">
+          <strong>Khuyến cáo đăng ký Mã số vùng trồng (PUC) xuất khẩu</strong>
+          <p>
+            Giống {item.name} đã được cấp phép trong danh mục cây trồng được bảo hộ và đủ điều kiện cấp mã số vùng trồng xuất khẩu chính ngạch sang Trung Quốc theo Lệnh 248/249 GACC. Bà con cần lưu ý ghi chép nhật ký nông hộ từ giai đoạn thụ phấn đến thu hoạch để phục vụ truy xuất nguồn gốc.
+          </p>
+        </div>
+      </div>
+
+      {/* 6. Nút đóng popup */}
+      <div className="pt-training-modal-actions">
+        <button
+          type="button"
+          className="pt-btn pt-btn-primary"
+          style={{ width: "100%", justifyContent: "center" }}
+          onClick={onClose}
+        >
+          Đã hiểu & Đóng
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function VarietyList() {
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<VarietyFilter>("all");
+  const [selectedVariety, setSelectedVariety] = useState<VarietyDto | null>(null);
+
+  const counts = useMemo(() => {
+    return {
+      all: DEFAULT_VARIETIES.length,
+      export: DEFAULT_VARIETIES.filter((d) => d.category === "export").length,
+      native: DEFAULT_VARIETIES.filter((d) => d.category === "native").length,
+      premium: DEFAULT_VARIETIES.filter((d) => d.category === "premium").length,
+      new: DEFAULT_VARIETIES.filter((d) => d.category === "new").length,
+    };
+  }, []);
+
+  const shown = useMemo(() => {
+    return DEFAULT_VARIETIES.filter((item) => {
+      const q = query.trim().toLowerCase();
+      const matchesQuery =
+        !q ||
+        `${item.name} ${item.origin} ${item.fleshColor} ${item.description}`
+          .toLowerCase()
+          .includes(q);
+      const matchesCategory =
+        categoryFilter === "all" || item.category === categoryFilter;
+      return matchesQuery && matchesCategory;
+    });
+  }, [query, categoryFilter]);
+
+  return (
+    <section className="pt-pest-section" aria-labelledby="variety-heading">
+      <div className="pt-pest-header">
+        <h2 id="variety-heading" className="pt-pest-title">
+          Danh mục giống sầu riêng chuẩn xuất khẩu
         </h2>
       </div>
-      <StateBlock loading={loading} error={error} />
-      <div className="pt-pest-list">
-        {data.map((item) => (
-          <article key={item.id} className="pt-variety-card">
-            <div className="pt-variety-head">
-              <h3 className="pt-variety-name">{item.name}</h3>
-              {item.origin && (
-                <span className="pt-variety-origin">
-                  <MapPin size={11} /> {item.origin}
-                </span>
-              )}
-            </div>
-            <div className="pt-variety-specs">
-              {item.weightRange && (
-                <div className="pt-variety-spec">
-                  <span>Trọng lượng:</span> <strong>{item.weightRange}</strong>
+
+      <div className="pt-pest-wrap">
+        {/* Hộp tìm kiếm */}
+        <div className="pt-pest-search-box">
+          <Search size={16} className="pt-pest-search-icon" aria-hidden="true" />
+          <input
+            className="pt-pest-search-input"
+            type="search"
+            placeholder="Tìm theo tên giống, xuất xứ hoặc đặc tính cơm..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Tìm kiếm giống sầu riêng"
+          />
+          {query && (
+            <button
+              type="button"
+              className="pt-pest-search-clear"
+              onClick={() => setQuery("")}
+              aria-label="Xóa từ khóa tìm kiếm"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Thanh filter phân loại giống sầu riêng */}
+        <div className="pt-pest-filter-bar" role="tablist" aria-label="Lọc theo phân loại giống sầu riêng">
+          <button
+            type="button"
+            className={`pt-pest-filter-chip ${categoryFilter === "all" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("all")}
+          >
+            Tất cả <span className="pt-pest-filter-count">{counts.all}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-export ${categoryFilter === "export" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("export")}
+          >
+            Xuất khẩu chủ lực <span className="pt-pest-filter-count">{counts.export}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-native ${categoryFilter === "native" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("native")}
+          >
+            Bản địa chất lượng <span className="pt-pest-filter-count">{counts.native}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-premium ${categoryFilter === "premium" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("premium")}
+          >
+            Nhập khẩu cao cấp <span className="pt-pest-filter-count">{counts.premium}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-new ${categoryFilter === "new" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("new")}
+          >
+            Giống mới tiềm năng <span className="pt-pest-filter-count">{counts.new}</span>
+          </button>
+        </div>
+
+        {/* Danh sách thẻ giống sầu riêng */}
+        <div className="pt-pest-list">
+          {shown.map((item) => {
+            const imgSrc = getVarietyImage(item);
+
+            return (
+              <article
+                key={item.id}
+                className="pt-pest-card pt-pest-card-allowed"
+                onClick={() => setSelectedVariety(item)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedVariety(item);
+                  }
+                }}
+                title="Bấm để xem chi tiết giống sầu riêng"
+              >
+                {/* Bên trái: Ảnh quả sầu riêng */}
+                <div className="pt-pest-card-img-wrap">
+                  <img
+                    src={imgSrc}
+                    alt={item.name}
+                    className="pt-pest-card-img"
+                    loading="lazy"
+                  />
                 </div>
-              )}
-              {item.harvestYears && (
-                <div className="pt-variety-spec">
-                  <span>Thu hoạch sau:</span> <strong>{item.harvestYears}</strong>
+
+                {/* Bên phải: Tên giống và thông tin */}
+                <div className="pt-pest-card-content">
+                  <h3 className="pt-pest-card-name">{item.name}</h3>
+
+                  <p className="pt-pest-card-sub">
+                    Xuất xứ: <strong>{item.origin}</strong>
+                    {item.weightRange ? ` · Trọng lượng: ${item.weightRange}` : ""}
+                  </p>
+
+                  <div className="pt-pest-card-metric">
+                    <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
+                    <span>Thu hoạch: <strong>{item.harvestYears}</strong></span>
+                    <span style={{ margin: "0 4px", color: "#cbd5e1" }}>•</span>
+                    <span>Cơm: <strong>{item.fleshColor || "Vàng đậm"}, {item.seedRate || "Hạt lép"}</strong></span>
+                  </div>
                 </div>
-              )}
-            </div>
-            {item.description && <p className="pt-variety-desc">{item.description}</p>}
-          </article>
-        ))}
+              </article>
+            );
+          })}
+        </div>
+
+        {shown.length === 0 && (
+          <EmptyState icon="search">Không tìm thấy giống sầu riêng phù hợp với tiêu chí lọc.</EmptyState>
+        )}
+
+        {/* Popup chi tiết về loại giống được chọn */}
+        {selectedVariety && (
+          <Sheet
+            title="Chi tiết giống sầu riêng"
+            onClose={() => setSelectedVariety(null)}
+          >
+            <VarietyDetailModal
+              item={selectedVariety}
+              onClose={() => setSelectedVariety(null)}
+            />
+          </Sheet>
+        )}
       </div>
     </section>
   );

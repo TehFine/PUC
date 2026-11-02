@@ -3937,6 +3937,26 @@ body.pt-body {
   border-color: #dc2626;
   box-shadow: 0 3px 10px rgba(220, 38, 38, 0.25);
 }
+.pt-pest-filter-chip.is-active.is-export {
+  background: #059669;
+  border-color: #059669;
+  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);
+}
+.pt-pest-filter-chip.is-active.is-native {
+  background: #d97706;
+  border-color: #d97706;
+  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.25);
+}
+.pt-pest-filter-chip.is-active.is-premium {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  box-shadow: 0 3px 10px rgba(124, 58, 237, 0.25);
+}
+.pt-pest-filter-chip.is-active.is-new {
+  background: #0284c7;
+  border-color: #0284c7;
+  box-shadow: 0 3px 10px rgba(2, 132, 199, 0.25);
+}
 
 /* Thanh tóm tắt số lượng */
 .pt-pest-summary-bar {
