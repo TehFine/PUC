@@ -187,7 +187,7 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
   if (lastTest?.result === "fail") {
     items.push({
       id: "test-fail",
-      title: "Kiểm tra mẫu chưa đạt",
+      title: "Mẫu kiểm nghiệm chưa đạt",
       to: "inspection",
     });
   }

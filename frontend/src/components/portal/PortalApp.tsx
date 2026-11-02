@@ -42,7 +42,7 @@ const TABS: { id: PortalTabId; label: string; icon: LucideIcon }[] = [
   { id: "plots", label: "Thửa đất", icon: TreePine },
   { id: "diary", label: "Nhật ký", icon: NotebookPen },
   { id: "stamps", label: "Thu hoạch", icon: Scale },
-  { id: "inspection", label: "Kiểm tra", icon: ClipboardCheck },
+  { id: "inspection", label: "Kiểm nghiệm", icon: ClipboardCheck },
   { id: "learn", label: "Kiến thức", icon: BookOpen },
 ];
 

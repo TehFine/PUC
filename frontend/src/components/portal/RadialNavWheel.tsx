@@ -63,7 +63,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   },
   {
     id: "inspection",
-    label: "Kiểm tra",
+    label: "Kiểm nghiệm",
     icon: AuditIcon,
     color: "#db2777",
     activeColor: "#e11d48",
