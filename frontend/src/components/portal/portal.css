@@ -2698,9 +2698,10 @@ body.pt-body {
   font-weight: 700;
   color: #dc2626;
   background: #fef2f2;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(220, 38, 38, 0.2);
+  border: none;
+  outline: none;
 }
 
 .pt-photo-dropzone {
