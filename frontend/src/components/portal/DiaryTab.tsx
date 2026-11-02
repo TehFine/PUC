@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { useResource } from "@/hooks/use-resource";
@@ -27,6 +27,15 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Tự động đồng bộ thửa đất khi danh sách plotCodes tải xong
+  useEffect(() => {
+    if (!plotCode && plotCodes.length > 0) {
+      setPlotCode(plotCodes[0]);
+    }
+  }, [plotCodes, plotCode]);
+
+  const effectivePlot = plotCode || plotCodes[0] || "";
+
   const getGps = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setGpsLocation("GPS: 12.87241, 108.13452 (Krông Búk)");
@@ -50,11 +59,21 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const finalPlot = effectivePlot.trim();
+    if (!finalPlot) {
+      setError("Vui lòng chọn hoặc nhập mã thửa đất.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const finalDetail = [detail.trim(), gpsLocation].filter(Boolean).join(" · ");
-      await api.post("/portal/journal", { entryOn, plotCode: plotCode.trim(), activity, detail: finalDetail || undefined });
+      await api.post("/portal/journal", {
+        entryOn,
+        plotCode: finalPlot,
+        activity,
+        detail: finalDetail || undefined,
+      });
       onDone();
     } catch (err) {
       setError(errorText(err));
@@ -64,32 +83,75 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
 
   return (
     <form className="pt-form" onSubmit={submit}>
-      <Field label="Ngày thực hiện" htmlFor="pj-date">
-        <input id="pj-date" type="date" max={todayIso()} value={entryOn} onChange={(e) => setEntryOn(e.target.value)} required />
-      </Field>
-      <Field label="Thửa đất" htmlFor="pj-plot">
-        {plotCodes.length > 0 ? (
-          <select id="pj-plot" value={plotCode} onChange={(e) => setPlotCode(e.target.value)}>
-            {plotCodes.map((code) => (
-              <option key={code}>{code}</option>
-            ))}
-          </select>
-        ) : (
-          <input id="pj-plot" placeholder="Ví dụ: TH1-001" value={plotCode} onChange={(e) => setPlotCode(e.target.value)} required />
-        )}
-      </Field>
-      <Field label="Công việc" htmlFor="pj-activity">
-        <select id="pj-activity" value={activity} onChange={(e) => setActivity(e.target.value)}>
+      <div className="pt-field-row">
+        <Field label="Ngày thực hiện" htmlFor="pj-date">
+          <input
+            id="pj-date"
+            type="date"
+            max={todayIso()}
+            value={entryOn}
+            onChange={(e) => setEntryOn(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Thửa đất" htmlFor="pj-plot">
+          {plotCodes.length > 0 ? (
+            <select
+              id="pj-plot"
+              value={effectivePlot}
+              onChange={(e) => setPlotCode(e.target.value)}
+              required
+            >
+              {plotCodes.map((code) => (
+                <option key={code} value={code}>
+                  Thửa {code}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="pj-plot"
+              placeholder="Ví dụ: KB-VT-001"
+              value={plotCode}
+              onChange={(e) => setPlotCode(e.target.value)}
+              required
+            />
+          )}
+        </Field>
+      </div>
+
+      <Field label="Công việc canh tác" htmlFor="pj-activity">
+        <select
+          id="pj-activity"
+          value={activity}
+          onChange={(e) => setActivity(e.target.value)}
+        >
           {JOURNAL_ACTIVITIES.map((item) => (
-            <option key={item}>{item}</option>
+            <option key={item} value={item}>
+              {item}
+            </option>
           ))}
         </select>
       </Field>
+
       <Field label="Ghi chú & Vật tư sử dụng" htmlFor="pj-detail">
-        <textarea id="pj-detail" rows={3} maxLength={500} placeholder="Ví dụ: Bón phân hữu cơ vi sinh 5 kg/gốc, tưới nước ẩm đều..." value={detail} onChange={(e) => setDetail(e.target.value)} />
+        <textarea
+          id="pj-detail"
+          rows={3}
+          maxLength={500}
+          placeholder="Mô tả công việc (ví dụ: Bón phân hữu cơ vi sinh 5 kg/gốc, tưới ẩm, tỉa cành thông thoáng...)"
+          value={detail}
+          onChange={(e) => setDetail(e.target.value)}
+        />
       </Field>
 
-      <div style={{ marginBottom: 14 }}>
+      <div className="pt-journal-gps-card">
+        <div className="pt-journal-gps-text">
+          <span className="pt-journal-gps-title">Tọa độ GPS vườn</span>
+          <span className="pt-journal-gps-desc">
+            {gpsLocation ? gpsLocation.replace("GPS: ", "") : "Chưa định vị (khuyến nghị gắn GPS xác thực tại vườn)"}
+          </span>
+        </div>
         <button
           type="button"
           className={`pt-gps-btn ${gpsLocation ? "is-active" : ""}`}
@@ -100,18 +162,12 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
           <img
             src="/location-pin.png"
             alt=""
-            width={18}
-            height={18}
+            width={16}
+            height={16}
             className="pt-gps-icon"
             aria-hidden="true"
           />
-          <span>
-            {locating
-              ? "Đang định vị…"
-              : gpsLocation
-              ? `Đã định vị: ${gpsLocation.replace("GPS: ", "").split(" (")[0]}`
-              : "Định vị vườn"}
-          </span>
+          <span>{locating ? "Đang lấy GPS…" : gpsLocation ? "Cập nhật GPS" : "Định vị vườn"}</span>
         </button>
       </div>
 
@@ -120,7 +176,7 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
         <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose}>
           Hủy
         </button>
-        <button type="submit" className="pt-btn pt-btn-primary" disabled={saving || !plotCode.trim()}>
+        <button type="submit" className="pt-btn pt-btn-primary" disabled={saving || !effectivePlot.trim()}>
           {saving ? "Đang lưu…" : "Lưu nhật ký"}
         </button>
       </div>
