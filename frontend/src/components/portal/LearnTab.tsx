@@ -694,25 +694,6 @@ function PesticideList() {
           </button>
         </div>
 
-        {/* Dòng trạng thái lọc */}
-        {(statusFilter !== "all" || query.trim()) && (
-          <div className="pt-pest-summary-bar">
-            <span>
-              Đang hiển thị <strong>{shown.length}</strong> / {data.length} loại thuốc
-            </span>
-            <button
-              type="button"
-              className="pt-pest-reset-btn"
-              onClick={() => {
-                setStatusFilter("all");
-                setQuery("");
-              }}
-            >
-              Đặt lại bộ lọc
-            </button>
-          </div>
-        )}
-
         <StateBlock loading={loading} error={error} />
 
         {/* Danh sách thẻ thuốc trực quan theo phong cách Ảnh 1 */}
