@@ -363,7 +363,7 @@ export default function PortalApp() {
         )}
         {visitedTabs.has("inspection") && (
           <div className={`pt-tab-pane ${tab === "inspection" ? "is-active" : "is-hidden"}`}>
-            <InspectionTab />
+            <InspectionTab onNavigate={navigate} />
             <SupportFooter onOpen={openSupport} />
           </div>
         )}

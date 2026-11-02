@@ -82,7 +82,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
   const harvest = usePortal<PortalList<PortalHarvest>>("harvest");
   const effectivePlots = plots.length > 0 ? plots : (plotsData.data?.data || []);
 
-  const [subTab, setSubTab] = useState<"harvest_lots" | "harvest_decl">("harvest_lots");
+  const [subTab, setSubTab] = useState<"harvest_lots" | "harvest_decl">("harvest_decl");
   const [declarations, setDeclarations] = useState<HarvestDeclaration[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -205,22 +205,22 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         <button
           type="button"
           role="tab"
-          aria-selected={subTab === "harvest_lots"}
-          className={subTab === "harvest_lots" ? "active" : ""}
-          onClick={() => setSubTab("harvest_lots")}
-        >
-          <span className="tab-label-desktop">Lô hàng xuất kho ({harvest.data?.data.length ?? 0})</span>
-          <span className="tab-label-mobile">Lô hàng ({harvest.data?.data.length ?? 0})</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
           aria-selected={subTab === "harvest_decl"}
           className={subTab === "harvest_decl" ? "active" : ""}
           onClick={() => setSubTab("harvest_decl")}
         >
           <span className="tab-label-desktop">Kế hoạch thu hái ({declarations.length})</span>
           <span className="tab-label-mobile">Kế hoạch ({declarations.length})</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={subTab === "harvest_lots"}
+          className={subTab === "harvest_lots" ? "active" : ""}
+          onClick={() => setSubTab("harvest_lots")}
+        >
+          <span className="tab-label-desktop">Lô hàng xuất kho ({harvest.data?.data.length ?? 0})</span>
+          <span className="tab-label-mobile">Lô hàng ({harvest.data?.data.length ?? 0})</span>
         </button>
       </div>
 
@@ -751,7 +751,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           align-items: center;
           justify-content: center;
           gap: 7px;
-          border-radius: 18px;
+          border-radius: 12px;
           font-weight: 700;
           cursor: pointer;
           transition: all 0.18s ease;
@@ -763,6 +763,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .btn-sm {
           padding: 9px 16px;
           font-size: 13px;
+          border-radius: 10px;
         }
         .btn-primary {
           background: #e05326;

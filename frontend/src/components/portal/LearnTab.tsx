@@ -8,17 +8,12 @@ import type { PesticideDto, TrainingDto, VarietyDto } from "@/types/api";
 import {
   AlertTriangle,
   Ban,
-  BookOpen,
-  Calendar,
   Check,
   CheckCircle2,
   Clock,
-  GraduationCap,
   MapPin,
   Search,
   ShieldCheck,
-  UserCheck,
-  Users,
   X,
 } from "lucide-react";
 import { Card, EmptyState, Sheet, StateBlock } from "./ui";
@@ -213,9 +208,6 @@ export function TrainingDetailModal({
     <div className="pt-training-detail-body">
       {/* 1. Phần Hero đầu popup */}
       <div className="pt-training-hero">
-        <div className="pt-training-hero-icon" aria-hidden="true">
-          <GraduationCap size={28} />
-        </div>
         <div className="pt-training-hero-info">
           <div className="pt-training-hero-badges">
             <span className="pt-training-status-pill">
@@ -232,7 +224,6 @@ export function TrainingDetailModal({
       <div className="pt-training-progress-box">
         <div className="pt-training-progress-head">
           <span className="pt-training-progress-label">
-            <Users size={14} style={{ display: "inline", marginRight: 5 }} />
             Tình trạng ghi danh: <strong>{enrolledCount}/{item.capacity} học viên</strong>
           </span>
           <span className="pt-training-progress-percent">
@@ -254,16 +245,18 @@ export function TrainingDetailModal({
       <div className="pt-training-grid">
         <div className="pt-training-cell">
           <span className="pt-training-cell-label">
-            <Calendar size={13} style={{ display: "inline", marginRight: 4 }} />
             Thời gian tổ chức
           </span>
-          <span className="pt-training-cell-value">{formatDate(item.heldOn)}</span>
-          <span className="pt-training-cell-sub">8:00 – 11:30 (Buổi sáng)</span>
+          <span className="pt-training-cell-value pt-training-time-val">
+            8:00 – 11:30 (Buổi sáng)
+          </span>
+          {item.heldOn && formatDate(item.heldOn) !== "—" && (
+            <span className="pt-training-cell-sub">Ngày: {formatDate(item.heldOn)}</span>
+          )}
         </div>
 
         <div className="pt-training-cell">
           <span className="pt-training-cell-label">
-            <MapPin size={13} style={{ display: "inline", marginRight: 4 }} />
             Địa điểm tập trung
           </span>
           <span className="pt-training-cell-value">{item.location ?? "UBND xã Krông Búk"}</span>
@@ -272,7 +265,6 @@ export function TrainingDetailModal({
 
         <div className="pt-training-cell">
           <span className="pt-training-cell-label">
-            <UserCheck size={13} style={{ display: "inline", marginRight: 4 }} />
             Giảng viên phụ trách
           </span>
           <span className="pt-training-cell-value">{item.trainer ?? "Chuyên gia nông nghiệp"}</span>
@@ -281,7 +273,6 @@ export function TrainingDetailModal({
 
         <div className="pt-training-cell">
           <span className="pt-training-cell-label">
-            <ShieldCheck size={13} style={{ display: "inline", marginRight: 4 }} />
             Quyền lợi chứng chỉ
           </span>
           <span className="pt-training-cell-value">Cấp chứng nhận VietGAP</span>
@@ -292,7 +283,6 @@ export function TrainingDetailModal({
       {/* 4. Nội dung bài giảng & thực hành chi tiết */}
       <div className="pt-training-detail-section">
         <h4 className="pt-training-section-title">
-          <BookOpen size={15} style={{ display: "inline", marginRight: 6 }} />
           Chương trình đào tạo & nội dung thực hành
         </h4>
         <div className="pt-training-modules">
@@ -415,16 +405,13 @@ function TrainingList() {
                     </div>
                   </div>
 
-                  {/* Đoạn nối chuyển tiếp giữa 2 chặng (Dotted line với các dấu chấm bình thường) */}
+                  {/* Đoạn nối chuyển tiếp giữa 2 chặng (Dotted line với các dấu chấm mini chuẩn VietGAP) */}
                   {!isLast && (
                     <div className="pt-transit-transfer" aria-hidden="true">
                       <div className="pt-transit-transfer-track">
                         <div className="pt-transit-mini-dot" />
                         <div className="pt-transit-mini-dot" />
                         <div className="pt-transit-mini-dot" />
-                      </div>
-                      <div className="pt-transit-transfer-text">
-                        <span>Khóa đào tạo kế tiếp</span>
                       </div>
                     </div>
                   )}
@@ -674,7 +661,12 @@ function PesticideList() {
 function VarietyList() {
   const { data, loading, error } = useResource<VarietyDto, VarietyDto>("varieties", keepVariety);
   return (
-    <Card title="Giống sầu riêng">
+    <section className="pt-variety-section" aria-labelledby="variety-heading">
+      <div className="pt-variety-header">
+        <h2 id="variety-heading" className="pt-variety-title">
+          Giống sầu riêng
+        </h2>
+      </div>
       <StateBlock loading={loading} error={error} />
       <div className="pt-pest-list">
         {data.map((item) => (
@@ -703,7 +695,7 @@ function VarietyList() {
           </article>
         ))}
       </div>
-    </Card>
+    </section>
   );
 }
 

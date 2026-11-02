@@ -99,6 +99,8 @@ export interface PortalViolation {
   plotCode: string | null;
   description: string | null;
   status: "open" | "resolved";
+  resolvedOn?: string | null;
+  resolutionNotes?: string | null;
 }
 
 export interface PortalHarvest {

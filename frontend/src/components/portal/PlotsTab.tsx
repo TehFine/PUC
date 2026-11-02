@@ -86,6 +86,15 @@ export default function PlotsTab() {
                   {/* Nội dung thông tin thửa đất theo phong cách thẻ nhắc nhở */}
                   <div className="pt-plot-card-body">
                     <strong className="pt-plot-code">{plot.code}</strong>
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--text-secondary)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha{plot.variety ? ` · ${plot.variety}` : ""}
+                    </span>
                   </div>
 
                   {/* Icon QR code ở cuối thẻ để người dùng bấm vào xem biển QR */}
@@ -121,6 +130,7 @@ export default function PlotsTab() {
 
       {mapViewPlot && (
         <PlotMapModal
+          key={mapViewPlot.id || mapViewPlot.code}
           plot={mapViewPlot}
           householdName={overview.data?.household.name || "Hộ nông dân Krông Búk"}
           onClose={() => setMapViewPlot(null)}

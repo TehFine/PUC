@@ -1,8 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
+import { AlertTriangle } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { formatDate } from "@/utils/format";
-import type { PortalLabTest, PortalList, PortalScheduleItem } from "@/types/portal";
+import type { PortalLabTest, PortalList, PortalScheduleItem, PortalViolation } from "@/types/portal";
+import type { PortalTabId } from "./PortalApp";
 import { Card, EmptyState, Pill, StateBlock } from "./ui";
 
 function getRelativeScheduleNote(dateStr: string): string {
@@ -53,12 +56,68 @@ const ROUTE_THEMES = [
   },
 ];
 
-export default function InspectionTab() {
+export default function InspectionTab({ onNavigate }: { onNavigate?: (tab: PortalTabId) => void }) {
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
   const tests = usePortal<PortalList<PortalLabTest>>("lab-tests");
+  const violations = usePortal<PortalList<PortalViolation>>("violations");
+
+  // Hoàn toàn loại bỏ các cảnh báo về nhật ký canh tác khỏi tab Kiểm tra
+  // (Mọi cảnh báo/nhắc nhở về nhật ký chỉ thuộc về tab Nhật ký canh tác)
+  const inspectionViolations = useMemo(() => {
+    if (!violations.data?.data) return [];
+    return violations.data.data.filter((v) => {
+      const lower = (v.title + " " + (v.description || "")).toLowerCase();
+      return !lower.includes("nhật ký");
+    });
+  }, [violations.data]);
 
   return (
     <div className="pt-stack">
+      {/* 1. KHỐI CẢNH BÁO VI PHẠM (CHỈ HIỂN THỊ VI PHẠM THỰC ĐỊA / QUY CHUẨN KIỂM TRA, KHÔNG CÓ NHẬT KÝ) */}
+      {inspectionViolations.length > 0 && (
+        <Card title="Cảnh báo & Vi phạm cần khắc phục">
+          <ul className="pt-list">
+            {inspectionViolations.map((v) => {
+              const isOpen = v.status === "open";
+
+              return (
+                <li key={v.id} className="pt-notice" style={{ borderBottom: "1px solid var(--border-light, #f1f5f9)", paddingBottom: 14 }}>
+                  <div className="pt-notice-head">
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                      <AlertTriangle
+                        size={18}
+                        style={{ color: v.severity === "critical" ? "#dc2626" : "#f59e0b", flexShrink: 0 }}
+                      />
+                      <strong>{v.title}</strong>
+                    </div>
+                    <Pill tone={isOpen ? (v.severity === "critical" ? "red" : "gold") : "green"}>
+                      {isOpen ? (v.severity === "critical" ? "Nghiêm trọng" : "Cần khắc phục") : "Đã xử lý"}
+                    </Pill>
+                  </div>
+
+                  {v.description && <p style={{ margin: "4px 0 6px", color: "var(--text-primary)" }}>{v.description}</p>}
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                    <p className="pt-notice-meta">
+                      Phát hiện: {formatDate(v.detectedOn)}
+                      {v.plotCode ? ` · Thửa ${v.plotCode}` : ""}
+                    </p>
+                  </div>
+
+                  {v.resolvedOn && (
+                    <p className="pt-notice-meta" style={{ color: "#059669", marginTop: 4 }}>
+                      ✓ Đã khắc phục ngày: {formatDate(v.resolvedOn)}
+                      {v.resolutionNotes ? ` (${v.resolutionNotes})` : ""}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
+      {/* 2. LỊCH KIỂM TRA SẮP TỚI */}
       <section className="pt-schedule-section" aria-labelledby="inspection-schedule-heading">
         <div className="pt-schedule-header">
           <h2 id="inspection-schedule-heading" className="pt-schedule-title">
@@ -112,16 +171,13 @@ export default function InspectionTab() {
                     </div>
                   </div>
 
-                  {/* Đoạn nối chuyển tiếp giữa 2 chặng (Dotted line với các dấu chấm bình thường) */}
+                  {/* Đoạn nối chuyển tiếp giữa 2 chặng (Dotted line với các dấu chấm mini chuẩn VietGAP) */}
                   {!isLast && (
                     <div className="pt-transit-transfer" aria-hidden="true">
                       <div className="pt-transit-transfer-track">
                         <div className="pt-transit-mini-dot" />
                         <div className="pt-transit-mini-dot" />
                         <div className="pt-transit-mini-dot" />
-                      </div>
-                      <div className="pt-transit-transfer-text">
-                        <span>Chuyển tiếp kỳ giám sát kế tiếp</span>
                       </div>
                     </div>
                   )}
@@ -159,11 +215,11 @@ export default function InspectionTab() {
                   </div>
                   <div>
                     <dt>Chlorpyrifos</dt>
-                    <dd>{test.chlorpyrifosMgKg === null ? "KPH" : `${test.chlorpyrifosMgKg} mg/kg`}</dd>
+                    <dd>{test.chlorpyrifosMgKg === null ? "KPH (Đạt chuẩn)" : `${test.chlorpyrifosMgKg} mg/kg`}</dd>
                   </div>
                   <div>
                     <dt>Vàng O</dt>
-                    <dd>{test.yellowOPositive ? "Dương tính" : "Âm tính"}</dd>
+                    <dd>{test.yellowOPositive ? "Dương tính (Cấm)" : "Âm tính (Đạt chuẩn)"}</dd>
                   </div>
                 </dl>
               </li>

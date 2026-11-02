@@ -366,7 +366,7 @@ function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onCl
           <span className="pt-detail-cell-value">{record.areaHa} ha</span>
         </div>
         <div className="pt-detail-cell">
-          <span className="pt-detail-cell-label">Thời gian cách ly (PHI)</span>
+          <span className="pt-detail-cell-label">Cách ly trước thu hoạch (PHI)</span>
           <span className="pt-detail-cell-value">{record.isolationDays} ngày</span>
         </div>
         <div className="pt-detail-cell">
