@@ -21,7 +21,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
+import { Card, EmptyState, Sheet, StateBlock } from "./ui";
 
 const keepTraining = (item: TrainingDto) => item;
 const keepPesticide = (item: PesticideDto) => item;
@@ -455,7 +455,6 @@ function TrainingList() {
                     Giảng viên: {item.trainer ?? "—"}
                   </span>
                 </div>
-                <Pill tone="gray">Đã diễn ra</Pill>
               </li>
             ))}
           </ul>
@@ -506,14 +505,13 @@ function PesticideList() {
   }, [data, query, statusFilter]);
 
   return (
-    <Card
-      title="Danh mục thuốc BVTV"
-      action={
-        <span className="pt-badge-alert" style={{ background: "rgba(22, 163, 74, 0.12)", color: "#15803d" }}>
-          {shown.length} loại
-        </span>
-      }
-    >
+    <section className="pt-pest-section" aria-labelledby="pesticide-heading">
+      <div className="pt-pest-header">
+        <h2 id="pesticide-heading" className="pt-pest-title">
+          Danh mục thuốc BVTV
+        </h2>
+      </div>
+
       <div className="pt-pest-wrap">
         {/* Hộp tìm kiếm */}
         <div className="pt-pest-search-box">
@@ -669,7 +667,7 @@ function PesticideList() {
           <EmptyState icon="search">Không tìm thấy thuốc phù hợp với tiêu chí lọc.</EmptyState>
         )}
       </div>
-    </Card>
+    </section>
   );
 }
 
