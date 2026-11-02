@@ -37,6 +37,9 @@ export default async function globalSetup() {
 
   process.env.NODE_ENV = "test";
   process.env.DATABASE_URL = url;
+  // Không kế thừa DATABASE_SSL từ .env (có thể đang trỏ tới CSDL thật dùng SSL).
+  process.env.DATABASE_SSL = "false";
+  process.env.UPLOAD_DIR = mkdtempSync(join(tmpdir(), "htx-uploads-"));
   process.env.JWT_ACCESS_SECRET = "test-access-secret-test-access-secret-1234";
   process.env.CORS_ORIGIN = "http://localhost:3000";
 

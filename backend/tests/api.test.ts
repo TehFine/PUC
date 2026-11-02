@@ -418,14 +418,23 @@ describe("cổng hộ dân (/api/portal)", () => {
 
   it("tự ghi nhật ký: hộ lấy từ tài khoản, không nhận householdId từ client, không ghi ngày tương lai", async () => {
     const an = await loggedIn(USERS.farmerAn);
-    const created = await an.post("/api/portal/journal").send({ plotCode: "TH1-001", activity: "Tưới nước", detail: "800 lít/cây" });
+    const upload = await an
+      .post("/api/uploads")
+      .field("purpose", "journal")
+      .attach("file", Buffer.from([0xff, 0xd8, 0xff, 0xd9]), "field.jpg");
+    expect(upload.status).toBe(201);
+    const photoId = upload.body.id as number;
+
+    const created = await an
+      .post("/api/portal/journal")
+      .send({ plotCode: "TH1-001", activity: "Tưới nước", detail: "800 lít/cây", photoId });
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({ activity: "Tưới nước", recorder: "Chủ hộ" });
 
-    const spoof = await an.post("/api/portal/journal").send({ plotCode: "TH1-001", activity: "Bón phân", householdId: 2 });
+    const spoof = await an.post("/api/portal/journal").send({ plotCode: "TH1-001", activity: "Bón phân", photoId, householdId: 2 });
     expect(spoof.status).toBe(400);
 
-    const future = await an.post("/api/portal/journal").send({ plotCode: "TH1-001", activity: "Bón phân", entryOn: "2999-01-01" });
+    const future = await an.post("/api/portal/journal").send({ plotCode: "TH1-001", activity: "Bón phân", photoId, entryOn: "2999-01-01" });
     expect(future.status).toBe(400);
 
     const mine = await an.get("/api/portal/journal");
