@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { formatDate } from "@/utils/format";
 import type { PortalLabTest, PortalList, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
-import { Card, EmptyState, Pill, StateBlock } from "./ui";
+import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
 
 function getRelativeScheduleNote(dateStr: string): string {
   if (!dateStr) return "";
@@ -60,6 +60,7 @@ export default function InspectionTab({ onNavigate }: { onNavigate?: (tab: Porta
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
   const tests = usePortal<PortalList<PortalLabTest>>("lab-tests");
   const violations = usePortal<PortalList<PortalViolation>>("violations");
+  const [selectedTest, setSelectedTest] = useState<PortalLabTest | null>(null);
 
   // Hoàn toàn loại bỏ các cảnh báo về nhật ký canh tác khỏi tab Kiểm tra
   // (Mọi cảnh báo/nhắc nhở về nhật ký chỉ thuộc về tab Nhật ký canh tác)
@@ -191,43 +192,143 @@ export default function InspectionTab({ onNavigate }: { onNavigate?: (tab: Porta
 
       <Card title="Kết quả kiểm nghiệm">
         <StateBlock loading={tests.loading} error={tests.error} />
-        {tests.data && tests.data.data.length === 0 && <EmptyState icon="lab">Chưa có kết quả kiểm nghiệm nào.</EmptyState>}
+        {tests.data && tests.data.data.length === 0 && (
+          <EmptyState icon="lab">Chưa có kết quả kiểm nghiệm nào.</EmptyState>
+        )}
         {tests.data && tests.data.data.length > 0 && (
           <ul className="pt-list">
             {tests.data.data.map((test) => (
-              <li key={test.id} className="pt-test">
-                <div className="pt-notice-head">
-                  <strong>
-                    {test.code} · Thửa {test.plotCode}
-                  </strong>
-                  <Pill tone={test.result === "pass" ? "green" : "red"}>{test.result === "pass" ? "Đạt" : "Không đạt"}</Pill>
+              <li
+                key={test.id}
+                className="pt-lab-test-row"
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedTest(test)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedTest(test);
+                  }
+                }}
+                title="Bấm để xem chi tiết kết quả kiểm nghiệm"
+              >
+                <div className="pt-lab-test-title">
+                  {test.code} · Thửa {test.plotCode}
                 </div>
-                <p className="pt-notice-meta">
-                  Lấy mẫu {formatDate(test.sampledOn)} · {test.lab}
-                </p>
-                <dl className="pt-test-grid">
-                  <div>
-                    <dt>Cadimi</dt>
-                    <dd>{test.cdMgKg} mg/kg</dd>
-                  </div>
-                  <div>
-                    <dt>Tồn dư</dt>
-                    <dd>{test.residueMgKg} mg/kg</dd>
-                  </div>
-                  <div>
-                    <dt>Chlorpyrifos</dt>
-                    <dd>{test.chlorpyrifosMgKg === null ? "KPH (Đạt chuẩn)" : `${test.chlorpyrifosMgKg} mg/kg`}</dd>
-                  </div>
-                  <div>
-                    <dt>Vàng O</dt>
-                    <dd>{test.yellowOPositive ? "Dương tính (Cấm)" : "Âm tính (Đạt chuẩn)"}</dd>
-                  </div>
-                </dl>
+                <div className="pt-lab-test-time">
+                  {formatDate(test.sampledOn)}
+                </div>
               </li>
             ))}
           </ul>
         )}
       </Card>
+
+      {/* Popup chi tiết kết quả kiểm nghiệm khi bấm vào dòng */}
+      {selectedTest && (
+        <Sheet
+          title="Kết quả kiểm nghiệm"
+          onClose={() => setSelectedTest(null)}
+        >
+          <LabTestDetailModal
+            test={selectedTest}
+            onClose={() => setSelectedTest(null)}
+          />
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+/** Popup hiển thị toàn bộ chỉ số xét nghiệm và kết luận đánh giá của mẫu kiểm nghiệm */
+function LabTestDetailModal({
+  test,
+  onClose,
+}: {
+  test: PortalLabTest;
+  onClose: () => void;
+}) {
+  const isPass = test.result === "pass";
+
+  return (
+    <div className="pt-pesticide-modal-body">
+      {/* 1. Header: Mã kiểm nghiệm, Thửa đất & Trạng thái */}
+      <div className="pt-lab-modal-hero">
+        <div className="pt-lab-modal-hero-top">
+          <div>
+            <span className="pt-lab-modal-sub">Mẫu kiểm nghiệm</span>
+            <h3 className="pt-lab-modal-title">
+              {test.code} · Thửa {test.plotCode}
+            </h3>
+          </div>
+          <Pill tone={isPass ? "green" : "red"}>
+            {isPass ? "Đạt chuẩn xuất khẩu" : "Không đạt chuẩn"}
+          </Pill>
+        </div>
+
+        <div className="pt-lab-modal-meta">
+          <span>
+            Ngày lấy mẫu: <strong>{formatDate(test.sampledOn)}</strong>
+          </span>
+          <span>
+            Đơn vị kiểm nghiệm (Lab): <strong>{test.lab}</strong>
+          </span>
+        </div>
+      </div>
+
+      {/* 2. Lưới 4 chỉ số xét nghiệm */}
+      <div className="pt-lab-modal-section">
+        <h4 className="pt-pesticide-modal-section-title">Chỉ số xét nghiệm phân tích</h4>
+        <dl className="pt-test-grid">
+          <div>
+            <dt>Cadimi (Cd)</dt>
+            <dd>{test.cdMgKg} mg/kg</dd>
+            <span className="pt-pesticide-spec-hint">Ngưỡng GACC: ≤ 0.05 mg/kg</span>
+          </div>
+          <div>
+            <dt>Tồn dư hóa chất</dt>
+            <dd>{test.residueMgKg} mg/kg</dd>
+            <span className="pt-pesticide-spec-hint">Chuẩn an toàn VietGAP</span>
+          </div>
+          <div>
+            <dt>Chlorpyrifos</dt>
+            <dd>{test.chlorpyrifosMgKg === null ? "KPH (Đạt chuẩn)" : `${test.chlorpyrifosMgKg} mg/kg`}</dd>
+            <span className="pt-pesticide-spec-hint">Hoạt chất cấm hoàn toàn</span>
+          </div>
+          <div>
+            <dt>Chất cấm Vàng O</dt>
+            <dd>{test.yellowOPositive ? "Dương tính (Cấm)" : "Âm tính (Đạt chuẩn)"}</dd>
+            <span className="pt-pesticide-spec-hint">Tuyệt đối không có</span>
+          </div>
+        </dl>
+      </div>
+
+      {/* 3. Đánh giá & Khuyến nghị kết luận */}
+      <div className={`pt-pesticide-alert-box ${isPass ? "pt-pesticide-alert-allowed" : "pt-pesticide-alert-banned"}`}>
+        <div className="pt-pesticide-alert-content">
+          <strong>
+            {isPass
+              ? "Kết luận: Lô hàng đạt tiêu chuẩn xuất khẩu chính ngạch"
+              : "Cảnh báo: Lô hàng chưa đủ điều kiện xuất khẩu"}
+          </strong>
+          <p>
+            {isPass
+              ? "Mẫu kiểm nghiệm tại thửa đất này đã vượt qua toàn bộ các chỉ tiêu về kim loại nặng và dư lượng thuốc BVTV theo Nghị định thư GACC và tiêu chuẩn VietGAP. Hộ thành viên đủ điều kiện được cấp tem truy xuất nguồn gốc khi thu hoạch."
+              : "Mẫu kiểm nghiệm phát hiện chỉ số chưa đạt ngưỡng cho phép. Bà con cần tạm ngừng thu hoạch tại thửa đất này và thông báo ngay cho cán bộ phụ trách kỹ thuật của HTX để lấy mẫu kiểm tra lại."}
+          </p>
+        </div>
+      </div>
+
+      {/* 4. Nút đóng popup */}
+      <div className="pt-training-modal-actions">
+        <button
+          type="button"
+          className="pt-btn-secondary"
+          onClick={onClose}
+        >
+          Đóng
+        </button>
+      </div>
     </div>
   );
 }

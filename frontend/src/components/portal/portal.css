@@ -3470,6 +3470,111 @@ body.pt-body {
 }
 @media (min-width: 520px) { .pt-test-grid { grid-template-columns: repeat(4, 1fr); } }
 
+/* ── Danh sách kết quả kiểm nghiệm (Tiêu đề bên trái, Thời gian bên phải) ── */
+.pt-lab-test-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.18s ease;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.pt-lab-test-row:last-child {
+  border-bottom: none;
+}
+
+.pt-lab-test-row:hover {
+  background: rgba(15, 23, 42, 0.035);
+}
+
+.pt-lab-test-row:active {
+  background: rgba(15, 23, 42, 0.06);
+  transform: scale(0.995);
+}
+
+.pt-lab-test-title {
+  font-family: var(--font-display-stack);
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pt-lab-test-time {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Modal Hero cho kết quả kiểm nghiệm */
+.pt-lab-modal-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 20px;
+}
+
+.pt-lab-modal-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pt-lab-modal-sub {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+
+.pt-lab-modal-title {
+  margin: 0;
+  font-family: var(--font-display-stack);
+  font-size: 19px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.pt-lab-modal-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #64748b;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  padding-top: 10px;
+}
+
+.pt-lab-modal-meta strong {
+  color: #1e293b;
+}
+
+.pt-lab-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* ── Giao diện danh mục Thuốc BVTV (Nằm trực tiếp dưới nền giao diện, không thẻ bọc ngoài) ── */
 .pt-pest-section {
   position: relative;
