@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Ban,
   Check,
-  CheckCircle2,
   ChevronRight,
   Clock,
   MapPin,
@@ -502,9 +501,6 @@ export function PesticideDetailModal({
       {/* 2. Thông tin đưa ra ngoài và đặt ở bên dưới khung */}
       <div className="pt-pesticide-header-info">
         <div className={`pt-pest-status-badge pt-pest-status-${item.status}`}>
-          {isAllowed && <CheckCircle2 size={13} strokeWidth={2.4} aria-hidden="true" />}
-          {isRestricted && <AlertTriangle size={13} strokeWidth={2.4} aria-hidden="true" />}
-          {isBanned && <Ban size={13} strokeWidth={2.4} aria-hidden="true" />}
           <span>{status.label}</span>
         </div>
         <h3 className="pt-pesticide-modal-title">{item.name}</h3>
@@ -673,7 +669,6 @@ function PesticideList() {
             className={`pt-pest-filter-chip is-allowed ${statusFilter === "allowed" ? "is-active" : ""}`}
             onClick={() => setStatusFilter("allowed")}
           >
-            <CheckCircle2 size={13} aria-hidden="true" />
             Được phép <span className="pt-pest-filter-count">{counts.allowed}</span>
           </button>
           <button
@@ -681,7 +676,6 @@ function PesticideList() {
             className={`pt-pest-filter-chip is-restricted ${statusFilter === "restricted" ? "is-active" : ""}`}
             onClick={() => setStatusFilter("restricted")}
           >
-            <AlertTriangle size={13} aria-hidden="true" />
             Hạn chế <span className="pt-pest-filter-count">{counts.restricted}</span>
           </button>
           <button
@@ -689,7 +683,6 @@ function PesticideList() {
             className={`pt-pest-filter-chip is-banned ${statusFilter === "banned" ? "is-active" : ""}`}
             onClick={() => setStatusFilter("banned")}
           >
-            <Ban size={13} aria-hidden="true" />
             Bị cấm <span className="pt-pest-filter-count">{counts.banned}</span>
           </button>
         </div>
