@@ -10,6 +10,7 @@ import {
   Ban,
   Check,
   CheckCircle2,
+  ChevronRight,
   Clock,
   MapPin,
   Search,
@@ -464,10 +465,145 @@ function TrainingList() {
   );
 }
 
+export function getPesticideImage(item: { status: string; name?: string; id?: number }): string {
+  if (item.status === "banned") return "/pesticides/red.jpg";
+  if (item.status === "restricted") return "/pesticides/amber.jpg";
+  const name = (item.name ?? "").toLowerCase();
+  if (name.includes("buprofezin") || name.includes("imidacloprid")) {
+    return "/pesticides/green.jpg";
+  }
+  return "/pesticides/blue.jpg";
+}
+
+export function PesticideDetailModal({
+  item,
+  onClose,
+}: {
+  item: PesticideDto;
+  onClose: () => void;
+}) {
+  const status = PESTICIDE_STATUS[item.status];
+  const isAllowed = item.status === "allowed";
+  const isRestricted = item.status === "restricted";
+  const isBanned = item.status === "banned";
+  const imgSrc = getPesticideImage(item);
+
+  return (
+    <div className="pt-pesticide-modal-body">
+      {/* 1. Phần Hero đầu popup: Ảnh lớn + Tên thuốc + Trạng thái */}
+      <div className="pt-pesticide-modal-hero">
+        <div className="pt-pesticide-modal-img-box">
+          <img
+            src={imgSrc}
+            alt={item.name}
+            className="pt-pesticide-modal-img"
+          />
+        </div>
+        <div className="pt-pesticide-modal-hero-info">
+          <div className={`pt-pest-status-badge pt-pest-status-${item.status}`}>
+            {isAllowed && <CheckCircle2 size={13} strokeWidth={2.4} aria-hidden="true" />}
+            {isRestricted && <AlertTriangle size={13} strokeWidth={2.4} aria-hidden="true" />}
+            {isBanned && <Ban size={13} strokeWidth={2.4} aria-hidden="true" />}
+            <span>{status.label}</span>
+          </div>
+          <h3 className="pt-pesticide-modal-title">{item.name}</h3>
+          <p className="pt-pesticide-modal-mfg">
+            Nhà sản xuất: <strong>{item.manufacturer ?? "Map Pacific / Cục BVTV"}</strong>
+          </p>
+        </div>
+      </div>
+
+      {/* 2. Lưới thông số kỹ thuật (Hoạt chất, Nồng độ, Cách ly PHI, MRL) */}
+      <div className="pt-pesticide-modal-specs">
+        <h4 className="pt-pesticide-modal-section-title">Thông số kỹ thuật & Tiêu chuẩn</h4>
+        <div className="pt-pesticide-specs-grid">
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Hoạt chất chính</span>
+            <strong className="pt-pesticide-spec-value">{item.activeIngredient}</strong>
+            <span className="pt-pesticide-spec-hint">Hàm lượng: {item.concentration ?? "Đạt chuẩn đăng ký"}</span>
+          </div>
+
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Thời gian cách ly (PHI)</span>
+            <strong className="pt-pesticide-spec-value pt-spec-highlight">
+              {item.isolationDays != null ? `${item.isolationDays} ngày` : "Không áp dụng"}
+            </strong>
+            <span className="pt-pesticide-spec-hint">Ngừng phun trước khi thu hoạch</span>
+          </div>
+
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Mức dư lượng tối đa (MRL)</span>
+            <strong className="pt-pesticide-spec-value">
+              {item.mrlMgKg != null ? `${item.mrlMgKg} mg/kg` : "—"}
+            </strong>
+            <span className="pt-pesticide-spec-hint">Chuẩn VietGAP & Nghị định thư GACC</span>
+          </div>
+
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Tình trạng kiểm soát</span>
+            <strong className="pt-pesticide-spec-value">
+              {isAllowed ? "Được phép sử dụng" : isRestricted ? "Kiểm soát đặc biệt" : "Cấm lưu hành"}
+            </strong>
+            <span className="pt-pesticide-spec-hint">Thông tư 10/2024/TT-BNNPTNT</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Cảnh báo & Hướng dẫn quy định chuyên môn */}
+      <div className={`pt-pesticide-alert-box pt-pesticide-alert-${item.status}`}>
+        <div className="pt-pesticide-alert-icon">
+          {isAllowed && <ShieldCheck size={20} />}
+          {isRestricted && <AlertTriangle size={20} />}
+          {isBanned && <Ban size={20} />}
+        </div>
+        <div className="pt-pesticide-alert-content">
+          <strong>
+            {isAllowed
+              ? "Quy định canh tác an toàn sinh học VietGAP"
+              : isRestricted
+              ? "Cảnh báo kiểm soát dư lượng nghiêm ngặt"
+              : "Cảnh báo đỏ: Nghiêm cấm tuyệt đối"}
+          </strong>
+          <p>
+            {isAllowed
+              ? "Thuốc nằm trong danh mục được phép sử dụng phòng trừ sâu rầy trên sầu riêng. Bà con cần tuân thủ đúng liều lượng khuyến cáo, ghi chép nhật ký phun và đảm bảo đủ thời gian cách ly trước ngày thu hoạch."
+              : isRestricted
+              ? "Hoạt chất có nguy cơ tồn dư kéo dài. Chỉ sử dụng khi dịch hại bùng phát mạnh và có sự đồng ý của cán bộ kỹ thuật HTX hoặc Chi cục Trồng trọt & BVTV."
+              : "Hoạt chất Carbaryl đã bị Hải quan Trung Quốc (GACC) và Bộ Nông nghiệp & PTNT cấm hoàn toàn. Bất kỳ lô hàng nào phát hiện tồn dư sẽ bị tiêu hủy và đình chỉ mã vùng trồng."}
+          </p>
+        </div>
+      </div>
+
+      {/* 4. Quy tắc an toàn lao động & bảo vệ môi trường */}
+      <div className="pt-pesticide-safety-tips">
+        <h4 className="pt-pesticide-modal-section-title">Nguyên tắc an toàn & bảo vệ môi trường</h4>
+        <ul className="pt-pesticide-safety-list">
+          <li>Trang bị đầy đủ khẩu trang, kính chắn giọt bắn, găng tay và ủng bảo hộ khi pha chế và phun thuốc.</li>
+          <li>Không phun ngược hướng gió, không phun vào những ngày nắng gắt trên 35°C hoặc khi trời sắp có mưa.</li>
+          <li>Vỏ chai, bao bì sau khi dùng phải súc rửa 3 lần, thu gom về đúng bể chứa rác nguy hại của thôn/xã.</li>
+        </ul>
+      </div>
+
+      {/* 5. Nút đóng popup */}
+      <div className="pt-training-modal-actions">
+        <button
+          type="button"
+          className="pt-btn pt-btn-primary"
+          style={{ width: "100%", justifyContent: "center" }}
+          onClick={onClose}
+        >
+          Đã hiểu & Đóng
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PesticideList() {
   const { data, loading, error } = useResource<PesticideDto, PesticideDto>("pesticides", keepPesticide);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedPesticide, setSelectedPesticide] = useState<PesticideDto | null>(null);
 
   const counts = useMemo(() => {
     return {
@@ -579,69 +715,67 @@ function PesticideList() {
 
         <StateBlock loading={loading} error={error} />
 
-        {/* Danh sách thẻ thuốc trực quan */}
+        {/* Danh sách thẻ thuốc trực quan theo phong cách Ảnh 1 */}
         <div className="pt-pest-list">
           {shown.map((item) => {
             const status = PESTICIDE_STATUS[item.status];
             const isAllowed = item.status === "allowed";
             const isRestricted = item.status === "restricted";
             const isBanned = item.status === "banned";
+            const imgSrc = getPesticideImage(item);
 
             return (
-              <article key={item.id} className={`pt-pest-card pt-pest-card-${item.status}`}>
-                {/* Phần trên: Tên thương phẩm + Huy hiệu trạng thái */}
-                <div className="pt-pest-card-top">
-                  <div className="pt-pest-card-identity">
-                    <h3 className="pt-pest-card-name">{item.name}</h3>
-                    <div className="pt-pest-card-ing-wrap">
-                      <span className="pt-pest-card-ing-label">Hoạt chất:</span>
-                      <strong className="pt-pest-card-ing-val">{item.activeIngredient}</strong>
-                      {item.concentration && <span className="pt-pest-card-conc">{item.concentration}</span>}
-                      {item.manufacturer && <span className="pt-pest-card-mfg">· {item.manufacturer}</span>}
-                    </div>
-                  </div>
-
-                  <div className={`pt-pest-status-badge pt-pest-status-${item.status}`}>
-                    {isAllowed && <CheckCircle2 size={13} strokeWidth={2.4} aria-hidden="true" />}
-                    {isRestricted && <AlertTriangle size={13} strokeWidth={2.4} aria-hidden="true" />}
-                    {isBanned && <Ban size={13} strokeWidth={2.4} aria-hidden="true" />}
-                    <span>{status.label}</span>
-                  </div>
+              <article
+                key={item.id}
+                className={`pt-pest-card pt-pest-card-${item.status}`}
+                onClick={() => setSelectedPesticide(item)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedPesticide(item);
+                  }
+                }}
+                title="Bấm để xem chi tiết thuốc BVTV"
+              >
+                {/* Bên trái: Ảnh của loại thuốc */}
+                <div className="pt-pest-card-img-wrap">
+                  <img
+                    src={imgSrc}
+                    alt={item.name}
+                    className="pt-pest-card-img"
+                    loading="lazy"
+                  />
                 </div>
 
-                {/* Phần dưới: Lưới 2 ô thông số kỹ thuật (Cách ly & MRL) */}
-                <div className="pt-pest-specs-grid">
-                  <div className="pt-pest-spec-box">
-                    <div className="pt-pest-spec-head">
-                      <Clock size={12} className="pt-pest-spec-icon" aria-hidden="true" />
-                      <span>Thời gian cách ly</span>
-                    </div>
-                    <div className="pt-pest-spec-body">
-                      {item.isolationDays != null ? (
-                        <div className="pt-pest-spec-metric">
-                          <span className="pt-pest-spec-val">{item.isolationDays}</span>
-                          <span className="pt-pest-spec-unit">ngày</span>
-                        </div>
-                      ) : (
-                        <span className="pt-pest-spec-empty">Không áp dụng</span>
-                      )}
-                    </div>
+                {/* Bên phải: Tên thuốc và thông tin */}
+                <div className="pt-pest-card-content">
+                  <div className="pt-pest-card-top-row">
+                    <h3 className="pt-pest-card-name">{item.name}</h3>
+                    <span className={`pt-pest-mini-status pt-pest-status-${item.status}`}>
+                      {isAllowed && <CheckCircle2 size={11} strokeWidth={2.4} aria-hidden="true" />}
+                      {isRestricted && <AlertTriangle size={11} strokeWidth={2.4} aria-hidden="true" />}
+                      {isBanned && <Ban size={11} strokeWidth={2.4} aria-hidden="true" />}
+                      <span>{status.label}</span>
+                    </span>
                   </div>
 
-                  <div className="pt-pest-spec-box">
-                    <div className="pt-pest-spec-head">
-                      <ShieldCheck size={12} className="pt-pest-spec-icon" aria-hidden="true" />
-                      <span>Dư lượng tối đa (MRL)</span>
+                  <p className="pt-pest-card-sub">
+                    Hoạt chất: <strong>{item.activeIngredient}</strong>
+                    {item.concentration ? ` (${item.concentration})` : ""}
+                    {item.manufacturer ? ` · ${item.manufacturer}` : ""}
+                  </p>
+
+                  <div className="pt-pest-card-bottom-row">
+                    <div className="pt-pest-card-metric">
+                      <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
+                      <span>Cách ly: <strong>{item.isolationDays != null ? `${item.isolationDays} ngày` : "Không áp dụng"}</strong></span>
                     </div>
-                    <div className="pt-pest-spec-body">
-                      {item.mrlMgKg != null ? (
-                        <div className="pt-pest-spec-metric">
-                          <span className="pt-pest-spec-val">{item.mrlMgKg}</span>
-                          <span className="pt-pest-spec-unit">mg/kg</span>
-                        </div>
-                      ) : (
-                        <span className="pt-pest-spec-empty">Không áp dụng</span>
-                      )}
+
+                    <div className="pt-pest-card-btn-pill">
+                      <span>Chi tiết</span>
+                      <ChevronRight size={13} strokeWidth={2.5} aria-hidden="true" />
                     </div>
                   </div>
                 </div>
@@ -652,6 +786,19 @@ function PesticideList() {
 
         {!loading && !error && shown.length === 0 && (
           <EmptyState icon="search">Không tìm thấy thuốc phù hợp với tiêu chí lọc.</EmptyState>
+        )}
+
+        {/* Popup chi tiết về loại thuốc được chọn */}
+        {selectedPesticide && (
+          <Sheet
+            title="Chi tiết thuốc BVTV"
+            onClose={() => setSelectedPesticide(null)}
+          >
+            <PesticideDetailModal
+              item={selectedPesticide}
+              onClose={() => setSelectedPesticide(null)}
+            />
+          </Sheet>
         )}
       </div>
     </section>

@@ -3641,92 +3641,191 @@ body.pt-body {
   text-decoration: underline;
 }
 
-/* Danh sách thẻ thuốc BVTV */
+/* Danh sách thẻ thuốc BVTV theo phong cách Image 1 */
 .pt-pest-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .pt-pest-card {
   position: relative;
-  background: #ffffff;
-  border: 1px solid rgba(20, 55, 47, 0.09);
-  border-radius: 18px;
-  padding: 16px 18px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-.pt-pest-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
-  border-color: rgba(20, 55, 47, 0.16);
-}
-.pt-pest-card.pt-pest-card-allowed {
-  border-color: rgba(20, 55, 47, 0.1);
-}
-.pt-pest-card.pt-pest-card-restricted {
-  border-color: rgba(217, 119, 6, 0.18);
-  background: linear-gradient(180deg, #ffffff 0%, #fffcf5 100%);
-}
-.pt-pest-card.pt-pest-card-banned {
-  border-color: rgba(239, 68, 68, 0.18);
-  background: linear-gradient(180deg, #ffffff 0%, #fffaf9 100%);
-}
-
-/* Phần đầu thẻ: Tên thuốc & Huy hiệu trạng thái */
-.pt-pest-card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.pt-pest-card-identity {
-  min-width: 0;
-  flex: 1;
-}
-.pt-pest-card-name {
-  margin: 0 0 6px;
-  font-family: var(--font-display-stack);
-  font-variation-settings: normal;
-  font-size: 16.5px;
-  font-weight: 700;
-  color: var(--ink);
-  letter-spacing: -0.015em;
-  line-height: 1.25;
-}
-.pt-pest-card-ing-wrap {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 22px;
+  padding: 14px 18px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pt-pest-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.09);
+  border-color: rgba(6, 95, 70, 0.25);
+}
+
+.pt-pest-card:active {
+  transform: scale(0.99);
+}
+
+.pt-pest-card.pt-pest-card-allowed {
+  border-color: rgba(22, 163, 74, 0.14);
+}
+
+.pt-pest-card.pt-pest-card-restricted {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: linear-gradient(180deg, #ffffff 0%, #fffdf8 100%);
+}
+
+.pt-pest-card.pt-pest-card-banned {
+  border-color: rgba(239, 68, 68, 0.22);
+  background: linear-gradient(180deg, #ffffff 0%, #fffbfb 100%);
+}
+
+/* Phần bên trái: Khung chứa ảnh thuốc */
+.pt-pest-card-img-wrap {
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+}
+
+.pt-pest-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.08));
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pt-pest-card:hover .pt-pest-card-img {
+  transform: scale(1.06);
+}
+
+/* Phần bên phải: Tên thuốc và thông số */
+.pt-pest-card-content {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pt-pest-card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pt-pest-card-name {
+  margin: 0;
+  font-family: var(--font-display-stack);
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pt-pest-mini-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pt-pest-card-sub {
+  margin: 0;
+  font-size: 12.5px;
+  color: #64748b;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+.pt-pest-card-sub strong {
+  color: #334155;
+  font-weight: 600;
+}
+
+.pt-pest-card-bottom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.pt-pest-card-metric {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12.5px;
   color: #475569;
 }
-.pt-pest-card-ing-label {
-  color: #64748b;
-  font-weight: 500;
+
+.pt-pest-card-metric strong {
+  color: #065f46;
+  font-weight: 700;
 }
-.pt-pest-card-ing-val {
-  color: #1e293b;
-  font-weight: 600;
+
+.pt-pest-card.pt-pest-card-banned .pt-pest-card-metric strong {
+  color: #b91c1c;
 }
-.pt-pest-card-conc {
+
+.pt-pest-card.pt-pest-card-restricted .pt-pest-card-metric strong {
+  color: #b45309;
+}
+
+.pt-pest-card-metric-icon {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+/* Nút dạng viên thuốc capsule giống phong cách nút - 000 + trong Ảnh 1 */
+.pt-pest-card-btn-pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 7px;
-  background: #f1f5f9;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #334155;
-  letter-spacing: -0.01em;
-}
-.pt-pest-card-mfg {
+  gap: 4px;
+  background: #1e293b;
+  color: #ffffff;
+  padding: 5px 12px;
+  border-radius: 999px;
   font-size: 12px;
-  color: #64748b;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+  transition: background 0.18s ease, transform 0.18s ease;
+  flex-shrink: 0;
+}
+
+.pt-pest-card:hover .pt-pest-card-btn-pill {
+  background: #065f46;
+  transform: scale(1.04);
 }
 
 /* Huy hiệu trạng thái */
@@ -3757,60 +3856,213 @@ body.pt-body {
   border: 1px solid rgba(220, 38, 38, 0.26);
 }
 
-/* Lưới 2 ô thông số kỹ thuật (Specs Grid) */
-.pt-pest-specs-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.pt-pest-spec-box {
+/* ── Popup chi tiết về loại thuốc BVTV ── */
+.pt-pesticide-modal-body {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid rgba(15, 23, 42, 0.05);
-  border-radius: 12px;
+  gap: 18px;
+  padding: 4px 0 16px;
 }
-.pt-pest-card-banned .pt-pest-spec-box {
-  background: rgba(254, 242, 242, 0.45);
-}
-.pt-pest-spec-head {
+
+.pt-pesticide-modal-hero {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: #64748b;
+  gap: 18px;
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 20px;
 }
-.pt-pest-spec-icon {
-  color: #94a3b8;
+
+.pt-pesticide-modal-img-box {
+  width: 104px;
+  height: 104px;
   flex-shrink: 0;
-}
-.pt-pest-spec-metric {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 6px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
   display: flex;
-  align-items: baseline;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
 }
-.pt-pest-spec-val {
+
+.pt-pesticide-modal-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.06));
+}
+
+.pt-pesticide-modal-hero-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pt-pesticide-modal-title {
+  margin: 0;
   font-family: var(--font-display-stack);
-  font-size: 16.5px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.02em;
-  line-height: 1.15;
+  line-height: 1.2;
 }
-.pt-pest-spec-unit {
-  font-size: 12px;
-  font-weight: 500;
+
+.pt-pesticide-modal-mfg {
+  margin: 0;
+  font-size: 13px;
   color: #64748b;
 }
-.pt-pest-spec-empty {
-  font-size: 12.5px;
-  font-weight: 500;
+
+.pt-pesticide-modal-section-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 750;
+  color: #1e293b;
+  letter-spacing: -0.01em;
+}
+
+.pt-pesticide-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.pt-pesticide-spec-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+}
+
+.pt-pesticide-spec-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.pt-pesticide-spec-value {
+  font-family: var(--font-display-stack);
+  font-size: 16px;
+  font-weight: 750;
+  color: #0f172a;
+}
+
+.pt-pesticide-spec-value.pt-spec-highlight {
+  color: #065f46;
+}
+
+.pt-pesticide-spec-hint {
+  font-size: 11.5px;
   color: #94a3b8;
-  font-style: italic;
+}
+
+.pt-pesticide-alert-box {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+}
+
+.pt-pesticide-alert-allowed {
+  background: #ecfdf5;
+  border: 1px solid rgba(22, 163, 74, 0.25);
+  color: #166534;
+}
+
+.pt-pesticide-alert-restricted {
+  background: #fffbeb;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  color: #92400e;
+}
+
+.pt-pesticide-alert-banned {
+  background: #fef2f2;
+  border: 1px solid rgba(220, 38, 38, 0.26);
+  color: #991b1b;
+}
+
+.pt-pesticide-alert-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.pt-pesticide-alert-content strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 750;
+  margin-bottom: 4px;
+}
+
+.pt-pesticide-alert-content p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  opacity: 0.94;
+}
+
+.pt-pesticide-safety-tips {
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+
+.pt-pesticide-safety-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .pt-pest-card {
+    padding: 12px 14px;
+    gap: 12px;
+    border-radius: 20px;
+  }
+  .pt-pest-card-img-wrap {
+    width: 74px;
+    height: 74px;
+  }
+  .pt-pest-card-name {
+    font-size: 15.5px;
+  }
+  .pt-pest-card-sub {
+    font-size: 11.5px;
+  }
+  .pt-pest-card-metric {
+    font-size: 11.5px;
+  }
+  .pt-pest-card-btn-pill {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  .pt-pesticide-modal-hero {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+    gap: 12px;
+  }
+  .pt-pesticide-modal-hero-info {
+    align-items: center;
+  }
+  .pt-pesticide-specs-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Lớp tập huấn theo phong cách Transit Timeline & Popup chi tiết ── */
