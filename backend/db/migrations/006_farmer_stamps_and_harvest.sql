@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS farmer_stamp_allocations (
   id BIGSERIAL PRIMARY KEY,
   allocation_code TEXT NOT NULL UNIQUE,
   household_id BIGINT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
-  plot_id BIGINT REFERENCES plots(id) ON DELETE SET NULL,
+  -- Không đặt khóa ngoại tới plots: bảng plots chỉ có khi CSDL có PostGIS (002_plots.sql có thể bị bỏ qua).
+  plot_id BIGINT,
   allocated_on DATE NOT NULL DEFAULT CURRENT_DATE,
   season TEXT NOT NULL DEFAULT 'Vụ 2024',
   max_quota_stamps INTEGER NOT NULL CHECK (max_quota_stamps >= 0),

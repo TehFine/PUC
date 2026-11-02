@@ -82,5 +82,9 @@ export async function seedDemoFarmers(
   await pool.query(`UPDATE training_courses SET held_on = current_date + 14 WHERE id = 3`);
   await pool.query(`UPDATE training_courses SET held_on = current_date + 25 WHERE id = 4`);
 
+  // Đồng bộ đường dẫn thông báo vi phạm / nhật ký sang đúng mục Nhật ký
+  await pool.query(`UPDATE notifications SET link = '/portal?tab=diary' WHERE kind = 'violation' AND link = '/portal?tab=inspection'`);
+  await pool.query(`UPDATE notifications SET link = '/admin?section=journal' WHERE kind = 'violation' AND link = '/admin?section=testing'`);
+
   if (created.length > 0) log(`✔ Đã tạo tài khoản hộ dân mẫu: ${created.join(", ")}.`);
 }

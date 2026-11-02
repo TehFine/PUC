@@ -26,6 +26,13 @@ export const RESOURCES = [
   "registrations",
   "contracts",
   "enterprises",
+  "fertilizers",
+  "news",
+  "stamps",
+  "harvest-declarations",
+  "training-registrations",
+  "dashboard",
+  "reports",
 ] as const;
 export type ResourceKey = (typeof RESOURCES)[number];
 
@@ -73,6 +80,17 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   registrations: { read: HTX, update: HTX, delete: HTX },
   contracts: { read: STAFF, create: HTX, update: HTX, delete: ADMIN },
   enterprises: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
+  fertilizers: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
+  // Bản tin: cán bộ HTX soạn/đăng; người xem công khai đọc qua /api/public/news.
+  news: { read: HTX, create: HTX, update: HTX, delete: HTX },
+  // Cấp phát tem nông hộ (tạo đợt cấp = create, thu hồi = update).
+  stamps: { read: OVERSIGHT, create: HTX, update: HTX },
+  // Khai báo thu hoạch của hộ: cán bộ HTX xác nhận/từ chối (= update).
+  "harvest-declarations": { read: OVERSIGHT, update: HTX },
+  // Danh sách hộ đăng ký tập huấn, điểm danh (= update).
+  "training-registrations": { read: STAFF, update: HTX },
+  dashboard: { read: STAFF },
+  reports: { read: OVERSIGHT },
 };
 
 export function can(role: Role, resource: ResourceKey, action: Action): boolean {

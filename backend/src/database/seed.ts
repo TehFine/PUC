@@ -3,6 +3,7 @@ import { join } from "node:path";
 import bcrypt from "bcryptjs";
 import type { Pool } from "pg";
 import * as data from "./seed-data";
+import { seedCatalogAndNews } from "./seed-catalog-news";
 import { seedDemoFarmers } from "./seed-farmers";
 import { seedSupplyChain } from "./seed-supply-chain";
 
@@ -64,6 +65,7 @@ export async function seedDatabase(pool: Pool, options: SeedOptions): Promise<bo
     // CSDL đã seed từ trước vẫn cần tài khoản/dữ liệu mẫu cho cổng hộ dân (chỉ thêm phần còn thiếu).
     await seedDemoFarmers(pool, { password: options.password, log });
     await seedSupplyChain(pool, { log });
+    await seedCatalogAndNews(pool, { log });
     return false;
   }
 
@@ -234,6 +236,7 @@ export async function seedDatabase(pool: Pool, options: SeedOptions): Promise<bo
     log("✔ Đã nạp dữ liệu mẫu.");
     await seedDemoFarmers(pool, { password: options.password, log });
     await seedSupplyChain(pool, { log });
+    await seedCatalogAndNews(pool, { log });
     return true;
   } catch (error) {
     await client.query("ROLLBACK");

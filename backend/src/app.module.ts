@@ -17,6 +17,8 @@ import { PlotsModule } from "./plots/plots.module";
 import { PortalModule } from "./portal/portal.module";
 import { RegistrationsModule } from "./registrations/registrations.module";
 import { ResourcesModule } from "./resources/resources.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { UploadsModule } from "./uploads/uploads.module";
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { ResourcesModule } from "./resources/resources.module";
     }),
     DatabaseModule,
     AuditModule,
+    UploadsModule,
+    NotificationsModule,
     AuthModule,
     PlotsModule,
     PortalModule,

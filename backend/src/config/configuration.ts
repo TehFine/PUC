@@ -48,6 +48,14 @@ class EnvironmentVariables {
   @IsString()
   @MinLength(8)
   SEED_PASSWORD?: string;
+
+  @IsString()
+  UPLOAD_DIR = "uploads";
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  UPLOAD_MAX_MB = 8;
 }
 
 export interface AppConfig {
@@ -59,6 +67,7 @@ export interface AppConfig {
   jwt: { accessSecret: string; accessTtlMin: number; refreshTtlDays: number };
   cookieSecure: boolean;
   seedPassword?: string;
+  uploads: { dir: string; maxBytes: number };
 }
 
 /** Đọc và kiểm tra biến môi trường; ném lỗi liệt kê mọi biến sai để dừng khởi động sớm. */
@@ -85,6 +94,7 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === "true" : env.NODE_ENV === NodeEnv.Production,
     seedPassword: env.SEED_PASSWORD,
+    uploads: { dir: env.UPLOAD_DIR, maxBytes: env.UPLOAD_MAX_MB * 1024 * 1024 },
   };
 }
 

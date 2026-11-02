@@ -73,16 +73,11 @@ export class AuthService {
 
   async login(dto: LoginDto, meta: ClientMeta): Promise<SessionResult & { tokens: IssuedTokens }> {
     const cleanUsername = dto.username.trim();
+    // Chỉ khớp đúng tên đăng nhập: không có bí danh theo vai trò, không đăng nhập bằng số điện thoại của hộ.
     const { rows } = await this.db.query<UserRow>(
       `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
        FROM users u
-       LEFT JOIN households h ON h.id = u.household_id
-       WHERE u.username = $1
-          OR (lower($1) = 'admin' AND u.role = 'admin')
-          OR (lower($1) IN ('canbo', 'officer') AND u.role = 'htx_officer')
-          OR (lower($1) IN ('kiemtra', 'inspector') AND u.role = 'inspector')
-          OR (h.phone = $1)
-       LIMIT 1`,
+       WHERE u.username = $1`,
       [cleanUsername],
     );
     const user = rows[0];
