@@ -8,7 +8,6 @@ import {
   X,
   MapPin,
   ExternalLink,
-  RotateCcw,
   QrCode,
   ChevronDown,
   ChevronUp,
@@ -273,21 +272,6 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     setLayerMode(mode);
   };
 
-  // Căn giữa lại thửa đất
-  const resetBounds = () => {
-    if (!mapRef.current) return;
-    const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
-    if (polygonLayerRef.current) {
-      mapRef.current.fitBounds(polygonLayerRef.current.getBounds(), {
-        paddingTopLeft: [isMobile ? 80 : 60, 20],
-        paddingBottomRight: [20, isMobile && infoExpanded ? 260 : 80],
-        maxZoom: 18,
-      });
-    } else {
-      mapRef.current.setView([lat, lng], 17);
-    }
-  };
-
   useEffect(() => {
     const timer = setTimeout(() => {
       mapRef.current?.invalidateSize();
@@ -333,16 +317,6 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               Bản đồ
             </button>
           </div>
-
-          <button
-            type="button"
-            className="pt-mapmodal-round-btn"
-            onClick={resetBounds}
-            title="Căn giữa lại thửa đất"
-            aria-label="Căn giữa lại thửa đất"
-          >
-            <RotateCcw size={16} />
-          </button>
 
           <button
             type="button"
