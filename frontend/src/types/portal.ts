@@ -81,6 +81,7 @@ export interface PortalLabTest {
   chlorpyrifosMgKg: number | null;
   result: "pass" | "fail";
   lab: string;
+  householdName?: string;
 }
 
 export interface PortalScheduleItem {

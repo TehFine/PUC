@@ -167,9 +167,10 @@ export class PortalService {
 
   async labTests(user: AuthUser) {
     const { rows } = await this.db.query(
-      `SELECT id, code, plot_code, sampled_on, cd_mg_kg, yellow_o_positive, residue_mg_kg,
-              chlorpyrifos_mg_kg, result, lab
-       FROM lab_tests WHERE household_id = $1 ORDER BY sampled_on DESC, id DESC LIMIT 100`,
+      `SELECT t.id, t.code, t.plot_code, t.sampled_on, t.cd_mg_kg, t.yellow_o_positive, t.residue_mg_kg,
+              t.chlorpyrifos_mg_kg, t.result, t.lab, h.name AS household_name
+       FROM lab_tests t JOIN households h ON h.id = t.household_id
+       WHERE t.household_id = $1 ORDER BY t.sampled_on DESC, t.id DESC LIMIT 100`,
       [this.householdIdOf(user)],
     );
     return { data: camelRows(rows) };
