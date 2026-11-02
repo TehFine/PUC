@@ -212,6 +212,21 @@ export interface VarietyDto {
   weightRange: string | null;
   harvestYears: string | null;
   description: string | null;
+  category?: "export" | "native" | "premium" | "new";
+  fleshColor?: string;
+  seedRate?: string;
+  brix?: string;
+  yieldPerHa?: string;
+  status?: "allowed" | "encouraged" | "trial";
+  image?: string;
+  marketPotential?: string;
+  morphology?: string[];
+  farmingTechniques?: {
+    density: string;
+    pollination: string;
+    thinning: string;
+    specialNotes: string;
+  };
 }
 
 export interface FertilizerDto {
