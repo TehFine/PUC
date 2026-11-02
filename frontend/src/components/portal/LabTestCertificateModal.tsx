@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { Printer, Download, X, ShieldCheck, CheckCircle2, AlertTriangle, FileText } from "lucide-react";
+import { Printer } from "lucide-react";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { formatDate } from "@/utils/format";
 
 export interface LabTestCertificateItem {
@@ -24,8 +25,85 @@ interface Props {
   onClose: () => void;
 }
 
+/** Góc gấp giấy trắng 3D (Dog-Ear Fold) với ID riêng biệt tránh xung đột SVG defs giữa Desktop & Mobile */
+function PaperDogEarFold({ idPrefix }: { idPrefix: string }) {
+  const shadowId = `certFoldShadow-${idPrefix}`;
+  const contactId = `certFoldContact-${idPrefix}`;
+  const surfaceId = `certFoldSurface-${idPrefix}`;
+  const rimId = `certFoldRim-${idPrefix}`;
+
+  return (
+    <div className="cert-paper-fold no-print" aria-hidden="true">
+      <svg width="100%" height="100%" viewBox="0 0 96 96" fill="none">
+        <defs>
+          <filter id={shadowId} x="0" y="0" width="96" height="96" filterUnits="userSpaceOnUse">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5.5" />
+            <feOffset dx="-4" dy="6" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="0.26" />
+            </feComponentTransfer>
+          </filter>
+
+          <filter id={contactId} x="0" y="0" width="96" height="96" filterUnits="userSpaceOnUse">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2.2" />
+            <feOffset dx="-1.5" dy="2.5" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="0.22" />
+            </feComponentTransfer>
+          </filter>
+
+          <linearGradient id={surfaceId} x1="62" y1="34" x2="26" y2="70" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#d8dee6" />
+            <stop offset="22%" stopColor="#eef2f6" />
+            <stop offset="58%" stopColor="#fbfcfd" />
+            <stop offset="88%" stopColor="#ffffff" />
+            <stop offset="100%" stopColor="#e6ebf1" />
+          </linearGradient>
+
+          <linearGradient id={rimId} x1="28" y1="0" x2="64" y2="68" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+            <stop offset="55%" stopColor="#ffffff" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#cbd5e1" stopOpacity="0.7" />
+          </linearGradient>
+        </defs>
+
+        <path
+          d="M28 2 L28 52 Q28 68 44 68 L94 68 Z"
+          fill="#0f172a"
+          filter={`url(#${shadowId})`}
+        />
+        <path
+          d="M28 2 L28 52 Q28 68 44 68 L94 68 Z"
+          fill="#0f172a"
+          filter={`url(#${contactId})`}
+        />
+        <path
+          d="M28 0 L28 51 Q28 68 45 68 L96 68 L28 0 Z"
+          fill={`url(#${surfaceId})`}
+        />
+        <path
+          d="M28.5 0.5 L28.5 51 Q28.5 67.5 45 67.5 L95.5 67.5"
+          stroke={`url(#${rimId})`}
+          strokeWidth="1.2"
+          fill="none"
+        />
+        <line
+          x1="28"
+          y1="0"
+          x2="96"
+          y2="68"
+          stroke="#cbd5e1"
+          strokeWidth="0.9"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export default function LabTestCertificateModal({ test, onClose }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const mobileStackRef = useRef<HTMLDivElement>(null);
+  const [sheetScale, setSheetScale] = useState<number>(0.68);
 
   const isPass = test.result === "pass" || test.result === "Đạt";
   const householdName = test.householdName || "Nguyễn Văn An";
@@ -46,6 +124,26 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         .catch(() => {});
     }
   }, [test.code, plotCode]);
+
+  // Tự động đo chiều rộng khung mobile để scale tờ giấy chuẩn xác tỷ lệ A4 (520 x 735.43)
+  useEffect(() => {
+    const el = mobileStackRef.current;
+    if (!el) return;
+    const updateScale = () => {
+      const w = el.clientWidth;
+      if (w > 0) {
+        setSheetScale(w / 520);
+      }
+    };
+    updateScale();
+    const ro = new ResizeObserver(updateScale);
+    ro.observe(el);
+    window.addEventListener("resize", updateScale);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", updateScale);
+    };
+  }, []);
 
   // Phím ESC đóng modal
   useEffect(() => {
@@ -93,8 +191,9 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         <div className="cert-toolbar no-print">
           <div className="cert-toolbar-left">
             <span className="cert-status-badge">
-              <ShieldCheck size={16} className="text-emerald-400" />
-              <span>Phiếu kiểm nghiệm điện tử · Đã ký số &amp; chứng thực</span>
+              <span className="cert-status-main">Phiếu kiểm nghiệm điện tử</span>
+              <span className="cert-status-sep" aria-hidden="true">·</span>
+              <span className="cert-status-sub">Đã ký số &amp; chứng thực</span>
             </span>
           </div>
 
@@ -106,7 +205,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
               title="In phiếu kiểm nghiệm khổ A4 hoặc lưu thành PDF"
             >
               <Printer size={15} />
-              <span>In phiếu / Xuất PDF</span>
+              <span className="cert-btn-text-desktop">In phiếu / Xuất PDF</span>
+              <span className="cert-btn-text-mobile">In / Xuất PDF</span>
             </button>
             <button
               type="button"
@@ -115,475 +215,865 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
               title="Đóng (Esc)"
               aria-label="Đóng"
             >
-              <X size={18} />
+              <CloseCircleIcon size={26} />
             </button>
           </div>
         </div>
 
-        {/* TỜ GIẤY PHIẾU XÉT NGHIỆM CHUẨN A4 */}
-        <div className="cert-paper">
-          {/* HIỆU ỨNG GÓC GẤP TRANG GIẤY (FOLDED CORNER NHƯ ẢNH MẪU 2) */}
-          <div className="cert-paper-fold no-print" aria-hidden="true">
-            <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
-              {/* Bóng đổ của góc gập */}
-              <path d="M0 0 L56 56 L0 56 Z" fill="rgba(15, 23, 42, 0.16)" />
-              {/* Mặt lật của góc gấp màu xanh chuyển sắc */}
-              <path d="M0 0 L56 56 L0 56 Z" fill="url(#paperFoldGrad)" />
-              <path d="M0 0 L56 56" stroke="rgba(255, 255, 255, 0.45)" strokeWidth="1" />
-              <defs>
-                <linearGradient id="paperFoldGrad" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%" stopColor="#0f2942" />
-                  <stop offset="50%" stopColor="#1e3a8a" />
-                  <stop offset="100%" stopColor="#3b82f6" />
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
+        {/* ═══════════════════════════════════════════════════════════════════════
+            1. BẢN DESKTOP & PRINT: 1 TỜ GIẤY A4 CHUẨN (790 x 1117)
+            ═══════════════════════════════════════════════════════════════════════ */}
+        <div className="cert-paper-shadow-wrap cert-desktop-only">
+          <div className="cert-paper">
+            <PaperDogEarFold idPrefix="desktop" />
 
-          {/* WATERMARK CHÌM Ở TÂM TỜ GIẤY */}
-          <div className="cert-watermark" aria-hidden="true">
-            <div className="cert-watermark-text">PUC · BẢN GỐC CHỨNG THỰC</div>
-            <div className="cert-watermark-sub">ISO/IEC 17025:2017</div>
-          </div>
-
-          {/* 1. HEADER CÔNG VĂN CHUẨN NHÀ NƯỚC (NHƯ ẢNH 1) */}
-          <div className="cert-header-row">
-            {/* Góc trái: Logo & Đơn vị kiểm nghiệm */}
-            <div className="cert-org-col">
-              <div className="cert-crest">
-                <svg width="44" height="44" viewBox="0 0 48 48" fill="none">
-                  <circle cx="24" cy="24" r="22" fill="#0f2942" stroke="#d97706" strokeWidth="1.5" />
-                  <circle cx="24" cy="24" r="18" fill="#1e3a5f" />
-                  <path d="M12 28 C10 22 14 16 18 13 C16 17 16 23 18 27 Z" fill="#f59e0b" opacity="0.95" />
-                  <path d="M36 28 C38 22 34 16 30 13 C32 17 32 23 30 27 Z" fill="#f59e0b" opacity="0.95" />
-                  <polygon points="24,14 26,19 31,19 27,22 29,27 24,24 19,27 21,22 17,19 22,19" fill="#fbbf24" />
-                  <path d="M21 28 L27 28 L29 34 L19 34 Z" fill="#38bdf8" opacity="0.9" />
-                  <circle cx="24" cy="31" r="1.5" fill="#ffffff" />
-                </svg>
-              </div>
-              <div className="cert-org-text">
-                <div className="cert-ministry">SỞ NÔNG NGHIỆP &amp; PHÁT TRIỂN NÔNG THÔN TỈNH ĐẮK LẮK</div>
-                <div className="cert-center-name">TRUNG TÂM KIỂM ĐỊNH &amp; KHẢO NGHIỆM CHẤT LƯỢNG NÔNG LÂM THỦY SẢN</div>
-                <div className="cert-lab-branch">Phòng Hóa nghiệm &amp; Kiểm soát Dư lượng BVTV (ISO/IEC 17025:2017 - VILAS 238)</div>
-              </div>
+            {/* WATERMARK CHÌM Ở TÂM TỜ GIẤY */}
+            <div className="cert-watermark" aria-hidden="true">
+              <div className="cert-watermark-text">PUC · BẢN GỐC CHỨNG THỰC</div>
+              <div className="cert-watermark-sub">ISO/IEC 17025:2017</div>
             </div>
 
-            {/* Góc phải: Số hiệu phiếu & Mã QR xác thực */}
-            <div className="cert-meta-col">
-              <div className="cert-doc-number">
-                <span>Số: </span>
-                <strong>LAB-{test.code}/PKN-2024</strong>
-              </div>
-              <div className="cert-puc-code">
-                <span>Mã PUC: </span>
-                <strong>VN-DLK-0028</strong>
-              </div>
-              {qrDataUrl && (
-                <div className="cert-qr-wrap">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={qrDataUrl} alt="Mã QR xác thực phiếu" className="cert-qr-img" />
-                  <span className="cert-qr-caption">Quét tra cứu gốc</span>
+            {/* 1. HEADER CÔNG VĂN CHUẨN NHÀ NƯỚC */}
+            <div className="cert-header-row">
+              <div className="cert-org-col">
+                <div className="cert-crest">
+                  <svg width="44" height="44" viewBox="0 0 48 48" fill="none">
+                    <circle cx="24" cy="24" r="22" fill="#0f2942" stroke="#d97706" strokeWidth="1.5" />
+                    <circle cx="24" cy="24" r="18" fill="#1e3a5f" />
+                    <path d="M12 28 C10 22 14 16 18 13 C16 17 16 23 18 27 Z" fill="#f59e0b" opacity="0.95" />
+                    <path d="M36 28 C38 22 34 16 30 13 C32 17 32 23 30 27 Z" fill="#f59e0b" opacity="0.95" />
+                    <polygon points="24,14 26,19 31,19 27,22 29,27 24,24 19,27 21,22 17,19 22,19" fill="#fbbf24" />
+                    <path d="M21 28 L27 28 L29 34 L19 34 Z" fill="#38bdf8" opacity="0.9" />
+                    <circle cx="24" cy="31" r="1.5" fill="#ffffff" />
+                  </svg>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* ĐƯỜNG KẺ ĐÔI CÔNG VĂN CHÍNH THỨC */}
-          <div className="cert-double-divider" />
-
-          {/* 2. TIÊU ĐỀ PHIẾU XÉT NGHIỆM IN HOA ĐẬM Ở GIỮA */}
-          <div className="cert-title-section">
-            <h1 className="cert-main-title">
-              PHIẾU TRẢ KẾT QUẢ KIỂM NGHIỆM
-            </h1>
-            <h2 className="cert-sub-title">
-              CHẤT LƯỢNG NÔNG SẢN VÀ DƯ LƯỢNG THUỐC BVTV
-            </h2>
-            <div className="cert-protocol-badge">
-              (Theo Nghị định thư GACC Lệnh 248/249 &amp; Quy chuẩn Kỹ thuật Quốc gia VietGAP)
-            </div>
-          </div>
-
-          {/* 3. THÔNG TIN MẪU THỬ & ĐỐI TƯỢNG KIỂM NGHIỆM (CHIA CỘT NHƯ ẢNH 1) */}
-          <div className="cert-info-block">
-            <div className="cert-info-grid">
-              <div className="cert-info-row">
-                <span className="cert-lbl">Tên chủ hộ / Cơ sở sản xuất:</span>
-                <span className="cert-val cert-bold">{householdName}</span>
-              </div>
-              <div className="cert-info-row">
-                <span className="cert-lbl">Mã số vùng trồng (PUC) / Thửa:</span>
-                <span className="cert-val cert-bold">VN-DLK-0028 · Thửa {plotCode}</span>
+                <div className="cert-org-text">
+                  <div className="cert-ministry">SỞ NÔNG NGHIỆP &amp; PHÁT TRIỂN NÔNG THÔN TỈNH ĐẮK LẮK</div>
+                  <div className="cert-center-name">TRUNG TÂM KIỂM ĐỊNH &amp; KHẢO NGHIỆM CHẤT LƯỢNG NÔNG LÂM THỦY SẢN</div>
+                  <div className="cert-lab-branch">Phòng Hóa nghiệm &amp; Kiểm soát Dư lượng BVTV (ISO/IEC 17025:2017 - VILAS 238)</div>
+                </div>
               </div>
 
-              <div className="cert-info-row">
-                <span className="cert-lbl">Địa chỉ canh tác:</span>
-                <span className="cert-val">Xã Ea Tar, Huyện Cư M&apos;gar, Tỉnh Đắk Lắk</span>
-              </div>
-              <div className="cert-info-row">
-                <span className="cert-lbl">Đối tượng mẫu thử:</span>
-                <span className="cert-val">Quả sầu riêng tươi (<em>Durio zibethinus</em> - Monthong/Ri6)</span>
-              </div>
-
-              <div className="cert-info-row">
-                <span className="cert-lbl">Đơn vị / Người gửi mẫu:</span>
-                <span className="cert-val">Ban Kiểm soát Kỹ thuật HTX Nông nghiệp Ea Tar</span>
-              </div>
-              <div className="cert-info-row">
-                <span className="cert-lbl">Ngày lấy mẫu:</span>
-                <span className="cert-val cert-bold">{formatDate(test.sampledOn)}</span>
-              </div>
-
-              <div className="cert-info-row">
-                <span className="cert-lbl">Đơn vị kiểm nghiệm (Lab):</span>
-                <span className="cert-val">{test.lab}</span>
-              </div>
-              <div className="cert-info-row">
-                <span className="cert-lbl">Tình trạng mẫu nhận:</span>
-                <span className="cert-val">Mẫu đại diện nguyên quả, niêm phong kẹp chì mã {test.code}</span>
-              </div>
-
-              <div className="cert-info-row cert-col-full">
-                <span className="cert-lbl">Yêu cầu kiểm nghiệm:</span>
-                <span className="cert-val">Phân tích kim loại nặng Cadimi (Cd), Dư lượng BVTV, Hoạt chất cấm Chlorpyrifos, Phẩm nhuộm Vàng O (Auramine O).</span>
-              </div>
-
-              <div className="cert-info-row cert-col-full">
-                <span className="cert-lbl">Phương pháp xét nghiệm:</span>
-                <span className="cert-val">Sắc ký khí &amp; lỏng khối phổ (GC-MS/MS, LC-MS/MS), Quang phổ hấp thụ nguyên tử AAS (AOAC 2007.01, TCVN 7602:2007).</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 4. BẢNG KẾT QUẢ XÉT NGHIỆM CHI TIẾT (CHUẨN BẢNG PHÒNG THÍ NGHIỆM) */}
-          <div className="cert-table-section">
-            <div className="cert-table-heading">
-              <strong>KẾT QUẢ THỬ NGHIỆM:</strong>
-            </div>
-
-            <div className="cert-table-wrapper">
-              <table className="cert-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: "5%" }}>STT</th>
-                    <th style={{ width: "32%" }}>TÊN CHỈ TIÊU KIỂM NGHIỆM</th>
-                    <th style={{ width: "23%" }}>PHƯƠNG PHÁP THỬ</th>
-                    <th style={{ width: "10%" }}>ĐƠN VỊ</th>
-                    <th style={{ width: "14%" }}>KẾT QUẢ</th>
-                    <th style={{ width: "16%" }}>NGƯỠNG CHO PHÉP</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* Hàng 1: Cadimi */}
-                  <tr>
-                    <td className="text-center">01</td>
-                    <td>
-                      <strong>Hàm lượng Cadimi (Cd)</strong>
-                      <div className="cert-sub-note">Kim loại nặng theo Lệnh 248/249</div>
-                    </td>
-                    <td>TCVN 7602:2007 (F-AAS)</td>
-                    <td className="text-center">mg/kg</td>
-                    <td className="text-center font-bold">
-                      <span className={test.cdMgKg <= 0.05 ? "val-ok" : "val-exceed"}>
-                        {test.cdMgKg}
-                      </span>
-                    </td>
-                    <td className="text-center">
-                      &le; 0.05 mg/kg
-                      <div className="cert-tag-pass">&le; GACC</div>
-                    </td>
-                  </tr>
-
-                  {/* Hàng 2: Dư lượng thuốc BVTV */}
-                  <tr>
-                    <td className="text-center">02</td>
-                    <td>
-                      <strong>Tổng dư lượng hóa chất BVTV</strong>
-                      <div className="cert-sub-note">Nhóm Phospho &amp; Cúc tổng hợp</div>
-                    </td>
-                    <td>AOAC 2007.01 (LC-MS/MS)</td>
-                    <td className="text-center">mg/kg</td>
-                    <td className="text-center font-bold">
-                      <span className={test.residueMgKg <= 0.1 ? "val-ok" : "val-exceed"}>
-                        {test.residueMgKg}
-                      </span>
-                    </td>
-                    <td className="text-center">
-                      &le; 0.10 mg/kg
-                      <div className="cert-tag-pass">VietGAP</div>
-                    </td>
-                  </tr>
-
-                  {/* Hàng 3: Chlorpyrifos */}
-                  <tr>
-                    <td className="text-center">03</td>
-                    <td>
-                      <strong>Hoạt chất Chlorpyrifos Ethyl</strong>
-                      <div className="cert-sub-note">Danh mục cấm theo TT 10/2024</div>
-                    </td>
-                    <td>TCVN 8938:2011 (GC-MS)</td>
-                    <td className="text-center">mg/kg</td>
-                    <td className="text-center font-bold">
-                      <span className={isChlorpyrifosPass ? "val-ok" : "val-exceed"}>
-                        {chlorpyrifosDisplay}
-                      </span>
-                    </td>
-                    <td className="text-center">
-                      KPH (Cấm tuyệt đối)
-                      <div className="cert-tag-zero">LOD: 0.01</div>
-                    </td>
-                  </tr>
-
-                  {/* Hàng 4: Vàng O */}
-                  <tr>
-                    <td className="text-center">04</td>
-                    <td>
-                      <strong>Chất cấm Vàng O (Auramine O)</strong>
-                      <div className="cert-sub-note">Phẩm nhuộm công nghiệp cấm</div>
-                    </td>
-                    <td>Phương pháp LC-MS/MS</td>
-                    <td className="text-center">Định tính</td>
-                    <td className="text-center font-bold">
-                      <span className={!test.yellowOPositive ? "val-ok" : "val-exceed"}>
-                        {test.yellowOPositive ? "Dương tính" : "Âm tính"}
-                      </span>
-                    </td>
-                    <td className="text-center">
-                      Âm tính (Cấm tuyệt đối)
-                      <div className="cert-tag-zero">Zero-tolerance</div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* 5. PHẦN KẾT LUẬN & ĐÁNH GIÁ (CHUẨN HÌNH ẢNH MẪU 1) */}
-          <div className="cert-conclusion-block">
-            <div className="cert-conclusion-line">
-              <span className="cert-concl-title">KẾT LUẬN: </span>
-              {isPass ? (
-                <strong className="cert-concl-pass">
-                  Mẫu sầu riêng ĐẠT TIÊU CHUẨN AN TOÀN VỆ SINH THỰC PHẨM VÀ ĐỦ ĐIỀU KIỆN XUẤT KHẨU CHÍNH NGẠCH SANG THỊ TRƯỜNG TRUNG QUỐC (Theo Lệnh 248/249 GACC &amp; Tiêu chuẩn VietGAP).
-                </strong>
-              ) : (
-                <strong className="cert-concl-fail">
-                  MẪU KIỂM NGHIỆM KHÔNG ĐẠT TIÊU CHUẨN XUẤT KHẨU. Tồn tại chỉ số vượt ngưỡng quy định an toàn. Cơ sở tạm dừng thu hoạch tại thửa {plotCode} để xử lý khoanh vùng.
-                </strong>
-              )}
-            </div>
-
-            <div className="cert-protocol-meta">
-              <div className="cert-meta-item">
-                <span>Mã quy trình kiểm nghiệm: </span>
-                <strong>QT-KNCL-GACC-500/PUC</strong>
-              </div>
-              <div className="cert-meta-item">
-                <span>Sử dụng PXN tham chiếu: </span>
-                <span className="cert-checkbox-group">
-                  <span className="cert-box checked">&#9746; Không</span>
-                  <span className="cert-box">&#9744; Có</span>
-                </span>
+              <div className="cert-meta-col">
+                <div className="cert-doc-number">
+                  <span>Số: </span>
+                  <strong>LAB-{test.code}/PKN-2024</strong>
+                </div>
+                <div className="cert-puc-code">
+                  <span>Mã PUC: </span>
+                  <strong>VN-DLK-0028</strong>
+                </div>
+                {qrDataUrl && (
+                  <div className="cert-qr-wrap">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={qrDataUrl} alt="Mã QR xác thực phiếu" className="cert-qr-img" />
+                    <span className="cert-qr-caption">Quét tra cứu gốc</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="cert-notes-line">
-              <span className="cert-notes-lbl">Chú thích: </span>
-              <em>
-                (1) KPH: Không phát hiện (dưới giới hạn định lượng LOD = 0.01 mg/kg). (2) Kết quả chỉ có giá trị đối với mẫu thử niêm phong mang mã số {test.code}. (3) Phiếu có giá trị xuất trình cơ quan Hải quan và Kiểm dịch thực vật tại cửa khẩu xuất khẩu.
-              </em>
+            <div className="cert-double-divider" />
+
+            {/* 2. TIÊU ĐỀ PHIẾU XÉT NGHIỆM */}
+            <div className="cert-title-section">
+              <h1 className="cert-main-title">PHIẾU TRẢ KẾT QUẢ KIỂM NGHIỆM</h1>
+              <h2 className="cert-sub-title">CHẤT LƯỢNG NÔNG SẢN VÀ DƯ LƯỢNG THUỐC BVTV</h2>
+              <div className="cert-protocol-badge">
+                (Theo Nghị định thư GACC Lệnh 248/249 &amp; Quy chuẩn Kỹ thuật Quốc gia VietGAP)
+              </div>
             </div>
 
-            <div className="cert-dispatch-time">
-              <span>Thời điểm trả kết quả: </span>
-              <strong>{formatDate(test.sampledOn)} — 17h30.</strong>
+            {/* 3. THÔNG TIN MẪU THỬ & ĐỐI TƯỢNG KIỂM NGHIỆM */}
+            <div className="cert-info-block">
+              <div className="cert-info-grid">
+                <div className="cert-info-row">
+                  <span className="cert-lbl">Tên chủ hộ / Cơ sở sản xuất:</span>
+                  <span className="cert-val cert-bold">{householdName}</span>
+                </div>
+                <div className="cert-info-row">
+                  <span className="cert-lbl">Mã số vùng trồng (PUC) / Thửa:</span>
+                  <span className="cert-val cert-bold">VN-DLK-0028 · Thửa {plotCode}</span>
+                </div>
+
+                <div className="cert-info-row">
+                  <span className="cert-lbl">Địa chỉ canh tác:</span>
+                  <span className="cert-val">Xã Ea Tar, Huyện Cư M&apos;gar, Tỉnh Đắk Lắk</span>
+                </div>
+                <div className="cert-info-row">
+                  <span className="cert-lbl">Đối tượng mẫu thử:</span>
+                  <span className="cert-val">Quả sầu riêng tươi (<em>Durio zibethinus</em> - Monthong/Ri6)</span>
+                </div>
+
+                <div className="cert-info-row">
+                  <span className="cert-lbl">Đơn vị / Người gửi mẫu:</span>
+                  <span className="cert-val">Ban Kiểm soát Kỹ thuật HTX Nông nghiệp Ea Tar</span>
+                </div>
+                <div className="cert-info-row">
+                  <span className="cert-lbl">Ngày lấy mẫu:</span>
+                  <span className="cert-val cert-bold">{formatDate(test.sampledOn)}</span>
+                </div>
+
+                <div className="cert-info-row">
+                  <span className="cert-lbl">Đơn vị kiểm nghiệm (Lab):</span>
+                  <span className="cert-val">{test.lab}</span>
+                </div>
+                <div className="cert-info-row">
+                  <span className="cert-lbl">Tình trạng mẫu nhận:</span>
+                  <span className="cert-val">Mẫu đại diện nguyên quả, niêm phong kẹp chì mã {test.code}</span>
+                </div>
+
+                <div className="cert-info-row cert-col-full">
+                  <span className="cert-lbl">Yêu cầu kiểm nghiệm:</span>
+                  <span className="cert-val">Phân tích kim loại nặng Cadimi (Cd), Dư lượng BVTV, Hoạt chất cấm Chlorpyrifos, Phẩm nhuộm Vàng O (Auramine O).</span>
+                </div>
+
+                <div className="cert-info-row cert-col-full">
+                  <span className="cert-lbl">Phương pháp xét nghiệm:</span>
+                  <span className="cert-val">Sắc ký khí &amp; lỏng khối phổ (GC-MS/MS, LC-MS/MS), Quang phổ hấp thụ nguyên tử AAS (AOAC 2007.01, TCVN 7602:2007).</span>
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* 6. PHẦN KÝ TÊN VÀ CON DẤU MỘC ĐỎ PHÁP LÝ (NHƯ ẢNH 1) */}
-          <div className="cert-signatures-section">
-            {/* Cột Trái: Kỹ thuật viên xét nghiệm */}
-            <div className="cert-sign-col">
-              <div className="cert-sign-role">Người thực hiện phân tích</div>
-              <div className="cert-sign-hint">(Ký và ghi rõ họ tên)</div>
-
-              <div className="cert-handwritten-signature">
-                {/* SVG Chữ ký tay nét mực xanh bút máy chân thực của KS. Nguyễn Thị Thùy Dương */}
-                <svg width="150" height="52" viewBox="0 0 150 52" fill="none">
-                  <path
-                    d="M14 36 C 20 16, 28 8, 34 20 C 38 28, 34 42, 44 30 C 53 18, 60 10, 68 23 C 73 32, 76 40, 86 26 C 94 14, 103 22, 113 33 C 120 40, 130 28, 136 20"
-                    stroke="#1d4ed8"
-                    strokeWidth="2.3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M20 42 C 43 40, 83 39, 126 41"
-                    stroke="#1d4ed8"
-                    strokeWidth="1.9"
-                    strokeLinecap="round"
-                  />
-                  <circle cx="130" cy="41" r="1.5" fill="#1d4ed8" />
-                </svg>
+            {/* 4. BẢNG KẾT QUẢ XÉT NGHIỆM CHI TIẾT */}
+            <div className="cert-table-section">
+              <div className="cert-table-heading">
+                <strong>KẾT QUẢ THỬ NGHIỆM:</strong>
               </div>
 
-              <div className="cert-sign-name">KS. Nguyễn Thị Thùy Dương</div>
-              <div className="cert-sign-title">Kỹ thuật viên Phân tích Hóa nghiệm</div>
+              <div className="cert-table-wrapper">
+                <table className="cert-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "5%" }}>STT</th>
+                      <th style={{ width: "32%" }}>TÊN CHỈ TIÊU KIỂM NGHIỆM</th>
+                      <th style={{ width: "23%" }}>PHƯƠNG PHÁP THỬ</th>
+                      <th style={{ width: "10%" }}>ĐƠN VỊ</th>
+                      <th style={{ width: "14%" }}>KẾT QUẢ</th>
+                      <th style={{ width: "16%" }}>NGƯỠNG CHO PHÉP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="text-center">01</td>
+                      <td>
+                        <strong>Hàm lượng Cadimi (Cd)</strong>
+                        <div className="cert-sub-note">Kim loại nặng theo Lệnh 248/249</div>
+                      </td>
+                      <td>TCVN 7602:2007 (F-AAS)</td>
+                      <td className="text-center">mg/kg</td>
+                      <td className="text-center font-bold">
+                        <span className={test.cdMgKg <= 0.05 ? "val-ok" : "val-exceed"}>{test.cdMgKg}</span>
+                      </td>
+                      <td className="text-center">
+                        &le; 0.05 mg/kg
+                        <div className="cert-tag-pass">&le; GACC</div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td className="text-center">02</td>
+                      <td>
+                        <strong>Tổng dư lượng hóa chất BVTV</strong>
+                        <div className="cert-sub-note">Nhóm Phospho &amp; Cúc tổng hợp</div>
+                      </td>
+                      <td>AOAC 2007.01 (LC-MS/MS)</td>
+                      <td className="text-center">mg/kg</td>
+                      <td className="text-center font-bold">
+                        <span className={test.residueMgKg <= 0.1 ? "val-ok" : "val-exceed"}>{test.residueMgKg}</span>
+                      </td>
+                      <td className="text-center">
+                        &le; 0.10 mg/kg
+                        <div className="cert-tag-pass">VietGAP</div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td className="text-center">03</td>
+                      <td>
+                        <strong>Hoạt chất Chlorpyrifos Ethyl</strong>
+                        <div className="cert-sub-note">Danh mục cấm theo TT 10/2024</div>
+                      </td>
+                      <td>TCVN 8938:2011 (GC-MS)</td>
+                      <td className="text-center">mg/kg</td>
+                      <td className="text-center font-bold">
+                        <span className={isChlorpyrifosPass ? "val-ok" : "val-exceed"}>{chlorpyrifosDisplay}</span>
+                      </td>
+                      <td className="text-center">
+                        KPH (Cấm tuyệt đối)
+                        <div className="cert-tag-zero">LOD: 0.01</div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td className="text-center">04</td>
+                      <td>
+                        <strong>Chất cấm Vàng O (Auramine O)</strong>
+                        <div className="cert-sub-note">Phẩm nhuộm công nghiệp cấm</div>
+                      </td>
+                      <td>Phương pháp LC-MS/MS</td>
+                      <td className="text-center">Định tính</td>
+                      <td className="text-center font-bold">
+                        <span className={!test.yellowOPositive ? "val-ok" : "val-exceed"}>
+                          {test.yellowOPositive ? "Dương tính" : "Âm tính"}
+                        </span>
+                      </td>
+                      <td className="text-center">
+                        Âm tính (Cấm tuyệt đối)
+                        <div className="cert-tag-zero">Zero-tolerance</div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            {/* Cột Phải: Trưởng đơn vị kiểm nghiệm + Dấu mộc đỏ tròn */}
-            <div className="cert-sign-col cert-sign-col-right">
-              <div className="cert-sign-date">
-                <em>Đắk Lắk, ngày {day} tháng {month} năm {year}</em>
+            {/* 5. PHẦN KẾT LUẬN & ĐÁNH GIÁ */}
+            <div className="cert-conclusion-block">
+              <div className="cert-conclusion-line">
+                <span className="cert-concl-title">KẾT LUẬN: </span>
+                {isPass ? (
+                  <strong className="cert-concl-pass">
+                    Mẫu sầu riêng ĐẠT TIÊU CHUẨN AN TOÀN VỆ SINH THỰC PHẨM VÀ ĐỦ ĐIỀU KIỆN XUẤT KHẨU CHÍNH NGẠCH SANG THỊ TRƯỜNG TRUNG QUỐC (Theo Lệnh 248/249 GACC &amp; Tiêu chuẩn VietGAP).
+                  </strong>
+                ) : (
+                  <strong className="cert-concl-fail">
+                    MẪU KIỂM NGHIỆM KHÔNG ĐẠT TIÊU CHUẨN XUẤT KHẨU. Tồn tại chỉ số vượt ngưỡng quy định an toàn. Cơ sở tạm dừng thu hoạch tại thửa {plotCode} để xử lý khoanh vùng.
+                  </strong>
+                )}
               </div>
-              <div className="cert-sign-role">Trưởng phòng Kiểm nghiệm &amp; Đo lường</div>
-              <div className="cert-sign-hint">(Ký tên và đóng dấu)</div>
 
-              <div className="cert-stamp-and-sign-area">
-                {/* 1. CHỮ KÝ TAY MỰC XANH CỦA GIÁM ĐỐC / TRƯỞNG PHÒNG */}
-                <div className="cert-director-signature">
-                  <svg width="170" height="60" viewBox="0 0 170 60" fill="none">
+              <div className="cert-protocol-meta">
+                <div className="cert-meta-item">
+                  <span>Mã quy trình kiểm nghiệm: </span>
+                  <strong>QT-KNCL-GACC-500/PUC</strong>
+                </div>
+                <div className="cert-meta-item">
+                  <span>Sử dụng PXN tham chiếu: </span>
+                  <span className="cert-checkbox-group">
+                    <span className="cert-box checked">&#9746; Không</span>
+                    <span className="cert-box">&#9744; Có</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="cert-notes-line">
+                <span className="cert-notes-lbl">Chú thích: </span>
+                <em>
+                  (1) KPH: Không phát hiện (dưới giới hạn định lượng LOD = 0.01 mg/kg). (2) Kết quả chỉ có giá trị đối với mẫu thử niêm phong mang mã số {test.code}. (3) Phiếu có giá trị xuất trình cơ quan Hải quan và Kiểm dịch thực vật tại cửa khẩu xuất khẩu.
+                </em>
+              </div>
+
+              <div className="cert-dispatch-time">
+                <span>Thời điểm trả kết quả: </span>
+                <strong>{formatDate(test.sampledOn)} — 17h30.</strong>
+              </div>
+            </div>
+
+            {/* 6. PHẦN KÝ TÊN VÀ CON DẤU MỘC ĐỎ PHÁP LÝ */}
+            <div className="cert-signatures-section">
+              <div className="cert-sign-col">
+                <div className="cert-sign-role">Người thực hiện phân tích</div>
+                <div className="cert-sign-hint">(Ký và ghi rõ họ tên)</div>
+
+                <div className="cert-handwritten-signature">
+                  <svg width="150" height="52" viewBox="0 0 150 52" fill="none">
                     <path
-                      d="M18 42 C 10 23, 26 6, 40 14 C 50 22, 43 46, 30 44 C 22 42, 36 26, 53 22 C 68 18, 76 36, 88 26 C 100 16, 110 30, 124 24 C 136 18, 143 33, 153 20"
+                      d="M14 36 C 20 16, 28 8, 34 20 C 38 28, 34 42, 44 30 C 53 18, 60 10, 68 23 C 73 32, 76 40, 86 26 C 94 14, 103 22, 113 33 C 120 40, 130 28, 136 20"
                       stroke="#1d4ed8"
-                      strokeWidth="2.5"
+                      strokeWidth="2.3"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
                     <path
-                      d="M23 48 C 58 46, 108 44, 156 46"
+                      d="M20 42 C 43 40, 83 39, 126 41"
                       stroke="#1d4ed8"
-                      strokeWidth="2.1"
+                      strokeWidth="1.9"
                       strokeLinecap="round"
                     />
-                    <circle cx="160" cy="46" r="1.8" fill="#1d4ed8" />
+                    <circle cx="130" cy="41" r="1.5" fill="#1d4ed8" />
                   </svg>
                 </div>
 
-                {/* 2. CON DẤU MỘC ĐỎ TRÒN BẢO CHỨNG SVG CHUẨN CÔNG VĂN VIỆT NAM (ĐÈ LÊN CHỮ KÝ) */}
-                <div className="cert-red-stamp" aria-hidden="true">
-                  <svg width="130" height="130" viewBox="0 0 130 130" fill="none">
-                    {/* Vòng tròn kép đỏ ngoài */}
-                    <circle cx="65" cy="65" r="62" stroke="#d32f2f" strokeWidth="2.4" fill="none" opacity="0.9" />
-                    <circle cx="65" cy="65" r="44" stroke="#d32f2f" strokeWidth="1.2" strokeDasharray="3 1.5" fill="none" opacity="0.85" />
+                <div className="cert-sign-name">KS. Nguyễn Thị Thùy Dương</div>
+                <div className="cert-sign-title">Kỹ thuật viên Phân tích Hóa nghiệm</div>
+              </div>
 
-                    {/* Vòng chữ tròn trên: TRUNG TÂM KIỂM NGHIỆM CHẤT LƯỢNG */}
-                    <path id="stamp-arc-top" d="M 15,65 A 50,50 0 0,1 115,65" fill="none" />
-                    <text fill="#d32f2f" fontSize="7.6" fontWeight="800" letterSpacing="1px" fontFamily="'Times New Roman', serif">
-                      <textPath href="#stamp-arc-top" startOffset="50%" textAnchor="middle">
-                        TRUNG TÂM KIỂM NGHIỆM CHẤT LƯỢNG
-                      </textPath>
-                    </text>
+              <div className="cert-sign-col cert-sign-col-right">
+                <div className="cert-sign-date">
+                  <em>Đắk Lắk, ngày {day} tháng {month} năm {year}</em>
+                </div>
+                <div className="cert-sign-role">GIÁM ĐỐC TRUNG TÂM KIỂM NGHIỆM</div>
+                <div className="cert-sign-hint">(Ký tên và đóng dấu pháp nhân)</div>
 
-                    {/* Vòng chữ tròn dưới: TỈNH ĐẮK LẮK */}
-                    <path id="stamp-arc-bot" d="M 115,65 A 50,50 0 0,1 15,65" fill="none" />
-                    <text fill="#d32f2f" fontSize="7.4" fontWeight="800" letterSpacing="1.2px" fontFamily="'Times New Roman', serif">
-                      <textPath href="#stamp-arc-bot" startOffset="50%" textAnchor="middle">
-                        ★ TỈNH ĐẮK LẮK ★
-                      </textPath>
-                    </text>
+                <div className="cert-stamp-and-sign-area">
+                  <div className="cert-director-signature">
+                    <svg width="165" height="58" viewBox="0 0 165 58" fill="none">
+                      <path
+                        d="M32 42 C 42 12, 54 6, 62 28 C 66 38, 72 22, 82 14 C 90 8, 96 32, 108 26 C 118 20, 128 12, 144 22"
+                        stroke="#1e3a8a"
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M46 46 C 72 40, 112 38, 152 44"
+                        stroke="#1e3a8a"
+                        strokeWidth="2.1"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
 
-                    {/* Biểu tượng ngôi sao 5 cánh ở giữa */}
-                    <polygon
-                      points="65,36 67.5,43 75,43 69,47.5 71,55 65,50 59,55 61,47.5 55,43 62.5,43"
-                      fill="#d32f2f"
-                    />
+                  <div className="cert-red-stamp" aria-hidden="true">
+                    <svg width="118" height="118" viewBox="0 0 130 130" fill="none">
+                      <defs>
+                        <path id="stampTopArc-desktop" d="M 19,65 A 46,46 0 1,1 111,65" />
+                        <path id="stampBottomArc-desktop" d="M 111,65 A 46,46 0 1,1 19,65" />
+                      </defs>
+                      <circle cx="65" cy="65" r="58" stroke="#d32f2f" strokeWidth="3.2" strokeDasharray="120 2 80 1" opacity="0.88" />
+                      <circle cx="65" cy="65" r="54" stroke="#d32f2f" strokeWidth="1.2" opacity="0.85" />
+                      <circle cx="65" cy="65" r="35" stroke="#d32f2f" strokeWidth="1.4" opacity="0.85" />
 
-                    {/* Chữ ĐÃ KIỂM ĐỊNH & ISO 17025 */}
-                    <text
-                      x="65"
-                      y="64"
-                      textAnchor="middle"
-                      fill="#d32f2f"
-                      fontSize="8.5"
-                      fontWeight="900"
-                      fontFamily="'Times New Roman', serif"
-                      letterSpacing="0.8px"
-                    >
-                      ĐÃ PHÊ DUYỆT
-                    </text>
-                    <text
-                      x="65"
-                      y="74"
-                      textAnchor="middle"
-                      fill="#d32f2f"
-                      fontSize="6.8"
-                      fontWeight="700"
-                      fontFamily="'Times New Roman', serif"
-                    >
-                      ISO/IEC 17025
-                    </text>
-                    <text
-                      x="65"
-                      y="83"
-                      textAnchor="middle"
-                      fill="#d32f2f"
-                      fontSize="5.8"
-                      fontWeight="600"
-                      fontFamily="'Times New Roman', serif"
-                    >
-                      SỐ: 08-VILAS 238
-                    </text>
-                  </svg>
+                      <text fill="#d32f2f" fontSize="7.3" fontWeight="800" letterSpacing="0.8">
+                        <textPath href="#stampTopArc-desktop" startOffset="50%" textAnchor="middle">
+                          SỞ NN &amp; PTNT TỈNH ĐẮK LẮK
+                        </textPath>
+                      </text>
+                      <text fill="#d32f2f" fontSize="6.7" fontWeight="800" letterSpacing="0.5">
+                        <textPath href="#stampBottomArc-desktop" startOffset="50%" textAnchor="middle">
+                          * TT KIỂM ĐỊNH &amp; KHẢO NGHIỆM CL *
+                        </textPath>
+                      </text>
+
+                      <polygon
+                        points="65,42 68.5,52.5 79.5,52.5 70.5,59 74,69.5 65,63 56,69.5 59.5,59 50.5,52.5 61.5,52.5"
+                        fill="#d32f2f"
+                        opacity="0.88"
+                      />
+                      <text x="65" y="76" textAnchor="middle" fill="#d32f2f" fontSize="6.5" fontWeight="900" fontFamily="'Times New Roman', serif">
+                        ISO/IEC 17025
+                      </text>
+                      <text x="65" y="83" textAnchor="middle" fill="#d32f2f" fontSize="5.8" fontWeight="600" fontFamily="'Times New Roman', serif">
+                        SỐ: 08-VILAS 238
+                      </text>
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="cert-sign-name">TS. Trần Gia Phú</div>
+                <div className="cert-sign-title">Giám đốc Trung tâm Kiểm nghiệm</div>
+              </div>
+            </div>
+
+            {/* 7. DẢI FOOTER BẢO MẬT & MÃ VẠCH (BARCODE) DƯỚI CÙNG */}
+            <div className="cert-footer-row">
+              <div className="cert-barcode-box">
+                <svg width="200" height="28" viewBox="0 0 200 28" fill="none">
+                  <rect x="0" y="0" width="3" height="22" fill="#0f2942" />
+                  <rect x="5" y="0" width="1.5" height="22" fill="#0f2942" />
+                  <rect x="9" y="0" width="4" height="22" fill="#0f2942" />
+                  <rect x="15" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="19" y="0" width="1" height="22" fill="#0f2942" />
+                  <rect x="23" y="0" width="3" height="22" fill="#0f2942" />
+                  <rect x="28" y="0" width="5" height="22" fill="#0f2942" />
+                  <rect x="35" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="39" y="0" width="3" height="22" fill="#0f2942" />
+                  <rect x="45" y="0" width="1.5" height="22" fill="#0f2942" />
+                  <rect x="49" y="0" width="4" height="22" fill="#0f2942" />
+                  <rect x="55" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="60" y="0" width="5" height="22" fill="#0f2942" />
+                  <rect x="68" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="73" y="0" width="3" height="22" fill="#0f2942" />
+                  <rect x="78" y="0" width="1.5" height="22" fill="#0f2942" />
+                  <rect x="82" y="0" width="4" height="22" fill="#0f2942" />
+                  <rect x="88" y="0" width="3" height="22" fill="#0f2942" />
+                  <rect x="93" y="0" width="1.5" height="22" fill="#0f2942" />
+                  <rect x="97" y="0" width="4" height="22" fill="#0f2942" />
+                  <rect x="103" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="108" y="0" width="5" height="22" fill="#0f2942" />
+                  <rect x="115" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="120" y="0" width="3" height="22" fill="#0f2942" />
+                  <rect x="125" y="0" width="1.5" height="22" fill="#0f2942" />
+                  <rect x="130" y="0" width="4" height="22" fill="#0f2942" />
+                  <rect x="136" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="140" y="0" width="5" height="22" fill="#0f2942" />
+                  <rect x="148" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="153" y="0" width="3" height="22" fill="#0f2942" />
+                  <rect x="158" y="0" width="1.5" height="22" fill="#0f2942" />
+                  <rect x="162" y="0" width="4" height="22" fill="#0f2942" />
+                  <rect x="168" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="173" y="0" width="3" height="22" fill="#0f2942" />
+                  <rect x="178" y="0" width="4" height="22" fill="#0f2942" />
+                  <rect x="185" y="0" width="2" height="22" fill="#0f2942" />
+                  <rect x="190" y="0" width="3" height="22" fill="#0f2942" />
+                  <rect x="196" y="0" width="4" height="22" fill="#0f2942" />
+                </svg>
+                <div className="cert-barcode-val">*PUC-{test.code}-ISO17025*</div>
+              </div>
+
+              <div className="cert-security-hash">
+                <span>Mã bảo mật điện tử: </span>
+                <code>PUC-SHA256-{test.code}-CERT-OK</code>
+                <div>Xác thực trực tuyến tại Cổng Dịch vụ công Quốc gia: puc.mard.gov.vn</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════════════════════════════════════════════════
+            2. BẢN MOBILE (<= 640PX): 2 TỜ GIẤY CHUẨN TỶ LỆ A4 (210 : 297) LIỀN MẠCH
+               Người dùng lướt dọc trực tiếp từ Trang 1 xuống Trang 2 & hỗ trợ zoom
+            ═══════════════════════════════════════════════════════════════════════ */}
+        <div
+          ref={mobileStackRef}
+          className="cert-mobile-a4-stack no-print"
+          style={{ "--sheet-scale": sheetScale } as React.CSSProperties}
+        >
+          {/* ─── TỜ A4 SỐ 1 / 2: TIÊU ĐỀ, THÔNG TIN MẪU & BẢNG KẾT QUẢ 6 CỘT ─── */}
+          <div className="cert-mobile-a4-frame">
+            <div className="cert-mobile-a4-canvas">
+              <PaperDogEarFold idPrefix="m1" />
+
+              <div className="cert-watermark" aria-hidden="true">
+                <div className="cert-watermark-text" style={{ fontSize: 36 }}>PUC · BẢN GỐC CHỨNG THỰC</div>
+                <div className="cert-watermark-sub" style={{ fontSize: 22 }}>ISO/IEC 17025:2017</div>
+              </div>
+
+              <div className="cert-m-top-group">
+                <div className="cert-m-header">
+                  <div className="cert-m-org">
+                    <div className="cert-crest">
+                      <svg width="36" height="36" viewBox="0 0 48 48" fill="none">
+                        <circle cx="24" cy="24" r="22" fill="#0f2942" stroke="#d97706" strokeWidth="1.5" />
+                        <circle cx="24" cy="24" r="18" fill="#1e3a5f" />
+                        <path d="M12 28 C10 22 14 16 18 13 C16 17 16 23 18 27 Z" fill="#f59e0b" opacity="0.95" />
+                        <path d="M36 28 C38 22 34 16 30 13 C32 17 32 23 30 27 Z" fill="#f59e0b" opacity="0.95" />
+                        <polygon points="24,14 26,19 31,19 27,22 29,27 24,24 19,27 21,22 17,19 22,19" fill="#fbbf24" />
+                        <path d="M21 28 L27 28 L29 34 L19 34 Z" fill="#38bdf8" opacity="0.9" />
+                        <circle cx="24" cy="31" r="1.5" fill="#ffffff" />
+                      </svg>
+                    </div>
+                    <div className="cert-m-org-text">
+                      <div className="cert-m-ministry">SỞ NÔNG NGHIỆP &amp; PHÁT TRIỂN NÔNG THÔN TỈNH ĐẮK LẮK</div>
+                      <div className="cert-m-center">TRUNG TÂM KIỂM ĐỊNH &amp; KHẢO NGHIỆM CHẤT LƯỢNG NÔNG LÂM THỦY SẢN</div>
+                      <div className="cert-m-branch">Phòng Hóa nghiệm &amp; Kiểm soát Dư lượng BVTV (ISO/IEC 17025:2017 - VILAS 238)</div>
+                    </div>
+                  </div>
+
+                  <div className="cert-m-meta">
+                    <div className="cert-m-doc">
+                      <span>Số: </span>
+                      <strong>LAB-{test.code}/PKN-2024</strong>
+                    </div>
+                    <div className="cert-m-doc">
+                      <span>Mã PUC: </span>
+                      <strong>VN-DLK-0028</strong>
+                    </div>
+                    {qrDataUrl && (
+                      <div className="cert-m-qr">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={qrDataUrl} alt="Mã QR xác thực phiếu" />
+                        <span>Quét tra cứu gốc</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="cert-m-divider" />
+
+                <div className="cert-m-title-box">
+                  <div className="cert-m-main-title">PHIẾU TRẢ KẾT QUẢ KIỂM NGHIỆM</div>
+                  <div className="cert-m-sub-title">CHẤT LƯỢNG NÔNG SẢN VÀ DƯ LƯỢNG THUỐC BVTV</div>
+                  <div className="cert-m-protocol">
+                    (Theo Nghị định thư GACC Lệnh 248/249 &amp; Quy chuẩn Kỹ thuật Quốc gia VietGAP)
+                  </div>
                 </div>
               </div>
 
-              <div className="cert-sign-name">TS. Trần Gia Phú</div>
-              <div className="cert-sign-title">Giám đốc Trung tâm Kiểm nghiệm</div>
+              {/* Thông tin mẫu thử 2 cột chuẩn A4 */}
+              <div className="cert-m-info-grid">
+                <div className="cert-m-info-item">
+                  <span className="cert-m-lbl">Tên chủ hộ / Cơ sở SX:</span>
+                  <strong className="cert-m-val">{householdName}</strong>
+                </div>
+                <div className="cert-m-info-item">
+                  <span className="cert-m-lbl">Mã vùng trồng / Thửa:</span>
+                  <strong className="cert-m-val">VN-DLK-0028 · Thửa {plotCode}</strong>
+                </div>
+
+                <div className="cert-m-info-item">
+                  <span className="cert-m-lbl">Địa chỉ canh tác:</span>
+                  <span className="cert-m-val">Xã Ea Tar, H. Cư M&apos;gar, Đắk Lắk</span>
+                </div>
+                <div className="cert-m-info-item">
+                  <span className="cert-m-lbl">Đối tượng mẫu thử:</span>
+                  <span className="cert-m-val">Sầu riêng tươi (<em>Durio zibethinus</em> - Monthong/Ri6)</span>
+                </div>
+
+                <div className="cert-m-info-item">
+                  <span className="cert-m-lbl">Đơn vị / Người gửi mẫu:</span>
+                  <span className="cert-m-val">Ban Kiểm soát Kỹ thuật HTX Nông nghiệp Ea Tar</span>
+                </div>
+                <div className="cert-m-info-item">
+                  <span className="cert-m-lbl">Ngày lấy mẫu:</span>
+                  <strong className="cert-m-val">{formatDate(test.sampledOn)}</strong>
+                </div>
+
+                <div className="cert-m-info-item">
+                  <span className="cert-m-lbl">Đơn vị kiểm nghiệm (Lab):</span>
+                  <span className="cert-m-val">{test.lab}</span>
+                </div>
+                <div className="cert-m-info-item">
+                  <span className="cert-m-lbl">Tình trạng mẫu nhận:</span>
+                  <span className="cert-m-val">Mẫu đại diện nguyên quả, niêm phong mã {test.code}</span>
+                </div>
+
+                <div className="cert-m-info-item cert-m-full">
+                  <span className="cert-m-lbl">Yêu cầu kiểm nghiệm:</span>
+                  <span className="cert-m-val">Phân tích kim loại nặng Cadimi (Cd), Dư lượng BVTV, Hoạt chất cấm Chlorpyrifos, Phẩm nhuộm Vàng O (Auramine O).</span>
+                </div>
+
+                <div className="cert-m-info-item cert-m-full">
+                  <span className="cert-m-lbl">Phương pháp xét nghiệm:</span>
+                  <span className="cert-m-val">Sắc ký khí &amp; lỏng khối phổ (GC-MS/MS, LC-MS/MS), Quang phổ hấp thụ nguyên tử AAS (AOAC 2007.01, TCVN 7602:2007).</span>
+                </div>
+              </div>
+
+              {/* Bảng kết quả đủ 6 cột chuẩn A4 */}
+              <div className="cert-m-table-wrap">
+                <div className="cert-m-sec-heading">KẾT QUẢ THỬ NGHIỆM:</div>
+                <table className="cert-m-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "6%" }}>STT</th>
+                      <th style={{ width: "31%" }}>TÊN CHỈ TIÊU KIỂM NGHIỆM</th>
+                      <th style={{ width: "22%" }}>PHƯƠNG PHÁP THỬ</th>
+                      <th style={{ width: "10%" }}>ĐƠN VỊ</th>
+                      <th style={{ width: "14%" }}>KẾT QUẢ</th>
+                      <th style={{ width: "17%" }}>NGƯỠNG CHO PHÉP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="text-center">01</td>
+                      <td>
+                        <strong>Hàm lượng Cadimi (Cd)</strong>
+                        <div className="cert-m-note">Kim loại nặng theo Lệnh 248/249</div>
+                      </td>
+                      <td>TCVN 7602:2007 (F-AAS)</td>
+                      <td className="text-center">mg/kg</td>
+                      <td className="text-center font-bold">
+                        <span className={test.cdMgKg <= 0.05 ? "val-ok" : "val-exceed"}>{test.cdMgKg}</span>
+                      </td>
+                      <td className="text-center">
+                        &le; 0.05 mg/kg
+                        <div className="cert-tag-pass">&le; GACC</div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td className="text-center">02</td>
+                      <td>
+                        <strong>Tổng dư lượng hóa chất BVTV</strong>
+                        <div className="cert-m-note">Nhóm Phospho &amp; Cúc tổng hợp</div>
+                      </td>
+                      <td>AOAC 2007.01 (LC-MS/MS)</td>
+                      <td className="text-center">mg/kg</td>
+                      <td className="text-center font-bold">
+                        <span className={test.residueMgKg <= 0.1 ? "val-ok" : "val-exceed"}>{test.residueMgKg}</span>
+                      </td>
+                      <td className="text-center">
+                        &le; 0.10 mg/kg
+                        <div className="cert-tag-pass">VietGAP</div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td className="text-center">03</td>
+                      <td>
+                        <strong>Hoạt chất Chlorpyrifos Ethyl</strong>
+                        <div className="cert-m-note">Danh mục cấm theo TT 10/2024</div>
+                      </td>
+                      <td>TCVN 8938:2011 (GC-MS)</td>
+                      <td className="text-center">mg/kg</td>
+                      <td className="text-center font-bold">
+                        <span className={isChlorpyrifosPass ? "val-ok" : "val-exceed"}>{chlorpyrifosDisplay}</span>
+                      </td>
+                      <td className="text-center">
+                        KPH (Cấm tuyệt đối)
+                        <div className="cert-tag-zero">LOD: 0.01</div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td className="text-center">04</td>
+                      <td>
+                        <strong>Chất cấm Vàng O (Auramine O)</strong>
+                        <div className="cert-m-note">Phẩm nhuộm công nghiệp cấm</div>
+                      </td>
+                      <td>Phương pháp LC-MS/MS</td>
+                      <td className="text-center">Định tính</td>
+                      <td className="text-center font-bold">
+                        <span className={!test.yellowOPositive ? "val-ok" : "val-exceed"}>
+                          {test.yellowOPositive ? "Dương tính" : "Âm tính"}
+                        </span>
+                      </td>
+                      <td className="text-center">
+                        Âm tính (Cấm tuyệt đối)
+                        <div className="cert-tag-zero">Zero-tolerance</div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Chân trang Tờ 1 */}
+              <div className="cert-m-sheet-footer">
+                <span>Hồ sơ kiểm nghiệm gốc: LAB-{test.code}/PKN-2024 · Xem tiếp kết luận &amp; chữ ký tại Trang 02</span>
+                <strong>Trang 01 / 02</strong>
+              </div>
             </div>
           </div>
 
-          {/* 7. DẢI FOOTER BẢO MẬT & MÃ VẠCH (BARCODE) DƯỚI CÙNG */}
-          <div className="cert-footer-row">
-            <div className="cert-barcode-box">
-              {/* Barcode SVG tượng trưng chân thực */}
-              <svg width="200" height="28" viewBox="0 0 200 28" fill="none">
-                <rect x="0" y="0" width="3" height="22" fill="#0f2942" />
-                <rect x="5" y="0" width="1.5" height="22" fill="#0f2942" />
-                <rect x="9" y="0" width="4" height="22" fill="#0f2942" />
-                <rect x="15" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="19" y="0" width="1" height="22" fill="#0f2942" />
-                <rect x="23" y="0" width="3" height="22" fill="#0f2942" />
-                <rect x="28" y="0" width="5" height="22" fill="#0f2942" />
-                <rect x="35" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="39" y="0" width="3" height="22" fill="#0f2942" />
-                <rect x="45" y="0" width="1.5" height="22" fill="#0f2942" />
-                <rect x="49" y="0" width="4" height="22" fill="#0f2942" />
-                <rect x="55" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="60" y="0" width="5" height="22" fill="#0f2942" />
-                <rect x="68" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="73" y="0" width="3" height="22" fill="#0f2942" />
-                <rect x="78" y="0" width="1.5" height="22" fill="#0f2942" />
-                <rect x="82" y="0" width="4" height="22" fill="#0f2942" />
-                <rect x="88" y="0" width="3" height="22" fill="#0f2942" />
-                <rect x="93" y="0" width="1.5" height="22" fill="#0f2942" />
-                <rect x="97" y="0" width="4" height="22" fill="#0f2942" />
-                <rect x="103" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="108" y="0" width="5" height="22" fill="#0f2942" />
-                <rect x="115" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="120" y="0" width="3" height="22" fill="#0f2942" />
-                <rect x="125" y="0" width="1.5" height="22" fill="#0f2942" />
-                <rect x="130" y="0" width="4" height="22" fill="#0f2942" />
-                <rect x="136" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="140" y="0" width="5" height="22" fill="#0f2942" />
-                <rect x="148" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="153" y="0" width="3" height="22" fill="#0f2942" />
-                <rect x="158" y="0" width="1.5" height="22" fill="#0f2942" />
-                <rect x="162" y="0" width="4" height="22" fill="#0f2942" />
-                <rect x="168" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="173" y="0" width="3" height="22" fill="#0f2942" />
-                <rect x="178" y="0" width="4" height="22" fill="#0f2942" />
-                <rect x="185" y="0" width="2" height="22" fill="#0f2942" />
-                <rect x="190" y="0" width="3" height="22" fill="#0f2942" />
-                <rect x="196" y="0" width="4" height="22" fill="#0f2942" />
-              </svg>
-              <div className="cert-barcode-val">*PUC-{test.code}-ISO17025*</div>
-            </div>
+          {/* ─── TỜ A4 SỐ 2 / 2: ĐÁNH GIÁ KIỂM DỊCH, KẾT LUẬN, CHỮ KÝ & DẤU MỘC ─── */}
+          <div className="cert-mobile-a4-frame">
+            <div className="cert-mobile-a4-canvas is-continuation">
+              <div className="cert-watermark" aria-hidden="true">
+                <div className="cert-watermark-text" style={{ fontSize: 36 }}>PUC · BẢN GỐC CHỨNG THỰC</div>
+                <div className="cert-watermark-sub" style={{ fontSize: 22 }}>ISO/IEC 17025:2017</div>
+              </div>
 
-            <div className="cert-security-hash">
-              <span>Mã bảo mật điện tử: </span>
-              <code>PUC-SHA256-{test.code}-CERT-OK</code>
-              <div>Xác thực trực tuyến tại Cổng Dịch vụ công Quốc gia: puc.mard.gov.vn</div>
+              {/* Running Header gọn gàng nối tiếp từ Trang 1 */}
+              <div className="cert-m-running-header">
+                <span className="cert-m-running-title">
+                  PHIẾU TRẢ KẾT QUẢ KIỂM NGHIỆM <em>(Tiếp theo Trang 01)</em>
+                </span>
+                <span className="cert-m-running-code">
+                  Số: <strong>LAB-{test.code}/PKN-2024</strong> · Mã PUC: <strong>VN-DLK-0028</strong>
+                </span>
+              </div>
+
+              {/* Bảng đánh giá cảm quan & kiểm dịch thực vật SPS/GACC */}
+              <div className="cert-m-sps-section">
+                <div className="cert-m-sec-heading">
+                  ĐÁNH GIÁ NGOẠI QUAN &amp; KIỂM DỊCH THỰC VẬT (SPS / LỆNH 248 GACC):
+                </div>
+                <div className="cert-m-sps-grid">
+                  <div className="cert-m-sps-cell">
+                    <span className="cert-m-sps-lbl">Độ chín &amp; Sinh lý mẫu quả:</span>
+                    <strong className="cert-m-sps-val val-ok">Đạt chuẩn thu hoạch (Chất khô &ge; 32%)</strong>
+                  </div>
+                  <div className="cert-m-sps-cell">
+                    <span className="cert-m-sps-lbl">Kiểm dịch sinh vật gây hại:</span>
+                    <strong className="cert-m-sps-val val-ok">KPH (Không có rệp sáp, sâu đục hạt)</strong>
+                  </div>
+                  <div className="cert-m-sps-cell">
+                    <span className="cert-m-sps-lbl">Ngoại quan vỏ &amp; Cuống quả:</span>
+                    <strong className="cert-m-sps-val">Nguyên vẹn, gai đều, không nấm mốc</strong>
+                  </div>
+                  <div className="cert-m-sps-cell">
+                    <span className="cert-m-sps-lbl">Truy xuất nhật ký canh tác:</span>
+                    <strong className="cert-m-sps-val">Đồng bộ 100% nhật ký điện tử PUC</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Khối Kết luận & Đối chiếu Quy chuẩn */}
+              <div className="cert-m-conclusion-box">
+                <div className="cert-m-concl-line">
+                  <span className="cert-concl-title">KẾT LUẬN: </span>
+                  {isPass ? (
+                    <strong className="cert-concl-pass">
+                      Mẫu sầu riêng ĐẠT TIÊU CHUẨN AN TOÀN VỆ SINH THỰC PHẨM VÀ ĐỦ ĐIỀU KIỆN XUẤT KHẨU CHÍNH NGẠCH SANG THỊ TRƯỜNG TRUNG QUỐC (Theo Lệnh 248/249 GACC &amp; Tiêu chuẩn VietGAP).
+                    </strong>
+                  ) : (
+                    <strong className="cert-concl-fail">
+                      MẪU KIỂM NGHIỆM KHÔNG ĐẠT TIÊU CHUẨN XUẤT KHẨU. Tồn tại chỉ số vượt ngưỡng quy định an toàn. Cơ sở tạm dừng thu hoạch tại thửa {plotCode} để xử lý khoanh vùng.
+                    </strong>
+                  )}
+                </div>
+
+                <div className="cert-m-protocol-row">
+                  <div>
+                    <span>Mã quy trình kiểm nghiệm: </span>
+                    <strong>QT-KNCL-GACC-500/PUC</strong>
+                  </div>
+                  <div>
+                    <span>Sử dụng PXN tham chiếu: </span>
+                    <span className="cert-checkbox-group">
+                      <span className="cert-box checked">&#9746; Không</span>
+                      <span className="cert-box">&#9744; Có</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="cert-m-notes">
+                  <strong>Chú thích: </strong>
+                  <em>
+                    (1) KPH: Không phát hiện (dưới giới hạn định lượng LOD = 0.01 mg/kg). (2) Kết quả chỉ có giá trị đối với mẫu thử niêm phong mang mã số {test.code}. (3) Phiếu có giá trị xuất trình cơ quan Hải quan và Kiểm dịch thực vật tại cửa khẩu xuất khẩu.
+                  </em>
+                </div>
+
+                <div className="cert-m-dispatch">
+                  <span>Thời điểm trả kết quả: </span>
+                  <strong>{formatDate(test.sampledOn)} — 17h30 · Chủ hộ: {householdName} (Thửa {plotCode})</strong>
+                </div>
+              </div>
+
+              {/* Khối Ký tên & Con dấu mộc đỏ pháp lý */}
+              <div className="cert-m-signatures">
+                <div className="cert-sign-col">
+                  <div className="cert-m-sign-role">Người thực hiện phân tích</div>
+                  <div className="cert-m-sign-hint">(Ký và ghi rõ họ tên)</div>
+
+                  <div className="cert-m-handwritten">
+                    <svg width="138" height="48" viewBox="0 0 150 52" fill="none">
+                      <path
+                        d="M14 36 C 20 16, 28 8, 34 20 C 38 28, 34 42, 44 30 C 53 18, 60 10, 68 23 C 73 32, 76 40, 86 26 C 94 14, 103 22, 113 33 C 120 40, 130 28, 136 20"
+                        stroke="#1d4ed8"
+                        strokeWidth="2.3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M20 42 C 43 40, 83 39, 126 41"
+                        stroke="#1d4ed8"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
+                      />
+                      <circle cx="130" cy="41" r="1.5" fill="#1d4ed8" />
+                    </svg>
+                  </div>
+
+                  <div className="cert-m-sign-name">KS. Nguyễn Thị Thùy Dương</div>
+                  <div className="cert-m-sign-title">Kỹ thuật viên Phân tích Hóa nghiệm</div>
+                </div>
+
+                <div className="cert-sign-col cert-sign-col-right">
+                  <div className="cert-m-sign-date">
+                    <em>Đắk Lắk, ngày {day} tháng {month} năm {year}</em>
+                  </div>
+                  <div className="cert-m-sign-role">GIÁM ĐỐC TRUNG TÂM KIỂM NGHIỆM</div>
+                  <div className="cert-m-sign-hint">(Ký tên và đóng dấu pháp nhân)</div>
+
+                  <div className="cert-m-stamp-area">
+                    <div className="cert-director-signature">
+                      <svg width="145" height="50" viewBox="0 0 165 58" fill="none">
+                        <path
+                          d="M32 42 C 42 12, 54 6, 62 28 C 66 38, 72 22, 82 14 C 90 8, 96 32, 108 26 C 118 20, 128 12, 144 22"
+                          stroke="#1e3a8a"
+                          strokeWidth="2.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M46 46 C 72 40, 112 38, 152 44"
+                          stroke="#1e3a8a"
+                          strokeWidth="2.1"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </div>
+
+                    <div className="cert-m-red-stamp" aria-hidden="true">
+                      <svg width="104" height="104" viewBox="0 0 130 130" fill="none">
+                        <defs>
+                          <path id="stampTopArc-m2" d="M 19,65 A 46,46 0 1,1 111,65" />
+                          <path id="stampBottomArc-m2" d="M 111,65 A 46,46 0 1,1 19,65" />
+                        </defs>
+                        <circle cx="65" cy="65" r="58" stroke="#d32f2f" strokeWidth="3.2" strokeDasharray="120 2 80 1" opacity="0.88" />
+                        <circle cx="65" cy="65" r="54" stroke="#d32f2f" strokeWidth="1.2" opacity="0.85" />
+                        <circle cx="65" cy="65" r="35" stroke="#d32f2f" strokeWidth="1.4" opacity="0.85" />
+
+                        <text fill="#d32f2f" fontSize="7.3" fontWeight="800" letterSpacing="0.8">
+                          <textPath href="#stampTopArc-m2" startOffset="50%" textAnchor="middle">
+                            SỞ NN &amp; PTNT TỈNH ĐẮK LẮK
+                          </textPath>
+                        </text>
+                        <text fill="#d32f2f" fontSize="6.7" fontWeight="800" letterSpacing="0.5">
+                          <textPath href="#stampBottomArc-m2" startOffset="50%" textAnchor="middle">
+                            * TT KIỂM ĐỊNH &amp; KHẢO NGHIỆM CL *
+                          </textPath>
+                        </text>
+
+                        <polygon
+                          points="65,42 68.5,52.5 79.5,52.5 70.5,59 74,69.5 65,63 56,69.5 59.5,59 50.5,52.5 61.5,52.5"
+                          fill="#d32f2f"
+                          opacity="0.88"
+                        />
+                        <text x="65" y="76" textAnchor="middle" fill="#d32f2f" fontSize="6.5" fontWeight="900" fontFamily="'Times New Roman', serif">
+                          ISO/IEC 17025
+                        </text>
+                        <text x="65" y="83" textAnchor="middle" fill="#d32f2f" fontSize="5.8" fontWeight="600" fontFamily="'Times New Roman', serif">
+                          SỐ: 08-VILAS 238
+                        </text>
+                      </svg>
+                    </div>
+                  </div>
+
+                  <div className="cert-m-sign-name">TS. Trần Gia Phú</div>
+                  <div className="cert-m-sign-title">Giám đốc Trung tâm Kiểm nghiệm</div>
+                </div>
+              </div>
+
+              {/* Footer Mã vạch & Bảo mật Trang 2 */}
+              <div className="cert-m-footer">
+                <div className="cert-barcode-box">
+                  <svg width="165" height="22" viewBox="0 0 200 28" fill="none">
+                    <rect x="0" y="0" width="3" height="22" fill="#0f2942" />
+                    <rect x="5" y="0" width="1.5" height="22" fill="#0f2942" />
+                    <rect x="9" y="0" width="4" height="22" fill="#0f2942" />
+                    <rect x="15" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="19" y="0" width="1" height="22" fill="#0f2942" />
+                    <rect x="23" y="0" width="3" height="22" fill="#0f2942" />
+                    <rect x="28" y="0" width="5" height="22" fill="#0f2942" />
+                    <rect x="35" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="39" y="0" width="3" height="22" fill="#0f2942" />
+                    <rect x="45" y="0" width="1.5" height="22" fill="#0f2942" />
+                    <rect x="49" y="0" width="4" height="22" fill="#0f2942" />
+                    <rect x="55" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="60" y="0" width="5" height="22" fill="#0f2942" />
+                    <rect x="68" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="73" y="0" width="3" height="22" fill="#0f2942" />
+                    <rect x="78" y="0" width="1.5" height="22" fill="#0f2942" />
+                    <rect x="82" y="0" width="4" height="22" fill="#0f2942" />
+                    <rect x="88" y="0" width="3" height="22" fill="#0f2942" />
+                    <rect x="93" y="0" width="1.5" height="22" fill="#0f2942" />
+                    <rect x="97" y="0" width="4" height="22" fill="#0f2942" />
+                    <rect x="103" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="108" y="0" width="5" height="22" fill="#0f2942" />
+                    <rect x="115" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="120" y="0" width="3" height="22" fill="#0f2942" />
+                    <rect x="125" y="0" width="1.5" height="22" fill="#0f2942" />
+                    <rect x="130" y="0" width="4" height="22" fill="#0f2942" />
+                    <rect x="136" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="140" y="0" width="5" height="22" fill="#0f2942" />
+                    <rect x="148" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="153" y="0" width="3" height="22" fill="#0f2942" />
+                    <rect x="158" y="0" width="1.5" height="22" fill="#0f2942" />
+                    <rect x="162" y="0" width="4" height="22" fill="#0f2942" />
+                    <rect x="168" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="173" y="0" width="3" height="22" fill="#0f2942" />
+                    <rect x="178" y="0" width="4" height="22" fill="#0f2942" />
+                    <rect x="185" y="0" width="2" height="22" fill="#0f2942" />
+                    <rect x="190" y="0" width="3" height="22" fill="#0f2942" />
+                    <rect x="196" y="0" width="4" height="22" fill="#0f2942" />
+                  </svg>
+                  <div className="cert-m-barcode-val">*PUC-{test.code}-ISO17025*</div>
+                </div>
+
+                <div className="cert-m-hash">
+                  <div>
+                    <span>Mã bảo mật: </span>
+                    <code>PUC-SHA256-{test.code}-CERT-OK</code>
+                  </div>
+                  <div className="cert-m-hash-bottom">
+                    <span>Cổng DVC Quốc gia: puc.mard.gov.vn</span>
+                    <strong>Trang 02 / 02</strong>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -599,6 +1089,9 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           background: rgba(15, 23, 42, 0.72);
           backdrop-filter: blur(6px);
           overflow-y: auto;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-x pan-y pinch-zoom;
           padding: 24px 16px;
           display: flex;
           justify-content: center;
@@ -625,6 +1118,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 12px;
           padding: 10px 16px;
           background: #1e293b;
           color: #ffffff;
@@ -636,26 +1130,31 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           display: flex;
           align-items: center;
           gap: 8px;
+          min-width: 0;
+          flex: 1;
         }
 
         .cert-status-badge {
           display: inline-flex;
           align-items: center;
-          gap: 7px;
+          gap: 6px;
           font-size: 13px;
           font-weight: 600;
           color: #34d399;
+          min-width: 0;
         }
 
         .cert-toolbar-right {
           display: flex;
           align-items: center;
           gap: 10px;
+          flex-shrink: 0;
         }
 
         .cert-btn-action {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 6px;
           padding: 7px 14px;
           background: #2563eb;
@@ -664,8 +1163,14 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           border-radius: 8px;
           font-size: 13px;
           font-weight: 600;
+          white-space: nowrap;
+          flex-shrink: 0;
           cursor: pointer;
           transition: background 0.15s ease;
+        }
+
+        .cert-btn-text-mobile {
+          display: none;
         }
 
         .cert-btn-action:hover {
@@ -678,46 +1183,60 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           justify-content: center;
           width: 32px;
           height: 32px;
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.1);
+          padding: 0;
+          flex-shrink: 0;
+          border-radius: 50%;
+          background: transparent;
           color: #ffffff;
           border: none;
           cursor: pointer;
-          transition: background 0.15s ease;
+          transition: opacity 0.15s ease, transform 0.15s ease;
         }
 
         .cert-btn-close:hover {
-          background: rgba(255, 255, 255, 0.2);
+          background: transparent;
+          opacity: 0.78;
+          transform: rotate(90deg);
         }
 
-        /* ── TỜ GIẤY CHUẨN A4 ── */
+        /* ── TỜ GIẤY CHUẨN A4 VỚI GÓC GẤP TRẮNG 3D (DESKTOP) ── */
+        .cert-paper-shadow-wrap {
+          --fold-size: 68px;
+          --fold-box: 96px;
+          position: relative;
+          filter:
+            drop-shadow(0 12px 24px rgba(15, 23, 42, 0.22))
+            drop-shadow(0 28px 54px rgba(15, 23, 42, 0.32));
+        }
+
         .cert-paper {
           position: relative;
-          background: #ffffff;
+          background: linear-gradient(155deg, #ffffff 0%, #fcfdfe 68%, #f4f6f9 100%);
           color: #0f172a;
-          border-radius: 4px;
-          padding: 38px 44px 32px;
-          box-shadow:
-            0 10px 30px -5px rgba(15, 23, 42, 0.14),
-            0 25px 60px -15px rgba(15, 23, 42, 0.28),
-            0 0 1px rgba(15, 23, 42, 0.15);
+          border-radius: 14px;
+          padding: 40px 44px 32px;
+          clip-path: polygon(
+            0 0,
+            calc(100% - var(--fold-size)) 0,
+            100% var(--fold-size),
+            100% 100%,
+            0 100%
+          );
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Times New Roman", serif;
           line-height: 1.45;
           overflow: hidden;
         }
 
-        /* Góc gập trang giấy (Top Right Fold) */
-        .cert-paper-fold {
+        :global(.cert-paper-fold) {
           position: absolute;
           top: 0;
           right: 0;
-          width: 56px;
-          height: 56px;
+          width: var(--fold-box);
+          height: var(--fold-box);
           pointer-events: none;
           z-index: 10;
         }
 
-        /* Watermark mờ nhạt bảo mật */
         .cert-watermark {
           position: absolute;
           top: 50%;
@@ -800,6 +1319,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           align-items: flex-end;
           gap: 2px;
           flex-shrink: 0;
+          padding-right: 42px;
         }
 
         .cert-doc-number,
@@ -836,7 +1356,6 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           margin-top: 1px;
         }
 
-        /* Đường kẻ đôi công văn */
         .cert-double-divider {
           position: relative;
           z-index: 2;
@@ -1211,56 +1730,586 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           color: #0f2942;
         }
 
-        /* ── RESPONSIVE MOBILE ── */
+        /* ── BẢN 2 TRANG A4 LIỀN MẠCH TRÊN MOBILE (MẶC ĐỊNH ẨN TRÊN DESKTOP) ── */
+        .cert-mobile-a4-stack {
+          display: none;
+        }
+
+        /* ── RESPONSIVE MOBILE: HIỂN THỊ 2 TỜ GIẤY ĐÚNG TỶ LỆ A4 (210 : 297) LIỀN MẠCH ── */
         @media (max-width: 640px) {
-          .cert-paper {
-            padding: 24px 16px 20px;
+          .cert-modal-backdrop {
+            padding: 10px 8px 22px;
           }
 
-          .cert-header-row {
+          .cert-toolbar {
+            padding: 9px 11px;
+            gap: 10px;
+            border-radius: 12px;
+          }
+
+          .cert-status-badge {
             flex-direction: column;
-            gap: 12px;
-          }
-
-          .cert-meta-col {
             align-items: flex-start;
+            gap: 2px;
+            line-height: 1.2;
           }
 
-          .cert-qr-wrap {
+          .cert-status-main {
+            font-size: 12px;
+            font-weight: 700;
+            color: #34d399;
+            white-space: nowrap;
+          }
+
+          .cert-status-sep {
             display: none;
           }
 
-          .cert-info-grid {
-            grid-template-columns: 1fr;
+          .cert-status-sub {
+            font-size: 10.5px;
+            font-weight: 500;
+            color: #94a3b8;
+            white-space: nowrap;
           }
 
-          .cert-main-title {
-            font-size: 17px;
+          .cert-toolbar-right {
+            gap: 7px;
           }
 
-          .cert-sub-title {
-            font-size: 12.5px;
+          .cert-btn-action {
+            padding: 7px 11px;
+            font-size: 11.5px;
+            border-radius: 8px;
+            gap: 5px;
           }
 
-          .cert-table th,
-          .cert-table td {
-            padding: 5px 4px;
-            font-size: 11px;
+          .cert-btn-text-desktop {
+            display: none;
           }
 
-          .cert-signatures-section {
-            grid-template-columns: 1fr;
-            gap: 18px;
+          .cert-btn-text-mobile {
+            display: inline;
           }
 
-          .cert-footer-row {
+          .cert-btn-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+          }
+
+          /* Ẩn bản 1 trang desktop, bật bản 2 tờ A4 liền mạch trên mobile */
+          .cert-desktop-only {
+            display: none;
+          }
+
+          .cert-mobile-a4-stack {
+            display: flex;
             flex-direction: column;
+            gap: 14px;
+            width: 100%;
+          }
+
+          /* Khung bao mỗi tờ giấy khóa đúng chuẩn tỷ lệ A4 (210 : 297) */
+          .cert-mobile-a4-frame {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 210 / 297;
+            filter:
+              drop-shadow(0 8px 18px rgba(15, 23, 42, 0.24))
+              drop-shadow(0 18px 36px rgba(15, 23, 42, 0.28));
+          }
+
+          /* Tờ giấy A4 gốc kích thước chuẩn 520 x 735.43 (210 : 297) được scale khớp 100% khung */
+          .cert-mobile-a4-canvas {
+            --fold-size: 46px;
+            --fold-box: 65px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 520px;
+            height: 735.43px;
+            transform: scale(var(--sheet-scale, 0.68));
+            transform-origin: top left;
+            background: linear-gradient(155deg, #ffffff 0%, #fcfdfe 68%, #f4f6f9 100%);
+            color: #0f172a;
+            border-radius: 12px;
+            padding: 22px 24px 16px;
+            clip-path: polygon(
+              0 0,
+              calc(100% - var(--fold-size)) 0,
+              100% var(--fold-size),
+              100% 100%,
+              0 100%
+            );
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Times New Roman", serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+          }
+
+          .cert-mobile-a4-canvas.is-continuation {
+            clip-path: none;
+          }
+
+          .cert-m-running-header {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding-bottom: 7px;
+            border-bottom: 1px solid #cbd5e1;
+            font-size: 9px;
+            color: #475569;
+          }
+
+          .cert-m-running-title {
+            font-weight: 800;
+            color: #0f2942;
+            letter-spacing: 0.02em;
+          }
+
+          .cert-m-running-title em {
+            font-weight: 500;
+            color: #64748b;
+          }
+
+          .cert-m-running-code {
+            font-size: 8.8px;
+            color: #475569;
+            white-space: nowrap;
+          }
+
+          .cert-m-running-code strong {
+            color: #0f2942;
+            font-family: monospace;
+          }
+
+          .cert-m-top-group {
+            position: relative;
+            z-index: 2;
+          }
+
+          .cert-m-header {
+            display: flex;
             align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+          }
+
+          .cert-m-org {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+          }
+
+          .cert-m-org-text {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5px;
+          }
+
+          .cert-m-ministry {
+            font-size: 8.8px;
+            font-weight: 700;
+            color: #475569;
+            letter-spacing: 0.02em;
+          }
+
+          .cert-m-center {
+            font-size: 10.3px;
+            font-weight: 900;
+            color: #0f2942;
+            line-height: 1.22;
+            text-transform: uppercase;
+          }
+
+          .cert-m-branch {
+            font-size: 8.8px;
+            font-style: italic;
+            color: #64748b;
+          }
+
+          .cert-m-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 1.5px;
+            flex-shrink: 0;
+            padding-right: 30px;
+          }
+
+          .cert-m-doc {
+            font-size: 9.2px;
+            color: #334155;
+            white-space: nowrap;
+          }
+
+          .cert-m-doc strong {
+            color: #0f2942;
+            font-family: monospace;
+            font-size: 9.6px;
+          }
+
+          .cert-m-qr {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 2px;
+          }
+
+          .cert-m-qr img {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #e2e8f0;
+            padding: 1.5px;
+            background: #ffffff;
+          }
+
+          .cert-m-qr span {
+            font-size: 7.2px;
+            color: #64748b;
+            margin-top: 1px;
+          }
+
+          .cert-m-divider {
+            height: 3px;
+            border-top: 1.4px solid #0f2942;
+            border-bottom: 0.8px solid #0f2942;
+            margin: 8px 0 9px;
+          }
+
+          .cert-m-title-box {
+            text-align: center;
+          }
+
+          .cert-m-main-title {
+            font-size: 16px;
+            font-weight: 900;
+            color: #1e3a8a;
+            letter-spacing: 0.03em;
+            line-height: 1.2;
+          }
+
+          .cert-m-sub-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #0f2942;
+            margin-top: 2px;
+            letter-spacing: 0.015em;
+          }
+
+          .cert-m-protocol {
+            font-size: 8.8px;
+            font-style: italic;
+            color: #475569;
+            margin-top: 2px;
+          }
+
+          /* Lưới thông tin mẫu 2 cột chuẩn A4 */
+          .cert-m-info-grid {
+            position: relative;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            column-gap: 12px;
+            row-gap: 4.5px;
+            font-size: 9.8px;
+            line-height: 1.34;
+            background: rgba(248, 250, 252, 0.72);
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 8px 10px;
+          }
+
+          .cert-m-info-item {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            min-width: 0;
+          }
+
+          .cert-m-full {
+            grid-column: 1 / -1;
+            padding-top: 2px;
+            border-top: 1px dashed #e2e8f0;
+          }
+
+          .cert-m-lbl {
+            font-weight: 600;
+            color: #334155;
+            flex-shrink: 0;
+          }
+
+          .cert-m-val {
+            color: #0f172a;
+          }
+
+          /* Bảng kết quả 6 cột chuẩn A4 trên Tờ 1 */
+          .cert-m-table-wrap {
+            position: relative;
+            z-index: 2;
+          }
+
+          .cert-m-sec-heading {
+            font-size: 10.5px;
+            font-weight: 800;
+            color: #0f2942;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+          }
+
+          .cert-m-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9.4px;
+            border: 1px solid #334155;
+            background: rgba(255, 255, 255, 0.85);
+          }
+
+          .cert-m-table th,
+          .cert-m-table td {
+            border: 1px solid #475569;
+            padding: 4.5px 5px;
+            vertical-align: middle;
+            line-height: 1.25;
+          }
+
+          .cert-m-table th {
+            background: #f1f5f9;
+            color: #0f2942;
+            font-weight: 800;
+            text-align: center;
+            font-size: 8.6px;
+            letter-spacing: 0.01em;
+          }
+
+          .cert-m-note {
+            font-size: 8.2px;
+            color: #64748b;
+            font-style: italic;
+            margin-top: 1px;
+          }
+
+          .cert-m-sheet-footer {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 6px;
+            font-size: 8.8px;
+            color: #64748b;
+          }
+
+          .cert-m-sheet-footer strong {
+            color: #0f2942;
+            font-weight: 800;
+          }
+
+          /* Tờ 2: Bảng đánh giá cảm quan & kiểm dịch SPS */
+          .cert-m-sps-section {
+            position: relative;
+            z-index: 2;
+          }
+
+          .cert-m-sps-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #f8fafc;
+            overflow: hidden;
+          }
+
+          .cert-m-sps-cell {
+            padding: 7px 9px;
+            border-right: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 9.4px;
+          }
+
+          .cert-m-sps-cell:nth-child(2n) {
+            border-right: none;
+          }
+
+          .cert-m-sps-cell:nth-child(n + 3) {
+            border-bottom: none;
+          }
+
+          .cert-m-sps-lbl {
+            font-size: 8.6px;
+            color: #64748b;
+            font-weight: 600;
+          }
+
+          .cert-m-sps-val {
+            font-size: 9.6px;
+            color: #0f2942;
+          }
+
+          /* Tờ 2: Khối kết luận */
+          .cert-m-conclusion-box {
+            position: relative;
+            z-index: 2;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 9.8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+
+          .cert-m-concl-line {
+            font-size: 10.4px;
+            line-height: 1.38;
+          }
+
+          .cert-m-protocol-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-top: 1px dashed #cbd5e1;
+            padding-top: 5px;
+            color: #334155;
+            font-size: 9.4px;
+          }
+
+          .cert-m-notes {
+            font-size: 9px;
+            color: #64748b;
+            line-height: 1.38;
+          }
+
+          .cert-m-dispatch {
+            font-size: 9.4px;
+            color: #334155;
+          }
+
+          /* Tờ 2: Khối chữ ký & dấu mộc đỏ */
+          .cert-m-signatures {
+            position: relative;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            align-items: end;
+            padding: 4px 0;
+          }
+
+          .cert-m-sign-date {
+            font-size: 9.2px;
+            color: #475569;
+            margin-bottom: 2px;
+          }
+
+          .cert-m-sign-role {
+            font-size: 10.2px;
+            font-weight: 800;
+            color: #0f2942;
+            text-transform: uppercase;
+          }
+
+          .cert-m-sign-hint {
+            font-size: 8.8px;
+            font-style: italic;
+            color: #64748b;
+          }
+
+          .cert-m-handwritten {
+            height: 62px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 4px 0;
+          }
+
+          .cert-m-stamp-area {
+            position: relative;
+            height: 68px;
+            width: 170px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 4px 0;
+          }
+
+          .cert-m-red-stamp {
+            position: absolute;
+            top: -16px;
+            left: 6px;
+            z-index: 3;
+            pointer-events: none;
+            transform: rotate(-7deg);
+            mix-blend-mode: multiply;
+          }
+
+          .cert-m-sign-name {
+            font-size: 11.2px;
+            font-weight: 800;
+            color: #0f2942;
+          }
+
+          .cert-m-sign-title {
+            font-size: 9.2px;
+            color: #64748b;
+          }
+
+          /* Tờ 2: Footer Barcode & Bảo mật */
+          .cert-m-footer {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            border-top: 1px solid #cbd5e1;
+            padding-top: 8px;
+            font-size: 8.8px;
+            color: #64748b;
+          }
+
+          .cert-m-barcode-val {
+            font-family: monospace;
+            font-size: 8.5px;
+            letter-spacing: 0.08em;
+            color: #0f2942;
+          }
+
+          .cert-m-hash {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+          }
+
+          .cert-m-hash code {
+            background: #f1f5f9;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 8.5px;
+            color: #0f2942;
+          }
+
+          .cert-m-hash-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
             gap: 8px;
           }
 
-          .cert-security-hash {
-            text-align: left;
+          .cert-m-hash-bottom strong {
+            color: #0f2942;
+            font-weight: 800;
           }
         }
 
@@ -1270,12 +2319,19 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             visibility: hidden !important;
           }
 
-          .cert-paper,
-          .cert-paper * {
+          .cert-desktop-only,
+          .cert-desktop-only .cert-paper,
+          .cert-desktop-only .cert-paper * {
             visibility: visible !important;
           }
 
+          .cert-desktop-only {
+            display: block !important;
+            filter: none !important;
+          }
+
           .no-print,
+          .cert-mobile-a4-stack,
           .cert-modal-backdrop {
             display: none !important;
             background: transparent !important;
@@ -1289,6 +2345,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             width: 100% !important;
             max-width: 100% !important;
             box-shadow: none !important;
+            clip-path: none !important;
             border: none !important;
             padding: 20mm 15mm !important;
             margin: 0 !important;

@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
 import {
-  X,
   MapPin,
   ExternalLink,
   QrCode,
@@ -16,6 +15,7 @@ import {
   ShieldCheck,
   Layers,
 } from "lucide-react";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import type { PortalPlot } from "@/types/portal";
 import { PLOT_STATUS } from "@/lib/portal-labels";
 import { Pill } from "./ui";
@@ -36,6 +36,16 @@ const SOURCE_LABEL = {
   demo: "Mẫu",
 } as const;
 
+/** Thoát ký tự HTML trước khi chèn dữ liệu (mã thửa, tên hộ, giống…) vào nội dung popup Leaflet (chống XSS). */
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function PlotMapModal({ plot, householdName, onClose, onOpenSignboard }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
@@ -51,7 +61,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     }
     return true;
   });
-  const [mounted, setMounted] = useState(false);
+  const [mounted] = useState(() => typeof document !== "undefined");
 
   // Vuốt xuống để tắt modal (Swipe-down-to-dismiss)
   const [dragY, setDragY] = useState(0);
@@ -168,7 +178,6 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   };
 
   useEffect(() => {
-    setMounted(true);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
@@ -205,8 +214,9 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           mapRef.current.remove();
           mapRef.current = null;
         }
-        if (containerRef.current && (containerRef.current as any)._leaflet_id) {
-          delete (containerRef.current as any)._leaflet_id;
+        const leafletContainer = containerRef.current as HTMLElement & { _leaflet_id?: number };
+        if (leafletContainer && leafletContainer._leaflet_id) {
+          delete leafletContainer._leaflet_id;
         }
 
         const map = L.map(containerRef.current, {
@@ -277,10 +287,10 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
             poly.bindPopup(`
               <div style="font-family: inherit; font-size: 13px; line-height: 1.5; color: #0f172a; padding: 2px 0;">
-                <strong style="font-size: 14px; color: #065f46;">Thửa đất ${plot.code}</strong><br/>
-                <span>Chủ hộ: <b>${householdName}</b></span><br/>
-                <span>Diện tích: <b>${plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha</b></span><br/>
-                <span>Giống: <b>${plot.variety || "Sầu riêng"}</b></span>
+                <strong style="font-size: 14px; color: #065f46;">Thửa đất ${escapeHtml(plot.code)}</strong><br/>
+                <span>Chủ hộ: <b>${escapeHtml(householdName)}</b></span><br/>
+                <span>Diện tích: <b>${escapeHtml(Number(plot.areaHa).toLocaleString("vi-VN", { maximumFractionDigits: 2 }))} ha</b></span><br/>
+                <span>Giống: <b>${escapeHtml(plot.variety || "Sầu riêng")}</b></span>
               </div>
             `);
 
@@ -312,8 +322,8 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
         L.marker([lat, lng], { icon: pinIcon }).addTo(map).bindPopup(`
           <div style="font-family: inherit; font-size: 13px; color: #0f172a;">
-            <strong>Vị trí trung tâm thửa đất ${plot.code}</strong><br/>
-            Tọa độ: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+            <strong>Vị trí trung tâm thửa đất ${escapeHtml(plot.code)}</strong><br/>
+            Tọa độ: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}
           </div>
         `);
 
@@ -470,7 +480,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
             title="Đóng bản đồ (Esc)"
             aria-label="Đóng bản đồ toàn cảnh"
           >
-            <X size={20} strokeWidth={2.4} />
+            <CloseCircleIcon size={30} strokeWidth={2.2} />
           </button>
         </div>
       </div>

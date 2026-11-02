@@ -2792,19 +2792,23 @@ body.pt-body {
   right: 8px;
   width: 30px;
   height: 30px;
+  padding: 0;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.65);
+  background: transparent;
   color: #ffffff;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.65));
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .pt-photo-remove-btn:hover {
-  background: #dc2626;
+  background: transparent;
+  color: #ef4444;
+  transform: rotate(90deg);
 }
 
 /* ── Ảnh chụp hiện trường trong Popup chi tiết ── */
@@ -3789,7 +3793,11 @@ body.pt-body {
   color: var(--ink);
   letter-spacing: -0.02em;
   margin: 0;
-  line-height: 1.25;
+  height: 28px;
+  line-height: 28px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pt-pest-wrap {
@@ -3838,15 +3846,18 @@ body.pt-body {
   place-items: center;
   width: 24px;
   height: 24px;
+  padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgba(15, 23, 42, 0.08);
+  background: transparent;
   color: var(--ink);
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .pt-pest-search-clear:hover {
-  background: rgba(15, 23, 42, 0.16);
+  background: transparent;
+  opacity: 0.72;
+  transform: rotate(90deg);
 }
 
 /* Thanh bộ lọc trạng thái (Filter Chips) */
@@ -3854,7 +3865,11 @@ body.pt-body {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 36px;
+  min-height: 36px;
+  box-sizing: border-box;
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 2px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -3995,20 +4010,24 @@ body.pt-body {
   outline: none;
   border-radius: 22px;
   padding: 14px 18px;
+  box-sizing: border-box;
   box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow 0.2s ease, background-color 0.2s ease;
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
+.pt-pest-section .pt-pest-card {
+  height: 112px;
+}
+
 .pt-pest-card:hover {
-  transform: translateY(-2px);
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.09);
 }
 
 .pt-pest-card:active {
-  transform: scale(0.99);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
 
 .pt-pest-card.pt-pest-card-allowed {
@@ -4089,10 +4108,17 @@ body.pt-body {
   font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.015em;
-  line-height: 1.25;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pt-pest-section .pt-pest-card-name {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .pt-pest-mini-status {
@@ -4237,6 +4263,30 @@ body.pt-body {
 
 .pt-pesticide-showcase-wrap:hover .pt-pesticide-showcase-img {
   transform: scale(1.04);
+}
+
+/* Dự phòng khối hero / ảnh modal */
+.pt-pesticide-modal-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+}
+.pt-pesticide-modal-hero-left {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pt-pesticide-modal-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 
 /* Thông tin chi tiết nằm độc lập bên dưới khung ảnh */
@@ -4518,6 +4568,9 @@ body.pt-body {
     padding: 12px 14px;
     gap: 12px;
     border-radius: 20px;
+  }
+  .pt-pest-section .pt-pest-card {
+    height: 98px;
   }
   .pt-pest-card-img-wrap {
     width: 74px;
@@ -5115,17 +5168,18 @@ body.pt-body {
 .pt-icon-btn {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--mist);
+  background: transparent;
   color: var(--ink);
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.pt-icon-btn:hover { background: var(--green-100); transform: rotate(90deg); }
-.pt-icon-btn svg { width: 17px; height: 17px; stroke-width: 2; }
+.pt-icon-btn:hover { background: transparent; opacity: 0.72; transform: rotate(90deg); }
+.pt-icon-btn svg { width: 28px; height: 28px; stroke-width: 2.2; }
 
 /* Bảng trượt + biểu mẫu */
 .pt-sheet-backdrop {
@@ -5846,17 +5900,19 @@ body.pt-body {
 .pt-radial-close-btn {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgba(15, 23, 42, 0.08);
+  background: transparent;
   color: var(--ink);
   cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .pt-radial-close-btn:hover {
-  background: rgba(15, 23, 42, 0.15);
+  background: transparent;
+  opacity: 0.72;
   transform: rotate(90deg);
 }
 
@@ -6738,25 +6794,25 @@ body.pt-body {
 }
 
 .pt-mapmodal-close-round-btn {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border: none;
+  background: transparent;
   color: #ffffff;
   display: grid;
   place-items: center;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  transition: all 0.18s ease;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.65));
+  transition: transform 0.18s ease, opacity 0.18s ease;
   flex-shrink: 0;
 }
 
 .pt-mapmodal-close-round-btn:hover {
-  background: #000000;
-  transform: scale(1.08);
+  background: transparent;
+  opacity: 0.85;
+  transform: rotate(90deg);
 }
 
 /* Popup nổi hiển thị thông tin thửa đất của hộ đó */
@@ -7565,7 +7621,7 @@ body.pt-body {
   padding: 4px 0;
 }
 
-@media (max-width: 480px) {
+  @media (max-width: 480px) {
   .pt-transit-segment,
   .pt-transit-transfer {
     grid-template-columns: 16px 1fr;
@@ -7600,6 +7656,312 @@ body.pt-body {
     gap: 10px;
   }
 }
+
+/* ── Nút xoay tải, xác nhận 2 bước, đính kèm tệp, tem quả & chuông thông báo ── */
+.pt-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: pt-spin 0.65s linear infinite;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+@keyframes pt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pt-btn-danger {
+  color: #dc2626 !important;
+}
+.pt-btn-danger:hover {
+  background: #fef2f2 !important;
+}
+.pt-btn-danger-solid {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+.pt-btn-danger-solid:hover {
+  background: #b91c1c !important;
+}
+
+.pt-confirm-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+.pt-confirm-question {
+  font-size: 13px;
+  font-weight: 600;
+  color: #991b1b;
+}
+.pt-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pt-photo-optional {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.pt-attach-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pt-attach-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pt-attach-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+.pt-attach-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--ink);
+}
+.pt-attach-size {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.pt-attach-remove {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.pt-attach-remove:hover {
+  background: transparent;
+  color: #dc2626;
+}
+.pt-attach-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1.5px dashed #cbd5e1;
+  background: #f8fafc;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.pt-attach-add:hover {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+.pt-attach-add input[type="file"] {
+  display: none;
+}
+
+.pt-attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.pt-attach-chip:hover {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+.pt-stamp-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.pt-stamp-stat-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 2px 10px rgba(20, 55, 47, 0.03);
+}
+.pt-stamp-stat-card.is-green {
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+  border-color: #bbf7d0;
+}
+.pt-stamp-stat-card.is-blue {
+  background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+  border-color: #bfdbfe;
+}
+.pt-stamp-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.pt-stamp-stat-val {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.15;
+}
+.pt-stamp-stat-sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .pt-stamp-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+.pt-notif-btn {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(20, 55, 47, 0.06);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.pt-notif-btn:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+.pt-notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+}
+
+.pt-notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.pt-notif-item + .pt-notif-item {
+  margin-top: 8px;
+}
+.pt-notif-item.is-unread {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.pt-notif-item:hover {
+  border-color: #16a34a;
+}
+.pt-notif-dot-col {
+  padding-top: 5px;
+}
+.pt-notif-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+.pt-notif-dot.is-active {
+  background: #16a34a;
+}
+.pt-notif-content {
+  flex: 1;
+  min-width: 0;
+}
+.pt-notif-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.pt-notif-head strong {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.pt-notif-time {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.pt-notif-body {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+@media (max-width: 999px) {
+  .pt-topbar-profile {
+    width: auto !important;
+  }
+}
+
 
 
 

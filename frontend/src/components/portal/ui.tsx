@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine, X } from "lucide-react";
+import { CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine } from "lucide-react";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
 
@@ -328,7 +329,7 @@ export function Sheet({
                 onPointerDown={(e) => e.stopPropagation()}
                 aria-label="Đóng"
               >
-                <X aria-hidden="true" />
+                <CloseCircleIcon size={28} />
               </button>
             </header>
           </div>

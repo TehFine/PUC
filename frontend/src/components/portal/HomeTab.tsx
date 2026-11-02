@@ -1,16 +1,14 @@
 "use client";
 
-import { useRef, useState, useLayoutEffect, useMemo, useEffect } from "react";
+import { useRef, useState, useLayoutEffect, useMemo } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
-import { useResource } from "@/hooks/use-resource";
-import { daysSince, formatKg, HOUSEHOLD_STATUS, SCHEDULE_KIND } from "@/lib/portal-labels";
+import { daysSince, formatClock, formatKg, HOUSEHOLD_STATUS, relativeDayLabel, SCHEDULE_KIND, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
-import type { TrainingDto } from "@/types/api";
 import type { PortalList, PortalOverview, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
-import { Sheet, StateBlock } from "./ui";
-import { getTrainingKicker, TrainingDetailModal } from "./LearnTab";
+import { Pill, Sheet, StateBlock } from "./ui";
+import { getTrainingKicker, TrainingDetailModal, usePortalTrainings, type TrainingCourseItem } from "./LearnTab";
 
 const SCHEDULE_THEMES = [
   { capsuleBg: "linear-gradient(180deg, #10b981 0%, #059669 100%)" },
@@ -27,34 +25,28 @@ const TRAINING_THEMES = [
 ];
 
 function getHeroPath(w: number, h: number, badgeW: number, badgeH: number, badgeRight: number): string {
-  const r = 28; // Corner radius
-  const gap = 6; // Reduced tight gap between dock and card (~6px)
-  const notchH = badgeH + gap; // Shelf is exactly gap below the badge
-  const rDock = badgeH / 2; // Radius of dock semicircular cap
-  const rConcave = rDock + gap; // Concentric arc radius hugging the dock cap
-  const rConvex = 14; // Convex fillet transitioning smoothly from top edge
-  const rShelfCorner = Math.min(20, Math.max(12, r)); // Smooth corner under the dock on right
+  const r = 28;
+  const gap = 6;
+  const notchH = badgeH + gap;
+  const rDock = badgeH / 2;
+  const rConcave = rDock + gap;
+  const rConvex = 14;
+  const rShelfCorner = Math.min(20, Math.max(12, r));
 
-  // Dock pill left edge in absolute container coords
   const pillLeft = w - badgeRight - badgeW;
-
-  // Center of dock semicircle cap & concentric concave arc
   const c1x = pillLeft + rDock;
   const c1y = rDock;
 
-  // Center of convex fillet tangent to top horizontal edge (y = 0)
   const dy = c1y - rConvex;
   const dist = rConcave + rConvex;
   const dx = Math.sqrt(Math.max(0, dist * dist - dy * dy));
   const c2x = c1x - dx;
   const c2y = rConvex;
 
-  // Tangent point where convex fillet meets concave arc
   const t = rConvex / dist;
   const xtan = c2x + t * (c1x - c2x);
   const ytan = c2y + t * (c1y - c2y);
 
-  // Shelf point where concave arc reaches bottom and becomes horizontal
   const xshelf = c1x;
 
   return [
@@ -98,28 +90,10 @@ function getConciseScheduleTitle(title: string): string {
   return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : title;
 }
 
-const keepTraining = (item: TrainingDto) => item;
-
-function getRelativeScheduleNote(dateStr: string | null | undefined): string {
-  if (!dateStr) return "(Dự kiến)";
-  const target = new Date(dateStr);
-  if (isNaN(target.getTime())) return "(Dự kiến)";
-  const now = new Date();
-  target.setHours(0, 0, 0, 0);
-  now.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "(Hôm nay)";
-  if (diffDays === 1) return "(Ngày mai)";
-  if (diffDays > 1 && diffDays <= 30) return `(Còn ${diffDays} ngày)`;
-  if (diffDays > 30) return "(Tháng tới)";
-  if (diffDays === -1) return "(Hôm qua)";
-  if (diffDays < -1) return "(Đã diễn ra)";
-  return "(Dự kiến)";
-}
-
 interface ActionItem {
   id: string;
   title: string;
+  detail?: string | null;
   to: PortalTabId;
 }
 
@@ -129,42 +103,53 @@ function getConciseViolationTitle(v?: PortalViolation | null, count = 1, isDiary
     return count > 1 ? `Khắc phục vi phạm (${count})` : "Khắc phục vi phạm";
   }
   const lower = v.title.toLowerCase();
-  if (lower.includes("nhật ký")) {
-    return "Chưa ghi nhật ký";
-  }
-  if (lower.includes("thuốc") || lower.includes("bảo vệ thực vật")) {
-    return "Vi phạm dùng thuốc";
-  }
-  if (lower.includes("mẫu") || lower.includes("kiểm nghiệm")) {
-    return "Mẫu kiểm nghiệm chưa đạt";
-  }
-  if (lower.includes("biển") || lower.includes("cắm vườn")) {
-    return "Chưa cắm biển vườn";
-  }
-  // Loại bỏ các tiền tố hành chính dài dòng như "Khắc phục:", "Vi phạm:", "Cảnh báo:"
-  let cleaned = v.title
-    .replace(/^(khắc phục|vi phạm|cảnh báo)[:\s\-]+/i, "")
-    .trim();
-  if (cleaned.length > 24) {
-    return "Khắc phục vi phạm";
-  }
+  if (lower.includes("nhật ký")) return "Chưa ghi nhật ký";
+  if (lower.includes("thuốc") || lower.includes("bảo vệ thực vật")) return "Vi phạm dùng thuốc";
+  if (lower.includes("mẫu") || lower.includes("kiểm nghiệm")) return "Mẫu kiểm nghiệm chưa đạt";
+  if (lower.includes("biển") || lower.includes("cắm vườn")) return "Chưa cắm biển vườn";
+  const cleaned = v.title.replace(/^(khắc phục|vi phạm|cảnh báo)[:\s\-]+/i, "").trim();
+  if (cleaned.length > 24) return "Khắc phục vi phạm";
   return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "Khắc phục vi phạm";
 }
 
+function normalizeReminderTab(tab: string): PortalTabId {
+  const clean = tab.trim().toLowerCase();
+  if (clean === "plots" || clean === "diary" || clean === "stamps" || clean === "inspection" || clean === "learn") {
+    return clean;
+  }
+  if (clean === "harvest") return "stamps";
+  if (clean === "training") return "learn";
+  return "diary";
+}
+
 function buildActionItems(overview: PortalOverview, firstViolation?: PortalViolation | null): ActionItem[] {
+  if (Array.isArray(overview.reminders)) {
+    return overview.reminders
+      .filter((rem) => {
+        const clean = (rem.tab || "").trim().toLowerCase();
+        return clean !== "requests" && clean !== "approvals";
+      })
+      .map((rem, idx) => ({
+        id: `${rem.kind}-${idx}`,
+        title: rem.title,
+        detail: rem.detail,
+        to: rem.kind === "violation" || rem.kind === "journal" || rem.kind === "isolation"
+          ? "diary"
+          : normalizeReminderTab(rem.tab),
+      }));
+  }
+
   const { stats, lastTest } = overview;
   const idle = daysSince(stats.lastJournalOn);
   const isDiaryIdle = idle === null || idle >= 7;
   const items: ActionItem[] = [];
 
-  // Kiểm tra xem có vấn đề về nhật ký canh tác hay không (quá hạn 7 ngày hoặc có nhắc nhở từ HTX)
   const hasDiaryViolation = Boolean(
     firstViolation &&
       (firstViolation.title.toLowerCase().includes("nhật ký") ||
         firstViolation.description?.toLowerCase().includes("nhật ký")),
   );
 
-  // 1. NHẬT KÝ CANH TÁC: Việc của nhật ký -> Bấm vào chuyển THẲNG sang tab "diary" để ghi chép ngay
   if (isDiaryIdle || hasDiaryViolation) {
     items.push({
       id: "diary",
@@ -173,17 +158,15 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
     });
   }
 
-  // 2. KIỂM TRA & GIÁM SÁT: Chỉ hiển thị nếu có vi phạm thực tế về kiểm tra / thanh tra thực địa (không phải nhật ký)
   const isNonDiaryViolation = Boolean(firstViolation && !hasDiaryViolation);
   if (stats.openViolations > 0 && isNonDiaryViolation) {
     items.push({
       id: "violations",
       title: getConciseViolationTitle(firstViolation, stats.openViolations),
-      to: "inspection",
+      to: "diary",
     });
   }
 
-  // 3. Kiểm tra mẫu không đạt -> việc của kiểm tra thì chuyển sang tab "inspection"
   if (lastTest?.result === "fail") {
     items.push({
       id: "test-fail",
@@ -195,18 +178,26 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
   return items;
 }
 
-export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId) => void }) {
+export default function HomeTab({
+  onNavigate,
+}: {
+  onNavigate: (tab: PortalTabId) => void;
+}) {
   const overview = usePortal<PortalOverview>("overview");
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
   const violations = usePortal<PortalList<PortalViolation>>("violations");
-  const training = useResource<TrainingDto, TrainingDto>("training", keepTraining);
-  const [selectedTraining, setSelectedTraining] = useState<TrainingDto | null>(null);
+  const training = usePortalTrainings();
+  const [selectedTrainingId, setSelectedTrainingId] = useState<number | null>(null);
+
+  const selectedTraining: TrainingCourseItem | null = useMemo(
+    () => (selectedTrainingId !== null ? (training.data.find((t) => t.id === selectedTrainingId) ?? null) : null),
+    [training.data, selectedTrainingId],
+  );
 
   const openViolationsList = useMemo(() => {
     return violations.data?.data?.filter((v) => v.status === "open") || [];
   }, [violations.data]);
 
-  // Chỉ đưa những lịch tập huấn trong vòng thời gian khoảng 10 ngày trở lại để tránh làm rối màn hình trang chủ
   const urgentTrainings = useMemo(() => {
     if (!training.data || training.data.length === 0) return [];
 
@@ -256,7 +247,7 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
       if (w === 0 || h === 0) return;
       const bW = badgeRef.current?.offsetWidth ?? 215;
       const bH = badgeRef.current?.offsetHeight ?? 60;
-      const badgeRight = 0; // Thẳng hàng với mép ngoài bên phải của thẻ
+      const badgeRight = 0;
 
       setDims((prev) => {
         if (
@@ -303,7 +294,7 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
 
   const pathD = useMemo(
     () => getHeroPath(dims.w, dims.h, dims.badgeW, dims.badgeH, dims.badgeRight),
-    [dims.w, dims.h, dims.badgeW, dims.badgeH, dims.badgeRight]
+    [dims.w, dims.h, dims.badgeW, dims.badgeH, dims.badgeRight],
   );
 
   if (overview.loading || overview.error || !overview.data) {
@@ -311,20 +302,30 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
   }
 
   const { household, stats } = overview.data;
-  const status = HOUSEHOLD_STATUS[household.status];
+  const status = HOUSEHOLD_STATUS[household.status] ?? HOUSEHOLD_STATUS.pending;
+
+  const handleActionClick = (target: PortalTabId) => {
+    onNavigate(target);
+  };
 
   return (
     <div className="pt-stack">
       <div
         ref={shellRef}
         className="pt-hero-shell"
-        style={{
-          "--hero-badge-w": `${dims.badgeW}px`,
-          "--hero-badge-h": `${dims.badgeH}px`,
-        } as React.CSSProperties}
+        style={
+          {
+            "--hero-badge-w": `${dims.badgeW}px`,
+            "--hero-badge-h": `${dims.badgeH}px`,
+          } as React.CSSProperties
+        }
       >
-        <div ref={badgeRef} className="pt-hero-notch-badge" title="Đạt chuẩn xuất khẩu">
-          <span>{household.status === "qualified" ? "ĐẠT CHUẨN XUẤT KHẨU" : status.label.toUpperCase()}</span>
+        <div
+          ref={badgeRef}
+          className={`pt-hero-notch-badge is-${status.tone}`}
+          title={status.label}
+        >
+          <span>{status.label.toUpperCase()}</span>
         </div>
 
         <svg
@@ -340,10 +341,7 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
               <stop offset="100%" stopColor="#f8fafc" />
             </linearGradient>
           </defs>
-          <path
-            d={pathD}
-            fill="url(#ptHeroGrad)"
-          />
+          <path d={pathD} fill="url(#ptHeroGrad)" />
         </svg>
 
         <section className="pt-hero">
@@ -361,7 +359,9 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
               </div>
               <div className="pt-hero-meta-col">
                 <span className="pt-hero-meta-title">Diện tích</span>
-                <span className="pt-hero-meta-val">{household.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha</span>
+                <span className="pt-hero-meta-val">
+                  {household.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
+                </span>
               </div>
               <div className="pt-hero-meta-col">
                 <span className="pt-hero-meta-title">Sản lượng</span>
@@ -403,21 +403,23 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
                 <span className="pt-hero-bottom-kicker">Mã vùng trồng</span>
                 <span className="pt-hero-bottom-highlight">PUC-KRB-001</span>
               </div>
-              <button
-                type="button"
-                className="pt-hero-cta-btn"
-                onClick={() => onNavigate("diary")}
-                title="Mở nhật ký canh tác để ghi chép hoạt động"
-              >
-                <span>Ghi nhật ký</span>
-                <span aria-hidden="true">&rarr;</span>
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="pt-hero-cta-btn"
+                  onClick={() => onNavigate("diary")}
+                  title="Mở nhật ký canh tác để ghi chép hoạt động"
+                >
+                  <span>Ghi nhật ký</span>
+                  <span aria-hidden="true">&rarr;</span>
+                </button>
+              </div>
             </div>
           </div>
         </section>
       </div>
 
-      {/* Widget Nhắc nhở theo phong cách Tasks for Today */}
+      {/* Widget Nhắc nhở */}
       <section className="pt-reminders-widget" aria-label="Nhắc nhở và nhiệm vụ hôm nay">
         <div className="pt-widget-topbar">
           <div className="pt-widget-topbar-info">
@@ -438,11 +440,11 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
                     role="button"
                     tabIndex={0}
                     className="pt-widget-item"
-                    onClick={() => onNavigate(item.to)}
+                    onClick={() => handleActionClick(item.to)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        onNavigate(item.to);
+                        handleActionClick(item.to);
                       }
                     }}
                   >
@@ -454,7 +456,16 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
                       className="pt-widget-note-icon"
                       aria-hidden="true"
                     />
-                    <span className="pt-widget-item-text">{item.title}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span className="pt-widget-item-text" style={{ display: "block" }}>
+                        {item.title}
+                      </span>
+                      {item.detail && (
+                        <span style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                          {item.detail}
+                        </span>
+                      )}
+                    </div>
                     <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
                   </div>
                 </li>
@@ -464,7 +475,7 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         </div>
       </section>
 
-      {/* Lịch kiểm tra hiển thị trực tiếp trên nền giao diện (không dùng thẻ bao quanh) */}
+      {/* Lịch kiểm tra */}
       <section className="pt-schedule-section" aria-labelledby="schedule-heading">
         <div className="pt-schedule-header">
           <h2 id="schedule-heading" className="pt-schedule-title">
@@ -481,7 +492,7 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
           )}
         </div>
 
-        {(!schedule.data || schedule.data.data.length === 0) ? (
+        {!schedule.data || schedule.data.data.length === 0 ? (
           <p className="pt-muted pt-schedule-empty">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
         ) : (
           <div className="pt-vietgap-timeline" role="list">
@@ -490,13 +501,12 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
               const isLast = idx === arr.length - 1;
               const kicker = getScheduleKicker(item);
               const conciseTitle = getConciseScheduleTitle(item.title);
-              const relNote = getRelativeScheduleNote(item.scheduledOn);
+              const relNote = relativeDayLabel(item.scheduledOn);
               const formattedDate = formatDate(item.scheduledOn);
 
               return (
                 <div key={item.id} className="pt-vietgap-step">
                   <div className="pt-vietgap-segment">
-                    {/* Trục Timeline dải capsule dày + chấm tròn trắng đồng bộ chuẩn VietGAP */}
                     <div className="pt-vietgap-track-col" aria-hidden="true">
                       <div
                         className="pt-vietgap-capsule pt-home-timeline-capsule"
@@ -507,7 +517,6 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
                       </div>
                     </div>
 
-                    {/* Thẻ nội dung */}
                     <div
                       className="pt-training-clean-card"
                       role="button"
@@ -527,12 +536,11 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
                       </div>
                       <div className="pt-timeline-meta">
                         <span className="pt-timeline-date">{formattedDate}</span>
-                        {relNote && <span className="pt-timeline-rel">{relNote}</span>}
+                        {relNote && <span className="pt-timeline-rel">({relNote})</span>}
                       </div>
                     </div>
                   </div>
 
-                  {/* Đoạn nối chuyển tiếp giữa các đợt (3 mini dots thẳng hàng với trục capsule) */}
                   {!isLast && (
                     <div className="pt-vietgap-transfer" aria-hidden="true">
                       <div className="pt-vietgap-transfer-track">
@@ -549,7 +557,7 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         )}
       </section>
 
-      {/* Lớp tập huấn sắp diễn ra hiển thị trực tiếp trên nền giao diện, thiết kế theo style lịch kiểm tra, lọc trong vòng 10 ngày */}
+      {/* Lớp tập huấn sắp tới */}
       <section className="pt-schedule-section" aria-labelledby="training-schedule-heading">
         <div className="pt-schedule-header">
           <h2 id="training-schedule-heading" className="pt-schedule-title">
@@ -578,13 +586,14 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
               const theme = TRAINING_THEMES[idx % TRAINING_THEMES.length];
               const isLast = idx === arr.length - 1;
               const kicker = getTrainingKicker(item.title);
-              const relNote = item.heldOn ? getRelativeScheduleNote(item.heldOn) : "";
+              const relNote = item.heldOn ? relativeDayLabel(item.heldOn) : "";
               const formattedDate = formatDate(item.heldOn);
+              const startStr = formatClock(item.startsAt);
+              const myStatusInfo = item.myStatus ? TRAINING_MY_STATUS[item.myStatus] : null;
 
               return (
                 <div key={item.id} className="pt-vietgap-step">
                   <div className="pt-vietgap-segment">
-                    {/* Trục Timeline dải capsule dày + chấm tròn trắng đồng bộ chuẩn VietGAP */}
                     <div className="pt-vietgap-track-col" aria-hidden="true">
                       <div
                         className="pt-vietgap-capsule pt-home-timeline-capsule"
@@ -595,32 +604,36 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
                       </div>
                     </div>
 
-                    {/* Thẻ nội dung */}
                     <div
                       className="pt-training-clean-card"
                       role="button"
                       tabIndex={0}
-                      onClick={() => setSelectedTraining(item)}
+                      onClick={() => setSelectedTrainingId(item.id)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          setSelectedTraining(item);
+                          setSelectedTrainingId(item.id);
                         }
                       }}
                       title="Nhấn để xem chi tiết khóa tập huấn và đăng ký"
                     >
                       <div className="pt-timeline-content">
-                        <span className="pt-timeline-kicker">{kicker}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span className="pt-timeline-kicker">{kicker}</span>
+                          {myStatusInfo && <Pill tone={myStatusInfo.tone}>{myStatusInfo.label}</Pill>}
+                        </div>
                         <h3 className="pt-timeline-title">{item.title}</h3>
                       </div>
                       <div className="pt-timeline-meta">
-                        <span className="pt-timeline-date">{formattedDate}</span>
-                        {relNote && <span className="pt-timeline-rel">{relNote}</span>}
+                        <span className="pt-timeline-date">
+                          {formattedDate}
+                          {startStr ? ` · ${startStr}` : ""}
+                        </span>
+                        {relNote && <span className="pt-timeline-rel">({relNote})</span>}
                       </div>
                     </div>
                   </div>
 
-                  {/* Đoạn nối chuyển tiếp giữa các khóa (3 mini dots thẳng hàng với trục capsule) */}
                   {!isLast && (
                     <div className="pt-vietgap-transfer" aria-hidden="true">
                       <div className="pt-vietgap-transfer-track">
@@ -637,15 +650,14 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         )}
       </section>
 
-      {/* Popup chi tiết khóa tập huấn khi bấm vào item từ trang chủ */}
       {selectedTraining && (
         <Sheet
           title="Thông tin lớp tập huấn"
-          onClose={() => setSelectedTraining(null)}
+          onClose={() => setSelectedTrainingId(null)}
         >
           <TrainingDetailModal
             item={selectedTraining}
-            onClose={() => setSelectedTraining(null)}
+            onClose={() => setSelectedTrainingId(null)}
           />
         </Sheet>
       )}

@@ -1,23 +1,37 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { invalidatePortal, usePortal, useSharedQuery } from "@/hooks/use-portal";
 import { useResource } from "@/hooks/use-resource";
-import { PESTICIDE_STATUS } from "@/lib/portal-labels";
+import { api, errorMessage } from "@/lib/api-client";
+import { formatClock, PESTICIDE_STATUS, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
-import type { FertilizerDto, PesticideDto, TrainingDto, VarietyDto } from "@/types/api";
+import type { FertilizerDto, ListResponse, PesticideDto, TrainingDto, VarietyDto } from "@/types/api";
+import { listOf, type PortalListLike, type PortalTrainingCourse } from "@/types/portal";
 import {
   Check,
-  ChevronRight,
   Clock,
-  MapPin,
   Search,
-  X,
 } from "lucide-react";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
 import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
 
 const keepTraining = (item: TrainingDto) => item;
 const keepPesticide = (item: PesticideDto) => item;
-const keepVariety = (item: VarietyDto) => item;
+
+export type TrainingCourseItem = TrainingDto & Partial<Omit<PortalTrainingCourse, keyof TrainingDto>>;
+
+export function usePortalTrainings() {
+  const portalQuery = usePortal<PortalListLike<PortalTrainingCourse>>("training");
+  const fallback = useResource<TrainingDto, TrainingDto>("training", keepTraining);
+  const portalItems = useMemo(() => listOf(portalQuery.data), [portalQuery.data]);
+  const hasPortal = portalQuery.data !== null && (!portalQuery.error || portalItems.length > 0);
+  const data: TrainingCourseItem[] = hasPortal ? portalItems : fallback.data;
+  const loading = portalQuery.loading && data.length === 0;
+  const error = data.length === 0 ? (portalQuery.error && fallback.error ? portalQuery.error : null) : null;
+  return { data, loading, error, refresh: portalQuery.refresh };
+}
 
 type View = "training" | "pesticides" | "fertilizers" | "varieties";
 type StatusFilter = "all" | "allowed" | "restricted" | "banned";
@@ -194,14 +208,60 @@ export function TrainingDetailModal({
   item,
   onClose,
 }: {
-  item: TrainingDto;
+  item: TrainingCourseItem;
   onClose: () => void;
 }) {
-  const [registered, setRegistered] = useState(false);
-  const enrolledCount = registered ? item.enrolled + 1 : item.enrolled;
-  const percent = Math.min(100, Math.round((enrolledCount / (item.capacity || 1)) * 100));
-  const remaining = Math.max(0, item.capacity - enrolledCount);
+  const [myStatus, setMyStatus] = useState(item.myStatus ?? null);
+  const [enrolledDelta, setEnrolledDelta] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const isRegistered = myStatus === "registered" || myStatus === "attended";
+  const enrolledCount = Math.max(0, (item.enrolled ?? 0) + enrolledDelta);
+  const capacity = item.capacity || 1;
+  const percent = Math.min(100, Math.round((enrolledCount / capacity) * 100));
+  const remaining = Math.max(0, (item.capacity || 0) - enrolledCount);
   const info = getTrainingDetailedInfo(item.title);
+  const startStr = formatClock(item.startsAt);
+  const endStr = formatClock(item.endsAt);
+  const timeDisplay =
+    startStr && endStr
+      ? `${startStr} – ${endStr}`
+      : startStr
+        ? `Bắt đầu ${startStr}`
+        : "08:00 – 11:30 (Buổi sáng)";
+
+  const myStatusInfo = myStatus ? TRAINING_MY_STATUS[myStatus] : null;
+
+  const handleRegister = async () => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.post(`/portal/training/${item.id}/register`);
+      setMyStatus("registered");
+      if (item.myStatus !== "registered") setEnrolledDelta(1);
+      invalidatePortal("training", "overview");
+    } catch (err) {
+      setActionError(errorMessage(err, "Không đăng ký được lớp tập huấn."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.post(`/portal/training/${item.id}/cancel`);
+      setMyStatus("cancelled");
+      setEnrolledDelta(item.myStatus === "registered" ? -1 : 0);
+      invalidatePortal("training", "overview");
+    } catch (err) {
+      setActionError(errorMessage(err, "Không hủy được đăng ký tập huấn."));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="pt-training-detail-body">
@@ -213,9 +273,10 @@ export function TrainingDetailModal({
               {item.completed ? "Đã kết thúc" : "Đang mở đăng ký"}
             </span>
             <span className="pt-training-code-pill">Mã khóa: #TH-{item.id}</span>
+            {myStatusInfo && <Pill tone={myStatusInfo.tone}>{myStatusInfo.label}</Pill>}
           </div>
           <h3 className="pt-training-hero-title">{item.title}</h3>
-          <p className="pt-training-hero-sub">{info.summary}</p>
+          <p className="pt-training-hero-sub">{item.description || info.summary}</p>
         </div>
       </div>
 
@@ -247,7 +308,7 @@ export function TrainingDetailModal({
             Thời gian tổ chức
           </span>
           <span className="pt-training-cell-value pt-training-time-val">
-            8:00 – 11:30 (Buổi sáng)
+            {timeDisplay}
           </span>
           {item.heldOn && formatDate(item.heldOn) !== "—" && (
             <span className="pt-training-cell-sub">Ngày: {formatDate(item.heldOn)}</span>
@@ -303,31 +364,42 @@ export function TrainingDetailModal({
         <p>{info.note}</p>
       </div>
 
-      {/* 6. Hàng nút hành động theo đúng chuẩn phong cách mới */}
+      <InlineError message={actionError} />
+
+      {/* 6. Hàng nút hành động */}
       <div className="pt-training-modal-actions">
         <button
           type="button"
           className="pt-btn pt-btn-ghost"
           onClick={onClose}
+          disabled={busy}
         >
           Đóng
         </button>
-        {!item.completed && (
-          <button
+        {!item.completed && myStatus === "registered" && (
+          <ConfirmButton
+            label="Hủy đăng ký"
+            question="Xác nhận hủy đăng ký tham gia lớp tập huấn này?"
+            confirmLabel="Đồng ý hủy"
+            busy={busy}
+            onConfirm={() => void handleCancel()}
+          />
+        )}
+        {!item.completed && !isRegistered && (
+          <BusyButton
             type="button"
             className="pt-btn pt-btn-primary"
-            onClick={() => setRegistered(true)}
-            disabled={registered || remaining === 0}
+            busy={busy}
+            busyLabel="Đang đăng ký…"
+            onClick={() => void handleRegister()}
+            disabled={remaining === 0}
           >
-            {registered ? (
-              <>
-                <Check size={16} /> Đã đăng ký thành công
-              </>
-            ) : remaining === 0 ? (
-              "Lớp đã đủ sĩ số"
-            ) : (
-              "Đăng ký tham gia ngay"
-            )}
+            {remaining === 0 ? "Lớp đã đủ sĩ số" : "Đăng ký tham gia"}
+          </BusyButton>
+        )}
+        {!item.completed && myStatus === "attended" && (
+          <button type="button" className="pt-btn pt-btn-primary" disabled>
+            <Check size={16} /> Đã điểm danh tham dự
           </button>
         )}
       </div>
@@ -336,14 +408,18 @@ export function TrainingDetailModal({
 }
 
 function TrainingList() {
-  const { data, loading, error } = useResource<TrainingDto, TrainingDto>("training", keepTraining);
-  const [selectedTraining, setSelectedTraining] = useState<TrainingDto | null>(null);
+  const { data, loading, error } = usePortalTrainings();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectedTraining = useMemo(
+    () => (selectedId !== null ? (data.find((d) => d.id === selectedId) ?? null) : null),
+    [data, selectedId],
+  );
   const upcoming = data.filter((item) => !item.completed);
   const done = data.filter((item) => item.completed);
 
   return (
     <div className="pt-stack">
-      {/* 1. LỚP TẬP HUẤN SẮP DIỄN RA: NẰM TRỰC TIẾP TRÊN BACKGROUND (KHÔNG CARD BAO NGOÀI), THEO STYLE LỊCH KIỂM TRA TRANG CHỦ */}
+      {/* 1. LỚP TẬP HUẤN SẮP DIỄN RA */}
       <section className="pt-schedule-section pt-training-section" aria-labelledby="training-schedule-heading">
         <div className="pt-schedule-header">
           <h2 id="training-schedule-heading" className="pt-schedule-title">
@@ -364,11 +440,14 @@ function TrainingList() {
               const rel = getRelativeScheduleNote(item.heldOn);
               const kicker = getTrainingKicker(item.title);
               const formattedDate = formatDate(item.heldOn);
+              const startStr = formatClock(item.startsAt);
+              const endStr = formatClock(item.endsAt);
+              const clockRange = startStr && endStr ? `${startStr}–${endStr}` : startStr;
+              const myStatusInfo = item.myStatus ? TRAINING_MY_STATUS[item.myStatus] : null;
 
               return (
                 <div key={item.id} className="pt-transit-step">
                   <div className="pt-transit-segment">
-                    {/* Cột Trục Timeline dải capsule dày + 2 chấm trắng nhỏ */}
                     <div className="pt-transit-track-col" aria-hidden="true">
                       <div
                         className="pt-transit-capsule"
@@ -379,32 +458,39 @@ function TrainingList() {
                       </div>
                     </div>
 
-                    {/* Khối nội dung thẻ thiết kế y như phần lịch kiểm tra (Image 1): chỉ có tiêu đề và thời gian */}
                     <div
                       className="pt-training-clean-card"
                       role="button"
                       tabIndex={0}
-                      onClick={() => setSelectedTraining(item)}
+                      onClick={() => setSelectedId(item.id)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          setSelectedTraining(item);
+                          setSelectedId(item.id);
                         }
                       }}
                       title="Bấm để xem chi tiết khóa tập huấn và đăng ký"
                     >
                       <div className="pt-timeline-content">
-                        <span className="pt-timeline-kicker">{kicker}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span className="pt-timeline-kicker">{kicker}</span>
+                          <span style={{ fontSize: 11.5, color: "var(--text-secondary)", fontWeight: 600 }}>
+                            · {item.enrolled}/{item.capacity} chỗ
+                          </span>
+                          {myStatusInfo && <Pill tone={myStatusInfo.tone}>{myStatusInfo.label}</Pill>}
+                        </div>
                         <h3 className="pt-timeline-title">{item.title}</h3>
                       </div>
                       <div className="pt-timeline-meta">
-                        <span className="pt-timeline-date">{formattedDate}</span>
+                        <span className="pt-timeline-date">
+                          {formattedDate}
+                          {clockRange ? ` · ${clockRange}` : ""}
+                        </span>
                         {rel && <span className="pt-timeline-rel">{rel.startsWith("(") ? rel : `(${rel})`}</span>}
                       </div>
                     </div>
                   </div>
 
-                  {/* Đoạn nối chuyển tiếp giữa 2 chặng (Dotted line với các dấu chấm mini chuẩn VietGAP) */}
                   {!isLast && (
                     <div className="pt-transit-transfer" aria-hidden="true">
                       <div className="pt-transit-transfer-track">
@@ -425,24 +511,35 @@ function TrainingList() {
       {done.length > 0 && (
         <Card title="Khóa tập huấn đã hoàn thành">
           <ul className="pt-list">
-            {done.map((item) => (
-              <li
-                key={item.id}
-                className="pt-row pt-training-done-row"
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedTraining(item)}
-                title="Bấm để xem thông tin khóa đã học"
-              >
-                <div className="pt-row-main">
-                  <strong>{item.title}</strong>
-                  <span>
-                    {item.location ? `${item.location} · ` : ""}
-                    Giảng viên: {item.trainer ?? "—"}
-                  </span>
-                </div>
-              </li>
-            ))}
+            {done.map((item) => {
+              const myStatusInfo = item.myStatus ? TRAINING_MY_STATUS[item.myStatus] : null;
+              return (
+                <li
+                  key={item.id}
+                  className="pt-row pt-training-done-row"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedId(item.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedId(item.id);
+                    }
+                  }}
+                  title="Bấm để xem thông tin khóa đã học"
+                >
+                  <div className="pt-row-main">
+                    <strong>{item.title}</strong>
+                    <span>
+                      {item.heldOn ? `${formatDate(item.heldOn)} · ` : ""}
+                      {item.location ? `${item.location} · ` : ""}
+                      Giảng viên: {item.trainer ?? "—"} · {item.enrolled}/{item.capacity} học viên
+                    </span>
+                  </div>
+                  {myStatusInfo && <Pill tone={myStatusInfo.tone}>{myStatusInfo.label}</Pill>}
+                </li>
+              );
+            })}
           </ul>
         </Card>
       )}
@@ -451,11 +548,11 @@ function TrainingList() {
       {selectedTraining && (
         <Sheet
           title="Thông tin lớp tập huấn"
-          onClose={() => setSelectedTraining(null)}
+          onClose={() => setSelectedId(null)}
         >
           <TrainingDetailModal
             item={selectedTraining}
-            onClose={() => setSelectedTraining(null)}
+            onClose={() => setSelectedId(null)}
           />
         </Sheet>
       )}
@@ -769,8 +866,75 @@ export function PesticideDetailModal({
   );
 }
 
+const DEFAULT_PESTICIDES: PesticideDto[] = [
+  {
+    id: 1,
+    name: "Buprofezin 400SC",
+    activeIngredient: "Buprofezin",
+    concentration: "400 g/l",
+    manufacturer: "Map Pacific",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 2,
+    name: "Abamectin 1.8EC",
+    activeIngredient: "Abamectin",
+    concentration: "1.8%",
+    manufacturer: "Syngenta",
+    mrlMgKg: 0.01,
+    isolationDays: 7,
+    status: "allowed",
+  },
+  {
+    id: 3,
+    name: "Imidacloprid 70WG",
+    activeIngredient: "Imidacloprid",
+    concentration: "70%",
+    manufacturer: "Bayer",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 4,
+    name: "Carbaryl 80WP",
+    activeIngredient: "Carbaryl",
+    concentration: "80%",
+    manufacturer: "Various",
+    mrlMgKg: null,
+    isolationDays: null,
+    status: "banned",
+  },
+  {
+    id: 5,
+    name: "Chlorpyrifos 40EC",
+    activeIngredient: "Chlorpyrifos",
+    concentration: "40%",
+    manufacturer: "Dow AgroSciences",
+    mrlMgKg: 0.05,
+    isolationDays: 21,
+    status: "restricted",
+  },
+  {
+    id: 6,
+    name: "Emamectin 1.9EC",
+    activeIngredient: "Emamectin benzoate",
+    concentration: "1.9%",
+    manufacturer: "Rotam",
+    mrlMgKg: 0.02,
+    isolationDays: 10,
+    status: "allowed",
+  },
+];
+
 function PesticideList() {
-  const { data, loading, error } = useResource<PesticideDto, PesticideDto>("pesticides", keepPesticide);
+  const { data: apiData } = useSharedQuery<ListResponse<PesticideDto> | PesticideDto[]>("/pesticides?pageSize=200");
+  const data = useMemo(() => {
+    const rows = Array.isArray(apiData) ? apiData : (apiData?.data ?? []);
+    return rows.length > 0 ? rows : DEFAULT_PESTICIDES;
+  }, [apiData]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedPesticide, setSelectedPesticide] = useState<PesticideDto | null>(null);
@@ -824,7 +988,7 @@ function PesticideList() {
               onClick={() => setQuery("")}
               aria-label="Xóa từ khóa tìm kiếm"
             >
-              <X size={14} />
+              <CloseCircleIcon size={20} />
             </button>
           )}
         </div>
@@ -861,9 +1025,7 @@ function PesticideList() {
           </button>
         </div>
 
-        <StateBlock loading={loading} error={error} />
-
-        {/* Danh sách thẻ thuốc trực quan theo phong cách Ảnh 1 */}
+        {/* Danh sách thẻ thuốc trực quan cố định kích thước */}
         <div className="pt-pest-list">
           {shown.map((item) => {
             const imgSrc = getPesticideImage(item);
@@ -889,31 +1051,19 @@ function PesticideList() {
                     src={imgSrc}
                     alt={item.name}
                     className="pt-pest-card-img"
-                    loading="lazy"
                   />
                 </div>
 
-                {/* Bên phải: Tên thuốc và thông tin */}
+                {/* Bên phải: Chỉ hiển thị tên thuốc */}
                 <div className="pt-pest-card-content">
                   <h3 className="pt-pest-card-name">{item.name}</h3>
-
-                  <p className="pt-pest-card-sub">
-                    Hoạt chất: <strong>{item.activeIngredient}</strong>
-                    {item.concentration ? ` (${item.concentration})` : ""}
-                    {item.manufacturer ? ` · ${item.manufacturer}` : ""}
-                  </p>
-
-                  <div className="pt-pest-card-metric">
-                    <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
-                    <span>Cách ly: <strong>{item.isolationDays != null ? `${item.isolationDays} ngày` : "Không áp dụng"}</strong></span>
-                  </div>
                 </div>
               </article>
             );
           })}
         </div>
 
-        {!loading && !error && shown.length === 0 && (
+        {shown.length === 0 && (
           <EmptyState icon="search">Không tìm thấy thuốc phù hợp với tiêu chí lọc.</EmptyState>
         )}
 
@@ -1244,40 +1394,46 @@ export function FertilizerDetailModal({
 }
 
 function FertilizerList() {
+  const { data: apiData } = useSharedQuery<ListResponse<FertilizerDto> | FertilizerDto[]>("/fertilizers?pageSize=200");
+  const fertilizers = useMemo(() => {
+    const rows = Array.isArray(apiData) ? apiData : (apiData?.data ?? []);
+    return rows.length > 0 ? rows : DEFAULT_FERTILIZERS;
+  }, [apiData]);
+
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<FertilizerFilter>("all");
   const [selectedFertilizer, setSelectedFertilizer] = useState<FertilizerDto | null>(null);
 
   const counts = useMemo(() => {
     return {
-      all: DEFAULT_FERTILIZERS.length,
-      organic: DEFAULT_FERTILIZERS.filter((d) => d.category === "organic").length,
-      npk: DEFAULT_FERTILIZERS.filter((d) => d.category === "npk").length,
-      foliar: DEFAULT_FERTILIZERS.filter((d) => d.category === "foliar").length,
-      microbial: DEFAULT_FERTILIZERS.filter((d) => d.category === "microbial").length,
-      restricted: DEFAULT_FERTILIZERS.filter((d) => d.category === "restricted").length,
+      all: fertilizers.length,
+      organic: fertilizers.filter((d) => d.category === "organic").length,
+      npk: fertilizers.filter((d) => d.category === "npk").length,
+      foliar: fertilizers.filter((d) => d.category === "foliar").length,
+      microbial: fertilizers.filter((d) => d.category === "microbial").length,
+      restricted: fertilizers.filter((d) => d.category === "restricted").length,
     };
-  }, []);
+  }, [fertilizers]);
 
   const shown = useMemo(() => {
-    return DEFAULT_FERTILIZERS.filter((item) => {
+    return fertilizers.filter((item) => {
       const q = query.trim().toLowerCase();
       const matchesQuery =
         !q ||
-        `${item.name} ${item.formula} ${item.manufacturer} ${item.applicationMethod}`
+        `${item.name} ${item.formula ?? ""} ${item.manufacturer ?? ""} ${item.applicationMethod ?? ""}`
           .toLowerCase()
           .includes(q);
       const matchesCategory =
         categoryFilter === "all" || item.category === categoryFilter;
       return matchesQuery && matchesCategory;
     });
-  }, [query, categoryFilter]);
+  }, [fertilizers, query, categoryFilter]);
 
   return (
     <section className="pt-pest-section" aria-labelledby="fertilizer-heading">
       <div className="pt-pest-header">
         <h2 id="fertilizer-heading" className="pt-pest-title">
-          Danh mục phân bón chuẩn VietGAP
+          Danh mục phân bón
         </h2>
       </div>
 
@@ -1300,7 +1456,7 @@ function FertilizerList() {
               onClick={() => setQuery("")}
               aria-label="Xóa từ khóa tìm kiếm"
             >
-              <X size={14} />
+              <CloseCircleIcon size={20} />
             </button>
           )}
         </div>
@@ -1355,8 +1511,6 @@ function FertilizerList() {
         <div className="pt-pest-list">
           {shown.map((item) => {
             const imgSrc = getFertilizerImage(item);
-            const isEncouraged = item.status === "encouraged";
-            const isWarning = item.status === "warning";
 
             return (
               <article
@@ -1379,30 +1533,14 @@ function FertilizerList() {
                     src={imgSrc}
                     alt={item.name}
                     className="pt-pest-card-img"
-                    loading="lazy"
                   />
                 </div>
 
-                {/* Bên phải: Tên phân bón và thông tin */}
+                {/* Bên phải: Chỉ hiển thị tên phân bón */}
                 <div className="pt-pest-card-content">
-                  <div className="pt-pest-card-top-row">
-                    <h3 className="pt-pest-card-name">{item.name}</h3>
-                    <span className={`pt-pest-mini-status ${isEncouraged ? "pt-pest-status-allowed" : isWarning ? "pt-pest-status-banned" : "pt-pest-status-restricted"}`}>
-                      {isEncouraged ? "VietGAP" : isWarning ? "Cảnh báo" : "Được phép"}
-                    </span>
-                  </div>
-
-                  <p className="pt-pest-card-sub">
-                    Thành phần: <strong>{item.formula}</strong>
-                    {item.manufacturer ? ` · ${item.manufacturer}` : ""}
-                  </p>
-
-                  <div className="pt-pest-card-metric">
-                    <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
-                    <span>Thời điểm: <strong>{item.timing}</strong></span>
-                    <span style={{ margin: "0 4px", color: "#cbd5e1" }}>•</span>
-                    <span>Cách bón: <strong>{item.applicationMethod}</strong></span>
-                  </div>
+                  <h3 className="pt-pest-card-name">
+                    {item.name}
+                  </h3>
                 </div>
               </article>
             );
@@ -1555,7 +1693,7 @@ export function getVarietyImage(v: VarietyDto): string {
   return "/varieties/monthong.png";
 }
 
-function VarietyDetailModal({
+export function VarietyDetailModal({
   item,
   onClose,
 }: {
@@ -1568,17 +1706,22 @@ function VarietyDetailModal({
 
   return (
     <div className="pt-pesticide-modal-body">
-      {/* 1. Header: Ảnh lớn, Tên giống & Phân loại */}
-      <div className="pt-pesticide-modal-hero">
-        <div className="pt-pesticide-modal-hero-left">
-          <img
-            src={imgSrc}
-            alt={item.name}
-            className="pt-pesticide-modal-img"
-          />
-        </div>
-        <div className="pt-pesticide-modal-hero-right">
-          <span className="pt-pesticide-modal-sub">
+      {/* 1. Ảnh quả sầu riêng cắt nền chất lượng cao */}
+      <div className="pt-pesticide-showcase-wrap">
+        <img
+          src={imgSrc}
+          alt={item.name}
+          className="pt-pesticide-showcase-img"
+        />
+      </div>
+
+      {/* 2. Tiêu đề, phân loại & xuất xứ */}
+      <div className="pt-pesticide-header-info">
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+          <Pill tone={isExport ? "green" : isPremium ? "blue" : "gold"}>
+            {isExport ? "Chuẩn xuất khẩu GACC & VietGAP" : "Khuyến khích mở rộng vùng trồng"}
+          </Pill>
+          <span className="pt-training-code-pill">
             {item.category === "export"
               ? "Giống xuất khẩu chủ lực"
               : item.category === "native"
@@ -1587,16 +1730,11 @@ function VarietyDetailModal({
               ? "Giống nhập khẩu cao cấp"
               : "Giống mới tiềm năng"}
           </span>
-          <h3 className="pt-pesticide-modal-title">{item.name}</h3>
-          <p className="pt-pesticide-modal-mfg">
-            Xuất xứ: {item.origin || "Việt Nam"} · Mã giống: VAR-0{item.id}
-          </p>
-          <div style={{ marginTop: 8 }}>
-            <Pill tone={isExport ? "green" : isPremium ? "blue" : "gold"}>
-              {isExport ? "Chuẩn xuất khẩu GACC & VietGAP" : "Khuyến khích mở rộng vùng trồng"}
-            </Pill>
-          </div>
         </div>
+        <h3 className="pt-pesticide-modal-title">{item.name}</h3>
+        <p className="pt-pesticide-modal-mfg">
+          Xuất xứ: <strong>{item.origin || "Việt Nam"}</strong> · Mã giống: <strong>VAR-0{item.id}</strong>
+        </p>
       </div>
 
       {/* 2. Đặc tính chất lượng & Phẩm chất cơm múi */}
@@ -1718,40 +1856,73 @@ function VarietyDetailModal({
   );
 }
 
+export function enrichVariety(item: VarietyDto): VarietyDto {
+  const matched = DEFAULT_VARIETIES.find(
+    (d) =>
+      d.id === item.id ||
+      d.name.toLowerCase() === item.name.toLowerCase() ||
+      (item.name.toLowerCase().includes("monthong") && d.name.toLowerCase().includes("monthong")) ||
+      (item.name.toLowerCase().includes("ri 6") && d.name.toLowerCase().includes("ri 6")) ||
+      (item.name.toLowerCase().includes("musang") && d.name.toLowerCase().includes("musang")) ||
+      (item.name.toLowerCase().includes("thorn") && d.name.toLowerCase().includes("thorn")),
+  );
+  if (!matched) return item;
+  return {
+    ...matched,
+    ...item,
+    category: item.category ?? matched.category,
+    fleshColor: item.fleshColor ?? matched.fleshColor,
+    seedRate: item.seedRate ?? matched.seedRate,
+    brix: item.brix ?? matched.brix,
+    yieldPerHa: item.yieldPerHa ?? matched.yieldPerHa,
+    status: item.status ?? matched.status,
+    image: item.image ?? matched.image,
+    marketPotential: item.marketPotential ?? matched.marketPotential,
+    morphology: item.morphology?.length ? item.morphology : matched.morphology,
+    farmingTechniques: item.farmingTechniques ?? matched.farmingTechniques,
+  };
+}
+
 function VarietyList() {
+  const { data: apiData } = useSharedQuery<ListResponse<VarietyDto> | VarietyDto[]>("/varieties?pageSize=200");
+  const varieties = useMemo(() => {
+    const rows = Array.isArray(apiData) ? apiData : (apiData?.data ?? []);
+    return rows.length > 0 ? rows.map(enrichVariety) : DEFAULT_VARIETIES;
+  }, [apiData]);
+
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<VarietyFilter>("all");
   const [selectedVariety, setSelectedVariety] = useState<VarietyDto | null>(null);
 
   const counts = useMemo(() => {
     return {
-      all: DEFAULT_VARIETIES.length,
-      export: DEFAULT_VARIETIES.filter((d) => d.category === "export").length,
-      native: DEFAULT_VARIETIES.filter((d) => d.category === "native").length,
-      premium: DEFAULT_VARIETIES.filter((d) => d.category === "premium").length,
-      new: DEFAULT_VARIETIES.filter((d) => d.category === "new").length,
+      all: varieties.length,
+      export: varieties.filter((d) => d.category === "export").length,
+      native: varieties.filter((d) => d.category === "native").length,
+      premium: varieties.filter((d) => d.category === "premium").length,
+      new: varieties.filter((d) => d.category === "new").length,
     };
-  }, []);
+  }, [varieties]);
 
   const shown = useMemo(() => {
-    return DEFAULT_VARIETIES.filter((item) => {
+    return varieties.filter((item) => {
       const q = query.trim().toLowerCase();
       const matchesQuery =
         !q ||
-        `${item.name} ${item.origin} ${item.fleshColor} ${item.description}`
+        `${item.name} ${item.origin ?? ""} ${item.fleshColor ?? ""} ${item.description ?? ""}`
           .toLowerCase()
           .includes(q);
       const matchesCategory =
         categoryFilter === "all" || item.category === categoryFilter;
       return matchesQuery && matchesCategory;
     });
-  }, [query, categoryFilter]);
+  }, [varieties, query, categoryFilter]);
 
   return (
     <section className="pt-pest-section" aria-labelledby="variety-heading">
       <div className="pt-pest-header">
         <h2 id="variety-heading" className="pt-pest-title">
-          Danh mục giống sầu riêng chuẩn xuất khẩu
+          Danh mục giống sầu riêng
         </h2>
       </div>
 
@@ -1774,7 +1945,7 @@ function VarietyList() {
               onClick={() => setQuery("")}
               aria-label="Xóa từ khóa tìm kiếm"
             >
-              <X size={14} />
+              <CloseCircleIcon size={20} />
             </button>
           )}
         </div>
@@ -1844,25 +2015,14 @@ function VarietyList() {
                     src={imgSrc}
                     alt={item.name}
                     className="pt-pest-card-img"
-                    loading="lazy"
                   />
                 </div>
 
-                {/* Bên phải: Tên giống và thông tin */}
+                {/* Bên phải: Chỉ hiển thị tên giống sầu riêng */}
                 <div className="pt-pest-card-content">
-                  <h3 className="pt-pest-card-name">{item.name}</h3>
-
-                  <p className="pt-pest-card-sub">
-                    Xuất xứ: <strong>{item.origin}</strong>
-                    {item.weightRange ? ` · Trọng lượng: ${item.weightRange}` : ""}
-                  </p>
-
-                  <div className="pt-pest-card-metric">
-                    <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
-                    <span>Thu hoạch: <strong>{item.harvestYears}</strong></span>
-                    <span style={{ margin: "0 4px", color: "#cbd5e1" }}>•</span>
-                    <span>Cơm: <strong>{item.fleshColor || "Vàng đậm"}, {item.seedRate || "Hạt lép"}</strong></span>
-                  </div>
+                  <h3 className="pt-pest-card-name">
+                    {item.name}
+                  </h3>
                 </div>
               </article>
             );
@@ -1915,10 +2075,18 @@ export default function LearnTab() {
           </button>
         ))}
       </div>
-      {view === "training" && <TrainingList />}
-      {view === "pesticides" && <PesticideList />}
-      {view === "fertilizers" && <FertilizerList />}
-      {view === "varieties" && <VarietyList />}
+      <div style={{ display: view === "training" ? "block" : "none" }}>
+        <TrainingList />
+      </div>
+      <div style={{ display: view === "pesticides" ? "block" : "none" }}>
+        <PesticideList />
+      </div>
+      <div style={{ display: view === "fertilizers" ? "block" : "none" }}>
+        <FertilizerList />
+      </div>
+      <div style={{ display: view === "varieties" ? "block" : "none" }}>
+        <VarietyList />
+      </div>
     </div>
   );
 }

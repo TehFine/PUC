@@ -5,26 +5,31 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
+  Bell,
   BookOpen,
+  CheckCheck,
   ClipboardCheck,
+  CreditCard,
   House,
+  KeyRound,
   LogOut,
   MapPin,
   NotebookPen,
   Phone,
   Scale,
-  Send,
-  Tag,
   TreePine,
   UserCheck,
   type LucideIcon,
 } from "lucide-react";
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { usePortal } from "@/hooks/use-portal";
+import { invalidateQueries, NOTIFICATIONS_PATH, portalPath, usePortal, useSharedQuery } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
+import { api, errorMessage } from "@/lib/api-client";
+import { HOUSEHOLD_STATUS } from "@/lib/portal-labels";
 import { INTRO_PATH } from "@/lib/routes";
-import type { PortalOverview } from "@/types/portal";
+import { formatDate } from "@/utils/format";
+import type { AppNotification, NotificationList, PortalOverview, PortalProfile } from "@/types/portal";
 import "./portal.css";
 import DiaryTab from "./DiaryTab";
 import HomeTab from "./HomeTab";
@@ -33,7 +38,9 @@ import LearnTab from "./LearnTab";
 import PlotsTab from "./PlotsTab";
 import StampsTab from "./StampsTab";
 import RadialNavWheel from "./RadialNavWheel";
+import { BusyButton, InlineError } from "./shared/controls";
 import { SupportFooter, SystemSupportModal } from "./SystemSupport";
+import { EmptyState, Field, Sheet, StateBlock, useSheetClose } from "./ui";
 
 export type PortalTabId = "home" | "plots" | "diary" | "stamps" | "inspection" | "learn";
 
@@ -46,17 +53,147 @@ const TABS: { id: PortalTabId; label: string; icon: LucideIcon }[] = [
   { id: "learn", label: "Kiến thức", icon: BookOpen },
 ];
 
+function resolveNotificationTarget(item: AppNotification): PortalTabId {
+  const kind = (item.kind || "").toLowerCase();
+  if (kind === "violation" || kind === "journal" || kind === "spray") return "diary";
+  if (kind === "harvest") return "stamps";
+  if (kind === "schedule" || kind === "lab") return "inspection";
+  if (kind === "training") return "learn";
+
+  const link = (item.link || "").toLowerCase();
+  if (link.includes("plot")) return "plots";
+  if (link.includes("diary") || link.includes("journal") || link.includes("spray") || link.includes("violation")) {
+    return "diary";
+  }
+  if (link.includes("stamp") || link.includes("harvest")) return "stamps";
+  if (link.includes("inspect") || link.includes("lab") || link.includes("schedule")) {
+    return "inspection";
+  }
+  if (link.includes("learn") || link.includes("training")) return "learn";
+
+  return "home";
+}
+
+function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onClose: () => void }) {
+  const sheetClose = useSheetClose();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      setError("Mật khẩu mới phải có tối thiểu 8 ký tự.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Xác nhận mật khẩu mới chưa khớp.");
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setError("Mật khẩu mới phải khác mật khẩu hiện tại.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await api.post("/auth/change-password", { currentPassword, newPassword });
+      onSuccess();
+    } catch (err) {
+      setError(errorMessage(err, "Không đổi được mật khẩu. Vui lòng kiểm tra lại mật khẩu hiện tại."));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="pt-form" onSubmit={submit}>
+      <Field label="Mật khẩu hiện tại" htmlFor="cp-current">
+        <input
+          id="cp-current"
+          type="password"
+          autoComplete="current-password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          required
+        />
+      </Field>
+      <Field label="Mật khẩu mới (ít nhất 8 ký tự)" htmlFor="cp-new">
+        <input
+          id="cp-new"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          required
+        />
+      </Field>
+      <Field label="Nhập lại mật khẩu mới" htmlFor="cp-confirm">
+        <input
+          id="cp-confirm"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+        />
+      </Field>
+      <p className="pt-hint">Sau khi đổi mật khẩu thành công, hệ thống sẽ đăng xuất để bạn đăng nhập lại bằng mật khẩu mới.</p>
+      <InlineError message={error} />
+      <div className="pt-form-actions">
+        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose} disabled={saving}>
+          Hủy
+        </button>
+        <BusyButton
+          type="submit"
+          className="pt-btn pt-btn-primary"
+          busy={saving}
+          busyLabel="Đang cập nhật…"
+          disabled={!currentPassword || !newPassword || !confirmPassword}
+        >
+          Lưu mật khẩu mới
+        </BusyButton>
+      </div>
+    </form>
+  );
+}
+
 /** Cổng dành cho hộ dân (tài khoản vai trò Nông dân). Cán bộ được chuyển về trang quản trị. */
 export default function PortalApp() {
   const router = useRouter();
   const { status, session, logout } = useAuth();
   const { data: overview } = usePortal<PortalOverview>("overview");
-  const [tab, setTab] = useState<PortalTabId>("home");
-  const [visitedTabs, setVisitedTabs] = useState<Set<PortalTabId>>(() => new Set(["home"]));
+  const { data: profile } = usePortal<PortalProfile>("profile");
+  const notifications = useSharedQuery<NotificationList>(
+    status === "authenticated" && session?.user.role === "farmer" ? NOTIFICATIONS_PATH : null,
+  );
+
+  const [tab, setTab] = useState<PortalTabId>(() => {
+    if (typeof window === "undefined") return "home";
+    const tabParam = new URLSearchParams(window.location.search).get("tab");
+    if (tabParam && TABS.some((t) => t.id === tabParam)) {
+      return tabParam as PortalTabId;
+    }
+    return "home";
+  });
+  const [visitedTabs, setVisitedTabs] = useState<Set<PortalTabId>>(() => {
+    if (typeof window === "undefined") return new Set(["home"]);
+    const tabParam = new URLSearchParams(window.location.search).get("tab");
+    if (tabParam && TABS.some((t) => t.id === tabParam)) {
+      return new Set<PortalTabId>(["home", tabParam as PortalTabId]);
+    }
+    return new Set(["home"]);
+  });
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileClosing, setProfileClosing] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [navWheelOpen, setNavWheelOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -64,15 +201,6 @@ export default function PortalApp() {
   const closeSupport = useCallback(() => setSupportOpen(false), []);
 
   const currentTabItem = useMemo(() => TABS.find((t) => t.id === tab) || TABS[0], [tab]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tabParam = params.get("tab") as PortalTabId;
-    if (tabParam && TABS.some((t) => t.id === tabParam)) {
-      setVisitedTabs((prev) => new Set(prev).add(tabParam));
-      setTab(tabParam);
-    }
-  }, []);
 
   const navigate = useCallback((next: PortalTabId) => {
     setNavWheelOpen(false);
@@ -122,7 +250,6 @@ export default function PortalApp() {
     else if (status === "authenticated" && session?.user.role !== "farmer") router.replace("/admin");
   }, [status, session, router]);
 
-  // Đóng popup khi click ngoài hoặc nhấn ESC (chạy qua closeProfile để có animation đóng êm)
   useEffect(() => {
     if (!profileOpen) return;
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
@@ -156,22 +283,54 @@ export default function PortalApp() {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
   }
 
-  const household = overview?.household;
-  const displayName = household?.name || session?.user.fullName || "Hộ thành viên";
-  const initials = displayName
-    .split(" ")
-    .filter(Boolean)
-    .slice(-2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase() || "HD";
+  const profHousehold = profile?.household ?? overview?.household;
+  const profAccount = profile?.account;
+  const displayName = profHousehold?.name || profAccount?.fullName || session?.user.fullName || "Hộ thành viên";
+  const householdStatus = HOUSEHOLD_STATUS[profHousehold?.status ?? "pending"] ?? HOUSEHOLD_STATUS.pending;
+  const initials =
+    displayName
+      .split(" ")
+      .filter(Boolean)
+      .slice(-2)
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase() || "HD";
+
+  const unreadCount = notifications.data?.unread ?? overview?.stats.unreadNotifications ?? 0;
+  const notifItems = notifications.data?.data ?? [];
+
+  const handleMarkRead = async (item: AppNotification) => {
+    if (!item.readAt) {
+      try {
+        await api.post(`/notifications/${item.id}/read`);
+        invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
+      } catch {
+        // Ignore read error and still navigate
+      }
+    }
+    const target = resolveNotificationTarget(item);
+    setNotifOpen(false);
+    navigate(target);
+  };
+
+  const handleMarkAllRead = async () => {
+    setMarkingAll(true);
+    try {
+      await api.post("/notifications/read-all");
+      invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
+    } catch {
+      // Ignore
+    } finally {
+      setMarkingAll(false);
+    }
+  };
 
   return (
     <div className="pt-app">
       <div className="pt-bg-backdrop" aria-hidden="true" />
       <header className="pt-topbar">
         <div className="pt-topbar-inner">
-          {/* Logo thương hiệu HTX Krông Búk (chỉ hiển thị trên màn hình Desktop/Laptop) */}
+          {/* Logo thương hiệu HTX Krông Búk (hiển thị trên Desktop/Laptop) */}
           <Link href={INTRO_PATH} className="pt-brand" aria-label="HTX Krông Búk – về trang giới thiệu" title="Về trang giới thiệu">
             <span className="pt-brand-mark" aria-hidden="true">
               <Image src="/logo.png" alt="" width={30} height={30} />
@@ -207,8 +366,22 @@ export default function PortalApp() {
             })}
           </nav>
 
-          {/* Cụm Avatar & Popup tài khoản (trên Desktop ở góc phải; trên Mobile tự động chuyển sang góc trái) */}
-          <div className="pt-topbar-profile" ref={profileMenuRef}>
+          {/* Cụm Chuông thông báo + Avatar & Popup tài khoản */}
+          <div className="pt-topbar-profile" ref={profileMenuRef} style={{ gap: 8 }}>
+            <button
+              id="portal-notifications-toggle"
+              type="button"
+              className="pt-notif-btn"
+              onClick={() => setNotifOpen(true)}
+              aria-label={unreadCount > 0 ? `Thông báo (${unreadCount} chưa đọc)` : "Thông báo"}
+              title="Thông báo từ HTX"
+            >
+              <Bell size={18} strokeWidth={2.1} aria-hidden="true" />
+              {unreadCount > 0 && (
+                <span className="pt-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+              )}
+            </button>
+
             {(profileOpen || profileClosing) && (
               <div
                 className={`pt-profile-backdrop ${profileClosing ? "is-closing" : ""}`}
@@ -217,7 +390,6 @@ export default function PortalApp() {
               />
             )}
 
-            {/* Avatar chỉ là 1 hình tròn duy nhất, click vào bật popup */}
             <button
               id="portal-profile-toggle"
               type="button"
@@ -230,7 +402,6 @@ export default function PortalApp() {
               <span className="pt-avatar">{initials}</span>
             </button>
 
-            {/* Popup chi tiết tài khoản khi bấm vào avatar */}
             {(profileOpen || profileClosing) && (
               <div
                 id="portal-profile-dropdown"
@@ -239,7 +410,6 @@ export default function PortalApp() {
                 aria-modal="true"
                 aria-label="Thông tin tài khoản hộ dân"
               >
-                {/* Header: Avatar lớn + Tên + Mã hộ */}
                 <div className="pt-profile-popup-head">
                   <div className="pt-profile-avatar-lg">
                     <span>{initials}</span>
@@ -248,41 +418,53 @@ export default function PortalApp() {
                     <strong className="pt-profile-name">{displayName}</strong>
                     <div className="pt-profile-badges">
                       <span className="pt-profile-kicker">
-                        {household?.code ? `MÃ: ${household.code}` : "HỘ THÀNH VIÊN"}
+                        {profHousehold?.code ? `MÃ: ${profHousehold.code}` : "HỘ THÀNH VIÊN"}
                       </span>
-                      <span className="pt-profile-status">Đủ chuẩn xuất khẩu</span>
+                      <span className={`pt-profile-status is-${householdStatus.tone}`}>
+                        {householdStatus.label}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Body: Thông tin chi tiết */}
                 <div className="pt-profile-details">
                   <div className="pt-profile-row">
                     <Phone size={15} className="pt-profile-icon" aria-hidden="true" />
                     <div className="pt-profile-row-content">
-                      <span className="pt-profile-label">Số điện thoại</span>
+                      <span className="pt-profile-label">Số điện thoại / Tài khoản</span>
                       <strong className="pt-profile-val">
-                        {household?.phone || session?.user.username || "Chưa cập nhật"}
+                        {profHousehold?.phone || "Chưa cập nhật"}
+                        {profAccount?.username ? ` (${profAccount.username})` : ""}
                       </strong>
                     </div>
                   </div>
+
+                  {profile?.household.cccdMasked && (
+                    <div className="pt-profile-row">
+                      <CreditCard size={15} className="pt-profile-icon" aria-hidden="true" />
+                      <div className="pt-profile-row-content">
+                        <span className="pt-profile-label">CCCD chủ hộ</span>
+                        <strong className="pt-profile-val">{profile.household.cccdMasked}</strong>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="pt-profile-row">
                     <MapPin size={15} className="pt-profile-icon" aria-hidden="true" />
                     <div className="pt-profile-row-content">
                       <span className="pt-profile-label">Địa bàn canh tác</span>
                       <strong className="pt-profile-val">
-                        {household?.villageName || "Thôn 1"}, Xã Krông Búk
+                        {profHousehold?.villageName ? `${profHousehold.villageName}, Xã Krông Búk` : "Xã Krông Búk"}
                       </strong>
                     </div>
                   </div>
 
-                  {household?.villageLeader && (
+                  {profHousehold?.villageLeader && (
                     <div className="pt-profile-row">
                       <UserCheck size={15} className="pt-profile-icon" aria-hidden="true" />
                       <div className="pt-profile-row-content">
                         <span className="pt-profile-label">Trưởng thôn phụ trách</span>
-                        <strong className="pt-profile-val">{household.villageLeader}</strong>
+                        <strong className="pt-profile-val">{profHousehold.villageLeader}</strong>
                       </div>
                     </div>
                   )}
@@ -292,14 +474,27 @@ export default function PortalApp() {
                     <div className="pt-profile-row-content">
                       <span className="pt-profile-label">Quy mô vườn sầu riêng</span>
                       <strong className="pt-profile-val">
-                        {household?.plotCount ?? 3} thửa đất · {household?.areaHa ? household.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 }) : "2,4"} ha
+                        {profHousehold?.plotCount ?? 0} thửa đất ·{" "}
+                        {(profHousehold?.areaHa ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
                       </strong>
                     </div>
                   </div>
                 </div>
 
-                {/* Footer: Về trang giới thiệu + Nút đăng xuất */}
                 <div className="pt-profile-footer">
+                  <button
+                    type="button"
+                    className="pt-profile-intro-btn"
+                    onClick={() => {
+                      closeProfile();
+                      setPasswordOpen(true);
+                    }}
+                  >
+                    <KeyRound size={15} aria-hidden="true" />
+                    <span>Đổi mật khẩu</span>
+                    <ArrowUpRight size={14} className="pt-profile-intro-arrow" aria-hidden="true" />
+                  </button>
+
                   <Link
                     href={INTRO_PATH}
                     className="pt-profile-intro-btn"
@@ -328,7 +523,7 @@ export default function PortalApp() {
             )}
           </div>
 
-          {/* Phần điều hướng trên mobile: Nút tròn có dấu mũi tên (chỉ hiện trên Mobile ở góc phải) */}
+          {/* Phần điều hướng trên mobile: Nút tròn có dấu mũi tên */}
           <div className="pt-topbar-nav">
             <button
               id="portal-radial-toggle"
@@ -385,14 +580,88 @@ export default function PortalApp() {
         )}
       </main>
 
-      {/* Hộp thoại hỗ trợ hệ thống (tối giản, thông tin rõ ràng) */}
+      {notifOpen && (
+        <Sheet title="Thông báo từ HTX" onClose={() => setNotifOpen(false)}>
+          <div className="pt-stack" style={{ gap: 14 }}>
+            {unreadCount > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                  Bạn có <strong>{unreadCount}</strong> thông báo chưa đọc
+                </span>
+                <BusyButton
+                  type="button"
+                  className="pt-btn pt-btn-ghost pt-btn-sm"
+                  busy={markingAll}
+                  busyLabel="Đang đánh dấu…"
+                  onClick={() => void handleMarkAllRead()}
+                >
+                  <CheckCheck size={15} aria-hidden="true" />
+                  <span>Đánh dấu đã đọc hết</span>
+                </BusyButton>
+              </div>
+            )}
+
+            <StateBlock loading={notifications.loading} error={notifications.error} variant="rows" />
+
+            {!notifications.loading && notifItems.length === 0 && (
+              <EmptyState icon="ok">Hiện chưa có thông báo mới nào từ HTX.</EmptyState>
+            )}
+
+            {notifItems.length > 0 && (
+              <ul className="pt-list">
+                {notifItems.map((item) => {
+                  const isUnread = !item.readAt;
+                  return (
+                    <li
+                      key={item.id}
+                      className={`pt-notif-item ${isUnread ? "is-unread" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void handleMarkRead(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          void handleMarkRead(item);
+                        }
+                      }}
+                    >
+                      <div className="pt-notif-dot-col">
+                        <span className={`pt-notif-dot ${isUnread ? "is-active" : ""}`} aria-hidden="true" />
+                      </div>
+                      <div className="pt-notif-content">
+                        <div className="pt-notif-head">
+                          <strong>{item.title}</strong>
+                          <span className="pt-notif-time">{formatDate(item.createdAt)}</span>
+                        </div>
+                        {item.body && <p className="pt-notif-body">{item.body}</p>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </Sheet>
+      )}
+
+      {passwordOpen && (
+        <Sheet title="Đổi mật khẩu tài khoản" onClose={() => setPasswordOpen(false)}>
+          <ChangePasswordForm
+            onSuccess={() => {
+              setPasswordOpen(false);
+              void logout();
+            }}
+            onClose={() => setPasswordOpen(false)}
+          />
+        </Sheet>
+      )}
+
       <SystemSupportModal
         open={supportOpen}
         onClose={closeSupport}
         household={overview?.household}
       />
 
-      {/* Điều hướng trục tròn dạng bánh xe uốn cong trên Mobile */}
       <RadialNavWheel
         currentTab={tab}
         onSelectTab={navigate}

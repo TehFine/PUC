@@ -1,20 +1,32 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { Camera, ChevronRight, X } from "lucide-react";
-import { usePortal } from "@/hooks/use-portal";
-import { useResource } from "@/hooks/use-resource";
-import { ApiError, api } from "@/lib/api-client";
-import { JOURNAL_ACTIVITIES, todayIso } from "@/lib/portal-labels";
+import { FormEvent, useState } from "react";
+import { AlertTriangle, CheckCircle2, ChevronRight, MessageSquareReply, Trash2 } from "lucide-react";
+import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
+import { api, errorMessage } from "@/lib/api-client";
+import { JOURNAL_ACTIVITIES, todayIso, toNumber } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
-import type { PortalJournalEntry, PortalList, PortalPlots, PortalSprayRecord } from "@/types/portal";
-import { EmptyState, Field, Pill, Sheet, StateBlock, useSheetClose } from "./ui";
+import type {
+  CreateJournalBody,
+  CreateSprayBody,
+  PortalJournalEntry,
+  PortalList,
+  PortalPlots,
+  PortalSprayRecord,
+  PortalViolation,
+} from "@/types/portal";
+import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
+import { Card, EmptyState, Field, Pill, Sheet, StateBlock, useSheetClose } from "./ui";
 
-const keep = (pesticide: PesticideDto) => pesticide;
-
-const errorText = (error: unknown) =>
-  error instanceof ApiError || error instanceof Error ? error.message : "Không lưu được. Vui lòng thử lại.";
+function canDeleteEntry(entry: PortalJournalEntry): boolean {
+  if (typeof entry.canDelete === "boolean") return entry.canDelete;
+  if (entry.recorder !== "Chủ hộ") return false;
+  if (!entry.createdAt) return false;
+  const createdMs = new Date(entry.createdAt).getTime();
+  if (!Number.isFinite(createdMs)) return false;
+  return Date.now() - createdMs < 24 * 60 * 60 * 1000;
+}
 
 function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDone: () => void; onClose: () => void }) {
   const sheetClose = useSheetClose();
@@ -22,40 +34,41 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
   const [plotCode, setPlotCode] = useState(plotCodes[0] ?? "");
   const [activity, setActivity] = useState(JOURNAL_ACTIVITIES[0]);
   const [detail, setDetail] = useState("");
-  const [gpsLocation, setGpsLocation] = useState<string | null>(null);
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [photoFileName, setPhotoFileName] = useState<string>("");
+  const photo = usePhotoPicker("journal");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Tự động đồng bộ thửa đất khi danh sách plotCodes tải xong
-  useEffect(() => {
-    if (!plotCode && plotCodes.length > 0) {
-      setPlotCode(plotCodes[0]);
-    }
-  }, [plotCodes, plotCode]);
 
   const effectivePlot = plotCode || plotCodes[0] || "";
 
   const getGps = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGpsLocation("GPS: 12.87241, 108.13452 (Krông Búk)");
+      setCoords(null);
+      setGpsStatus("Thiết bị hoặc trình duyệt không hỗ trợ định vị GPS.");
       return;
     }
     setLocating(true);
+    setGpsStatus(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const lat = pos.coords.latitude.toFixed(5);
-        const lng = pos.coords.longitude.toFixed(5);
-        setGpsLocation(`GPS: ${lat}, ${lng}`);
+        const latitude = Number(pos.coords.latitude.toFixed(6));
+        const longitude = Number(pos.coords.longitude.toFixed(6));
+        setCoords({ latitude, longitude });
+        setGpsStatus(`Đã định vị: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
         setLocating(false);
       },
-      () => {
+      (err) => {
         setLocating(false);
-        setGpsLocation("GPS: 12.87241, 108.13452 (Krông Búk)");
+        setCoords(null);
+        setGpsStatus(
+          err.code === err.PERMISSION_DENIED
+            ? "Chưa cấp quyền vị trí GPS. Bạn vẫn có thể lưu nhật ký không kèm tọa độ."
+            : "Không lấy được tín hiệu GPS hiện tại. Bạn vẫn có thể lưu nhật ký.",
+        );
       },
-      { timeout: 7000 },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
     );
   };
 
@@ -66,30 +79,33 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
       setError("Vui lòng chọn hoặc nhập mã thửa đất.");
       return;
     }
-    if (!photoUrl) {
-      setError("Bắt buộc phải chụp hoặc tải lên ít nhất 1 ảnh hiện trường vườn trước khi lưu.");
+    if (!photo.file) {
+      setError("Vui lòng chụp hoặc chọn ảnh hiện trường vườn trước khi lưu.");
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const finalDetail = [detail.trim(), gpsLocation].filter(Boolean).join(" · ");
-      const created = await api.post<PortalJournalEntry>("/portal/journal", {
+      const photoId = await photo.ensureUploaded();
+      if (!photoId) {
+        setError("Vui lòng chụp hoặc chọn ảnh hiện trường vườn.");
+        setSaving(false);
+        return;
+      }
+      const body: CreateJournalBody = {
         entryOn,
         plotCode: finalPlot,
         activity,
-        detail: finalDetail || undefined,
-      });
-      if (created?.id && photoUrl && typeof window !== "undefined") {
-        try {
-          localStorage.setItem(`journal_photo_${created.id}`, photoUrl);
-        } catch {
-          // Bỏ qua nếu đầy quota local storage
-        }
-      }
+        detail: detail.trim() || undefined,
+        photoId,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
+      };
+      await api.post<PortalJournalEntry>("/portal/journal", body);
+      invalidatePortal("journal", "spray", "violations", "overview");
       onDone();
     } catch (err) {
-      setError(errorText(err));
+      setError(errorMessage(err, "Không lưu được nhật ký. Vui lòng thử lại."));
       setSaving(false);
     }
   };
@@ -125,7 +141,7 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
           ) : (
             <input
               id="pj-plot"
-              placeholder="Ví dụ: KB-VT-001"
+              placeholder="Nhập mã thửa đất"
               value={plotCode}
               onChange={(e) => setPlotCode(e.target.value)}
               required
@@ -161,17 +177,19 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
 
       <div className="pt-journal-gps-card">
         <div className="pt-journal-gps-text">
-          <span className="pt-journal-gps-title">Tọa độ GPS vườn</span>
+          <span className="pt-journal-gps-title">Tọa độ GPS vườn (tùy chọn)</span>
           <span className="pt-journal-gps-desc">
-            {gpsLocation ? gpsLocation.replace("GPS: ", "") : "Chưa định vị (khuyến nghị gắn GPS xác thực tại vườn)"}
+            {coords
+              ? `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`
+              : gpsStatus || "Chưa định vị (khuyến nghị gắn GPS xác thực tại vườn)"}
           </span>
         </div>
         <button
           type="button"
-          className={`pt-gps-btn ${gpsLocation ? "is-active" : ""}`}
+          className={`pt-gps-btn ${coords ? "is-active" : ""}`}
           onClick={getGps}
-          disabled={locating}
-          title={gpsLocation ? `Đã định vị: ${gpsLocation}` : "Lấy vị trí định vị của vườn hiện tại"}
+          disabled={locating || saving}
+          title={coords ? `Đã định vị: ${coords.latitude}, ${coords.longitude}` : "Lấy vị trí định vị của vườn hiện tại"}
         >
           <img
             src="/location-pin.png"
@@ -181,93 +199,55 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
             className="pt-gps-icon"
             aria-hidden="true"
           />
-          <span>{locating ? "Đang lấy GPS…" : gpsLocation ? "Cập nhật GPS" : "Định vị vườn"}</span>
+          <span>{locating ? "Đang lấy GPS…" : coords ? "Cập nhật GPS" : "Định vị vườn"}</span>
         </button>
       </div>
 
-      {/* Ô tải ảnh hiện trường bắt buộc */}
-      <div className="pt-journal-photo-field">
-        <div className="pt-journal-photo-header">
-          <label className="pt-journal-photo-label" htmlFor="pj-photo-input">
-            Ảnh chụp hiện trường vườn
-          </label>
-          <span className="pt-journal-photo-required">* Bắt buộc</span>
-        </div>
+      <PhotoField
+        id="pj-photo-input"
+        label="Ảnh chụp hiện trường vườn"
+        picker={photo}
+        required
+        title="Chụp ảnh hoặc tải ảnh hiện trường"
+        description="Bấm để mở máy ảnh hoặc chọn ảnh thực tế tại vườn (tự động nén nhanh)"
+        disabled={saving}
+      />
 
-        {photoUrl ? (
-          <div className="pt-photo-preview-wrap">
-            <img src={photoUrl} alt="Xem trước ảnh hiện trường" className="pt-photo-preview-img" />
-            <div className="pt-photo-preview-bar">
-              <span>{photoFileName || "Ảnh hiện trường đã chọn"}</span>
-              <span>✓ Đã đính kèm</span>
-            </div>
-            <button
-              type="button"
-              className="pt-photo-remove-btn"
-              onClick={() => {
-                setPhotoUrl(null);
-                setPhotoFileName("");
-              }}
-              title="Xóa và chụp lại ảnh khác"
-              aria-label="Xóa ảnh hiện trường"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        ) : (
-          <label className="pt-photo-dropzone" htmlFor="pj-photo-input">
-            <input
-              id="pj-photo-input"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                if (file.size > 10 * 1024 * 1024) {
-                  setError("Dung lượng ảnh không được vượt quá 10MB.");
-                  return;
-                }
-                setPhotoFileName(file.name);
-                const reader = new FileReader();
-                reader.onload = () => {
-                  setPhotoUrl(reader.result as string);
-                  setError(null);
-                };
-                reader.readAsDataURL(file);
-              }}
-            />
-            <div className="pt-photo-dropzone-icon">
-              <Camera size={22} aria-hidden="true" />
-            </div>
-            <span className="pt-photo-dropzone-title">Chụp ảnh hoặc Tải ảnh hiện trường</span>
-            <span className="pt-photo-dropzone-desc">Bấm để mở máy ảnh hoặc chọn ảnh thực tế tại vườn</span>
-          </label>
-        )}
-      </div>
-
-      {error && <p className="pt-form-error" role="alert">{error}</p>}
+      <InlineError message={error} />
       <div className="pt-form-actions">
-        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose}>
+        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose} disabled={saving}>
           Hủy
         </button>
-        <button
+        <BusyButton
           type="submit"
           className="pt-btn pt-btn-primary"
-          disabled={saving || !effectivePlot.trim() || !photoUrl}
-          title={!photoUrl ? "Vui lòng chụp ảnh hiện trường trước khi lưu" : undefined}
+          busy={saving}
+          busyLabel="Đang tải ảnh & lưu…"
+          disabled={!effectivePlot.trim() || !photo.file}
+          title={!photo.file ? "Vui lòng chụp ảnh hiện trường trước khi lưu" : undefined}
         >
-          {saving ? "Đang lưu…" : "Lưu nhật ký"}
-        </button>
+          Lưu nhật ký
+        </BusyButton>
       </div>
     </form>
   );
 }
 
-function SprayForm({ plotsHint, onDone, onClose }: { plotsHint: string; onDone: () => void; onClose: () => void }) {
+function SprayForm({
+  plotCodes,
+  plotsHint,
+  onDone,
+  onClose,
+}: {
+  plotCodes: string[];
+  plotsHint: string;
+  onDone: () => void;
+  onClose: () => void;
+}) {
   const sheetClose = useSheetClose();
-  const pesticides = useResource<PesticideDto, PesticideDto>("pesticides", keep);
+  const pesticides = useCatalog<PesticideDto>("pesticides");
   const [sprayedOn, setSprayedOn] = useState(todayIso());
+  const [plotCode, setPlotCode] = useState<string | null>(null);
   const [pesticideId, setPesticideId] = useState("");
   const [dose, setDose] = useState("");
   const [areaHa, setAreaHa] = useState("");
@@ -275,46 +255,75 @@ function SprayForm({ plotsHint, onDone, onClose }: { plotsHint: string; onDone: 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const chosen = pesticides.data.find((item) => String(item.id) === pesticideId);
+  const effectivePlot = plotCode ?? plotCodes[0] ?? "";
+  const chosen = pesticides.rows.find((item) => String(item.id) === pesticideId);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      await api.post("/portal/spray", {
+      const body: CreateSprayBody = {
         sprayedOn,
         pesticideId: Number(pesticideId),
         dose: dose.trim(),
         areaHa: Number(areaHa),
         source: source.trim() || undefined,
-      });
+        plotCode: effectivePlot.trim() || undefined,
+      };
+      await api.post("/portal/spray", body);
+      invalidatePortal("journal", "spray", "violations", "overview");
       onDone();
     } catch (err) {
-      setError(errorText(err));
+      setError(errorMessage(err, "Không lưu được nhật ký phun thuốc."));
       setSaving(false);
     }
   };
 
   return (
     <form className="pt-form" onSubmit={submit}>
-      <Field label="Ngày phun" htmlFor="ps-date">
-        <input
-          id="ps-date"
-          type="date"
-          className="pt-input-date"
-          max={todayIso()}
-          value={sprayedOn}
-          onChange={(e) => setSprayedOn(e.target.value)}
-          required
-        />
-      </Field>
+      <div className="pt-field-row">
+        <Field label="Ngày phun" htmlFor="ps-date">
+          <input
+            id="ps-date"
+            type="date"
+            className="pt-input-date"
+            max={todayIso()}
+            value={sprayedOn}
+            onChange={(e) => setSprayedOn(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Thửa đất" htmlFor="ps-plot">
+          {plotCodes.length > 0 ? (
+            <select
+              id="ps-plot"
+              value={effectivePlot}
+              onChange={(e) => setPlotCode(e.target.value)}
+            >
+              <option value="">Tất cả thửa / Toàn vườn</option>
+              {plotCodes.map((code) => (
+                <option key={code} value={code}>
+                  Thửa {code}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="ps-plot"
+              placeholder="Mã thửa (không bắt buộc)"
+              value={effectivePlot}
+              onChange={(e) => setPlotCode(e.target.value)}
+            />
+          )}
+        </Field>
+      </div>
       <Field label="Loại thuốc" htmlFor="ps-pesticide">
         <select id="ps-pesticide" value={pesticideId} onChange={(e) => setPesticideId(e.target.value)} required>
           <option value="" disabled>
             {pesticides.loading ? "Đang tải danh mục…" : "Chọn thuốc"}
           </option>
-          {pesticides.data.map((item) => (
+          {pesticides.rows.map((item) => (
             <option key={item.id} value={item.id}>
               {item.name}
               {item.status === "banned" ? " (BỊ CẤM)" : ""}
@@ -342,14 +351,20 @@ function SprayForm({ plotsHint, onDone, onClose }: { plotsHint: string; onDone: 
         <input id="ps-source" placeholder="Tên đại lý" value={source} onChange={(e) => setSource(e.target.value)} />
       </Field>
       <p className="pt-hint">{plotsHint}</p>
-      {error && <p className="pt-form-error" role="alert">{error}</p>}
+      <InlineError message={error} />
       <div className="pt-form-actions">
-        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose}>
+        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose} disabled={saving}>
           Hủy
         </button>
-        <button type="submit" className="pt-btn pt-btn-primary" disabled={saving || !pesticideId || !dose.trim() || !areaHa}>
-          {saving ? "Đang lưu…" : "Lưu nhật ký phun"}
-        </button>
+        <BusyButton
+          type="submit"
+          className="pt-btn pt-btn-primary"
+          busy={saving}
+          busyLabel="Đang lưu…"
+          disabled={!pesticideId || !dose.trim() || !areaHa}
+        >
+          Lưu nhật ký phun
+        </BusyButton>
       </div>
     </form>
   );
@@ -397,30 +412,35 @@ const VIETGAP_RULES: VietgapRule[] = [
   },
 ];
 
-function getJournalPhoto(entry: PortalJournalEntry): string | null {
-  if (typeof window !== "undefined") {
-    const saved = localStorage.getItem(`journal_photo_${entry.id}`);
-    if (saved) return saved;
-  }
-  if (!entry.hasPhoto) return null;
-  const act = (entry.activity || "").toLowerCase();
-  if (act.includes("phun")) return "/landing/news-protection.jpg";
-  if (act.includes("cắt") || act.includes("tưới")) return "/landing/news-field-visit.jpg";
-  if (act.includes("bón") || act.includes("tỉa")) return "/landing/durian-tree.jpg";
-  return "/landing/durian-landscape-real.jpg";
-}
+function JournalDetailModal({
+  entry,
+  onClose,
+  onDeleted,
+}: {
+  entry: PortalJournalEntry;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-function JournalDetailModal({ entry, onClose }: { entry: PortalJournalEntry; onClose: () => void }) {
-  const photoSrc = getJournalPhoto(entry);
-  const hasGps = entry.detail?.includes("GPS:");
-  let cleanDetail = entry.detail || "";
-  let gpsText = "";
-  if (hasGps && entry.detail) {
-    const parts = entry.detail.split(" · ");
-    const gpsPart = parts.find((p) => p.startsWith("GPS:"));
-    gpsText = gpsPart ? gpsPart.replace("GPS:", "").trim() : "";
-    cleanDetail = parts.filter((p) => !p.startsWith("GPS:")).join(" · ");
-  }
+  const lat = toNumber(entry.latitude);
+  const lng = toNumber(entry.longitude);
+  const hasRealCoords = lat !== null && lng !== null;
+  const allowDelete = canDeleteEntry(entry);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.delete(`/portal/journal/${entry.id}`);
+      invalidatePortal("journal", "spray", "overview");
+      onDeleted();
+    } catch (err) {
+      setDeleteError(errorMessage(err, "Không xóa được bản ghi nhật ký."));
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="pt-diary-detail-body">
@@ -433,7 +453,7 @@ function JournalDetailModal({ entry, onClose }: { entry: PortalJournalEntry; onC
           <div className="pt-detail-hero-sub">
             <span className="pt-detail-badge-plot">Thửa {entry.plotCode}</span>
             <span className="pt-detail-date">{formatDate(entry.entryOn)}</span>
-            {entry.hasPhoto && <Pill tone="green">Có ảnh hiện trường</Pill>}
+            {entry.photoUrl && <Pill tone="green">Có ảnh hiện trường</Pill>}
           </div>
         </div>
       </div>
@@ -457,7 +477,7 @@ function JournalDetailModal({ entry, onClose }: { entry: PortalJournalEntry; onC
         </div>
       </div>
 
-      {gpsText && (
+      {hasRealCoords && (
         <div className="pt-detail-gps-box">
           <img
             src="/location-pin.png"
@@ -468,8 +488,10 @@ function JournalDetailModal({ entry, onClose }: { entry: PortalJournalEntry; onC
             aria-hidden="true"
           />
           <div>
-            <div className="pt-detail-gps-title">Tọa độ vườn</div>
-            <div className="pt-detail-gps-coords">{gpsText}</div>
+            <div className="pt-detail-gps-title">Tọa độ GPS thực địa</div>
+            <div className="pt-detail-gps-coords">
+              {lat.toFixed(5)}, {lng.toFixed(5)}
+            </div>
           </div>
         </div>
       )}
@@ -478,18 +500,17 @@ function JournalDetailModal({ entry, onClose }: { entry: PortalJournalEntry; onC
       <div className="pt-detail-section">
         <div className="pt-detail-section-header">
           <h4 className="pt-detail-section-title">Ảnh chụp hiện trường vườn</h4>
-          {entry.hasPhoto && <span className="pt-detail-photo-tag">✓ Đã xác thực thực địa</span>}
+          {entry.photoUrl && <span className="pt-detail-photo-tag">✓ Đã xác thực thực địa</span>}
         </div>
-        {photoSrc ? (
-          <div className="pt-detail-photo-frame">
-            <img src={photoSrc} alt={`Hiện trường ${entry.activity}`} className="pt-detail-photo-img" />
-            <div className="pt-detail-photo-overlay">
-              <span>Thửa {entry.plotCode} · Ngày {formatDate(entry.entryOn)}</span>
-            </div>
-          </div>
+        {entry.photoUrl ? (
+          <StoredPhoto
+            url={entry.photoUrl}
+            alt={`Hiện trường ${entry.activity}`}
+            caption={`Thửa ${entry.plotCode} · Ngày ${formatDate(entry.entryOn)}`}
+          />
         ) : (
           <div className="pt-detail-no-photo">
-            <span>Chưa có ảnh đính kèm cho lần ghi chép này.</span>
+            <span>Bản ghi này không có tệp ảnh đính kèm trên máy chủ.</span>
           </div>
         )}
       </div>
@@ -497,16 +518,32 @@ function JournalDetailModal({ entry, onClose }: { entry: PortalJournalEntry; onC
       <div className="pt-detail-section">
         <h4 className="pt-detail-section-title">Nội dung công việc & vật tư sử dụng</h4>
         <div className="pt-detail-content-box">
-          {cleanDetail ? (
-            <p className="pt-detail-text">{cleanDetail}</p>
+          {entry.detail ? (
+            <p className="pt-detail-text">{entry.detail}</p>
           ) : (
             <p className="pt-detail-empty">Không có ghi chú thêm cho lần canh tác này.</p>
           )}
         </div>
       </div>
 
-      <div className="pt-detail-footer">
-        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={onClose}>
+      <InlineError message={deleteError} />
+
+      <div className="pt-detail-footer" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {allowDelete && (
+          <ConfirmButton
+            label={
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Trash2 size={15} aria-hidden="true" />
+                <span>Xóa bản ghi này (trong 24h)</span>
+              </span>
+            }
+            question="Xác nhận xóa bản ghi nhật ký này?"
+            confirmLabel="Xóa nhật ký"
+            busy={deleting}
+            onConfirm={handleDelete}
+          />
+        )}
+        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={onClose} disabled={deleting}>
           Đóng chi tiết
         </button>
       </div>
@@ -527,6 +564,7 @@ function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onCl
         <div className="pt-detail-hero-info">
           <h3 className="pt-detail-hero-title">{record.pesticide}</h3>
           <div className="pt-detail-hero-sub">
+            {record.plotCode && <span className="pt-detail-badge-plot">Thửa {record.plotCode}</span>}
             <span className="pt-detail-date">{formatDate(record.sprayedOn)}</span>
             {isPass ? <Pill tone="green">Đạt chuẩn MRL</Pill> : <Pill tone="red">Không đạt chuẩn</Pill>}
             {isBanned && <Pill tone="red">Thuốc cấm</Pill>}
@@ -541,7 +579,9 @@ function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onCl
         </div>
         <div className="pt-detail-cell">
           <span className="pt-detail-cell-label">Diện tích phun</span>
-          <span className="pt-detail-cell-value">{record.areaHa} ha</span>
+          <span className="pt-detail-cell-value">
+            {record.areaHa} ha{record.plotCode ? ` · Thửa ${record.plotCode}` : ""}
+          </span>
         </div>
         <div className="pt-detail-cell">
           <span className="pt-detail-cell-label">Cách ly trước thu hoạch (PHI)</span>
@@ -557,7 +597,7 @@ function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onCl
         <h4 className="pt-detail-section-title">Nguồn gốc & Đại lý cung cấp</h4>
         <div className="pt-detail-content-box">
           <p className="pt-detail-text">
-            {record.source || "Mua tại đại lý liên kết thuộc HTX Krông Búk"}
+            {record.source || "Chưa ghi nhận đại lý cung cấp"}
           </p>
         </div>
       </div>
@@ -582,26 +622,235 @@ function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onCl
   );
 }
 
+function ViolationResponseForm({
+  violation,
+  onDone,
+  onClose,
+}: {
+  violation: PortalViolation;
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const sheetClose = useSheetClose();
+  const [note, setNote] = useState(violation.farmerResponse ?? "");
+  const photo = usePhotoPicker("violation");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const cleanNote = note.trim();
+    if (!cleanNote) {
+      setError("Vui lòng mô tả biện pháp đã khắc phục.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const photoId = await photo.ensureUploaded();
+      await api.post(`/portal/violations/${violation.id}/response`, {
+        note: cleanNote,
+        photoId,
+      });
+      invalidatePortal("violations", "journal", "spray", "overview");
+      onDone();
+    } catch (err) {
+      setError(errorMessage(err, "Không gửi được phản hồi khắc phục."));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="pt-form" onSubmit={submit}>
+      <div className="pt-notice" style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: 12 }}>
+        <strong style={{ display: "block", color: "#92400e", marginBottom: 4 }}>{violation.title}</strong>
+        {violation.description && (
+          <p style={{ margin: 0, fontSize: 13, color: "#78350f" }}>{violation.description}</p>
+        )}
+      </div>
+
+      <Field label="Nội dung báo cáo đã khắc phục" htmlFor="vr-note">
+        <textarea
+          id="vr-note"
+          rows={4}
+          maxLength={1000}
+          placeholder="Mô tả rõ công việc gia đình đã thực hiện để khắc phục (ví dụ: Đã cập nhật nhật ký canh tác, đã thu gom vỏ bao bì thuốc BVTV về kho chứa...)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          required
+        />
+      </Field>
+
+      <PhotoField
+        id="vr-photo"
+        label="Ảnh minh chứng sau khắc phục (tùy chọn)"
+        picker={photo}
+        title="Chụp ảnh hoặc tải ảnh minh chứng"
+        description="Gửi kèm ảnh thực tế giúp cán bộ kiểm tra xác nhận đóng cảnh báo/vi phạm nhanh hơn"
+        disabled={saving}
+      />
+
+      <InlineError message={error} />
+
+      <div className="pt-form-actions">
+        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose} disabled={saving}>
+          Hủy
+        </button>
+        <BusyButton
+          type="submit"
+          className="pt-btn pt-btn-primary"
+          busy={saving}
+          busyLabel="Đang gửi báo cáo…"
+          disabled={!note.trim()}
+        >
+          Gửi báo cáo khắc phục
+        </BusyButton>
+      </div>
+    </form>
+  );
+}
+
 export default function DiaryTab() {
   const [view, setView] = useState<View>("journal");
   const [form, setForm] = useState<View | null>(null);
   const [selectedJournal, setSelectedJournal] = useState<PortalJournalEntry | null>(null);
   const [selectedSpray, setSelectedSpray] = useState<PortalSprayRecord | null>(null);
+  const [respondingViolation, setRespondingViolation] = useState<PortalViolation | null>(null);
   const journal = usePortal<PortalList<PortalJournalEntry>>("journal");
   const spray = usePortal<PortalList<PortalSprayRecord>>("spray");
+  const violations = usePortal<PortalList<PortalViolation>>("violations");
   const plots = usePortal<PortalPlots>("plots");
   const plotCodes = plots.data?.available ? plots.data.data.map((plot) => plot.code) : [];
+  const violationsList = violations.data?.data ?? [];
 
   const done = () => {
-    const kind = form;
     setForm(null);
-    void (kind === "spray" ? spray.refresh() : journal.refresh());
   };
 
   const active = view === "journal" ? journal : spray;
 
   return (
     <div className="pt-stack">
+      {/* KHỐI CẢNH BÁO & VI PHẠM NHẬT KÝ CANH TÁC */}
+      <Card title={`Cảnh báo & Vi phạm (${violationsList.length})`}>
+        <StateBlock loading={violations.loading} error={violations.error} />
+        {!violations.loading && violationsList.length === 0 && (
+          <EmptyState icon="ok">Hộ của bạn không có cảnh báo hay vi phạm nhật ký nào. Hãy tiếp tục duy trì ghi chép đúng quy chuẩn VietGAP.</EmptyState>
+        )}
+        {violationsList.length > 0 && (
+          <ul className="pt-list">
+            {violationsList.map((v) => {
+              const isOpen = v.status === "open";
+
+              return (
+                <li
+                  key={v.id}
+                  className="pt-notice"
+                  style={{ borderBottom: "1px solid var(--border-light, #f1f5f9)", paddingBottom: 14 }}
+                >
+                  <div className="pt-notice-head">
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                      <AlertTriangle
+                        size={18}
+                        style={{ color: v.severity === "critical" ? "#dc2626" : "#f59e0b", flexShrink: 0 }}
+                      />
+                      <strong>{v.title}</strong>
+                    </div>
+                    <Pill tone={isOpen ? (v.severity === "critical" ? "red" : "gold") : "green"}>
+                      {isOpen ? (v.severity === "critical" ? "Nghiêm trọng · Đang mở" : "Cần khắc phục") : "Đã xử lý"}
+                    </Pill>
+                  </div>
+
+                  {v.description && (
+                    <p style={{ margin: "4px 0 6px", color: "var(--text-primary)" }}>{v.description}</p>
+                  )}
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: 8,
+                      marginTop: 4,
+                    }}
+                  >
+                    <p className="pt-notice-meta">
+                      Phát hiện: {formatDate(v.detectedOn)}
+                      {v.plotCode ? ` · Thửa ${v.plotCode}` : ""}
+                    </p>
+                  </div>
+
+                  {v.farmerResponse && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "#f8fafc",
+                        border: "1px solid #e2e8f0",
+                      }}
+                    >
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
+                        Phản hồi khắc phục của hộ
+                        {v.farmerResponseAt ? ` (${formatDate(v.farmerResponseAt)})` : ""}:
+                      </div>
+                      <p style={{ margin: 0, fontSize: 13.5, color: "#334155" }}>{v.farmerResponse}</p>
+                      {v.farmerResponsePhotoUrl && (
+                        <div style={{ marginTop: 8 }}>
+                          <StoredPhoto
+                            url={v.farmerResponsePhotoUrl}
+                            alt={`Ảnh khắc phục ${v.title}`}
+                            caption="Ảnh minh chứng khắc phục của hộ"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {(v.resolvedOn || v.resolutionNotes) && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: "8px 12px",
+                        borderRadius: 10,
+                        background: "#ecfdf5",
+                        border: "1px solid #a7f3d0",
+                        color: "#065f46",
+                        fontSize: 13,
+                      }}
+                    >
+                      <CheckCircle2
+                        size={15}
+                        style={{ display: "inline", verticalAlign: "-2px", marginRight: 6 }}
+                        aria-hidden="true"
+                      />
+                      <strong>
+                        Đã xác nhận khắc phục{v.resolvedOn ? ` ngày ${formatDate(v.resolvedOn)}` : ""}
+                      </strong>
+                      {v.resolutionNotes ? `: ${v.resolutionNotes}` : ""}
+                    </div>
+                  )}
+
+                  {isOpen && (
+                    <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="pt-btn pt-btn-primary pt-btn-sm"
+                        onClick={() => setRespondingViolation(v)}
+                      >
+                        <MessageSquareReply size={15} aria-hidden="true" />
+                        <span>{v.farmerResponse ? "Cập nhật báo cáo khắc phục" : "Báo đã khắc phục"}</span>
+                      </button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
+
       <div className="pt-segmented" role="tablist" aria-label="Loại nhật ký">
         <button type="button" role="tab" aria-selected={view === "journal"} className={view === "journal" ? "active" : ""} onClick={() => setView("journal")}>
           Canh tác
@@ -663,7 +912,10 @@ export default function DiaryTab() {
                         className="pt-widget-note-icon"
                         aria-hidden="true"
                       />
-                      <span className="pt-widget-item-text">{entry.activity}</span>
+                      <span className="pt-widget-item-text">
+                        {entry.activity}
+                        {entry.plotCode ? ` · ${entry.plotCode}` : ""}
+                      </span>
                       <span className="pt-diary-item-date">{formatDate(entry.entryOn)}</span>
                       <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
                     </div>
@@ -700,7 +952,10 @@ export default function DiaryTab() {
                         className="pt-widget-note-icon"
                         aria-hidden="true"
                       />
-                      <span className="pt-widget-item-text">{record.pesticide}</span>
+                      <span className="pt-widget-item-text">
+                        {record.pesticide}
+                        {record.plotCode ? ` · ${record.plotCode}` : ""}
+                      </span>
                       <span className="pt-diary-item-date">{formatDate(record.sprayedOn)}</span>
                       <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
                     </div>
@@ -724,7 +979,6 @@ export default function DiaryTab() {
               return (
                 <div key={rule.id} className="pt-vietgap-step">
                   <div className="pt-vietgap-segment">
-                    {/* Cột Trục Timeline dải capsule dày + chấm tròn trắng đồng bộ */}
                     <div className="pt-vietgap-track-col" aria-hidden="true">
                       <div
                         className="pt-vietgap-capsule"
@@ -735,7 +989,6 @@ export default function DiaryTab() {
                       </div>
                     </div>
 
-                    {/* Khối nội dung thẻ quy chuẩn */}
                     <div className={`pt-vietgap-content pt-vietgap-card ${rule.cardClass}`}>
                       <span className="pt-timeline-kicker">{rule.kicker}</span>
                       <h3 className="pt-timeline-title">{rule.title}</h3>
@@ -743,7 +996,6 @@ export default function DiaryTab() {
                     </div>
                   </div>
 
-                  {/* Đoạn nối chuyển tiếp giữa các quy chuẩn (Dotted line với các dấu chấm mini) */}
                   {!isLast && (
                     <div className="pt-vietgap-transfer" aria-hidden="true">
                       <div className="pt-vietgap-transfer-track">
@@ -768,6 +1020,7 @@ export default function DiaryTab() {
       {form === "spray" && (
         <Sheet title="Ghi nhật ký phun thuốc" onClose={() => setForm(null)}>
           <SprayForm
+            plotCodes={plotCodes}
             plotsHint="Mẹo: ghi thêm nhật ký canh tác “Phun thuốc” để cán bộ đối chiếu theo thửa."
             onDone={done}
             onClose={() => setForm(null)}
@@ -777,13 +1030,30 @@ export default function DiaryTab() {
 
       {selectedJournal && (
         <Sheet title="Chi tiết nhật ký canh tác" onClose={() => setSelectedJournal(null)}>
-          <JournalDetailModal entry={selectedJournal} onClose={() => setSelectedJournal(null)} />
+          <JournalDetailModal
+            entry={selectedJournal}
+            onClose={() => setSelectedJournal(null)}
+            onDeleted={() => setSelectedJournal(null)}
+          />
         </Sheet>
       )}
 
       {selectedSpray && (
         <Sheet title="Chi tiết lần phun thuốc" onClose={() => setSelectedSpray(null)}>
           <SprayDetailModal record={selectedSpray} onClose={() => setSelectedSpray(null)} />
+        </Sheet>
+      )}
+
+      {respondingViolation && (
+        <Sheet
+          title="Báo đã khắc phục vi phạm"
+          onClose={() => setRespondingViolation(null)}
+        >
+          <ViolationResponseForm
+            violation={respondingViolation}
+            onDone={() => setRespondingViolation(null)}
+            onClose={() => setRespondingViolation(null)}
+          />
         </Sheet>
       )}
     </div>

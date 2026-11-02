@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, X } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import type { PortalTabId } from "./PortalApp";
 import {
   HouseCircleCheckIcon,
@@ -237,13 +238,15 @@ export default function RadialNavWheel({
   }, [propOnClose]);
 
   useEffect(() => {
-    if (propOpen !== undefined) {
+    if (propOpen === undefined) return;
+    const rafId = requestAnimationFrame(() => {
       if (propOpen && !isOpen) {
         handleOpen();
       } else if (!propOpen && isOpen && !isClosing) {
         handleClose();
       }
-    }
+    });
+    return () => cancelAnimationFrame(rafId);
   }, [propOpen, isOpen, isClosing, handleOpen, handleClose]);
 
   // Tự động thu popup lại sau khi bánh xe dừng lại ở một tab nhanh chóng, tránh trễ
@@ -633,7 +636,7 @@ export default function RadialNavWheel({
                 onClick={handleClose}
                 aria-label="Đóng điều hướng"
               >
-                <X size={18} />
+                <CloseCircleIcon size={28} />
               </button>
             </div>
 

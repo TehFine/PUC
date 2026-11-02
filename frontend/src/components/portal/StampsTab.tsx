@@ -1,36 +1,25 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import {
-  CheckCircle2,
-  AlertTriangle,
-  QrCode,
-  Plus,
-  Calendar,
-  Clock,
-  ArrowUpRight,
-} from "lucide-react";
-import QRCode from "qrcode";
-import { api } from "@/lib/api-client";
-import { usePortal } from "@/hooks/use-portal";
-import { formatKg, HARVEST_STATUS } from "@/lib/portal-labels";
+import { FormEvent, useState } from "react";
+import { Calendar, CheckCircle2, Clock, Plus, Trash2 } from "lucide-react";
+import { api, errorMessage } from "@/lib/api-client";
+import { invalidatePortal, usePortal } from "@/hooks/use-portal";
+import { DECLARATION_STATUS, todayIso, toNumber } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
-import type { PortalHarvest, PortalList, PortalOverview, PortalPlot, PortalPlots } from "@/types/portal";
-import { EmptyState, Sheet, StateBlock } from "./ui";
-
-
-
-interface HarvestDeclaration {
-  id: number;
-  plotCode: string;
-  harvestedOn: string;
-  weightKg: number;
-  gradeAKg: number;
-  gradeBKg: number;
-  qualityRating: string;
-  note: string | null;
-  createdAt: string;
-}
+import type {
+  CreateHarvestDeclarationBody,
+  PortalHarvest,
+  PortalHarvestDeclaration,
+  PortalList,
+  PortalOverview,
+  PortalPlot,
+  PortalPlots,
+  PortalStampsResponse,
+} from "@/types/portal";
+import { FruitStampsView } from "./harvest/FruitStampsView";
+import { HarvestAssetTagCard, HarvestLotQrModal } from "./harvest/HarvestLotTicket";
+import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
+import { EmptyState, Pill, StateBlock } from "./ui";
 
 interface HarvestRule {
   id: string;
@@ -77,81 +66,111 @@ interface Props {
   plots?: PortalPlot[];
 }
 
-export default function StampsTab({ overview, plots = [] }: Props) {
+export default function StampsTab({ plots = [] }: Props) {
   const plotsData = usePortal<PortalPlots>("plots");
   const harvest = usePortal<PortalList<PortalHarvest>>("harvest");
-  const effectivePlots = plots.length > 0 ? plots : (plotsData.data?.data || []);
+  const declarationsQuery = usePortal<PortalList<PortalHarvestDeclaration>>("harvest-declarations");
+  const stampsQuery = usePortal<PortalStampsResponse>("stamps");
 
-  const [subTab, setSubTab] = useState<"harvest_lots" | "harvest_decl">("harvest_decl");
-  const [declarations, setDeclarations] = useState<HarvestDeclaration[]>([]);
-  const [loading, setLoading] = useState(true);
+  const effectivePlots = plots.length > 0 ? plots : (plotsData.data?.data ?? []);
+  const declarations = declarationsQuery.data?.data ?? [];
 
-  // Modal xem chi tiết tem vé voucher lô hàng
+  const [subTab, setSubTab] = useState<"harvest_decl" | "fruit_stamps" | "harvest_lots">("harvest_decl");
   const [selectedLotForQr, setSelectedLotForQr] = useState<PortalHarvest | null>(null);
 
   // Form khai báo / đăng ký thu hái
   const [showDeclForm, setShowDeclForm] = useState(false);
-  const [declPlot, setDeclPlot] = useState(() => effectivePlots[0]?.code ?? "KB-VT-001");
-  const [declDate, setDeclDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [declWeight, setDeclWeight] = useState(1200);
-  const [declGradeA, setDeclGradeA] = useState(900);
-  const [declGradeB, setDeclGradeB] = useState(300);
+  const [declPlot, setDeclPlot] = useState("");
+  const [declDate, setDeclDate] = useState(() => todayIso());
+  const [declWeight, setDeclWeight] = useState("1200");
+  const [declGradeA, setDeclGradeA] = useState("900");
+  const [declGradeB, setDeclGradeB] = useState("300");
   const [declRating, setDeclRating] = useState("Loại 1 (VIP)");
   const [declNote, setDeclNote] = useState("");
-  const [savingDecl, startSavingDecl] = useTransition();
+  const declPhoto = usePhotoPicker("harvest");
+  const [savingDecl, setSavingDecl] = useState(false);
+  const [declError, setDeclError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (effectivePlots.length > 0 && (!declPlot || declPlot === "KB-VT-001")) {
-      setDeclPlot(effectivePlots[0].code);
-    }
-  }, [effectivePlots, declPlot]);
+  const effectiveDeclPlot = declPlot || effectivePlots[0]?.code || "";
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const declRes = await api.get<{ data: HarvestDeclaration[] }>("/portal/harvest-declarations");
-      setDeclarations(declRes.data);
-    } catch {
-      // Bỏ qua lỗi mạng
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  // Xử lý lưu khai báo thu hái
-  const handleSaveDecl = (e: React.FormEvent) => {
+  const handleSaveDecl = async (e: FormEvent) => {
     e.preventDefault();
     setSuccessMsg(null);
-    startSavingDecl(async () => {
-      try {
-        await api.post("/portal/harvest-declarations", {
-          plotCode: declPlot,
-          harvestedOn: declDate,
-          weightKg: declWeight,
-          gradeAKg: declGradeA,
-          gradeBKg: declGradeB,
-          qualityRating: declRating,
-          note: declNote,
-        });
-        setShowDeclForm(false);
-        setDeclNote("");
-        setSuccessMsg(`Đã gửi đăng ký thu hoạch cho Lô ${declPlot} thành công! HTX đã tiếp nhận thông tin.`);
-        await loadData();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Có lỗi khi lưu khai báo thu hái.");
-      }
-    });
+    setDeclError(null);
+
+    const plotCode = effectiveDeclPlot.trim();
+    if (!plotCode) {
+      setDeclError("Vui lòng chọn hoặc nhập mã thửa đất thu hái.");
+      return;
+    }
+    const weight = Number(declWeight);
+    const gradeA = Number(declGradeA || 0);
+    const gradeB = Number(declGradeB || 0);
+
+    if (!Number.isFinite(weight) || weight <= 0) {
+      setDeclError("Tổng sản lượng thu hái phải lớn hơn 0 kg.");
+      return;
+    }
+    if (gradeA < 0 || gradeB < 0) {
+      setDeclError("Khối lượng phân loại không được âm.");
+      return;
+    }
+    if (gradeA + gradeB > weight + 1e-6) {
+      setDeclError("Tổng khối lượng Loại 1 (A) và Loại 2 (B) không được vượt quá tổng sản lượng.");
+      return;
+    }
+    if (declDate > todayIso()) {
+      setDeclError("Ngày khai báo thu hái không được ở tương lai.");
+      return;
+    }
+
+    setSavingDecl(true);
+    try {
+      const photoId = await declPhoto.ensureUploaded();
+      const body: CreateHarvestDeclarationBody = {
+        plotCode,
+        harvestedOn: declDate,
+        weightKg: weight,
+        gradeAKg: gradeA,
+        gradeBKg: gradeB,
+        qualityRating: declRating || undefined,
+        note: declNote.trim() || undefined,
+        photoId,
+      };
+      await api.post("/portal/harvest-declarations", body);
+      setShowDeclForm(false);
+      setDeclNote("");
+      declPhoto.clear();
+      setSuccessMsg(`Đã gửi khai báo thu hái cho Thửa ${plotCode} thành công! HTX đã tiếp nhận thông tin.`);
+      invalidatePortal("harvest-declarations", "stamps", "harvest", "overview");
+    } catch (err) {
+      setDeclError(errorMessage(err, "Có lỗi khi lưu khai báo thu hái."));
+    } finally {
+      setSavingDecl(false);
+    }
   };
+
+  const handleDeleteDecl = async (id: number) => {
+    setDeletingId(id);
+    setDeleteError(null);
+    try {
+      await api.delete(`/portal/harvest-declarations/${id}`);
+      invalidatePortal("harvest-declarations", "overview");
+    } catch (err) {
+      setDeleteError(errorMessage(err, "Không xóa được bản khai báo thu hái."));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const remainingStamps = stampsQuery.data?.stats.remaining ?? 0;
 
   return (
     <div className="portal-tab-content">
-
-      {/* ─── 2. QUY CHUẨN THU HOẠCH (THEO STYLE QUY CHUẨN VIETGAP) ─── */}
+      {/* ─── 1. QUY CHUẨN THU HOẠCH ─── */}
       <section className="pt-schedule-section pt-vietgap-section pt-harvest-rules-section" aria-labelledby="harvest-rules-heading">
         <div className="pt-schedule-header">
           <h2 id="harvest-rules-heading" className="pt-schedule-title">
@@ -161,30 +180,21 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         <div className="pt-vietgap-timeline" role="list">
           {HARVEST_RULES.map((rule, idx, arr) => {
             const isLast = idx === arr.length - 1;
-
             return (
               <div key={rule.id} className="pt-vietgap-step">
                 <div className="pt-vietgap-segment">
-                  {/* Cột Trục Timeline dải capsule dày + chấm tròn trắng đồng bộ */}
                   <div className="pt-vietgap-track-col" aria-hidden="true">
-                    <div
-                      className="pt-vietgap-capsule"
-                      style={{ background: rule.capsuleBg }}
-                    >
+                    <div className="pt-vietgap-capsule" style={{ background: rule.capsuleBg }}>
                       <div className="pt-vietgap-dot" />
                       <div className="pt-vietgap-dot" />
                     </div>
                   </div>
-
-                  {/* Khối nội dung thẻ quy chuẩn */}
                   <div className={`pt-vietgap-content pt-vietgap-card ${rule.cardClass}`}>
                     <span className="pt-timeline-kicker">{rule.kicker}</span>
                     <h3 className="pt-timeline-title">{rule.title}</h3>
                     <p className="pt-timeline-desc">{rule.desc}</p>
                   </div>
                 </div>
-
-                {/* Đoạn nối chuyển tiếp giữa các quy chuẩn (Dotted line với các dấu chấm mini) */}
                 {!isLast && (
                   <div className="pt-vietgap-transfer" aria-hidden="true">
                     <div className="pt-vietgap-transfer-track">
@@ -200,7 +210,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         </div>
       </section>
 
-      {/* ─── 3. THANH ĐIỀU HƯỚNG CHỨC NĂNG (THEO STYLE THANH BAR TAB KIẾN THỨC) ─── */}
+      {/* ─── 2. THANH ĐIỀU HƯỚNG CHỨC NĂNG ─── */}
       <div className="pt-segmented pt-harvest-segmented" role="tablist" aria-label="Chế độ thu hoạch">
         <button
           type="button"
@@ -209,8 +219,18 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           className={subTab === "harvest_decl" ? "active" : ""}
           onClick={() => setSubTab("harvest_decl")}
         >
-          <span className="tab-label-desktop">Kế hoạch thu hái ({declarations.length})</span>
-          <span className="tab-label-mobile">Kế hoạch ({declarations.length})</span>
+          <span className="tab-label-desktop">Khai báo thu hái ({declarations.length})</span>
+          <span className="tab-label-mobile">Khai báo ({declarations.length})</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={subTab === "fruit_stamps"}
+          className={subTab === "fruit_stamps" ? "active" : ""}
+          onClick={() => setSubTab("fruit_stamps")}
+        >
+          <span className="tab-label-desktop">Kích hoạt tem quả ({remainingStamps})</span>
+          <span className="tab-label-mobile">Tem quả ({remainingStamps})</span>
         </button>
         <button
           type="button"
@@ -246,14 +266,17 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         </div>
       )}
 
-      {/* ─── CHẾ ĐỘ 2: KẾ HOẠCH & ĐĂNG KÝ THU HÁI TẠI VƯỜN (NẰM DƯỚI NỀN) ─── */}
+      {/* ─── CHẾ ĐỘ 2: KÍCH HOẠT TEM QUẢ ĐIỆN TỬ ─── */}
+      {subTab === "fruit_stamps" && <FruitStampsView plots={effectivePlots} />}
+
+      {/* ─── CHẾ ĐỘ 3: KẾ HOẠCH & KHAI BÁO THU HÁI TẠI VƯỜN ─── */}
       {subTab === "harvest_decl" && (
         <div className="pt-harvest-decl-view">
           <div className="decl-topbar">
             <div className="decl-topbar-info">
-              <h3 className="decl-topbar-title">Kế hoạch thu hái</h3>
+              <h3 className="decl-topbar-title">Khai báo thu hái tại vườn</h3>
               <p className="decl-topbar-sub">
-                Khai báo ngày cắt để HTX kiểm định chất lượng &amp; cấp tem niêm phong.
+                Gửi thông tin sản lượng thu hái để HTX kiểm định chất lượng &amp; xác nhận vào lô xuất khẩu.
               </p>
             </div>
             {!showDeclForm && (
@@ -263,10 +286,11 @@ export default function StampsTab({ overview, plots = [] }: Props) {
                 onClick={() => {
                   setShowDeclForm(true);
                   setSuccessMsg(null);
+                  setDeclError(null);
                 }}
               >
                 <Plus size={15} />
-                <span>Báo lịch mới</span>
+                <span>Khai báo mới</span>
               </button>
             )}
           </div>
@@ -278,38 +302,56 @@ export default function StampsTab({ overview, plots = [] }: Props) {
             </div>
           )}
 
+          <InlineError message={deleteError} />
+
           {showDeclForm && (
             <form onSubmit={handleSaveDecl} className="harvest-decl-form">
               <div className="form-legend">
                 <Calendar size={16} />
-                <span>Đăng ký đợt thu hoạch sầu riêng gửi HTX</span>
+                <span>Khai báo đợt thu hái sầu riêng gửi HTX</span>
               </div>
 
               <div className="portal-form-grid-2">
                 <div className="portal-form-group">
-                  <label className="portal-label">Lô đất canh tác thu hái</label>
-                  <select
-                    className="portal-input"
-                    value={declPlot}
-                    onChange={(e) => setDeclPlot(e.target.value)}
-                  >
-                    {effectivePlots.length > 0 ? (
-                      effectivePlots.map((p) => (
+                  <label className="portal-label" htmlFor="hd-plot">
+                    Thửa đất canh tác thu hái
+                  </label>
+                  {effectivePlots.length > 0 ? (
+                    <select
+                      id="hd-plot"
+                      className="portal-input"
+                      value={effectiveDeclPlot}
+                      onChange={(e) => setDeclPlot(e.target.value)}
+                      required
+                    >
+                      {effectivePlots.map((p) => (
                         <option key={p.code} value={p.code}>
-                          Lô {p.code} – {p.variety || "Sầu riêng"} ({p.areaHa} ha)
+                          Thửa {p.code} – {p.variety || "Sầu riêng"} ({p.areaHa} ha)
                         </option>
-                      ))
-                    ) : (
-                      <option value="KB-VT-001">Lô KB-VT-001 – Monthong (2.4 ha)</option>
-                    )}
-                  </select>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      id="hd-plot"
+                      type="text"
+                      className="portal-input"
+                      placeholder="Nhập mã thửa đất"
+                      value={effectiveDeclPlot}
+                      onChange={(e) => setDeclPlot(e.target.value)}
+                      required
+                    />
+                  )}
                 </div>
 
                 <div className="portal-form-group">
-                  <label className="portal-label">Ngày dự kiến cắt trái</label>
+                  <label className="portal-label" htmlFor="hd-date">
+                    Ngày cắt trái
+                  </label>
                   <input
+                    id="hd-date"
                     type="date"
                     className="portal-input"
+                    max={todayIso()}
                     value={declDate}
                     onChange={(e) => setDeclDate(e.target.value)}
                     required
@@ -319,205 +361,213 @@ export default function StampsTab({ overview, plots = [] }: Props) {
 
               <div className="portal-form-grid-3">
                 <div className="portal-form-group">
-                  <label className="portal-label">Sản lượng ước tính (kg)</label>
+                  <label className="portal-label" htmlFor="hd-weight">
+                    Tổng sản lượng (kg)
+                  </label>
                   <input
+                    id="hd-weight"
                     type="number"
-                    min="10"
+                    min="1"
+                    step="0.1"
                     className="portal-input"
                     value={declWeight}
-                    onChange={(e) => setDeclWeight(Number(e.target.value))}
+                    onChange={(e) => setDeclWeight(e.target.value)}
                     required
                   />
                 </div>
 
                 <div className="portal-form-group">
-                  <label className="portal-label">Ước tính Loại 1 / VIP (kg)</label>
+                  <label className="portal-label" htmlFor="hd-grade-a">
+                    Loại 1 / VIP (kg)
+                  </label>
                   <input
+                    id="hd-grade-a"
                     type="number"
                     min="0"
+                    step="0.1"
                     className="portal-input"
                     value={declGradeA}
-                    onChange={(e) => setDeclGradeA(Number(e.target.value))}
+                    onChange={(e) => setDeclGradeA(e.target.value)}
                   />
                 </div>
 
                 <div className="portal-form-group">
-                  <label className="portal-label">Ước tính Loại 2 (kg)</label>
+                  <label className="portal-label" htmlFor="hd-grade-b">
+                    Loại 2 (kg)
+                  </label>
                   <input
+                    id="hd-grade-b"
                     type="number"
                     min="0"
+                    step="0.1"
                     className="portal-input"
                     value={declGradeB}
-                    onChange={(e) => setDeclGradeB(Number(e.target.value))}
+                    onChange={(e) => setDeclGradeB(e.target.value)}
                   />
                 </div>
               </div>
 
-              <div className="portal-form-group">
-                <label className="portal-label">Ghi chú gửi Cán bộ HTX</label>
-                <input
-                  type="text"
-                  className="portal-input"
-                  placeholder="Ví dụ: Trái già đủ ngày, cơm vàng, hộc đều, nhờ HTX kiểm tra dư lượng và hỗ trợ dụng cụ cắt..."
-                  value={declNote}
-                  onChange={(e) => setDeclNote(e.target.value)}
-                />
+              <div className="portal-form-grid-2">
+                <div className="portal-form-group">
+                  <label className="portal-label" htmlFor="hd-rating">
+                    Đánh giá chất lượng dự kiến
+                  </label>
+                  <select
+                    id="hd-rating"
+                    className="portal-input"
+                    value={declRating}
+                    onChange={(e) => setDeclRating(e.target.value)}
+                  >
+                    <option value="Loại 1 (VIP)">Loại 1 (VIP xuất khẩu)</option>
+                    <option value="Loại 2 (Chuẩn)">Loại 2 (Chuẩn VietGAP)</option>
+                    <option value="Xô / Nội địa">Hàng xô / Tiêu thụ nội địa</option>
+                  </select>
+                </div>
+
+                <div className="portal-form-group">
+                  <label className="portal-label" htmlFor="hd-note">
+                    Ghi chú gửi Cán bộ HTX
+                  </label>
+                  <input
+                    id="hd-note"
+                    type="text"
+                    className="portal-input"
+                    placeholder="Ví dụ: Trái già đủ ngày, cơm vàng, nhờ HTX kiểm định..."
+                    value={declNote}
+                    onChange={(e) => setDeclNote(e.target.value)}
+                  />
+                </div>
               </div>
+
+              <PhotoField
+                id="hd-photo"
+                label="Ảnh lô sầu riêng thu hái tại vườn"
+                picker={declPhoto}
+                title="Chụp ảnh hoặc tải ảnh lô sầu riêng"
+                description="Đính kèm ảnh thực tế giúp cán bộ HTX duyệt xác nhận nhanh hơn"
+                disabled={savingDecl}
+              />
+
+              <InlineError message={declError} />
 
               <div className="form-btn-actions">
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
                   onClick={() => setShowDeclForm(false)}
+                  disabled={savingDecl}
                 >
                   Hủy bỏ
                 </button>
-                <button type="submit" className="btn btn-primary btn-sm" disabled={savingDecl}>
-                  {savingDecl ? "Đang gửi đăng ký..." : "Gửi đăng ký thu hoạch cho HTX"}
-                </button>
+                <BusyButton
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  busy={savingDecl}
+                  busyLabel="Đang gửi khai báo…"
+                >
+                  Gửi khai báo thu hái cho HTX
+                </BusyButton>
               </div>
             </form>
           )}
 
-          <div className="decl-list">
-            {declarations.length === 0 ? (
-              <div className="decl-empty-state">
-                <EmptyState icon="harvest">
-                  Chưa có đợt thu hái nào được đăng ký. Bấm <strong>"+ Báo lịch thu hái mới"</strong> để gửi lịch cắt cho HTX.
-                </EmptyState>
-              </div>
-            ) : (
-              declarations.map((d) => (
-                <div key={d.id} className="decl-card">
-                  <div className="decl-head">
-                    <strong className="decl-plot">Lô {d.plotCode}</strong>
-                    <span className="decl-date">
-                      <Clock size={13} style={{ display: "inline", verticalAlign: "-2px", marginRight: 5 }} />
-                      Ngày cắt: {d.harvestedOn}
-                    </span>
-                  </div>
-                  <div className="decl-weights">
-                    <span className="decl-total">Sản lượng: {Number(d.weightKg).toLocaleString("vi-VN")} kg</span>
-                    <span className="decl-detail">Loại 1 (VIP): {d.gradeAKg} kg · Loại 2: {d.gradeBKg} kg</span>
-                  </div>
-                  {d.note && <p className="decl-note"><strong>Ghi chú:</strong> {d.note}</p>}
+          <StateBlock loading={declarationsQuery.loading} error={declarationsQuery.error} />
+
+          {!declarationsQuery.loading && (
+            <div className="decl-list">
+              {declarations.length === 0 ? (
+                <div className="decl-empty-state">
+                  <EmptyState icon="harvest">
+                    Chưa có đợt thu hái nào được đăng ký. Bấm <strong>“+ Khai báo mới”</strong> để gửi thông tin thu hái cho HTX.
+                  </EmptyState>
                 </div>
-              ))
-            )}
-          </div>
+              ) : (
+                declarations.map((d) => {
+                  const statusInfo = DECLARATION_STATUS[d.status] ?? DECLARATION_STATUS.submitted;
+                  const weight = toNumber(d.weightKg) ?? 0;
+                  const gradeA = toNumber(d.gradeAKg) ?? 0;
+                  const gradeB = toNumber(d.gradeBKg) ?? 0;
+                  return (
+                    <div key={d.id} className="decl-card">
+                      <div className="decl-head">
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <strong className="decl-plot">Thửa {d.plotCode}</strong>
+                          <Pill tone={statusInfo.tone}>{statusInfo.label}</Pill>
+                        </div>
+                        <span className="decl-date">
+                          <Clock size={13} style={{ display: "inline", verticalAlign: "-2px", marginRight: 5 }} />
+                          Ngày cắt: {formatDate(d.harvestedOn)}
+                        </span>
+                      </div>
+
+                      <div className="decl-weights">
+                        <span className="decl-total">Tổng sản lượng: {weight.toLocaleString("vi-VN")} kg</span>
+                        <span className="decl-detail">
+                          Loại 1 (VIP): {gradeA.toLocaleString("vi-VN")} kg · Loại 2: {gradeB.toLocaleString("vi-VN")} kg
+                          {d.qualityRating ? ` · ${d.qualityRating}` : ""}
+                        </span>
+                      </div>
+
+                      {d.note && (
+                        <p className="decl-note">
+                          <strong>Ghi chú của hộ:</strong> {d.note}
+                        </p>
+                      )}
+
+                      {d.reviewNote && (
+                        <p
+                          className="decl-note"
+                          style={{
+                            background: d.status === "rejected" ? "#fef2f2" : "#ecfdf5",
+                            color: d.status === "rejected" ? "#991b1b" : "#065f46",
+                            border: `1px solid ${d.status === "rejected" ? "#fecaca" : "#a7f3d0"}`,
+                          }}
+                        >
+                          <strong>Phản hồi từ HTX:</strong> {d.reviewNote}
+                        </p>
+                      )}
+
+                      {d.photoUrl && (
+                        <div style={{ marginTop: 10 }}>
+                          <StoredPhoto
+                            url={d.photoUrl}
+                            alt={`Ảnh thu hái thửa ${d.plotCode}`}
+                            caption={`Thửa ${d.plotCode} · ${formatDate(d.harvestedOn)}`}
+                          />
+                        </div>
+                      )}
+
+                      {d.status === "submitted" && (
+                        <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                          <ConfirmButton
+                            label={
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                <Trash2 size={14} aria-hidden="true" />
+                                <span>Xóa khai báo</span>
+                              </span>
+                            }
+                            question="Xác nhận xóa bản khai báo thu hái đang chờ xác nhận này?"
+                            confirmLabel="Xóa khai báo"
+                            busy={deletingId === d.id}
+                            onConfirm={() => void handleDeleteDecl(d.id)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
       )}
 
-
-
-      {/* ─── MODAL TICKET VOUCHER CHI TIẾT TEM ĐIỆN TỬ (GIỮ NGUYÊN 100% STYLE CHUẨN) ─── */}
+      {/* ─── MODAL TICKET VOUCHER CHI TIẾT TEM ĐIỆN TỬ ─── */}
       {selectedLotForQr && (
-        <Sheet
-          title="Tem điện tử lô hàng"
+        <HarvestLotQrModal
+          lot={selectedLotForQr}
           onClose={() => setSelectedLotForQr(null)}
-        >
-          <div className="pt-qr-modal-body">
-            <div className="pt-ticket-container">
-              <div className="pt-ticket-card">
-                {/* ── 1. ĐẦU VÉ: ICON CHECK-MARK & TIÊU ĐỀ ── */}
-                <div className="pt-ticket-head">
-                  <div className="pt-ticket-popper-wrap" aria-hidden="true">
-                    <img
-                      src="/check-mark.png"
-                      alt="Tem hợp lệ"
-                      width={28}
-                      height={28}
-                      className="pt-ticket-check-icon"
-                    />
-                  </div>
-                  <h3 className="pt-ticket-title">Tem điện tử hợp lệ!</h3>
-                  <p className="pt-ticket-sub">
-                    Lô sầu riêng đã được cấp mã truy xuất nguồn gốc chính thức
-                  </p>
-                </div>
-
-                {/* Đường gạch đứt ngăn cách mờ */}
-                <div className="pt-ticket-sub-divider" aria-hidden="true" />
-
-                {/* ── 2. THÔNG TIN LÔ HÀNG (PHÍA TRÊN) ── */}
-                <div className="pt-ticket-body">
-                  <div className="pt-ticket-grid">
-                    <div className="pt-ticket-col">
-                      <span className="pt-ticket-label">MÃ LÔ HÀNG</span>
-                      <strong className="pt-ticket-val">{selectedLotForQr.lotCode}</strong>
-                    </div>
-                    <div className="pt-ticket-col pt-ticket-col-right">
-                      <span className="pt-ticket-label">KHỐI LƯỢNG TỊNH (KLT)</span>
-                      <strong className="pt-ticket-val pt-ticket-val-accent">{formatKg(selectedLotForQr.weightKg)}</strong>
-                    </div>
-
-                    <div className="pt-ticket-col">
-                      <span className="pt-ticket-label">NGÀY THU HOẠCH</span>
-                      <strong className="pt-ticket-val">{formatDate(selectedLotForQr.harvestedOn)}</strong>
-                    </div>
-                    <div className="pt-ticket-col pt-ticket-col-right">
-                      <span className="pt-ticket-label">THỊ TRƯỜNG</span>
-                      <strong className="pt-ticket-val">{selectedLotForQr.market}</strong>
-                    </div>
-                  </div>
-
-                  <div className="pt-ticket-entity-box">
-                    <div className="pt-ticket-entity-badge" aria-hidden="true">
-                      <span className="pt-ticket-badge-circle pt-badge-green">PUC</span>
-                      <span className="pt-ticket-badge-circle pt-badge-gold">VG</span>
-                    </div>
-                    <div className="pt-ticket-entity-info">
-                      <div className="pt-ticket-entity-name">{selectedLotForQr.buyer}</div>
-                      <div className="pt-ticket-entity-meta">Vùng trồng PUC-KRB-001 · VietGAP</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── 3. ĐƯỜNG RÃNH XÉ VÉ (NOTCHES 2 BÊN & ĐƯỜNG ĐỨT NÉT) ── */}
-                <div className="pt-ticket-perforation">
-                  <div className="pt-ticket-notch pt-ticket-notch-l" aria-hidden="true" />
-                  <div className="pt-ticket-dash-line" aria-hidden="true" />
-                  <div className="pt-ticket-notch pt-ticket-notch-r" aria-hidden="true" />
-                </div>
-
-                {/* ── 4. CUỐNG VÉ: MÃ QR CODE ── */}
-                <div className="pt-ticket-stub">
-                  <div className="pt-ticket-qr-wrap">
-                    <div className="pt-qr-frame">
-                      <TicketQrImage lotCode={selectedLotForQr.lotCode} qrCode={selectedLotForQr.qrCode} />
-                    </div>
-                    <div className="pt-ticket-barcode-num">
-                      <span>{selectedLotForQr.qrCode || selectedLotForQr.lotCode}</span>
-                    </div>
-                    <p className="pt-ticket-scan-hint">
-                      Quét mã QR để kiểm tra nguồn gốc &amp; nhật ký canh tác
-                    </p>
-                  </div>
-                </div>
-
-                {/* ── 5. CẠNH RĂNG CƯA ĐÁY VÉ ── */}
-                <div className="pt-ticket-scallop-bottom" aria-hidden="true">
-                  <svg viewBox="0 0 320 14" preserveAspectRatio="none" className="pt-ticket-scallop-svg">
-                    <path
-                      d="M0,0 L320,0 L320,2 A20,12 0 0,1 280,2 A20,12 0 0,1 240,2 A20,12 0 0,1 200,2 A20,12 0 0,1 160,2 A20,12 0 0,1 120,2 A20,12 0 0,1 80,2 A20,12 0 0,1 40,2 A20,12 0 0,1 0,2 Z"
-                      fill="#ffffff"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              <a
-                href={`/trace/${encodeURIComponent(selectedLotForQr.lotCode)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="pt-btn pt-btn-primary pt-ticket-open-btn"
-              >
-                <span>Xem toàn bộ hồ sơ truy xuất</span>
-                <ArrowUpRight size={17} strokeWidth={2.4} aria-hidden="true" />
-              </a>
-            </div>
-          </div>
-        </Sheet>
+        />
       )}
 
       <style jsx>{`
@@ -527,8 +577,6 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           box-sizing: border-box;
           overflow-x: hidden;
         }
-
-
         .pt-harvest-rules-section {
           max-width: 720px;
           margin-bottom: 22px;
@@ -544,11 +592,10 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           margin: 0;
           letter-spacing: -0.015em;
         }
-
         .pt-harvest-segmented {
           display: flex;
           width: 100%;
-          max-width: 440px;
+          max-width: 640px;
           gap: 4px;
           padding: 4px;
           border: 1px solid var(--border);
@@ -561,13 +608,13 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .pt-harvest-segmented button {
           flex: 1 1 0;
           min-width: 0;
-          padding: 8px 12px;
+          padding: 8px 10px;
           border: 0;
           border-radius: 9px;
           background: transparent;
           color: var(--text-secondary);
           font: inherit;
-          font-size: 13.5px;
+          font-size: 13px;
           font-weight: 600;
           letter-spacing: -0.01em;
           text-align: center;
@@ -594,36 +641,6 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .tab-label-mobile {
           display: none;
         }
-
-        .portal-card {
-          background: #ffffff;
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 20px;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
-          box-sizing: border-box;
-        }
-        .portal-card-head {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 12px;
-          margin-bottom: 16px;
-          flex-wrap: wrap;
-        }
-        .portal-card-title {
-          font-size: 16.5px;
-          font-weight: 750;
-          color: var(--ink);
-          margin: 0 0 4px;
-        }
-        .portal-card-sub {
-          font-size: 12.5px;
-          color: var(--text-secondary);
-          margin: 0;
-          line-height: 1.45;
-        }
-
         .portal-alert {
           display: flex;
           align-items: center;
@@ -638,11 +655,9 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           color: #065f46;
           border: 1px solid #a7f3d0;
         }
-
         .pt-harvest-decl-view {
           width: 100%;
         }
-
         .decl-topbar {
           display: flex;
           justify-content: space-between;
@@ -684,7 +699,6 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .decl-add-btn:hover {
           background: #cf461b !important;
         }
-
         .harvest-decl-form {
           background: #ffffff;
           border: 1px solid var(--border);
@@ -738,14 +752,12 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           border-color: #16a34a;
           box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.15);
         }
-
         .form-btn-actions {
           display: flex;
           justify-content: flex-end;
           gap: 8px;
           margin-top: 10px;
         }
-
         .btn {
           display: inline-flex;
           align-items: center;
@@ -781,7 +793,6 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           background: #e4e7ed;
           color: #0f172a;
         }
-
         .decl-list {
           display: flex;
           flex-direction: column;
@@ -803,12 +814,13 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           justify-content: space-between;
           align-items: center;
           margin-bottom: 8px;
+          flex-wrap: wrap;
+          gap: 6px;
         }
         .decl-plot {
           font-size: 14.5px;
           font-weight: 750;
           color: #0f172a;
-          margin-right: 10px;
         }
         .decl-date {
           font-size: 12.5px;
@@ -837,7 +849,6 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           border-radius: 8px;
           border: none;
         }
-
         .decl-empty-state {
           background: #ffffff;
           border: 1px dashed var(--border);
@@ -845,9 +856,6 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           padding: 24px 16px;
           text-align: center;
         }
-
-
-
         @media (max-width: 640px) {
           .pt-harvest-segmented {
             max-width: 100%;
@@ -855,7 +863,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           }
           .pt-harvest-segmented button {
             padding: 7px 6px;
-            font-size: 12.5px;
+            font-size: 12px;
           }
           .decl-topbar {
             margin-bottom: 14px;
@@ -883,172 +891,8 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           .tab-label-mobile {
             display: inline;
           }
-
         }
       `}</style>
     </div>
   );
-}
-
-/* ── COMPONENT THẺ TÀI SẢN LÔ HÀNG XUẤT KHẨU (CHUYỂN TỪ THỬA ĐẤT SANG) ── */
-interface HarvestAssetTagCardProps {
-  lot: PortalHarvest;
-  pucCode?: string;
-  onOpenModal: () => void;
-}
-
-function HarvestAssetTagCard({
-  lot,
-  pucCode = "PUC-KRB-001",
-  onOpenModal,
-}: HarvestAssetTagCardProps) {
-  const [qrSrc, setQrSrc] = useState<string>("");
-  const status = HARVEST_STATUS[lot.status];
-
-  const watermarkTitle =
-    lot.status === "exported" || lot.status === "delivered"
-      ? "ĐÃ XUẤT KHO"
-      : (status?.label || lot.status).toUpperCase();
-
-  const watermarkSub =
-    lot.status === "exported" || lot.status === "delivered"
-      ? "HTX KRÔNG BÚK · ĐÃ KIỂM TRA"
-      : "HTX KRÔNG BÚK · GIÁM SÁT";
-
-  useEffect(() => {
-    let active = true;
-    const origin =
-      typeof window !== "undefined" && window.location.origin
-        ? window.location.origin
-        : "https://krongbuk.puc.vn";
-    const targetUrl = `${origin}/trace/${encodeURIComponent(lot.qrCode || lot.lotCode)}`;
-
-    QRCode.toDataURL(targetUrl, {
-      margin: 0,
-      width: 320,
-      color: {
-        dark: "#0f172a",
-        light: "#ffffff",
-      },
-      errorCorrectionLevel: "M",
-    })
-      .then((url) => {
-        if (active) setQrSrc(url);
-      })
-      .catch((err) => {
-        console.error("Failed to generate asset QR code", err);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [lot.qrCode, lot.lotCode]);
-
-  return (
-    <div className="pt-asset-card" data-status={lot.status}>
-      {/* ── DẤU MỘC WATERMARK XUẤT HÀNG (DỜI SANG PHÍA PHẢI, MỜ NHẸ, KHÔNG ẢNH HƯỞNG CHỮ TEM) ── */}
-      <div className="pt-asset-watermark" aria-hidden="true">
-        <div className="pt-asset-watermark-inner">
-          <span className="pt-asset-watermark-title">{watermarkTitle}</span>
-          <span className="pt-asset-watermark-sub">{watermarkSub}</span>
-        </div>
-      </div>
-
-      {/* ── BÊN TRÁI: THÔNG TIN TEM LÔ HÀNG ── */}
-      <div className="pt-asset-left">
-        {/* Dòng 1: Tên sản phẩm, Đơn vị & Mã số vùng trồng */}
-        <div className="pt-asset-sub-title">
-          <span>SẦU RIÊNG TƯƠI</span>
-          <span className="pt-asset-dot">·</span>
-          <span className="pt-asset-hide-mobile">HTX KRÔNG BÚK</span>
-          <span className="pt-asset-dot pt-asset-hide-mobile">·</span>
-          <span>{pucCode}</span>
-        </div>
-
-        {/* Dòng 2: Mã lô & Khối lượng tịnh (KLT) nằm trọn trên 1 dòng */}
-        <div className="pt-asset-code-line">
-          <span className="pt-asset-code-val">LÔ {lot.lotCode}</span>
-          <span className="pt-asset-code-divider">·</span>
-          <span className="pt-asset-weight-val">KLT: {formatKg(lot.weightKg)}</span>
-        </div>
-
-        {/* Dòng 3: Mã truy xuất nguồn gốc */}
-        <div className="pt-asset-id-group">
-          <span className="pt-asset-id-label">MÃ TRUY XUẤT</span>
-          <strong className="pt-asset-id-val">{lot.qrCode || lot.lotCode}</strong>
-        </div>
-
-        {/* Dòng 4: Ngày thu hoạch & Nơi nhận */}
-        <div className="pt-asset-meta">
-          <span>Ngày thu: {formatDate(lot.harvestedOn)}</span>
-          <span className="pt-asset-meta-dot">·</span>
-          <span>{lot.buyer} ({lot.market === "Trung Quốc" ? "Xuất khẩu TQ" : lot.market})</span>
-        </div>
-      </div>
-
-      {/* ── BÊN PHẢI: MÃ QR CODE TRUY XUẤT THEO CHUẨN THÔNG TƯ 02/2024/TT-BKHCN ── */}
-      <div className="pt-asset-right">
-        <button
-          type="button"
-          className="pt-asset-qr-btn"
-          onClick={onOpenModal}
-          title="Bấm để mở tem vé chi tiết hoặc dùng máy ảnh quét trực tiếp"
-          aria-label={`Mã QR tra cứu nguồn gốc lô ${lot.lotCode} - Bấm để mở tem chi tiết`}
-        >
-          <div className="pt-asset-qr-box">
-            {qrSrc ? (
-              <img
-                src={qrSrc}
-                alt={`Mã QR tra cứu nguồn gốc lô ${lot.lotCode}`}
-                className="pt-asset-qr-img"
-              />
-            ) : (
-              <div className="pt-asset-qr-loading" aria-hidden="true">
-                <QrCode size={110} strokeWidth={1.8} />
-              </div>
-            )}
-            <div className="pt-asset-qr-overlay">
-              <span className="pt-asset-qr-badge">
-                <ArrowUpRight size={13} strokeWidth={2.5} aria-hidden="true" />
-                <span>Bấm mở</span>
-              </span>
-            </div>
-          </div>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ── COMPONENT HÌNH ẢNH MÃ QR CỦA TEM VÉ VOUCHER (CĂN GIỮA HOÀN HẢO) ── */
-function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string | null }) {
-  const [src, setSrc] = useState<string>("");
-
-  useEffect(() => {
-    let active = true;
-    const origin =
-      typeof window !== "undefined" && window.location.origin
-        ? window.location.origin
-        : "https://krongbuk.puc.vn";
-    const targetUrl = `${origin}/trace/${encodeURIComponent(qrCode || lotCode)}`;
-
-    QRCode.toDataURL(targetUrl, {
-      margin: 0,
-      width: 320,
-      color: { dark: "#0f172a", light: "#ffffff" },
-      errorCorrectionLevel: "H",
-    }).then((url) => {
-      if (active) setSrc(url);
-    }).catch(() => {});
-
-    return () => {
-      active = false;
-    };
-  }, [lotCode, qrCode]);
-
-  if (!src) {
-    return <QrCode size={110} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />;
-  }
-
-  return <img src={src} alt={`Mã QR ${lotCode}`} className="pt-qr-frame-img" />;
 }
