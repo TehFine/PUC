@@ -7,10 +7,24 @@ import { useResource } from "@/hooks/use-resource";
 import { daysSince, formatKg, HOUSEHOLD_STATUS, SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { TrainingDto } from "@/types/api";
-import type { PortalList, PortalOverview, PortalScheduleItem } from "@/types/portal";
+import type { PortalList, PortalOverview, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
 import { Sheet, StateBlock } from "./ui";
 import { getTrainingKicker, TrainingDetailModal } from "./LearnTab";
+
+const SCHEDULE_THEMES = [
+  { capsuleBg: "linear-gradient(180deg, #10b981 0%, #059669 100%)" },
+  { capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)" },
+  { capsuleBg: "linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%)" },
+  { capsuleBg: "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)" },
+];
+
+const TRAINING_THEMES = [
+  { capsuleBg: "linear-gradient(180deg, #10b981 0%, #059669 100%)" },
+  { capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)" },
+  { capsuleBg: "linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%)" },
+  { capsuleBg: "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)" },
+];
 
 function getHeroPath(w: number, h: number, badgeW: number, badgeH: number, badgeRight: number): string {
   const r = 28; // Corner radius
@@ -109,13 +123,49 @@ interface ActionItem {
   to: PortalTabId;
 }
 
-function buildActionItems(overview: PortalOverview): ActionItem[] {
+function getConciseViolationTitle(v?: PortalViolation | null, count = 1, isDiaryIdle = false): string {
+  if (!v) {
+    if (isDiaryIdle) return "Chưa ghi nhật ký";
+    return count > 1 ? `Khắc phục vi phạm (${count})` : "Khắc phục vi phạm";
+  }
+  const lower = v.title.toLowerCase();
+  if (lower.includes("nhật ký")) {
+    return "Chưa ghi nhật ký";
+  }
+  if (lower.includes("thuốc") || lower.includes("bảo vệ thực vật")) {
+    return "Vi phạm dùng thuốc";
+  }
+  if (lower.includes("mẫu") || lower.includes("kiểm nghiệm")) {
+    return "Mẫu kiểm nghiệm chưa đạt";
+  }
+  if (lower.includes("biển") || lower.includes("cắm vườn")) {
+    return "Chưa cắm biển vườn";
+  }
+  // Loại bỏ các tiền tố hành chính dài dòng như "Khắc phục:", "Vi phạm:", "Cảnh báo:"
+  let cleaned = v.title
+    .replace(/^(khắc phục|vi phạm|cảnh báo)[:\s\-]+/i, "")
+    .trim();
+  if (cleaned.length > 24) {
+    return "Khắc phục vi phạm";
+  }
+  return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "Khắc phục vi phạm";
+}
+
+function buildActionItems(overview: PortalOverview, firstViolation?: PortalViolation | null): ActionItem[] {
   const { stats, lastTest } = overview;
   const idle = daysSince(stats.lastJournalOn);
+  const isDiaryIdle = idle === null || idle >= 7;
   const items: ActionItem[] = [];
 
-  // 1. Nhật ký canh tác: việc cần làm khi quá hạn ghi nhật ký
-  if (idle === null || idle >= 7) {
+  // Kiểm tra xem có vấn đề về nhật ký canh tác hay không (quá hạn 7 ngày hoặc có nhắc nhở từ HTX)
+  const hasDiaryViolation = Boolean(
+    firstViolation &&
+      (firstViolation.title.toLowerCase().includes("nhật ký") ||
+        firstViolation.description?.toLowerCase().includes("nhật ký")),
+  );
+
+  // 1. NHẬT KÝ CANH TÁC: Việc của nhật ký -> Bấm vào chuyển THẲNG sang tab "diary" để ghi chép ngay
+  if (isDiaryIdle || hasDiaryViolation) {
     items.push({
       id: "diary",
       title: "Chưa ghi nhật ký",
@@ -123,16 +173,17 @@ function buildActionItems(overview: PortalOverview): ActionItem[] {
     });
   }
 
-  // 2. Vi phạm quy chuẩn cần khắc phục
-  if (stats.openViolations > 0) {
+  // 2. KIỂM TRA & GIÁM SÁT: Chỉ hiển thị nếu có vi phạm thực tế về kiểm tra / thanh tra thực địa (không phải nhật ký)
+  const isNonDiaryViolation = Boolean(firstViolation && !hasDiaryViolation);
+  if (stats.openViolations > 0 && isNonDiaryViolation) {
     items.push({
       id: "violations",
-      title: "Khắc phục vi phạm",
+      title: getConciseViolationTitle(firstViolation, stats.openViolations),
       to: "inspection",
     });
   }
 
-  // 3. Kiểm tra mẫu không đạt
+  // 3. Kiểm tra mẫu không đạt -> việc của kiểm tra thì chuyển sang tab "inspection"
   if (lastTest?.result === "fail") {
     items.push({
       id: "test-fail",
@@ -147,8 +198,13 @@ function buildActionItems(overview: PortalOverview): ActionItem[] {
 export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId) => void }) {
   const overview = usePortal<PortalOverview>("overview");
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
+  const violations = usePortal<PortalList<PortalViolation>>("violations");
   const training = useResource<TrainingDto, TrainingDto>("training", keepTraining);
   const [selectedTraining, setSelectedTraining] = useState<TrainingDto | null>(null);
+
+  const openViolationsList = useMemo(() => {
+    return violations.data?.data?.filter((v) => v.status === "open") || [];
+  }, [violations.data]);
 
   // Chỉ đưa những lịch tập huấn trong vòng thời gian khoảng 10 ngày trở lại để tránh làm rối màn hình trang chủ
   const urgentTrainings = useMemo(() => {
@@ -240,24 +296,10 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
     };
   }, [overview.data]);
 
-  const [timeStr, setTimeStr] = useState<string>("14:17");
-
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      const h = String(now.getHours()).padStart(2, "0");
-      const m = String(now.getMinutes()).padStart(2, "0");
-      setTimeStr(`${h}:${m}`);
-    };
-    updateTime();
-    const timer = setInterval(updateTime, 30000);
-    return () => clearInterval(timer);
-  }, []);
-
   const actionItems = useMemo<ActionItem[]>(() => {
     if (!overview.data) return [];
-    return buildActionItems(overview.data);
-  }, [overview.data]);
+    return buildActionItems(overview.data, openViolationsList[0]);
+  }, [overview.data, openViolationsList]);
 
   const pathD = useMemo(
     () => getHeroPath(dims.w, dims.h, dims.badgeW, dims.badgeH, dims.badgeRight),
@@ -380,13 +422,12 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         <div className="pt-widget-topbar">
           <div className="pt-widget-topbar-info">
             <h2 className="pt-widget-topbar-title">Nhắc nhở</h2>
-            <span className="pt-widget-topbar-time">{timeStr}</span>
           </div>
           <button
             type="button"
             className="pt-widget-topbar-btn"
-            onClick={() => onNavigate("diary")}
-            title="Xem chi tiết nhật ký canh tác"
+            onClick={() => onNavigate(actionItems[0]?.to || "diary")}
+            title="Xem chi tiết nội dung cần làm"
           >
             Chi tiết
           </button>
@@ -414,11 +455,11 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
                     }}
                   >
                     <img
-                      src={item.id === "diary" ? "/note.png?v=2" : "/clock-timer.png"}
+                      src="/note.png?v=2"
                       alt=""
                       width={20}
                       height={20}
-                      className={item.id === "diary" ? "pt-widget-note-icon" : "pt-widget-clock-icon"}
+                      className="pt-widget-note-icon"
                       aria-hidden="true"
                     />
                     <span className="pt-widget-item-text">{item.title}</span>
@@ -451,41 +492,64 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
         {(!schedule.data || schedule.data.data.length === 0) ? (
           <p className="pt-muted pt-schedule-empty">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
         ) : (
-          <div className="pt-timeline" role="list">
+          <div className="pt-vietgap-timeline" role="list">
             {schedule.data.data.slice(0, 4).map((item, idx, arr) => {
-              const isFirst = idx === 0;
-              const isLast = idx === arr.length - 1 && arr.length > 1;
+              const theme = SCHEDULE_THEMES[idx % SCHEDULE_THEMES.length];
+              const isLast = idx === arr.length - 1;
               const kicker = getScheduleKicker(item);
               const conciseTitle = getConciseScheduleTitle(item.title);
               const relNote = getRelativeScheduleNote(item.scheduledOn);
               const formattedDate = formatDate(item.scheduledOn);
 
               return (
-                <div
-                  key={item.id}
-                  role="button"
-                  tabIndex={0}
-                  className={`pt-timeline-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
-                  onClick={() => onNavigate("inspection")}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onNavigate("inspection");
-                    }
-                  }}
-                  title="Nhấn để xem chi tiết đợt kiểm tra trong tab riêng"
-                >
-                  <div className="pt-timeline-track" aria-hidden="true">
-                    <div className={`pt-timeline-node ${isFirst ? "is-active" : ""} ${isLast ? "is-target" : ""}`} />
+                <div key={item.id} className="pt-vietgap-step">
+                  <div className="pt-vietgap-segment">
+                    {/* Trục Timeline dải capsule dày + chấm tròn trắng đồng bộ chuẩn VietGAP */}
+                    <div className="pt-vietgap-track-col" aria-hidden="true">
+                      <div
+                        className="pt-vietgap-capsule pt-home-timeline-capsule"
+                        style={{ background: theme.capsuleBg }}
+                      >
+                        <div className="pt-vietgap-dot" />
+                        <div className="pt-vietgap-dot" />
+                      </div>
+                    </div>
+
+                    {/* Thẻ nội dung */}
+                    <div
+                      className="pt-training-clean-card"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onNavigate("inspection")}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onNavigate("inspection");
+                        }
+                      }}
+                      title="Nhấn để xem chi tiết đợt kiểm tra trong tab riêng"
+                    >
+                      <div className="pt-timeline-content">
+                        <span className="pt-timeline-kicker">{kicker}</span>
+                        <h3 className="pt-timeline-title">{conciseTitle}</h3>
+                      </div>
+                      <div className="pt-timeline-meta">
+                        <span className="pt-timeline-date">{formattedDate}</span>
+                        {relNote && <span className="pt-timeline-rel">{relNote}</span>}
+                      </div>
+                    </div>
                   </div>
-                  <div className="pt-timeline-content">
-                    <span className="pt-timeline-kicker">{kicker}</span>
-                    <h3 className="pt-timeline-title">{conciseTitle}</h3>
-                  </div>
-                  <div className="pt-timeline-meta">
-                    <span className="pt-timeline-date">{formattedDate}</span>
-                    {relNote && <span className="pt-timeline-rel">{relNote}</span>}
-                  </div>
+
+                  {/* Đoạn nối chuyển tiếp giữa các đợt (3 mini dots thẳng hàng với trục capsule) */}
+                  {!isLast && (
+                    <div className="pt-vietgap-transfer" aria-hidden="true">
+                      <div className="pt-vietgap-transfer-track">
+                        <div className="pt-vietgap-mini-dot" />
+                        <div className="pt-vietgap-mini-dot" />
+                        <div className="pt-vietgap-mini-dot" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -517,40 +581,63 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
               : "Hiện không có lớp tập huấn nào diễn ra trong 10 ngày tới."}
           </p>
         ) : (
-          <div className="pt-timeline" role="list">
+          <div className="pt-vietgap-timeline" role="list">
             {urgentTrainings.slice(0, 4).map((item, idx, arr) => {
-              const isFirst = idx === 0;
-              const isLast = idx === arr.length - 1 && arr.length > 1;
+              const theme = TRAINING_THEMES[idx % TRAINING_THEMES.length];
+              const isLast = idx === arr.length - 1;
               const kicker = getTrainingKicker(item.title);
               const relNote = item.heldOn ? getRelativeScheduleNote(item.heldOn) : "";
               const formattedDate = formatDate(item.heldOn);
 
               return (
-                <div
-                  key={item.id}
-                  role="button"
-                  tabIndex={0}
-                  className={`pt-timeline-item ${isFirst ? "is-first" : ""} ${isLast ? "is-last" : ""}`}
-                  onClick={() => setSelectedTraining(item)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedTraining(item);
-                    }
-                  }}
-                  title="Nhấn để xem chi tiết khóa tập huấn và đăng ký"
-                >
-                  <div className="pt-timeline-track" aria-hidden="true">
-                    <div className={`pt-timeline-node ${isFirst ? "is-active" : ""} ${isLast ? "is-target" : ""}`} />
+                <div key={item.id} className="pt-vietgap-step">
+                  <div className="pt-vietgap-segment">
+                    {/* Trục Timeline dải capsule dày + chấm tròn trắng đồng bộ chuẩn VietGAP */}
+                    <div className="pt-vietgap-track-col" aria-hidden="true">
+                      <div
+                        className="pt-vietgap-capsule pt-home-timeline-capsule"
+                        style={{ background: theme.capsuleBg }}
+                      >
+                        <div className="pt-vietgap-dot" />
+                        <div className="pt-vietgap-dot" />
+                      </div>
+                    </div>
+
+                    {/* Thẻ nội dung */}
+                    <div
+                      className="pt-training-clean-card"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedTraining(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedTraining(item);
+                        }
+                      }}
+                      title="Nhấn để xem chi tiết khóa tập huấn và đăng ký"
+                    >
+                      <div className="pt-timeline-content">
+                        <span className="pt-timeline-kicker">{kicker}</span>
+                        <h3 className="pt-timeline-title">{item.title}</h3>
+                      </div>
+                      <div className="pt-timeline-meta">
+                        <span className="pt-timeline-date">{formattedDate}</span>
+                        {relNote && <span className="pt-timeline-rel">{relNote}</span>}
+                      </div>
+                    </div>
                   </div>
-                  <div className="pt-timeline-content">
-                    <span className="pt-timeline-kicker">{kicker}</span>
-                    <h3 className="pt-timeline-title">{item.title}</h3>
-                  </div>
-                  <div className="pt-timeline-meta">
-                    <span className="pt-timeline-date">{formattedDate}</span>
-                    {relNote && <span className="pt-timeline-rel">{relNote}</span>}
-                  </div>
+
+                  {/* Đoạn nối chuyển tiếp giữa các khóa (3 mini dots thẳng hàng với trục capsule) */}
+                  {!isLast && (
+                    <div className="pt-vietgap-transfer" aria-hidden="true">
+                      <div className="pt-vietgap-transfer-track">
+                        <div className="pt-vietgap-mini-dot" />
+                        <div className="pt-vietgap-mini-dot" />
+                        <div className="pt-vietgap-mini-dot" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
