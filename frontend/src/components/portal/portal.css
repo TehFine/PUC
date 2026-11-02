@@ -5905,11 +5905,36 @@ body.pt-body {
   border: 1px solid rgba(255, 255, 255, 0.9);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
   overflow: hidden;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  touch-action: pan-y;
+}
+
+.pt-mapmodal-floating-popup.is-dragging {
+  transition: none !important;
+  user-select: none !important;
+}
+
+.pt-mapmodal-floating-popup.is-closing {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .pt-mapmodal-popup-handle {
-  display: none;
+  display: block;
+  width: 44px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.22);
+  margin: 3px auto 8px;
+  flex-shrink: 0;
+  transition: background 0.18s ease, transform 0.18s ease;
+  cursor: grab;
+}
+
+.pt-mapmodal-popup-header:hover .pt-mapmodal-popup-handle {
+  background: rgba(15, 23, 42, 0.42);
+  transform: scaleX(1.06);
 }
 
 .pt-mapmodal-popup-header {

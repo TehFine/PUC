@@ -53,6 +53,117 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   });
   const [mounted, setMounted] = useState(false);
 
+  // Vuốt xuống để tắt modal (Swipe-down-to-dismiss)
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const touchStartRef = useRef<{ y: number; x: number; time: number } | null>(null);
+  const hasDraggedRef = useRef(false);
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    touchStartRef.current = { y: touch.clientY, x: touch.clientX, time: Date.now() };
+    hasDraggedRef.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    const deltaY = touch.clientY - touchStartRef.current.y;
+    const deltaX = touch.clientX - touchStartRef.current.x;
+
+    // Chỉ nhận diện kéo xuống theo phương thẳng đứng
+    if (deltaY > 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      if (popupRef.current && popupRef.current.scrollTop > 0) {
+        return;
+      }
+      hasDraggedRef.current = true;
+      setIsDragging(true);
+      const dampened = deltaY > 150 ? 150 + (deltaY - 150) * 0.5 : deltaY;
+      setDragY(Math.max(0, dampened));
+      if (e.cancelable) e.preventDefault();
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const startY = touchStartRef.current.y;
+    const startTime = touchStartRef.current.time;
+    touchStartRef.current = null;
+    setIsDragging(false);
+
+    const touch = e.changedTouches[0];
+    if (!touch) {
+      setDragY(0);
+      return;
+    }
+
+    const deltaY = touch.clientY - startY;
+    const deltaTime = Math.max(1, Date.now() - startTime);
+    const velocity = deltaY / deltaTime; // px per ms
+
+    // Ngưỡng vuốt tắt: kéo xuống > 70px hoặc vuốt nhanh (velocity > 0.35 & deltaY > 25px)
+    if (deltaY > 70 || (velocity > 0.35 && deltaY > 25)) {
+      setIsClosing(true);
+      setDragY(window.innerHeight || 650);
+      setTimeout(() => {
+        onClose();
+      }, 200);
+    } else {
+      setDragY(0);
+    }
+  };
+
+  // Kéo chuột trên Desktop đối với thanh handle / header
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("button, a")) return;
+
+    const startY = e.clientY;
+    const startX = e.clientX;
+    const startTime = Date.now();
+    hasDraggedRef.current = false;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY;
+      const deltaX = moveEvent.clientX - startX;
+      if (deltaY > 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        hasDraggedRef.current = true;
+        setIsDragging(true);
+        const dampened = deltaY > 150 ? 150 + (deltaY - 150) * 0.5 : deltaY;
+        setDragY(Math.max(0, dampened));
+      }
+    };
+
+    const onMouseUp = (upEvent: MouseEvent) => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      setIsDragging(false);
+
+      const deltaY = upEvent.clientY - startY;
+      const deltaTime = Math.max(1, Date.now() - startTime);
+      const velocity = deltaY / deltaTime;
+
+      if (deltaY > 70 || (velocity > 0.35 && deltaY > 25)) {
+        setIsClosing(true);
+        setDragY(window.innerHeight || 650);
+        setTimeout(() => {
+          onClose();
+        }, 200);
+      } else {
+        setDragY(0);
+      }
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
   useEffect(() => {
     setMounted(true);
     const prevOverflow = document.body.style.overflow;
@@ -290,7 +401,12 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       {!ready && <div className="pt-mapmodal-loading-curtain" />}
 
       {/* 2. THANH ĐIỀU HƯỚNG NỔI TRÊN ĐỈNH (TOP BAR) */}
-      <div className="pt-mapmodal-topbar">
+      <div
+        className="pt-mapmodal-topbar"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         {/* Huy hiệu mã thửa nổi bật góc trái */}
         <div className="pt-mapmodal-top-tag">
           <strong className="pt-mapmodal-top-code">{plot.code}</strong>
@@ -331,11 +447,26 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       </div>
 
       {/* 3. POPUP NỔI HIỂN THỊ THÔNG TIN THỬA ĐẤT CỦA HỘ ĐÓ */}
-      <div className={`pt-mapmodal-floating-popup ${infoExpanded ? "is-expanded" : "is-minimized"}`}>
+      <div
+        ref={popupRef}
+        className={`pt-mapmodal-floating-popup ${infoExpanded ? "is-expanded" : "is-minimized"} ${isDragging ? "is-dragging" : ""} ${isClosing ? "is-closing" : ""}`}
+        style={{
+          transform: dragY > 0 ? `translateY(${dragY}px)` : undefined,
+          transition: isDragging ? "none" : undefined,
+          opacity: dragY > 0 ? Math.max(0.08, 1 - dragY / 380) : undefined,
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         {/* Đầu popup: Thanh kéo handle + Tiêu đề + Nút thu gọn / mở rộng */}
         <div
           className="pt-mapmodal-popup-header"
-          onClick={() => setInfoExpanded((prev) => !prev)}
+          onMouseDown={handleMouseDown}
+          onClick={() => {
+            if (hasDraggedRef.current) return;
+            setInfoExpanded((prev) => !prev);
+          }}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
@@ -344,7 +475,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               setInfoExpanded((prev) => !prev);
             }
           }}
-          title={infoExpanded ? "Thu gọn thông tin để xem trọn bản đồ" : "Mở rộng xem chi tiết thông tin thửa đất"}
+          title={infoExpanded ? "Vuốt xuống để tắt hoặc bấm để thu gọn" : "Vuốt xuống để tắt hoặc bấm để mở rộng"}
         >
           <div className="pt-mapmodal-popup-handle" aria-hidden="true" />
           <div className="pt-mapmodal-popup-header-row">
