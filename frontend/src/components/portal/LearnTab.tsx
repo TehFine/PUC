@@ -6,14 +6,11 @@ import { PESTICIDE_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PesticideDto, TrainingDto, VarietyDto } from "@/types/api";
 import {
-  AlertTriangle,
-  Ban,
   Check,
   ChevronRight,
   Clock,
   MapPin,
   Search,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import { Card, EmptyState, Sheet, StateBlock } from "./ui";
@@ -547,11 +544,6 @@ export function PesticideDetailModal({
 
       {/* 3. Cảnh báo & Hướng dẫn quy định chuyên môn */}
       <div className={`pt-pesticide-alert-box pt-pesticide-alert-${item.status}`}>
-        <div className="pt-pesticide-alert-icon">
-          {isAllowed && <ShieldCheck size={20} />}
-          {isRestricted && <AlertTriangle size={20} />}
-          {isBanned && <Ban size={20} />}
-        </div>
         <div className="pt-pesticide-alert-content">
           <strong>
             {isAllowed
