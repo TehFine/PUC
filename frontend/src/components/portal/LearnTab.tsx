@@ -476,6 +476,8 @@ export interface PesticideEfficacy {
   usage: string;
   targets: string[];
   stage?: string;
+  dosage: string;
+  instructions: string[];
 }
 
 export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
@@ -484,44 +486,113 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
 
   if (active.includes("buprofezin") || name.includes("buprofezin")) {
     return {
-      usage: "Ức chế lột xác, chống rầy đẻ trứng và kìm hãm quần thể chích hút nở rộ.",
-      targets: ["Rầy phấn trắng", "Rệp sáp bông", "Rầy bông sầu riêng", "Rệp dính"],
-      stage: "Phun khi rầy non mới nở, giai đoạn cây nhú đọt non hoặc mắt cua",
+      usage: "Ức chế tổng hợp chitin, ngăn cản côn trùng lột xác, làm ung trứng và triệt tiêu lứa rầy non tiếp theo.",
+      targets: [
+        "Rầy phấn trắng (rầy bông sầu riêng)",
+        "Rầy xanh (rầy nhảy hại đọt non)",
+        "Rệp sáp bông & rệp sáp trái non",
+        "Rệp dính, rệp sáp giả",
+      ],
+      stage: "Phun khi rầy non mới nở (tuổi 1–3) hoặc giai đoạn cây nhú đọt non, mở lá bàng, mắt cua",
+      dosage: "Pha 100 – 150 ml cho phuy 200 lít nước (10 – 15 ml / bình 25 lít)",
+      instructions: [
+        "Lượng nước phun 400 – 600 lít/ha tùy theo độ lớn tán cây sầu riêng.",
+        "Phun ướt đều 2 mặt lá, ngọn non và chùm quả nơi rầy rệp đang trú ẩn.",
+        "Thuốc ức chế lột xác nên đạt hiệu lực diệt trừ triệt để nhất sau 3 – 5 ngày.",
+        "Luân phiên hoặc phối hợp hoạt chất khi mật độ rầy trưởng thành cao để cắt đứt vòng đời sâu hại.",
+      ],
     };
   }
   if (active.includes("abamectin") || name.includes("abamectin")) {
     return {
-      usage: "Trừ sâu sinh học phổ rộng, tác động vị độc & tiếp xúc, thấm sâu cực nhanh vào lá.",
-      targets: ["Nhện đỏ", "Bọ trĩ hại hoa", "Sâu đục trái non", "Sâu vẽ bùa"],
-      stage: "Phun sớm khi nhện bùng phát mùa khô hoặc phát hiện vết cắn sâu non",
+      usage: "Trừ sâu sinh học phổ rộng chiết xuất từ xạ khuẩn, tác động vị độc & tiếp xúc, thấm sâu cực nhanh vào biểu bì lá.",
+      targets: [
+        "Nhện đỏ hại lá (mặt dưới lá)",
+        "Bọ trĩ (bù lạch hại hoa và đọt non)",
+        "Sâu đục trái non & cuống trái",
+        "Sâu vẽ bùa trên lá non",
+      ],
+      stage: "Phun sớm khi nhện đỏ chớm xuất hiện mùa khô hoặc giai đoạn cây nhú đọt, chùm hoa non",
+      dosage: "Pha 15 – 25 ml cho bình 25 lít nước (150 – 200 ml cho phuy 200 lít)",
+      instructions: [
+        "Chỉnh béc phun sương thật mịn, phun kỹ và ướt đều mặt dưới lá và các đọt non.",
+        "Phun vào lúc sáng sớm (khi ráo sương) hoặc chiều mát; tránh phun lúc nắng gắt vì hoạt chất dễ bị quang hóa phân hủy.",
+        "Không phun quá 2 lần liên tiếp cùng một hoạt chất trong một vụ canh tác để tránh nhện đỏ kháng thuốc.",
+        "Ngừng phun trước khi thu hoạch tối thiểu 7 ngày để đảm bảo dư lượng an toàn VietGAP.",
+      ],
     };
   }
   if (active.includes("imidacloprid") || name.includes("imidacloprid")) {
     return {
-      usage: "Thuốc lưu dẫn nội hấp cực mạnh, hấp thu qua rễ và tán lá bảo vệ đọt non toàn diện.",
-      targets: ["Rầy nhảy", "Bọ trĩ", "Rệp sáp đọt non", "Rầy chổng cánh"],
-      stage: "Phun phòng ngừa khi cây bung đọt mới hoặc giai đoạn xả nhụy",
+      usage: "Thuốc lưu dẫn nội hấp cực mạnh (hai chiều), hấp thu nhanh qua rễ và tán lá, bảo vệ toàn diện các cơi đọt non mới bung.",
+      targets: [
+        "Rầy nhảy (rầy xanh hại sầu riêng)",
+        "Bọ trĩ gây cháy bìa lá non",
+        "Rệp sáp đọt non & rệp vảy",
+        "Bọ xít muỗi chích hút cuống hoa",
+      ],
+      stage: "Phun phòng ngừa khi cây bắt đầu nhú mắt cua hoặc vừa bung đọt non mới",
+      dosage: "Pha 20 – 30 g cho bình 25 lít nước (hoặc 100 g cho phuy 200 lít nước)",
+      instructions: [
+        "Phun ướt đều tán lá, thân cành và những nơi côn trùng chích hút ẩn nấp.",
+        "Thuốc có tính nội hấp di chuyển khắp thân cây, bảo vệ được cả những đọt non mọc sau khi phun.",
+        "Không phun trực tiếp khi sầu riêng đang bung hoa nở rộ (xả nhụy) để bảo vệ ong mật thụ phấn.",
+        "Thời gian cách ly an toàn tối thiểu 14 ngày trước khi thu hoạch theo tiêu chuẩn xuất khẩu GACC.",
+      ],
     };
   }
   if (active.includes("emamectin") || name.includes("emamectin")) {
     return {
-      usage: "Thuốc sinh học diệt sâu miệng nhai kháng thuốc, độc tính thấp, đạt chuẩn xuất khẩu.",
-      targets: ["Sâu đục quả", "Sâu đục cuống", "Sâu ăn bông", "Sâu lông"],
-      stage: "Phun khi phát hiện sâu non hoặc thời điểm trái bằng quả trứng gà",
+      usage: "Thuốc trừ sâu sinh học thế hệ mới diệt sâu miệng nhai kháng thuốc, tác động tiếp xúc và vị độc cực mạnh, an toàn xuất khẩu.",
+      targets: [
+        "Sâu đục quả (sâu đục trái sầu riêng)",
+        "Sâu đục cuống hoa & cuống trái",
+        "Sâu ăn bông & sâu cắn phá gai",
+        "Sâu lông, sâu róm hại tán lá",
+      ],
+      stage: "Phun khi sâu non mới xuất hiện (tuổi 1–2) hoặc thời điểm định kỳ trái bằng quả trứng gà",
+      dosage: "Pha 15 – 20 ml cho bình 25 lít nước (150 – 200 ml cho phuy 200 lít nước)",
+      instructions: [
+        "Phun ướt đẫm và kỹ vào bề mặt chùm trái non, kẽ trái, cuống trái nơi sâu hay đẻ trứng và đục vào.",
+        "Phun sớm khi sâu non chưa đục sâu vào bên trong cơm sầu riêng để đạt hiệu quả 100%.",
+        "Kết hợp tỉa bớt trái méo, tạo chùm trái thông thoáng và bao trái đúng thời điểm để hạn chế sâu tấn công.",
+        "Thời gian cách ly ngắn (5 – 7 ngày), phù hợp cho các đợt xử lý bảo vệ trái trước thu hoạch.",
+      ],
     };
   }
   if (active.includes("chlorpyrifos") || name.includes("chlorpyrifos")) {
     return {
-      usage: "Tác động tiếp xúc và xông hơi mạnh (Kiểm soát đặc biệt / Chỉ dùng khi có dịch nặng).",
-      targets: ["Rệp sáp rễ", "Tuyến trùng hại rễ", "Mối hại gốc sầu riêng"],
-      stage: "Tưới vùng rễ khi dịch hại nặng; ngưng trước thu hoạch tối thiểu 21 ngày",
+      usage: "Thuốc trừ sâu gốc lân hữu cơ tác động tiếp xúc, vị độc và xông hơi cực mạnh. NẰM TRONG DANH MỤC KIỂM SOÁT ĐẶC BIỆT CỦA BỘ NN-PTNT.",
+      targets: [
+        "Rệp sáp rễ & rệp đất",
+        "Tuyến trùng hại rễ tơ sầu riêng",
+        "Mối hại gốc và cổ rễ",
+        "Mọt đục cành già mùa khô",
+      ],
+      stage: "Chỉ dùng tưới vùng gốc rễ khi dịch hại bùng phát nghiêm trọng ngoài tầm kiểm soát sinh học",
+      dosage: "Pha 200 – 250 ml cho phuy 200 lít nước (tưới 5 – 10 lít dung dịch/gốc)",
+      instructions: [
+        "TUYỆT ĐỐI CẤM PHUN LÊN TRÁI VÀ TÁN LÁ SẦU RIÊNG XUẤT KHẨU vì nguy cơ tồn dư vượt ngưỡng MRL của Hải quan GACC.",
+        "Chỉ được phép tưới xử lý vùng rễ khi có văn bản hướng dẫn và giám sát của cán bộ kỹ thuật HTX.",
+        "Ngừng sử dụng tối thiểu 21 ngày trước thu hoạch; bắt buộc kiểm nghiệm mẫu đất và quả trước khi cấp phép xuất khẩu.",
+      ],
     };
   }
   if (active.includes("carbaryl") || name.includes("carbaryl") || item.status === "banned") {
     return {
-      usage: "Hoạt chất độc hại đã bị cấm hoàn toàn theo Nghị định thư GACC và Bộ NN-PTNT.",
-      targets: ["Chất cấm – Tuyệt đối không dùng cho sầu riêng"],
+      usage: "HOẠT CHẤT ĐỘC HẠI BỊ CẤM HOÀN TOÀN THEO NGHỊ ĐỊNH THƯ GACC VÀ THÔNG TƯ 10/2024/TT-BNNPTNT.",
+      targets: [
+        "Hoạt chất độc thần kinh Carbamate bị cấm tuyệt đối",
+        "Cấm dùng trên sầu riêng và mọi loại cây ăn trái xuất khẩu",
+        "GACC đình chỉ ngay mã vùng trồng nếu phát hiện tồn dư",
+      ],
       stage: "Nghiêm cấm tuyệt đối ở mọi giai đoạn sinh trưởng của cây",
+      dosage: "0 g (TUYỆT ĐỐI KHÔNG SỬ DỤNG)",
+      instructions: [
+        "Cấm mua bán, tàng trữ và sử dụng trong toàn bộ vùng trồng được cấp mã số PUC.",
+        "Mọi lô hàng sầu riêng phát hiện tồn dư Carbaryl sẽ bị Hải quan cửa khẩu từ chối thông quan và tịch thu tiêu hủy.",
+        "Bà con nông hộ sử dụng hoạt chất cấm sẽ bị đình chỉ tư cách xã viên HTX và thu hồi mã vùng trồng liên kết.",
+      ],
     };
   }
 
@@ -529,6 +600,12 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
     usage: "Đặc trị sâu hại và côn trùng chích hút theo danh mục BVTV được phép sử dụng.",
     targets: ["Sâu đục thân", "Rầy chích hút", "Bọ trĩ", "Nhện đỏ"],
     stage: "Phun theo đúng hướng dẫn trên nhãn thuốc và đảm bảo thời gian cách ly PHI",
+    dosage: "Pha theo tỷ lệ khuyến cáo in trên nhãn bao bì sản phẩm",
+    instructions: [
+      "Trang bị đầy đủ đồ bảo hộ khi pha chế và phun thuốc.",
+      "Phun ướt đều tán lá vào sáng sớm hoặc chiều mát.",
+      "Tuân thủ nghiêm ngặt thời gian cách ly trước thu hoạch (PHI).",
+    ],
   };
 }
 
@@ -577,13 +654,13 @@ export function PesticideDetailModal({
 
         <div className="pt-efficacy-row">
           <span className="pt-efficacy-label">Đối tượng phòng trừ & Bệnh hại</span>
-          <div className="pt-efficacy-targets">
+          <ul className="pt-efficacy-bullet-list">
             {efficacy.targets.map((target) => (
-              <span key={target} className="pt-efficacy-tag">
+              <li key={target} className="pt-efficacy-bullet-item">
                 {target}
-              </span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
 
         {efficacy.stage && (
@@ -592,6 +669,22 @@ export function PesticideDetailModal({
             <strong>{efficacy.stage}</strong>
           </div>
         )}
+
+        {/* Hướng dẫn sử dụng & Liều lượng pha phun chuẩn kỹ thuật */}
+        <div className="pt-efficacy-row" style={{ marginTop: "6px" }}>
+          <span className="pt-efficacy-label">Hướng dẫn sử dụng & Liều lượng pha phun</span>
+          <div className="pt-instruction-dosage-box">
+            <span className="pt-instruction-dosage-label">Liều lượng khuyến cáo:</span>
+            <strong className="pt-instruction-dosage-val">{efficacy.dosage}</strong>
+          </div>
+          <ul className="pt-efficacy-bullet-list">
+            {efficacy.instructions.map((ins, idx) => (
+              <li key={idx} className="pt-efficacy-bullet-item">
+                {ins}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       {/* 4. Lưới thông số kỹ thuật (Hoạt chất, Nồng độ, Cách ly PHI, MRL) */}
@@ -1048,13 +1141,13 @@ export function FertilizerDetailModal({
 
         <div className="pt-efficacy-row">
           <span className="pt-efficacy-label">Giai đoạn cây trồng & Hiệu quả trọng tâm</span>
-          <div className="pt-efficacy-targets">
+          <ul className="pt-efficacy-bullet-list">
             {efficacy.targets.map((target) => (
-              <span key={target} className="pt-efficacy-tag">
+              <li key={target} className="pt-efficacy-bullet-item">
                 {target}
-              </span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
 
         <div className="pt-efficacy-timing">
