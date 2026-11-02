@@ -471,6 +471,66 @@ export function getPesticideImage(item: { status: string; name?: string; id?: nu
   return "/pesticides/blue.png";
 }
 
+export interface PesticideEfficacy {
+  usage: string;
+  targets: string[];
+  stage?: string;
+}
+
+export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
+  const name = (item.name || "").toLowerCase();
+  const active = (item.activeIngredient || "").toLowerCase();
+
+  if (active.includes("buprofezin") || name.includes("buprofezin")) {
+    return {
+      usage: "Ức chế lột xác, chống rầy đẻ trứng và kìm hãm quần thể chích hút nở rộ.",
+      targets: ["Rầy phấn trắng", "Rệp sáp bông", "Rầy bông sầu riêng", "Rệp dính"],
+      stage: "Phun khi rầy non mới nở, giai đoạn cây nhú đọt non hoặc mắt cua",
+    };
+  }
+  if (active.includes("abamectin") || name.includes("abamectin")) {
+    return {
+      usage: "Trừ sâu sinh học phổ rộng, tác động vị độc & tiếp xúc, thấm sâu cực nhanh vào lá.",
+      targets: ["Nhện đỏ", "Bọ trĩ hại hoa", "Sâu đục trái non", "Sâu vẽ bùa"],
+      stage: "Phun sớm khi nhện bùng phát mùa khô hoặc phát hiện vết cắn sâu non",
+    };
+  }
+  if (active.includes("imidacloprid") || name.includes("imidacloprid")) {
+    return {
+      usage: "Thuốc lưu dẫn nội hấp cực mạnh, hấp thu qua rễ và tán lá bảo vệ đọt non toàn diện.",
+      targets: ["Rầy nhảy", "Bọ trĩ", "Rệp sáp đọt non", "Rầy chổng cánh"],
+      stage: "Phun phòng ngừa khi cây bung đọt mới hoặc giai đoạn xả nhụy",
+    };
+  }
+  if (active.includes("emamectin") || name.includes("emamectin")) {
+    return {
+      usage: "Thuốc sinh học diệt sâu miệng nhai kháng thuốc, độc tính thấp, đạt chuẩn xuất khẩu.",
+      targets: ["Sâu đục quả", "Sâu đục cuống", "Sâu ăn bông", "Sâu lông"],
+      stage: "Phun khi phát hiện sâu non hoặc thời điểm trái bằng quả trứng gà",
+    };
+  }
+  if (active.includes("chlorpyrifos") || name.includes("chlorpyrifos")) {
+    return {
+      usage: "Tác động tiếp xúc và xông hơi mạnh (Kiểm soát đặc biệt / Chỉ dùng khi có dịch nặng).",
+      targets: ["Rệp sáp rễ", "Tuyến trùng hại rễ", "Mối hại gốc sầu riêng"],
+      stage: "Tưới vùng rễ khi dịch hại nặng; ngưng trước thu hoạch tối thiểu 21 ngày",
+    };
+  }
+  if (active.includes("carbaryl") || name.includes("carbaryl") || item.status === "banned") {
+    return {
+      usage: "Hoạt chất độc hại đã bị cấm hoàn toàn theo Nghị định thư GACC và Bộ NN-PTNT.",
+      targets: ["Chất cấm – Tuyệt đối không dùng cho sầu riêng"],
+      stage: "Nghiêm cấm tuyệt đối ở mọi giai đoạn sinh trưởng của cây",
+    };
+  }
+
+  return {
+    usage: "Đặc trị sâu hại và côn trùng chích hút theo danh mục BVTV được phép sử dụng.",
+    targets: ["Sâu đục thân", "Rầy chích hút", "Bọ trĩ", "Nhện đỏ"],
+    stage: "Phun theo đúng hướng dẫn trên nhãn thuốc và đảm bảo thời gian cách ly PHI",
+  };
+}
+
 export function PesticideDetailModal({
   item,
   onClose,
@@ -483,6 +543,7 @@ export function PesticideDetailModal({
   const isRestricted = item.status === "restricted";
   const isBanned = item.status === "banned";
   const imgSrc = getPesticideImage(item);
+  const efficacy = getPesticideEfficacy(item);
 
   return (
     <div className="pt-pesticide-modal-body">
@@ -506,7 +567,33 @@ export function PesticideDetailModal({
         </p>
       </div>
 
-      {/* 2. Lưới thông số kỹ thuật (Hoạt chất, Nồng độ, Cách ly PHI, MRL) */}
+      {/* 3. Công dụng & Đối tượng phòng trừ (Cô đọng, súc tích) */}
+      <div className="pt-pesticide-efficacy-card">
+        <div className="pt-efficacy-row">
+          <span className="pt-efficacy-label">Công dụng chính</span>
+          <p className="pt-efficacy-desc">{efficacy.usage}</p>
+        </div>
+
+        <div className="pt-efficacy-row">
+          <span className="pt-efficacy-label">Đối tượng phòng trừ & Bệnh hại</span>
+          <div className="pt-efficacy-targets">
+            {efficacy.targets.map((target) => (
+              <span key={target} className="pt-efficacy-tag">
+                {target}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {efficacy.stage && (
+          <div className="pt-efficacy-timing">
+            <span>Thời điểm khuyến nghị:</span>
+            <strong>{efficacy.stage}</strong>
+          </div>
+        )}
+      </div>
+
+      {/* 4. Lưới thông số kỹ thuật (Hoạt chất, Nồng độ, Cách ly PHI, MRL) */}
       <div className="pt-pesticide-modal-specs">
         <h4 className="pt-pesticide-modal-section-title">Thông số kỹ thuật & Tiêu chuẩn</h4>
         <div className="pt-pesticide-specs-grid">
