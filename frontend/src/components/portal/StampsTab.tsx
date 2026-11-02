@@ -552,7 +552,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           gap: 4px;
           padding: 4px;
           border: 1px solid var(--border);
-          border-radius: 999px;
+          border-radius: 12px;
           background: #fff;
           box-shadow: 0 2px 10px rgba(20, 55, 47, 0.04);
           box-sizing: border-box;
@@ -563,7 +563,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           min-width: 0;
           padding: 8px 12px;
           border: 0;
-          border-radius: 999px;
+          border-radius: 9px;
           background: transparent;
           color: var(--text-secondary);
           font: inherit;
