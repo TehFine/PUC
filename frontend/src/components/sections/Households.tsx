@@ -1,31 +1,48 @@
 "use client";
 
 import { useState } from "react";
-import { useResource } from "@/hooks/use-resource";
-import { mapHousehold } from "@/lib/mappers";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { useApiList } from "@/hooks/use-api";
+import DeleteDialog from "@/components/admin/shared/DeleteDialog";
+import Pagination from "@/components/admin/shared/Pagination";
+import TableState from "@/components/admin/shared/TableState";
+import { formatVn } from "@/components/admin/shared/form-utils";
+import { badgeOf, HOUSEHOLD_STATUS, optionsOf } from "@/components/admin/shared/labels";
+import { useVillageOptions } from "@/components/admin/shared/options";
+import { useDebounced } from "@/components/admin/shared/use-debounced";
+import HouseholdDetailModal from "@/components/admin/households/HouseholdDetailModal";
+import HouseholdFormModal from "@/components/admin/households/HouseholdFormModal";
+import HouseholdImportModal from "@/components/admin/households/HouseholdImportModal";
+import type { HouseholdRecord } from "@/types/households";
 
-const statusClass: Record<string, string> = {
-  green: "badge-green",
-  gold:  "badge-gold",
-  red:   "badge-red",
-  blue:  "badge-blue",
-};
+const PAGE_SIZE = 25;
+const STATUS_OPTIONS = optionsOf(HOUSEHOLD_STATUS);
 
 export default function Households() {
-  const { data: households } = useResource("households", mapHousehold);
-  const [search,  setSearch]  = useState("");
-  const [village, setVillage] = useState("all");
-  const [status,  setStatus]  = useState("all");
+  const { can } = useAuth();
+  const canCreate = can("households", "create");
+  const canUpdate = can("households", "update");
+  const canDelete = can("households", "delete");
 
-  const filtered = households.filter((h) => {
-    const matchSearch =
-      h.name.toLowerCase().includes(search.toLowerCase()) ||
-      h.code.toLowerCase().includes(search.toLowerCase()) ||
-      h.cccd.includes(search);
-    const matchVillage = village === "all" || h.village === village;
-    const matchStatus  = status  === "all" || h.status  === status;
-    return matchSearch && matchVillage && matchStatus;
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounced(search);
+  const [villageId, setVillageId] = useState("");
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
+
+  const { villages, options: villageOptions } = useVillageOptions();
+  const list = useApiList<HouseholdRecord>("households", {
+    q: debouncedSearch || undefined,
+    villageId: villageId || undefined,
+    status: status || undefined,
+    page,
+    pageSize: PAGE_SIZE,
   });
+
+  const [viewing, setViewing] = useState<HouseholdRecord | null>(null);
+  const [editing, setEditing] = useState<HouseholdRecord | "new" | null>(null);
+  const [deleting, setDeleting] = useState<HouseholdRecord | null>(null);
+  const [importing, setImporting] = useState(false);
 
   return (
     <>
@@ -33,10 +50,16 @@ export default function Households() {
         <div>
           <h1>Quản lý Hộ Nông Dân</h1>
         </div>
-        <div className="header-actions">
-          <button className="btn btn-outline">Import Excel</button>
-          <button className="btn btn-primary">Thêm hộ mới</button>
-        </div>
+        {canCreate && (
+          <div className="header-actions">
+            <button type="button" className="btn btn-outline" onClick={() => setImporting(true)}>
+              Import CSV/Excel
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
+              Thêm hộ mới
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="filter-bar">
@@ -44,27 +67,45 @@ export default function Households() {
           <input
             type="text"
             className="filter-input"
-            placeholder="Tìm theo tên, CCCD, mã vùng…"
+            placeholder="Tìm theo tên, CCCD, số ĐT, mã vùng…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
-        <select className="filter-select" value={village} onChange={(e) => setVillage(e.target.value)}>
-          <option value="all">Tất cả thôn</option>
-          {["Thôn 1","Thôn 2","Thôn 3","Thôn 4","Thôn 5","Thôn 6"].map(v => (
-            <option key={v}>{v}</option>
+        <select
+          className="filter-select"
+          value={villageId}
+          aria-label="Lọc theo thôn"
+          onChange={(e) => {
+            setVillageId(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">Tất cả thôn</option>
+          {villageOptions.map((v) => (
+            <option key={v.value} value={v.value}>
+              {v.label}
+            </option>
           ))}
         </select>
-        <select className="filter-select" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="all">Mọi trạng thái</option>
-          <option>Đủ chuẩn XK</option>
-          <option>Cần cải thiện</option>
-          <option>Vi phạm</option>
-          <option>Chờ duyệt</option>
-        </select>
-        <select className="filter-select">
-          <option>Năm 2024</option>
-          <option>Năm 2023</option>
+        <select
+          className="filter-select"
+          value={status}
+          aria-label="Lọc theo trạng thái"
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">Mọi trạng thái</option>
+          {STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -85,50 +126,117 @@ export default function Households() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((h, i) => (
-              <tr key={h.id}>
-                <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{i + 1}</td>
-                <td style={{ fontWeight: 600 }}>{h.name}</td>
-                <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-secondary)" }}>{h.cccd}</td>
-                <td style={{ color: "var(--text-secondary)" }}>{h.phone}</td>
-                <td>{h.village}</td>
-                <td style={{ textAlign: "center", fontWeight: 600 }}>{h.plots}</td>
-                <td style={{ fontWeight: 500 }}>{h.area} ha</td>
-                <td>
-                  <span style={{
-                    fontFamily: "monospace", fontSize: 12,
-                    background: "#f0fdf4", color: "#166534",
-                    border: "1px solid #bbf7d0",
-                    padding: "2px 8px", borderRadius: 6, fontWeight: 600,
-                  }}>
-                    {h.code}
-                  </span>
-                </td>
-                <td>
-                  <span className={`badge ${statusClass[h.statusType]}`}>{h.status}</span>
-                </td>
-                <td>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="btn btn-outline btn-sm">Xem</button>
-                    <button className="btn btn-outline btn-sm">Sửa</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={10} className="empty-state">Không tìm thấy hộ phù hợp</td></tr>
-            )}
+            <TableState
+              colSpan={10}
+              loading={list.loading}
+              error={list.error}
+              empty={list.rows.length === 0}
+              emptyText="Không tìm thấy hộ nông dân phù hợp"
+              onRetry={() => void list.refresh()}
+            />
+            {list.rows.map((h, i) => {
+              const st = badgeOf(HOUSEHOLD_STATUS, h.status);
+              return (
+                <tr key={h.id}>
+                  <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{(page - 1) * PAGE_SIZE + i + 1}</td>
+                  <td style={{ fontWeight: 600 }}>{h.name}</td>
+                  <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-secondary)" }}>{h.cccd}</td>
+                  <td style={{ color: "var(--text-secondary)" }}>{h.phone}</td>
+                  <td>{h.villageName || `Thôn #${h.villageId}`}</td>
+                  <td style={{ textAlign: "center", fontWeight: 600 }}>{h.plotCount}</td>
+                  <td style={{ fontWeight: 500 }}>{formatVn(h.areaHa, 2)} ha</td>
+                  <td>
+                    <span
+                      style={{
+                        fontFamily: "monospace",
+                        fontSize: 12,
+                        background: "#f0fdf4",
+                        color: "#166534",
+                        border: "1px solid #bbf7d0",
+                        padding: "2px 8px",
+                        borderRadius: 6,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {h.code}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`badge ${st.badge}`}>{st.label}</span>
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewing(h)}>
+                        Xem
+                      </button>
+                      {canUpdate && (
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(h)}>
+                          Sửa
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeleting(h)}>
+                          Xóa
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
-        <div className="table-footer">
-          <span>Hiển thị {filtered.length} / 248 hộ</span>
-          <div className="pagination">
-            {[1,2,3,"…",17].map((p, i) => (
-              <button key={i} className={`pg-btn ${p === 1 ? "active" : ""}`}>{p}</button>
-            ))}
-          </div>
-        </div>
+        <Pagination page={page} pageSize={PAGE_SIZE} total={list.total} unit="hộ" onChange={setPage} />
       </div>
+
+      {viewing && (
+        <HouseholdDetailModal
+          household={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={
+            canUpdate
+              ? () => {
+                  const target = viewing;
+                  setViewing(null);
+                  setEditing(target);
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {editing && (
+        <HouseholdFormModal
+          initial={editing === "new" ? null : editing}
+          villageOptions={villageOptions}
+          onClose={() => setEditing(null)}
+          onSaved={() => void list.refresh()}
+        />
+      )}
+
+      {deleting && (
+        <DeleteDialog
+          title="Xóa hộ nông dân"
+          message={
+            <>
+              Bạn có chắc chắn muốn xóa hộ <strong>{deleting.name}</strong> (mã <code>{deleting.code}</code>)? Thao tác này không
+              thể hoàn tác.
+            </>
+          }
+          path={`/households/${deleting.id}`}
+          successMessage={`Đã xóa hộ ${deleting.name}.`}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => void list.refresh()}
+        />
+      )}
+
+      {importing && (
+        <HouseholdImportModal
+          villages={villages}
+          onClose={() => setImporting(false)}
+          onImported={() => void list.refresh()}
+        />
+      )}
     </>
   );
 }

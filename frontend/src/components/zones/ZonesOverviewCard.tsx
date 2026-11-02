@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { formatHa } from "@/utils/plot-utils";
-import { SoftBars } from "@/components/ui/charts/KpiCharts";
+import { SmoothLineChart } from "@/components/ui/charts/KpiCharts";
 import type { PlotsSummary, ZoneRowData } from "./zone-data";
 
 interface ZonesOverviewCardProps {
@@ -17,8 +18,9 @@ export default function ZonesOverviewCard({
   isMobile,
   onOpenZone,
 }: ZonesOverviewCardProps) {
-  const areaByZone = [...zoneRows]
-    .sort((a, b) => b.area - a.area)
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+
+  const areaByZone = zoneRows
     .slice(0, 8)
     .map((zone) => {
       const match = zone.code.match(/VT-(\d+)/i);
@@ -61,14 +63,16 @@ export default function ZonesOverviewCard({
       {areaByZone.length > 1 && (
         <div className="zones-chart">
           <div className="zones-chart-title">Diện tích theo mã vùng</div>
-          <SoftBars
+          <SmoothLineChart
             data={areaByZone}
             tone="lime"
             unit=" ha"
-            height={130}
+            height={142}
             highlight="max"
             formatValue={formatArea}
             ariaLabel="Diện tích theo mã vùng"
+            activeIndex={activeIdx}
+            onActiveChange={setActiveIdx}
           />
         </div>
       )}
@@ -79,11 +83,13 @@ export default function ZonesOverviewCard({
       </div>
 
       <div className="zones-zone-list">
-        {zoneRows.map((zone) => (
+        {zoneRows.map((zone, idx) => (
           <div
             key={zone.code}
             className="zg-item"
-            onClick={isMobile ? () => onOpenZone(zone.code) : undefined}
+            onPointerEnter={() => setActiveIdx(idx)}
+            onPointerLeave={() => setActiveIdx(null)}
+            onClick={isMobile ? () => onOpenZone(zone.code) : () => setActiveIdx(idx)}
             role={isMobile ? "button" : undefined}
             tabIndex={isMobile ? 0 : undefined}
             onKeyDown={

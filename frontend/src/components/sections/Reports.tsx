@@ -1,103 +1,247 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { todayIso } from "@/components/admin/catalog/form-utils";
+import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
+import { FormError, Modal } from "@/components/ui/Modal";
+import { toast } from "@/components/ui/Toast";
+import { useApiList } from "@/hooks/use-api";
+import type { VillageRecord } from "@/types/catalog";
 
-interface ReportType {
+type ReportBackendType =
+  | "households"
+  | "journal"
+  | "spray"
+  | "lab-tests"
+  | "violations"
+  | "harvest"
+  | "training-registrations";
+
+interface ReportSpec {
   id: string;
+  type: ReportBackendType;
   title: string;
   desc: string;
   formats: string[];
 }
 
-const reports: ReportType[] = [
-  { id: "vietgap",     title: "Báo cáo VietGAP",         desc: "Mẫu báo cáo theo quy định Bộ NN&PTNT",                 formats: ["Excel", "PDF"] },
-  { id: "gacc",        title: "Hồ sơ GACC (Trung Quốc)",  desc: "Báo cáo theo yêu cầu GACC xuất khẩu sang Trung Quốc",  formats: ["Excel", "PDF"] },
-  { id: "spray",       title: "Nhật ký phun thuốc",       desc: "Tổng hợp lịch sử phun theo hộ và vùng trồng",          formats: ["Excel", "PDF"] },
-  { id: "harvest_rpt", title: "Thống kê thu hoạch",       desc: "Sản lượng, doanh thu theo hộ và vùng trồng",           formats: ["Excel", "PDF"] },
-  { id: "compliance",  title: "Báo cáo tuân thủ",         desc: "Tỷ lệ hộ đạt tiêu chuẩn theo thời gian",              formats: ["Excel", "PDF"] },
-  { id: "testing_rpt", title: "Kết quả kiểm nghiệm",      desc: "Dư lượng, Cd, Vàng O tổng hợp theo đợt",              formats: ["Excel", "PDF"] },
-  { id: "training_rpt",title: "Báo cáo tập huấn",         desc: "Số lượt tham dự, chứng nhận đã cấp",                   formats: ["Excel", "PDF"] },
-  { id: "bvtv",        title: "Báo cáo BVTV tỉnh",        desc: "Gửi Chi cục Bảo vệ Thực vật Đắk Lắk định kỳ",         formats: ["Excel", "PDF"] },
+const REPORTS: ReportSpec[] = [
+  {
+    id: "households",
+    type: "households",
+    title: "Báo cáo danh sách hộ vùng trồng (VietGAP / GACC)",
+    desc: "Tổng hợp thông tin chủ hộ, thôn/tổ, số thửa, diện tích và trạng thái tuân thủ tiêu chuẩn",
+    formats: ["CSV (Excel)", "In / PDF"],
+  },
+  {
+    id: "journal",
+    type: "journal",
+    title: "Nhật ký canh tác điện tử",
+    desc: "Tổng hợp các hoạt động chăm sóc, bón phân, tỉa cành theo hộ và khoảng thời gian",
+    formats: ["CSV (Excel)", "In / PDF"],
+  },
+  {
+    id: "spray",
+    type: "spray",
+    title: "Nhật ký phun thuốc BVTV",
+    desc: "Tổng hợp lịch sử phun thuốc, hoạt chất, liều lượng, ngày cách ly và trạng thái MRL",
+    formats: ["CSV (Excel)", "In / PDF"],
+  },
+  {
+    id: "lab-tests",
+    type: "lab-tests",
+    title: "Kết quả kiểm nghiệm an toàn thực phẩm",
+    desc: "Dư lượng thuốc BVTV, Cadimi (Cd), Vàng O tổng hợp theo các đợt lấy mẫu",
+    formats: ["CSV (Excel)", "In / PDF"],
+  },
+  {
+    id: "violations",
+    type: "violations",
+    title: "Báo cáo vi phạm & Khắc phục",
+    desc: "Danh sách cảnh báo vi phạm, phản hồi từ nông hộ và kết quả xử lý của HTX",
+    formats: ["CSV (Excel)", "In / PDF"],
+  },
+  {
+    id: "harvest",
+    type: "harvest",
+    title: "Thống kê lô thu hoạch & Xuất khẩu",
+    desc: "Sản lượng, thị trường tiêu thụ, đơn vị thu mua và trạng thái vận chuyển từng lô",
+    formats: ["CSV (Excel)", "In / PDF"],
+  },
+  {
+    id: "training-registrations",
+    type: "training-registrations",
+    title: "Báo cáo đăng ký & Tham dự tập huấn",
+    desc: "Danh sách nông hộ đăng ký và điểm danh các lớp tập huấn kỹ thuật",
+    formats: ["CSV (Excel)", "In / PDF"],
+  },
 ];
 
-export default function Reports() {
-  const [modal, setModal] = useState<ReportType | null>(null);
-  const [format, setFormat] = useState<"Excel" | "PDF">("Excel");
+function firstDayOfYear(): string {
+  return `${new Date().getFullYear()}-01-01`;
+}
 
-  useEffect(() => {
-    if (!modal) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setModal(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [modal]);
+export default function Reports() {
+  const villages = useApiList<VillageRecord>("villages");
+  const [selectedReport, setSelectedReport] = useState<ReportSpec | null>(null);
+  const [from, setFrom] = useState<string>(firstDayOfYear);
+  const [to, setTo] = useState<string>(todayIso);
+  const [villageId, setVillageId] = useState<string>("");
+  const [format, setFormat] = useState<"CSV" | "PDF">("CSV");
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const downloadReport = async (report: ReportSpec) => {
+    if (from && to && from > to) {
+      setError("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
+      return;
+    }
+    setError(null);
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      if (villageId) params.set("villageId", villageId);
+      const query = params.toString();
+      const url = `/api/reports/${report.type}${query ? `?${query}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const errBody = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(errBody?.error || "Không xuất được báo cáo.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `bao-cao-${report.type}-${to || todayIso()}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+
+      toast.success(`Đã tải xuống báo cáo "${report.title}".`);
+      setSelectedReport(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Không tải được báo cáo.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <>
       <div className="page-header">
         <div>
           <h1>Báo Cáo</h1>
-          <div className="page-header-sub">Xuất báo cáo Excel / PDF theo mẫu chuẩn – gửi cơ quan, doanh nghiệp</div>
+        </div>
+      </div>
+
+      {/* Bộ lọc nhanh trên trang */}
+      <div className="filter-bar" style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <label style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 500 }}>Từ ngày:</label>
+          <input type="date" className="filter-select" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <label style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 500 }}>Đến ngày:</label>
+          <input type="date" className="filter-select" value={to} onChange={(e) => setTo(e.target.value)} />
+          <select className="filter-select" value={villageId} onChange={(e) => setVillageId(e.target.value)}>
+            <option value="">Tất cả thôn / tổ</option>
+            {villages.rows.map((v) => (
+              <option key={v.id} value={String(v.id)}>
+                {v.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
       <div className="report-grid">
-        {reports.map((r) => (
-          <div key={r.id} className="report-card" onClick={() => setModal(r)}>
+        {REPORTS.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            className="report-card"
+            style={{ textAlign: "left", width: "100%", cursor: "pointer" }}
+            onClick={() => {
+              setError(null);
+              setSelectedReport(r);
+            }}
+          >
             <div className="report-title">{r.title}</div>
             <div className="report-desc">{r.desc}</div>
             <div className="report-formats">
-              {r.formats.map((f) => <span key={f}>{f}</span>)}
+              {r.formats.map((f) => (
+                <span key={f}>{f}</span>
+              ))}
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
-      {modal && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{modal.title}</h3>
-              <button onClick={() => setModal(null)}>Đóng</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label>Từ ngày</label>
-                <input type="date" className="form-input" defaultValue="2024-10-01" />
-              </div>
-              <div className="form-group">
-                <label>Đến ngày</label>
-                <input type="date" className="form-input" defaultValue="2024-10-31" />
-              </div>
-              <div className="form-group">
-                <label>Thôn / Tổ</label>
-                <select className="form-input">
-                  <option>Tất cả thôn</option>
-                  {["Thôn 1","Thôn 2","Thôn 3","Thôn 4","Thôn 5","Thôn 6"].map(v => <option key={v}>{v}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Định dạng xuất</label>
-                <div className="format-btns">
-                  {(["Excel", "PDF"] as const).map((f) => (
-                    <button
-                      key={f}
-                      className={`fmt-btn ${format === f ? "active" : ""}`}
-                      onClick={() => setFormat(f)}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setModal(null)}>Hủy</button>
-              <button className="btn btn-primary">Tải xuống {format}</button>
+      {selectedReport && (
+        <Modal
+          title={selectedReport.title}
+          onClose={() => !downloading && setSelectedReport(null)}
+          width={500}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={downloading}
+                onClick={() => setSelectedReport(null)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={downloading}
+                onClick={() => void downloadReport(selectedReport)}
+              >
+                {downloading ? "Đang xuất tệp…" : "Tải xuống CSV"}
+              </button>
+            </>
+          }
+        >
+          <p style={{ marginTop: 0, fontSize: 13.5, color: "var(--text-secondary)" }}>{selectedReport.desc}</p>
+          <FormGrid>
+            <TextField label="Từ ngày" type="date" value={from} onChange={setFrom} />
+            <TextField label="Đến ngày" type="date" value={to} onChange={setTo} />
+          </FormGrid>
+          <SelectField
+            label="Thôn / Tổ"
+            value={villageId}
+            onChange={setVillageId}
+            placeholder="Tất cả thôn / tổ"
+            options={villages.rows.map((v) => ({ value: String(v.id), label: v.name }))}
+          />
+          <div className="form-group">
+            <label>Định dạng xuất</label>
+            <div className="format-btns">
+              {(["CSV", "PDF"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className={`fmt-btn ${format === f ? "active" : ""}`}
+                  onClick={() => setFormat(f)}
+                >
+                  {f === "CSV" ? "CSV (Excel UTF-8)" : "CSV chuẩn in"}
+                </button>
+              ))}
             </div>
           </div>
-        </div>
+          <FormError message={error} />
+        </Modal>
       )}
     </>
   );

@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, KeyRound } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import ChangePasswordModal from "@/components/admin/notifications/ChangePasswordModal";
+import NotificationBell from "@/components/admin/notifications/NotificationBell";
 import { ROLE_LABELS } from "@/constants/roles";
 import { INTRO_PATH } from "@/lib/routes";
 
@@ -19,6 +21,7 @@ const initials = (name: string) =>
 export default function UserMenu() {
   const { session, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,8 +44,10 @@ export default function UserMenu() {
 
   return (
     <div className="user-menu" ref={ref}>
+      <NotificationBell />
+
       <button
-        className="header-avatar"
+        className={`header-avatar ${open ? "is-active" : ""}`}
         type="button"
         aria-label={title}
         title={title}
@@ -66,6 +71,19 @@ export default function UserMenu() {
             <ArrowUpRight size={14} aria-hidden="true" />
           </Link>
           <button
+            type="button"
+            role="menuitem"
+            className="btn btn-outline btn-sm"
+            style={{ marginBottom: 6 }}
+            onClick={() => {
+              setOpen(false);
+              setChangingPassword(true);
+            }}
+          >
+            <KeyRound size={14} />
+            Đổi mật khẩu
+          </button>
+          <button
             id="logout-button"
             type="button"
             role="menuitem"
@@ -78,6 +96,13 @@ export default function UserMenu() {
             Đăng xuất
           </button>
         </div>
+      )}
+
+      {changingPassword && (
+        <ChangePasswordModal
+          onClose={() => setChangingPassword(false)}
+          onSuccessLogout={logout}
+        />
       )}
     </div>
   );

@@ -1,41 +1,130 @@
 "use client";
 
-import { useResource } from "@/hooks/use-resource";
-import { mapTraining } from "@/lib/mappers";
+import { useMemo, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { KpiChartView, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
+import { useApiList } from "@/hooks/use-api";
+import BlockState from "@/components/admin/shared/BlockState";
+import DeleteDialog from "@/components/admin/shared/DeleteDialog";
+import Pagination from "@/components/admin/shared/Pagination";
+import { formatVn, percent, timeText } from "@/components/admin/shared/form-utils";
+import { useDebounced } from "@/components/admin/shared/use-debounced";
+import TrainingFormModal from "@/components/admin/training/TrainingFormModal";
+import TrainingRegistrationsModal from "@/components/admin/training/TrainingRegistrationsModal";
+import { formatDate } from "@/utils/format";
+import type { TrainingCourseRecord } from "@/types/training";
 
-const MONTHS = ["T5", "T6", "T7", "T8", "T9", "T10"];
-const pts = (values: number[]): ChartPoint[] => values.map((value, i) => ({ label: MONTHS[i], value }));
-const oneDecimal = (v: number) => v.toFixed(1).replace(".", ",");
-
-const KPIS: { val: string; label: string; sub: string; chart: KpiChartSpec }[] = [
-  { val: "6",     label: "Khóa học tổ chức",      sub: "Năm 2024",
-    chart: { kind: "bars", tone: "lime", unit: " khóa", highlight: "max", data: pts([1, 2, 1, 0, 1, 1]) } },
-  { val: "248",   label: "Lượt nông dân tham dự", sub: "82% tỷ lệ tham gia",
-    chart: { kind: "area", tone: "ink", unit: " lượt", highlight: "max", caption: "Tỷ lệ tham gia các khóa đạt 82%", data: pts([30, 48, 41, 33, 52, 44]) } },
-  { val: "183",   label: "Chứng nhận đã cấp",     sub: "VietGAP + GACC",
-    chart: { kind: "gauge", tone: "lime", value: 74, caption: "183/248 lượt" } },
-  { val: "4.7/5", label: "Đánh giá trung bình",   sub: "Từ nông dân tham dự",
-    chart: { kind: "area", tone: "ink", unit: "/5", highlight: "last", formatValue: oneDecimal, caption: "Mức độ hài lòng đạt đỉnh 4.8 điểm", data: pts([4.4, 4.6, 4.5, 4.8, 4.6, 4.7]) } },
-];
+const PAGE_SIZE = 25;
 
 export default function Training() {
-  const { data: trainingCourses } = useResource("training", mapTraining);
+  const { can } = useAuth();
+  const canCreate = can("training", "create");
+  const canUpdate = can("training", "update");
+  const canDelete = can("training", "delete");
+
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounced(search);
+  const [completedFilter, setCompletedFilter] = useState("");
+  const [page, setPage] = useState(1);
+
+  const list = useApiList<TrainingCourseRecord>("training", {
+    q: debouncedSearch || undefined,
+    completed: completedFilter || undefined,
+    page,
+    pageSize: PAGE_SIZE,
+  });
+
+  const [editing, setEditing] = useState<TrainingCourseRecord | "new" | null>(null);
+  const [deleting, setDeleting] = useState<TrainingCourseRecord | null>(null);
+  const [registrationsCourse, setRegistrationsCourse] = useState<TrainingCourseRecord | null>(null);
+
+  const kpis = useMemo<
+    { val: string; label: string; sub: string; chart: KpiChartSpec }[]
+  >(() => {
+    const rows = list.rows;
+    const totalCourses = list.total || rows.length;
+    const completedCount = rows.filter((r) => r.completed).length;
+    const totalEnrolled = rows.reduce((sum, r) => sum + (Number(r.enrolled) || 0), 0);
+    const totalCapacity = rows.reduce((sum, r) => sum + (Number(r.capacity) || 0), 0);
+    const avgFill = percent(totalEnrolled, totalCapacity);
+    const completedPct = percent(completedCount, Math.max(rows.length, 1));
+
+    const barPoints: ChartPoint[] =
+      rows.length > 0
+        ? rows.slice(0, 6).map((c, idx) => ({
+            label: `K${idx + 1}`,
+            value: Number(c.enrolled) || 0,
+          }))
+        : [
+            { label: "K1", value: 0 },
+            { label: "K2", value: 0 },
+          ];
+
+    const areaPoints: ChartPoint[] =
+      barPoints.length >= 2 ? barPoints : [...barPoints, { label: "K2", value: barPoints[0]?.value ?? 0 }];
+
+    return [
+      {
+        val: String(totalCourses),
+        label: "Khóa học tổ chức",
+        sub: `${completedCount} khóa đã hoàn thành`,
+        chart: { kind: "bars", tone: "lime", unit: " HV", highlight: "max", data: barPoints },
+      },
+      {
+        val: formatVn(totalEnrolled),
+        label: "Lượt nông dân đăng ký",
+        sub: `${formatVn(avgFill, 1)}% quy mô tiếp nhận`,
+        chart: {
+          kind: "area",
+          tone: "ink",
+          unit: " lượt",
+          highlight: "max",
+          caption: `Tổng sức chứa ${formatVn(totalCapacity)} học viên`,
+          data: areaPoints,
+        },
+      },
+      {
+        val: String(completedCount),
+        label: "Khóa đã hoàn tất",
+        sub: "VietGAP + GACC",
+        chart: {
+          kind: "gauge",
+          tone: "lime",
+          value: Math.round(completedPct),
+          caption: `${completedCount}/${rows.length || 0} khóa`,
+        },
+      },
+      {
+        val: `${formatVn(avgFill, 0)}%`,
+        label: "Tỷ lệ lấp đầy lớp",
+        sub: `${totalEnrolled}/${totalCapacity || 0} học viên`,
+        chart: {
+          kind: "gauge",
+          tone: "sky",
+          value: Math.min(100, Math.round(avgFill)),
+          caption: `${formatVn(totalEnrolled)} học viên`,
+        },
+      },
+    ];
+  }, [list.rows, list.total]);
+
   return (
     <>
       <div className="page-header">
         <div>
           <h1>Tập Huấn &amp; Đào Tạo</h1>
-          <div className="page-header-sub">Nâng cao năng lực nông dân – điều kiện đạt tiêu chuẩn xuất khẩu</div>
         </div>
-        <div className="header-actions">
-          <button className="btn btn-outline">Danh sách tham dự</button>
-          <button className="btn btn-primary">Tạo lớp tập huấn</button>
-        </div>
+        {canCreate && (
+          <div className="header-actions">
+            <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
+              + Tạo khóa tập huấn
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="kpi-grid-4">
-        {KPIS.map(({ val, label, sub, chart }, i) => (
+        {kpis.map(({ val, label, sub, chart }, i) => (
           <div key={i} className="kpi-card has-chart">
             <div className="kpi-head">
               <div className="kpi-val">{val}</div>
@@ -49,47 +138,163 @@ export default function Training() {
         ))}
       </div>
 
-      <div className="training-grid">
-        {trainingCourses.map((c, i) => (
-          <div key={i} className="training-card">
-            <div className="training-card-top">
-              <div className="training-card-title">{c.title}</div>
-              <div className="training-card-date">
-                {c.completed ? "Đã hoàn thành" : c.date}
-              </div>
-            </div>
-            <div className="training-card-body">
-              <div className="training-card-row">
-                <span>Địa điểm</span>
-                <strong>{c.location}</strong>
-              </div>
-              <div className="training-card-row">
-                <span>Giảng viên</span>
-                <strong>{c.trainer}</strong>
-              </div>
-              <div className="training-card-row">
-                <span>Tham dự</span>
-                <strong>{c.enrolled}/{c.capacity} người</strong>
-              </div>
-              <div style={{ marginTop: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--text-muted)", marginBottom: 4 }}>
-                  <span>Tỷ lệ đăng ký</span>
-                  <span style={{ color: "var(--green-700)", fontWeight: 600 }}>{c.progress}%</span>
-                </div>
-                <div className="training-progress">
-                  <div className="training-progress-fill" style={{ width: `${c.progress}%` }} />
-                </div>
-              </div>
-              <div style={{ marginTop: 12, display: "flex", gap: 6 }}>
-                <button className="btn btn-primary btn-sm" style={{ flex: 1 }}>
-                  {c.completed ? "Chứng nhận" : "Danh sách"}
-                </button>
-                <button className="btn btn-outline btn-sm">Sửa</button>
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className="filter-bar">
+        <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="Tìm theo tên khóa tập huấn, giảng viên, địa điểm…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <select
+          className="filter-select"
+          value={completedFilter}
+          aria-label="Lọc theo trạng thái khóa học"
+          onChange={(e) => {
+            setCompletedFilter(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">Tất cả khóa học</option>
+          <option value="false">Sắp diễn ra / Đang mở ĐK</option>
+          <option value="true">Đã hoàn thành</option>
+        </select>
       </div>
+
+      <BlockState
+        loading={list.loading}
+        error={list.error}
+        empty={list.rows.length === 0}
+        emptyText="Chưa có khóa tập huấn nào phù hợp."
+        onRetry={() => void list.refresh()}
+      />
+
+      {list.rows.length > 0 && (
+        <>
+          <div className="training-grid">
+            {list.rows.map((c) => {
+              const progress = Math.min(100, Math.round(percent(c.enrolled, c.capacity)));
+              const startStr = timeText(c.startsAt);
+              const endStr = timeText(c.endsAt);
+              const timeRange = startStr && endStr ? `${startStr} – ${endStr}` : startStr || endStr || "";
+              return (
+                <div key={c.id} className="training-card">
+                  <div className="training-card-top">
+                    <div className="training-card-title">{c.title}</div>
+                    <div className="training-card-date" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span className={`badge ${c.completed ? "badge-green" : "badge-blue"}`}>
+                        {c.completed ? "Đã hoàn thành" : "Đang mở đăng ký"}
+                      </span>
+                      <span>
+                        {formatDate(c.heldOn)}
+                        {timeRange ? ` · ${timeRange}` : ""}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="training-card-body">
+                    <div className="training-card-row">
+                      <span>Địa điểm</span>
+                      <strong>{c.location || "—"}</strong>
+                    </div>
+                    <div className="training-card-row">
+                      <span>Giảng viên</span>
+                      <strong>{c.trainer || "—"}</strong>
+                    </div>
+                    <div className="training-card-row">
+                      <span>Tham dự</span>
+                      <strong>
+                        {c.enrolled}/{c.capacity} người
+                      </strong>
+                    </div>
+                    {c.description && (
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.45 }}>
+                        {c.description}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 10 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          fontSize: 10.5,
+                          color: "var(--text-muted)",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span>Tỷ lệ đăng ký</span>
+                        <span style={{ color: "var(--green-700)", fontWeight: 600 }}>{progress}%</span>
+                      </div>
+                      <div className="training-progress">
+                        <div className="training-progress-fill" style={{ width: `${progress}%` }} />
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        style={{ flex: 1 }}
+                        onClick={() => setRegistrationsCourse(c)}
+                      >
+                        Danh sách đăng ký
+                      </button>
+                      {canUpdate && (
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(c)}>
+                          Sửa
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeleting(c)}>
+                          Xóa
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Pagination page={page} pageSize={PAGE_SIZE} total={list.total} unit="khóa học" onChange={setPage} />
+          </div>
+        </>
+      )}
+
+      {registrationsCourse && (
+        <TrainingRegistrationsModal
+          course={registrationsCourse}
+          canUpdate={canUpdate}
+          onClose={() => setRegistrationsCourse(null)}
+          onChanged={() => void list.refresh()}
+        />
+      )}
+
+      {editing && (
+        <TrainingFormModal
+          initial={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => void list.refresh()}
+        />
+      )}
+
+      {deleting && (
+        <DeleteDialog
+          title="Xóa khóa tập huấn"
+          message={
+            <>
+              Xóa khóa tập huấn <strong>{deleting.title}</strong>? Danh sách đăng ký của khóa này cũng sẽ bị xóa.
+            </>
+          }
+          path={`/training/${deleting.id}`}
+          successMessage="Đã xóa khóa tập huấn."
+          onClose={() => setDeleting(null)}
+          onDeleted={() => void list.refresh()}
+        />
+      )}
     </>
   );
 }

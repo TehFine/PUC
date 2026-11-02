@@ -15,6 +15,7 @@ import {
 import ComparisonResult from "./ComparisonResult";
 import DraftForm from "./DraftForm";
 import DrawHint from "./DrawHint";
+import { AppleLoadingPill } from "@/components/ui/Skeleton";
 import {
   defaultForm,
   EMPTY_PREVIEW,
@@ -614,7 +615,11 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
         />
       )}
 
-      {loading && <div className="plotmap-loading">Đang tải dữ liệu thửa…</div>}
+      {loading && (
+        <div className="plotmap-loading">
+          <AppleLoadingPill label="Đang tải dữ liệu thửa…" hud />
+        </div>
+      )}
 
       {showPanel && (
         <aside className="plotmap-panel">

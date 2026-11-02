@@ -11,13 +11,13 @@ import { PageSkeleton } from "@/components/ui/Skeleton";
 import { INTRO_PATH } from "@/lib/routes";
 
 import dynamic from "next/dynamic";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { SkeletonCards, SkeletonStats } from "@/components/ui/Skeleton";
 
 const TabLoading = () => (
-  <div style={{ padding: "24px 0" }}>
-    <Skeleton h={32} w={200} r={8} />
-    <div style={{ height: 16 }} />
-    <Skeleton h={140} r={14} />
+  <div style={{ padding: "8px 0" }}>
+    <SkeletonStats count={4} label="Đang tải dữ liệu…" />
+    <div style={{ height: 14 }} />
+    <SkeletonCards count={2} showSpinner={false} />
   </div>
 );
 
@@ -46,8 +46,8 @@ const SECTION_TITLES: Record<SectionId, string> = {
   dashboard: "Tổng quan",
   households: "Nông hộ",
   zones: "Vùng trồng",
-  approval: "Duyệt hồ sơ",
-  registrations: "Đăng ký hộ",
+  approval: "Hồ sơ",
+  registrations: "Đăng ký",
   journal: "Nhật ký",
   testing: "Kiểm nghiệm",
   harvest: "Lô hàng",
@@ -62,23 +62,12 @@ export default function Home() {
   const router = useRouter();
   const { status, session } = useAuth();
   const [active, setActive] = useState<SectionId>("dashboard");
-  const [isScrolled, setIsScrolled] = useState(false);
   const isFarmer = session?.user.role === "farmer";
 
   useEffect(() => {
     if (status === "anonymous") router.replace("/login");
     else if (status === "authenticated" && isFarmer) router.replace("/portal");
   }, [status, isFarmer, router]);
-
-  useEffect(() => {
-    const onScroll = () => {
-      const isPast = window.scrollY > 24;
-      setIsScrolled((prev) => (prev !== isPast ? isPast : prev));
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   const navigate = (id: SectionId) => {
     setActive(id);
@@ -119,7 +108,7 @@ export default function Home() {
           </span>
         </Link>
         <Sidebar active={active} onNavigate={navigate} />
-        <div className={`mobile-header-title ${isScrolled ? "is-scrolled" : ""}`} aria-hidden={!isScrolled}>
+        <div className="mobile-header-title is-scrolled" aria-live="polite">
           <span>{SECTION_TITLES[active] ?? "Tổng quan"}</span>
         </div>
         <UserMenu />

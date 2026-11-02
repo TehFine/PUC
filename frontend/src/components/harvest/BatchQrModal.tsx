@@ -1,13 +1,24 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useState, useTransition } from "react";
 import QRCode from "qrcode";
-import { X, Printer, Download, Sparkles, Tag, Package, Check, RefreshCw } from "lucide-react";
-import type { HarvestLot, HarvestItem } from "@/types/entities";
+import { Printer, Download, Sparkles, Tag, Package, RefreshCw } from "lucide-react";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import type { HarvestItem } from "@/types/entities";
 import { api } from "@/lib/api-client";
 
+export interface BatchQrLot {
+  id?: number;
+  code: string;
+  date?: string;
+  harvestedOn?: string;
+  packhouseCode?: string | null;
+  buyer: string;
+  market: string;
+}
+
 interface Props {
-  lot: HarvestLot;
+  lot: BatchQrLot;
   onClose: () => void;
 }
 
@@ -15,16 +26,44 @@ interface ItemWithQr extends HarvestItem {
   qrDataUrl?: string;
 }
 
+function getPublicBaseUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_PUBLIC_BASE_URL?.trim();
+  if (envUrl) return envUrl.replace(/\/+$/, "");
+  if (typeof window !== "undefined") return window.location.origin;
+  return "";
+}
+
+function escapeCsvCell(value: unknown): string {
+  const str = value === null || value === undefined ? "" : String(value);
+  if (/[",\r\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 export default function BatchQrModal({ lot, onClose }: Props) {
+  const titleId = useId();
   const [itemType, setItemType] = useState<"fruit" | "box">("fruit");
   const [count, setCount] = useState<number>(12);
   const [grade, setGrade] = useState<"A" | "B" | "C">("A");
-  const [weightKg, setWeightKg] = useState<number>(itemType === "fruit" ? 3.5 : 18.0);
+  const [weightKg, setWeightKg] = useState<number>(3.5);
   const [items, setItems] = useState<ItemWithQr[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, startGenerating] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Đóng bằng phím Escape
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
 
   // Cập nhật trọng lượng mặc định khi đổi loại tem
   const handleTypeChange = (type: "fruit" | "box") => {
@@ -33,56 +72,67 @@ export default function BatchQrModal({ lot, onClose }: Props) {
   };
 
   // Tải danh sách tem đã có của lô
-  const loadItems = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (!lot.id) return;
-      const res = await api.get<{ data: HarvestItem[] }>(`/harvest/${lot.id}/items`);
-      const rawItems = res.data;
+  const fetchItemsWithQr = useCallback(async (lotId: number): Promise<ItemWithQr[]> => {
+    const res = await api.get<{ data: HarvestItem[] }>(`/harvest/${lotId}/items`);
+    const rawItems = res.data;
+    const baseUrl = getPublicBaseUrl();
 
-      // Sinh mã QR Data URL cho từng tem
-      const itemsWithQr = await Promise.all(
-        rawItems.map(async (item) => {
-          try {
-            const url = `${window.location.origin}/trace/${encodeURIComponent(item.serialCode)}`;
-            const qrDataUrl = await QRCode.toDataURL(url, {
-              margin: 1,
-              width: 160,
-              color: { dark: "#0f372a", light: "#ffffff" },
-            });
-            return { ...item, qrDataUrl };
-          } catch {
-            return item;
-          }
-        }),
-      );
-
-      setItems(itemsWithQr);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Không tải được danh sách tem.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    return Promise.all(
+      rawItems.map(async (item) => {
+        try {
+          const url = `${baseUrl}/trace/${encodeURIComponent(item.serialCode)}`;
+          const qrDataUrl = await QRCode.toDataURL(url, {
+            margin: 1,
+            width: 160,
+            color: { dark: "#0f372a", light: "#ffffff" },
+          });
+          return { ...item, qrDataUrl };
+        } catch {
+          return item;
+        }
+      }),
+    );
+  }, []);
 
   useEffect(() => {
-    void loadItems();
-  }, [lot.id]);
+    let active = true;
+    const lotId = lot.id;
+    if (!lotId) return;
+    fetchItemsWithQr(lotId)
+      .then((list) => {
+        if (active) {
+          setItems(list);
+          setError(null);
+        }
+      })
+      .catch((e: unknown) => {
+        if (active) {
+          setError(e instanceof Error ? e.message : "Không tải được danh sách tem.");
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [lot.id, fetchItemsWithQr]);
 
   // Sinh thêm dải tem mới
   const handleGenerate = () => {
-    if (!lot.id) return;
+    const lotId = lot.id;
+    if (!lotId) return;
     startGenerating(async () => {
       try {
         setError(null);
-        await api.post(`/harvest/${lot.id}/generate-items`, {
+        await api.post(`/harvest/${lotId}/generate-items`, {
           count,
           itemType,
           grade,
           weightKg,
         });
-        await loadItems();
+        const updated = await fetchItemsWithQr(lotId);
+        setItems(updated);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Không thể sinh tem mới.");
       }
@@ -95,16 +145,30 @@ export default function BatchQrModal({ lot, onClose }: Props) {
   // Xuất file CSV
   const handleExportCsv = () => {
     if (filteredItems.length === 0) return;
+    const baseUrl = getPublicBaseUrl();
     const header = "Số thứ tự,Mã định danh Serial,Loại tem,Hạng,Khối lượng (kg),Đường dẫn truy xuất\n";
     const rows = filteredItems.map((item, idx) => {
-      const url = `${window.location.origin}/trace/${encodeURIComponent(item.serialCode)}`;
-      return `${idx + 1},${item.serialCode},${item.itemType === "fruit" ? "Quả" : "Thùng"},${item.grade ?? "A"},${item.weightKg ?? ""},${url}`;
+      const url = `${baseUrl}/trace/${encodeURIComponent(item.serialCode)}`;
+      return [
+        idx + 1,
+        item.serialCode,
+        item.itemType === "fruit" ? "Quả" : "Thùng",
+        item.grade ?? "A",
+        item.weightKg ?? "",
+        url,
+      ]
+        .map(escapeCsvCell)
+        .join(",");
     });
     const blob = new Blob(["\uFEFF" + header + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
+    link.href = objectUrl;
     link.download = `Danh_sach_tem_${lot.code}_${itemType}.csv`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
   };
 
   // In tem bằng window.print
@@ -118,17 +182,31 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
+  const displayDate = lot.date ?? (lot.harvestedOn ? lot.harvestedOn.slice(0, 10) : "—");
+
   return (
-    <div className="batch-qr-overlay">
-      <div className="batch-qr-modal">
+    <div
+      className="batch-qr-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="batch-qr-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
         {/* Header Modal */}
         <div className="batch-qr-header no-print">
           <div>
             <div className="batch-qr-subtitle">Truy xuất nguồn gốc CheckVN &amp; GACC</div>
-            <h2 className="batch-qr-title">Bộ sinh &amp; In tem định danh – Lô {lot.code}</h2>
+            <h2 id={titleId} className="batch-qr-title">
+              Bộ sinh &amp; In tem định danh – Lô {lot.code}
+            </h2>
           </div>
           <button type="button" className="batch-qr-close" onClick={onClose} aria-label="Đóng">
-            <X size={20} />
+            <CloseCircleIcon size={28} />
           </button>
         </div>
 
@@ -353,7 +431,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
 
                       <div className="box-stamp-foot">
                         <span>Lô hàng: {lot.code}</span>
-                        <span>Ngày đóng gói: {lot.date}</span>
+                        <span>Ngày đóng gói: {displayDate}</span>
                         <span className="safe-mark">✔ Kiểm nghiệm Cadimi an toàn · Âm tính Vàng O</span>
                       </div>
                     </div>
@@ -421,21 +499,24 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         }
 
         .batch-qr-close {
-          width: 36px;
-          height: 36px;
+          width: 32px;
+          height: 32px;
+          padding: 0;
           border-radius: 50%;
-          border: 1px solid #e2e8e5;
-          background: #ffffff;
+          border: none;
+          background: transparent;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          color: #556b63;
-          transition: all 0.15s ease;
+          color: #14372f;
+          transition: opacity 0.15s ease, transform 0.15s ease;
         }
         .batch-qr-close:hover {
-          background: #f0f4f2;
-          color: #111;
+          background: transparent;
+          color: #14372f;
+          opacity: 0.72;
+          transform: rotate(90deg);
         }
 
         .batch-qr-toolbar {
@@ -703,7 +784,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           padding: 3px 8px;
           border-radius: 4px;
           font-size: 11px;
-          font-weight: 800;
+          font-weight: 807;
           white-space: nowrap;
         }
 

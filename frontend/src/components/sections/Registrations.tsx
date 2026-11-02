@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api-client";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 
 interface Registration {
   id: number;
@@ -119,7 +120,6 @@ export default function Registrations() {
       <div className="page-header">
         <div>
           <h1>Duyệt đăng ký hộ dân</h1>
-          <div className="page-header-sub">{loading ? "Đang tải…" : `${rows.length} tài khoản đang chờ duyệt`}</div>
         </div>
       </div>
 
@@ -179,7 +179,7 @@ export default function Registrations() {
             <div className="modal-header">
               <h3>Duyệt đăng ký: {target.fullName}</h3>
               <button type="button" aria-label="Đóng" onClick={close}>
-                ✕
+                <CloseCircleIcon size={28} />
               </button>
             </div>
             <div className="modal-body">

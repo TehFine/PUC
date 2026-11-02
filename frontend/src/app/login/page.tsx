@@ -36,20 +36,12 @@ export default function LoginPage() {
     }
   }, [status, session, router]);
 
-  // Xóa sạch thông tin form và trạng thái khi phiên chuyển về anonymous (đăng xuất)
+  // Đảm bảo dọn dẹp khi trang login unmount
   useEffect(() => {
-    if (status === "anonymous") {
-      resetForm();
-    }
-  }, [status, resetForm]);
-
-  // Đảm bảo dọn dẹp khi trang login xuất hiện lần đầu hoặc unmount
-  useEffect(() => {
-    resetForm();
     return () => {
-      resetForm();
+      formRef.current?.reset();
     };
-  }, [resetForm]);
+  }, []);
 
   // Lắng nghe sự kiện đăng xuất, hết hạn phiên và phục hồi từ bfcache của mobile browser
   useEffect(() => {

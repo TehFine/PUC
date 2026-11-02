@@ -4,8 +4,6 @@ import { useState } from "react";
 import AccountsTab from "@/components/settings/AccountsTab";
 import AuditLogTab from "@/components/settings/AuditLogTab";
 import RolesTab from "@/components/settings/RolesTab";
-import { useResource } from "@/hooks/use-resource";
-import { mapAccount, mapAuditLog } from "@/lib/mappers";
 
 type Tab = "accounts" | "roles" | "audit";
 
@@ -16,9 +14,8 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function SystemSettings() {
-  const { data: accounts } = useResource("accounts", mapAccount);
-  const { data: auditLog } = useResource("audit-log", mapAuditLog);
   const [tab, setTab] = useState<Tab>("accounts");
+  const [createTrigger, setCreateTrigger] = useState(0);
 
   return (
     <>
@@ -27,7 +24,11 @@ export default function SystemSettings() {
           <h1>Quản Trị Hệ Thống</h1>
         </div>
         <div className="header-actions">
-          {tab === "accounts" && <button className="btn btn-primary">Thêm tài khoản</button>}
+          {tab === "accounts" && (
+            <button type="button" className="btn btn-primary" onClick={() => setCreateTrigger((c) => c + 1)}>
+              + Thêm tài khoản
+            </button>
+          )}
         </div>
       </div>
 
@@ -35,6 +36,7 @@ export default function SystemSettings() {
         {TABS.map((t) => (
           <button
             key={t.id}
+            type="button"
             className={`tab-btn ${tab === t.id ? "active" : ""}`}
             onClick={() => setTab(t.id)}
           >
@@ -43,9 +45,9 @@ export default function SystemSettings() {
         ))}
       </div>
 
-      {tab === "accounts" && <AccountsTab accounts={accounts} />}
+      {tab === "accounts" && <AccountsTab createTrigger={createTrigger} />}
       {tab === "roles" && <RolesTab />}
-      {tab === "audit" && <AuditLogTab auditLog={auditLog} />}
+      {tab === "audit" && <AuditLogTab />}
     </>
   );
 }

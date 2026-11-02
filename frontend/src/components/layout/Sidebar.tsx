@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { SectionId } from "@/app/admin/page";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useApi } from "@/hooks/use-api";
+import { onAdminNavigate, onCountsChanged } from "@/components/admin/shared/counts-events";
+import type { DashboardSummary } from "@/types/dashboard";
 
 interface NavItem {
   id: SectionId;
@@ -14,24 +17,7 @@ interface NavItem {
   resource?: string;
 }
 
-const topItems: NavItem[] = [
-  { id: "dashboard", label: "Tổng quan" },
-  { id: "households", label: "Nông hộ", resource: "households" },
-  { id: "zones", label: "Vùng trồng", resource: "plots" },
-  { id: "approval", label: "Duyệt hồ sơ", badge: 7, resource: "approvals" },
-  { id: "registrations", label: "Đăng ký hộ", resource: "registrations" },
-  { id: "journal", label: "Nhật ký", badge: 3, badgeType: "warn", resource: "journal" },
-  { id: "testing", label: "Kiểm nghiệm", resource: "testing" },
-  { id: "harvest", label: "Lô hàng", resource: "harvest" },
-  { id: "training", label: "Tập huấn", resource: "training" },
-  { id: "news", label: "Bản tin" },
-  { id: "reports", label: "Báo cáo" },
-  { id: "catalog", label: "Danh mục", resource: "pesticides" },
-];
-
-const bottomItems: NavItem[] = [
-  { id: "system", label: "Hệ thống", resource: "accounts" },
-];
+const bottomItems: NavItem[] = [{ id: "system", label: "Hệ thống", resource: "accounts" }];
 
 interface Props {
   active: SectionId;
@@ -41,6 +27,51 @@ interface Props {
 export default function Sidebar({ active, onNavigate }: Props) {
   const { can } = useAuth();
   const [open, setOpen] = useState(false);
+  const { data: summary, refresh } = useApi<DashboardSummary>("/dashboard/summary");
+
+  useEffect(() => onCountsChanged(() => void refresh()), [refresh]);
+
+  useEffect(
+    () =>
+      onAdminNavigate((section) => {
+        onNavigate(section as SectionId);
+        setOpen(false);
+      }),
+    [onNavigate],
+  );
+
+  const counts = summary?.counts;
+
+  const topItems = useMemo<NavItem[]>(
+    () => [
+      { id: "dashboard", label: "Tổng quan" },
+      { id: "households", label: "Nông hộ", resource: "households" },
+      { id: "zones", label: "Vùng trồng", resource: "plots" },
+      {
+        id: "approval",
+        label: "Hồ sơ",
+        resource: "approvals",
+      },
+      {
+        id: "registrations",
+        label: "Đăng ký",
+        resource: "registrations",
+      },
+      {
+        id: "journal",
+        label: "Nhật ký",
+        resource: "journal",
+      },
+      { id: "testing", label: "Kiểm nghiệm", resource: "testing" },
+      { id: "harvest", label: "Lô hàng", resource: "harvest" },
+      { id: "training", label: "Tập huấn", resource: "training" },
+      { id: "news", label: "Bản tin" },
+      { id: "reports", label: "Báo cáo" },
+      { id: "catalog", label: "Danh mục", resource: "pesticides" },
+    ],
+    [],
+  );
+
   const allowed = (item: NavItem) => !item.resource || can(item.resource, "read");
 
   useEffect(() => {
@@ -85,19 +116,9 @@ export default function Sidebar({ active, onNavigate }: Props) {
         <ArrowUpRight className="nav-toggle-icon" size={20} strokeWidth={2.4} aria-hidden="true" />
       </button>
 
-      {open && (
-        <div
-          className="nav-backdrop"
-          aria-hidden="true"
-          onClick={() => setOpen(false)}
-        />
-      )}
+      {open && <div className="nav-backdrop" aria-hidden="true" onClick={() => setOpen(false)} />}
 
-      <nav
-        id="main-nav"
-        className={`sidebar${open ? " open" : ""}`}
-        aria-label="Điều hướng chính"
-      >
+      <nav id="main-nav" className={`sidebar${open ? " open" : ""}`} aria-label="Điều hướng chính">
         {topItems.filter(allowed).map(({ id, label, badge, badgeType }) => (
           <button
             key={id}
@@ -108,10 +129,8 @@ export default function Sidebar({ active, onNavigate }: Props) {
             onClick={() => go(id)}
           >
             {label}
-            {badge && (
-              <span className={`nav-badge ${badgeType === "warn" ? "warn" : ""}`}>
-                {badge}
-              </span>
+            {!!badge && badge > 0 && (
+              <span className={`nav-badge ${badgeType === "warn" ? "warn" : ""}`}>{badge}</span>
             )}
           </button>
         ))}
