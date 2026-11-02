@@ -234,76 +234,81 @@
 .lp-pill-blue {
   background: rgba(224, 242, 254, 0.92) !important;
   color: #0369a1 !important;
-  border-color: #7dd3fc !important;
-  box-shadow: 0 0 0 4px rgba(186, 230, 253, 0.25) !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .lp-pill-green {
   background: rgba(240, 251, 228, 0.92) !important;
   color: #2f8f6f !important;
-  border-color: #a6d890 !important;
-  box-shadow: 0 0 0 4px rgba(184, 230, 124, 0.25) !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .lp-pill-gold {
   background: rgba(254, 249, 195, 0.92) !important;
   color: #854d0e !important;
-  border-color: #fde047 !important;
-  box-shadow: 0 0 0 4px rgba(253, 224, 71, 0.25) !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* Nội dung thông tin thẻ */
-.lp-training-content {
-  padding: 22px 24px;
+.lp .lp-training-content {
+  padding: 24px 26px;
   display: flex;
   flex-direction: column;
   flex: 1;
 }
 
-.lp-training-meta {
+.lp .lp-training-meta {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   font-size: 12.5px;
   color: var(--lp-text);
   margin-bottom: 10px;
-  gap: 12px;
+  gap: 3px;
 }
 
-.lp-training-speaker {
+.lp .lp-training-speaker {
   font-weight: 600;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--lp-green-deep);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 65%;
+  max-width: 100%;
+  width: 100%;
 }
 
-.lp-training-date {
+.lp .lp-training-date {
   font-weight: 500;
-  color: #8b9991;
-  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #7a8b82;
 }
 
-.lp-training-title {
+.lp .lp-training-title {
   font-family: var(--lp-font-display);
-  font-size: 18.5px;
+  font-size: 18px;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.42;
   color: var(--lp-ink);
   margin: 0 0 10px 0;
-  letter-spacing: -0.015em;
+  letter-spacing: normal;
   transition: color 0.2s ease;
 }
 
-.lp-training-card:hover .lp-training-title {
+.lp .lp-training-card:hover .lp-training-title {
   color: var(--lp-green-deep);
 }
 
-.lp-training-desc {
+.lp .lp-training-desc {
   font-size: 14px;
   color: var(--lp-text);
-  line-height: 1.55;
+  line-height: 1.6;
+  letter-spacing: normal;
   margin: 0 0 16px 0;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -311,33 +316,34 @@
   overflow: hidden;
 }
 
-.lp-training-highlights {
+.lp .lp-training-highlights {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(20, 55, 47, 0.06);
 }
 
-.lp-training-highlight-tag {
+.lp .lp-training-highlight-tag {
   font-size: 12px;
   font-weight: 500;
+  line-height: 1.35;
   color: var(--lp-ink-soft);
   background: rgba(20, 55, 47, 0.05);
-  border: 1px solid rgba(20, 55, 47, 0.07);
-  padding: 4px 10px;
+  border: none;
+  padding: 5px 11px;
   border-radius: 999px;
   transition: all 0.2s ease;
 }
 
-.lp-training-card:hover .lp-training-highlight-tag {
+.lp .lp-training-card:hover .lp-training-highlight-tag {
   background: rgba(184, 230, 124, 0.3);
-  border-color: rgba(95, 174, 91, 0.25);
   color: var(--lp-ink);
 }
 
 /* ─── 4. Banner kêu gọi đăng ký (Training CTA) ───────────────────────── */
-.lp-training-cta {
+.lp .lp-training-cta {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -349,24 +355,24 @@
   margin-top: 12px;
 }
 
-.lp-training-cta-info {
+.lp .lp-training-cta-info {
   max-width: 640px;
 }
 
-.lp-training-cta-info h3 {
+.lp .lp-training-cta-info h3 {
   font-family: var(--lp-font-display);
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.4;
   color: var(--lp-ink);
   margin: 0 0 10px 0;
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
 }
 
-.lp-training-cta-info p {
+.lp .lp-training-cta-info p {
   font-size: 14.5px;
   color: var(--lp-text);
-  line-height: 1.55;
+  line-height: 1.6;
   margin: 0;
 }
 
@@ -454,51 +460,52 @@
 }
 
 .lp-lightbox-close {
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(20, 55, 47, 0.12);
-  background: #fff;
+  border: none;
+  background: transparent;
   color: var(--lp-ink);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .lp-lightbox-close svg {
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
 }
 
 .lp-lightbox-close:hover {
-  background: #14372f;
-  color: #fff;
-  border-color: #14372f;
+  background: transparent;
+  color: var(--lp-ink);
+  opacity: 0.72;
   transform: rotate(90deg);
 }
 
-.lp-lightbox-media {
+.lp .lp-lightbox-media {
   position: relative;
   width: 100%;
   background: #0d1e18;
   display: flex;
   align-items: center;
   justify-content: center;
-  max-height: 58vh;
+  max-height: 50vh;
   overflow: hidden;
 }
 
-.lp-lightbox-img {
+.lp .lp-lightbox-img {
   width: auto;
   max-width: 100%;
-  max-height: 58vh;
+  max-height: 50vh;
   object-fit: contain;
   display: block;
 }
 
-.lp-lightbox-arrow {
+.lp .lp-lightbox-arrow {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
@@ -519,76 +526,94 @@
   z-index: 5;
 }
 
-.lp-lightbox-arrow.prev {
+.lp .lp-lightbox-arrow.prev {
   left: 16px;
 }
 
-.lp-lightbox-arrow.next {
+.lp .lp-lightbox-arrow.next {
   right: 16px;
 }
 
-.lp-lightbox-arrow:hover {
+.lp .lp-lightbox-arrow:hover {
   background: #fff;
   color: var(--lp-green-deep);
   transform: translateY(-50%) scale(1.08);
 }
 
-.lp-lightbox-arrow svg {
+.lp .lp-lightbox-arrow svg {
   width: 22px;
   height: 22px;
 }
 
-.lp-lightbox-foot {
-  padding: 20px 24px;
+.lp .lp-lightbox-foot {
+  padding: 22px 28px 26px;
   background: #fff;
   overflow-y: auto;
-  max-height: 28vh;
+  max-height: 38vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.lp-lightbox-foot h3 {
+.lp .lp-lightbox-foot h3 {
   font-family: var(--lp-font-display);
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--lp-ink);
-  margin: 0 0 6px 0;
-  line-height: 1.3;
+  margin: 0;
+  line-height: 1.4;
+  letter-spacing: normal;
 }
 
-.lp-lightbox-speaker {
+.lp .lp-lightbox-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: rgba(243, 247, 238, 0.8);
+}
+
+.lp .lp-lightbox-speaker,
+.lp .lp-lightbox-location {
   font-size: 13.5px;
   color: var(--lp-ink-soft);
-  margin: 0 0 8px 0;
-  line-height: 1.45;
+  margin: 0;
+  line-height: 1.5;
 }
 
-.lp-lightbox-speaker strong {
+.lp .lp-lightbox-speaker strong,
+.lp .lp-lightbox-location strong {
   color: var(--lp-ink);
+  font-weight: 600;
 }
 
-.lp-lightbox-speaker em {
+.lp .lp-lightbox-location em {
   font-style: normal;
   color: var(--lp-green-deep);
-  font-weight: 550;
+  font-weight: 600;
 }
 
-.lp-lightbox-desc {
-  font-size: 14px;
+.lp .lp-lightbox-desc {
+  font-size: 14.5px;
   color: var(--lp-text);
-  line-height: 1.55;
-  margin: 0 0 14px 0;
+  line-height: 1.65;
+  letter-spacing: normal;
+  margin: 0;
 }
 
-.lp-lightbox-tags {
+.lp .lp-lightbox-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 2px;
 }
 
-.lp-lightbox-tags .lp-training-highlight-tag {
+.lp .lp-lightbox-tags .lp-training-highlight-tag {
   background: rgba(184, 230, 124, 0.22);
-  border-color: rgba(95, 174, 91, 0.3);
   color: var(--lp-ink);
   font-weight: 600;
+  padding: 6px 12px;
 }
 
 /* ─── 6. Responsive Breakpoints ─────────────────────────────────────── */
@@ -617,7 +642,7 @@
     aspect-ratio: 16 / 11;
   }
 
-  .lp-training-cta {
+  .lp .lp-training-cta {
     flex-direction: column;
     align-items: stretch;
     padding: 26px 24px;
@@ -710,156 +735,165 @@
     font-size: 11px;
   }
 
-  .lp-training-content {
-    padding: 16px 14px;
+  .lp .lp-training-content {
+    padding: 18px 18px 20px;
   }
 
-  .lp-training-meta {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-    font-size: 11.5px;
-    margin-bottom: 6px;
-  }
-
-  .lp-training-speaker {
+  .lp .lp-training-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
     font-size: 12px;
-    max-width: 62%;
+    margin-bottom: 8px;
+  }
+
+  .lp .lp-training-speaker {
+    font-size: 12.5px;
+    max-width: 100%;
+    width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .lp-training-date {
-    font-size: 11px;
-    color: #8b9991;
-    white-space: nowrap;
+  .lp .lp-training-date {
+    font-size: 11.5px;
+    color: #7a8b82;
   }
 
-  .lp-training-title {
-    font-size: 16px;
-    line-height: 1.35;
-    margin: 0 0 6px 0;
-    letter-spacing: -0.01em;
+  .lp .lp-training-title {
+    font-size: 16.5px;
+    line-height: 1.42;
+    margin: 0 0 8px 0;
+    letter-spacing: normal;
   }
 
-  .lp-training-desc {
-    font-size: 13px;
-    line-height: 1.45;
+  .lp .lp-training-desc {
+    font-size: 13.5px;
+    line-height: 1.58;
     color: var(--lp-text);
-    margin: 0 0 10px 0;
+    margin: 0 0 14px 0;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
 
-  .lp-training-highlights {
-    gap: 5px;
-    padding-top: 4px;
+  .lp .lp-training-highlights {
+    gap: 6px;
+    padding-top: 10px;
   }
 
-  .lp-training-highlight-tag {
-    font-size: 11px;
-    padding: 3px 8px;
+  .lp .lp-training-highlight-tag {
+    font-size: 11.5px;
+    padding: 4px 10px;
   }
 
   /* Banner CTA trên mobile */
-  .lp-training-cta {
-    padding: 20px 16px;
+  .lp .lp-training-cta {
+    padding: 20px 18px;
     gap: 16px;
     border-radius: 18px;
     flex-direction: column;
     align-items: stretch;
   }
 
-  .lp-training-cta-info h3 {
+  .lp .lp-training-cta-info h3 {
     font-size: 17px;
-    line-height: 1.35;
-    margin-bottom: 6px;
+    line-height: 1.4;
+    margin-bottom: 8px;
+    letter-spacing: normal;
   }
 
-  .lp-training-cta-info p {
-    font-size: 13px;
-    line-height: 1.5;
+  .lp .lp-training-cta-info p {
+    font-size: 13.5px;
+    line-height: 1.55;
   }
 
-  .lp-training-cta-actions {
+  .lp .lp-training-cta-actions {
     width: 100%;
     min-width: 0;
     gap: 10px;
   }
 
-  .lp-training-cta-actions .lp-btn {
+  .lp .lp-training-cta-actions .lp-btn {
     padding: 12px 18px;
     font-size: 14px;
   }
 
   /* Lightbox trên mobile */
-  .lp-lightbox {
-    padding: 8px;
+  .lp .lp-lightbox {
+    padding: 10px;
   }
 
-  .lp-lightbox-dialog {
+  .lp .lp-lightbox-dialog {
     max-height: 94vh;
     border-radius: 16px;
   }
 
-  .lp-lightbox-head {
-    padding: 10px 14px;
+  .lp .lp-lightbox-head {
+    padding: 12px 16px;
   }
 
-  .lp-lightbox-counter {
+  .lp .lp-lightbox-counter {
     font-size: 12px;
     padding: 3px 8px;
   }
 
-  .lp-lightbox-close {
+  .lp .lp-lightbox-close {
     width: 32px;
     height: 32px;
   }
 
-  .lp-lightbox-media {
-    max-height: 44vh;
+  .lp .lp-lightbox-media {
+    max-height: 40vh;
   }
 
-  .lp-lightbox-img {
-    max-height: 44vh;
+  .lp .lp-lightbox-img {
+    max-height: 40vh;
   }
 
-  .lp-lightbox-arrow {
+  .lp .lp-lightbox-arrow {
     width: 36px;
     height: 36px;
   }
 
-  .lp-lightbox-arrow.prev {
+  .lp .lp-lightbox-arrow.prev {
     left: 8px;
   }
 
-  .lp-lightbox-arrow.next {
+  .lp .lp-lightbox-arrow.next {
     right: 8px;
   }
 
-  .lp-lightbox-foot {
-    padding: 14px 16px;
-    max-height: 38vh;
+  .lp .lp-lightbox-foot {
+    padding: 18px 18px 22px;
+    max-height: 46vh;
+    gap: 10px;
   }
 
-  .lp-lightbox-foot h3 {
-    font-size: 16px;
-    line-height: 1.3;
-    margin-bottom: 4px;
+  .lp .lp-lightbox-foot h3 {
+    font-size: 17px;
+    line-height: 1.4;
+    margin: 0;
+    letter-spacing: normal;
   }
 
-  .lp-lightbox-speaker {
-    font-size: 12px;
-    margin-bottom: 6px;
+  .lp .lp-lightbox-meta {
+    padding: 10px 12px;
+    gap: 4px;
   }
 
-  .lp-lightbox-desc {
+  .lp .lp-lightbox-speaker,
+  .lp .lp-lightbox-location {
     font-size: 12.5px;
-    line-height: 1.45;
-    margin-bottom: 10px;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .lp .lp-lightbox-desc {
+    font-size: 13.5px;
+    line-height: 1.6;
+    margin: 0;
   }
 }

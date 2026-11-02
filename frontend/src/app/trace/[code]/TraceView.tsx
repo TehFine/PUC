@@ -2,20 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
+import QRCode from "qrcode";
+import { SkeletonCards } from "@/components/ui/Skeleton";
 import {
   ArrowLeft,
   Search,
   Share2,
   Check,
-  ShieldCheck,
-  Building2,
-  Truck,
-  TreePine,
   CheckCircle2,
   Tag,
   Package,
+  QrCode,
 } from "lucide-react";
 import "./trace.css";
 
@@ -163,6 +161,7 @@ export default function TraceView() {
   const [error, setError] = useState<string | null>(null);
   const [searchCode, setSearchCode] = useState(code);
   const [copied, setCopied] = useState(false);
+  const [qrSrc, setQrSrc] = useState<string>("");
 
   const [prevCode, setPrevCode] = useState(code);
   if (prevCode !== code) {
@@ -171,6 +170,34 @@ export default function TraceView() {
     setError(null);
     setSearchCode(code);
   }
+
+  useEffect(() => {
+    if (!code) return;
+    let active = true;
+    const origin =
+      typeof window !== "undefined" && window.location.origin
+        ? window.location.origin
+        : "https://krongbuk.puc.vn";
+    const targetUrl = `${origin}/trace/${encodeURIComponent(code)}`;
+
+    QRCode.toDataURL(targetUrl, {
+      margin: 0,
+      width: 320,
+      color: {
+        dark: "#0f172a",
+        light: "#ffffff",
+      },
+      errorCorrectionLevel: "M",
+    })
+      .then((url) => {
+        if (active) setQrSrc(url);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [code]);
 
   useEffect(() => {
     if (!code) return;
@@ -231,29 +258,13 @@ export default function TraceView() {
             <span>Trang chủ</span>
           </Link>
 
-          <Link href="/" className="tr-brand">
-            <span className="tr-brand-logo">
-              <Image src="/logo.png" alt="HTX Krông Búk" width={30} height={30} priority />
-            </span>
-            <div className="tr-brand-text">
-              <strong>HTX KRÔNG BÚK</strong>
-              <span>Đắk Lắk</span>
-            </div>
-          </Link>
-
           <span className="tr-verify-tag">Hồ sơ xác thực GACC</span>
         </div>
       </header>
 
       <main className="tr-wrap tr-main">
         {loading ? (
-          <div className="tr-state-card">
-            <div className="tr-loading-pulse" />
-            <h2 className="tr-state-title">Đang nạp hồ sơ lô hàng &amp; tem truy xuất...</h2>
-            <p className="tr-state-desc">
-              Hệ thống đang đối soát mã vùng trồng, mã nhà đóng gói và kết quả kiểm nghiệm từ cơ sở dữ liệu HTX.
-            </p>
-          </div>
+          <SkeletonCards count={3} label="Đang nạp hồ sơ lô hàng & tem truy xuất…" />
         ) : error ? (
           <div className="tr-card tr-error-card">
             <h2 className="tr-error-title">Chưa tìm thấy thông tin</h2>
@@ -323,7 +334,11 @@ export default function TraceView() {
               >
                 <div
                   className="tr-item-badge"
-                  style={{ background: data.farmerStamp.status === "activated" ? "#15803d" : "#b45309" }}
+                  style={
+                    data.farmerStamp.status === "activated"
+                      ? undefined
+                      : { background: "#fef3c7", borderColor: "#fcd34d", color: "#b45309" }
+                  }
                 >
                   <Tag size={14} />
                   <span>
@@ -363,160 +378,185 @@ export default function TraceView() {
               </section>
             )}
 
-            {/* ─── Thẻ 1: Khối thông tin chính (Tem Quả Nông hộ / Lô vườn / Lô hàng) ─── */}
+            {/* ─── Thẻ 1: Tem Lô Hàng Điện Tử (Đồng bộ thiết kế HarvestAssetTagCard + Watermark) ─── */}
             {data.farmerStamp ? (
-              <section className="tr-hero-card">
-                <div
-                  className="tr-hero-badge"
-                  style={{
-                    background: data.farmerStamp.status === "activated" ? "#166534" : "#854d0e",
-                  }}
-                >
-                  {data.farmerStamp.status === "activated"
-                    ? "TEM QUẢ TẬN VƯỜN ĐÃ KÍCH HOẠT"
-                    : "TEM ĐIỆN TỬ ĐÃ CẤP CHO NÔNG HỘ"}
-                </div>
-                <h1 className="tr-hero-title">Sầu Riêng Krông Búk</h1>
-                <p className="tr-hero-origin">
-                  Hộ nông dân: <strong>{data.farmerStamp.householdName}</strong> · Thôn: {data.farmerStamp.villageName} · VietGAP &amp; GACC
-                </p>
-
-                <div
-                  className="tr-hero-status-pill"
-                  style={{
-                    background:
-                      data.farmerStamp.status === "activated"
-                        ? "rgba(22, 101, 52, 0.15)"
-                        : "rgba(161, 98, 7, 0.15)",
-                    color: data.farmerStamp.status === "activated" ? "#15803d" : "#b45309",
-                  }}
-                >
-                  {data.farmerStamp.status === "activated"
-                    ? "ĐÃ XÁC THỰC THU HÁI TẠI VƯỜN · ĐẠT CHUẨN XUẤT KHẨU"
-                    : "TEM ĐÃ ĐƯỢC CẤP THEO HẠN NGẠCH CCCD · CHƯA KÍCH HOẠT THU HÁI"}
+              <section className="tr-asset-card" data-status={data.farmerStamp.status}>
+                <div className="tr-asset-watermark" aria-hidden="true">
+                  <div className="tr-asset-watermark-inner">
+                    <span className="tr-asset-watermark-title">
+                      {data.farmerStamp.status === "activated" ? "ĐÃ KÍCH HOẠT" : "ĐÃ CẤP TEM"}
+                    </span>
+                    <span className="tr-asset-watermark-sub">HTX KRÔNG BÚK · ĐÃ KIỂM TRA</span>
+                  </div>
                 </div>
 
-                <div className="tr-hero-grid">
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Mã tem Serial</span>
-                    <strong className="tr-hero-val highlight">{data.farmerStamp.serialCode}</strong>
+                <div className="tr-asset-left">
+                  <div className="tr-asset-sub-title">
+                    <span>SẦU RIÊNG TƯƠI</span>
+                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-hide-mobile">HTX KRÔNG BÚK</span>
+                    <span className="tr-asset-dot tr-asset-hide-mobile">·</span>
+                    <span>{data.puc.code}</span>
                   </div>
 
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Chủ hộ canh tác</span>
-                    <strong className="tr-hero-val">{data.farmerStamp.householdName}</strong>
-                  </div>
-
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Định danh CCCD</span>
-                    <strong className="tr-hero-val highlight">{data.farmerStamp.householdCccd}</strong>
-                  </div>
-
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Lô đất canh tác</span>
-                    <strong className="tr-hero-val">{data.farmerStamp.plotCode || "TH1-001"}</strong>
-                  </div>
-
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Khối lượng quả</span>
-                    <strong className="tr-hero-val">
+                  <div className="tr-asset-code-line">
+                    <span className="tr-asset-code-val">TEM {data.farmerStamp.serialCode}</span>
+                    <span className="tr-asset-code-divider">·</span>
+                    <span className="tr-asset-weight-val">
                       {data.farmerStamp.fruitWeightKg
-                        ? `${data.farmerStamp.fruitWeightKg} kg (Hạng ${data.farmerStamp.grade ?? "A"})`
-                        : "Chờ thu hái thực tế"}
-                    </strong>
+                        ? `KLT: ${data.farmerStamp.fruitWeightKg} kg`
+                        : `HẠNG ${data.farmerStamp.grade ?? "A"}`}
+                    </span>
                   </div>
 
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Mã số vùng trồng (PUC)</span>
-                    <strong className="tr-hero-val highlight">{data.puc.code}</strong>
+                  <div className="tr-asset-id-group">
+                    <span className="tr-asset-id-label">CHỦ HỘ</span>
+                    <strong className="tr-asset-id-val">{data.farmerStamp.householdName}</strong>
+                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-id-label">CCCD</span>
+                    <strong className="tr-asset-id-val">{data.farmerStamp.householdCccd}</strong>
+                  </div>
+
+                  <div className="tr-asset-meta">
+                    <span>Lô đất: {data.farmerStamp.plotCode || "TH1-001"}</span>
+                    <span className="tr-asset-meta-dot">·</span>
+                    <span>Thôn: {data.farmerStamp.villageName} (VietGAP &amp; GACC)</span>
+                  </div>
+                </div>
+
+                <div className="tr-asset-right">
+                  <div className="tr-asset-qr-box">
+                    {qrSrc ? (
+                      <img
+                        src={qrSrc}
+                        alt={`Mã QR tra cứu ${data.farmerStamp.serialCode}`}
+                        className="tr-asset-qr-img"
+                      />
+                    ) : (
+                      <div className="tr-asset-qr-loading" aria-hidden="true">
+                        <QrCode size={110} strokeWidth={1.8} />
+                      </div>
+                    )}
                   </div>
                 </div>
               </section>
             ) : data.plot ? (
-              <section className="tr-hero-card">
-                <div className="tr-hero-badge">BIỂN CẮM ĐẦU LÔ VƯỜN QR</div>
-                <h1 className="tr-hero-title">Định Danh Lô Canh Tác Sầu Riêng</h1>
-                <p className="tr-hero-origin">
-                  Mã lô: <strong>{data.plot.code}</strong> · Vùng trồng: {data.puc.code} · Krông Búk, Đắk Lắk
-                </p>
-
-                <div className="tr-hero-status-pill">
-                  ĐÃ ĐỊNH DANH ĐỊA CHÍNH &amp; CẮM BIỂN ĐẦU LÔ VƯỜN
+              <section className="tr-asset-card" data-status="active">
+                <div className="tr-asset-watermark" aria-hidden="true">
+                  <div className="tr-asset-watermark-inner">
+                    <span className="tr-asset-watermark-title">ĐÃ ĐỊNH DANH</span>
+                    <span className="tr-asset-watermark-sub">HTX KRÔNG BÚK · ĐÃ KIỂM TRA</span>
+                  </div>
                 </div>
 
-                <div className="tr-hero-grid">
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Mã lô canh tác</span>
-                    <strong className="tr-hero-val highlight">{data.plot.code}</strong>
+                <div className="tr-asset-left">
+                  <div className="tr-asset-sub-title">
+                    <span>LÔ CANH TÁC SẦU RIÊNG</span>
+                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-hide-mobile">HTX KRÔNG BÚK</span>
+                    <span className="tr-asset-dot tr-asset-hide-mobile">·</span>
+                    <span>{data.puc.code}</span>
                   </div>
 
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Chủ sở hữu</span>
-                    <strong className="tr-hero-val">{data.plot.ownerName || "Hộ nông dân"}</strong>
+                  <div className="tr-asset-code-line">
+                    <span className="tr-asset-code-val">LÔ {data.plot.code}</span>
+                    <span className="tr-asset-code-divider">·</span>
+                    <span className="tr-asset-weight-val">DT: {data.plot.areaHa} ha</span>
                   </div>
 
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Diện tích thửa</span>
-                    <strong className="tr-hero-val highlight">{data.plot.areaHa} ha</strong>
+                  <div className="tr-asset-id-group">
+                    <span className="tr-asset-id-label">CHỦ HỘ</span>
+                    <strong className="tr-asset-id-val">{data.plot.ownerName || "Hộ nông dân"}</strong>
+                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-id-label">GIỐNG</span>
+                    <strong className="tr-asset-id-val">{data.plot.variety || "Monthong (Dona)"}</strong>
                   </div>
 
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Giống sầu riêng</span>
-                    <strong className="tr-hero-val">{data.plot.variety || "Monthong (Dona)"}</strong>
+                  <div className="tr-asset-meta">
+                    <span>Năm trồng: {data.plot.plantedYear || "Cây thuần thục"}</span>
+                    <span className="tr-asset-meta-dot">·</span>
+                    <span>Krông Búk, Đắk Lắk (VietGAP &amp; GACC)</span>
                   </div>
+                </div>
 
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Năm trồng</span>
-                    <strong className="tr-hero-val">{data.plot.plantedYear ? `Năm ${data.plot.plantedYear}` : "Cây thuần thục"}</strong>
-                  </div>
-
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Mã số vùng trồng (PUC)</span>
-                    <strong className="tr-hero-val highlight">{data.puc.code}</strong>
+                <div className="tr-asset-right">
+                  <div className="tr-asset-qr-box">
+                    {qrSrc ? (
+                      <img
+                        src={qrSrc}
+                        alt={`Mã QR tra cứu lô đất ${data.plot.code}`}
+                        className="tr-asset-qr-img"
+                      />
+                    ) : (
+                      <div className="tr-asset-qr-loading" aria-hidden="true">
+                        <QrCode size={110} strokeWidth={1.8} />
+                      </div>
+                    )}
                   </div>
                 </div>
               </section>
             ) : (
-              <section className="tr-hero-card">
-                <div className="tr-hero-badge">XÁC THỰC NGUỒN GỐC CHÍNH NGẠCH</div>
-                <h1 className="tr-hero-title">Sầu Riêng Krông Búk</h1>
-                <p className="tr-hero-origin">Vùng trồng Đắk Lắk · Tiêu chuẩn VietGAP &amp; GACC</p>
-
-                <div className="tr-hero-status-pill">
-                  ĐÃ KIỂM ĐỊNH AN TOÀN · ĐẠT CHUẨN XUẤT KHẨU
+              <section className="tr-asset-card" data-status={data.lot?.status || "exported"}>
+                <div className="tr-asset-watermark" aria-hidden="true">
+                  <div className="tr-asset-watermark-inner">
+                    <span className="tr-asset-watermark-title">ĐÃ XUẤT KHO</span>
+                    <span className="tr-asset-watermark-sub">HTX KRÔNG BÚK · ĐÃ KIỂM TRA</span>
+                  </div>
                 </div>
 
-                <div className="tr-hero-grid">
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Mã số lô hàng</span>
-                    <strong className="tr-hero-val highlight">{data.lot?.code ?? code}</strong>
+                <div className="tr-asset-left">
+                  <div className="tr-asset-sub-title">
+                    <span>SẦU RIÊNG TƯƠI</span>
+                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-hide-mobile">HTX KRÔNG BÚK</span>
+                    <span className="tr-asset-dot tr-asset-hide-mobile">·</span>
+                    <span>{data.puc.code}</span>
                   </div>
 
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Mã tem QR Lô</span>
-                    <strong className="tr-hero-val">{data.lot?.qrCode ?? code}</strong>
+                  <div className="tr-asset-code-line">
+                    <span className="tr-asset-code-val">LÔ {data.lot?.code ?? code}</span>
+                    <span className="tr-asset-code-divider">·</span>
+                    <span className="tr-asset-weight-val">
+                      KLT: {((data.lot?.weightTons ?? 0) * 1000).toLocaleString("vi-VN")} kg ({data.lot?.weightTons ?? 0} Tấn)
+                    </span>
                   </div>
 
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Ngày thu hoạch</span>
-                    <strong className="tr-hero-val">{formatDate(data.lot?.harvestedOn ?? "")}</strong>
-                  </div>
-
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Mã vùng trồng (PUC)</span>
-                    <strong className="tr-hero-val highlight">{data.puc.code}</strong>
-                  </div>
-
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Mã nhà đóng gói (PHC)</span>
-                    <strong className="tr-hero-val highlight">
+                  <div className="tr-asset-id-group">
+                    <span className="tr-asset-id-label">MÃ TRUY XUẤT</span>
+                    <strong className="tr-asset-id-val">{data.lot?.qrCode ?? code}</strong>
+                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-id-label">MÃ PHC</span>
+                    <strong className="tr-asset-id-val">
                       {data.supplyChain?.packhouse.code || data.lot?.packhouseCode || "VN-DLPH-0089"}
                     </strong>
                   </div>
 
-                  <div className="tr-hero-item">
-                    <span className="tr-hero-label">Tổng sản lượng lô</span>
-                    <strong className="tr-hero-val">{data.lot?.weightTons ?? 0} Tấn</strong>
+                  <div className="tr-asset-meta">
+                    <span>Ngày thu: {formatDate(data.lot?.harvestedOn ?? "")}</span>
+                    <span className="tr-asset-meta-dot">·</span>
+                    <span>
+                      {data.lot?.buyer || "HTX Nông Nghiệp Krông Búk"} (
+                      {data.lot?.market === "Trung Quốc"
+                        ? "Xuất khẩu TQ"
+                        : data.lot?.market || "Xuất khẩu chính ngạch"}
+                      )
+                    </span>
+                  </div>
+                </div>
+
+                <div className="tr-asset-right">
+                  <div className="tr-asset-qr-box">
+                    {qrSrc ? (
+                      <img
+                        src={qrSrc}
+                        alt={`Mã QR tra cứu nguồn gốc lô ${data.lot?.code ?? code}`}
+                        className="tr-asset-qr-img"
+                      />
+                    ) : (
+                      <div className="tr-asset-qr-loading" aria-hidden="true">
+                        <QrCode size={110} strokeWidth={1.8} />
+                      </div>
+                    )}
                   </div>
                 </div>
               </section>
@@ -532,79 +572,132 @@ export default function TraceView() {
                 Hồ sơ theo dõi xuyên suốt từ vườn sầu riêng, cơ sở đóng gói sơ chế, xe vận chuyển lạnh đến cảng xuất khẩu.
               </p>
 
-              <div className="tr-timeline-steps">
+              <div className="tr-timeline-steps" role="list">
                 {/* Giai đoạn 1 */}
                 <div className="tr-step-item">
-                  <div className="tr-step-marker">
-                    <TreePine size={18} />
-                  </div>
-                  <div className="tr-step-content">
-                    <div className="tr-step-head">
-                      <strong>1. VÙNG TRỒNG LIÊN KẾT (PUC)</strong>
-                      <span className="tr-step-tag">Khảo sát &amp; Canh tác</span>
-                    </div>
-                    <p className="tr-step-desc">
-                      Vùng trồng sầu riêng tập trung HTX Krông Búk, mã số <strong>{data.puc.code}</strong>. Canh tác an toàn sinh học theo quy trình VietGAP, kiểm soát nhật ký phân bón và thời gian cách ly thuốc BVTV (PHI).
-                    </p>
-                    {data.supplyChain?.contract && (
-                      <div className="tr-step-subdetail">
-                        <span>Hợp đồng bao tiêu: <strong>{data.supplyChain.contract.code}</strong></span>
+                  <div className="tr-step-segment">
+                    <div className="tr-step-track-col" aria-hidden="true">
+                      <div
+                        className="tr-step-capsule"
+                        style={{ background: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)" }}
+                      >
+                        <div className="tr-step-dot" />
+                        <div className="tr-step-dot" />
                       </div>
-                    )}
+                    </div>
+                    <div className="tr-step-content tr-step-card-blue">
+                      <div className="tr-step-head">
+                        <strong>1. VÙNG TRỒNG LIÊN KẾT (PUC)</strong>
+                        <span className="tr-step-tag">Khảo sát &amp; Canh tác</span>
+                      </div>
+                      <p className="tr-step-desc">
+                        Vùng trồng sầu riêng tập trung HTX Krông Búk, mã số <strong>{data.puc.code}</strong>. Canh tác an toàn sinh học theo quy trình VietGAP, kiểm soát nhật ký phân bón và thời gian cách ly thuốc BVTV (PHI).
+                      </p>
+                      {data.supplyChain?.contract && (
+                        <div className="tr-step-subdetail">
+                          <span>Hợp đồng bao tiêu: <strong>{data.supplyChain.contract.code}</strong></span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="tr-step-transfer" aria-hidden="true">
+                    <div className="tr-step-transfer-track">
+                      <div className="tr-step-mini-dot" />
+                      <div className="tr-step-mini-dot" />
+                      <div className="tr-step-mini-dot" />
+                    </div>
                   </div>
                 </div>
 
                 {/* Giai đoạn 2 */}
                 <div className="tr-step-item">
-                  <div className="tr-step-marker">
-                    <Building2 size={18} />
-                  </div>
-                  <div className="tr-step-content">
-                    <div className="tr-step-head">
-                      <strong>2. SƠ CHẾ &amp; ĐÓNG GÓI (PHC)</strong>
-                      <span className="tr-step-tag">Nhà máy đóng gói</span>
+                  <div className="tr-step-segment">
+                    <div className="tr-step-track-col" aria-hidden="true">
+                      <div
+                        className="tr-step-capsule"
+                        style={{ background: "linear-gradient(180deg, #10b981 0%, #34d399 100%)" }}
+                      >
+                        <div className="tr-step-dot" />
+                        <div className="tr-step-dot" />
+                      </div>
                     </div>
-                    <p className="tr-step-desc">
-                      Tại <strong>{data.supplyChain?.packhouse.name || "Cơ sở đóng gói Đắk Lắk"}</strong> (Mã PHC: <strong>{data.supplyChain?.packhouse.code || "VN-DLPH-0089"}</strong>).
-                      <br />
-                      • <strong>Phương pháp sơ chế:</strong> {data.supplyChain?.packhouse.treatmentMethod || "Rửa áp lực Ozone, sấy ráo khí động học, khử khuẩn nấm sinh học."}
-                      <br />
-                      • <strong>Phân loại chất lượng:</strong> Hạng A ({data.supplyChain?.packhouse.gradeAPct ?? 72.5}%) · Độ ngọt bình quân đạt <strong>{data.supplyChain?.packhouse.avgBrix ?? 33.2}° Brix</strong>.
-                    </p>
+                    <div className="tr-step-content tr-step-card-mint">
+                      <div className="tr-step-head">
+                        <strong>2. SƠ CHẾ &amp; ĐÓNG GÓI (PHC)</strong>
+                        <span className="tr-step-tag">Nhà máy đóng gói</span>
+                      </div>
+                      <p className="tr-step-desc">
+                        Tại <strong>{data.supplyChain?.packhouse.name || "Cơ sở đóng gói Đắk Lắk"}</strong> (Mã PHC: <strong>{data.supplyChain?.packhouse.code || "VN-DLPH-0089"}</strong>).
+                        <br />
+                        • <strong>Phương pháp sơ chế:</strong> {data.supplyChain?.packhouse.treatmentMethod || "Rửa áp lực Ozone, sấy ráo khí động học, khử khuẩn nấm sinh học."}
+                        <br />
+                        • <strong>Phân loại chất lượng:</strong> Hạng A ({data.supplyChain?.packhouse.gradeAPct ?? 72.5}%) · Độ ngọt bình quân đạt <strong>{data.supplyChain?.packhouse.avgBrix ?? 33.2}° Brix</strong>.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="tr-step-transfer" aria-hidden="true">
+                    <div className="tr-step-transfer-track">
+                      <div className="tr-step-mini-dot" />
+                      <div className="tr-step-mini-dot" />
+                      <div className="tr-step-mini-dot" />
+                    </div>
                   </div>
                 </div>
 
                 {/* Giai đoạn 3 */}
                 <div className="tr-step-item">
-                  <div className="tr-step-marker">
-                    <Truck size={18} />
-                  </div>
-                  <div className="tr-step-content">
-                    <div className="tr-step-head">
-                      <strong>3. VẬN CHUYỂN CHUỖI LẠNH (COLD CHAIN)</strong>
-                      <span className="tr-step-tag">Bảo quản nhiệt độ</span>
+                  <div className="tr-step-segment">
+                    <div className="tr-step-track-col" aria-hidden="true">
+                      <div
+                        className="tr-step-capsule"
+                        style={{ background: "linear-gradient(180deg, #8b5cf6 0%, #a78bfa 100%)" }}
+                      >
+                        <div className="tr-step-dot" />
+                        <div className="tr-step-dot" />
+                      </div>
                     </div>
-                    <p className="tr-step-desc">
-                      Đơn vị logistics: <strong>{data.supplyChain?.transport.transporter || "Vận tải Lạnh Á Châu"}</strong>.
-                      <br />
-                      Xe container lạnh biển số <strong>{data.supplyChain?.transport.vehiclePlate || "47C-289.45"}</strong> duy trì nhiệt độ bảo quản chuẩn <strong>{data.supplyChain?.transport.temperatureC ?? 13.5}°C</strong> trong suốt hành trình đưa hàng đến cửa khẩu xuất khẩu.
-                    </p>
+                    <div className="tr-step-content tr-step-card-lavender">
+                      <div className="tr-step-head">
+                        <strong>3. VẬN CHUYỂN CHUỖI LẠNH (COLD CHAIN)</strong>
+                        <span className="tr-step-tag">Bảo quản nhiệt độ</span>
+                      </div>
+                      <p className="tr-step-desc">
+                        Đơn vị logistics: <strong>{data.supplyChain?.transport.transporter || "Vận tải Lạnh Á Châu"}</strong>.
+                        <br />
+                        Xe container lạnh biển số <strong>{data.supplyChain?.transport.vehiclePlate || "47C-289.45"}</strong> duy trì nhiệt độ bảo quản chuẩn <strong>{data.supplyChain?.transport.temperatureC ?? 13.5}°C</strong> trong suốt hành trình đưa hàng đến cửa khẩu xuất khẩu.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="tr-step-transfer" aria-hidden="true">
+                    <div className="tr-step-transfer-track">
+                      <div className="tr-step-mini-dot" />
+                      <div className="tr-step-mini-dot" />
+                      <div className="tr-step-mini-dot" />
+                    </div>
                   </div>
                 </div>
 
                 {/* Giai đoạn 4 */}
                 <div className="tr-step-item">
-                  <div className="tr-step-marker">
-                    <ShieldCheck size={18} />
-                  </div>
-                  <div className="tr-step-content">
-                    <div className="tr-step-head">
-                      <strong>4. KIỂM ĐỊNH &amp; DÁN TEM TRUY XUẤT</strong>
-                      <span className="tr-step-tag">Thị trường {data.lot?.market || "Xuất khẩu & Nội địa"}</span>
+                  <div className="tr-step-segment">
+                    <div className="tr-step-track-col" aria-hidden="true">
+                      <div
+                        className="tr-step-capsule"
+                        style={{ background: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)" }}
+                      >
+                        <div className="tr-step-dot" />
+                        <div className="tr-step-dot" />
+                      </div>
                     </div>
-                    <p className="tr-step-desc">
-                      Lô hàng đã được kiểm nghiệm độc lập Cadimi an toàn, 100% âm tính chất cấm Vàng O, kích hoạt dải tem QR CheckVN dán trên từng quả và thùng hàng đưa ra thị trường tiêu thụ.
-                    </p>
+                    <div className="tr-step-content tr-step-card-peach">
+                      <div className="tr-step-head">
+                        <strong>4. KIỂM ĐỊNH &amp; DÁN TEM TRUY XUẤT</strong>
+                        <span className="tr-step-tag">Thị trường {data.lot?.market || "Xuất khẩu & Nội địa"}</span>
+                      </div>
+                      <p className="tr-step-desc">
+                        Lô hàng đã được kiểm nghiệm độc lập Cadimi an toàn, 100% âm tính chất cấm Vàng O, kích hoạt dải tem QR CheckVN dán trên từng quả và thùng hàng đưa ra thị trường tiêu thụ.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -614,43 +707,62 @@ export default function TraceView() {
             <section className="tr-card">
               <div className="tr-card-header">
                 <h2 className="tr-card-title">Kiểm tra an toàn thực phẩm</h2>
-                <span className="tr-badge-green">Đạt 100%</span>
+                <span className="tr-badge-green">
+                  {data.labTests[0]
+                    ? data.labTests[0].result === "pass"
+                      ? "Đạt chuẩn"
+                      : "Không đạt"
+                    : "Chưa có mẫu"}
+                </span>
               </div>
               <p className="tr-card-sub">
-                Kết quả phân tích mẫu trái tại phòng kiểm nghiệm độc lập đạt tiêu chuẩn an toàn cho người tiêu dùng.
+                {data.labTests[0]
+                  ? `Phiếu kiểm nghiệm ${data.labTests[0].code} (${formatDate(data.labTests[0].sampledOn)}) tại ${data.labTests[0].lab}.`
+                  : "Chưa có phiếu kiểm nghiệm gắn với mã truy xuất này."}
               </p>
 
-              <div className="tr-safety-list">
-                <div className="tr-safety-item">
-                  <div className="tr-safety-info">
-                    <strong className="tr-safety-name">Kim loại nặng Cadimi (Cd)</strong>
-                    <span className="tr-safety-detail">
-                      Kết quả: {data.labTests[0]?.cdMgKg ?? 0.018} mg/kg (Mức tối đa cho phép: 0.05 mg/kg)
+              {data.labTests[0] && (
+                <div className="tr-safety-list">
+                  <div className="tr-safety-item">
+                    <div className="tr-safety-info">
+                      <strong className="tr-safety-name">Kim loại nặng Cadimi (Cd)</strong>
+                      <span className="tr-safety-detail">
+                        Kết quả: {data.labTests[0].cdMgKg} mg/kg (Mức tối đa cho phép: 0.05 mg/kg)
+                      </span>
+                    </div>
+                    <span className="tr-pass-pill">
+                      {Number(data.labTests[0].cdMgKg) <= 0.05 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
                     </span>
                   </div>
-                  <span className="tr-pass-pill">ĐẠT CHUẨN</span>
-                </div>
 
-                <div className="tr-safety-item">
-                  <div className="tr-safety-info">
-                    <strong className="tr-safety-name">Chất nhuộm Vàng O (Chất cấm)</strong>
-                    <span className="tr-safety-detail">
-                      Kết quả: {data.labTests[0]?.yellowOPositive ? "Dương tính" : "Âm tính 100% (Không phát hiện)"}
+                  <div className="tr-safety-item">
+                    <div className="tr-safety-info">
+                      <strong className="tr-safety-name">Chất nhuộm Vàng O (Chất cấm)</strong>
+                      <span className="tr-safety-detail">
+                        Kết quả: {data.labTests[0].yellowOPositive ? "Dương tính" : "Âm tính (Không phát hiện)"}
+                      </span>
+                    </div>
+                    <span className="tr-pass-pill">
+                      {data.labTests[0].yellowOPositive ? "KHÔNG ĐẠT" : "AN TOÀN"}
                     </span>
                   </div>
-                  <span className="tr-pass-pill">AN TOÀN</span>
-                </div>
 
-                <div className="tr-safety-item">
-                  <div className="tr-safety-info">
-                    <strong className="tr-safety-name">Dư lượng thuốc trừ sâu Chlorpyrifos</strong>
-                    <span className="tr-safety-detail">
-                      Kết quả: {data.labTests[0]?.chlorpyrifosMgKg ?? "KPH"} (Không phát hiện dư lượng)
+                  <div className="tr-safety-item">
+                    <div className="tr-safety-info">
+                      <strong className="tr-safety-name">Dư lượng thuốc trừ sâu Chlorpyrifos</strong>
+                      <span className="tr-safety-detail">
+                        Kết quả:{" "}
+                        {data.labTests[0].chlorpyrifosMgKg !== null && data.labTests[0].chlorpyrifosMgKg !== undefined
+                          ? `${data.labTests[0].chlorpyrifosMgKg} mg/kg`
+                          : "KPH (Không phát hiện dư lượng)"}
+                      </span>
+                    </div>
+                    <span className="tr-pass-pill">
+                      {(data.labTests[0].chlorpyrifosMgKg ?? 0) <= 0.01 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
                     </span>
                   </div>
-                  <span className="tr-pass-pill">ĐẠT CHUẨN</span>
                 </div>
-              </div>
+              )}
             </section>
 
             {/* ─── Thẻ 4: Thông số vùng trồng & Chứng nhận ─── */}
@@ -784,12 +896,13 @@ export default function TraceView() {
         <div className="tr-wrap tr-footer-inner">
           <p className="tr-footer-text">
             Hệ thống quản lý mã số vùng trồng &amp; truy xuất nguồn gốc nông sản
-            <br />
-            <strong>Hợp Tác Xã Nông Nghiệp Krông Búk – Tỉnh Đắk Lắk</strong>
           </p>
-          <div className="tr-footer-meta">
+          <p className="tr-footer-org">
+            Hợp Tác Xã Nông Nghiệp Krông Búk – Tỉnh Đắk Lắk
+          </p>
+          <p className="tr-footer-meta">
             Cơ sở dữ liệu xác thực mã số vùng trồng PUC theo tiêu chuẩn Bộ NN&amp;PTNT và GACC.
-          </div>
+          </p>
         </div>
       </footer>
     </div>

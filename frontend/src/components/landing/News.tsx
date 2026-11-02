@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { NEWS_CATEGORIES, type NewsArticle } from "./news-data";
 import { useNewsArticles } from "@/lib/news-store";
 
@@ -32,8 +33,8 @@ export default function News() {
       ? articles
       : articles.filter((item) => item.category === selectedCategory);
 
-  const featured = filteredArticles[0];
-  const regularList = filteredArticles.slice(1);
+  const featured = filteredArticles.find((a) => a.featured) ?? filteredArticles[0];
+  const regularList = filteredArticles.filter((a) => a !== featured);
 
   return (
     <div className="lp-news-root">
@@ -65,6 +66,7 @@ export default function News() {
               fill
               sizes="(max-width: 900px) 100vw, 560px"
               priority
+              unoptimized={featured.image.startsWith("/api/")}
             />
             <span className="lp-clip-arrow" aria-hidden="true">
               <svg viewBox="0 0 42 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ overflow: "visible", display: "block" }}>
@@ -115,6 +117,7 @@ export default function News() {
                   alt={item.imageAlt}
                   fill
                   sizes="(max-width: 768px) 100vw, 360px"
+                  unoptimized={item.image.startsWith("/api/")}
                 />
               </div>
 
@@ -162,7 +165,7 @@ export default function News() {
                 aria-label="Đóng bài viết"
                 onClick={() => setReadingArticle(null)}
               >
-                ✕
+                <CloseCircleIcon size={28} />
               </button>
             </header>
 
@@ -181,6 +184,7 @@ export default function News() {
                   alt={readingArticle.imageAlt}
                   fill
                   sizes="(max-width: 900px) 100vw, 760px"
+                  unoptimized={readingArticle.image.startsWith("/api/")}
                 />
                 <figcaption>{readingArticle.imageAlt}</figcaption>
               </figure>

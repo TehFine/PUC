@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import "./training.css";
 
 export interface TrainingItem {
@@ -349,9 +350,7 @@ export default function TrainingGallery() {
                 </span>
               </div>
               <button type="button" className="lp-lightbox-close" onClick={closeLightbox} aria-label="Đóng ảnh phóng to">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
+                <CloseCircleIcon size={28} />
               </button>
             </div>
 
@@ -396,9 +395,14 @@ export default function TrainingGallery() {
 
             <div className="lp-lightbox-foot">
               <h3>{activeLightboxItem.title}</h3>
-              <p className="lp-lightbox-speaker">
-                <strong>Diễn giả / Đơn vị tổ chức:</strong> {activeLightboxItem.speaker} · <em>{activeLightboxItem.location}</em>
-              </p>
+              <div className="lp-lightbox-meta">
+                <p className="lp-lightbox-speaker">
+                  <strong>Đơn vị / Diễn giả:</strong> <span>{activeLightboxItem.speaker}</span>
+                </p>
+                <p className="lp-lightbox-location">
+                  <strong>Địa điểm & Chuyên đề:</strong> <em>{activeLightboxItem.location}</em> · <span>{activeLightboxItem.date}</span>
+                </p>
+              </div>
               <p className="lp-lightbox-desc">{activeLightboxItem.description}</p>
               <div className="lp-lightbox-tags">
                 {activeLightboxItem.highlights.map((h, i) => (
