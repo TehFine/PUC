@@ -147,6 +147,15 @@ export default function PortalApp() {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
   }
 
+  useEffect(() => {
+    document.documentElement.classList.add("pt-html");
+    document.body.classList.add("pt-body");
+    return () => {
+      document.documentElement.classList.remove("pt-html");
+      document.body.classList.remove("pt-body");
+    };
+  }, []);
+
   const household = overview?.household;
   const displayName = household?.name || session?.user.fullName || "Hộ thành viên";
   const initials = displayName
@@ -159,6 +168,7 @@ export default function PortalApp() {
 
   return (
     <div className="pt-app">
+      <div className="pt-bg-backdrop" aria-hidden="true" />
       <header className="pt-topbar">
         <div className="pt-topbar-inner">
           {/* Logo thương hiệu HTX Krông Búk (chỉ hiển thị trên màn hình Desktop/Laptop) */}

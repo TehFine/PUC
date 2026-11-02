@@ -4,6 +4,22 @@
  * nút bo tròn điểm nhấn vàng chanh. Thanh tab là dock nổi phía dưới màn hình. Tiền tố .pt-
  */
 
+/* Khóa cuộn ở tầng window để cố định nền tuyệt đối, tránh hiện tượng cuộn lồng body làm giật nền trên mobile */
+html:has(.pt-app),
+html.pt-html {
+  height: auto !important;
+  min-height: 100% !important;
+  background-color: #f4f8f2 !important;
+}
+
+html:has(.pt-app) body,
+body.pt-body {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-x: clip !important;
+  background-color: #f4f8f2 !important;
+}
+
 .pt-app {
   --pt-gap: 16px;
   --font-display-stack: var(--font-hero-sans), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -20,19 +36,33 @@
 }
 
 /* Nền cố định: trời xanh nhạt chuyển dần sang trắng ngà như phần mở đầu trang giới thiệu */
+.pt-bg-backdrop,
 .pt-app::before {
   content: "";
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100lvh;
   z-index: -1;
   pointer-events: none;
-  background-color: #f3f8f4;
+  background-color: #f4f8f2;
   background-image:
     radial-gradient(44rem 16rem at 50% -2%, rgba(255, 255, 255, 0.95), transparent 70%),
     radial-gradient(22rem 9rem at 4% 12%, rgba(255, 255, 255, 0.7), transparent 70%),
     radial-gradient(24rem 9rem at 98% 6%, rgba(255, 255, 255, 0.7), transparent 70%),
     linear-gradient(180deg, #bddff3 0%, #d9edf8 240px, #eef6f6 540px, #f4f8f1 100%);
   background-repeat: no-repeat;
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.pt-app:has(.pt-bg-backdrop)::before {
+  display: none !important;
+  content: none !important;
 }
 
 .pt-topbar {
@@ -79,6 +109,17 @@
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: rgba(15, 23, 42, 0.52);
+  }
+
+  /* Nền cố định ổn định tuyệt đối trên di động, dải màu êm dịu, không giật lắc hay dồn mảng khi lướt */
+  .pt-bg-backdrop,
+  .pt-app::before {
+    background-color: #f4f8f2;
+    background-image:
+      radial-gradient(120% 50% at 50% -5%, rgba(255, 255, 255, 0.9) 0%, transparent 100%),
+      linear-gradient(180deg, #d3e8f6 0%, #e2eef7 160px, #eff5f2 380px, #f4f8f2 100%);
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
   }
 }
 
