@@ -1,0 +1,126 @@
+import { Injectable } from "@nestjs/common";
+import type { AuthUser } from "../../auth/auth-user";
+import { notFound } from "../../common/errors/app.exception";
+import { camelRow, camelRows } from "../../common/sql/rows";
+import { DatabaseService } from "../../database/database.service";
+import { householdIdOf, PORTAL_TABS, TODAY_VN_SQL } from "../common/portal-context";
+
+export interface PortalReminder {
+  kind: "journal" | "violation" | "isolation" | "schedule" | "training" | "harvest";
+  title: string;
+  detail: string;
+  tab: string;
+  date: string | null;
+}
+
+/** Tổng quan của hộ: thông tin hộ, số liệu nhanh, kết quả kiểm nghiệm gần nhất và nhắc việc. */
+@Injectable()
+export class OverviewService {
+  constructor(private readonly db: DatabaseService) {}
+
+  async overview(user: AuthUser) {
+    const id = householdIdOf(user);
+    const household = (
+      await this.db.query(
+        `SELECT h.id, h.code, h.name, h.phone, h.plot_count, h.area_ha, h.status,
+                v.name AS village_name, v.leader AS village_leader
+         FROM households h JOIN villages v ON v.id = h.village_id WHERE h.id = $1`,
+        [id],
+      )
+    ).rows[0];
+    if (!household) throw notFound("Không tìm thấy hộ của tài khoản này.");
+
+    const stats = (
+      await this.db.query(
+        `SELECT
+           (SELECT count(*)::int FROM violations WHERE household_id = $1 AND status = 'open') AS open_violations,
+           (SELECT count(*)::int FROM approvals WHERE household_id = $1 AND status = 'pending') AS pending_approvals,
+           (SELECT max(entry_on) FROM journal_entries WHERE household_id = $1) AS last_journal_on,
+           (SELECT count(*)::int FROM journal_entries
+              WHERE household_id = $1 AND entry_on >= (${TODAY_VN_SQL} - 30)) AS "journalLast30Days",
+           (SELECT coalesce(sum(weight_kg), 0)::float8 FROM harvest_contributions WHERE household_id = $1) AS harvest_total_kg,
+           (SELECT count(*)::int FROM notifications WHERE user_id = $2 AND read_at IS NULL) AS unread_notifications`,
+        [id, user.id],
+      )
+    ).rows[0];
+
+    const lastTest = (
+      await this.db.query(
+        `SELECT code, plot_code, sampled_on, result FROM lab_tests
+         WHERE household_id = $1 ORDER BY sampled_on DESC, id DESC LIMIT 1`,
+        [id],
+      )
+    ).rows[0];
+
+    return {
+      household: camelRow(household),
+      stats: camelRow(stats),
+      lastTest: lastTest ? camelRow(lastTest) : null,
+      reminders: await this.reminders(id),
+    };
+  }
+
+  /**
+   * Nhắc việc tính hoàn toàn bằng SQL:
+   * chưa ghi nhật ký 7 ngày, vi phạm đang mở, đang trong thời gian cách ly thuốc,
+   * lịch kiểm tra trong 7 ngày tới, lớp tập huấn đã đăng ký trong 7 ngày tới, khai báo thu hái bị từ chối (30 ngày gần đây).
+   */
+  private async reminders(householdId: number): Promise<PortalReminder[]> {
+    const { rows } = await this.db.query(
+      `WITH today AS (SELECT ${TODAY_VN_SQL} AS d)
+       SELECT * FROM (
+         SELECT 1 AS priority, 'journal' AS kind, 'Chưa ghi nhật ký canh tác 7 ngày' AS title,
+                CASE WHEN j.last_on IS NULL THEN 'Hộ chưa có bản ghi nhật ký nào. Hãy ghi nhật ký kèm ảnh thực địa.'
+                     ELSE 'Lần ghi gần nhất: ' || to_char(j.last_on, 'DD/MM/YYYY') || '. Theo quy định cần ghi tối thiểu 7 ngày/lần.' END AS detail,
+                '${PORTAL_TABS.diary}' AS tab, j.last_on AS date
+         FROM (SELECT max(entry_on) AS last_on FROM journal_entries WHERE household_id = $1) j, today
+         WHERE j.last_on IS NULL OR j.last_on < today.d - 7
+
+         UNION ALL
+         SELECT 0, 'violation', v.title,
+                'Vi phạm đang mở' || coalesce(' tại thửa ' || v.plot_code, '') ||
+                  CASE WHEN v.farmer_response_at IS NULL THEN '. Vui lòng khắc phục và gửi phản hồi.' ELSE '. Đã gửi phản hồi, chờ cán bộ xác nhận.' END,
+                '${PORTAL_TABS.diary}', v.detected_on
+         FROM violations v WHERE v.household_id = $1 AND v.status = 'open'
+
+         UNION ALL
+         SELECT 2, 'isolation', 'Đang trong thời gian cách ly: ' || p.name,
+                'Phun ngày ' || to_char(s.sprayed_on, 'DD/MM/YYYY') || coalesce(' (thửa ' || s.plot_code || ')', '') ||
+                  '. Không thu hoạch trước ngày ' || to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') || '.',
+                '${PORTAL_TABS.diary}', s.sprayed_on + s.isolation_days
+         FROM spray_records s JOIN pesticides p ON p.id = s.pesticide_id, today
+         WHERE s.household_id = $1 AND s.isolation_days > 0 AND s.sprayed_on <= today.d
+           AND s.sprayed_on + s.isolation_days >= today.d
+
+         UNION ALL
+         SELECT 3, 'schedule', i.title,
+                'Lịch kiểm tra ngày ' || to_char(i.scheduled_on, 'DD/MM/YYYY') || ' – cán bộ ' || i.officer || '.',
+                '${PORTAL_TABS.inspection}', i.scheduled_on
+         FROM inspection_schedule i, today
+         WHERE i.scheduled_on BETWEEN today.d AND today.d + 7
+
+         UNION ALL
+         SELECT 4, 'training', c.title,
+                'Lớp tập huấn đã đăng ký, ngày ' || to_char(c.held_on, 'DD/MM/YYYY') ||
+                  coalesce(' lúc ' || to_char(c.starts_at, 'HH24:MI'), '') || coalesce(' tại ' || c.location, '') || '.',
+                '${PORTAL_TABS.learn}', c.held_on
+         FROM training_registrations r JOIN training_courses c ON c.id = r.course_id, today
+         WHERE r.household_id = $1 AND r.status = 'registered' AND NOT c.completed
+           AND c.held_on BETWEEN today.d AND today.d + 7
+
+         UNION ALL
+         SELECT 5, 'harvest', 'Khai báo thu hái bị từ chối',
+                'Thửa ' || d.plot_code || ', ngày ' || to_char(d.harvested_on, 'DD/MM/YYYY') ||
+                  coalesce('. Lý do: ' || d.review_note, '') || '.',
+                '${PORTAL_TABS.stamps}', (d.reviewed_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+         FROM harvest_declarations d, today
+         WHERE d.household_id = $1 AND d.status = 'rejected'
+           AND (d.reviewed_at IS NULL OR d.reviewed_at >= now() - interval '30 days')
+       ) r
+       ORDER BY priority, date NULLS FIRST
+       LIMIT 20`,
+      [householdId],
+    );
+    return camelRows<PortalReminder & { priority?: number }>(rows).map(({ priority: _priority, ...reminder }) => reminder);
+  }
+}
