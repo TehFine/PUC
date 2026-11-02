@@ -19,12 +19,60 @@
   display: grid;
   gap: 12px;
   width: 100%;
-  animation: sk-appear 0.3s ease both;
-  animation-delay: 180ms;
+  animation: sk-appear 0.2s ease both;
 }
-html[data-net="slow"] .sk-group,
-html[data-net="offline"] .sk-group {
-  animation-delay: 0s;
+
+/* ─── Con quay 12 nan chuẩn Apple (iOS / macOS Activity Indicator) ─── */
+.sk-apple-spinner {
+  flex: none;
+  display: inline-block;
+  color: currentColor;
+  animation: net-ios-spin 0.85s steps(12, end) infinite;
+}
+
+.sk-apple-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.sk-apple-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 13px 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(20, 55, 47, 0.1);
+  box-shadow: 0 4px 14px rgba(20, 55, 47, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #14372f;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.sk-apple-pill .sk-apple-spinner {
+  color: #14372f;
+}
+
+.sk-apple-pill.is-hud {
+  padding: 9px 16px 9px 13px;
+  background: rgba(20, 55, 47, 0.88);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 32px rgba(10, 28, 24, 0.24);
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.sk-apple-pill.is-hud .sk-apple-spinner {
+  color: #f8f23a;
+}
+
+.sk-apple-pill-text {
+  white-space: nowrap;
 }
 
 .sk {

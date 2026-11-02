@@ -4,6 +4,65 @@ import "./skeleton.css";
 type Size = number | string;
 const px = (value: Size) => (typeof value === "number" ? `${value}px` : value);
 
+const APPLE_BLADES = Array.from({ length: 12 }, (_, idx) => ({
+  angle: idx * 30,
+  opacity: Number((1 - idx * (0.9 / 12)).toFixed(2)),
+}));
+
+/** Con quay 12 nan chuẩn phong cách Apple (iOS / macOS Activity Indicator). */
+export function AppleSpinner({
+  size = 18,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <svg
+      className={`sk-apple-spinner ${className}`.trim()}
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      {APPLE_BLADES.map(({ angle, opacity }) => (
+        <rect
+          key={angle}
+          x="11"
+          y="1.75"
+          width="2"
+          height="5.6"
+          rx="1"
+          transform={angle ? `rotate(${angle} 12 12)` : undefined}
+          opacity={opacity}
+        />
+      ))}
+    </svg>
+  );
+}
+
+/** Huy hiệu trạng thái đang tải kiểu Apple (kèm con quay 12 nan + nhãn). */
+export function AppleLoadingPill({
+  label = "Đang tải dữ liệu…",
+  hud = false,
+  className = "",
+}: {
+  label?: string;
+  hud?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`sk-apple-pill${hud ? " is-hud" : ""} ${className}`.trim()}
+      aria-hidden="true"
+    >
+      <AppleSpinner size={hud ? 20 : 16} />
+      <span className="sk-apple-pill-text">{label}</span>
+    </div>
+  );
+}
+
 /** Một khối giữ chỗ có nhịp sáng. Chỉ trang trí nên ẩn khỏi trình đọc màn hình. */
 export function Skeleton({ w, h, r, circle, className = "" }: { w?: Size; h?: Size; r?: Size; circle?: boolean; className?: string }) {
   const style = {
@@ -26,13 +85,28 @@ export function SkeletonLines({ lines = 3, h = 13 }: { lines?: number; h?: Size 
 }
 
 /**
- * Vỏ bọc cho một cụm skeleton: báo "đang tải" cho trình đọc màn hình và
- * trì hoãn hiển thị ~180ms khi mạng tốt (hiện ngay khi mạng yếu).
+ * Vỏ bọc cho một cụm skeleton: hiển thị ngay lập tức kèm con quay Apple và khối giữ chỗ
+ * để giữ nguyên bố cục trang, tránh cảm giác trang bị đơ hoặc thoát trang.
  */
-export function SkeletonGroup({ label = "Đang tải…", className = "", children }: { label?: string; className?: string; children: ReactNode }) {
+export function SkeletonGroup({
+  label = "Đang tải dữ liệu…",
+  showSpinner = true,
+  className = "",
+  children,
+}: {
+  label?: string;
+  showSpinner?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
     <div className={`sk-group ${className}`.trim()} role="status" aria-busy="true" aria-live="polite">
       <span className="sk-sr">{label}</span>
+      {showSpinner && (
+        <div className="sk-apple-bar" aria-hidden="true">
+          <AppleLoadingPill label={label} />
+        </div>
+      )}
       {children}
     </div>
   );
@@ -54,10 +128,18 @@ export function SkeletonCard({ lines = 2, avatar = false }: { lines?: number; av
   );
 }
 
-/** Danh sách thẻ giữ chỗ dùng cho các tab của cổng hộ dân. */
-export function SkeletonCards({ count = 3, label }: { count?: number; label?: string }) {
+/** Danh sách thẻ giữ chỗ dùng cho các tab của cổng hộ dân và quản trị. */
+export function SkeletonCards({
+  count = 3,
+  label,
+  showSpinner = true,
+}: {
+  count?: number;
+  label?: string;
+  showSpinner?: boolean;
+}) {
   return (
-    <SkeletonGroup label={label}>
+    <SkeletonGroup label={label} showSpinner={showSpinner}>
       {Array.from({ length: count }, (_, index) => (
         <SkeletonCard key={index} avatar={index === 0} />
       ))}
@@ -66,9 +148,17 @@ export function SkeletonCards({ count = 3, label }: { count?: number; label?: st
 }
 
 /** Các dòng của bảng/danh sách giữ chỗ. */
-export function SkeletonRows({ count = 5, label }: { count?: number; label?: string }) {
+export function SkeletonRows({
+  count = 5,
+  label,
+  showSpinner = true,
+}: {
+  count?: number;
+  label?: string;
+  showSpinner?: boolean;
+}) {
   return (
-    <SkeletonGroup label={label}>
+    <SkeletonGroup label={label} showSpinner={showSpinner}>
       <div aria-hidden="true">
         {Array.from({ length: count }, (_, index) => (
           <div key={index} className="sk-row">
@@ -86,9 +176,17 @@ export function SkeletonRows({ count = 5, label }: { count?: number; label?: str
 }
 
 /** Ô số liệu giữ chỗ (2 cột) cho thẻ thống kê. */
-export function SkeletonStats({ count = 4, label }: { count?: number; label?: string }) {
+export function SkeletonStats({
+  count = 4,
+  label,
+  showSpinner = true,
+}: {
+  count?: number;
+  label?: string;
+  showSpinner?: boolean;
+}) {
   return (
-    <SkeletonGroup label={label}>
+    <SkeletonGroup label={label} showSpinner={showSpinner}>
       <div className="sk-stats" aria-hidden="true">
         {Array.from({ length: count }, (_, index) => (
           <div key={index} className="sk-card">
@@ -101,13 +199,13 @@ export function SkeletonStats({ count = 4, label }: { count?: number; label?: st
   );
 }
 
-/** Khung bản đồ giữ chỗ trong lúc tải thư viện bản đồ (nặng, dễ bị chậm trên mạng yếu). */
+/** Khung bản đồ giữ chỗ trong lúc tải thư viện bản đồ (kèm HUD con quay Apple). */
 export function MapSkeleton({ label = "Đang tải bản đồ…" }: { label?: string }) {
   return (
-    <SkeletonGroup label={label} className="sk-map">
+    <SkeletonGroup label={label} showSpinner={false} className="sk-map">
       <Skeleton h="100%" r={14} />
       <span className="sk-map-label" aria-hidden="true">
-        {label}
+        <AppleLoadingPill label={label} hud />
       </span>
     </SkeletonGroup>
   );
@@ -116,7 +214,7 @@ export function MapSkeleton({ label = "Đang tải bản đồ…" }: { label?: 
 /** Khung cả trang (thanh trên + tab + thẻ) dùng khi đang kiểm tra phiên hoặc tải trang. */
 export function PageSkeleton({ label = "Đang tải trang…" }: { label?: string }) {
   return (
-    <SkeletonGroup label={label} className="sk-page">
+    <SkeletonGroup label={label} showSpinner={false} className="sk-page">
       <div className="sk-page-bar" aria-hidden="true">
         <div className="sk-page-brand">
           <Skeleton w={40} h={40} circle />
@@ -125,14 +223,14 @@ export function PageSkeleton({ label = "Đang tải trang…" }: { label?: strin
             <Skeleton h={10} w="60%" />
           </div>
         </div>
-        <Skeleton w={84} h={34} r={999} />
+        <AppleLoadingPill label={label} />
       </div>
       <div className="sk-tabs" aria-hidden="true">
         {[88, 76, 82, 90, 70].map((width, index) => (
           <Skeleton key={index} w={width} h={36} r={999} />
         ))}
       </div>
-      <SkeletonStats count={4} />
+      <SkeletonStats count={4} showSpinner={false} />
       <SkeletonCard lines={3} />
       <SkeletonCard lines={2} />
     </SkeletonGroup>

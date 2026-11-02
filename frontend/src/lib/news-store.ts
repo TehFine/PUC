@@ -1,113 +1,100 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NEWS_ARTICLES, type NewsArticle } from "@/components/landing/news-data";
+import type { NewsCategory, PublicNewsRecord } from "@/types/news";
 
-const STORAGE_KEY = "puc_htx_news_articles";
-const EVENT_NAME = "htx:news-updated";
+export const NEWS_CATEGORY_META: Record<
+  NewsCategory,
+  { label: string; tone: NewsArticle["tagTone"]; badge: string }
+> = {
+  visit: { label: "Lãnh đạo & Thăm vườn", tone: "blue", badge: "blue" },
+  training: { label: "Tập huấn nhà nông", tone: "green", badge: "green" },
+  protection: { label: "Thuốc & Sâu bệnh", tone: "yellow", badge: "warn" },
+  farming: { label: "Quy trình chăm bón", tone: "peach", badge: "plain" },
+};
 
-let cachedRaw: string | null = null;
-let cachedArticles: NewsArticle[] = NEWS_ARTICLES;
-
-/** Lấy danh sách bài viết tin tức từ localStorage hoặc khởi tạo bài viết mẫu ban đầu */
-export function getStoredArticles(): NewsArticle[] {
-  if (typeof window === "undefined") return NEWS_ARTICLES;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      if (cachedRaw === null) {
-        const defaultRaw = JSON.stringify(NEWS_ARTICLES);
-        try {
-          localStorage.setItem(STORAGE_KEY, defaultRaw);
-        } catch {
-          // Bỏ qua lỗi hạn ngạch hoặc môi trường riêng tư
-        }
-        cachedRaw = defaultRaw;
-        cachedArticles = NEWS_ARTICLES;
-      }
-      return cachedArticles;
-    }
-
-    if (raw === cachedRaw) {
-      return cachedArticles;
-    }
-
-    const parsed = JSON.parse(raw) as NewsArticle[];
-    cachedRaw = raw;
-    cachedArticles = Array.isArray(parsed) && parsed.length > 0 ? parsed : NEWS_ARTICLES;
-    return cachedArticles;
-  } catch (err) {
-    console.error("Lỗi khi đọc tin tức từ localStorage:", err);
-    return cachedArticles;
-  }
+export function formatVnDate(isoOrDate: string | null | undefined): string {
+  if (!isoOrDate) return "—";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoOrDate);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  return isoOrDate;
 }
 
-/** Lưu danh sách bài viết vào localStorage và thông báo cho các component */
-export function setStoredArticles(articles: NewsArticle[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    const raw = JSON.stringify(articles);
-    cachedRaw = raw;
-    cachedArticles = articles;
-    localStorage.setItem(STORAGE_KEY, raw);
-    window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: articles }));
-  } catch (err) {
-    console.error("Lỗi khi lưu tin tức vào localStorage:", err);
-  }
-}
-
-/** Thêm hoặc cập nhật một bài viết */
-export function upsertArticle(article: NewsArticle): void {
-  const current = getStoredArticles();
-  const index = current.findIndex((a) => a.id === article.id);
-  let updated: NewsArticle[];
-  if (index >= 0) {
-    updated = [...current];
-    updated[index] = article;
-  } else {
-    // Đưa bài mới lên đầu danh sách
-    updated = [article, ...current];
-  }
-  setStoredArticles(updated);
-}
-
-/** Xóa một bài viết theo ID */
-export function deleteArticleById(id: string): void {
-  const current = getStoredArticles();
-  const updated = current.filter((a) => a.id !== id);
-  setStoredArticles(updated);
-}
-
-/** Đặt lại danh sách bài viết về mặc định */
-export function resetArticlesToDefault(): void {
-  setStoredArticles(NEWS_ARTICLES);
-}
-
-function subscribeNews(callback: () => void) {
-  if (typeof window === "undefined") return () => {};
-  window.addEventListener(EVENT_NAME, callback);
-  window.addEventListener("storage", callback);
-  return () => {
-    window.removeEventListener(EVENT_NAME, callback);
-    window.removeEventListener("storage", callback);
+export function mapPublicNewsToArticle(record: PublicNewsRecord & { id?: number | string }): NewsArticle {
+  const catMeta = NEWS_CATEGORY_META[record.category] ?? NEWS_CATEGORY_META.visit;
+  const content = record.content ?? { lead: record.excerpt, sections: [] };
+  return {
+    id: record.slug || String(record.id ?? ""),
+    category: record.category,
+    categoryLabel: catMeta.label,
+    tagTone: catMeta.tone,
+    featured: Boolean(record.featured),
+    title: record.title,
+    excerpt: record.excerpt,
+    date: formatVnDate(record.publishedOn),
+    readTime: record.readTime || "4 phút đọc",
+    author: record.author || "Ban Kỹ thuật & Truyền thông HTX",
+    image: record.imageUrl || "/landing/news-field-visit.jpg",
+    imageAlt: record.imageAlt || record.title,
+    content: {
+      lead: content.lead || record.excerpt,
+      sections: Array.isArray(content.sections) ? content.sections : [],
+      takeaway: content.takeaway,
+    },
   };
 }
 
-const emptySubscribe = () => () => {};
-const getClientMounted = () => true;
-const getServerMounted = () => false;
-const getServerArticles = () => NEWS_ARTICLES;
+async function fetchPublicArticles(): Promise<NewsArticle[]> {
+  const response = await fetch("/api/public/news", { cache: "no-store" });
+  if (!response.ok) return NEWS_ARTICLES;
+  const body = (await response.json()) as
+    | { data?: (PublicNewsRecord & { id?: number })[] }
+    | (PublicNewsRecord & { id?: number })[];
+  const rawList = Array.isArray(body) ? body : (body.data ?? []);
+  return rawList.length > 0 ? rawList.map(mapPublicNewsToArticle) : NEWS_ARTICLES;
+}
 
-/** React Hook sử dụng danh sách tin tức với khả năng phản ứng thời gian thực */
+/**
+ * Hook tải bản tin đã xuất bản từ `GET /api/public/news`.
+ * Nếu ngoại tuyến hoặc danh sách rỗng thì dùng `NEWS_ARTICLES` mặc định.
+ */
 export function useNewsArticles() {
-  const articles = useSyncExternalStore(subscribeNews, getStoredArticles, getServerArticles);
-  const mounted = useSyncExternalStore(emptySubscribe, getClientMounted, getServerMounted);
+  const [articles, setArticles] = useState<NewsArticle[]>(NEWS_ARTICLES);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const next = await fetchPublicArticles();
+      setArticles(next);
+    } catch {
+      // Ngoại tuyến: giữ danh sách bài viết mẫu NEWS_ARTICLES
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetchPublicArticles()
+      .then((next) => {
+        if (active) setArticles(next);
+      })
+      .catch(() => {
+        // Ngoại tuyến: giữ NEWS_ARTICLES
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return {
     articles,
-    mounted,
-    upsertArticle,
-    deleteArticle: deleteArticleById,
-    resetDefaults: resetArticlesToDefault,
+    loading,
+    refresh,
   };
 }

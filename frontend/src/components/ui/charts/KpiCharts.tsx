@@ -436,77 +436,56 @@ interface SoftBarsProps {
   formatAxisLabel?: (label: string, index: number, point: ChartPoint) => string;
   caption?: string;
   ariaLabel: string;
+  activeIndex?: number | null;
+  onActiveChange?: (index: number | null) => void;
 }
 
-const RULER_TONES: Record<
+const CAPSULE_TONES: Record<
   ChartTone,
   {
     active: string;
-    muted: string;
-    pin: string;
-    grid: string;
-    scale: string;
-    baseline: string;
+    mid: string;
+    dim: string;
+    glow: string;
+    labelActive: string;
   }
 > = {
   ink: {
     active: "#14372f",
-    muted: "rgba(20, 55, 47, 0.36)",
-    pin: "#f97316",
-    grid: "rgba(20, 55, 47, 0.16)",
-    scale: "rgba(20, 55, 47, 0.52)",
-    baseline: "rgba(20, 55, 47, 0.28)",
+    mid: "rgba(20, 55, 47, 0.44)",
+    dim: "rgba(20, 55, 47, 0.22)",
+    glow: "rgba(20, 55, 47, 0.24)",
+    labelActive: "#14372f",
   },
   lime: {
-    active: "#2e7018",
-    muted: "rgba(46, 112, 24, 0.36)",
-    pin: "#f97316",
-    grid: "rgba(46, 112, 24, 0.16)",
-    scale: "rgba(46, 112, 24, 0.52)",
-    baseline: "rgba(46, 112, 24, 0.28)",
+    active: "#2e7d20",
+    mid: "rgba(46, 125, 32, 0.44)",
+    dim: "rgba(46, 125, 32, 0.22)",
+    glow: "rgba(46, 125, 32, 0.26)",
+    labelActive: "#236318",
   },
   sky: {
-    active: "#1c5d85",
-    muted: "rgba(28, 93, 133, 0.36)",
-    pin: "#f97316",
-    grid: "rgba(28, 93, 133, 0.16)",
-    scale: "rgba(28, 93, 133, 0.52)",
-    baseline: "rgba(28, 93, 133, 0.28)",
+    active: "#1c6ea4",
+    mid: "rgba(28, 110, 164, 0.44)",
+    dim: "rgba(28, 110, 164, 0.22)",
+    glow: "rgba(28, 110, 164, 0.24)",
+    labelActive: "#165782",
   },
   rose: {
     active: "#c4503a",
-    muted: "rgba(196, 80, 58, 0.36)",
-    pin: "#f97316",
-    grid: "rgba(196, 80, 58, 0.16)",
-    scale: "rgba(196, 80, 58, 0.52)",
-    baseline: "rgba(196, 80, 58, 0.28)",
+    mid: "rgba(196, 80, 58, 0.44)",
+    dim: "rgba(196, 80, 58, 0.22)",
+    glow: "rgba(196, 80, 58, 0.24)",
+    labelActive: "#a63e2a",
   },
   amber: {
-    active: "#8f6a0c",
-    muted: "rgba(143, 106, 12, 0.38)",
-    pin: "#f97316",
-    grid: "rgba(143, 106, 12, 0.16)",
-    scale: "rgba(143, 106, 12, 0.52)",
-    baseline: "rgba(143, 106, 12, 0.28)",
+    active: "#f59e0b",
+    mid: "rgba(217, 119, 6, 0.44)",
+    dim: "rgba(217, 119, 6, 0.22)",
+    glow: "rgba(245, 158, 11, 0.28)",
+    labelActive: "#b45309",
   },
 };
-
-function calculateScale(maxVal: number) {
-  if (maxVal <= 2) return { scaleMax: 2, steps: [1, 2] };
-  if (maxVal <= 5) return { scaleMax: 5, steps: [2.5, 5] };
-  if (maxVal <= 10) return { scaleMax: 10, steps: [5, 10] };
-  if (maxVal <= 20) return { scaleMax: 20, steps: [10, 20] };
-  if (maxVal <= 35) return { scaleMax: 30, steps: [10, 20, 30] };
-  if (maxVal <= 60) return { scaleMax: 60, steps: [20, 40, 60] };
-  if (maxVal <= 100) return { scaleMax: 100, steps: [50, 100] };
-  const mag = Math.pow(10, Math.floor(Math.log10(maxVal)));
-  const norm = maxVal / mag;
-  let mult = 10;
-  if (norm <= 2) mult = 2;
-  else if (norm <= 5) mult = 5;
-  const scaleMax = mult * mag;
-  return { scaleMax, steps: [Math.round(scaleMax * 0.33), Math.round(scaleMax * 0.67), scaleMax] };
-}
 
 export function SoftBars({
   data,
@@ -518,12 +497,23 @@ export function SoftBars({
   formatAxisLabel,
   caption,
   ariaLabel,
+  activeIndex,
+  onActiveChange,
 }: SoftBarsProps) {
   const [wrapRef, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const n = data.length;
-  const active = hover ?? (n ? resolveIndex(data, highlight) : 0);
-  const clear = useCallback(() => setHover(null), []);
+  const resolvedHover = activeIndex !== undefined && activeIndex !== null ? activeIndex : hover;
+  const active = resolvedHover ?? (n ? resolveIndex(data, highlight) : 0);
+
+  const updateHover = useCallback(
+    (idx: number | null) => {
+      setHover(idx);
+      onActiveChange?.(idx);
+    },
+    [onActiveChange]
+  );
+  const clear = useCallback(() => updateHover(null), [updateHover]);
 
   if (!n) return <div className="vc vc-empty" role="img" aria-label={ariaLabel} />;
 
@@ -531,78 +521,57 @@ export function SoftBars({
   const isMini = width > 0 && width < 180;
   const effectiveHeight = isMini ? 120 : isCompact ? 135 : height;
 
-  const maxVal = Math.max(...data.map((p) => p.value), 1);
-  const { scaleMax, steps } = calculateScale(maxVal);
+  const maxVal = Math.max(...data.map((p) => p.value), 0.0001);
 
-  const PAD_TOP = 40;
+  const PAD_TOP = 38;
   const PAD_BOTTOM = 22;
-  const PAD_X = isMini ? 14 : isCompact ? 18 : 24;
+  const PAD_X = isMini ? 8 : isCompact ? 10 : 12;
   const plotW = Math.max(width - 2 * PAD_X, 10);
-  const plotH = Math.max(effectiveHeight - PAD_TOP - PAD_BOTTOM, 20);
+  const plotH = Math.max(effectiveHeight - PAD_TOP - PAD_BOTTOM, 24);
   const plotBottom = effectiveHeight - PAD_BOTTOM;
 
-  const colors = RULER_TONES[tone] ?? RULER_TONES.lime;
+  const colors = CAPSULE_TONES[tone] ?? CAPSULE_TONES.lime;
 
-  // Tọa độ X của các cột mốc chính
+  // Tọa độ X tâm mỗi cột
   const colW = plotW / n;
   const majorXs = data.map((_, i) => PAD_X + (i + 0.5) * colW);
 
-  // Số lượng vạch chia lẻ trong mỗi cột để tạo vạch chính đối xứng ở giữa (S = 5 hoặc 7)
-  const subDivs = isCompact ? 5 : 7;
-  const midK = Math.floor(subDivs / 2);
+  // Bề rộng thanh capsule bo tròn hai đầu (style pill bar)
+  const baseBarW = Math.min(Math.max(colW * 0.42, isMini ? 10 : 13), 20);
 
-  interface RulerTick {
-    key: string;
-    x: number;
-    y: number;
-    h: number;
-    val: number;
-    isMajor: boolean;
-    colIndex: number;
-  }
+  const bars = data.map((p, i) => {
+    const val = Math.max(p.value, 0);
+    const isOn = i === active;
+    const w = isOn ? baseBarW + 1.5 : baseBarW;
+    const rawH = (val / maxVal) * plotH;
+    const h = val <= 0 ? w : Math.max(rawH, w);
+    const x = majorXs[i] - w / 2;
+    const y = plotBottom - h;
 
-  const ticks: RulerTick[] = [];
-  const dx = colW / subDivs;
-
-  for (let i = 0; i < n; i++) {
-    for (let k = 0; k < subDivs; k++) {
-      const tx = PAD_X + (i * subDivs + k + 0.5) * dx;
-      const isMajor = k === midK;
-
-      // Nội suy giá trị dữ liệu chính xác theo số liệu thực tế
-      let val = data[i].value;
-      if (!isMajor) {
-        if (k > midK) {
-          const t = (k - midK) / subDivs;
-          if (i < n - 1) {
-            val = data[i].value + t * (data[i + 1].value - data[i].value);
-          } else {
-            val = data[i].value * (1 - t * 0.25);
-          }
-        } else {
-          const t = (midK - k) / subDivs;
-          if (i > 0) {
-            val = data[i].value - t * (data[i].value - data[i - 1].value);
-          } else {
-            val = data[i].value * (1 - t * 0.25);
-          }
-        }
-      }
-      val = Math.max(val, 0);
-
-      const h = Math.max((val / scaleMax) * plotH, isMajor ? 5 : 2.5);
-      const ty = plotBottom - h;
-      ticks.push({
-        key: `${i}-${k}`,
-        x: tx,
-        y: ty,
-        h,
-        val,
-        isMajor,
-        colIndex: i,
-      });
+    // Phân tầng sắc độ theo vị trí tương quan với cột đang chọn (giống mẫu pill chart)
+    let fill = colors.mid;
+    if (isOn) {
+      fill = colors.active;
+    } else if (active > 0 && active < n - 1) {
+      fill = i < active ? colors.mid : colors.dim;
+    } else if (active === n - 1) {
+      fill = i < Math.ceil((n - 1) / 2) ? colors.mid : colors.dim;
+    } else {
+      fill = i <= Math.floor(n / 2) ? colors.mid : colors.dim;
     }
-  }
+
+    return {
+      key: `${p.label}-${i}`,
+      x,
+      y,
+      w,
+      h,
+      val,
+      isOn,
+      fill,
+      cx: majorXs[i],
+    };
+  });
 
   // Xác định nhãn hiển thị cho từng cột mốc X
   const resolveAxisLabel = (p: ChartPoint, i: number, colWidth: number): string => {
@@ -614,14 +583,12 @@ export function SoftBars({
       }
       return p.shortLabel;
     }
-    // Tự động rút gọn mã vùng dạng KB-VT-001 thành VT-01 hoặc 01 khi không gian hẹp
     const vtMatch = p.label.match(/VT-0*(\d+)/i);
     if (vtMatch) {
       const num = parseInt(vtMatch[1], 10);
       const padded = num < 10 ? `0${num}` : `${num}`;
-      return colWidth < 34 ? padded : `VT-${padded}`;
+      return colWidth < 32 ? padded : `VT-${padded}`;
     }
-    // Tự động rút gọn tiền tố mã (VD: KB-001 -> #01)
     if (p.label.length > 5 && colWidth < 52) {
       const num = p.label.match(/\d+$/)?.[0];
       if (num) return `#${num}`;
@@ -632,56 +599,62 @@ export function SoftBars({
 
   const axisLabels = data.map((p, i) => resolveAxisLabel(p, i, colW));
 
-  // Chống chồng lấn (collision avoidance) tuyệt đối giữa các nhãn trục X
-  const labelWidths = axisLabels.map((lbl) => lbl.length * 6.2 + 8);
+  // Hiển thị đầy đủ nhãn trục X cho <= 8 cột; chỉ lọc khi quá dày
+  const labelWidths = axisLabels.map((lbl) => lbl.length * 5.2 + 4);
   const showLabel = new Array<boolean>(n).fill(true);
 
-  let hasOverlap = false;
-  for (let i = 0; i < n - 1; i++) {
-    const gap = majorXs[i + 1] - majorXs[i];
-    const minNeeded = (labelWidths[i] + labelWidths[i + 1]) / 2 + 3;
-    if (gap < minNeeded) {
-      hasOverlap = true;
-      break;
-    }
-  }
-
-  if (hasOverlap) {
-    showLabel.fill(false);
-    showLabel[active] = true;
-
-    let leftBound = majorXs[active] - labelWidths[active] / 2;
-    for (let i = active - 1; i >= 0; i--) {
-      const r = majorXs[i] + labelWidths[i] / 2;
-      if (leftBound - r >= 6) {
-        showLabel[i] = true;
-        leftBound = majorXs[i] - labelWidths[i] / 2;
+  if (n > 8) {
+    let hasOverlap = false;
+    for (let i = 0; i < n - 1; i++) {
+      const gap = majorXs[i + 1] - majorXs[i];
+      const minNeeded = (labelWidths[i] + labelWidths[i + 1]) / 2 + 2;
+      if (gap < minNeeded) {
+        hasOverlap = true;
+        break;
       }
     }
 
-    let rightBound = majorXs[active] + labelWidths[active] / 2;
-    for (let i = active + 1; i < n; i++) {
-      const l = majorXs[i] - labelWidths[i] / 2;
-      if (l - rightBound >= 6) {
-        showLabel[i] = true;
-        rightBound = majorXs[i] + labelWidths[i] / 2;
+    if (hasOverlap) {
+      showLabel.fill(false);
+      showLabel[active] = true;
+
+      let leftBound = majorXs[active] - labelWidths[active] / 2;
+      for (let i = active - 1; i >= 0; i--) {
+        const r = majorXs[i] + labelWidths[i] / 2;
+        if (leftBound - r >= 4) {
+          showLabel[i] = true;
+          leftBound = majorXs[i] - labelWidths[i] / 2;
+        }
+      }
+
+      let rightBound = majorXs[active] + labelWidths[active] / 2;
+      for (let i = active + 1; i < n; i++) {
+        const l = majorXs[i] - labelWidths[i] / 2;
+        if (l - rightBound >= 4) {
+          showLabel[i] = true;
+          rightBound = majorXs[i] + labelWidths[i] / 2;
+        }
       }
     }
   }
 
   const curPoint = data[active] ?? data[0];
-  const curX = majorXs[active] ?? PAD_X;
-  const curVal = curPoint.value;
-  const curH = Math.max((curVal / scaleMax) * plotH, 5);
-  const curY = plotBottom - curH;
+  const curBar = bars[active] ?? bars[0];
+  const curX = curBar?.cx ?? PAD_X;
+  const curY = curBar?.y ?? plotBottom;
 
-  const tipW = isMini ? 72 : 88;
-  const textClampX = Math.max(tipW / 2 + 4, Math.min(width - tipW / 2 - 4, curX));
+  const valStr = `${formatValue(curPoint.value)}${unit}`;
+  const estTipW = Math.max(
+    isMini ? 72 : 88,
+    (curPoint.label.length + valStr.length) * 6.8 + 26
+  );
+  const halfTip = Math.min(estTipW / 2, Math.max(width / 2 - 4, 36));
+  const textClampX = Math.max(halfTip, Math.min(width - halfTip, curX));
 
   return (
     <div
       ref={wrapRef}
-      className="vc vc-ruler-bars"
+      className="vc vc-ruler-bars vc-capsule-bars"
       data-tone={tone}
       style={{ height: effectiveHeight, position: "relative" }}
       role="img"
@@ -690,12 +663,15 @@ export function SoftBars({
     >
       {width > 0 && (
         <>
-          {/* Tooltip hiển thị giá trị dạng viên thuốc */}
+          {/* Tooltip hiển thị giá trị chính xác dạng viên thuốc */}
           <div
             className="vc-tip is-on"
             style={{
               left: textClampX,
-              bottom: Math.max(effectiveHeight - curY + 6, 46),
+              bottom: Math.min(
+                Math.max(effectiveHeight - curY + 7, 44),
+                effectiveHeight - 28
+              ),
             }}
           >
             <span>{curPoint.label}</span>
@@ -711,115 +687,55 @@ export function SoftBars({
             className="vc-ruler-svg"
             style={{ display: "block", overflow: "visible" }}
           >
-            {/* Vạch kẻ lưới chia tỷ lệ ngang (ruler grid divisions) */}
-            {steps.map((st) => {
-              const y = plotBottom - (st / scaleMax) * plotH;
-              return (
-                <g key={st}>
-                  <line
-                    x1={PAD_X}
-                    x2={width - PAD_X}
-                    y1={y}
-                    y2={y}
-                    stroke={colors.grid}
-                    strokeDasharray="2.5 3.5"
-                    strokeWidth="1"
-                  />
-                  <text
-                    x={width - PAD_X + 3}
-                    y={y + 3}
-                    textAnchor="start"
-                    className="vc-ruler-scale"
-                    fill={colors.scale}
-                    style={{ fontSize: isMini ? 8 : 9, fontFamily: "var(--font-mono, monospace)" }}
-                  >
-                    {st}
-                  </text>
-                </g>
-              );
-            })}
+            {/* Các cột capsule bo tròn 2 đầu ứng với số liệu thực tế */}
+            {bars.map((b, i) => (
+              <rect
+                key={b.key}
+                x={b.x}
+                y={b.y}
+                width={b.w}
+                height={b.h}
+                rx={b.w / 2}
+                ry={b.w / 2}
+                fill={b.fill}
+                style={{
+                  transition:
+                    "y 0.28s cubic-bezier(0.22, 1, 0.36, 1), height 0.28s cubic-bezier(0.22, 1, 0.36, 1), x 0.2s ease, width 0.2s ease, fill 0.2s ease, filter 0.2s ease",
+                  filter: b.isOn ? `drop-shadow(0 4px 10px ${colors.glow})` : "none",
+                  cursor: "pointer",
+                }}
+                onClick={() => updateHover(i)}
+              />
+            ))}
 
-            {/* Đường đáy (baseline) */}
-            <line
-              x1={PAD_X}
-              x2={width - PAD_X}
-              y1={plotBottom}
-              y2={plotBottom}
-              stroke={colors.baseline}
-              strokeWidth="1"
-            />
-
-            {/* Các vạch kẻ thước kỹ thuật (ruler ticks) theo số liệu thực tế */}
-            {ticks.map((t) => {
-              const isOn = t.colIndex === active;
-              const strokeColor = isOn ? colors.active : colors.muted;
-              const sw = t.isMajor ? (isCompact ? 2.0 : 2.5) : isCompact ? 1.2 : 1.5;
-              const opacity = isOn ? (t.isMajor ? 1 : 0.78) : t.isMajor ? 0.65 : 0.35;
-
-              return (
-                <line
-                  key={t.key}
-                  x1={t.x}
-                  x2={t.x}
-                  y1={t.y}
-                  y2={plotBottom}
-                  stroke={strokeColor}
-                  strokeWidth={sw}
-                  strokeLinecap="round"
-                  opacity={opacity}
-                  style={{ transition: "stroke 0.18s ease, opacity 0.18s ease" }}
-                />
-              );
-            })}
-
-            {/* Đường chỉ mốc đứt nét tại vị trí đang chọn */}
-            <line
-              x1={curX}
-              x2={curX}
-              y1={curY}
-              y2={plotBottom}
-              stroke={colors.pin}
-              strokeWidth={isCompact ? 1.15 : 1.3}
-              strokeDasharray="2 2.5"
-              opacity="0.85"
-            />
-
-            {/* Chấm pin cam nổi bật ở đỉnh vạch chính đang chọn */}
-            <circle
-              cx={curX}
-              cy={curY}
-              r={isMini ? 2.4 : isCompact ? 2.8 : 3.2}
-              fill={colors.pin}
-              stroke="#fff"
-              strokeWidth="1.2"
-            />
-
-            {/* Nhãn trục X dưới chân các vạch chính */}
+            {/* Nhãn trục X dưới chân mỗi cột */}
             {data.map((p, i) => {
               if (!showLabel[i]) return null;
+              const isOn = i === active;
               return (
                 <text
                   key={i}
-                  className={i === active ? "vc-x is-on" : "vc-x"}
+                  className={isOn ? "vc-x is-on" : "vc-x"}
                   x={majorXs[i]}
                   y={plotBottom + 16}
                   textAnchor="middle"
                   style={{
-                    fontSize: isMini ? 8.5 : isCompact ? 9 : 10,
-                    fontWeight: i === active ? 700 : 500,
-                    fill: i === active ? colors.active : "rgba(20, 55, 47, 0.55)",
+                    fontSize: isMini ? 8.5 : isCompact ? 9.5 : 10.5,
+                    fontWeight: isOn ? 700 : 500,
+                    fill: isOn ? colors.labelActive : "rgba(20, 55, 47, 0.52)",
                     cursor: "pointer",
                     letterSpacing: "-0.01em",
+                    transition: "fill 0.18s ease",
                   }}
-                  onClick={() => setHover(i)}
+                  onClick={() => updateHover(i)}
                 >
                   {axisLabels[i]}
                 </text>
               );
             })}
 
-            {/* Các vùng cảm ứng vô hình (invisible touch hits) */}
-            {data.map((p, i) => (
+            {/* Vùng cảm ứng chọn cột */}
+            {data.map((_, i) => (
               <rect
                 key={i}
                 x={PAD_X + i * colW}
@@ -828,10 +744,310 @@ export function SoftBars({
                 height={effectiveHeight}
                 fill="transparent"
                 style={{ cursor: "pointer" }}
-                onPointerEnter={() => setHover(i)}
-                onPointerDown={() => setHover(i)}
+                onPointerEnter={() => updateHover(i)}
+                onPointerDown={() => updateHover(i)}
               />
             ))}
+          </svg>
+        </>
+      )}
+      {caption && <p className="vc-aurora-caption" title={caption}>{caption}</p>}
+    </div>
+  );
+}
+
+/* ─────────────────────────── SmoothLineChart ─────────────────────────── */
+
+function computeNiceScale(maxVal: number): { yMax: number; ticks: number[] } {
+  const safeMax = maxVal > 0 ? maxVal : 1;
+  const rawStep = safeMax / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const residual = rawStep / mag;
+  let niceStep: number;
+  if (residual <= 1) niceStep = 1 * mag;
+  else if (residual <= 2) niceStep = 2 * mag;
+  else if (residual <= 2.5) niceStep = 2.5 * mag;
+  else if (residual <= 5) niceStep = 5 * mag;
+  else niceStep = 10 * mag;
+
+  const steps = Math.max(2, Math.ceil(safeMax / niceStep));
+  const yMax = Math.round(steps * niceStep * 1000) / 1000;
+  const ticks: number[] = [];
+  for (let i = 0; i <= steps; i++) {
+    ticks.push(Math.round(i * niceStep * 1000) / 1000);
+  }
+  return { yMax, ticks };
+}
+
+/**
+ * Biểu đồ đường cong mượt (smooth spline line + soft vertical green gradient fill)
+ * theo đúng tỷ lệ trục Y (0 -> yMax) và khoảng chia đều trục X.
+ */
+export function SmoothLineChart({
+  data,
+  tone = "lime",
+  height = 148,
+  highlight = "max",
+  unit = "",
+  formatValue = defaultFormat,
+  ariaLabel,
+  caption,
+  activeIndex,
+  onActiveChange,
+}: SoftBarsProps) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const [wrapRef, width] = useWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
+  const n = data.length;
+  const defaultIdx = n ? resolveIndex(data, highlight) : 0;
+  const externalIdx =
+    activeIndex !== undefined && activeIndex !== null && activeIndex >= 0 && activeIndex < n
+      ? activeIndex
+      : null;
+  const active = hover ?? externalIdx ?? defaultIdx;
+
+  const updateHover = (idx: number | null) => {
+    setHover(idx);
+    onActiveChange?.(idx);
+  };
+
+  if (n < 2) return <div className="vc vc-empty" role="img" aria-label={ariaLabel} />;
+
+  const isMini = width > 0 && width < 220;
+  const isCompact = width > 0 && width < 380;
+
+  const effectiveHeight = isMini
+    ? Math.min(height, 108)
+    : isCompact
+    ? Math.min(height, 138)
+    : height;
+
+  const padTop = isMini ? 32 : 38;
+  const padBottom = isMini ? 20 : 24;
+  const plotTop = padTop;
+  const plotBottom = effectiveHeight - padBottom;
+  const plotH = Math.max(plotBottom - plotTop, 28);
+
+  const rightAxisW = isMini ? 22 : 28;
+  const leftPad = isMini ? 14 : 18;
+  const rightPad = rightAxisW + (isMini ? 8 : 12);
+  const innerW = Math.max(width - leftPad - rightPad, 1);
+  const stepX = innerW / Math.max(n - 1, 1);
+
+  const maxVal = Math.max(...data.map((p) => p.value), 0.1);
+  const { yMax, ticks } = computeNiceScale(maxVal);
+
+  const pts = data.map((p, i) => {
+    const val = Math.max(0, p.value);
+    const ratio = Math.min(val / yMax, 1);
+    return {
+      x: leftPad + i * stepX,
+      y: plotBottom - ratio * plotH,
+      value: p.value,
+      label: p.label,
+    };
+  });
+
+  const linePath = monotonePath(pts);
+  const areaPath = `${linePath} L${pts[n - 1].x},${plotBottom} L${pts[0].x},${plotBottom} Z`;
+  const minY = Math.min(...pts.map((p) => p.y));
+
+  const resolveAxisLabel = (p: ChartPoint): string => {
+    if (p.shortLabel) return p.shortLabel;
+    const vtMatch = p.label.match(/VT-0*(\d+)/i);
+    if (vtMatch) {
+      const num = parseInt(vtMatch[1], 10);
+      return `VT-${num < 10 ? `0${num}` : num}`;
+    }
+    return p.label;
+  };
+
+  const axisLabels = data.map((p) => resolveAxisLabel(p));
+  const curPt = pts[active] ?? pts[0];
+  const curData = data[active] ?? data[0];
+
+  const valStr = `${formatValue(curData.value)}${unit}`;
+  const estTipW = Math.max(
+    isMini ? 72 : 88,
+    (curData.label.length + valStr.length) * 6.8 + 26
+  );
+  const halfTip = Math.min(estTipW / 2, Math.max(width / 2 - 4, 36));
+  const textClampX = Math.max(halfTip, Math.min(width - halfTip, curPt.x));
+
+  const formatTick = (t: number) =>
+    Number.isInteger(t)
+      ? t.toString()
+      : t.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+
+  return (
+    <div
+      ref={wrapRef}
+      className="vc vc-ruler-bars vc-smooth-line"
+      data-tone={tone}
+      style={{ height: effectiveHeight, position: "relative" }}
+      role="img"
+      aria-label={`${ariaLabel}. ${data.map((p) => `${p.label} ${formatValue(p.value)}${unit}`).join(", ")}`}
+      onPointerLeave={() => updateHover(null)}
+    >
+      {width > 0 && (
+        <>
+          <div
+            className="vc-tip is-on"
+            style={{
+              left: textClampX,
+              bottom: Math.min(
+                Math.max(effectiveHeight - curPt.y + 8, 44),
+                effectiveHeight - 28
+              ),
+            }}
+          >
+            <span>{curData.label}</span>
+            <b>
+              {formatValue(curData.value)}
+              {unit}
+            </b>
+          </div>
+
+          <svg
+            width={width}
+            height={effectiveHeight}
+            className="vc-ruler-svg"
+            style={{ display: "block", overflow: "visible" }}
+          >
+            <defs>
+              <linearGradient
+                id={`${uid}lineFill`}
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1={minY}
+                x2="0"
+                y2={plotBottom}
+              >
+                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.32" />
+                <stop offset="60%" stopColor="#4ade80" stopOpacity="0.12" />
+                <stop offset="100%" stopColor="#4ade80" stopOpacity="0.0" />
+              </linearGradient>
+            </defs>
+
+            {/* Lưới chia tỷ lệ chuẩn theo trục Y (0 -> yMax) */}
+            {ticks.map((t) => {
+              const ty = plotBottom - (t / yMax) * plotH;
+              const isZero = t === 0;
+              return (
+                <g key={t}>
+                  <line
+                    x1={leftPad - 4}
+                    y1={ty}
+                    x2={leftPad + innerW + 4}
+                    y2={ty}
+                    stroke={isZero ? "rgba(20, 55, 47, 0.16)" : "rgba(20, 55, 47, 0.09)"}
+                    strokeWidth={1}
+                    strokeDasharray={isZero ? undefined : "3 3"}
+                  />
+                  <text
+                    x={width - 2}
+                    y={ty + 3}
+                    textAnchor="end"
+                    style={{
+                      fontSize: isMini ? 8.5 : 9.5,
+                      fontWeight: 500,
+                      fill: "rgba(20, 55, 47, 0.45)",
+                    }}
+                  >
+                    {formatTick(t)}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Vùng phủ màu xanh lá mờ dần bên dưới đường cong */}
+            <path d={areaPath} fill={`url(#${uid}lineFill)`} />
+
+            {/* Đường gióng dọc tại điểm đang chọn */}
+            <line
+              x1={curPt.x}
+              y1={curPt.y}
+              x2={curPt.x}
+              y2={plotBottom}
+              stroke="#16a34a"
+              strokeWidth={1.2}
+              strokeDasharray="2.5 2.5"
+              strokeOpacity={0.55}
+            />
+
+            {/* Đường biểu đồ xanh lá mượt như hình mẫu */}
+            <path
+              d={linePath}
+              fill="none"
+              stroke="#16a34a"
+              strokeWidth={3.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+
+            {/* Các điểm dữ liệu chuẩn xác trên đường cong */}
+            {pts.map((p, i) => {
+              const isOn = i === active;
+              return (
+                <circle
+                  key={i}
+                  cx={p.x}
+                  cy={p.y}
+                  r={isOn ? 4.5 : 2.5}
+                  fill={isOn ? "#16a34a" : "#ffffff"}
+                  stroke="#16a34a"
+                  strokeWidth={isOn ? 2.2 : 1.8}
+                  style={{
+                    transition: "r 0.18s ease, fill 0.18s ease",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => updateHover(i)}
+                />
+              );
+            })}
+
+            {/* Nhãn trục X chia đều dưới mỗi mốc mã vùng */}
+            {pts.map((p, i) => {
+              const isOn = i === active;
+              return (
+                <text
+                  key={i}
+                  className={isOn ? "vc-x is-on" : "vc-x"}
+                  x={p.x}
+                  y={plotBottom + 16}
+                  textAnchor="middle"
+                  style={{
+                    fontSize: isMini ? 8.5 : isCompact ? 9.5 : 10.5,
+                    fontWeight: isOn ? 700 : 500,
+                    fill: isOn ? "#14372f" : "rgba(20, 55, 47, 0.52)",
+                    cursor: "pointer",
+                    letterSpacing: "-0.01em",
+                  }}
+                  onClick={() => updateHover(i)}
+                >
+                  {axisLabels[i]}
+                </text>
+              );
+            })}
+
+            {/* Vùng cảm ứng tương tác theo từng mốc */}
+            {pts.map((p, i) => {
+              const hitW = n > 1 ? innerW / (n - 1) : innerW;
+              const hx = Math.max(0, p.x - hitW / 2);
+              return (
+                <rect
+                  key={i}
+                  x={hx}
+                  y={0}
+                  width={hitW}
+                  height={effectiveHeight}
+                  fill="transparent"
+                  style={{ cursor: "pointer" }}
+                  onPointerEnter={() => updateHover(i)}
+                  onPointerDown={() => updateHover(i)}
+                />
+              );
+            })}
           </svg>
         </>
       )}

@@ -62,7 +62,9 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     } | null;
     throw new ApiError(body?.error ?? "Không xử lý được yêu cầu.", response.status, body?.code, body?.details);
   }
-  return (await response.json()) as T;
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 const jsonRequest = (method: string, body?: unknown): RequestInit => ({
@@ -71,9 +73,36 @@ const jsonRequest = (method: string, body?: unknown): RequestInit => ({
   body: body === undefined ? undefined : JSON.stringify(body),
 });
 
+/** Mục đích tải tệp (khớp backend `UPLOAD_PURPOSES`). */
+export type UploadPurpose = "journal" | "harvest" | "stamp" | "approval" | "violation" | "news" | "catalog";
+
+export interface UploadedFile {
+  id: number;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 export const api = {
   get: <T>(path: string) => apiRequest<T>(path),
   post: <T>(path: string, body?: unknown) => apiRequest<T>(path, jsonRequest("POST", body)),
   patch: <T>(path: string, body: unknown) => apiRequest<T>(path, jsonRequest("PATCH", body)),
   delete: <T>(path: string) => apiRequest<T>(path, jsonRequest("DELETE")),
+  /** Tải một tệp lên `/api/uploads` (multipart). Trả về `{ id, url }` để gửi kèm bản ghi nghiệp vụ. */
+  upload: (file: Blob, purpose: UploadPurpose, filename = "upload") => {
+    const form = new FormData();
+    form.append("purpose", purpose);
+    form.append("file", file, file instanceof File ? file.name : filename);
+    return apiRequest<UploadedFile>("/uploads", { method: "POST", body: form });
+  },
 };
+
+/** Thông báo lỗi tiếng Việt dễ hiểu từ một lỗi bất kỳ (kèm chi tiết từng trường nếu có). */
+export function errorMessage(error: unknown, fallback = "Không xử lý được yêu cầu."): string {
+  if (error instanceof ApiError) {
+    if (error.details?.length) return `${error.message} ${error.details.map((d) => d.message).join(" ")}`;
+    return error.message;
+  }
+  if (error instanceof TypeError) return "Không kết nối được máy chủ. Vui lòng kiểm tra mạng và thử lại.";
+  return error instanceof Error && error.message ? error.message : fallback;
+}

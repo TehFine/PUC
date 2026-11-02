@@ -173,9 +173,9 @@
 .vc-gauge-center strong,
 .vc-meter-head strong {
   font-family: var(--font-display-stack);
-  font-weight: 400;
-  font-variation-settings: "wdth" 80;
-  letter-spacing: -0.02em;
+  font-weight: 750;
+  font-variation-settings: normal;
+  letter-spacing: -0.025em;
 }
 .vc-meter-head strong { font-size: 2.4rem; }
 .vc-gauge-center strong small,

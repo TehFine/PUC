@@ -4,6 +4,7 @@ import { display, heroSans } from "@/components/landing/fonts";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import NetworkStatus from "@/components/ui/NetworkStatus";
+import { Toaster } from "@/components/ui/Toast";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -38,6 +39,7 @@ export default function RootLayout({
       <body className={`${inter.variable} ${display.variable} ${heroSans.variable} font-sans antialiased`}>
         <NetworkStatus />
         <AuthProvider>{children}</AuthProvider>
+        <Toaster />
       </body>
     </html>
   );

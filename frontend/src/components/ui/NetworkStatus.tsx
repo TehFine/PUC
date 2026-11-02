@@ -109,15 +109,16 @@ export default function NetworkStatus() {
       exitTimerRef.current = undefined;
     }
 
-    setIsDismissing(false);
     isDismissingRef.current = false;
-    setIsDragging(false);
     isDraggingRef.current = false;
-    setIsSnapping(false);
-    setDragY(0);
     dragYRef.current = 0;
-
-    setToast(next);
+    queueMicrotask(() => {
+      setIsDismissing(false);
+      setIsDragging(false);
+      setIsSnapping(false);
+      setDragY(0);
+      setToast(next);
+    });
     if (!next || next.kind === "offline") return;
 
     // Tự động kích hoạt hiệu ứng lướt lên ẩn đi sau thời gian chờ
