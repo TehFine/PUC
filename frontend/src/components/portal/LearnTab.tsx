@@ -462,13 +462,13 @@ function TrainingList() {
 }
 
 export function getPesticideImage(item: { status: string; name?: string; id?: number }): string {
-  if (item.status === "banned") return "/pesticides/red.jpg";
-  if (item.status === "restricted") return "/pesticides/amber.jpg";
+  if (item.status === "banned") return "/pesticides/red.png";
+  if (item.status === "restricted") return "/pesticides/amber.png";
   const name = (item.name ?? "").toLowerCase();
   if (name.includes("buprofezin") || name.includes("imidacloprid")) {
-    return "/pesticides/green.jpg";
+    return "/pesticides/green.png";
   }
-  return "/pesticides/blue.jpg";
+  return "/pesticides/blue.png";
 }
 
 export function PesticideDetailModal({
