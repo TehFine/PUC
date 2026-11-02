@@ -490,27 +490,27 @@ export function PesticideDetailModal({
 
   return (
     <div className="pt-pesticide-modal-body">
-      {/* 1. Phần Hero đầu popup: Ảnh lớn + Tên thuốc + Trạng thái */}
-      <div className="pt-pesticide-modal-hero">
-        <div className="pt-pesticide-modal-img-box">
-          <img
-            src={imgSrc}
-            alt={item.name}
-            className="pt-pesticide-modal-img"
-          />
+      {/* 1. Khung hiển thị CHỈ chứa duy nhất hình ảnh chai thuốc */}
+      <div className="pt-pesticide-showcase-frame">
+        <img
+          src={imgSrc}
+          alt={item.name}
+          className="pt-pesticide-showcase-img"
+        />
+      </div>
+
+      {/* 2. Thông tin đưa ra ngoài và đặt ở bên dưới khung */}
+      <div className="pt-pesticide-header-info">
+        <div className={`pt-pest-status-badge pt-pest-status-${item.status}`}>
+          {isAllowed && <CheckCircle2 size={13} strokeWidth={2.4} aria-hidden="true" />}
+          {isRestricted && <AlertTriangle size={13} strokeWidth={2.4} aria-hidden="true" />}
+          {isBanned && <Ban size={13} strokeWidth={2.4} aria-hidden="true" />}
+          <span>{status.label}</span>
         </div>
-        <div className="pt-pesticide-modal-hero-info">
-          <div className={`pt-pest-status-badge pt-pest-status-${item.status}`}>
-            {isAllowed && <CheckCircle2 size={13} strokeWidth={2.4} aria-hidden="true" />}
-            {isRestricted && <AlertTriangle size={13} strokeWidth={2.4} aria-hidden="true" />}
-            {isBanned && <Ban size={13} strokeWidth={2.4} aria-hidden="true" />}
-            <span>{status.label}</span>
-          </div>
-          <h3 className="pt-pesticide-modal-title">{item.name}</h3>
-          <p className="pt-pesticide-modal-mfg">
-            Nhà sản xuất: <strong>{item.manufacturer ?? "Map Pacific / Cục BVTV"}</strong>
-          </p>
-        </div>
+        <h3 className="pt-pesticide-modal-title">{item.name}</h3>
+        <p className="pt-pesticide-modal-mfg">
+          Nhà sản xuất: <strong>{item.manufacturer ?? "Map Pacific / Cục BVTV"}</strong>
+        </p>
       </div>
 
       {/* 2. Lưới thông số kỹ thuật (Hoạt chất, Nồng độ, Cách ly PHI, MRL) */}

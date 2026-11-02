@@ -3835,42 +3835,40 @@ body.pt-body {
   padding: 4px 0 16px;
 }
 
-.pt-pesticide-modal-hero {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 16px 18px;
+/* Khung hiển thị CHỈ chứa duy nhất hình ảnh chai thuốc */
+.pt-pesticide-showcase-frame {
+  width: 100%;
+  height: 190px;
   background: #f8fafc;
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 20px;
-}
-
-.pt-pesticide-modal-img-box {
-  width: 104px;
-  height: 104px;
-  flex-shrink: 0;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 6px;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
-.pt-pesticide-modal-img {
-  width: 100%;
-  height: 100%;
+.pt-pesticide-showcase-img {
+  max-height: 156px;
+  max-width: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.06));
+  filter: drop-shadow(0 10px 22px rgba(15, 23, 42, 0.12));
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.pt-pesticide-modal-hero-info {
-  flex: 1;
-  min-width: 0;
+.pt-pesticide-showcase-frame:hover .pt-pesticide-showcase-img {
+  transform: scale(1.03);
+}
+
+/* Thông tin chi tiết nằm độc lập bên dưới khung ảnh */
+.pt-pesticide-header-info {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 4px 8px 0;
 }
 
 .pt-pesticide-modal-title {
@@ -4018,14 +4016,12 @@ body.pt-body {
   .pt-pest-card-metric {
     font-size: 12px;
   }
-  .pt-pesticide-modal-hero {
-    flex-direction: column;
-    text-align: center;
-    align-items: center;
-    gap: 12px;
+  .pt-pesticide-showcase-frame {
+    height: 165px;
+    padding: 12px;
   }
-  .pt-pesticide-modal-hero-info {
-    align-items: center;
+  .pt-pesticide-showcase-img {
+    max-height: 135px;
   }
   .pt-pesticide-specs-grid {
     grid-template-columns: 1fr;
