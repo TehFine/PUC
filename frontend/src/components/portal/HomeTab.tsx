@@ -423,14 +423,6 @@ export default function HomeTab({ onNavigate }: { onNavigate: (tab: PortalTabId)
           <div className="pt-widget-topbar-info">
             <h2 className="pt-widget-topbar-title">Nhắc nhở</h2>
           </div>
-          <button
-            type="button"
-            className="pt-widget-topbar-btn"
-            onClick={() => onNavigate(actionItems[0]?.to || "diary")}
-            title="Xem chi tiết nội dung cần làm"
-          >
-            Chi tiết
-          </button>
         </div>
 
         <div className="pt-widget-sheet">
