@@ -1,7 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useResource } from "@/hooks/use-resource";
 import { mapLabTest } from "@/lib/mappers";
+import type { LabTest } from "@/types/entities";
+import { FileText } from "lucide-react";
+import LabTestCertificateModal, { type LabTestCertificateItem } from "@/components/portal/LabTestCertificateModal";
 import {
   BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -34,6 +38,30 @@ const passData: DonutItem[] = [
 
 export default function Testing() {
   const { data: testingData } = useResource("testing", mapLabTest);
+  const [selectedTest, setSelectedTest] = useState<LabTest | null>(null);
+
+  const certData: LabTestCertificateItem | null = selectedTest
+    ? {
+        code: selectedTest.code,
+        plotCode: selectedTest.household.includes("–")
+          ? selectedTest.household.split("–")[1]?.trim() || "TH1"
+          : "TH1",
+        householdName: selectedTest.household.includes("–")
+          ? selectedTest.household.split("–")[0]?.trim() || "Hộ thành viên HTX"
+          : selectedTest.household,
+        sampledOn: selectedTest.sampleDate,
+        cdMgKg: parseFloat(selectedTest.cd) || 0,
+        yellowOPositive: selectedTest.yellowO === "Dương tính",
+        residueMgKg: parseFloat(selectedTest.residue) || 0,
+        chlorpyrifosMgKg:
+          selectedTest.chlorpyrifos === "KPH"
+            ? null
+            : parseFloat(selectedTest.chlorpyrifos) || 0,
+        result: selectedTest.result === "Đạt" ? "pass" : "fail",
+        lab: selectedTest.lab,
+      }
+    : null;
+
   return (
     <>
       <div className="page-header">
@@ -152,11 +180,17 @@ export default function Testing() {
                 <th>Mã mẫu</th><th>Hộ / Thửa</th><th>Ngày lấy mẫu</th>
                 <th>Cd (mg/kg)</th><th>Vàng O</th><th>Dư lượng TBV</th>
                 <th>Chlorpyrifos</th><th>Kết quả</th><th>Đơn vị lab</th>
+                <th style={{ textAlign: "center" }}>Phiếu KQ</th>
               </tr>
             </thead>
             <tbody>
               {testingData.map((t, i) => (
-                <tr key={i}>
+                <tr
+                  key={i}
+                  onClick={() => setSelectedTest(t)}
+                  style={{ cursor: "pointer" }}
+                  title="Bấm để xem chi tiết phiếu kết quả kiểm nghiệm dạng văn bản A4"
+                >
                   <td style={{ fontFamily: "monospace", fontSize: 12, color: "#256b45", fontWeight: 600 }}>{t.code}</td>
                   <td style={{ fontSize: 12 }}>{t.household}</td>
                   <td style={{ color: "var(--text-secondary)" }}>{t.sampleDate}</td>
@@ -170,12 +204,34 @@ export default function Testing() {
                   </td>
                   <td><span className={`badge ${t.resultType === "green" ? "badge-green" : "badge-red"}`}>{t.result}</span></td>
                   <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{t.lab}</td>
+                  <td style={{ textAlign: "center" }}>
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      style={{ padding: "4px 8px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTest(t);
+                      }}
+                    >
+                      <FileText size={13} />
+                      Xem phiếu
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Phiếu trả kết quả kiểm nghiệm dạng tờ giấy A4 thực tế có chữ ký và mộc đỏ */}
+      {certData && (
+        <LabTestCertificateModal
+          test={certData}
+          onClose={() => setSelectedTest(null)}
+        />
+      )}
     </>
   );
 }
