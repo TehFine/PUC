@@ -3914,6 +3914,27 @@ body.pt-body {
   border-color: #dc2626;
   box-shadow: 0 3px 10px rgba(220, 38, 38, 0.25);
 }
+.pt-pest-filter-chip.is-active.is-organic,
+.pt-pest-filter-chip.is-active.is-encouraged {
+  background: #059669;
+  border-color: #059669;
+  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);
+}
+.pt-pest-filter-chip.is-active.is-npk {
+  background: #2563eb;
+  border-color: #2563eb;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+}
+.pt-pest-filter-chip.is-active.is-foliar {
+  background: #d97706;
+  border-color: #d97706;
+  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.25);
+}
+.pt-pest-filter-chip.is-active.is-warning {
+  background: #dc2626;
+  border-color: #dc2626;
+  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.25);
+}
 
 /* Thanh tóm tắt số lượng */
 .pt-pest-summary-bar {
@@ -3979,6 +4000,16 @@ body.pt-body {
 
 .pt-pest-card.pt-pest-card-banned {
   border-color: rgba(239, 68, 68, 0.22);
+  background: linear-gradient(180deg, #ffffff 0%, #fffbfb 100%);
+}
+
+.pt-pest-card.pt-pest-card-encouraged {
+  border-color: rgba(5, 150, 105, 0.22);
+  background: linear-gradient(180deg, #ffffff 0%, #f4fdf8 100%);
+}
+
+.pt-pest-card.pt-pest-card-warning {
+  border-color: rgba(239, 68, 68, 0.25);
   background: linear-gradient(180deg, #ffffff 0%, #fffbfb 100%);
 }
 
@@ -4116,6 +4147,33 @@ body.pt-body {
   border: 1px solid rgba(217, 119, 6, 0.28);
 }
 .pt-pest-status-banned {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid rgba(220, 38, 38, 0.26);
+}
+
+.pt-fert-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.pt-fert-status-encouraged {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+.pt-fert-status-allowed {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.24);
+}
+.pt-fert-status-warning {
   background: #fef2f2;
   color: #b91c1c;
   border: 1px solid rgba(220, 38, 38, 0.26);

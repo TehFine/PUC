@@ -214,6 +214,20 @@ export interface VarietyDto {
   description: string | null;
 }
 
+export interface FertilizerDto {
+  id: number;
+  name: string;
+  category: "organic" | "npk" | "foliar" | "microbial" | "restricted";
+  formula: string;
+  manufacturer: string;
+  dosage: string;
+  applicationMethod: string;
+  status: "encouraged" | "allowed" | "warning";
+  timing: string;
+  image?: string;
+  description?: string;
+}
+
 export interface VillageDto {
   id: number;
   name: string;

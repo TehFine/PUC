@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useResource } from "@/hooks/use-resource";
 import { PESTICIDE_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
-import type { PesticideDto, TrainingDto, VarietyDto } from "@/types/api";
+import type { FertilizerDto, PesticideDto, TrainingDto, VarietyDto } from "@/types/api";
 import {
   Check,
   ChevronRight,
@@ -19,8 +19,9 @@ const keepTraining = (item: TrainingDto) => item;
 const keepPesticide = (item: PesticideDto) => item;
 const keepVariety = (item: VarietyDto) => item;
 
-type View = "training" | "pesticides" | "varieties";
+type View = "training" | "pesticides" | "fertilizers" | "varieties";
 type StatusFilter = "all" | "allowed" | "restricted" | "banned";
+type FertilizerFilter = "all" | "organic" | "npk" | "foliar" | "microbial" | "restricted";
 
 function getRelativeScheduleNote(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -839,6 +840,502 @@ function PesticideList() {
   );
 }
 
+export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
+  {
+    id: 1,
+    name: "Hữu cơ Vi sinh Đất Mẹ 70% OM",
+    category: "organic",
+    formula: "Chất hữu cơ: 70% · Axit Humic: 12% · Nấm Trichoderma: 1×10⁶ CFU/g",
+    manufacturer: "Công ty CP Nông Nghiệp Xanh Đất Mẹ",
+    dosage: "5 – 10 kg/gốc/lần (Tùy tuổi cây)",
+    applicationMethod: "Bón gốc theo mép tán lá",
+    status: "encouraged",
+    timing: "Sau thu hoạch & đầu mùa mưa",
+    image: "/fertilizers/organic.png",
+    description: "Phân bón hữu cơ vi sinh cao cấp chuyên dùng cho sầu riêng, cung cấp dinh dưỡng thiết yếu và tăng cường hệ vi sinh đất.",
+  },
+  {
+    id: 2,
+    name: "NPK 12-12-17+TE Gốc Sunfat (Bio-Agri)",
+    category: "npk",
+    formula: "Đạm (N): 12% · Lân (P₂O₅): 12% · Kali Sunfat (K₂SO₄): 17% · TE (Bo, Mg, Zn)",
+    manufacturer: "Bio-Agri Systems International",
+    dosage: "0.8 – 1.5 kg/cây/đợt nuôi trái",
+    applicationMethod: "Rải đều quanh tán & tưới đẫm nước",
+    status: "allowed",
+    timing: "Giai đoạn nuôi trái non & thúc trái lớn",
+    image: "/fertilizers/npk.png",
+    description: "Dinh dưỡng khoáng cân đối 100% gốc Kali Sunfat không chứa Clo, giúp cơm vàng óng, dày cơm và đạt chuẩn xuất khẩu GACC.",
+  },
+  {
+    id: 3,
+    name: "Phân bón lá Canxi Bo Sữa Bo Amino Kẽm",
+    category: "foliar",
+    formula: "Canxi (CaO): 12% · Bo hữu hiệu: 35.000 ppm · Kẽm (Zn): 15.000 ppm · Amino Acid: 10%",
+    manufacturer: "Agri-Green Nutrition Ltd.",
+    dosage: "Pha 750ml cho 400 – 600 lít nước",
+    applicationMethod: "Phun ướt đều 2 mặt lá & chùm hoa/trái",
+    status: "allowed",
+    timing: "Nhú mắt cua, trước xả nhụy & trái non 3-7 tuần",
+    image: "/fertilizers/foliar.png",
+    description: "Đặc trị rụng hoa, tăng tỷ lệ đậu trái, chống nứt gai, dai cuống và hỗ trợ trái lớn nhanh đồng đều.",
+  },
+  {
+    id: 4,
+    name: "Gói Axit Humic Đậm Đặc & Trichoderma (Duri-Root)",
+    category: "microbial",
+    formula: "Axit Humic: 85% · Axit Fulvic: 10% · Kali hữu hiệu: 10% · Trichoderma: 2×10⁹ CFU/g",
+    manufacturer: "Duri-Root Bio Sciences",
+    dosage: "1 kg pha 500 – 800 lít nước tưới gốc",
+    applicationMethod: "Tưới vùng rễ tơ hoặc hòa qua hệ thống nhỏ giọt",
+    status: "encouraged",
+    timing: "Kích rễ đầu vụ & phục hồi sau đợt bệnh",
+    image: "/fertilizers/humic.png",
+    description: "Kích rễ phát triển cực mạnh, cải thiện độ phì nhiêu của đất và đối kháng nấm bệnh Phytophthora gây xì mủ.",
+  },
+  {
+    id: 5,
+    name: "NPK 20-20-15+TE Đầu Trâu Chuyên Đọt",
+    category: "npk",
+    formula: "Đạm (N): 20% · Lân (P₂O₅): 20% · Kali (K₂O): 15% · Vi lượng Bo, Kẽm, Đồng",
+    manufacturer: "Công ty CP Phân bón Bình Điền",
+    dosage: "0.5 – 1.0 kg/cây/đợt cơi đọt",
+    applicationMethod: "Bón gốc khi đất ẩm sau cơn mưa",
+    status: "allowed",
+    timing: "Giai đoạn bung cơi đọt & cơi lá mới",
+    image: "/fertilizers/npk.png",
+    description: "Cung cấp đạm và lân cao giúp cơi đọt bung mập khỏe, phiến lá dày bóng, tăng diện tích quang hợp nuôi cây sung mãn.",
+  },
+  {
+    id: 6,
+    name: "Kali Clorua (KCl / Muối Ớt Đỏ) — Cảnh báo cấm",
+    category: "restricted",
+    formula: "Kali (K₂O): 60% · Hàm lượng Clo (Cl⁻): > 45%",
+    manufacturer: "Nhập khẩu Belarus / Canada",
+    dosage: "0 kg/cây (Tuyệt đối không dùng cho sầu riêng)",
+    applicationMethod: "CẤM SỬ DỤNG CHO CÂY SẦU RIÊNG",
+    status: "warning",
+    timing: "Nghiêm cấm tuyệt đối ở mọi thời điểm",
+    image: "/fertilizers/npk.png",
+    description: "Hàm lượng Clo cực cao gây sượng múi, nhão cơm, cháy chóp lá và tích tụ muối hại đất; bị cấm trong tiêu chuẩn VietGAP sầu riêng.",
+  },
+];
+
+export function getFertilizerImage(item: FertilizerDto): string {
+  if (item.image) return item.image;
+  if (item.category === "organic") return "/fertilizers/organic.png";
+  if (item.category === "npk") return "/fertilizers/npk.png";
+  if (item.category === "foliar") return "/fertilizers/foliar.png";
+  if (item.category === "microbial") return "/fertilizers/humic.png";
+  return "/fertilizers/npk.png";
+}
+
+export interface FertilizerEfficacy {
+  usage: string;
+  targets: string[];
+  timing: string;
+  dosageAdvice: string;
+}
+
+export function getFertilizerEfficacy(item: FertilizerDto): FertilizerEfficacy {
+  const name = item.name.toLowerCase();
+  const cat = item.category;
+
+  if (cat === "organic" || name.includes("đất mẹ") || name.includes("hữu cơ")) {
+    return {
+      usage: "Cải tạo đất tơi xốp, kích hoạt vi sinh vật bản địa có lợi và tái tạo mạng lưới rễ tơ sau vụ thu hoạch.",
+      targets: ["Phục hồi sau thu hoạch", "Tái tạo rễ tơ", "Đất tơi xốp phì nhiêu", "Kháng nấm hại rễ", "VietGAP khuyến khích"],
+      timing: "Bón vào đầu mùa mưa hoặc ngay sau khi dọn vườn sau thu hoạch",
+      dosageAdvice: "5 – 10 kg/gốc rải đều theo mép tán lá, xới nhẹ lấp đất và tưới đủ ẩm.",
+    };
+  }
+
+  if (name.includes("canxi bo") || cat === "foliar") {
+    return {
+      usage: "Chống rụng hoa và trái non, tăng sức sống hạt phấn, dẻo dai cuống trái và ngăn ngừa nứt gai, thối đít trái.",
+      targets: ["Chống rụng hoa sinh lý", "Tăng đậu trái chùm", "Dai cuống dẻo trái", "Chống nứt gai, teo trái", "Dưỡng lá xanh dày"],
+      timing: "Giai đoạn nhú mắt cua, trước và sau khi xả nhụy, trái non 3-7 tuần tuổi",
+      dosageAdvice: "Pha 750ml với 400 – 600 lít nước, phun sương ướt đều tán lá và chùm bông/trái.",
+    };
+  }
+
+  if (cat === "microbial" || name.includes("humic") || name.includes("trichoderma")) {
+    return {
+      usage: "Kích thích ra rễ cực mạnh, giải độc phèn đất, ức chế nấm Phytophthora và Fusarium gây thối rễ xì mủ.",
+      targets: ["Kích rễ tơ bung đọt", "Giải độc phèn & hữu cơ", "Đối kháng nấm xì mủ", "Hạ phèn cân bằng pH đất"],
+      timing: "Đầu mùa mưa, khi cây nhú đọt non hoặc khi phục hồi cây suy kiệt",
+      dosageAdvice: "Hòa 1 kg vào 500 – 800 lít nước, tưới 10 – 15 lít dung dịch quanh gốc vùng rễ tơ.",
+    };
+  }
+
+  if (name.includes("12-12-17") || (cat === "npk" && name.includes("sunfat"))) {
+    return {
+      usage: "Cung cấp dinh dưỡng đa lượng cân đối 100% gốc Sunfat (SOP không Clo), nuôi múi vàng óng, ráo cơm và nâng độ ngọt Brix.",
+      targets: ["Nuôi trái non 40-80 ngày", "Cơm vàng óng dày múi", "Tăng độ ngọt Brix", "Không sượng cơm (Gốc SOP)", "Chuẩn GACC xuất khẩu"],
+      timing: "Giai đoạn trái lớn nhanh đến trước thu hoạch 20 ngày",
+      dosageAdvice: "0.8 – 1.5 kg/cây chia làm 2-3 lần bón rải đều quanh tán, tưới ẩm ngay sau bón.",
+    };
+  }
+
+  if (cat === "restricted" || item.status === "warning" || name.includes("clorua") || name.includes("kcl")) {
+    return {
+      usage: "CẢNH BÁO NGUY HIỂM: Ion Clo (Cl⁻) làm tích nước tế bào múi gây sượng cơm hoàn toàn, cháy rìa lá và chai cứng đất.",
+      targets: ["Cảnh báo sượng múi cực nặng", "Cháy chóp lá, rụng lá", "GACC từ chối thông quan", "Nghiêm cấm trên sầu riêng"],
+      timing: "CẤM SỬ DỤNG trong toàn bộ chu kỳ sinh trưởng của sầu riêng",
+      dosageAdvice: "TUYỆT ĐỐI KHÔNG DÙNG. Thay thế bằng Kali Sunfat (K₂SO₄) hoặc phân bón lá hữu cơ.",
+    };
+  }
+
+  return {
+    usage: "Thúc cây bung cơi đọt mập khỏe đồng loạt, lá xanh bóng dồi dào diệp lục, tích lũy dinh dưỡng nuôi thân cành sung mãn.",
+    targets: ["Nuôi cơi đọt sung mãn", "Phiến lá to xanh dày", "Phát triển cành cấp 1-2", "Chuẩn bị lực làm bông"],
+    timing: "Đầu mỗi đợt cơi đọt mới hoặc sau khi tỉa cành tạo tán",
+    dosageAdvice: "Bón 0.5 – 1.0 kg/cây khi đất có độ ẩm tốt, bón theo mép tán lá.",
+  };
+}
+
+export function FertilizerDetailModal({
+  item,
+  onClose,
+}: {
+  item: FertilizerDto;
+  onClose: () => void;
+}) {
+  const imgSrc = getFertilizerImage(item);
+  const efficacy = getFertilizerEfficacy(item);
+  const isEncouraged = item.status === "encouraged";
+  const isWarning = item.status === "warning";
+
+  return (
+    <div className="pt-pesticide-modal-body">
+      {/* 1. Ảnh bao bì / chai phân bón cắt nền nằm trực tiếp trên nền modal */}
+      <div className="pt-pesticide-showcase-wrap">
+        <img
+          src={imgSrc}
+          alt={item.name}
+          className="pt-pesticide-showcase-img"
+        />
+      </div>
+
+      {/* 2. Tiêu đề, phân loại & trạng thái */}
+      <div className="pt-pesticide-header-info">
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+          <span className={`pt-fert-status-badge pt-fert-status-${item.status}`}>
+            {isEncouraged ? "Khuyến khích VietGAP" : isWarning ? "Cảnh báo: Không sử dụng" : "Được phép sử dụng"}
+          </span>
+          <span className="pt-training-code-pill">
+            {item.category === "organic"
+              ? "Hữu cơ vi sinh"
+              : item.category === "npk"
+              ? "Khoáng NPK cao cấp"
+              : item.category === "foliar"
+              ? "Trung vi lượng qua lá"
+              : item.category === "microbial"
+              ? "Vi sinh & Rễ"
+              : "Kiểm soát đặc biệt"}
+          </span>
+        </div>
+        <h3 className="pt-pesticide-modal-title">{item.name}</h3>
+        <p className="pt-pesticide-modal-mfg">Nhà sản xuất: {item.manufacturer}</p>
+      </div>
+
+      {/* 3. Công dụng & Giai đoạn áp dụng (Cô đọng, súc tích) */}
+      <div className="pt-pesticide-efficacy-card">
+        <div className="pt-efficacy-row">
+          <span className="pt-efficacy-label">Công dụng chính</span>
+          <p className="pt-efficacy-desc">{efficacy.usage}</p>
+        </div>
+
+        <div className="pt-efficacy-row">
+          <span className="pt-efficacy-label">Giai đoạn cây trồng & Hiệu quả trọng tâm</span>
+          <div className="pt-efficacy-targets">
+            {efficacy.targets.map((target) => (
+              <span key={target} className="pt-efficacy-tag">
+                {target}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="pt-efficacy-timing">
+          <span>Thời điểm bón khuyến nghị:</span>
+          <strong>{efficacy.timing}</strong>
+        </div>
+
+        <div className="pt-efficacy-timing">
+          <span>Liều lượng khuyến cáo:</span>
+          <strong style={{ color: "#2563eb" }}>{efficacy.dosageAdvice}</strong>
+        </div>
+      </div>
+
+      {/* 4. Lưới thông số kỹ thuật & Tiêu chuẩn */}
+      <div className="pt-pesticide-modal-specs">
+        <h4 className="pt-pesticide-modal-section-title">Thông số kỹ thuật & Tiêu chuẩn</h4>
+        <div className="pt-pesticide-specs-grid">
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Thành phần / Công thức</span>
+            <strong className="pt-pesticide-spec-value">{item.formula}</strong>
+            <span className="pt-pesticide-spec-hint">Hàm lượng dinh dưỡng đăng ký</span>
+          </div>
+
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Phương thức bón</span>
+            <strong className="pt-pesticide-spec-value pt-spec-highlight">
+              {item.applicationMethod}
+            </strong>
+            <span className="pt-pesticide-spec-hint">Bón theo hình chiếu mép tán</span>
+          </div>
+
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Định mức sử dụng</span>
+            <strong className="pt-pesticide-spec-value">
+              {item.dosage}
+            </strong>
+            <span className="pt-pesticide-spec-hint">Chuẩn VietGAP Krông Búk</span>
+          </div>
+
+          <div className="pt-pesticide-spec-card">
+            <span className="pt-pesticide-spec-label">Tiêu chuẩn áp dụng</span>
+            <strong className="pt-pesticide-spec-value">
+              {isEncouraged ? "VietGAP & Hữu cơ GACC" : isWarning ? "Nghiêm cấm theo GACC" : "QCVN 01-189:2019/BNNPTNT"}
+            </strong>
+            <span className="pt-pesticide-spec-hint">Bộ Nông nghiệp & PTNT</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Cảnh báo & Lưu ý canh tác */}
+      <div className={`pt-pesticide-alert-box pt-pesticide-alert-${isWarning ? "banned" : isEncouraged ? "allowed" : "restricted"}`}>
+        <div className="pt-pesticide-alert-content">
+          <strong>
+            {isWarning
+              ? "Cảnh báo đỏ: Nghiêm cấm bón phân chứa Clo trên sầu riêng"
+              : isEncouraged
+              ? "Khuyến khích canh tác hữu cơ bền vững VietGAP"
+              : "Quy chuẩn bón phân cân đối & Quản lý dinh dưỡng"}
+          </strong>
+          <p>
+            {isWarning
+              ? "Phân Kali đỏ (KCl) chứa hàm lượng ion Clorua trên 45% làm tế bào cơm sầu riêng ngậm nước, gây hiện tượng sượng cơm, nhão thịt và làm chua đất. Toàn bộ sầu riêng phục vụ xuất khẩu bắt buộc phải dùng Kali Sunfat (K2SO4)."
+              : isEncouraged
+              ? "Khuyến khích tăng cường bón phân hữu cơ vi sinh và Axit Humic hàng năm giúp đất tơi xốp, kích thích giun đất và vi sinh vật đối kháng tự nhiên bảo vệ bộ rễ sầu riêng bền lực qua nhiều mùa vụ."
+              : "Bón phân đúng thời điểm sinh trưởng của cây, kết hợp tưới đủ ẩm. Bắt buộc ghi chép ngày bón, tên phân và khối lượng vào Cổng nhật ký điện tử PUC Krông Búk."}
+          </p>
+        </div>
+      </div>
+
+      {/* 6. Nguyên tắc an toàn & bảo vệ môi trường */}
+      <div className="pt-pesticide-safety-tips">
+        <h4 className="pt-pesticide-modal-section-title">Nguyên tắc canh tác an toàn sinh học</h4>
+        <ul className="pt-pesticide-safety-list">
+          <li>Phân chuồng bón cho sầu riêng bắt buộc phải được ủ hoai mục bằng nấm Trichoderma tối thiểu 45 ngày.</li>
+          <li>Không bón phân hóa học sát gốc cây; rải phân theo mép tán nơi có nhiều đầu rễ tơ hút dinh dưỡng nhất.</li>
+          <li>Sau khi bón phân hạt cần tưới nước nhẹ để phân tan dần, tránh bón vào lúc trời nắng gắt làm bốc hơi đạm.</li>
+        </ul>
+      </div>
+
+      {/* 7. Nút đóng popup */}
+      <div className="pt-training-modal-actions">
+        <button
+          type="button"
+          className="pt-btn pt-btn-primary"
+          style={{ width: "100%", justifyContent: "center" }}
+          onClick={onClose}
+        >
+          Đã hiểu & Đóng
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FertilizerList() {
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<FertilizerFilter>("all");
+  const [selectedFertilizer, setSelectedFertilizer] = useState<FertilizerDto | null>(null);
+
+  const counts = useMemo(() => {
+    return {
+      all: DEFAULT_FERTILIZERS.length,
+      organic: DEFAULT_FERTILIZERS.filter((d) => d.category === "organic").length,
+      npk: DEFAULT_FERTILIZERS.filter((d) => d.category === "npk").length,
+      foliar: DEFAULT_FERTILIZERS.filter((d) => d.category === "foliar").length,
+      microbial: DEFAULT_FERTILIZERS.filter((d) => d.category === "microbial").length,
+      restricted: DEFAULT_FERTILIZERS.filter((d) => d.category === "restricted").length,
+    };
+  }, []);
+
+  const shown = useMemo(() => {
+    return DEFAULT_FERTILIZERS.filter((item) => {
+      const q = query.trim().toLowerCase();
+      const matchesQuery =
+        !q ||
+        `${item.name} ${item.formula} ${item.manufacturer} ${item.applicationMethod}`
+          .toLowerCase()
+          .includes(q);
+      const matchesCategory =
+        categoryFilter === "all" || item.category === categoryFilter;
+      return matchesQuery && matchesCategory;
+    });
+  }, [query, categoryFilter]);
+
+  return (
+    <section className="pt-pest-section" aria-labelledby="fertilizer-heading">
+      <div className="pt-pest-header">
+        <h2 id="fertilizer-heading" className="pt-pest-title">
+          Danh mục phân bón chuẩn VietGAP
+        </h2>
+      </div>
+
+      <div className="pt-pest-wrap">
+        {/* Hộp tìm kiếm */}
+        <div className="pt-pest-search-box">
+          <Search size={16} className="pt-pest-search-icon" aria-hidden="true" />
+          <input
+            className="pt-pest-search-input"
+            type="search"
+            placeholder="Tìm theo tên phân bón, thành phần dinh dưỡng hoặc hãng..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Tìm kiếm phân bón"
+          />
+          {query && (
+            <button
+              type="button"
+              className="pt-pest-search-clear"
+              onClick={() => setQuery("")}
+              aria-label="Xóa từ khóa tìm kiếm"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Thanh filter phân loại phân bón */}
+        <div className="pt-pest-filter-bar" role="tablist" aria-label="Lọc theo phân loại phân bón">
+          <button
+            type="button"
+            className={`pt-pest-filter-chip ${categoryFilter === "all" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("all")}
+          >
+            Tất cả <span className="pt-pest-filter-count">{counts.all}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-organic ${categoryFilter === "organic" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("organic")}
+          >
+            Hữu cơ vi sinh <span className="pt-pest-filter-count">{counts.organic}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-npk ${categoryFilter === "npk" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("npk")}
+          >
+            NPK đa lượng <span className="pt-pest-filter-count">{counts.npk}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-foliar ${categoryFilter === "foliar" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("foliar")}
+          >
+            Trung vi lượng <span className="pt-pest-filter-count">{counts.foliar}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-organic ${categoryFilter === "microbial" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("microbial")}
+          >
+            Cải tạo đất & Rễ <span className="pt-pest-filter-count">{counts.microbial}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-warning ${categoryFilter === "restricted" ? "is-active" : ""}`}
+            onClick={() => setCategoryFilter("restricted")}
+          >
+            Kiểm soát Clo <span className="pt-pest-filter-count">{counts.restricted}</span>
+          </button>
+        </div>
+
+        {/* Danh sách thẻ phân bón trực quan giống hệt thuốc BVTV */}
+        <div className="pt-pest-list">
+          {shown.map((item) => {
+            const imgSrc = getFertilizerImage(item);
+            const isEncouraged = item.status === "encouraged";
+            const isWarning = item.status === "warning";
+
+            return (
+              <article
+                key={item.id}
+                className={`pt-pest-card pt-pest-card-${item.status}`}
+                onClick={() => setSelectedFertilizer(item)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedFertilizer(item);
+                  }
+                }}
+                title="Bấm để xem chi tiết phân bón"
+              >
+                {/* Bên trái: Ảnh của bao/chai phân bón */}
+                <div className="pt-pest-card-img-wrap">
+                  <img
+                    src={imgSrc}
+                    alt={item.name}
+                    className="pt-pest-card-img"
+                    loading="lazy"
+                  />
+                </div>
+
+                {/* Bên phải: Tên phân bón và thông tin */}
+                <div className="pt-pest-card-content">
+                  <div className="pt-pest-card-top-row">
+                    <h3 className="pt-pest-card-name">{item.name}</h3>
+                    <span className={`pt-pest-mini-status ${isEncouraged ? "pt-pest-status-allowed" : isWarning ? "pt-pest-status-banned" : "pt-pest-status-restricted"}`}>
+                      {isEncouraged ? "VietGAP" : isWarning ? "Cảnh báo" : "Được phép"}
+                    </span>
+                  </div>
+
+                  <p className="pt-pest-card-sub">
+                    Thành phần: <strong>{item.formula}</strong>
+                    {item.manufacturer ? ` · ${item.manufacturer}` : ""}
+                  </p>
+
+                  <div className="pt-pest-card-metric">
+                    <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
+                    <span>Thời điểm: <strong>{item.timing}</strong></span>
+                    <span style={{ margin: "0 4px", color: "#cbd5e1" }}>•</span>
+                    <span>Cách bón: <strong>{item.applicationMethod}</strong></span>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        {shown.length === 0 && (
+          <EmptyState icon="search">Không tìm thấy phân bón phù hợp với tiêu chí lọc.</EmptyState>
+        )}
+
+        {/* Popup chi tiết về loại phân bón được chọn */}
+        {selectedFertilizer && (
+          <Sheet
+            title="Chi tiết phân bón"
+            onClose={() => setSelectedFertilizer(null)}
+          >
+            <FertilizerDetailModal
+              item={selectedFertilizer}
+              onClose={() => setSelectedFertilizer(null)}
+            />
+          </Sheet>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function VarietyList() {
   const { data, loading, error } = useResource<VarietyDto, VarietyDto>("varieties", keepVariety);
   return (
@@ -885,6 +1382,7 @@ export default function LearnTab() {
   const items: { id: View; label: string }[] = [
     { id: "training", label: "Tập huấn" },
     { id: "pesticides", label: "Thuốc BVTV" },
+    { id: "fertilizers", label: "Phân bón" },
     { id: "varieties", label: "Giống cây" },
   ];
 
@@ -906,6 +1404,7 @@ export default function LearnTab() {
       </div>
       {view === "training" && <TrainingList />}
       {view === "pesticides" && <PesticideList />}
+      {view === "fertilizers" && <FertilizerList />}
       {view === "varieties" && <VarietyList />}
     </div>
   );

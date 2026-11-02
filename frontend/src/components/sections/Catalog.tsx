@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useResource } from "@/hooks/use-resource";
 import { mapPesticide, mapVariety, mapVillage } from "@/lib/mappers";
+import { DEFAULT_FERTILIZERS } from "@/components/portal/LearnTab";
 
 const statusClass: Record<string, string> = { green: "badge-green", gold: "badge-gold", red: "badge-red" };
 
@@ -90,14 +91,55 @@ export default function Catalog() {
       )}
 
       {tab === "fertilizer" && (
-        <div className="card">
-          <div className="card-body" style={{ textAlign: "center", padding: "56px 20px" }}>
-            <div style={{ color: "var(--text-muted)", marginBottom: 16, fontSize: 13 }}>
-              Danh mục phân bón chưa có dữ liệu.
+        <>
+          <div className="filter-bar">
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <input type="text" className="filter-input" placeholder="Tìm tên phân bón, thành phần, hãng…" />
             </div>
-            <button className="btn btn-primary">Thêm phân bón</button>
+            <select className="filter-select">
+              <option>Mọi phân loại</option>
+              <option>Hữu cơ vi sinh</option>
+              <option>NPK đa lượng</option>
+              <option>Trung vi lượng</option>
+              <option>Cải tạo rễ</option>
+              <option>Kiểm soát Clo</option>
+            </select>
+            <button className="btn btn-primary" style={{ marginLeft: "auto" }}>Thêm phân bón</button>
           </div>
-        </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên thương phẩm</th>
+                  <th>Phân loại</th>
+                  <th>Thành phần / Công thức</th>
+                  <th>Nhà sản xuất</th>
+                  <th>Định mức khuyến cáo</th>
+                  <th>Phương thức bón</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {DEFAULT_FERTILIZERS.map((f) => {
+                  const badgeType = f.status === "encouraged" ? "badge-green" : f.status === "allowed" ? "badge-gold" : "badge-red";
+                  const statusLabel = f.status === "encouraged" ? "Khuyến khích" : f.status === "allowed" ? "Được phép" : "Cảnh báo cấm";
+                  const catLabel = f.category === "organic" ? "Hữu cơ vi sinh" : f.category === "npk" ? "NPK đa lượng" : f.category === "foliar" ? "Trung vi lượng" : f.category === "microbial" ? "Cải tạo rễ" : "Kiểm soát đặc biệt";
+                  return (
+                    <tr key={f.id}>
+                      <td style={{ fontWeight: 600 }}>{f.name}</td>
+                      <td><span style={{ fontSize: 12, color: "#047857", fontWeight: 600 }}>{catLabel}</span></td>
+                      <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{f.formula}</td>
+                      <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{f.manufacturer}</td>
+                      <td style={{ textAlign: "center", fontWeight: 500, fontSize: 12 }}>{f.dosage}</td>
+                      <td style={{ fontSize: 12 }}>{f.applicationMethod}</td>
+                      <td><span className={`badge ${badgeType}`}>{statusLabel}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {tab === "variety" && (
