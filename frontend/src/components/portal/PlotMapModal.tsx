@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
@@ -61,7 +61,17 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   const hasDraggedRef = useRef(false);
   const popupRef = useRef<HTMLDivElement>(null);
 
+  // Đóng modal êm ái với animation mượt mà (smooth graceful exit)
+  const handleRequestClose = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 320);
+  }, [isClosing, onClose]);
+
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isClosing) return;
     const touch = e.touches[0];
     if (!touch) return;
     touchStartRef.current = { y: touch.clientY, x: touch.clientX, time: Date.now() };
@@ -69,7 +79,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
+    if (!touchStartRef.current || isClosing) return;
     const touch = e.touches[0];
     if (!touch) return;
 
@@ -83,14 +93,15 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       }
       hasDraggedRef.current = true;
       setIsDragging(true);
-      const dampened = deltaY > 150 ? 150 + (deltaY - 150) * 0.5 : deltaY;
+      // Damping mềm mại tự nhiên (power curve), không bị giật cục
+      const dampened = deltaY <= 50 ? deltaY : 50 + Math.pow(deltaY - 50, 0.88);
       setDragY(Math.max(0, dampened));
       if (e.cancelable) e.preventDefault();
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
+    if (!touchStartRef.current || isClosing) return;
     const startY = touchStartRef.current.y;
     const startTime = touchStartRef.current.time;
     touchStartRef.current = null;
@@ -106,13 +117,9 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     const deltaTime = Math.max(1, Date.now() - startTime);
     const velocity = deltaY / deltaTime; // px per ms
 
-    // Ngưỡng vuốt tắt: kéo xuống > 70px hoặc vuốt nhanh (velocity > 0.35 & deltaY > 25px)
-    if (deltaY > 70 || (velocity > 0.35 && deltaY > 25)) {
-      setIsClosing(true);
-      setDragY(window.innerHeight || 650);
-      setTimeout(() => {
-        onClose();
-      }, 200);
+    // Ngưỡng vuốt tắt nhẹ nhàng: kéo xuống > 65px hoặc lướt dứt khoát
+    if (deltaY > 65 || (velocity > 0.3 && deltaY > 25)) {
+      handleRequestClose();
     } else {
       setDragY(0);
     }
@@ -120,7 +127,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
   // Kéo chuột trên Desktop đối với thanh handle / header
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || isClosing) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest("button, a")) return;
 
@@ -135,7 +142,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       if (deltaY > 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
         hasDraggedRef.current = true;
         setIsDragging(true);
-        const dampened = deltaY > 150 ? 150 + (deltaY - 150) * 0.5 : deltaY;
+        const dampened = deltaY <= 50 ? deltaY : 50 + Math.pow(deltaY - 50, 0.88);
         setDragY(Math.max(0, dampened));
       }
     };
@@ -149,12 +156,8 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       const deltaTime = Math.max(1, Date.now() - startTime);
       const velocity = deltaY / deltaTime;
 
-      if (deltaY > 70 || (velocity > 0.35 && deltaY > 25)) {
-        setIsClosing(true);
-        setDragY(window.innerHeight || 650);
-        setTimeout(() => {
-          onClose();
-        }, 200);
+      if (deltaY > 65 || (velocity > 0.3 && deltaY > 25)) {
+        handleRequestClose();
       } else {
         setDragY(0);
       }
@@ -170,7 +173,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     document.body.style.overflow = "hidden";
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleRequestClose();
     };
     window.addEventListener("keydown", onKeyDown);
 
@@ -178,7 +181,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       document.body.style.overflow = prevOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [onClose]);
+  }, [handleRequestClose]);
 
   const lat = plot.lat ?? 12.72245;
   const lng = plot.lng ?? 108.14746;
@@ -393,7 +396,20 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   if (!mounted) return null;
 
   return createPortal(
-    <div className="pt-mapmodal-fullscreen" role="dialog" aria-modal="true" aria-label={`Bản đồ thửa đất ${plot.code}`}>
+    <div
+      className={`pt-mapmodal-fullscreen ${isClosing ? "is-closing" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Bản đồ thửa đất ${plot.code}`}
+      style={{
+        opacity: isClosing ? 0 : dragY > 0 ? Math.max(0.45, 1 - dragY / 850) : undefined,
+        transition: isDragging
+          ? "none"
+          : isClosing
+            ? "opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1)"
+            : "opacity 0.28s ease",
+      }}
+    >
       {/* 1. TOÀN CẢNH BẢN ĐỒ TRÀN VIỀN (100% VIEWPORT) */}
       <div ref={containerRef} className="pt-mapmodal-canvas-fullscreen" />
 
@@ -403,6 +419,19 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       {/* 2. THANH ĐIỀU HƯỚNG NỔI TRÊN ĐỈNH (TOP BAR) */}
       <div
         className="pt-mapmodal-topbar"
+        style={{
+          transform: isClosing
+            ? "translateY(-24px)"
+            : dragY > 0
+              ? `translateY(${Math.min(dragY * 0.25, 24)}px)`
+              : undefined,
+          opacity: isClosing ? 0 : dragY > 0 ? Math.max(0.4, 1 - dragY / 260) : undefined,
+          transition: isDragging
+            ? "none"
+            : isClosing
+              ? "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease"
+              : "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease",
+        }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -437,7 +466,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           <button
             type="button"
             className="pt-mapmodal-close-round-btn"
-            onClick={onClose}
+            onClick={handleRequestClose}
             title="Đóng bản đồ (Esc)"
             aria-label="Đóng bản đồ toàn cảnh"
           >
@@ -451,9 +480,21 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         ref={popupRef}
         className={`pt-mapmodal-floating-popup ${infoExpanded ? "is-expanded" : "is-minimized"} ${isDragging ? "is-dragging" : ""} ${isClosing ? "is-closing" : ""}`}
         style={{
-          transform: dragY > 0 ? `translateY(${dragY}px)` : undefined,
-          transition: isDragging ? "none" : undefined,
-          opacity: dragY > 0 ? Math.max(0.08, 1 - dragY / 380) : undefined,
+          transform: isClosing
+            ? "translateY(115%)"
+            : dragY > 0
+              ? `translateY(${dragY}px)`
+              : undefined,
+          opacity: isClosing
+            ? 0
+            : dragY > 0
+              ? Math.max(0.65, 1 - dragY / 650)
+              : undefined,
+          transition: isDragging
+            ? "none"
+            : isClosing
+              ? "transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease"
+              : "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}

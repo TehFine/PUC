@@ -5723,7 +5723,20 @@ body.pt-body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  animation: pt-modal-fade 0.22s ease-out;
+  animation: pt-modal-fade 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity;
+}
+
+.pt-mapmodal-fullscreen.is-closing {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+.pt-mapmodal-fullscreen.is-closing .pt-mapmodal-topbar {
+  transform: translateY(-24px) !important;
+  opacity: 0 !important;
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease !important;
 }
 
 .pt-mapmodal-canvas-fullscreen {
@@ -5905,8 +5918,9 @@ body.pt-body {
   border: 1px solid rgba(255, 255, 255, 0.9);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
   overflow: hidden;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   touch-action: pan-y;
+  will-change: transform, opacity;
 }
 
 .pt-mapmodal-floating-popup.is-dragging {
@@ -5915,9 +5929,10 @@ body.pt-body {
 }
 
 .pt-mapmodal-floating-popup.is-closing {
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease !important;
+  transform: translateY(115%) !important;
   opacity: 0 !important;
   pointer-events: none !important;
+  transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease !important;
 }
 
 .pt-mapmodal-popup-handle {
@@ -5928,8 +5943,14 @@ body.pt-body {
   background: rgba(15, 23, 42, 0.22);
   margin: 3px auto 8px;
   flex-shrink: 0;
-  transition: background 0.18s ease, transform 0.18s ease;
+  transition: background 0.18s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
   cursor: grab;
+}
+
+.pt-mapmodal-floating-popup.is-dragging .pt-mapmodal-popup-handle {
+  cursor: grabbing;
+  background: rgba(6, 95, 70, 0.45);
+  transform: scaleX(1.15);
 }
 
 .pt-mapmodal-popup-header:hover .pt-mapmodal-popup-handle {
@@ -6341,6 +6362,7 @@ body.pt-body {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .pt-mapmodal-floating-popup.is-minimized {
