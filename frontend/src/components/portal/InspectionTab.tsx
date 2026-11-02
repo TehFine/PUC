@@ -158,13 +158,14 @@ export default function InspectionTab({ onNavigate }: { onNavigate?: (tab: Porta
                       </div>
 
                       <div className="pt-transit-meta-row">
-                        <span className="pt-transit-meta-item">
+                        <div className="pt-transit-meta-item">
                           <span className="pt-transit-date-highlight">{formatDate(item.scheduledOn)}</span>
                           {rel && <span className="pt-transit-rel-badge">({rel})</span>}
-                        </span>
-                        <span className="pt-transit-meta-item">
-                          Cán bộ: <strong>{item.officer}</strong>
-                        </span>
+                        </div>
+                        <div className="pt-transit-meta-item">
+                          <span>Cán bộ:</span>
+                          <strong>{item.officer}</strong>
+                        </div>
                       </div>
 
                       <p className="pt-transit-desc">{theme.defaultNote}</p>

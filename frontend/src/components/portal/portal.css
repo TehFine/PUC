@@ -6589,18 +6589,19 @@ body.pt-body {
 
 .pt-transit-meta-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
   font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: 1.45;
+  margin: 6px 0 8px;
 }
 
 .pt-transit-meta-item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
 .pt-transit-date-highlight {
