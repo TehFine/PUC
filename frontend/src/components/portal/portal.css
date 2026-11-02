@@ -5042,7 +5042,8 @@
 
 .pt-support-box {
   background: #f8faf9;
-  border: 1px solid rgba(20, 55, 47, 0.08);
+  border: none;
+  outline: none;
   border-radius: 16px;
   padding: 14px 16px;
   display: flex;
@@ -6274,33 +6275,10 @@
 
 .pt-transit-segment {
   display: grid;
-  grid-template-columns: 28px 20px 1fr;
-  gap: 10px;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
   align-items: stretch;
   position: relative;
-}
-
-.pt-transit-badge-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding-top: 5px;
-}
-
-.pt-transit-badge {
-  width: 25px;
-  height: 25px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-  flex-shrink: 0;
-  user-select: none;
 }
 
 .pt-transit-track-col {
@@ -6452,14 +6430,10 @@
 
 .pt-transit-transfer {
   display: grid;
-  grid-template-columns: 28px 20px 1fr;
-  gap: 10px;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
   align-items: center;
   padding: 5px 0;
-}
-
-.pt-transit-transfer-empty {
-  /* để trống cột 1 */
 }
 
 .pt-transit-transfer-track {
@@ -6492,13 +6466,8 @@
 @media (max-width: 480px) {
   .pt-transit-segment,
   .pt-transit-transfer {
-    grid-template-columns: 24px 16px 1fr;
+    grid-template-columns: 16px 1fr;
     gap: 8px;
-  }
-  .pt-transit-badge {
-    width: 22px;
-    height: 22px;
-    font-size: 10px;
   }
   .pt-transit-capsule {
     width: 10px;

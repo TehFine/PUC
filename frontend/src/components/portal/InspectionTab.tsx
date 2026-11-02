@@ -24,9 +24,6 @@ function getRelativeScheduleNote(dateStr: string): string {
 
 const ROUTE_THEMES = [
   {
-    badge: "L1",
-    badgeBg: "#f59e0b",
-    badgeColor: "#ffffff",
     capsuleBg: "linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%)",
     tagBg: "#fef3c7",
     tagColor: "#b45309",
@@ -34,9 +31,6 @@ const ROUTE_THEMES = [
     defaultNote: "Kiểm tra thực địa độ che phủ, hệ thống tưới và ghi chép nhật ký canh tác của hộ.",
   },
   {
-    badge: "L2",
-    badgeBg: "#f43f5e",
-    badgeColor: "#ffffff",
     capsuleBg: "linear-gradient(180deg, #f43f5e 0%, #fb7185 100%)",
     tagBg: "#ffe4e6",
     tagColor: "#be123c",
@@ -44,9 +38,6 @@ const ROUTE_THEMES = [
     defaultNote: "Lấy mẫu quả và đất ngẫu nhiên gửi phòng Lab phân tích tồn dư hóa chất & kim loại nặng.",
   },
   {
-    badge: "L3",
-    badgeBg: "#10b981",
-    badgeColor: "#ffffff",
     capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
     tagBg: "#d1fae5",
     tagColor: "#047857",
@@ -54,9 +45,6 @@ const ROUTE_THEMES = [
     defaultNote: "Tái thẩm định điều kiện cơ sở hạ tầng, kho vật tư và nghiệm thu kết quả đánh giá vùng trồng.",
   },
   {
-    badge: "L4",
-    badgeBg: "#3b82f6",
-    badgeColor: "#ffffff",
     capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
     tagBg: "#dbeafe",
     tagColor: "#1d4ed8",
@@ -91,18 +79,7 @@ export default function InspectionTab() {
               return (
                 <div key={item.id} className="pt-transit-step">
                   <div className="pt-transit-segment">
-                    {/* Cột 1: Badge tròn chặng kiểm tra (L1, L2,...) */}
-                    <div className="pt-transit-badge-col">
-                      <div
-                        className="pt-transit-badge"
-                        style={{ backgroundColor: theme.badgeBg, color: theme.badgeColor }}
-                        aria-hidden="true"
-                      >
-                        {theme.badge}
-                      </div>
-                    </div>
-
-                    {/* Cột 2: Trục Timeline dải capsule dày + 2 chấm trắng nhỏ */}
+                    {/* Trục Timeline dải capsule dày + 2 chấm trắng nhỏ */}
                     <div className="pt-transit-track-col" aria-hidden="true">
                       <div
                         className="pt-transit-capsule"
@@ -113,7 +90,7 @@ export default function InspectionTab() {
                       </div>
                     </div>
 
-                    {/* Cột 3: Khối nội dung màu sáng thanh lịch */}
+                    {/* Khối nội dung màu sáng thanh lịch */}
                     <div className="pt-transit-content">
                       <div className="pt-transit-head">
                         <h3 className="pt-transit-title" style={{ color: theme.titleColor }}>
@@ -138,7 +115,6 @@ export default function InspectionTab() {
                   {/* Đoạn nối chuyển tiếp giữa 2 chặng (Dotted line với các dấu chấm bình thường) */}
                   {!isLast && (
                     <div className="pt-transit-transfer" aria-hidden="true">
-                      <div className="pt-transit-transfer-empty" />
                       <div className="pt-transit-transfer-track">
                         <div className="pt-transit-mini-dot" />
                         <div className="pt-transit-mini-dot" />
