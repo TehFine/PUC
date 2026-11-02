@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { Camera, ChevronRight, X } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import { useResource } from "@/hooks/use-resource";
 import { ApiError, api } from "@/lib/api-client";
@@ -24,6 +24,8 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
   const [detail, setDetail] = useState("");
   const [gpsLocation, setGpsLocation] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoFileName, setPhotoFileName] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,16 +66,27 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
       setError("Vui lòng chọn hoặc nhập mã thửa đất.");
       return;
     }
+    if (!photoUrl) {
+      setError("Bắt buộc phải chụp hoặc tải lên ít nhất 1 ảnh hiện trường vườn trước khi lưu.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const finalDetail = [detail.trim(), gpsLocation].filter(Boolean).join(" · ");
-      await api.post("/portal/journal", {
+      const created = await api.post<PortalJournalEntry>("/portal/journal", {
         entryOn,
         plotCode: finalPlot,
         activity,
         detail: finalDetail || undefined,
       });
+      if (created?.id && photoUrl && typeof window !== "undefined") {
+        try {
+          localStorage.setItem(`journal_photo_${created.id}`, photoUrl);
+        } catch {
+          // Bỏ qua nếu đầy quota local storage
+        }
+      }
       onDone();
     } catch (err) {
       setError(errorText(err));
@@ -172,12 +185,78 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
         </button>
       </div>
 
+      {/* Ô tải ảnh hiện trường bắt buộc */}
+      <div className="pt-journal-photo-field">
+        <div className="pt-journal-photo-header">
+          <label className="pt-journal-photo-label" htmlFor="pj-photo-input">
+            Ảnh chụp hiện trường vườn
+          </label>
+          <span className="pt-journal-photo-required">* Bắt buộc</span>
+        </div>
+
+        {photoUrl ? (
+          <div className="pt-photo-preview-wrap">
+            <img src={photoUrl} alt="Xem trước ảnh hiện trường" className="pt-photo-preview-img" />
+            <div className="pt-photo-preview-bar">
+              <span>{photoFileName || "Ảnh hiện trường đã chọn"}</span>
+              <span>✓ Đã đính kèm</span>
+            </div>
+            <button
+              type="button"
+              className="pt-photo-remove-btn"
+              onClick={() => {
+                setPhotoUrl(null);
+                setPhotoFileName("");
+              }}
+              title="Xóa và chụp lại ảnh khác"
+              aria-label="Xóa ảnh hiện trường"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ) : (
+          <label className="pt-photo-dropzone" htmlFor="pj-photo-input">
+            <input
+              id="pj-photo-input"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 10 * 1024 * 1024) {
+                  setError("Dung lượng ảnh không được vượt quá 10MB.");
+                  return;
+                }
+                setPhotoFileName(file.name);
+                const reader = new FileReader();
+                reader.onload = () => {
+                  setPhotoUrl(reader.result as string);
+                  setError(null);
+                };
+                reader.readAsDataURL(file);
+              }}
+            />
+            <div className="pt-photo-dropzone-icon">
+              <Camera size={22} aria-hidden="true" />
+            </div>
+            <span className="pt-photo-dropzone-title">Chụp ảnh hoặc Tải ảnh hiện trường</span>
+            <span className="pt-photo-dropzone-desc">Bấm để mở máy ảnh hoặc chọn ảnh thực tế tại vườn</span>
+          </label>
+        )}
+      </div>
+
       {error && <p className="pt-form-error" role="alert">{error}</p>}
       <div className="pt-form-actions">
         <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose}>
           Hủy
         </button>
-        <button type="submit" className="pt-btn pt-btn-primary" disabled={saving || !effectivePlot.trim()}>
+        <button
+          type="submit"
+          className="pt-btn pt-btn-primary"
+          disabled={saving || !effectivePlot.trim() || !photoUrl}
+          title={!photoUrl ? "Vui lòng chụp ảnh hiện trường trước khi lưu" : undefined}
+        >
           {saving ? "Đang lưu…" : "Lưu nhật ký"}
         </button>
       </div>
@@ -318,7 +397,21 @@ const VIETGAP_RULES: VietgapRule[] = [
   },
 ];
 
+function getJournalPhoto(entry: PortalJournalEntry): string | null {
+  if (typeof window !== "undefined") {
+    const saved = localStorage.getItem(`journal_photo_${entry.id}`);
+    if (saved) return saved;
+  }
+  if (!entry.hasPhoto) return null;
+  const act = (entry.activity || "").toLowerCase();
+  if (act.includes("phun")) return "/landing/news-protection.jpg";
+  if (act.includes("cắt") || act.includes("tưới")) return "/landing/news-field-visit.jpg";
+  if (act.includes("bón") || act.includes("tỉa")) return "/landing/durian-tree.jpg";
+  return "/landing/durian-landscape-real.jpg";
+}
+
 function JournalDetailModal({ entry, onClose }: { entry: PortalJournalEntry; onClose: () => void }) {
+  const photoSrc = getJournalPhoto(entry);
   const hasGps = entry.detail?.includes("GPS:");
   let cleanDetail = entry.detail || "";
   let gpsText = "";
@@ -380,6 +473,26 @@ function JournalDetailModal({ entry, onClose }: { entry: PortalJournalEntry; onC
           </div>
         </div>
       )}
+
+      {/* Ảnh chụp hiện trường minh chứng thực tế */}
+      <div className="pt-detail-section">
+        <div className="pt-detail-section-header">
+          <h4 className="pt-detail-section-title">Ảnh chụp hiện trường vườn</h4>
+          {entry.hasPhoto && <span className="pt-detail-photo-tag">✓ Đã xác thực thực địa</span>}
+        </div>
+        {photoSrc ? (
+          <div className="pt-detail-photo-frame">
+            <img src={photoSrc} alt={`Hiện trường ${entry.activity}`} className="pt-detail-photo-img" />
+            <div className="pt-detail-photo-overlay">
+              <span>Thửa {entry.plotCode} · Ngày {formatDate(entry.entryOn)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="pt-detail-no-photo">
+            <span>Chưa có ảnh đính kèm cho lần ghi chép này.</span>
+          </div>
+        )}
+      </div>
 
       <div className="pt-detail-section">
         <h4 className="pt-detail-section-title">Nội dung công việc & vật tư sử dụng</h4>
