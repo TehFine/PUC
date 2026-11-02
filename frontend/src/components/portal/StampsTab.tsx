@@ -670,10 +670,10 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .decl-add-btn {
           flex-shrink: 0;
           white-space: nowrap;
-          padding: 8px 16px;
+          padding: 8px 18px;
           font-size: 13px;
           font-weight: 700;
-          border-radius: 18px;
+          border-radius: 9999px !important;
           border: none !important;
           outline: none !important;
           background: #e05326 !important;
@@ -868,8 +868,9 @@ export default function StampsTab({ overview, plots = [] }: Props) {
             font-size: 12px;
           }
           .decl-add-btn {
-            padding: 6px 12px;
-            font-size: 12px;
+            padding: 7px 15px;
+            font-size: 12.5px;
+            border-radius: 9999px !important;
           }
           .portal-form-grid-2,
           .portal-form-grid-3 {

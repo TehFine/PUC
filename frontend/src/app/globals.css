@@ -402,7 +402,13 @@ body {
   background: #e05326 !important;
   border: none !important;
   color: #ffffff !important;
+  border-radius: 9999px !important;
   box-shadow: 0 4px 14px rgba(224, 83, 38, 0.28);
+}
+
+.header-actions .btn,
+.news-header-actions .btn {
+  border-radius: 9999px !important;
 }
 
 .btn-primary:hover:not(:disabled) {
