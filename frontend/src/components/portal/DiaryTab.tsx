@@ -88,6 +88,7 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
           <input
             id="pj-date"
             type="date"
+            className="pt-input-date"
             max={todayIso()}
             value={entryOn}
             onChange={(e) => setEntryOn(e.target.value)}
@@ -219,7 +220,15 @@ function SprayForm({ plotsHint, onDone, onClose }: { plotsHint: string; onDone: 
   return (
     <form className="pt-form" onSubmit={submit}>
       <Field label="Ngày phun" htmlFor="ps-date">
-        <input id="ps-date" type="date" max={todayIso()} value={sprayedOn} onChange={(e) => setSprayedOn(e.target.value)} required />
+        <input
+          id="ps-date"
+          type="date"
+          className="pt-input-date"
+          max={todayIso()}
+          value={sprayedOn}
+          onChange={(e) => setSprayedOn(e.target.value)}
+          required
+        />
       </Field>
       <Field label="Loại thuốc" htmlFor="ps-pesticide">
         <select id="ps-pesticide" value={pesticideId} onChange={(e) => setPesticideId(e.target.value)} required>
