@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
+import { attachmentUrlSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 
 @Injectable()
@@ -12,7 +13,9 @@ export class JournalService extends BaseCrudService {
       label: "Nhật ký canh tác",
       table: "journal_entries",
       fields: `t.id, t.entry_on, t.household_id, h.name AS household_name, t.plot_code,
-      t.activity, t.detail, t.recorder, t.has_photo`,
+      t.activity, t.detail, t.recorder, t.has_photo,
+      ${attachmentUrlSql("t.photo_id")} AS photo_url,
+      t.latitude, t.longitude`,
       from: `journal_entries t JOIN households h ON h.id = t.household_id`,
       orderBy: "t.entry_on DESC, t.id DESC",
       search: ["h.name", "t.plot_code", "t.activity", "t.detail"],

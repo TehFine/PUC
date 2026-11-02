@@ -1,12 +1,11 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
+import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService } from "../../common/crud/base-crud.service";
+import { badRequest, notFound } from "../../common/errors/app.exception";
+import { camelRow, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
-import type { GenerateItemsDto } from "./harvest.dto";
-
-const toCamel = (key: string) => key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-const camelRows = <T = Record<string, unknown>>(rows: Record<string, unknown>[]): T[] =>
-  rows.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [toCamel(key), value])) as T);
+import type { GenerateItemsDto, UpsertContributionDto } from "./harvest.dto";
 
 @Injectable()
 export class HarvestService extends BaseCrudService {
@@ -32,7 +31,7 @@ export class HarvestService extends BaseCrudService {
   async getItems(lotId: number) {
     const lot = await this.db.query("SELECT id, code FROM harvest_lots WHERE id = $1", [lotId]);
     if (lot.rowCount === 0) {
-      throw new NotFoundException(`Không tìm thấy lô hàng với ID ${lotId}`);
+      throw notFound(`Không tìm thấy lô hàng với ID ${lotId}`);
     }
 
     const res = await this.db.query(
@@ -46,20 +45,19 @@ export class HarvestService extends BaseCrudService {
   }
 
   /** Tự động sinh hàng loạt dải tem truy xuất nguồn gốc con (quả hoặc thùng) */
-  async generateItems(lotId: number, dto: GenerateItemsDto) {
+  async generateItems(lotId: number, dto: GenerateItemsDto, user: AuthUser, ip?: string) {
     const lotRes = await this.db.query<{ id: number; code: string }>(
       "SELECT id, code FROM harvest_lots WHERE id = $1",
       [lotId],
     );
     if (lotRes.rowCount === 0) {
-      throw new NotFoundException(`Không tìm thấy lô hàng với ID ${lotId}`);
+      throw notFound(`Không tìm thấy lô hàng với ID ${lotId}`);
     }
     const lot = lotRes.rows[0];
 
     const prefix = dto.itemType === "fruit" ? "Q" : "T";
     const padLen = dto.itemType === "fruit" ? 4 : 3;
 
-    // Tìm số thứ tự lớn nhất hiện tại của loại tem này trong lô
     const maxRes = await this.db.query<{ serial_code: string }>(
       `SELECT serial_code FROM harvest_items
        WHERE lot_id = $1 AND item_type = $2
@@ -105,6 +103,100 @@ export class HarvestService extends BaseCrudService {
       client.release();
     }
 
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Sinh tem truy xuất",
+        object: `${this.config.label} #${lotId}`,
+        detail: `${createdItems.length} tem (${dto.itemType})`,
+      },
+    );
+
     return createdItems;
+  }
+
+  async listContributions(lotId: number) {
+    const lot = await this.db.query("SELECT 1 FROM harvest_lots WHERE id = $1", [lotId]);
+    if (lot.rowCount === 0) throw notFound("Không tìm thấy lô hàng.");
+
+    const { rows } = await this.db.query(
+      `SELECT hc.id, hc.lot_id, hc.household_id, h.code AS household_code, h.name AS household_name,
+              v.name AS village_name, h.phone, hc.weight_kg::float8 AS weight_kg, hc.created_at
+       FROM harvest_contributions hc
+       JOIN households h ON h.id = hc.household_id
+       JOIN villages v ON v.id = h.village_id
+       WHERE hc.lot_id = $1
+       ORDER BY hc.weight_kg DESC, hc.id ASC`,
+      [lotId],
+    );
+    return { data: camelRows(rows) };
+  }
+
+  async upsertContribution(lotId: number, dto: UpsertContributionDto, user: AuthUser, ip?: string) {
+    const lot = await this.db.query("SELECT 1 FROM harvest_lots WHERE id = $1", [lotId]);
+    if (lot.rowCount === 0) throw notFound("Không tìm thấy lô hàng.");
+
+    const household = await this.db.query("SELECT 1 FROM households WHERE id = $1", [dto.householdId]);
+    if (household.rowCount === 0) throw badRequest("Hộ nông dân không tồn tại.");
+
+    const { rows } = await this.db.query<{ id: number }>(
+      `INSERT INTO harvest_contributions (lot_id, household_id, weight_kg)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (lot_id, household_id) DO UPDATE SET weight_kg = EXCLUDED.weight_kg
+       RETURNING id`,
+      [lotId, dto.householdId, dto.weightKg],
+    );
+
+    await this.db.query(
+      `UPDATE harvest_lots
+       SET household_count = (SELECT count(*)::int FROM harvest_contributions WHERE lot_id = $1)
+       WHERE id = $1`,
+      [lotId],
+    );
+
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Ghi đóng góp lô thu hoạch",
+        object: `${this.config.label} #${lotId}`,
+        detail: `Hộ #${dto.householdId}: ${dto.weightKg} kg`,
+      },
+    );
+
+    const saved = await this.db.query(
+      `SELECT hc.id, hc.lot_id, hc.household_id, h.code AS household_code, h.name AS household_name,
+              v.name AS village_name, h.phone, hc.weight_kg::float8 AS weight_kg, hc.created_at
+       FROM harvest_contributions hc
+       JOIN households h ON h.id = hc.household_id
+       JOIN villages v ON v.id = h.village_id
+       WHERE hc.id = $1`,
+      [rows[0].id],
+    );
+    return camelRow(saved.rows[0]);
+  }
+
+  async removeContribution(lotId: number, contributionId: number, user: AuthUser, ip?: string) {
+    const deleted = await this.db.query(
+      "DELETE FROM harvest_contributions WHERE id = $1 AND lot_id = $2 RETURNING id",
+      [contributionId, lotId],
+    );
+    if (deleted.rowCount === 0) throw notFound("Không tìm thấy đóng góp này.");
+
+    await this.db.query(
+      `UPDATE harvest_lots
+       SET household_count = (SELECT count(*)::int FROM harvest_contributions WHERE lot_id = $1)
+       WHERE id = $1`,
+      [lotId],
+    );
+
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Xóa đóng góp lô thu hoạch",
+        object: `${this.config.label} #${lotId}`,
+        detail: `Đóng góp #${contributionId}`,
+      },
+    );
+    return { ok: true };
   }
 }

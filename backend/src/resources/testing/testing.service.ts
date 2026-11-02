@@ -1,11 +1,16 @@
 import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
-import { BaseCrudService } from "../../common/crud/base-crud.service";
+import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { DatabaseService } from "../../database/database.service";
+import { NotificationsService } from "../../notifications/notifications.service";
 
 @Injectable()
 export class TestingService extends BaseCrudService {
-  constructor(db: DatabaseService, audit: AuditService) {
+  constructor(
+    db: DatabaseService,
+    audit: AuditService,
+    private readonly notifications: NotificationsService,
+  ) {
     super(db, audit, {
       resource: "testing",
       label: "Kết quả kiểm nghiệm",
@@ -17,5 +22,21 @@ export class TestingService extends BaseCrudService {
       search: ["t.code", "h.name", "t.plot_code", "t.lab"],
       filters: { householdId: "t.household_id", result: "t.result" },
     });
+  }
+
+  protected override prepare(input: Record<string, unknown>, context: WriteContext) {
+    return { ...input, _method: context.method };
+  }
+
+  protected override async afterWrite(_id: number, input: Record<string, unknown>) {
+    if (input._method === "POST" && input.householdId) {
+      const passed = input.result === "pass";
+      await this.notifications.notifyHousehold(Number(input.householdId), {
+        kind: "lab",
+        title: `Kết quả kiểm nghiệm mẫu ${String(input.code)}: ${passed ? "Đạt" : "Không đạt"}`,
+        body: `Thửa ${String(input.plotCode)} – Đơn vị: ${String(input.lab)}`,
+        link: "/portal?tab=inspection",
+      });
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsIn } from "class-validator";
-import { IsoDate, OptionalField, OptionalText, Text } from "../../common/validation/fields";
+import { IsIn, IsOptional } from "class-validator";
+import { IsoDate, OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateViolationDto {
   @IsIn(["critical", "warning"])
@@ -9,8 +9,12 @@ export class CreateViolationDto {
   @Text(300)
   title!: string;
 
-  @Text(200)
-  householdLabel!: string;
+  @OptionalText(200)
+  householdLabel?: string;
+
+  @IsOptional()
+  @RecordId()
+  householdId?: number | null;
 
   @IsoDate()
   detectedOn!: string;
@@ -27,3 +31,8 @@ export class CreateViolationDto {
 }
 
 export class UpdateViolationDto extends PartialType(CreateViolationDto) {}
+
+export class ResolveViolationDto {
+  @Text(2000)
+  resolutionNotes!: string;
+}

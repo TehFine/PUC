@@ -1,5 +1,5 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsBoolean, IsInt, IsOptional, IsPositive } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsOptional, IsPositive, Matches } from "class-validator";
 import { Count, IsoDate, OptionalField, OptionalText, Text } from "../../common/validation/fields";
 
 export class CreateTrainingCourseDto {
@@ -10,11 +10,22 @@ export class CreateTrainingCourseDto {
   @IsoDate()
   heldOn?: string | null;
 
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: "Giờ bắt đầu phải có dạng HH:MM." })
+  startsAt?: string | null;
+
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: "Giờ kết thúc phải có dạng HH:MM." })
+  endsAt?: string | null;
+
   @OptionalText(200)
   location?: string | null;
 
   @OptionalText(100)
   trainer?: string | null;
+
+  @OptionalText(2000)
+  description?: string | null;
 
   @OptionalField()
   @Count()
@@ -30,3 +41,8 @@ export class CreateTrainingCourseDto {
 }
 
 export class UpdateTrainingCourseDto extends PartialType(CreateTrainingCourseDto) {}
+
+export class UpdateRegistrationStatusDto {
+  @IsIn(["registered", "attended", "absent", "cancelled"])
+  status!: "registered" | "attended" | "absent" | "cancelled";
+}

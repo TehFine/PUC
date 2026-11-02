@@ -16,6 +16,12 @@ import { AccountsModule } from "./accounts/accounts.module";
 import { AuditLogModule } from "./audit-log/audit-log.module";
 import { EnterprisesModule } from "./enterprises/enterprises.module";
 import { ContractsModule } from "./contracts/contracts.module";
+import { FertilizersModule } from "./fertilizers/fertilizers.module";
+import { HarvestDeclarationsModule } from "./harvest-declarations/harvest-declarations.module";
+import { StampsModule } from "./stamps/stamps.module";
+import { NewsModule } from "./news/news.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
+import { ReportsModule } from "./reports/reports.module";
 
 /** Các nhóm dữ liệu nghiệp vụ (mỗi nhóm một module: controller + service + DTO). */
 @Module({
@@ -37,6 +43,12 @@ import { ContractsModule } from "./contracts/contracts.module";
     AuditLogModule,
     EnterprisesModule,
     ContractsModule,
+    FertilizersModule,
+    HarvestDeclarationsModule,
+    StampsModule,
+    NewsModule,
+    DashboardModule,
+    ReportsModule,
   ],
 })
 export class ResourcesModule {}

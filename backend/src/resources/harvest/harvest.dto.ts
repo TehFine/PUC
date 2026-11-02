@@ -1,6 +1,6 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsIn } from "class-validator";
-import { Count, IsoDate, NonNegative, OptionalField, OptionalText, Text } from "../../common/validation/fields";
+import { IsIn, IsInt, IsNumber, IsPositive, Max, Min } from "class-validator";
+import { Count, IsoDate, NonNegative, OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateHarvestLotDto {
   @Text(40)
@@ -29,9 +29,11 @@ export class CreateHarvestLotDto {
   status!: "exported" | "delivered" | "in_transit" | "sampling";
 
   @OptionalField()
+  @RecordId()
   enterpriseId?: number;
 
   @OptionalField()
+  @RecordId()
   contractId?: number;
 
   @OptionalText(50)
@@ -63,6 +65,7 @@ export class CreateHarvestLotDto {
   vehiclePlate?: string;
 
   @OptionalField()
+  @IsNumber({ allowNaN: false, allowInfinity: false })
   temperatureC?: number;
 
   @OptionalText(50)
@@ -75,15 +78,31 @@ export class CreateHarvestLotDto {
 export class UpdateHarvestLotDto extends PartialType(CreateHarvestLotDto) {}
 
 export class GenerateItemsDto {
-  @Count()
+  @IsInt()
+  @Min(1)
+  @Max(2000)
   count!: number;
 
   @IsIn(["fruit", "box"])
   itemType!: "fruit" | "box";
 
   @OptionalField()
+  @IsIn(["A", "B", "C"])
   grade?: "A" | "B" | "C";
 
   @OptionalField()
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @IsPositive()
+  @Max(1000)
   weightKg?: number;
+}
+
+export class UpsertContributionDto {
+  @RecordId()
+  householdId!: number;
+
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @IsPositive()
+  @Max(500_000)
+  weightKg!: number;
 }

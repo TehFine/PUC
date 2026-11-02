@@ -1,21 +1,68 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Ip, Param, Post } from "@nestjs/common";
+import type { AuthUser } from "../../auth/auth-user";
+import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { CrudController } from "../../common/crud/crud-controller.factory";
-import { CreateHarvestLotDto, GenerateItemsDto, UpdateHarvestLotDto } from "./harvest.dto";
+import { ParseRecordIdPipe, strictPipe } from "../../common/pipes/validation.pipes";
+import {
+  CreateHarvestLotDto,
+  GenerateItemsDto,
+  UpdateHarvestLotDto,
+  UpsertContributionDto,
+} from "./harvest.dto";
 import { HarvestService } from "./harvest.service";
 
 @Controller("harvest")
-export class HarvestController extends CrudController("harvest", CreateHarvestLotDto, UpdateHarvestLotDto) {
+export class HarvestController extends CrudController(
+  "harvest",
+  CreateHarvestLotDto,
+  UpdateHarvestLotDto,
+) {
   constructor(private readonly harvestService: HarvestService) {
     super(harvestService);
   }
 
   @Get(":id/items")
-  async getItems(@Param("id", ParseIntPipe) id: number) {
+  @Authorize("harvest", "read")
+  async getItems(@Param("id", ParseRecordIdPipe) id: number) {
     return { data: await this.harvestService.getItems(id) };
   }
 
   @Post(":id/generate-items")
-  async generateItems(@Param("id", ParseIntPipe) id: number, @Body() dto: GenerateItemsDto) {
-    return { data: await this.harvestService.generateItems(id, dto) };
+  @Authorize("harvest", "update")
+  async generateItems(
+    @Param("id", ParseRecordIdPipe) id: number,
+    @Body(strictPipe(GenerateItemsDto)) dto: GenerateItemsDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return { data: await this.harvestService.generateItems(id, dto, user, ip) };
+  }
+
+  @Get(":id/contributions")
+  @Authorize("harvest", "read")
+  listContributions(@Param("id", ParseRecordIdPipe) id: number) {
+    return this.harvestService.listContributions(id);
+  }
+
+  @Post(":id/contributions")
+  @Authorize("harvest", "update")
+  upsertContribution(
+    @Param("id", ParseRecordIdPipe) id: number,
+    @Body(strictPipe(UpsertContributionDto)) dto: UpsertContributionDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.harvestService.upsertContribution(id, dto, user, ip);
+  }
+
+  @Delete(":id/contributions/:cid")
+  @Authorize("harvest", "update")
+  removeContribution(
+    @Param("id", ParseRecordIdPipe) id: number,
+    @Param("cid", ParseRecordIdPipe) cid: number,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.harvestService.removeContribution(id, cid, user, ip);
   }
 }

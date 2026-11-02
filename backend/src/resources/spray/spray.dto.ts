@@ -12,6 +12,9 @@ export class CreateSprayDto {
   @RecordId()
   pesticideId!: number;
 
+  @OptionalText(30)
+  plotCode?: string | null;
+
   @OptionalText(200)
   source?: string | null;
 
@@ -25,8 +28,9 @@ export class CreateSprayDto {
   @Count()
   isolationDays?: number;
 
+  @OptionalField()
   @IsIn(["pass", "exceeded"])
-  mrlStatus!: "pass" | "exceeded";
+  mrlStatus?: "pass" | "exceeded";
 }
 
 export class UpdateSprayDto extends PartialType(CreateSprayDto) {}
