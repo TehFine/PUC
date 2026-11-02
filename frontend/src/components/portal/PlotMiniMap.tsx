@@ -49,11 +49,16 @@ export default function PlotMiniMap({ plot, onOpen }: Props) {
 
       mapRef.current = map;
 
-      // Lớp bản đồ giao thông đường xá & địa hình Google Maps sáng & sắc nét
-      L.tileLayer("https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
-        maxZoom: 20,
-        subdomains: ["0", "1", "2", "3"],
-      }).addTo(map);
+      // Lớp vệ tinh hybrid độ nét cao Esri World Imagery (siêu nét, ổn định 100%)
+      const satBase = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { maxNativeZoom: 18, maxZoom: 20, attribution: "Esri" }
+      );
+      const satLabels = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        { maxNativeZoom: 18, maxZoom: 20 }
+      );
+      L.layerGroup([satBase, satLabels]).addTo(map);
 
       // Vẽ ranh giới polygon nếu có
       let polygonLayer: Leaflet.GeoJSON | null = null;
@@ -91,10 +96,23 @@ export default function PlotMiniMap({ plot, onOpen }: Props) {
 
       L.marker([lat, lng], { icon: arrowIcon, interactive: false }).addTo(map);
 
+      let lastW = 0;
+      let lastH = 0;
+      let roTimer: ReturnType<typeof setTimeout> | null = null;
       let ro: ResizeObserver | null = null;
       if (typeof ResizeObserver !== "undefined" && containerRef.current) {
-        ro = new ResizeObserver(() => {
-          if (!disposed && map) map.invalidateSize();
+        ro = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            const { width, height } = entry.contentRect;
+            if (Math.abs(width - lastW) > 6 || Math.abs(height - lastH) > 6) {
+              lastW = width;
+              lastH = height;
+              if (roTimer) clearTimeout(roTimer);
+              roTimer = setTimeout(() => {
+                if (!disposed && map) map.invalidateSize({ pan: false });
+              }, 120);
+            }
+          }
         });
         ro.observe(containerRef.current);
       }
@@ -102,13 +120,14 @@ export default function PlotMiniMap({ plot, onOpen }: Props) {
       // Đảm bảo kích thước chuẩn
       const timer = setTimeout(() => {
         if (!disposed && map) {
-          map.invalidateSize();
+          map.invalidateSize({ pan: false });
           setLoaded(true);
         }
-      }, 120);
+      }, 100);
 
       return () => {
         clearTimeout(timer);
+        if (roTimer) clearTimeout(roTimer);
         if (ro) ro.disconnect();
       };
     };

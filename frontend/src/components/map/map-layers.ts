@@ -7,7 +7,7 @@ const DARK_ATTRIBUTION = "Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap
 
 export interface BaseLayers {
   map: Leaflet.LayerGroup;
-  satellite: Leaflet.TileLayer;
+  satellite: Leaflet.Layer;
 }
 
 export function createBaseLayers(L: typeof import("leaflet")): BaseLayers {
@@ -20,12 +20,15 @@ export function createBaseLayers(L: typeof import("leaflet")): BaseLayers {
     `${ESRI}/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`,
     { attribution: DARK_ATTRIBUTION, maxNativeZoom: 16, maxZoom: 20 },
   );
-  const satellite = L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, {
+  const satBase = L.tileLayer(`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, {
     attribution: "Tiles © Esri — Esri, Maxar, Earthstar Geographics",
-    // Esri không có ảnh vệ tinh chi tiết hơn mức này ở khu vực nông thôn: phóng to ảnh cũ thay vì xin tile không tồn tại
-    // (tránh lỗi "Map data not yet available").
-    maxNativeZoom: 17,
-    maxZoom: 19,
+    maxNativeZoom: 18,
+    maxZoom: 20,
   });
+  const satLabels = L.tileLayer(
+    `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`,
+    { maxNativeZoom: 18, maxZoom: 20 },
+  );
+  const satellite = L.layerGroup([satBase, satLabels]);
   return { map: L.layerGroup([darkBase, darkReference]), satellite };
 }

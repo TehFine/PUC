@@ -40,8 +40,8 @@ const SOURCE_LABEL = {
 export default function PlotMapModal({ plot, householdName, onClose, onOpenSignboard }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
-  const streetLayerRef = useRef<Leaflet.TileLayer | null>(null);
-  const satLayerRef = useRef<Leaflet.TileLayer | null>(null);
+  const streetLayerRef = useRef<Leaflet.Layer | null>(null);
+  const satLayerRef = useRef<Leaflet.Layer | null>(null);
   const polygonLayerRef = useRef<Leaflet.GeoJSON | null>(null);
 
   const [layerMode, setLayerMode] = useState<LayerMode>("satellite");
@@ -78,6 +78,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     if (!mounted) return;
     let disposed = false;
     let ro: ResizeObserver | null = null;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
     const init = async () => {
       try {
@@ -108,21 +109,38 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
         mapRef.current = map;
 
-        // 1. Lớp bản đồ đường xá & địa hình Google Maps (chi tiết đầy đủ buôn làng, đường liên thôn Krông Búk)
+        // 1. Lớp vệ tinh hybrid độ nét cao Esri World Imagery (siêu nét, hiển thị ranh giới & nhãn buôn thôn chuẩn xác, không bị chặn)
+        const satBase = L.tileLayer(
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          {
+            maxNativeZoom: 18,
+            maxZoom: 20,
+            attribution: "Esri, Maxar, Earthstar Geographics",
+          },
+        );
+        const satLabels = L.tileLayer(
+          "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+          {
+            maxNativeZoom: 18,
+            maxZoom: 20,
+          },
+        );
+        const satellite = L.layerGroup([satBase, satLabels]);
+        satLayerRef.current = satellite;
+
+        // 2. Lớp bản đồ giao thông đường xá & địa hình Carto Voyager (rõ tên thôn buôn, liên xã Krông Búk)
         const streets = L.tileLayer(
-          "https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-          { subdomains: ["0", "1", "2", "3"], maxZoom: 20 },
+          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          {
+            subdomains: "abcd",
+            maxNativeZoom: 18,
+            maxZoom: 20,
+            attribution: "© OpenStreetMap, © CARTO",
+          },
         );
         streetLayerRef.current = streets;
 
-        // 2. Lớp vệ tinh độ nét cao Google Hybrid (rõ từng tán cây sầu riêng + tên đường buôn)
-        const satellite = L.tileLayer(
-          "https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-          { subdomains: ["0", "1", "2", "3"], maxZoom: 20 },
-        );
-        satLayerRef.current = satellite;
-
-        // Mặc định vệ tinh tràn viền nhìn rõ từng cây sầu riêng
+        // Mặc định nạp lớp theo layerMode
         if (layerMode === "satellite") {
           satellite.addTo(map);
         } else {
@@ -186,29 +204,35 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           </div>
         `);
 
-        // Giữ map responsive theo kích thước container
+        // Giữ map responsive an toàn, tránh vòng lặp resize gây giật lag
+        let lastW = 0;
+        let lastH = 0;
+
         if (typeof ResizeObserver !== "undefined" && containerRef.current) {
-          ro = new ResizeObserver(() => {
-            if (mapRef.current) {
-              mapRef.current.invalidateSize();
+          ro = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+              const { width, height } = entry.contentRect;
+              if (Math.abs(width - lastW) > 6 || Math.abs(height - lastH) > 6) {
+                lastW = width;
+                lastH = height;
+                if (resizeTimer) clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => {
+                  if (!disposed && mapRef.current) {
+                    mapRef.current.invalidateSize({ pan: false });
+                  }
+                }, 120);
+              }
             }
           });
           ro.observe(containerRef.current);
         }
 
-        requestAnimationFrame(() => {
-          if (!disposed && mapRef.current) {
-            mapRef.current.invalidateSize();
-            setReady(true);
-          }
-        });
-
         setTimeout(() => {
           if (!disposed && mapRef.current) {
-            mapRef.current.invalidateSize();
+            mapRef.current.invalidateSize({ pan: false });
             setReady(true);
           }
-        }, 150);
+        }, 100);
       } catch (err) {
         console.error("PlotMapModal init error:", err);
         setReady(true);
@@ -219,6 +243,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
     return () => {
       disposed = true;
+      if (resizeTimer) clearTimeout(resizeTimer);
       ro?.disconnect();
       if (mapRef.current) {
         mapRef.current.remove();
@@ -230,15 +255,20 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     };
   }, [mounted, lat, lng, plot.code, plot.geometryJson, plot.areaHa, plot.variety, householdName]);
 
-  // Đổi lớp bản đồ
+  // Đổi lớp bản đồ mượt mà, chống lặp layer
   const switchLayer = (mode: LayerMode) => {
-    if (!mapRef.current || !streetLayerRef.current || !satLayerRef.current) return;
+    if (mode === layerMode) return;
+    const map = mapRef.current;
+    const street = streetLayerRef.current;
+    const sat = satLayerRef.current;
+    if (!map || !street || !sat) return;
+
     if (mode === "satellite") {
-      mapRef.current.removeLayer(streetLayerRef.current);
-      satLayerRef.current.addTo(mapRef.current);
+      if (map.hasLayer(street)) map.removeLayer(street);
+      if (!map.hasLayer(sat)) sat.addTo(map);
     } else {
-      mapRef.current.removeLayer(satLayerRef.current);
-      streetLayerRef.current.addTo(mapRef.current);
+      if (map.hasLayer(sat)) map.removeLayer(sat);
+      if (!map.hasLayer(street)) street.addTo(map);
     }
     setLayerMode(mode);
   };
