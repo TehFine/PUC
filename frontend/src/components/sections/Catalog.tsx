@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useResource } from "@/hooks/use-resource";
 import { mapPesticide, mapVariety, mapVillage } from "@/lib/mappers";
-import { DEFAULT_FERTILIZERS } from "@/components/portal/LearnTab";
+import { DEFAULT_FERTILIZERS, DEFAULT_VARIETIES, getVarietyImage } from "@/components/portal/LearnTab";
 
 const statusClass: Record<string, string> = { green: "badge-green", gold: "badge-gold", red: "badge-red" };
 
@@ -143,19 +143,73 @@ export default function Catalog() {
       )}
 
       {tab === "variety" && (
-        <div className="catalog-cards">
-          {varieties.map((v, i) => (
-            <div key={i} className="variety-card">
-              <div className="variety-card-name">{v.name}</div>
-              <div className="variety-card-info">
-                <div><strong>Xuất xứ:</strong> {v.origin}</div>
-                <div><strong>Trọng lượng:</strong> {v.weight}</div>
-                <div><strong>Tuổi cho trái:</strong> {v.year}</div>
-                <div style={{ marginTop: 6, color: "var(--text-muted)", fontSize: 11 }}>{v.desc}</div>
-              </div>
+        <>
+          <div className="filter-bar">
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <input type="text" className="filter-input" placeholder="Tìm tên giống sầu riêng, xuất xứ, đặc tính…" />
             </div>
-          ))}
-        </div>
+            <select className="filter-select">
+              <option>Mọi phân loại</option>
+              <option>Xuất khẩu chủ lực</option>
+              <option>Bản địa chất lượng</option>
+              <option>Nhập khẩu cao cấp</option>
+              <option>Giống mới tiềm năng</option>
+            </select>
+            <button className="btn btn-primary" style={{ marginLeft: "auto" }}>Thêm giống cây</button>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 55, textAlign: "center" }}>Hình ảnh</th>
+                  <th>Tên giống sầu riêng</th>
+                  <th>Phân loại</th>
+                  <th>Xuất xứ</th>
+                  <th>Trọng lượng trái</th>
+                  <th>Thời gian sinh trưởng</th>
+                  <th>Đặc tính cơm & Múi</th>
+                  <th>Năng suất</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {DEFAULT_VARIETIES.map((v) => {
+                  const imgSrc = getVarietyImage(v);
+                  const catLabel =
+                    v.category === "export"
+                      ? "Xuất khẩu chủ lực"
+                      : v.category === "native"
+                      ? "Bản địa chất lượng"
+                      : v.category === "premium"
+                      ? "Nhập khẩu cao cấp"
+                      : "Giống mới";
+                  const badgeType = v.status === "allowed" ? "badge-green" : "badge-gold";
+                  const statusLabel = v.status === "allowed" ? "Đạt chuẩn GACC" : "Khuyến khích";
+
+                  return (
+                    <tr key={v.id}>
+                      <td style={{ textAlign: "center", padding: "6px" }}>
+                        <img
+                          src={imgSrc}
+                          alt={v.name}
+                          style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 8, background: "#f5f3fc" }}
+                        />
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{v.name}</td>
+                      <td><span style={{ fontSize: 12, color: "#047857", fontWeight: 600 }}>{catLabel}</span></td>
+                      <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{v.origin}</td>
+                      <td style={{ fontSize: 12, textAlign: "center", fontWeight: 500 }}>{v.weightRange}</td>
+                      <td style={{ fontSize: 12, textAlign: "center", color: "var(--text-secondary)" }}>{v.harvestYears}</td>
+                      <td style={{ fontSize: 12 }}>{v.fleshColor}, {v.seedRate}</td>
+                      <td style={{ fontSize: 12, textAlign: "center", fontWeight: 600, color: "#2563eb" }}>{v.yieldPerHa}</td>
+                      <td><span className={`badge ${badgeType}`}>{statusLabel}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {tab === "village" && (
