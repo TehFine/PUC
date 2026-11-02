@@ -699,10 +699,6 @@ function PesticideList() {
         {/* Danh sách thẻ thuốc trực quan theo phong cách Ảnh 1 */}
         <div className="pt-pest-list">
           {shown.map((item) => {
-            const status = PESTICIDE_STATUS[item.status];
-            const isAllowed = item.status === "allowed";
-            const isRestricted = item.status === "restricted";
-            const isBanned = item.status === "banned";
             const imgSrc = getPesticideImage(item);
 
             return (
@@ -732,15 +728,7 @@ function PesticideList() {
 
                 {/* Bên phải: Tên thuốc và thông tin */}
                 <div className="pt-pest-card-content">
-                  <div className="pt-pest-card-top-row">
-                    <h3 className="pt-pest-card-name">{item.name}</h3>
-                    <span className={`pt-pest-mini-status pt-pest-status-${item.status}`}>
-                      {isAllowed && <CheckCircle2 size={11} strokeWidth={2.4} aria-hidden="true" />}
-                      {isRestricted && <AlertTriangle size={11} strokeWidth={2.4} aria-hidden="true" />}
-                      {isBanned && <Ban size={11} strokeWidth={2.4} aria-hidden="true" />}
-                      <span>{status.label}</span>
-                    </span>
-                  </div>
+                  <h3 className="pt-pest-card-name">{item.name}</h3>
 
                   <p className="pt-pest-card-sub">
                     Hoạt chất: <strong>{item.activeIngredient}</strong>
@@ -748,16 +736,9 @@ function PesticideList() {
                     {item.manufacturer ? ` · ${item.manufacturer}` : ""}
                   </p>
 
-                  <div className="pt-pest-card-bottom-row">
-                    <div className="pt-pest-card-metric">
-                      <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
-                      <span>Cách ly: <strong>{item.isolationDays != null ? `${item.isolationDays} ngày` : "Không áp dụng"}</strong></span>
-                    </div>
-
-                    <div className="pt-pest-card-btn-pill">
-                      <span>Chi tiết</span>
-                      <ChevronRight size={13} strokeWidth={2.5} aria-hidden="true" />
-                    </div>
+                  <div className="pt-pest-card-metric">
+                    <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
+                    <span>Cách ly: <strong>{item.isolationDays != null ? `${item.isolationDays} ngày` : "Không áp dụng"}</strong></span>
                   </div>
                 </div>
               </article>
