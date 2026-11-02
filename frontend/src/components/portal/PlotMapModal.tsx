@@ -75,126 +75,160 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   const status = PLOT_STATUS[plot.status];
 
   useEffect(() => {
+    if (!mounted) return;
     let disposed = false;
+    let ro: ResizeObserver | null = null;
 
     const init = async () => {
-      const imported = (await import("leaflet")) as unknown as {
-        default?: typeof import("leaflet");
-      };
-      const L = imported.default ?? (imported as unknown as typeof import("leaflet"));
-      if (disposed || !containerRef.current) return;
+      try {
+        const imported = (await import("leaflet")) as unknown as {
+          default?: typeof import("leaflet");
+        };
+        const L = imported.default ?? (imported as unknown as typeof import("leaflet"));
+        if (disposed || !containerRef.current) return;
 
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
+        if (mapRef.current) {
+          mapRef.current.remove();
+          mapRef.current = null;
+        }
+        if (containerRef.current && (containerRef.current as any)._leaflet_id) {
+          delete (containerRef.current as any)._leaflet_id;
+        }
 
-      const map = L.map(containerRef.current, {
-        zoomControl: false, // Tự đặt controls hoặc dùng nút nổi
-        attributionControl: false,
-        preferCanvas: true,
-      }).setView([lat, lng], 17);
+        const map = L.map(containerRef.current, {
+          zoomControl: false, // Tự đặt controls hoặc dùng nút nổi
+          attributionControl: false,
+          preferCanvas: true,
+        }).setView([lat, lng], 17);
 
-      mapRef.current = map;
+        if (disposed) {
+          map.remove();
+          return;
+        }
 
-      // 1. Lớp đường phố Carto Voyager
-      const streets = L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-        { maxZoom: 19, subdomains: "abcd" },
-      );
-      streetLayerRef.current = streets;
+        mapRef.current = map;
 
-      // 2. Lớp vệ tinh Esri World Imagery
-      const satellite = L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        { maxNativeZoom: 18, maxZoom: 20 },
-      );
-      satLayerRef.current = satellite;
+        // 1. Lớp bản đồ đường xá & địa hình Google Maps (chi tiết đầy đủ buôn làng, đường liên thôn Krông Búk)
+        const streets = L.tileLayer(
+          "https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+          { subdomains: ["0", "1", "2", "3"], maxZoom: 20 },
+        );
+        streetLayerRef.current = streets;
 
-      // Mặc định vệ tinh tràn viền nhìn rõ từng cây sầu riêng
-      satellite.addTo(map);
+        // 2. Lớp vệ tinh độ nét cao Google Hybrid (rõ từng tán cây sầu riêng + tên đường buôn)
+        const satellite = L.tileLayer(
+          "https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+          { subdomains: ["0", "1", "2", "3"], maxZoom: 20 },
+        );
+        satLayerRef.current = satellite;
 
-      // 3. Vẽ ranh giới thửa đất nếu có
-      if (plot.geometryJson) {
-        try {
-          const geojson = JSON.parse(plot.geometryJson);
-          const poly = L.geoJSON(geojson, {
-            style: {
-              color: "#10b981",
-              weight: 3.5,
-              opacity: 0.95,
-              fillColor: "#059669",
-              fillOpacity: 0.28,
-            },
-          }).addTo(map);
-          polygonLayerRef.current = poly;
+        // Mặc định vệ tinh tràn viền nhìn rõ từng cây sầu riêng
+        if (layerMode === "satellite") {
+          satellite.addTo(map);
+        } else {
+          streets.addTo(map);
+        }
 
-          poly.bindPopup(`
-            <div style="font-family: inherit; font-size: 13px; line-height: 1.5; color: #0f172a; padding: 2px 0;">
-              <strong style="font-size: 14px; color: #065f46;">Thửa đất ${plot.code}</strong><br/>
-              <span>Chủ hộ: <b>${householdName}</b></span><br/>
-              <span>Diện tích: <b>${plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha</b></span><br/>
-              <span>Giống: <b>${plot.variety || "Sầu riêng"}</b></span>
+        // 3. Vẽ ranh giới thửa đất nếu có
+        if (plot.geometryJson) {
+          try {
+            const geojson = JSON.parse(plot.geometryJson);
+            const poly = L.geoJSON(geojson, {
+              style: {
+                color: "#10b981",
+                weight: 3.5,
+                opacity: 0.95,
+                fillColor: "#059669",
+                fillOpacity: 0.28,
+              },
+            }).addTo(map);
+            polygonLayerRef.current = poly;
+
+            poly.bindPopup(`
+              <div style="font-family: inherit; font-size: 13px; line-height: 1.5; color: #0f172a; padding: 2px 0;">
+                <strong style="font-size: 14px; color: #065f46;">Thửa đất ${plot.code}</strong><br/>
+                <span>Chủ hộ: <b>${householdName}</b></span><br/>
+                <span>Diện tích: <b>${plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha</b></span><br/>
+                <span>Giống: <b>${plot.variety || "Sầu riêng"}</b></span>
+              </div>
+            `);
+
+            const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
+            map.fitBounds(poly.getBounds(), {
+              paddingTopLeft: [isMobile ? 70 : 60, 20],
+              paddingBottomRight: [20, isMobile ? 80 : 60],
+              maxZoom: 18,
+            });
+          } catch {
+            // Bỏ qua lỗi json
+          }
+        }
+
+        // 4. Marker định vị tâm thửa đất với radar xung điện
+        const pinIcon = L.divIcon({
+          className: "pt-mapmodal-pin-wrap",
+          html: `
+            <div class="pt-mapmodal-radar"></div>
+            <div class="pt-mapmodal-pin-core">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#059669" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+              </svg>
             </div>
-          `);
+          `,
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+        });
 
-          const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
-          map.fitBounds(poly.getBounds(), {
-            paddingTopLeft: [isMobile ? 70 : 60, 20],
-            paddingBottomRight: [20, isMobile ? 80 : 60],
-            maxZoom: 18,
-          });
-        } catch {
-          // Bỏ qua lỗi json
-        }
-      }
-
-      // 4. Marker định vị tâm thửa đất với radar xung điện
-      const pinIcon = L.divIcon({
-        className: "pt-mapmodal-pin-wrap",
-        html: `
-          <div class="pt-mapmodal-radar"></div>
-          <div class="pt-mapmodal-pin-core">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="#059669" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-            </svg>
+        L.marker([lat, lng], { icon: pinIcon }).addTo(map).bindPopup(`
+          <div style="font-family: inherit; font-size: 13px; color: #0f172a;">
+            <strong>Vị trí trung tâm thửa đất ${plot.code}</strong><br/>
+            Tọa độ: ${lat.toFixed(5)}, ${lng.toFixed(5)}
           </div>
-        `,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
-      });
+        `);
 
-      L.marker([lat, lng], { icon: pinIcon }).addTo(map).bindPopup(`
-        <div style="font-family: inherit; font-size: 13px; color: #0f172a;">
-          <strong>Vị trí trung tâm thửa đất ${plot.code}</strong><br/>
-          Tọa độ: ${lat.toFixed(5)}, ${lng.toFixed(5)}
-        </div>
-      `);
-
-      setTimeout(() => {
-        if (!disposed && map) {
-          map.invalidateSize();
-          setReady(true);
+        // Giữ map responsive theo kích thước container
+        if (typeof ResizeObserver !== "undefined" && containerRef.current) {
+          ro = new ResizeObserver(() => {
+            if (mapRef.current) {
+              mapRef.current.invalidateSize();
+            }
+          });
+          ro.observe(containerRef.current);
         }
-      }, 150);
+
+        requestAnimationFrame(() => {
+          if (!disposed && mapRef.current) {
+            mapRef.current.invalidateSize();
+            setReady(true);
+          }
+        });
+
+        setTimeout(() => {
+          if (!disposed && mapRef.current) {
+            mapRef.current.invalidateSize();
+            setReady(true);
+          }
+        }, 150);
+      } catch (err) {
+        console.error("PlotMapModal init error:", err);
+        setReady(true);
+      }
     };
 
     void init();
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-
     return () => {
       disposed = true;
-      window.removeEventListener("keydown", handleKeyDown);
+      ro?.disconnect();
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
+      streetLayerRef.current = null;
+      satLayerRef.current = null;
+      polygonLayerRef.current = null;
     };
-  }, [lat, lng, plot, householdName, onClose]);
+  }, [mounted, lat, lng, plot.code, plot.geometryJson, plot.areaHa, plot.variety, householdName]);
 
   // Đổi lớp bản đồ
   const switchLayer = (mode: LayerMode) => {
