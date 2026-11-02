@@ -143,10 +143,6 @@ export default function PortalApp() {
     };
   }, [profileOpen, closeProfile]);
 
-  if (status !== "authenticated" || session?.user.role !== "farmer") {
-    return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
-  }
-
   useEffect(() => {
     document.documentElement.classList.add("pt-html");
     document.body.classList.add("pt-body");
@@ -155,6 +151,10 @@ export default function PortalApp() {
       document.body.classList.remove("pt-body");
     };
   }, []);
+
+  if (status !== "authenticated" || session?.user.role !== "farmer") {
+    return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
+  }
 
   const household = overview?.household;
   const displayName = household?.name || session?.user.fullName || "Hộ thành viên";
