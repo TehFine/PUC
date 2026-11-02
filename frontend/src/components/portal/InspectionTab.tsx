@@ -6,7 +6,8 @@ import { usePortal } from "@/hooks/use-portal";
 import { formatDate } from "@/utils/format";
 import type { PortalLabTest, PortalList, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
-import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
+import { Card, EmptyState, Pill, StateBlock } from "./ui";
+import LabTestCertificateModal from "./LabTestCertificateModal";
 
 function getRelativeScheduleNote(dateStr: string): string {
   if (!dateStr) return "";
@@ -224,111 +225,13 @@ export default function InspectionTab({ onNavigate }: { onNavigate?: (tab: Porta
         )}
       </Card>
 
-      {/* Popup chi tiết kết quả kiểm nghiệm khi bấm vào dòng */}
+      {/* Phiếu kết quả kiểm nghiệm trình bày theo dạng tờ giấy A4 thực tế có chữ ký và mộc đỏ */}
       {selectedTest && (
-        <Sheet
-          title="Kết quả kiểm nghiệm"
+        <LabTestCertificateModal
+          test={selectedTest}
           onClose={() => setSelectedTest(null)}
-        >
-          <LabTestDetailModal
-            test={selectedTest}
-            onClose={() => setSelectedTest(null)}
-          />
-        </Sheet>
+        />
       )}
-    </div>
-  );
-}
-
-/** Popup hiển thị toàn bộ chỉ số xét nghiệm và kết luận đánh giá của mẫu kiểm nghiệm */
-function LabTestDetailModal({
-  test,
-  onClose,
-}: {
-  test: PortalLabTest;
-  onClose: () => void;
-}) {
-  const isPass = test.result === "pass";
-
-  return (
-    <div className="pt-pesticide-modal-body">
-      {/* 1. Header: Mã kiểm nghiệm, Thửa đất & Trạng thái */}
-      <div className="pt-lab-modal-hero">
-        <div className="pt-lab-modal-hero-top">
-          <div>
-            <span className="pt-lab-modal-sub">Mẫu kiểm nghiệm</span>
-            <h3 className="pt-lab-modal-title">
-              {test.code} · Thửa {test.plotCode}
-            </h3>
-          </div>
-          <Pill tone={isPass ? "green" : "red"}>
-            {isPass ? "Đạt chuẩn xuất khẩu" : "Không đạt chuẩn"}
-          </Pill>
-        </div>
-
-        <div className="pt-lab-modal-meta">
-          <span>
-            Ngày lấy mẫu: <strong>{formatDate(test.sampledOn)}</strong>
-          </span>
-          <span>
-            Đơn vị kiểm nghiệm (Lab): <strong>{test.lab}</strong>
-          </span>
-        </div>
-      </div>
-
-      {/* 2. Lưới 4 chỉ số xét nghiệm */}
-      <div className="pt-lab-modal-section">
-        <h4 className="pt-pesticide-modal-section-title">Chỉ số xét nghiệm phân tích</h4>
-        <dl className="pt-test-grid">
-          <div>
-            <dt>Cadimi (Cd)</dt>
-            <dd>{test.cdMgKg} mg/kg</dd>
-            <span className="pt-pesticide-spec-hint">Ngưỡng GACC: ≤ 0.05 mg/kg</span>
-          </div>
-          <div>
-            <dt>Tồn dư hóa chất</dt>
-            <dd>{test.residueMgKg} mg/kg</dd>
-            <span className="pt-pesticide-spec-hint">Chuẩn an toàn VietGAP</span>
-          </div>
-          <div>
-            <dt>Chlorpyrifos</dt>
-            <dd>{test.chlorpyrifosMgKg === null ? "KPH (Đạt chuẩn)" : `${test.chlorpyrifosMgKg} mg/kg`}</dd>
-            <span className="pt-pesticide-spec-hint">Hoạt chất cấm hoàn toàn</span>
-          </div>
-          <div>
-            <dt>Chất cấm Vàng O</dt>
-            <dd>{test.yellowOPositive ? "Dương tính (Cấm)" : "Âm tính (Đạt chuẩn)"}</dd>
-            <span className="pt-pesticide-spec-hint">Tuyệt đối không có</span>
-          </div>
-        </dl>
-      </div>
-
-      {/* 3. Đánh giá & Khuyến nghị kết luận */}
-      <div className={`pt-pesticide-alert-box ${isPass ? "pt-pesticide-alert-allowed" : "pt-pesticide-alert-banned"}`}>
-        <div className="pt-pesticide-alert-content">
-          <strong>
-            {isPass
-              ? "Kết luận: Lô hàng đạt tiêu chuẩn xuất khẩu chính ngạch"
-              : "Cảnh báo: Lô hàng chưa đủ điều kiện xuất khẩu"}
-          </strong>
-          <p>
-            {isPass
-              ? "Mẫu kiểm nghiệm tại thửa đất này đã vượt qua toàn bộ các chỉ tiêu về kim loại nặng và dư lượng thuốc BVTV theo Nghị định thư GACC và tiêu chuẩn VietGAP. Hộ thành viên đủ điều kiện được cấp tem truy xuất nguồn gốc khi thu hoạch."
-              : "Mẫu kiểm nghiệm phát hiện chỉ số chưa đạt ngưỡng cho phép. Bà con cần tạm ngừng thu hoạch tại thửa đất này và thông báo ngay cho cán bộ phụ trách kỹ thuật của HTX để lấy mẫu kiểm tra lại."}
-          </p>
-        </div>
-      </div>
-
-      {/* 4. Nút đóng popup */}
-      <div className="pt-training-modal-actions">
-        <button
-          type="button"
-          className="pt-btn-secondary"
-          onClick={onClose}
-        >
-          Đóng
-        </button>
-      </div>
     </div>
   );
 }
