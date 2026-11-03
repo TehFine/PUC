@@ -18,6 +18,7 @@ import type {
   PortalViolation,
 } from "@/types/portal";
 import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
+import type { PortalAction } from "./PortalSearch";
 import { Card, EmptyState, Field, Pill, Sheet, StateBlock, useSheetClose } from "./ui";
 
 function canDeleteEntry(entry: PortalJournalEntry): boolean {
@@ -712,9 +713,14 @@ function ViolationResponseForm({
   );
 }
 
-export default function DiaryTab() {
-  const [view, setView] = useState<View>("journal");
-  const [form, setForm] = useState<View | null>(null);
+export default function DiaryTab({ initialAction }: { initialAction?: PortalAction } = {}) {
+  // Mở sẵn đúng màn hình khi bà con chọn gợi ý từ ô tìm kiếm
+  const [view, setView] = useState<View>(() =>
+    initialAction === "spray-add" || initialAction === "spray-list" ? "spray" : "journal",
+  );
+  const [form, setForm] = useState<View | null>(() =>
+    initialAction === "journal-add" ? "journal" : initialAction === "spray-add" ? "spray" : null,
+  );
   const [selectedJournal, setSelectedJournal] = useState<PortalJournalEntry | null>(null);
   const [selectedSpray, setSelectedSpray] = useState<PortalSprayRecord | null>(null);
   const [respondingViolation, setRespondingViolation] = useState<PortalViolation | null>(null);

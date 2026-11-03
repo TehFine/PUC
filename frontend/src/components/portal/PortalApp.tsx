@@ -33,6 +33,7 @@ import type { AppNotification, NotificationList, PortalOverview, PortalProfile }
 import dynamic from "next/dynamic";
 import "./portal.css";
 import HomeTab from "./HomeTab";
+import { PortalSearchButton, type PortalAction, type PortalSearchTarget } from "./PortalSearch";
 import RadialNavWheel from "./RadialNavWheel";
 import { BusyButton, InlineError } from "./shared/controls";
 import { SupportFooter, SystemSupportModal } from "./SystemSupport";
@@ -195,10 +196,32 @@ export default function PortalApp() {
 
   const currentTabItem = useMemo(() => TABS.find((t) => t.id === tab) || TABS[0], [tab]);
 
+  // Thao tác được yêu cầu từ ô tìm kiếm (ví dụ mở sẵn biểu mẫu ghi nhật ký). `nonce` tăng mỗi lần chọn
+  // để tab được dựng lại và nhận thao tác mới, kể cả khi đang ở đúng tab đó.
+  const [intent, setIntent] = useState<{ action?: PortalAction; nonce: number }>({ nonce: 0 });
+
   const navigate = useCallback((next: PortalTabId) => {
     setNavWheelOpen(false);
+    // Điều hướng thông thường: bỏ thao tác cũ từ ô tìm kiếm để tab không tự mở lại biểu mẫu
+    setIntent((prev) => (prev.action ? { nonce: prev.nonce } : prev));
     startTransition(() => {
       setTab(next);
+    });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
+  const handleSearchPick = useCallback((target: PortalSearchTarget) => {
+    if (target.kind === "global") {
+      if (target.action === "notifications") setNotifOpen(true);
+      else if (target.action === "profile") setProfileOpen(true);
+      else if (target.action === "password") setPasswordOpen(true);
+      else setSupportOpen(true);
+      return;
+    }
+    setNavWheelOpen(false);
+    setIntent((prev) => ({ action: target.action, nonce: prev.nonce + 1 }));
+    startTransition(() => {
+      setTab(target.tab);
     });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
@@ -326,6 +349,8 @@ export default function PortalApp() {
 
           {/* Cụm Chuông thông báo + Avatar tài khoản */}
           <div className="pt-topbar-profile" style={{ gap: 8 }}>
+            {/* Tìm chức năng (máy tính): gõ bất kỳ chữ nào để được gợi ý đúng tab và thao tác */}
+            <PortalSearchButton id="portal-search-toggle" className="is-desktop" onPick={handleSearchPick} />
             <button
               id="portal-notifications-toggle"
               type="button"
@@ -355,6 +380,8 @@ export default function PortalApp() {
 
           {/* Phần điều hướng trên mobile: Nút tròn có icon menu */}
           <div className="pt-topbar-nav">
+            {/* Tìm chức năng (điện thoại): đặt cạnh nút menu để không đè lên tiêu đề tab ở giữa */}
+            <PortalSearchButton id="portal-search-toggle-mobile" className="is-mobile" onPick={handleSearchPick} />
             <button
               id="portal-radial-toggle"
               type="button"
@@ -372,13 +399,13 @@ export default function PortalApp() {
       </header>
 
       <main className="pt-main">
-        <div key={tab} className="pt-tab-pane is-active">
+        <div key={`${tab}-${intent.nonce}`} className="pt-tab-pane is-active">
           {tab === "home" && <HomeTab onNavigate={navigate} />}
           {tab === "plots" && <PlotsTab />}
-          {tab === "diary" && <DiaryTab />}
-          {tab === "stamps" && <StampsTab overview={overview} />}
+          {tab === "diary" && <DiaryTab initialAction={intent.action} />}
+          {tab === "stamps" && <StampsTab overview={overview} initialAction={intent.action} />}
           {tab === "inspection" && <InspectionTab onNavigate={navigate} />}
-          {tab === "learn" && <LearnTab />}
+          {tab === "learn" && <LearnTab initialAction={intent.action} />}
           <SupportFooter onOpen={openSupport} />
         </div>
       </main>

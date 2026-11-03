@@ -8159,3 +8159,173 @@ body.pt-body {
 
 
 
+
+
+/* ══════════════════════════════════════════════════════════════════
+   TÌM CHỨC NĂNG (nút kính lúp trên thanh đầu trang + popup gợi ý)
+   ══════════════════════════════════════════════════════════════════ */
+.pt-search-btn.is-mobile {
+  display: none;
+}
+
+@media (max-width: 999px) {
+  .pt-search-btn.is-desktop {
+    display: none;
+  }
+  .pt-search-btn.is-mobile {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+  /* Cụm phải (tìm kiếm + menu) chứa 2 nút: bỏ bề rộng cố định 44px của bản cũ để nút menu không bị đẩy tràn mép */
+  .pt-topbar-nav {
+    width: auto !important;
+    height: 40px;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  /* Các nút tròn trên thanh đầu trang di động cùng kích thước 40px để thẳng hàng hai bên */
+  .pt-topbar-nav .pt-nav-btn {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+  .pt-topbar-profile .pt-notif-btn {
+    flex-shrink: 0;
+  }
+  .pt-topbar-profile .pt-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+  /* Chừa đủ chỗ hai bên cho cụm chuông + avatar (trái) và tìm kiếm + menu (phải) */
+  .pt-mobile-tab-title {
+    max-width: calc(100% - 220px);
+  }
+}
+
+.pt-search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pt-search-field {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  min-height: 52px;
+  border-radius: 16px;
+  background: var(--mist, #f3f7ee);
+  color: var(--text-secondary);
+  border: 1.5px solid transparent;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.pt-search-field:focus-within {
+  border-color: var(--green-600, #2f8f6f);
+  background: #ffffff;
+}
+
+.pt-search-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px; /* ≥16px để iOS không tự phóng to khi gõ */
+}
+
+.pt-search-field input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+.pt-search-heading {
+  margin: 4px 2px 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.pt-search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pt-search-result {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px 13px 16px;
+  border: none;
+  border-radius: 16px;
+  background: #f4f4f8;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.16s ease;
+}
+
+.pt-search-result:hover,
+.pt-search-result:focus-visible {
+  background: #ececf3;
+}
+
+.pt-search-result:active {
+  background: #e4e4ee;
+}
+
+.pt-search-result-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pt-search-result-text strong {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.pt-search-result-text span {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.pt-search-result-arrow {
+  flex-shrink: 0;
+  --detail-arrow-bg: #d4dae2;
+  --detail-arrow-fg: #1e293b;
+}
+
+.pt-search-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pt-search-empty p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}

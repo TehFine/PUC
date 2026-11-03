@@ -19,6 +19,7 @@ import { HarvestAssetTagCard, HarvestLotQrModal } from "./harvest/HarvestLotTick
 import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
 import { EmptyState, Pill, StateBlock } from "./ui";
 
+import type { PortalAction } from "./PortalSearch";
 interface HarvestRule {
   id: string;
   kicker: string;
@@ -62,9 +63,11 @@ const HARVEST_RULES: HarvestRule[] = [
 interface Props {
   overview?: PortalOverview | null;
   plots?: PortalPlot[];
+  /** Thao tác chọn từ ô tìm kiếm: mở sẵn biểu mẫu khai báo hoặc danh sách lô hàng. */
+  initialAction?: PortalAction;
 }
 
-export default function StampsTab({ plots = [] }: Props) {
+export default function StampsTab({ plots = [], initialAction }: Props) {
   const plotsData = usePortal<PortalPlots>("plots");
   const harvest = usePortal<PortalList<PortalHarvest>>("harvest");
   const declarationsQuery = usePortal<PortalList<PortalHarvestDeclaration>>("harvest-declarations");
@@ -72,11 +75,13 @@ export default function StampsTab({ plots = [] }: Props) {
   const effectivePlots = plots.length > 0 ? plots : (plotsData.data?.data ?? []);
   const declarations = declarationsQuery.data?.data ?? [];
 
-  const [subTab, setSubTab] = useState<"harvest_decl" | "harvest_lots">("harvest_decl");
+  const [subTab, setSubTab] = useState<"harvest_decl" | "harvest_lots">(() =>
+    initialAction === "harvest-lots" ? "harvest_lots" : "harvest_decl",
+  );
   const [selectedLotForQr, setSelectedLotForQr] = useState<PortalHarvest | null>(null);
 
   // Form khai báo / đăng ký thu hái
-  const [showDeclForm, setShowDeclForm] = useState(false);
+  const [showDeclForm, setShowDeclForm] = useState(() => initialAction === "decl-add");
   const [declPlot, setDeclPlot] = useState("");
   const [declDate, setDeclDate] = useState(() => todayIso());
   const [declWeight, setDeclWeight] = useState("1200");

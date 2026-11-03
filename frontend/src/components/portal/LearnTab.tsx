@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
+import type { PortalAction } from "./PortalSearch";
 import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
 import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
 
@@ -2050,8 +2051,16 @@ function VarietyList() {
   );
 }
 
-export default function LearnTab() {
-  const [view, setView] = useState<View>("training");
+const LEARN_VIEW_BY_ACTION: Partial<Record<PortalAction, View>> = {
+  "learn-training": "training",
+  "learn-pesticides": "pesticides",
+  "learn-fertilizers": "fertilizers",
+  "learn-varieties": "varieties",
+};
+
+export default function LearnTab({ initialAction }: { initialAction?: PortalAction } = {}) {
+  // Mở sẵn đúng mục khi bà con chọn gợi ý từ ô tìm kiếm
+  const [view, setView] = useState<View>(() => (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) || "training");
   const items: { id: View; label: string }[] = [
     { id: "training", label: "Tập huấn" },
     { id: "pesticides", label: "Thuốc BVTV" },
