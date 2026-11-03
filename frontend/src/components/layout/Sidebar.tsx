@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
 import { SectionId } from "@/app/admin/page";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApi } from "@/hooks/use-api";
@@ -113,7 +112,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
         aria-controls="main-nav"
         onClick={() => setOpen((value) => !value)}
       >
-        <ArrowUpRight className="nav-toggle-icon" size={20} strokeWidth={2.4} aria-hidden="true" />
+        <span className="nav-toggle-icon nav-menu-mask" aria-hidden="true" />
       </button>
 
       {open && <div className="nav-backdrop" aria-hidden="true" onClick={() => setOpen(false)} />}

@@ -62,6 +62,7 @@ export default function Home() {
   const router = useRouter();
   const { status, session } = useAuth();
   const [active, setActive] = useState<SectionId>("dashboard");
+  const [scrollingDown, setScrollingDown] = useState(false);
   const isFarmer = session?.user.role === "farmer";
 
   useEffect(() => {
@@ -69,8 +70,38 @@ export default function Home() {
     else if (status === "authenticated" && isFarmer) router.replace("/portal");
   }, [status, isFarmer, router]);
 
+  useEffect(() => {
+    let lastY = window.scrollY;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = Math.max(0, window.scrollY);
+        const delta = y - lastY;
+        if (y <= 6 || delta < -4) {
+          setScrollingDown(false);
+          document.documentElement.classList.remove("is-scrolling-down");
+        } else if (y > 10 && delta > 2) {
+          setScrollingDown(true);
+          document.documentElement.classList.add("is-scrolling-down");
+        }
+        lastY = y;
+        ticking = false;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      document.documentElement.classList.remove("is-scrolling-down");
+    };
+  }, []);
+
   const navigate = (id: SectionId) => {
     setActive(id);
+    setScrollingDown(false);
+    document.documentElement.classList.remove("is-scrolling-down");
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   };
 
@@ -97,7 +128,7 @@ export default function Home() {
   }
 
   return (
-    <div className={`app-shell${active === "zones" ? " is-zones" : ""}`}>
+    <div className={`app-shell${active === "zones" ? " is-zones" : ""}${scrollingDown ? " is-scrolling-down" : ""}`}>
       <ResponsiveTables />
       <div className="app-header">
         <Link href={INTRO_PATH} className="header-home" aria-label="HTX Krông Búk – về trang giới thiệu" title="Về trang giới thiệu">

@@ -20,13 +20,19 @@ export const metadata: Metadata = {
   },
   description:
     "Hệ thống quản lý mã vùng trồng sầu riêng của Hợp tác xã Krông Búk, Đắk Lắk",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "HTX Krông Búk",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#eef1eb",
+  interactiveWidget: "resizes-content",
+  themeColor: "#f4f8f2",
 };
 
 export default function RootLayout({

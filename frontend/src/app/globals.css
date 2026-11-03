@@ -72,13 +72,23 @@ body {
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
+
+/* Cuộn ở tầng root document (window) để trình duyệt di động tự động thu gọn thanh địa chỉ & công cụ cạnh dưới khi lướt lên */
+html {
+  height: auto !important;
+  min-height: 100%;
+  min-height: 100dvh;
+  overflow-x: clip;
+}
 
 body {
+  height: auto !important;
+  min-height: 100%;
+  min-height: 100dvh;
   font-family: var(--font-body-stack);
   background: var(--bg-page);
   color: var(--text-primary);
-  overflow-x: hidden;
+  overflow-x: clip;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -101,7 +111,15 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
+  padding-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .app-shell:not(.is-zones) {
+    min-height: calc(100lvh + 1px);
+  }
 }
 
 /* Nền trời xanh nhạt chuyển dần sang trắng ngà, giống phần mở đầu trang giới thiệu */
@@ -379,7 +397,7 @@ body {
 
 /* ─── CONTENT ─────────────────────────────────── */
 .content-area {
-  padding: 42px 48px 64px;
+  padding: 42px 48px calc(18px + env(safe-area-inset-bottom, 0px));
   width: 100%;
   max-width: 1680px;
   margin-inline: auto;
@@ -1796,11 +1814,11 @@ body {
   .app-shell.is-zones .content-area {
     max-width: none;
     margin-inline: 0;
-    padding: 18px 24px 16px;
+    padding: 16px 24px 8px;
   }
 
   .app-shell.is-zones .zones-page {
-    height: calc(100vh - 98px);
+    height: calc(100dvh - 88px);
   }
 
   .zones-topbar {
@@ -2302,7 +2320,7 @@ body {
 }
 
 @media (max-width: 900px) {
-  .content-area { padding: 40px 20px 32px; }
+  .content-area { padding: 24px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
   .app-header { height: 56px; padding: 0 14px; }
   .user-menu {
     top: 50%;
@@ -2403,8 +2421,22 @@ body {
     color: var(--ink);
     transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease;
   }
+  .nav-menu-mask {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    background-color: currentColor;
+    -webkit-mask-image: url("/menu.png");
+    mask-image: url("/menu.png");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+  }
   .nav-toggle:hover .nav-toggle-icon {
-    transform: translate(1px, -1px);
+    transform: scale(1.06);
   }
   .nav-toggle.open .nav-toggle-icon {
     color: var(--yellow);
@@ -2671,7 +2703,7 @@ body {
 
 /* ─── MOBILE REFINEMENTS ──────────────────────── */
 @media (max-width: 900px) {
-  .content-area { padding: 24px 16px calc(32px + env(safe-area-inset-bottom)); }
+  .content-area { padding: 20px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
 
   .app-header::before {
     background: rgba(255, 255, 255, 0.98);
@@ -2826,7 +2858,7 @@ body {
 }
 
 @media (max-width: 640px) {
-  .content-area { padding: 16px 14px calc(24px + env(safe-area-inset-bottom)); }
+  .content-area { padding: 14px 14px calc(8px + env(safe-area-inset-bottom, 0px)); }
 
   .page-header {
     flex-direction: column;
@@ -3548,4 +3580,21 @@ body {
   gap: 6px;
   margin-left: auto;
 }
+
+/* ── Tự động ẩn các cụm nút/thông tin ở cạnh dưới màn hình khi người dùng lướt lên (cuộn xuống), giữ cố định thanh header ngang ở trên ── */
+.map-sheet-btn,
+.zones-map-area .plotmap-zoom,
+.table-wrap .table-footer {
+  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
+}
+
+html.is-scrolling-down .map-sheet-btn,
+.app-shell.is-scrolling-down .map-sheet-btn,
+html.is-scrolling-down .zones-map-area .plotmap-zoom,
+.app-shell.is-scrolling-down .zones-map-area .plotmap-zoom {
+  opacity: 0 !important;
+  transform: translateY(120%) !important;
+  pointer-events: none !important;
+}
+
 
