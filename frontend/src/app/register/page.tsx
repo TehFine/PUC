@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
 import { AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
+import { AppleSpinner } from "@/components/ui/Skeleton";
 import { api, ApiError } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
 
@@ -191,9 +192,17 @@ export default function RegisterPage() {
 
         {error && <AuthError>{error}</AuthError>}
 
-        <button id="register-submit" type="submit" className="auth-submit" disabled={submitting}>
+        <button
+          id="register-submit"
+          type="submit"
+          className={`auth-submit${submitting ? " is-busy" : ""}`}
+          disabled={submitting}
+        >
           {submitting ? (
-            "Đang gửi…"
+            <>
+              <AppleSpinner size={19} className="auth-submit-spinner" />
+              <span>Đang gửi hồ sơ đăng ký…</span>
+            </>
           ) : (
             <>
               Gửi đăng ký
@@ -203,6 +212,17 @@ export default function RegisterPage() {
             </>
           )}
         </button>
+
+        {submitting && (
+          <div className="auth-processing-status" role="status" aria-live="polite">
+            <div className="auth-processing-bar" aria-hidden="true">
+              <span className="auth-processing-bar-fill" />
+            </div>
+            <p className="auth-processing-text">
+              Hệ thống đang ghi nhận thông tin đăng ký của bạn, vui lòng đợi trong giây lát…
+            </p>
+          </div>
+        )}
       </form>
       <p className="auth-note">Hộ chưa có trong danh sách của HTX cần được cán bộ ghi nhận trước khi tài khoản được duyệt.</p>
     </AuthShell>

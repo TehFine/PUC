@@ -15,6 +15,28 @@ export class LoginDto {
   password!: string;
 }
 
+export class GoogleLoginDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  credential?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  username?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  role?: string;
+}
+
 export class ChangePasswordDto {
   @IsString()
   @IsNotEmpty()

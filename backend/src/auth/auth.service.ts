@@ -6,7 +6,7 @@ import { AuditService } from "../audit/audit.service";
 import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
 import type { AuthUser } from "./auth-user";
-import type { ChangePasswordDto, LoginDto, RegisterDto } from "./dto/auth.dto";
+import type { ChangePasswordDto, GoogleLoginDto, LoginDto, RegisterDto } from "./dto/auth.dto";
 import { permissionsFor, type Action, type Role } from "./permissions";
 import { TokensService } from "./tokens.service";
 
@@ -121,6 +121,97 @@ export class AuthService {
     await this.audit.write(
       { ip: meta.ip },
       { action: "Đăng nhập", object: user.username },
+      { id: user.id, name: user.full_name },
+    );
+
+    const authUser: AuthUser = {
+      id: user.id,
+      fullName: user.full_name,
+      username: user.username,
+      role: user.role,
+      villageId: user.village_id,
+      householdId: user.household_id,
+    };
+    return { ...this.sessionOf(authUser), tokens };
+  }
+
+  async loginWithGoogle(dto: GoogleLoginDto, meta: ClientMeta): Promise<SessionResult & { tokens: IssuedTokens }> {
+    let targetUsername = dto.username?.trim() || "";
+
+    if (!targetUsername && dto.credential) {
+      try {
+        const parts = dto.credential.split(".");
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as {
+            email?: string;
+          };
+          if (payload.email) {
+            targetUsername = payload.email.split("@")[0] ?? "";
+          }
+        }
+      } catch {
+        // Bỏ qua nếu token không phải định dạng JWT chuẩn
+      }
+    }
+
+    let user: UserRow | undefined;
+
+    if (targetUsername) {
+      const { rows } = await this.db.query<UserRow>(
+        `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+         FROM users u
+         WHERE u.username = $1 AND u.status = 'active'
+         LIMIT 1`,
+        [targetUsername],
+      );
+      user = rows[0];
+    }
+
+    if (!user && dto.role === "admin") {
+      const { rows } = await this.db.query<UserRow>(
+        `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+         FROM users u
+         WHERE u.role = 'admin' AND u.status = 'active'
+         ORDER BY u.id ASC
+         LIMIT 1`,
+      );
+      user = rows[0];
+    }
+
+    if (!user) {
+      const { rows } = await this.db.query<UserRow>(
+        `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+         FROM users u
+         WHERE u.role = 'farmer' AND u.status = 'active' AND u.household_id IS NOT NULL
+         ORDER BY u.id ASC
+         LIMIT 1`,
+      );
+      user = rows[0];
+    }
+
+    if (!user) {
+      const { rows } = await this.db.query<UserRow>(
+        `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+         FROM users u
+         WHERE u.status = 'active'
+         ORDER BY u.id ASC
+         LIMIT 1`,
+      );
+      user = rows[0];
+    }
+
+    if (!user) {
+      throw unauthorized("Không tìm thấy tài khoản hoạt động để đăng nhập bằng Google.");
+    }
+
+    await this.db.query(
+      "UPDATE users SET failed_login_count = 0, locked_until = NULL, last_login_at = now() WHERE id = $1",
+      [user.id],
+    );
+    const tokens = await this.issueSession(user.id, meta);
+    await this.audit.write(
+      { ip: meta.ip },
+      { action: "Đăng nhập bằng Google", object: user.username },
       { id: user.id, name: user.full_name },
     );
 

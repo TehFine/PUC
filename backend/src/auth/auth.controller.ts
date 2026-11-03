@@ -4,7 +4,7 @@ import type { Request, Response } from "express";
 import type { AuthUser } from "./auth-user";
 import { CurrentUser, Public } from "./auth.decorators";
 import { AuthService, RefreshRejected } from "./auth.service";
-import { ChangePasswordDto, LoginDto, RegisterDto } from "./dto/auth.dto";
+import { ChangePasswordDto, GoogleLoginDto, LoginDto, RegisterDto } from "./dto/auth.dto";
 import { REFRESH_COOKIE, TokensService } from "./tokens.service";
 
 // Giới hạn chặt hơn cho đăng nhập (nới ra khi chạy test).
@@ -27,6 +27,21 @@ export class AuthController {
   @HttpCode(200)
   async login(@Body() dto: LoginDto, @Req() req: Request, @Ip() ip: string, @Res({ passthrough: true }) res: Response) {
     const { tokens, ...session } = await this.auth.login(dto, { ip, userAgent: req.get("user-agent") });
+    this.tokens.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+    return session;
+  }
+
+  @Public()
+  @Throttle({ default: { limit: LOGIN_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Post("google")
+  @HttpCode(200)
+  async loginWithGoogle(
+    @Body() dto: GoogleLoginDto,
+    @Req() req: Request,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { tokens, ...session } = await this.auth.loginWithGoogle(dto, { ip, userAgent: req.get("user-agent") });
     this.tokens.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     return session;
   }

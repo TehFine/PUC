@@ -7,10 +7,18 @@ import type { Action, AuthSession } from "@/types/api";
 
 type Status = "loading" | "authenticated" | "anonymous";
 
+export interface GoogleLoginPayload {
+  credential?: string;
+  email?: string;
+  username?: string;
+  role?: "farmer" | "admin";
+}
+
 interface AuthContextValue {
   status: Status;
   session: AuthSession | null;
   login: (username: string, password: string) => Promise<void>;
+  loginWithGoogle: (payload?: GoogleLoginPayload) => Promise<void>;
   logout: () => Promise<void>;
   /** Kiểm tra quyền theo ma trận backend trả về (backend vẫn là nơi quyết định cuối cùng). */
   can: (resource: string, action: Action) => boolean;
@@ -51,6 +59,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus("authenticated");
   }, []);
 
+  const loginWithGoogle = useCallback(async (payload?: GoogleLoginPayload) => {
+    const result = await api.post<AuthSession>("/auth/google", payload ?? {});
+    setSession(result);
+    setStatus("authenticated");
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
@@ -74,7 +88,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [session],
   );
 
-  const value = useMemo(() => ({ status, session, login, logout, can }), [status, session, login, logout, can]);
+  const value = useMemo(
+    () => ({ status, session, login, loginWithGoogle, logout, can }),
+    [status, session, login, loginWithGoogle, logout, can],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
