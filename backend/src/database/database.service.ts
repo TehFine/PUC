@@ -19,6 +19,9 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
   /** Dừng khởi động ngay nếu không kết nối được CSDL. */
   async onModuleInit(): Promise<void> {
     await this.pool.query("SELECT 1");
+    // Mở sẵn thêm vài kết nối (song song) để các request đầu tiên chạy truy vấn song song
+    // không phải chờ bắt tay TLS với CSDL từ xa. Lỗi ở bước làm nóng không chặn khởi động.
+    await Promise.all(Array.from({ length: 3 }, () => this.pool.query("SELECT 1"))).catch(() => undefined);
   }
 
   async onApplicationShutdown(): Promise<void> {
