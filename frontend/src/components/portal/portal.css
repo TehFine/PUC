@@ -1428,6 +1428,59 @@ body.pt-body {
   transform: translateX(3px);
 }
 
+.pt-profile-lang-row {
+  width: 100%;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 12px 9px 18px;
+  margin: 0;
+  border-radius: 20px;
+  background: #f4f4f8;
+  color: #111827;
+  box-sizing: border-box;
+}
+
+.pt-lang-seg {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 122, 255, 0.18);
+  flex-shrink: 0;
+}
+
+.pt-lang-seg-btn {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #007aff;
+  font-family: var(--font-body-stack);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 8px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color 0.18s ease, color 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pt-lang-seg-btn:hover:not(.is-active) {
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.pt-lang-seg-btn.is-active {
+  background: #007aff;
+  color: #ffffff;
+  box-shadow: none;
+}
+
 /* Nút tròn điều hướng có dấu mũi tên (đặt ở góc phải thay thế vị trí avatar cũ) */
 .pt-nav-btn {
   display: grid;

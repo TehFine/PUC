@@ -7,6 +7,7 @@ import {
   BookOpen,
   CheckCheck,
   ClipboardCheck,
+  Globe,
   House,
   NotebookPen,
   Scale,
@@ -26,6 +27,7 @@ import type { AppNotification, NotificationList, PortalOverview, PortalProfile }
 import dynamic from "next/dynamic";
 import "./portal.css";
 import HomeTab from "./HomeTab";
+import { PortalLangProvider, usePortalLang } from "./i18n";
 import { PortalSearchButton, type PortalAction, type PortalSearchTarget } from "./PortalSearch";
 import { RadialPngIcon } from "./RadialIcons";
 import RadialNavWheel from "./RadialNavWheel";
@@ -162,7 +164,16 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
 
 /** Cổng dành cho hộ dân (tài khoản vai trò Nông dân). Cán bộ được chuyển về trang quản trị. */
 export default function PortalApp() {
+  return (
+    <PortalLangProvider>
+      <PortalAppContent />
+    </PortalLangProvider>
+  );
+}
+
+function PortalAppContent() {
   const router = useRouter();
+  const { lang, setLang, t } = usePortalLang();
   const { status, session, logout } = useAuth();
   const { data: overview } = usePortal<PortalOverview>("overview");
   const { data: profile } = usePortal<PortalProfile>("profile");
@@ -318,11 +329,11 @@ export default function PortalApp() {
 
           {/* Tiêu đề tab đang chọn trên Mobile */}
           <div className="pt-mobile-tab-title" aria-live="polite">
-            <span className="pt-mobile-tab-name">{currentTabItem.label}</span>
+            <span className="pt-mobile-tab-name">{t(currentTabItem.label)}</span>
           </div>
 
           {/* Thanh tab điều hướng chức năng trên Desktop/Laptop */}
-          <nav className="pt-tabs" aria-label="Chức năng">
+          <nav className="pt-tabs" aria-label={t("Chức năng")}>
             {TABS.map((item) => {
               const Icon = item.icon;
               return (
@@ -335,7 +346,7 @@ export default function PortalApp() {
                   onClick={() => navigate(item.id)}
                 >
                   <Icon aria-hidden="true" />
-                  <span>{item.label}</span>
+                  <span>{t(item.label)}</span>
                 </button>
               );
             })}
@@ -393,7 +404,7 @@ export default function PortalApp() {
       </header>
 
       <main className="pt-main">
-        <div key={`${tab}-${intent.nonce}`} className="pt-tab-pane is-active">
+        <div key={`${tab}-${intent.nonce}-${lang}`} className="pt-tab-pane is-active">
           {tab === "home" && <HomeTab onNavigate={navigate} />}
           {tab === "plots" && <PlotsTab />}
           {tab === "diary" && <DiaryTab initialAction={intent.action} />}
@@ -406,7 +417,7 @@ export default function PortalApp() {
 
       {profileOpen && (
         <Sheet
-          title="Thông tin tài khoản"
+          title={t("Thông tin tài khoản")}
           onClose={closeProfile}
           className="pt-profile-sheet"
         >
@@ -482,6 +493,31 @@ export default function PortalApp() {
             </div>
 
             <div className="pt-profile-footer">
+              <div className="pt-profile-lang-row" role="group" aria-label={t("Ngôn ngữ")}>
+                <span className="pt-profile-action-icon" aria-hidden="true">
+                  <Globe size={21} strokeWidth={2.1} />
+                </span>
+                <span className="pt-profile-action-title">{t("Ngôn ngữ")}</span>
+                <div className="pt-lang-seg">
+                  <button
+                    type="button"
+                    className={`pt-lang-seg-btn ${lang === "vi" ? "is-active" : ""}`}
+                    onClick={() => setLang("vi")}
+                    aria-pressed={lang === "vi"}
+                  >
+                    Tiếng Việt
+                  </button>
+                  <button
+                    type="button"
+                    className={`pt-lang-seg-btn ${lang === "zh" ? "is-active" : ""}`}
+                    onClick={() => setLang("zh")}
+                    aria-pressed={lang === "zh"}
+                  >
+                    中文
+                  </button>
+                </div>
+              </div>
+
               <button
                 type="button"
                 className="pt-profile-intro-btn"
@@ -493,7 +529,7 @@ export default function PortalApp() {
                 <span className="pt-profile-action-icon" aria-hidden="true">
                   <RadialPngIcon src="/key.png" size={22} />
                 </span>
-                <span className="pt-profile-action-title">Đổi mật khẩu</span>
+                <span className="pt-profile-action-title">{t("Đổi mật khẩu")}</span>
                 <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
               </button>
 
@@ -501,12 +537,12 @@ export default function PortalApp() {
                 href={INTRO_PATH}
                 className="pt-profile-intro-btn"
                 onClick={closeProfile}
-                title="Về trang giới thiệu HTX Krông Búk"
+                title={t("Về trang giới thiệu HTX Krông Búk")}
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">
                   <Image src="/logo.png" alt="" width={24} height={24} />
                 </span>
-                <span className="pt-profile-action-title">Trang giới thiệu HTX</span>
+                <span className="pt-profile-action-title">{t("Trang giới thiệu HTX")}</span>
                 <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
               </Link>
 
@@ -520,7 +556,7 @@ export default function PortalApp() {
                 }}
               >
                 <RadialPngIcon src="/logout.png" size={20} />
-                <span>Đăng xuất</span>
+                <span>{t("Đăng xuất")}</span>
               </button>
             </div>
           </div>
@@ -528,7 +564,7 @@ export default function PortalApp() {
       )}
 
       {notifOpen && (
-        <Sheet title="Thông báo từ HTX" onClose={() => setNotifOpen(false)}>
+        <Sheet title={t("Thông báo từ HTX")} onClose={() => setNotifOpen(false)}>
           <div className="pt-stack" style={{ gap: 14 }}>
             {unreadCount > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -592,7 +628,7 @@ export default function PortalApp() {
       )}
 
       {passwordOpen && (
-        <Sheet title="Đổi mật khẩu tài khoản" onClose={() => setPasswordOpen(false)} className="pt-password-sheet">
+        <Sheet title={t("Đổi mật khẩu tài khoản")} onClose={() => setPasswordOpen(false)} className="pt-password-sheet">
           <ChangePasswordForm
             onSuccess={() => {
               setPasswordOpen(false);
