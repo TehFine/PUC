@@ -214,7 +214,7 @@ export function MapSkeleton({ label = "Đang tải bản đồ…" }: { label?: 
 /** Khung cả trang (thanh trên + tab + thẻ) dùng khi đang kiểm tra phiên hoặc tải trang. */
 export function PageSkeleton({ label = "Đang tải trang…" }: { label?: string }) {
   return (
-    <SkeletonGroup label={label} showSpinner={false} className="sk-page">
+    <SkeletonGroup label={label} showSpinner className="sk-page">
       <div className="sk-page-bar" aria-hidden="true">
         <div className="sk-page-brand">
           <Skeleton w={40} h={40} circle />
@@ -223,7 +223,6 @@ export function PageSkeleton({ label = "Đang tải trang…" }: { label?: strin
             <Skeleton h={10} w="60%" />
           </div>
         </div>
-        <AppleLoadingPill label={label} />
       </div>
       <div className="sk-tabs" aria-hidden="true">
         {[88, 76, 82, 90, 70].map((width, index) => (
