@@ -160,6 +160,10 @@ export interface PortalViolation {
   farmerResponsePhotoUrl?: string | null;
   resolvedOn?: string | null;
   resolutionNotes?: string | null;
+  /** Vi phạm loại "chưa cập nhật nhật ký": phải ghi nhật ký mới mới được báo đã khắc phục. */
+  isJournalViolation?: boolean;
+  /** Ngày ghi nhật ký gần nhất cho đúng thửa vi phạm. */
+  lastJournalOn?: string | null;
 }
 
 export interface PortalHarvest {

@@ -7,6 +7,7 @@ import { attachmentUrlSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { assertExists, TODAY_VN_SQL } from "../shared/state";
+import { isJournalViolationSql, lastJournalOnSql } from "../shared/violation-evidence";
 import type { ResolveViolationDto } from "./violations.dto";
 
 @Injectable()
@@ -23,7 +24,9 @@ export class ViolationsService extends BaseCrudService {
       fields: `t.id, t.severity, t.title, t.household_label, t.household_id, t.detected_on, t.plot_code,
       t.description, t.status, t.farmer_response, t.farmer_response_at,
       ${attachmentUrlSql("t.farmer_response_photo_id")} AS farmer_response_photo_url,
-      t.resolved_on, t.resolution_notes, t.resolved_by`,
+      t.resolved_on, t.resolution_notes, t.resolved_by,
+      ${isJournalViolationSql("t")} AS is_journal_violation,
+      ${lastJournalOnSql("t")} AS last_journal_on`,
       from: `violations t`,
       orderBy: "t.detected_on DESC, t.id DESC",
       search: ["t.title", "t.household_label", "t.plot_code"],

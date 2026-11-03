@@ -99,6 +99,8 @@ export function ViolationDetailModal({
         </div>
       </div>
 
+      <JournalEvidence violation={violation} />
+
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
           Phản hồi giải trình từ hộ nông dân
@@ -138,6 +140,36 @@ export function ViolationDetailModal({
         </div>
       )}
     </Modal>
+  );
+}
+
+/**
+ * Đối chiếu bằng chứng cho vi phạm "chưa cập nhật nhật ký": cho cán bộ thấy hộ đã thực sự ghi nhật ký mới
+ * (đúng thửa) kể từ ngày phát hiện hay chưa, thay vì chỉ dựa vào lời giải trình.
+ */
+function JournalEvidence({ violation }: { violation: ViolationRow }) {
+  if (!violation.isJournalViolation) return null;
+  const last = violation.lastJournalOn ?? null;
+  const ok = !!last && last >= violation.detectedOn;
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        borderRadius: 12,
+        fontSize: 12.5,
+        lineHeight: 1.5,
+        marginBottom: 14,
+        background: ok ? "#f0fdf4" : "#fff7ed",
+        color: ok ? "#166534" : "#9a3412",
+      }}
+    >
+      <strong>Đối chiếu nhật ký{violation.plotCode ? ` (thửa ${violation.plotCode})` : ""}: </strong>
+      {ok
+        ? `Hộ đã ghi nhật ký mới ngày ${formatDate(last)}, sau ngày phát hiện vi phạm.`
+        : last
+          ? `Lần ghi gần nhất ${formatDate(last)} — chưa có nhật ký mới kể từ ngày phát hiện (${formatDate(violation.detectedOn)}).`
+          : "Hộ chưa có bản ghi nhật ký nào cho thửa này."}
+    </div>
   );
 }
 
@@ -205,6 +237,7 @@ export function ViolationResolveModal({
             <strong>Giải trình của hộ:</strong> {violation.farmerResponse}
           </div>
         )}
+        <JournalEvidence violation={violation} />
         <TextAreaField
           label="Biên bản / Biện pháp xử lý (resolutionNotes)"
           required

@@ -33,6 +33,10 @@ export interface ViolationRow {
   farmerResponsePhotoUrl?: string | null;
   resolvedOn?: string | null;
   resolutionNotes?: string | null;
+  /** Vi phạm loại "chưa cập nhật nhật ký" (backend nhận diện theo tiêu đề). */
+  isJournalViolation?: boolean;
+  /** Ngày ghi nhật ký gần nhất của hộ cho đúng thửa vi phạm, dùng để đối chiếu khi xác nhận khắc phục. */
+  lastJournalOn?: string | null;
 }
 
 export type MrlStatus = "pass" | "exceeded";

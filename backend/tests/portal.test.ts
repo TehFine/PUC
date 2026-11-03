@@ -219,14 +219,56 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
   });
 
   describe("inspection & phản hồi vi phạm", () => {
-    it("hộ gửi phản hồi kèm ảnh cho vi phạm đang mở và gửi thông báo cho cán bộ", async () => {
+    it("vi phạm nhật ký: chưa ghi nhật ký mới đúng thửa thì không báo khắc phục được; ghi xong mới gửi phản hồi", async () => {
       const an = await loggedIn(USERS.farmerAn);
       const binh = await loggedIn(USERS.farmerBinh);
 
+      // Vi phạm riêng cho test, trên một mã thửa chưa có nhật ký nào (CSDL test dùng chung giữa các suite)
+      const PLOT = "TH1-VP99";
+      const household = await db.query<{ household_id: number }>("SELECT household_id FROM users WHERE username = $1", [
+        USERS.farmerAn,
+      ]);
+      const inserted = await db.query<{ id: number }>(
+        `INSERT INTO violations (severity, title, household_label, household_id, detected_on, plot_code, description)
+         VALUES ('warning', 'Nhật ký canh tác chưa cập nhật 7+ ngày', 'Nguyễn Văn An', $1, current_date, $2, 'Test')
+         RETURNING id`,
+        [household.rows[0].household_id, PLOT],
+      );
+      const violationId = inserted.rows[0].id;
+
       const violations = await an.get("/api/portal/violations");
       expect(violations.status).toBe(200);
-      const openViolation = violations.body.data.find((v: { status: string }) => v.status === "open");
-      expect(openViolation).toBeDefined();
+      const openViolation = violations.body.data.find((v: { id: number }) => v.id === violationId);
+      expect(openViolation).toMatchObject({ status: "open", isJournalViolation: true, plotCode: PLOT, lastJournalOn: null });
+
+      // 1. Bấm "đã khắc phục" khi chưa ghi nhật ký mới kể từ ngày phát hiện -> 409
+      const premature = await an.post(`/api/portal/violations/${openViolation.id}/response`).send({
+        note: "Đã khắc phục",
+      });
+      expect(premature.status).toBe(409);
+      expect(premature.body.error).toContain(`Chưa có nhật ký mới cho thửa ${PLOT}`);
+
+      // 2. Ghi nhật ký cho thửa KHÁC không được tính là khắc phục
+      const otherPhotoId = await uploadFile(an, "journal");
+      const otherPlot = await an.post("/api/portal/journal").send({
+        plotCode: "TH1-002",
+        activity: "Làm cỏ",
+        photoId: otherPhotoId,
+      });
+      expect(otherPlot.status).toBe(201);
+      const stillBlocked = await an.post(`/api/portal/violations/${openViolation.id}/response`).send({
+        note: "Đã khắc phục",
+      });
+      expect(stillBlocked.status).toBe(409);
+
+      // 3. Ghi nhật ký đúng thửa vi phạm -> cán bộ thấy bằng chứng, hộ gửi được phản hồi kèm ảnh
+      const journalPhotoId = await uploadFile(an, "journal");
+      const journal = await an.post("/api/portal/journal").send({
+        plotCode: PLOT,
+        activity: "Bón phân hữu cơ",
+        photoId: journalPhotoId,
+      });
+      expect(journal.status).toBe(201);
 
       const photoId = await uploadFile(an, "violation");
       const res = await an.post(`/api/portal/violations/${openViolation.id}/response`).send({
@@ -238,8 +280,10 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
         id: openViolation.id,
         farmerResponse: "Đã bổ sung nhật ký canh tác đầy đủ và dọn vệ sinh đồng ruộng.",
         farmerResponsePhotoUrl: `/api/uploads/${photoId}`,
+        status: "open", // hộ không tự đóng được vi phạm, phải chờ cán bộ xác nhận
       });
       expect(res.body.farmerResponseAt).toBeTruthy();
+      expect(res.body.lastJournalOn >= res.body.detectedOn).toBe(true);
 
       // Hộ khác không phản hồi được vi phạm của hộ An
       const cross = await binh.post(`/api/portal/violations/${openViolation.id}/response`).send({
@@ -247,11 +291,23 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
       });
       expect(cross.status).toBe(404);
 
+      // Cán bộ thấy cờ đối chiếu nhật ký khi xem vi phạm
+      const htx = await loggedIn(USERS.htx);
+      const adminView = await htx.get(`/api/violations/${openViolation.id}`);
+      expect(adminView.status).toBe(200);
+      expect(adminView.body.isJournalViolation).toBe(true);
+      expect(adminView.body.lastJournalOn >= adminView.body.detectedOn).toBe(true);
+
       // Kiểm tra thông báo gửi tới kiểm tra viên
       const inspector = await loggedIn(USERS.inspector);
       const notifs = await inspector.get("/api/notifications");
       expect(notifs.status).toBe(200);
       expect(notifs.body.data.some((n: { kind: string }) => n.kind === "violation")).toBe(true);
+
+      // Dọn: xóa 2 nhật ký vừa tạo (trong 24h) và vi phạm của test để không ảnh hưởng các test khác
+      expect((await an.delete(`/api/portal/journal/${otherPlot.body.id}`)).status).toBe(200);
+      expect((await an.delete(`/api/portal/journal/${journal.body.id}`)).status).toBe(200);
+      await db.query("DELETE FROM violations WHERE id = $1", [violationId]);
     });
   });
 

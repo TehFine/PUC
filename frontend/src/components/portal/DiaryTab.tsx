@@ -435,7 +435,8 @@ function JournalDetailModal({
     setDeleteError(null);
     try {
       await api.delete(`/portal/journal/${entry.id}`);
-      invalidatePortal("journal", "spray", "overview");
+      // Xóa nhật ký có thể làm mất bằng chứng khắc phục vi phạm: làm mới cả danh sách vi phạm
+      invalidatePortal("journal", "spray", "violations", "overview");
       onDeleted();
     } catch (err) {
       setDeleteError(errorMessage(err, "Không xóa được bản ghi nhật ký."));
@@ -742,6 +743,10 @@ export default function DiaryTab() {
           <ul className="pt-list">
             {violationsList.map((v) => {
               const isOpen = v.status === "open";
+              // Vi phạm "chưa cập nhật nhật ký" mà chưa có nhật ký mới từ ngày phát hiện: hướng hộ đi ghi nhật ký
+              // (ghi xong hệ thống tự ghi nhận phản hồi khắc phục), không cho bấm "đã khắc phục" suông.
+              const needsJournal =
+                isOpen && !!v.isJournalViolation && !(v.lastJournalOn && v.lastJournalOn >= v.detectedOn);
 
               return (
                 <li key={v.id} className="pt-notice pt-viol-item">
@@ -790,9 +795,16 @@ export default function DiaryTab() {
                       <button
                         type="button"
                         className="pt-btn pt-btn-primary pt-btn-sm pt-viol-action"
-                        onClick={() => setRespondingViolation(v)}
+                        onClick={() => {
+                          if (needsJournal) {
+                            setView("journal");
+                            setForm("journal");
+                          } else {
+                            setRespondingViolation(v);
+                          }
+                        }}
                       >
-                        {v.farmerResponse ? "Cập nhật khắc phục" : "Báo đã khắc phục"}
+                        {needsJournal ? "Ghi nhật ký" : v.farmerResponse ? "Cập nhật khắc phục" : "Báo đã khắc phục"}
                       </button>
                     )}
                   </div>
