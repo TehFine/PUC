@@ -30,10 +30,11 @@
   animation: net-ios-spin 0.85s steps(12, end) infinite;
 }
 
+/* Huy hiệu "Đang tải dữ liệu…" nằm giữa vùng nội dung (ngang) */
 .sk-apple-bar {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .sk-apple-pill {

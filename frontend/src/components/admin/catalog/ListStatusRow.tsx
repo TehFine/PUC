@@ -42,7 +42,7 @@ export default function ListStatusRow({
     return (
       <>
         <tr>
-          <td colSpan={colSpan} style={{ padding: "14px 16px 6px", borderBottom: "none" }} role="status">
+          <td colSpan={colSpan} style={{ padding: "14px 16px 6px", borderBottom: "none", textAlign: "center" }} role="status">
             <AppleLoadingPill label="Đang tải dữ liệu…" />
           </td>
         </tr>
