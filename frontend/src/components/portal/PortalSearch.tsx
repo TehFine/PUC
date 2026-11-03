@@ -322,26 +322,28 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
         />
       </label>
 
-      {!hasQuery && (
-        <>
-          <h3 className="pt-search-heading">Gợi ý</h3>
-          <ResultList items={POPULAR} onPick={pick} />
-        </>
-      )}
+      <div className="pt-search-scroll">
+        {!hasQuery && (
+          <>
+            <h3 className="pt-search-heading">Gợi ý</h3>
+            <ResultList items={POPULAR} onPick={pick} />
+          </>
+        )}
 
-      {hasQuery && results.length > 0 && <ResultList items={results} onPick={pick} />}
+        {hasQuery && results.length > 0 && <ResultList items={results} onPick={pick} />}
 
-      {hasQuery && results.length === 0 && (
-        <div className="pt-search-empty">
-          <p>
-            Chưa tìm thấy “<strong>{query.trim()}</strong>”. Bà con thử gõ chữ khác, hoặc gọi cán bộ HTX để được
-            hướng dẫn.
-          </p>
-          <ResultList items={ENTRIES.filter((e) => e.id === "support")} onPick={pick} />
-          <h3 className="pt-search-heading">Gợi ý</h3>
-          <ResultList items={POPULAR.filter((e) => e.id !== "support")} onPick={pick} />
-        </div>
-      )}
+        {hasQuery && results.length === 0 && (
+          <div className="pt-search-empty">
+            <p>
+              Chưa tìm thấy “<strong>{query.trim()}</strong>”. Bà con thử gõ chữ khác, hoặc gọi cán bộ HTX để được
+              hướng dẫn.
+            </p>
+            <ResultList items={ENTRIES.filter((e) => e.id === "support")} onPick={pick} />
+            <h3 className="pt-search-heading">Gợi ý</h3>
+            <ResultList items={POPULAR.filter((e) => e.id !== "support")} onPick={pick} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
