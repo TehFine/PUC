@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from "react";
 import "./charts.css";
 
 /**
@@ -20,17 +30,22 @@ export interface ChartPoint {
 type Highlight = "max" | "last" | number;
 
 const defaultFormat = (v: number) => v.toLocaleString("vi-VN");
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 /** Đo bề rộng phần tử để vẽ SVG đúng pixel (chữ không bị co giãn theo viewBox). */
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const initial = Math.round(el.clientWidth);
+    if (initial > 0) setWidth(initial);
     const ro = new ResizeObserver(([entry]) => {
       const w = Math.round(entry?.contentRect?.width ?? 0);
-      if (w > 0) setWidth(w);
+      if (w > 0) {
+        setWidth((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+      }
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -219,10 +234,18 @@ export function AreaTrend({
   const textClampX = Math.min(Math.max(cur.x, textMinX), Math.max(textMaxX, textMinX));
   const labelEvery = n > 8 || (isCompact && n > 6) ? 2 : 1;
 
+  const selectPointAtClientX = (el: HTMLDivElement, clientX: number) => {
+    const rect = el.getBoundingClientRect();
+    const idx = Math.round((clientX - rect.left - PAD_X) / step);
+    const clamped = Math.min(Math.max(idx, 0), n - 1);
+    setHover((prev) => (prev === clamped ? prev : clamped));
+  };
   const onMove = (e: PointerEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const idx = Math.round((e.clientX - rect.left - PAD_X) / step);
-    setHover(Math.min(Math.max(idx, 0), n - 1));
+    if (e.pointerType === "touch") return;
+    selectPointAtClientX(e.currentTarget, e.clientX);
+  };
+  const onClick = (e: MouseEvent<HTMLDivElement>) => {
+    selectPointAtClientX(e.currentTarget, e.clientX);
   };
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "ArrowRight") setHover(Math.min(active + 1, n - 1));
@@ -242,7 +265,10 @@ export function AreaTrend({
       aria-label={`${ariaLabel}. ${data[active].label} ${valText}`}
       tabIndex={0}
       onPointerMove={onMove}
-      onPointerLeave={() => setHover(null)}
+      onClick={onClick}
+      onPointerLeave={(e) => {
+        if (e.pointerType !== "touch") setHover(null);
+      }}
       onBlur={() => setHover(null)}
       onKeyDown={onKey}
     >
@@ -250,14 +276,6 @@ export function AreaTrend({
         <>
           <svg width={width} height={effectiveHeight} aria-hidden="true" style={{ overflow: "visible" }}>
             <defs>
-              {/* Bộ lọc làm mờ gaussian mềm như mây quang phổ trong hình */}
-              <filter id={`${uid}blur`} x="-20%" y="-30%" width="140%" height="160%">
-                <feGaussianBlur stdDeviation="7.5" />
-              </filter>
-              <filter id={`${uid}mist`} x="-20%" y="-30%" width="140%" height="160%">
-                <feGaussianBlur stdDeviation="4.5" />
-              </filter>
-
               {/* Dải gradient cực quang: Xanh lá mạ -> Xanh bạc hà -> Vàng hổ phách -> Cam đào -> Hồng san hô */}
               <linearGradient id={`${uid}aurora`} gradientUnits="userSpaceOnUse" x1={PAD_X} y1="0" x2={cur.x} y2="0">
                 <stop offset="0%" stopColor="#4ade80" stopOpacity="0.88" />
@@ -289,17 +307,20 @@ export function AreaTrend({
             {/* Tầng 1: Sóng sương mờ hậu cảnh (soft mist silhouette) */}
             <path
               d={backArea}
-              fill="rgba(195, 215, 205, 0.32)"
+              fill="rgba(195, 215, 205, 0.30)"
               clipPath={`url(#${uid}clip)`}
-              filter={`url(#${uid}mist)`}
             />
 
-            {/* Tầng 2: Sóng cực quang mờ phát sáng (blurred aurora wave) */}
+            {/* Tầng 2: Sóng cực quang phát sáng (aurora wave) */}
             <path
               d={area}
               fill={`url(#${uid}aurora)`}
+              opacity="0.86"
+              stroke={`url(#${uid}aurora)`}
+              strokeWidth="5"
+              strokeOpacity="0.22"
+              strokeLinejoin="round"
               clipPath={`url(#${uid}clip)`}
-              filter={`url(#${uid}blur)`}
             />
 
             {/* Tầng 3: Sống lưng nét cong nhẹ mờ thanh thoát */}
@@ -744,8 +765,10 @@ export function SoftBars({
                 height={effectiveHeight}
                 fill="transparent"
                 style={{ cursor: "pointer" }}
-                onPointerEnter={() => updateHover(i)}
-                onPointerDown={() => updateHover(i)}
+                onPointerEnter={(e) => {
+                  if (e.pointerType !== "touch") updateHover(i);
+                }}
+                onClick={() => updateHover(i)}
               />
             ))}
           </svg>
@@ -1043,8 +1066,10 @@ export function SmoothLineChart({
                   height={effectiveHeight}
                   fill="transparent"
                   style={{ cursor: "pointer" }}
-                  onPointerEnter={() => updateHover(i)}
-                  onPointerDown={() => updateHover(i)}
+                  onPointerEnter={(e) => {
+                    if (e.pointerType !== "touch") updateHover(i);
+                  }}
+                  onClick={() => updateHover(i)}
                 />
               );
             })}

@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { FileText } from "lucide-react";
 import {
@@ -14,7 +15,10 @@ import {
   ReferenceLine,
 } from "recharts";
 import { useAuth } from "@/components/auth/AuthProvider";
-import LabTestCertificateModal from "@/components/portal/LabTestCertificateModal";
+
+const LabTestCertificateModal = dynamic(() => import("@/components/portal/LabTestCertificateModal"), {
+  ssr: false,
+});
 import { AXIS_TICK, GRID_STROKE, TOOLTIP_STYLE } from "@/components/ui/chart-theme";
 import { AreaTrend, CapsuleDonutChart, type DonutItem } from "@/components/ui/charts/KpiCharts";
 import { useApiList } from "@/hooks/use-api";

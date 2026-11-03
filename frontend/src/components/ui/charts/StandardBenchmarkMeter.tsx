@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, useCallback, useEffect } from "react";
+import { useId, useRef, useState, useCallback, useEffect, useLayoutEffect } from "react";
 import "./charts.css";
 
 export interface StandardMetric {
@@ -16,13 +16,22 @@ export interface StandardBenchmarkMeterProps {
   initialIndex?: number;
 }
 
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)));
+    const initial = Math.round(el.clientWidth);
+    if (initial > 0) setWidth(initial);
+    const ro = new ResizeObserver(([entry]) => {
+      const w = Math.round(entry.contentRect.width);
+      if (w > 0) {
+        setWidth((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+      }
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -111,18 +120,34 @@ export function StandardBenchmarkMeter({ standards, initialIndex = 0 }: Standard
     ].join(" ");
   };
 
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clientX = e.clientX - rect.left;
-      const pct = Math.round(((clientX - PAD_X) / barW) * 100);
-      setHoverPct(Math.min(Math.max(pct, 0), 100));
+  const selectAtClientX = useCallback(
+    (svg: SVGSVGElement, clientX: number) => {
+      const rect = svg.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const pct = Math.round(((x - PAD_X) / barW) * 100);
+      const clamped = Math.min(Math.max(pct, 0), 100);
+      setHoverPct((prev) => (prev === clamped ? prev : clamped));
     },
-    [PAD_X, barW]
+    [PAD_X, barW],
   );
 
-  const handlePointerLeave = useCallback(() => {
-    setHoverPct(null);
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<SVGSVGElement>) => {
+      if (e.pointerType === "touch") return;
+      selectAtClientX(e.currentTarget, e.clientX);
+    },
+    [selectAtClientX],
+  );
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      selectAtClientX(e.currentTarget, e.clientX);
+    },
+    [selectAtClientX],
+  );
+
+  const handlePointerLeave = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.pointerType !== "touch") setHoverPct(null);
   }, []);
 
   const tipW = isMini ? 76 : 98;
@@ -172,6 +197,7 @@ export function StandardBenchmarkMeter({ standards, initialIndex = 0 }: Standard
               height={svgH}
               className="sbm-svg"
               onPointerMove={handlePointerMove}
+              onClick={handleClick}
               onPointerLeave={handlePointerLeave}
               style={{ display: "block", overflow: "visible", cursor: "ew-resize" }}
             >
@@ -187,20 +213,6 @@ export function StandardBenchmarkMeter({ standards, initialIndex = 0 }: Standard
                   <stop offset="86%" stopColor="#5cd87a" />
                   <stop offset="100%" stopColor="#42d389" />
                 </linearGradient>
-
-                {/* Bộ lọc làm mờ viền phát sáng mộng mơ (Soft frosted aura glow) */}
-                <filter id={`${uid}soft`} x="-20%" y="-40%" width="140%" height="180%">
-                  <feGaussianBlur stdDeviation="3.8" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" opacity="0.68" />
-                    <feMergeNode in="SourceGraphic" opacity="0.95" />
-                  </feMerge>
-                </filter>
-
-                {/* Vầng sáng mở rộng tạo hiệu ứng dạ quang êm dịu */}
-                <filter id={`${uid}haze`} x="-20%" y="-40%" width="140%" height="180%">
-                  <feGaussianBlur stdDeviation="8" />
-                </filter>
               </defs>
 
               {/* Nhãn mốc đánh giá phía trên với đường kẻ nối đứt nét (Worst imaginable, Poor, Ok, Best imaginable) */}
@@ -249,18 +261,18 @@ export function StandardBenchmarkMeter({ standards, initialIndex = 0 }: Standard
               {/* Lớp dạ quang phát sáng mộng mơ (Soft ambient aura glow) */}
               <path
                 d={buildPinchedBarPath(PAD_X, barY, barW, barH, barR, needleX, 0.68)}
-                fill={`url(#${uid}aurora)`}
-                filter={`url(#${uid}haze)`}
-                opacity="0.38"
-                style={{ transition: "d 0.12s ease" }}
+                fill="none"
+                stroke={`url(#${uid}aurora)`}
+                strokeWidth="7"
+                strokeOpacity="0.22"
+                strokeLinejoin="round"
               />
 
               {/* Thân thanh gradient chính với eo thắt tại kim đo (Pinched gradient capsule) */}
               <path
                 d={buildPinchedBarPath(PAD_X, barY, barW, barH, barR, needleX, 0.68)}
                 fill={`url(#${uid}aurora)`}
-                filter={`url(#${uid}soft)`}
-                style={{ transition: "d 0.12s ease" }}
+                opacity="0.96"
               />
 
               {/* Đường kim dọc đứt nét chạy xuyên qua eo thắt (Vertical dashed needle line) */}
