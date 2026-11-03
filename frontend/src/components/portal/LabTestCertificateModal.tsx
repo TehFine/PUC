@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Printer } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
@@ -159,8 +160,20 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
     };
   }, [onClose]);
 
+  // In / Xuất PDF: tiêu đề trang được dùng làm tên file gợi ý khi chọn "Lưu thành PDF",
+  // nên tạm đổi sang mã phiếu rồi khôi phục lại sau khi hộp thoại in đóng.
   const handlePrint = () => {
+    const previousTitle = document.title;
+    const safeCode = (test.code || "phieu").replace(/[^a-zA-Z0-9-_]+/g, "-");
+    document.title = `Phieu-kiem-nghiem-${safeCode}`;
+    const restoreTitle = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+    window.addEventListener("afterprint", restoreTitle);
     window.print();
+    // Một số trình duyệt di động không phát sự kiện afterprint: khôi phục dự phòng
+    setTimeout(restoreTitle, 1500);
   };
 
   // Format ngày tháng hiển thị phần ký tên
@@ -176,9 +189,10 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
       : `${test.chlorpyrifosMgKg} mg/kg`;
   const isChlorpyrifosPass = test.chlorpyrifosMgKg === null || test.chlorpyrifosMgKg === undefined || test.chlorpyrifosMgKg === 0;
 
-  return (
+  // Gắn trực tiếp dưới <body>: khi in chỉ còn phiếu, không bị nội dung trang phía sau đẩy sang trang trắng
+  return createPortal(
     <div
-      className="cert-modal-backdrop"
+      className="cert-modal-backdrop cert-print-root"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -2313,16 +2327,49 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           }
         }
 
-        /* ── CHẾ ĐỘ IN ẤN CHUẨN A4 (PRINT MEDIA) ── */
+        /* ── CHẾ ĐỘ IN ẤN CHUẨN A4 (PRINT MEDIA) ──
+           Chỉ in đúng 1 tờ phiếu bản desktop (thiết kế 790px ≈ khổ 210mm), ẩn toàn bộ phần còn lại của trang. */
+        @page {
+          size: A4 portrait;
+          margin: 0;
+        }
+
         @media print {
-          body * {
-            visibility: hidden !important;
+          :global(html),
+          :global(body) {
+            overflow: visible !important;
+            height: auto !important;
+            min-height: 0 !important;
+            background: #ffffff !important;
           }
 
-          .cert-desktop-only,
-          .cert-desktop-only .cert-paper,
-          .cert-desktop-only .cert-paper * {
-            visibility: visible !important;
+          :global(body > *:not(.cert-print-root)) {
+            display: none !important;
+          }
+
+          .cert-modal-backdrop {
+            position: static !important;
+            inset: auto !important;
+            z-index: auto !important;
+            display: block !important;
+            overflow: visible !important;
+            padding: 0 !important;
+            background: none !important;
+            -webkit-backdrop-filter: none !important;
+            backdrop-filter: none !important;
+            animation: none !important;
+          }
+
+          .cert-modal-container {
+            display: block !important;
+            width: 210mm !important;
+            max-width: none !important;
+            margin: 0 !important;
+          }
+
+          .no-print,
+          .cert-mobile-a4-stack {
+            display: none !important;
           }
 
           .cert-desktop-only {
@@ -2330,29 +2377,30 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             filter: none !important;
           }
 
-          .no-print,
-          .cert-mobile-a4-stack,
-          .cert-modal-backdrop {
-            display: none !important;
-            background: transparent !important;
-            padding: 0 !important;
-          }
-
           .cert-paper {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
+            position: relative !important;
+            width: 210mm !important;
+            max-width: none !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            border: none !important;
+            border-radius: 0 !important;
             box-shadow: none !important;
             clip-path: none !important;
-            border: none !important;
-            padding: 20mm 15mm !important;
-            margin: 0 !important;
-            border-radius: 0 !important;
+            background: #ffffff !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          /* Giữ nguyên màu con dấu, bảng kết quả và nền khi in / lưu PDF */
+          .cert-paper,
+          .cert-paper * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
       `}</style>
-    </div>
+    </div>,
+    document.body,
   );
 }
