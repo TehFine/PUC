@@ -3735,6 +3735,96 @@ body.pt-body {
   line-height: 1.5;
   color: var(--text-secondary);
 }
+
+/* ── Thẻ Cảnh báo & Vi phạm (tab Nhật ký): gọn gàng, không icon ── */
+.pt-viol-item {
+  gap: 6px;
+}
+.pt-viol-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pt-viol-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  word-break: break-word;
+}
+.pt-viol-head .pt-pill {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.pt-notice p.pt-viol-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.pt-viol-box {
+  margin-top: 2px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.pt-viol-box-response {
+  background: #f8fafc;
+}
+.pt-viol-box-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.pt-notice .pt-viol-box-response p {
+  margin: 0;
+  font-size: 13px;
+  color: #334155;
+}
+.pt-viol-box-resolved {
+  background: #ecfdf5;
+  color: #065f46;
+}
+/* Chân thẻ: ngày phát hiện bên trái, nút hành động bên phải trên cùng một hàng */
+.pt-viol-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+.pt-viol-foot .pt-notice-meta {
+  min-width: 0;
+}
+.pt-viol-action {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .pt-viol-item {
+    padding: 12px 0;
+  }
+  .pt-viol-title {
+    font-size: 14px;
+  }
+  .pt-viol-head .pt-pill {
+    padding: 3px 9px;
+    font-size: 11px;
+  }
+  .pt-viol-action {
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+}
 .pt-test-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

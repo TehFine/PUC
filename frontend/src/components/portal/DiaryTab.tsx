@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { AlertTriangle, CheckCircle2, MessageSquareReply, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
@@ -744,59 +744,22 @@ export default function DiaryTab() {
               const isOpen = v.status === "open";
 
               return (
-                <li
-                  key={v.id}
-                  className="pt-notice"
-                  style={{ borderBottom: "1px solid var(--border-light, #f1f5f9)", paddingBottom: 14 }}
-                >
-                  <div className="pt-notice-head">
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
-                      <AlertTriangle
-                        size={18}
-                        style={{ color: v.severity === "critical" ? "#dc2626" : "#f59e0b", flexShrink: 0 }}
-                      />
-                      <strong>{v.title}</strong>
-                    </div>
+                <li key={v.id} className="pt-notice pt-viol-item">
+                  <div className="pt-viol-head">
+                    <strong className="pt-viol-title">{v.title}</strong>
                     <Pill tone={isOpen ? (v.severity === "critical" ? "red" : "gold") : "green"}>
-                      {isOpen ? (v.severity === "critical" ? "Nghiêm trọng · Đang mở" : "Cần khắc phục") : "Đã xử lý"}
+                      {isOpen ? (v.severity === "critical" ? "Nghiêm trọng" : "Cần khắc phục") : "Đã xử lý"}
                     </Pill>
                   </div>
 
-                  {v.description && (
-                    <p style={{ margin: "4px 0 6px", color: "var(--text-primary)" }}>{v.description}</p>
-                  )}
-
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      flexWrap: "wrap",
-                      gap: 8,
-                      marginTop: 4,
-                    }}
-                  >
-                    <p className="pt-notice-meta">
-                      Phát hiện: {formatDate(v.detectedOn)}
-                      {v.plotCode ? ` · Thửa ${v.plotCode}` : ""}
-                    </p>
-                  </div>
+                  {v.description && <p className="pt-viol-desc">{v.description}</p>}
 
                   {v.farmerResponse && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        padding: "10px 12px",
-                        borderRadius: 10,
-                        background: "#f8fafc",
-                        border: "1px solid #e2e8f0",
-                      }}
-                    >
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
-                        Phản hồi khắc phục của hộ
-                        {v.farmerResponseAt ? ` (${formatDate(v.farmerResponseAt)})` : ""}:
-                      </div>
-                      <p style={{ margin: 0, fontSize: 13.5, color: "#334155" }}>{v.farmerResponse}</p>
+                    <div className="pt-viol-box pt-viol-box-response">
+                      <span className="pt-viol-box-label">
+                        Phản hồi của hộ{v.farmerResponseAt ? ` · ${formatDate(v.farmerResponseAt)}` : ""}
+                      </span>
+                      <p>{v.farmerResponse}</p>
                       {v.farmerResponsePhotoUrl && (
                         <div style={{ marginTop: 8 }}>
                           <StoredPhoto
@@ -810,22 +773,7 @@ export default function DiaryTab() {
                   )}
 
                   {(v.resolvedOn || v.resolutionNotes) && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        padding: "8px 12px",
-                        borderRadius: 10,
-                        background: "#ecfdf5",
-                        border: "1px solid #a7f3d0",
-                        color: "#065f46",
-                        fontSize: 13,
-                      }}
-                    >
-                      <CheckCircle2
-                        size={15}
-                        style={{ display: "inline", verticalAlign: "-2px", marginRight: 6 }}
-                        aria-hidden="true"
-                      />
+                    <div className="pt-viol-box pt-viol-box-resolved">
                       <strong>
                         Đã xác nhận khắc phục{v.resolvedOn ? ` ngày ${formatDate(v.resolvedOn)}` : ""}
                       </strong>
@@ -833,18 +781,21 @@ export default function DiaryTab() {
                     </div>
                   )}
 
-                  {isOpen && (
-                    <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+                  <div className="pt-viol-foot">
+                    <p className="pt-notice-meta">
+                      Phát hiện: {formatDate(v.detectedOn)}
+                      {v.plotCode ? ` · Thửa ${v.plotCode}` : ""}
+                    </p>
+                    {isOpen && (
                       <button
                         type="button"
-                        className="pt-btn pt-btn-primary pt-btn-sm"
+                        className="pt-btn pt-btn-primary pt-btn-sm pt-viol-action"
                         onClick={() => setRespondingViolation(v)}
                       >
-                        <MessageSquareReply size={15} aria-hidden="true" />
-                        <span>{v.farmerResponse ? "Cập nhật báo cáo khắc phục" : "Báo đã khắc phục"}</span>
+                        {v.farmerResponse ? "Cập nhật khắc phục" : "Báo đã khắc phục"}
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </li>
               );
             })}
