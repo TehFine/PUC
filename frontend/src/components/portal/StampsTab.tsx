@@ -683,13 +683,13 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
           border-radius: 13px !important;
           border: none !important;
           outline: none !important;
-          background: #e05326 !important;
+          background: #007aff !important;
           color: #ffffff !important;
-          box-shadow: 0 3px 10px rgba(224, 83, 38, 0.28);
+          box-shadow: none !important;
           margin-top: 1px;
         }
         .decl-add-btn:hover {
-          background: #cf461b !important;
+          background: #0062cc !important;
         }
         .harvest-decl-form {
           background: #ffffff;
@@ -770,20 +770,21 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
           border-radius: 10px;
         }
         .btn-primary {
-          background: #e05326;
+          background: #007aff;
           color: #ffffff;
-          box-shadow: 0 4px 14px rgba(224, 83, 38, 0.28);
+          box-shadow: none;
         }
         .btn-primary:hover {
-          background: #cf461b;
+          background: #0062cc;
         }
         .btn-secondary {
-          background: #f1f3f8;
-          color: #475569;
+          background: #ffffff;
+          color: #007aff;
+          border: 1px solid rgba(0, 122, 255, 0.22) !important;
         }
         .btn-secondary:hover {
-          background: #e4e7ed;
-          color: #0f172a;
+          background: #f0f7ff;
+          color: #0062cc;
         }
         .decl-list {
           display: flex;
