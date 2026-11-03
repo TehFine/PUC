@@ -3,9 +3,158 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
-import { Printer } from "lucide-react";
+import { Download, Printer } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { formatDate } from "@/utils/format";
+
+/** Đóng gói mảng byte ảnh JPEG thành file PDF 1.4 khổ A4 chuẩn (595.28 x 841.89 pt). */
+function jpegBytesToA4PdfBlob(jpegBytes: Uint8Array, pixelWidth: number, pixelHeight: number): Blob {
+  const pageW = "595.28";
+  const pageH = "841.89";
+  const encoder = new TextEncoder();
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  const offsets: number[] = [0];
+  let pos = 0;
+
+  const pushStr = (str: string) => {
+    const buf = encoder.encode(str) as Uint8Array<ArrayBuffer>;
+    chunks.push(buf);
+    pos += buf.byteLength;
+  };
+  const pushBytes = (buf: Uint8Array) => {
+    const copy = new Uint8Array(buf.byteLength);
+    copy.set(buf);
+    chunks.push(copy);
+    pos += copy.byteLength;
+  };
+
+  pushStr("%PDF-1.4\n%\xFF\xFF\xFF\xFF\n");
+
+  offsets[1] = pos;
+  pushStr("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+  offsets[2] = pos;
+  pushStr("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+
+  offsets[3] = pos;
+  pushStr(
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
+  );
+
+  offsets[4] = pos;
+  pushStr(
+    `4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${pixelWidth} /Height ${pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.byteLength} >>\nstream\n`,
+  );
+  pushBytes(jpegBytes);
+  pushStr("\nendstream\nendobj\n");
+
+  const contentStream = `q\n${pageW} 0 0 ${pageH} 0 0 cm\n/Im0 Do\nQ\n`;
+  offsets[5] = pos;
+  pushStr(`5 0 obj\n<< /Length ${contentStream.length} >>\nstream\n${contentStream}endstream\nendobj\n`);
+
+  const xrefPos = pos;
+  pushStr("xref\n0 6\n0000000000 65535 f \n");
+  for (let i = 1; i <= 5; i++) {
+    pushStr(`${String(offsets[i]).padStart(10, "0")} 00000 n \n`);
+  }
+  pushStr(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
+
+  return new Blob(chunks, { type: "application/pdf" });
+}
+
+/** Kết xuất tờ giấy A4 (.cert-paper 790x1117) sang file PDF độ phân giải cao (2x) và tải thẳng về máy. */
+async function exportCertPaperToPdf(paperEl: HTMLElement, fileName: string): Promise<void> {
+  const width = 790;
+  const height = 1117;
+  const scale = 2;
+  const outW = width * scale;
+  const outH = height * scale;
+
+  const clone = paperEl.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll(".cert-paper-fold, .no-print").forEach((node) => node.remove());
+
+  const styles = Array.from(document.querySelectorAll("style"))
+    .map((el) => el.textContent ?? "")
+    .join("\n");
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const xhtmlNS = "http://www.w3.org/1999/xhtml";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("xmlns", svgNS);
+  svg.setAttribute("width", String(outW));
+  svg.setAttribute("height", String(outH));
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const fo = document.createElementNS(svgNS, "foreignObject");
+  fo.setAttribute("x", "0");
+  fo.setAttribute("y", "0");
+  fo.setAttribute("width", String(width));
+  fo.setAttribute("height", String(height));
+
+  const wrapper = document.createElementNS(xhtmlNS, "div");
+  wrapper.setAttribute("xmlns", xhtmlNS);
+  wrapper.setAttribute(
+    "style",
+    `width:${width}px;height:${height}px;background:#ffffff;overflow:hidden;margin:0;padding:0;`,
+  );
+
+  const styleEl = document.createElementNS(xhtmlNS, "style");
+  styleEl.textContent = `${styles}
+    .cert-paper {
+      width: ${width}px !important;
+      min-height: ${height}px !important;
+      height: ${height}px !important;
+      margin: 0 !important;
+      box-shadow: none !important;
+      clip-path: none !important;
+      border-radius: 0 !important;
+      background: #ffffff !important;
+      box-sizing: border-box !important;
+    }
+  `;
+
+  wrapper.appendChild(styleEl);
+  wrapper.appendChild(clone);
+  fo.appendChild(wrapper);
+  svg.appendChild(fo);
+
+  const svgXml = new XMLSerializer().serializeToString(svg);
+  const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgXml)}`;
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = (err) => reject(err);
+    image.src = svgUrl;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas context unavailable");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, outW, outH);
+  ctx.drawImage(img, 0, 0, outW, outH);
+
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.94);
+  const base64 = dataUrl.split(",")[1] ?? "";
+  const binary = atob(base64);
+  const jpegBytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    jpegBytes[i] = binary.charCodeAt(i);
+  }
+
+  const pdfBlob = jpegBytesToA4PdfBlob(jpegBytes, outW, outH);
+  const blobUrl = URL.createObjectURL(pdfBlob);
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+}
 
 export interface LabTestCertificateItem {
   id?: number;
@@ -103,6 +252,8 @@ function PaperDogEarFold({ idPrefix }: { idPrefix: string }) {
 
 export default function LabTestCertificateModal({ test, onClose }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [downloading, setDownloading] = useState<boolean>(false);
+  const paperRef = useRef<HTMLDivElement>(null);
   const mobileStackRef = useRef<HTMLDivElement>(null);
   const [sheetScale, setSheetScale] = useState<number>(0.68);
 
@@ -160,11 +311,11 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
     };
   }, [onClose]);
 
-  // In / Xuất PDF: tiêu đề trang được dùng làm tên file gợi ý khi chọn "Lưu thành PDF",
-  // nên tạm đổi sang mã phiếu rồi khôi phục lại sau khi hộp thoại in đóng.
+  const safeCode = (test.code || "phieu").replace(/[^a-zA-Z0-9-_]+/g, "-");
+
+  // In trực tiếp ra máy in khổ A4
   const handlePrint = () => {
     const previousTitle = document.title;
-    const safeCode = (test.code || "phieu").replace(/[^a-zA-Z0-9-_]+/g, "-");
     document.title = `Phieu-kiem-nghiem-${safeCode}`;
     const restoreTitle = () => {
       document.title = previousTitle;
@@ -174,6 +325,19 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
     window.print();
     // Một số trình duyệt di động không phát sự kiện afterprint: khôi phục dự phòng
     setTimeout(restoreTitle, 1500);
+  };
+
+  // Tải thẳng file PDF khổ A4 về thiết bị (không cần qua hộp thoại chọn máy in)
+  const handleDownloadPdf = async () => {
+    if (downloading || !paperRef.current) return;
+    setDownloading(true);
+    try {
+      await exportCertPaperToPdf(paperRef.current, `Phieu-kiem-nghiem-${safeCode}.pdf`);
+    } catch {
+      handlePrint();
+    } finally {
+      setDownloading(false);
+    }
   };
 
   // Format ngày tháng hiển thị phần ký tên
@@ -215,12 +379,23 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             <button
               type="button"
               className="cert-btn-action"
+              onClick={() => void handleDownloadPdf()}
+              disabled={downloading}
+              title="Tải file PDF phiếu kiểm nghiệm khổ A4 về máy"
+            >
+              <Download size={15} />
+              <span className="cert-btn-text-desktop">{downloading ? "Đang tạo PDF…" : "Tải file PDF"}</span>
+              <span className="cert-btn-text-mobile">{downloading ? "Đang tải…" : "Tải PDF"}</span>
+            </button>
+            <button
+              type="button"
+              className="cert-btn-print"
               onClick={handlePrint}
-              title="In phiếu kiểm nghiệm khổ A4 hoặc lưu thành PDF"
+              title="In phiếu kiểm nghiệm khổ A4"
+              aria-label="In phiếu"
             >
               <Printer size={15} />
-              <span className="cert-btn-text-desktop">In phiếu / Xuất PDF</span>
-              <span className="cert-btn-text-mobile">In / Xuất PDF</span>
+              <span className="cert-btn-print-label">In</span>
             </button>
             <button
               type="button"
@@ -238,7 +413,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             1. BẢN DESKTOP & PRINT: 1 TỜ GIẤY A4 CHUẨN (790 x 1117)
             ═══════════════════════════════════════════════════════════════════════ */}
         <div className="cert-paper-shadow-wrap cert-desktop-only">
-          <div className="cert-paper">
+          <div ref={paperRef} className="cert-paper">
             <PaperDogEarFold idPrefix="desktop" />
 
             {/* WATERMARK CHÌM Ở TÂM TỜ GIẤY */}
@@ -1171,7 +1346,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           justify-content: center;
           gap: 6px;
           padding: 7px 14px;
-          background: #2563eb;
+          background: #007aff;
           color: #ffffff;
           border: none;
           border-radius: 8px;
@@ -1187,8 +1362,36 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           display: none;
         }
 
-        .cert-btn-action:hover {
-          background: #1d4ed8;
+        .cert-btn-action:hover:not(:disabled) {
+          background: #0062cc;
+        }
+
+        .cert-btn-action:disabled {
+          opacity: 0.72;
+          cursor: wait;
+        }
+
+        .cert-btn-print {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 7px 12px;
+          background: #ffffff;
+          color: #007aff;
+          border: 1px solid rgba(0, 122, 255, 0.22);
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          white-space: nowrap;
+          flex-shrink: 0;
+          cursor: pointer;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .cert-btn-print:hover {
+          background: #f0f7ff;
+          color: #0062cc;
         }
 
         .cert-btn-close {
@@ -1803,6 +2006,15 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
           .cert-btn-text-mobile {
             display: inline;
+          }
+
+          .cert-btn-print {
+            padding: 7px 9px;
+            font-size: 11.5px;
+          }
+
+          .cert-btn-print-label {
+            display: none;
           }
 
           .cert-btn-close {
