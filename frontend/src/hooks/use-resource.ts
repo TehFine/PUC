@@ -6,6 +6,7 @@ import type { ListResponse } from "@/types/api";
 
 const PAGE_SIZE = 500;
 const resourceCache = new Map<string, unknown>();
+const resourceInflight = new Map<string, Promise<unknown>>();
 
 /**
  * Tải danh sách từ `/api/<resource>` và chuyển từng bản ghi sang kiểu hiển thị bằng `mapper`.
@@ -17,16 +18,28 @@ export function useResource<TDto, TView>(resource: string, mapper: (dto: TDto) =
   const [loading, setLoading] = useState(cached === undefined);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(
-    () => api.get<ListResponse<TDto>>(`/${resource}?pageSize=${PAGE_SIZE}`).then((result) => result.data.map(mapper)),
-    [resource, mapper],
-  );
+  const load = useCallback(() => {
+    const existing = resourceInflight.get(resource) as Promise<TView[]> | undefined;
+    if (existing) return existing;
+    const req = api
+      .get<ListResponse<TDto>>(`/${resource}?pageSize=${PAGE_SIZE}`)
+      .then((result) => {
+        const mapped = result.data.map(mapper);
+        resourceCache.set(resource, mapped);
+        return mapped;
+      })
+      .finally(() => {
+        resourceInflight.delete(resource);
+      });
+    resourceInflight.set(resource, req);
+    return req;
+  }, [resource, mapper]);
 
   const refresh = useCallback(async () => {
     setError(null);
+    resourceInflight.delete(resource);
     try {
       const fresh = await load();
-      resourceCache.set(resource, fresh);
       setData(fresh);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được dữ liệu.");
@@ -36,11 +49,16 @@ export function useResource<TDto, TView>(resource: string, mapper: (dto: TDto) =
   }, [load, resource]);
 
   useEffect(() => {
+    const existingCache = resourceCache.get(resource) as TView[] | undefined;
+    if (existingCache !== undefined) {
+      setData(existingCache);
+      setLoading(false);
+      return;
+    }
     let active = true;
     load()
       .then((rows) => {
         if (!active) return;
-        resourceCache.set(resource, rows);
         setData(rows);
       })
       .catch((err) => {

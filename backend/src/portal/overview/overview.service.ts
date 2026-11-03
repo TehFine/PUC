@@ -30,8 +30,8 @@ export class OverviewService {
     ).rows[0];
     if (!household) throw notFound("Không tìm thấy hộ của tài khoản này.");
 
-    const stats = (
-      await this.db.query(
+    const [statsRes, lastTestRes, reminders] = await Promise.all([
+      this.db.query(
         `SELECT
            (SELECT count(*)::int FROM violations WHERE household_id = $1 AND status = 'open') AS open_violations,
            (SELECT count(*)::int FROM approvals WHERE household_id = $1 AND status = 'pending') AS pending_approvals,
@@ -41,22 +41,23 @@ export class OverviewService {
            (SELECT coalesce(sum(weight_kg), 0)::float8 FROM harvest_contributions WHERE household_id = $1) AS harvest_total_kg,
            (SELECT count(*)::int FROM notifications WHERE user_id = $2 AND read_at IS NULL) AS unread_notifications`,
         [id, user.id],
-      )
-    ).rows[0];
-
-    const lastTest = (
-      await this.db.query(
+      ),
+      this.db.query(
         `SELECT code, plot_code, sampled_on, result FROM lab_tests
          WHERE household_id = $1 ORDER BY sampled_on DESC, id DESC LIMIT 1`,
         [id],
-      )
-    ).rows[0];
+      ),
+      this.reminders(id),
+    ]);
+
+    const stats = statsRes.rows[0];
+    const lastTest = lastTestRes.rows[0];
 
     return {
       household: camelRow(household),
       stats: camelRow(stats),
       lastTest: lastTest ? camelRow(lastTest) : null,
-      reminders: await this.reminders(id),
+      reminders,
     };
   }
 

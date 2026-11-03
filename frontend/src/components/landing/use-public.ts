@@ -47,6 +47,7 @@ type State<T> = { data: T | null; error: boolean; loading: boolean };
 
 // Dùng chung một lần gọi cho nhiều thành phần trên trang.
 const cache = new Map<string, Promise<unknown>>();
+const resolvedCache = new Map<string, unknown>();
 
 const REQUEST_TIMEOUT_MS = 20_000;
 const RETRY_DELAY_MS = 1500;
@@ -71,6 +72,10 @@ function load<T>(path: string): Promise<T> {
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
         return fetchJson<T>(path);
       })
+      .then((data) => {
+        resolvedCache.set(path, data);
+        return data;
+      })
       .catch((error) => {
         cache.delete(path); // cho phép thử lại ở lần tải sau
         throw error;
@@ -81,9 +86,18 @@ function load<T>(path: string): Promise<T> {
 }
 
 export function usePublic<T>(path: string): State<T> {
-  const [state, setState] = useState<State<T>>({ data: null, error: false, loading: true });
+  const [state, setState] = useState<State<T>>(() => {
+    if (resolvedCache.has(path)) {
+      return { data: resolvedCache.get(path) as T, error: false, loading: false };
+    }
+    return { data: null, error: false, loading: true };
+  });
 
   useEffect(() => {
+    if (resolvedCache.has(path)) {
+      setState({ data: resolvedCache.get(path) as T, error: false, loading: false });
+      return;
+    }
     let active = true;
     load<T>(path)
       .then((data) => active && setState({ data, error: false, loading: false }))

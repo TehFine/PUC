@@ -34,10 +34,15 @@ export function householdIdOf(user: AuthUser): number {
   return user.householdId;
 }
 
+let cachedPlotsTableExists: boolean | null = null;
+
 /** Bảng `plots` chỉ có khi CSDL bật PostGIS (migration 002 có thể bị bỏ qua). */
 export async function plotsTableExists(db: Pick<DatabaseService, "query">): Promise<boolean> {
+  if (cachedPlotsTableExists === true) return true;
   const { rows } = await db.query<{ t: string | null }>("SELECT to_regclass('public.plots')::text AS t");
-  return rows[0]?.t !== null && rows[0]?.t !== undefined;
+  const exists = rows[0]?.t !== null && rows[0]?.t !== undefined;
+  if (exists) cachedPlotsTableExists = true;
+  return exists;
 }
 
 /**
