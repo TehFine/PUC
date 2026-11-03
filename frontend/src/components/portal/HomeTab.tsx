@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRef, useState, useLayoutEffect, useMemo } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortal } from "@/hooks/use-portal";
@@ -8,7 +9,12 @@ import { formatDate } from "@/utils/format";
 import type { PortalList, PortalOverview, PortalReminder, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
 import { Pill, SectionDivider, Sheet, StateBlock } from "./ui";
-import { getTrainingKicker, TrainingDetailModal, usePortalTrainings, type TrainingCourseItem } from "./LearnTab";
+import { getTrainingKicker, usePortalTrainings, type TrainingCourseItem } from "./training-shared";
+
+const TrainingDetailModal = dynamic(
+  () => import("./LearnTab").then((m) => m.TrainingDetailModal),
+  { ssr: false },
+);
 
 const SCHEDULE_THEMES = [
   { capsuleBg: "linear-gradient(180deg, #10b981 0%, #059669 100%)" },

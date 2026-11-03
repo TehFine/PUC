@@ -15,18 +15,11 @@ import {
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import type { PortalAction } from "./PortalSearch";
+import { getTrainingKicker, usePortalTrainings, type TrainingCourseItem } from "./training-shared";
 import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
 import { Card, EmptyState, Pill, SectionDivider, Sheet, StateBlock } from "./ui";
 
-export type TrainingCourseItem = TrainingDto & Partial<Omit<PortalTrainingCourse, keyof TrainingDto>>;
-
-export function usePortalTrainings() {
-  const portalQuery = usePortal<PortalListLike<PortalTrainingCourse>>("training");
-  const data: TrainingCourseItem[] = useMemo(() => listOf(portalQuery.data), [portalQuery.data]);
-  const loading = portalQuery.loading && data.length === 0;
-  const error = data.length === 0 ? portalQuery.error : null;
-  return { data, loading, error, refresh: portalQuery.refresh };
-}
+export { getTrainingKicker, usePortalTrainings, type TrainingCourseItem };
 
 type View = "training" | "pesticides" | "fertilizers" | "varieties";
 type StatusFilter = "all" | "allowed" | "restricted" | "banned";
@@ -49,17 +42,6 @@ function getRelativeScheduleNote(dateStr: string | null): string {
   if (diffDays === -1) return "Hôm qua";
   if (diffDays < -1) return "Đã diễn ra";
   return "";
-}
-
-export function getTrainingKicker(title: string): string {
-  const lower = title.toLowerCase();
-  if (lower.includes("vietgap")) return "Quy chuẩn VietGAP";
-  if (lower.includes("gacc") || lower.includes("xuất khẩu")) return "Tiêu chuẩn GACC";
-  if (lower.includes("sâu bệnh") || lower.includes("phòng trừ")) return "Kỹ thuật phòng trừ";
-  if (lower.includes("phần mềm") || lower.includes("quản lý")) return "Chuyển đổi số PUC";
-  if (lower.includes("tưới tiêu")) return "Kỹ thuật canh tác";
-  if (lower.includes("hữu cơ")) return "Nông nghiệp hữu cơ";
-  return "Lớp tập huấn";
 }
 
 const TRAINING_THEMES = [
@@ -727,6 +709,8 @@ export function PesticideDetailModal({
         <img
           src={imgSrc}
           alt={item.name}
+          loading="lazy"
+          decoding="async"
           className="pt-pesticide-showcase-img"
         />
       </div>
@@ -1049,6 +1033,8 @@ function PesticideList() {
                   <img
                     src={imgSrc}
                     alt={item.name}
+                    loading="lazy"
+                    decoding="async"
                     className="pt-pest-card-img"
                   />
                 </div>
@@ -1257,6 +1243,8 @@ export function FertilizerDetailModal({
         <img
           src={imgSrc}
           alt={item.name}
+          loading="lazy"
+          decoding="async"
           className="pt-pesticide-showcase-img"
         />
       </div>
@@ -1532,6 +1520,8 @@ function FertilizerList() {
                   <img
                     src={imgSrc}
                     alt={item.name}
+                    loading="lazy"
+                    decoding="async"
                     className="pt-pest-card-img"
                   />
                 </div>
@@ -1712,6 +1702,8 @@ export function VarietyDetailModal({
         <img
           src={imgSrc}
           alt={item.name}
+          loading="lazy"
+          decoding="async"
           className="pt-pesticide-showcase-img"
         />
       </div>
@@ -2015,6 +2007,8 @@ function VarietyList() {
                   <img
                     src={imgSrc}
                     alt={item.name}
+                    loading="lazy"
+                    decoding="async"
                     className="pt-pest-card-img"
                   />
                 </div>
