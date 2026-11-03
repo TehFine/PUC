@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { homePathFor } from "@/lib/routes";
 import { NAV_LINKS } from "./data";
@@ -11,12 +11,16 @@ import { display } from "./fonts";
 export default function Nav() {
   const { status, session, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
+  const scrolledRef = useRef(false);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => {
       const isPast = window.scrollY > 24;
-      setScrolled((prev) => (prev !== isPast ? isPast : prev));
+      if (scrolledRef.current !== isPast) {
+        scrolledRef.current = isPast;
+        setScrolled(isPast);
+      }
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });

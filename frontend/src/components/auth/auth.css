@@ -650,18 +650,9 @@ select.auth-input {
   .auth-slide {
     position: absolute;
     inset: 0;
-    opacity: 0;
-    transition: opacity 1.6s ease;
-  }
-  .auth-slide.is-active {
-    opacity: 1;
   }
   .auth-slide img {
     object-fit: cover;
-    transform: scale(1.02);
-  }
-  .auth-slide.is-active img {
-    animation: auth-drift 14s ease-out forwards;
   }
 
   .auth-aside {
@@ -717,19 +708,6 @@ select.auth-input {
   }
   .auth-sub {
     margin-bottom: 22px;
-  }
-}
-
-@keyframes auth-drift {
-  to {
-    transform: scale(1.12);
-  }
-}
-
-@media (max-width: 640px) {
-  .auth-slide.is-active img {
-    animation: none;
-    transform: scale(1.02);
   }
 }
 
