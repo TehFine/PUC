@@ -740,7 +740,10 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
   return (
     <div className="pt-stack">
       {/* KHỐI CẢNH BÁO & VI PHẠM NHẬT KÝ CANH TÁC */}
-      <Card title={`Vi phạm (${violationsList.length})`}>
+      <Card
+        title="Vi phạm"
+        action={<span className="pt-viol-count">{violationsList.length}</span>}
+      >
         <StateBlock loading={violations.loading} error={violations.error} />
         {!violations.loading && violationsList.length === 0 && (
           <EmptyState icon="ok">Hộ của bạn không có cảnh báo hay vi phạm nhật ký nào. Hãy tiếp tục duy trì ghi chép đúng quy chuẩn VietGAP.</EmptyState>
@@ -756,9 +759,16 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
 
               return (
                 <li key={v.id} className="pt-notice pt-viol-item">
-                  <strong className="pt-viol-title">{v.title}</strong>
-
-                  {v.description && <p className="pt-viol-desc">{v.description}</p>}
+                  <div className="pt-viol-main">
+                    <strong className="pt-viol-title">{v.title}</strong>
+                    <div className="pt-viol-details">
+                      {v.description && <p className="pt-viol-desc">{v.description}</p>}
+                      <p className="pt-notice-meta pt-viol-meta">
+                        Phát hiện: {formatDate(v.detectedOn)}
+                        {v.plotCode ? ` · Thửa ${v.plotCode}` : ""}
+                      </p>
+                    </div>
+                  </div>
 
                   {v.farmerResponse && (
                     <div className="pt-viol-box pt-viol-box-response">
@@ -787,12 +797,8 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                     </div>
                   )}
 
-                  <div className="pt-viol-foot">
-                    <p className="pt-notice-meta">
-                      Phát hiện: {formatDate(v.detectedOn)}
-                      {v.plotCode ? ` · Thửa ${v.plotCode}` : ""}
-                    </p>
-                    {isOpen && (
+                  {isOpen && (
+                    <div className="pt-viol-foot">
                       <button
                         type="button"
                         className="pt-btn pt-btn-primary pt-btn-sm pt-viol-action"
@@ -807,8 +813,8 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                       >
                         {needsJournal ? "Ghi nhật ký" : v.farmerResponse ? "Cập nhật khắc phục" : "Báo đã khắc phục"}
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </li>
               );
             })}

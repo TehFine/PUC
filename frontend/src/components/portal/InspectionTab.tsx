@@ -8,7 +8,7 @@ import { relativeDayLabel } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalLabTest, PortalList, PortalScheduleItem } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
-import { Card, EmptyState, Pill, SectionDivider, StateBlock } from "./ui";
+import { EmptyState, SectionDivider, StateBlock } from "./ui";
 
 const LabTestCertificateModal = dynamic(() => import("./LabTestCertificateModal"), { ssr: false });
 
@@ -39,13 +39,18 @@ export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?
   return (
     <div className="pt-stack">
       {/* 1. KẾT QUẢ KIỂM NGHIỆM */}
-      <Card title="Kết quả kiểm nghiệm">
+      <section className="pt-schedule-section" aria-labelledby="lab-tests-heading">
+        <div className="pt-schedule-header">
+          <h2 id="lab-tests-heading" className="pt-schedule-title">
+            Kết quả kiểm nghiệm
+          </h2>
+        </div>
         <StateBlock loading={tests.loading} error={tests.error} />
         {tests.data && tests.data.data.length === 0 && (
           <EmptyState icon="lab">Chưa có kết quả kiểm nghiệm nào.</EmptyState>
         )}
         {tests.data && tests.data.data.length > 0 && (
-          <ul className="pt-list">
+          <ul className="pt-list pt-lab-test-list">
             {tests.data.data.map((test) => (
               <li
                 key={test.id}
@@ -61,13 +66,10 @@ export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?
                 }}
                 title="Bấm để xem chi tiết kết quả kiểm nghiệm"
               >
-                <div className="pt-lab-test-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span>{test.code} · Thửa {test.plotCode}</span>
-                  <Pill tone={test.result === "pass" ? "green" : "red"}>
-                    {test.result === "pass" ? "Đạt" : "Không đạt"}
-                  </Pill>
+                <div className="pt-lab-test-title">
+                  <span className="pt-lab-test-code">{test.code} · Thửa {test.plotCode}</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                <div className="pt-lab-test-right">
                   <div className="pt-lab-test-time">{formatDate(test.sampledOn)}</div>
                   <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
                 </div>
@@ -75,7 +77,7 @@ export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?
             ))}
           </ul>
         )}
-      </Card>
+      </section>
 
       <SectionDivider />
 

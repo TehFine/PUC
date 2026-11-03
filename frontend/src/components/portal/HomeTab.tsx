@@ -455,7 +455,7 @@ export default function HomeTab({
                   title="Mở nhật ký canh tác để ghi chép hoạt động"
                 >
                   <span>Ghi nhật ký</span>
-                  <span aria-hidden="true">&rarr;</span>
+                  <DetailArrowIcon className="pt-hero-cta-arrow" size={20} />
                 </button>
               </div>
             </div>
@@ -535,7 +535,8 @@ export default function HomeTab({
               className="pt-schedule-link"
               onClick={() => onNavigate("inspection")}
             >
-              Xem tất cả &rarr;
+              <span>Xem tất cả</span>
+              <DetailArrowIcon className="pt-schedule-link-arrow" size={20} />
             </button>
           )}
         </div>
@@ -619,7 +620,8 @@ export default function HomeTab({
               className="pt-schedule-link"
               onClick={() => onNavigate("learn")}
             >
-              Xem tất cả &rarr;
+              <span>Xem tất cả</span>
+              <DetailArrowIcon className="pt-schedule-link-arrow" size={20} />
             </button>
           )}
         </div>

@@ -1263,7 +1263,7 @@ export function FertilizerDetailModal({
 
       {/* 2. Tiêu đề, phân loại & trạng thái */}
       <div className="pt-pesticide-header-info">
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
           <span className={`pt-fert-status-badge pt-fert-status-${item.status}`}>
             {isEncouraged ? "Khuyến khích VietGAP" : isWarning ? "Cảnh báo: Không sử dụng" : "Được phép sử dụng"}
           </span>
