@@ -11,6 +11,7 @@ import {
   QrTagIcon,
   type RadialIconProps,
 } from "./RadialIcons";
+import { useSheetSwipe } from "./use-sheet-swipe";
 
 export interface NavItemConfig {
   id: PortalTabId;
@@ -112,13 +113,8 @@ export default function RadialNavWheel({
   const selectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isClosingRef = useRef(false);
 
-  // Hỗ trợ vuốt kéo xuống từ tiêu đề để đóng mượt mà
-  const isTrackingRef = useRef(false);
-  const isDraggingRef = useRef(false);
-  const dragStartYRef = useRef(0);
-  const currentTranslateYRef = useRef(0);
-  const dragStartTimeRef = useRef(0);
-  const activePointerIdRef = useRef<number | null>(null);
+  // Vùng tiêu đề: chạm vào đây luôn kéo popup; trong danh sách thì cuộn tới đầu rồi kéo tiếp để đóng
+  const headRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -248,70 +244,8 @@ export default function RadialNavWheel({
     handleClose();
   };
 
-  const onHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isClosingRef.current) return;
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    isTrackingRef.current = true;
-    isDraggingRef.current = false;
-    dragStartYRef.current = e.clientY;
-    currentTranslateYRef.current = 0;
-    dragStartTimeRef.current = Date.now();
-    activePointerIdRef.current = e.pointerId;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-  };
-
-  const onHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isTrackingRef.current || activePointerIdRef.current !== e.pointerId || isClosingRef.current) return;
-    const rawDeltaY = e.clientY - dragStartYRef.current;
-    if (!isDraggingRef.current) {
-      if (Math.abs(rawDeltaY) < 4) return;
-      isDraggingRef.current = true;
-      dragStartYRef.current = e.clientY;
-      dragStartTimeRef.current = Date.now();
-      if (sheetRef.current) {
-        sheetRef.current.style.transition = "none";
-        sheetRef.current.style.animation = "none";
-      }
-      if (backdropRef.current) {
-        backdropRef.current.style.transition = "none";
-        backdropRef.current.style.animation = "none";
-      }
-      return;
-    }
-    const deltaY = e.clientY - dragStartYRef.current;
-    const translateY = deltaY < 0 ? deltaY * 0.12 : deltaY;
-    currentTranslateYRef.current = translateY;
-    if (sheetRef.current) {
-      sheetRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
-    }
-  };
-
-  const onHeaderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (activePointerIdRef.current !== e.pointerId) return;
-    activePointerIdRef.current = null;
-    const wasDragging = isDraggingRef.current;
-    isTrackingRef.current = false;
-    isDraggingRef.current = false;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-    if (!wasDragging) return;
-    const deltaY = currentTranslateYRef.current;
-    const elapsed = Math.max(1, Date.now() - dragStartTimeRef.current);
-    const velocity = deltaY / elapsed;
-    if (deltaY > 100 || (velocity > 0.4 && deltaY > 30)) {
-      handleClose();
-    } else if (sheetRef.current) {
-      sheetRef.current.style.transition = "transform 240ms cubic-bezier(0.25, 1, 0.5, 1)";
-      sheetRef.current.style.transform = "translate3d(0, 0, 0)";
-    }
-  };
+  // Vuốt kiểu khung bình luận TikTok / Facebook (dùng chung với các popup Sheet)
+  useSheetSwipe({ sheetRef, handleRef: headRef, onDismiss: handleClose, enabled: isOpen });
 
   return (
     <>
@@ -348,13 +282,7 @@ export default function RadialNavWheel({
             ref={sheetRef}
             className="pt-radial-sheet"
           >
-            <div
-              className="pt-radial-sheet-head"
-              onPointerDown={onHeaderPointerDown}
-              onPointerMove={onHeaderPointerMove}
-              onPointerUp={onHeaderPointerUp}
-              onPointerCancel={onHeaderPointerUp}
-            >
+            <div ref={headRef} className="pt-radial-sheet-head">
               <h2 className="pt-radial-sheet-title">Điều hướng</h2>
             </div>
 

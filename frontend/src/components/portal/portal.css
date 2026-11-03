@@ -5414,7 +5414,8 @@ body.pt-body {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  /* Không nảy (bounce) khi cuộn chạm đầu: để thao tác kéo tiếp xuống chuyển mượt sang đóng popup */
+  overscroll-behavior: none;
   box-sizing: border-box;
 }
 
@@ -5989,7 +5990,7 @@ body.pt-body {
   gap: 10px;
   overflow-y: auto;
   overflow-x: hidden;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
   padding: 2px 0;
 }
