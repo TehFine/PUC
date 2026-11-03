@@ -555,7 +555,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         .type-btn.active {
           background: #ffffff;
           color: #166534;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+          box-shadow: none;
         }
 
         .batch-qr-actions {

@@ -596,7 +596,7 @@
   background: var(--ink, #14372f);
   border-color: var(--ink, #14372f);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(20, 55, 47, 0.18);
+  box-shadow: none;
 }
 
 .sbm-tab-btn.is-active b {

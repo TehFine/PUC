@@ -614,7 +614,7 @@ export default function StampsTab({ plots = [] }: Props) {
         .pt-harvest-segmented button.active {
           background: var(--ink);
           color: #fff;
-          box-shadow: 0 4px 14px rgba(20, 55, 47, 0.2);
+          box-shadow: none;
         }
         .pt-harvest-segmented button:focus-visible {
           outline: 2px solid var(--green-600);

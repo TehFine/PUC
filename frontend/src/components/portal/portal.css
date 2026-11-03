@@ -253,7 +253,7 @@ body.pt-body {
 .pt-tab:hover { background: rgba(20, 55, 47, 0.06); }
 .pt-tab:active { transform: scale(0.95); }
 .pt-tab:focus-visible { outline: 2px solid var(--green-600); outline-offset: 1px; }
-.pt-tab.active { background: var(--ink); color: #fff; box-shadow: 0 8px 20px rgba(20, 55, 47, 0.28); }
+.pt-tab.active { background: var(--ink); color: #fff; box-shadow: none; }
 .pt-tab.active svg { color: var(--yellow); transform: translateY(-1px) scale(1.06); }
 
 /* Topbar right: profile badge & logout */
@@ -1557,7 +1557,7 @@ body.pt-body {
     white-space: nowrap;
   }
   .pt-tab svg { display: none; }
-  .pt-tab.active { box-shadow: 0 4px 14px rgba(20, 55, 47, 0.22); }
+  .pt-tab.active { box-shadow: none; }
 }
 
 /* ── Hero Shell (Container cho hiệu ứng lõm góc trên bên phải bằng SVG) ── */
@@ -4000,8 +4000,8 @@ body.pt-body {
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
-  transition: all 0.18s ease;
+  box-shadow: none;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
 .pt-pest-filter-chip:hover {
   background: #f8fafc;
@@ -4019,7 +4019,7 @@ body.pt-body {
   background: #0f172a;
   color: #ffffff;
   border-color: #0f172a;
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.18);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active .pt-pest-filter-count {
   background: rgba(255, 255, 255, 0.22);
@@ -4028,58 +4028,58 @@ body.pt-body {
 .pt-pest-filter-chip.is-active.is-allowed {
   background: #15803d;
   border-color: #15803d;
-  box-shadow: 0 3px 10px rgba(21, 128, 61, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-restricted {
   background: #d97706;
   border-color: #d97706;
-  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-banned {
   background: #dc2626;
   border-color: #dc2626;
-  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-organic,
 .pt-pest-filter-chip.is-active.is-encouraged {
   background: #059669;
   border-color: #059669;
-  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-npk {
   background: #2563eb;
   border-color: #2563eb;
-  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-foliar {
   background: #d97706;
   border-color: #d97706;
-  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-warning {
   background: #dc2626;
   border-color: #dc2626;
-  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-export {
   background: #059669;
   border-color: #059669;
-  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-native {
   background: #d97706;
   border-color: #d97706;
-  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-premium {
   background: #7c3aed;
   border-color: #7c3aed;
-  box-shadow: 0 3px 10px rgba(124, 58, 237, 0.25);
+  box-shadow: none;
 }
 .pt-pest-filter-chip.is-active.is-new {
   background: #0284c7;
   border-color: #0284c7;
-  box-shadow: 0 3px 10px rgba(2, 132, 199, 0.25);
+  box-shadow: none;
 }
 
 /* Thanh tóm tắt số lượng */
@@ -5195,7 +5195,7 @@ body.pt-body {
   transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .pt-segmented button:hover { background: rgba(20, 55, 47, 0.05); color: var(--ink); }
-.pt-segmented button.active { background: var(--ink); color: #fff; box-shadow: 0 4px 14px rgba(20, 55, 47, 0.2); }
+.pt-segmented button.active { background: var(--ink); color: #fff; box-shadow: none; }
 .pt-segmented button:focus-visible { outline: 2px solid var(--green-600); outline-offset: 2px; }
 
 /* Giao diện di động: căn giữa bộ chuyển Canh tác / Phun thuốc ở tab Nhật ký */
@@ -6857,7 +6857,7 @@ body.pt-body {
 .pt-mapmodal-pill-btn.is-active {
   background: #065f46;
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(6, 95, 70, 0.35);
+  box-shadow: none;
 }
 
 .pt-mapmodal-round-btn {

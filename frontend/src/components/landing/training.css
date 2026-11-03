@@ -110,7 +110,7 @@
   background: #fff;
   color: var(--lp-ink);
   font-weight: 650;
-  box-shadow: 0 4px 14px rgba(20, 55, 47, 0.08);
+  box-shadow: none;
   border: 1px solid rgba(20, 55, 47, 0.1);
 }
 
