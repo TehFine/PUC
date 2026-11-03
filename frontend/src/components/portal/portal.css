@@ -3740,24 +3740,13 @@ body.pt-body {
 .pt-viol-item {
   gap: 6px;
 }
-.pt-viol-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
 .pt-viol-title {
-  flex: 1;
-  min-width: 0;
+  display: block;
   font-size: 14.5px;
   font-weight: 700;
   line-height: 1.35;
   color: var(--ink);
   word-break: break-word;
-}
-.pt-viol-head .pt-pill {
-  flex-shrink: 0;
-  margin-top: 1px;
 }
 .pt-notice p.pt-viol-desc {
   margin: 0;
@@ -3815,10 +3804,6 @@ body.pt-body {
   }
   .pt-viol-title {
     font-size: 14px;
-  }
-  .pt-viol-head .pt-pill {
-    padding: 3px 9px;
-    font-size: 11px;
   }
   .pt-viol-action {
     padding: 7px 12px;

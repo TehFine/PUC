@@ -734,7 +734,7 @@ export default function DiaryTab() {
   return (
     <div className="pt-stack">
       {/* KHỐI CẢNH BÁO & VI PHẠM NHẬT KÝ CANH TÁC */}
-      <Card title={`Cảnh báo & Vi phạm (${violationsList.length})`}>
+      <Card title={`Vi phạm (${violationsList.length})`}>
         <StateBlock loading={violations.loading} error={violations.error} />
         {!violations.loading && violationsList.length === 0 && (
           <EmptyState icon="ok">Hộ của bạn không có cảnh báo hay vi phạm nhật ký nào. Hãy tiếp tục duy trì ghi chép đúng quy chuẩn VietGAP.</EmptyState>
@@ -750,12 +750,7 @@ export default function DiaryTab() {
 
               return (
                 <li key={v.id} className="pt-notice pt-viol-item">
-                  <div className="pt-viol-head">
-                    <strong className="pt-viol-title">{v.title}</strong>
-                    <Pill tone={isOpen ? (v.severity === "critical" ? "red" : "gold") : "green"}>
-                      {isOpen ? (v.severity === "critical" ? "Nghiêm trọng" : "Cần khắc phục") : "Đã xử lý"}
-                    </Pill>
-                  </div>
+                  <strong className="pt-viol-title">{v.title}</strong>
 
                   {v.description && <p className="pt-viol-desc">{v.description}</p>}
 
