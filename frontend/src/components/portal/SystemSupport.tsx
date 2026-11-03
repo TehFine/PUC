@@ -49,14 +49,7 @@ export function SupportFooter({ onOpen }: { onOpen: () => void }) {
         className="pt-support-btn"
         onClick={onOpen}
       >
-        <img
-          src="/headset.png"
-          alt=""
-          width={18}
-          height={18}
-          className="pt-support-icon"
-          aria-hidden="true"
-        />
+        <span className="pt-support-icon" aria-hidden="true" />
         <span>Bạn cần hỗ trợ ?</span>
       </button>
     </div>

@@ -1,12 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { QrCode } from "lucide-react";
 import { usePortal } from "@/hooks/use-portal";
 import type { PortalOverview, PortalPlot, PortalPlots } from "@/types/portal";
 import { EmptyState, StateBlock } from "./ui";
-import GardenSignboardModal from "./GardenSignboardModal";
-import PlotMapModal from "./PlotMapModal";
+
+const GardenSignboardModal = dynamic(() => import("./GardenSignboardModal"), { ssr: false });
+const PlotMapModal = dynamic(() => import("./PlotMapModal"), { ssr: false });
 
 export default function PlotsTab() {
   const plots = usePortal<PortalPlots>("plots");

@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { invalidatePortal, usePortal, useSharedQuery } from "@/hooks/use-portal";
-import { useResource } from "@/hooks/use-resource";
 import { api, errorMessage } from "@/lib/api-client";
 import { formatClock, PESTICIDE_STATUS, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
@@ -18,19 +17,13 @@ import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
 import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
 
-const keepTraining = (item: TrainingDto) => item;
-const keepPesticide = (item: PesticideDto) => item;
-
 export type TrainingCourseItem = TrainingDto & Partial<Omit<PortalTrainingCourse, keyof TrainingDto>>;
 
 export function usePortalTrainings() {
   const portalQuery = usePortal<PortalListLike<PortalTrainingCourse>>("training");
-  const fallback = useResource<TrainingDto, TrainingDto>("training", keepTraining);
-  const portalItems = useMemo(() => listOf(portalQuery.data), [portalQuery.data]);
-  const hasPortal = portalQuery.data !== null && (!portalQuery.error || portalItems.length > 0);
-  const data: TrainingCourseItem[] = hasPortal ? portalItems : fallback.data;
+  const data: TrainingCourseItem[] = useMemo(() => listOf(portalQuery.data), [portalQuery.data]);
   const loading = portalQuery.loading && data.length === 0;
-  const error = data.length === 0 ? (portalQuery.error && fallback.error ? portalQuery.error : null) : null;
+  const error = data.length === 0 ? portalQuery.error : null;
   return { data, loading, error, refresh: portalQuery.refresh };
 }
 
@@ -2082,18 +2075,10 @@ export default function LearnTab() {
           </button>
         ))}
       </div>
-      <div style={{ display: view === "training" ? "block" : "none" }}>
-        <TrainingList />
-      </div>
-      <div style={{ display: view === "pesticides" ? "block" : "none" }}>
-        <PesticideList />
-      </div>
-      <div style={{ display: view === "fertilizers" ? "block" : "none" }}>
-        <FertilizerList />
-      </div>
-      <div style={{ display: view === "varieties" ? "block" : "none" }}>
-        <VarietyList />
-      </div>
+      {view === "training" && <TrainingList />}
+      {view === "pesticides" && <PesticideList />}
+      {view === "fertilizers" && <FertilizerList />}
+      {view === "varieties" && <VarietyList />}
     </div>
   );
 }

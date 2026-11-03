@@ -63,11 +63,16 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   });
   const [mounted] = useState(() => typeof document !== "undefined");
 
-  // Vuốt xuống để tắt modal (Swipe-down-to-dismiss)
+  // Vuốt lên để mở rộng popup, vuốt xuống để thu gọn / tắt popup (Swipe up & down)
   const [dragY, setDragY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const touchStartRef = useRef<{ y: number; x: number; time: number } | null>(null);
+  const touchStartRef = useRef<{
+    y: number;
+    x: number;
+    time: number;
+    source: "topbar" | "popup";
+  } | null>(null);
   const hasDraggedRef = useRef(false);
   const popupRef = useRef<HTMLDivElement>(null);
 
@@ -80,11 +85,16 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     }, 320);
   }, [isClosing, onClose]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = (source: "topbar" | "popup") => (e: React.TouchEvent) => {
     if (isClosing) return;
     const touch = e.touches[0];
     if (!touch) return;
-    touchStartRef.current = { y: touch.clientY, x: touch.clientX, time: Date.now() };
+    touchStartRef.current = {
+      y: touch.clientY,
+      x: touch.clientX,
+      time: Date.now(),
+      source,
+    };
     hasDraggedRef.current = false;
   };
 
@@ -95,25 +105,39 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
     const deltaY = touch.clientY - touchStartRef.current.y;
     const deltaX = touch.clientX - touchStartRef.current.x;
+    const { source } = touchStartRef.current;
 
-    // Chỉ nhận diện kéo xuống theo phương thẳng đứng
-    if (deltaY > 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      if (popupRef.current && popupRef.current.scrollTop > 0) {
+    if (Math.abs(deltaY) <= Math.abs(deltaX)) return;
+
+    // 1. Kéo xuống (Swipe Down)
+    if (deltaY > 5) {
+      if (source === "popup" && popupRef.current && popupRef.current.scrollTop > 0) {
         return;
       }
       hasDraggedRef.current = true;
       setIsDragging(true);
-      // Damping mềm mại tự nhiên (power curve), không bị giật cục
       const dampened = deltaY <= 50 ? deltaY : 50 + Math.pow(deltaY - 50, 0.88);
       setDragY(Math.max(0, dampened));
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
+
+    // 2. Kéo lên trên popup (Swipe Up để mở rộng thông tin thửa đất)
+    if (source === "popup" && deltaY < -5) {
+      hasDraggedRef.current = true;
+      setIsDragging(true);
+      const absY = Math.abs(deltaY);
+      const upwardDampened = infoExpanded
+        ? -Math.min(16, Math.pow(absY, 0.72))
+        : -Math.min(42, Math.pow(absY, 0.84));
+      setDragY(upwardDampened);
       if (e.cancelable) e.preventDefault();
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (!touchStartRef.current || isClosing) return;
-    const startY = touchStartRef.current.y;
-    const startTime = touchStartRef.current.time;
+    const { y: startY, time: startTime, source } = touchStartRef.current;
     touchStartRef.current = null;
     setIsDragging(false);
 
@@ -127,7 +151,32 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     const deltaTime = Math.max(1, Date.now() - startTime);
     const velocity = deltaY / deltaTime; // px per ms
 
-    // Ngưỡng vuốt tắt nhẹ nhàng: kéo xuống > 65px hoặc lướt dứt khoát
+    if (source === "popup") {
+      // Vuốt lên -> Mở rộng popup thông tin thửa đất
+      if (deltaY < -20 || (velocity < -0.15 && deltaY < -10)) {
+        setInfoExpanded(true);
+        setDragY(0);
+        return;
+      }
+
+      // Vuốt xuống khi popup đang mở rộng -> Thu gọn popup về thanh đáy
+      if (infoExpanded && (deltaY > 36 || (velocity > 0.22 && deltaY > 16))) {
+        setInfoExpanded(false);
+        setDragY(0);
+        return;
+      }
+
+      // Vuốt xuống khi popup đang thu gọn -> Đóng bản đồ
+      if (!infoExpanded && (deltaY > 55 || (velocity > 0.28 && deltaY > 22))) {
+        handleRequestClose();
+        return;
+      }
+
+      setDragY(0);
+      return;
+    }
+
+    // Trên thanh topbar: vuốt xuống để tắt bản đồ
     if (deltaY > 65 || (velocity > 0.3 && deltaY > 25)) {
       handleRequestClose();
     } else {
@@ -135,7 +184,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     }
   };
 
-  // Kéo chuột trên Desktop đối với thanh handle / header
+  // Kéo chuột trên Desktop / giả lập Mobile đối với thanh handle & popup
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0 || isClosing) return;
     const target = e.target as HTMLElement | null;
@@ -149,11 +198,21 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     const onMouseMove = (moveEvent: MouseEvent) => {
       const deltaY = moveEvent.clientY - startY;
       const deltaX = moveEvent.clientX - startX;
-      if (deltaY > 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      if (Math.abs(deltaY) <= Math.abs(deltaX)) return;
+
+      if (deltaY > 5) {
         hasDraggedRef.current = true;
         setIsDragging(true);
         const dampened = deltaY <= 50 ? deltaY : 50 + Math.pow(deltaY - 50, 0.88);
         setDragY(Math.max(0, dampened));
+      } else if (deltaY < -5) {
+        hasDraggedRef.current = true;
+        setIsDragging(true);
+        const absY = Math.abs(deltaY);
+        const upwardDampened = infoExpanded
+          ? -Math.min(16, Math.pow(absY, 0.72))
+          : -Math.min(42, Math.pow(absY, 0.84));
+        setDragY(upwardDampened);
       }
     };
 
@@ -166,11 +225,27 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       const deltaTime = Math.max(1, Date.now() - startTime);
       const velocity = deltaY / deltaTime;
 
-      if (deltaY > 65 || (velocity > 0.3 && deltaY > 25)) {
-        handleRequestClose();
-      } else {
+      // Vuốt lên -> Mở rộng popup
+      if (deltaY < -20 || (velocity < -0.15 && deltaY < -10)) {
+        setInfoExpanded(true);
         setDragY(0);
+        return;
       }
+
+      // Vuốt xuống khi đang mở -> Thu gọn popup
+      if (infoExpanded && (deltaY > 36 || (velocity > 0.22 && deltaY > 16))) {
+        setInfoExpanded(false);
+        setDragY(0);
+        return;
+      }
+
+      // Vuốt xuống khi đang thu gọn -> Đóng bản đồ
+      if (!infoExpanded && (deltaY > 55 || (velocity > 0.28 && deltaY > 22))) {
+        handleRequestClose();
+        return;
+      }
+
+      setDragY(0);
     };
 
     window.addEventListener("mousemove", onMouseMove);
@@ -412,7 +487,11 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       aria-modal="true"
       aria-label={`Bản đồ thửa đất ${plot.code}`}
       style={{
-        opacity: isClosing ? 0 : dragY > 0 ? Math.max(0.45, 1 - dragY / 850) : undefined,
+        opacity: isClosing
+          ? 0
+          : !infoExpanded && dragY > 0
+            ? Math.max(0.45, 1 - dragY / 850)
+            : undefined,
         transition: isDragging
           ? "none"
           : isClosing
@@ -432,17 +511,21 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         style={{
           transform: isClosing
             ? "translateY(-24px)"
-            : dragY > 0
+            : !infoExpanded && dragY > 0
               ? `translateY(${Math.min(dragY * 0.25, 24)}px)`
               : undefined,
-          opacity: isClosing ? 0 : dragY > 0 ? Math.max(0.4, 1 - dragY / 260) : undefined,
+          opacity: isClosing
+            ? 0
+            : !infoExpanded && dragY > 0
+              ? Math.max(0.4, 1 - dragY / 260)
+              : undefined,
           transition: isDragging
             ? "none"
             : isClosing
               ? "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease"
               : "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease",
         }}
-        onTouchStart={handleTouchStart}
+        onTouchStart={handleTouchStart("topbar")}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
@@ -492,28 +575,28 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         style={{
           transform: isClosing
             ? "translateY(115%)"
-            : dragY > 0
+            : dragY !== 0
               ? `translateY(${dragY}px)`
               : undefined,
           opacity: isClosing
             ? 0
-            : dragY > 0
+            : !infoExpanded && dragY > 0
               ? Math.max(0.65, 1 - dragY / 650)
               : undefined,
           transition: isDragging
             ? "none"
             : isClosing
               ? "transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease"
-              : "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+              : "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
-        onTouchStart={handleTouchStart}
+        onTouchStart={handleTouchStart("popup")}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
       >
         {/* Đầu popup: Thanh kéo handle + Tiêu đề + Nút thu gọn / mở rộng */}
         <div
           className="pt-mapmodal-popup-header"
-          onMouseDown={handleMouseDown}
           onClick={() => {
             if (hasDraggedRef.current) return;
             setInfoExpanded((prev) => !prev);
@@ -526,7 +609,11 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               setInfoExpanded((prev) => !prev);
             }
           }}
-          title={infoExpanded ? "Vuốt xuống để tắt hoặc bấm để thu gọn" : "Vuốt xuống để tắt hoặc bấm để mở rộng"}
+          title={
+            infoExpanded
+              ? "Vuốt xuống hoặc bấm để thu gọn thông tin"
+              : "Vuốt lên để mở rộng hoặc vuốt xuống để tắt"
+          }
         >
           <div className="pt-mapmodal-popup-handle" aria-hidden="true" />
           <div className="pt-mapmodal-popup-header-row">
@@ -559,76 +646,81 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           </div>
         </div>
 
-        {/* Nội dung chi tiết popup (ẩn khi thu gọn để xem map) */}
-        {infoExpanded && (
-          <div className="pt-mapmodal-popup-body">
-            <div className="pt-mapmodal-popup-grid">
-              <div className="pt-mapmodal-popup-stat">
-                <span className="pt-mapmodal-stat-label">Diện tích</span>
-                <strong className="pt-mapmodal-stat-val">
-                  {plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
-                </strong>
-                <span className="pt-mapmodal-stat-sub">
-                  ({(plot.areaHa * 10000).toLocaleString("vi-VN")} m²)
-                </span>
+        {/* Nội dung chi tiết popup (trượt mở/đóng mượt mà khi vuốt lên/xuống) */}
+        <div
+          className={`pt-mapmodal-popup-body-wrap ${infoExpanded ? "is-expanded" : ""}`}
+          aria-hidden={!infoExpanded}
+        >
+          <div className="pt-mapmodal-popup-body-inner">
+            <div className="pt-mapmodal-popup-body">
+              <div className="pt-mapmodal-popup-grid">
+                <div className="pt-mapmodal-popup-stat">
+                  <span className="pt-mapmodal-stat-label">Diện tích</span>
+                  <strong className="pt-mapmodal-stat-val">
+                    {plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
+                  </strong>
+                  <span className="pt-mapmodal-stat-sub">
+                    ({(plot.areaHa * 10000).toLocaleString("vi-VN")} m²)
+                  </span>
+                </div>
+
+                <div className="pt-mapmodal-popup-stat">
+                  <span className="pt-mapmodal-stat-label">Số thửa / Tờ bản đồ</span>
+                  <strong className="pt-mapmodal-stat-val">
+                    Thửa #{plot.parcel || "—"} · Tờ #{plot.sheet || "—"}
+                  </strong>
+                  <span className="pt-mapmodal-stat-sub">
+                    Nguồn: {SOURCE_LABEL[plot.source]}
+                  </span>
+                </div>
+
+                <div className="pt-mapmodal-popup-stat">
+                  <span className="pt-mapmodal-stat-label">Mã vùng trồng</span>
+                  <strong className="pt-mapmodal-stat-val">
+                    {plot.zoneCode || "PUC-KRB-001"}
+                  </strong>
+                  <span className="pt-mapmodal-stat-sub">
+                    {plot.plantedYear ? `Trồng năm ${plot.plantedYear}` : "Cây thuần thục"}
+                  </span>
+                </div>
+
+                <div className="pt-mapmodal-popup-stat">
+                  <span className="pt-mapmodal-stat-label">Tọa độ tâm WGS84</span>
+                  <strong className="pt-mapmodal-stat-val pt-mapmodal-coords-text">
+                    {lat.toFixed(5)}, {lng.toFixed(5)}
+                  </strong>
+                  <span className="pt-mapmodal-stat-sub">Định vị vệ tinh GPS</span>
+                </div>
               </div>
 
-              <div className="pt-mapmodal-popup-stat">
-                <span className="pt-mapmodal-stat-label">Số thửa / Tờ bản đồ</span>
-                <strong className="pt-mapmodal-stat-val">
-                  Thửa #{plot.parcel || "—"} · Tờ #{plot.sheet || "—"}
-                </strong>
-                <span className="pt-mapmodal-stat-sub">
-                  Nguồn: {SOURCE_LABEL[plot.source]}
-                </span>
-              </div>
-
-              <div className="pt-mapmodal-popup-stat">
-                <span className="pt-mapmodal-stat-label">Mã vùng trồng</span>
-                <strong className="pt-mapmodal-stat-val">
-                  {plot.zoneCode || "PUC-KRB-001"}
-                </strong>
-                <span className="pt-mapmodal-stat-sub">
-                  {plot.plantedYear ? `Trồng năm ${plot.plantedYear}` : "Cây thuần thục"}
-                </span>
-              </div>
-
-              <div className="pt-mapmodal-popup-stat">
-                <span className="pt-mapmodal-stat-label">Tọa độ tâm WGS84</span>
-                <strong className="pt-mapmodal-stat-val pt-mapmodal-coords-text">
-                  {lat.toFixed(5)}, {lng.toFixed(5)}
-                </strong>
-                <span className="pt-mapmodal-stat-sub">Định vị vệ tinh GPS</span>
-              </div>
-            </div>
-
-            {/* Các nút tác vụ dưới đáy popup */}
-            <div className="pt-mapmodal-popup-actions">
-              <a
-                href={`https://www.google.com/maps?q=${lat},${lng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="pt-mapmodal-popup-action-btn pt-mapmodal-action-gmaps"
-                title="Mở ứng dụng Google Maps để nhận chỉ đường tới tận thửa đất"
-              >
-                <ExternalLink size={15} strokeWidth={2.2} />
-                <span>Chỉ đường Google Maps</span>
-              </a>
-
-              {onOpenSignboard && (
-                <button
-                  type="button"
-                  className="pt-mapmodal-popup-action-btn pt-mapmodal-action-qr"
-                  onClick={() => onOpenSignboard(plot)}
-                  title="Xem và in biển cắm vườn"
+              {/* Các nút tác vụ dưới đáy popup */}
+              <div className="pt-mapmodal-popup-actions">
+                <a
+                  href={`https://www.google.com/maps?q=${lat},${lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pt-mapmodal-popup-action-btn pt-mapmodal-action-gmaps"
+                  title="Mở ứng dụng Google Maps để nhận chỉ đường tới tận thửa đất"
                 >
-                  <QrCode size={15} strokeWidth={2.2} />
-                  <span>Biển cắm vườn</span>
-                </button>
-              )}
+                  <ExternalLink size={15} strokeWidth={2.2} />
+                  <span>Chỉ đường Google Maps</span>
+                </a>
+
+                {onOpenSignboard && (
+                  <button
+                    type="button"
+                    className="pt-mapmodal-popup-action-btn pt-mapmodal-action-qr"
+                    onClick={() => onOpenSignboard(plot)}
+                    title="Xem và in biển cắm vườn"
+                  >
+                    <QrCode size={15} strokeWidth={2.2} />
+                    <span>Biển cắm vườn</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>,
     document.body

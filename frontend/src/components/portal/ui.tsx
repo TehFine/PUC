@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
 import { CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
@@ -78,34 +78,40 @@ export function Sheet({
   children: ReactNode;
   className?: string;
 }) {
-  const [closing, setClosing] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const dragZoneRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   // Gesture tracking refs: hoàn toàn sử dụng ref để đảm bảo 120 FPS mượt mà không re-render React gây khựng
   const isTracking = useRef(false);
   const isDragging = useRef(false);
   const dragStartY = useRef(0);
+  const dragStartX = useRef(0);
   const currentTranslateY = useRef(0);
   const dragStartTime = useRef(0);
   const activePointerId = useRef<number | null>(null);
+  const dragSourceRef = useRef<"topbar" | "body">("topbar");
   const isClosingRef = useRef(false);
 
-  // Đóng dialog mượt mà với transition tinh chỉnh
+  // Đóng dialog mượt mà trực tiếp từ vị trí hiện tại (không bật lại keyframe CSS làm nhảy về 0)
   const handleClose = useCallback(() => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
-    setClosing(true);
 
-    if (sheetRef.current) {
-      sheetRef.current.style.transition = "transform 0.22s cubic-bezier(0.32, 0, 0.67, 0), opacity 0.2s ease-out";
-      sheetRef.current.style.transform = "translate3d(0, 100%, 0)";
-      sheetRef.current.style.opacity = "0";
+    const sheet = sheetRef.current;
+    const backdrop = backdropRef.current;
+    if (sheet) {
+      sheet.style.animation = "none";
+      sheet.style.pointerEvents = "none";
+      sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+      sheet.style.transform = "translate3d(0, 105%, 0)";
     }
-    if (backdropRef.current) {
-      backdropRef.current.style.transition = "opacity 0.2s ease-out";
-      backdropRef.current.style.opacity = "0";
+    if (backdrop) {
+      backdrop.style.animation = "none";
+      backdrop.style.pointerEvents = "none";
+      backdrop.style.transition = "opacity 200ms ease-out";
+      backdrop.style.opacity = "0";
     }
 
     setTimeout(() => {
@@ -117,18 +123,22 @@ export function Sheet({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && handleClose();
     document.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
+    const previousBody = document.body.style.overflow;
+    const previousHtml = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
+      document.documentElement.style.overflow = previousHtml;
+      document.body.style.overflow = previousBody;
     };
   }, [handleClose]);
 
-  // Sau khi animation mở ban đầu (slide-up 350ms) kết thúc, khóa style animation = "none"
-  // để trình duyệt KHÔNG BAO GIỜ tự chạy lại keyframe gây hiện tượng giật sáng/load lại màn hình
+  // Sau khi animation mở ban đầu kết thúc, khóa style animation = "none"
+  // để thao tác kéo transform trực tiếp trên GPU không bị xung đột với CSS fill-mode forwards
   useEffect(() => {
     const timer = setTimeout(() => {
+      if (isClosingRef.current) return;
       if (sheetRef.current) {
         sheetRef.current.style.animation = "none";
         sheetRef.current.style.transform = "translate3d(0, 0, 0)";
@@ -137,169 +147,159 @@ export function Sheet({
         backdropRef.current.style.animation = "none";
         backdropRef.current.style.opacity = "1";
       }
-    }, 380);
+    }, 350);
     return () => clearTimeout(timer);
   }, []);
 
-  // Bắt đầu chạm / nhấn chuột vào vùng thanh kéo & tiêu đề
+  const beginDragSession = (sheet: HTMLDivElement, originY: number) => {
+    isDragging.current = true;
+    dragStartY.current = originY;
+    dragStartTime.current = performance.now();
+    sheet.style.animation = "none";
+    sheet.style.transition = "none";
+    if (backdropRef.current) {
+      backdropRef.current.style.animation = "none";
+      backdropRef.current.style.transition = "none";
+    }
+    dragZoneRef.current?.classList.add("is-dragging");
+  };
+
+  const applyDragTransform = (rawDeltaY: number) => {
+    const translateY = rawDeltaY < 0 ? rawDeltaY * 0.12 : rawDeltaY;
+    currentTranslateY.current = translateY;
+    if (sheetRef.current) {
+      sheetRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
+    }
+  };
+
+  const finishDragSession = () => {
+    const wasDragging = isDragging.current;
+    isTracking.current = false;
+    isDragging.current = false;
+    activePointerId.current = null;
+    dragZoneRef.current?.classList.remove("is-dragging");
+
+    if (!wasDragging || isClosingRef.current) return;
+
+    const deltaY = currentTranslateY.current;
+    const elapsed = Math.max(1, performance.now() - dragStartTime.current);
+    const velocity = deltaY / elapsed;
+
+    // Điều kiện đóng: Kéo xuống > 90px hoặc vuốt nhanh > 0.35px/ms với khoảng kéo > 24px
+    if (deltaY > 90 || (velocity > 0.35 && deltaY > 24)) {
+      handleClose();
+    } else if (sheetRef.current) {
+      const sheet = sheetRef.current;
+      sheet.style.transition = "transform 240ms cubic-bezier(0.22, 1, 0.36, 1)";
+      sheet.style.transform = "translate3d(0, 0, 0)";
+    }
+  };
+
+  // 1. Kéo bằng Pointer Events trên thanh tiêu đề (.pt-sheet-topbar có touch-action: none)
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isClosingRef.current) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    // Bỏ qua nếu người dùng bấm nút đóng X
     if ((e.target as HTMLElement).closest(".pt-icon-btn")) return;
 
     isTracking.current = true;
     isDragging.current = false;
+    dragSourceRef.current = "topbar";
     dragStartY.current = e.clientY;
+    dragStartX.current = e.clientX;
     currentTranslateY.current = 0;
-    dragStartTime.current = Date.now();
+    dragStartTime.current = performance.now();
     activePointerId.current = e.pointerId;
 
     try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       // ignore
     }
   };
 
-  // Di chuyển ngón tay / chuột
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isTracking.current || activePointerId.current !== e.pointerId || isClosingRef.current) return;
 
     const rawDeltaY = e.clientY - dragStartY.current;
-
-    // Ngưỡng dịch chuyển tối thiểu (4px) để tránh giật khi người dùng chỉ bấm chạm nhẹ
     if (!isDragging.current) {
       if (Math.abs(rawDeltaY) < 4) return;
-      isDragging.current = true;
-
       if (sheetRef.current) {
-        sheetRef.current.style.transition = "none";
-        sheetRef.current.style.animation = "none";
+        beginDragSession(sheetRef.current, e.clientY);
       }
-      if (backdropRef.current) {
-        backdropRef.current.style.transition = "none";
-        backdropRef.current.style.animation = "none";
-      }
-      dragZoneRef.current?.classList.add("is-dragging");
+      return;
     }
 
-    // Tính khoảng dịch chuyển với kháng lực đàn hồi khi kéo ngược lên
-    let translateY = rawDeltaY;
-    if (translateY < 0) {
-      translateY = translateY * 0.12;
-    }
-    currentTranslateY.current = translateY;
-
-    if (sheetRef.current) {
-      sheetRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
-    }
-
-    if (backdropRef.current) {
-      if (translateY > 0) {
-        // Giảm mờ nền dịu nhẹ, không bao giờ tụt quá mức gây chớp giật sáng
-        const progress = Math.min(1, translateY / 500);
-        const opacity = Math.max(0.4, 1 - progress * 0.6);
-        backdropRef.current.style.opacity = opacity.toFixed(3);
-      } else {
-        backdropRef.current.style.opacity = "1";
-      }
-    }
-  };
-
-  // Kết thúc thao tác kéo
-  const endDrag = (pointerId: number, currentTarget?: HTMLElement | null) => {
-    if (activePointerId.current !== pointerId) return;
-    activePointerId.current = null;
-    const wasDragging = isDragging.current;
-    isTracking.current = false;
-    isDragging.current = false;
-    dragZoneRef.current?.classList.remove("is-dragging");
-
-    if (currentTarget) {
-      try {
-        currentTarget.releasePointerCapture(pointerId);
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!wasDragging) return;
-
-    const deltaY = currentTranslateY.current;
-    const elapsed = Math.max(1, Date.now() - dragStartTime.current);
-    const velocity = deltaY / elapsed;
-
-    // Điều kiện đóng: Kéo xuống > 115px hoặc flick nhanh > 0.4px/ms với khoảng kéo > 30px
-    const shouldDismiss = deltaY > 115 || (velocity > 0.4 && deltaY > 30);
-
-    if (shouldDismiss) {
-      handleClose();
-    } else {
-      // THAO TÁC CHƯA TỚI ĐIỂM THU:
-      // Đẩy nhẹ nhàng và êm dịu popup trở lại vị trí cũ (Snap back)
-      // Đường cong cubic-bezier(0.25, 1, 0.5, 1) giúp popup về vị trí mượt mà, không giật khựng
-      const sheet = sheetRef.current;
-      const backdrop = backdropRef.current;
-      const duration = Math.round(Math.min(320, Math.max(220, 180 + Math.max(0, deltaY) * 1.2)));
-
-      if (sheet) {
-        sheet.style.transition = `transform ${duration}ms cubic-bezier(0.25, 1, 0.5, 1)`;
-        sheet.style.transform = "translate3d(0, 0, 0)";
-        sheet.style.opacity = "1";
-      }
-      if (backdrop) {
-        backdrop.style.transition = `opacity ${Math.min(280, duration)}ms ease-out`;
-        backdrop.style.opacity = "1";
-      }
-
-      // Sau khi animation snap-back hoàn tất: chỉ xóa transition, TUYỆT ĐỐI GIỮ animation = "none"
-      // để trình duyệt không kích hoạt lại keyframe css ban đầu
-      setTimeout(() => {
-        if (isClosingRef.current) return;
-        if (sheetRef.current) {
-          sheetRef.current.style.transition = "";
-          sheetRef.current.style.transform = "translate3d(0, 0, 0)";
-          sheetRef.current.style.animation = "none";
-        }
-        if (backdropRef.current) {
-          backdropRef.current.style.transition = "";
-          backdropRef.current.style.opacity = "1";
-          backdropRef.current.style.animation = "none";
-        }
-      }, duration + 20);
-    }
+    applyDragTransform(e.clientY - dragStartY.current);
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    endDrag(e.pointerId, e.currentTarget as HTMLElement);
+    if (activePointerId.current !== e.pointerId) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    finishDragSession();
   };
 
-  // Dự phòng an toàn nếu ngón tay nhả ngoài viewport
-  useEffect(() => {
-    const handleGlobalPointerUp = (e: PointerEvent) => {
-      if (activePointerId.current === e.pointerId) {
-        endDrag(e.pointerId, null);
+  // 2. Hỗ trợ vuốt xuống mượt mà ngay trên phần thân popup (.pt-sheet-body) khi đang ở đầu trang (scrollTop <= 0)
+  const onBodyTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (isClosingRef.current || isTracking.current) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("input, textarea, select")) return;
+    if (bodyRef.current && bodyRef.current.scrollTop > 0) return;
+
+    const touch = e.touches[0];
+    if (!touch) return;
+    isTracking.current = true;
+    isDragging.current = false;
+    dragSourceRef.current = "body";
+    dragStartY.current = touch.clientY;
+    dragStartX.current = touch.clientX;
+    currentTranslateY.current = 0;
+    dragStartTime.current = performance.now();
+  };
+
+  const onBodyTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isTracking.current || dragSourceRef.current !== "body" || isClosingRef.current) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    const rawDeltaY = touch.clientY - dragStartY.current;
+    const rawDeltaX = touch.clientX - dragStartX.current;
+
+    if (!isDragging.current) {
+      // Nếu vuốt ngang hoặc vuốt lên (để cuộn nội dung xuống) hoặc nội dung đã cuộn: nhường cho scroll tự nhiên
+      if (rawDeltaY < -4 || Math.abs(rawDeltaX) > Math.abs(rawDeltaY) + 2 || (bodyRef.current && bodyRef.current.scrollTop > 0)) {
+        isTracking.current = false;
+        return;
       }
-    };
-    window.addEventListener("pointerup", handleGlobalPointerUp);
-    window.addEventListener("pointercancel", handleGlobalPointerUp);
-    return () => {
-      window.removeEventListener("pointerup", handleGlobalPointerUp);
-      window.removeEventListener("pointercancel", handleGlobalPointerUp);
-    };
-  }, []);
+      if (rawDeltaY < 6) return;
+      if (sheetRef.current) {
+        beginDragSession(sheetRef.current, touch.clientY);
+      }
+      return;
+    }
+
+    const deltaY = Math.max(0, touch.clientY - dragStartY.current);
+    applyDragTransform(deltaY);
+  };
+
+  const onBodyTouchEnd = () => {
+    if (!isTracking.current || dragSourceRef.current !== "body") return;
+    finishDragSession();
+  };
 
   return (
     <SheetCloseContext.Provider value={handleClose}>
       <div
         ref={backdropRef}
-        className={`pt-sheet-backdrop ${closing ? "is-closing" : ""}`}
+        className="pt-sheet-backdrop"
         onMouseDown={(event) => event.target === event.currentTarget && handleClose()}
       >
         <div
           ref={sheetRef}
-          className={`pt-sheet ${className} ${closing ? "is-closing" : ""}`.trim()}
+          className={`pt-sheet ${className}`.trim()}
           role="dialog"
           aria-modal="true"
           aria-label={title}
@@ -334,7 +334,14 @@ export function Sheet({
             </header>
           </div>
 
-          <div className="pt-sheet-body">
+          <div
+            ref={bodyRef}
+            className="pt-sheet-body"
+            onTouchStart={onBodyTouchStart}
+            onTouchMove={onBodyTouchMove}
+            onTouchEnd={onBodyTouchEnd}
+            onTouchCancel={onBodyTouchEnd}
+          >
             {children}
           </div>
         </div>

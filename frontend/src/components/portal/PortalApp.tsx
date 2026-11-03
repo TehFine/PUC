@@ -30,17 +30,21 @@ import { HOUSEHOLD_STATUS } from "@/lib/portal-labels";
 import { INTRO_PATH } from "@/lib/routes";
 import { formatDate } from "@/utils/format";
 import type { AppNotification, NotificationList, PortalOverview, PortalProfile } from "@/types/portal";
+import dynamic from "next/dynamic";
 import "./portal.css";
-import DiaryTab from "./DiaryTab";
 import HomeTab from "./HomeTab";
-import InspectionTab from "./InspectionTab";
-import LearnTab from "./LearnTab";
-import PlotsTab from "./PlotsTab";
-import StampsTab from "./StampsTab";
 import RadialNavWheel from "./RadialNavWheel";
 import { BusyButton, InlineError } from "./shared/controls";
 import { SupportFooter, SystemSupportModal } from "./SystemSupport";
 import { EmptyState, Field, Sheet, StateBlock, useSheetClose } from "./ui";
+
+const PortalTabLoading = () => <StateBlock loading error={null} />;
+
+const DiaryTab = dynamic(() => import("./DiaryTab"), { loading: PortalTabLoading });
+const InspectionTab = dynamic(() => import("./InspectionTab"), { loading: PortalTabLoading });
+const LearnTab = dynamic(() => import("./LearnTab"), { loading: PortalTabLoading });
+const PlotsTab = dynamic(() => import("./PlotsTab"), { loading: PortalTabLoading });
+const StampsTab = dynamic(() => import("./StampsTab"), { loading: PortalTabLoading });
 
 export type PortalTabId = "home" | "plots" | "diary" | "stamps" | "inspection" | "learn";
 
@@ -179,21 +183,12 @@ export default function PortalApp() {
     }
     return "home";
   });
-  const [visitedTabs, setVisitedTabs] = useState<Set<PortalTabId>>(() => {
-    if (typeof window === "undefined") return new Set(["home"]);
-    const tabParam = new URLSearchParams(window.location.search).get("tab");
-    if (tabParam && TABS.some((t) => t.id === tabParam)) {
-      return new Set<PortalTabId>(["home", tabParam as PortalTabId]);
-    }
-    return new Set(["home"]);
-  });
   const [profileOpen, setProfileOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [navWheelOpen, setNavWheelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
-  const [scrollingDown, setScrollingDown] = useState(false);
 
   const openSupport = useCallback(() => setSupportOpen(true), []);
   const closeSupport = useCallback(() => setSupportOpen(false), []);
@@ -202,22 +197,10 @@ export default function PortalApp() {
 
   const navigate = useCallback((next: PortalTabId) => {
     setNavWheelOpen(false);
-    setScrollingDown(false);
-    document.documentElement.classList.remove("is-scrolling-down");
     startTransition(() => {
-      setVisitedTabs((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
       setTab(next);
     });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    });
-    setTimeout(() => {
-      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    }, 120);
-    setTimeout(() => {
-      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    }, 260);
   }, []);
 
   const closeProfile = useCallback(() => {
@@ -234,36 +217,26 @@ export default function PortalApp() {
   }, [status, session, router]);
 
   useEffect(() => {
+    document.documentElement.classList.remove("is-scrolling-down");
     document.documentElement.classList.add("pt-html");
     document.body.classList.add("pt-body");
-
-    let lastY = window.scrollY;
-    let ticking = false;
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const y = Math.max(0, window.scrollY);
-        const delta = y - lastY;
-        if (y <= 6 || delta < -4) {
-          setScrollingDown(false);
-          document.documentElement.classList.remove("is-scrolling-down");
-        } else if (y > 10 && delta > 2) {
-          setScrollingDown(true);
-          document.documentElement.classList.add("is-scrolling-down");
-        }
-        lastY = y;
-        ticking = false;
-      });
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      window.removeEventListener("scroll", onScroll);
       document.documentElement.classList.remove("pt-html", "is-scrolling-down");
       document.body.classList.remove("pt-body");
     };
   }, []);
+
+  useEffect(() => {
+    if (status !== "authenticated" || session?.user.role !== "farmer") return;
+    const timer = window.setTimeout(() => {
+      void import("./PlotsTab");
+      void import("./DiaryTab");
+      void import("./StampsTab");
+      void import("./InspectionTab");
+      void import("./LearnTab");
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [status, session?.user.role]);
 
   if (status !== "authenticated" || session?.user.role !== "farmer") {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
@@ -312,8 +285,7 @@ export default function PortalApp() {
   };
 
   return (
-    <div className={`pt-app${scrollingDown ? " is-scrolling-down" : ""}`}>
-      <div className="pt-bg-backdrop" aria-hidden="true" />
+    <div className="pt-app">
       <header className="pt-topbar">
         <div className="pt-topbar-inner">
           {/* Logo thương hiệu HTX Krông Búk (hiển thị trên Desktop/Laptop) */}
@@ -400,42 +372,15 @@ export default function PortalApp() {
       </header>
 
       <main className="pt-main">
-        {visitedTabs.has("home") && (
-          <div className={`pt-tab-pane ${tab === "home" ? "is-active" : "is-hidden"}`}>
-            <HomeTab onNavigate={navigate} />
-            <SupportFooter onOpen={openSupport} />
-          </div>
-        )}
-        {visitedTabs.has("plots") && (
-          <div className={`pt-tab-pane ${tab === "plots" ? "is-active" : "is-hidden"}`}>
-            <PlotsTab />
-            <SupportFooter onOpen={openSupport} />
-          </div>
-        )}
-        {visitedTabs.has("diary") && (
-          <div className={`pt-tab-pane ${tab === "diary" ? "is-active" : "is-hidden"}`}>
-            <DiaryTab />
-            <SupportFooter onOpen={openSupport} />
-          </div>
-        )}
-        {visitedTabs.has("stamps") && (
-          <div className={`pt-tab-pane ${tab === "stamps" ? "is-active" : "is-hidden"}`}>
-            <StampsTab overview={overview} />
-            <SupportFooter onOpen={openSupport} />
-          </div>
-        )}
-        {visitedTabs.has("inspection") && (
-          <div className={`pt-tab-pane ${tab === "inspection" ? "is-active" : "is-hidden"}`}>
-            <InspectionTab onNavigate={navigate} />
-            <SupportFooter onOpen={openSupport} />
-          </div>
-        )}
-        {visitedTabs.has("learn") && (
-          <div className={`pt-tab-pane ${tab === "learn" ? "is-active" : "is-hidden"}`}>
-            <LearnTab />
-            <SupportFooter onOpen={openSupport} />
-          </div>
-        )}
+        <div key={tab} className="pt-tab-pane is-active">
+          {tab === "home" && <HomeTab onNavigate={navigate} />}
+          {tab === "plots" && <PlotsTab />}
+          {tab === "diary" && <DiaryTab />}
+          {tab === "stamps" && <StampsTab overview={overview} />}
+          {tab === "inspection" && <InspectionTab onNavigate={navigate} />}
+          {tab === "learn" && <LearnTab />}
+          <SupportFooter onOpen={openSupport} />
+        </div>
       </main>
 
       {profileOpen && (

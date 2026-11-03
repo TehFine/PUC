@@ -8,6 +8,8 @@ import { formatDate } from "@/utils/format";
 import type { PortalHarvest } from "@/types/portal";
 import { Sheet } from "../ui";
 
+const qrDataUrlCache = new Map<string, string>();
+
 interface HarvestAssetTagCardProps {
   lot: PortalHarvest;
   pucCode?: string;
@@ -19,7 +21,8 @@ export function HarvestAssetTagCard({
   pucCode = "PUC-KRB-001",
   onOpenModal,
 }: HarvestAssetTagCardProps) {
-  const [qrSrc, setQrSrc] = useState<string>("");
+  const codeKey = `M:${lot.qrCode || lot.lotCode}`;
+  const [qrSrc, setQrSrc] = useState<string>(() => qrDataUrlCache.get(codeKey) ?? "");
   const status = HARVEST_STATUS[lot.status];
 
   const watermarkTitle =
@@ -33,6 +36,11 @@ export function HarvestAssetTagCard({
       : "HTX KRÔNG BÚK · GIÁM SÁT";
 
   useEffect(() => {
+    const cached = qrDataUrlCache.get(codeKey);
+    if (cached) {
+      setQrSrc(cached);
+      return;
+    }
     let active = true;
     const origin =
       typeof window !== "undefined" && window.location.origin
@@ -50,6 +58,7 @@ export function HarvestAssetTagCard({
       errorCorrectionLevel: "M",
     })
       .then((url) => {
+        qrDataUrlCache.set(codeKey, url);
         if (active) setQrSrc(url);
       })
       .catch(() => {
@@ -59,7 +68,7 @@ export function HarvestAssetTagCard({
     return () => {
       active = false;
     };
-  }, [lot.qrCode, lot.lotCode]);
+  }, [codeKey, lot.qrCode, lot.lotCode]);
 
   return (
     <div className="pt-asset-card" data-status={lot.status}>
@@ -131,9 +140,15 @@ export function HarvestAssetTagCard({
 }
 
 function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string | null }) {
-  const [src, setSrc] = useState<string>("");
+  const codeKey = `H:${qrCode || lotCode}`;
+  const [src, setSrc] = useState<string>(() => qrDataUrlCache.get(codeKey) ?? "");
 
   useEffect(() => {
+    const cached = qrDataUrlCache.get(codeKey);
+    if (cached) {
+      setSrc(cached);
+      return;
+    }
     let active = true;
     const origin =
       typeof window !== "undefined" && window.location.origin
@@ -148,6 +163,7 @@ function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string |
       errorCorrectionLevel: "H",
     })
       .then((url) => {
+        qrDataUrlCache.set(codeKey, url);
         if (active) setSrc(url);
       })
       .catch(() => {});
@@ -155,7 +171,7 @@ function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string |
     return () => {
       active = false;
     };
-  }, [lotCode, qrCode]);
+  }, [codeKey, lotCode, qrCode]);
 
   if (!src) {
     return <QrCode size={110} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />;

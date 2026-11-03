@@ -104,7 +104,6 @@ export default function RadialNavWheel({
   showFloatingLauncher = false,
 }: RadialNavWheelProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
   const [selectedTab, setSelectedTab] = useState<PortalTabId>(currentTab);
 
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -131,7 +130,6 @@ export default function RadialNavWheel({
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     if (selectTimerRef.current) clearTimeout(selectTimerRef.current);
     isClosingRef.current = false;
-    setIsClosing(false);
     setSelectedTab(currentTab);
     setIsOpen(true);
   }, [currentTab]);
@@ -144,23 +142,23 @@ export default function RadialNavWheel({
       selectTimerRef.current = null;
     }
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    setIsClosing(true);
 
     if (sheetRef.current) {
       sheetRef.current.style.animation = "none";
+      sheetRef.current.style.pointerEvents = "none";
       sheetRef.current.style.transition =
-        "transform 0.24s cubic-bezier(0.32, 0, 0.67, 0), opacity 0.2s ease-out";
-      sheetRef.current.style.transform = "translate3d(0, 100%, 0)";
+        "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+      sheetRef.current.style.transform = "translate3d(0, 105%, 0)";
     }
     if (backdropRef.current) {
       backdropRef.current.style.animation = "none";
-      backdropRef.current.style.transition = "opacity 0.22s ease-out";
+      backdropRef.current.style.pointerEvents = "none";
+      backdropRef.current.style.transition = "opacity 200ms ease-out";
       backdropRef.current.style.opacity = "0";
     }
 
     closeTimerRef.current = setTimeout(() => {
       setIsOpen(false);
-      setIsClosing(false);
       isClosingRef.current = false;
       propOnClose?.();
     }, CLOSE_DURATION_MS);
@@ -272,6 +270,8 @@ export default function RadialNavWheel({
     if (!isDraggingRef.current) {
       if (Math.abs(rawDeltaY) < 4) return;
       isDraggingRef.current = true;
+      dragStartYRef.current = e.clientY;
+      dragStartTimeRef.current = Date.now();
       if (sheetRef.current) {
         sheetRef.current.style.transition = "none";
         sheetRef.current.style.animation = "none";
@@ -280,8 +280,10 @@ export default function RadialNavWheel({
         backdropRef.current.style.transition = "none";
         backdropRef.current.style.animation = "none";
       }
+      return;
     }
-    const translateY = rawDeltaY < 0 ? rawDeltaY * 0.12 : rawDeltaY;
+    const deltaY = e.clientY - dragStartYRef.current;
+    const translateY = deltaY < 0 ? deltaY * 0.12 : deltaY;
     currentTranslateYRef.current = translateY;
     if (sheetRef.current) {
       sheetRef.current.style.transform = `translate3d(0, ${translateY}px, 0)`;
@@ -334,7 +336,7 @@ export default function RadialNavWheel({
         <div
           id="portal-radial-drawer"
           ref={backdropRef}
-          className={`pt-radial-backdrop ${isClosing ? "is-closing" : ""}`}
+          className="pt-radial-backdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleClose();
           }}
@@ -344,7 +346,7 @@ export default function RadialNavWheel({
         >
           <div
             ref={sheetRef}
-            className={`pt-radial-sheet ${isClosing ? "is-closing" : ""}`}
+            className="pt-radial-sheet"
           >
             <div
               className="pt-radial-sheet-head"
