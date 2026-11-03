@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { Camera, FileText, Paperclip } from "lucide-react";
+import { FileText, Paperclip } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { AppleSpinner } from "@/components/ui/Skeleton";
 import type { UploadPurpose } from "@/lib/api-client";
+import { RadialPngIcon } from "../RadialIcons";
 import { uploadPortalFile, validatePickedFile } from "./media";
 
 /* ──────────────────────────── Nút có trạng thái đang xử lý ──────────────────────────── */
@@ -195,7 +196,7 @@ export function PhotoField({
             }}
           />
           <div className="pt-photo-dropzone-icon">
-            <Camera size={22} aria-hidden="true" />
+            <RadialPngIcon src="/photo-camera.png" size={28} />
           </div>
           <span className="pt-photo-dropzone-title">{title}</span>
           <span className="pt-photo-dropzone-desc">{description}</span>
@@ -264,7 +265,7 @@ export function AttachmentsField({
         <ul className="pt-attach-list">
           {files.map((item) => (
             <li key={item.key} className="pt-attach-item">
-              {item.file.type.startsWith("image/") ? <Camera size={15} aria-hidden="true" /> : <FileText size={15} aria-hidden="true" />}
+              {item.file.type.startsWith("image/") ? <RadialPngIcon src="/photo-camera.png" size={16} /> : <FileText size={15} aria-hidden="true" />}
               <span className="pt-attach-name">{item.file.name}</span>
               <span className="pt-attach-size">{Math.max(1, Math.round(item.file.size / 1024))} KB</span>
               <button

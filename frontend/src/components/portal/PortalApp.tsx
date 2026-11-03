@@ -4,20 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Bell,
   BookOpen,
   CheckCheck,
   ClipboardCheck,
-  CreditCard,
   House,
-  KeyRound,
-  LogOut,
-  MapPin,
   NotebookPen,
-  Phone,
   Scale,
   TreePine,
-  UserCheck,
   type LucideIcon,
 } from "lucide-react";
 import { FormEvent, startTransition, useCallback, useEffect, useMemo, useState } from "react";
@@ -34,6 +27,7 @@ import dynamic from "next/dynamic";
 import "./portal.css";
 import HomeTab from "./HomeTab";
 import { PortalSearchButton, type PortalAction, type PortalSearchTarget } from "./PortalSearch";
+import { RadialPngIcon } from "./RadialIcons";
 import RadialNavWheel from "./RadialNavWheel";
 import { BusyButton, InlineError } from "./shared/controls";
 import { SupportFooter, SystemSupportModal } from "./SystemSupport";
@@ -347,24 +341,10 @@ export default function PortalApp() {
             })}
           </nav>
 
-          {/* Cụm Chuông thông báo + Avatar tài khoản */}
+          {/* Cụm Avatar tài khoản + Chuông thông báo */}
           <div className="pt-topbar-profile" style={{ gap: 8 }}>
             {/* Tìm chức năng (máy tính): gõ bất kỳ chữ nào để được gợi ý đúng tab và thao tác */}
             <PortalSearchButton id="portal-search-toggle" className="is-desktop" onPick={handleSearchPick} />
-            <button
-              id="portal-notifications-toggle"
-              type="button"
-              className="pt-notif-btn"
-              onClick={() => setNotifOpen(true)}
-              aria-label={unreadCount > 0 ? `Thông báo (${unreadCount} chưa đọc)` : "Thông báo"}
-              title="Thông báo từ HTX"
-            >
-              <Bell size={18} strokeWidth={2.1} aria-hidden="true" />
-              {unreadCount > 0 && (
-                <span className="pt-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
-              )}
-            </button>
-
             <button
               id="portal-profile-toggle"
               type="button"
@@ -375,6 +355,20 @@ export default function PortalApp() {
               title={`Hồ sơ: ${displayName}`}
             >
               <span className="pt-avatar">{initials}</span>
+            </button>
+
+            <button
+              id="portal-notifications-toggle"
+              type="button"
+              className="pt-notif-btn"
+              onClick={() => setNotifOpen(true)}
+              aria-label={unreadCount > 0 ? `Thông báo (${unreadCount} chưa đọc)` : "Thông báo"}
+              title="Thông báo từ HTX"
+            >
+              <RadialPngIcon src="/bell.png" size={18} />
+              {unreadCount > 0 && (
+                <span className="pt-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+              )}
             </button>
           </div>
 
@@ -436,7 +430,7 @@ export default function PortalApp() {
 
             <div className="pt-profile-details">
               <div className="pt-profile-row">
-                <Phone size={17} className="pt-profile-icon" aria-hidden="true" />
+                <RadialPngIcon src="/call.png" size={24} className="pt-profile-icon" />
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Số điện thoại</span>
                   <strong className="pt-profile-val">
@@ -447,7 +441,7 @@ export default function PortalApp() {
 
               {profile?.household.cccdMasked && (
                 <div className="pt-profile-row">
-                  <CreditCard size={17} className="pt-profile-icon" aria-hidden="true" />
+                  <RadialPngIcon src="/id-card.png" size={24} className="pt-profile-icon" />
                   <div className="pt-profile-row-content">
                     <span className="pt-profile-label">CCCD chủ hộ</span>
                     <strong className="pt-profile-val">{profile.household.cccdMasked}</strong>
@@ -456,7 +450,7 @@ export default function PortalApp() {
               )}
 
               <div className="pt-profile-row">
-                <MapPin size={17} className="pt-profile-icon" aria-hidden="true" />
+                <RadialPngIcon src="/placeholder.png" size={24} className="pt-profile-icon" />
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Địa bàn</span>
                   <strong className="pt-profile-val">
@@ -467,7 +461,7 @@ export default function PortalApp() {
 
               {profHousehold?.villageLeader && (
                 <div className="pt-profile-row">
-                  <UserCheck size={17} className="pt-profile-icon" aria-hidden="true" />
+                  <RadialPngIcon src="/leader.png" size={24} className="pt-profile-icon" />
                   <div className="pt-profile-row-content">
                     <span className="pt-profile-label">Trưởng thôn</span>
                     <strong className="pt-profile-val">{profHousehold.villageLeader}</strong>
@@ -476,7 +470,7 @@ export default function PortalApp() {
               )}
 
               <div className="pt-profile-row">
-                <TreePine size={17} className="pt-profile-icon" aria-hidden="true" />
+                <RadialPngIcon src="/scale.png" size={24} className="pt-profile-icon" />
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Quy mô vườn</span>
                   <strong className="pt-profile-val">
@@ -497,7 +491,7 @@ export default function PortalApp() {
                 }}
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">
-                  <KeyRound size={20} strokeWidth={2.1} />
+                  <RadialPngIcon src="/key.png" size={22} />
                 </span>
                 <span className="pt-profile-action-title">Đổi mật khẩu</span>
                 <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
@@ -510,7 +504,7 @@ export default function PortalApp() {
                 title="Về trang giới thiệu HTX Krông Búk"
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">
-                  <Image src="/logo.png" alt="" width={22} height={22} />
+                  <Image src="/logo.png" alt="" width={24} height={24} />
                 </span>
                 <span className="pt-profile-action-title">Trang giới thiệu HTX</span>
                 <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
@@ -525,7 +519,7 @@ export default function PortalApp() {
                   void logout();
                 }}
               >
-                <LogOut aria-hidden="true" size={17} strokeWidth={2.2} />
+                <RadialPngIcon src="/logout.png" size={20} />
                 <span>Đăng xuất</span>
               </button>
             </div>
@@ -557,7 +551,7 @@ export default function PortalApp() {
             <StateBlock loading={notifications.loading} error={notifications.error} variant="rows" />
 
             {!notifications.loading && notifItems.length === 0 && (
-              <EmptyState icon="ok">Hiện chưa có thông báo mới nào từ HTX.</EmptyState>
+              <EmptyState icon="none">Hiện chưa có thông báo mới nào từ HTX.</EmptyState>
             )}
 
             {notifItems.length > 0 && (
@@ -598,7 +592,7 @@ export default function PortalApp() {
       )}
 
       {passwordOpen && (
-        <Sheet title="Đổi mật khẩu tài khoản" onClose={() => setPasswordOpen(false)}>
+        <Sheet title="Đổi mật khẩu tài khoản" onClose={() => setPasswordOpen(false)} className="pt-password-sheet">
           <ChangePasswordForm
             onSuccess={() => {
               setPasswordOpen(false);

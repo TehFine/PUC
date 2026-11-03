@@ -6,7 +6,7 @@ export interface RadialIconProps {
   className?: string;
 }
 
-function RadialPngIcon({
+export function RadialPngIcon({
   src,
   size = 24,
   className,

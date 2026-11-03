@@ -1,9 +1,9 @@
 "use client";
 
-import { Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import type { PortalTabId } from "./PortalApp";
+import { RadialPngIcon } from "./RadialIcons";
 import { Sheet, useSheetClose } from "./ui";
 
 /**
@@ -300,7 +300,7 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
       }}
     >
       <label className="pt-search-field">
-        <Search size={18} aria-hidden="true" />
+        <RadialPngIcon src="/search.png" size={18} />
         <input
           ref={inputRef}
           type="search"
@@ -377,7 +377,7 @@ export function PortalSearchButton({
         aria-label="Tìm chức năng"
         title="Tìm chức năng"
       >
-        <Search size={18} strokeWidth={2.1} aria-hidden="true" />
+        <RadialPngIcon src="/search.png" size={18} />
       </button>
       {open && (
         <Sheet title="Tìm chức năng" onClose={handleClosed} className="pt-search-sheet">

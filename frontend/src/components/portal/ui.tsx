@@ -5,6 +5,7 @@ import { CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
+import { RadialPngIcon } from "./RadialIcons";
 import { useSheetSwipe } from "./use-sheet-swipe";
 
 export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
@@ -44,9 +45,17 @@ const EMPTY_ICONS = {
   lab: Microscope,
 };
 
-export type EmptyIconName = keyof typeof EMPTY_ICONS;
+export type EmptyIconName = keyof typeof EMPTY_ICONS | "none";
 
 export function EmptyState({ icon, children }: { icon: EmptyIconName; children: ReactNode }) {
+  if (icon === "none") {
+    return (
+      <div className="pt-empty">
+        <RadialPngIcon src="/none.png" size={44} className="pt-empty-none-icon" />
+        <p>{children}</p>
+      </div>
+    );
+  }
   const Icon = EMPTY_ICONS[icon];
   return (
     <div className="pt-empty">
