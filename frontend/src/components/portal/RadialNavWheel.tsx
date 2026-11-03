@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { usePortalLang } from "./i18n";
 import type { PortalTabId } from "./PortalApp";
 import {
   HouseCircleCheckIcon,
@@ -104,6 +105,7 @@ export default function RadialNavWheel({
   onClose: propOnClose,
   showFloatingLauncher = false,
 }: RadialNavWheelProps) {
+  const { t } = usePortalLang();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState<PortalTabId>(currentTab);
 
@@ -283,10 +285,10 @@ export default function RadialNavWheel({
             className="pt-radial-sheet"
           >
             <div ref={headRef} className="pt-radial-sheet-head">
-              <h2 className="pt-radial-sheet-title">Điều hướng</h2>
+              <h2 className="pt-radial-sheet-title">{t("Điều hướng")}</h2>
             </div>
 
-            <div className="pt-radial-card-list" role="radiogroup" aria-label="Chọn danh mục chức năng">
+            <div className="pt-radial-card-list" role="radiogroup" aria-label={t("Danh mục chức năng")}>
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const isActive = selectedTab === item.id;
@@ -303,8 +305,8 @@ export default function RadialNavWheel({
                       <Icon size={26} />
                     </div>
                     <div className="pt-radial-option-text">
-                      <span className="pt-radial-option-title">{item.label}</span>
-                      <span className="pt-radial-option-desc">{item.desc}</span>
+                      <span className="pt-radial-option-title">{t(item.label)}</span>
+                      <span className="pt-radial-option-desc">{t(item.desc)}</span>
                     </div>
                     <div className="pt-radial-option-radio" aria-hidden="true">
                       <span className="pt-radial-option-radio-dot" />
@@ -320,7 +322,7 @@ export default function RadialNavWheel({
                 className="pt-radial-done-btn"
                 onClick={handleDone}
               >
-                Xong
+                {t("Xong")}
               </button>
             </div>
           </div>

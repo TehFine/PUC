@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
+import { translateViToZh, usePortalLang } from "./i18n";
 import type { PortalTabId } from "./PortalApp";
 import { RadialPngIcon } from "./RadialIcons";
 import { Sheet, useSheetClose } from "./ui";
@@ -179,14 +180,21 @@ const ENTRIES: SearchEntry[] = [
     id: "password",
     title: "Đổi mật khẩu",
     where: "Tài khoản",
-    keywords: "doi mat khau quen bao mat dang nhap",
+    keywords: "doi mat khau quen bao mat dang nhap 密码 修改密码",
     target: { kind: "global", action: "password" },
+  },
+  {
+    id: "language",
+    title: "Đổi ngôn ngữ (Tiếng Việt / 中文)",
+    where: "Tài khoản",
+    keywords: "doi ngon ngu tieng trung tieng viet chinese zhongwen yuyan 中文 语言 切换语言",
+    target: { kind: "global", action: "profile" },
   },
   {
     id: "support",
     title: "Gọi hỗ trợ, hotline HTX",
     where: "Hỗ trợ",
-    keywords: "ho tro giup do goi dien hotline lien he can bo thac mac",
+    keywords: "ho tro giup do goi dien hotline lien he can bo thac mac 帮助 支持 热线",
     target: { kind: "global", action: "support" },
     popular: true,
   },
@@ -204,7 +212,9 @@ function normalize(text: string): string {
 }
 
 const INDEX = ENTRIES.map((entry) => {
-  const haystack = normalize(`${entry.title} ${entry.where} ${entry.keywords}`);
+  const zhTitle = translateViToZh(entry.title);
+  const zhWhere = translateViToZh(entry.where);
+  const haystack = normalize(`${entry.title} ${entry.where} ${zhTitle} ${zhWhere} ${entry.keywords}`);
   return { entry, haystack, words: haystack.split(" ") };
 });
 
@@ -237,14 +247,15 @@ function searchEntries(query: string): SearchEntry[] {
 const POPULAR = ENTRIES.filter((e) => e.popular);
 
 function ResultList({ items, onPick }: { items: SearchEntry[]; onPick: (target: PortalSearchTarget) => void }) {
+  const { t } = usePortalLang();
   return (
     <ul className="pt-search-results">
       {items.map((item) => (
         <li key={item.id}>
           <button type="button" className="pt-search-result" onClick={() => onPick(item.target)}>
             <span className="pt-search-result-text">
-              <strong>{item.title}</strong>
-              <span>{item.where}</span>
+              <strong>{t(item.title)}</strong>
+              <span>{t(item.where)}</span>
             </span>
             <DetailArrowIcon className="pt-search-result-arrow" />
           </button>
@@ -256,6 +267,7 @@ function ResultList({ items, onPick }: { items: SearchEntry[]; onPick: (target: 
 
 function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void }) {
   const close = useSheetClose();
+  const { isZh, t } = usePortalLang();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const touchStartY = useRef<number | null>(null);
@@ -309,7 +321,7 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          placeholder="Bạn muốn làm gì?"
+          placeholder={t("Bạn muốn làm gì?")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -318,17 +330,25 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
               pick(results[0].target);
             }
           }}
-          aria-label="Tìm chức năng"
+          aria-label={t("Tìm chức năng")}
         />
       </label>
 
       {hasQuery && results.length === 0 && (
         <p className="pt-search-empty-note">
-          Chưa tìm thấy “<strong>{query.trim()}</strong>”. Bà con thử gõ chữ khác, hoặc chọn gợi ý bên dưới:
+          {isZh ? (
+            <>
+              未找到与“<strong>{query.trim()}</strong>”匹配的功能。请尝试其他关键词，或从下方推荐中选择：
+            </>
+          ) : (
+            <>
+              Chưa tìm thấy “<strong>{query.trim()}</strong>”. Bà con thử gõ chữ khác, hoặc chọn gợi ý bên dưới:
+            </>
+          )}
         </p>
       )}
 
-      <h3 className="pt-search-heading">Gợi ý</h3>
+      <h3 className="pt-search-heading">{t("Gợi ý")}</h3>
 
       <div className="pt-search-scroll">
         {!hasQuery && <ResultList items={POPULAR} onPick={pick} />}
@@ -357,6 +377,7 @@ export function PortalSearchButton({
   /** Lớp bổ sung để chọn vị trí hiển thị (desktop / mobile). */
   className?: string;
 }) {
+  const { t } = usePortalLang();
   const [open, setOpen] = useState(false);
   // Chỉ thực hiện thao tác sau khi popup tìm kiếm đã trượt xuống xong: tránh mở chồng popup khác
   // (hồ sơ, đổi mật khẩu…) khi popup này chưa đóng, làm lệch khóa cuộn trang.
@@ -374,13 +395,13 @@ export function PortalSearchButton({
         type="button"
         className={`pt-notif-btn pt-search-btn ${className}`.trim()}
         onClick={() => setOpen(true)}
-        aria-label="Tìm chức năng"
-        title="Tìm chức năng"
+        aria-label={t("Tìm chức năng")}
+        title={t("Tìm chức năng")}
       >
         <RadialPngIcon src="/search.png" size={18} />
       </button>
       {open && (
-        <Sheet title="Tìm chức năng" onClose={handleClosed} className="pt-search-sheet">
+        <Sheet title={t("Tìm chức năng")} onClose={handleClosed} className="pt-search-sheet">
           <SearchPanel
             onPick={(target) => {
               pendingRef.current = target;
