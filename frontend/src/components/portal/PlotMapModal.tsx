@@ -326,14 +326,16 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         const satellite = L.layerGroup([satBase, satLabels]);
         satLayerRef.current = satellite;
 
-        // 2. Lớp bản đồ giao thông đường xá & địa hình Carto Voyager (rõ tên thôn buôn, liên xã Krông Búk)
+        // 2. Lớp bản đồ đường xá Esri World Street Map (rõ tên thôn buôn, đường liên xã Krông Búk).
+        //    Dùng cùng máy chủ Esri với lớp vệ tinh để nằm trong danh sách img-src của CSP (next.config.ts).
+        //    Esri chỉ có dữ liệu đường xá khu vực Krông Búk đến zoom 17 (zoom 18+ trả ô "Map data not yet available"),
+        //    nên giới hạn maxNativeZoom = 17 để Leaflet tự phóng to ảnh zoom 17 khi người dùng zoom sâu hơn.
         const streets = L.tileLayer(
-          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
           {
-            subdomains: "abcd",
-            maxNativeZoom: 18,
+            maxNativeZoom: 17,
             maxZoom: 20,
-            attribution: "© OpenStreetMap, © CARTO",
+            attribution: "Esri, HERE, Garmin, © OpenStreetMap",
           },
         );
         streetLayerRef.current = streets;
