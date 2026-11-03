@@ -8232,6 +8232,27 @@ body.pt-body {
   background: #ffffff;
 }
 
+/* Popup tìm kiếm: chiều cao cố định để không co giãn theo số gợi ý mỗi lần gõ (gây giật khung),
+   bỏ hiệu ứng làm mờ nền (rất nặng khi bàn phím bật lên làm trình duyệt vẽ lại toàn màn hình). */
+.pt-sheet-backdrop:has(.pt-search-sheet) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.pt-sheet.pt-search-sheet {
+  height: min(92dvh, calc(100dvh - 24px));
+  max-height: min(92dvh, calc(100dvh - 24px));
+}
+
+.pt-search-sheet .pt-sheet-body {
+  padding-top: 4px;
+}
+
+.pt-search-sheet .pt-search-results {
+  contain: content;
+}
+
 .pt-search-field input {
   flex: 1;
   min-width: 0;

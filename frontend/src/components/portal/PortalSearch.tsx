@@ -1,7 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import type { PortalTabId } from "./PortalApp";
 import { Sheet, useSheetClose } from "./ui";
@@ -258,17 +258,47 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
   const close = useSheetClose();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const touchStartY = useRef<number | null>(null);
   const results = useMemo(() => searchEntries(query), [query]);
   const hasQuery = query.trim().length > 0;
 
+  // Máy tính có chuột: tự đặt con trỏ vào ô nhập sau khi popup trượt lên xong.
+  // Điện thoại: KHÔNG tự focus — bàn phím chỉ hiện khi bà con chạm vào ô nhập,
+  // tránh bàn phím bật lên giữa lúc popup đang trượt gây giật / khựng khung hình.
+  useEffect(() => {
+    const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    if (!canHover) return;
+    const timer = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 360);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const hideKeyboard = () => {
+    if (inputRef.current && document.activeElement === inputRef.current) inputRef.current.blur();
+  };
+
   // Ghi nhận lựa chọn rồi đóng popup; thao tác thật chạy sau khi popup đóng hẳn (xem PortalSearchButton)
   const pick = (target: PortalSearchTarget) => {
+    hideKeyboard();
     onPick(target);
     if (close) close();
   };
 
   return (
-    <div className="pt-search-panel">
+    <div
+      className="pt-search-panel"
+      // Vuốt danh sách gợi ý thì cụp bàn phím (như ứng dụng gốc) để xem được nhiều gợi ý hơn
+      onTouchStart={(e) => {
+        touchStartY.current = e.target === inputRef.current ? null : e.touches[0]?.clientY ?? null;
+      }}
+      onTouchMove={(e) => {
+        const startY = touchStartY.current;
+        const y = e.touches[0]?.clientY;
+        if (startY !== null && y !== undefined && Math.abs(y - startY) > 10) {
+          touchStartY.current = null;
+          hideKeyboard();
+        }
+      }}
+    >
       <label className="pt-search-field">
         <Search size={18} aria-hidden="true" />
         <input
@@ -276,8 +306,10 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
           type="search"
           inputMode="search"
           enterKeyHint="search"
-          autoFocus
-          placeholder="Bạn muốn làm gì? VD: bón phân, tem, phun thuốc…"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="Bạn muốn làm gì?"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -292,7 +324,7 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
 
       {!hasQuery && (
         <>
-          <h3 className="pt-search-heading">Gợi ý thường dùng</h3>
+          <h3 className="pt-search-heading">Gợi ý</h3>
           <ResultList items={POPULAR} onPick={pick} />
         </>
       )}
@@ -306,7 +338,7 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
             hướng dẫn.
           </p>
           <ResultList items={ENTRIES.filter((e) => e.id === "support")} onPick={pick} />
-          <h3 className="pt-search-heading">Gợi ý thường dùng</h3>
+          <h3 className="pt-search-heading">Gợi ý</h3>
           <ResultList items={POPULAR.filter((e) => e.id !== "support")} onPick={pick} />
         </div>
       )}
