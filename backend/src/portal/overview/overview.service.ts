@@ -70,18 +70,39 @@ export class OverviewService {
       `WITH today AS (SELECT ${TODAY_VN_SQL} AS d)
        SELECT * FROM (
          SELECT 1 AS priority, 'journal' AS kind, 'Chưa ghi nhật ký canh tác 7 ngày' AS title,
-                CASE WHEN j.last_on IS NULL THEN 'Hộ chưa có bản ghi nhật ký nào. Hãy ghi nhật ký kèm ảnh thực địa.'
-                     ELSE 'Lần ghi gần nhất: ' || to_char(j.last_on, 'DD/MM/YYYY') || '. Theo quy định cần ghi tối thiểu 7 ngày/lần.' END AS detail,
-                '${PORTAL_TABS.diary}' AS tab, j.last_on AS date
-         FROM (SELECT max(entry_on) AS last_on FROM journal_entries WHERE household_id = $1) j, today
-         WHERE j.last_on IS NULL OR j.last_on < today.d - 7
+                CASE
+                  WHEN j.last_on IS NULL THEN
+                    'Hộ chưa có bản ghi nhật ký nào' || coalesce(' (thửa ' || dv.plot_code || ')', '') || '. Hãy ghi nhật ký kèm ảnh thực địa.'
+                  ELSE
+                    'Lần ghi gần nhất: ' || to_char(j.last_on, 'DD/MM/YYYY') ||
+                    coalesce(' (thửa ' || dv.plot_code || ')', '') ||
+                    '. Theo quy định cần ghi tối thiểu 7 ngày/lần.'
+                END AS detail,
+                '${PORTAL_TABS.diary}' AS tab, coalesce(j.last_on, dv.detected_on) AS date
+         FROM (SELECT max(entry_on) AS last_on FROM journal_entries WHERE household_id = $1) j
+         CROSS JOIN today
+         LEFT JOIN LATERAL (
+           SELECT v.plot_code, v.detected_on, v.farmer_response_at
+           FROM violations v
+           WHERE v.household_id = $1
+             AND v.status = 'open'
+             AND v.title ILIKE '%nhật ký%'
+           ORDER BY v.detected_on DESC, v.id DESC
+           LIMIT 1
+         ) dv ON true
+         WHERE j.last_on IS NULL
+            OR j.last_on < today.d - 7
+            OR (dv.detected_on IS NOT NULL AND dv.farmer_response_at IS NULL)
 
          UNION ALL
          SELECT 0, 'violation', v.title,
                 'Vi phạm đang mở' || coalesce(' tại thửa ' || v.plot_code, '') ||
                   CASE WHEN v.farmer_response_at IS NULL THEN '. Vui lòng khắc phục và gửi phản hồi.' ELSE '. Đã gửi phản hồi, chờ cán bộ xác nhận.' END,
                 '${PORTAL_TABS.diary}', v.detected_on
-         FROM violations v WHERE v.household_id = $1 AND v.status = 'open'
+         FROM violations v
+         WHERE v.household_id = $1
+           AND v.status = 'open'
+           AND v.title NOT ILIKE '%nhật ký%'
 
          UNION ALL
          SELECT 2, 'isolation', 'Đang trong thời gian cách ly: ' || p.name,
