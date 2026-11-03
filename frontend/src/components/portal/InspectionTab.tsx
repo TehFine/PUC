@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortal } from "@/hooks/use-portal";
 import { relativeDayLabel, SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
@@ -72,7 +73,10 @@ export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?
                     {test.result === "pass" ? "Đạt" : "Không đạt"}
                   </Pill>
                 </div>
-                <div className="pt-lab-test-time">{formatDate(test.sampledOn)}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                  <div className="pt-lab-test-time">{formatDate(test.sampledOn)}</div>
+                  <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
+                </div>
               </li>
             ))}
           </ul>

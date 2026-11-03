@@ -14,9 +14,7 @@ import type {
   PortalOverview,
   PortalPlot,
   PortalPlots,
-  PortalStampsResponse,
 } from "@/types/portal";
-import { FruitStampsView } from "./harvest/FruitStampsView";
 import { HarvestAssetTagCard, HarvestLotQrModal } from "./harvest/HarvestLotTicket";
 import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
 import { EmptyState, Pill, StateBlock } from "./ui";
@@ -70,12 +68,11 @@ export default function StampsTab({ plots = [] }: Props) {
   const plotsData = usePortal<PortalPlots>("plots");
   const harvest = usePortal<PortalList<PortalHarvest>>("harvest");
   const declarationsQuery = usePortal<PortalList<PortalHarvestDeclaration>>("harvest-declarations");
-  const stampsQuery = usePortal<PortalStampsResponse>("stamps");
 
   const effectivePlots = plots.length > 0 ? plots : (plotsData.data?.data ?? []);
   const declarations = declarationsQuery.data?.data ?? [];
 
-  const [subTab, setSubTab] = useState<"harvest_decl" | "fruit_stamps" | "harvest_lots">("harvest_decl");
+  const [subTab, setSubTab] = useState<"harvest_decl" | "harvest_lots">("harvest_decl");
   const [selectedLotForQr, setSelectedLotForQr] = useState<PortalHarvest | null>(null);
 
   // Form khai báo / đăng ký thu hái
@@ -145,7 +142,7 @@ export default function StampsTab({ plots = [] }: Props) {
       setDeclNote("");
       declPhoto.clear();
       setSuccessMsg(`Đã gửi khai báo thu hái cho Thửa ${plotCode} thành công! HTX đã tiếp nhận thông tin.`);
-      invalidatePortal("harvest-declarations", "stamps", "harvest", "overview");
+      invalidatePortal("harvest-declarations", "harvest", "overview");
     } catch (err) {
       setDeclError(errorMessage(err, "Có lỗi khi lưu khai báo thu hái."));
     } finally {
@@ -165,8 +162,6 @@ export default function StampsTab({ plots = [] }: Props) {
       setDeletingId(null);
     }
   };
-
-  const remainingStamps = stampsQuery.data?.stats.remaining ?? 0;
 
   return (
     <div className="portal-tab-content">
@@ -225,16 +220,6 @@ export default function StampsTab({ plots = [] }: Props) {
         <button
           type="button"
           role="tab"
-          aria-selected={subTab === "fruit_stamps"}
-          className={subTab === "fruit_stamps" ? "active" : ""}
-          onClick={() => setSubTab("fruit_stamps")}
-        >
-          <span className="tab-label-desktop">Kích hoạt tem quả ({remainingStamps})</span>
-          <span className="tab-label-mobile">Tem quả ({remainingStamps})</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
           aria-selected={subTab === "harvest_lots"}
           className={subTab === "harvest_lots" ? "active" : ""}
           onClick={() => setSubTab("harvest_lots")}
@@ -266,10 +251,7 @@ export default function StampsTab({ plots = [] }: Props) {
         </div>
       )}
 
-      {/* ─── CHẾ ĐỘ 2: KÍCH HOẠT TEM QUẢ ĐIỆN TỬ ─── */}
-      {subTab === "fruit_stamps" && <FruitStampsView plots={effectivePlots} />}
-
-      {/* ─── CHẾ ĐỘ 3: KẾ HOẠCH & KHAI BÁO THU HÁI TẠI VƯỜN ─── */}
+      {/* ─── CHẾ ĐỘ 2: KẾ HOẠCH & KHAI BÁO THU HÁI TẠI VƯỜN ─── */}
       {subTab === "harvest_decl" && (
         <div className="pt-harvest-decl-view">
           <div className="decl-topbar">

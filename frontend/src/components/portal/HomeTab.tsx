@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useLayoutEffect, useMemo } from "react";
-import { ChevronRight } from "lucide-react";
+import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortal } from "@/hooks/use-portal";
 import { daysSince, formatClock, formatKg, HOUSEHOLD_STATUS, relativeDayLabel, SCHEDULE_KIND, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
@@ -124,10 +124,19 @@ function normalizeReminderTab(tab: string): PortalTabId {
 
 function buildActionItems(overview: PortalOverview, firstViolation?: PortalViolation | null): ActionItem[] {
   if (Array.isArray(overview.reminders)) {
+    let hasDiaryReminder = false;
     return overview.reminders
       .filter((rem) => {
         const clean = (rem.tab || "").trim().toLowerCase();
-        return clean !== "requests" && clean !== "approvals";
+        if (clean === "requests" || clean === "approvals") return false;
+        const isDiaryReminder =
+          rem.kind === "journal" ||
+          (rem.kind === "violation" && rem.title.toLowerCase().includes("nhật ký"));
+        if (isDiaryReminder) {
+          if (hasDiaryReminder) return false;
+          hasDiaryReminder = true;
+        }
+        return true;
       })
       .map((rem, idx) => ({
         id: `${rem.kind}-${idx}`,
@@ -420,7 +429,7 @@ export default function HomeTab({
       </div>
 
       {/* Widget Nhắc nhở */}
-      <section className="pt-reminders-widget" aria-label="Nhắc nhở và nhiệm vụ hôm nay">
+      <section className="pt-reminders-widget pt-home-reminders-widget" aria-label="Nhắc nhở và nhiệm vụ hôm nay">
         <div className="pt-widget-topbar">
           <div className="pt-widget-topbar-info">
             <h2 className="pt-widget-topbar-title">Nhắc nhở</h2>
@@ -439,7 +448,7 @@ export default function HomeTab({
                   <div
                     role="button"
                     tabIndex={0}
-                    className="pt-widget-item"
+                    className="pt-widget-item pt-reminder-item"
                     onClick={() => handleActionClick(item.to)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
@@ -456,17 +465,17 @@ export default function HomeTab({
                       className="pt-widget-note-icon"
                       aria-hidden="true"
                     />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span className="pt-widget-item-text" style={{ display: "block" }}>
+                    <div className="pt-reminder-item-content">
+                      <span className="pt-widget-item-text pt-reminder-item-title">
                         {item.title}
                       </span>
                       {item.detail && (
-                        <span style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                        <span className="pt-reminder-item-detail">
                           {item.detail}
                         </span>
                       )}
                     </div>
-                    <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
+                    <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
                   </div>
                 </li>
               ))}

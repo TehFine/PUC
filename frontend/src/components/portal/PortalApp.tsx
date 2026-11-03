@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowUpRight,
   Bell,
   BookOpen,
   CheckCheck,
@@ -21,8 +20,9 @@ import {
   UserCheck,
   type LucideIcon,
 } from "lucide-react";
-import { FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { invalidateQueries, NOTIFICATIONS_PATH, portalPath, usePortal, useSharedQuery } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { api, errorMessage } from "@/lib/api-client";
@@ -188,14 +188,12 @@ export default function PortalApp() {
     return new Set(["home"]);
   });
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileClosing, setProfileClosing] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [navWheelOpen, setNavWheelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const [scrollingDown, setScrollingDown] = useState(false);
 
   const openSupport = useCallback(() => setSupportOpen(true), []);
   const closeSupport = useCallback(() => setSupportOpen(false), []);
@@ -204,6 +202,8 @@ export default function PortalApp() {
 
   const navigate = useCallback((next: PortalTabId) => {
     setNavWheelOpen(false);
+    setScrollingDown(false);
+    document.documentElement.classList.remove("is-scrolling-down");
     startTransition(() => {
       setVisitedTabs((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
       setTab(next);
@@ -221,28 +221,11 @@ export default function PortalApp() {
   }, []);
 
   const closeProfile = useCallback(() => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    setProfileClosing(true);
-    closeTimerRef.current = setTimeout(() => {
-      setProfileOpen(false);
-      setProfileClosing(false);
-    }, 200);
+    setProfileOpen(false);
   }, []);
 
   const toggleProfile = useCallback(() => {
-    if (profileOpen) {
-      closeProfile();
-    } else {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-      setProfileClosing(false);
-      setProfileOpen(true);
-    }
-  }, [profileOpen, closeProfile]);
-
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    };
+    setProfileOpen((prev) => !prev);
   }, []);
 
   useEffect(() => {
@@ -251,30 +234,33 @@ export default function PortalApp() {
   }, [status, session, router]);
 
   useEffect(() => {
-    if (!profileOpen) return;
-    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
-        closeProfile();
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeProfile();
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("touchstart", handleClickOutside, { passive: true });
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("touchstart", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [profileOpen, closeProfile]);
-
-  useEffect(() => {
     document.documentElement.classList.add("pt-html");
     document.body.classList.add("pt-body");
+
+    let lastY = window.scrollY;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = Math.max(0, window.scrollY);
+        const delta = y - lastY;
+        if (y <= 6 || delta < -4) {
+          setScrollingDown(false);
+          document.documentElement.classList.remove("is-scrolling-down");
+        } else if (y > 10 && delta > 2) {
+          setScrollingDown(true);
+          document.documentElement.classList.add("is-scrolling-down");
+        }
+        lastY = y;
+        ticking = false;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      document.documentElement.classList.remove("pt-html");
+      window.removeEventListener("scroll", onScroll);
+      document.documentElement.classList.remove("pt-html", "is-scrolling-down");
       document.body.classList.remove("pt-body");
     };
   }, []);
@@ -326,7 +312,7 @@ export default function PortalApp() {
   };
 
   return (
-    <div className="pt-app">
+    <div className={`pt-app${scrollingDown ? " is-scrolling-down" : ""}`}>
       <div className="pt-bg-backdrop" aria-hidden="true" />
       <header className="pt-topbar">
         <div className="pt-topbar-inner">
@@ -366,8 +352,8 @@ export default function PortalApp() {
             })}
           </nav>
 
-          {/* Cụm Chuông thông báo + Avatar & Popup tài khoản */}
-          <div className="pt-topbar-profile" ref={profileMenuRef} style={{ gap: 8 }}>
+          {/* Cụm Chuông thông báo + Avatar tài khoản */}
+          <div className="pt-topbar-profile" style={{ gap: 8 }}>
             <button
               id="portal-notifications-toggle"
               type="button"
@@ -382,14 +368,6 @@ export default function PortalApp() {
               )}
             </button>
 
-            {(profileOpen || profileClosing) && (
-              <div
-                className={`pt-profile-backdrop ${profileClosing ? "is-closing" : ""}`}
-                onClick={closeProfile}
-                aria-hidden="true"
-              />
-            )}
-
             <button
               id="portal-profile-toggle"
               type="button"
@@ -401,129 +379,9 @@ export default function PortalApp() {
             >
               <span className="pt-avatar">{initials}</span>
             </button>
-
-            {(profileOpen || profileClosing) && (
-              <div
-                id="portal-profile-dropdown"
-                className={`pt-profile-popup ${profileClosing ? "is-closing" : ""}`}
-                role="dialog"
-                aria-modal="true"
-                aria-label="Thông tin tài khoản hộ dân"
-              >
-                <div className="pt-profile-popup-head">
-                  <div className="pt-profile-avatar-lg">
-                    <span>{initials}</span>
-                  </div>
-                  <div className="pt-profile-head-info">
-                    <strong className="pt-profile-name">{displayName}</strong>
-                    <div className="pt-profile-badges">
-                      <span className="pt-profile-kicker">
-                        {profHousehold?.code ? `MÃ: ${profHousehold.code}` : "HỘ THÀNH VIÊN"}
-                      </span>
-                      <span className={`pt-profile-status is-${householdStatus.tone}`}>
-                        {householdStatus.label}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-profile-details">
-                  <div className="pt-profile-row">
-                    <Phone size={15} className="pt-profile-icon" aria-hidden="true" />
-                    <div className="pt-profile-row-content">
-                      <span className="pt-profile-label">Số điện thoại / Tài khoản</span>
-                      <strong className="pt-profile-val">
-                        {profHousehold?.phone || "Chưa cập nhật"}
-                        {profAccount?.username ? ` (${profAccount.username})` : ""}
-                      </strong>
-                    </div>
-                  </div>
-
-                  {profile?.household.cccdMasked && (
-                    <div className="pt-profile-row">
-                      <CreditCard size={15} className="pt-profile-icon" aria-hidden="true" />
-                      <div className="pt-profile-row-content">
-                        <span className="pt-profile-label">CCCD chủ hộ</span>
-                        <strong className="pt-profile-val">{profile.household.cccdMasked}</strong>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="pt-profile-row">
-                    <MapPin size={15} className="pt-profile-icon" aria-hidden="true" />
-                    <div className="pt-profile-row-content">
-                      <span className="pt-profile-label">Địa bàn canh tác</span>
-                      <strong className="pt-profile-val">
-                        {profHousehold?.villageName ? `${profHousehold.villageName}, Xã Krông Búk` : "Xã Krông Búk"}
-                      </strong>
-                    </div>
-                  </div>
-
-                  {profHousehold?.villageLeader && (
-                    <div className="pt-profile-row">
-                      <UserCheck size={15} className="pt-profile-icon" aria-hidden="true" />
-                      <div className="pt-profile-row-content">
-                        <span className="pt-profile-label">Trưởng thôn phụ trách</span>
-                        <strong className="pt-profile-val">{profHousehold.villageLeader}</strong>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="pt-profile-row">
-                    <TreePine size={15} className="pt-profile-icon" aria-hidden="true" />
-                    <div className="pt-profile-row-content">
-                      <span className="pt-profile-label">Quy mô vườn sầu riêng</span>
-                      <strong className="pt-profile-val">
-                        {profHousehold?.plotCount ?? 0} thửa đất ·{" "}
-                        {(profHousehold?.areaHa ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-profile-footer">
-                  <button
-                    type="button"
-                    className="pt-profile-intro-btn"
-                    onClick={() => {
-                      closeProfile();
-                      setPasswordOpen(true);
-                    }}
-                  >
-                    <KeyRound size={15} aria-hidden="true" />
-                    <span>Đổi mật khẩu</span>
-                    <ArrowUpRight size={14} className="pt-profile-intro-arrow" aria-hidden="true" />
-                  </button>
-
-                  <Link
-                    href={INTRO_PATH}
-                    className="pt-profile-intro-btn"
-                    onClick={closeProfile}
-                    title="Về trang giới thiệu HTX Krông Búk"
-                  >
-                    <Image src="/logo.png" alt="" width={18} height={18} />
-                    <span>Trang giới thiệu HTX</span>
-                    <ArrowUpRight size={14} className="pt-profile-intro-arrow" aria-hidden="true" />
-                  </Link>
-
-                  <button
-                    id="portal-logout"
-                    type="button"
-                    className="pt-profile-logout-btn"
-                    onClick={() => {
-                      closeProfile();
-                      void logout();
-                    }}
-                  >
-                    <LogOut aria-hidden="true" size={15} strokeWidth={2.2} />
-                    <span>Đăng xuất tài khoản</span>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Phần điều hướng trên mobile: Nút tròn có dấu mũi tên */}
+          {/* Phần điều hướng trên mobile: Nút tròn có icon menu */}
           <div className="pt-topbar-nav">
             <button
               id="portal-radial-toggle"
@@ -532,10 +390,10 @@ export default function PortalApp() {
               onClick={() => setNavWheelOpen((value) => !value)}
               aria-expanded={navWheelOpen}
               aria-controls="portal-radial-drawer"
-              title="Mở menu xoay điều hướng"
-              aria-label="Mở menu xoay điều hướng"
+              title="Mở menu điều hướng"
+              aria-label="Mở menu điều hướng"
             >
-              <ArrowUpRight className="pt-nav-icon" size={20} strokeWidth={2.4} aria-hidden="true" />
+              <span className="pt-nav-icon pt-nav-menu-mask" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -579,6 +437,129 @@ export default function PortalApp() {
           </div>
         )}
       </main>
+
+      {profileOpen && (
+        <Sheet
+          title="Thông tin tài khoản"
+          onClose={closeProfile}
+          className="pt-profile-sheet"
+        >
+          <div id="portal-profile-dropdown" className="pt-profile-sheet-content">
+            <div className="pt-profile-popup-head">
+              <div className="pt-profile-avatar-lg">
+                <span>{initials}</span>
+              </div>
+              <div className="pt-profile-head-info">
+                <strong className="pt-profile-name">{displayName}</strong>
+                <div className="pt-profile-badges">
+                  <span className="pt-profile-kicker">
+                    {profHousehold?.code ? `MÃ: ${profHousehold.code}` : "HỘ THÀNH VIÊN"}
+                  </span>
+                  <span className={`pt-profile-status is-${householdStatus.tone}`}>
+                    {householdStatus.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-profile-details">
+              <div className="pt-profile-row">
+                <Phone size={17} className="pt-profile-icon" aria-hidden="true" />
+                <div className="pt-profile-row-content">
+                  <span className="pt-profile-label">Số điện thoại</span>
+                  <strong className="pt-profile-val">
+                    {profHousehold?.phone || "Chưa cập nhật"}
+                  </strong>
+                </div>
+              </div>
+
+              {profile?.household.cccdMasked && (
+                <div className="pt-profile-row">
+                  <CreditCard size={17} className="pt-profile-icon" aria-hidden="true" />
+                  <div className="pt-profile-row-content">
+                    <span className="pt-profile-label">CCCD chủ hộ</span>
+                    <strong className="pt-profile-val">{profile.household.cccdMasked}</strong>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-profile-row">
+                <MapPin size={17} className="pt-profile-icon" aria-hidden="true" />
+                <div className="pt-profile-row-content">
+                  <span className="pt-profile-label">Địa bàn</span>
+                  <strong className="pt-profile-val">
+                    {profHousehold?.villageName ? `${profHousehold.villageName}, Xã Krông Búk` : "Xã Krông Búk"}
+                  </strong>
+                </div>
+              </div>
+
+              {profHousehold?.villageLeader && (
+                <div className="pt-profile-row">
+                  <UserCheck size={17} className="pt-profile-icon" aria-hidden="true" />
+                  <div className="pt-profile-row-content">
+                    <span className="pt-profile-label">Trưởng thôn</span>
+                    <strong className="pt-profile-val">{profHousehold.villageLeader}</strong>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-profile-row">
+                <TreePine size={17} className="pt-profile-icon" aria-hidden="true" />
+                <div className="pt-profile-row-content">
+                  <span className="pt-profile-label">Quy mô vườn</span>
+                  <strong className="pt-profile-val">
+                    {profHousehold?.plotCount ?? 0} thửa ·{" "}
+                    {(profHousehold?.areaHa ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-profile-footer">
+              <button
+                type="button"
+                className="pt-profile-intro-btn"
+                onClick={() => {
+                  closeProfile();
+                  setPasswordOpen(true);
+                }}
+              >
+                <span className="pt-profile-action-icon" aria-hidden="true">
+                  <KeyRound size={20} strokeWidth={2.1} />
+                </span>
+                <span className="pt-profile-action-title">Đổi mật khẩu</span>
+                <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
+              </button>
+
+              <Link
+                href={INTRO_PATH}
+                className="pt-profile-intro-btn"
+                onClick={closeProfile}
+                title="Về trang giới thiệu HTX Krông Búk"
+              >
+                <span className="pt-profile-action-icon" aria-hidden="true">
+                  <Image src="/logo.png" alt="" width={22} height={22} />
+                </span>
+                <span className="pt-profile-action-title">Trang giới thiệu HTX</span>
+                <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
+              </Link>
+
+              <button
+                id="portal-logout"
+                type="button"
+                className="pt-profile-logout-btn"
+                onClick={() => {
+                  closeProfile();
+                  void logout();
+                }}
+              >
+                <LogOut aria-hidden="true" size={17} strokeWidth={2.2} />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          </div>
+        </Sheet>
+      )}
 
       {notifOpen && (
         <Sheet title="Thông báo từ HTX" onClose={() => setNotifOpen(false)}>

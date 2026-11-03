@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronRight, MessageSquareReply, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MessageSquareReply, Trash2 } from "lucide-react";
+import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
 import { JOURNAL_ACTIVITIES, todayIso, toNumber } from "@/lib/portal-labels";
@@ -917,7 +918,7 @@ export default function DiaryTab() {
                         {entry.plotCode ? ` · ${entry.plotCode}` : ""}
                       </span>
                       <span className="pt-diary-item-date">{formatDate(entry.entryOn)}</span>
-                      <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
+                      <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
                     </div>
                   </li>
                 ))}
@@ -957,7 +958,7 @@ export default function DiaryTab() {
                         {record.plotCode ? ` · ${record.plotCode}` : ""}
                       </span>
                       <span className="pt-diary-item-date">{formatDate(record.sprayedOn)}</span>
-                      <ChevronRight className="pt-widget-item-arrow" size={17} aria-hidden="true" />
+                      <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
                     </div>
                   </li>
                 ))}

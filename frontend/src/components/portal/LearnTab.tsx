@@ -14,6 +14,7 @@ import {
   Search,
 } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
 import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
 
@@ -536,7 +537,10 @@ function TrainingList() {
                       Giảng viên: {item.trainer ?? "—"} · {item.enrolled}/{item.capacity} học viên
                     </span>
                   </div>
-                  {myStatusInfo && <Pill tone={myStatusInfo.tone}>{myStatusInfo.label}</Pill>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                    {myStatusInfo && <Pill tone={myStatusInfo.tone}>{myStatusInfo.label}</Pill>}
+                    <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
+                  </div>
                 </li>
               );
             })}
@@ -1058,6 +1062,7 @@ function PesticideList() {
                 <div className="pt-pest-card-content">
                   <h3 className="pt-pest-card-name">{item.name}</h3>
                 </div>
+                <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
               </article>
             );
           })}
@@ -1542,6 +1547,7 @@ function FertilizerList() {
                     {item.name}
                   </h3>
                 </div>
+                <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
               </article>
             );
           })}
@@ -2024,6 +2030,7 @@ function VarietyList() {
                     {item.name}
                   </h3>
                 </div>
+                <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
               </article>
             );
           })}
