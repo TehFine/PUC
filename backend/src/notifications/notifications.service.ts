@@ -51,18 +51,19 @@ export class NotificationsService {
       await this.syncStaffNotifications(userOrId);
     }
 
-    const { rows } = await this.db.query(
-      `SELECT id, kind, title, body, link, read_at, created_at FROM notifications
-       WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`,
-      [userId, limit],
-    );
-    const unread = (
-      await this.db.query<{ n: number }>(
+    // Danh sách và số chưa đọc độc lập nhau: chạy song song để giảm một lượt chờ CSDL
+    const [listRes, unreadRes] = await Promise.all([
+      this.db.query(
+        `SELECT id, kind, title, body, link, read_at, created_at FROM notifications
+         WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`,
+        [userId, limit],
+      ),
+      this.db.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL",
         [userId],
-      )
-    ).rows[0].n;
-    return { data: camelRows(rows), unread };
+      ),
+    ]);
+    return { data: camelRows(listRes.rows), unread: unreadRes.rows[0].n };
   }
 
   /**
@@ -83,65 +84,69 @@ export class NotificationsService {
           ? "AND v.household_id IN (SELECT id FROM households WHERE village_id = $2)"
           : "";
 
-      // 1. Tạo thông báo thực cho từng hồ sơ đang chờ duyệt (pending) nếu chưa có
-      await this.db.query(
-        `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
-         SELECT
-           $1,
-           'approval',
-           'Hồ sơ chờ duyệt: ' || a.code || ' – ' || a.applicant_name,
-           a.request_type || ' · Nộp ngày ' || to_char(a.submitted_on, 'DD/MM/YYYY'),
-           '/admin?section=approval&id=' || a.id,
-           COALESCE(a.created_at, a.submitted_on::timestamptz, now())
-         FROM approvals a
-         WHERE a.status = 'pending' ${apprScope}
-           AND NOT EXISTS (
-             SELECT 1 FROM notifications n
-             WHERE n.user_id = $1 AND n.link = '/admin?section=approval&id=' || a.id
-           )
-         ORDER BY a.submitted_on ASC, a.id ASC`,
-        params,
-      );
+      // Ba bước dưới đây tác động lên các nhóm thông báo tách biệt (hồ sơ chờ duyệt / vi phạm đang mở /
+      // mục đã xử lý xong) nên chạy song song: 1 lượt chờ CSDL thay vì 3.
+      await Promise.all([
+        // 1. Tạo thông báo thực cho từng hồ sơ đang chờ duyệt (pending) nếu chưa có
+        this.db.query(
+          `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+           SELECT
+             $1,
+             'approval',
+             'Hồ sơ chờ duyệt: ' || a.code || ' – ' || a.applicant_name,
+             a.request_type || ' · Nộp ngày ' || to_char(a.submitted_on, 'DD/MM/YYYY'),
+             '/admin?section=approval&id=' || a.id,
+             COALESCE(a.created_at, a.submitted_on::timestamptz, now())
+           FROM approvals a
+           WHERE a.status = 'pending' ${apprScope}
+             AND NOT EXISTS (
+               SELECT 1 FROM notifications n
+               WHERE n.user_id = $1 AND n.link = '/admin?section=approval&id=' || a.id
+             )
+           ORDER BY a.submitted_on ASC, a.id ASC`,
+          params,
+        ),
 
-      // 2. Tạo thông báo thực cho từng cảnh báo vi phạm đang mở (open) nếu chưa có
-      await this.db.query(
-        `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
-         SELECT
-           $1,
-           'violation',
-           'Cảnh báo vi phạm: ' || v.title,
-           v.household_label || COALESCE(' · Thửa ' || v.plot_code, '') || COALESCE(' – ' || v.description, ''),
-           '/admin?section=journal&violationId=' || v.id,
-           COALESCE(v.detected_on::timestamptz, now())
-         FROM violations v
-         WHERE v.status = 'open' ${violScope}
-           AND NOT EXISTS (
-             SELECT 1 FROM notifications n
-             WHERE n.user_id = $1 AND n.link = '/admin?section=journal&violationId=' || v.id
-           )
-         ORDER BY v.detected_on ASC, v.id ASC`,
-        params,
-      );
+        // 2. Tạo thông báo thực cho từng cảnh báo vi phạm đang mở (open) nếu chưa có
+        this.db.query(
+          `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+           SELECT
+             $1,
+             'violation',
+             'Cảnh báo vi phạm: ' || v.title,
+             v.household_label || COALESCE(' · Thửa ' || v.plot_code, '') || COALESCE(' – ' || v.description, ''),
+             '/admin?section=journal&violationId=' || v.id,
+             COALESCE(v.detected_on::timestamptz, now())
+           FROM violations v
+           WHERE v.status = 'open' ${violScope}
+             AND NOT EXISTS (
+               SELECT 1 FROM notifications n
+               WHERE n.user_id = $1 AND n.link = '/admin?section=journal&violationId=' || v.id
+             )
+           ORDER BY v.detected_on ASC, v.id ASC`,
+          params,
+        ),
 
-      // 3. Tự động đánh dấu đã đọc với các thông báo gắn với hồ sơ đã duyệt/từ chối hoặc vi phạm đã đóng
-      await this.db.query(
-        `UPDATE notifications n
-         SET read_at = now()
-         WHERE n.user_id = $1
-           AND n.read_at IS NULL
-           AND (
-             (n.link LIKE '/admin?section=approval&id=%' AND EXISTS (
-               SELECT 1 FROM approvals a
-               WHERE '/admin?section=approval&id=' || a.id = n.link AND a.status <> 'pending'
-             ))
-             OR
-             (n.link LIKE '/admin?section=journal&violationId=%' AND EXISTS (
-               SELECT 1 FROM violations v
-               WHERE '/admin?section=journal&violationId=' || v.id = n.link AND v.status <> 'open'
-             ))
-           )`,
-        [user.id],
-      );
+        // 3. Tự động đánh dấu đã đọc với các thông báo gắn với hồ sơ đã duyệt/từ chối hoặc vi phạm đã đóng
+        this.db.query(
+          `UPDATE notifications n
+           SET read_at = now()
+           WHERE n.user_id = $1
+             AND n.read_at IS NULL
+             AND (
+               (n.link LIKE '/admin?section=approval&id=%' AND EXISTS (
+                 SELECT 1 FROM approvals a
+                 WHERE '/admin?section=approval&id=' || a.id = n.link AND a.status <> 'pending'
+               ))
+               OR
+               (n.link LIKE '/admin?section=journal&violationId=%' AND EXISTS (
+                 SELECT 1 FROM violations v
+                 WHERE '/admin?section=journal&violationId=' || v.id = n.link AND v.status <> 'open'
+               ))
+             )`,
+          [user.id],
+        ),
+      ]);
     } catch (error) {
       this.logger.error(
         `Không đồng bộ được thông báo quản trị: ${error instanceof Error ? error.message : String(error)}`,

@@ -7,7 +7,23 @@ import { TODAY_VN_SQL } from "../shared/state";
 
 @Injectable()
 export class DashboardService {
+  /** Bảng plots (PostGIS) có hay không gần như không đổi khi đang chạy: chỉ kiểm tra 1 lần rồi lưu lại. */
+  private plotsTableExists: Promise<boolean> | null = null;
+
   constructor(private readonly db: DatabaseService) {}
+
+  private hasPlotsTable(): Promise<boolean> {
+    if (!this.plotsTableExists) {
+      this.plotsTableExists = this.db
+        .query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")
+        .then((res) => res.rows[0]?.reg !== null)
+        .catch((error: unknown) => {
+          this.plotsTableExists = null; // lỗi tạm thời: lần sau kiểm tra lại
+          throw error;
+        });
+    }
+    return this.plotsTableExists;
+  }
 
   async summary(user: AuthUser) {
     const isVillageScoped = user.role === "village_officer";
@@ -25,16 +41,14 @@ export class DashboardService {
         : "";
     const regWhere = villageId !== null ? "AND u.village_id = $1" : "";
 
-    const hasPlots =
-      (await this.db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")).rows[0]
-        ?.reg !== null;
+    const hasPlots = await this.hasPlotsTable();
 
     const plotsCountExpr =
       hasPlots && villageId === null
         ? `GREATEST((SELECT count(*)::int FROM plots), (SELECT COALESCE(sum(h.plot_count), 0)::int FROM households h))`
         : `(SELECT COALESCE(sum(h.plot_count), 0)::int FROM households h ${hhWhere})`;
 
-    const countsRes = await this.db.query(
+    const countsQuery = this.db.query(
       `SELECT
          (SELECT count(*)::int FROM households h ${hhWhere}) AS households,
          ${plotsCountExpr} AS plots,
@@ -52,24 +66,8 @@ export class DashboardService {
          (SELECT count(*)::int FROM journal_entries je JOIN households h ON h.id = je.household_id WHERE je.entry_on >= ${TODAY_VN_SQL} - 30 ${hhAnd}) AS journal_last_30_days`,
       params,
     );
-    const rawCounts = camelRow<{
-      households: number;
-      plots: number;
-      areaHa: number;
-      qualifiedHouseholds: number;
-      openViolations: number;
-      pendingApprovals: number;
-      pendingRegistrations: number;
-      pendingDeclarations: number;
-      labTests: number;
-      labTestsPassed: number;
-      harvestTons: number;
-      harvestLots: number;
-      trainingCourses: number;
-      journalLast30Days: number;
-    }>(countsRes.rows[0]);
-
-    const [statusRes, villagesRes, trendRes, violationsRes, approvalsRes, scheduleRes] = await Promise.all([
+    const [countsRes, statusRes, villagesRes, trendRes, violationsRes, approvalsRes, scheduleRes] = await Promise.all([
+      countsQuery,
       this.db.query(
         `SELECT h.status, count(*)::int AS count
          FROM households h ${hhWhere}
@@ -131,6 +129,23 @@ export class DashboardService {
          LIMIT 5`,
       ),
     ]);
+
+    const rawCounts = camelRow<{
+      households: number;
+      plots: number;
+      areaHa: number;
+      qualifiedHouseholds: number;
+      openViolations: number;
+      pendingApprovals: number;
+      pendingRegistrations: number;
+      pendingDeclarations: number;
+      labTests: number;
+      labTestsPassed: number;
+      harvestTons: number;
+      harvestLots: number;
+      trainingCourses: number;
+      journalLast30Days: number;
+    }>(countsRes.rows[0]);
 
     const { harvestLots, ...counts } = rawCounts;
 

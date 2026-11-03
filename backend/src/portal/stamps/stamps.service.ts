@@ -23,38 +23,39 @@ export class StampsService {
   async stamps(user: AuthUser) {
     const householdId = householdIdOf(user);
 
-    const statsRes = await this.db.query<{ total: number; activated: number; allocated: number }>(
-      `SELECT
-         count(*)::int AS total,
-         count(*) FILTER (WHERE status = 'activated')::int AS activated,
-         count(*) FILTER (WHERE status = 'allocated')::int AS allocated
-       FROM farmer_stamps
-       WHERE household_id = $1`,
-      [householdId],
-    );
+    // Ba truy vấn độc lập: chạy song song (1 lượt chờ CSDL thay vì 3)
+    const [statsRes, allocs, stamps] = await Promise.all([
+      this.db.query<{ total: number; activated: number; allocated: number }>(
+        `SELECT
+           count(*)::int AS total,
+           count(*) FILTER (WHERE status = 'activated')::int AS activated,
+           count(*) FILTER (WHERE status = 'allocated')::int AS allocated
+         FROM farmer_stamps
+         WHERE household_id = $1`,
+        [householdId],
+      ),
+      this.db.query(
+        `SELECT id, allocation_code, allocated_on, season, max_quota_stamps, quantity_allocated, from_serial, to_serial, status, notes
+         FROM farmer_stamp_allocations
+         WHERE household_id = $1
+         ORDER BY allocated_on DESC, id DESC`,
+        [householdId],
+      ),
+      this.db.query(
+        `SELECT ${STAMP_COLUMNS}
+         FROM farmer_stamps
+         WHERE household_id = $1
+         ORDER BY status = 'allocated' DESC, id DESC
+         LIMIT 100`,
+        [householdId],
+      ),
+    ]);
 
     const stats = {
       totalAllocated: Number(statsRes.rows[0]?.total ?? 0),
       totalActivated: Number(statsRes.rows[0]?.activated ?? 0),
       remaining: Number(statsRes.rows[0]?.allocated ?? 0),
     };
-
-    const allocs = await this.db.query(
-      `SELECT id, allocation_code, allocated_on, season, max_quota_stamps, quantity_allocated, from_serial, to_serial, status, notes
-       FROM farmer_stamp_allocations
-       WHERE household_id = $1
-       ORDER BY allocated_on DESC, id DESC`,
-      [householdId],
-    );
-
-    const stamps = await this.db.query(
-      `SELECT ${STAMP_COLUMNS}
-       FROM farmer_stamps
-       WHERE household_id = $1
-       ORDER BY status = 'allocated' DESC, id DESC
-       LIMIT 100`,
-      [householdId],
-    );
 
     return {
       stats,
