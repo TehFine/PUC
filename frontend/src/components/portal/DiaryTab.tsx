@@ -852,7 +852,7 @@ export default function DiaryTab() {
         )}
       </Card>
 
-      <div className="pt-segmented" role="tablist" aria-label="Loại nhật ký">
+      <div className="pt-segmented pt-diary-segmented" role="tablist" aria-label="Loại nhật ký">
         <button type="button" role="tab" aria-selected={view === "journal"} className={view === "journal" ? "active" : ""} onClick={() => setView("journal")}>
           Canh tác
         </button>

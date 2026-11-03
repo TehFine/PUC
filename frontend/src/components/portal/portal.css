@@ -5198,6 +5198,14 @@ body.pt-body {
 .pt-segmented button.active { background: var(--ink); color: #fff; box-shadow: 0 4px 14px rgba(20, 55, 47, 0.2); }
 .pt-segmented button:focus-visible { outline: 2px solid var(--green-600); outline-offset: 2px; }
 
+/* Giao diện di động: căn giữa bộ chuyển Canh tác / Phun thuốc ở tab Nhật ký */
+@media (max-width: 640px) {
+  .pt-diary-segmented {
+    margin-inline: auto;
+    align-self: center;
+  }
+}
+
 /* Trạng thái */
 .pt-state { padding: 26px 8px; text-align: center; font-size: 13.5px; color: var(--text-secondary); }
 .pt-state-error { color: #b73c20; }
