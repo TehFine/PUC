@@ -19,7 +19,7 @@ import type {
 } from "@/types/portal";
 import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
 import type { PortalAction } from "./PortalSearch";
-import { Card, EmptyState, Field, Pill, Sheet, StateBlock, useSheetClose } from "./ui";
+import { Card, EmptyState, Field, Pill, SectionDivider, Sheet, StateBlock, useSheetClose } from "./ui";
 
 function canDeleteEntry(entry: PortalJournalEntry): boolean {
   if (typeof entry.canDelete === "boolean") return entry.canDelete;
@@ -815,6 +815,8 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
           </ul>
         )}
       </Card>
+
+      <SectionDivider />
 
       <div className="pt-segmented pt-diary-segmented" role="tablist" aria-label="Loại nhật ký">
         <button type="button" role="tab" aria-selected={view === "journal"} className={view === "journal" ? "active" : ""} onClick={() => setView("journal")}>

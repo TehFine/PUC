@@ -11,6 +11,11 @@ export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <span className={`pt-pill pt-pill-${tone}`}>{children}</span>;
 }
 
+/** Đường kẻ mảnh phân tách các phần nội dung lớn trong một tab (chỉ hiện trên giao diện di động). */
+export function SectionDivider() {
+  return <hr className="pt-section-divider" aria-hidden="true" />;
+}
+
 export function Card({ title, action, children }: { title?: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="pt-card">

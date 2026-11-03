@@ -16,7 +16,7 @@ import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import type { PortalAction } from "./PortalSearch";
 import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
-import { Card, EmptyState, Pill, Sheet, StateBlock } from "./ui";
+import { Card, EmptyState, Pill, SectionDivider, Sheet, StateBlock } from "./ui";
 
 export type TrainingCourseItem = TrainingDto & Partial<Omit<PortalTrainingCourse, keyof TrainingDto>>;
 
@@ -503,6 +503,7 @@ function TrainingList() {
       </section>
 
       {/* 2. CÁC LỚP ĐÃ HOÀN THÀNH */}
+      {done.length > 0 && <SectionDivider />}
       {done.length > 0 && (
         <Card title="Khóa tập huấn đã hoàn thành">
           <ul className="pt-list">

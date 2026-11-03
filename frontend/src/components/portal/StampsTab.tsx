@@ -17,7 +17,7 @@ import type {
 } from "@/types/portal";
 import { HarvestAssetTagCard, HarvestLotQrModal } from "./harvest/HarvestLotTicket";
 import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
-import { EmptyState, Pill, StateBlock } from "./ui";
+import { EmptyState, Pill, SectionDivider, StateBlock } from "./ui";
 
 import type { PortalAction } from "./PortalSearch";
 interface HarvestRule {
@@ -209,6 +209,8 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
           })}
         </div>
       </section>
+
+      <SectionDivider />
 
       {/* ─── 2. THANH ĐIỀU HƯỚNG CHỨC NĂNG ─── */}
       <div className="pt-segmented pt-harvest-segmented" role="tablist" aria-label="Chế độ thu hoạch">
@@ -568,6 +570,9 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
           max-width: 720px;
           margin-bottom: 22px;
           padding: 0 0 4px;
+        }
+        .portal-tab-content > :global(.pt-section-divider) {
+          margin: 0 auto 22px;
         }
         .pt-harvest-rules-section .pt-schedule-header {
           padding: 0 2px 10px;

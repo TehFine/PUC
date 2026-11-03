@@ -7,7 +7,7 @@ import { daysSince, formatClock, formatKg, HOUSEHOLD_STATUS, relativeDayLabel, S
 import { formatDate } from "@/utils/format";
 import type { PortalList, PortalOverview, PortalReminder, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
-import { Pill, Sheet, StateBlock } from "./ui";
+import { Pill, SectionDivider, Sheet, StateBlock } from "./ui";
 import { getTrainingKicker, TrainingDetailModal, usePortalTrainings, type TrainingCourseItem } from "./LearnTab";
 
 const SCHEDULE_THEMES = [
@@ -463,6 +463,8 @@ export default function HomeTab({
         </section>
       </div>
 
+      <SectionDivider />
+
       {/* Widget Nhắc nhở */}
       <section className="pt-reminders-widget pt-home-reminders-widget" aria-label="Nhắc nhở và nhiệm vụ hôm nay">
         <div className="pt-widget-topbar">
@@ -518,6 +520,8 @@ export default function HomeTab({
           )}
         </div>
       </section>
+
+      <SectionDivider />
 
       {/* Lịch kiểm tra */}
       <section className="pt-schedule-section" aria-labelledby="schedule-heading">
@@ -600,6 +604,8 @@ export default function HomeTab({
           </div>
         )}
       </section>
+
+      <SectionDivider />
 
       {/* Lớp tập huấn sắp tới */}
       <section className="pt-schedule-section" aria-labelledby="training-schedule-heading">

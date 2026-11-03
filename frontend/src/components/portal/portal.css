@@ -207,6 +207,27 @@ body.pt-body {
   gap: 24px;
 }
 
+/* Đường kẻ mảnh giữa các phần nội dung của tab: chỉ dùng trên di động, máy tính đã có khoảng trắng rộng */
+.pt-section-divider {
+  display: none;
+}
+
+@media (max-width: 999px) {
+  .pt-section-divider {
+    display: block;
+    flex-shrink: 0;
+    width: calc(100% - 24px);
+    height: 1px;
+    margin: 0 auto;
+    border: 0;
+    background: rgba(20, 55, 47, 0.1);
+  }
+  /* Thẻ hero đã có đường kẻ + khoảng cách của cột bên dưới: bỏ lề dưới riêng để không bị hở quá nhiều */
+  .pt-stack > .pt-hero-shell {
+    margin-bottom: 0;
+  }
+}
+
 @keyframes pt-rise {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
@@ -2072,7 +2093,7 @@ body.pt-body {
     padding: 14px 18px calc(20px + env(safe-area-inset-bottom));
   }
   .pt-stack {
-    gap: 18px;
+    gap: 20px;
   }
   .pt-home-grid,
   .pt-grid-2 {
@@ -8211,27 +8232,6 @@ body.pt-body {
   gap: 12px;
 }
 
-.pt-search-field {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  min-height: 52px;
-  border-radius: 16px;
-  background: var(--mist, #f3f7ee);
-  color: var(--text-secondary);
-  border: 1.5px solid transparent;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
-}
-
-.pt-search-field:focus-within {
-  border-color: var(--green-600, #2f8f6f);
-  background: #ffffff;
-}
-
 /* Popup tìm kiếm: chiều cao cố định để không co giãn theo số gợi ý mỗi lần gõ (gây giật khung),
    bỏ hiệu ứng làm mờ nền (rất nặng khi bàn phím bật lên làm trình duyệt vẽ lại toàn màn hình). */
 .pt-sheet-backdrop:has(.pt-search-sheet) {
@@ -8251,6 +8251,27 @@ body.pt-body {
 
 .pt-search-sheet .pt-search-results {
   contain: content;
+}
+
+.pt-search-field {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  min-height: 52px;
+  border-radius: 16px;
+  background: var(--mist, #f3f7ee);
+  color: var(--text-secondary);
+  border: 1.5px solid transparent;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.pt-search-field:focus-within {
+  border-color: var(--green-600, #2f8f6f);
+  background: #ffffff;
 }
 
 .pt-search-field input {

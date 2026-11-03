@@ -8,7 +8,7 @@ import { relativeDayLabel } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalLabTest, PortalList, PortalScheduleItem } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
-import { Card, EmptyState, Pill, StateBlock } from "./ui";
+import { Card, EmptyState, Pill, SectionDivider, StateBlock } from "./ui";
 
 const LabTestCertificateModal = dynamic(() => import("./LabTestCertificateModal"), { ssr: false });
 
@@ -76,6 +76,8 @@ export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?
           </ul>
         )}
       </Card>
+
+      <SectionDivider />
 
       {/* 2. LỊCH KIỂM TRA SẮP TỚI */}
       <section className="pt-schedule-section" aria-labelledby="inspection-schedule-heading">
