@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -1651,6 +1652,35 @@ const COMPOSITIONAL_PHRASES: Array<[string, string]> = [
   ["thửa đất", "地块"],
 ];
 
+const COMPOSITIONAL_PHRASE_RULES: Array<[RegExp, string]> = COMPOSITIONAL_PHRASES.map(
+  ([viPhrase, zhPhrase]) => {
+    const escaped = viPhrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return [new RegExp(`(^|[^a-zA-ZÀ-ỹ])(${escaped})(?=$|[^a-zA-ZÀ-ỹ])`, "gi"), zhPhrase];
+  },
+);
+
+const COMPOSITIONAL_UNIT_RULES: Array<[RegExp, string]> = [
+  [/(\d+(?:[.,]\d+)?)\s*lít\/ha\b/gi, "$1 升/公顷"],
+  [/(\d+(?:[.,]\d+)?)\s*kg\/ha\b/gi, "$1 公斤/公顷"],
+  [/(\d+(?:[.,]\d+)?)\s*kg\/gốc\b/gi, "$1 公斤/株"],
+  [/(\d+(?:[.,]\d+)?)\s*kg\/cây\b/gi, "$1 公斤/株"],
+  [/(\d+(?:[.,]\d+)?)\s*lít\/gốc\b/gi, "$1 升/株"],
+  [/(\d+(?:[.,]\d+)?)\s*lít\/cây\b/gi, "$1 升/株"],
+  [/(\d+(?:[.,]\d+)?)\s*lít\s*nước\b/gi, "$1 升水"],
+  [/(\d+(?:[.,]\d+)?)\s*lít\b/gi, "$1 升"],
+  [/(\d+(?:[.,]\d+)?)\s*kg\b/gi, "$1 公斤"],
+  [/(\d+(?:[.,]\d+)?)\s*tấn\b/gi, "$1 吨"],
+  [/(\d+)\s*ngày\b/gi, "$1 天"],
+  [/(\d+)\s*giờ\b/gi, "$1 小时"],
+  [/(\d+)\s*phút\b/gi, "$1 分钟"],
+  [/(\d+)\s*cây\b/gi, "$1 株"],
+  [/(\d+)\s*gốc\b/gi, "$1 株"],
+  [/(\d+)\s*bao\b/gi, "$1 袋"],
+  [/(\d+)\s*bình\b/gi, "$1 喷雾器"],
+  [/(\d+)\s*phuy\b/gi, "$1 桶"],
+  [/(\d+)\s*lần\b/gi, "$1 次"],
+];
+
 function translateCompositionalViToZh(text: string): string {
   if (!VI_DIACRITIC_RE.test(text) || isLikelyPersonName(text)) {
     return text;
@@ -1659,40 +1689,19 @@ function translateCompositionalViToZh(text: string): string {
   let result = text;
   let replacedAny = false;
 
-  for (const [viPhrase, zhPhrase] of COMPOSITIONAL_PHRASES) {
-    const escaped = viPhrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`(^|[^a-zA-ZÀ-ỹ])(${escaped})(?=$|[^a-zA-ZÀ-ỹ])`, "gi");
+  for (const [regex, zhPhrase] of COMPOSITIONAL_PHRASE_RULES) {
+    regex.lastIndex = 0;
     if (regex.test(result)) {
+      regex.lastIndex = 0;
       result = result.replace(regex, (_, prefix: string) => `${prefix}${zhPhrase}`);
       replacedAny = true;
     }
   }
 
-  // Dịch các đơn vị số lượng phổ biến nằm bên trong câu
-  const unitRules: Array<[RegExp, string]> = [
-    [/(\d+(?:[.,]\d+)?)\s*lít\/ha\b/gi, "$1 升/公顷"],
-    [/(\d+(?:[.,]\d+)?)\s*kg\/ha\b/gi, "$1 公斤/公顷"],
-    [/(\d+(?:[.,]\d+)?)\s*kg\/gốc\b/gi, "$1 公斤/株"],
-    [/(\d+(?:[.,]\d+)?)\s*kg\/cây\b/gi, "$1 公斤/株"],
-    [/(\d+(?:[.,]\d+)?)\s*lít\/gốc\b/gi, "$1 升/株"],
-    [/(\d+(?:[.,]\d+)?)\s*lít\/cây\b/gi, "$1 升/株"],
-    [/(\d+(?:[.,]\d+)?)\s*lít\s*nước\b/gi, "$1 升水"],
-    [/(\d+(?:[.,]\d+)?)\s*lít\b/gi, "$1 升"],
-    [/(\d+(?:[.,]\d+)?)\s*kg\b/gi, "$1 公斤"],
-    [/(\d+(?:[.,]\d+)?)\s*tấn\b/gi, "$1 吨"],
-    [/(\d+)\s*ngày\b/gi, "$1 天"],
-    [/(\d+)\s*giờ\b/gi, "$1 小时"],
-    [/(\d+)\s*phút\b/gi, "$1 分钟"],
-    [/(\d+)\s*cây\b/gi, "$1 株"],
-    [/(\d+)\s*gốc\b/gi, "$1 株"],
-    [/(\d+)\s*bao\b/gi, "$1 袋"],
-    [/(\d+)\s*bình\b/gi, "$1 喷雾器"],
-    [/(\d+)\s*phuy\b/gi, "$1 桶"],
-    [/(\d+)\s*lần\b/gi, "$1 次"],
-  ];
-
-  for (const [uRegex, uReplace] of unitRules) {
+  for (const [uRegex, uReplace] of COMPOSITIONAL_UNIT_RULES) {
+    uRegex.lastIndex = 0;
     if (uRegex.test(result)) {
+      uRegex.lastIndex = 0;
       result = result.replace(uRegex, uReplace);
       replacedAny = true;
     }
@@ -1986,23 +1995,33 @@ function translateElementAttrs(el: Element, lang: PortalLang) {
   }
 }
 
+let isApplyingDom = false;
+
 function applyDomTranslation(root: Node, lang: PortalLang) {
-  if (root.nodeType === Node.TEXT_NODE) {
-    translateTextNode(root as Text, lang);
-    return;
-  }
-  if (root.nodeType === Node.ELEMENT_NODE) {
-    translateElementAttrs(root as Element, lang);
-  }
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
-  let current: Node | null = walker.nextNode();
-  while (current) {
-    if (current.nodeType === Node.TEXT_NODE) {
-      translateTextNode(current as Text, lang);
-    } else if (current.nodeType === Node.ELEMENT_NODE) {
-      translateElementAttrs(current as Element, lang);
+  isApplyingDom = true;
+  try {
+    if (root.nodeType === 3 /* Node.TEXT_NODE */) {
+      translateTextNode(root as Text, lang);
+      return;
     }
-    current = walker.nextNode();
+    if (root.nodeType === 1 /* Node.ELEMENT_NODE */) {
+      translateElementAttrs(root as Element, lang);
+    }
+    if (typeof document === "undefined" || typeof document.createTreeWalker !== "function") {
+      return;
+    }
+    const walker = document.createTreeWalker(root, 5 /* SHOW_ELEMENT | SHOW_TEXT */);
+    let current: Node | null = walker.nextNode();
+    while (current) {
+      if (current.nodeType === 3) {
+        translateTextNode(current as Text, lang);
+      } else if (current.nodeType === 1) {
+        translateElementAttrs(current as Element, lang);
+      }
+      current = walker.nextNode();
+    }
+  } finally {
+    isApplyingDom = false;
   }
 }
 
@@ -2012,6 +2031,7 @@ export function PortalLangProvider({ children }: { children: ReactNode }) {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     return saved === "zh" ? "zh" : "vi";
   });
+  const hasTranslatedZhRef = useRef(false);
 
   const setLang = useCallback((next: PortalLang) => {
     setLangState(next);
@@ -2033,16 +2053,23 @@ export function PortalLangProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.documentElement.lang = lang === "zh" ? "zh-CN" : "vi";
-    applyDomTranslation(document.body, lang);
-    const rafId = requestAnimationFrame(() => {
-      applyDomTranslation(document.body, lang);
-    });
 
-    if (lang !== "zh") {
-      return () => cancelAnimationFrame(rafId);
+    // Nếu đang ở Tiếng Việt và chưa từng bật Tiếng Trung thì không cần quét cây DOM (0ms CPU)
+    if (lang === "vi") {
+      if (hasTranslatedZhRef.current) {
+        applyDomTranslation(document.body, "vi");
+      }
+      return;
     }
 
+    hasTranslatedZhRef.current = true;
+    applyDomTranslation(document.body, "zh");
+    const rafId = requestAnimationFrame(() => {
+      applyDomTranslation(document.body, "zh");
+    });
+
     const observer = new MutationObserver((mutations) => {
+      if (isApplyingDom) return;
       for (const m of mutations) {
         if (m.type === "childList") {
           m.addedNodes.forEach((node) => applyDomTranslation(node, "zh"));
