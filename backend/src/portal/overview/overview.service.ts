@@ -70,14 +70,13 @@ export class OverviewService {
     const { rows } = await this.db.query(
       `WITH today AS (SELECT ${TODAY_VN_SQL} AS d)
        SELECT * FROM (
-         SELECT 1 AS priority, 'journal' AS kind, 'Chưa ghi nhật ký canh tác 7 ngày' AS title,
+         SELECT 1 AS priority, 'journal' AS kind, 'Chưa ghi nhật ký 7 ngày' AS title,
                 CASE
                   WHEN j.last_on IS NULL THEN
-                    'Hộ chưa có bản ghi nhật ký nào' || coalesce(' (thửa ' || dv.plot_code || ')', '') || '. Hãy ghi nhật ký kèm ảnh thực địa.'
+                    'Chưa có bản ghi' || coalesce(' · Thửa ' || dv.plot_code, '')
                   ELSE
-                    'Lần ghi gần nhất: ' || to_char(j.last_on, 'DD/MM/YYYY') ||
-                    coalesce(' (thửa ' || dv.plot_code || ')', '') ||
-                    '. Theo quy định cần ghi tối thiểu 7 ngày/lần.'
+                    'Gần nhất: ' || to_char(j.last_on, 'DD/MM/YYYY') ||
+                    coalesce(' · Thửa ' || dv.plot_code, '')
                 END AS detail,
                 '${PORTAL_TABS.diary}' AS tab, coalesce(j.last_on, dv.detected_on) AS date
          FROM (SELECT max(entry_on) AS last_on FROM journal_entries WHERE household_id = $1) j
@@ -97,8 +96,8 @@ export class OverviewService {
 
          UNION ALL
          SELECT 0, 'violation', v.title,
-                'Vi phạm đang mở' || coalesce(' tại thửa ' || v.plot_code, '') ||
-                  CASE WHEN v.farmer_response_at IS NULL THEN '. Vui lòng khắc phục và gửi phản hồi.' ELSE '. Đã gửi phản hồi, chờ cán bộ xác nhận.' END,
+                coalesce('Thửa ' || v.plot_code || ' · ', '') ||
+                  CASE WHEN v.farmer_response_at IS NULL THEN 'Cần khắc phục' ELSE 'Chờ xác nhận' END,
                 '${PORTAL_TABS.diary}', v.detected_on
          FROM violations v
          WHERE v.household_id = $1
@@ -106,9 +105,9 @@ export class OverviewService {
            AND v.title NOT ILIKE '%nhật ký%'
 
          UNION ALL
-         SELECT 2, 'isolation', 'Đang trong thời gian cách ly: ' || p.name,
-                'Phun ngày ' || to_char(s.sprayed_on, 'DD/MM/YYYY') || coalesce(' (thửa ' || s.plot_code || ')', '') ||
-                  '. Không thu hoạch trước ngày ' || to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') || '.',
+         SELECT 2, 'isolation', 'Cách ly thuốc: ' || p.name,
+                'Ngưng thu hái đến ' || to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') ||
+                  coalesce(' · Thửa ' || s.plot_code, ''),
                 '${PORTAL_TABS.diary}', s.sprayed_on + s.isolation_days
          FROM spray_records s JOIN pesticides p ON p.id = s.pesticide_id, today
          WHERE s.household_id = $1 AND s.isolation_days > 0 AND s.sprayed_on <= today.d
@@ -116,24 +115,23 @@ export class OverviewService {
 
          UNION ALL
          SELECT 3, 'schedule', i.title,
-                'Lịch kiểm tra ngày ' || to_char(i.scheduled_on, 'DD/MM/YYYY') || ' – cán bộ ' || i.officer || '.',
+                to_char(i.scheduled_on, 'DD/MM/YYYY') || ' · CB ' || i.officer,
                 '${PORTAL_TABS.inspection}', i.scheduled_on
          FROM inspection_schedule i, today
          WHERE i.scheduled_on BETWEEN today.d AND today.d + 7
 
          UNION ALL
          SELECT 4, 'training', c.title,
-                'Lớp tập huấn đã đăng ký, ngày ' || to_char(c.held_on, 'DD/MM/YYYY') ||
-                  coalesce(' lúc ' || to_char(c.starts_at, 'HH24:MI'), '') || coalesce(' tại ' || c.location, '') || '.',
+                to_char(c.held_on, 'DD/MM/YYYY') ||
+                  coalesce(' · ' || to_char(c.starts_at, 'HH24:MI'), '') || coalesce(' · ' || c.location, ''),
                 '${PORTAL_TABS.learn}', c.held_on
          FROM training_registrations r JOIN training_courses c ON c.id = r.course_id, today
          WHERE r.household_id = $1 AND r.status = 'registered' AND NOT c.completed
            AND c.held_on BETWEEN today.d AND today.d + 7
 
          UNION ALL
-         SELECT 5, 'harvest', 'Khai báo thu hái bị từ chối',
-                'Thửa ' || d.plot_code || ', ngày ' || to_char(d.harvested_on, 'DD/MM/YYYY') ||
-                  coalesce('. Lý do: ' || d.review_note, '') || '.',
+         SELECT 5, 'harvest', 'Từ chối khai báo thu hái',
+                'Thửa ' || d.plot_code || ' · ' || to_char(d.harvested_on, 'DD/MM/YYYY'),
                 '${PORTAL_TABS.stamps}', (d.reviewed_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
          FROM harvest_declarations d, today
          WHERE d.household_id = $1 AND d.status = 'rejected'

@@ -5,7 +5,7 @@ import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortal } from "@/hooks/use-portal";
 import { daysSince, formatClock, formatKg, HOUSEHOLD_STATUS, relativeDayLabel, SCHEDULE_KIND, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
-import type { PortalList, PortalOverview, PortalScheduleItem, PortalViolation } from "@/types/portal";
+import type { PortalList, PortalOverview, PortalReminder, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
 import { Pill, Sheet, StateBlock } from "./ui";
 import { getTrainingKicker, TrainingDetailModal, usePortalTrainings, type TrainingCourseItem } from "./LearnTab";
@@ -122,6 +122,41 @@ function normalizeReminderTab(tab: string): PortalTabId {
   return "diary";
 }
 
+function getConciseReminderTitle(rem: PortalReminder): string {
+  const raw = (rem.title || "").trim();
+  const lower = raw.toLowerCase();
+
+  if (rem.kind === "journal") {
+    return "Chưa ghi nhật ký 7 ngày";
+  }
+
+  if (rem.kind === "schedule") {
+    if (lower.startsWith("lấy mẫu")) return "Lấy mẫu kiểm nghiệm";
+    if (lower.startsWith("phúc tra")) return "Phúc tra vi phạm";
+    if (lower.startsWith("kiểm tra thực địa")) return "Kiểm tra thực địa";
+    if (lower.startsWith("kiểm tra định kỳ")) return "Kiểm tra định kỳ VietGAP";
+    if (lower.startsWith("kiểm tra đột xuất")) return "Kiểm tra đột xuất";
+    return raw.length > 32 ? getConciseScheduleTitle(raw) : raw;
+  }
+
+  if (rem.kind === "violation") {
+    if (lower.includes("nhật ký")) return "Chưa ghi nhật ký 7 ngày";
+    if (lower.includes("thuốc") || lower.includes("bảo vệ thực vật") || lower.includes("bvtv")) {
+      return "Vi phạm dùng thuốc BVTV";
+    }
+    if (lower.includes("mẫu") || lower.includes("kiểm nghiệm")) return "Mẫu kiểm nghiệm chưa đạt";
+    if (lower.includes("biển") || lower.includes("cắm vườn")) return "Chưa cắm biển vườn";
+    return raw;
+  }
+
+  if (rem.kind === "training" && raw.length > 34) {
+    const cleaned = raw.replace(/^(tập huấn kỹ thuật|lớp tập huấn|tập huấn)\s+/i, "").trim();
+    if (cleaned) return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+
+  return raw;
+}
+
 function buildActionItems(overview: PortalOverview, firstViolation?: PortalViolation | null): ActionItem[] {
   if (Array.isArray(overview.reminders)) {
     let hasDiaryReminder = false;
@@ -140,7 +175,7 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
       })
       .map((rem, idx) => ({
         id: `${rem.kind}-${idx}`,
-        title: rem.title,
+        title: getConciseReminderTitle(rem),
         detail: rem.detail,
         to: rem.kind === "violation" || rem.kind === "journal" || rem.kind === "isolation"
           ? "diary"
