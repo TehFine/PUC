@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortal } from "@/hooks/use-portal";
-import { relativeDayLabel, SCHEDULE_KIND } from "@/lib/portal-labels";
+import { relativeDayLabel } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalLabTest, PortalList, PortalScheduleItem } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
@@ -15,26 +15,18 @@ const LabTestCertificateModal = dynamic(() => import("./LabTestCertificateModal"
 const ROUTE_THEMES = [
   {
     capsuleBg: "linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%)",
-    tagBg: "#fef3c7",
-    tagColor: "#b45309",
     titleColor: "#92400e",
   },
   {
     capsuleBg: "linear-gradient(180deg, #f43f5e 0%, #fb7185 100%)",
-    tagBg: "#ffe4e6",
-    tagColor: "#be123c",
     titleColor: "#9f1239",
   },
   {
     capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
-    tagBg: "#d1fae5",
-    tagColor: "#047857",
     titleColor: "#065f46",
   },
   {
     capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
-    tagBg: "#dbeafe",
-    tagColor: "#1d4ed8",
     titleColor: "#1e40af",
   },
 ];
@@ -102,7 +94,6 @@ export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?
               const theme = ROUTE_THEMES[idx % ROUTE_THEMES.length];
               const isLast = idx === arr.length - 1;
               const rel = relativeDayLabel(item.scheduledOn);
-              const kindLabel = SCHEDULE_KIND[item.kind] ?? item.kind;
 
               return (
                 <div key={item.id} className="pt-transit-step">
@@ -119,18 +110,6 @@ export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?
                         <h3 className="pt-transit-title" style={{ color: theme.titleColor }}>
                           {item.title}
                         </h3>
-                        <span
-                          style={{
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            background: theme.tagBg,
-                            color: theme.tagColor,
-                          }}
-                        >
-                          {kindLabel}
-                        </span>
                       </div>
 
                       <div className="pt-transit-meta-row">
