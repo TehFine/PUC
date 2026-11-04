@@ -158,8 +158,8 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           align-items: center;
           justify-content: center;
           gap: 7px;
-          background: #007aff;
-          color: #ffffff;
+          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+          color: #404040;
           border: none;
           border-radius: 999px;
           padding: 8px 16px;
@@ -167,15 +167,16 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           font-weight: 700;
           cursor: pointer;
           white-space: nowrap;
-          box-shadow: none;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
           transition: all 0.2s ease;
           flex-shrink: 0;
         }
 
         .signboard-print-btn:hover {
-          background: #0062cc;
+          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
+          color: #2b2b2b;
           transform: translateY(-1px);
-          box-shadow: none;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
         }
 
         .signboard-preview-wrap {

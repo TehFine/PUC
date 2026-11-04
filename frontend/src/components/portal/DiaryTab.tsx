@@ -850,7 +850,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
               onClick={() => setForm(view)}
               title="Thêm ghi chép mới"
             >
-              + Thêm mới
+              Thêm mới
             </button>
           </div>
 
@@ -858,7 +858,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
             <StateBlock loading={active.loading} error={active.error} />
 
             {view === "journal" && journal.data && journal.data.data.length === 0 && (
-              <EmptyState icon="diary">Chưa có nhật ký nào. Bấm “+ Thêm mới” để ghi công việc đầu tiên.</EmptyState>
+              <EmptyState icon="diary">Chưa có nhật ký nào. Bấm “Thêm mới” để ghi công việc đầu tiên.</EmptyState>
             )}
             {view === "journal" && journal.data && journal.data.data.length > 0 && (
               <ul className="pt-widget-list pt-diary-widget-list" role="list">

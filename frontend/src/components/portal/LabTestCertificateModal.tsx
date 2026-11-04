@@ -1346,8 +1346,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           justify-content: center;
           gap: 6px;
           padding: 7px 14px;
-          background: #007aff;
-          color: #ffffff;
+          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+          color: #404040;
           border: none;
           border-radius: 8px;
           font-size: 13px;
@@ -1355,7 +1355,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           white-space: nowrap;
           flex-shrink: 0;
           cursor: pointer;
-          transition: background 0.15s ease;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+          transition: background 0.15s ease, color 0.15s ease;
         }
 
         .cert-btn-text-mobile {
@@ -1363,7 +1364,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         }
 
         .cert-btn-action:hover:not(:disabled) {
-          background: #0062cc;
+          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
+          color: #2b2b2b;
         }
 
         .cert-btn-action:disabled {
@@ -1377,21 +1379,22 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           justify-content: center;
           gap: 6px;
           padding: 7px 12px;
-          background: #ffffff;
-          color: #007aff;
-          border: 1px solid rgba(0, 122, 255, 0.22);
+          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+          color: #404040;
+          border: none;
           border-radius: 8px;
           font-size: 13px;
           font-weight: 600;
           white-space: nowrap;
           flex-shrink: 0;
           cursor: pointer;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
           transition: background 0.15s ease, color 0.15s ease;
         }
 
         .cert-btn-print:hover {
-          background: #f0f7ff;
-          color: #0062cc;
+          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
+          color: #2b2b2b;
         }
 
         .cert-btn-close {

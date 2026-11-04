@@ -394,10 +394,13 @@ const EXACT_MAP: Record<string, string> = {
   "Loại nhật ký": "日志类型",
   "Nhật ký canh tác": "农事作业日志",
   "Nhật ký phun thuốc": "施药记录日志",
-  "+ Thêm mới": "+ 新增记录",
+  "+ Thêm mới": "新增记录",
+  "Thêm mới": "新增记录",
   "Thêm ghi chép mới": "新增农事记录",
   "Chưa có nhật ký nào. Bấm “+ Thêm mới” để ghi công việc đầu tiên.":
-    "暂无农事日志。点击“+ 新增记录”添加第一条农事作业。",
+    "暂无农事日志。点击“新增记录”添加第一条农事作业。",
+  "Chưa có nhật ký nào. Bấm “Thêm mới” để ghi công việc đầu tiên.":
+    "暂无农事日志。点击“新增记录”添加第一条农事作业。",
   "Bấm để xem chi tiết nhật ký": "点击查看农事日志详情",
   "Chưa có lần phun thuốc nào được ghi.": "暂无施药记录。",
   "Bấm để xem chi tiết phun thuốc": "点击查看施药记录详情",

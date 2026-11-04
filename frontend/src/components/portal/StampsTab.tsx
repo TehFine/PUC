@@ -680,16 +680,17 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
           padding: 8px 18px;
           font-size: 13px;
           font-weight: 700;
-          border-radius: 13px !important;
+          border-radius: 7px !important;
           border: none !important;
           outline: none !important;
-          background: #007aff !important;
-          color: #ffffff !important;
-          box-shadow: none !important;
+          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%) !important;
+          color: #404040 !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
           margin-top: 1px;
         }
         .decl-add-btn:hover {
-          background: #0062cc !important;
+          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%) !important;
+          color: #2b2b2b !important;
         }
         .harvest-decl-form {
           background: #ffffff;
@@ -770,21 +771,23 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
           border-radius: 10px;
         }
         .btn-primary {
-          background: #007aff;
-          color: #ffffff;
-          box-shadow: none;
+          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+          color: #404040;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
         }
         .btn-primary:hover {
-          background: #0062cc;
+          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
+          color: #2b2b2b;
         }
         .btn-secondary {
-          background: #ffffff;
-          color: #007aff;
-          border: 1px solid rgba(0, 122, 255, 0.22) !important;
+          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+          color: #404040;
+          border: none !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
         }
         .btn-secondary:hover {
-          background: #f0f7ff;
-          color: #0062cc;
+          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
+          color: #2b2b2b;
         }
         .decl-list {
           display: flex;
@@ -871,7 +874,7 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
           .decl-add-btn {
             padding: 7px 15px;
             font-size: 12.5px;
-            border-radius: 12px !important;
+            border-radius: 7px !important;
           }
           .portal-form-grid-2,
           .portal-form-grid-3 {
