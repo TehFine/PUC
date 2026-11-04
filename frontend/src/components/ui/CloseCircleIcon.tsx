@@ -1,33 +1,36 @@
 import React from 'react';
 
-export interface CloseCircleIconProps extends React.SVGProps<SVGSVGElement> {
+export interface CloseCircleIconProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'width' | 'height'> {
   size?: number | string;
   strokeWidth?: number | string;
 }
 
 export function CloseCircleIcon({
   size = 28,
-  strokeWidth = 2.2,
+  strokeWidth: _strokeWidth,
   className,
+  style,
   ...props
 }: CloseCircleIconProps) {
   return (
-    <svg
+    <img
+      src="/close.png"
+      alt=""
       width={size}
       height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      decoding="async"
       className={className}
+      style={{
+        width: size,
+        height: size,
+        objectFit: 'contain',
+        display: 'block',
+        flexShrink: 0,
+        ...style,
+      }}
       aria-hidden="true"
       {...props}
-    >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M9 9l6 6M15 9l-6 6" />
-    </svg>
+    />
   );
 }
 export default CloseCircleIcon;

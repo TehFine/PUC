@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { translateViToZh, usePortalLang } from "./i18n";
 import type { PortalTabId } from "./PortalApp";
@@ -332,6 +333,20 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
           }}
           aria-label={t("Tìm chức năng")}
         />
+        {hasQuery && (
+          <button
+            type="button"
+            className="pt-search-clear-btn"
+            onClick={(e) => {
+              e.preventDefault();
+              setQuery("");
+              inputRef.current?.focus();
+            }}
+            aria-label={t("Xóa từ khóa tìm kiếm")}
+          >
+            <CloseCircleIcon size={20} />
+          </button>
+        )}
       </label>
 
       {hasQuery && results.length === 0 && (
