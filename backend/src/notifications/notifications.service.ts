@@ -47,8 +47,12 @@ export class NotificationsService {
 
   async list(userOrId: AuthUser | number, limit = 50) {
     const userId = typeof userOrId === "number" ? userOrId : userOrId.id;
-    if (typeof userOrId !== "number" && userOrId.role !== "farmer") {
-      await this.syncStaffNotifications(userOrId);
+    if (typeof userOrId !== "number") {
+      if (userOrId.role === "farmer") {
+        await this.syncFarmerNotifications(userOrId);
+      } else {
+        await this.syncStaffNotifications(userOrId);
+      }
     }
 
     // Danh sách và số chưa đọc độc lập nhau: chạy song song để giảm một lượt chờ CSDL
@@ -64,6 +68,73 @@ export class NotificationsService {
       ),
     ]);
     return { data: camelRows(listRes.rows), unread: unreadRes.rows[0].n };
+  }
+
+  /**
+   * Đồng bộ tự động các cảnh báo vi phạm đang mở (violations: open) và lịch kiểm tra sắp tới
+   * vào bảng notifications của hộ nông dân, đồng thời tự đánh dấu đã đọc khi vi phạm đã xử lý xong.
+   */
+  private async syncFarmerNotifications(user: AuthUser): Promise<void> {
+    if (!user.householdId) return;
+    try {
+      await Promise.all([
+        this.db.query(
+          `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+           SELECT
+             $1,
+             'violation',
+             'Cảnh báo vi phạm: ' || v.title,
+             COALESCE('Thửa ' || v.plot_code || ' – ', '') || COALESCE(v.description, 'Vui lòng kiểm tra và cập nhật khắc phục.'),
+             '/portal?tab=diary&violationId=' || v.id,
+             COALESCE(v.detected_on::timestamptz, now())
+           FROM violations v
+           WHERE v.household_id = $2
+             AND v.status = 'open'
+             AND NOT EXISTS (
+               SELECT 1 FROM notifications n
+               WHERE n.user_id = $1
+                 AND (n.link = '/portal?tab=diary&violationId=' || v.id OR (n.kind = 'violation' AND n.title LIKE '%' || v.title))
+             )
+           ORDER BY v.detected_on ASC, v.id ASC`,
+          [user.id, user.householdId],
+        ),
+        this.db.query(
+          `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+           SELECT
+             $1,
+             'schedule',
+             'Lịch kiểm tra: ' || i.title,
+             'Ngày ' || to_char(i.scheduled_on, 'DD/MM/YYYY') || ' · Cán bộ phụ trách: ' || i.officer,
+             '/portal?tab=inspection&scheduleId=' || i.id,
+             now()
+           FROM inspection_schedule i
+           WHERE i.scheduled_on >= current_date
+             AND NOT EXISTS (
+               SELECT 1 FROM notifications n
+               WHERE n.user_id = $1
+                 AND (n.link = '/portal?tab=inspection&scheduleId=' || i.id OR (n.kind = 'schedule' AND n.title LIKE '%' || i.title))
+             )
+           ORDER BY i.scheduled_on ASC, i.id ASC`,
+          [user.id],
+        ),
+        this.db.query(
+          `UPDATE notifications n
+           SET read_at = now()
+           WHERE n.user_id = $1
+             AND n.read_at IS NULL
+             AND n.link LIKE '/portal?tab=diary&violationId=%'
+             AND EXISTS (
+               SELECT 1 FROM violations v
+               WHERE '/portal?tab=diary&violationId=' || v.id = n.link AND v.status <> 'open'
+             )`,
+          [user.id],
+        ),
+      ]);
+    } catch (error) {
+      this.logger.error(
+        `Không đồng bộ được thông báo hộ nông dân: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /**

@@ -256,6 +256,27 @@ function PortalAppContent() {
 
   useEffect(() => {
     if (status !== "authenticated" || session?.user.role !== "farmer") return;
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === "visible") {
+        invalidateQueries(NOTIFICATIONS_PATH);
+      }
+    };
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        invalidateQueries(NOTIFICATIONS_PATH);
+      }
+    }, 30000);
+    window.addEventListener("focus", onFocusOrVisible);
+    document.addEventListener("visibilitychange", onFocusOrVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocusOrVisible);
+      document.removeEventListener("visibilitychange", onFocusOrVisible);
+    };
+  }, [status, session?.user.role]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || session?.user.role !== "farmer") return;
     const timer = window.setTimeout(() => {
       void import("./PlotsTab");
       void import("./DiaryTab");
@@ -372,7 +393,10 @@ function PortalAppContent() {
               id="portal-notifications-toggle"
               type="button"
               className="pt-notif-btn"
-              onClick={() => setNotifOpen(true)}
+              onClick={() => {
+                setNotifOpen(true);
+                invalidateQueries(NOTIFICATIONS_PATH);
+              }}
               aria-label={unreadCount > 0 ? `Thông báo (${unreadCount} chưa đọc)` : "Thông báo"}
               title="Thông báo từ HTX"
             >
