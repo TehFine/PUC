@@ -1,4 +1,63 @@
-import type { InputHTMLAttributes, ReactNode } from "react";
+"use client";
+
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
+
+/** Đường line đỏ chạy quanh viền nút khi hệ thống đang xử lý đăng nhập. */
+export function AuthBusyBorderRing() {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [size, setSize] = useState({ w: 360, h: 56 });
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSize({ w: Math.round(rect.width), h: Math.round(rect.height) });
+      }
+    };
+    update();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(update);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+  }, []);
+
+  const inset = 3;
+  const rw = Math.max(20, size.w - inset * 2);
+  const rh = Math.max(20, size.h - inset * 2);
+  const rx = rh / 2;
+
+  return (
+    <svg
+      ref={svgRef}
+      className="auth-busy-ring"
+      viewBox={`0 0 ${size.w} ${size.h}`}
+      aria-hidden="true"
+    >
+      <rect
+        className="auth-busy-ring-track"
+        x={inset}
+        y={inset}
+        width={rw}
+        height={rh}
+        rx={rx}
+        ry={rx}
+      />
+      <rect
+        className="auth-busy-ring-stroke"
+        x={inset}
+        y={inset}
+        width={rw}
+        height={rh}
+        rx={rx}
+        ry={rx}
+        pathLength={100}
+      />
+    </svg>
+  );
+}
 
 /** Một ô nhập có nhãn phía trên và dòng gợi ý (tùy chọn) phía dưới. */
 export function AuthField({ id, label, optional, hint, children }: { id: string; label: string; optional?: boolean; hint?: string; children: ReactNode }) {

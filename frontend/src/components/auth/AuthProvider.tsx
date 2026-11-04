@@ -66,20 +66,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    setSession(null);
+    setStatus("anonymous");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
+      try {
+        sessionStorage.clear();
+      } catch {}
+    }
+    router.replace("/login");
     try {
       await api.post("/auth/logout");
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
     } finally {
-      setSession(null);
-      setStatus("anonymous");
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
-        try {
-          sessionStorage.clear();
-        } catch {}
       }
-      router.replace("/login");
     }
   }, [router]);
 

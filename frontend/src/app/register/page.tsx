@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
-import { AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
+import { AuthBusyBorderRing, AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
 import { AppleSpinner } from "@/components/ui/Skeleton";
 import { api, ApiError } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
@@ -200,7 +200,7 @@ export default function RegisterPage() {
         >
           {submitting ? (
             <>
-              <AppleSpinner size={19} className="auth-submit-spinner" />
+              <AuthBusyBorderRing />
               <span>Đang gửi hồ sơ đăng ký…</span>
             </>
           ) : (

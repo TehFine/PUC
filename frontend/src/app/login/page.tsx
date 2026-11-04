@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
-import { AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
+import { AuthBusyBorderRing, AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
 import { AppleSpinner } from "@/components/ui/Skeleton";
 import { ApiError, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
@@ -57,19 +57,27 @@ export default function LoginPage() {
     }
   }, []);
 
-  // Điều hướng nếu đã có phiên đăng nhập hợp lệ
+  // Điều hướng nếu đã có phiên đăng nhập hợp lệ; nếu đã đăng xuất (anonymous) thì mở khóa ngay biểu mẫu
   useEffect(() => {
     if (status === "authenticated") {
       setRedirecting(true);
       router.replace(homePathFor(session?.user.role));
+    } else if (status === "anonymous") {
+      setSubmitting(false);
+      setGoogleSubmitting(false);
+      setRedirecting(false);
     }
   }, [status, session, router]);
 
-  // Đảm bảo dọn dẹp khi trang login unmount
+  // Đảm bảo dọn dẹp khi trang login mount (kể cả khi khôi phục từ Router Cache của Next.js) và unmount
   useEffect(() => {
+    if (status !== "authenticated") {
+      resetForm();
+    }
     return () => {
       formRef.current?.reset();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Lắng nghe sự kiện đăng xuất, hết hạn phiên và phục hồi từ bfcache của mobile browser
@@ -93,7 +101,8 @@ export default function LoginPage() {
     };
   }, [resetForm]);
 
-  const isBusy = submitting || googleSubmitting || redirecting || status === "authenticated";
+  const isRedirectingAuth = status === "authenticated" || (redirecting && (submitting || googleSubmitting));
+  const isBusy = submitting || googleSubmitting || isRedirectingAuth;
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -170,14 +179,14 @@ export default function LoginPage() {
         <button
           id="login-submit"
           type="submit"
-          className={`auth-submit${submitting || (redirecting && !googleSubmitting) ? " is-busy" : ""}`}
+          className={`auth-submit${submitting || (isRedirectingAuth && !googleSubmitting) ? " is-busy" : ""}`}
           disabled={isBusy || !username.trim() || !password}
         >
-          {submitting || (redirecting && !googleSubmitting) ? (
+          {submitting || (isRedirectingAuth && !googleSubmitting) ? (
             <>
-              <AppleSpinner size={19} className="auth-submit-spinner" />
+              <AuthBusyBorderRing />
               <span>
-                {redirecting || status === "authenticated"
+                {isRedirectingAuth
                   ? "Đang mở hệ thống…"
                   : "Đang xác thực tài khoản…"}
               </span>
@@ -205,9 +214,9 @@ export default function LoginPage() {
         >
           {googleSubmitting ? (
             <>
-              <AppleSpinner size={19} className="auth-google-spinner" />
+              <AuthBusyBorderRing />
               <span>
-                {redirecting || status === "authenticated"
+                {isRedirectingAuth
                   ? "Đang mở hệ thống…"
                   : "Đang đăng nhập bằng Google…"}
               </span>
@@ -226,7 +235,7 @@ export default function LoginPage() {
               <span className="auth-processing-bar-fill" />
             </div>
             <p className="auth-processing-text">
-              {redirecting || status === "authenticated"
+              {isRedirectingAuth
                 ? "Xác thực thành công! Đang tải dữ liệu và chuyển vào hệ thống…"
                 : googleSubmitting
                   ? "Đang kết nối tài khoản Google với hệ thống HTX, vui lòng đợi…"
