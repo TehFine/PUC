@@ -451,7 +451,9 @@ export default function HomeTab({
             <div className="pt-hero-bottom">
               <div className="pt-hero-bottom-left">
                 <span className="pt-hero-bottom-kicker">Mã vùng trồng</span>
-                <span className="pt-hero-bottom-highlight">PUC-KRB-001</span>
+                <span className="pt-hero-bottom-highlight">
+                  {household.code ? household.code.replace(/-H\d+$/i, "") : "—"}
+                </span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <button

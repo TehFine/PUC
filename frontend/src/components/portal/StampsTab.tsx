@@ -68,12 +68,15 @@ interface Props {
   initialAction?: PortalAction;
 }
 
-export default function StampsTab({ plots = [], initialAction }: Props) {
+export default function StampsTab({ overview, plots = [], initialAction }: Props) {
   const plotsData = usePortal<PortalPlots>("plots");
   const harvest = usePortal<PortalList<PortalHarvest>>("harvest");
   const declarationsQuery = usePortal<PortalList<PortalHarvestDeclaration>>("harvest-declarations");
 
   const effectivePlots = plots.length > 0 ? plots : (plotsData.data?.data ?? []);
+  const resolvedPucCode =
+    effectivePlots[0]?.zoneCode ||
+    (overview?.household.code ? overview.household.code.replace(/-H\d+$/i, "") : "66-PUC-SR0001-00728");
   const declarations = declarationsQuery.data?.data ?? [];
 
   const [subTab, setSubTab] = useState<"harvest_decl" | "harvest_lots">(() =>
@@ -250,7 +253,7 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
                 <HarvestAssetTagCard
                   key={lot.id}
                   lot={lot}
-                  pucCode="PUC-KRB-001"
+                  pucCode={resolvedPucCode}
                   onOpenModal={() => setSelectedLotForQr(lot)}
                 />
               ))}
@@ -556,6 +559,7 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
       {selectedLotForQr && (
         <HarvestLotQrModal
           lot={selectedLotForQr}
+          pucCode={resolvedPucCode}
           onClose={() => setSelectedLotForQr(null)}
         />
       )}

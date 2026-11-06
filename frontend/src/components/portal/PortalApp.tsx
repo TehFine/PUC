@@ -534,7 +534,7 @@ function PortalAppContent() {
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Địa bàn</span>
                   <strong className="pt-profile-val">
-                    {profHousehold?.villageName ? `${profHousehold.villageName}, Xã Krông Búk` : "Xã Krông Búk"}
+                    {profHousehold?.villageName ? `${profHousehold.villageName}, Xã Ea Khăl, Đắk Lắk` : "Xã Ea Khăl, Đắk Lắk"}
                   </strong>
                 </div>
               </div>

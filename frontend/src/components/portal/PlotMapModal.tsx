@@ -267,8 +267,8 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     };
   }, [handleRequestClose]);
 
-  const lat = plot.lat ?? 12.72245;
-  const lng = plot.lng ?? 108.14746;
+  const lat = plot.lat ?? 13.125;
+  const lng = plot.lng ?? 108.185;
   const status = PLOT_STATUS[plot.status];
 
   useEffect(() => {
@@ -630,7 +630,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               <div className="pt-mapmodal-popup-owner">
                 <span>Chủ hộ: <strong>{householdName}</strong></span>
                 <span className="pt-mapmodal-popup-dot">·</span>
-                <span>{plot.village || "Thôn 1"}, Krông Búk</span>
+                <span>{plot.village || "Xã Ea Khăl"}, Xã Ea Khăl, Đắk Lắk</span>
               </div>
             </div>
 
@@ -679,7 +679,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Mã vùng trồng</span>
                   <strong className="pt-mapmodal-stat-val">
-                    {plot.zoneCode || "PUC-KRB-001"}
+                    {plot.zoneCode || "—"}
                   </strong>
                   <span className="pt-mapmodal-stat-sub">
                     {plot.plantedYear ? `Trồng năm ${plot.plantedYear}` : "Cây thuần thục"}
@@ -689,7 +689,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Tọa độ tâm WGS84</span>
                   <strong className="pt-mapmodal-stat-val pt-mapmodal-coords-text">
-                    {lat.toFixed(5)}, {lng.toFixed(5)}
+                    {`${lat.toFixed(7).replace(/0+$/, "").replace(/\.(\d{0,4})$/, (_, d: string) => `.${d.padEnd(5, "0")}`)}, ${lng.toFixed(7).replace(/0+$/, "").replace(/\.(\d{0,4})$/, (_, d: string) => `.${d.padEnd(5, "0")}`)}`}
                   </strong>
                   <span className="pt-mapmodal-stat-sub">Định vị vệ tinh GPS</span>
                 </div>

@@ -52,7 +52,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           <div className="garden-signboard-plate">
             <div className="plate-top">
               <div className="plate-flag">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
-              <div className="plate-org">HỢP TÁC XÃ NÔNG NGHIỆP KRÔNG BÚK – ĐẮK LẮK</div>
+              <div className="plate-org">HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ – ĐẮK LẮK</div>
               <div className="plate-main-title">BIỂN ĐỊNH DANH LÔ CANH TÁC SẦU RIÊNG</div>
             </div>
 
@@ -65,7 +65,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
                 <div className="plate-row">
                   <span className="plate-lbl">Mã số vùng trồng (PUC):</span>
-                  <strong className="plate-val">VN-DLOR-0086</strong>
+                  <strong className="plate-val">{plot.zoneCode || "—"}</strong>
                 </div>
 
                 <div className="plate-row">
@@ -80,12 +80,14 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
                 <div className="plate-row">
                   <span className="plate-lbl">Giống sầu riêng:</span>
-                  <span className="plate-val">{plot.variety || "Monthong (Dona)"}</span>
+                  <span className="plate-val">{plot.variety || "Đô Na"}</span>
                 </div>
 
                 <div className="plate-row">
-                  <span className="plate-lbl">Năm trồng:</span>
-                  <span className="plate-val">{plot.plantedYear || "2018"}</span>
+                  <span className="plate-lbl">Số thửa / Tờ bản đồ:</span>
+                  <span className="plate-val">
+                    {plot.parcel || plot.sheet ? `Thửa ${plot.parcel || "—"}, Tờ ${plot.sheet || "—"}` : (plot.plantedYear || "2020")}
+                  </span>
                 </div>
 
                 <div className="plate-row">

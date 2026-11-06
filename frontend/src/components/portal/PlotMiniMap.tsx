@@ -16,8 +16,8 @@ export default function PlotMiniMap({ plot, onOpen }: Props) {
   const mapRef = useRef<Leaflet.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  const lat = plot.lat ?? 12.72245;
-  const lng = plot.lng ?? 108.14746;
+  const lat = plot.lat ?? 13.125;
+  const lng = plot.lng ?? 108.185;
 
   useEffect(() => {
     let disposed = false;

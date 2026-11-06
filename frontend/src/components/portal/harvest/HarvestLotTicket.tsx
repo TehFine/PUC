@@ -18,7 +18,7 @@ interface HarvestAssetTagCardProps {
 
 export function HarvestAssetTagCard({
   lot,
-  pucCode = "PUC-KRB-001",
+  pucCode = "66-PUC-SR0001-00728",
   onOpenModal,
 }: HarvestAssetTagCardProps) {
   const codeKey = `M:${lot.qrCode || lot.lotCode}`;
@@ -182,9 +182,11 @@ function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string |
 
 export function HarvestLotQrModal({
   lot,
+  pucCode = "66-PUC-SR0001-00728",
   onClose,
 }: {
   lot: PortalHarvest;
+  pucCode?: string;
   onClose: () => void;
 }) {
   return (
@@ -238,7 +240,7 @@ export function HarvestLotQrModal({
                 </div>
                 <div className="pt-ticket-entity-info">
                   <div className="pt-ticket-entity-name">{lot.buyer}</div>
-                  <div className="pt-ticket-entity-meta">Vùng trồng PUC-KRB-001 · VietGAP</div>
+                  <div className="pt-ticket-entity-meta">Vùng trồng {pucCode} · VietGAP</div>
                 </div>
               </div>
             </div>
