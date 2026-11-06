@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Calendar, CheckCircle2, Clock, Plus, Trash2 } from "lucide-react";
+import { Calendar, CheckCircle2, Clock, Plus } from "lucide-react";
+import { RadialPngIcon } from "./RadialIcons";
 import { api, errorMessage } from "@/lib/api-client";
 import { invalidatePortal, usePortal } from "@/hooks/use-portal";
 import { DECLARATION_STATUS, todayIso, toNumber } from "@/lib/portal-labels";
@@ -531,7 +532,7 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
                           <ConfirmButton
                             label={
                               <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                                <Trash2 size={14} aria-hidden="true" />
+                                <RadialPngIcon src="/trash.png" size={14} />
                                 <span>Xóa khai báo</span>
                               </span>
                             }
@@ -677,20 +678,22 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
         .decl-add-btn {
           flex-shrink: 0;
           white-space: nowrap;
-          padding: 8px 18px;
+          padding: 10.5px 16px 8px;
+          line-height: 1;
+          text-align: center;
           font-size: 13px;
           font-weight: 700;
           border-radius: 7px !important;
           border: none !important;
           outline: none !important;
-          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%) !important;
-          color: #404040 !important;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+          background: #dfe9f8 !important;
+          color: #0084ff !important;
+          box-shadow: none !important;
           margin-top: 1px;
         }
         .decl-add-btn:hover {
-          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%) !important;
-          color: #2b2b2b !important;
+          background: #d0dff5 !important;
+          color: #006ee6 !important;
         }
         .harvest-decl-form {
           background: #ffffff;
@@ -771,23 +774,23 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
           border-radius: 10px;
         }
         .btn-primary {
-          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
-          color: #404040;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+          background: #dfe9f8;
+          color: #0084ff;
+          box-shadow: none;
         }
         .btn-primary:hover {
-          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
-          color: #2b2b2b;
+          background: #d0dff5;
+          color: #006ee6;
         }
         .btn-secondary {
-          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
-          color: #404040;
+          background: #dfe9f8;
+          color: #0084ff;
           border: none !important;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+          box-shadow: none;
         }
         .btn-secondary:hover {
-          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
-          color: #2b2b2b;
+          background: #d0dff5;
+          color: #006ee6;
         }
         .decl-list {
           display: flex;
@@ -872,7 +875,8 @@ export default function StampsTab({ plots = [], initialAction }: Props) {
             font-size: 12px;
           }
           .decl-add-btn {
-            padding: 7px 15px;
+            padding: 9.5px 15px 7px;
+            line-height: 1;
             font-size: 12.5px;
             border-radius: 7px !important;
           }

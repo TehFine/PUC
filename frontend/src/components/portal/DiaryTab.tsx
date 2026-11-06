@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { RadialPngIcon } from "./RadialIcons";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
@@ -536,7 +536,7 @@ function JournalDetailModal({
           <ConfirmButton
             label={
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <Trash2 size={15} aria-hidden="true" />
+                <RadialPngIcon src="/trash.png" size={15} />
                 <span>Xóa bản ghi này (trong 24h)</span>
               </span>
             }
