@@ -15,7 +15,18 @@ export function configureApp(app: NestExpressApplication): void {
   app.set("trust proxy", ["loopback", "linklocal", "uniquelocal"]);
   app.disable("x-powered-by");
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      frameguard: { action: "deny" },
+      crossOriginResourcePolicy: { policy: "same-origin" },
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+        },
+      },
+    }),
+  );
   app.enableCors({
     origin: config.get("corsOrigins", { infer: true }),
     credentials: true,
@@ -32,6 +43,7 @@ export function configureApp(app: NestExpressApplication): void {
   // Mặc định không lưu bộ nhớ đệm cho các API có xác thực (các route tệp sẽ ghi đè khi cần).
   app.use("/api", (_req: unknown, res: { setHeader: (k: string, v: string) => void }, next: () => void) => {
     res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
     next();
   });
 

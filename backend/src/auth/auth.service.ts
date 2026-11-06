@@ -93,14 +93,17 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user?.password_hash ?? DUMMY_HASH);
     if (!user || !valid) {
       if (user) {
-        const failed = user.failed_login_count + 1;
-        const lock = failed >= MAX_FAILED_LOGINS;
-        await this.db.query(
-          `UPDATE users SET failed_login_count = $2,
-             locked_until = CASE WHEN $3 THEN now() + make_interval(mins => $4) ELSE locked_until END
-           WHERE id = $1`,
-          [user.id, lock ? 0 : failed, lock, LOCK_MINUTES],
+        const { rows: failRows } = await this.db.query<{ locked: boolean }>(
+          `UPDATE users
+           SET failed_login_count = CASE WHEN failed_login_count + 1 >= $2 THEN 0 ELSE failed_login_count + 1 END,
+               locked_until = CASE WHEN failed_login_count + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END
+           WHERE id = $1
+           RETURNING (locked_until IS NOT NULL AND locked_until > now()) AS locked`,
+          [user.id, MAX_FAILED_LOGINS, LOCK_MINUTES],
         );
+        if (failRows[0]?.locked) {
+          await this.revokeAllSessions(user.id);
+        }
         await this.audit.write(
           { ip: meta.ip },
           { action: "Đăng nhập thất bại", object: user.username },
@@ -117,10 +120,15 @@ export class AuthService {
       throw new AppException(403, "Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.", "ACCOUNT_DISABLED");
     }
 
-    await this.db.query(
-      "UPDATE users SET failed_login_count = 0, locked_until = NULL, last_login_at = now() WHERE id = $1",
+    const unlocked = await this.db.query(
+      `UPDATE users
+       SET failed_login_count = 0, locked_until = NULL, last_login_at = now()
+       WHERE id = $1 AND (locked_until IS NULL OR locked_until <= now())`,
       [user.id],
     );
+    if (unlocked.rowCount === 0) {
+      throw new AppException(429, "Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
+    }
     const tokens = await this.issueSession(user.id, meta);
     await this.audit.write(
       { ip: meta.ip },
@@ -335,15 +343,15 @@ export class AuthService {
     }
 
     if (!(await bcrypt.compare(dto.currentPassword, current.password_hash))) {
-      const failed = current.failed_login_count + 1;
-      const lock = failed >= MAX_FAILED_LOGINS;
-      await this.db.query(
-        `UPDATE users SET failed_login_count = $2,
-           locked_until = CASE WHEN $3 THEN now() + make_interval(mins => $4) ELSE locked_until END
-         WHERE id = $1`,
-        [user.id, lock ? 0 : failed, lock, LOCK_MINUTES],
+      const { rows: failRows } = await this.db.query<{ locked: boolean }>(
+        `UPDATE users
+         SET failed_login_count = CASE WHEN failed_login_count + 1 >= $2 THEN 0 ELSE failed_login_count + 1 END,
+             locked_until = CASE WHEN failed_login_count + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END
+         WHERE id = $1
+         RETURNING (locked_until IS NOT NULL AND locked_until > now()) AS locked`,
+        [user.id, MAX_FAILED_LOGINS, LOCK_MINUTES],
       );
-      if (lock) {
+      if (failRows[0]?.locked) {
         await this.revokeAllSessions(user.id);
       }
       await this.audit.write({ ip, user }, { action: "Đổi mật khẩu thất bại", object: user.username });
@@ -351,10 +359,15 @@ export class AuthService {
     }
     if (dto.currentPassword === dto.newPassword) throw badRequest("Mật khẩu mới phải khác mật khẩu hiện tại.");
 
-    await this.db.query("UPDATE users SET password_hash = $2, failed_login_count = 0, locked_until = NULL WHERE id = $1", [
-      user.id,
-      await bcrypt.hash(dto.newPassword, 12),
-    ]);
+    const updated = await this.db.query(
+      `UPDATE users
+       SET password_hash = $2, failed_login_count = 0, locked_until = NULL
+       WHERE id = $1 AND (locked_until IS NULL OR locked_until <= now())`,
+      [user.id, await bcrypt.hash(dto.newPassword, 12)],
+    );
+    if (updated.rowCount === 0) {
+      throw new AppException(429, "Tài khoản tạm khóa do nhập sai mật khẩu nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
+    }
     await this.revokeAllSessions(user.id);
     await this.audit.write({ ip, user }, { action: "Đổi mật khẩu", object: user.username });
   }
