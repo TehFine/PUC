@@ -212,17 +212,6 @@ export default function RegisterPage() {
             </>
           )}
         </button>
-
-        {submitting && (
-          <div className="auth-processing-status" role="status" aria-live="polite">
-            <div className="auth-processing-bar" aria-hidden="true">
-              <span className="auth-processing-bar-fill" />
-            </div>
-            <p className="auth-processing-text">
-              Hệ thống đang ghi nhận thông tin đăng ký của bạn, vui lòng đợi trong giây lát…
-            </p>
-          </div>
-        )}
       </form>
       <p className="auth-note">Hộ chưa có trong danh sách của HTX cần được cán bộ ghi nhận trước khi tài khoản được duyệt.</p>
     </AuthShell>

@@ -228,21 +228,6 @@ export default function LoginPage() {
             </>
           )}
         </button>
-
-        {isBusy && (
-          <div className="auth-processing-status" role="status" aria-live="polite">
-            <div className="auth-processing-bar" aria-hidden="true">
-              <span className="auth-processing-bar-fill" />
-            </div>
-            <p className="auth-processing-text">
-              {isRedirectingAuth
-                ? "Xác thực thành công! Đang tải dữ liệu và chuyển vào hệ thống…"
-                : googleSubmitting
-                  ? "Đang kết nối tài khoản Google với hệ thống HTX, vui lòng đợi…"
-                  : "Hệ thống đang kiểm tra thông tin đăng nhập, vui lòng đợi trong giây lát…"}
-            </p>
-          </div>
-        )}
       </form>
     </AuthShell>
   );
