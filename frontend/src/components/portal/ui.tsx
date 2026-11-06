@@ -1,10 +1,12 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
+import { lockRootScroll } from "@/lib/scroll-lock";
 import { RadialPngIcon } from "./RadialIcons";
 import { useSheetSwipe } from "./use-sheet-swipe";
 
@@ -105,11 +107,18 @@ export function Sheet({
 
     const sheet = sheetRef.current;
     const backdrop = backdropRef.current;
+    const isDesktop = typeof window !== "undefined" && window.innerWidth >= 760;
     if (sheet) {
       sheet.style.animation = "none";
       sheet.style.pointerEvents = "none";
-      sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-      sheet.style.transform = "translate3d(0, 105%, 0)";
+      if (isDesktop) {
+        sheet.style.transition = "transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out";
+        sheet.style.transform = "translate3d(0, 12px, 0) scale(0.97)";
+        sheet.style.opacity = "0";
+      } else {
+        sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+        sheet.style.transform = "translate3d(0, 105%, 0)";
+      }
     }
     if (backdrop) {
       backdrop.style.animation = "none";
@@ -123,18 +132,14 @@ export function Sheet({
     }, 220);
   }, [onClose]);
 
-  // Khóa scroll body & lắng nghe phím ESC
+  // Khóa cuộn ở tầng root (<html>) & lắng nghe phím ESC
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && handleClose();
     document.addEventListener("keydown", onKey);
-    const previousBody = document.body.style.overflow;
-    const previousHtml = document.documentElement.style.overflow;
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockRootScroll();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.documentElement.style.overflow = previousHtml;
-      document.body.style.overflow = previousBody;
+      unlockScroll();
     };
   }, [handleClose]);
 
@@ -158,7 +163,7 @@ export function Sheet({
   // Vuốt kiểu khung bình luận TikTok / Facebook: cuộn nội dung đến đầu rồi kéo tiếp xuống để đóng popup
   useSheetSwipe({ sheetRef, handleRef: dragZoneRef, onDismiss: handleClose });
 
-  return (
+  const sheetNode = (
     <SheetCloseContext.Provider value={handleClose}>
       <div
         ref={backdropRef}
@@ -202,6 +207,8 @@ export function Sheet({
       </div>
     </SheetCloseContext.Provider>
   );
+
+  return typeof document !== "undefined" ? createPortal(sheetNode, document.body) : sheetNode;
 }
 
 export function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {

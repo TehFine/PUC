@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { SectionId } from "@/app/admin/page";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApi } from "@/hooks/use-api";
 import { onAdminNavigate, onCountsChanged } from "@/components/admin/shared/counts-events";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
+import { lockRootScroll } from "@/lib/scroll-lock";
 import type { DashboardSummary } from "@/types/dashboard";
 
 interface NavItem {
@@ -126,11 +128,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
   useEffect(() => {
     if (!isOpen) return;
 
-    const prevBodyOverflow = document.body.style.overflow;
-    const prevHtmlOverflow = document.documentElement.style.overflow;
-
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockRootScroll();
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") handleClose();
@@ -138,8 +136,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
     window.addEventListener("keydown", onKey);
 
     return () => {
-      document.documentElement.style.overflow = prevHtmlOverflow;
-      document.body.style.overflow = prevBodyOverflow;
+      unlockScroll();
       window.removeEventListener("keydown", onKey);
     };
   }, [isOpen, handleClose]);
@@ -273,62 +270,68 @@ export default function Sidebar({ active, onNavigate }: Props) {
         ))}
       </nav>
 
-      {isOpen && (
-        <div
-          id="admin-radial-drawer"
-          ref={backdropRef}
-          className="pt-radial-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) handleClose();
-          }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Điều hướng chức năng"
-        >
-          <div ref={sheetRef} className="pt-radial-sheet">
-            <div ref={headRef} className="pt-radial-sheet-head">
-              <h2 className="pt-radial-sheet-title">Điều hướng</h2>
-            </div>
+      {isOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            id="admin-radial-drawer"
+            ref={backdropRef}
+            className="pt-radial-backdrop"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) handleClose();
+            }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Điều hướng chức năng"
+          >
+            <div ref={sheetRef} className="pt-radial-sheet">
+              <div ref={headRef} className="pt-radial-sheet-head">
+                <div className="pt-sheet-handle-zone" aria-hidden="true" style={{ paddingTop: 0, paddingBottom: 10 }}>
+                  <div className="pt-sheet-handle-bar" />
+                </div>
+                <h2 className="pt-radial-sheet-title">Điều hướng</h2>
+              </div>
 
-            <div className="pt-radial-card-list" role="radiogroup" aria-label="Danh mục chức năng">
-              {allAllowedItems.map((item) => {
-                const isActive = selectedTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={isActive}
-                    className={`pt-radial-option-card ${isActive ? "is-active" : ""}`}
-                    onClick={() => handleSelectItem(item.id)}
-                  >
-                    <div className="pt-radial-option-text">
-                      <span className="pt-radial-option-title">
-                        {item.label}
-                        {!!item.badge && item.badge > 0 && (
-                          <span className={`nav-badge ${item.badgeType === "warn" ? "warn" : ""}`} style={{ marginLeft: 8 }}>
-                            {item.badge}
-                          </span>
-                        )}
-                      </span>
-                      <span className="pt-radial-option-desc">{item.desc}</span>
-                    </div>
-                    <div className="pt-radial-option-radio" aria-hidden="true">
-                      <span className="pt-radial-option-radio-dot" />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+              <div className="pt-radial-card-list" role="radiogroup" aria-label="Danh mục chức năng">
+                {allAllowedItems.map((item) => {
+                  const isActive = selectedTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={isActive}
+                      className={`pt-radial-option-card ${isActive ? "is-active" : ""}`}
+                      onClick={() => handleSelectItem(item.id)}
+                    >
+                      <div className="pt-radial-option-text">
+                        <span className="pt-radial-option-title">
+                          {item.label}
+                          {!!item.badge && item.badge > 0 && (
+                            <span className={`nav-badge ${item.badgeType === "warn" ? "warn" : ""}`} style={{ marginLeft: 8 }}>
+                              {item.badge}
+                            </span>
+                          )}
+                        </span>
+                        <span className="pt-radial-option-desc">{item.desc}</span>
+                      </div>
+                      <div className="pt-radial-option-radio" aria-hidden="true">
+                        <span className="pt-radial-option-radio-dot" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
 
-            <div className="pt-radial-sheet-footer">
-              <button type="button" className="pt-radial-done-btn" onClick={handleDone}>
-                Xong
-              </button>
+              <div className="pt-radial-sheet-footer">
+                <button type="button" className="pt-radial-done-btn" onClick={handleDone}>
+                  Xong
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

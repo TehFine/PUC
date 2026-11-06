@@ -96,7 +96,7 @@ export default function LotContributionsModal({
         </FormGrid>
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
           <button type="button" className="btn btn-primary btn-sm" disabled={addMutation.pending} onClick={() => void handleAdd()}>
-            {addMutation.pending ? "Đang lưu…" : "+ Ghi nhận đóng góp"}
+            {addMutation.pending ? "Đang lưu…" : "Ghi nhận đóng góp"}
           </button>
         </div>
         <FormError message={localError ?? addMutation.error ?? removeMutation.error} />

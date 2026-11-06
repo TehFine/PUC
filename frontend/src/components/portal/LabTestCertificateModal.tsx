@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Download, Printer } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { lockRootScroll } from "@/lib/scroll-lock";
 import { formatDate } from "@/utils/format";
+import { useSheetSwipe } from "./use-sheet-swipe";
 
 /** Đóng gói mảng byte ảnh JPEG thành file PDF 1.4 khổ A4 chuẩn (595.28 x 841.89 pt). */
 function jpegBytesToA4PdfBlob(jpegBytes: Uint8Array, pixelWidth: number, pixelHeight: number): Blob {
@@ -253,9 +255,34 @@ function PaperDogEarFold({ idPrefix }: { idPrefix: string }) {
 export default function LabTestCertificateModal({ test, onClose }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [downloading, setDownloading] = useState<boolean>(false);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const closingRef = useRef<boolean>(false);
   const paperRef = useRef<HTMLDivElement>(null);
   const mobileStackRef = useRef<HTMLDivElement>(null);
   const [sheetScale, setSheetScale] = useState<number>(0.68);
+
+  const handleClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    const container = containerRef.current;
+    const backdrop = backdropRef.current;
+    if (container) {
+      container.style.transition = "transform 220ms cubic-bezier(0.25, 1, 0.5, 1)";
+      container.style.transform = "translate3d(0, 100%, 0)";
+    }
+    if (backdrop) {
+      backdrop.style.transition = "opacity 220ms ease-out";
+      backdrop.style.opacity = "0";
+    }
+    setTimeout(() => {
+      closingRef.current = false;
+      onClose();
+    }, 220);
+  }, [onClose]);
+
+  useSheetSwipe({ sheetRef: containerRef, handleRef: toolbarRef, onDismiss: handleClose });
 
   const isPass = test.result === "pass" || test.result === "Đạt";
   const householdName = test.householdName || "Nguyễn Văn An";
@@ -300,16 +327,15 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
   // Phím ESC đóng modal
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
     };
     window.addEventListener("keydown", handleKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockRootScroll();
     return () => {
       window.removeEventListener("keydown", handleKey);
-      document.body.style.overflow = prev;
+      unlockScroll();
     };
-  }, [onClose]);
+  }, [handleClose]);
 
   const safeCode = (test.code || "phieu").replace(/[^a-zA-Z0-9-_]+/g, "-");
 
@@ -356,17 +382,18 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
   // Gắn trực tiếp dưới <body>: khi in chỉ còn phiếu, không bị nội dung trang phía sau đẩy sang trang trắng
   return createPortal(
     <div
+      ref={backdropRef}
       className="cert-modal-backdrop cert-print-root"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleClose();
       }}
       role="dialog"
       aria-modal="true"
       aria-label="Phiếu trả kết quả kiểm nghiệm"
     >
-      <div className="cert-modal-container">
+      <div ref={containerRef} className="cert-modal-container">
         {/* THANH ĐIỀU KHIỂN THAO TÁC NGOÀI TỜ GIẤY (NO-PRINT) */}
-        <div className="cert-toolbar no-print">
+        <div ref={toolbarRef} className="cert-toolbar no-print">
           <div className="cert-toolbar-left">
             <span className="cert-status-badge">
               <span className="cert-status-main">Phiếu kiểm nghiệm điện tử</span>
@@ -400,7 +427,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             <button
               type="button"
               className="cert-btn-close"
-              onClick={onClose}
+              onClick={handleClose}
               title="Đóng (Esc)"
               aria-label="Đóng"
             >

@@ -20,6 +20,7 @@ import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { invalidateQueries, NOTIFICATIONS_PATH, portalPath, usePortal, useSharedQuery } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { api, errorMessage } from "@/lib/api-client";
+import { isLowEndDevice } from "@/lib/network";
 import { HOUSEHOLD_STATUS } from "@/lib/portal-labels";
 import { INTRO_PATH } from "@/lib/routes";
 import { formatDate } from "@/utils/format";
@@ -262,11 +263,12 @@ function PortalAppContent() {
         invalidateQueries(NOTIFICATIONS_PATH);
       }
     };
+    const pollMs = isLowEndDevice() ? 60000 : 30000;
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") {
         invalidateQueries(NOTIFICATIONS_PATH);
       }
-    }, 30000);
+    }, pollMs);
     window.addEventListener("focus", onFocusOrVisible);
     document.addEventListener("visibilitychange", onFocusOrVisible);
     return () => {
@@ -278,14 +280,20 @@ function PortalAppContent() {
 
   useEffect(() => {
     if (status !== "authenticated" || session?.user.role !== "farmer") return;
-    const timer = window.setTimeout(() => {
-      void import("./PlotsTab");
-      void import("./DiaryTab");
-      void import("./StampsTab");
-      void import("./InspectionTab");
-      void import("./LearnTab");
-    }, 1500);
-    return () => window.clearTimeout(timer);
+    if (isLowEndDevice()) return;
+    const loaders = [
+      () => import("./PlotsTab"),
+      () => import("./DiaryTab"),
+      () => import("./StampsTab"),
+      () => import("./InspectionTab"),
+      () => import("./LearnTab"),
+    ];
+    const timers = loaders.map((load, idx) =>
+      window.setTimeout(() => {
+        void load();
+      }, 1800 + idx * 450),
+    );
+    return () => timers.forEach((t) => window.clearTimeout(t));
   }, [status, session?.user.role]);
 
   if (status !== "authenticated" || session?.user.role !== "farmer") {

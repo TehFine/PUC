@@ -1,20 +1,23 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { lockRootScroll } from "@/lib/scroll-lock";
 
 /**
- * Hộp thoại dùng chung cho khu quản trị (dùng class `.modal*` trong globals.css).
- * Có `role="dialog"`, đóng bằng Esc/nút X/bấm nền, khóa cuộn trang, giữ focus trong hộp thoại.
+ * Hộp thoại dùng chung cho khu quản trị — đồng bộ thiết kế và thao tác vuốt đóng (Bottom Sheet / Modal)
+ * với Cổng hộ dân (`Sheet` trong `portal/ui.tsx`).
  */
 export function Modal({
   title,
   onClose,
   children,
   footer,
-  width = 520,
+  width = 560,
   closeOnBackdrop = true,
+  className = "",
 }: {
   title: string;
   onClose: () => void;
@@ -22,19 +25,46 @@ export function Modal({
   footer?: ReactNode;
   width?: number;
   closeOnBackdrop?: boolean;
+  className?: string;
 }) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const dragZoneRef = useRef<HTMLDivElement>(null);
+  const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
 
+  const handleClose = useCallback(() => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+
+    const sheet = panelRef.current;
+    const backdrop = backdropRef.current;
+    if (sheet) {
+      sheet.style.animation = "none";
+      sheet.style.pointerEvents = "none";
+      sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+      sheet.style.transform = "translate3d(0, 105%, 0)";
+    }
+    if (backdrop) {
+      backdrop.style.animation = "none";
+      backdrop.style.pointerEvents = "none";
+      backdrop.style.transition = "opacity 200ms ease-out";
+      backdrop.style.opacity = "0";
+    }
+
+    setTimeout(() => {
+      onCloseRef.current();
+    }, 220);
+  }, []);
+
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockRootScroll();
 
     const panel = panelRef.current;
     const focusable = () =>
@@ -48,7 +78,7 @@ export function Modal({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onCloseRef.current();
+        handleClose();
         return;
       }
       if (event.key !== "Tab") return;
@@ -67,41 +97,76 @@ export function Modal({
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       previousFocus?.focus?.();
     };
+  }, [handleClose]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isClosingRef.current) return;
+      if (panelRef.current) {
+        panelRef.current.style.animation = "none";
+        panelRef.current.style.transform = "translate3d(0, 0, 0)";
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.animation = "none";
+        backdropRef.current.style.opacity = "1";
+      }
+    }, 350);
+    return () => clearTimeout(timer);
   }, []);
 
-  return createPortal(
+  useSheetSwipe({ sheetRef: panelRef, handleRef: dragZoneRef, onDismiss: handleClose });
+
+  const modalNode = (
     <div
-      className="modal-overlay"
+      ref={backdropRef}
+      className="modal-overlay pt-sheet-backdrop"
       onMouseDown={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget) onClose();
+        if (closeOnBackdrop && event.target === event.currentTarget) handleClose();
       }}
     >
       <div
         ref={panelRef}
-        className="modal"
+        className={`modal pt-sheet ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        style={{ width, maxHeight: "calc(100dvh - 32px)", display: "flex", flexDirection: "column" }}
+        style={{ "--modal-max-w": `${width}px` } as CSSProperties}
       >
-        <div className="modal-header">
-          <h3 id={titleId}>{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Đóng">
-            <CloseCircleIcon size={28} />
-          </button>
+        <div ref={dragZoneRef} className="modal-topbar pt-sheet-topbar">
+          <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
+            <div className="pt-sheet-handle-bar" />
+          </div>
+
+          <header className="modal-header pt-sheet-head">
+            <h2 id={titleId}>{title}</h2>
+            <button
+              type="button"
+              className="pt-icon-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleClose();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label="Đóng"
+            >
+              <CloseCircleIcon size={28} />
+            </button>
+          </header>
         </div>
-        <div className="modal-body" style={{ overflowY: "auto" }}>
+
+        <div className="modal-body pt-sheet-body">
           {children}
         </div>
         {footer && <div className="modal-footer">{footer}</div>}
       </div>
-    </div>,
-    document.body,
+    </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalNode, document.body) : modalNode;
 }
 
 /** Hộp thoại xác nhận (xóa, từ chối...). `onConfirm` có thể là async; hộp thoại tự hiện trạng thái đang xử lý. */
@@ -130,7 +195,8 @@ export function ConfirmDialog({
     <Modal
       title={title}
       onClose={pending ? () => undefined : onClose}
-      width={440}
+      width={460}
+      className="modal-confirm-sheet"
       footer={
         <>
           <button type="button" className="btn btn-outline" onClick={onClose} disabled={pending}>
@@ -142,7 +208,7 @@ export function ConfirmDialog({
         </>
       }
     >
-      <div style={{ fontSize: 14, lineHeight: 1.6 }}>{message}</div>
+      <div style={{ fontSize: 14.5, lineHeight: 1.6, color: "var(--ink)" }}>{message}</div>
       {children}
       <FormError message={error} />
     </Modal>
@@ -152,7 +218,7 @@ export function ConfirmDialog({
 export function FormError({ message }: { message?: string | null }) {
   if (!message) return null;
   return (
-    <div role="alert" className="form-error" style={{ marginTop: 12, padding: "10px 14px", borderRadius: 12, background: "#fbe0d8", color: "#9a2f17", fontSize: 13.5 }}>
+    <div role="alert" className="form-error pt-form-error" style={{ marginTop: 12 }}>
       {message}
     </div>
   );

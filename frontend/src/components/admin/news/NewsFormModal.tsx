@@ -230,7 +230,7 @@ export default function NewsFormModal({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <strong style={{ fontSize: 13.5 }}>Nội dung chi tiết từng phân đoạn</strong>
           <button type="button" className="btn btn-outline btn-sm" onClick={handleAddSection}>
-            + Thêm phân đoạn
+            Thêm phân đoạn
           </button>
         </div>
 

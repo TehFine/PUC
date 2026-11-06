@@ -1,23 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Bell, CheckCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CheckCheck } from "lucide-react";
+import { onCountsChanged, requestAdminNavigate } from "@/components/admin/shared/counts-events";
+import { RadialPngIcon } from "@/components/portal/RadialIcons";
+import { BusyButton } from "@/components/portal/shared/controls";
+import { EmptyState, Sheet, StateBlock } from "@/components/portal/ui";
 import { useApi } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
-import { AppleLoadingPill } from "@/components/ui/Skeleton";
-import { onCountsChanged, requestAdminNavigate } from "@/components/admin/shared/counts-events";
-import { formatDateTime } from "@/utils/format";
+import { formatDate } from "@/utils/format";
 import type { NotificationItem, NotificationList } from "@/types/notifications";
-
-const KIND_META: Record<string, { label: string; bg: string; color: string }> = {
-  approval: { label: "Hồ sơ", bg: "#fde8e2", color: "#c93f18" },
-  violation: { label: "Nhật ký · Vi phạm", bg: "#fef3c7", color: "#b45309" },
-  harvest: { label: "Lô hàng", bg: "#e7f6ec", color: "#15803d" },
-  training: { label: "Tập huấn", bg: "#e0f2fe", color: "#0369a1" },
-  schedule: { label: "Lịch kiểm tra", bg: "#f3e8ff", color: "#6d28d9" },
-  lab: { label: "Kiểm nghiệm", bg: "#e0f2fe", color: "#0369a1" },
-  system: { label: "Hệ thống", bg: "#eef4f0", color: "#14372f" },
-};
 
 function resolveSectionFromLink(link: string | null, kind?: string): string | null {
   if (kind === "violation") return "journal";
@@ -34,33 +26,20 @@ function resolveSectionFromLink(link: string | null, kind?: string): string | nu
   if (kind === "approval") return "approval";
   if (kind === "harvest") return "harvest";
   if (kind === "training") return "training";
-  if (kind === "lab") return "testing";
+  if (kind === "lab" || kind === "schedule") return "testing";
   return null;
 }
 
 export default function NotificationBell() {
-  const { data, loading, refresh } = useApi<NotificationList>("/notifications");
+  const { data, loading, error, refresh } = useApi<NotificationList>("/notifications");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => onCountsChanged(() => void refresh()), [refresh]);
 
   useEffect(() => {
     if (!open) return;
     void refresh();
-    const onPointer = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
   }, [open, refresh]);
 
   const items: NotificationItem[] = data?.data ?? [];
@@ -74,8 +53,8 @@ export default function NotificationBell() {
       } catch {}
     }
     const section = resolveSectionFromLink(item.link, item.kind);
+    setOpen(false);
     if (section) {
-      setOpen(false);
       requestAdminNavigate(section);
     }
   };
@@ -93,129 +72,89 @@ export default function NotificationBell() {
   };
 
   return (
-    <div ref={ref} className="admin-notif-wrap">
+    <div className="admin-notif-wrap">
       <button
         type="button"
-        className="admin-notif-btn"
+        className="admin-notif-btn pt-notif-btn"
         aria-label={unread > 0 ? `Thông báo (${unread} chưa đọc)` : "Thông báo"}
-        title="Thông báo"
+        title="Thông báo từ HTX"
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setOpen(true);
+          void refresh();
+        }}
       >
-        <Bell size={18} strokeWidth={2.1} />
+        <RadialPngIcon src="/bell.png" size={18} />
         {unread > 0 && (
-          <span className="admin-notif-badge">
+          <span className="admin-notif-badge pt-notif-badge">
             {unread > 99 ? "99+" : unread}
           </span>
         )}
       </button>
 
       {open && (
-        <div
-          role="dialog"
-          aria-label="Danh sách thông báo"
-          className="admin-notif-dropdown"
-        >
-          <div
-            style={{
-              padding: "14px 18px",
-              borderBottom: "1px solid var(--border)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
-            }}
-          >
-            <strong style={{ fontSize: 14, color: "var(--ink)" }}>
-              Thông báo {unread > 0 ? `(${unread})` : ""}
-            </strong>
+        <Sheet title="Thông báo từ HTX" onClose={() => setOpen(false)}>
+          <div className="pt-stack" style={{ gap: 14 }}>
             {unread > 0 && (
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                style={{ padding: "4px 10px", fontSize: 11.5 }}
-                disabled={busy}
-                onClick={() => void markAllRead()}
-              >
-                <CheckCheck size={13} />
-                Đọc tất cả
-              </button>
-            )}
-          </div>
-
-          <div style={{ overflowY: "auto", maxHeight: 350 }}>
-            {loading && items.length === 0 && (
-              <div style={{ padding: 20, display: "flex", justifyContent: "center" }}>
-                <AppleLoadingPill label="Đang tải thông báo…" />
-              </div>
-            )}
-            {!loading && items.length === 0 && (
-              <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "var(--text-muted)" }}>
-                Chưa có thông báo nào.
-              </div>
-            )}
-            {items.map((item) => {
-              const isUnread = !item.readAt;
-              const meta = KIND_META[item.kind] ?? KIND_META.system;
-              return (
-                <button
-                  key={item.id}
+              <div className="pt-notif-toolbar">
+                <span className="pt-notif-summary">
+                  Bạn có <strong>{unread}</strong> thông báo chưa đọc
+                </span>
+                <BusyButton
                   type="button"
-                  onClick={() => void markRead(item)}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "12px 18px",
-                    border: "none",
-                    borderBottom: "1px solid var(--border)",
-                    background: isUnread ? "#f3f8ee" : "#fff",
-                    cursor: "pointer",
-                    display: "block",
-                  }}
+                  className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
+                  busy={busy}
+                  busyLabel="Đang đánh dấu…"
+                  onClick={() => void markAllRead()}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        padding: "2px 7px",
-                        borderRadius: 999,
-                        background: meta.bg,
-                        color: meta.color,
+                  <CheckCheck size={14} aria-hidden="true" />
+                  <span>Đánh dấu đã đọc hết</span>
+                </BusyButton>
+              </div>
+            )}
+
+            <StateBlock loading={loading && items.length === 0} error={error} variant="rows" />
+
+            {!loading && items.length === 0 && (
+              <EmptyState icon="none">Hiện chưa có thông báo mới nào từ HTX.</EmptyState>
+            )}
+
+            {items.length > 0 && (
+              <ul className="pt-notif-list">
+                {items.map((item) => {
+                  const isUnread = !item.readAt;
+                  return (
+                    <li
+                      key={item.id}
+                      className={`pt-notif-item ${isUnread ? "is-unread" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void markRead(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          void markRead(item);
+                        }
                       }}
                     >
-                      {meta.label}
-                    </span>
-                    {isUnread && (
-                      <span
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          background: "#e05326",
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
-                  </div>
-                  <div style={{ fontWeight: isUnread ? 700 : 500, fontSize: 13, color: "var(--ink)" }}>
-                    {item.title}
-                  </div>
-                  {item.body && (
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 3, lineHeight: 1.45 }}>
-                      {item.body}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                    {formatDateTime(item.createdAt)}
-                  </div>
-                </button>
-              );
-            })}
+                      <div className="pt-notif-dot-col">
+                        <span className={`pt-notif-dot ${isUnread ? "is-active" : ""}`} aria-hidden="true" />
+                      </div>
+                      <div className="pt-notif-content">
+                        <div className="pt-notif-head">
+                          <strong>{item.title}</strong>
+                          <span className="pt-notif-time">{formatDate(item.createdAt)}</span>
+                        </div>
+                        {item.body && <p className="pt-notif-body">{item.body}</p>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
-        </div>
+        </Sheet>
       )}
     </div>
   );

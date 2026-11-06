@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Printer, Download, Sparkles, Tag, Package, RefreshCw } from "lucide-react";
+import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import type { HarvestItem } from "@/types/entities";
 import { api } from "@/lib/api-client";
+import { lockRootScroll } from "@/lib/scroll-lock";
 
 export interface BatchQrLot {
   id?: number;
@@ -25,6 +28,8 @@ interface Props {
 interface ItemWithQr extends HarvestItem {
   qrDataUrl?: string;
 }
+
+const batchQrCache = new Map<string, string>();
 
 function getPublicBaseUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_PUBLIC_BASE_URL?.trim();
@@ -52,18 +57,65 @@ export default function BatchQrModal({ lot, onClose }: Props) {
   const [generating, startGenerating] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const dragZoneRef = useRef<HTMLDivElement>(null);
+  const isClosingRef = useRef(false);
 
-  // Đóng bằng phím Escape
+  const handleClose = useCallback(() => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    const sheet = sheetRef.current;
+    const backdrop = backdropRef.current;
+    if (sheet) {
+      sheet.style.animation = "none";
+      sheet.style.pointerEvents = "none";
+      sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+      sheet.style.transform = "translate3d(0, 105%, 0)";
+    }
+    if (backdrop) {
+      backdrop.style.animation = "none";
+      backdrop.style.pointerEvents = "none";
+      backdrop.style.transition = "opacity 200ms ease-out";
+      backdrop.style.opacity = "0";
+    }
+    setTimeout(() => {
+      onClose();
+    }, 220);
+  }, [onClose]);
+
+  // Đóng bằng phím Escape & khóa cuộn tầng root
   useEffect(() => {
+    const unlockScroll = lockRootScroll();
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        handleClose();
       }
     };
     window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      unlockScroll();
+    };
+  }, [handleClose]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isClosingRef.current) return;
+      if (sheetRef.current) {
+        sheetRef.current.style.animation = "none";
+        sheetRef.current.style.transform = "translate3d(0, 0, 0)";
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.animation = "none";
+        backdropRef.current.style.opacity = "1";
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useSheetSwipe({ sheetRef, handleRef: dragZoneRef, onDismiss: handleClose });
 
   // Cập nhật trọng lượng mặc định khi đổi loại tem
   const handleTypeChange = (type: "fruit" | "box") => {
@@ -71,27 +123,43 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     setWeightKg(type === "fruit" ? 3.5 : 18.0);
   };
 
-  // Tải danh sách tem đã có của lô
+  // Tải danh sách tem đã có của lô (chia cụm nhỏ + bộ nhớ đệm để không khóa luồng chính trên máy yếu)
   const fetchItemsWithQr = useCallback(async (lotId: number): Promise<ItemWithQr[]> => {
     const res = await api.get<{ data: HarvestItem[] }>(`/harvest/${lotId}/items`);
     const rawItems = res.data;
     const baseUrl = getPublicBaseUrl();
+    const results: ItemWithQr[] = [];
+    const CHUNK_SIZE = 8;
 
-    return Promise.all(
-      rawItems.map(async (item) => {
-        try {
-          const url = `${baseUrl}/trace/${encodeURIComponent(item.serialCode)}`;
-          const qrDataUrl = await QRCode.toDataURL(url, {
-            margin: 1,
-            width: 160,
-            color: { dark: "#0f372a", light: "#ffffff" },
-          });
-          return { ...item, qrDataUrl };
-        } catch {
-          return item;
-        }
-      }),
-    );
+    for (let i = 0; i < rawItems.length; i += CHUNK_SIZE) {
+      const slice = rawItems.slice(i, i + CHUNK_SIZE);
+      const chunkResults = await Promise.all(
+        slice.map(async (item) => {
+          const cached = batchQrCache.get(item.serialCode);
+          if (cached) {
+            return { ...item, qrDataUrl: cached };
+          }
+          try {
+            const url = `${baseUrl}/trace/${encodeURIComponent(item.serialCode)}`;
+            const qrDataUrl = await QRCode.toDataURL(url, {
+              margin: 1,
+              width: 160,
+              color: { dark: "#0f372a", light: "#ffffff" },
+            });
+            batchQrCache.set(item.serialCode, qrDataUrl);
+            return { ...item, qrDataUrl };
+          } catch {
+            return item;
+          }
+        }),
+      );
+      results.push(...chunkResults);
+      if (i + CHUNK_SIZE < rawItems.length) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
+    return results;
   }, []);
 
   useEffect(() => {
@@ -184,30 +252,46 @@ export default function BatchQrModal({ lot, onClose }: Props) {
 
   const displayDate = lot.date ?? (lot.harvestedOn ? lot.harvestedOn.slice(0, 10) : "—");
 
-  return (
+  const modalNode = (
     <div
-      className="batch-qr-overlay"
+      ref={backdropRef}
+      className="batch-qr-overlay pt-sheet-backdrop"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div
-        className="batch-qr-modal"
+        ref={sheetRef}
+        className="batch-qr-modal pt-sheet"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
         {/* Header Modal */}
-        <div className="batch-qr-header no-print">
-          <div>
-            <div className="batch-qr-subtitle">Truy xuất nguồn gốc CheckVN &amp; GACC</div>
-            <h2 id={titleId} className="batch-qr-title">
-              Bộ sinh &amp; In tem định danh – Lô {lot.code}
-            </h2>
+        <div ref={dragZoneRef} className="pt-sheet-topbar no-print">
+          <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
+            <div className="pt-sheet-handle-bar" />
           </div>
-          <button type="button" className="batch-qr-close" onClick={onClose} aria-label="Đóng">
-            <CloseCircleIcon size={28} />
-          </button>
+          <div className="batch-qr-header">
+            <div>
+              <div className="batch-qr-subtitle">Truy xuất nguồn gốc CheckVN &amp; GACC</div>
+              <h2 id={titleId} className="batch-qr-title">
+                Bộ sinh &amp; In tem định danh – Lô {lot.code}
+              </h2>
+            </div>
+            <button
+              type="button"
+              className="batch-qr-close pt-icon-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleClose();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label="Đóng"
+            >
+              <CloseCircleIcon size={28} />
+            </button>
+          </div>
         </div>
 
         {/* Cấu hình sinh tem */}
@@ -447,40 +531,55 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         /* Overlay & Modal */
         .batch-qr-overlay {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(14, 28, 22, 0.65);
-          backdrop-filter: blur(4px);
+          inset: 0;
+          background: rgba(15, 23, 42, 0.52);
           z-index: 1000;
           display: flex;
-          align-items: center;
+          align-items: flex-end;
           justify-content: center;
-          padding: 20px;
-          overflow-y: auto;
+          padding: 0;
+          overflow: hidden;
         }
 
         .batch-qr-modal {
           background: #ffffff;
-          border-radius: 16px;
-          max-width: 960px;
+          border-radius: 28px 28px 0 0;
+          max-width: 960px !important;
           width: 100%;
-          max-height: 90vh;
+          height: min(92dvh, calc(100dvh - 28px));
+          max-height: min(92dvh, calc(100dvh - 28px));
           display: flex;
           flex-direction: column;
-          box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.3);
-          border: 1px solid #e1e7e4;
+          box-shadow: 0 -12px 48px rgba(15, 23, 42, 0.24), 0 -2px 12px rgba(0, 0, 0, 0.06);
+          border: none;
           overflow: hidden;
         }
 
+        @media (min-width: 760px) {
+          .batch-qr-overlay {
+            align-items: center;
+            padding: 20px;
+          }
+          .batch-qr-modal {
+            border-radius: 24px;
+            height: auto;
+            max-height: 90dvh;
+          }
+        }
+
         .batch-qr-header {
-          padding: 18px 24px;
-          border-bottom: 1px solid #edf1ef;
+          padding: 8px 22px 14px;
+          border-bottom: 1px solid rgba(20, 55, 47, 0.07);
           display: flex;
           align-items: center;
           justify-content: space-between;
-          background: #fcfdfd;
+          background: #ffffff;
+        }
+
+        @media (min-width: 760px) {
+          .batch-qr-header {
+            padding: 20px 24px 14px;
+          }
         }
 
         .batch-qr-subtitle {
@@ -930,4 +1029,6 @@ export default function BatchQrModal({ lot, onClose }: Props) {
       `}</style>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalNode, document.body) : modalNode;
 }

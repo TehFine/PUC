@@ -18,6 +18,7 @@ import {
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import type { PortalPlot } from "@/types/portal";
 import { PLOT_STATUS } from "@/lib/portal-labels";
+import { lockRootScroll } from "@/lib/scroll-lock";
 import { Pill } from "./ui";
 
 interface Props {
@@ -253,8 +254,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   };
 
   useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockRootScroll();
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleRequestClose();
@@ -262,7 +262,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
-      document.body.style.overflow = prevOverflow;
+      unlockScroll();
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [handleRequestClose]);

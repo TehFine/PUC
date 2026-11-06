@@ -30,22 +30,28 @@ interface SheetSwipeOptions {
 
 type Mode = "idle" | "pending" | "scroll" | "drag" | "ignore";
 
-/** Các phần tử không nhận thao tác kéo popup (bản đồ, thanh trượt, ô nhập nhiều dòng…). */
+/** Các phần tử không nhận thao tác kéo popup (bản đồ, thanh trượt, ô nhập liệu…). */
 const NO_DRAG_SELECTOR =
-  "textarea, input[type='range'], select, [contenteditable='true'], .leaflet-container, [data-no-sheet-drag]";
+  "input, textarea, select, [contenteditable='true'], .leaflet-container, [data-no-sheet-drag]";
 
 const START_SLOP = 6; // px: ngưỡng phân biệt chạm nhẹ với vuốt
 const SNAP_BACK_MS = 260;
 
-/** Tìm vùng cuộn dọc gần nhất của phần tử được chạm, giới hạn bên trong popup. */
+/** Tìm vùng cuộn dọc gần nhất của phần tử được chạm, tính cả bản thân khung popup (boundary). */
 function findVerticalScroller(target: EventTarget | null, boundary: HTMLElement): HTMLElement | null {
   let el = target instanceof Element ? (target as HTMLElement) : null;
-  while (el && el !== boundary) {
+  while (el) {
     if (el.scrollHeight > el.clientHeight + 1) {
       const overflowY = getComputedStyle(el).overflowY;
       if (overflowY === "auto" || overflowY === "scroll") return el;
     }
+    if (el === boundary) break;
     el = el.parentElement;
+  }
+  const parent = boundary.parentElement;
+  if (parent && parent.scrollHeight > parent.clientHeight + 1) {
+    const overflowY = getComputedStyle(parent).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") return parent;
   }
   return null;
 }
@@ -173,7 +179,7 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
           mode = "ignore";
           return;
         }
-        const atTop = !scroller || scroller.scrollTop <= 0;
+        const atTop = !scroller || scroller.scrollTop <= 1;
         if (inHandle || (atTop && dy > 0)) {
           startDrag(y);
         } else {
@@ -181,7 +187,7 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
         }
       } else if (mode === "scroll") {
         // Đang cuộn nội dung: khi đã chạm đầu danh sách mà ngón tay vẫn kéo xuống → chuyển sang kéo popup
-        if (stepY > 0 && (!scroller || scroller.scrollTop <= 0)) {
+        if (stepY > 0 && (!scroller || scroller.scrollTop <= 1)) {
           startDrag(y);
         }
       }
@@ -217,37 +223,76 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
       scroller = null;
     };
 
-    // Kéo bằng chuột trên thanh tiêu đề (máy tính / máy tính bảng có chuột)
+    // Kéo bằng chuột / touchpad trên cả thanh tiêu đề lẫn phần thân popup (khi danh sách đã ở đầu trang)
     let mouseActive = false;
+    let suppressNextClick = false;
     const onPointerDown = (e: PointerEvent) => {
-      if (e.pointerType !== "mouse" || e.button !== 0) return;
+      if (e.pointerType !== "mouse" || e.button !== 0 || sheet.style.pointerEvents === "none") return;
       const target = e.target as Element | null;
-      if (!handleRef?.current || !target || !handleRef.current.contains(target)) return;
-      if (target.closest("button, a")) return;
+      if (!target || target.closest(NO_DRAG_SELECTOR)) return;
+      inHandle = !!(handleRef?.current && handleRef.current.contains(target));
+      if (inHandle && target.closest("button, a")) return;
+      scroller = inHandle ? null : findVerticalScroller(target, sheet);
       mouseActive = true;
+      startX = e.clientX;
       startY = e.clientY;
-      scroller = null;
+      lastY = e.clientY;
       mode = "pending";
     };
     const onPointerMove = (e: PointerEvent) => {
-      if (!mouseActive) return;
+      if (!mouseActive || mode === "idle" || mode === "ignore") return;
+      const y = e.clientY;
+      const stepY = y - lastY;
+
       if (mode === "pending") {
-        if (Math.abs(e.clientY - startY) < START_SLOP) return;
-        startDrag(e.clientY);
+        const dx = e.clientX - startX;
+        const dy = y - startY;
+        if (Math.abs(dx) < START_SLOP && Math.abs(dy) < START_SLOP) return;
+        if (Math.abs(dx) > Math.abs(dy)) {
+          mode = "ignore";
+          return;
+        }
+        const atTop = !scroller || scroller.scrollTop <= 1;
+        if (inHandle || (atTop && dy > 0)) {
+          suppressNextClick = true;
+          startDrag(y);
+        } else {
+          mode = "scroll";
+        }
+      } else if (mode === "scroll") {
+        if (stepY > 0 && (!scroller || scroller.scrollTop <= 1)) {
+          suppressNextClick = true;
+          startDrag(y);
+        }
       }
+
       if (mode === "drag") {
-        const next = e.clientY - originY;
+        const next = y - originY;
         offset = next < 0 ? next * 0.15 : next;
         setTransform(offset);
-        samples.push({ y: e.clientY, t: performance.now() });
+        samples.push({ y, t: performance.now() });
         if (samples.length > 12) samples.shift();
       }
+      lastY = y;
     };
     const onPointerUp = () => {
       if (!mouseActive) return;
       mouseActive = false;
       if (mode === "drag") finishDrag(false);
       mode = "idle";
+      scroller = null;
+      if (suppressNextClick) {
+        setTimeout(() => {
+          suppressNextClick = false;
+        }, 50);
+      }
+    };
+    const onClickCapture = (e: MouseEvent) => {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }
     };
 
     sheet.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -255,6 +300,7 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
     sheet.addEventListener("touchend", onTouchEnd);
     sheet.addEventListener("touchcancel", onTouchEnd);
     sheet.addEventListener("pointerdown", onPointerDown);
+    sheet.addEventListener("click", onClickCapture, true);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerUp);
@@ -267,6 +313,7 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
       sheet.removeEventListener("touchend", onTouchEnd);
       sheet.removeEventListener("touchcancel", onTouchEnd);
       sheet.removeEventListener("pointerdown", onPointerDown);
+      sheet.removeEventListener("click", onClickCapture, true);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);

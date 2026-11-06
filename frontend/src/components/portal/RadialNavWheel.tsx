@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { lockRootScroll } from "@/lib/scroll-lock";
 import { usePortalLang } from "./i18n";
 import type { PortalTabId } from "./PortalApp";
 import {
@@ -200,11 +202,7 @@ export default function RadialNavWheel({
   useEffect(() => {
     if (!isOpen) return;
 
-    const prevBodyOverflow = document.body.style.overflow;
-    const prevHtmlOverflow = document.documentElement.style.overflow;
-
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockRootScroll();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") handleClose();
@@ -212,8 +210,7 @@ export default function RadialNavWheel({
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      document.documentElement.style.overflow = prevHtmlOverflow;
-      document.body.style.overflow = prevBodyOverflow;
+      unlockScroll();
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, handleClose]);
@@ -249,6 +246,70 @@ export default function RadialNavWheel({
   // Vuốt kiểu khung bình luận TikTok / Facebook (dùng chung với các popup Sheet)
   useSheetSwipe({ sheetRef, handleRef: headRef, onDismiss: handleClose, enabled: isOpen });
 
+  const drawerNode = isOpen ? (
+    <div
+      id="portal-radial-drawer"
+      ref={backdropRef}
+      className="pt-radial-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Điều hướng chức năng"
+    >
+      <div
+        ref={sheetRef}
+        className="pt-radial-sheet"
+      >
+        <div ref={headRef} className="pt-radial-sheet-head">
+          <div className="pt-sheet-handle-zone" aria-hidden="true" style={{ paddingTop: 0, paddingBottom: 10 }}>
+            <div className="pt-sheet-handle-bar" />
+          </div>
+          <h2 className="pt-radial-sheet-title">{t("Điều hướng")}</h2>
+        </div>
+
+        <div className="pt-radial-card-list" role="radiogroup" aria-label={t("Danh mục chức năng")}>
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = selectedTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                className={`pt-radial-option-card ${isActive ? "is-active" : ""}`}
+                onClick={() => handleSelectItem(item.id)}
+              >
+                <div className="pt-radial-option-icon">
+                  <Icon size={26} />
+                </div>
+                <div className="pt-radial-option-text">
+                  <span className="pt-radial-option-title">{t(item.label)}</span>
+                  <span className="pt-radial-option-desc">{t(item.desc)}</span>
+                </div>
+                <div className="pt-radial-option-radio" aria-hidden="true">
+                  <span className="pt-radial-option-radio-dot" />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="pt-radial-sheet-footer">
+          <button
+            type="button"
+            className="pt-radial-done-btn"
+            onClick={handleDone}
+          >
+            {t("Xong")}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <>
       {showFloatingLauncher && (
@@ -268,66 +329,7 @@ export default function RadialNavWheel({
         </aside>
       )}
 
-      {isOpen && (
-        <div
-          id="portal-radial-drawer"
-          ref={backdropRef}
-          className="pt-radial-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) handleClose();
-          }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Điều hướng chức năng"
-        >
-          <div
-            ref={sheetRef}
-            className="pt-radial-sheet"
-          >
-            <div ref={headRef} className="pt-radial-sheet-head">
-              <h2 className="pt-radial-sheet-title">{t("Điều hướng")}</h2>
-            </div>
-
-            <div className="pt-radial-card-list" role="radiogroup" aria-label={t("Danh mục chức năng")}>
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const isActive = selectedTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={isActive}
-                    className={`pt-radial-option-card ${isActive ? "is-active" : ""}`}
-                    onClick={() => handleSelectItem(item.id)}
-                  >
-                    <div className="pt-radial-option-icon">
-                      <Icon size={26} />
-                    </div>
-                    <div className="pt-radial-option-text">
-                      <span className="pt-radial-option-title">{t(item.label)}</span>
-                      <span className="pt-radial-option-desc">{t(item.desc)}</span>
-                    </div>
-                    <div className="pt-radial-option-radio" aria-hidden="true">
-                      <span className="pt-radial-option-radio-dot" />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="pt-radial-sheet-footer">
-              <button
-                type="button"
-                className="pt-radial-done-btn"
-                onClick={handleDone}
-              >
-                {t("Xong")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {drawerNode && (typeof document !== "undefined" ? createPortal(drawerNode, document.body) : drawerNode)}
     </>
   );
 }
