@@ -4,14 +4,65 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api-client";
 import type { ListResponse } from "@/types/api";
 
+interface CacheEntry {
+  data: unknown;
+  timestamp: number;
+}
+
+const CACHE_FRESH_MS = 25_000;
+const apiCache = new Map<string, CacheEntry>();
+const inflightRequests = new Map<string, Promise<unknown>>();
+
+/** Xóa bộ nhớ đệm API (gọi tự động sau khi mutation thành công hoặc khi làm mới thủ công). */
+export function invalidateApiCache(prefix?: string) {
+  if (!prefix) {
+    apiCache.clear();
+    return;
+  }
+  for (const key of apiCache.keys()) {
+    if (key.startsWith(prefix)) {
+      apiCache.delete(key);
+    }
+  }
+}
+
+function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
+  if (forceRefresh) {
+    apiCache.delete(path);
+  }
+  const existing = inflightRequests.get(path) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const request = api
+    .get<T>(path)
+    .then((result) => {
+      apiCache.set(path, { data: result, timestamp: Date.now() });
+      return result;
+    })
+    .finally(() => {
+      inflightRequests.delete(path);
+    });
+
+  inflightRequests.set(path, request);
+  return request;
+}
+
 /**
  * Tải dữ liệu thô (DTO) từ một đường dẫn API, kèm trạng thái tải/lỗi và `refresh()`.
  * Dùng cho các màn hình cần thao tác ghi (thêm/sửa/xóa) nên giữ nguyên `id` và kiểu số của backend.
+ * Có bộ nhớ đệm stale-while-revalidate & gộp request trùng để chuyển tab mượt tức thì trên máy yếu.
  * `path = null` để tạm chưa tải (ví dụ chờ người dùng chọn bản ghi).
  */
 export function useApi<T>(path: string | null) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(path !== null);
+  const [data, setData] = useState<T | null>(() => {
+    if (path === null) return null;
+    const cached = apiCache.get(path);
+    return cached ? (cached.data as T) : null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (path === null) return false;
+    return !apiCache.has(path);
+  });
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(path);
 
@@ -19,20 +70,31 @@ export function useApi<T>(path: string | null) {
     latest.current = path;
   }, [path]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (forceRefresh = true) => {
     const current = latest.current;
     if (current === null) {
       setData(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    const cached = !forceRefresh ? apiCache.get(current) : undefined;
+    if (cached) {
+      setData(cached.data as T);
+      setLoading(false);
+      if (Date.now() - cached.timestamp < CACHE_FRESH_MS) {
+        return;
+      }
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const result = await api.get<T>(current);
+      const result = await fetchDeduped<T>(current, forceRefresh);
       if (latest.current === current) setData(result);
     } catch (err) {
-      if (latest.current === current) setError(errorMessage(err, "Không tải được dữ liệu."));
+      if (latest.current === current && !cached) {
+        setError(errorMessage(err, "Không tải được dữ liệu."));
+      }
     } finally {
       if (latest.current === current) setLoading(false);
     }
@@ -40,10 +102,26 @@ export function useApi<T>(path: string | null) {
 
   useEffect(() => {
     latest.current = path;
-    void refresh();
+    void refresh(false);
   }, [path, refresh]);
 
-  return { data: path === null ? null : data, loading: path === null ? false : loading, error, refresh, setData };
+  const setCachedData = (next: T | null | ((prev: T | null) => T | null)) => {
+    setData((prev) => {
+      const resolved = typeof next === "function" ? (next as (prev: T | null) => T | null)(prev) : next;
+      if (latest.current && resolved !== null) {
+        apiCache.set(latest.current, { data: resolved, timestamp: Date.now() });
+      }
+      return resolved;
+    });
+  };
+
+  return {
+    data: path === null ? null : data,
+    loading: path === null ? false : loading,
+    error,
+    refresh: () => refresh(true),
+    setData: setCachedData,
+  };
 }
 
 /** Danh sách phân trang chuẩn `{ data, total, page, pageSize }` của backend. */
@@ -85,7 +163,9 @@ export function useMutation<TArgs extends unknown[], TResult>(action: (...args: 
     setPending(true);
     setError(null);
     try {
-      return await actionRef.current(...args);
+      const result = await actionRef.current(...args);
+      invalidateApiCache();
+      return result;
     } catch (err) {
       setError(errorMessage(err));
       return undefined;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNetworkQuality, type NetQuality } from "@/lib/network";
+import { isLowEndDevice, useNetworkQuality, type NetQuality } from "@/lib/network";
 import "./skeleton.css";
 
 type Toast = { kind: "slow" | "offline" | "ok"; text: string } | null;
@@ -39,7 +39,7 @@ function IosSpinner({ className }: { className?: string }) {
 }
 
 /**
- * Ghi trạng thái mạng vào <html data-net="…"> (CSS dựa vào đó để hiện skeleton ngay khi mạng yếu)
+ * Ghi trạng thái mạng và chế độ hiệu năng vào <html data-net="…" data-perf="…">
  * và hiển thị dock thông báo. Hỗ trợ bấm hoặc vuốt ngược lên cạnh trên màn hình để đóng.
  */
 export default function NetworkStatus() {
@@ -61,8 +61,10 @@ export default function NetworkStatus() {
 
   useEffect(() => {
     document.documentElement.dataset.net = quality;
+    document.documentElement.dataset.perf = isLowEndDevice() ? "lite" : "full";
     return () => {
       delete document.documentElement.dataset.net;
+      delete document.documentElement.dataset.perf;
     };
   }, [quality]);
 
@@ -239,9 +241,8 @@ export default function NetworkStatus() {
     ? {
         transform: "translate(-50%, calc(-100% - 36px)) scale(0.92)",
         opacity: 0,
-        filter: "blur(3px)",
         transition:
-          "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.26s ease, filter 0.26s ease",
+          "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.26s ease",
         pointerEvents: "none",
       }
     : isDragging

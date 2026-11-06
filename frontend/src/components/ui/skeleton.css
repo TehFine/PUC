@@ -43,11 +43,9 @@
   gap: 8px;
   padding: 6px 13px 6px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.97);
   border: 1px solid rgba(20, 55, 47, 0.1);
   box-shadow: 0 4px 14px rgba(20, 55, 47, 0.06);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   color: #14372f;
   font-size: 12.5px;
   font-weight: 600;
@@ -90,6 +88,10 @@
 html[data-net="slow"] .sk,
 html[data-net="offline"] .sk {
   animation-duration: 2.2s;
+}
+html[data-perf="lite"] .sk {
+  background: var(--sk-base);
+  animation: none;
 }
 .sk-circle {
   --sk-r: 999px;
@@ -219,22 +221,19 @@ img[data-nimg="fill"] {
   width: max-content;
   padding: 5px 14px 7px 14px;
   border-radius: 999px;
-  background: rgba(18, 48, 41, 0.94);
+  background: rgba(18, 48, 41, 0.97);
   color: #fff;
   font-size: 13.5px;
   line-height: 1.35;
   box-shadow: 0 14px 36px -4px rgba(10, 28, 24, 0.38),
               0 0 0 1px rgba(255, 255, 255, 0.15) inset,
               0 4px 14px rgba(0, 0, 0, 0.16);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   transform: translate(-50%, 0);
   animation: net-toast-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
-  will-change: transform, opacity;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -402,9 +401,7 @@ img[data-nimg="fill"] {
     max-width: calc(100vw - 20px);
     font-size: 13px;
     padding: 5px 12px 6px 11px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    background: rgba(18, 48, 41, 0.96);
+    background: rgba(18, 48, 41, 0.98);
   }
 }
 
