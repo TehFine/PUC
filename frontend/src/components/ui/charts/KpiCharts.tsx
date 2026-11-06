@@ -53,14 +53,33 @@ function useWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
-function resolveIndex(data: ChartPoint[], highlight: Highlight): number {
+function resolveIndex(data: ChartPoint[], highlight: Highlight, preferLastOnTie = false): number {
   if (typeof highlight === "number") return Math.min(Math.max(highlight, 0), data.length - 1);
   if (highlight === "last") return data.length - 1;
   let best = 0;
   data.forEach((p, i) => {
-    if (p.value > data[best].value) best = i;
+    if (preferLastOnTie ? p.value >= data[best].value : p.value > data[best].value) best = i;
   });
   return best;
+}
+
+/** Rút gọn nhãn trục X cho biểu đồ miền xu hướng để không bao giờ đè chữ trên thẻ nhỏ. */
+function formatAreaAxisLabel(p: ChartPoint, stepPx: number): string {
+  if (p.shortLabel) return p.shortLabel;
+  const ym = p.label.match(/^(\d{4})-(\d{2})$/);
+  if (ym) {
+    const m = parseInt(ym[2], 10);
+    const yShort = ym[1].slice(2);
+    if (stepPx < 56) return `T${m}`;
+    if (stepPx < 80) return `T${m}/${yShort}`;
+    return `${ym[2]}/${ym[1]}`;
+  }
+  if (stepPx < 48 && p.label.length > 5) {
+    const num = p.label.match(/\d+$/)?.[0];
+    if (num) return `#${num}`;
+    return p.label.slice(0, 4);
+  }
+  return p.label;
 }
 
 /** Đường cong đơn điệu (Fritsch–Carlson) — mượt nhưng không "vọt" quá giá trị thật. */
@@ -168,7 +187,7 @@ export function AreaTrend({
   const [wrapRef, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const n = data.length;
-  const defaultIdx = n ? resolveIndex(data, highlight) : 0;
+  const defaultIdx = n ? resolveIndex(data, highlight, true) : 0;
   const active = hover ?? defaultIdx;
 
   if (n < 2) return <div className="vc vc-empty" role="img" aria-label={ariaLabel} />;
@@ -176,31 +195,34 @@ export function AreaTrend({
   const values = data.map((p) => p.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
+  const allZero = min === 0 && max === 0;
   const span = max - min || Math.max(Math.abs(max), 1);
-  const lo = min - span * 0.35;
-  const hi = max + span * 0.12;
+  const lo = allZero ? -0.45 : min - span * 0.35;
+  const hi = allZero ? 1.0 : max + span * 0.12;
 
   const isMini = width > 0 && width < 220;
   const isCompact = width > 0 && width < 460;
+  const padX = isMini ? 12 : PAD_X;
 
-  const padTop = isMini ? 26 : isCompact ? 32 : PAD_TOP;
-  const padBottom = isMini ? 16 : isCompact ? 18 : PAD_BOTTOM;
+  const padTop = isMini ? 24 : isCompact ? 32 : PAD_TOP;
+  const padBottom = isMini ? 18 : isCompact ? 20 : PAD_BOTTOM;
   const effectiveHeight = isMini
-    ? Math.min(height, 112)
+    ? Math.min(height, caption ? 98 : 112)
     : isCompact
-    ? Math.min(height, 138)
+    ? Math.min(height, caption ? 132 : 142)
     : height;
 
   const plotTop = padTop;
   const plotBottom = effectiveHeight - padBottom;
-  // Dành khoảng không gian bên phải cho phần vạch kẻ thước
-  const reserveRight = Math.min(Math.max(width * 0.28, isMini ? 36 : isCompact ? 48 : 68), 120);
-  const innerW = Math.max(width - PAD_X * 2 - reserveRight, 1);
+  // Trên thẻ nhỏ (< 300px), để biểu đồ trải đều toàn chiều ngang thẻ cho cân đối
+  const reserveRight =
+    width < 300 ? 0 : Math.min(Math.max(width * 0.22, isCompact ? 44 : 64), 110);
+  const innerW = Math.max(width - padX * 2 - reserveRight, 1);
   const step = innerW / Math.max(n - 1, 1);
 
-  const waveTop = plotTop + (isMini ? 8 : isCompact ? 12 : 16);
+  const waveTop = plotTop + (isMini ? 6 : isCompact ? 10 : 16);
   const pts = data.map((p, i) => ({
-    x: PAD_X + i * step,
+    x: padX + i * step,
     y: plotBottom - ((p.value - lo) / (hi - lo)) * (plotBottom - waveTop),
   }));
 
@@ -210,33 +232,74 @@ export function AreaTrend({
 
   // Sóng hậu cảnh (mist wave) tạo hiệu ứng đa tầng mờ ảo
   const backPts = pts.map((p, i) => {
-    const wave = Math.sin((i / Math.max(n - 1, 1)) * Math.PI * 2.3) * 10;
+    const wave = Math.sin((i / Math.max(n - 1, 1)) * Math.PI * 2.3) * (isMini ? 6 : 10);
     return {
       x: p.x,
-      y: Math.min(Math.max(p.y + wave - 6, plotTop + 4), plotBottom - 2),
+      y: Math.min(Math.max(p.y + wave - (isMini ? 4 : 6), plotTop + 4), plotBottom - 2),
     };
   });
   const backLine = monotonePath(backPts);
   const backArea = `${backLine} L${pts[n - 1].x},${plotBottom} L${pts[0].x},${plotBottom} Z`;
 
   const cur = pts[active];
-  const clipW = Math.max(cur.x, PAD_X + step * 0.3);
+  const lastX = pts[n - 1].x;
+  // Luôn hiển thị trọn vẹn dải sóng tới điểm cuối (hoặc điểm đang chọn nếu ở giữa trên khung lớn)
+  const clipW = reserveRight > 0 && active > 0 ? cur.x : lastX;
+  const rulerStart = (reserveRight > 0 && active > 0 ? cur.x : lastX) + 5.5;
 
-  // Sinh các vạch kẻ thước kỹ thuật phía sau kim mốc
-  const rulerTicks = generateRulerTicks(cur.x + 5.5, width - PAD_X, plotTop, plotBottom, isCompact);
+  // Sinh các vạch kẻ thước kỹ thuật phía sau kim mốc (chỉ khi có vùng reserveRight)
+  const rulerTicks =
+    reserveRight > 0
+      ? generateRulerTicks(rulerStart, width - padX, plotTop, plotBottom, isCompact)
+      : [];
 
   const valText = `${formatValue(data[active].value)}${unit}`;
-  const pinDotY = isMini ? plotTop + 4 : isCompact ? plotTop + 5 : plotTop + 6;
+  const pinDotY = isMini ? plotTop + 3 : isCompact ? plotTop + 4 : plotTop + 6;
   const textY = isMini ? pinDotY - 6 : isCompact ? pinDotY - 8 : pinDotY - 11;
-  const valFontSize = isMini ? 15 : isCompact ? 21 : 28;
-  const textMinX = isMini ? 24 : isCompact ? 32 : 44;
-  const textMaxX = width - textMinX;
-  const textClampX = Math.min(Math.max(cur.x, textMinX), Math.max(textMaxX, textMinX));
-  const labelEvery = n > 8 || (isCompact && n > 6) ? 2 : 1;
+  const valFontSize = isMini ? 12.5 : isCompact ? 16 : 24;
+  const estHalfTextW = Math.ceil(valText.length * valFontSize * 0.31) + padX;
+  const textMinX = Math.min(estHalfTextW, width / 2);
+  const textMaxX = Math.max(width - estHalfTextW, width / 2);
+  const textClampX = Math.min(Math.max(cur.x, textMinX), textMaxX);
+
+  const axisLabels = data.map((p) => formatAreaAxisLabel(p, step));
+  const charW = isMini ? 5.2 : isCompact ? 5.6 : 6.2;
+  const labelWidths = axisLabels.map((lbl) => lbl.length * charW + 4);
+  const showLabel = new Array<boolean>(n).fill(true);
+
+  let hasOverlap = false;
+  for (let i = 0; i < n - 1; i++) {
+    const gap = pts[i + 1].x - pts[i].x;
+    const minNeeded = (labelWidths[i] + labelWidths[i + 1]) / 2 + 4;
+    if (gap < minNeeded) {
+      hasOverlap = true;
+      break;
+    }
+  }
+  if (hasOverlap) {
+    showLabel.fill(false);
+    showLabel[active] = true;
+    let leftBound = pts[active].x - labelWidths[active] / 2;
+    for (let i = active - 1; i >= 0; i--) {
+      const r = pts[i].x + labelWidths[i] / 2;
+      if (leftBound - r >= 5) {
+        showLabel[i] = true;
+        leftBound = pts[i].x - labelWidths[i] / 2;
+      }
+    }
+    let rightBound = pts[active].x + labelWidths[active] / 2;
+    for (let i = active + 1; i < n; i++) {
+      const l = pts[i].x - labelWidths[i] / 2;
+      if (l - rightBound >= 5) {
+        showLabel[i] = true;
+        rightBound = pts[i].x + labelWidths[i] / 2;
+      }
+    }
+  }
 
   const selectPointAtClientX = (el: HTMLDivElement, clientX: number) => {
     const rect = el.getBoundingClientRect();
-    const idx = Math.round((clientX - rect.left - PAD_X) / step);
+    const idx = Math.round((clientX - rect.left - padX) / step);
     const clamped = Math.min(Math.max(idx, 0), n - 1);
     setHover((prev) => (prev === clamped ? prev : clamped));
   };
@@ -277,7 +340,7 @@ export function AreaTrend({
           <svg width={width} height={effectiveHeight} aria-hidden="true" style={{ overflow: "visible" }}>
             <defs>
               {/* Dải gradient cực quang: Xanh lá mạ -> Xanh bạc hà -> Vàng hổ phách -> Cam đào -> Hồng san hô */}
-              <linearGradient id={`${uid}aurora`} gradientUnits="userSpaceOnUse" x1={PAD_X} y1="0" x2={cur.x} y2="0">
+              <linearGradient id={`${uid}aurora`} gradientUnits="userSpaceOnUse" x1={padX} y1="0" x2={Math.max(clipW, padX + 20)} y2="0">
                 <stop offset="0%" stopColor="#4ade80" stopOpacity="0.88" />
                 <stop offset="22%" stopColor="#86efac" stopOpacity="0.88" />
                 <stop offset="50%" stopColor="#fde047" stopOpacity="0.90" />
@@ -286,22 +349,22 @@ export function AreaTrend({
               </linearGradient>
 
               {/* Dải màu cho vạch kẻ thước ở cuối: Cam đào san hô chuyển dần sang hồng thắm */}
-              <linearGradient id={`${uid}ruler`} gradientUnits="userSpaceOnUse" x1={cur.x + 5} y1="0" x2={width - PAD_X} y2="0">
+              <linearGradient id={`${uid}ruler`} gradientUnits="userSpaceOnUse" x1={rulerStart} y1="0" x2={width - padX} y2="0">
                 <stop offset="0%" stopColor="#fb923c" stopOpacity="0.45" />
                 <stop offset="40%" stopColor="#f43f5e" stopOpacity="0.55" />
                 <stop offset="100%" stopColor="#e11d48" stopOpacity="0.65" />
               </linearGradient>
 
-              {/* Mặt nạ cắt lớp sóng tại vạch phân cách cur.x và giữ phẳng đáy */}
+              {/* Mặt nạ cắt lớp sóng tại vạch phân cách và giữ phẳng đáy */}
               <clipPath id={`${uid}clip`}>
-                <rect x="0" y="0" width={clipW} height={plotBottom + 1} />
+                <rect x="0" y="0" width={clipW + 1} height={plotBottom + 1} />
               </clipPath>
             </defs>
 
             {/* Các đường lưới ngang đứt nét rất nhẹ */}
             {[0, 1, 2].map((g) => {
               const y = plotTop + ((plotBottom - plotTop) * g) / 2;
-              return <line key={g} className="vc-grid" x1={0} x2={width} y1={y} y2={y} />;
+              return <line key={g} className="vc-grid" x1={padX} x2={width - padX} y1={y} y2={y} />;
             })}
 
             {/* Tầng 1: Sóng sương mờ hậu cảnh (soft mist silhouette) */}
@@ -361,32 +424,36 @@ export function AreaTrend({
             {/* Chấm tròn pin màu cam ở đỉnh kim mốc như hình mẫu */}
             <circle cx={cur.x} cy={pinDotY} r={isMini ? 2.4 : isCompact ? 2.8 : 3.2} fill="#f97316" />
 
-            {/* Số liệu cụ thể font chữ số kỹ thuật nét mảnh phía trên đỉnh kim */}
+            {/* Số liệu cụ thể phía trên đỉnh kim */}
             <text
               x={textClampX}
               y={textY}
               textAnchor="middle"
               className="vc-aurora-val"
-              style={{ fontSize: valFontSize }}
+              style={{
+                fontSize: valFontSize,
+                fontWeight: isMini || isCompact ? 600 : 300,
+              }}
             >
               {valText}
             </text>
 
             {/* Nhãn trục X phía đáy */}
-            {data.map((p, i) => {
-              if (i % labelEvery !== 0 && i !== n - 1) return null;
-              const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
-              const x = i === 0 ? pts[i].x - 6 : i === n - 1 ? pts[i].x + 4 : pts[i].x;
+            {data.map((_, i) => {
+              if (!showLabel[i]) return null;
+              const lbl = axisLabels[i];
+              const halfLbl = labelWidths[i] / 2;
+              const x = Math.min(Math.max(pts[i].x, padX + halfLbl - 2), width - padX - halfLbl + 2);
               return (
                 <text
                   key={i}
                   className={i === active ? "vc-x is-on" : "vc-x"}
                   x={x}
-                  y={effectiveHeight - 6}
-                  textAnchor={anchor}
+                  y={effectiveHeight - (isMini ? 4 : 5)}
+                  textAnchor="middle"
                   style={isMini ? { fontSize: 9 } : isCompact ? { fontSize: 9.5 } : undefined}
                 >
-                  {p.label}
+                  {lbl}
                 </text>
               );
             })}
@@ -422,7 +489,7 @@ export function GaugeArc({ value, unit = "%", caption, tone = "lime", ariaLabel 
 
   return (
     <div className="vc vc-gauge" data-tone={tone} role="img" aria-label={`${ariaLabel}: ${value}${unit}${caption ? `, ${caption}` : ""}`}>
-      <svg viewBox="0 0 200 112" aria-hidden="true">
+      <svg viewBox="0 10 200 108" aria-hidden="true">
         <defs>
           <linearGradient id={`${uid}g`} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" style={{ stopColor: "var(--vc-gauge-a)" }} />
@@ -431,8 +498,8 @@ export function GaugeArc({ value, unit = "%", caption, tone = "lime", ariaLabel 
         </defs>
         <path className="vc-track" d={arc} pathLength={100} />
         <path className="vc-arc" d={arc} pathLength={100} stroke={`url(#${uid}g)`} strokeDasharray={`${v} 100`} />
-        <text className="vc-x" x={G_CX - G_R} y={G_CY + 15} textAnchor="middle">0</text>
-        <text className="vc-x" x={G_CX + G_R} y={G_CY + 15} textAnchor="middle">100</text>
+        <text className="vc-x" x={G_CX - G_R} y={G_CY + 14} textAnchor="middle">0</text>
+        <text className="vc-x" x={G_CX + G_R} y={G_CY + 14} textAnchor="middle">100</text>
       </svg>
       <div className="vc-gauge-center">
         <strong>
@@ -539,14 +606,14 @@ export function SoftBars({
   if (!n) return <div className="vc vc-empty" role="img" aria-label={ariaLabel} />;
 
   const isCompact = width > 0 && width < 260;
-  const isMini = width > 0 && width < 180;
-  const effectiveHeight = isMini ? 120 : isCompact ? 135 : height;
+  const isMini = width > 0 && width < 200;
+  const effectiveHeight = isMini ? 116 : isCompact ? 132 : height;
 
   const maxVal = Math.max(...data.map((p) => p.value), 0.0001);
 
-  const PAD_TOP = 38;
-  const PAD_BOTTOM = 22;
-  const PAD_X = isMini ? 8 : isCompact ? 10 : 12;
+  const PAD_TOP = isMini ? 34 : 38;
+  const PAD_BOTTOM = isMini ? 20 : 22;
+  const PAD_X = isMini ? 11 : isCompact ? 12 : 14;
   const plotW = Math.max(width - 2 * PAD_X, 10);
   const plotH = Math.max(effectiveHeight - PAD_TOP - PAD_BOTTOM, 24);
   const plotBottom = effectiveHeight - PAD_BOTTOM;
@@ -665,12 +732,15 @@ export function SoftBars({
   const curY = curBar?.y ?? plotBottom;
 
   const valStr = `${formatValue(curPoint.value)}${unit}`;
+  const charFactor = isMini ? 5.8 : 6.6;
+  const padTip = isMini ? 18 : 24;
   const estTipW = Math.max(
-    isMini ? 72 : 88,
-    (curPoint.label.length + valStr.length) * 6.8 + 26
+    isMini ? 52 : 76,
+    (curPoint.label.length + valStr.length) * charFactor + padTip
   );
-  const halfTip = Math.min(estTipW / 2, Math.max(width / 2 - 4, 36));
-  const textClampX = Math.max(halfTip, Math.min(width - halfTip, curX));
+  const halfTip = Math.min(estTipW / 2, Math.max(width / 2 - 8, 26));
+  const edgePad = isMini ? 10 : 12;
+  const textClampX = Math.max(halfTip + edgePad, Math.min(width - halfTip - edgePad, curX));
 
   return (
     <div
@@ -690,8 +760,8 @@ export function SoftBars({
             style={{
               left: textClampX,
               bottom: Math.min(
-                Math.max(effectiveHeight - curY + 7, 44),
-                effectiveHeight - 28
+                Math.max(effectiveHeight - curY + (isMini ? 5 : 7), isMini ? 38 : 44),
+                effectiveHeight - (isMini ? 24 : 28)
               ),
             }}
           >
@@ -1116,6 +1186,18 @@ export function GradientMeter({ value, caption, unit = "%", ariaLabel }: Gradien
 export type KpiChartSpec =
   | { kind: "area" | "bars"; data: ChartPoint[]; tone: ChartTone; unit?: string; highlight?: "max" | "last"; formatValue?: (v: number) => string; caption?: string }
   | { kind: "gauge"; value: number; target?: number; caption: string; tone: ChartTone };
+
+/** Tách phần số và phần đơn vị (ví dụ "33,9 tấn" -> 33,9 + <small>tấn</small>) để không tràn chữ trên thẻ nhỏ. */
+export function renderKpiValue(val: string) {
+  const m = val.match(/^([\d.,]+%?)\s+(.+)$/);
+  if (!m) return val;
+  return (
+    <>
+      <span>{m[1]}</span>
+      <small className="kpi-val-unit">{m[2]}</small>
+    </>
+  );
+}
 
 /** Vùng biểu đồ ở đáy thẻ số liệu: area/bars tràn sát mép, gauge canh giữa. */
 export function KpiChartView({ chart, label, suffix = "theo tháng" }: { chart: KpiChartSpec; label: string; suffix?: string }) {

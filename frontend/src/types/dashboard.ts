@@ -27,6 +27,7 @@ export interface DashboardVillage {
   name: string;
   households?: number;
   qualified?: number;
+  plots?: number;
   areaHa?: number;
 }
 

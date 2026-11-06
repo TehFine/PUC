@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Lock } from "lucide-react";
+import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
 import type { PlotFeature } from "@/types/geo";
@@ -22,14 +23,49 @@ interface PlotPopupProps {
  */
 export default function PlotPopup({ feature, overlaps, onCompare, onClose }: PlotPopupProps) {
   const props = feature.properties;
+  const popupRef = useRef<HTMLElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
+  const isClosingRef = useRef(false);
+
+  const handleClose = useCallback(() => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    const el = popupRef.current;
+    if (el) {
+      el.style.animation = "none";
+      el.style.pointerEvents = "none";
+      el.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms ease";
+      el.style.transform = "translate3d(0, 105%, 0)";
+      el.style.opacity = "0";
+      setTimeout(() => {
+        isClosingRef.current = false;
+        onClose();
+      }, 220);
+      return;
+    }
+    isClosingRef.current = false;
+    onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    isClosingRef.current = false;
+    if (popupRef.current) {
+      popupRef.current.style.transition = "";
+      popupRef.current.style.transform = "";
+      popupRef.current.style.opacity = "";
+      popupRef.current.style.pointerEvents = "";
+    }
+  }, [feature.properties.code]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") handleClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [handleClose]);
+
+  useSheetSwipe({ sheetRef: popupRef, handleRef: headRef, onDismiss: handleClose });
 
   const facts: Array<{ label: string; value: string; wide?: boolean }> = [
     { label: "Số tờ / số thửa", value: `${props.sheet || "—"} / ${props.parcel || "—"}` },
@@ -42,21 +78,27 @@ export default function PlotPopup({ feature, overlaps, onCompare, onClose }: Plo
 
   return (
     <section
+      ref={popupRef}
       className="plotmap-popup"
       role="dialog"
       aria-modal="false"
       aria-label={`Thông tin thửa ${props.code}`}
       onClick={(event) => event.stopPropagation()}
     >
-      <header className="pp-head">
-        <div>
-          <div className="pp-kicker">Thửa đất · {props.code}</div>
-          <h3 className="pp-title">Tờ/thửa {featureLabel(feature)}</h3>
+      <div ref={headRef} className="pt-sheet-topbar">
+        <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
+          <div className="pt-sheet-handle-bar" />
         </div>
-        <button type="button" className="pp-close" onClick={onClose} aria-label="Đóng">
-          <CloseCircleIcon size={28} strokeWidth={2.2} />
-        </button>
-      </header>
+        <header className="pp-head">
+          <div>
+            <div className="pp-kicker">Thửa đất · {props.code}</div>
+            <h3 className="pp-title">Tờ/thửa {featureLabel(feature)}</h3>
+          </div>
+          <button type="button" className="pp-close" onClick={handleClose} aria-label="Đóng">
+            <CloseCircleIcon size={28} strokeWidth={2.2} />
+          </button>
+        </header>
+      </div>
 
       <div className="pp-badges">
         <span className={`badge ${STATUS_BADGE[props.status]}`}>{STATUS_LABELS[props.status]}</span>
@@ -104,7 +146,7 @@ export default function PlotPopup({ feature, overlaps, onCompare, onClose }: Plo
         <button type="button" className="btn btn-primary btn-sm" onClick={onCompare}>
           Đối chiếu thửa này
         </button>
-        <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
+        <button type="button" className="btn btn-outline btn-sm" onClick={handleClose}>
           Đóng
         </button>
       </div>

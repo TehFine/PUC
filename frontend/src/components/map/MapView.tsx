@@ -15,6 +15,8 @@ import {
 import ComparisonResult from "./ComparisonResult";
 import DraftForm from "./DraftForm";
 import DrawHint from "./DrawHint";
+import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { AppleLoadingPill } from "@/components/ui/Skeleton";
 import {
   defaultForm,
@@ -575,6 +577,35 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
   const showPopup = Boolean(selectedFeature) && !draft && !comparison && mode === "idle";
   const showPanel = Boolean(draft || comparison || message) || mode !== "idle";
 
+  const panelRef = useRef<HTMLElement>(null);
+  const panelHeadRef = useRef<HTMLDivElement>(null);
+
+  const handleDismissPanel = useCallback(() => {
+    const el = panelRef.current;
+    if (el) {
+      el.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms ease";
+      el.style.transform = "translate3d(0, 105%, 0)";
+      el.style.opacity = "0";
+      setTimeout(() => {
+        closePanel();
+        if (panelRef.current) {
+          panelRef.current.style.transition = "";
+          panelRef.current.style.transform = "";
+          panelRef.current.style.opacity = "";
+        }
+      }, 220);
+      return;
+    }
+    closePanel();
+  }, [closePanel]);
+
+  useSheetSwipe({
+    sheetRef: panelRef,
+    handleRef: panelHeadRef,
+    onDismiss: handleDismissPanel,
+    enabled: showPanel,
+  });
+
   const { kicker: panelKicker, title: panelTitle } = panelHeading({
     mode,
     draft,
@@ -622,15 +653,20 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
       )}
 
       {showPanel && (
-        <aside className="plotmap-panel">
-          <div className="plotmap-panel-head">
-            <div>
-              <div className="plotmap-kicker">{panelKicker}</div>
-              <div className="plotmap-title">{panelTitle}</div>
+        <aside ref={panelRef} className="plotmap-panel">
+          <div ref={panelHeadRef} className="pt-sheet-topbar">
+            <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
+              <div className="pt-sheet-handle-bar" />
             </div>
-            <button type="button" className="map-tool" onClick={closePanel}>
-              Đóng
-            </button>
+            <div className="plotmap-panel-head">
+              <div>
+                <div className="plotmap-kicker">{panelKicker}</div>
+                <div className="plotmap-title">{panelTitle}</div>
+              </div>
+              <button type="button" className="pp-close" onClick={handleDismissPanel} aria-label="Đóng">
+                <CloseCircleIcon size={28} />
+              </button>
+            </div>
           </div>
 
           <div className="plotmap-panel-body">

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { NEWS_CATEGORIES, type NewsArticle } from "./news-data";
 import { useNewsArticles } from "@/lib/news-store";
+import { lockRootScroll } from "@/lib/scroll-lock";
 
 export default function News() {
   const { articles } = useNewsArticles();
@@ -13,19 +14,16 @@ export default function News() {
 
   // Khóa cuộn trang khi mở modal đọc bài viết
   useEffect(() => {
-    if (readingArticle) {
-      document.body.style.overflow = "hidden";
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Escape") setReadingArticle(null);
-      };
-      window.addEventListener("keydown", handleKeyDown);
-      return () => {
-        document.body.style.overflow = "";
-        window.removeEventListener("keydown", handleKeyDown);
-      };
-    } else {
-      document.body.style.overflow = "";
-    }
+    if (!readingArticle) return;
+    const unlockScroll = lockRootScroll();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setReadingArticle(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      unlockScroll();
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, [readingArticle]);
 
   const filteredArticles =
