@@ -6,14 +6,16 @@ types.setTypeParser(1700, (value) => Number.parseFloat(value));
 types.setTypeParser(1082, (value) => value);
 
 export function createPool(options: { url: string; ssl: boolean }): Pool {
+  const poolMax = Number(process.env.DB_POOL_MAX) || 4;
   const pool = new Pool({
     connectionString: options.url,
     ssl: options.ssl ? { rejectUnauthorized: false } : undefined,
-    max: 10,
-    // CSDL từ xa (Supabase): mở kết nối mới mất ~1,5–2 giây (bắt tay TLS) so với ~0,2 giây khi dùng lại.
-    // Giữ kết nối rảnh lâu hơn (10 phút thay vì 30 giây) và bật TCP keep-alive để người dùng
-    // không phải chờ mở lại kết nối mỗi khi quay lại trang sau một lúc không thao tác.
-    idleTimeoutMillis: 10 * 60_000,
+    // Giới hạn tối đa 4 kết nối/tiến trình để khi chạy song song cả Render lẫn localhost
+    // (hoặc khi nhiều truy vấn Promise.all chạy cùng lúc) không bao giờ vượt ngưỡng
+    // pool_size: 15 của Supabase Session Mode (EMAXCONNSESSION). pg.Pool sẽ tự xếp hàng
+    // các truy vấn trên các kết nối sẵn có.
+    max: poolMax,
+    idleTimeoutMillis: 30_000,
     keepAlive: true,
     keepAliveInitialDelayMillis: 10_000,
     // Không treo request vô thời hạn khi CSDL không phản hồi.

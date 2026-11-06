@@ -79,6 +79,7 @@ export class DashboardService {
         `SELECT v.id, v.name,
                 count(h.id)::int AS households,
                 count(h.id) FILTER (WHERE h.status = 'qualified')::int AS qualified,
+                COALESCE(sum(h.plot_count), 0)::int AS plots,
                 COALESCE(sum(h.area_ha), 0)::float8 AS area_ha
          FROM villages v
          LEFT JOIN households h ON h.village_id = v.id

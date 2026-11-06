@@ -20,6 +20,8 @@ export interface NotificationInput {
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
+  private readonly lastSyncedAt = new Map<number, number>();
+  private static readonly SYNC_THROTTLE_MS = 15_000;
 
   constructor(private readonly db: DatabaseService) {}
 
@@ -75,6 +77,11 @@ export class NotificationsService {
    * vào bảng notifications của hộ nông dân, đồng thời tự đánh dấu đã đọc khi vi phạm đã xử lý xong.
    */
   async syncFarmerNotifications(user: AuthUser): Promise<void> {
+    const now = Date.now();
+    const lastSync = this.lastSyncedAt.get(user.id) ?? 0;
+    if (now - lastSync < NotificationsService.SYNC_THROTTLE_MS) return;
+    this.lastSyncedAt.set(user.id, now);
+
     try {
       let householdId = user.householdId;
       if (!householdId) {
@@ -86,37 +93,10 @@ export class NotificationsService {
       }
       if (!householdId) return;
 
-      // Trên môi trường Render (chỉ chạy node dist/main.js, không tự chạy lại seedDemoFarmers mỗi lần khởi động):
-      // đảm bảo lịch kiểm tra mẫu sắp tới và vi phạm mẫu của hộ demo luôn có sẵn như ở localhost.
-      await Promise.all([
-        this.db.query(
-          `UPDATE violations v
-           SET household_id = h.id
-           FROM households h
-           WHERE v.household_id IS NULL
-             AND h.id = $1
-             AND v.household_label ILIKE h.name || '%'`,
-          [householdId],
-        ),
-        this.db.query(
-          `INSERT INTO violations (severity, title, household_label, detected_on, plot_code, description, household_id)
-           SELECT 'warning', 'Nhật ký canh tác chưa cập nhật 7+ ngày', h.name || ' – Thôn 1', current_date - 3, 'TH1-001',
-                  'Theo quy định HTX, hộ cần ghi nhật ký canh tác tối thiểu 7 ngày/lần. Vui lòng cập nhật sớm.', h.id
-           FROM households h
-           WHERE h.id = $1 AND h.phone = '0905123456'
-             AND NOT EXISTS (SELECT 1 FROM violations WHERE household_id = h.id)`,
-          [householdId],
-        ),
-        this.db.query(
-          `INSERT INTO inspection_schedule (scheduled_on, title, officer, plot_count, kind)
-           SELECT current_date + 5, 'Kiểm tra định kỳ vùng trồng Thôn 1', 'Lê Văn Kiểm', 12, 'periodic'
-           WHERE NOT EXISTS (SELECT 1 FROM inspection_schedule WHERE scheduled_on >= current_date)`,
-        ),
-      ]);
-
-      await Promise.all([
-        this.db.query(
-          `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+      // Gộp 3 bước đồng bộ thông báo vào 1 câu lệnh CTE để chỉ chiếm 1 kết nối từ pool
+      await this.db.query(
+        `WITH ins_viol AS (
+           INSERT INTO notifications (user_id, kind, title, body, link, created_at)
            SELECT
              $1,
              'violation',
@@ -132,11 +112,10 @@ export class NotificationsService {
                WHERE n.user_id = $1
                  AND (n.link = '/portal?tab=diary&violationId=' || v.id OR (n.kind = 'violation' AND n.title LIKE '%' || v.title))
              )
-           ORDER BY v.detected_on ASC, v.id ASC`,
-          [user.id, householdId],
-        ),
-        this.db.query(
-          `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+           ORDER BY v.detected_on ASC, v.id ASC
+         ),
+         ins_sched AS (
+           INSERT INTO notifications (user_id, kind, title, body, link, created_at)
            SELECT
              $1,
              'schedule',
@@ -151,23 +130,21 @@ export class NotificationsService {
                WHERE n.user_id = $1
                  AND (n.link = '/portal?tab=inspection&scheduleId=' || i.id OR (n.kind = 'schedule' AND n.title LIKE '%' || i.title))
              )
-           ORDER BY i.scheduled_on ASC, i.id ASC`,
-          [user.id],
-        ),
-        this.db.query(
-          `UPDATE notifications n
-           SET read_at = now()
-           WHERE n.user_id = $1
-             AND n.read_at IS NULL
-             AND n.link LIKE '/portal?tab=diary&violationId=%'
-             AND EXISTS (
-               SELECT 1 FROM violations v
-               WHERE '/portal?tab=diary&violationId=' || v.id = n.link AND v.status <> 'open'
-             )`,
-          [user.id],
-        ),
-      ]);
+           ORDER BY i.scheduled_on ASC, i.id ASC
+         )
+         UPDATE notifications n
+         SET read_at = now()
+         WHERE n.user_id = $1
+           AND n.read_at IS NULL
+           AND n.link LIKE '/portal?tab=diary&violationId=%'
+           AND EXISTS (
+             SELECT 1 FROM violations v
+             WHERE '/portal?tab=diary&violationId=' || v.id = n.link AND v.status <> 'open'
+           )`,
+        [user.id, householdId],
+      );
     } catch (error) {
+      this.lastSyncedAt.delete(user.id);
       this.logger.error(
         `Không đồng bộ được thông báo hộ nông dân: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -179,6 +156,11 @@ export class NotificationsService {
    * vào bảng notifications của cán bộ quản trị, đồng thời tự động đánh dấu đã đọc khi hồ sơ/vi phạm đã xử lý xong.
    */
   private async syncStaffNotifications(user: AuthUser): Promise<void> {
+    const now = Date.now();
+    const lastSync = this.lastSyncedAt.get(user.id) ?? 0;
+    if (now - lastSync < NotificationsService.SYNC_THROTTLE_MS) return;
+    this.lastSyncedAt.set(user.id, now);
+
     try {
       const isVillageScoped = user.role === "village_officer";
       const villageId = isVillageScoped ? (user.villageId ?? -1) : null;
@@ -192,12 +174,10 @@ export class NotificationsService {
           ? "AND v.household_id IN (SELECT id FROM households WHERE village_id = $2)"
           : "";
 
-      // Ba bước dưới đây tác động lên các nhóm thông báo tách biệt (hồ sơ chờ duyệt / vi phạm đang mở /
-      // mục đã xử lý xong) nên chạy song song: 1 lượt chờ CSDL thay vì 3.
-      await Promise.all([
-        // 1. Tạo thông báo thực cho từng hồ sơ đang chờ duyệt (pending) nếu chưa có
-        this.db.query(
-          `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+      // Gộp 3 bước đồng bộ thông báo quản trị vào 1 câu lệnh CTE trên 1 kết nối CSDL duy nhất
+      await this.db.query(
+        `WITH ins_appr AS (
+           INSERT INTO notifications (user_id, kind, title, body, link, created_at)
            SELECT
              $1,
              'approval',
@@ -211,13 +191,10 @@ export class NotificationsService {
                SELECT 1 FROM notifications n
                WHERE n.user_id = $1 AND n.link = '/admin?section=approval&id=' || a.id
              )
-           ORDER BY a.submitted_on ASC, a.id ASC`,
-          params,
-        ),
-
-        // 2. Tạo thông báo thực cho từng cảnh báo vi phạm đang mở (open) nếu chưa có
-        this.db.query(
-          `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+           ORDER BY a.submitted_on ASC, a.id ASC
+         ),
+         ins_viol AS (
+           INSERT INTO notifications (user_id, kind, title, body, link, created_at)
            SELECT
              $1,
              'violation',
@@ -231,31 +208,27 @@ export class NotificationsService {
                SELECT 1 FROM notifications n
                WHERE n.user_id = $1 AND n.link = '/admin?section=journal&violationId=' || v.id
              )
-           ORDER BY v.detected_on ASC, v.id ASC`,
-          params,
-        ),
-
-        // 3. Tự động đánh dấu đã đọc với các thông báo gắn với hồ sơ đã duyệt/từ chối hoặc vi phạm đã đóng
-        this.db.query(
-          `UPDATE notifications n
-           SET read_at = now()
-           WHERE n.user_id = $1
-             AND n.read_at IS NULL
-             AND (
-               (n.link LIKE '/admin?section=approval&id=%' AND EXISTS (
-                 SELECT 1 FROM approvals a
-                 WHERE '/admin?section=approval&id=' || a.id = n.link AND a.status <> 'pending'
-               ))
-               OR
-               (n.link LIKE '/admin?section=journal&violationId=%' AND EXISTS (
-                 SELECT 1 FROM violations v
-                 WHERE '/admin?section=journal&violationId=' || v.id = n.link AND v.status <> 'open'
-               ))
-             )`,
-          [user.id],
-        ),
-      ]);
+           ORDER BY v.detected_on ASC, v.id ASC
+         )
+         UPDATE notifications n
+         SET read_at = now()
+         WHERE n.user_id = $1
+           AND n.read_at IS NULL
+           AND (
+             (n.link LIKE '/admin?section=approval&id=%' AND EXISTS (
+               SELECT 1 FROM approvals a
+               WHERE '/admin?section=approval&id=' || a.id = n.link AND a.status <> 'pending'
+             ))
+             OR
+             (n.link LIKE '/admin?section=journal&violationId=%' AND EXISTS (
+               SELECT 1 FROM violations v
+               WHERE '/admin?section=journal&violationId=' || v.id = n.link AND v.status <> 'open'
+             ))
+           )`,
+        params,
+      );
     } catch (error) {
+      this.lastSyncedAt.delete(user.id);
       this.logger.error(
         `Không đồng bộ được thông báo quản trị: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -274,6 +247,7 @@ export class NotificationsService {
 
   private async insert(recipientsSql: string, params: unknown[]) {
     try {
+      this.lastSyncedAt.clear();
       await this.db.query(
         `INSERT INTO notifications (user_id, kind, title, body, link)
          SELECT r.id, $1, $2, $3, $4 FROM (${recipientsSql}) r`,
