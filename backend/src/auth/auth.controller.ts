@@ -16,6 +16,8 @@ const REGISTER_WINDOW_MS = 60 * 60 * 1000;
 // Làm mới phiên: giới hạn 30 lần/phút mỗi IP.
 const REFRESH_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 30;
 const REFRESH_WINDOW_MS = 60 * 1000;
+// Đổi mật khẩu: giới hạn 10 lần/15 phút để chống dò mật khẩu hiện tại.
+const CHANGE_PASSWORD_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 10;
 
 @Controller("auth")
 export class AuthController {
@@ -88,6 +90,7 @@ export class AuthController {
     return this.auth.sessionOf(user);
   }
 
+  @Throttle({ default: { limit: CHANGE_PASSWORD_LIMIT, ttl: LOGIN_WINDOW_MS } })
   @Post("change-password")
   @HttpCode(200)
   async changePassword(

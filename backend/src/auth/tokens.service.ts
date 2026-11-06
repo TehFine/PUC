@@ -7,6 +7,8 @@ import type { AppConfig } from "../config/configuration";
 
 export const ACCESS_COOKIE = "htx_access";
 export const REFRESH_COOKIE = "htx_refresh";
+export const JWT_ISSUER = "puc-krongbuk-api";
+export const JWT_AUDIENCE = "puc-krongbuk-client";
 
 @Injectable()
 export class TokensService {
@@ -22,13 +24,20 @@ export class TokensService {
   }
 
   signAccessToken(userId: number): Promise<string> {
-    return this.jwt.signAsync({}, { subject: String(userId) });
+    return this.jwt.signAsync(
+      {},
+      { subject: String(userId), algorithm: "HS256", issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
+    );
   }
 
   /** Trả về id người dùng nếu token hợp lệ, ngược lại null. */
   async verifyAccessToken(token: string): Promise<number | null> {
     try {
-      const payload = await this.jwt.verifyAsync<{ sub?: string }>(token);
+      const payload = await this.jwt.verifyAsync<{ sub?: string }>(token, {
+        algorithms: ["HS256"],
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+      });
       const id = Number(payload.sub);
       return Number.isInteger(id) && id > 0 ? id : null;
     } catch {

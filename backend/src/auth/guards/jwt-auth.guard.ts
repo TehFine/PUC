@@ -36,10 +36,16 @@ export class JwtAuthGuard implements CanActivate {
       status: string;
       village_id: number | null;
       household_id: number | null;
-    }>("SELECT id, full_name, username, role, status, village_id, household_id FROM users WHERE id = $1", [userId]);
+      locked_until: Date | null;
+    }>(
+      "SELECT id, full_name, username, role, status, village_id, household_id, locked_until FROM users WHERE id = $1",
+      [userId],
+    );
 
     const row = rows[0];
-    if (!row || row.status !== "active") throw unauthorized();
+    if (!row || row.status !== "active" || (row.locked_until && row.locked_until.getTime() > Date.now())) {
+      throw unauthorized();
+    }
 
     request.user = {
       id: row.id,

@@ -158,7 +158,10 @@ export class AuthService {
       if (payload.iss !== "https://accounts.google.com" && payload.iss !== "accounts.google.com") {
         throw unauthorized("Nguồn phát hành token Google không hợp lệ.");
       }
-      if (this.googleClientId && payload.aud !== this.googleClientId) {
+      if (!this.googleClientId) {
+        throw unauthorized("Chức năng đăng nhập Google chưa được cấu hình (thiếu GOOGLE_CLIENT_ID).");
+      }
+      if (payload.aud !== this.googleClientId) {
         throw unauthorized("Token Google không khớp ứng dụng (client_id).");
       }
       const expSec = Number(payload.exp ?? 0);
@@ -183,13 +186,12 @@ export class AuthService {
 
     if (dto.credential) {
       const { email } = await this.verifyGoogleIdToken(dto.credential);
-      const localPart = email.split("@")[0] ?? "";
       const { rows } = await this.db.query<UserRow>(
         `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
          FROM users u
-         WHERE (LOWER(u.username) = $1 OR LOWER(u.username) = $2)
+         WHERE LOWER(u.username) = $1 AND position('@' in u.username) > 0
          LIMIT 1`,
-        [email, localPart],
+        [email],
       );
       user = rows[0];
     } else if (!this.isProduction && !this.googleClientId) {
@@ -278,8 +280,9 @@ export class AuthService {
       expires_at: Date;
       revoked_at: Date | null;
       status: string;
+      locked_until: Date | null;
     }>(
-      `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked_at, u.status
+      `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked_at, u.status, u.locked_until
        FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id
        WHERE rt.token_hash = $1`,
       [this.tokens.hashToken(token)],
@@ -294,9 +297,21 @@ export class AuthService {
       }
       throw new RefreshRejected();
     }
-    if (row.expires_at.getTime() < Date.now() || row.status !== "active") throw new RefreshRejected();
+    if (
+      row.expires_at.getTime() < Date.now() ||
+      row.status !== "active" ||
+      (row.locked_until && row.locked_until.getTime() > Date.now())
+    ) {
+      throw new RefreshRejected();
+    }
 
-    await this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1", [row.id]);
+    const revoked = await this.db.query(
+      "UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL",
+      [row.id],
+    );
+    if (revoked.rowCount === 0) {
+      throw new RefreshRejected();
+    }
     return this.issueSession(row.user_id, meta);
   }
 
@@ -308,15 +323,35 @@ export class AuthService {
   }
 
   async changePassword(user: AuthUser, dto: ChangePasswordDto, ip?: string): Promise<void> {
-    const { rows } = await this.db.query<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = $1", [
-      user.id,
-    ]);
-    if (!(await bcrypt.compare(dto.currentPassword, rows[0].password_hash))) {
+    const { rows } = await this.db.query<{
+      password_hash: string;
+      failed_login_count: number;
+      locked_until: Date | null;
+    }>("SELECT password_hash, failed_login_count, locked_until FROM users WHERE id = $1", [user.id]);
+    const current = rows[0];
+    if (!current) throw unauthorized();
+    if (current.locked_until && current.locked_until.getTime() > Date.now()) {
+      throw new AppException(429, "Tài khoản tạm khóa do nhập sai mật khẩu nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
+    }
+
+    if (!(await bcrypt.compare(dto.currentPassword, current.password_hash))) {
+      const failed = current.failed_login_count + 1;
+      const lock = failed >= MAX_FAILED_LOGINS;
+      await this.db.query(
+        `UPDATE users SET failed_login_count = $2,
+           locked_until = CASE WHEN $3 THEN now() + make_interval(mins => $4) ELSE locked_until END
+         WHERE id = $1`,
+        [user.id, lock ? 0 : failed, lock, LOCK_MINUTES],
+      );
+      if (lock) {
+        await this.revokeAllSessions(user.id);
+      }
+      await this.audit.write({ ip, user }, { action: "Đổi mật khẩu thất bại", object: user.username });
       throw badRequest("Mật khẩu hiện tại không đúng.");
     }
     if (dto.currentPassword === dto.newPassword) throw badRequest("Mật khẩu mới phải khác mật khẩu hiện tại.");
 
-    await this.db.query("UPDATE users SET password_hash = $2 WHERE id = $1", [
+    await this.db.query("UPDATE users SET password_hash = $2, failed_login_count = 0, locked_until = NULL WHERE id = $1", [
       user.id,
       await bcrypt.hash(dto.newPassword, 12),
     ]);
@@ -332,6 +367,11 @@ export class AuthService {
 
   private async issueSession(userId: number, meta: ClientMeta): Promise<IssuedTokens> {
     const refresh = this.tokens.newRefreshToken();
+    await this.db.query(
+      `DELETE FROM refresh_tokens
+       WHERE user_id = $1 AND (expires_at < now() OR revoked_at < now() - interval '1 day')`,
+      [userId],
+    );
     await this.db.query(
       `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent, ip)
        VALUES ($1, $2, now() + make_interval(days => $3), $4, $5)`,

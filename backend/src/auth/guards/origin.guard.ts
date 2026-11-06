@@ -10,16 +10,21 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 @Injectable()
 export class OriginGuard implements CanActivate {
   private readonly allowed: string[];
-  private readonly isProduction: boolean;
+  private readonly isTest: boolean;
 
   constructor(config: ConfigService<AppConfig, true>) {
     this.allowed = config.get("corsOrigins", { infer: true });
-    this.isProduction = config.get("isProduction", { infer: true });
+    this.isTest = config.get("nodeEnv", { infer: true }) === "test";
   }
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
     if (SAFE_METHODS.has(request.method)) return true;
+
+    const secFetchSite = request.headers["sec-fetch-site"];
+    if (secFetchSite === "cross-site") {
+      throw forbidden("Nguồn gửi yêu cầu chéo trang (cross-site) không được phép.");
+    }
 
     const origin = request.headers.origin;
     if (origin) {
@@ -41,7 +46,7 @@ export class OriginGuard implements CanActivate {
       return true;
     }
 
-    if (this.isProduction && request.headers.cookie) {
+    if (!this.isTest && request.headers.cookie) {
       throw forbidden("Thiếu thông tin nguồn gửi yêu cầu (Origin/Referer).");
     }
 
