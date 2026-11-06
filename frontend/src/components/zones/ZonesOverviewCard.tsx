@@ -24,9 +24,12 @@ export default function ZonesOverviewCard({
     .slice(0, 8)
     .map((zone) => {
       const match = zone.code.match(/VT-(\d+)/i);
+      const pucTail = zone.code.match(/-(\d{4,5})$/);
       const shortLabel = match
         ? `VT-${parseInt(match[1], 10).toString().padStart(2, "0")}`
-        : zone.code.replace(/^[A-Z]{2,4}-/, "");
+        : pucTail
+          ? pucTail[1]
+          : zone.code.replace(/^[A-Z]{2,4}-/, "");
       return {
         label: zone.code,
         shortLabel,

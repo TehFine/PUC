@@ -1,6 +1,6 @@
 import type * as Leaflet from "leaflet";
 
-export const MAP_CENTER: Leaflet.LatLngTuple = [12.726, 108.152];
+export const MAP_CENTER: Leaflet.LatLngTuple = [13.125, 108.185];
 
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
 const DARK_ATTRIBUTION = "Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap contributors";

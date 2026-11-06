@@ -20,15 +20,6 @@ export interface PlotsSummary {
   persisted: number;
 }
 
-export const ZONES: ZoneMeta[] = [
-  { code: "KB-VT-001", village: "Thôn 1", status: "Đủ chuẩn", cls: "badge-green" },
-  { code: "KB-VT-002", village: "Thôn 2", status: "Đủ chuẩn", cls: "badge-green" },
-  { code: "KB-VT-003", village: "Thôn 3", status: "Cần cải thiện", cls: "badge-gold" },
-  { code: "KB-VT-004", village: "Thôn 4", status: "Đủ chuẩn", cls: "badge-green" },
-  { code: "KB-VT-005", village: "Thôn 5", status: "Chưa đạt", cls: "badge-red" },
-  { code: "KB-VT-006", village: "Thôn 6", status: "Cần cải thiện", cls: "badge-gold" },
-];
-
 export function plotArea(feature: PlotFeature): number {
   return feature.properties.areaHa || polygonAreaHa(feature.geometry);
 }
@@ -45,22 +36,35 @@ export function summarizePlots(features: PlotFeature[]): PlotsSummary {
   return { totalArea, zones: zones.size, sources, persisted };
 }
 
+function deriveZoneStatus(items: PlotFeature[]): { status: string; cls: string } {
+  if (items.length === 0) return { status: "Chờ duyệt", cls: "badge-gray" };
+  if (items.some((item) => item.properties.status === "violation")) {
+    return { status: "Chưa đạt", cls: "badge-red" };
+  }
+  if (items.some((item) => item.properties.status === "improve")) {
+    return { status: "Cần cải thiện", cls: "badge-gold" };
+  }
+  if (items.some((item) => item.properties.status === "pending")) {
+    return { status: "Chờ duyệt", cls: "badge-gray" };
+  }
+  return { status: "Đủ chuẩn", cls: "badge-green" };
+}
+
 export function buildZoneRows(features: PlotFeature[]): ZoneRowData[] {
-  const metadata = new Map(ZONES.map((zone) => [zone.code, zone]));
   const codes = Array.from(
     new Set(features.map((feature) => feature.properties.zone).filter(Boolean)),
   ).sort();
-  const rows = codes.length > 0 ? codes : ZONES.map((zone) => zone.code);
 
-  return rows.map((code) => {
+  return codes.map((code) => {
     const items = features.filter((feature) => feature.properties.zone === code);
     const area = items.reduce((sum, feature) => sum + plotArea(feature), 0);
-    const meta = metadata.get(code);
+    const village = items.find((item) => item.properties.village)?.properties.village || "Chưa gán thôn";
+    const { status, cls } = deriveZoneStatus(items);
     return {
       code,
-      village: meta?.village ?? items[0]?.properties.village ?? "Chưa gán thôn",
-      status: meta?.status ?? "Chờ duyệt",
-      cls: meta?.cls ?? "badge-gray",
+      village,
+      status,
+      cls,
       count: items.length,
       area,
     };
