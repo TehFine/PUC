@@ -11,6 +11,8 @@ id_rsa*
 secrets/
 credentials*.json
 service-account*.json
+Data_PUC/
+data_PUC/
 
 # Thư mục làm việc cục bộ, không thuộc mã nguồn
 uiux/
