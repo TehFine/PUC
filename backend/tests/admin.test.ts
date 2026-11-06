@@ -1,10 +1,13 @@
 import type { INestApplication } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
 import type { Server } from "node:http";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
+import { JWT_AUDIENCE, JWT_ISSUER } from "../src/auth/tokens.service";
+import { loadConfig } from "../src/config/configuration";
 import { DatabaseService } from "../src/database/database.service";
 import { TEST_PASSWORD } from "./constants";
 
@@ -499,5 +502,164 @@ describe("bản tin, bảng điều khiển và xuất báo cáo CSV", () => {
     }
 
     expect((await htx.get("/api/reports/loai-la")).status).toBe(400);
+  });
+});
+
+describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-Skills", () => {
+  it("JWT Security: từ chối alg=none, sai secret, sai issuer/audience và token hết hạn", async () => {
+    const secret = process.env.JWT_ACCESS_SECRET!;
+    const jwt = new JwtService({ secret });
+
+    // 1. alg: none
+    const noneHeader = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
+    const nonePayload = Buffer.from(
+      JSON.stringify({ sub: "1", iss: JWT_ISSUER, aud: JWT_AUDIENCE, exp: Math.floor(Date.now() / 1000) + 900 }),
+    ).toString("base64url");
+    const noneToken = `${noneHeader}.${nonePayload}.`;
+    expect(
+      (await request(app).get("/api/auth/me").set("Cookie", `htx_access=${noneToken}`)).status,
+    ).toBe(401);
+
+    // 2. Sai secret
+    const wrongSecretJwt = new JwtService({ secret: "wrong-secret-wrong-secret-wrong-secret-1234" });
+    const badSigToken = await wrongSecretJwt.signAsync(
+      {},
+      { subject: "1", algorithm: "HS256", issuer: JWT_ISSUER, audience: JWT_AUDIENCE, expiresIn: 900 },
+    );
+    expect(
+      (await request(app).get("/api/auth/me").set("Cookie", `htx_access=${badSigToken}`)).status,
+    ).toBe(401);
+
+    // 3. Sai issuer hoặc thiếu audience
+    const wrongIssToken = await jwt.signAsync(
+      {},
+      { subject: "1", algorithm: "HS256", issuer: "other-service", audience: JWT_AUDIENCE, expiresIn: 900 },
+    );
+    expect(
+      (await request(app).get("/api/auth/me").set("Cookie", `htx_access=${wrongIssToken}`)).status,
+    ).toBe(401);
+
+    const wrongAudToken = await jwt.signAsync(
+      {},
+      { subject: "1", algorithm: "HS256", issuer: JWT_ISSUER, audience: "other-client", expiresIn: 900 },
+    );
+    expect(
+      (await request(app).get("/api/auth/me").set("Cookie", `htx_access=${wrongAudToken}`)).status,
+    ).toBe(401);
+
+    // 4. Token đã hết hạn
+    const expiredToken = await jwt.signAsync(
+      {},
+      { subject: "1", algorithm: "HS256", issuer: JWT_ISSUER, audience: JWT_AUDIENCE, expiresIn: -60 },
+    );
+    expect(
+      (await request(app).get("/api/auth/me").set("Cookie", `htx_access=${expiredToken}`)).status,
+    ).toBe(401);
+  });
+
+  it("CORS & CSRF: không phản chiếu Origin lạ/null, chặn Sec-Fetch-Site: cross-site và cấm cấu hình CORS_ORIGIN=*", async () => {
+    const evilOrigin = await request(app).get("/api/public/overview").set("Origin", "https://evil.example.com");
+    expect(evilOrigin.headers["access-control-allow-origin"]).toBeUndefined();
+
+    const nullOrigin = await request(app).get("/api/public/overview").set("Origin", "null");
+    expect(nullOrigin.headers["access-control-allow-origin"]).toBeUndefined();
+
+    const trustedOrigin = await request(app).get("/api/public/overview").set("Origin", "http://localhost:3000");
+    expect(trustedOrigin.headers["access-control-allow-origin"]).toBe("http://localhost:3000");
+    expect(trustedOrigin.headers["access-control-allow-credentials"]).toBe("true");
+
+    const admin = await loggedIn(USERS.admin);
+    const crossSite = await admin
+      .post("/api/villages")
+      .set("Origin", "http://localhost:3000")
+      .set("Sec-Fetch-Site", "cross-site")
+      .send({ name: "Thôn CrossSite" });
+    expect(crossSite.status).toBe(403);
+
+    expect(() =>
+      loadConfig({
+        ...process.env,
+        CORS_ORIGIN: "*",
+      }),
+    ).toThrow(/CORS_ORIGIN/);
+
+    expect(() =>
+      loadConfig({
+        ...process.env,
+        CORS_ORIGIN: "null",
+      }),
+    ).toThrow(/CORS_ORIGIN/);
+  });
+
+  it("BOPLA & Logic nghiệp vụ: không cho giả mạo mrlStatus='pass' khi phun thuốc cấm", async () => {
+    const htx = await loggedIn(USERS.htx);
+    const pesticides = await htx.get("/api/pesticides?pageSize=100");
+    const banned = pesticides.body.data.find((p: { status: string }) => p.status === "banned");
+    expect(banned).toBeDefined();
+
+    const created = await htx.post("/api/spray").send({
+      sprayedOn: "2024-11-05",
+      householdId: 1,
+      pesticideId: banned.id,
+      plotCode: "TH1-001",
+      dose: "0.5 lít/ha",
+      areaHa: 0.5,
+      mrlStatus: "pass",
+      isolationDays: 0,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.mrlStatus).toBe("exceeded");
+  });
+
+  it("BOLA: Cán bộ Thôn 1 chỉ xem/điểm danh được học viên thuộc Thôn 1 trong lớp tập huấn", async () => {
+    const htx = await loggedIn(USERS.htx);
+    const villageOfficer = await loggedIn(USERS.villageOfficer);
+
+    const course = await htx.post("/api/training").send({
+      title: "Lớp kiểm tra phân quyền thôn",
+      heldOn: "2025-07-01",
+      location: "Hội trường",
+      trainer: "KS. Kiểm Tra",
+      capacity: 30,
+    });
+    expect(course.status).toBe(201);
+
+    // Gắn 1 hộ Thôn 1 (id=1) và 1 hộ Thôn 2 (id=2)
+    await db.query(
+      `INSERT INTO training_registrations (course_id, household_id, status)
+       VALUES ($1, 1, 'registered'), ($1, 2, 'registered')`,
+      [course.body.id],
+    );
+
+    const scopedRegs = await villageOfficer.get(`/api/training/${course.body.id}/registrations`);
+    expect(scopedRegs.status).toBe(200);
+    expect(scopedRegs.body.data).toHaveLength(1);
+    expect(scopedRegs.body.data[0].householdId).toBe(1);
+  });
+
+  it("Đổi mật khẩu: khóa tài khoản và thu hồi phiên sau 5 lần nhập sai mật khẩu hiện tại", async () => {
+    const admin = await loggedIn(USERS.admin);
+    const temp = await admin.post("/api/accounts").send({
+      fullName: "Tài khoản Test Đổi MK",
+      username: "0999888777",
+      password: "Password123",
+      role: "inspector",
+    });
+    expect(temp.status).toBe(201);
+
+    const userAgent = await loggedIn("0999888777", "Password123");
+    for (let i = 0; i < 5; i += 1) {
+      const res = await userAgent.post("/api/auth/change-password").send({
+        currentPassword: "SaiMatKhauHienTai999",
+        newPassword: "NewPassword123",
+      });
+      expect(res.status).toBe(400);
+    }
+
+    // Sau 5 lần sai, phiên hiện tại bị chặn ngay lập tức (401 do locked_until) và đăng nhập lại bị 429 ACCOUNT_LOCKED
+    expect((await userAgent.get("/api/auth/me")).status).toBe(401);
+    const relogin = await login("0999888777", "Password123");
+    expect(relogin.res.status).toBe(429);
+    expect(relogin.res.body.code).toBe("ACCOUNT_LOCKED");
   });
 });
