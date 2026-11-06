@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { randomBytes } from "node:crypto";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { badRequest, notFound } from "../../common/errors/app.exception";
@@ -58,7 +59,7 @@ export class RequestsService {
     const plotCode = dto.plotCode ? await assertPlotOwned(this.db, householdId, dto.plotCode) : null;
     const attachmentIds = await this.uploads.assertUsable(dto.attachmentIds, user, "approval");
     const docsCount = dto.attachmentIds !== undefined ? attachmentIds.length : (dto.docsCount ?? 0);
-    const code = `HS-${todayVn().replaceAll("-", "")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    const code = `HS-${todayVn().replaceAll("-", "")}-${randomBytes(3).toString("hex").toUpperCase()}`;
 
     const id = await withTransaction(this.db, async (client) => {
       const inserted = await client.query<{ id: number }>(

@@ -6,6 +6,7 @@ import { badRequest, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
+import { assertPlotOwned } from "../../portal/common/portal-context";
 import { assertExists } from "../shared/state";
 import type { CreateStampAllocationDto } from "./stamps.dto";
 
@@ -47,6 +48,7 @@ export class StampsService extends BaseCrudService {
     );
     if (hhRes.rowCount === 0) throw badRequest("Hộ nông dân không tồn tại.");
     const household = hhRes.rows[0];
+    const plotCode = dto.plotCode ? await assertPlotOwned(this.db, household.id, dto.plotCode) : null;
     const shortCode = extractShortHouseholdCode(household.code, household.id);
     const serialPrefix = `KB-${shortCode}-`;
 
@@ -104,7 +106,7 @@ export class StampsService extends BaseCrudService {
         `INSERT INTO farmer_stamps (allocation_id, household_id, plot_code, serial_code, status)
          SELECT $1, $2, $3, $4 || lpad(seq::text, 6, '0'), 'allocated'
          FROM generate_series($5::int, $6::int) AS seq`,
-        [allocId, household.id, dto.plotCode ?? null, serialPrefix, startSeq, endSeq],
+        [allocId, household.id, plotCode, serialPrefix, startSeq, endSeq],
       );
 
       await client.query("COMMIT");
@@ -135,10 +137,18 @@ export class StampsService extends BaseCrudService {
 
   async revoke(id: number, user: AuthUser, ip?: string) {
     const { rows } = await this.db.query<{ id: number; allocation_code: string }>(
-      `UPDATE farmer_stamp_allocations
-       SET status = 'revoked'
-       WHERE id = $1 AND status = 'active'
-       RETURNING id, allocation_code`,
+      `WITH revoked_alloc AS (
+         UPDATE farmer_stamp_allocations
+         SET status = 'revoked'
+         WHERE id = $1 AND status = 'active'
+         RETURNING id, allocation_code
+       ),
+       revoked_stamps AS (
+         UPDATE farmer_stamps
+         SET status = 'revoked'
+         WHERE allocation_id IN (SELECT id FROM revoked_alloc) AND status = 'allocated'
+       )
+       SELECT id, allocation_code FROM revoked_alloc`,
       [id],
     );
     if (rows.length === 0) {
@@ -149,13 +159,6 @@ export class StampsService extends BaseCrudService {
         "Chỉ thu hồi được đợt cấp phát đang hoạt động.",
       );
     }
-
-    await this.db.query(
-      `UPDATE farmer_stamps
-       SET status = 'revoked'
-       WHERE allocation_id = $1 AND status = 'allocated'`,
-      [id],
-    );
 
     await this.audit.write(
       { ip, user },

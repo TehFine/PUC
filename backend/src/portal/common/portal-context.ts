@@ -59,17 +59,43 @@ export async function assertPlotOwned(
 ): Promise<string> {
   const code = (plotCode ?? "").trim();
   if (!code) throw badRequest("Vui lòng chọn thửa đất.");
-  if (!(await plotsTableExists(db))) return code;
 
-  const { rows } = await db.query<{ has_plots: boolean; owned: boolean; foreign_owned: boolean }>(
-    `SELECT
-       EXISTS (SELECT 1 FROM plots WHERE household_id = $1) AS has_plots,
-       EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id = $1) AS owned,
-       EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id IS NOT NULL AND household_id <> $1) AS foreign_owned`,
+  if (await plotsTableExists(db)) {
+    const { rows } = await db.query<{ has_plots: boolean; owned: boolean; foreign_owned: boolean }>(
+      `SELECT
+         EXISTS (SELECT 1 FROM plots WHERE household_id = $1) AS has_plots,
+         EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id = $1) AS owned,
+         EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id IS NOT NULL AND household_id <> $1) AS foreign_owned`,
+      [householdId, code],
+    );
+    const check = rows[0];
+    if (check.foreign_owned || (check.has_plots && !check.owned)) {
+      throw badRequest(`Thửa "${code}" không thuộc hộ của bạn.`);
+    }
+    return code;
+  }
+
+  // Khi chưa bật bảng PostGIS `plots`, đối chiếu quyền sở hữu thửa qua dữ liệu nghiệp vụ đã gắn hộ.
+  const { rows } = await db.query<{ foreign_owned: boolean }>(
+    `SELECT (
+       EXISTS (
+         SELECT 1 FROM journal_entries WHERE upper(plot_code) = upper($2) AND household_id <> $1
+         UNION ALL
+         SELECT 1 FROM farmer_stamps WHERE upper(plot_code) = upper($2) AND household_id <> $1
+         UNION ALL
+         SELECT 1 FROM lab_tests WHERE upper(plot_code) = upper($2) AND household_id <> $1
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM journal_entries WHERE upper(plot_code) = upper($2) AND household_id = $1
+         UNION ALL
+         SELECT 1 FROM farmer_stamps WHERE upper(plot_code) = upper($2) AND household_id = $1
+         UNION ALL
+         SELECT 1 FROM lab_tests WHERE upper(plot_code) = upper($2) AND household_id = $1
+       )
+     ) AS foreign_owned`,
     [householdId, code],
   );
-  const check = rows[0];
-  if (check.foreign_owned || (check.has_plots && !check.owned)) {
+  if (rows[0]?.foreign_owned) {
     throw badRequest(`Thửa "${code}" không thuộc hộ của bạn.`);
   }
   return code;
