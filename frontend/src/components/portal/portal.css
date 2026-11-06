@@ -1078,14 +1078,14 @@ body.pt-body {
   box-sizing: border-box;
   border: none !important;
   outline: none !important;
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%) !important;
-  color: #404040 !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  background: #dfe9f8 !important;
+  color: #0084ff !important;
+  box-shadow: none !important;
 }
 .pt-ticket-open-btn:hover {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%) !important;
-  color: #2b2b2b !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+  background: #d0dff5 !important;
+  color: #006ee6 !important;
+  box-shadow: none !important;
 }
 
 /* Nút Avatar hình tròn duy nhất */
@@ -1453,7 +1453,7 @@ body.pt-body {
   border: none;
   outline: none;
   background: transparent;
-  color: #404040;
+  color: #0084ff;
   font-family: var(--font-body-stack);
   font-size: 13px;
   font-weight: 700;
@@ -1467,13 +1467,13 @@ body.pt-body {
 }
 
 .pt-lang-seg-btn:hover:not(.is-active) {
-  background: rgba(196, 196, 196, 0.35);
+  background: rgba(0, 132, 255, 0.08);
 }
 
 .pt-lang-seg-btn.is-active {
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
-  color: #404040;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  background: #dfe9f8;
+  color: #0084ff;
+  box-shadow: none;
 }
 
 /* Nút tròn điều hướng có dấu mũi tên (đặt ở góc phải thay thế vị trí avatar cũ) */
@@ -1839,8 +1839,8 @@ body.pt-body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
-  color: #404040;
+  background: #dfe9f8;
+  color: #0084ff;
   border: none !important;
   outline: none !important;
   border-radius: 7px;
@@ -1850,23 +1850,23 @@ body.pt-body {
   font-weight: 700;
   letter-spacing: -0.01em;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
   transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
   white-space: nowrap;
 }
 
 .pt-hero-cta-arrow {
   flex-shrink: 0;
-  --detail-arrow-bg: rgba(64, 64, 64, 0.16);
-  --detail-arrow-fg: #404040;
+  --detail-arrow-bg: rgba(0, 132, 255, 0.15);
+  --detail-arrow-fg: #0084ff;
   transition: transform 0.18s ease;
 }
 
 .pt-hero-cta-btn:hover {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
-  color: #2b2b2b;
+  background: #d0dff5;
+  color: #006ee6;
   transform: translateY(-1px);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
 }
 
 .pt-hero-cta-btn:hover .pt-hero-cta-arrow {
@@ -1874,9 +1874,9 @@ body.pt-body {
 }
 
 .pt-hero-cta-btn:active {
-  background: #e6e6e6;
+  background: #c3d6f2;
   transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
 }
 
 /* ── Thao tác nhanh (3 nút dạng thẻ ngang trên Desktop) ── */
@@ -2075,7 +2075,7 @@ body.pt-body {
     border-radius: 26px;
   }
   .pt-widget-topbar {
-    padding: 14px 18px 12px;
+    padding: 13px 16px;
     gap: 8px;
   }
   .pt-widget-topbar-title {
@@ -2327,7 +2327,7 @@ body.pt-body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 22px 14px;
+  padding: 16px 20px;
   background: #ffffff;
   border-bottom: 1px solid rgba(20, 55, 47, 0.06);
 }
@@ -2373,18 +2373,19 @@ body.pt-body {
 }
 
 .pt-widget-topbar-btn {
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+  background: #dfe9f8;
   border: none !important;
   outline: none !important;
   border-radius: 7px;
-  padding: 7px 16px;
+  padding: 10.5px 16px 8px;
   font-size: 12.5px;
   font-weight: 600;
-  color: #404040;
+  color: #0084ff;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
-  line-height: 1.2;
+  line-height: 1;
+  text-align: center;
   white-space: nowrap;
   flex-shrink: 0;
   display: inline-flex;
@@ -2393,8 +2394,8 @@ body.pt-body {
 }
 
 .pt-widget-topbar-btn:hover {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
-  color: #2b2b2b;
+  background: #d0dff5;
+  color: #006ee6;
 }
 
 .pt-widget-topbar-btn:active {
@@ -2568,7 +2569,7 @@ body.pt-body {
 
 @media (max-width: 720px) {
   .pt-widget-topbar {
-    padding: 14px 18px 12px;
+    padding: 13px 16px;
     gap: 8px;
   }
   .pt-widget-topbar-title {
@@ -2780,16 +2781,16 @@ body.pt-body {
   gap: 8px;
   padding: 10px 16px;
   border-radius: 12px;
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+  background: #dfe9f8;
   border: none !important;
   outline: none !important;
   font-size: 13.5px;
   font-weight: 650;
-  color: #404040;
+  color: #0084ff;
   cursor: pointer;
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
   line-height: 1.3;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
   flex-shrink: 0;
 }
 
@@ -2829,17 +2830,17 @@ body.pt-body {
 }
 
 .pt-gps-btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
-  color: #2b2b2b;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  background: #d0dff5;
+  color: #006ee6;
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
 .pt-gps-btn.is-active {
-  background: linear-gradient(180deg, #f4f4f4 0%, #ebebeb 52%, #e2e2e2 100%);
-  color: #404040;
+  background: #d0dff5;
+  color: #0084ff;
   border: none !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
 }
 
 /* ── Khối tải ảnh hiện trường bắt buộc trong form ghi nhật ký ── */
@@ -3176,23 +3177,25 @@ body.pt-body {
 }
 
 .pt-widget-topbar-btn.is-primary {
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%) !important;
+  background: #dfe9f8 !important;
   border: none !important;
   outline: none !important;
-  color: #404040 !important;
+  color: #0084ff !important;
   font-weight: 700;
   border-radius: 7px !important;
-  padding: 8px 18px !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  padding: 10.5px 16px 8px !important;
+  line-height: 1 !important;
+  text-align: center;
+  box-shadow: none !important;
 }
 
 .pt-widget-topbar-btn.is-primary:hover {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%) !important;
+  background: #d0dff5 !important;
   border: none !important;
   outline: none !important;
-  color: #2b2b2b !important;
+  color: #006ee6 !important;
   transform: translateY(-1px);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: none !important;
 }
 
 .pt-reminders { list-style: none; display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; }
@@ -5525,30 +5528,30 @@ body.pt-body {
 .pt-btn:hover:not(:disabled) { transform: translateY(-1px); }
 .pt-btn:active { transform: scale(0.97); }
 .pt-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-.pt-btn:focus-visible { outline: 2px solid #404040; outline-offset: 2px; }
+.pt-btn:focus-visible { outline: 2px solid #0084ff; outline-offset: 2px; }
 .pt-btn-sm { padding: 9px 16px; font-size: 13px; border-radius: 7px; }
 .pt-btn-primary {
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%) !important;
-  color: #404040 !important;
+  background: #dfe9f8 !important;
+  color: #0084ff !important;
   border: none !important;
   border-radius: 7px !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: none !important;
 }
 .pt-btn-primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%) !important;
-  color: #2b2b2b !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+  background: #d0dff5 !important;
+  color: #006ee6 !important;
+  box-shadow: none !important;
 }
 .pt-btn-ghost {
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%) !important;
+  background: #dfe9f8 !important;
   border: none !important;
-  color: #404040 !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  color: #0084ff !important;
+  box-shadow: none !important;
 }
 .pt-btn-ghost:hover:not(:disabled) {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%) !important;
-  color: #2b2b2b !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+  background: #d0dff5 !important;
+  color: #006ee6 !important;
+  box-shadow: none !important;
 }
 .pt-btn svg { width: 16px; height: 16px; stroke-width: 2; }
 .pt-icon-btn {
@@ -6906,23 +6909,23 @@ body.pt-body {
   gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+  background: #dfe9f8;
   border: none;
-  color: #404040;
+  color: #0084ff;
   font-family: inherit;
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  box-shadow: none;
   transition: background 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
 }
 
 .pt-plot-qr-action-btn:hover {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
-  color: #2b2b2b;
+  background: #d0dff5;
+  color: #006ee6;
   border-color: transparent;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
   transform: scale(1.05);
 }
 
@@ -7424,30 +7427,30 @@ body.pt-body {
 }
 
 .pt-mapmodal-action-gmaps {
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+  background: #dfe9f8;
   border: none;
   outline: none;
-  color: #404040;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  color: #0084ff;
+  box-shadow: none;
 }
 
 .pt-mapmodal-action-gmaps:hover {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
-  color: #2b2b2b;
+  background: #d0dff5;
+  color: #006ee6;
   transform: translateY(-1px);
 }
 
 .pt-mapmodal-action-qr {
-  background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
+  background: #dfe9f8;
   border: none;
   outline: none;
-  color: #404040;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  color: #0084ff;
+  box-shadow: none;
 }
 
 .pt-mapmodal-action-qr:hover {
-  background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
-  color: #2b2b2b;
+  background: #d0dff5;
+  color: #006ee6;
   transform: translateY(-1px);
 }
 
