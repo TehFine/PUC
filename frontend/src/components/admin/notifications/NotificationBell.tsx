@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCheck } from "lucide-react";
 import { onCountsChanged, requestAdminNavigate } from "@/components/admin/shared/counts-events";
 import { RadialPngIcon } from "@/components/portal/RadialIcons";
 import { BusyButton } from "@/components/portal/shared/controls";
@@ -108,7 +107,6 @@ export default function NotificationBell() {
                   busyLabel="Đang đánh dấu…"
                   onClick={() => void markAllRead()}
                 >
-                  <CheckCheck size={14} aria-hidden="true" />
                   <span>Đánh dấu đã đọc hết</span>
                 </BusyButton>
               </div>

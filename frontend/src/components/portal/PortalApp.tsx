@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
-  CheckCheck,
   ClipboardCheck,
   Globe,
   House,
@@ -648,7 +647,6 @@ function PortalAppContent() {
                   busyLabel="Đang đánh dấu…"
                   onClick={() => void handleMarkAllRead()}
                 >
-                  <CheckCheck size={14} aria-hidden="true" />
                   <span>Đánh dấu đã đọc hết</span>
                 </BusyButton>
               </div>
