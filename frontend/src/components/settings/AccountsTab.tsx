@@ -101,7 +101,7 @@ export default function AccountsTab({
           <option value="locked">Khóa</option>
         </select>
         <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
-          + Thêm tài khoản
+          Thêm tài khoản
         </button>
       </div>
 

@@ -1,7 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
+import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { MapSkeleton } from "@/components/ui/Skeleton";
 import AllPlotsCard from "@/components/zones/AllPlotsCard";
 import PlotsTable from "@/components/zones/PlotsTable";
@@ -25,7 +27,40 @@ export default function Zones() {
   const [sheet, setSheet] = useState<SheetMode>(null);
   const [activeZone, setActiveZone] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const sheetHeadRef = useRef<HTMLDivElement>(null);
   const features = useMemo(() => plots?.features ?? [], [plots]);
+
+  const closeSheet = useCallback(() => {
+    const el = sheetRef.current;
+    if (el && isMobile) {
+      el.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+      el.style.transform = "translate3d(0, calc(100% + 24px), 0)";
+      setTimeout(() => {
+        setSheet(null);
+        if (sheetRef.current) {
+          sheetRef.current.style.transition = "";
+          sheetRef.current.style.transform = "";
+        }
+      }, 220);
+      return;
+    }
+    setSheet(null);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (sheet && sheetRef.current) {
+      sheetRef.current.style.transition = "";
+      sheetRef.current.style.transform = "";
+    }
+  }, [sheet]);
+
+  useSheetSwipe({
+    sheetRef,
+    handleRef: sheetHeadRef,
+    onDismiss: closeSheet,
+    enabled: isMobile && Boolean(sheet),
+  });
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -93,19 +128,27 @@ export default function Zones() {
 
       {view === "map" ? (
         <div className="zones-workspace">
-          <div className={`zones-left-col${sheet ? " sheet-open" : ""}`} data-sheet={sheet ?? "none"}>
-            <div className="sheet-head">
-              <span className="sheet-grip" />
-              <span className="sheet-title">
-                {sheet === "list"
-                  ? "Danh sách thửa"
-                  : sheet === "zone"
-                    ? activeZoneRow?.code ?? "Chi tiết vùng"
-                    : "Tổng quan vùng trồng"}
-              </span>
-              <button type="button" className="map-tool" onClick={() => setSheet(null)}>
-                Đóng
-              </button>
+          <div
+            ref={sheetRef}
+            className={`zones-left-col${sheet ? " sheet-open" : ""}`}
+            data-sheet={sheet ?? "none"}
+          >
+            <div ref={sheetHeadRef} className="sheet-head pt-sheet-topbar">
+              <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
+                <div className="pt-sheet-handle-bar" />
+              </div>
+              <div className="sheet-head-row">
+                <span className="sheet-title">
+                  {sheet === "list"
+                    ? "Danh sách thửa"
+                    : sheet === "zone"
+                      ? activeZoneRow?.code ?? "Chi tiết vùng"
+                      : "Tổng quan vùng trồng"}
+                </span>
+                <button type="button" className="pp-close" onClick={closeSheet} aria-label="Đóng">
+                  <CloseCircleIcon size={28} />
+                </button>
+              </div>
             </div>
 
             {sheet && (

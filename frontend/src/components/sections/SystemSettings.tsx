@@ -26,7 +26,7 @@ export default function SystemSettings() {
         <div className="header-actions">
           {tab === "accounts" && (
             <button type="button" className="btn btn-primary" onClick={() => setCreateTrigger((c) => c + 1)}>
-              + Thêm tài khoản
+              Thêm tài khoản
             </button>
           )}
         </div>

@@ -108,7 +108,7 @@ export default function Testing() {
         {canCreate && (
           <div className="header-actions">
             <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
-              + Thêm phiếu kiểm nghiệm
+              Thêm phiếu kiểm nghiệm
             </button>
           </div>
         )}

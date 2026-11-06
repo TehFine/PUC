@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock, MapPin, Pencil, Plus, Search, Users } from "lucide-react";
+import { Clock, MapPin, Pencil, Search, Users } from "lucide-react";
 import { RadialPngIcon } from "@/components/portal/RadialIcons";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
@@ -249,7 +249,7 @@ export default function Catalog() {
         {[
           { id: "pesticide", label: `Thuốc BVTV (${pesticides.total})` },
           { id: "fertilizer", label: `Phân bón (${fertilizers.total})` },
-          { id: "variety", label: `Giống sầu riêng (${varieties.total})` },
+          { id: "variety", label: `Giống cây (${varieties.total})` },
           { id: "village", label: `Thôn / Tổ (${villages.total})` },
           { id: "standards", label: "Tiêu chuẩn" },
         ].map(({ id, label }) => (
@@ -268,7 +268,7 @@ export default function Catalog() {
       {tab === "pesticide" && (
         <div className="pt-pest-wrap">
           <div className="admin-catalog-top">
-            <div className="pt-pest-search-box" style={{ flex: 1 }}>
+            <div className="pt-pest-search-box">
               <Search size={16} className="pt-pest-search-icon" aria-hidden="true" />
               <input
                 className="pt-pest-search-input"
@@ -295,7 +295,6 @@ export default function Catalog() {
               className="btn btn-primary"
               onClick={() => setEditingPesticide("new")}
             >
-              <Plus size={16} strokeWidth={2.4} />
               <span>Thêm thuốc</span>
             </button>
           </div>
@@ -433,7 +432,7 @@ export default function Catalog() {
       {tab === "fertilizer" && (
         <div className="pt-pest-wrap">
           <div className="admin-catalog-top">
-            <div className="pt-pest-search-box" style={{ flex: 1 }}>
+            <div className="pt-pest-search-box">
               <Search size={16} className="pt-pest-search-icon" aria-hidden="true" />
               <input
                 className="pt-pest-search-input"
@@ -460,7 +459,6 @@ export default function Catalog() {
               className="btn btn-primary"
               onClick={() => setEditingFertilizer("new")}
             >
-              <Plus size={16} strokeWidth={2.4} />
               <span>Thêm phân bón</span>
             </button>
           </div>
@@ -614,7 +612,7 @@ export default function Catalog() {
       {tab === "variety" && (
         <div className="pt-pest-wrap">
           <div className="admin-catalog-top">
-            <div className="pt-pest-search-box" style={{ flex: 1 }}>
+            <div className="pt-pest-search-box">
               <Search size={16} className="pt-pest-search-icon" aria-hidden="true" />
               <input
                 className="pt-pest-search-input"
@@ -641,7 +639,6 @@ export default function Catalog() {
               className="btn btn-primary"
               onClick={() => setEditingVariety("new")}
             >
-              <Plus size={16} strokeWidth={2.4} />
               <span>Thêm giống cây</span>
             </button>
           </div>
@@ -780,7 +777,7 @@ export default function Catalog() {
       {tab === "village" && (
         <div className="pt-pest-wrap">
           <div className="admin-catalog-top">
-            <div className="pt-pest-search-box" style={{ flex: 1 }}>
+            <div className="pt-pest-search-box">
               <Search size={16} className="pt-pest-search-icon" aria-hidden="true" />
               <input
                 className="pt-pest-search-input"
@@ -807,7 +804,6 @@ export default function Catalog() {
               className="btn btn-primary"
               onClick={() => setEditingVillage("new")}
             >
-              <Plus size={16} strokeWidth={2.4} />
               <span>Thêm thôn / tổ</span>
             </button>
           </div>

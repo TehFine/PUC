@@ -6,7 +6,7 @@ export interface TabItem<T extends string> {
   badge?: number | null;
 }
 
-/** Thanh tab dùng class `.tab-bar` / `.tab-btn`; badge chỉ hiện khi > 0. */
+/** Thanh tab dùng class `.tab-bar` / `.tab-btn`. */
 export default function TabBar<T extends string>({
   tabs,
   active,
@@ -18,7 +18,7 @@ export default function TabBar<T extends string>({
 }) {
   return (
     <div className="tab-bar" role="tablist">
-      {tabs.map(({ id, label, badge }) => (
+      {tabs.map(({ id, label }) => (
         <button
           key={id}
           type="button"
@@ -28,7 +28,6 @@ export default function TabBar<T extends string>({
           onClick={() => onChange(id)}
         >
           {label}
-          {!!badge && badge > 0 && <span className="tab-badge">{badge}</span>}
         </button>
       ))}
     </div>

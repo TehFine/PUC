@@ -6,6 +6,7 @@ import {
   AreaTrend,
   CapsuleDonutChart,
   KpiChartView,
+  renderKpiValue,
   type ChartPoint,
   type DonutItem,
   type KpiChartSpec,
@@ -123,6 +124,20 @@ export default function Dashboard() {
     }));
   }, [summary?.villages, totalHouseholds, qualifiedHouseholds]);
 
+  const villagePlotBars = useMemo<ChartPoint[]>(() => {
+    const villages = summary?.villages ?? [];
+    if (villages.length === 0) {
+      return [
+        { label: "T1", value: totalPlots },
+        { label: "T2", value: Math.max(Math.round(totalPlots * 0.6), 1) },
+      ];
+    }
+    return villages.map((v) => ({
+      label: v.name.replace(/^Thôn\s+/i, "T"),
+      value: Number(v.plots ?? v.households) || 0,
+    }));
+  }, [summary?.villages, totalPlots]);
+
   const statusData = useMemo<DonutItem[]>(() => {
     const st = readStatusCounts(summary?.householdStatus, qualifiedHouseholds);
     return [
@@ -172,9 +187,9 @@ export default function Dashboard() {
       chart: {
         kind: "bars",
         tone: "ink",
-        unit: " hộ",
+        unit: " thửa",
         highlight: "max",
-        data: villageBars,
+        data: villagePlotBars,
       },
     },
     {
@@ -284,7 +299,7 @@ export default function Dashboard() {
         {kpis.map(({ val, label, trend, trendType, chart }, i) => (
           <div key={i} className="kpi-card has-chart">
             <div className="kpi-head">
-              <div className="kpi-val">{val}</div>
+              <div className="kpi-val">{renderKpiValue(val)}</div>
               <div className="kpi-meta">
                 <div className="kpi-label">{label}</div>
                 <div className={`kpi-trend ${trendType}`}>{trend}</div>

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FormError, Modal } from "@/components/ui/Modal";
 import { api } from "@/lib/api-client";
-import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 
 interface Registration {
   id: number;
@@ -174,59 +174,51 @@ export default function Registrations() {
       </div>
 
       {target && (
-        <div className="modal-overlay" onClick={close}>
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Duyệt đăng ký" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Duyệt đăng ký: {target.fullName}</h3>
-              <button type="button" aria-label="Đóng" onClick={close}>
-                <CloseCircleIcon size={28} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginBottom: 12 }}>
-                Chọn hộ mà tài khoản <strong>{target.phone}</strong> sẽ được xem dữ liệu. Chỉ hiện các hộ chưa có tài khoản.
-              </p>
-              <div className="form-group">
-                <label htmlFor="registration-search">Tìm hộ theo tên, mã hộ hoặc số điện thoại</label>
-                <input id="registration-search" className="form-input" value={query} onChange={(event) => setQuery(event.target.value)} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="registration-household">Hộ</label>
-                <select
-                  id="registration-household"
-                  className="form-input"
-                  value={householdId ?? ""}
-                  onChange={(event) => setHouseholdId(event.target.value ? Number(event.target.value) : null)}
-                >
-                  <option value="">Chọn hộ</option>
-                  {households.map((household) => (
-                    <option key={household.id} value={household.id}>
-                      {household.code} · {household.name} · {household.villageName} · {household.phone}
-                    </option>
-                  ))}
-                  {target.suggestedHouseholdId && !households.some((item) => item.id === target.suggestedHouseholdId) && (
-                    <option value={target.suggestedHouseholdId}>
-                      {target.suggestedHouseholdCode} · {target.suggestedHouseholdName} (gợi ý)
-                    </option>
-                  )}
-                </select>
-              </div>
-              {dialogError && (
-                <p className="login-error" role="alert">
-                  {dialogError}
-                </p>
-              )}
-            </div>
-            <div className="modal-footer">
+        <Modal
+          title={`Duyệt đăng ký: ${target.fullName}`}
+          onClose={busy ? () => undefined : close}
+          width={520}
+          footer={
+            <>
               <button type="button" className="btn btn-outline" onClick={close} disabled={busy}>
                 Hủy
               </button>
               <button type="button" className="btn btn-primary" onClick={() => void approve()} disabled={busy || !householdId}>
                 {busy ? "Đang duyệt…" : "Duyệt tài khoản"}
               </button>
-            </div>
+            </>
+          }
+        >
+          <p style={{ fontSize: 13.5, color: "var(--text-secondary)", marginBottom: 14, lineHeight: 1.5 }}>
+            Chọn hộ mà tài khoản <strong>{target.phone}</strong> sẽ được xem dữ liệu. Chỉ hiện các hộ chưa có tài khoản.
+          </p>
+          <div className="form-group">
+            <label htmlFor="registration-search">Tìm hộ theo tên, mã hộ hoặc số điện thoại</label>
+            <input id="registration-search" className="form-input" value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
-        </div>
+          <div className="form-group">
+            <label htmlFor="registration-household">Hộ</label>
+            <select
+              id="registration-household"
+              className="form-input"
+              value={householdId ?? ""}
+              onChange={(event) => setHouseholdId(event.target.value ? Number(event.target.value) : null)}
+            >
+              <option value="">Chọn hộ</option>
+              {households.map((household) => (
+                <option key={household.id} value={household.id}>
+                  {household.code} · {household.name} · {household.villageName} · {household.phone}
+                </option>
+              ))}
+              {target.suggestedHouseholdId && !households.some((item) => item.id === target.suggestedHouseholdId) && (
+                <option value={target.suggestedHouseholdId}>
+                  {target.suggestedHouseholdCode} · {target.suggestedHouseholdName} (gợi ý)
+                </option>
+              )}
+            </select>
+          </div>
+          <FormError message={dialogError} />
+        </Modal>
       )}
     </>
   );

@@ -9,6 +9,7 @@ import UserMenu from "@/components/layout/UserMenu";
 import ResponsiveTables from "@/components/ui/ResponsiveTables";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { INTRO_PATH } from "@/lib/routes";
+import "@/components/portal/portal.css";
 
 import dynamic from "next/dynamic";
 import { SkeletonCards, SkeletonStats } from "@/components/ui/Skeleton";

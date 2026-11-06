@@ -142,17 +142,17 @@ export default function Journal() {
         <div className="header-actions">
           {canCreateJournal && (
             <button type="button" className="btn btn-primary" onClick={() => setEditingJournal("new")}>
-              + Ghi nhật ký
+              Ghi nhật ký
             </button>
           )}
           {canReadViolations && canCreateViolation && (
             <button type="button" className="btn btn-outline" onClick={() => setEditingViolation("new")}>
-              + Ghi nhận vi phạm
+              Ghi nhận vi phạm
             </button>
           )}
           {canCreateSpray && (
             <button type="button" className="btn btn-outline" onClick={() => setEditingSpray("new")}>
-              + Ghi phun thuốc
+              Ghi phun thuốc
             </button>
           )}
         </div>
@@ -363,7 +363,7 @@ export default function Journal() {
             </select>
             {canCreateViolation && (
               <button type="button" className="btn btn-primary" onClick={() => setEditingViolation("new")}>
-                + Ghi nhận vi phạm
+                Ghi nhận vi phạm
               </button>
             )}
           </div>
@@ -382,11 +382,13 @@ export default function Journal() {
               const st = badgeOf(VIOLATION_STATUS, v.status);
               return (
                 <div key={v.id} className={`violation-item ${v.severity}`}>
-                  <div style={{ flex: 1 }}>
-                    <div className="violation-title" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span className={`badge ${sev.badge}`}>{sev.label}</span>
-                      <span className={`badge ${st.badge}`}>{st.label}</span>
-                      <span>{v.title}</span>
+                  <div className="violation-body">
+                    <div className="violation-head">
+                      <div className="violation-badges">
+                        <span className={`badge ${sev.badge}`}>{sev.label}</span>
+                        <span className={`badge ${st.badge}`}>{st.label}</span>
+                      </div>
+                      <div className="violation-title">{v.title}</div>
                     </div>
                     {v.description && <div className="violation-desc">{v.description}</div>}
                     {v.farmerResponse && (
@@ -479,7 +481,7 @@ export default function Journal() {
             </select>
             {canCreateSpray && (
               <button type="button" className="btn btn-primary" onClick={() => setEditingSpray("new")}>
-                + Ghi phun thuốc
+                Ghi phun thuốc
               </button>
             )}
           </div>

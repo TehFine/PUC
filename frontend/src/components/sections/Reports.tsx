@@ -147,12 +147,17 @@ export default function Reports() {
       </div>
 
       {/* Bộ lọc nhanh trên trang */}
-      <div className="filter-bar" style={{ marginBottom: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <label style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 500 }}>Từ ngày:</label>
+      <div className="filter-bar report-filter-bar" style={{ marginBottom: 18 }}>
+        <label className="report-filter-field">
+          <span className="report-filter-label">Từ ngày</span>
           <input type="date" className="filter-select" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <label style={{ fontSize: 12.5, color: "var(--text-secondary)", fontWeight: 500 }}>Đến ngày:</label>
+        </label>
+        <label className="report-filter-field">
+          <span className="report-filter-label">Đến ngày</span>
           <input type="date" className="filter-select" value={to} onChange={(e) => setTo(e.target.value)} />
+        </label>
+        <label className="report-filter-field report-filter-village">
+          <span className="report-filter-label">Thôn / Tổ</span>
           <select className="filter-select" value={villageId} onChange={(e) => setVillageId(e.target.value)}>
             <option value="">Tất cả thôn / tổ</option>
             {villages.rows.map((v) => (
@@ -161,29 +166,52 @@ export default function Reports() {
               </option>
             ))}
           </select>
-        </div>
+        </label>
       </div>
 
       <div className="report-grid">
         {REPORTS.map((r) => (
-          <button
+          <div
             key={r.id}
-            type="button"
+            role="button"
+            tabIndex={0}
             className="report-card"
             style={{ textAlign: "left", width: "100%", cursor: "pointer" }}
             onClick={() => {
               setError(null);
               setSelectedReport(r);
             }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setError(null);
+                setSelectedReport(r);
+              }
+            }}
           >
             <div className="report-title">{r.title}</div>
             <div className="report-desc">{r.desc}</div>
             <div className="report-formats">
-              {r.formats.map((f) => (
-                <span key={f}>{f}</span>
-              ))}
+              {r.formats.map((f) => {
+                const isPdf = f.toLowerCase().includes("pdf");
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    className="report-format-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setError(null);
+                      setFormat(isPdf ? "PDF" : "CSV");
+                      setSelectedReport(r);
+                    }}
+                  >
+                    {f}
+                  </button>
+                );
+              })}
             </div>
-          </button>
+          </div>
         ))}
       </div>
 

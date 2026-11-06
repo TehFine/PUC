@@ -12,7 +12,7 @@ import HarvestLotFormModal, { LOT_STATUS_LABELS } from "@/components/admin/harve
 import LotContributionsModal from "@/components/admin/harvest/LotContributionsModal";
 import { StampAllocationModal, StampListModal } from "@/components/admin/harvest/StampModals";
 import BatchQrModal from "@/components/harvest/BatchQrModal";
-import { KpiChartView, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
+import { KpiChartView, renderKpiValue, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
 import { Modal } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
 import type {
@@ -193,12 +193,12 @@ export default function Harvest() {
           {tab !== "declarations" && (
             <button type="button" className="btn btn-primary" onClick={handlePrimaryAction}>
               {tab === "lots"
-                ? "+ Tạo lô hàng mới"
+                ? "Tạo lô hàng mới"
                 : tab === "stamps"
-                  ? "+ Cấp phát dải tem"
+                  ? "Cấp phát dải tem"
                   : tab === "contracts"
-                    ? "+ Thêm hợp đồng bao tiêu"
-                    : "+ Thêm doanh nghiệp"}
+                    ? "Thêm hợp đồng bao tiêu"
+                    : "Thêm doanh nghiệp"}
             </button>
           )}
         </div>
@@ -208,7 +208,7 @@ export default function Harvest() {
         {kpis.map(({ val, label, sub, chart, suffix }, i) => (
           <div key={i} className="kpi-card has-chart">
             <div className="kpi-head">
-              <div className="kpi-val">{val}</div>
+              <div className="kpi-val">{renderKpiValue(val)}</div>
               <div className="kpi-meta">
                 <div className="kpi-label">{label}</div>
                 <div className="kpi-trend up">{sub}</div>
@@ -229,10 +229,10 @@ export default function Harvest() {
           className={`tab-btn ${tab === "declarations" ? "active" : ""}`}
           onClick={() => setTab("declarations")}
         >
-          Khai báo thu hoạch ({declarations.total})
+          Đơn khai báo ({declarations.total})
         </button>
         <button type="button" className={`tab-btn ${tab === "stamps" ? "active" : ""}`} onClick={() => setTab("stamps")}>
-          Cấp phát tem nông hộ ({stampAllocations.total})
+          Cấp phát tem ({stampAllocations.total})
         </button>
         <button type="button" className={`tab-btn ${tab === "contracts" ? "active" : ""}`} onClick={() => setTab("contracts")}>
           Hợp đồng bao tiêu ({contracts.total})

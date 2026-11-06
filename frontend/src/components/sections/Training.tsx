@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { KpiChartView, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
+import { KpiChartView, renderKpiValue, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
 import { useApiList } from "@/hooks/use-api";
 import BlockState from "@/components/admin/shared/BlockState";
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
@@ -117,7 +117,7 @@ export default function Training() {
         {canCreate && (
           <div className="header-actions">
             <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
-              + Tạo khóa tập huấn
+              Tạo khóa tập huấn
             </button>
           </div>
         )}
@@ -127,7 +127,7 @@ export default function Training() {
         {kpis.map(({ val, label, sub, chart }, i) => (
           <div key={i} className="kpi-card has-chart">
             <div className="kpi-head">
-              <div className="kpi-val">{val}</div>
+              <div className="kpi-val">{renderKpiValue(val)}</div>
               <div className="kpi-meta">
                 <div className="kpi-label">{label}</div>
                 <div className="kpi-trend up">{sub}</div>

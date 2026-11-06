@@ -119,17 +119,17 @@ export default function Approval() {
         <div className="header-actions">
           {canCreateApproval && (
             <button type="button" className="btn btn-outline" onClick={() => setEditingApproval("new")}>
-              + Thêm hồ sơ
+              Thêm hồ sơ
             </button>
           )}
           {canCreateSchedule && (
             <button type="button" className="btn btn-outline" onClick={() => setEditingSchedule("new")}>
-              + Lên lịch kiểm tra
+              Lên lịch kiểm tra
             </button>
           )}
           {canCreateMinute && (
             <button type="button" className="btn btn-primary" onClick={() => setEditingMinute("new")}>
-              + Tạo biên bản
+              Tạo biên bản
             </button>
           )}
         </div>
@@ -309,7 +309,7 @@ export default function Approval() {
             </select>
             {canCreateSchedule && (
               <button type="button" className="btn btn-primary" onClick={() => setEditingSchedule("new")}>
-                + Lên lịch kiểm tra
+                Lên lịch kiểm tra
               </button>
             )}
           </div>
@@ -395,7 +395,7 @@ export default function Approval() {
             </select>
             {canCreateMinute && (
               <button type="button" className="btn btn-primary" onClick={() => setEditingMinute("new")}>
-                + Tạo biên bản
+                Tạo biên bản
               </button>
             )}
           </div>

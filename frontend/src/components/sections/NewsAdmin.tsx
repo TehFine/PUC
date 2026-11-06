@@ -56,7 +56,7 @@ export default function NewsAdmin() {
         </div>
         <div className="header-actions">
           <button type="button" className="btn btn-primary" onClick={() => setEditingArticle("new")}>
-            + Đăng tin mới
+            Đăng tin mới
           </button>
         </div>
       </div>
