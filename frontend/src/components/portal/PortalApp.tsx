@@ -195,6 +195,7 @@ function PortalAppContent() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
+  const [localReadIds, setLocalReadIds] = useState<number[]>([]);
 
   const openSupport = useCallback(() => setSupportOpen(true), []);
   const closeSupport = useCallback(() => setSupportOpen(false), []);
@@ -304,16 +305,49 @@ function PortalAppContent() {
       .join("")
       .toUpperCase() || "HD";
 
-  const unreadCount = notifications.data?.unread ?? overview?.stats.unreadNotifications ?? 0;
-  const notifItems = notifications.data?.data ?? [];
+  const apiNotifItems = notifications.data?.data ?? [];
+  const fallbackNotifItems = useMemo<AppNotification[]>(() => {
+    if (apiNotifItems.length > 0) return [];
+    const reminders = overview?.reminders ?? [];
+    return reminders.map((r, idx) => {
+      const id = -(idx + 1);
+      const isRead = localReadIds.includes(id);
+      const prefix =
+        r.kind === "violation" || r.kind === "journal"
+          ? "Cảnh báo vi phạm: "
+          : r.kind === "schedule"
+            ? "Lịch kiểm tra: "
+            : "";
+      const title = prefix && !r.title.startsWith(prefix) ? `${prefix}${r.title}` : r.title;
+      return {
+        id,
+        kind: (r.kind === "journal" || r.kind === "isolation" ? "violation" : r.kind) as AppNotification["kind"],
+        title,
+        body: r.detail ?? null,
+        link: `/portal?tab=${r.tab}`,
+        readAt: isRead ? new Date().toISOString() : null,
+        createdAt: r.date ?? new Date().toISOString(),
+      };
+    });
+  }, [apiNotifItems.length, overview?.reminders, localReadIds]);
+
+  const notifItems = apiNotifItems.length > 0 ? apiNotifItems : fallbackNotifItems;
+  const unreadCount =
+    apiNotifItems.length > 0
+      ? (notifications.data?.unread ?? apiNotifItems.filter((n) => !n.readAt).length)
+      : fallbackNotifItems.filter((n) => !n.readAt).length;
 
   const handleMarkRead = async (item: AppNotification) => {
     if (!item.readAt) {
-      try {
-        await api.post(`/notifications/${item.id}/read`);
-        invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
-      } catch {
-        // Ignore read error and still navigate
+      if (item.id < 0) {
+        setLocalReadIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]));
+      } else {
+        try {
+          await api.post(`/notifications/${item.id}/read`);
+          invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
+        } catch {
+          // Ignore read error and still navigate
+        }
       }
     }
     const target = resolveNotificationTarget(item);
@@ -324,8 +358,12 @@ function PortalAppContent() {
   const handleMarkAllRead = async () => {
     setMarkingAll(true);
     try {
-      await api.post("/notifications/read-all");
-      invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
+      if (apiNotifItems.length === 0 && fallbackNotifItems.length > 0) {
+        setLocalReadIds(fallbackNotifItems.map((n) => n.id));
+      } else {
+        await api.post("/notifications/read-all");
+        invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
+      }
     } catch {
       // Ignore
     } finally {
