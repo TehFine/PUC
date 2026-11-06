@@ -591,18 +591,18 @@ function PortalAppContent() {
         <Sheet title={t("Thông báo từ HTX")} onClose={() => setNotifOpen(false)}>
           <div className="pt-stack" style={{ gap: 14 }}>
             {unreadCount > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+              <div className="pt-notif-toolbar">
+                <span className="pt-notif-summary">
                   Bạn có <strong>{unreadCount}</strong> thông báo chưa đọc
                 </span>
                 <BusyButton
                   type="button"
-                  className="pt-btn pt-btn-ghost pt-btn-sm"
+                  className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
                   busy={markingAll}
                   busyLabel="Đang đánh dấu…"
                   onClick={() => void handleMarkAllRead()}
                 >
-                  <CheckCheck size={15} aria-hidden="true" />
+                  <CheckCheck size={14} aria-hidden="true" />
                   <span>Đánh dấu đã đọc hết</span>
                 </BusyButton>
               </div>
@@ -615,7 +615,7 @@ function PortalAppContent() {
             )}
 
             {notifItems.length > 0 && (
-              <ul className="pt-list">
+              <ul className="pt-notif-list">
                 {notifItems.map((item) => {
                   const isUnread = !item.readAt;
                   return (

@@ -158,8 +158,8 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           align-items: center;
           justify-content: center;
           gap: 7px;
-          background: linear-gradient(180deg, #fefefe 0%, #f6f6f6 52%, #eeeeee 100%);
-          color: #404040;
+          background: #dfe9f8;
+          color: #0084ff;
           border: none;
           border-radius: 999px;
           padding: 8px 16px;
@@ -167,16 +167,16 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           font-weight: 700;
           cursor: pointer;
           white-space: nowrap;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.06);
+          box-shadow: none;
           transition: all 0.2s ease;
           flex-shrink: 0;
         }
 
         .signboard-print-btn:hover {
-          background: linear-gradient(180deg, #f8f8f8 0%, #efefef 52%, #e6e6e6 100%);
-          color: #2b2b2b;
+          background: #d0dff5;
+          color: #006ee6;
           transform: translateY(-1px);
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
+          box-shadow: none;
         }
 
         .signboard-preview-wrap {
@@ -302,13 +302,20 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           border-top: 1px solid #cbd5e1;
           display: flex;
           justify-content: space-between;
-          font-size: 9.5px;
+          align-items: center;
+          gap: 16px;
+          font-size: 8.75px;
           font-weight: 600;
           color: #64748b;
+          line-height: 1.4;
+        }
+        .plate-bottom > span:first-child {
+          text-align: left;
         }
         .protect-warning {
           color: #b91c1c;
           font-weight: 800;
+          text-align: right;
         }
 
         /* ─── Responsive cho màn hình di động (≤ 640px) ─── */
@@ -417,10 +424,15 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
             margin-top: 13px;
             padding-top: 8px;
             flex-direction: column;
+            align-items: center;
             gap: 6px;
             text-align: center;
             font-size: 9px;
             line-height: 1.35;
+          }
+          .plate-bottom > span:first-child,
+          .protect-warning {
+            text-align: center;
           }
         }
 
@@ -525,7 +537,12 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           .plate-bottom {
             flex-direction: row !important;
             justify-content: space-between !important;
+            align-items: center !important;
+            gap: 16px !important;
             text-align: left !important;
+          }
+          .protect-warning {
+            text-align: right !important;
           }
         }
       `}</style>
