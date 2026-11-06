@@ -29,6 +29,9 @@ interface PlotRow {
   source: PlotSource;
   status: PlotStatus;
   source_ref: string | null;
+  household_id?: string | number | null;
+  lat?: string | number | null;
+  lng?: string | number | null;
   geometry_json: string;
 }
 
@@ -105,6 +108,9 @@ function rowToFeature(row: PlotRow): PlotFeature {
       source: row.source,
       status: row.status,
       sourceRef: row.source_ref ?? undefined,
+      householdId: row.household_id != null ? Number(row.household_id) : undefined,
+      lat: row.lat != null ? asNumber(row.lat) : undefined,
+      lng: row.lng != null ? asNumber(row.lng) : undefined,
       persisted: true,
     },
   };
@@ -219,10 +225,12 @@ export class PlotsService {
       `
         SELECT id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
                village, zone_code AS zone, variety, planted_year AS year, area_ha,
-               source, status, source_ref, ST_AsGeoJSON(geom) AS geometry_json
+               source, status, source_ref, household_id,
+               ST_Y(ST_Centroid(geom)) AS lat, ST_X(ST_Centroid(geom)) AS lng,
+               ST_AsGeoJSON(geom) AS geometry_json
         FROM plots
         ${where}
-        ORDER BY zone_code, sheet_no, parcel_no
+        ORDER BY zone_code, code
       `,
       params,
     );
@@ -258,7 +266,9 @@ export class PlotsService {
           )
           RETURNING id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
                     village, zone_code AS zone, variety, planted_year AS year, area_ha,
-                    source, status, source_ref, ST_AsGeoJSON(geom) AS geometry_json
+                    source, status, source_ref, household_id,
+                    ST_Y(ST_Centroid(geom)) AS lat, ST_X(ST_Centroid(geom)) AS lng,
+                    ST_AsGeoJSON(geom) AS geometry_json
         `,
         [
           properties.code,

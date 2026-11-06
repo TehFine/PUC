@@ -129,7 +129,7 @@ export class PublicController {
                 fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
                 h.name AS household_name, '********' || right(h.cccd, 4) AS household_cccd,
                 h.code AS household_code, v.name AS village_name,
-                p.variety, COALESCE(p.area_ha, h.area_ha)::float8 AS area_ha, p.planted_year
+                p.zone_code, p.variety, COALESCE(p.area_ha, h.area_ha)::float8 AS area_ha, p.planted_year
          FROM farmer_stamps fs
          JOIN households h ON h.id = fs.household_id
          JOIN villages v ON v.id = h.village_id
@@ -140,7 +140,7 @@ export class PublicController {
                 fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
                 h.name AS household_name, '********' || right(h.cccd, 4) AS household_cccd,
                 h.code AS household_code, v.name AS village_name,
-                NULL::text AS variety, h.area_ha::float8 AS area_ha, NULL::int AS planted_year
+                NULL::text AS zone_code, NULL::text AS variety, h.area_ha::float8 AS area_ha, NULL::int AS planted_year
          FROM farmer_stamps fs
          JOIN households h ON h.id = fs.household_id
          JOIN villages v ON v.id = h.village_id
@@ -178,6 +178,12 @@ export class PublicController {
           ? String(farmerStamp.activatedAt).split("T")[0]
           : new Date().toISOString().split("T")[0];
 
+      const resolvedPucCode = String(
+        farmerStamp.zoneCode ||
+          String(farmerStamp.householdCode || "").replace(/-H\d+$/i, "") ||
+          "66-PUC-SR0001-00728",
+      );
+
       return {
         stampType: "farmer_fruit",
         isFarmerStamp: true,
@@ -188,7 +194,7 @@ export class PublicController {
           harvestedOn: harvestDateStr,
           weightTons: Number(farmerStamp.fruitWeightKg ? (Number(farmerStamp.fruitWeightKg) / 1000).toFixed(4) : 0.0035),
           householdCount: 1,
-          buyer: "Hợp tác xã Nông nghiệp Krông Búk (Tiêu thụ & Xuất khẩu)",
+          buyer: "HTX Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né",
           market: "Xuất khẩu chính ngạch & Nội địa",
           status: farmerStamp.status === "activated" ? "harvested" : "allocated",
           packhouseCode: "VN-DLPH-0089",
@@ -197,14 +203,14 @@ export class PublicController {
           {
             householdName: String(farmerStamp.householdName),
             householdCode: String(farmerStamp.householdCode),
-            village: String(farmerStamp.villageName || "Thôn 1"),
+            village: String(farmerStamp.villageName || "Xã Ea Khăl"),
             weightKg: Number(farmerStamp.fruitWeightKg || 3.5),
           },
         ],
         supplyChain: {
           packhouse: {
             code: "VN-DLPH-0089",
-            name: "Cơ sở đóng gói sầu riêng Krông Búk – Đắk Lắk",
+            name: "Cơ sở đóng gói sầu riêng HTX Cư Né – Đắk Lắk",
             taxCode: "6001234567",
             treatmentMethod: "Làm sạch áp lực, khử khuẩn, dán tem QR quả và đóng hộp",
             gradeAPct: farmerStamp.grade === "A" ? 100 : 70,
@@ -220,16 +226,16 @@ export class PublicController {
             estimatedArrival: harvestDateStr,
           },
           contract: {
-            code: "HD-2024/VP-KB01",
-            title: "Hợp đồng liên kết bao tiêu nông hộ Krông Búk",
+            code: "HD-2026/CN-EK01",
+            title: "Hợp đồng liên kết bao tiêu nông hộ HTX Cư Né",
           },
         },
         puc: {
-          code: "VN-DLOR-0086",
-          name: "Vùng trồng sầu riêng HTX Nông nghiệp Krông Búk",
+          code: resolvedPucCode,
+          name: `Vùng trồng sầu riêng ${farmerStamp.villageName || "Ea Khăl"} – HTX Cư Né`,
           crop: "Sầu riêng (Durian - Durio zibethinus)",
-          variety: (farmerStamp.variety as string) || "Monthong (Dona) Đắk Lắk",
-          location: `Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk (Thôn ${farmerStamp.villageName || "1"})`,
+          variety: (farmerStamp.variety as string) || "Đô Na",
+          location: `${farmerStamp.villageName || "Thôn 2"}, Xã Ea Khăl, Tỉnh Đắk Lắk`,
           standard: "VietGAP & Nghị định thư kiểm dịch thực vật Việt Nam - Trung Quốc (GACC)",
           validUntil: "2027-12-31",
         },
@@ -238,7 +244,7 @@ export class PublicController {
         certifications: [
           {
             title: "Mã số vùng trồng (PUC)",
-            code: "VN-DLOR-0086",
+            code: resolvedPucCode,
             status: "Đạt chuẩn xuất khẩu",
             authority: "Cục Bảo vệ Thực vật – Bộ NN&PTNT",
           },
@@ -246,7 +252,7 @@ export class PublicController {
             title: "Kiểm soát tem Nông hộ",
             code: String(farmerStamp.serialCode),
             status: farmerStamp.status === "activated" ? "Đã kích hoạt thu hái tại vườn" : "Tem đã cấp nhưng chưa kích hoạt",
-            authority: "Hệ thống CheckVN & HTX Krông Búk",
+            authority: "Hệ thống CheckVN & HTX Cư Né",
           },
           {
             title: "Chứng nhận VietGAP",
@@ -297,8 +303,9 @@ export class PublicController {
       if (hasPlots) {
         const plotRes = await this.db.query(
           `SELECT p.code, p.owner_name, p.village, p.zone_code, p.variety, p.planted_year,
-                  p.area_ha::float8 AS area_ha, p.status
+                  p.area_ha::float8 AS area_ha, p.status, h.code AS household_code
            FROM plots p
+           LEFT JOIN households h ON h.id = p.household_id
            WHERE upper(p.code) = upper($1)
            LIMIT 1`,
           [cleanCode],
@@ -306,6 +313,7 @@ export class PublicController {
 
         if (plotRes.rowCount && plotRes.rows[0]) {
           const plot = camelRow<Record<string, unknown>>(plotRes.rows[0]);
+          const plotPucCode = String(plot.zoneCode || "66-PUC-SR0001-00728");
           const [diariesRes, labTestsRes] = await Promise.all([
             this.db.query(
               `SELECT entry_on, plot_code, activity, detail, recorder
@@ -333,23 +341,23 @@ export class PublicController {
               harvestedOn: new Date().toISOString().split("T")[0],
               weightTons: Number(plot.areaHa ? (Number(plot.areaHa) * 20).toFixed(1) : 48.0),
               householdCount: 1,
-              buyer: "Hợp tác xã Nông nghiệp Krông Búk",
+              buyer: "HTX Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né",
               market: "Xuất khẩu chính ngạch & Nội địa",
               status: "harvested",
               packhouseCode: "VN-DLPH-0089",
             },
             households: [
               {
-                householdName: String(plot.ownerName || "Hộ Nông Dân Krông Búk"),
-                householdCode: "KB-VT-001",
-                village: String(plot.village || "Thôn 1"),
+                householdName: String(plot.ownerName || "Hộ Nông Dân"),
+                householdCode: String(plot.householdCode || `${plotPucCode}-H01`),
+                village: String(plot.village || "Xã Ea Khăl"),
                 weightKg: Number(plot.areaHa ? (Number(plot.areaHa) * 20000).toFixed(0) : 48000),
               },
             ],
             supplyChain: {
               packhouse: {
                 code: "VN-DLPH-0089",
-                name: "Cơ sở Đóng gói & Sơ chế Krông Búk",
+                name: "Cơ sở Đóng gói & Sơ chế HTX Cư Né",
                 taxCode: "6001289456",
                 treatmentMethod: "Quy trình sơ chế khử khuẩn xuất khẩu VietGAP/GACC",
                 gradeAPct: 75.0,
@@ -358,23 +366,23 @@ export class PublicController {
                 avgBrix: 32.5,
               },
               transport: {
-                transporter: "Vận tải chuyên dùng HTX Krông Búk",
+                transporter: "Vận tải chuyên dùng HTX Cư Né",
                 vehiclePlate: "47C-289.45",
                 temperatureC: 13.5,
                 departedAt: new Date().toISOString().split("T")[0],
                 estimatedArrival: new Date().toISOString().split("T")[0],
               },
               contract: {
-                code: "HD-2024/VP-KB01",
+                code: "HD-2026/CN-EK01",
                 title: "Hợp đồng bao tiêu liên kết chuỗi giá trị",
               },
             },
             puc: {
-              code: "VN-DLOR-0086",
-              name: "Vùng trồng sầu riêng HTX Nông nghiệp Krông Búk",
+              code: plotPucCode,
+              name: `Vùng trồng sầu riêng ${plot.village || "Ea Khăl"} – HTX Cư Né`,
               crop: "Sầu riêng (Durian - Durio zibethinus)",
-              variety: String(plot.variety || "Monthong (Dona) Đắk Lắk"),
-              location: `Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk (${plot.village || "Thôn 1"})`,
+              variety: String(plot.variety || "Đô Na"),
+              location: `${plot.village || "Thôn 2"}, Xã Ea Khăl, Tỉnh Đắk Lắk`,
               standard: "VietGAP & Nghị định thư kiểm dịch thực vật Việt Nam - Trung Quốc (GACC)",
               validUntil: "2027-12-31",
             },
@@ -383,7 +391,7 @@ export class PublicController {
             certifications: [
               {
                 title: "Mã số vùng trồng (PUC)",
-                code: "VN-DLOR-0086",
+                code: plotPucCode,
                 status: "Đạt chuẩn xuất khẩu",
                 authority: "Cục Bảo vệ Thực vật – Bộ NN&PTNT",
               },
@@ -391,7 +399,7 @@ export class PublicController {
                 title: "Biển cắm đầu lô vườn QR",
                 code: String(plot.code),
                 status: "Đã cắm biển định danh tại vườn",
-                authority: "HTX Nông nghiệp Krông Búk",
+                authority: "HTX Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né",
               },
               {
                 title: "Chứng nhận VietGAP",
