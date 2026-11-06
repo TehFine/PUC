@@ -1,12 +1,12 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { api, errorMessage, type UploadPurpose } from "@/lib/api-client";
-
-const MAX_BYTES = 5 * 1024 * 1024;
+import { uploadOptimizedFile, validatePickedFile } from "@/components/portal/shared/media";
+import { errorMessage, type UploadPurpose } from "@/lib/api-client";
 
 /**
- * Ô chọn ảnh: tải tệp lên `/api/uploads` với `purpose` rồi trả về URL do máy chủ cấp (lưu vào `imageUrl`).
+ * Ô chọn ảnh của Quản trị viên: tự động thu nhỏ (tối đa 1600px) và nén JPEG ~0.8 trên trình duyệt
+ * trước khi tải lên `/api/uploads` để tối ưu tốc độ tải và hiển thị khi người dùng truy cập.
  * Không bao giờ lưu ảnh dạng base64.
  */
 export default function ImageUploadField({
@@ -34,18 +34,15 @@ export default function ImageUploadField({
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Vui lòng chọn tệp hình ảnh (JPG, PNG, WEBP).");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      setError("Ảnh quá lớn. Vui lòng chọn ảnh dưới 5 MB.");
+    const problem = validatePickedFile(file);
+    if (problem) {
+      setError(problem);
       return;
     }
     setError(null);
     setUploading(true);
     try {
-      const uploaded = await api.upload(file, purpose);
+      const uploaded = await uploadOptimizedFile(file, purpose);
       onChange(uploaded.url, file);
     } catch (err) {
       setError(errorMessage(err, "Không tải được ảnh lên."));
@@ -72,9 +69,15 @@ export default function ImageUploadField({
             flexShrink: 0,
           }}
         >
-          {value ? (
+          {value && /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(value) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt={alt || "Ảnh đã chọn"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <img
+              src={value}
+              alt={alt || "Ảnh đã chọn"}
+              loading="lazy"
+              decoding="async"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
           ) : (
             <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Chưa có ảnh</span>
           )}

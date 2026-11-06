@@ -1,11 +1,13 @@
 "use client";
 
-import { api, type UploadPurpose } from "@/lib/api-client";
+import { api, type UploadedFile, type UploadPurpose } from "@/lib/api-client";
 
 /** Giới hạn tệp gốc người dùng chọn (trước khi nén). */
 export const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 /** Giới hạn tệp PDF gửi kèm hồ sơ. */
 export const MAX_PDF_BYTES = 10 * 1024 * 1024;
+/** Giới hạn tệp video hiện trường (MP4 / WebM). */
+export const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
 
 const MAX_DIMENSION = 1600;
 const JPEG_QUALITY = 0.8;
@@ -72,23 +74,39 @@ export function jpegName(name: string): string {
   return `${base}.jpg`;
 }
 
-/** Nén (nếu là ảnh) rồi tải lên `/api/uploads`, trả về id tệp. */
-export async function uploadPortalFile(file: File, purpose: UploadPurpose): Promise<number> {
+/** Nén (nếu là ảnh) rồi tải lên `/api/uploads`, trả về thông tin tệp đầy đủ (`{ id, url, mimeType, sizeBytes }`). */
+export async function uploadOptimizedFile(file: File, purpose: UploadPurpose): Promise<UploadedFile> {
   const isImage = file.type.startsWith("image/");
   const blob = isImage ? await compressImage(file) : file;
   const name = isImage && blob !== file ? jpegName(file.name) : file.name;
-  const uploaded = await api.upload(blob, purpose, name);
+  return api.upload(blob, purpose, name);
+}
+
+/** Nén (nếu là ảnh) rồi tải lên `/api/uploads`, trả về id tệp. */
+export async function uploadPortalFile(file: File, purpose: UploadPurpose): Promise<number> {
+  const uploaded = await uploadOptimizedFile(file, purpose);
   return uploaded.id;
 }
 
 /** Kiểm tra tệp người dùng chọn; trả về thông báo lỗi tiếng Việt hoặc null nếu hợp lệ. */
-export function validatePickedFile(file: File, options: { allowPdf?: boolean } = {}): string | null {
+export function validatePickedFile(
+  file: File,
+  options: { allowPdf?: boolean; allowVideo?: boolean } = {},
+): string | null {
   const isImage = file.type.startsWith("image/");
   const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
-  if (!isImage && !(options.allowPdf && isPdf)) {
-    return options.allowPdf ? "Chỉ nhận ảnh (JPG, PNG…) hoặc tệp PDF." : "Vui lòng chọn tệp ảnh (JPG, PNG…).";
+  const isVideo =
+    file.type === "video/mp4" ||
+    file.type === "video/webm" ||
+    /\.(mp4|webm)$/i.test(file.name);
+  if (!isImage && !(options.allowPdf && isPdf) && !(options.allowVideo && isVideo)) {
+    if (options.allowPdf && options.allowVideo) return "Chỉ nhận ảnh (JPG, PNG, WEBP), video (MP4, WebM) hoặc tệp PDF.";
+    if (options.allowPdf) return "Chỉ nhận ảnh (JPG, PNG…) hoặc tệp PDF.";
+    if (options.allowVideo) return "Chỉ nhận ảnh (JPG, PNG, WEBP) hoặc video hiện trường (MP4, WebM).";
+    return "Vui lòng chọn tệp ảnh (JPG, PNG, WEBP).";
   }
   if (isPdf && file.size > MAX_PDF_BYTES) return "Tệp PDF không được vượt quá 10MB.";
+  if (isVideo && file.size > MAX_VIDEO_BYTES) return "Video không được vượt quá 20MB.";
   if (isImage && file.size > MAX_SOURCE_BYTES) return "Ảnh quá lớn (tối đa 15MB).";
   return null;
 }

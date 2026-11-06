@@ -223,46 +223,60 @@ export default function ApprovalDetailModal({
         )}
         {attachments.length > 0 && (
           <div style={{ display: "grid", gap: 10 }}>
-            {attachments.map((att) => {
-              const isImage = att.mimeType?.startsWith("image/") ?? /\.(png|jpe?g|webp|gif)$/i.test(att.url);
-              return (
-                <div
-                  key={att.id}
-                  style={{
-                    padding: 10,
-                    borderRadius: 12,
-                    border: "1px solid var(--border)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                    {isImage && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={att.url}
-                        alt={att.originalName || `Tệp #${att.id}`}
-                        style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
-                      />
-                    )}
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {att.originalName || `Tệp đính kèm #${att.id}`}
-                      </div>
-                      <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-                        {att.mimeType || "Tệp"}
-                        {att.sizeBytes ? ` · ${Math.round(att.sizeBytes / 1024)} KB` : ""}
+            {attachments
+              .filter((att) => /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(att.url))
+              .map((att) => {
+                const isImage = att.mimeType?.startsWith("image/") ?? /\.(png|jpe?g|webp|gif)$/i.test(att.url);
+                const isVideo = att.mimeType?.startsWith("video/") ?? /\.(mp4|webm)$/i.test(att.url);
+                return (
+                  <div
+                    key={att.id}
+                    style={{
+                      padding: 10,
+                      borderRadius: 12,
+                      border: "1px solid var(--border)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      {isImage && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={att.url}
+                          alt={att.originalName || `Tệp #${att.id}`}
+                          loading="lazy"
+                          decoding="async"
+                          style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
+                        />
+                      )}
+                      {isVideo && (
+                        <video
+                          src={att.url}
+                          preload="metadata"
+                          playsInline
+                          muted
+                          style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
+                        />
+                      )}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {att.originalName || `Tệp đính kèm #${att.id}`}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                          {att.mimeType || "Tệp"}
+                          {att.sizeBytes ? ` · ${Math.round(att.sizeBytes / 1024)} KB` : ""}
+                        </div>
                       </div>
                     </div>
+                    <a href={att.url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+                      Mở tệp
+                    </a>
                   </div>
-                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-                    Mở tệp
-                  </a>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         )}
       </div>

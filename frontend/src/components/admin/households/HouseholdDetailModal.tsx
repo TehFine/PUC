@@ -134,7 +134,7 @@ export default function HouseholdDetailModal({
                   <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{j.detail || "—"}</td>
                   <td style={{ fontSize: 12 }}>{j.recorder}</td>
                   <td>
-                    {j.photoUrl ? (
+                    {j.photoUrl && /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(j.photoUrl) ? (
                       <a href={j.photoUrl} target="_blank" rel="noopener noreferrer" className="badge badge-blue">
                         Xem ảnh
                       </a>

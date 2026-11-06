@@ -97,6 +97,12 @@ export function usePhotoPicker(purpose: UploadPurpose) {
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const uploaded = useRef<{ file: File; id: number } | null>(null);
+  const allowVideo =
+    purpose === "journal" ||
+    purpose === "harvest" ||
+    purpose === "approval" ||
+    purpose === "violation" ||
+    purpose === "news";
 
   useEffect(() => {
     return () => {
@@ -104,17 +110,20 @@ export function usePhotoPicker(purpose: UploadPurpose) {
     };
   }, [preview]);
 
-  const pick = useCallback((next: File | null | undefined) => {
-    if (!next) return;
-    const problem = validatePickedFile(next);
-    if (problem) {
-      setError(problem);
-      return;
-    }
-    setError(null);
-    setFile(next);
-    setPreview(URL.createObjectURL(next));
-  }, []);
+  const pick = useCallback(
+    (next: File | null | undefined) => {
+      if (!next) return;
+      const problem = validatePickedFile(next, { allowVideo });
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      setError(null);
+      setFile(next);
+      setPreview(URL.createObjectURL(next));
+    },
+    [allowVideo],
+  );
 
   const clear = useCallback(() => {
     setFile(null);
@@ -165,10 +174,20 @@ export function PhotoField({
 
       {picker.preview ? (
         <div className="pt-photo-preview-wrap">
-          {/* eslint-disable-next-line @next/next/no-img-element -- ảnh xem trước từ blob: URL */}
-          <img src={picker.preview} alt="Xem trước ảnh đã chọn" className="pt-photo-preview-img" />
+          {picker.file?.type.startsWith("video/") ? (
+            <video
+              src={picker.preview}
+              controls
+              playsInline
+              preload="metadata"
+              className="pt-photo-preview-img"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element -- ảnh xem trước từ blob: URL
+            <img src={picker.preview} alt="Xem trước ảnh đã chọn" className="pt-photo-preview-img" decoding="async" />
+          )}
           <div className="pt-photo-preview-bar">
-            <span>{picker.file?.name || "Ảnh đã chọn"}</span>
+            <span>{picker.file?.name || "Tệp đã chọn"}</span>
             <span>✓ Đã đính kèm</span>
           </div>
           <button
@@ -176,8 +195,8 @@ export function PhotoField({
             className="pt-photo-remove-btn"
             onClick={picker.clear}
             disabled={disabled}
-            title="Bỏ ảnh này để chọn ảnh khác"
-            aria-label="Bỏ ảnh đã chọn"
+            title="Bỏ tệp này để chọn tệp khác"
+            aria-label="Bỏ tệp đã chọn"
           >
             <CloseCircleIcon size={24} />
           </button>
@@ -187,7 +206,7 @@ export function PhotoField({
           <input
             id={id}
             type="file"
-            accept="image/*"
+            accept="image/*,video/mp4,video/webm"
             capture="environment"
             disabled={disabled}
             onChange={(event) => {
@@ -240,7 +259,7 @@ export function AttachmentsField({
         setError(`Tối đa ${max} tệp đính kèm.`);
         break;
       }
-      const problem = validatePickedFile(file, { allowPdf: true });
+      const problem = validatePickedFile(file, { allowPdf: true, allowVideo: true });
       if (problem) {
         setError(`${file.name}: ${problem}`);
         continue;
@@ -287,7 +306,7 @@ export function AttachmentsField({
             id={id}
             type="file"
             multiple
-            accept="image/*,application/pdf,.pdf"
+            accept="image/*,video/mp4,video/webm,application/pdf,.pdf"
             disabled={disabled}
             onChange={(event) => {
               add(event.target.files);
@@ -304,15 +323,42 @@ export function AttachmentsField({
 }
 
 /** Chỉ cho phép URL nội bộ bắt đầu bằng `/` (không phải `//`) hoặc `http(s)://` để chặn `javascript:`. */
-const isSafeMediaUrl = (url: string) => /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(url);
+export const isSafeMediaUrl = (url: string | null | undefined): url is string =>
+  typeof url === "string" && /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(url);
 
-/** Ảnh đã lưu trên server (`/api/uploads/:id`), có liên kết mở ảnh gốc. */
+/** Ảnh hoặc video hiện trường đã lưu trên server (`/api/uploads/:id`), có liên kết mở tệp gốc. */
 export function StoredPhoto({ url, alt, caption }: { url: string; alt: string; caption?: string }) {
+  const [asVideo, setAsVideo] = useState(() => /\.(mp4|webm)(\?|$)/i.test(url));
   if (!isSafeMediaUrl(url)) return null;
+  if (asVideo) {
+    return (
+      <div className="pt-detail-photo-frame">
+        <video
+          src={url}
+          controls
+          playsInline
+          preload="metadata"
+          className="pt-detail-photo-img"
+        />
+        {caption && (
+          <div className="pt-detail-photo-overlay">
+            <span>{caption}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
-    <a className="pt-detail-photo-frame" href={url} target="_blank" rel="noopener noreferrer" title="Mở ảnh gốc">
+    <a className="pt-detail-photo-frame" href={url} target="_blank" rel="noopener noreferrer" title="Mở tệp gốc">
       {/* eslint-disable-next-line @next/next/no-img-element -- ảnh tải lên phục vụ qua API có cookie phiên */}
-      <img src={url} alt={alt} className="pt-detail-photo-img" loading="lazy" />
+      <img
+        src={url}
+        alt={alt}
+        className="pt-detail-photo-img"
+        loading="lazy"
+        decoding="async"
+        onError={() => setAsVideo(true)}
+      />
       {caption && (
         <div className="pt-detail-photo-overlay">
           <span>{caption}</span>

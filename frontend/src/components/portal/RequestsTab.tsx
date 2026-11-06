@@ -13,6 +13,7 @@ import {
   BusyButton,
   ConfirmButton,
   InlineError,
+  isSafeMediaUrl,
   type PickedAttachment,
 } from "./shared/controls";
 import { uploadPortalFile } from "./shared/media";
@@ -215,23 +216,25 @@ export default function RequestsTab() {
 
                     {attachments.length > 0 && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                        {attachments.map((att) => (
-                          <a
-                            key={att.id}
-                            href={att.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="pt-attach-chip"
-                            title="Mở tệp đính kèm"
-                          >
-                            {att.mimeType?.includes("pdf") ? (
-                              <FileText size={13} aria-hidden="true" />
-                            ) : (
-                              <Paperclip size={13} aria-hidden="true" />
-                            )}
-                            <span>{att.originalName || `Tệp #${att.id}`}</span>
-                          </a>
-                        ))}
+                        {attachments
+                          .filter((att) => isSafeMediaUrl(att.url))
+                          .map((att) => (
+                            <a
+                              key={att.id}
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="pt-attach-chip"
+                              title="Mở tệp đính kèm"
+                            >
+                              {att.mimeType?.includes("pdf") ? (
+                                <FileText size={13} aria-hidden="true" />
+                              ) : (
+                                <Paperclip size={13} aria-hidden="true" />
+                              )}
+                              <span>{att.originalName || `Tệp #${att.id}`}</span>
+                            </a>
+                          ))}
                       </div>
                     )}
 
