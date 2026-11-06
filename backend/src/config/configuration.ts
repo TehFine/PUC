@@ -86,11 +86,18 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error(`Cấu hình môi trường không hợp lệ:\n${details}`);
   }
 
+  const corsOrigins = env.CORS_ORIGIN.split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  if (corsOrigins.length === 0 || corsOrigins.some((origin) => origin === "*" || origin === "null" || !/^https?:\/\/[^/\s]+$/i.test(origin))) {
+    throw new Error("Cấu hình môi trường không hợp lệ:\n  - CORS_ORIGIN: Phải là danh sách origin http(s) cụ thể, không dùng '*' hoặc 'null'");
+  }
+
   return {
     nodeEnv: env.NODE_ENV,
     isProduction: env.NODE_ENV === NodeEnv.Production,
     port: env.PORT,
-    corsOrigins: env.CORS_ORIGIN.split(",").map((origin) => origin.trim()),
+    corsOrigins,
     database: { url: env.DATABASE_URL, ssl: env.DATABASE_SSL === "true" },
     jwt: {
       accessSecret: env.JWT_ACCESS_SECRET,
