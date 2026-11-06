@@ -82,7 +82,13 @@ export abstract class BaseCrudService {
       const value = query[param];
       if (value === undefined) continue;
       if (typeof value !== "string") throw badRequest(`Tham số ${param} không hợp lệ.`);
-      params.push(value);
+      const trimmed = value.trim();
+      if (!trimmed) continue;
+      if (trimmed.length > 100) throw badRequest(`Tham số ${param} vượt quá độ dài cho phép.`);
+      if (column.endsWith("_id") && !/^[1-9]\d{0,14}$/.test(trimmed)) {
+        throw badRequest(`Tham số ${param} phải là mã định danh số nguyên dương.`);
+      }
+      params.push(trimmed);
       conditions.push(`${column} = $${params.length}`);
     }
 

@@ -1,6 +1,7 @@
 import type { FeatureCollection, Polygon } from "geojson";
 import { Injectable } from "@nestjs/common";
-import { AppException } from "../common/errors/app.exception";
+import type { AuthUser } from "../auth/auth-user";
+import { AppException, forbidden } from "../common/errors/app.exception";
 import { DatabaseService } from "../database/database.service";
 import type {
   CreatedPlot,
@@ -109,6 +110,9 @@ function rowToFeature(row: PlotRow): PlotFeature {
   };
 }
 
+const MAX_RINGS_PER_POLYGON = 32;
+const MAX_POINTS_PER_RING = 2000;
+
 function normalizeGeometry(geometry: unknown): Polygon {
   if (!geometry || typeof geometry !== "object") {
     throw new PlotInputError("Thiếu dữ liệu hình học của thửa.");
@@ -117,10 +121,16 @@ function normalizeGeometry(geometry: unknown): Polygon {
   if (candidate.type !== "Polygon" || !Array.isArray(candidate.coordinates) || candidate.coordinates.length === 0) {
     throw new PlotInputError("Hình học phải là Polygon GeoJSON hợp lệ.");
   }
+  if (candidate.coordinates.length > MAX_RINGS_PER_POLYGON) {
+    throw new PlotInputError(`Polygon không được vượt quá ${MAX_RINGS_PER_POLYGON} vòng tọa độ.`);
+  }
 
   const rings = candidate.coordinates.map((ring) => {
     if (!Array.isArray(ring) || ring.length < 3) {
       throw new PlotInputError("Polygon cần ít nhất 3 điểm.");
+    }
+    if (ring.length > MAX_POINTS_PER_RING) {
+      throw new PlotInputError(`Mỗi vòng polygon không được vượt quá ${MAX_POINTS_PER_RING} điểm.`);
     }
     const positions = ring.map((position) => {
       if (!Array.isArray(position) || position.length < 2) {
@@ -190,21 +200,48 @@ function toProperties(input: CreatePlotInput, geometry: Polygon): PlotProperties
 export class PlotsService {
   constructor(private readonly db: DatabaseService) {}
 
-  async listPlots(): Promise<PlotCollection> {
-    const { rows } = await this.db.query<PlotRow>(`
-      SELECT id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
-             village, zone_code AS zone, variety, planted_year AS year, area_ha,
-             source, status, source_ref, ST_AsGeoJSON(geom) AS geometry_json
-      FROM plots
-      ORDER BY zone_code, sheet_no, parcel_no
-    `);
+  /** Nếu là cán bộ thôn thì trả về tên thôn được phân công; các vai trò khác trả về null (không giới hạn thôn). */
+  private async resolveScopedVillageName(user?: AuthUser): Promise<string | null> {
+    if (!user || user.role !== "village_officer") return null;
+    if (!user.villageId) return "";
+    const { rows } = await this.db.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [user.villageId]);
+    return rows[0]?.name ?? "";
+  }
+
+  async listPlots(user?: AuthUser): Promise<PlotCollection> {
+    const scopedVillage = await this.resolveScopedVillageName(user);
+    if (scopedVillage === "") {
+      return { type: "FeatureCollection", features: [] };
+    }
+    const params: unknown[] = [];
+    const where = scopedVillage !== null ? (params.push(scopedVillage), "WHERE village = $1") : "";
+    const { rows } = await this.db.query<PlotRow>(
+      `
+        SELECT id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
+               village, zone_code AS zone, variety, planted_year AS year, area_ha,
+               source, status, source_ref, ST_AsGeoJSON(geom) AS geometry_json
+        FROM plots
+        ${where}
+        ORDER BY zone_code, sheet_no, parcel_no
+      `,
+      params,
+    );
     return { type: "FeatureCollection", features: rows.map(rowToFeature) };
   }
 
-  async createPlot(input: CreatePlotInput): Promise<CreatedPlot> {
+  async createPlot(input: CreatePlotInput, user?: AuthUser): Promise<CreatedPlot> {
     if (!input || typeof input !== "object") throw new PlotInputError("Thiếu dữ liệu thửa đất.");
     const geometry = normalizeGeometry(input.geometry);
     const properties = toProperties(input, geometry);
+    const scopedVillage = await this.resolveScopedVillageName(user);
+    if (scopedVillage !== null) {
+      if (!scopedVillage) throw forbidden("Tài khoản cán bộ thôn chưa được gắn thôn phụ trách.");
+      if (properties.village && properties.village !== scopedVillage) {
+        throw forbidden("Cán bộ thôn chỉ được tạo thửa đất thuộc thôn mình phụ trách.");
+      }
+      properties.village = scopedVillage;
+      properties.status = "pending";
+    }
     const pool = this.db.pool;
 
     try {
@@ -250,7 +287,11 @@ export class PlotsService {
   async importCadastral(
     collection: FeatureCollection,
     sourceRef?: string,
+    user?: AuthUser,
   ): Promise<ImportResult> {
+    if (user?.role === "village_officer") {
+      throw forbidden("Chỉ quản trị viên hoặc cán bộ HTX/kiểm tra mới có quyền nhập dữ liệu địa chính hàng loạt.");
+    }
     if (!collection || collection.type !== "FeatureCollection" || !Array.isArray(collection.features)) {
       throw new PlotInputError("Tệp phải là GeoJSON FeatureCollection.");
     }
@@ -339,23 +380,41 @@ export class PlotsService {
     }
   }
 
-  async addMeasurement(input: MeasurementInput): Promise<MeasurementResult> {
+  async addMeasurement(input: MeasurementInput, user?: AuthUser): Promise<MeasurementResult> {
     if (!input || typeof input !== "object") throw new PlotInputError("Thiếu dữ liệu kết quả đo.");
     const geometry = normalizeGeometry(input.geometry);
     const areaHa = polygonAreaHa(geometry);
     const plotCode = cleanText(input.plotCode, 64);
     if (!plotCode) throw new PlotInputError("Thiếu mã thửa cần đối chiếu.");
 
+    const scopedVillage = await this.resolveScopedVillageName(user);
     const pool = this.db.pool;
 
     let plotId: number | null = null;
+    let plotVillage: string | null = null;
     if (input.plotId && /^\d+$/.test(input.plotId)) {
-      plotId = Number(input.plotId);
+      const found = await pool.query<{ id: string | number; village: string | null }>(
+        "SELECT id, village FROM plots WHERE id = $1",
+        [Number(input.plotId)],
+      );
+      if (found.rows.length > 0) {
+        plotId = Number(found.rows[0].id);
+        plotVillage = found.rows[0].village;
+      }
     } else {
-      const found = await pool.query<{ id: string | number }>("SELECT id FROM plots WHERE code = $1", [plotCode]);
-      if (found.rows.length > 0) plotId = Number(found.rows[0].id);
+      const found = await pool.query<{ id: string | number; village: string | null }>(
+        "SELECT id, village FROM plots WHERE code = $1",
+        [plotCode],
+      );
+      if (found.rows.length > 0) {
+        plotId = Number(found.rows[0].id);
+        plotVillage = found.rows[0].village;
+      }
     }
     if (!plotId) throw new PlotInputError("Không tìm thấy thửa để lưu kết quả đo.");
+    if (scopedVillage !== null && plotVillage !== scopedVillage) {
+      throw forbidden("Bạn không có quyền thêm kết quả đo cho thửa đất ngoài thôn phụ trách.");
+    }
 
     const { rows } = await pool.query<MeasurementRow>(
       `
@@ -390,10 +449,17 @@ export class PlotsService {
     };
   }
 
-  async listMeasurements(plotCode: string): Promise<StoredMeasurement[]> {
+  async listMeasurements(plotCode: string, user?: AuthUser): Promise<StoredMeasurement[]> {
     const code = cleanText(plotCode, 64);
     if (!code) return [];
+    const scopedVillage = await this.resolveScopedVillageName(user);
     const pool = this.db.pool;
+    if (scopedVillage !== null) {
+      const found = await pool.query<{ village: string | null }>("SELECT village FROM plots WHERE code = $1", [code]);
+      if (found.rows.length === 0 || found.rows[0].village !== scopedVillage) {
+        return [];
+      }
+    }
 
     const { rows } = await pool.query<MeasurementRow>(
       `

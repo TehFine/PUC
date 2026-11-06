@@ -3,8 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, stat, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import type { AuthUser } from "../auth/auth-user";
+import { can, type ResourceKey } from "../auth/permissions";
 import { badRequest, forbidden, notFound } from "../common/errors/app.exception";
 import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
@@ -16,6 +17,14 @@ export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
 const FARMER_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["journal", "harvest", "stamp", "approval", "violation"]);
 /** Tệp dùng trên trang công khai (ảnh bản tin, ảnh danh mục) – ai cũng xem được. */
 export const PUBLIC_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["news", "catalog"]);
+
+const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
+  journal: "journal",
+  harvest: "harvest",
+  stamp: "stamps",
+  approval: "approvals",
+  violation: "violations",
+};
 
 interface DetectedType {
   mime: string;
@@ -144,18 +153,19 @@ export class UploadsService implements OnModuleInit {
       if (attachment.household_id !== null && attachment.household_id === user.householdId) return;
       throw notFound();
     }
+    const requiredResource = PURPOSE_RESOURCE[attachment.purpose];
+    if (requiredResource && !can(user.role, requiredResource, "read")) {
+      throw notFound();
+    }
     if (user.role === "village_officer") {
-      // Cán bộ thôn không có quyền xem hồ sơ phê duyệt và vi phạm của các hộ.
-      if (attachment.purpose === "approval" || attachment.purpose === "violation") {
+      if (attachment.household_id === null) {
         throw notFound();
       }
-      if (attachment.household_id !== null) {
-        const { rows } = await this.db.query("SELECT 1 FROM households WHERE id = $1 AND village_id = $2", [
-          attachment.household_id,
-          user.villageId ?? -1,
-        ]);
-        if (rows.length === 0) throw notFound();
-      }
+      const { rows } = await this.db.query("SELECT 1 FROM households WHERE id = $1 AND village_id = $2", [
+        attachment.household_id,
+        user.villageId ?? -1,
+      ]);
+      if (rows.length === 0) throw notFound();
     }
   }
 
@@ -169,7 +179,7 @@ export class UploadsService implements OnModuleInit {
 
   private pathOf(key: string) {
     const path = resolve(join(this.root, key));
-    if (!path.startsWith(this.root)) throw notFound();
+    if (path === this.root || !path.startsWith(this.root + sep)) throw notFound();
     return path;
   }
 }
