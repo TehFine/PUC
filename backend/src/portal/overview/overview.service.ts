@@ -3,6 +3,7 @@ import type { AuthUser } from "../../auth/auth-user";
 import { notFound } from "../../common/errors/app.exception";
 import { camelRow, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
+import { NotificationsService } from "../../notifications/notifications.service";
 import { householdIdOf, PORTAL_TABS, TODAY_VN_SQL } from "../common/portal-context";
 
 export interface PortalReminder {
@@ -16,10 +17,14 @@ export interface PortalReminder {
 /** Tổng quan của hộ: thông tin hộ, số liệu nhanh, kết quả kiểm nghiệm gần nhất và nhắc việc. */
 @Injectable()
 export class OverviewService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async overview(user: AuthUser) {
     const id = householdIdOf(user);
+    await this.notifications.syncFarmerNotifications(user);
     const household = (
       await this.db.query(
         `SELECT h.id, h.code, h.name, h.phone, h.plot_count, h.area_ha, h.status,

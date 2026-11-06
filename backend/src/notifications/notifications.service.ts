@@ -74,9 +74,46 @@ export class NotificationsService {
    * Đồng bộ tự động các cảnh báo vi phạm đang mở (violations: open) và lịch kiểm tra sắp tới
    * vào bảng notifications của hộ nông dân, đồng thời tự đánh dấu đã đọc khi vi phạm đã xử lý xong.
    */
-  private async syncFarmerNotifications(user: AuthUser): Promise<void> {
-    if (!user.householdId) return;
+  async syncFarmerNotifications(user: AuthUser): Promise<void> {
     try {
+      let householdId = user.householdId;
+      if (!householdId) {
+        const uRes = await this.db.query<{ household_id: number | null }>(
+          "SELECT household_id FROM users WHERE id = $1",
+          [user.id],
+        );
+        householdId = uRes.rows[0]?.household_id ?? null;
+      }
+      if (!householdId) return;
+
+      // Trên môi trường Render (chỉ chạy node dist/main.js, không tự chạy lại seedDemoFarmers mỗi lần khởi động):
+      // đảm bảo lịch kiểm tra mẫu sắp tới và vi phạm mẫu của hộ demo luôn có sẵn như ở localhost.
+      await Promise.all([
+        this.db.query(
+          `UPDATE violations v
+           SET household_id = h.id
+           FROM households h
+           WHERE v.household_id IS NULL
+             AND h.id = $1
+             AND v.household_label ILIKE h.name || '%'`,
+          [householdId],
+        ),
+        this.db.query(
+          `INSERT INTO violations (severity, title, household_label, detected_on, plot_code, description, household_id)
+           SELECT 'warning', 'Nhật ký canh tác chưa cập nhật 7+ ngày', h.name || ' – Thôn 1', current_date - 3, 'TH1-001',
+                  'Theo quy định HTX, hộ cần ghi nhật ký canh tác tối thiểu 7 ngày/lần. Vui lòng cập nhật sớm.', h.id
+           FROM households h
+           WHERE h.id = $1 AND h.phone = '0905123456'
+             AND NOT EXISTS (SELECT 1 FROM violations WHERE household_id = h.id)`,
+          [householdId],
+        ),
+        this.db.query(
+          `INSERT INTO inspection_schedule (scheduled_on, title, officer, plot_count, kind)
+           SELECT current_date + 5, 'Kiểm tra định kỳ vùng trồng Thôn 1', 'Lê Văn Kiểm', 12, 'periodic'
+           WHERE NOT EXISTS (SELECT 1 FROM inspection_schedule WHERE scheduled_on >= current_date)`,
+        ),
+      ]);
+
       await Promise.all([
         this.db.query(
           `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
@@ -96,7 +133,7 @@ export class NotificationsService {
                  AND (n.link = '/portal?tab=diary&violationId=' || v.id OR (n.kind = 'violation' AND n.title LIKE '%' || v.title))
              )
            ORDER BY v.detected_on ASC, v.id ASC`,
-          [user.id, user.householdId],
+          [user.id, householdId],
         ),
         this.db.query(
           `INSERT INTO notifications (user_id, kind, title, body, link, created_at)
