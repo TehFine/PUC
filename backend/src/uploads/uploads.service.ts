@@ -26,6 +26,19 @@ const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
   violation: "violations",
 };
 
+const PURPOSE_WRITE_RESOURCE: Record<UploadPurpose, ResourceKey> = {
+  journal: "journal",
+  harvest: "harvest",
+  stamp: "stamps",
+  approval: "approvals",
+  violation: "violations",
+  news: "news",
+  catalog: "pesticides",
+};
+
+const VIDEO_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["journal", "harvest", "approval", "violation", "news"]);
+const DEFAULT_MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+
 interface DetectedType {
   mime: string;
   ext: string;
@@ -41,6 +54,16 @@ function detectType(buffer: Buffer): DetectedType | null {
     return { mime: "image/webp", ext: "webp" };
   }
   if (buffer.length >= 5 && buffer.toString("ascii", 0, 5) === "%PDF-") return { mime: "application/pdf", ext: "pdf" };
+  if (
+    buffer.length >= 12 &&
+    buffer.toString("ascii", 4, 8) === "ftyp" &&
+    /^(isom|iso2|mp41|mp42|avc1|M4V |qt  |mmp4|dash|MSNV|3gp)/i.test(buffer.toString("ascii", 8, 12))
+  ) {
+    return { mime: "video/mp4", ext: "mp4" };
+  }
+  if (buffer.length >= 4 && buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
+    return { mime: "video/webm", ext: "webm" };
+  }
   return null;
 }
 
@@ -89,15 +112,30 @@ export class UploadsService implements OnModuleInit {
 
   async save(file: UploadedFileInput | undefined, purpose: UploadPurpose, user: AuthUser) {
     if (!file?.buffer?.length) throw badRequest("Chưa chọn tệp để tải lên.");
-    if (file.size > this.maxBytes) throw badRequest(`Tệp vượt quá ${Math.round(this.maxBytes / 1024 / 1024)} MB.`);
-    if (user.role === "farmer" && !FARMER_PURPOSES.has(purpose)) throw forbidden();
-    if (user.role === "farmer" && user.householdId === null) {
-      throw forbidden("Tài khoản chưa được liên kết với hộ nào. Vui lòng liên hệ cán bộ HTX.");
+    if (user.role === "farmer") {
+      if (!FARMER_PURPOSES.has(purpose)) throw forbidden();
+      if (user.householdId === null) {
+        throw forbidden("Tài khoản chưa được liên kết với hộ nào. Vui lòng liên hệ cán bộ HTX.");
+      }
+    } else {
+      const resource = PURPOSE_WRITE_RESOURCE[purpose];
+      if (!can(user.role, resource, "create") && !can(user.role, resource, "update")) {
+        throw forbidden();
+      }
     }
 
     const type = detectType(file.buffer);
-    if (!type) throw badRequest("Chỉ chấp nhận ảnh JPG, PNG, WEBP hoặc tệp PDF.");
+    if (!type) {
+      if (file.size > this.maxBytes) throw badRequest(`Tệp vượt quá ${Math.round(this.maxBytes / 1024 / 1024)} MB.`);
+      throw badRequest("Chỉ chấp nhận ảnh JPG, PNG, WEBP, video MP4/WEBM hoặc tệp PDF.");
+    }
+    const isVideo = type.mime.startsWith("video/");
+    const limitBytes = isVideo ? Math.max(this.maxBytes, DEFAULT_MAX_VIDEO_BYTES) : this.maxBytes;
+    if (file.size > limitBytes) {
+      throw badRequest(`Tệp vượt quá ${Math.round(limitBytes / 1024 / 1024)} MB.`);
+    }
     if (type.mime === "application/pdf" && purpose !== "approval") throw badRequest("Mục này chỉ nhận tệp ảnh.");
+    if (isVideo && !VIDEO_PURPOSES.has(purpose)) throw badRequest("Mục này chỉ nhận tệp ảnh.");
 
     const now = new Date();
     const key = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${randomUUID()}.${type.ext}`;
@@ -169,12 +207,12 @@ export class UploadsService implements OnModuleInit {
     }
   }
 
-  async open(attachment: AttachmentRow) {
+  async open(attachment: AttachmentRow, range?: { start: number; end: number }) {
     const path = this.pathOf(attachment.storage_key);
     await stat(path).catch(() => {
       throw notFound();
     });
-    return createReadStream(path);
+    return createReadStream(path, range);
   }
 
   private pathOf(key: string) {
