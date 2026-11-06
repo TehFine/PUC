@@ -47,6 +47,8 @@ export interface IssuedTokens {
 @Injectable()
 export class AuthService {
   private readonly refreshTtlDays: number;
+  private readonly isProduction: boolean;
+  private readonly googleClientId?: string;
 
   constructor(
     private readonly db: DatabaseService,
@@ -55,6 +57,8 @@ export class AuthService {
     config: ConfigService<AppConfig, true>,
   ) {
     this.refreshTtlDays = config.get("jwt", { infer: true }).refreshTtlDays;
+    this.isProduction = config.get("isProduction", { infer: true });
+    this.googleClientId = config.get("googleClientId", { infer: true });
   }
 
   sessionOf(user: AuthUser): SessionResult {
@@ -135,50 +139,62 @@ export class AuthService {
     return { ...this.sessionOf(authUser), tokens };
   }
 
-  async loginWithGoogle(dto: GoogleLoginDto, meta: ClientMeta): Promise<SessionResult & { tokens: IssuedTokens }> {
-    let targetUsername = dto.username?.trim() || "";
-
-    if (!targetUsername && dto.credential) {
-      try {
-        const parts = dto.credential.split(".");
-        if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as {
-            email?: string;
-          };
-          if (payload.email) {
-            targetUsername = payload.email.split("@")[0] ?? "";
-          }
-        }
-      } catch {
-        // Bỏ qua nếu token không phải định dạng JWT chuẩn
+  private async verifyGoogleIdToken(credential: string): Promise<{ email: string }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5_000);
+    try {
+      const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`;
+      const res = await fetch(url, { method: "GET", signal: controller.signal });
+      if (!res.ok) {
+        throw unauthorized("Token đăng nhập Google không hợp lệ hoặc đã hết hạn.");
       }
+      const payload = (await res.json()) as {
+        iss?: string;
+        aud?: string;
+        exp?: string;
+        email?: string;
+        email_verified?: string | boolean;
+      };
+      if (payload.iss !== "https://accounts.google.com" && payload.iss !== "accounts.google.com") {
+        throw unauthorized("Nguồn phát hành token Google không hợp lệ.");
+      }
+      if (this.googleClientId && payload.aud !== this.googleClientId) {
+        throw unauthorized("Token Google không khớp ứng dụng (client_id).");
+      }
+      const expSec = Number(payload.exp ?? 0);
+      if (!Number.isFinite(expSec) || expSec * 1000 <= Date.now()) {
+        throw unauthorized("Token đăng nhập Google đã hết hạn.");
+      }
+      const emailVerified = payload.email_verified === true || payload.email_verified === "true";
+      if (!payload.email || !emailVerified) {
+        throw unauthorized("Tài khoản Google chưa xác minh địa chỉ email.");
+      }
+      return { email: payload.email.trim().toLowerCase() };
+    } catch (error) {
+      if (error instanceof AppException) throw error;
+      throw unauthorized("Không xác thực được thông tin đăng nhập với Google.");
+    } finally {
+      clearTimeout(timer);
     }
+  }
 
+  async loginWithGoogle(dto: GoogleLoginDto, meta: ClientMeta): Promise<SessionResult & { tokens: IssuedTokens }> {
     let user: UserRow | undefined;
 
-    if (targetUsername) {
+    if (dto.credential) {
+      const { email } = await this.verifyGoogleIdToken(dto.credential);
+      const localPart = email.split("@")[0] ?? "";
       const { rows } = await this.db.query<UserRow>(
         `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
          FROM users u
-         WHERE u.username = $1 AND u.status = 'active'
+         WHERE (LOWER(u.username) = $1 OR LOWER(u.username) = $2)
          LIMIT 1`,
-        [targetUsername],
+        [email, localPart],
       );
       user = rows[0];
-    }
-
-    if (!user && dto.role === "admin") {
-      const { rows } = await this.db.query<UserRow>(
-        `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
-         FROM users u
-         WHERE u.role = 'admin' AND u.status = 'active'
-         ORDER BY u.id ASC
-         LIMIT 1`,
-      );
-      user = rows[0];
-    }
-
-    if (!user) {
+    } else if (!this.isProduction && !this.googleClientId) {
+      // Chế độ trải nghiệm nhanh trên môi trường dev/demo (khi chưa cấu hình GOOGLE_CLIENT_ID):
+      // chỉ đăng nhập vào tài khoản nông dân mẫu, tuyệt đối không cấp quyền quản trị viên.
       const { rows } = await this.db.query<UserRow>(
         `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
          FROM users u
@@ -187,21 +203,22 @@ export class AuthService {
          LIMIT 1`,
       );
       user = rows[0];
+    } else {
+      throw unauthorized("Vui lòng cung cấp thông tin xác thực Google hợp lệ.");
     }
 
     if (!user) {
-      const { rows } = await this.db.query<UserRow>(
-        `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
-         FROM users u
-         WHERE u.status = 'active'
-         ORDER BY u.id ASC
-         LIMIT 1`,
-      );
-      user = rows[0];
+      throw unauthorized("Tài khoản Google này chưa được liên kết với tài khoản nào trong hệ thống.");
     }
 
-    if (!user) {
-      throw unauthorized("Không tìm thấy tài khoản hoạt động để đăng nhập bằng Google.");
+    if (user.locked_until && user.locked_until.getTime() > Date.now()) {
+      throw new AppException(429, "Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
+    }
+    if (user.status === "pending") {
+      throw new AppException(403, "Tài khoản đang chờ cán bộ HTX duyệt. Vui lòng quay lại sau khi được thông báo.", "ACCOUNT_PENDING");
+    }
+    if (user.status !== "active") {
+      throw new AppException(403, "Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.", "ACCOUNT_DISABLED");
     }
 
     await this.db.query(

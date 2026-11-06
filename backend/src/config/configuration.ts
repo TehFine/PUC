@@ -49,6 +49,10 @@ class EnvironmentVariables {
   @MinLength(8)
   SEED_PASSWORD?: string;
 
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_ID?: string;
+
   @IsString()
   UPLOAD_DIR = "uploads";
 
@@ -67,6 +71,7 @@ export interface AppConfig {
   jwt: { accessSecret: string; accessTtlMin: number; refreshTtlDays: number };
   cookieSecure: boolean;
   seedPassword?: string;
+  googleClientId?: string;
   uploads: { dir: string; maxBytes: number };
 }
 
@@ -94,6 +99,7 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === "true" : env.NODE_ENV === NodeEnv.Production,
     seedPassword: env.SEED_PASSWORD,
+    googleClientId: env.GOOGLE_CLIENT_ID?.trim() || undefined,
     uploads: { dir: env.UPLOAD_DIR, maxBytes: env.UPLOAD_MAX_MB * 1024 * 1024 },
   };
 }

@@ -13,6 +13,9 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 // Đăng ký: tối đa 5 lần/giờ cho mỗi IP để chống tạo tài khoản rác hàng loạt.
 const REGISTER_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 5;
 const REGISTER_WINDOW_MS = 60 * 60 * 1000;
+// Làm mới phiên: giới hạn 30 lần/phút mỗi IP.
+const REFRESH_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 30;
+const REFRESH_WINDOW_MS = 60 * 1000;
 
 @Controller("auth")
 export class AuthController {
@@ -54,6 +57,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: REFRESH_LIMIT, ttl: REFRESH_WINDOW_MS } })
   @Post("refresh")
   @HttpCode(200)
   async refresh(@Req() req: Request, @Ip() ip: string, @Res({ passthrough: true }) res: Response) {

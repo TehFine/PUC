@@ -135,7 +135,7 @@ export class UploadsService implements OnModuleInit {
     return rows[0] ?? null;
   }
 
-  /** Quyền xem tệp: tệp công khai; người tải lên; hộ dân cùng hộ; cán bộ (thôn: chỉ hộ trong thôn mình). */
+  /** Quyền xem tệp: tệp công khai; người tải lên; hộ dân cùng hộ; cán bộ (thôn: chỉ hộ trong thôn mình và đúng phân quyền). */
   async assertReadable(attachment: AttachmentRow, user: AuthUser | undefined) {
     if (PUBLIC_PURPOSES.has(attachment.purpose)) return;
     if (!user) throw notFound();
@@ -144,12 +144,18 @@ export class UploadsService implements OnModuleInit {
       if (attachment.household_id !== null && attachment.household_id === user.householdId) return;
       throw notFound();
     }
-    if (user.role === "village_officer" && attachment.household_id !== null) {
-      const { rows } = await this.db.query("SELECT 1 FROM households WHERE id = $1 AND village_id = $2", [
-        attachment.household_id,
-        user.villageId ?? -1,
-      ]);
-      if (rows.length === 0) throw notFound();
+    if (user.role === "village_officer") {
+      // Cán bộ thôn không có quyền xem hồ sơ phê duyệt và vi phạm của các hộ.
+      if (attachment.purpose === "approval" || attachment.purpose === "violation") {
+        throw notFound();
+      }
+      if (attachment.household_id !== null) {
+        const { rows } = await this.db.query("SELECT 1 FROM households WHERE id = $1 AND village_id = $2", [
+          attachment.household_id,
+          user.villageId ?? -1,
+        ]);
+        if (rows.length === 0) throw notFound();
+      }
     }
   }
 

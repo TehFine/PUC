@@ -9,9 +9,6 @@ type Status = "loading" | "authenticated" | "anonymous";
 
 export interface GoogleLoginPayload {
   credential?: string;
-  email?: string;
-  username?: string;
-  role?: "farmer" | "admin";
 }
 
 interface AuthContextValue {

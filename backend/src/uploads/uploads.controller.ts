@@ -31,6 +31,17 @@ const findOr404 = async (service: UploadsService, id: number) => {
   return attachment;
 };
 
+const applySafeFileHeaders = (res: Response, mimeType: string) => {
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Content-Disposition", "inline");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+  );
+};
+
 @Controller()
 export class UploadsController {
   constructor(private readonly uploads: UploadsService) {}
@@ -57,8 +68,7 @@ export class UploadsController {
   ) {
     const attachment = await findOr404(this.uploads, id);
     await this.uploads.assertReadable(attachment, user);
-    res.setHeader("Content-Type", attachment.mime_type);
-    res.setHeader("Content-Disposition", "inline");
+    applySafeFileHeaders(res, attachment.mime_type);
     return new StreamableFile(await this.uploads.open(attachment));
   }
 
@@ -69,8 +79,7 @@ export class UploadsController {
   async publicFile(@Param("id", ParseRecordIdPipe) id: number, @Res({ passthrough: true }) res: Response) {
     const attachment = await findOr404(this.uploads, id);
     if (!PUBLIC_PURPOSES.has(attachment.purpose)) throw notFound();
-    res.setHeader("Content-Type", attachment.mime_type);
-    res.setHeader("Content-Disposition", "inline");
+    applySafeFileHeaders(res, attachment.mime_type);
     return new StreamableFile(await this.uploads.open(attachment));
   }
 }

@@ -31,6 +31,7 @@ export class ViolationsService extends BaseCrudService {
       orderBy: "t.detected_on DESC, t.id DESC",
       search: ["t.title", "t.household_label", "t.plot_code"],
       filters: { severity: "t.severity", status: "t.status", householdId: "t.household_id" },
+      virtual: ["_method"],
     });
   }
 
