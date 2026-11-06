@@ -80,6 +80,7 @@ export class NotificationsService {
     const now = Date.now();
     const lastSync = this.lastSyncedAt.get(user.id) ?? 0;
     if (now - lastSync < NotificationsService.SYNC_THROTTLE_MS) return;
+    if (this.lastSyncedAt.size > 1000) this.lastSyncedAt.clear();
     this.lastSyncedAt.set(user.id, now);
 
     try {
@@ -159,6 +160,7 @@ export class NotificationsService {
     const now = Date.now();
     const lastSync = this.lastSyncedAt.get(user.id) ?? 0;
     if (now - lastSync < NotificationsService.SYNC_THROTTLE_MS) return;
+    if (this.lastSyncedAt.size > 1000) this.lastSyncedAt.clear();
     this.lastSyncedAt.set(user.id, now);
 
     try {

@@ -4,9 +4,10 @@ import { validate } from "class-validator";
 import type { AuthUser } from "../../auth/auth-user";
 import type { Role } from "../../auth/permissions";
 import { AuditService } from "../../audit/audit.service";
-import { BaseCrudService } from "../../common/crud/base-crud.service";
+import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import type { ListQueryDto } from "../../common/crud/list-query.dto";
 import { villageScope } from "../../common/crud/village-scope";
+import { AppException, forbidden } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
 import { CreateHouseholdDto } from "./households.dto";
 
@@ -52,6 +53,17 @@ export class HouseholdsService extends BaseCrudService {
       filters: { villageId: "t.village_id", status: "t.status" },
       scope: villageScope("t.village_id"),
     });
+  }
+
+  protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (input.villageId !== undefined && input.villageId !== null) {
+      if (context.user.role === "village_officer" && input.villageId !== context.user.villageId) {
+        throw forbidden("Cán bộ thôn chỉ được thao tác với hộ thuộc thôn mình phụ trách.");
+      }
+      const village = await this.db.query("SELECT 1 FROM villages WHERE id = $1", [input.villageId]);
+      if (village.rowCount === 0) throw new AppException(409, "Thôn được chọn không tồn tại.", "DB_23503");
+    }
+    return input;
   }
 
   override async list(user: AuthUser, query: ListQueryDto & Record<string, unknown>) {

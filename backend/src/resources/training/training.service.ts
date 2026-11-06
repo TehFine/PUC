@@ -27,6 +27,7 @@ export class TrainingService extends BaseCrudService {
       orderBy: "t.completed, t.held_on NULLS LAST, t.id",
       search: ["t.title", "t.trainer", "t.location", "t.description"],
       filters: { completed: "t.completed" },
+      virtual: ["_method"],
     });
   }
 
@@ -45,9 +46,16 @@ export class TrainingService extends BaseCrudService {
     }
   }
 
-  async listRegistrations(courseId: number) {
+  async listRegistrations(courseId: number, user?: AuthUser) {
     const course = await this.db.query("SELECT 1 FROM training_courses WHERE id = $1", [courseId]);
     if (course.rowCount === 0) throw notFound("Không tìm thấy khóa đào tạo.");
+
+    const params: unknown[] = [courseId];
+    let villageClause = "";
+    if (user?.role === "village_officer") {
+      params.push(user.villageId ?? -1);
+      villageClause = `AND h.village_id = $${params.length}`;
+    }
 
     const { rows } = await this.db.query(
       `SELECT r.id, r.course_id, r.household_id, h.code AS household_code, h.name AS household_name,
@@ -55,9 +63,9 @@ export class TrainingService extends BaseCrudService {
        FROM training_registrations r
        JOIN households h ON h.id = r.household_id
        JOIN villages v ON v.id = h.village_id
-       WHERE r.course_id = $1
+       WHERE r.course_id = $1 ${villageClause}
        ORDER BY r.registered_at ASC, r.id ASC`,
-      [courseId],
+      params,
     );
     return { data: camelRows(rows) };
   }

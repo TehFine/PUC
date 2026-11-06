@@ -22,8 +22,8 @@ export class TrainingController extends CrudController(
 
   @Get(":id/registrations")
   @Authorize("training-registrations", "read")
-  listRegistrations(@Param("id", ParseRecordIdPipe) id: number) {
-    return this.training.listRegistrations(id);
+  listRegistrations(@Param("id", ParseRecordIdPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.training.listRegistrations(id, user);
   }
 
   @Patch(":id/registrations/:rid")

@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, Ip, Post } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { CrudController } from "../../common/crud/crud-controller.factory";
@@ -13,6 +14,7 @@ export class HouseholdsController extends CrudController("households", CreateHou
 
   /** Nhập danh sách hộ (cập nhật theo `code`): `{ created, updated, errors: [{ row, message }] }`. */
   @Post("import")
+  @Throttle({ default: { limit: process.env.NODE_ENV === "test" ? 1000 : 10, ttl: 60_000 } })
   @HttpCode(200)
   @Authorize("households", "create")
   import(@Body() dto: ImportHouseholdsDto, @CurrentUser() user: AuthUser, @Ip() ip: string) {

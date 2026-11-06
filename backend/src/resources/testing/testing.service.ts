@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
+import { assertHouseholdInScope } from "../../common/crud/village-scope";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 
@@ -21,10 +22,12 @@ export class TestingService extends BaseCrudService {
       orderBy: "t.sampled_on DESC, t.id DESC",
       search: ["t.code", "h.name", "t.plot_code", "t.lab"],
       filters: { householdId: "t.household_id", result: "t.result" },
+      virtual: ["_method"],
     });
   }
 
-  protected override prepare(input: Record<string, unknown>, context: WriteContext) {
+  protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
+    await assertHouseholdInScope(this.db, input, context.user);
     return { ...input, _method: context.method };
   }
 

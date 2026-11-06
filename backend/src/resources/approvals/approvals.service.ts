@@ -1,7 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
+import { can } from "../../auth/permissions";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
+import { badRequest, forbidden } from "../../common/errors/app.exception";
 import { camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -75,11 +77,19 @@ export class ApprovalsService extends BaseCrudService {
     return this.findOne(id, user);
   }
 
-  /** Duyệt/từ chối hồ sơ qua PATCH thì ghi lại người duyệt và thời điểm duyệt. */
-  protected override prepare(input: Record<string, unknown>, context: WriteContext) {
-    return context.method === "PATCH" && input.status !== undefined
-      ? { ...input, reviewedBy: context.user.id, reviewedAt: new Date().toISOString() }
-      : input;
+  /** Duyệt/từ chối hồ sơ qua PATCH thì kiểm tra quyền duyệt và ghi lại người duyệt, thời điểm duyệt. */
+  protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (input.householdId !== undefined && input.householdId !== null) {
+      const hh = await this.db.query("SELECT 1 FROM households WHERE id = $1", [input.householdId]);
+      if (hh.rowCount === 0) throw badRequest("Hộ nông dân không tồn tại.");
+    }
+    if (input.status === "approved" || input.status === "rejected") {
+      if (!can(context.user.role, "approvals", "update")) {
+        throw forbidden("Bạn không có quyền phê duyệt hoặc từ chối hồ sơ.");
+      }
+      return { ...input, reviewedBy: context.user.id, reviewedAt: new Date().toISOString() };
+    }
+    return input;
   }
 
   protected override auditAction(_method: "POST" | "PATCH", input: Record<string, unknown>) {

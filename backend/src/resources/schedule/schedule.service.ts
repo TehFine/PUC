@@ -20,6 +20,7 @@ export class ScheduleService extends BaseCrudService {
       orderBy: "t.scheduled_on ASC, t.id",
       search: ["t.title", "t.officer"],
       filters: { kind: "t.kind" },
+      virtual: ["_method"],
     });
   }
 

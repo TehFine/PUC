@@ -26,17 +26,20 @@ export class SprayService extends BaseCrudService {
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     await assertHouseholdInScope(this.db, input, context.user);
     const out = { ...input };
-    if (context.method === "POST" && (out.mrlStatus === undefined || out.isolationDays === undefined)) {
+    if (out.pesticideId !== undefined && out.pesticideId !== null) {
       const { rows } = await this.db.query<{ status: string; isolation_days: number | null }>(
         "SELECT status, isolation_days FROM pesticides WHERE id = $1",
         [out.pesticideId],
       );
       if (rows.length === 0) throw badRequest("Thuốc BVTV không tồn tại.");
-      if (out.mrlStatus === undefined) {
-        out.mrlStatus = rows[0].status === "allowed" ? "pass" : "exceeded";
+      const pesticide = rows[0];
+      if (pesticide.status === "banned") {
+        out.mrlStatus = "exceeded";
+      } else if (context.method === "POST" && out.mrlStatus === undefined) {
+        out.mrlStatus = pesticide.status === "allowed" ? "pass" : "exceeded";
       }
-      if (out.isolationDays === undefined) {
-        out.isolationDays = rows[0].isolation_days ?? 0;
+      if (context.method === "POST" && out.isolationDays === undefined) {
+        out.isolationDays = pesticide.isolation_days ?? 0;
       }
     }
     return out;
