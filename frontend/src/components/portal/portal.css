@@ -8496,11 +8496,12 @@ body.pt-body {
   gap: 10px;
   padding: 12px 14px;
   border-radius: 12px;
-  border: 1px solid var(--border);
-  background: #ffffff;
+  border: none;
+  outline: none;
+  background: #f8fafc;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease;
 }
 .pt-notif-item + .pt-notif-item {
   margin-top: 0;
@@ -8509,12 +8510,21 @@ body.pt-body {
 .pt-list > li.pt-notif-item.is-unread,
 .pt-list > li.pt-notif-item.is-unread:first-child {
   background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  border: none;
 }
 .pt-notif-item:hover,
 .pt-list > li.pt-notif-item:hover,
 .pt-list > li.pt-notif-item:first-child:hover {
-  border-color: #16a34a;
+  background: #f1f5f9;
+}
+.pt-notif-item.is-unread:hover,
+.pt-list > li.pt-notif-item.is-unread:hover,
+.pt-list > li.pt-notif-item.is-unread:first-child:hover {
+  background: #e6f9ed;
+}
+.pt-notif-item:focus,
+.pt-notif-item:focus-visible {
+  outline: none;
 }
 .pt-notif-dot-col {
   padding-top: 5px;
