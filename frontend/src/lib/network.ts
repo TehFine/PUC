@@ -20,13 +20,19 @@ interface NavigatorWithHardware extends Navigator {
   deviceMemory?: number;
 }
 
-/** Một request chậm hơn ngưỡng này được coi là dấu hiệu mạng yếu (cho trình duyệt không có Network Information API). */
-const SLOW_REQUEST_MS = 3000;
-/** Sau chừng này thời gian không thấy request chậm nào nữa thì coi như mạng đã ổn lại. */
-const SLOW_MEMORY_MS = 45_000;
+/** Ngưỡng thời gian phản hồi thực tế để coi một request là chậm. */
+const SLOW_REQUEST_MS = 3500;
+/** Ngưỡng một request cực chậm (bật cảnh báo ngay mà không cần đợi 2 request liên tiếp). */
+const VERY_SLOW_REQUEST_MS = 5500;
+/** Ngưỡng phản hồi nhanh chứng tỏ mạng đã ổn định trở lại. */
+const FAST_REQUEST_MS = 1000;
+/** Sau khoảng thời gian này không còn request chậm nào thì tự gỡ trạng thái mạng yếu. */
+const SLOW_MEMORY_MS = 30_000;
 
 const listeners = new Set<() => void>();
 let observedSlow = false;
+let slowStreak = 0;
+let fastStreak = 0;
 let observedTimer: ReturnType<typeof setTimeout> | undefined;
 
 const emit = () => listeners.forEach((listener) => listener());
@@ -81,23 +87,49 @@ function readQuality(): NetQuality {
   if (observedSlow) return "slow";
   const connection = getConnection();
   if (!connection) return "good";
-  const slowType = connection.effectiveType === "slow-2g" || connection.effectiveType === "2g" || connection.effectiveType === "3g";
-  const slowRtt = (connection.rtt ?? 0) >= 600;
-  const slowLink = (connection.downlink ?? 0) > 0 && (connection.downlink ?? 0) < 1.2;
-  return slowType || slowRtt || slowLink || connection.saveData === true ? "slow" : "good";
+  // Chỉ báo mạng yếu từ Network Information API khi thực sự rơi vào sóng 2G hoặc độ trễ cực cao kèm băng thông nghẽn,
+  // tránh báo nhầm lúc mới mở trang trên máy tính/Wi-Fi khi trình duyệt chưa đo xong băng thông.
+  const is2G = connection.effectiveType === "slow-2g" || connection.effectiveType === "2g";
+  const isSeverelyCongested =
+    (connection.rtt ?? 0) >= 1000 && (connection.downlink ?? 10) > 0 && (connection.downlink ?? 10) < 0.5;
+  return is2G || isSeverelyCongested ? "slow" : "good";
 }
 
-/** Gọi sau mỗi request: nếu quá chậm thì đánh dấu mạng yếu một lúc để giao diện chuyển sang chế độ nhẹ. */
+/**
+ * Đo thời gian phản hồi thực tế của từng request API:
+ * - Bật cảnh báo mạng yếu khi có 2 request liên tiếp >= 3.5s hoặc 1 request >= 5.5s.
+ * - Tự động gỡ trạng thái mạng yếu ngay khi có 2 request liên tiếp phản hồi nhanh (< 1s).
+ */
 export function reportRequestTime(ms: number) {
-  if (ms < SLOW_REQUEST_MS) return;
-  clearTimeout(observedTimer);
-  const changed = !observedSlow;
-  observedSlow = true;
-  observedTimer = setTimeout(() => {
-    observedSlow = false;
-    emit();
-  }, SLOW_MEMORY_MS);
-  if (changed) emit();
+  if (ms >= SLOW_REQUEST_MS) {
+    slowStreak += 1;
+    fastStreak = 0;
+    if (ms >= VERY_SLOW_REQUEST_MS || slowStreak >= 2) {
+      clearTimeout(observedTimer);
+      const changed = !observedSlow;
+      observedSlow = true;
+      observedTimer = setTimeout(() => {
+        observedSlow = false;
+        slowStreak = 0;
+        emit();
+      }, SLOW_MEMORY_MS);
+      if (changed) emit();
+    }
+    return;
+  }
+
+  if (ms < FAST_REQUEST_MS) {
+    slowStreak = 0;
+    if (observedSlow) {
+      fastStreak += 1;
+      if (fastStreak >= 2) {
+        clearTimeout(observedTimer);
+        observedSlow = false;
+        fastStreak = 0;
+        emit();
+      }
+    }
+  }
 }
 
 function subscribe(listener: () => void) {

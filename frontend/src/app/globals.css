@@ -2191,15 +2191,21 @@ body {
 }
 
 .report-card {
+  --fill: var(--bg-card);
   display: flex;
   flex-direction: column;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 22px 24px 30px;
+  background: var(--fill);
+  border: 1px solid rgba(20, 55, 47, 0.08);
+  border-radius: 20px;
+  padding: 22px 24px;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.25s ease, filter 0.25s ease;
+  box-shadow: 0 4px 16px rgba(20, 55, 47, 0.07);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.report-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 26px rgba(20, 55, 47, 0.14);
 }
 
 .report-icon { display: none; }
@@ -4144,19 +4150,16 @@ select.form-input {
     border: 1px solid rgba(20, 55, 47, 0.08);
     box-shadow: 0 2px 10px rgba(20, 55, 47, 0.06);
   }
-  :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card)::before {
+  :is(.kpi-card, .comp-kpi-item, .variety-card, .schedule-card)::before {
     clip-path: none !important;
     border-radius: 18px;
-  }
-  .report-card::after {
-    display: none;
   }
 }
 
 /* ─── THẺ CẮT CHÉO GÓC ────────────────────────────
- * Cùng ngôn ngữ hình với thẻ của trang giới thiệu: cắt chéo góc dưới bên phải, mũi tên mảnh trong phần góc bị cắt.
+ * Cùng ngôn ngữ hình với thẻ của trang giới thiệu: cắt chéo góc dưới bên phải.
  * Chỉ lớp nền ::before bị cắt; bóng đổ nằm ở thẻ cha (drop-shadow) để không bị clip-path xén mất. */
-:is(.comp-kpi-item, .report-card, .variety-card, .schedule-card) {
+:is(.comp-kpi-item, .variety-card, .schedule-card) {
   --fill: #fff;
   --cut: 34px;
   position: relative;
@@ -4168,7 +4171,7 @@ select.form-input {
   transition: transform 0.25s ease, filter 0.25s ease;
 }
 
-:is(.comp-kpi-item, .report-card, .variety-card, .schedule-card)::before {
+:is(.comp-kpi-item, .variety-card, .schedule-card)::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -4178,23 +4181,10 @@ select.form-input {
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut) * 1.5) 100%, 0 100%);
 }
 
-:is(.comp-kpi-item, .report-card, .variety-card, .schedule-card):hover {
+:is(.comp-kpi-item, .variety-card, .schedule-card):hover {
   transform: translateY(-3px);
   filter: drop-shadow(0 12px 26px rgba(20, 55, 47, 0.14));
 }
-
-.report-card::after {
-  content: "";
-  position: absolute;
-  right: 10px;
-  bottom: 8px;
-  width: 34px;
-  height: 13px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 16' fill='none' stroke='%2314372f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 8h37M31 1l7 7-7 7'/%3E%3C/svg%3E") right center / contain no-repeat;
-  pointer-events: none;
-  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.report-card:hover::after { transform: translateX(6px); }
 
 .comp-kpi-item.ok     { --fill: #e3f4cc; }
 .comp-kpi-item.warn   { --fill: var(--yellow); }

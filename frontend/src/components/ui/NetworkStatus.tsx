@@ -268,6 +268,8 @@ export default function NetworkStatus() {
       }${isDragging ? " is-dragging" : ""}${isSnapping ? " is-snapping" : ""}`}
       role="button"
       tabIndex={0}
+      lang="vi"
+      translate="no"
       aria-label={`${toast.text}. Bấm hoặc vuốt lên để ẩn.`}
       title="Bấm hoặc vuốt lên để ẩn"
       style={dismissStyle}
