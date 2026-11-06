@@ -662,4 +662,146 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     expect(relogin.res.status).toBe(429);
     expect(relogin.res.body.code).toBe("ACCOUNT_LOCKED");
   });
+
+  it("Chống Race Condition brute-force: gửi song song 6 request sai mật khẩu vẫn khóa tài khoản nguyên tử", async () => {
+    const admin = await loggedIn(USERS.admin);
+    const temp = await admin.post("/api/accounts").send({
+      fullName: "Tài khoản Test Race Lockout",
+      username: "0999888778",
+      password: "Password123",
+      role: "inspector",
+    });
+    expect(temp.status).toBe(201);
+
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        request(app)
+          .post("/api/auth/login")
+          .send({ username: "0999888778", password: "WrongPassword999" }),
+      ),
+    );
+
+    const after = await login("0999888778", "Password123");
+    expect(after.res.status).toBe(429);
+    expect(after.res.body.code).toBe("ACCOUNT_LOCKED");
+  });
+
+  it("Phân quyền tải tệp (Uploads RBAC): chặn cán bộ thôn/kiểm tra viên tải tệp công khai (news/catalog) hoặc sai nghiệp vụ", async () => {
+    const villageOfficer = await loggedIn(USERS.villageOfficer);
+    const inspector = await loggedIn(USERS.inspector);
+    const htx = await loggedIn(USERS.htx);
+    const tinyJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+
+    // Cán bộ thôn không được tải ảnh bản tin/danh mục công khai hoặc vi phạm
+    expect(
+      (await villageOfficer.post("/api/uploads").field("purpose", "news").attach("file", tinyJpeg, "news.jpg")).status,
+    ).toBe(403);
+    expect(
+      (await villageOfficer.post("/api/uploads").field("purpose", "catalog").attach("file", tinyJpeg, "cat.jpg")).status,
+    ).toBe(403);
+    expect(
+      (await villageOfficer.post("/api/uploads").field("purpose", "violation").attach("file", tinyJpeg, "viol.jpg")).status,
+    ).toBe(403);
+
+    // Nhưng cán bộ thôn được tải ảnh nhật ký canh tác
+    expect(
+      (await villageOfficer.post("/api/uploads").field("purpose", "journal").attach("file", tinyJpeg, "journal.jpg")).status,
+    ).toBe(201);
+
+    // Kiểm tra viên không được tải ảnh bản tin công khai hoặc nhật ký
+    expect(
+      (await inspector.post("/api/uploads").field("purpose", "news").attach("file", tinyJpeg, "news.jpg")).status,
+    ).toBe(403);
+    expect(
+      (await inspector.post("/api/uploads").field("purpose", "journal").attach("file", tinyJpeg, "journal.jpg")).status,
+    ).toBe(403);
+
+    // Cán bộ HTX được tải ảnh bản tin công khai
+    expect((await htx.post("/api/uploads").field("purpose", "news").attach("file", tinyJpeg, "news.jpg")).status).toBe(
+      201,
+    );
+  });
+
+  it("Cấp phát & thu hồi tem: kiểm tra quyền sở hữu thửa đất của hộ và thu hồi nguyên tử", async () => {
+    const htx = await loggedIn(USERS.htx);
+
+    // Hộ 1 không sở hữu thửa TH2-001 (thuộc Hộ 2) -> từ chối 400
+    const badPlot = await htx.post("/api/stamp-allocations").send({
+      householdId: 1,
+      plotCode: "TH2-001",
+      quantity: 5,
+    });
+    expect(badPlot.status).toBe(400);
+
+    // Cấp phát hợp lệ cho Hộ 1 với thửa TH1-001
+    const okAlloc = await htx.post("/api/stamp-allocations").send({
+      householdId: 1,
+      plotCode: "TH1-001",
+      quantity: 3,
+    });
+    expect(okAlloc.status).toBe(201);
+
+    // Thu hồi nguyên tử cả đợt cấp phát và các tem con
+    const revoked = await htx.post(`/api/stamp-allocations/${okAlloc.body.id}/revoke`);
+    expect(revoked.status).toBe(200);
+    expect(revoked.body.status).toBe("revoked");
+
+    const stamps = await htx.get(`/api/stamp-allocations/${okAlloc.body.id}/stamps`);
+    expect(stamps.status).toBe(200);
+    expect(stamps.body.data.every((s: { status: string }) => s.status === "revoked")).toBe(true);
+  });
+
+  it("Security Headers Audit: phản hồi API có đầy đủ header chống Clickjacking, MIME-sniffing, CORP và Permissions-Policy", async () => {
+    const res = await request(app).get("/api/health");
+    expect(res.status).toBe(200);
+    expect(res.headers["x-frame-options"]).toBe("DENY");
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["cross-origin-resource-policy"]).toBe("same-origin");
+    expect(res.headers["permissions-policy"]).toContain("camera=()");
+    expect(res.headers["content-security-policy"]).toContain("default-src 'none'");
+    expect(res.headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+    expect(res.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("Tối ưu Media & Video: nhận diện video MP4 theo magic-bytes, hỗ trợ HTTP Range (206 Partial Content) và ETag (304)", async () => {
+    const htx = await loggedIn(USERS.htx);
+    // Hộp ftyp chuẩn ISO Base Media (MP4) 32 bytes
+    const tinyMp4 = Buffer.from([
+      0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, // size=32, 'ftyp'
+      0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00, // 'isom', minor_version
+      0x69, 0x73, 0x6f, 0x6d, 0x69, 0x73, 0x6f, 0x32, // compatible_brands
+      0x6d, 0x70, 0x34, 0x31, 0x00, 0x00, 0x00, 0x00,
+    ]);
+
+    // Danh mục sản phẩm (catalog) chỉ nhận ảnh, từ chối video (400)
+    const badCatalogVideo = await htx
+      .post("/api/uploads")
+      .field("purpose", "catalog")
+      .attach("file", tinyMp4, "clip.mp4");
+    expect(badCatalogVideo.status).toBe(400);
+
+    // Nhật ký hiện trường (journal) nhận video MP4 (201)
+    const up = await htx.post("/api/uploads").field("purpose", "journal").attach("file", tinyMp4, "field-clip.mp4");
+    expect(up.status).toBe(201);
+    expect(up.body.mimeType).toBe("video/mp4");
+
+    // Tải toàn bộ: có Content-Length, Accept-Ranges: bytes, ETag
+    const full = await htx.get(`/api/uploads/${up.body.id}`);
+    expect(full.status).toBe(200);
+    expect(full.headers["content-type"]).toBe("video/mp4");
+    expect(full.headers["accept-ranges"]).toBe("bytes");
+    expect(full.headers["content-length"]).toBe("32");
+    const etag = full.headers["etag"];
+    expect(etag).toBeDefined();
+
+    // Tải một phần (HTTP Range Request cho tua video): 206 Partial Content
+    const partial = await htx.get(`/api/uploads/${up.body.id}`).set("Range", "bytes=0-11");
+    expect(partial.status).toBe(206);
+    expect(partial.headers["content-range"]).toBe("bytes 0-11/32");
+    expect(partial.headers["content-length"]).toBe("12");
+
+    // Kiểm tra bộ nhớ đệm If-None-Match -> 304 Not Modified
+    const cached = await htx.get(`/api/uploads/${up.body.id}`).set("If-None-Match", etag);
+    expect(cached.status).toBe(304);
+  });
 });
