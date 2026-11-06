@@ -303,8 +303,12 @@ export function AttachmentsField({
   );
 }
 
+/** Chỉ cho phép URL nội bộ bắt đầu bằng `/` (không phải `//`) hoặc `http(s)://` để chặn `javascript:`. */
+const isSafeMediaUrl = (url: string) => /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(url);
+
 /** Ảnh đã lưu trên server (`/api/uploads/:id`), có liên kết mở ảnh gốc. */
 export function StoredPhoto({ url, alt, caption }: { url: string; alt: string; caption?: string }) {
+  if (!isSafeMediaUrl(url)) return null;
   return (
     <a className="pt-detail-photo-frame" href={url} target="_blank" rel="noopener noreferrer" title="Mở ảnh gốc">
       {/* eslint-disable-next-line @next/next/no-img-element -- ảnh tải lên phục vụ qua API có cookie phiên */}

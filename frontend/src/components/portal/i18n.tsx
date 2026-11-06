@@ -1438,9 +1438,20 @@ function ensureDynCacheLoaded() {
   try {
     const raw = window.localStorage.getItem(DYN_CACHE_STORAGE_KEY);
     if (!raw) return;
-    const parsed = JSON.parse(raw) as Record<string, string>;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
     for (const [k, v] of Object.entries(parsed)) {
-      if (k && v) dynamicZhCache.set(k, v);
+      if (
+        typeof k === "string" &&
+        typeof v === "string" &&
+        k.length > 0 &&
+        v.length > 0 &&
+        k !== "__proto__" &&
+        k !== "constructor" &&
+        k !== "prototype"
+      ) {
+        dynamicZhCache.set(k, v);
+      }
     }
   } catch {
     // Ignore storage parse errors
@@ -1719,11 +1730,11 @@ function translateCompositionalViToZh(text: string): string {
  */
 /** Ngắt mạch: endpoint nào lỗi / bị giới hạn (429) thì tạm bỏ qua trong 10 phút để không gửi yêu cầu vô ích. */
 const ENDPOINT_COOLDOWN_MS = 10 * 60 * 1000;
-const endpointDisabledUntil = { google: 0, mymemory: 0 };
+const endpointDisabledUntil = { google: 0 };
 
 async function fetchOnlineViToZh(text: string): Promise<string | null> {
   const now = Date.now();
-  // Endpoint 1: Google Translate GTX
+  // Chỉ dùng Google Translate GTX (HTTPS), không gửi dữ liệu sang kho bộ nhớ dịch công cộng của bên thứ ba
   if (now >= endpointDisabledUntil.google) try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl=zh-CN&dt=t&q=${encodeURIComponent(text)}`;
     const res = await fetch(url, { method: "GET" });
@@ -1742,31 +1753,6 @@ async function fetchOnlineViToZh(text: string): Promise<string | null> {
     }
   } catch {
     endpointDisabledUntil.google = Date.now() + ENDPOINT_COOLDOWN_MS;
-  }
-
-  // Endpoint 2: MyMemory Translation API (hỗ trợ CORS, giới hạn 500 ký tự / yêu cầu)
-  if (Date.now() >= endpointDisabledUntil.mymemory) try {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=vi|zh-CN`;
-    const res = await fetch(url, { method: "GET" });
-    if (!res.ok) endpointDisabledUntil.mymemory = Date.now() + ENDPOINT_COOLDOWN_MS;
-    if (res.ok) {
-      const data = (await res.json()) as {
-        responseData?: { translatedText?: string };
-        quotaFinished?: boolean;
-      };
-      if (data?.quotaFinished) endpointDisabledUntil.mymemory = Date.now() + ENDPOINT_COOLDOWN_MS;
-      const translated = data?.responseData?.translatedText?.trim();
-      if (
-        translated &&
-        translated !== text &&
-        !translated.includes("MYMEMORY WARNING") &&
-        !VI_DIACRITIC_RE.test(translated)
-      ) {
-        return translated;
-      }
-    }
-  } catch {
-    endpointDisabledUntil.mymemory = Date.now() + ENDPOINT_COOLDOWN_MS;
   }
 
   return null;
@@ -1808,6 +1794,8 @@ function queueAutoTranslateViToZh(trimmed: string) {
   if (typeof window === "undefined") return;
   if (pendingAutoTranslate.has(trimmed) || dynamicZhCache.has(trimmed)) return;
   if (!VI_DIACRITIC_RE.test(trimmed) || isLikelyPersonName(trimmed)) return;
+  // Không gửi chuỗi chứa dãy số dài (CCCD, số điện thoại, mã định danh) ra ngoài
+  if (/\d{6,}/.test(trimmed)) return;
   if (trimmed.length < 2 || trimmed.length > 480) return;
   const retryAt = failedAutoTranslate.get(trimmed);
   if (retryAt !== undefined && Date.now() < retryAt) return;

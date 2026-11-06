@@ -94,7 +94,7 @@ export function JournalDetailModal({
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>
             Hình ảnh thực địa
           </div>
-          {entry.photoUrl ? (
+          {entry.photoUrl && /^(\/api\/uploads\/\d+|\/[A-Za-z0-9._/-]+|https?:\/\/)/i.test(entry.photoUrl) ? (
             <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

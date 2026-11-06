@@ -135,7 +135,7 @@ export default function HouseholdDetailModal({
                   <td style={{ fontSize: 12 }}>{j.recorder}</td>
                   <td>
                     {j.photoUrl ? (
-                      <a href={j.photoUrl} target="_blank" rel="noreferrer" className="badge badge-blue">
+                      <a href={j.photoUrl} target="_blank" rel="noopener noreferrer" className="badge badge-blue">
                         Xem ảnh
                       </a>
                     ) : j.hasPhoto ? (

@@ -113,7 +113,8 @@ export function ViolationDetailModal({
                 Gửi lúc: {formatDateTime(violation.farmerResponseAt)}
               </div>
             )}
-            {violation.farmerResponsePhotoUrl && (
+            {violation.farmerResponsePhotoUrl &&
+              /^(\/api\/uploads\/\d+|\/[A-Za-z0-9._/-]+|https?:\/\/)/i.test(violation.farmerResponsePhotoUrl) && (
               <div style={{ marginTop: 10, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img

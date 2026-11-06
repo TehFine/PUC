@@ -885,7 +885,7 @@ export default function Harvest() {
           }}
         />
       )}
-      {previewPhoto && (
+      {previewPhoto && /^(\/api\/uploads\/\d+|\/[A-Za-z0-9._/-]+|https?:\/\/)/i.test(previewPhoto.url) && (
         <Modal
           title={previewPhoto.title}
           onClose={() => setPreviewPhoto(null)}

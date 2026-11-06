@@ -159,7 +159,7 @@ export function StampListModal({
                   <td>{s.fruitWeightKg ? `${s.fruitWeightKg} kg` : "—"}</td>
                   <td style={{ fontSize: 12 }}>{s.activatedAt ? s.activatedAt.slice(0, 10) : "—"}</td>
                   <td>
-                    {s.photoUrl ? (
+                    {s.photoUrl && /^(\/api\/uploads\/\d+|\/[A-Za-z0-9._/-]+|https?:\/\/)/i.test(s.photoUrl) ? (
                       <a href={s.photoUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
                         Xem ảnh
                       </a>

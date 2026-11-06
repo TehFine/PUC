@@ -257,7 +257,7 @@ export default function ApprovalDetailModal({
                       </div>
                     </div>
                   </div>
-                  <a href={att.url} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm">
+                  <a href={att.url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
                     Mở tệp
                   </a>
                 </div>
