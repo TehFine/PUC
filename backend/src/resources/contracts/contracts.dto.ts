@@ -1,46 +1,39 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsDateString, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString } from "class-validator";
+import { IsIn } from "class-validator";
+import { IsoDate, NonNegative, OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateContractDto {
-  @IsString()
-  @IsNotEmpty()
+  @Text(40)
   code!: string;
 
-  @IsNumber()
-  @IsNotEmpty()
+  @RecordId()
   enterpriseId!: number;
 
-  @IsString()
-  @IsNotEmpty()
+  @Text(200)
   title!: string;
 
-  @IsDateString()
-  @IsNotEmpty()
+  @IsoDate()
   signedOn!: string;
 
-  @IsDateString()
-  @IsNotEmpty()
+  @IsoDate()
   validUntil!: string;
 
-  @IsNumber()
-  @IsOptional()
+  @OptionalField()
+  @NonNegative()
   targetTons?: number;
 
-  @IsString()
-  @IsOptional()
-  priceGuarantee?: string;
+  @OptionalText(100)
+  priceGuarantee?: string | null;
 
-  @IsString()
-  @IsOptional()
-  market?: string;
+  @OptionalText(100)
+  market?: string | null;
 
+  @OptionalField()
   @IsIn(["active", "completed", "expired"])
-  @IsOptional()
   status?: "active" | "completed" | "expired";
 
-  @IsString()
-  @IsOptional()
-  notes?: string;
+  @OptionalText(2000)
+  notes?: string | null;
 }
 
 export class UpdateContractDto extends PartialType(CreateContractDto) {}

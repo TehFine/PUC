@@ -41,18 +41,22 @@ export class CreateHarvestLotDto {
 
   @OptionalField()
   @NonNegative()
+  @Max(100)
   gradeAPct?: number;
 
   @OptionalField()
   @NonNegative()
+  @Max(100)
   gradeBPct?: number;
 
   @OptionalField()
   @NonNegative()
+  @Max(100)
   gradeCPct?: number;
 
   @OptionalField()
   @NonNegative()
+  @Max(100)
   avgBrix?: number;
 
   @OptionalText(300)
@@ -66,6 +70,8 @@ export class CreateHarvestLotDto {
 
   @OptionalField()
   @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(-50)
+  @Max(60)
   temperatureC?: number;
 
   @OptionalText(50)

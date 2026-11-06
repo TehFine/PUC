@@ -1,4 +1,5 @@
 import { Controller, Get, Header, Param } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { Public } from "../auth/auth.decorators";
 import { notFound } from "../common/errors/app.exception";
 import { camelRow, camelRows } from "../common/sql/rows";
@@ -74,7 +75,8 @@ export class PublicController {
               read_time, featured, published_on
        FROM news_articles
        WHERE status = 'published'
-       ORDER BY published_on DESC NULLS LAST, id DESC`,
+       ORDER BY published_on DESC NULLS LAST, id DESC
+       LIMIT 100`,
     );
     return { data: camelRows(rows) };
   }
@@ -83,13 +85,17 @@ export class PublicController {
   @Get("news/:slug")
   @Header("Cache-Control", "public, max-age=120")
   async newsDetail(@Param("slug") slug: string) {
+    const cleanSlug = slug.trim();
+    if (!cleanSlug || cleanSlug.length > 120 || !/^[a-z0-9-]+$/i.test(cleanSlug)) {
+      throw notFound("Không tìm thấy bản tin.");
+    }
     const { rows } = await this.db.query(
       `SELECT slug, category, title, excerpt, content, author, image_url, image_alt,
               read_time, featured, published_on
        FROM news_articles
        WHERE slug = $1 AND status = 'published'
        LIMIT 1`,
-      [slug.trim()],
+      [cleanSlug],
     );
     if (rows.length === 0) throw notFound("Không tìm thấy bản tin.");
     return camelRow(rows[0]);
@@ -105,10 +111,14 @@ export class PublicController {
 
   /** Tra cứu hồ sơ truy xuất nguồn gốc công khai bằng mã lô, mã tem QR hoặc mã định danh từng quả/thùng */
   @Public()
+  @Throttle({ default: { limit: process.env.NODE_ENV === "test" ? 1000 : 60, ttl: 60_000 } })
   @Get("trace/:code")
   @Header("Cache-Control", "public, max-age=60")
   async trace(@Param("code") code: string) {
     const cleanCode = code.trim();
+    if (!cleanCode || cleanCode.length > 80 || !/^[A-Za-z0-9._/-]+$/.test(cleanCode)) {
+      throw notFound(`Không tìm thấy hồ sơ lô hàng hoặc mã tem "${cleanCode.slice(0, 80)}". Vui lòng kiểm tra lại tem QR.`);
+    }
     const hasPlots =
       (await this.db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")).rows[0]
         ?.reg !== null;

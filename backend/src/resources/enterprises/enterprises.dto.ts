@@ -1,37 +1,31 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsIn, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsIn } from "class-validator";
+import { OptionalField, OptionalText, Text } from "../../common/validation/fields";
 
 export class CreateEnterpriseDto {
-  @IsString()
-  @IsNotEmpty()
+  @Text(40)
   code!: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @Text(200)
   name!: string;
 
-  @IsString()
-  @IsOptional()
-  taxCode?: string;
+  @OptionalText(40)
+  taxCode?: string | null;
 
-  @IsString()
-  @IsOptional()
-  representative?: string;
+  @OptionalText(100)
+  representative?: string | null;
 
-  @IsString()
-  @IsOptional()
-  phone?: string;
+  @OptionalText(30)
+  phone?: string | null;
 
-  @IsString()
-  @IsOptional()
-  address?: string;
+  @OptionalText(300)
+  address?: string | null;
 
-  @IsString()
-  @IsOptional()
-  packhouseCode?: string;
+  @OptionalText(50)
+  packhouseCode?: string | null;
 
+  @OptionalField()
   @IsIn(["active", "inactive"])
-  @IsOptional()
   status?: "active" | "inactive";
 }
 

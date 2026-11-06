@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
-import { BaseCrudService } from "../../common/crud/base-crud.service";
+import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { badRequest, notFound } from "../../common/errors/app.exception";
 import { camelRow, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
@@ -25,6 +25,24 @@ export class HarvestService extends BaseCrudService {
       search: ["t.code", "t.buyer", "t.market", "e.name"],
       filters: { status: "t.status", market: "t.market", enterpriseId: "t.enterprise_id" },
     });
+  }
+
+  protected override async prepare(input: Record<string, unknown>, _context: WriteContext) {
+    const a = typeof input.gradeAPct === "number" ? input.gradeAPct : 0;
+    const b = typeof input.gradeBPct === "number" ? input.gradeBPct : 0;
+    const c = typeof input.gradeCPct === "number" ? input.gradeCPct : 0;
+    if (a + b + c > 100.0001) {
+      throw badRequest("Tổng tỷ lệ phân hạng (A + B + C) không được vượt quá 100%.");
+    }
+    if (input.enterpriseId !== undefined && input.enterpriseId !== null) {
+      const ent = await this.db.query("SELECT 1 FROM enterprises WHERE id = $1", [input.enterpriseId]);
+      if (ent.rowCount === 0) throw badRequest("Doanh nghiệp liên kết không tồn tại.");
+    }
+    if (input.contractId !== undefined && input.contractId !== null) {
+      const con = await this.db.query("SELECT 1 FROM contracts WHERE id = $1", [input.contractId]);
+      if (con.rowCount === 0) throw badRequest("Hợp đồng liên kết không tồn tại.");
+    }
+    return input;
   }
 
   /** Lấy danh sách tem truy xuất con (quả/thùng) của một lô */

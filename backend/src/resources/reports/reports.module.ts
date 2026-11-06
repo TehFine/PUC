@@ -1,4 +1,5 @@
 import { Controller, Get, Ip, Module, Param, Query, Res, Injectable } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
@@ -19,11 +20,13 @@ export const REPORT_TYPES = [
 export type ReportType = (typeof REPORT_TYPES)[number];
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_EXPORT_ROWS = 10_000;
+const EXPORT_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 30;
 
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   const text = value instanceof Date ? value.toISOString() : String(value);
-  const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  const safe = /^[=+\-@\t\r\n|]/.test(text) || /^\s+[=+\-@|]/.test(text) ? `'${text}` : text;
   if (/[",\r\n]/.test(safe)) {
     return `"${safe.replace(/"/g, '""')}"`;
   }
@@ -103,7 +106,8 @@ export class ReportsService {
            FROM households h
            JOIN villages v ON v.id = h.village_id
            ${where}
-           ORDER BY h.id`,
+           ORDER BY h.id
+           LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
         const fullCccd = canSeeCccd(user);
@@ -131,7 +135,8 @@ export class ReportsService {
            JOIN households h ON h.id = j.household_id
            JOIN villages v ON v.id = h.village_id
            ${where}
-           ORDER BY j.entry_on DESC, j.id DESC`,
+           ORDER BY j.entry_on DESC, j.id DESC
+           LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
         return toCsv(
@@ -160,7 +165,8 @@ export class ReportsService {
            JOIN villages v ON v.id = h.village_id
            JOIN pesticides p ON p.id = s.pesticide_id
            ${where}
-           ORDER BY s.sprayed_on DESC, s.id DESC`,
+           ORDER BY s.sprayed_on DESC, s.id DESC
+           LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
         return toCsv(
@@ -203,7 +209,8 @@ export class ReportsService {
            JOIN households h ON h.id = lt.household_id
            JOIN villages v ON v.id = h.village_id
            ${where}
-           ORDER BY lt.sampled_on DESC, lt.id DESC`,
+           ORDER BY lt.sampled_on DESC, lt.id DESC
+           LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
         return toCsv(
@@ -246,7 +253,8 @@ export class ReportsService {
            FROM violations vl
            LEFT JOIN households h ON h.id = vl.household_id
            ${where}
-           ORDER BY vl.detected_on DESC, vl.id DESC`,
+           ORDER BY vl.detected_on DESC, vl.id DESC
+           LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
         return toCsv(
@@ -284,7 +292,8 @@ export class ReportsService {
                   hl.buyer, hl.market, hl.packhouse_code, hl.status
            FROM harvest_lots hl
            ${where}
-           ORDER BY hl.harvested_on DESC, hl.id DESC`,
+           ORDER BY hl.harvested_on DESC, hl.id DESC
+           LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
         return toCsv(
@@ -321,7 +330,8 @@ export class ReportsService {
            JOIN households h ON h.id = tr.household_id
            JOIN villages v ON v.id = h.village_id
            ${where}
-           ORDER BY tc.held_on DESC NULLS LAST, tr.id ASC`,
+           ORDER BY tc.held_on DESC NULLS LAST, tr.id ASC
+           LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
         return toCsv(
@@ -365,6 +375,7 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   @Get(":type")
+  @Throttle({ default: { limit: EXPORT_LIMIT, ttl: 60_000 } })
   @Authorize("reports", "read")
   async exportReport(
     @Param("type") type: string,
@@ -376,6 +387,8 @@ export class ReportsController {
     const { filename, csv } = await this.reports.exportCsv(type, query, user, ip);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "no-store");
     res.status(200).send(csv);
   }
 }

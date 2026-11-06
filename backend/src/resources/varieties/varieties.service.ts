@@ -1,7 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService } from "../../common/crud/base-crud.service";
+import { badRequest } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
+
+const MAX_FARMING_TECHNIQUES_BYTES = 20_000;
 
 @Injectable()
 export class VarietiesService extends BaseCrudService {
@@ -26,7 +29,11 @@ export class VarietiesService extends BaseCrudService {
       out.morphology = JSON.stringify(out.morphology);
     }
     if (out.farmingTechniques !== undefined && out.farmingTechniques !== null) {
-      out.farmingTechniques = JSON.stringify(out.farmingTechniques);
+      const serialized = JSON.stringify(out.farmingTechniques);
+      if (serialized.length > MAX_FARMING_TECHNIQUES_BYTES) {
+        throw badRequest("Dữ liệu kỹ thuật canh tác vượt quá dung lượng cho phép.");
+      }
+      out.farmingTechniques = serialized;
     }
     return out;
   }

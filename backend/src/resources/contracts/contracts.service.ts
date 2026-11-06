@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
-import { BaseCrudService } from "../../common/crud/base-crud.service";
+import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
+import { badRequest } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
 
 @Injectable()
@@ -17,5 +18,20 @@ export class ContractsService extends BaseCrudService {
       search: ["t.code", "t.title", "e.name", "t.market"],
       filters: { status: "t.status", enterpriseId: "t.enterprise_id", market: "t.market" },
     });
+  }
+
+  protected override async prepare(input: Record<string, unknown>, _context: WriteContext) {
+    if (input.enterpriseId !== undefined && input.enterpriseId !== null) {
+      const ent = await this.db.query("SELECT 1 FROM enterprises WHERE id = $1", [input.enterpriseId]);
+      if (ent.rowCount === 0) throw badRequest("Doanh nghiệp liên kết không tồn tại.");
+    }
+    if (
+      typeof input.signedOn === "string" &&
+      typeof input.validUntil === "string" &&
+      input.validUntil < input.signedOn
+    ) {
+      throw badRequest("Ngày hết hiệu lực hợp đồng không được nhỏ hơn ngày ký.");
+    }
+    return input;
   }
 }

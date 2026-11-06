@@ -20,17 +20,25 @@ export function slugifyVietnamese(text: string): string {
   return base || "ban-tin";
 }
 
-function validateNewsContent(content: unknown): void {
+const MAX_NEWS_CONTENT_BYTES = 50_000;
+const MAX_NEWS_SECTIONS = 30;
+
+function validateNewsContent(content: unknown): string {
   if (!content || typeof content !== "object" || Array.isArray(content)) {
     throw badRequest("Nội dung bản tin phải là một đối tượng.");
   }
   const obj = content as { lead?: unknown; sections?: unknown };
-  if (typeof obj.lead !== "string" || !obj.lead.trim()) {
-    throw badRequest("Nội dung bản tin phải có phần mở đầu (lead).");
+  if (typeof obj.lead !== "string" || !obj.lead.trim() || obj.lead.length > 5000) {
+    throw badRequest("Nội dung bản tin phải có phần mở đầu (lead) hợp lệ.");
   }
-  if (!Array.isArray(obj.sections)) {
-    throw badRequest("Nội dung bản tin phải có danh sách các mục (sections).");
+  if (!Array.isArray(obj.sections) || obj.sections.length > MAX_NEWS_SECTIONS) {
+    throw badRequest("Nội dung bản tin phải có danh sách các mục (sections) hợp lệ.");
   }
+  const serialized = JSON.stringify(content);
+  if (serialized.length > MAX_NEWS_CONTENT_BYTES) {
+    throw badRequest("Nội dung bản tin vượt quá dung lượng cho phép.");
+  }
+  return serialized;
 }
 
 @Injectable()
@@ -66,8 +74,7 @@ export class NewsService extends BaseCrudService {
     }
 
     if (out.content !== undefined) {
-      validateNewsContent(out.content);
-      out.content = JSON.stringify(out.content);
+      out.content = validateNewsContent(out.content);
     }
 
     return out;
