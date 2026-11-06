@@ -7,8 +7,14 @@ import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
 import type { PlotFeature } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
-import { featureLabel, formatHa, polygonAreaHa, type PlotOverlap } from "@/utils/plot-utils";
-import { maskPersonName } from "@/utils/privacy";
+import {
+  featureLabel,
+  formatCoords,
+  formatHa,
+  plotCenterCoords,
+  polygonAreaHa,
+  type PlotOverlap,
+} from "@/utils/plot-utils";
 
 interface PlotPopupProps {
   feature: PlotFeature;
@@ -67,13 +73,14 @@ export default function PlotPopup({ feature, overlaps, onCompare, onClose }: Plo
 
   useSheetSwipe({ sheetRef: popupRef, handleRef: headRef, onDismiss: handleClose });
 
+  const center = plotCenterCoords(feature);
   const facts: Array<{ label: string; value: string; wide?: boolean }> = [
-    { label: "Số tờ / số thửa", value: `${props.sheet || "—"} / ${props.parcel || "—"}` },
-    { label: "Thôn", value: props.village || "—" },
+    { label: "Số thửa / tờ bản đồ", value: `${props.parcel || "—"} / ${props.sheet || "—"}` },
+    { label: "Thôn / Tổ", value: props.village || "—" },
     { label: "Mã vùng trồng", value: props.zone || "—" },
-    { label: "Năm trồng", value: props.year ? String(props.year) : "—" },
-    { label: "Giống", value: props.variety || "—", wide: true },
-    { label: "Chủ hộ", value: maskPersonName(props.owner), wide: true },
+    { label: "Giống", value: props.variety || "—" },
+    { label: "Định vị GPS", value: formatCoords(center?.lat, center?.lng), wide: true },
+    { label: "Chủ hộ", value: props.owner || "—", wide: true },
   ];
 
   return (

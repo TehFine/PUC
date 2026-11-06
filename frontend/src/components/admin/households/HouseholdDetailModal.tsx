@@ -1,19 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Modal } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
+import { usePlots } from "@/hooks/use-plots";
 import TabBar, { type TabItem } from "@/components/admin/shared/TabBar";
 import TableState from "@/components/admin/shared/TableState";
 import { formatVn } from "@/components/admin/shared/form-utils";
 import { badgeOf, HOUSEHOLD_STATUS, LAB_RESULT, SEVERITY, VIOLATION_STATUS } from "@/components/admin/shared/labels";
 import { formatDate } from "@/utils/format";
+import { formatCoords, plotCenterCoords } from "@/utils/plot-utils";
 import type { HouseholdRow } from "@/types/households";
 import type { JournalRow, ViolationRow } from "@/types/journal";
 import type { LabTestRow } from "@/types/testing";
 
-type DetailTab = "journal" | "violations" | "testing";
+type DetailTab = "plots" | "journal" | "violations" | "testing";
 
 export default function HouseholdDetailModal({
   household,
@@ -26,7 +28,18 @@ export default function HouseholdDetailModal({
 }) {
   const { can } = useAuth();
   const canReadViolations = can("violations", "read");
-  const [tab, setTab] = useState<DetailTab>("journal");
+  const [tab, setTab] = useState<DetailTab>("plots");
+
+  const { plots: allPlots, loading: plotsLoading, error: plotsError, refresh: refreshPlots } = usePlots();
+  const householdPlots = useMemo(() => {
+    const features = allPlots?.features ?? [];
+    const zonePrefix = household.code.replace(/-H\d+$/i, "");
+    return features.filter(
+      (f) =>
+        f.properties.householdId === household.id ||
+        (f.properties.householdId == null && f.properties.owner === household.name && f.properties.zone === zonePrefix),
+    );
+  }, [allPlots, household.id, household.name, household.code]);
 
   const journal = useApiList<JournalRow>("journal", { householdId: household.id, pageSize: 20 });
   const violations = useApiList<ViolationRow>(canReadViolations ? "violations" : null, {
@@ -38,6 +51,7 @@ export default function HouseholdDetailModal({
   const statusBadge = badgeOf(HOUSEHOLD_STATUS, household.status);
 
   const tabs: TabItem<DetailTab>[] = [
+    { id: "plots", label: "Thửa đất & Định vị", badge: householdPlots.length },
     { id: "journal", label: "Nhật ký canh tác", badge: journal.total },
     ...(canReadViolations ? [{ id: "violations" as const, label: "Vi phạm", badge: violations.total }] : []),
     { id: "testing", label: "Kiểm nghiệm", badge: labTests.total },
@@ -103,6 +117,64 @@ export default function HouseholdDetailModal({
       </div>
 
       <TabBar tabs={tabs} active={tab} onChange={setTab} />
+
+      {tab === "plots" && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã thửa</th>
+                <th>Số thửa</th>
+                <th>Tờ bản đồ</th>
+                <th>Diện tích</th>
+                <th>Giống</th>
+                <th>Định vị GPS (Vĩ độ, Kinh độ)</th>
+                <th>Bản đồ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <TableState
+                colSpan={7}
+                loading={plotsLoading}
+                error={plotsError}
+                empty={householdPlots.length === 0}
+                emptyText="Chưa có thửa đất nào được gán cho hộ này."
+                onRetry={() => void refreshPlots()}
+              />
+              {householdPlots.map((f) => {
+                const p = f.properties;
+                const center = plotCenterCoords(f);
+                return (
+                  <tr key={p.code}>
+                    <td style={{ fontFamily: "monospace", fontWeight: 700, color: "#166534" }}>{p.code}</td>
+                    <td>{p.parcel || "—"}</td>
+                    <td>{p.sheet || "—"}</td>
+                    <td style={{ fontWeight: 600 }}>{formatVn(p.areaHa, 2)} ha</td>
+                    <td>{p.variety || "—"}</td>
+                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>
+                      {formatCoords(center?.lat, center?.lng)}
+                    </td>
+                    <td>
+                      {center ? (
+                        <a
+                          href={`https://www.google.com/maps?q=${center.lat},${center.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="badge badge-blue"
+                        >
+                          Google Maps
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {tab === "journal" && (
         <div className="table-wrap">

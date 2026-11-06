@@ -17,6 +17,9 @@ export interface PlotProperties {
   source: PlotSource;
   status: PlotStatus;
   sourceRef?: string;
+  householdId?: number;
+  lat?: number;
+  lng?: number;
   persisted?: boolean;
 }
 

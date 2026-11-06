@@ -11,6 +11,35 @@ export function formatHa(value: number): string {
   return `${value.toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha`;
 }
 
+export function formatCoordValue(value: number): string {
+  const s7 = value.toFixed(7).replace(/0+$/, "");
+  const [intPart, decPart = ""] = s7.split(".");
+  return `${intPart}.${decPart.padEnd(5, "0")}`;
+}
+
+export function formatCoords(lat?: number | null, lng?: number | null): string {
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return "—";
+  return `${formatCoordValue(lat)}, ${formatCoordValue(lng)}`;
+}
+
+export function plotCenterCoords(feature: PlotFeature): { lat: number; lng: number } | null {
+  const { lat, lng } = feature.properties;
+  if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+  const ring = feature.geometry?.coordinates?.[0];
+  if (!ring || ring.length === 0) return null;
+  const pts = ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]
+    ? ring.slice(0, -1)
+    : ring;
+  if (pts.length === 0) return null;
+  const sum = pts.reduce(
+    (acc, pt) => ({ lng: acc.lng + Number(pt[0]), lat: acc.lat + Number(pt[1]) }),
+    { lat: 0, lng: 0 },
+  );
+  return { lat: sum.lat / pts.length, lng: sum.lng / pts.length };
+}
+
 export function formatPercent(value: number): string {
   return `${value.toLocaleString("vi-VN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }

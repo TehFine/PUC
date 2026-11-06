@@ -2,7 +2,7 @@ import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { PlotFeature } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
-import { formatHa } from "@/utils/plot-utils";
+import { formatCoords, formatHa, plotCenterCoords } from "@/utils/plot-utils";
 import { plotArea, type PlotsSummary } from "./zone-data";
 
 interface PlotsTableProps {
@@ -31,9 +31,9 @@ export default function PlotsTable({ features, loading, summary }: PlotsTablePro
               <th>Số thửa</th>
               <th>Hộ sở hữu</th>
               <th>Diện tích</th>
+              <th>Định vị (Vĩ độ, Kinh độ)</th>
               <th>Mã vùng</th>
               <th>Giống</th>
-              <th>Năm trồng</th>
               <th>Nguồn dữ liệu</th>
               <th>Trạng thái</th>
             </tr>
@@ -59,6 +59,7 @@ export default function PlotsTable({ features, loading, summary }: PlotsTablePro
             )}
             {features.map((feature) => {
               const props = feature.properties;
+              const center = plotCenterCoords(feature);
               return (
                 <tr key={props.code}>
                   <td style={{ fontFamily: "monospace", color: "var(--green-700)", fontSize: 12 }}>
@@ -68,13 +69,15 @@ export default function PlotsTable({ features, loading, summary }: PlotsTablePro
                   <td>{props.parcel || "—"}</td>
                   <td style={{ fontWeight: 600 }}>{props.owner || "—"}</td>
                   <td>{formatHa(plotArea(feature))}</td>
+                  <td style={{ fontFamily: "monospace", fontSize: 11.5, color: "var(--text-secondary)" }}>
+                    {formatCoords(center?.lat, center?.lng)}
+                  </td>
                   <td>
                     <span style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gold)" }}>
                       {props.zone || "—"}
                     </span>
                   </td>
                   <td>{props.variety || "—"}</td>
-                  <td>{props.year ?? "—"}</td>
                   <td>
                     <span className={`badge ${SOURCE_BADGE[props.source]}`}>{SOURCE_LABELS[props.source]}</span>
                     {props.sourceRef && (
