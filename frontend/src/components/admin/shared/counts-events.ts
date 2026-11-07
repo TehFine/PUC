@@ -58,3 +58,31 @@ export function consumePendingEditPlotCode(): string | null {
   }
   return null;
 }
+
+const APPROVAL_TAB_STORAGE_KEY = "puc:pending-approval-tab";
+export const ADMIN_APPROVAL_TAB_EVENT = "admin:approval-tab";
+
+export function requestApprovalTab(tab: "pending" | "registrations" | "schedule" | "minutes"): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(APPROVAL_TAB_STORAGE_KEY, tab);
+  } catch {
+    // ignore storage errors
+  }
+  requestAdminNavigate("approval");
+  window.dispatchEvent(new CustomEvent<string>(ADMIN_APPROVAL_TAB_EVENT, { detail: tab }));
+}
+
+export function consumePendingApprovalTab(): "pending" | "registrations" | "schedule" | "minutes" | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const tab = window.sessionStorage.getItem(APPROVAL_TAB_STORAGE_KEY);
+    if (tab === "pending" || tab === "registrations" || tab === "schedule" || tab === "minutes") {
+      window.sessionStorage.removeItem(APPROVAL_TAB_STORAGE_KEY);
+      return tab;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}

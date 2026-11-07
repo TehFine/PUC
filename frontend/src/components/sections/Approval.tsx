@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApiList } from "@/hooks/use-api";
+import { api } from "@/lib/api-client";
 import BlockState from "@/components/admin/shared/BlockState";
+import { ADMIN_APPROVAL_TAB_EVENT, consumePendingApprovalTab } from "@/components/admin/shared/counts-events";
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
 import Pagination from "@/components/admin/shared/Pagination";
 import TabBar, { type TabItem } from "@/components/admin/shared/TabBar";
@@ -21,10 +23,11 @@ import ApprovalDetailModal, { ApprovalDecisionModal } from "@/components/admin/a
 import ApprovalFormModal from "@/components/admin/approvals/ApprovalFormModal";
 import MinuteFormModal, { MinuteDetailModal } from "@/components/admin/approvals/MinuteFormModal";
 import ScheduleFormModal from "@/components/admin/approvals/ScheduleFormModal";
+import Registrations from "@/components/sections/Registrations";
 import { formatDate } from "@/utils/format";
 import type { ApprovalRow, MinuteRow, ScheduleRow } from "@/types/approvals";
 
-type Tab = "pending" | "schedule" | "minutes";
+type Tab = "pending" | "registrations" | "schedule" | "minutes";
 const PAGE_SIZE = 25;
 
 const APPROVAL_STATUS_OPTIONS = optionsOf(APPROVAL_STATUS);
@@ -37,6 +40,7 @@ export default function Approval() {
   const canCreateApproval = can("approvals", "create");
   const canUpdateApproval = can("approvals", "update");
   const canDeleteApproval = can("approvals", "delete");
+  const canReadRegistrations = can("registrations", "read");
 
   const canCreateSchedule = can("schedule", "create");
   const canUpdateSchedule = can("schedule", "update");
@@ -46,7 +50,35 @@ export default function Approval() {
   const canUpdateMinute = can("minutes", "update");
   const canDeleteMinute = can("minutes", "delete");
 
-  const [tab, setTab] = useState<Tab>("pending");
+  const [tab, setTab] = useState<Tab>(() => consumePendingApprovalTab() ?? "pending");
+  const [regCount, setRegCount] = useState<number>(0);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const nextTab = (event as CustomEvent<string>).detail ?? consumePendingApprovalTab();
+      if (nextTab === "pending" || nextTab === "registrations" || nextTab === "schedule" || nextTab === "minutes") {
+        setTab(nextTab);
+      }
+    };
+    window.addEventListener(ADMIN_APPROVAL_TAB_EVENT, handler);
+    return () => window.removeEventListener(ADMIN_APPROVAL_TAB_EVENT, handler);
+  }, []);
+
+  useEffect(() => {
+    if (!canReadRegistrations) return;
+    let active = true;
+    api
+      .get<{ data: unknown[]; total?: number }>("/registrations")
+      .then((res) => {
+        if (active) setRegCount(res.total ?? res.data.length);
+      })
+      .catch(() => {
+        // ignore
+      });
+    return () => {
+      active = false;
+    };
+  }, [canReadRegistrations]);
 
   // Filters & pagination for Approvals
   const [appSearch, setAppSearch] = useState("");
@@ -106,6 +138,15 @@ export default function Approval() {
 
   const tabs: TabItem<Tab>[] = [
     { id: "pending", label: "Hồ sơ chờ duyệt", badge: approvals.total },
+    ...(canReadRegistrations
+      ? [
+          {
+            id: "registrations" as const,
+            label: regCount > 0 ? `Đăng ký tài khoản (${regCount})` : "Đăng ký tài khoản",
+            badge: regCount,
+          },
+        ]
+      : []),
     { id: "schedule", label: "Lịch kiểm tra", badge: schedules.total },
     { id: "minutes", label: "Biên bản kiểm tra", badge: minutes.total },
   ];
@@ -275,6 +316,8 @@ export default function Approval() {
           </div>
         </>
       )}
+
+      {tab === "registrations" && canReadRegistrations && <Registrations embedded onCountChange={setRegCount} />}
 
       {tab === "schedule" && (
         <>

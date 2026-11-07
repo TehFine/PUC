@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
+import TableState from "@/components/admin/shared/TableState";
 import { FormError, Modal } from "@/components/ui/Modal";
+import { toast } from "@/components/ui/Toast";
 import { api } from "@/lib/api-client";
 
 interface Registration {
@@ -28,11 +31,17 @@ const formatDate = (iso: string) => new Date(iso).toLocaleString("vi-VN", { date
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : "Không xử lý được yêu cầu.");
 
 /** Duyệt tài khoản hộ dân tự đăng ký: gắn vào một hộ rồi kích hoạt, hoặc từ chối. */
-export default function Registrations() {
+export default function Registrations({
+  embedded = false,
+  onCountChange,
+}: {
+  embedded?: boolean;
+  onCountChange?: (count: number) => void;
+}) {
   const [rows, setRows] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const [target, setTarget] = useState<Registration | null>(null);
   const [query, setQuery] = useState("");
@@ -42,25 +51,34 @@ export default function Registrations() {
   const [dialogError, setDialogError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
-      setRows((await api.get<{ data: Registration[] }>("/registrations")).data);
+      const result = await api.get<{ data: Registration[] }>("/registrations");
+      setRows(result.data);
+      onCountChange?.(result.data.length);
       setError(null);
     } catch (err) {
       setError(messageOf(err));
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [onCountChange]);
 
   useEffect(() => {
     let active = true;
     api
       .get<{ data: Registration[] }>("/registrations")
-      .then((result) => active && setRows(result.data))
+      .then((result) => {
+        if (!active) return;
+        setRows(result.data);
+        onCountChange?.(result.data.length);
+      })
       .catch((err) => active && setError(messageOf(err)))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, []);
+  }, [onCountChange]);
 
   useEffect(() => {
     if (!target) return;
@@ -76,6 +94,20 @@ export default function Registrations() {
       clearTimeout(timer);
     };
   }, [target, query]);
+
+  const filteredRows = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter(
+      (r) =>
+        r.fullName.toLowerCase().includes(term) ||
+        r.phone.toLowerCase().includes(term) ||
+        (r.villageName ?? "").toLowerCase().includes(term) ||
+        (r.suggestedHouseholdCode ?? "").toLowerCase().includes(term) ||
+        (r.suggestedHouseholdName ?? "").toLowerCase().includes(term) ||
+        (r.note ?? "").toLowerCase().includes(term),
+    );
+  }, [rows, search]);
 
   const open = (row: Registration) => {
     setTarget(row);
@@ -94,7 +126,8 @@ export default function Registrations() {
     setDialogError(null);
     try {
       await api.post(`/registrations/${target.id}/approve`, { householdId });
-      setNotice(`Đã duyệt tài khoản ${target.fullName} (${target.phone}).`);
+      toast.success(`Đã duyệt tài khoản ${target.fullName} (${target.phone}).`);
+      notifyCountsChanged();
       setTarget(null);
       await load();
     } catch (err) {
@@ -108,31 +141,35 @@ export default function Registrations() {
     if (!window.confirm(`Từ chối đăng ký của ${row.fullName} (${row.phone})? Tài khoản chờ duyệt sẽ bị xóa.`)) return;
     try {
       await api.post(`/registrations/${row.id}/reject`);
-      setNotice(`Đã từ chối đăng ký của ${row.fullName}.`);
+      toast.success(`Đã từ chối đăng ký của ${row.fullName}.`);
+      notifyCountsChanged();
       await load();
     } catch (err) {
-      setError(messageOf(err));
+      toast.error(messageOf(err));
     }
   };
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Duyệt đăng ký hộ dân</h1>
+      {!embedded && (
+        <div className="page-header">
+          <div>
+            <h1>Duyệt đăng ký hộ dân</h1>
+          </div>
+        </div>
+      )}
+
+      <div className="filter-bar">
+        <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="Tìm theo họ tên, số điện thoại, thôn, hộ gợi ý…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
       </div>
-
-      {notice && (
-        <p className="login-error" role="status" style={{ background: "#e6f2eb", color: "#256b45" }}>
-          {notice}
-        </p>
-      )}
-      {error && (
-        <p className="login-error" role="alert">
-          {error}
-        </p>
-      )}
 
       <div className="table-wrap">
         <table>
@@ -148,13 +185,21 @@ export default function Registrations() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            <TableState
+              colSpan={7}
+              loading={loading}
+              error={error}
+              empty={filteredRows.length === 0}
+              emptyText="Không có yêu cầu đăng ký tài khoản nào đang chờ duyệt."
+              onRetry={() => void load()}
+            />
+            {filteredRows.map((row) => (
               <tr key={row.id}>
                 <td style={{ fontWeight: 500 }}>{row.fullName}</td>
                 <td style={{ fontFamily: "monospace", fontSize: 12 }}>{row.phone}</td>
                 <td>{row.villageName ?? "—"}</td>
                 <td>{row.note ?? "—"}</td>
-                <td style={{ color: "var(--text-secondary)" }}>{formatDate(row.createdAt)}</td>
+                <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(row.createdAt)}</td>
                 <td>{row.suggestedHouseholdId ? `${row.suggestedHouseholdCode} · ${row.suggestedHouseholdName}` : "—"}</td>
                 <td>
                   <div style={{ display: "flex", gap: 5 }}>
@@ -170,7 +215,6 @@ export default function Registrations() {
             ))}
           </tbody>
         </table>
-        {!loading && rows.length === 0 && <div className="empty-state">Không có đăng ký nào đang chờ duyệt.</div>}
       </div>
 
       {target && (
