@@ -72,7 +72,7 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   villages: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   accounts: { read: ADMIN, create: ADMIN, update: ADMIN, delete: ADMIN },
   "audit-log": { read: ADMIN },
-  plots: { read: STAFF, create: HTX },
+  plots: { read: STAFF, create: HTX, update: HTX },
   "plot-measurements": { read: STAFF, create: HTX_OR_INSPECTOR },
   // Cổng hộ dân: chỉ tài khoản nông dân được xem/ghi dữ liệu của chính hộ mình (phạm vi áp dụng ở PortalService).
   portal: { read: FARMER, create: FARMER },

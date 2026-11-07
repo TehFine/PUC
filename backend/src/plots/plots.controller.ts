@@ -1,11 +1,11 @@
-import { Body, Controller, Get, HttpCode, Ip, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Ip, Param, Patch, Post, Query } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import type { FeatureCollection } from "geojson";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { Authorize, CurrentUser } from "../auth/auth.decorators";
 import { lenientPipe } from "../common/pipes/validation.pipes";
-import { CreateMeasurementDto, CreatePlotDto } from "./dto/plot.dto";
+import { CreateMeasurementDto, CreatePlotDto, UpdatePlotGeometryDto } from "./dto/plot.dto";
 import { PlotInputError, PlotsService } from "./plots.service";
 import type { MeasurementInput } from "./plot.types";
 
@@ -32,6 +32,25 @@ export class PlotsController {
   async create(@Body(lenientPipe(CreatePlotDto)) dto: CreatePlotDto, @CurrentUser() user: AuthUser, @Ip() ip: string) {
     const result = await this.plots.createPlot(dto, user);
     await this.audit.write({ ip, user }, { action: "Tạo mới", object: `Thửa đất ${result.feature.properties.code}` });
+    return result;
+  }
+
+  @Patch(":code/geometry")
+  @Authorize("plots", "update")
+  async updateGeometry(
+    @Param("code") code: string,
+    @Body(lenientPipe(UpdatePlotGeometryDto)) dto: UpdatePlotGeometryDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    const result = await this.plots.updatePlotGeometry(code, dto.geometry, Boolean(dto.updateArea), user);
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Cập nhật",
+        object: `Hình dạng thửa đất ${result.feature.properties.code}`,
+      },
+    );
     return result;
   }
 

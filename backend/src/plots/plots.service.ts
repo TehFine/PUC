@@ -294,6 +294,61 @@ export class PlotsService {
     }
   }
 
+  async updatePlotGeometry(
+    codeInput: string,
+    geometryInput: unknown,
+    updateArea = false,
+    user?: AuthUser,
+  ): Promise<CreatedPlot> {
+    const code = normalizeCode(codeInput);
+    const geometry = normalizeGeometry(geometryInput);
+    const computedAreaHa = polygonAreaHa(geometry);
+    const scopedVillage = await this.resolveScopedVillageName(user);
+    const pool = this.db.pool;
+
+    const existing = await pool.query<{ id: string | number; village: string | null; household_id: string | number | null }>(
+      "SELECT id, village, household_id FROM plots WHERE code = $1",
+      [code],
+    );
+    if (existing.rows.length === 0) {
+      throw new PlotInputError(`Không tìm thấy thửa đất có mã ${code}.`);
+    }
+    if (scopedVillage !== null && existing.rows[0].village !== scopedVillage) {
+      throw forbidden("Bạn không có quyền chỉnh sửa thửa đất ngoài thôn phụ trách.");
+    }
+
+    const { rows } = await pool.query<PlotRow>(
+      `
+        UPDATE plots
+        SET geom = ST_SetSRID(ST_GeomFromGeoJSON($2), 4326),
+            area_ha = CASE WHEN $3::boolean THEN $4::numeric ELSE area_ha END,
+            updated_at = now()
+        WHERE code = $1
+        RETURNING id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
+                  village, zone_code AS zone, variety, planted_year AS year, area_ha,
+                  source, status, source_ref, household_id,
+                  ST_Y(ST_Centroid(geom)) AS lat, ST_X(ST_Centroid(geom)) AS lng,
+                  ST_AsGeoJSON(geom) AS geometry_json
+      `,
+      [code, JSON.stringify(geometry), Boolean(updateArea), computedAreaHa],
+    );
+
+    if (updateArea && existing.rows[0].household_id != null) {
+      const hhId = Number(existing.rows[0].household_id);
+      await pool.query(
+        `
+          UPDATE households
+          SET area_ha = COALESCE((SELECT ROUND(SUM(area_ha)::numeric, 4) FROM plots WHERE household_id = $1), area_ha),
+              updated_at = now()
+          WHERE id = $1
+        `,
+        [hhId],
+      );
+    }
+
+    return { feature: rowToFeature(rows[0]), persisted: true };
+  }
+
   async importCadastral(
     collection: FeatureCollection,
     sourceRef?: string,

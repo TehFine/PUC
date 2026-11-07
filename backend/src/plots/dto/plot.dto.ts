@@ -1,6 +1,6 @@
 import type { Polygon } from "geojson";
 import { Type } from "class-transformer";
-import { IsNumber, IsObject, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsNumber, IsObject, IsOptional, IsString } from "class-validator";
 
 /** Hình học cụ thể (Polygon GeoJSON) được PlotsService kiểm tra kỹ hơn; ở đây chỉ chặn kiểu dữ liệu sai hẳn. */
 export class CreatePlotDto {
@@ -35,4 +35,17 @@ export class CreateMeasurementDto {
 
   @IsObject()
   geometry!: Polygon;
+}
+
+export class UpdatePlotGeometryDto {
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsObject()
+  geometry!: Polygon;
+
+  @IsOptional()
+  @IsBoolean()
+  updateArea?: boolean;
 }
