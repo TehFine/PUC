@@ -26,6 +26,7 @@ export default function Zones() {
   const [view, setView] = useState<ZoneView>("map");
   const [sheet, setSheet] = useState<SheetMode>(null);
   const [activeZone, setActiveZone] = useState<string | null>(null);
+  const [pendingEditCode, setPendingEditCode] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const sheetHeadRef = useRef<HTMLDivElement>(null);
@@ -192,13 +193,19 @@ export default function Zones() {
               isMobile={isMobile}
               onOpenZone={openZone}
             />
-            <ZoneSourceCard sources={summary.sources} />
+            <ZoneSourceCard sources={summary.sources} zoneRows={zoneRows} />
             <ZoneDetailCard zone={activeZoneRow} plots={activeZonePlots} />
             <AllPlotsCard features={features} zoneCount={summary.zones} />
           </div>
 
           <div className="zones-map-area">
-            <MapView plots={plots} loading={loading} onChanged={refresh} />
+            <MapView
+              plots={plots}
+              loading={loading}
+              onChanged={refresh}
+              pendingEditCode={pendingEditCode}
+              onPendingEditHandled={() => setPendingEditCode(null)}
+            />
           </div>
 
           <button type="button" className="map-sheet-btn" onClick={() => setSheet("overview")}>
@@ -206,7 +213,16 @@ export default function Zones() {
           </button>
         </div>
       ) : (
-        <PlotsTable features={features} loading={loading} summary={summary} />
+        <PlotsTable
+          features={features}
+          loading={loading}
+          summary={summary}
+          onEditPlot={(code) => {
+            setPendingEditCode(code);
+            setSheet(null);
+            setView("map");
+          }}
+        />
       )}
     </div>
   );

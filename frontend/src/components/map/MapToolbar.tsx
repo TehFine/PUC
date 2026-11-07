@@ -5,11 +5,13 @@ interface MapToolbarProps {
   mode: Mode;
   ready: boolean;
   canCompare: boolean;
+  canEditShape?: boolean;
   importing: boolean;
   onBaseLayerChange: (layer: BaseLayer) => void;
   onDraw: () => void;
   onGps: () => void;
   onCompare: () => void;
+  onEditShape?: () => void;
   onImport: () => void;
 }
 
@@ -18,11 +20,13 @@ export default function MapToolbar({
   mode,
   ready,
   canCompare,
+  canEditShape = false,
   importing,
   onBaseLayerChange,
   onDraw,
   onGps,
   onCompare,
+  onEditShape,
   onImport,
 }: MapToolbarProps) {
   return (
@@ -44,6 +48,17 @@ export default function MapToolbar({
         </button>
       </div>
       <div className="map-toolgroup map-toolgroup-col">
+        {onEditShape && (
+          <button
+            type="button"
+            className={`map-tool ${mode === "edit" ? "active" : ""}`}
+            onClick={onEditShape}
+            disabled={!ready || (!canEditShape && mode !== "edit")}
+            title="Chọn một thửa đất trên bản đồ rồi bấm để chỉnh sửa hình dạng ranh giới"
+          >
+            Sửa hình dạng
+          </button>
+        )}
         <button
           type="button"
           className={`map-tool ${mode === "draw" ? "active" : ""}`}

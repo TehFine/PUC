@@ -5,6 +5,7 @@ import { Lock } from "lucide-react";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
+import { getZoneColor } from "@/components/zones/zone-data";
 import type { PlotFeature } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
 import {
@@ -20,6 +21,7 @@ interface PlotPopupProps {
   feature: PlotFeature;
   overlaps: PlotOverlap[];
   onCompare: () => void;
+  onEditShape?: () => void;
   onClose: () => void;
 }
 
@@ -27,7 +29,7 @@ interface PlotPopupProps {
  * Bảng thông tin thửa đất nằm bên cạnh phải bản đồ (không làm mờ nền bản đồ phía sau).
  * Chỉ hiển thị thông tin quy hoạch của thửa; thông tin cá nhân (họ tên đầy đủ, nguồn nhập, chủ hộ của thửa chồng lấn…) được ẩn.
  */
-export default function PlotPopup({ feature, overlaps, onCompare, onClose }: PlotPopupProps) {
+export default function PlotPopup({ feature, overlaps, onCompare, onEditShape, onClose }: PlotPopupProps) {
   const props = feature.properties;
   const popupRef = useRef<HTMLElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
@@ -74,10 +76,11 @@ export default function PlotPopup({ feature, overlaps, onCompare, onClose }: Plo
   useSheetSwipe({ sheetRef: popupRef, handleRef: headRef, onDismiss: handleClose });
 
   const center = plotCenterCoords(feature);
-  const facts: Array<{ label: string; value: string; wide?: boolean }> = [
+  const zc = getZoneColor(props.zone || props.code);
+  const facts: Array<{ label: string; value: string; wide?: boolean; isZone?: boolean }> = [
     { label: "Số thửa / tờ bản đồ", value: `${props.parcel || "—"} / ${props.sheet || "—"}` },
     { label: "Thôn / Tổ", value: props.village || "—" },
-    { label: "Mã vùng trồng", value: props.zone || "—" },
+    { label: "Mã vùng trồng", value: props.zone || "—", isZone: true },
     { label: "Giống", value: props.variety || "—" },
     { label: "Định vị GPS", value: formatCoords(center?.lat, center?.lng), wide: true },
     { label: "Chủ hộ", value: props.owner || "—", wide: true },
@@ -98,7 +101,9 @@ export default function PlotPopup({ feature, overlaps, onCompare, onClose }: Plo
         </div>
         <header className="pp-head">
           <div>
-            <div className="pp-kicker">Thửa đất · {props.code}</div>
+            <div className="pp-kicker" style={{ color: zc.text }}>
+              Thửa đất · {props.code}
+            </div>
             <h3 className="pp-title">Tờ/thửa {featureLabel(feature)}</h3>
           </div>
           <button type="button" className="pp-close" onClick={handleClose} aria-label="Đóng">
@@ -108,6 +113,19 @@ export default function PlotPopup({ feature, overlaps, onCompare, onClose }: Plo
       </div>
 
       <div className="pp-badges">
+        <span
+          className="badge"
+          style={{
+            background: zc.bg,
+            color: zc.text,
+            border: "none",
+            borderRadius: 8,
+            padding: "4px 9px",
+            fontFamily: "monospace",
+          }}
+        >
+          {props.zone || zc.zoneCode}
+        </span>
         <span className={`badge ${STATUS_BADGE[props.status]}`}>{STATUS_LABELS[props.status]}</span>
         <span className={`badge ${SOURCE_BADGE[props.source]}`}>{SOURCE_LABELS[props.source]}</span>
       </div>
@@ -127,7 +145,19 @@ export default function PlotPopup({ feature, overlaps, onCompare, onClose }: Plo
         {facts.map((fact) => (
           <div key={fact.label} className={fact.wide ? "wide" : undefined}>
             <dt>{fact.label}</dt>
-            <dd>{fact.value}</dd>
+            <dd
+              style={
+                fact.isZone
+                  ? {
+                      color: zc.text,
+                      fontWeight: 700,
+                      fontFamily: "monospace",
+                    }
+                  : undefined
+              }
+            >
+              {fact.value}
+            </dd>
           </div>
         ))}
       </dl>
@@ -149,8 +179,13 @@ export default function PlotPopup({ feature, overlaps, onCompare, onClose }: Plo
         Họ tên đầy đủ, số điện thoại, CCCD và nguồn nhập dữ liệu được ẩn khỏi cửa sổ này.
       </p>
 
-      <div className="pp-actions">
-        <button type="button" className="btn btn-primary btn-sm" onClick={onCompare}>
+      <div className="pp-actions" style={{ flexWrap: "wrap" }}>
+        {onEditShape && (
+          <button type="button" className="btn btn-primary btn-sm" onClick={onEditShape}>
+            Sửa hình dạng thửa
+          </button>
+        )}
+        <button type="button" className="btn btn-outline btn-sm" onClick={onCompare}>
           Đối chiếu thửa này
         </button>
         <button type="button" className="btn btn-outline btn-sm" onClick={handleClose}>

@@ -30,3 +30,31 @@ export function onAdminNavigate(listener: (section: string) => void): () => void
   window.addEventListener(ADMIN_NAVIGATE_EVENT, handler);
   return () => window.removeEventListener(ADMIN_NAVIGATE_EVENT, handler);
 }
+
+const EDIT_PLOT_STORAGE_KEY = "puc:pending-edit-plot-code";
+export const ADMIN_EDIT_PLOT_EVENT = "admin:edit-plot-shape";
+
+export function requestEditPlotShape(plotCode: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(EDIT_PLOT_STORAGE_KEY, plotCode);
+  } catch {
+    // ignore storage errors
+  }
+  requestAdminNavigate("zones");
+  window.dispatchEvent(new CustomEvent<string>(ADMIN_EDIT_PLOT_EVENT, { detail: plotCode }));
+}
+
+export function consumePendingEditPlotCode(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const code = window.sessionStorage.getItem(EDIT_PLOT_STORAGE_KEY);
+    if (code) {
+      window.sessionStorage.removeItem(EDIT_PLOT_STORAGE_KEY);
+      return code;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}

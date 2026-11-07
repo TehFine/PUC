@@ -1,5 +1,6 @@
 import type * as Leaflet from "leaflet";
 import type { Polygon } from "geojson";
+import { getZoneColor } from "@/components/zones/zone-data";
 import type { PlotFeature, PlotSource } from "@/types/geo";
 import { SOURCE_COLORS } from "@/types/geo";
 import { polygonAreaHa } from "@/utils/plot-utils";
@@ -7,14 +8,14 @@ import type { ComparisonState, DraftState, Mode, PlotForm, PreviewState } from "
 
 export const EMPTY_PREVIEW: PreviewState = { points: 0, areaHa: 0, perimeterKm: 0 };
 
-export function plotStyle(source: PlotSource, selected: boolean): Leaflet.PathOptions {
-  const color = SOURCE_COLORS[source] ?? SOURCE_COLORS.demo;
+export function plotStyle(source: PlotSource, selected: boolean, zoneOrCode?: string): Leaflet.PathOptions {
+  const color = zoneOrCode ? getZoneColor(zoneOrCode).dot : (SOURCE_COLORS[source] ?? SOURCE_COLORS.demo);
   return {
     color: selected ? "#f8fafc" : color,
-    weight: selected ? 3 : 1.7,
+    weight: selected ? 3 : 2,
     opacity: 1,
     fillColor: color,
-    fillOpacity: selected ? 0.4 : 0.2,
+    fillOpacity: selected ? 0.45 : 0.26,
   };
 }
 
@@ -64,25 +65,31 @@ export function panelHeading({ mode, draft, comparison, selectedFeature, formCod
     ? "Thửa vừa vẽ"
     : comparison
       ? "Kết quả đối chiếu"
-      : mode !== "idle"
-        ? "Đang thao tác trên bản đồ"
-        : selectedFeature
-          ? "Thửa đang chọn"
-          : "Bản đồ";
+      : mode === "edit"
+        ? "Đang chỉnh sửa hình dạng"
+        : mode !== "idle"
+          ? "Đang thao tác trên bản đồ"
+          : selectedFeature
+            ? "Thửa đang chọn"
+            : "Bản đồ";
 
   const title = draft
     ? formCode || "Chưa đặt mã"
     : comparison
       ? comparison.target.properties.code
-      : selectedFeature
+      : mode === "edit" && selectedFeature
         ? selectedFeature.properties.code
-        : mode === "draw"
-          ? "Vẽ thửa mới"
-          : mode === "gps"
-            ? "Đo GPS"
-            : mode === "compare"
-              ? "Đối chiếu thửa"
-              : "Thông báo";
+        : selectedFeature
+          ? selectedFeature.properties.code
+          : mode === "draw"
+            ? "Vẽ thửa mới"
+            : mode === "gps"
+              ? "Đo GPS"
+              : mode === "compare"
+                ? "Đối chiếu thửa"
+                : mode === "edit"
+                  ? "Chỉnh sửa hình dạng"
+                  : "Thông báo";
 
   return { kicker, title };
 }

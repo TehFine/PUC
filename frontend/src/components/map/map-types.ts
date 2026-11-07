@@ -2,7 +2,7 @@ import type { Polygon } from "geojson";
 import type { PlotFeature, PlotSource } from "@/types/geo";
 import type { PlotComparison } from "@/utils/plot-utils";
 
-export type Mode = "idle" | "draw" | "gps" | "compare";
+export type Mode = "idle" | "draw" | "gps" | "compare" | "edit";
 export type BaseLayer = "map" | "satellite";
 export type MessageTone = "ok" | "error" | "info";
 

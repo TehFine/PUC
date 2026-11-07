@@ -7,8 +7,10 @@ import { useApiList } from "@/hooks/use-api";
 import { usePlots } from "@/hooks/use-plots";
 import TabBar, { type TabItem } from "@/components/admin/shared/TabBar";
 import TableState from "@/components/admin/shared/TableState";
+import { requestEditPlotShape } from "@/components/admin/shared/counts-events";
 import { formatVn } from "@/components/admin/shared/form-utils";
 import { badgeOf, HOUSEHOLD_STATUS, LAB_RESULT, SEVERITY, VIOLATION_STATUS } from "@/components/admin/shared/labels";
+import { getZoneColor } from "@/components/zones/zone-data";
 import { formatDate } from "@/utils/format";
 import { formatCoords, plotCenterCoords } from "@/utils/plot-utils";
 import type { HouseholdRow } from "@/types/households";
@@ -49,6 +51,7 @@ export default function HouseholdDetailModal({
   const labTests = useApiList<LabTestRow>("testing", { householdId: household.id, pageSize: 20 });
 
   const statusBadge = badgeOf(HOUSEHOLD_STATUS, household.status);
+  const zc = getZoneColor(household.code);
 
   const tabs: TabItem<DetailTab>[] = [
     { id: "plots", label: "Thửa đất & Định vị", badge: householdPlots.length },
@@ -88,7 +91,23 @@ export default function HouseholdDetailModal({
       >
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã vùng trồng / Mã hộ</div>
-          <div style={{ fontWeight: 700, fontFamily: "monospace", fontSize: 14, color: "#166534" }}>{household.code}</div>
+          <div style={{ marginTop: 3 }}>
+            <span
+              style={{
+                display: "inline-block",
+                fontWeight: 700,
+                fontFamily: "monospace",
+                fontSize: 13,
+                color: zc.text,
+                background: zc.bg,
+                border: "none",
+                padding: "4px 10px",
+                borderRadius: 8,
+              }}
+            >
+              {household.code}
+            </span>
+          </div>
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Số CCCD</div>
@@ -146,7 +165,7 @@ export default function HouseholdDetailModal({
                 const center = plotCenterCoords(f);
                 return (
                   <tr key={p.code}>
-                    <td style={{ fontFamily: "monospace", fontWeight: 700, color: "#166534" }}>{p.code}</td>
+                    <td style={{ fontFamily: "monospace", fontWeight: 700, color: zc.text }}>{p.code}</td>
                     <td>{p.parcel || "—"}</td>
                     <td>{p.sheet || "—"}</td>
                     <td style={{ fontWeight: 600 }}>{formatVn(p.areaHa, 2)} ha</td>
@@ -155,18 +174,29 @@ export default function HouseholdDetailModal({
                       {formatCoords(center?.lat, center?.lng)}
                     </td>
                     <td>
-                      {center ? (
-                        <a
-                          href={`https://www.google.com/maps?q=${center.lat},${center.lng}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="badge badge-blue"
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => {
+                            onClose();
+                            requestEditPlotShape(p.code);
+                          }}
+                          title="Mở bản đồ để kéo chỉnh sửa hình dạng ranh giới mảnh đất này"
                         >
-                          Google Maps
-                        </a>
-                      ) : (
-                        "—"
-                      )}
+                          Sửa hình dạng
+                        </button>
+                        {center && (
+                          <a
+                            href={`https://www.google.com/maps?q=${center.lat},${center.lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="badge badge-blue"
+                          >
+                            Google Maps
+                          </a>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

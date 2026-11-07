@@ -3,17 +3,18 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import type { PlotFeature } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
 import { formatCoords, formatHa, plotCenterCoords } from "@/utils/plot-utils";
-import { plotArea, type PlotsSummary } from "./zone-data";
+import { getZoneColor, plotArea, type PlotsSummary } from "./zone-data";
 
 interface PlotsTableProps {
   features: PlotFeature[];
   loading: boolean;
   summary: PlotsSummary;
+  onEditPlot?: (code: string) => void;
 }
 
 const emptyCellStyle = { textAlign: "center", padding: 28, color: "var(--text-muted)" } as const;
 
-export default function PlotsTable({ features, loading, summary }: PlotsTableProps) {
+export default function PlotsTable({ features, loading, summary, onEditPlot }: PlotsTableProps) {
   return (
     <div className="card zones-list-card">
       <div className="card-header">
@@ -36,6 +37,7 @@ export default function PlotsTable({ features, loading, summary }: PlotsTablePro
               <th>Giống</th>
               <th>Nguồn dữ liệu</th>
               <th>Trạng thái</th>
+              {onEditPlot && <th>Thao tác</th>}
             </tr>
           </thead>
           <tbody>
@@ -43,7 +45,7 @@ export default function PlotsTable({ features, loading, summary }: PlotsTablePro
               features.length === 0 &&
               [0, 1, 2, 3, 4].map((row) => (
                 <tr key={`sk-${row}`} aria-hidden="true">
-                  {Array.from({ length: 10 }, (_, cell) => (
+                  {Array.from({ length: onEditPlot ? 11 : 10 }, (_, cell) => (
                     <td key={cell}>
                       <Skeleton h={12} w={cell === 0 ? 70 : "80%"} />
                     </td>
@@ -52,7 +54,7 @@ export default function PlotsTable({ features, loading, summary }: PlotsTablePro
               ))}
             {!loading && features.length === 0 && (
               <tr>
-                <td colSpan={10} style={emptyCellStyle}>
+                <td colSpan={onEditPlot ? 11 : 10} style={emptyCellStyle}>
                   Chưa có thửa đất. Dùng nút “Vẽ thửa” trên bản đồ hoặc nhập GeoJSON địa chính.
                 </td>
               </tr>
@@ -60,10 +62,25 @@ export default function PlotsTable({ features, loading, summary }: PlotsTablePro
             {features.map((feature) => {
               const props = feature.properties;
               const center = plotCenterCoords(feature);
+              const zc = getZoneColor(props.zone || props.code);
               return (
-                <tr key={props.code}>
-                  <td style={{ fontFamily: "monospace", color: "var(--green-700)", fontSize: 12 }}>
-                    {props.code}
+                <tr key={props.code} style={{ background: zc.rowTint }}>
+                  <td>
+                    <span
+                      style={{
+                        fontFamily: "monospace",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: zc.text,
+                        background: zc.bg,
+                        border: "none",
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        display: "inline-block",
+                      }}
+                    >
+                      {props.code}
+                    </span>
                   </td>
                   <td>{props.sheet || "—"}</td>
                   <td>{props.parcel || "—"}</td>
@@ -73,7 +90,19 @@ export default function PlotsTable({ features, loading, summary }: PlotsTablePro
                     {formatCoords(center?.lat, center?.lng)}
                   </td>
                   <td>
-                    <span style={{ fontFamily: "monospace", fontSize: 11, color: "var(--gold)" }}>
+                    <span
+                      style={{
+                        fontFamily: "monospace",
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        background: zc.bg,
+                        color: zc.text,
+                        border: "none",
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        display: "inline-block",
+                      }}
+                    >
                       {props.zone || "—"}
                     </span>
                   </td>
@@ -89,6 +118,18 @@ export default function PlotsTable({ features, loading, summary }: PlotsTablePro
                   <td>
                     <span className={`badge ${STATUS_BADGE[props.status]}`}>{STATUS_LABELS[props.status]}</span>
                   </td>
+                  {onEditPlot && (
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => onEditPlot(props.code)}
+                        title="Mở bản đồ để chỉnh sửa hình dạng ranh giới thửa đất này"
+                      >
+                        Sửa hình dạng
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}

@@ -3,7 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
-import { createPlot, importCadastral, saveMeasurement as saveMeasurementRequest } from "@/services/plots";
+import {
+  ADMIN_EDIT_PLOT_EVENT,
+  consumePendingEditPlotCode,
+  notifyCountsChanged,
+} from "@/components/admin/shared/counts-events";
+import {
+  createPlot,
+  importCadastral,
+  saveMeasurement as saveMeasurementRequest,
+  updatePlotGeometry,
+} from "@/services/plots";
 import type { PlotFeature, PlotSource } from "@/types/geo";
 import {
   comparePolygons,
@@ -46,9 +56,27 @@ interface MapViewProps {
   plots: import("@/types/geo").PlotCollection | null;
   loading?: boolean;
   onChanged?: () => void;
+  pendingEditCode?: string | null;
+  onPendingEditHandled?: () => void;
 }
 
-export default function MapView({ plots, loading = false, onChanged }: MapViewProps) {
+function extractOpenRingLatLngs(L: typeof import("leaflet"), feature: PlotFeature): Leaflet.LatLng[] {
+  const ring = feature.geometry.coordinates[0] ?? [];
+  if (ring.length === 0) return [];
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  const openRing =
+    ring.length > 1 && first[0] === last[0] && first[1] === last[1] ? ring.slice(0, -1) : ring;
+  return openRing.map(([lng, lat]) => L.latLng(lat, lng));
+}
+
+export default function MapView({
+  plots,
+  loading = false,
+  onChanged,
+  pendingEditCode,
+  onPendingEditHandled,
+}: MapViewProps) {
   const mapElementRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
@@ -61,6 +89,7 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
   const modeRef = useRef<Mode>("idle");
   const draftSourceRef = useRef<PlotSource>("declared");
   const compareTargetRef = useRef<PlotFeature | null>(null);
+  const editTargetRef = useRef<PlotFeature | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +107,7 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
   const [measureSaved, setMeasureSaved] = useState(false);
   const [measuredBy, setMeasuredBy] = useState("Cán bộ đo");
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [updateAreaOnEdit, setUpdateAreaOnEdit] = useState(false);
 
   const selectedFeature = useMemo(
     () => plots?.features.find((feature) => feature.properties.code === selectedCode) ?? null,
@@ -127,29 +157,106 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
     if (!L || !group) return;
 
     group.clearLayers();
-    const compareMode = modeRef.current === "compare";
-    const color = compareMode ? "#c05621" : "#2f7a4f";
+    const currentMode = modeRef.current;
+    const compareMode = currentMode === "compare";
+    const editMode = currentMode === "edit";
+    const color = editMode ? "#f59e0b" : compareMode ? "#c05621" : "#2f7a4f";
+
+    let polyLayer: Leaflet.Polygon | null = null;
+    let lineLayer: Leaflet.Polyline | null = null;
 
     if (points.length >= 3) {
-      L.polygon(
+      polyLayer = L.polygon(
         points.map((point) => [point.lat, point.lng] as Leaflet.LatLngTuple),
         {
           color,
-          weight: 2,
+          weight: editMode ? 2.5 : 2,
           opacity: 1,
           fillColor: color,
-          fillOpacity: 0.2,
-          dashArray: "5 4",
+          fillOpacity: editMode ? 0.28 : 0.2,
+          dashArray: editMode ? undefined : "5 4",
           interactive: false,
         },
       ).addTo(group);
     }
 
     if (points.length >= 2) {
-      L.polyline(
+      lineLayer = L.polyline(
         points.map((point) => [point.lat, point.lng] as Leaflet.LatLngTuple),
         { color, weight: 2, opacity: 0.9, dashArray: "4 4", interactive: false },
       ).addTo(group);
+    }
+
+    if (editMode) {
+      // Nút trung điểm trên từng cạnh để bấm hoặc kéo thêm đỉnh mới
+      if (points.length >= 2) {
+        const edgeCount = points.length >= 3 ? points.length : points.length - 1;
+        for (let i = 0; i < edgeCount; i += 1) {
+          const p1 = points[i];
+          const p2 = points[(i + 1) % points.length];
+          const mid = L.latLng((p1.lat + p2.lat) / 2, (p1.lng + p2.lng) / 2);
+          const midIcon = L.divIcon({
+            className: "plot-edit-midpoint-icon",
+            html: `<span style="display:block;width:10px;height:10px;border-radius:50%;background:#fde68a;border:2px solid #d97706;box-shadow:0 1px 4px rgba(0,0,0,0.35);cursor:pointer;" title="Kéo hoặc bấm để thêm đỉnh mới trên cạnh này"></span>`,
+            iconSize: [10, 10],
+            iconAnchor: [5, 5],
+          });
+          const midMarker = L.marker(mid, { draggable: true, icon: midIcon }).addTo(group);
+          midMarker.on("click", (ev) => {
+            L.DomEvent.stopPropagation(ev);
+            const next = [...verticesRef.current];
+            next.splice(i + 1, 0, mid);
+            verticesRef.current = next;
+            redrawDraftRef.current(next);
+            setPreview(previewFromLatLngs(next));
+          });
+          midMarker.on("dragend", () => {
+            const newPos = midMarker.getLatLng();
+            const next = [...verticesRef.current];
+            next.splice(i + 1, 0, newPos);
+            verticesRef.current = next;
+            redrawDraftRef.current(next);
+            setPreview(previewFromLatLngs(next));
+          });
+        }
+      }
+
+      // Nút đỉnh có thể kéo thả để chỉnh hình dạng và bấm chuột phải để xóa đỉnh
+      points.forEach((point, idx) => {
+        const vertexIcon = L.divIcon({
+          className: "plot-edit-vertex-icon",
+          html: `<span style="display:block;width:14px;height:14px;border-radius:50%;background:#ffffff;border:3px solid #d97706;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:grab;" title="Đỉnh #${idx + 1}: Kéo để di chuyển · Chuột phải để xóa"></span>`,
+          iconSize: [14, 14],
+          iconAnchor: [7, 7],
+        });
+        const marker = L.marker(point, { draggable: true, icon: vertexIcon }).addTo(group);
+        marker.on("drag", () => {
+          const pos = marker.getLatLng();
+          const next = [...verticesRef.current];
+          next[idx] = pos;
+          verticesRef.current = next;
+          const tuples = next.map((pt) => [pt.lat, pt.lng] as Leaflet.LatLngTuple);
+          polyLayer?.setLatLngs(tuples);
+          lineLayer?.setLatLngs(tuples);
+          setPreview(previewFromLatLngs(next));
+        });
+        marker.on("dragend", () => {
+          redrawDraftRef.current(verticesRef.current);
+          setPreview(previewFromLatLngs(verticesRef.current));
+        });
+        marker.on("contextmenu", (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          if (verticesRef.current.length <= 3) {
+            setMessage({ tone: "info", text: "Thửa đất cần tối thiểu 3 đỉnh. Dùng “Vẽ lại từ đầu” nếu muốn chấm lại toàn bộ." });
+            return;
+          }
+          const next = verticesRef.current.filter((_, itemIdx) => itemIdx !== idx);
+          verticesRef.current = next;
+          redrawDraftRef.current(next);
+          setPreview(previewFromLatLngs(next));
+        });
+      });
+      return;
     }
 
     points.forEach((point) => {
@@ -170,7 +277,14 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
 
   const addVertex = useCallback(
     (latlng: Leaflet.LatLng) => {
-      if (modeRef.current !== "draw" && modeRef.current !== "gps" && modeRef.current !== "compare") return;
+      if (
+        modeRef.current !== "draw" &&
+        modeRef.current !== "gps" &&
+        modeRef.current !== "compare" &&
+        modeRef.current !== "edit"
+      ) {
+        return;
+      }
       verticesRef.current = [...verticesRef.current, latlng];
       redrawDraftRef.current(verticesRef.current);
       setPreview(previewFromLatLngs(verticesRef.current));
@@ -189,6 +303,7 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
     draftGroupRef.current?.clearLayers();
     compareGroupRef.current?.clearLayers();
     compareTargetRef.current = null;
+    editTargetRef.current = null;
     setDraft(null);
     setComparison(null);
     setPreview(EMPTY_PREVIEW);
@@ -250,8 +365,43 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
       setMessage(null);
       changeMode("idle");
       verticesRef.current = [];
+      return;
     }
-  }, [changeMode, stopGps]);
+
+    if (currentMode === "edit") {
+      const target = editTargetRef.current;
+      if (!target) return;
+      stopGps();
+      setSaving(true);
+      updatePlotGeometry(target.properties.code, {
+        geometry,
+        updateArea: updateAreaOnEdit,
+      })
+        .then((res) => {
+          draftGroupRef.current?.clearLayers();
+          editTargetRef.current = null;
+          verticesRef.current = [];
+          setPreview(EMPTY_PREVIEW);
+          changeMode("idle");
+          setSelectedCode(res.feature.properties.code);
+          setMessage({
+            tone: "ok",
+            text: `Đã lưu hình dạng mới cho thửa đất ${res.feature.properties.code}.`,
+          });
+          notifyCountsChanged();
+          onChanged?.();
+        })
+        .catch((err) => {
+          setMessage({
+            tone: "error",
+            text: err instanceof Error ? err.message : "Không lưu được hình dạng thửa đất.",
+          });
+        })
+        .finally(() => {
+          setSaving(false);
+        });
+    }
+  }, [changeMode, onChanged, stopGps, updateAreaOnEdit]);
 
   const handleSelect = useCallback(
     (feature: PlotFeature) => {
@@ -304,7 +454,12 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
 
       map.on("click", (event) => {
         const latlng = L.latLng(event.latlng.lat, event.latlng.lng);
-        if (modeRef.current === "draw" || modeRef.current === "gps" || modeRef.current === "compare") {
+        if (
+          modeRef.current === "draw" ||
+          modeRef.current === "gps" ||
+          modeRef.current === "compare" ||
+          modeRef.current === "edit"
+        ) {
           addVertexRef.current(latlng);
           return;
         }
@@ -453,16 +608,119 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
     });
   };
 
-  const cancelDraft = () => {
+  const startEditShape = useCallback(
+    (targetFeature?: PlotFeature | null) => {
+      const feature = targetFeature ?? selectedFeature;
+      if (modeRef.current === "edit" && !targetFeature) {
+        resetDraftState();
+        changeMode("idle");
+        setMessage(null);
+        return;
+      }
+      if (!feature) {
+        setMessage({
+          tone: "info",
+          text: "Hãy bấm chọn một thửa đất trên bản đồ trước khi sửa hình dạng.",
+        });
+        return;
+      }
+      const L = leafletRef.current;
+      const map = mapRef.current;
+      if (!L) return;
+
+      resetDraftState();
+      setSelectedCode(feature.properties.code);
+      editTargetRef.current = feature;
+      setUpdateAreaOnEdit(false);
+      changeMode("edit");
+
+      const initialPoints = extractOpenRingLatLngs(L, feature);
+      verticesRef.current = initialPoints;
+      redrawDraftRef.current(initialPoints);
+      setPreview(previewFromLatLngs(initialPoints));
+      setMessage({
+        tone: "info",
+        text: `Đang sửa hình dạng thửa ${feature.properties.code} (${feature.properties.owner || "Nông hộ"}). Kéo các đỉnh trắng để chỉnh ranh giới, kéo chấm vàng giữa cạnh để thêm đỉnh mới, hoặc bấm “Vẽ lại từ đầu”.`,
+      });
+
+      if (map && initialPoints.length > 0) {
+        const bounds = L.latLngBounds(initialPoints);
+        if (bounds.isValid()) {
+          map.fitBounds(bounds.pad(0.65), { maxZoom: 18 });
+        }
+      }
+    },
+    [changeMode, resetDraftState, selectedFeature],
+  );
+
+  const undoEditVertex = useCallback(() => {
+    if (modeRef.current !== "edit" || verticesRef.current.length <= 3) return;
+    const next = verticesRef.current.slice(0, -1);
+    verticesRef.current = next;
+    redrawDraftRef.current(next);
+    setPreview(previewFromLatLngs(next));
+  }, []);
+
+  const clearEditVertices = useCallback(() => {
+    if (modeRef.current !== "edit") return;
+    verticesRef.current = [];
+    redrawDraftRef.current([]);
+    setPreview(EMPTY_PREVIEW);
+    setMessage({
+      tone: "info",
+      text: "Đã xóa các đỉnh cũ. Hãy bấm trực tiếp các góc mới của mảnh đất trên bản đồ (ít nhất 3 điểm), sau đó bấm “Lưu hình dạng”.",
+    });
+  }, []);
+
+  const resetEditOriginal = useCallback(() => {
+    const L = leafletRef.current;
+    const target = editTargetRef.current;
+    if (modeRef.current !== "edit" || !L || !target) return;
+    const initialPoints = extractOpenRingLatLngs(L, target);
+    verticesRef.current = initialPoints;
+    redrawDraftRef.current(initialPoints);
+    setPreview(previewFromLatLngs(initialPoints));
+    setMessage({
+      tone: "info",
+      text: "Đã khôi phục lại hình dạng ban đầu của thửa đất.",
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !plots || plots.features.length === 0) return;
+    const codeToEdit = pendingEditCode || consumePendingEditPlotCode();
+    if (!codeToEdit) return;
+    const target = plots.features.find((f) => f.properties.code === codeToEdit);
+    if (!target) return;
+    const timer = window.setTimeout(() => {
+      startEditShape(target);
+      onPendingEditHandled?.();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [ready, plots, pendingEditCode, onPendingEditHandled, startEditShape]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onEditEvent = (event: Event) => {
+      const code = (event as CustomEvent<string>).detail || consumePendingEditPlotCode();
+      if (!code || !plots) return;
+      const target = plots.features.find((f) => f.properties.code === code);
+      if (target) startEditShape(target);
+    };
+    window.addEventListener(ADMIN_EDIT_PLOT_EVENT, onEditEvent);
+    return () => window.removeEventListener(ADMIN_EDIT_PLOT_EVENT, onEditEvent);
+  }, [plots, startEditShape]);
+
+  const cancelDraft = useCallback(() => {
     resetDraftState();
     changeMode("idle");
     setMessage(null);
-  };
+  }, [changeMode, resetDraftState]);
 
-  const closePanel = () => {
+  const closePanel = useCallback(() => {
     cancelDraft();
     setSelectedCode(null);
-  };
+  }, [cancelDraft]);
 
   const zoomIn = () => mapRef.current?.zoomIn();
   const zoomOut = () => mapRef.current?.zoomOut();
@@ -626,11 +884,13 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
         mode={mode}
         ready={ready}
         canCompare={Boolean(selectedFeature || comparison)}
+        canEditShape={Boolean(selectedFeature)}
         importing={importing}
         onBaseLayerChange={setBaseLayer}
         onDraw={startDraw}
         onGps={startGps}
         onCompare={startCompare}
+        onEditShape={() => startEditShape()}
         onImport={() => fileInputRef.current?.click()}
       />
 
@@ -641,8 +901,12 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
           mode={mode}
           preview={preview}
           gpsAccuracy={gpsAccuracy}
+          saving={saving}
           onFinish={finishDraft}
           onCancel={cancelDraft}
+          onUndoVertex={mode === "edit" ? undoEditVertex : undefined}
+          onClearVertices={mode === "edit" ? clearEditVertices : undefined}
+          onResetOriginal={mode === "edit" ? resetEditOriginal : undefined}
         />
       )}
 
@@ -697,7 +961,18 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
               />
             )}
 
-            {mode !== "idle" && !draft && !comparison && <ModeNote mode={mode} />}
+            {mode !== "idle" && !draft && !comparison && (
+              <ModeNote
+                mode={mode}
+                preview={preview}
+                declaredAreaHa={selectedFeature?.properties.areaHa}
+                updateArea={updateAreaOnEdit}
+                onUpdateAreaChange={setUpdateAreaOnEdit}
+                saving={saving}
+                onFinish={finishDraft}
+                onCancel={cancelDraft}
+              />
+            )}
           </div>
         </aside>
       )}
@@ -707,6 +982,7 @@ export default function MapView({ plots, loading = false, onChanged }: MapViewPr
           feature={selectedFeature}
           overlaps={overlaps}
           onCompare={startCompare}
+          onEditShape={() => startEditShape(selectedFeature)}
           onClose={() => setSelectedCode(null)}
         />
       )}
