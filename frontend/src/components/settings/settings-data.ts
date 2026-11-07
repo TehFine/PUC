@@ -64,7 +64,7 @@ export const ROLES: {
       { label: "Ghi nhật ký & Khai báo thu hoạch", ok: true },
       { label: "Kích hoạt tem truy xuất QR", ok: true },
       { label: "Gửi hồ sơ đề nghị & Phản hồi vi phạm", ok: true },
-      { label: "Đăng ký lớp tập huấn", ok: true },
+      { label: "Tra cứu thuốc BVTV, phân bón & giống", ok: true },
       { label: "Truy cập khu quản trị", ok: false },
     ],
   },

@@ -21,7 +21,7 @@ import { Card, EmptyState, Pill, SectionDivider, Sheet, StateBlock } from "./ui"
 
 export { getTrainingKicker, usePortalTrainings, type TrainingCourseItem };
 
-type View = "training" | "pesticides" | "fertilizers" | "varieties";
+type View = "pesticides" | "fertilizers" | "varieties";
 type StatusFilter = "all" | "allowed" | "restricted" | "banned";
 type FertilizerFilter = "all" | "organic" | "npk" | "foliar" | "microbial" | "restricted";
 type VarietyFilter = "all" | "export" | "native" | "premium" | "new";
@@ -384,7 +384,7 @@ export function TrainingDetailModal({
   );
 }
 
-function TrainingList() {
+export function TrainingList() {
   const { data, loading, error } = usePortalTrainings();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const selectedTraining = useMemo(
@@ -2047,7 +2047,6 @@ function VarietyList() {
 }
 
 const LEARN_VIEW_BY_ACTION: Partial<Record<PortalAction, View>> = {
-  "learn-training": "training",
   "learn-pesticides": "pesticides",
   "learn-fertilizers": "fertilizers",
   "learn-varieties": "varieties",
@@ -2055,9 +2054,8 @@ const LEARN_VIEW_BY_ACTION: Partial<Record<PortalAction, View>> = {
 
 export default function LearnTab({ initialAction }: { initialAction?: PortalAction } = {}) {
   // Mở sẵn đúng mục khi bà con chọn gợi ý từ ô tìm kiếm
-  const [view, setView] = useState<View>(() => (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) || "training");
+  const [view, setView] = useState<View>(() => (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) || "pesticides");
   const items: { id: View; label: string }[] = [
-    { id: "training", label: "Tập huấn" },
     { id: "pesticides", label: "Thuốc BVTV" },
     { id: "fertilizers", label: "Phân bón" },
     { id: "varieties", label: "Giống cây" },
@@ -2079,7 +2077,6 @@ export default function LearnTab({ initialAction }: { initialAction?: PortalActi
           </button>
         ))}
       </div>
-      {view === "training" && <TrainingList />}
       {view === "pesticides" && <PesticideList />}
       {view === "fertilizers" && <FertilizerList />}
       {view === "varieties" && <VarietyList />}

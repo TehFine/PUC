@@ -81,7 +81,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     id: "learn",
     label: "Kiến thức",
-    desc: "Vật tư VietGAP và lớp tập huấn.",
+    desc: "Tra cứu thuốc BVTV, phân bón và giống cây.",
     icon: BrainQuestionMarkIcon,
     color: "#111827",
     activeColor: "#e05a2b",

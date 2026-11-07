@@ -29,10 +29,8 @@ const Approval = dynamic(() => import("@/components/sections/Approval"), { loadi
 const Journal = dynamic(() => import("@/components/sections/Journal"), { loading: TabLoading });
 const Testing = dynamic(() => import("@/components/sections/Testing"), { loading: TabLoading });
 const Harvest = dynamic(() => import("@/components/sections/Harvest"), { loading: TabLoading });
-const Training = dynamic(() => import("@/components/sections/Training"), { loading: TabLoading });
 const Catalog = dynamic(() => import("@/components/sections/Catalog"), { loading: TabLoading });
 const SystemSettings = dynamic(() => import("@/components/sections/SystemSettings"), { loading: TabLoading });
-const Registrations = dynamic(() => import("@/components/sections/Registrations"), { loading: TabLoading });
 
 const Zones = dynamic(() => import("@/components/sections/Zones"), { ssr: false, loading: TabLoading });
 const NewsAdmin = dynamic(() => import("@/components/sections/NewsAdmin"), { ssr: false, loading: TabLoading });
@@ -40,8 +38,8 @@ const Reports = dynamic(() => import("@/components/sections/Reports"), { ssr: fa
 
 export type SectionId =
   | "dashboard" | "households" | "zones" | "approval"
-  | "journal" | "testing" | "harvest" | "training"
-  | "reports" | "catalog" | "system" | "registrations"
+  | "journal" | "testing" | "harvest"
+  | "reports" | "catalog" | "system"
   | "news";
 
 const SECTION_TITLES: Record<SectionId, string> = {
@@ -49,11 +47,9 @@ const SECTION_TITLES: Record<SectionId, string> = {
   households: "Nông hộ",
   zones: "Vùng trồng",
   approval: "Hồ sơ",
-  registrations: "Đăng ký",
   journal: "Nhật ký",
   testing: "Kiểm nghiệm",
   harvest: "Lô hàng",
-  training: "Tập huấn",
   reports: "Báo cáo",
   catalog: "Danh mục",
   system: "Hệ thống",
@@ -85,11 +81,9 @@ export default function Home() {
       case "journal":      return <Journal />;
       case "testing":      return <Testing />;
       case "harvest":      return <Harvest />;
-      case "training":     return <Training />;
       case "reports":      return <Reports />;
       case "catalog":      return <Catalog />;
       case "system":       return <SystemSettings />;
-      case "registrations": return <Registrations />;
       case "news":         return <NewsAdmin />;
     }
   };

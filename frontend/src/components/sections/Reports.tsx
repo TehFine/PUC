@@ -14,8 +14,7 @@ type ReportBackendType =
   | "spray"
   | "lab-tests"
   | "violations"
-  | "harvest"
-  | "training-registrations";
+  | "harvest";
 
 interface ReportSpec {
   id: string;
@@ -66,13 +65,6 @@ const REPORTS: ReportSpec[] = [
     type: "harvest",
     title: "Thống kê lô thu hoạch & Xuất khẩu",
     desc: "Sản lượng, thị trường tiêu thụ, đơn vị thu mua và trạng thái vận chuyển từng lô",
-    formats: ["CSV (Excel)", "In / PDF"],
-  },
-  {
-    id: "training-registrations",
-    type: "training-registrations",
-    title: "Báo cáo đăng ký & Tham dự tập huấn",
-    desc: "Danh sách nông hộ đăng ký và điểm danh các lớp tập huấn kỹ thuật",
     formats: ["CSV (Excel)", "In / PDF"],
   },
 ];

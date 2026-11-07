@@ -21,7 +21,6 @@ export type PortalAction =
   | "spray-list"
   | "decl-add"
   | "harvest-lots"
-  | "learn-training"
   | "learn-pesticides"
   | "learn-fertilizers"
   | "learn-varieties";
@@ -127,13 +126,6 @@ const ENTRIES: SearchEntry[] = [
     where: "Kiểm nghiệm",
     keywords: "lich kiem tra lay mau can bo den ngay hen phuc tra",
     target: { kind: "tab", tab: "inspection" },
-  },
-  {
-    id: "training",
-    title: "Lớp tập huấn, đăng ký học",
-    where: "Kiến thức › Tập huấn",
-    keywords: "tap huan lop hoc dang ky khoa hoc huong dan ky thuat",
-    target: { kind: "tab", tab: "learn", action: "learn-training" },
   },
   {
     id: "pesticides",

@@ -1,29 +1,15 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useRef, useState, useLayoutEffect, useMemo } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortal } from "@/hooks/use-portal";
-import { daysSince, formatClock, formatKg, HOUSEHOLD_STATUS, relativeDayLabel, SCHEDULE_KIND, TRAINING_MY_STATUS } from "@/lib/portal-labels";
+import { daysSince, formatKg, HOUSEHOLD_STATUS, relativeDayLabel, SCHEDULE_KIND } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalList, PortalOverview, PortalReminder, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
-import { Pill, SectionDivider, Sheet, StateBlock } from "./ui";
-import { getTrainingKicker, usePortalTrainings, type TrainingCourseItem } from "./training-shared";
-
-const TrainingDetailModal = dynamic(
-  () => import("./LearnTab").then((m) => m.TrainingDetailModal),
-  { ssr: false },
-);
+import { SectionDivider, StateBlock } from "./ui";
 
 const SCHEDULE_THEMES = [
-  { capsuleBg: "linear-gradient(180deg, #10b981 0%, #059669 100%)" },
-  { capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)" },
-  { capsuleBg: "linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%)" },
-  { capsuleBg: "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)" },
-];
-
-const TRAINING_THEMES = [
   { capsuleBg: "linear-gradient(180deg, #10b981 0%, #059669 100%)" },
   { capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)" },
   { capsuleBg: "linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%)" },
@@ -169,7 +155,7 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
     return overview.reminders
       .filter((rem) => {
         const clean = (rem.tab || "").trim().toLowerCase();
-        if (clean === "requests" || clean === "approvals") return false;
+        if (clean === "requests" || clean === "approvals" || clean === "training" || rem.kind === "training") return false;
         const isDiaryReminder =
           rem.kind === "journal" ||
           (rem.kind === "violation" && rem.title.toLowerCase().includes("nhật ký"));
@@ -236,39 +222,10 @@ export default function HomeTab({
   const overview = usePortal<PortalOverview>("overview");
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
   const violations = usePortal<PortalList<PortalViolation>>("violations");
-  const training = usePortalTrainings();
-  const [selectedTrainingId, setSelectedTrainingId] = useState<number | null>(null);
-
-  const selectedTraining: TrainingCourseItem | null = useMemo(
-    () => (selectedTrainingId !== null ? (training.data.find((t) => t.id === selectedTrainingId) ?? null) : null),
-    [training.data, selectedTrainingId],
-  );
 
   const openViolationsList = useMemo(() => {
     return violations.data?.data?.filter((v) => v.status === "open") || [];
   }, [violations.data]);
-
-  const urgentTrainings = useMemo(() => {
-    if (!training.data || training.data.length === 0) return [];
-
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    return training.data
-      .filter((item) => {
-        if (item.completed || !item.heldOn) return false;
-        const target = new Date(item.heldOn);
-        if (isNaN(target.getTime())) return false;
-        const tgt = new Date(target.getFullYear(), target.getMonth(), target.getDate());
-        const diffDays = Math.round((tgt.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        return diffDays >= 0 && diffDays <= 10;
-      })
-      .sort((a, b) => {
-        const tA = a.heldOn ? new Date(a.heldOn).getTime() : 0;
-        const tB = b.heldOn ? new Date(b.heldOn).getTime() : 0;
-        return tA - tB;
-      });
-  }, [training.data]);
 
   const shellRef = useRef<HTMLDivElement>(null);
   const badgeRef = useRef<HTMLDivElement>(null);
@@ -613,114 +570,6 @@ export default function HomeTab({
           </div>
         )}
       </section>
-
-      <SectionDivider />
-
-      {/* Lớp tập huấn sắp tới */}
-      <section className="pt-schedule-section" aria-labelledby="training-schedule-heading">
-        <div className="pt-schedule-header">
-          <h2 id="training-schedule-heading" className="pt-schedule-title">
-            Lớp tập huấn sắp tới
-          </h2>
-          {training.data && training.data.length > 0 && (
-            <button
-              type="button"
-              className="pt-schedule-link"
-              onClick={() => onNavigate("learn")}
-            >
-              <span>Xem tất cả</span>
-              <DetailArrowIcon className="pt-schedule-link-arrow" size={20} />
-            </button>
-          )}
-        </div>
-
-        {urgentTrainings.length === 0 ? (
-          <p className="pt-muted pt-schedule-empty">
-            {training.loading
-              ? "Đang tải lịch tập huấn..."
-              : "Hiện không có lớp tập huấn nào diễn ra trong 10 ngày tới."}
-          </p>
-        ) : (
-          <div className="pt-vietgap-timeline" role="list">
-            {urgentTrainings.slice(0, 4).map((item, idx, arr) => {
-              const theme = TRAINING_THEMES[idx % TRAINING_THEMES.length];
-              const isLast = idx === arr.length - 1;
-              const kicker = getTrainingKicker(item.title);
-              const relNote = item.heldOn ? relativeDayLabel(item.heldOn) : "";
-              const formattedDate = formatDate(item.heldOn);
-              const startStr = formatClock(item.startsAt);
-              const myStatusInfo = item.myStatus ? TRAINING_MY_STATUS[item.myStatus] : null;
-
-              return (
-                <div key={item.id} className="pt-vietgap-step">
-                  <div className="pt-vietgap-segment">
-                    <div className="pt-vietgap-track-col" aria-hidden="true">
-                      <div
-                        className="pt-vietgap-capsule pt-home-timeline-capsule"
-                        style={{ background: theme.capsuleBg }}
-                      >
-                        <div className="pt-vietgap-dot" />
-                        <div className="pt-vietgap-dot" />
-                      </div>
-                    </div>
-
-                    <div
-                      className="pt-training-clean-card"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setSelectedTrainingId(item.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setSelectedTrainingId(item.id);
-                        }
-                      }}
-                      title="Nhấn để xem chi tiết khóa tập huấn và đăng ký"
-                    >
-                      <div className="pt-timeline-content">
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span className="pt-timeline-kicker">{kicker}</span>
-                          {myStatusInfo && <Pill tone={myStatusInfo.tone}>{myStatusInfo.label}</Pill>}
-                        </div>
-                        <h3 className="pt-timeline-title">{item.title}</h3>
-                      </div>
-                      <div className="pt-timeline-meta">
-                        <span className="pt-timeline-date">
-                          {formattedDate}
-                          {startStr ? ` · ${startStr}` : ""}
-                        </span>
-                        {relNote && <span className="pt-timeline-rel">({relNote})</span>}
-                      </div>
-                    </div>
-                  </div>
-
-                  {!isLast && (
-                    <div className="pt-vietgap-transfer" aria-hidden="true">
-                      <div className="pt-vietgap-transfer-track">
-                        <div className="pt-vietgap-mini-dot" />
-                        <div className="pt-vietgap-mini-dot" />
-                        <div className="pt-vietgap-mini-dot" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {selectedTraining && (
-        <Sheet
-          title="Thông tin lớp tập huấn"
-          onClose={() => setSelectedTrainingId(null)}
-        >
-          <TrainingDetailModal
-            item={selectedTraining}
-            onClose={() => setSelectedTrainingId(null)}
-          />
-        </Sheet>
-      )}
     </div>
   );
 }

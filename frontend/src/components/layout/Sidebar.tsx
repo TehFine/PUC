@@ -4,11 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { SectionId } from "@/app/admin/page";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useApi } from "@/hooks/use-api";
-import { onAdminNavigate, onCountsChanged } from "@/components/admin/shared/counts-events";
+import { onAdminNavigate } from "@/components/admin/shared/counts-events";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { lockRootScroll } from "@/lib/scroll-lock";
-import type { DashboardSummary } from "@/types/dashboard";
 
 interface NavItem {
   id: SectionId;
@@ -40,7 +38,6 @@ export default function Sidebar({ active, onNavigate }: Props) {
   const { can } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState<SectionId>(active);
-  const { data: summary, refresh } = useApi<DashboardSummary>("/dashboard/summary");
 
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -48,14 +45,6 @@ export default function Sidebar({ active, onNavigate }: Props) {
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isClosingRef = useRef(false);
-
-  useEffect(() => onCountsChanged(() => void refresh()), [refresh]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setSelectedTab(active);
-    }
-  }, [active, isOpen]);
 
   const handleOpen = useCallback(() => {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
@@ -96,7 +85,8 @@ export default function Sidebar({ active, onNavigate }: Props) {
   useEffect(
     () =>
       onAdminNavigate((section) => {
-        onNavigate(section as SectionId);
+        const target = section === "registrations" ? "approval" : (section as SectionId);
+        onNavigate(target);
         handleClose();
       }),
     [onNavigate, handleClose],
@@ -150,8 +140,6 @@ export default function Sidebar({ active, onNavigate }: Props) {
     return () => query.removeEventListener("change", closeOnDesktop);
   }, [isOpen, handleClose]);
 
-  const counts = summary?.counts;
-
   const topItems = useMemo<NavItem[]>(
     () => [
       { id: "dashboard", label: "Tổng quan", desc: "Số liệu thống kê và tình hình vùng trồng." },
@@ -160,14 +148,8 @@ export default function Sidebar({ active, onNavigate }: Props) {
       {
         id: "approval",
         label: "Hồ sơ",
-        desc: "Tiếp nhận, xét duyệt hồ sơ và lịch kiểm tra.",
+        desc: "Tiếp nhận, xét duyệt hồ sơ, tài khoản đăng ký và lịch kiểm tra.",
         resource: "approvals",
-      },
-      {
-        id: "registrations",
-        label: "Đăng ký",
-        desc: "Duyệt yêu cầu đăng ký tài khoản hộ dân mới.",
-        resource: "registrations",
       },
       {
         id: "journal",
@@ -177,7 +159,6 @@ export default function Sidebar({ active, onNavigate }: Props) {
       },
       { id: "testing", label: "Kiểm nghiệm", desc: "Kết quả phân tích mẫu và tồn dư thuốc BVTV.", resource: "testing" },
       { id: "harvest", label: "Lô hàng", desc: "Quản lý lô thu hoạch, tem truy xuất và hợp đồng.", resource: "harvest" },
-      { id: "training", label: "Tập huấn", desc: "Tổ chức khóa học kỹ thuật và danh sách học viên.", resource: "training" },
       { id: "news", label: "Bản tin", desc: "Đăng tải thông báo và tin tức nông nghiệp." },
       { id: "reports", label: "Báo cáo", desc: "Tổng hợp số liệu định kỳ và xuất báo cáo." },
       { id: "catalog", label: "Danh mục", desc: "Quản lý thuốc BVTV, phân bón, giống và thôn tổ.", resource: "pesticides" },

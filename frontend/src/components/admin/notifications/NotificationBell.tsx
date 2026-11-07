@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { onCountsChanged, requestAdminNavigate } from "@/components/admin/shared/counts-events";
+import { onCountsChanged, requestAdminNavigate, requestApprovalTab } from "@/components/admin/shared/counts-events";
 import { RadialPngIcon } from "@/components/portal/RadialIcons";
 import { BusyButton } from "@/components/portal/shared/controls";
 import { EmptyState, Sheet, StateBlock } from "@/components/portal/ui";
@@ -14,17 +14,15 @@ function resolveSectionFromLink(link: string | null, kind?: string): string | nu
   if (kind === "violation") return "journal";
   if (link) {
     const clean = link.toLowerCase();
+    if (clean.includes("registration")) return "registrations";
     if (clean.includes("approval")) return "approval";
     if (clean.includes("violation") || clean.includes("journal") || clean.includes("spray")) return "journal";
     if (clean.includes("harvest") || clean.includes("stamp")) return "harvest";
-    if (clean.includes("training")) return "training";
     if (clean.includes("testing") || clean.includes("lab")) return "testing";
     if (clean.includes("household")) return "households";
-    if (clean.includes("registration")) return "registrations";
   }
   if (kind === "approval") return "approval";
   if (kind === "harvest") return "harvest";
-  if (kind === "training") return "training";
   if (kind === "lab" || kind === "schedule") return "testing";
   return null;
 }
@@ -41,8 +39,8 @@ export default function NotificationBell() {
     void refresh();
   }, [open, refresh]);
 
-  const items: NotificationItem[] = data?.data ?? [];
-  const unread = data?.unread ?? items.filter((n) => !n.readAt).length;
+  const items: NotificationItem[] = (data?.data ?? []).filter((n) => n.kind !== "training");
+  const unread = items.filter((n) => !n.readAt).length;
 
   const markRead = async (item: NotificationItem) => {
     if (!item.readAt) {
@@ -53,7 +51,9 @@ export default function NotificationBell() {
     }
     const section = resolveSectionFromLink(item.link, item.kind);
     setOpen(false);
-    if (section) {
+    if (section === "registrations") {
+      requestApprovalTab("registrations");
+    } else if (section) {
       requestAdminNavigate(section);
     }
   };

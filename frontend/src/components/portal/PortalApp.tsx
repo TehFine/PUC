@@ -295,10 +295,10 @@ function PortalAppContent() {
     return () => timers.forEach((t) => window.clearTimeout(t));
   }, [status, session?.user.role]);
 
-  const apiNotifItems = notifications.data?.data ?? [];
+  const apiNotifItems = (notifications.data?.data ?? []).filter((n) => n.kind !== "training");
   const fallbackNotifItems = useMemo<AppNotification[]>(() => {
     if (apiNotifItems.length > 0) return [];
-    const reminders = overview?.reminders ?? [];
+    const reminders = (overview?.reminders ?? []).filter((r) => r.kind !== "training");
     return reminders.map((r, idx) => {
       const id = -(idx + 1);
       const isRead = localReadIds.includes(id);
