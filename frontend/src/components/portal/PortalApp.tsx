@@ -295,23 +295,6 @@ function PortalAppContent() {
     return () => timers.forEach((t) => window.clearTimeout(t));
   }, [status, session?.user.role]);
 
-  if (status !== "authenticated" || session?.user.role !== "farmer") {
-    return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
-  }
-
-  const profHousehold = profile?.household ?? overview?.household;
-  const profAccount = profile?.account;
-  const displayName = profHousehold?.name || profAccount?.fullName || session?.user.fullName || "Hộ thành viên";
-  const householdStatus = HOUSEHOLD_STATUS[profHousehold?.status ?? "pending"] ?? HOUSEHOLD_STATUS.pending;
-  const initials =
-    displayName
-      .split(" ")
-      .filter(Boolean)
-      .slice(-2)
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase() || "HD";
-
   const apiNotifItems = notifications.data?.data ?? [];
   const fallbackNotifItems = useMemo<AppNotification[]>(() => {
     if (apiNotifItems.length > 0) return [];
@@ -337,6 +320,23 @@ function PortalAppContent() {
       };
     });
   }, [apiNotifItems.length, overview?.reminders, localReadIds]);
+
+  if (status !== "authenticated" || session?.user.role !== "farmer") {
+    return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
+  }
+
+  const profHousehold = profile?.household ?? overview?.household;
+  const profAccount = profile?.account;
+  const displayName = profHousehold?.name || profAccount?.fullName || session?.user.fullName || "Hộ thành viên";
+  const householdStatus = HOUSEHOLD_STATUS[profHousehold?.status ?? "pending"] ?? HOUSEHOLD_STATUS.pending;
+  const initials =
+    displayName
+      .split(" ")
+      .filter(Boolean)
+      .slice(-2)
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase() || "HD";
 
   const notifItems = apiNotifItems.length > 0 ? apiNotifItems : fallbackNotifItems;
   const unreadCount =
