@@ -32,7 +32,7 @@
   --purple: #6b46c1;
 
   /* Surfaces */
-  --bg-page:    #ffffff;
+  --bg-page:    #f2f5f9;
   --bg-sidebar: #ffffff;
   --bg-card:    #ffffff;
   --bg-white:   #ffffff;
@@ -136,7 +136,7 @@ body {
   width: 100%;
   padding-top: 64px;
   padding-bottom: 0;
-  background: #ffffff;
+  background: var(--bg-page);
 }
 
 .app-shell.is-zones {
@@ -603,7 +603,7 @@ body {
  * Chỉ lớp nền ::before bị cắt; bóng đổ đặt ở thẻ cha bằng drop-shadow để không bị clip-path xén mất.
  */
 .kpi-card {
-  --fill: #fff;
+  --fill: var(--bg-card);
   --cut: 34px;
   position: relative;
   isolation: isolate;
@@ -999,7 +999,7 @@ body {
 
 .table-wrap tbody tr:last-child td { border-bottom: none; }
 .table-wrap tbody tr td { transition: background 0.15s ease; }
-.table-wrap tbody tr:hover td { background: rgba(243, 247, 238, 0.75); }
+.table-wrap tbody tr:hover td { background: rgba(20, 55, 47, 0.04); }
 
 .table-footer {
   display: flex;
@@ -1010,7 +1010,7 @@ body {
   border-top: 1px solid var(--border);
   font-size: 12.5px;
   color: var(--text-muted);
-  background: #fff;
+  background: var(--bg-card);
   flex-wrap: wrap;
 }
 
@@ -4160,7 +4160,7 @@ select.form-input {
  * Cùng ngôn ngữ hình với thẻ của trang giới thiệu: cắt chéo góc dưới bên phải.
  * Chỉ lớp nền ::before bị cắt; bóng đổ nằm ở thẻ cha (drop-shadow) để không bị clip-path xén mất. */
 :is(.comp-kpi-item, .variety-card, .schedule-card) {
-  --fill: #fff;
+  --fill: var(--bg-card);
   --cut: 34px;
   position: relative;
   isolation: isolate;
@@ -4444,6 +4444,110 @@ html[data-perf="lite"] svg,
 html[data-net="slow"] svg {
   filter: none !important;
 }
+
+/* ─── BẢNG CHÚ GIẢI & LỌC NHANH THEO MÃ VÙNG TRỒNG (TRANG HỘ NÔNG DÂN) ─── */
+.zone-legend-card {
+  background: #ffffff;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 12px rgba(20, 55, 47, 0.04);
+}
+
+.zone-legend-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.zone-legend-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.zone-legend-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none !important;
+  outline: none !important;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+  transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease;
+}
+
+.zone-legend-item:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.97);
+}
+
+.zone-legend-item.is-active {
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.zone-legend-code {
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.zone-legend-sub {
+  font-family: var(--font-body-stack);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+@media (max-width: 1240px) {
+  .zone-legend-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .zone-legend-card {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .zone-legend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .zone-legend-item {
+    padding: 9px 10px;
+    border-radius: 9px;
+  }
+
+  .zone-legend-code {
+    font-size: 11.5px;
+  }
+
+  .zone-legend-sub {
+    font-size: 10.5px;
+  }
+}
+
 
 
 

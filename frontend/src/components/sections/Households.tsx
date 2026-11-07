@@ -13,6 +13,7 @@ import { useDebounced } from "@/components/admin/shared/use-debounced";
 import HouseholdDetailModal from "@/components/admin/households/HouseholdDetailModal";
 import HouseholdFormModal from "@/components/admin/households/HouseholdFormModal";
 import HouseholdImportModal from "@/components/admin/households/HouseholdImportModal";
+import { getZoneColor, KNOWN_ZONES } from "@/components/zones/zone-data";
 import type { HouseholdRecord } from "@/types/households";
 
 const PAGE_SIZE = 25;
@@ -25,14 +26,16 @@ export default function Households() {
   const canDelete = can("households", "delete");
 
   const [search, setSearch] = useState("");
+  const [zoneFilter, setZoneFilter] = useState("");
   const debouncedSearch = useDebounced(search);
   const [villageId, setVillageId] = useState("");
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
 
   const { villages, options: villageOptions } = useVillageOptions();
+  const effectiveQuery = [debouncedSearch.trim(), zoneFilter].filter(Boolean).join(" ") || undefined;
   const list = useApiList<HouseholdRecord>("households", {
-    q: debouncedSearch || undefined,
+    q: effectiveQuery,
     villageId: villageId || undefined,
     status: status || undefined,
     page,
@@ -109,6 +112,52 @@ export default function Households() {
         </select>
       </div>
 
+      <div className="zone-legend-card">
+        <div className="zone-legend-title">Phân màu theo Mã vùng trồng</div>
+        <div className="zone-legend-grid">
+          <button
+            type="button"
+            className={`zone-legend-item ${zoneFilter === "" ? "is-active" : ""}`}
+            onClick={() => {
+              setZoneFilter("");
+              setPage(1);
+            }}
+            style={{
+              background: zoneFilter === "" ? "#0f172a" : "#f1f5f9",
+              color: zoneFilter === "" ? "#ffffff" : "#1e293b",
+            }}
+          >
+            <span className="zone-legend-code" style={{ fontFamily: "var(--font-body-stack)" }}>
+              Tất cả vùng
+            </span>
+            <span className="zone-legend-sub">Hiển thị toàn bộ các hộ</span>
+          </button>
+          {KNOWN_ZONES.map((z) => {
+            const zc = getZoneColor(z.code);
+            const active = zoneFilter === z.code;
+            return (
+              <button
+                key={z.code}
+                type="button"
+                className={`zone-legend-item ${active ? "is-active" : ""}`}
+                onClick={() => {
+                  setZoneFilter(active ? "" : z.code);
+                  setPage(1);
+                }}
+                title={`Lọc các hộ thuộc vùng ${z.code} (${z.label})`}
+                style={{
+                  background: zc.bg,
+                  color: zc.text,
+                }}
+              >
+                <span className="zone-legend-code">{z.code}</span>
+                <span className="zone-legend-sub">{z.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="table-wrap">
         <table>
           <thead>
@@ -120,7 +169,7 @@ export default function Households() {
               <th>Thôn / Tổ</th>
               <th>Số thửa</th>
               <th>Diện tích</th>
-              <th>Mã vùng trồng</th>
+              <th>Mã vùng trồng / Mã hộ</th>
               <th>Trạng thái</th>
               <th>Thao tác</th>
             </tr>
@@ -136,8 +185,9 @@ export default function Households() {
             />
             {list.rows.map((h, i) => {
               const st = badgeOf(HOUSEHOLD_STATUS, h.status);
+              const zc = getZoneColor(h.code);
               return (
-                <tr key={h.id}>
+                <tr key={h.id} style={{ background: zc.rowTint }}>
                   <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{(page - 1) * PAGE_SIZE + i + 1}</td>
                   <td style={{ fontWeight: 600 }}>{h.name}</td>
                   <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-secondary)" }}>{h.cccd}</td>
@@ -148,14 +198,15 @@ export default function Households() {
                   <td>
                     <span
                       style={{
+                        display: "inline-block",
                         fontFamily: "monospace",
                         fontSize: 12,
-                        background: "#f0fdf4",
-                        color: "#166534",
-                        border: "1px solid #bbf7d0",
-                        padding: "2px 8px",
-                        borderRadius: 6,
-                        fontWeight: 600,
+                        background: zc.bg,
+                        color: zc.text,
+                        border: "none",
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        fontWeight: 700,
                       }}
                     >
                       {h.code}

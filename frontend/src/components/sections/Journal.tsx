@@ -13,6 +13,7 @@ import { formatVn } from "@/components/admin/shared/form-utils";
 import { badgeOf, MRL_STATUS, optionsOf, SEVERITY, VIOLATION_STATUS } from "@/components/admin/shared/labels";
 import { useHouseholdOptions, usePesticideOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
+import { getZoneColor } from "@/components/zones/zone-data";
 import { JournalDetailModal, JournalFormModal } from "@/components/admin/journal/JournalModals";
 import SprayFormModal from "@/components/admin/journal/SprayFormModal";
 import {
@@ -252,11 +253,29 @@ export default function Journal() {
                   emptyText="Chưa có nhật ký canh tác nào phù hợp"
                   onRetry={() => void journalList.refresh()}
                 />
-                {journalList.rows.map((j) => (
+                {journalList.rows.map((j) => {
+                  const zc = getZoneColor(j.plotCode);
+                  return (
                   <tr key={j.id}>
                     <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(j.entryOn)}</td>
                     <td style={{ fontWeight: 500 }}>{j.householdName}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: 12, color: "#256b45", fontWeight: 600 }}>{j.plotCode}</td>
+                    <td>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          fontFamily: "monospace",
+                          fontSize: 12,
+                          color: zc.text,
+                          background: zc.bg,
+                          border: "none",
+                          padding: "4px 10px",
+                          borderRadius: 8,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {j.plotCode}
+                      </span>
+                    </td>
                     <td>
                       <span
                         style={{
@@ -306,7 +325,8 @@ export default function Journal() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             <Pagination page={jPage} pageSize={PAGE_SIZE} total={journalList.total} unit="bản ghi" onChange={setJPage} />

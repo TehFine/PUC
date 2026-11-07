@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { formatHa } from "@/utils/plot-utils";
 import { SmoothLineChart } from "@/components/ui/charts/KpiCharts";
-import type { PlotsSummary, ZoneRowData } from "./zone-data";
+import { getZoneColor, type PlotsSummary, type ZoneRowData } from "./zone-data";
 
 interface ZonesOverviewCardProps {
   plotCount: number;
@@ -86,37 +86,51 @@ export default function ZonesOverviewCard({
       </div>
 
       <div className="zones-zone-list">
-        {zoneRows.map((zone, idx) => (
-          <div
-            key={zone.code}
-            className="zg-item"
-            onPointerEnter={() => setActiveIdx(idx)}
-            onPointerLeave={() => setActiveIdx(null)}
-            onClick={isMobile ? () => onOpenZone(zone.code) : () => setActiveIdx(idx)}
-            role={isMobile ? "button" : undefined}
-            tabIndex={isMobile ? 0 : undefined}
-            onKeyDown={
-              isMobile
-                ? (event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onOpenZone(zone.code);
+        {zoneRows.map((zone, idx) => {
+          const zc = getZoneColor(zone.code);
+          return (
+            <div
+              key={zone.code}
+              className="zg-item"
+              onPointerEnter={() => setActiveIdx(idx)}
+              onPointerLeave={() => setActiveIdx(null)}
+              onClick={isMobile ? () => onOpenZone(zone.code) : () => setActiveIdx(idx)}
+              role={isMobile ? "button" : undefined}
+              tabIndex={isMobile ? 0 : undefined}
+              onKeyDown={
+                isMobile
+                  ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onOpenZone(zone.code);
+                      }
                     }
-                  }
-                : undefined
-            }
-          >
-            <span className="badge badge-gray" style={{ fontFamily: "monospace", fontSize: 10.5 }}>
-              {zone.code}
-            </span>
-            <span className="zg-meta">
-              {zone.village} · {zone.count} thửa · {formatHa(zone.area)}
-            </span>
-            <span className={`badge ${zone.cls}`}>
-              {zone.status}
-            </span>
-          </div>
-        ))}
+                  : undefined
+              }
+            >
+              <span
+                className="badge"
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: 10.5,
+                  background: zc.bg,
+                  color: zc.text,
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "4px 9px",
+                }}
+              >
+                {zone.code}
+              </span>
+              <span className="zg-meta">
+                {zone.village} · {zone.count} thửa · {formatHa(zone.area)}
+              </span>
+              <span className={`badge ${zone.cls}`}>
+                {zone.status}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </aside>
   );

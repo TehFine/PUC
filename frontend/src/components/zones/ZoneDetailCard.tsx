@@ -1,7 +1,7 @@
 import { formatHa } from "@/utils/plot-utils";
 import type { PlotFeature } from "@/types/geo";
 import PlotRow from "./PlotRow";
-import type { ZoneRowData } from "./zone-data";
+import { getZoneColor, type ZoneRowData } from "./zone-data";
 
 interface ZoneDetailCardProps {
   zone: ZoneRowData | null;
@@ -9,14 +9,17 @@ interface ZoneDetailCardProps {
 }
 
 export default function ZoneDetailCard({ zone, plots }: ZoneDetailCardProps) {
+  const zc = zone ? getZoneColor(zone.code) : null;
   return (
     <aside className="card zones-sheet-card zones-sheet-zone">
-      {zone && (
+      {zone && zc && (
         <>
           <div className="zones-sidebar-head">
             <div>
               <div className="zones-sidebar-kicker">Mã vùng</div>
-              <div className="zones-sidebar-title">{zone.code}</div>
+              <div className="zones-sidebar-title" style={{ color: zc.text }}>
+                {zone.code}
+              </div>
             </div>
             <span className={`badge ${zone.cls}`}>{zone.status}</span>
           </div>

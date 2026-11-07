@@ -46,7 +46,11 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
     plots.features.forEach((feature, index) => {
       const labelOffset: [number, number] = [0, index % 2 === 0 ? -9 : 9];
       const geo = L.geoJSON(feature, {
-        style: plotStyle(feature.properties.source, feature.properties.code === selectedRef.current),
+        style: plotStyle(
+          feature.properties.source,
+          feature.properties.code === selectedRef.current,
+          feature.properties.zone || feature.properties.code,
+        ),
         onEachFeature: (_geoFeature: Feature, layer: Leaflet.Layer) => {
           // Leaflet gán chuỗi vào innerHTML; nhãn lấy từ dữ liệu nhập nên phải dùng textContent để chống XSS.
           const label = document.createElement("span");
@@ -83,7 +87,13 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
     const features = new Map(plots?.features.map((feature) => [feature.properties.code, feature]));
     plotLayers.current.forEach((layer, code) => {
       const feature = features.get(code);
-      layer.setStyle(plotStyle(feature?.properties.source ?? "demo", code === selectedCode));
+      layer.setStyle(
+        plotStyle(
+          feature?.properties.source ?? "demo",
+          code === selectedCode,
+          feature?.properties.zone || feature?.properties.code,
+        ),
+      );
       if (code === selectedCode) layer.bringToFront();
     });
   }, [plots, selectedCode, plotLayers]);
