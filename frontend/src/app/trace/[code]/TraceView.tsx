@@ -319,7 +319,7 @@ export default function TraceView() {
                   </div>
                 </div>
                 <p className="tr-item-sub">
-                  Sản phẩm này đã được dán tem định danh điện tử theo quy trình kiểm soát nguồn gốc nghiêm ngặt của HTX Krông Búk và Doanh nghiệp xuất khẩu.
+                  Sản phẩm này đã được dán tem định danh điện tử theo quy trình kiểm soát nguồn gốc nghiêm ngặt của HTX Cư Né và Doanh nghiệp xuất khẩu.
                 </p>
               </section>
             )}
@@ -373,7 +373,7 @@ export default function TraceView() {
                   </div>
                 </div>
                 <p className="tr-item-sub">
-                  Tem cấp phát cho nông hộ <strong>{data.farmerStamp.householdName}</strong> (CCCD: {data.farmerStamp.householdCccd}) theo định mức diện tích của vườn sầu riêng HTX Krông Búk.
+                  Tem cấp phát cho nông hộ <strong>{data.farmerStamp.householdName}</strong> (CCCD: {data.farmerStamp.householdCccd}) theo định mức diện tích của vườn sầu riêng HTX Cư Né.
                 </p>
               </section>
             )}
@@ -386,7 +386,7 @@ export default function TraceView() {
                     <span className="tr-asset-watermark-title">
                       {data.farmerStamp.status === "activated" ? "ĐÃ KÍCH HOẠT" : "ĐÃ CẤP TEM"}
                     </span>
-                    <span className="tr-asset-watermark-sub">HTX KRÔNG BÚK · ĐÃ KIỂM TRA</span>
+                    <span className="tr-asset-watermark-sub">HTX CƯ NÉ · ĐÃ KIỂM TRA</span>
                   </div>
                 </div>
 
@@ -394,7 +394,7 @@ export default function TraceView() {
                   <div className="tr-asset-sub-title">
                     <span>SẦU RIÊNG TƯƠI</span>
                     <span className="tr-asset-dot">·</span>
-                    <span className="tr-asset-hide-mobile">HTX KRÔNG BÚK</span>
+                    <span className="tr-asset-hide-mobile">HTX CƯ NÉ</span>
                     <span className="tr-asset-dot tr-asset-hide-mobile">·</span>
                     <span>{data.puc.code}</span>
                   </div>
@@ -445,7 +445,7 @@ export default function TraceView() {
                 <div className="tr-asset-watermark" aria-hidden="true">
                   <div className="tr-asset-watermark-inner">
                     <span className="tr-asset-watermark-title">ĐÃ ĐỊNH DANH</span>
-                    <span className="tr-asset-watermark-sub">HTX KRÔNG BÚK · ĐÃ KIỂM TRA</span>
+                    <span className="tr-asset-watermark-sub">HTX CƯ NÉ · ĐÃ KIỂM TRA</span>
                   </div>
                 </div>
 
@@ -453,7 +453,7 @@ export default function TraceView() {
                   <div className="tr-asset-sub-title">
                     <span>LÔ CANH TÁC SẦU RIÊNG</span>
                     <span className="tr-asset-dot">·</span>
-                    <span className="tr-asset-hide-mobile">HTX KRÔNG BÚK</span>
+                    <span className="tr-asset-hide-mobile">HTX CƯ NÉ</span>
                     <span className="tr-asset-dot tr-asset-hide-mobile">·</span>
                     <span>{data.puc.code}</span>
                   </div>
@@ -500,7 +500,7 @@ export default function TraceView() {
                 <div className="tr-asset-watermark" aria-hidden="true">
                   <div className="tr-asset-watermark-inner">
                     <span className="tr-asset-watermark-title">ĐÃ XUẤT KHO</span>
-                    <span className="tr-asset-watermark-sub">HTX KRÔNG BÚK · ĐÃ KIỂM TRA</span>
+                    <span className="tr-asset-watermark-sub">HTX CƯ NÉ · ĐÃ KIỂM TRA</span>
                   </div>
                 </div>
 
@@ -508,7 +508,7 @@ export default function TraceView() {
                   <div className="tr-asset-sub-title">
                     <span>SẦU RIÊNG TƯƠI</span>
                     <span className="tr-asset-dot">·</span>
-                    <span className="tr-asset-hide-mobile">HTX KRÔNG BÚK</span>
+                    <span className="tr-asset-hide-mobile">HTX CƯ NÉ</span>
                     <span className="tr-asset-dot tr-asset-hide-mobile">·</span>
                     <span>{data.puc.code}</span>
                   </div>
@@ -535,7 +535,7 @@ export default function TraceView() {
                     <span>Ngày thu: {formatDate(data.lot?.harvestedOn ?? "")}</span>
                     <span className="tr-asset-meta-dot">·</span>
                     <span>
-                      {data.lot?.buyer || "HTX Nông Nghiệp Krông Búk"} (
+                      {data.lot?.buyer || "HTX Nông Nghiệp Cư Né"} (
                       {data.lot?.market === "Trung Quốc"
                         ? "Xuất khẩu TQ"
                         : data.lot?.market || "Xuất khẩu chính ngạch"}
@@ -591,7 +591,7 @@ export default function TraceView() {
                         <span className="tr-step-tag">Khảo sát &amp; Canh tác</span>
                       </div>
                       <p className="tr-step-desc">
-                        Vùng trồng sầu riêng tập trung HTX Krông Búk, mã số <strong>{data.puc.code}</strong>. Canh tác an toàn sinh học theo quy trình VietGAP, kiểm soát nhật ký phân bón và thời gian cách ly thuốc BVTV (PHI).
+                        Vùng trồng sầu riêng tập trung HTX Cư Né, mã số <strong>{data.puc.code}</strong>. Canh tác an toàn sinh học theo quy trình VietGAP, kiểm soát nhật ký phân bón và thời gian cách ly thuốc BVTV (PHI).
                       </p>
                       {data.supplyChain?.contract && (
                         <div className="tr-step-subdetail">
@@ -801,7 +801,7 @@ export default function TraceView() {
 
                 <div className="tr-data-row">
                   <span className="tr-data-label">Doanh nghiệp thu mua</span>
-                  <strong className="tr-data-val">{data.lot?.buyer || "HTX Nông Nghiệp Krông Búk"}</strong>
+                  <strong className="tr-data-val">{data.lot?.buyer || "HTX Nông Nghiệp Cư Né"}</strong>
                 </div>
 
                 <div className="tr-data-row">
@@ -821,7 +821,7 @@ export default function TraceView() {
                   <span className="tr-count-badge">{data.households.length} hộ</span>
                 </div>
                 <p className="tr-card-sub">
-                  Sản lượng sầu riêng được thu hoạch trực tiếp từ các hộ xã viên của HTX Krông Búk.
+                  Sản lượng sầu riêng được thu hoạch trực tiếp từ các hộ xã viên của HTX Cư Né.
                 </p>
 
                 <div className="tr-farmer-list">
@@ -898,7 +898,7 @@ export default function TraceView() {
             Hệ thống quản lý mã số vùng trồng &amp; truy xuất nguồn gốc nông sản
           </p>
           <p className="tr-footer-org">
-            Hợp Tác Xã Nông Nghiệp Krông Búk – Tỉnh Đắk Lắk
+            Hợp Tác Xã Nông Nghiệp Cư Né – Tỉnh Đắk Lắk
           </p>
           <p className="tr-footer-meta">
             Cơ sở dữ liệu xác thực mã số vùng trồng PUC theo tiêu chuẩn Bộ NN&amp;PTNT và GACC.

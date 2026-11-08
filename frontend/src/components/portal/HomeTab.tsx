@@ -400,7 +400,7 @@ export default function HomeTab({
                   <circle cx="4" cy="4" r="3" />
                 </svg>
                 <span className="pt-hero-bio-text">
-                  Hộ canh tác sầu riêng VietGAP liên kết Hợp tác xã Krông Búk, Đắk Lắk.
+                  Hộ canh tác sầu riêng VietGAP liên kết Hợp tác xã Cư Né, Đắk Lắk.
                 </span>
               </div>
             </div>

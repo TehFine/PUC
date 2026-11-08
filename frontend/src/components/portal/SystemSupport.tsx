@@ -141,7 +141,7 @@ export function SystemSupportModal({
         </section>
 
         <div className="pt-support-system-info">
-          Hệ thống Quản lý Vùng trồng & Nhật ký số PUC Krông Búk · Phiên bản 2.4.0
+          Hệ thống Quản lý Vùng trồng & Nhật ký số PUC HTX Cư Né · Phiên bản 2.4.0
         </div>
       </div>
     </Sheet>

@@ -15,15 +15,15 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "HTX Krông Búk – Quản lý vùng trồng sầu riêng",
-    template: "%s – HTX Krông Búk",
+    default: "HTX Cư Né – Quản lý vùng trồng sầu riêng",
+    template: "%s – HTX Cư Né",
   },
   description:
-    "Hệ thống quản lý mã vùng trồng sầu riêng của Hợp tác xã Krông Búk, Đắk Lắk",
+    "Hệ thống quản lý mã vùng trồng sầu riêng của Hợp tác xã Cư Né, Đắk Lắk",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "HTX Krông Búk",
+    title: "HTX Cư Né",
   },
 };
 

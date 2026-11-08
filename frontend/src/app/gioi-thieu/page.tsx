@@ -3,7 +3,7 @@ import LandingPage from "@/components/landing/LandingPage";
 
 export const metadata: Metadata = {
   title: "Giới thiệu hệ thống",
-  description: "Giới thiệu hệ thống quản lý mã vùng trồng sầu riêng của HTX Krông Búk, Đắk Lắk.",
+  description: "Giới thiệu hệ thống quản lý mã vùng trồng sầu riêng của HTX Cư Né, Đắk Lắk.",
   alternates: { canonical: "/" },
 };
 

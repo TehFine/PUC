@@ -55,7 +55,7 @@ function Frame({ children, caption }: { children: ReactNode; caption: string }) 
         <i />
         <i />
         <i />
-        <span>htx-krongbuk</span>
+        <span>htx-cune</span>
       </div>
       <div className="lp-frame-body">{children}</div>
       <figcaption>{caption}</figcaption>

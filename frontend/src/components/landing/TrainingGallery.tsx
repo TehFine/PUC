@@ -29,7 +29,7 @@ export const TRAINING_ITEMS: TrainingItem[] = [
     categoryLabel: "Chỉ đạo & Chính sách",
     tagTone: "blue",
     title: "Hội nghị triển khai thí điểm truy xuất nguồn gốc sầu riêng Đắk Lắk",
-    speaker: "Sở Nông nghiệp & Môi trường phối hợp cùng UBND Huyện & HTX Krông Búk",
+    speaker: "Sở Nông nghiệp & Môi trường phối hợp cùng UBND Huyện & HTX Cư Né",
     location: "Hội trường Hội nghị Huyện Krông Búk",
     date: "Đợt 1 / Vụ mùa xuất khẩu",
     description:
@@ -60,7 +60,7 @@ export const TRAINING_ITEMS: TrainingItem[] = [
     tagTone: "gold",
     title: "Làm việc bàn tròn & hướng dẫn phần mềm quản lý vùng trồng",
     speaker: "Tổ kỹ thuật số HTX & Chuyên viên quản trị dữ liệu",
-    location: "Phòng họp kỹ thuật HTX Krông Búk",
+    location: "Phòng họp kỹ thuật HTX Cư Né",
     date: "Tập huấn cán bộ thôn & tổ trưởng",
     description:
       "Cán bộ HTX và chuyên viên hướng dẫn đại diện các thôn thực hành thao tác trên phần mềm: quản lý bản đồ thửa đất, gắn hộ dân và kiểm tra chéo nhật ký.",
@@ -315,7 +315,7 @@ export default function TrainingGallery() {
         <div className="lp-training-cta-info">
           <h3>Bà con xã viên muốn đăng ký tham gia các khóa tập huấn tiếp theo?</h3>
           <p>
-            HTX Krông Búk tổ chức các buổi hướng dẫn thực tế định kỳ theo mùa vụ. Cán bộ HTX sẽ thông báo lịch cụ thể qua nhóm Zalo thôn và tài khoản ứng dụng của từng hộ.
+            HTX Cư Né tổ chức các buổi hướng dẫn thực tế định kỳ theo mùa vụ. Cán bộ HTX sẽ thông báo lịch cụ thể qua nhóm Zalo thôn và tài khoản ứng dụng của từng hộ.
           </p>
         </div>
         <div className="lp-training-cta-actions">

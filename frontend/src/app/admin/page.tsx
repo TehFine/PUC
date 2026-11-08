@@ -96,10 +96,10 @@ export default function Home() {
     <div className={`app-shell${active === "zones" ? " is-zones" : ""}`}>
       <ResponsiveTables />
       <div className="app-header">
-        <Link href={INTRO_PATH} className="header-home" aria-label="HTX Krông Búk – về trang giới thiệu" title="Về trang giới thiệu">
+        <Link href={INTRO_PATH} className="header-home" aria-label="HTX Cư Né – về trang giới thiệu" title="Về trang giới thiệu">
           <span className="header-home-mark" aria-hidden="true" />
           <span className="header-brand" aria-hidden="true">
-            <strong>HTX Krông Búk</strong>
+            <strong>HTX Cư Né</strong>
             <small>Khu quản trị</small>
           </span>
         </Link>

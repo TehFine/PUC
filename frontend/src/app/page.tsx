@@ -2,11 +2,11 @@ import type { Metadata, Viewport } from "next";
 import LandingPage from "@/components/landing/LandingPage";
 
 export const metadata: Metadata = {
-  title: { absolute: "HTX Krông Búk – Sầu riêng minh bạch, đạt chuẩn xuất khẩu" },
+  title: { absolute: "HTX Cư Né – Sầu riêng minh bạch, đạt chuẩn xuất khẩu" },
   description:
-    "Hệ thống quản lý mã vùng trồng sầu riêng của HTX Krông Búk, Đắk Lắk: bản đồ thửa đất, nhật ký canh tác, kiểm nghiệm và quy trình chăm sóc đạt chuẩn chất lượng xuất khẩu.",
+    "Hệ thống quản lý mã vùng trồng sầu riêng của HTX Cư Né, Đắk Lắk: bản đồ thửa đất, nhật ký canh tác, kiểm nghiệm và quy trình chăm sóc đạt chuẩn chất lượng xuất khẩu.",
   openGraph: {
-    title: "HTX Krông Búk – Sầu riêng minh bạch từ vườn đến thị trường",
+    title: "HTX Cư Né – Sầu riêng minh bạch từ vườn đến thị trường",
     description: "Tìm hiểu hệ thống quản lý mã vùng trồng, quy trình chăm sóc và tiêu chuẩn xuất khẩu sầu riêng.",
     type: "website",
     locale: "vi_VN",

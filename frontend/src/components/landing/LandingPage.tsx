@@ -149,7 +149,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               </span>
             </h1>
             <p className="lp-hero-lead">
-              Tại HTX Krông Búk, Đắk Lắk, bà con ghi nhật ký chăm sóc vườn, theo dõi mã vùng trồng và kết quả kiểm nghiệm ngay trên điện thoại, để sầu riêng đạt chuẩn trước khi xuất khẩu.
+              Tại HTX Cư Né, Đắk Lắk, bà con ghi nhật ký chăm sóc vườn, theo dõi mã vùng trồng và kết quả kiểm nghiệm ngay trên điện thoại, để sầu riêng đạt chuẩn trước khi xuất khẩu.
             </p>
             <div className="lp-hero-cta">
               <Link href="/register" className="lp-btn lp-btn-solid">
@@ -359,7 +359,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
           tone="beige"
           eyebrow="Bản tin nhà nông"
           title="Tin tức, kỹ thuật & hoạt động vùng trồng"
-          intro="Cập nhật nhanh hướng dẫn bón phân, thuốc bảo vệ thực vật được phép, các buổi tập huấn thực địa và thông tin chỉ đạo mùa vụ từ HTX Krông Búk."
+          intro="Cập nhật nhanh hướng dẫn bón phân, thuốc bảo vệ thực vật được phép, các buổi tập huấn thực địa và thông tin chỉ đạo mùa vụ từ HTX Cư Né."
         >
           <News />
         </Section>
@@ -394,9 +394,9 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
       <footer className="lp-footer">
         <div className="lp-wrap lp-footer-grid">
           <div className="lp-footer-brand">
-            <a href="#top" className="lp-logo" aria-label="HTX Krông Búk – về đầu trang">
+            <a href="#top" className="lp-logo" aria-label="HTX Cư Né – về đầu trang">
               <Image className="lp-logo-mark" src="/logo.png" alt="" width={40} height={40} />
-              <strong>Krông Búk</strong>
+              <strong>Cư Né</strong>
             </a>
             <p>Ghi nhật ký vườn, quản lý mã vùng trồng và kết quả kiểm nghiệm, giúp sầu riêng Đắk Lắk minh bạch từ vườn đến thị trường.</p>
             <div className="lp-footer-actions">
@@ -407,7 +407,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
                 Đăng ký
               </Link>
             </div>
-            <small>© HTX Krông Búk, Đắk Lắk</small>
+            <small>© HTX Cư Né, Đắk Lắk</small>
           </div>
 
           <nav className="lp-footer-col" aria-label="Hệ thống">
@@ -439,7 +439,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
         </p>
 
         <div className="lp-footer-mark" aria-hidden="true">
-          <span>Krông Búk</span>
+          <span>Cư Né</span>
         </div>
 
         <a href="#top" className="lp-totop">

@@ -465,7 +465,7 @@ export class PublicController {
       supplyChain: {
         packhouse: {
           code: lot.packhouseCode || "VN-DLPH-0089",
-          name: lot.enterpriseName || "Cơ sở Đóng gói & Sơ chế Krông Búk (GACC)",
+          name: lot.enterpriseName || "Cơ sở Đóng gói & Sơ chế HTX Cư Né (GACC)",
           taxCode: lot.enterpriseTaxCode || "6001289456",
           treatmentMethod: lot.treatmentMethod || "Rửa sục khí Ozone, sấy ráo khí động học, xử lý nấm sinh học",
           gradeAPct: Number(lot.gradeAPct || 72.5),
@@ -487,7 +487,7 @@ export class PublicController {
       },
       puc: {
         code: "VN-DLOR-0086",
-        name: "Vùng trồng sầu riêng HTX Nông nghiệp Krông Búk",
+        name: "Vùng trồng sầu riêng HTX Nông nghiệp Cư Né",
         crop: "Sầu riêng (Durian - Durio zibethinus)",
         variety: "Monthong (Dona) & Ri6 Đắk Lắk",
         location: "Xã Cư Né & Cư Kbô, Huyện Krông Búk, Tỉnh Đắk Lắk",

@@ -34,7 +34,7 @@ export default function TrainingFormModal({
   const [heldOn, setHeldOn] = useState(dateText(initial?.heldOn) || todayIso());
   const [startsAt, setStartsAt] = useState(timeText(initial?.startsAt) || "08:00");
   const [endsAt, setEndsAt] = useState(timeText(initial?.endsAt) || "11:30");
-  const [location, setLocation] = useState(initial?.location ?? "Hội trường HTX Krông Búk");
+  const [location, setLocation] = useState(initial?.location ?? "Hội trường HTX Cư Né");
   const [trainer, setTrainer] = useState(initial?.trainer ?? "");
   const [capacity, setCapacity] = useState(numberText(initial?.capacity ?? 60));
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -147,7 +147,7 @@ export default function TrainingFormModal({
             label="Địa điểm tổ chức"
             value={location}
             onChange={setLocation}
-            placeholder="Hội trường HTX Krông Búk"
+            placeholder="Hội trường HTX Cư Né"
             maxLength={200}
           />
           <TextField

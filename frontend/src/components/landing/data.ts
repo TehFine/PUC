@@ -21,7 +21,7 @@ export const ROLES = [
 ];
 
 export const CODE_PARTS = [
-  { part: "KB", label: "Krông Búk", note: "Xã / HTX" },
+  { part: "KB", label: "Krông Búk – Cư Né", note: "Huyện / HTX" },
   { part: "VT", label: "Vùng trồng", note: "Loại mã: vùng trồng" },
   { part: "001", label: "Thôn", note: "Khu vực canh tác" },
   { part: "H001", label: "Hộ", note: "Số thứ tự hộ" },

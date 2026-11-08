@@ -382,13 +382,13 @@ function PortalAppContent() {
     <div className="pt-app">
       <header className="pt-topbar">
         <div className="pt-topbar-inner">
-          {/* Logo thương hiệu HTX Krông Búk (hiển thị trên Desktop/Laptop) */}
-          <Link href={INTRO_PATH} className="pt-brand" aria-label="HTX Krông Búk – về trang giới thiệu" title="Về trang giới thiệu">
+          {/* Logo thương hiệu HTX Cư Né (hiển thị trên Desktop/Laptop) */}
+          <Link href={INTRO_PATH} className="pt-brand" aria-label="HTX Cư Né – về trang giới thiệu" title="Về trang giới thiệu">
             <span className="pt-brand-mark" aria-hidden="true">
               <Image src="/logo.png" alt="" width={30} height={30} />
             </span>
             <div className="pt-brand-text">
-              <strong>HTX Krông Búk</strong>
+              <strong>HTX Cư Né</strong>
               <span>Cổng hộ dân</span>
             </div>
           </Link>
@@ -606,7 +606,7 @@ function PortalAppContent() {
                 href={INTRO_PATH}
                 className="pt-profile-intro-btn"
                 onClick={closeProfile}
-                title={t("Về trang giới thiệu HTX Krông Búk")}
+                title={t("Về trang giới thiệu HTX Cư Né")}
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">
                   <Image src="/logo.png" alt="" width={24} height={24} />

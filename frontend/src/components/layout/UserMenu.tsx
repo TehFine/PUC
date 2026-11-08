@@ -89,7 +89,7 @@ export default function UserMenu() {
                 <RadialPngIcon src="/placeholder.png" size={24} className="pt-profile-icon" />
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Đơn vị quản lý</span>
-                  <strong className="pt-profile-val">HTX Sầu riêng Krông Búk, Đắk Lắk</strong>
+                  <strong className="pt-profile-val">HTX Sầu riêng Cư Né, Đắk Lắk</strong>
                 </div>
               </div>
             </div>
@@ -114,7 +114,7 @@ export default function UserMenu() {
                 href={INTRO_PATH}
                 className="pt-profile-intro-btn"
                 onClick={() => setOpen(false)}
-                title="Về trang giới thiệu HTX Krông Búk"
+                title="Về trang giới thiệu HTX Cư Né"
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">
                   <Image src="/logo.png" alt="" width={24} height={24} />

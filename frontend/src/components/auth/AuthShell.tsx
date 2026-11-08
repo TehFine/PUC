@@ -67,12 +67,12 @@ export default function AuthShell({ variant, title, subtitle, wide = false, hide
       <aside className="auth-aside">
         <Image className="auth-aside-photo" src={aside.photo} alt={aside.alt} fill priority sizes="(max-width: 900px) 100vw, 55vw" />
 
-        <Link href="/" className="auth-brand" aria-label="HTX Krông Búk – về trang giới thiệu">
+        <Link href="/" className="auth-brand" aria-label="HTX Cư Né – về trang giới thiệu">
           <span className="auth-brand-mark">
             <Image src="/logo.png" alt="" width={36} height={36} priority />
           </span>
           <span className="auth-brand-text">
-            <strong>Krông Búk</strong>
+            <strong>Cư Né</strong>
             <span>Hợp tác xã sầu riêng · Đắk Lắk</span>
           </span>
         </Link>
@@ -90,7 +90,7 @@ export default function AuthShell({ variant, title, subtitle, wide = false, hide
           </ul>
         </div>
 
-        <p className="auth-aside-foot">© HTX Krông Búk, Đắk Lắk · Ảnh minh họa</p>
+        <p className="auth-aside-foot">© HTX Cư Né, Đắk Lắk · Ảnh minh họa</p>
       </aside>
 
       <section className="auth-main">

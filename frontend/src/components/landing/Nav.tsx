@@ -32,9 +32,9 @@ export default function Nav() {
   return (
     <header className={`lp-nav ${scrolled || open ? "is-solid" : ""}`}>
       <div className="lp-nav-inner">
-        <a href="#top" className="lp-logo" aria-label="HTX Krông Búk – về đầu trang">
+        <a href="#top" className="lp-logo" aria-label="HTX Cư Né – về đầu trang">
           <Image className="lp-logo-mark" src="/logo.png" alt="" width={40} height={40} priority />
-          <strong>Krông Búk</strong>
+          <strong>Cư Né</strong>
         </a>
 
         <nav className={`lp-links ${display.className} ${open ? "is-open" : ""}`} aria-label="Điều hướng chính">

@@ -173,7 +173,7 @@ export default function News() {
               </h2>
 
               <p className="lp-news-modal-author">
-                Tác giả: <strong>{readingArticle.author}</strong> · Phát hành nội bộ HTX Krông Búk
+                Tác giả: <strong>{readingArticle.author}</strong> · Phát hành nội bộ HTX Cư Né
               </p>
 
               <figure className="lp-news-modal-photo">

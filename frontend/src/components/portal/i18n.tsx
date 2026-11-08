@@ -22,8 +22,10 @@ const STORAGE_KEY = "puc-portal-lang";
  */
 const EXACT_MAP: Record<string, string> = {
   // ─── Thanh đầu trang & Điều hướng ───
-  "HTX Krông Búk": "克容布合作社 (Krông Búk)",
-  "HTX KRÔNG BÚK": "克容布合作社 (KRÔNG BÚK)",
+  "HTX Cư Né": "居内合作社 (Cư Né)",
+  "HTX CƯ NÉ": "居内合作社 (CƯ NÉ)",
+  "HTX Krông Búk": "居内合作社 (Cư Né)",
+  "HTX KRÔNG BÚK": "居内合作社 (CƯ NÉ)",
   "Cổng hộ dân": "农户门户",
   "Trang chủ": "首页",
   "Thửa đất": "地块",
@@ -112,8 +114,10 @@ const EXACT_MAP: Record<string, string> = {
   "Ngôn ngữ": "界面语言",
   "Trang giới thiệu HTX": "合作社介绍主页",
   "Về trang giới thiệu": "返回介绍页",
-  "Về trang giới thiệu HTX Krông Búk": "返回克容布合作社介绍页",
-  "HTX Krông Búk – về trang giới thiệu": "克容布合作社 – 返回介绍页",
+  "Về trang giới thiệu HTX Cư Né": "返回居内合作社介绍页",
+  "HTX Cư Né – về trang giới thiệu": "居内合作社 – 返回介绍页",
+  "Về trang giới thiệu HTX Krông Búk": "返回居内合作社介绍页",
+  "HTX Krông Búk – về trang giới thiệu": "居内合作社 – 返回介绍页",
   "Đăng xuất": "退出登录",
   "Thông báo từ HTX": "合作社通知",
   "Bạn có": "您有",
@@ -214,8 +218,10 @@ const EXACT_MAP: Record<string, string> = {
   "Cắt thủ công, chu kỳ 45 ngày": "人工除草，周期 45 天",
 
   // ─── Trang chủ (HomeTab) ───
+  "Hộ canh tác sầu riêng VietGAP liên kết Hợp tác xã Cư Né, Đắk Lắk.":
+    "多乐省居内合作社 (Cư Né, Đắk Lắk) VietGAP 认证榴莲签约种植户。",
   "Hộ canh tác sầu riêng VietGAP liên kết Hợp tác xã Krông Búk, Đắk Lắk.":
-    "多乐省克容布合作社 (Krông Búk, Đắk Lắk) VietGAP 认证榴莲签约种植户。",
+    "多乐省居内合作社 (Cư Né, Đắk Lắk) VietGAP 认证榴莲签约种植户。",
   "Mọi thứ đều ổn. Hiện chưa có việc cần làm ngay.": "一切正常，目前暂无紧急待办事项。",
   "Thông số canh tác": "果园核心指标",
   "Số thửa": "地块数量",
@@ -302,7 +308,8 @@ const EXACT_MAP: Record<string, string> = {
   "Bà con in biển này ra khổ A4 hoặc ép plastic chống nước để cắm tại cọc mốc đầu lô đất canh tác.":
     "请将此标识牌按 A4 尺寸打印并进行防水塑封，安装在果园地块入口标桩处。",
   "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM": "越南社会主义共和国",
-  "HỢP TÁC XÃ NÔNG NGHIỆP KRÔNG BÚK – ĐẮK LẮK": "多乐省克容布农业合作社 (KRÔNG BÚK – ĐẮK LẮK)",
+  "HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ – ĐẮK LẮK": "多乐省居内农业合作社 (CƯ NÉ – ĐẮK LẮK)",
+  "HỢP TÁC XÃ NÔNG NGHIỆP KRÔNG BÚK – ĐẮK LẮK": "多乐省居内农业合作社 (CƯ NÉ – ĐẮK LẮK)",
   "BIỂN ĐỊNH DANH LÔ CANH TÁC SẦU RIÊNG": "榴莲种植地块溯源标识牌",
   "MÃ SỐ LÔ CANH TÁC:": "地块登记编码：",
   "Mã số vùng trồng (PUC):": "注册果园代码 (PUC)：",
@@ -316,7 +323,8 @@ const EXACT_MAP: Record<string, string> = {
   "Hệ thống truy xuất nguồn gốc nông sản CheckVN · Cục Bảo vệ Thực vật":
     "CheckVN 农产品溯源系统 · 植物保护局认证",
   "NGHIÊM CẤM TỰ Ý THAY ĐỔI BIỂN CẮM RANH GIỚI VÙNG TRỒNG": "严禁擅自移动或更改种植区边界标识牌",
-  "Hộ nông dân Krông Búk": "克容布合作社社员农户",
+  "Hộ nông dân Krông Búk": "居内合作社社员农户",
+  "Hộ nông dân HTX Cư Né": "居内合作社社员农户",
   "Chủ hộ": "户主",
   "Chủ hộ:": "户主：",
   "Diện tích:": "面积：",
@@ -563,8 +571,10 @@ const EXACT_MAP: Record<string, string> = {
   "Ngày thu:": "采收日期：",
   "Bấm mở": "点击查看",
   "ĐÃ XUẤT KHO": "已出库",
-  "HTX KRÔNG BÚK · ĐÃ KIỂM TRA": "克容布合作社 · 已核验",
-  "HTX KRÔNG BÚK · GIÁM SÁT": "克容布合作社 · 全程监管",
+  "HTX CƯ NÉ · ĐÃ KIỂM TRA": "居内合作社 · 已核验",
+  "HTX CƯ NÉ · GIÁM SÁT": "居内合作社 · 全程监管",
+  "HTX KRÔNG BÚK · ĐÃ KIỂM TRA": "居内合作社 · 已核验",
+  "HTX KRÔNG BÚK · GIÁM SÁT": "居内合作社 · 全程监管",
   "Xuất khẩu TQ": "出口中国",
   "Bấm để mở tem vé chi tiết hoặc dùng máy ảnh quét trực tiếp": "点击打开溯源标签详情或直接扫码核验",
   "Tem điện tử lô hàng": "批次电子溯源标签",
@@ -775,7 +785,9 @@ const EXACT_MAP: Record<string, string> = {
   "Tập trung tại vườn mẫu Thôn 3 lúc 7:45 sáng. Bà con nên mặc trang phục làm vườn gọn gàng, ủng và nón lá để tiện di chuyển thực địa.":
     "早上 7:45 在第 3 村示范果园集合。建议穿着轻便田间劳作服与胶靴，方便实地观摩操作。",
   "Hướng dẫn chi tiết cách cài đặt, đăng nhập và sử dụng hệ thống số hóa nhật ký canh tác PUC Krông Búk trên điện thoại.":
-    "详细指导如何在手机上安装、登录并使用克容布 PUC 数字化农事日志管理系统。",
+    "详细指导如何在手机上安装、登录并使用居内合作社 PUC 数字化农事日志管理系统。",
+  "Hướng dẫn chi tiết cách cài đặt, đăng nhập và sử dụng hệ thống số hóa nhật ký canh tác PUC HTX Cư Né trên điện thoại.":
+    "详细指导如何在手机上安装、登录并使用居内合作社 PUC 数字化农事日志管理系统。",
   "Cài đặt & đăng nhập tài khoản nông hộ": "农户账户安装与登录指引",
   "Kích hoạt tài khoản theo số điện thoại đã cấp mã, quản lý thông tin thửa đất và phân quyền thành viên trong hộ.":
     "使用已登记手机号激活账户，查看地块档案并管理家庭成员填报权限。",
@@ -787,8 +799,10 @@ const EXACT_MAP: Record<string, string> = {
     "接收定期巡检通知、查看农残与重金属安全检测结果及允许使用的植保农药名录。",
   "Bà con chuẩn bị điện thoại thông minh còn pin trên 50%, có kết nối 4G/Wifi. Đội ngũ kỹ sư CNTT sẽ hỗ trợ cài đặt tận tay cho từng bà con.":
     "请携带电量充足（50%以上）并连接 4G/Wi-Fi 的智能手机，IT 工程师将一对一现场协助安装设置。",
+  "Chương trình tập huấn nâng cao năng lực canh tác, chất lượng nông sản và ứng dụng khoa học kỹ thuật cho nông dân HTX Cư Né.":
+    "面向居内合作社农户的栽培管理提升、果品质量控制与现代农业科技应用培训。",
   "Chương trình tập huấn nâng cao năng lực canh tác, chất lượng nông sản và ứng dụng khoa học kỹ thuật cho nông dân HTX Krông Búk.":
-    "面向克容布合作社农户的栽培管理提升、果品质量控制与现代农业科技应用培训。",
+    "面向居内合作社农户的栽培管理提升、果品质量控制与现代农业科技应用培训。",
   "Tổng quan tiêu chuẩn kỹ thuật & quy định mới": "最新农业技术标准与出口监管规定概述",
   "Cập nhật các chính sách, quy chuẩn mới nhất của ngành nông nghiệp về canh tác và tiêu thụ sầu riêng.":
     "更新农业部门关于榴莲标准化种植与出口销售的最新政策与技术规范。",
@@ -984,7 +998,8 @@ const EXACT_MAP: Record<string, string> = {
   "Phương thức bón": "施用方式",
   "Bón theo hình chiếu mép tán": "沿树冠滴水线环施",
   "Định mức sử dụng": "推荐施用定额",
-  "Chuẩn VietGAP Krông Búk": "克容布 VietGAP 标准",
+  "Chuẩn VietGAP Krông Búk": "居内合作社 VietGAP 标准",
+  "Chuẩn VietGAP HTX Cư Né": "居内合作社 VietGAP 标准",
   "Tiêu chuẩn áp dụng": "执行标准",
   "VietGAP & Hữu cơ GACC": "VietGAP 与 GACC 有机标准",
   "Nghiêm cấm theo GACC": "按 GACC 标准严禁使用",
@@ -1112,7 +1127,9 @@ const EXACT_MAP: Record<string, string> = {
   "Khuyến khích tăng cường bón phân hữu cơ vi sinh và Axit Humic hàng năm giúp đất tơi xốp, kích thích giun đất và vi sinh vật đối kháng tự nhiên bảo vệ bộ rễ sầu riêng bền lực qua nhiều mùa vụ.":
     "建议每年增施有机微生物肥与腐殖酸，疏松土壤并促进蚯蚓及天然拮抗微生物繁殖，长效保护榴莲根系健康。",
   "Bón phân đúng thời điểm sinh trưởng của cây, kết hợp tưới đủ ẩm. Bắt buộc ghi chép ngày bón, tên phân và khối lượng vào Cổng nhật ký điện tử PUC Krông Búk.":
-    "按果树物候期精准施肥并配合适量灌溉。必须在克容布 PUC 数字化农事门户完整记录施肥日期、肥料名称与用量。",
+    "按果树物候期精准施肥并配合适量灌溉。必须在居内合作社 PUC 数字化农事门户完整记录施肥日期、肥料名称与用量。",
+  "Bón phân đúng thời điểm sinh trưởng của cây, kết hợp tưới đủ ẩm. Bắt buộc ghi chép ngày bón, tên phân và khối lượng vào Cổng nhật ký điện tử PUC HTX Cư Né.":
+    "按果树物候期精准施肥并配合适量灌溉。必须在居内合作社 PUC 数字化农事门户完整记录施肥日期、肥料名称与用量。",
 
   // ─── Tab Kiến thức: Giống sầu riêng (LearnTab) ───
   "Danh mục giống sầu riêng": "榴莲栽培品种名录",
@@ -1294,7 +1311,9 @@ const EXACT_MAP: Record<string, string> = {
   "Liên hệ Ban quản trị HTX hoặc Trưởng thôn để được kiểm tra và cấp lại mật khẩu đăng nhập.":
     "请联系合作社管理委员会或村长核实身份并重置登录密码。",
   "Hệ thống Quản lý Vùng trồng & Nhật ký số PUC Krông Búk · Phiên bản 2.4.0":
-    "克容布 (Krông Búk) PUC 种植区管理与数字化农事日志系统 · 版本 2.4.0",
+    "居内合作社 (HTX Cư Né) PUC 种植区管理与数字化农事日志系统 · 版本 2.4.0",
+  "Hệ thống Quản lý Vùng trồng & Nhật ký số PUC HTX Cư Né · Phiên bản 2.4.0":
+    "居内合作社 (HTX Cư Né) PUC 种植区管理与数字化农事日志系统 · 版本 2.4.0",
 
   // ─── Tiện ích upload / dùng chung ───
   "Chụp ảnh hoặc tải ảnh lên": "拍照或上传图片",

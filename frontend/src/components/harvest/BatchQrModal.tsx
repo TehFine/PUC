@@ -428,7 +428,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                     /* ─── Tem dán từng quả (Fruit Decal 40x30mm) ─── */
                     <div className="fruit-stamp-inner">
                       <div className="fruit-stamp-header">
-                        <div className="fruit-stamp-brand">HTX KRÔNG BÚK</div>
+                        <div className="fruit-stamp-brand">HTX CƯ NÉ</div>
                         <span className="fruit-stamp-grade">HẠNG {item.grade ?? "A"}</span>
                       </div>
                       <div className="fruit-stamp-body">
@@ -460,7 +460,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                     <div className="box-stamp-inner">
                       <div className="box-stamp-head">
                         <div className="box-brand">
-                          <strong>HTX SẦU RIÊNG KRÔNG BÚK – ĐẮK LẮK</strong>
+                          <strong>HTX SẦU RIÊNG CƯ NÉ – ĐẮK LẮK</strong>
                           <small>TIÊU CHUẨN XUẤT KHẨU VIETGAP &amp; NGHỊ ĐỊNH THƯ GACC</small>
                         </div>
                         <div className="box-stamp-grade-box">
