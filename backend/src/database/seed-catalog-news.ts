@@ -1,5 +1,216 @@
 import type { Pool } from "pg";
 
+interface PesticideSeed {
+  name: string;
+  activeIngredient: string;
+  concentration: string;
+  manufacturer: string;
+  mrlMgKg: number | null;
+  isolationDays: number | null;
+  status: "allowed" | "restricted" | "banned";
+}
+
+const PESTICIDES_2026: PesticideSeed[] = [
+  {
+    name: "ABT 2WP (Sinh học Bt + Abamectin)",
+    activeIngredient: "Abamectin 9g/kg + Bacillus thuringiensis var. kurstaki 11g/kg",
+    concentration: "9 g/kg + 11 g/kg",
+    manufacturer: "Viện Bảo vệ thực vật / Sinh học VN",
+    mrlMgKg: 0.01,
+    isolationDays: 5,
+    status: "allowed",
+  },
+  {
+    name: "Trắng xanh WP (Nấm xanh – Nấm trắng)",
+    activeIngredient: "Beauveria bassiana 1×10⁹ bào tử/g + Metarhizium anisopliae 0,5×10⁹ bào tử/g",
+    concentration: "1,5×10⁹ bào tử/g",
+    manufacturer: "Viện Bảo vệ thực vật (PPRI)",
+    mrlMgKg: null,
+    isolationDays: 3,
+    status: "allowed",
+  },
+  {
+    name: "Bitadin WP (Sinh học Bt + Granulosis virus)",
+    activeIngredient: "Bacillus thuringiensis var. kurstaki 16.000 IU + Granulosis virus 10⁸ PIB",
+    concentration: "16.000 IU + 10⁸ PIB",
+    manufacturer: "Viện Bảo vệ thực vật (PPRI)",
+    mrlMgKg: null,
+    isolationDays: 3,
+    status: "allowed",
+  },
+  {
+    name: "Chế phẩm Vi sinh Trichoderma – Bacillus – Streptomyces",
+    activeIngredient: "Trichoderma spp. + Bacillus spp. + Streptomyces spp.",
+    concentration: "≥ 10⁸ bào tử/g(ml)",
+    manufacturer: "Viện Khoa học Nông nghiệp Việt Nam (VAAS)",
+    mrlMgKg: null,
+    isolationDays: 0,
+    status: "allowed",
+  },
+  {
+    name: "Acrobat MZ 90/600 WP",
+    activeIngredient: "Dimethomorph 90g/kg + Mancozeb 600g/kg",
+    concentration: "90 g/kg + 600 g/kg",
+    manufacturer: "BASF",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Agri-Fos 400SL",
+    activeIngredient: "Phosphorous acid",
+    concentration: "400 g/l",
+    manufacturer: "Agrichem (Úc)",
+    mrlMgKg: 2.0,
+    isolationDays: 7,
+    status: "allowed",
+  },
+  {
+    name: "Ridomil Gold 68WG",
+    activeIngredient: "Metalaxyl-M 40g/kg + Mancozeb 640g/kg",
+    concentration: "40 g/kg + 640 g/kg",
+    manufacturer: "Syngenta",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Anvil 5SC (Huivil)",
+    activeIngredient: "Hexaconazole ≥ 85%",
+    concentration: "50 g/l",
+    manufacturer: "Syngenta",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Nativo 750WG",
+    activeIngredient: "Trifloxystrobin + Tebuconazole",
+    concentration: "750 g/kg",
+    manufacturer: "Bayer CropScience",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Antracol 70WP",
+    activeIngredient: "Propineb (Metiram complex)",
+    concentration: "700 g/kg",
+    manufacturer: "Bayer CropScience",
+    mrlMgKg: 0.1,
+    isolationDays: 10,
+    status: "allowed",
+  },
+  {
+    name: "Movento 150OD",
+    activeIngredient: "Spirotetramat ≥ 96%",
+    concentration: "150 g/l",
+    manufacturer: "Bayer CropScience",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Penalty 40WP",
+    activeIngredient: "Acetamiprid 20% + Buprofezin 20%",
+    concentration: "20% + 20% (400 g/kg)",
+    manufacturer: "Nihon Nohyaku / Map Pacific",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Sida 20WP",
+    activeIngredient: "Dinotefuran ≥ 89%",
+    concentration: "200 g/kg",
+    manufacturer: "Mitsui Chemicals / BVTV",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Confidor 200SL + Dầu khoáng SK Enspray 99EC",
+    activeIngredient: "Imidacloprid ≥ 96% + Petroleum spray oil",
+    concentration: "200 g/l + 99% EC",
+    manufacturer: "Bayer / SK Energy",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Ascend 20SP",
+    activeIngredient: "Acetamiprid ≥ 97%",
+    concentration: "200 g/kg",
+    manufacturer: "Nisso / BVTV",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Acnipyram / Nitensuper + Applaud / Butyl",
+    activeIngredient: "Nitenpyram + Buprofezin",
+    concentration: "500 g/kg",
+    manufacturer: "Nihon Nohyaku / BVTV",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Buprofezin 400SC",
+    activeIngredient: "Buprofezin",
+    concentration: "400 g/l",
+    manufacturer: "Map Pacific",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Abamectin 1.8EC",
+    activeIngredient: "Abamectin",
+    concentration: "1.8%",
+    manufacturer: "Syngenta",
+    mrlMgKg: 0.01,
+    isolationDays: 7,
+    status: "allowed",
+  },
+  {
+    name: "Imidacloprid 70WG",
+    activeIngredient: "Imidacloprid",
+    concentration: "70%",
+    manufacturer: "Bayer",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    name: "Emamectin 1.9EC",
+    activeIngredient: "Emamectin benzoate",
+    concentration: "1.9%",
+    manufacturer: "Rotam",
+    mrlMgKg: 0.02,
+    isolationDays: 10,
+    status: "allowed",
+  },
+  {
+    name: "Chlorpyrifos 40EC",
+    activeIngredient: "Chlorpyrifos",
+    concentration: "40%",
+    manufacturer: "Dow AgroSciences",
+    mrlMgKg: 0.05,
+    isolationDays: 21,
+    status: "restricted",
+  },
+  {
+    name: "Carbaryl 80WP",
+    activeIngredient: "Carbaryl",
+    concentration: "80%",
+    manufacturer: "Various",
+    mrlMgKg: null,
+    isolationDays: null,
+    status: "banned",
+  },
+];
+
 interface FertilizerSeed {
   name: string;
   category: "organic" | "npk" | "foliar" | "microbial" | "restricted";
@@ -14,6 +225,32 @@ interface FertilizerSeed {
 }
 
 const FERTILIZERS: FertilizerSeed[] = [
+  {
+    name: "Phân chuồng hoai mục ủ Vi sinh đối kháng (Trichoderma – Bacillus – Streptomyces)",
+    category: "organic",
+    formula: "Phân chuồng hoai mục (độ ẩm 50–60%) + Trichoderma spp., Bacillus spp., Streptomyces spp. (≥ 10⁸ bào tử/g)",
+    manufacturer: "Quy trình Viện Bảo vệ Thực vật (PPRI 2026)",
+    dosage: "Ủ trộn 3 kg chế phẩm vi sinh / 1 tấn phân chuồng hoai mục trước khi bón 7 – 10 ngày",
+    applicationMethod: "Bón vào đất vùng rễ theo hình chiếu tán cây hoặc giữa 2 hàng giao tán rồi phủ đất mặt",
+    timing: "Trước mùa mưa (tháng 4 đến đầu tháng 5 hàng năm)",
+    status: "encouraged",
+    imageUrl: "/fertilizers/organic.png",
+    description:
+      "Quản lý các bệnh hại trong đất, đặc biệt là bệnh xì mủ (Phytophthora palmivora) và vàng lá thối rễ (Phytopythium vexans); áp dụng cho cả vườn chưa có và đang có triệu chứng bệnh.",
+  },
+  {
+    name: "Phân hữu cơ truyền thống kết hợp Nấm rễ Arbuscular Mycorrhizae",
+    category: "microbial",
+    formula: "Phân chuồng, bò, gà, rơm cỏ khô ủ hoai + Nấm rễ Arbuscular mycorrhizae + Trichoderma, Streptomyces",
+    manufacturer: "Quy trình Viện Khoa học Nông nghiệp VN (VAAS 2026)",
+    dosage: "50 – 100 kg phân hữu cơ/cây/năm + 100 – 150 g nấm rễ Mycorrhizae/cây/năm",
+    applicationMethod: "Bón quanh vùng rễ tơ theo hình chiếu tán cây kết hợp lấp đất giữ ẩm",
+    timing: "Sau thu hoạch & đầu mùa mưa",
+    status: "encouraged",
+    imageUrl: "/fertilizers/humic.png",
+    description:
+      "Diệt mầm bệnh trong đất, mở rộng hệ thống lông hút cộng sinh và tăng sức đề kháng tự nhiên giúp cây chống chịu bệnh đốm lá (Phomopsis durionis) và thán thư (Colletotrichum siamense).",
+  },
   {
     name: "Hữu cơ Vi sinh Đất Mẹ 70% OM",
     category: "organic",
@@ -268,7 +505,7 @@ const NEWS_SEED = [
     imageAlt: "Đoàn cán bộ và ban giám đốc HTX cùng bà con kiểm tra cây sầu riêng tại vườn Krông Búk",
     featured: true,
     content: {
-      lead: "Đoàn công tác Chi cục Trồng trọt & Bảo vệ Thực vật tỉnh Đắk Lắk phối hợp cùng Phòng Nông nghiệp huyện Krông Búk đã có chuyến thăm và làm việc tại các vườn sầu riêng thành viên HTX Nông nghiệp Krông Búk.",
+      lead: "Đoàn công tác Chi cục Trồng trọt & Bảo vệ Thực vật tỉnh Đắk Lắk phối hợp cùng Phòng Nông nghiệp huyện Krông Búk đã có chuyến thăm và làm việc tại các vườn sầu riêng thành viên HTX Nông nghiệp Cư Né.",
       sections: [
         {
           heading: "Kiểm tra thực địa và đánh giá vùng trồng xuất khẩu",
@@ -307,7 +544,7 @@ const NEWS_SEED = [
     imageAlt: "Kỹ sư nông nghiệp hướng dẫn bà con nông dân thao tác tỉa cành sầu riêng tại vườn",
     featured: false,
     content: {
-      lead: "Nhằm chuẩn bị tốt nhất cho giai đoạn phân hóa mầm hoa và tạo vụ sầu riêng năng suất cao, HTX Krông Búk tổ chức chuỗi tập huấn thực địa định kỳ hàng tháng cho toàn thể bà con nông dân.",
+      lead: "Nhằm chuẩn bị tốt nhất cho giai đoạn phân hóa mầm hoa và tạo vụ sầu riêng năng suất cao, HTX Cư Né tổ chức chuỗi tập huấn thực địa định kỳ hàng tháng cho toàn thể bà con nông dân.",
       sections: [
         {
           heading: "Nội dung trọng tâm của khóa tập huấn",
@@ -336,77 +573,77 @@ const NEWS_SEED = [
   {
     slug: "canh-bao-sau-benh-mua-mua",
     category: "protection",
-    title: "Cảnh báo bệnh nứt thân xì mủ mùa mưa: Danh mục hoạt chất sinh học an toàn được cấp phép",
+    title: "Quản lý tổng hợp (IPM) bệnh xì mủ, héo ngọn và sâu hại sầu riêng theo tiêu chuẩn VietGAP 2026",
     excerpt:
-      "Độ ẩm cao là điều kiện nấm Phytophthora phát triển mạnh gây thối rễ, xì mủ thân. Khuyến cáo bà con chỉ sử dụng các dòng thuốc sinh học trong danh mục cho phép và tuyệt đối giữ thời gian cách ly.",
+      "Hướng dẫn mới nhất của Viện Bảo vệ Thực vật (2026) về nhận diện 10 bệnh hại, 21 loài sâu hại tại Đắk Lắk và phác đồ kết hợp chế phẩm sinh học với thuốc hóa học theo nguyên tắc 4 đúng.",
     publishedOn: "2026-10-21",
-    readTime: "5 phút đọc",
-    author: "Tổ Bảo vệ Thực vật HTX",
+    readTime: "6 phút đọc",
+    author: "Tổ Bảo vệ Thực vật HTX Cư Né",
     imageUrl: "/landing/news-protection.jpg",
     imageAlt: "Bà con kiểm tra kỹ lưỡng mặt dưới của lá sầu riêng để phát hiện sớm mầm nấm bệnh",
     featured: false,
     content: {
-      lead: "Mùa mưa kéo dài tại vùng đất đỏ Tây Nguyên tiềm ẩn nguy cơ bùng phát nấm Phytophthora palmivora gây thối rễ và xì mủ gốc trên các vườn sầu riêng từ 4 năm tuổi trở lên.",
+      lead: "Theo tài liệu kỹ thuật Quản lý dịch hại tổng hợp (IPM) cây sầu riêng năm 2026 của Viện Khoa học Nông nghiệp Việt Nam – Viện Bảo vệ Thực vật, tại vùng trồng Đắk Lắk có 10 bệnh hại và 21 loài sâu hại thường xuyên xuất hiện, trong đó bệnh xì mủ (Phytophthora palmivora) và bệnh héo ngọn (Diaporthe durionigena) là hai bệnh nguy hiểm nhất.",
       sections: [
         {
-          heading: "Biện pháp phòng ngừa canh tác tự nhiên",
+          heading: "1. Phác đồ quản lý bệnh héo ngọn và bệnh xì mủ",
           paragraphs: [
-            "Trước khi can thiệp bằng thuốc, biện pháp canh tác bền vững là yếu tố quyết định:",
-            "Vườn phải được xẻ rãnh thoát nước sâu 40-50cm giữa các hàng, tuyệt đối không để đọng vũng quanh cổ rễ. Dọn sạch tàn dư lá bệnh rụng xuống gốc, quét vôi hoặc chế phẩm đồng đỏ quanh thân cây từ mặt đất lên 1 mét.",
+            "Đối với bệnh héo ngọn (phát triển mạnh từ tháng 11 đến tháng 2 năm sau): Cuối mùa mưa (tháng 11), phun phòng bằng chế phẩm vi sinh đối kháng (Trichoderma spp., Bacillus spp., Streptomyces spp. ≥ 10⁸ bào tử/g) pha tỷ lệ 1:1000 vào chiều mát. Khi tỷ lệ bệnh ≥ 5%, cắt bỏ cành bệnh kết hợp phun Hexaconazole ≥ 85% hoặc Dimethomorph 90g/kg + Mancozeb 600g/kg (Acrobat MZ 90/600 WP) 2 lần cách nhau 7–10 ngày.",
+            "Đối với bệnh xì mủ (mùa mưa tháng 5–11): Ủ 3 kg chế phẩm vi sinh (Trichoderma, Bacillus, Streptomyces) với 1 tấn phân chuồng hoai mục (độ ẩm 50–60%) trước 7–10 ngày để bón vùng rễ vào tháng 4 – đầu tháng 5. Với cây chớm bệnh, cạo sạch vỏ bệnh rồi quét Metalaxyl-M + Mancozeb hoặc Acrobat MZ 90/600 WP, kết hợp tiêm Phosphorous acid (Agri-Fos 400SL) cho cây có đường kính thân ≥ 15 cm (2 lần cách nhau 15 ngày vào ngày khô ráo).",
           ],
         },
         {
-          heading: "Các hoạt chất sinh học được khuyến khích sử dụng",
+          heading: "2. Quản lý rệp sáp bột hai tua dài, rầy nhảy và sâu đục quả",
           paragraphs: [
-            "HTX khuyến cáo bà con chỉ dùng các hoạt chất có trong danh mục xuất khẩu đã được kiểm duyệt trong phần Tra cứu của hệ thống:",
+            "Giai đoạn cây ra lộc non (tháng 6–9) và ra hoa đậu quả (tháng 3–8), ưu tiên bảo tồn thiên địch (bọ mắt vàng, bọ rùa, nhện bắt mồi, ong ký sinh) và phun luân phiên chế phẩm sinh học với hóa học:",
           ],
           bulletPoints: [
-            "Chế phẩm nấm đối kháng Trichoderma spp. tưới định kỳ quanh vùng rễ non.",
-            "Phosphonate (lân 2 chiều) tiêm thân hoặc quét vết bệnh đã cạo sạch vỏ ngoài.",
-            "Metalaxyl-M hoặc Mancozeb chính hãng với thời gian cách ly tối thiểu 14 ngày (tuyệt đối ngừng dùng trước thu hoạch 45 ngày).",
+            "Thuốc sinh học: ABT 2WP (Abamectin + Bt kurstaki), Trắng xanh WP (Beauveria bassiana + Metarhizium anisopliae), Bitadin WP (Bt kurstaki + Granulosis virus).",
+            "Luân phiên & phối trộn: Movento 150OD (Spirotetramat) + Bitadin WP; Sida 20WP (Dinotefuran) + Trắng xanh WP; Confidor 200SL (Imidacloprid) + Dầu khoáng SK Enspray 99EC; Ascend 20SP (Acetamiprid) + Trắng xanh WP; hoặc Penalty 40WP (Acetamiprid + Buprofezin).",
+            "Bệnh đốm lá & thán thư: Phun 3 lần cách nhau 7–10 ngày luân phiên Propineb, Metiram complex, Mancozeb + Metalaxyl-M, Trifloxystrobin + Tebuconazole và Hexaconazole (lần 2 khi ra đọt non cộng thêm Nitenpyram + Buprofezin).",
           ],
         },
       ],
       takeaway:
-        "Nghiêm cấm tuyệt đối việc sử dụng hóa chất kích kháng trôi nổi không rõ nguồn gốc. Khi phát hiện cây chớm vàng lá, xì mủ, cần chụp ảnh báo ngay cho cán bộ kiểm tra của HTX.",
+        "Chỉ sử dụng thuốc BVTV khi dịch hại chạm ngưỡng kinh tế và tuân thủ nghiêm nguyên tắc 4 đúng. Tuyệt đối không dùng các hoạt chất cấm theo quy định VietGAP và Nghị định thư GACC.",
     },
   },
   {
     slug: "quy-trinh-bon-phan-can-doi",
     category: "farming",
-    title: "Quy trình bón phân hữu cơ vi sinh kết hợp tưới nhỏ giọt: Đất tơi xốp, cây bền lực",
+    title: "Quy trình ủ phân chuồng vi sinh đối kháng, cắt tỉa và vệ sinh vườn sầu riêng chuẩn VietGAP 2026",
     excerpt:
-      "Chia sẻ kinh nghiệm thực tế từ các nhà vườn đạt năng suất 25 tấn/ha: Cách ủ phân chuồng hoai mục với vi sinh bản địa và điều tiết dinh dưỡng vi lượng Bo, Kẽm, Magie chống rụng hoa.",
+      "Hướng dẫn chi tiết kỹ thuật ủ phân chuồng hoai mục ở độ ẩm 50–60% với nấm đối kháng Trichoderma – Bacillus – Streptomyces, kết hợp nấm rễ Mycorrhizae và lịch cắt tỉa tạo tán theo tháng.",
     publishedOn: "2026-10-18",
-    readTime: "4 phút đọc",
-    author: "KS. Nguyễn Thành Long",
+    readTime: "5 phút đọc",
+    author: "KS. Nguyễn Thành Long – HTX Cư Né",
     imageUrl: "/landing/durian-tree.jpg",
     imageAlt: "Cây sầu riêng trĩu quả xanh mướt trên nền đất đỏ giàu dinh dưỡng hữu cơ",
     featured: false,
     content: {
-      lead: "Một trong những bí quyết để sầu riêng Krông Búk đạt tỷ lệ trái loại 1 trên 85% chính là kỹ thuật bón phân hữu cơ cân đối, kết hợp nuôi dưỡng hệ vi sinh vật đất khỏe mạnh.",
+      lead: "Áp dụng 4 nguyên tắc IPM (Trồng cây khỏe – Bảo vệ thiên địch – Thăm đồng thường xuyên – Nông dân trở thành chuyên gia), quy trình chăm sóc vườn sầu riêng năm 2026 tại HTX Cư Né đặt trọng tâm vào cải tạo đất sinh học và vệ sinh đồng ruộng.",
       sections: [
         {
-          heading: "Công thức bón phân theo chu kỳ phát triển",
+          heading: "Phương pháp ủ phân chuồng hoai mục với vi sinh vật đối kháng",
           paragraphs: [
-            "Cây sầu riêng là loài cây ăn quả 'khó tính', đòi hỏi chế độ dinh dưỡng phân tầng rõ rệt tùy theo từng giai đoạn sinh trưởng:",
+            "Để phòng ngừa hiệu quả nấm Phytophthora palmivora và Phytopythium vexans gây xì mủ, vàng lá thối rễ, bà con thực hiện ủ trộn chế phẩm sinh học trước khi bón:",
           ],
           bulletPoints: [
-            "Giai đoạn phục hồi sau thu hoạch: Ưu tiên 20-30kg phân chuồng hoai mục + chế phẩm vi sinh/cây, kết hợp NPK tỷ lệ 20-20-15 để tái tạo bộ rễ mới.",
-            "Giai đoạn đón hoa và nhú mắt cua: Giảm đạm, tăng lân hữu hiệu (DAP hoặc Lân nung chảy) để mầm hoa mập mạp, sáng màu.",
-            "Giai đoạn nuôi trái non: Bổ sung định kỳ Canxi-Bo và Kali hữu cơ dạng phun sương nhẹ vào chiều mát để cuống trái dẻo dai, chống sốc rụng trái non.",
+            "Tỷ lệ ủ trộn: Dùng 3 kg chế phẩm vi sinh đối kháng (Trichoderma spp., Bacillus spp., Streptomyces spp. mật độ ≥ 10⁸ bào tử/g) trộn đều với 1 tấn phân chuồng hoai mục trước khi bón 7 – 10 ngày.",
+            "Kiểm soát độ ẩm 50% – 60%: Bóp chặt nắm phân trong tay thấy nước rỉ qua kẽ tay là đạt yêu cầu (nước chảy thành dòng là quá ẩm, xòe tay vỡ rời là quá khô), sau đó phủ kín đống ủ bằng bạt.",
+            "Thời điểm & cách bón: Bón vào đất vùng rễ theo hình chiếu tán cây hoặc giữa 2 hàng khi cây đã giao tán rồi phủ lớp đất mặt lên trên vào thời điểm trước mùa mưa (tháng 4 đến đầu tháng 5). Kết hợp 50–100 kg phân hữu cơ + 100–150 g nấm rễ Arbuscular mycorrhizae/cây/năm để phòng đốm lá, thán thư.",
           ],
         },
         {
-          heading: "Lưu ý quan trọng khi phối hợp phân bón",
+          heading: "Lịch cắt tỉa và vệ sinh vườn theo mùa vụ",
           paragraphs: [
-            "Không bón phân chuồng tươi chưa qua xử lý vì dễ mang theo nguồn nấm tuyến trùng gây hại rễ tơ.",
-            "Tất cả các đợt bón phân đều phải ghi chép tên phân, liều lượng (kg/cây) và ngày bón vào Cổng hộ dân để phục vụ truy xuất tem QR sau này.",
+            "Tháng 9 – Tháng 10 (sau thu hoạch): Cắt bỏ và tiêu hủy cành khô, lá vàng, cành vượt, cành che bóng và tỉa tán cây trồng xen (cà phê, bơ) vào những ngày nắng ráo để vườn thông thoáng.",
+            "Tháng 1 – Tháng 2 (ra hoa rộ): Tỉa bỏ bớt chùm hoa mọc dày và những chùm hoa có rệp sáp bột hai tua dài; đào hố ở vị trí giao tán giữa 4 cây trước mùa mưa để thu gom tàn dư, lá rụng và tiêu hủy quả nhiễm bệnh thối nâu, thối đen.",
           ],
         },
       ],
       takeaway:
-        "Nuôi đất khỏe thì cây mới bền. Bón nhiều phân hóa học có thể kích cây nhanh nhưng đất sẽ chua và chai cứng, làm giảm tuổi thọ vườn sau 7-8 năm khai thác.",
+        "Mọi đợt bón phân, cắt tỉa và phun phòng sinh học cần được bà con cập nhật đầy đủ kèm ảnh chụp thực địa lên Cổng Nông hộ HTX Cư Né để đồng bộ hồ sơ truy xuất nguồn gốc.",
     },
   },
 ];
@@ -414,12 +651,45 @@ const NEWS_SEED = [
 export async function seedCatalogAndNews(pool: Pool, options?: { log?: (msg: string) => void }): Promise<void> {
   const log = options?.log ?? (() => undefined);
 
+  for (const p of PESTICIDES_2026) {
+    await pool.query(
+      `INSERT INTO pesticides
+         (name, active_ingredient, concentration, manufacturer, mrl_mg_kg, isolation_days, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (name) DO UPDATE SET
+         active_ingredient = EXCLUDED.active_ingredient,
+         concentration = EXCLUDED.concentration,
+         manufacturer = EXCLUDED.manufacturer,
+         mrl_mg_kg = EXCLUDED.mrl_mg_kg,
+         isolation_days = EXCLUDED.isolation_days,
+         status = EXCLUDED.status`,
+      [
+        p.name,
+        p.activeIngredient,
+        p.concentration,
+        p.manufacturer,
+        p.mrlMgKg,
+        p.isolationDays,
+        p.status,
+      ],
+    );
+  }
+
   for (const f of FERTILIZERS) {
     await pool.query(
       `INSERT INTO fertilizers
          (name, category, formula, manufacturer, dosage, application_method, timing, status, image_url, description)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       ON CONFLICT (name) DO NOTHING`,
+       ON CONFLICT (name) DO UPDATE SET
+         category = EXCLUDED.category,
+         formula = EXCLUDED.formula,
+         manufacturer = EXCLUDED.manufacturer,
+         dosage = EXCLUDED.dosage,
+         application_method = EXCLUDED.application_method,
+         timing = EXCLUDED.timing,
+         status = EXCLUDED.status,
+         image_url = EXCLUDED.image_url,
+         description = EXCLUDED.description`,
       [
         f.name,
         f.category,
@@ -479,7 +749,12 @@ export async function seedCatalogAndNews(pool: Pool, options?: { log?: (msg: str
          (slug, category, title, excerpt, content, author, image_url, image_alt,
           read_time, featured, status, published_on)
        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, 'published', $11)
-       ON CONFLICT (slug) DO NOTHING`,
+       ON CONFLICT (slug) DO UPDATE SET
+         title = EXCLUDED.title,
+         excerpt = EXCLUDED.excerpt,
+         content = EXCLUDED.content,
+         author = EXCLUDED.author,
+         read_time = EXCLUDED.read_time`,
       [
         n.slug,
         n.category,
@@ -496,5 +771,5 @@ export async function seedCatalogAndNews(pool: Pool, options?: { log?: (msg: str
     );
   }
 
-  log("✔ Đã nạp dữ liệu phân bón, giống mở rộng và bản tin mẫu.");
+  log("✔ Đã nạp dữ liệu thuốc BVTV 2026, phân bón, giống mở rộng và bản tin mẫu.");
 }

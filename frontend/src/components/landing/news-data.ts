@@ -46,7 +46,7 @@ export const NEWS_ARTICLES: NewsArticle[] = [
     image: "/landing/news-field-visit.jpg",
     imageAlt: "Đoàn cán bộ và ban giám đốc HTX cùng bà con kiểm tra cây sầu riêng tại vườn Krông Búk",
     content: {
-      lead: "Đoàn công tác Chi cục Trồng trọt & Bảo vệ Thực vật tỉnh Đắk Lắk phối hợp cùng Phòng Nông nghiệp huyện Krông Búk đã có chuyến thăm và làm việc tại các vườn sầu riêng thành viên HTX Nông nghiệp Krông Búk.",
+      lead: "Đoàn công tác Chi cục Trồng trọt & Bảo vệ Thực vật tỉnh Đắk Lắk phối hợp cùng Phòng Nông nghiệp huyện Krông Búk đã có chuyến thăm và làm việc tại các vườn sầu riêng thành viên HTX Nông nghiệp Cư Né.",
       sections: [
         {
           heading: "Kiểm tra thực địa và đánh giá vùng trồng xuất khẩu",
@@ -86,7 +86,7 @@ export const NEWS_ARTICLES: NewsArticle[] = [
     image: "/landing/news-training.jpg",
     imageAlt: "Kỹ sư nông nghiệp hướng dẫn bà con nông dân thao tác tỉa cành sầu riêng tại vườn",
     content: {
-      lead: "Nhằm chuẩn bị tốt nhất cho giai đoạn phân hóa mầm hoa và tạo vụ sầu riêng năng suất cao, HTX Krông Búk tổ chức chuỗi tập huấn thực địa định kỳ hàng tháng cho toàn thể bà con nông dân.",
+      lead: "Nhằm chuẩn bị tốt nhất cho giai đoạn phân hóa mầm hoa và tạo vụ sầu riêng năng suất cao, HTX Cư Né tổ chức chuỗi tập huấn thực địa định kỳ hàng tháng cho toàn thể bà con nông dân.",
       sections: [
         {
           heading: "Nội dung trọng tâm của khóa tập huấn",
@@ -117,38 +117,38 @@ export const NEWS_ARTICLES: NewsArticle[] = [
     category: "protection",
     categoryLabel: "Thuốc & Sâu bệnh",
     tagTone: "yellow",
-    title: "Cảnh báo bệnh nứt thân xì mủ mùa mưa: Danh mục hoạt chất sinh học an toàn được cấp phép",
+    title: "Quản lý tổng hợp (IPM) bệnh xì mủ, héo ngọn và sâu hại sầu riêng theo tiêu chuẩn VietGAP 2026",
     excerpt:
-      "Độ ẩm cao là điều kiện nấm Phytophthora phát triển mạnh gây thối rễ, xì mủ thân. Khuyến cáo bà con chỉ sử dụng các dòng thuốc sinh học trong danh mục cho phép và tuyệt đối giữ thời gian cách ly.",
+      "Hướng dẫn mới nhất của Viện Bảo vệ Thực vật (2026) về nhận diện 10 bệnh hại, 21 loài sâu hại tại Đắk Lắk và phác đồ kết hợp chế phẩm sinh học với thuốc hóa học theo nguyên tắc 4 đúng.",
     date: "21/10/2026",
-    readTime: "5 phút đọc",
-    author: "Tổ Bảo vệ Thực vật HTX",
+    readTime: "6 phút đọc",
+    author: "Tổ Bảo vệ Thực vật HTX Cư Né",
     image: "/landing/news-protection.jpg",
     imageAlt: "Bà con kiểm tra kỹ lưỡng mặt dưới của lá sầu riêng để phát hiện sớm mầm nấm bệnh",
     content: {
-      lead: "Mùa mưa kéo dài tại vùng đất đỏ Tây Nguyên tiềm ẩn nguy cơ bùng phát nấm Phytophthora palmivora gây thối rễ và xì mủ gốc trên các vườn sầu riêng từ 4 năm tuổi trở lên.",
+      lead: "Theo tài liệu kỹ thuật Quản lý dịch hại tổng hợp (IPM) cây sầu riêng năm 2026 của Viện Khoa học Nông nghiệp Việt Nam – Viện Bảo vệ Thực vật, tại vùng trồng Đắk Lắk có 10 bệnh hại và 21 loài sâu hại thường xuyên xuất hiện, trong đó bệnh xì mủ (Phytophthora palmivora) và bệnh héo ngọn (Diaporthe durionigena) là hai bệnh nguy hiểm nhất.",
       sections: [
         {
-          heading: "Biện pháp phòng ngừa canh tác tự nhiên",
+          heading: "1. Phác đồ quản lý bệnh héo ngọn và bệnh xì mủ",
           paragraphs: [
-            "Trước khi can thiệp bằng thuốc, biện pháp canh tác bền vững là yếu tố quyết định:",
-            "Vườn phải được xẻ rãnh thoát nước sâu 40-50cm giữa các hàng, tuyệt đối không để đọng vũng quanh cổ rễ. Dọn sạch tàn dư lá bệnh rụng xuống gốc, quét vôi hoặc chế phẩm đồng đỏ quanh thân cây từ mặt đất lên 1 mét.",
+            "Đối với bệnh héo ngọn (phát triển mạnh từ tháng 11 đến tháng 2 năm sau): Cuối mùa mưa (tháng 11), phun phòng bằng chế phẩm vi sinh đối kháng (Trichoderma spp., Bacillus spp., Streptomyces spp. ≥ 10⁸ bào tử/g) pha tỷ lệ 1:1000 vào chiều mát. Khi tỷ lệ bệnh ≥ 5%, cắt bỏ cành bệnh kết hợp phun Hexaconazole ≥ 85% hoặc Dimethomorph 90g/kg + Mancozeb 600g/kg (Acrobat MZ 90/600 WP) 2 lần cách nhau 7–10 ngày.",
+            "Đối với bệnh xì mủ (mùa mưa tháng 5–11): Ủ 3 kg chế phẩm vi sinh (Trichoderma, Bacillus, Streptomyces) với 1 tấn phân chuồng hoai mục (độ ẩm 50–60%) trước 7–10 ngày để bón vùng rễ vào tháng 4 – đầu tháng 5. Với cây chớm bệnh, cạo sạch vỏ bệnh rồi quét Metalaxyl-M + Mancozeb hoặc Acrobat MZ 90/600 WP, kết hợp tiêm Phosphorous acid (Agri-Fos 400SL) cho cây có đường kính thân ≥ 15 cm (2 lần cách nhau 15 ngày vào ngày khô ráo).",
           ],
         },
         {
-          heading: "Các hoạt chất sinh học được khuyến khích sử dụng",
+          heading: "2. Quản lý rệp sáp bột hai tua dài, rầy nhảy và sâu đục quả",
           paragraphs: [
-            "HTX khuyến cáo bà con chỉ dùng các hoạt chất có trong danh mục xuất khẩu đã được kiểm duyệt trong phần Tra cứu của hệ thống:",
+            "Giai đoạn cây ra lộc non (tháng 6–9) và ra hoa đậu quả (tháng 3–8), ưu tiên bảo tồn thiên địch (bọ mắt vàng, bọ rùa, nhện bắt mồi, ong ký sinh) và phun luân phiên chế phẩm sinh học với hóa học:",
           ],
           bulletPoints: [
-            "Chế phẩm nấm đối kháng Trichoderma spp. tưới định kỳ quanh vùng rễ non.",
-            "Phosphonate (lân 2 chiều) tiêm thân hoặc quét vết bệnh đã cạo sạch vỏ ngoài.",
-            "Metalaxyl-M hoặc Mancozeb chính hãng với thời gian cách ly tối thiểu 14 ngày (tuyệt đối ngừng dùng trước thu hoạch 45 ngày).",
+            "Thuốc sinh học: ABT 2WP (Abamectin + Bt kurstaki), Trắng xanh WP (Beauveria bassiana + Metarhizium anisopliae), Bitadin WP (Bt kurstaki + Granulosis virus).",
+            "Luân phiên & phối trộn: Movento 150OD (Spirotetramat) + Bitadin WP; Sida 20WP (Dinotefuran) + Trắng xanh WP; Confidor 200SL (Imidacloprid) + Dầu khoáng SK Enspray 99EC; Ascend 20SP (Acetamiprid) + Trắng xanh WP; hoặc Penalty 40WP (Acetamiprid + Buprofezin).",
+            "Bệnh đốm lá & thán thư: Phun 3 lần cách nhau 7–10 ngày luân phiên Propineb, Metiram complex, Mancozeb + Metalaxyl-M, Trifloxystrobin + Tebuconazole và Hexaconazole (lần 2 khi ra đọt non cộng thêm Nitenpyram + Buprofezin).",
           ],
         },
       ],
       takeaway:
-        "Nghiêm cấm tuyệt đối việc sử dụng hóa chất kích kháng trôi nổi không rõ nguồn gốc. Khi phát hiện cây chớm vàng lá, xì mủ, cần chụp ảnh báo ngay cho cán bộ kiểm tra của HTX.",
+        "Chỉ sử dụng thuốc BVTV khi dịch hại chạm ngưỡng kinh tế và tuân thủ nghiêm nguyên tắc 4 đúng. Tuyệt đối không dùng các hoạt chất cấm theo quy định VietGAP và Nghị định thư GACC.",
     },
   },
   {
@@ -156,38 +156,38 @@ export const NEWS_ARTICLES: NewsArticle[] = [
     category: "farming",
     categoryLabel: "Quy trình chăm bón",
     tagTone: "peach",
-    title: "Quy trình bón phân hữu cơ vi sinh kết hợp tưới nhỏ giọt: Đất tơi xốp, cây bền lực",
+    title: "Quy trình ủ phân chuồng vi sinh đối kháng, cắt tỉa và vệ sinh vườn sầu riêng chuẩn VietGAP 2026",
     excerpt:
-      "Chia sẻ kinh nghiệm thực tế từ các nhà vườn đạt năng suất 25 tấn/ha: Cách ủ phân chuồng hoai mục với vi sinh bản địa và điều tiết dinh dưỡng vi lượng Bo, Kẽm, Magie chống rụng hoa.",
+      "Hướng dẫn chi tiết kỹ thuật ủ phân chuồng hoai mục ở độ ẩm 50–60% với nấm đối kháng Trichoderma – Bacillus – Streptomyces, kết hợp nấm rễ Mycorrhizae và lịch cắt tỉa tạo tán theo tháng.",
     date: "18/10/2026",
-    readTime: "4 phút đọc",
-    author: "KS. Nguyễn Thành Long",
+    readTime: "5 phút đọc",
+    author: "KS. Nguyễn Thành Long – HTX Cư Né",
     image: "/landing/durian-tree.jpg",
     imageAlt: "Cây sầu riêng trĩu quả xanh mướt trên nền đất đỏ giàu dinh dưỡng hữu cơ",
     content: {
-      lead: "Một trong những bí quyết để sầu riêng Krông Búk đạt tỷ lệ trái loại 1 trên 85% chính là kỹ thuật bón phân hữu cơ cân đối, kết hợp nuôi dưỡng hệ vi sinh vật đất khỏe mạnh.",
+      lead: "Áp dụng 4 nguyên tắc IPM (Trồng cây khỏe – Bảo vệ thiên địch – Thăm đồng thường xuyên – Nông dân trở thành chuyên gia), quy trình chăm sóc vườn sầu riêng năm 2026 tại HTX Cư Né đặt trọng tâm vào cải tạo đất sinh học và vệ sinh đồng ruộng.",
       sections: [
         {
-          heading: "Công thức bón phân theo chu kỳ phát triển",
+          heading: "Phương pháp ủ phân chuồng hoai mục với vi sinh vật đối kháng",
           paragraphs: [
-            "Cây sầu riêng là loài cây ăn quả 'khó tính', đòi hỏi chế độ dinh dưỡng phân tầng rõ rệt tùy theo từng giai đoạn sinh trưởng:",
+            "Để phòng ngừa hiệu quả nấm Phytophthora palmivora và Phytopythium vexans gây xì mủ, vàng lá thối rễ, bà con thực hiện ủ trộn chế phẩm sinh học trước khi bón:",
           ],
           bulletPoints: [
-            "Giai đoạn phục hồi sau thu hoạch: Ưu tiên 20-30kg phân chuồng hoai mục + chế phẩm vi sinh/cây, kết hợp NPK tỷ lệ 20-20-15 để tái tạo bộ rễ mới.",
-            "Giai đoạn đón hoa và nhú mắt cua: Giảm đạm, tăng lân hữu hiệu (DAP hoặc Lân nung chảy) để mầm hoa mập mạp, sáng màu.",
-            "Giai đoạn nuôi trái non: Bổ sung định kỳ Canxi-Bo và Kali hữu cơ dạng phun sương nhẹ vào chiều mát để cuống trái dẻo dai, chống sốc rụng trái non.",
+            "Tỷ lệ ủ trộn: Dùng 3 kg chế phẩm vi sinh đối kháng (Trichoderma spp., Bacillus spp., Streptomyces spp. mật độ ≥ 10⁸ bào tử/g) trộn đều với 1 tấn phân chuồng hoai mục trước khi bón 7 – 10 ngày.",
+            "Kiểm soát độ ẩm 50% – 60%: Bóp chặt nắm phân trong tay thấy nước rỉ qua kẽ tay là đạt yêu cầu (nước chảy thành dòng là quá ẩm, xòe tay vỡ rời là quá khô), sau đó phủ kín đống ủ bằng bạt.",
+            "Thời điểm & cách bón: Bón vào đất vùng rễ theo hình chiếu tán cây hoặc giữa 2 hàng khi cây đã giao tán rồi phủ lớp đất mặt lên trên vào thời điểm trước mùa mưa (tháng 4 đến đầu tháng 5). Kết hợp 50–100 kg phân hữu cơ + 100–150 g nấm rễ Arbuscular mycorrhizae/cây/năm để phòng đốm lá, thán thư.",
           ],
         },
         {
-          heading: "Lưu ý quan trọng khi phối hợp phân bón",
+          heading: "Lịch cắt tỉa và vệ sinh vườn theo mùa vụ",
           paragraphs: [
-            "Không bón phân chuồng tươi chưa qua xử lý vì dễ mang theo nguồn nấm tuyến trùng gây hại rễ tơ.",
-            "Tất cả các đợt bón phân đều phải ghi chép tên phân, liều lượng (kg/cây) và ngày bón vào Cổng hộ dân để phục vụ truy xuất tem QR sau này.",
+            "Tháng 9 – Tháng 10 (sau thu hoạch): Cắt bỏ và tiêu hủy cành khô, lá vàng, cành vượt, cành che bóng và tỉa tán cây trồng xen (cà phê, bơ) vào những ngày nắng ráo để vườn thông thoáng.",
+            "Tháng 1 – Tháng 2 (ra hoa rộ): Tỉa bỏ bớt chùm hoa mọc dày và những chùm hoa có rệp sáp bột hai tua dài; đào hố ở vị trí giao tán giữa 4 cây trước mùa mưa để thu gom tàn dư, lá rụng và tiêu hủy quả nhiễm bệnh thối nâu, thối đen.",
           ],
         },
       ],
       takeaway:
-        "Nuôi đất khỏe thì cây mới bền. Bón nhiều phân hóa học có thể kích cây nhanh nhưng đất sẽ chua và chai cứng, làm giảm tuổi thọ vườn sau 7-8 năm khai thác.",
+        "Mọi đợt bón phân, cắt tỉa và phun phòng sinh học cần được bà con cập nhật đầy đủ kèm ảnh chụp thực địa lên Cổng Nông hộ HTX Cư Né để đồng bộ hồ sơ truy xuất nguồn gốc.",
     },
   },
 ];
