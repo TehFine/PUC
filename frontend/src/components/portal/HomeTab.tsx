@@ -412,17 +412,15 @@ export default function HomeTab({
                   {household.code ? household.code.replace(/-H\d+$/i, "") : "—"}
                 </span>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  className="pt-hero-cta-btn"
-                  onClick={() => onNavigate("diary")}
-                  title="Mở nhật ký canh tác để ghi chép hoạt động"
-                >
-                  <span>Ghi nhật ký</span>
-                  <DetailArrowIcon className="pt-hero-cta-arrow" size={20} />
-                </button>
-              </div>
+              <button
+                type="button"
+                className="pt-hero-cta-btn"
+                onClick={() => onNavigate("diary")}
+                title="Mở nhật ký canh tác để ghi chép hoạt động"
+              >
+                <span>Ghi nhật ký</span>
+                <DetailArrowIcon className="pt-hero-cta-arrow" size={18} />
+              </button>
             </div>
           </div>
         </section>
