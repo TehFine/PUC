@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { todayIso } from "@/components/admin/catalog/form-utils";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { useApiList } from "@/hooks/use-api";
+import { api, errorMessage } from "@/lib/api-client";
 import type { VillageRecord } from "@/types/catalog";
 
 type ReportBackendType =
@@ -22,6 +23,14 @@ interface ReportSpec {
   title: string;
   desc: string;
   formats: string[];
+}
+
+interface ReportDataPayload {
+  type: ReportBackendType;
+  filename: string;
+  headers: string[];
+  rows: string[][];
+  total: number;
 }
 
 const REPORTS: ReportSpec[] = [
@@ -69,21 +78,335 @@ const REPORTS: ReportSpec[] = [
   },
 ];
 
-function firstDayOfYear(): string {
-  return `${new Date().getFullYear()}-01-01`;
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function csvCellClient(value: string): string {
+  const safe = /^[=+\-@\t\r\n|]/.test(value) || /^\s+[=+\-@|]/.test(value) ? `'${value}` : value;
+  if (/[",\r\n]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
+  }
+  return safe;
+}
+
+function buildCsvBlob(headers: string[], rows: string[][]): Blob {
+  const lines = [
+    headers.map(csvCellClient).join(","),
+    ...rows.map((r) => r.map(csvCellClient).join(",")),
+  ];
+  return new Blob([`\uFEFF${lines.join("\r\n")}\r\n`], { type: "text/csv;charset=utf-8;" });
+}
+
+function formatIsoToVn(iso: string): string {
+  if (!iso) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
+function openPrintableReport(
+  report: ReportSpec,
+  data: ReportDataPayload,
+  meta: { from: string; to: string; villageName: string },
+): boolean {
+  const win = window.open("", "_blank", "width=1080,height=800");
+  if (!win) return false;
+
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, "0");
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const year = now.getFullYear();
+
+  const dateRangeLabel =
+    meta.from && meta.to
+      ? `Từ ngày ${formatIsoToVn(meta.from)} đến ngày ${formatIsoToVn(meta.to)}`
+      : meta.from
+        ? `Từ ngày ${formatIsoToVn(meta.from)} đến nay`
+        : meta.to
+          ? `Tính đến ngày ${formatIsoToVn(meta.to)}`
+          : "Toàn bộ thời gian";
+
+  const theadHtml = data.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
+  const tbodyHtml =
+    data.rows.length === 0
+      ? `<tr><td colspan="${data.headers.length + 1}" style="text-align:center;padding:24px;color:#64748b;">Không có dữ liệu phù hợp trong khoảng lọc đã chọn.</td></tr>`
+      : data.rows
+          .map(
+            (row, idx) =>
+              `<tr><td style="text-align:center;font-weight:600;">${idx + 1}</td>${row
+                .map((cell) => `<td>${escapeHtml(cell || "—")}</td>`)
+                .join("")}</tr>`,
+          )
+          .join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(report.title)} - HTX Cư Né</title>
+  <style>
+    @page { size: A4 landscape; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Times New Roman", Times, serif;
+      color: #0f172a;
+      margin: 0;
+      padding: 20px 24px;
+      background: #fff;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .print-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px dashed #cbd5e1;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .print-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid #14372f;
+      background: #14372f;
+      color: #fff;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .print-btn.secondary {
+      background: #fff;
+      color: #14372f;
+    }
+    .doc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+      margin-bottom: 18px;
+    }
+    .doc-org, .doc-nation {
+      text-align: center;
+    }
+    .doc-org strong, .doc-nation strong {
+      display: block;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .doc-org span, .doc-nation span {
+      display: inline-block;
+      font-size: 12.5px;
+      font-weight: 700;
+      padding-bottom: 3px;
+      border-bottom: 1px solid #0f172a;
+      margin-top: 2px;
+    }
+    .doc-title-wrap {
+      text-align: center;
+      margin: 14px 0 16px;
+    }
+    .doc-title {
+      font-size: 19px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin: 0 0 6px;
+      color: #14372f;
+    }
+    .doc-meta {
+      font-size: 13px;
+      color: #334155;
+      margin: 2px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+    }
+    th, td {
+      border: 1px solid #475569;
+      padding: 7px 8px;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+    }
+    th {
+      background: #f1f5f9;
+      color: #0f172a;
+      font-weight: 700;
+      text-align: center;
+    }
+    tbody tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    .doc-summary {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .doc-Validations {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 26px;
+      page-break-inside: avoid;
+    }
+    .sig-box {
+      width: 42%;
+      text-align: center;
+    }
+    .sig-date {
+      font-style: italic;
+      font-size: 12.5px;
+      margin-bottom: 4px;
+    }
+    .sig-role {
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 13px;
+    }
+    .sig-note {
+      font-style: italic;
+      font-size: 12px;
+      color: #475569;
+      margin-bottom: 64px;
+    }
+    @media print {
+      .print-toolbar { display: none !important; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-toolbar">
+    <button type="button" class="print-btn" onclick="window.print()">In báo cáo / Lưu PDF</button>
+    <button type="button" class="print-btn secondary" onclick="window.close()">Đóng cửa sổ</button>
+  </div>
+  <div class="doc-header">
+    <div class="doc-org">
+      <strong>HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ</strong>
+      <span>HỆ THỐNG QUẢN LÝ VÙNG TRỒNG PUC</span>
+    </div>
+    <div class="doc-nation">
+      <strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong>
+      <span>Độc lập - Tự do - Hạnh phúc</span>
+    </div>
+  </div>
+  <div class="doc-title-wrap">
+    <h1 class="doc-title">${escapeHtml(report.title)}</h1>
+    <div class="doc-meta"><strong>Phạm vi khu vực:</strong> ${escapeHtml(meta.villageName)} &nbsp;|&nbsp; <strong>Kỳ báo cáo:</strong> ${escapeHtml(dateRangeLabel)}</div>
+    <div class="doc-meta">${escapeHtml(report.desc)}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:42px;">STT</th>
+        ${theadHtml}
+      </tr>
+    </thead>
+    <tbody>
+      ${tbodyHtml}
+    </tbody>
+  </table>
+  <div class="doc-summary">Tổng số bản ghi: ${data.total}</div>
+  <div class="doc-Validations">
+    <div class="sig-box">
+      <div class="sig-date">&nbsp;</div>
+      <div class="sig-role">Người lập biểu</div>
+      <div class="sig-note">(Ký, ghi rõ họ tên)</div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-date">Cư Né, ngày ${day} tháng ${month} năm ${year}</div>
+      <div class="sig-role">TM. Ban Giám Đốc HTX Cư Né</div>
+      <div class="sig-note">(Ký tên, đóng dấu)</div>
+    </div>
+  </div>
+  <script>
+    window.addEventListener("load", function() {
+      setTimeout(function() { window.print(); }, 250);
+    });
+  </script>
+</body>
+</html>`;
+
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  return true;
 }
 
 export default function Reports() {
   const villages = useApiList<VillageRecord>("villages");
   const [selectedReport, setSelectedReport] = useState<ReportSpec | null>(null);
-  const [from, setFrom] = useState<string>(firstDayOfYear);
+  const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>(todayIso);
   const [villageId, setVillageId] = useState<string>("");
   const [format, setFormat] = useState<"CSV" | "PDF">("CSV");
   const [downloading, setDownloading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<ReportDataPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const downloadReport = async (report: ReportSpec) => {
+  const buildQueryString = (extra?: Record<string, string>) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    if (villageId) params.set("villageId", villageId);
+    if (extra) {
+      for (const [k, v] of Object.entries(extra)) {
+        params.set(k, v);
+      }
+    }
+    const q = params.toString();
+    return q ? `?${q}` : "";
+  };
+
+  const dateRangeError =
+    from && to && from > to ? "Ngày bắt đầu không được lớn hơn ngày kết thúc." : null;
+
+  // Tự động tải dữ liệu xem trước khi mở modal hoặc đổi bộ lọc
+  useEffect(() => {
+    if (!selectedReport || dateRangeError) {
+      return;
+    }
+    let active = true;
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    if (villageId) params.set("villageId", villageId);
+    params.set("format", "json");
+
+    Promise.resolve()
+      .then(() => {
+        if (active) {
+          setPreviewLoading(true);
+          setError(null);
+        }
+        return api.get<ReportDataPayload>(`/reports/${selectedReport.type}?${params.toString()}`);
+      })
+      .then((res) => {
+        if (active) setPreviewData(res);
+      })
+      .catch((err) => {
+        if (active) setError(errorMessage(err, "Không tải được dữ liệu báo cáo."));
+      })
+      .finally(() => {
+        if (active) setPreviewLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedReport, from, to, villageId, dateRangeError]);
+
+  const handleExport = async (report: ReportSpec, targetFormat: "CSV" | "PDF") => {
     if (from && to && from > to) {
       setError("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
       return;
@@ -91,38 +414,43 @@ export default function Reports() {
     setError(null);
     setDownloading(true);
     try {
-      const params = new URLSearchParams();
-      if (from) params.set("from", from);
-      if (to) params.set("to", to);
-      if (villageId) params.set("villageId", villageId);
-      const query = params.toString();
-      const url = `/api/reports/${report.type}${query ? `?${query}` : ""}`;
+      const data =
+        previewData && previewData.type === report.type
+          ? previewData
+          : await api.get<ReportDataPayload>(
+              `/reports/${report.type}${buildQueryString({ format: "json", audit: "1" })}`,
+            );
 
-      const response = await fetch(url, {
-        method: "GET",
-        credentials: "same-origin",
-        cache: "no-store",
-      });
+      const selectedVillageName =
+        villages.rows.find((v) => String(v.id) === villageId)?.name || "Tất cả thôn / tổ";
 
-      if (!response.ok) {
-        const errBody = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(errBody?.error || "Không xuất được báo cáo.");
+      if (targetFormat === "PDF") {
+        const opened = openPrintableReport(report, data, {
+          from,
+          to,
+          villageName: selectedVillageName,
+        });
+        if (!opened) {
+          throw new Error("Trình duyệt đã chặn cửa sổ bật lên. Vui lòng cho phép mở cửa sổ in.");
+        }
+        toast.success(`Đã mở bản in / PDF cho "${report.title}" (${data.total} bản ghi).`);
+        setSelectedReport(null);
+      } else {
+        const blob = buildCsvBlob(data.headers, data.rows);
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = `bao-cao-${report.type}-${to || todayIso()}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+
+        toast.success(`Đã tải xuống CSV "${report.title}" (${data.total} bản ghi).`);
+        setSelectedReport(null);
       }
-
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = `bao-cao-${report.type}-${to || todayIso()}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(objectUrl);
-
-      toast.success(`Đã tải xuống báo cáo "${report.title}".`);
-      setSelectedReport(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Không tải được báo cáo.";
+      const msg = errorMessage(err, "Không xuất được báo cáo.");
       setError(msg);
       toast.error(msg);
     } finally {
@@ -171,12 +499,14 @@ export default function Reports() {
             style={{ textAlign: "left", width: "100%", cursor: "pointer" }}
             onClick={() => {
               setError(null);
+              setFormat("CSV");
               setSelectedReport(r);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 setError(null);
+                setFormat("CSV");
                 setSelectedReport(r);
               }
             }}
@@ -211,7 +541,7 @@ export default function Reports() {
         <Modal
           title={selectedReport.title}
           onClose={() => !downloading && setSelectedReport(null)}
-          width={500}
+          width={680}
           footer={
             <>
               <button
@@ -225,17 +555,21 @@ export default function Reports() {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={downloading}
-                onClick={() => void downloadReport(selectedReport)}
+                disabled={downloading || previewLoading}
+                onClick={() => void handleExport(selectedReport, format)}
               >
-                {downloading ? "Đang xuất tệp…" : "Tải xuống CSV"}
+                {downloading
+                  ? "Đang xử lý…"
+                  : format === "PDF"
+                    ? `In báo cáo / Lưu PDF (${previewData?.total ?? 0})`
+                    : `Tải xuống CSV (${previewData?.total ?? 0})`}
               </button>
             </>
           }
         >
           <p style={{ marginTop: 0, fontSize: 13.5, color: "var(--text-secondary)" }}>{selectedReport.desc}</p>
           <FormGrid>
-            <TextField label="Từ ngày" type="date" value={from} onChange={setFrom} />
+            <TextField label="Từ ngày (để trống = tất cả)" type="date" value={from} onChange={setFrom} />
             <TextField label="Đến ngày" type="date" value={to} onChange={setTo} />
           </FormGrid>
           <SelectField
@@ -255,12 +589,96 @@ export default function Reports() {
                   className={`fmt-btn ${format === f ? "active" : ""}`}
                   onClick={() => setFormat(f)}
                 >
-                  {f === "CSV" ? "CSV (Excel UTF-8)" : "CSV chuẩn in"}
+                  {f === "CSV" ? "CSV (Excel UTF-8)" : "In / Xuất PDF (Mẫu A4 HTX Cư Né)"}
                 </button>
               ))}
             </div>
           </div>
-          <FormError message={error} />
+
+          <div
+            style={{
+              marginTop: 12,
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              overflow: "hidden",
+              background: "#f8faf9",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "8px 12px",
+                borderBottom: "1px solid var(--border)",
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: "var(--ink)",
+                background: "#f1f5f3",
+              }}
+            >
+              <span>Xem trước dữ liệu báo cáo</span>
+              <span>
+                {previewLoading ? "Đang tải…" : `Tổng cộng: ${previewData?.total ?? 0} bản ghi`}
+              </span>
+            </div>
+            <div style={{ maxHeight: 210, overflow: "auto" }}>
+              {previewLoading ? (
+                <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--text-muted)" }}>
+                  Đang tổng hợp dữ liệu báo cáo…
+                </div>
+              ) : !previewData || previewData.rows.length === 0 ? (
+                <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--text-muted)" }}>
+                  Chưa có bản ghi nào trong khoảng thời gian / thôn đã chọn.
+                </div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {previewData.headers.map((h) => (
+                        <th
+                          key={h}
+                          style={{
+                            padding: "7px 10px",
+                            textAlign: "left",
+                            borderBottom: "1px solid var(--border)",
+                            background: "#fff",
+                            whiteSpace: "nowrap",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewData.rows.slice(0, 8).map((row, rIdx) => (
+                      <tr key={rIdx}>
+                        {row.map((cell, cIdx) => (
+                          <td
+                            key={cIdx}
+                            style={{
+                              padding: "6px 10px",
+                              borderBottom: "1px solid rgba(20,55,47,0.06)",
+                              whiteSpace: "nowrap",
+                              maxWidth: 220,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
+                            {cell || "—"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          <FormError message={dateRangeError || error} />
         </Modal>
       )}
     </>
