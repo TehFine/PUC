@@ -46,7 +46,12 @@ export default function ResponsiveTables() {
           const node = added[j];
           if (node.nodeType === 1) {
             const el = node as Element;
-            if (el.tagName === "TABLE" || el.querySelector?.("table")) {
+            if (
+              el.tagName === "TABLE" ||
+              el.tagName === "TBODY" ||
+              el.tagName === "TR" ||
+              el.querySelector?.("table, tbody, tr")
+            ) {
               hasTableMutation = true;
               break;
             }

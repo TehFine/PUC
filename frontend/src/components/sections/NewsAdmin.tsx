@@ -102,104 +102,100 @@ export default function NewsAdmin() {
       </div>
 
       {/* Bộ lọc & Danh sách bài viết */}
-      <div className="card" style={{ padding: 0, overflow: "hidden", marginTop: 20 }}>
-        <div className="filter-bar" style={{ padding: "14px 18px", marginBottom: 0, borderBottom: "1px solid var(--border)" }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <input
-              type="text"
-              className="filter-input"
-              placeholder="Tìm kiếm bài viết theo tiêu đề, tác giả, tóm tắt..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <select className="filter-select" value={selectedCat} onChange={(e) => setSelectedCat(e.target.value)}>
-            {NEWS_CATEGORIES.map((c) => (
-              <option key={c.id} value={c.id === "all" ? "" : c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-          <select className="filter-select" value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
-            <option value="">Mọi trạng thái</option>
-            <option value="published">Đã xuất bản</option>
-            <option value="draft">Bản nháp</option>
-          </select>
-          <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-            Hiển thị <strong>{newsList.rows.length}</strong> bài viết
-          </span>
+      <div className="filter-bar" style={{ marginTop: 16 }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="Tìm kiếm bài viết theo tiêu đề, tác giả, tóm tắt..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
+        <select className="filter-select" value={selectedCat} onChange={(e) => setSelectedCat(e.target.value)}>
+          {NEWS_CATEGORIES.map((c) => (
+            <option key={c.id} value={c.id === "all" ? "" : c.id}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <select className="filter-select" value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
+          <option value="">Mọi trạng thái</option>
+          <option value="published">Đã xuất bản</option>
+          <option value="draft">Bản nháp</option>
+        </select>
+        <span className="filter-bar-count">
+          Hiển thị <strong>{newsList.rows.length}</strong> bài viết
+        </span>
+      </div>
 
-        <div className="table-wrap" style={{ border: "none", borderRadius: 0, boxShadow: "none" }}>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 80 }}>Hình ảnh</th>
-                <th>Tiêu đề &amp; Tóm tắt</th>
-                <th style={{ width: 165 }}>Chuyên mục</th>
-                <th style={{ width: 120 }}>Ngày đăng</th>
-                <th style={{ width: 150 }}>Tác giả</th>
-                <th style={{ width: 120 }}>Trạng thái</th>
-                <th style={{ width: 220, textAlign: "right" }}>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              <ListStatusRow
-                colSpan={7}
-                loading={newsList.loading}
-                error={newsList.error}
-                empty={newsList.rows.length === 0}
-                emptyText="Không tìm thấy bài viết nào phù hợp."
-                onRetry={newsList.refresh}
-              />
-              {newsList.rows.map((article) => {
-                const catMeta = NEWS_CATEGORY_META[article.category] ?? NEWS_CATEGORY_META.visit;
-                const imgSrc = article.imageUrl || "/landing/news-field-visit.jpg";
-                const isPublished = article.status === "published";
+      <div className="table-wrap">
+        <table className="news-admin-table">
+          <thead>
+            <tr>
+              <th style={{ width: 80 }}>Hình ảnh</th>
+              <th>Tiêu đề &amp; Tóm tắt</th>
+              <th style={{ width: 165 }}>Chuyên mục</th>
+              <th style={{ width: 120 }}>Ngày đăng</th>
+              <th style={{ width: 150 }}>Tác giả</th>
+              <th style={{ width: 120 }}>Trạng thái</th>
+              <th style={{ width: 220, textAlign: "right" }}>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            <ListStatusRow
+              colSpan={7}
+              loading={newsList.loading}
+              error={newsList.error}
+              empty={newsList.rows.length === 0}
+              emptyText="Không tìm thấy bài viết nào phù hợp."
+              onRetry={newsList.refresh}
+            />
+            {newsList.rows.map((article) => {
+              const catMeta = NEWS_CATEGORY_META[article.category] ?? NEWS_CATEGORY_META.visit;
+              const imgSrc = article.imageUrl || "/landing/news-field-visit.jpg";
+              const isPublished = article.status === "published";
 
-                return (
-                  <tr key={article.id}>
-                    <td>
-                      <div
-                        style={{
-                          width: 68,
-                          height: 48,
-                          borderRadius: 8,
-                          overflow: "hidden",
-                          border: "1px solid var(--border)",
-                          background: "#f4f6f3",
-                        }}
-                      >
+              return (
+                <tr key={article.id}>
+                  <td className="news-admin-thumb-cell">
+                    <div
+                      style={{
+                        width: 68,
+                        height: 48,
+                        borderRadius: 8,
+                        overflow: "hidden",
+                        border: "1px solid var(--border)",
+                        background: "#f4f6f3",
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imgSrc}
+                        alt={article.imageAlt || article.title}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    </div>
+                  </td>
+                  <td className="news-admin-main-cell">
+                    <div className="news-admin-main-wrap">
+                      <div className="news-admin-mobile-thumb">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={imgSrc}
-                          alt={article.imageAlt || article.title}
-                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        />
+                        <img src={imgSrc} alt={article.imageAlt || article.title} />
                       </div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: 14, marginBottom: 3 }}>
-                        {article.featured && (
-                          <span className="badge badge-gold" style={{ marginRight: 6, fontSize: 10 }}>
-                            Tiêu điểm
-                          </span>
-                        )}
-                        {article.title}
+                      <div className="news-admin-main-text">
+                        <div className="news-admin-title-line">
+                          {article.featured && (
+                            <span className="badge badge-gold news-admin-featured-badge">
+                              Tiêu điểm
+                            </span>
+                          )}
+                          <span className="news-admin-title">{article.title}</span>
+                        </div>
+                        <div className="news-admin-excerpt">{article.excerpt}</div>
                       </div>
-                      <div
-                        style={{
-                          fontSize: 12.5,
-                          color: "var(--text-muted)",
-                          display: "-webkit-box",
-                          WebkitLineClamp: 1,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {article.excerpt}
-                      </div>
-                    </td>
+                    </div>
+                  </td>
                     <td>
                       <span className={`badge ${catMeta.badge}`}>{catMeta.label}</span>
                     </td>
@@ -252,7 +248,6 @@ export default function NewsAdmin() {
             </tbody>
           </table>
         </div>
-      </div>
 
       {editingArticle && (
         <NewsFormModal

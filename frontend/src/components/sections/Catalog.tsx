@@ -22,6 +22,7 @@ import {
   PesticideDetailModal,
   VarietyDetailModal,
 } from "@/components/portal/LearnTab";
+import { DISEASES_AND_PESTS_2026 } from "@/components/portal/ipm-2026-data";
 import "@/components/portal/portal.css";
 import { EmptyState, Sheet } from "@/components/portal/ui";
 import { Modal } from "@/components/ui/Modal";
@@ -260,12 +261,36 @@ export default function Catalog() {
 
       <div className="tab-bar">
         {[
-          { id: "pesticide", label: `Thuốc BVTV (${pesticides.total})` },
-          { id: "fertilizer", label: `Phân bón (${fertilizers.total})` },
-          { id: "variety", label: `Giống cây (${varieties.total})` },
-          { id: "diseases", label: "Sâu bệnh & IPM 2026" },
-          { id: "village", label: `Thôn / Tổ (${villages.total})` },
-          { id: "standards", label: "Tiêu chuẩn" },
+          {
+            id: "pesticide",
+            label:
+              pesticides.loading && pesticides.total === 0
+                ? "Thuốc BVTV"
+                : `Thuốc BVTV (${pesticides.total})`,
+          },
+          {
+            id: "fertilizer",
+            label:
+              fertilizers.loading && fertilizers.total === 0
+                ? "Phân bón"
+                : `Phân bón (${fertilizers.total})`,
+          },
+          {
+            id: "variety",
+            label:
+              varieties.loading && varieties.total === 0
+                ? "Giống cây"
+                : `Giống cây (${varieties.total})`,
+          },
+          { id: "diseases", label: `Sâu bệnh & IPM (${DISEASES_AND_PESTS_2026.length})` },
+          {
+            id: "village",
+            label:
+              villages.loading && villages.total === 0
+                ? "Thôn / Tổ"
+                : `Thôn / Tổ (${villages.total})`,
+          },
+          { id: "standards", label: `Tiêu chuẩn (${STANDARDS.length})` },
         ].map(({ id, label }) => (
           <button
             key={id}
