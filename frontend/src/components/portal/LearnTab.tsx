@@ -1,27 +1,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { invalidatePortal, usePortal, useSharedQuery } from "@/hooks/use-portal";
+import { invalidatePortal, useSharedQuery } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
 import { formatClock, PESTICIDE_STATUS, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
-import type { FertilizerDto, ListResponse, PesticideDto, TrainingDto, VarietyDto } from "@/types/api";
-import { listOf, type PortalListLike, type PortalTrainingCourse } from "@/types/portal";
+import type { FertilizerDto, ListResponse, PesticideDto, VarietyDto } from "@/types/api";
 import {
   Check,
-  Clock,
   Search,
 } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import type { PortalAction } from "./PortalSearch";
+import {
+  CARE_PROCESS_2026,
+  DISEASES_AND_PESTS_2026,
+  IPM_2026_PRINCIPLES,
+  type DiseaseOrPestItem,
+} from "./ipm-2026-data";
 import { getTrainingKicker, usePortalTrainings, type TrainingCourseItem } from "./training-shared";
 import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
 import { Card, EmptyState, Pill, SectionDivider, Sheet, StateBlock } from "./ui";
 
 export { getTrainingKicker, usePortalTrainings, type TrainingCourseItem };
 
-type View = "pesticides" | "fertilizers" | "varieties";
+type View = "pesticides" | "fertilizers" | "varieties" | "diseases";
 type StatusFilter = "all" | "allowed" | "restricted" | "banned";
 type FertilizerFilter = "all" | "organic" | "npk" | "foliar" | "microbial" | "restricted";
 type VarietyFilter = "all" | "export" | "native" | "premium" | "new";
@@ -143,7 +147,7 @@ function getTrainingDetailedInfo(title: string) {
   }
   if (lower.includes("phần mềm") || lower.includes("quản lý") || lower.includes("hướng dẫn")) {
     return {
-      summary: "Hướng dẫn chi tiết cách cài đặt, đăng nhập và sử dụng hệ thống số hóa nhật ký canh tác PUC Krông Búk trên điện thoại.",
+      summary: "Hướng dẫn chi tiết cách cài đặt, đăng nhập và sử dụng hệ thống số hóa nhật ký canh tác PUC HTX Cư Né trên điện thoại.",
       modules: [
         {
           title: "Cài đặt & đăng nhập tài khoản nông hộ",
@@ -162,7 +166,7 @@ function getTrainingDetailedInfo(title: string) {
     };
   }
   return {
-    summary: "Chương trình tập huấn nâng cao năng lực canh tác, chất lượng nông sản và ứng dụng khoa học kỹ thuật cho nông dân HTX Krông Búk.",
+    summary: "Chương trình tập huấn nâng cao năng lực canh tác, chất lượng nông sản và ứng dụng khoa học kỹ thuật cho nông dân HTX Cư Né.",
     modules: [
       {
         title: "Tổng quan tiêu chuẩn kỹ thuật & quy định mới",
@@ -545,7 +549,15 @@ export function getPesticideImage(item: { status: string; name?: string; id?: nu
   if (item.status === "banned") return "/pesticides/red.png";
   if (item.status === "restricted") return "/pesticides/amber.png";
   const name = (item.name ?? "").toLowerCase();
-  if (name.includes("buprofezin") || name.includes("imidacloprid")) {
+  if (
+    name.includes("buprofezin") ||
+    name.includes("imidacloprid") ||
+    name.includes("abt") ||
+    name.includes("trắng xanh") ||
+    name.includes("bitadin") ||
+    name.includes("trichoderma") ||
+    name.includes("sinh học")
+  ) {
     return "/pesticides/green.png";
   }
   return "/pesticides/blue.png";
@@ -563,14 +575,300 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
   const name = (item.name || "").toLowerCase();
   const active = (item.activeIngredient || "").toLowerCase();
 
+  if (name.includes("abt 2wp") || (active.includes("abamectin") && active.includes("kurstaki"))) {
+    return {
+      usage:
+        "Thuốc BVTV sinh học phối hợp hoạt chất sinh học Abamectin 9g/kg và vi khuẩn Bacillus thuringiensis var. kurstaki 11g/kg theo quy trình IPM Viện Bảo vệ Thực vật (2026), diệt trừ hiệu quả cả nhóm chích hút và sâu đục quả mà an toàn cho thiên địch.",
+      targets: [
+        "Rệp sáp bột hai tua dài (Ferrisia virgata)",
+        "Rầy nhảy hại búp và lá non (Allocaridara malayensis)",
+        "Sâu đục quả sầu riêng (Conogethes punctiferalis)",
+        "Nhện đỏ, bọ vòi voi và sâu ăn bông",
+      ],
+      stage: "Giai đoạn cây ra lộc non (tháng 6–9) và giai đoạn ra hoa, đậu quả, nuôi quả (tháng 3–8)",
+      dosage: "Pha theo khuyến cáo nhà sản xuất (15 – 25 g cho bình 25 lít nước; 150 – 200 g cho phuy 200 lít)",
+      instructions: [
+        "Phun sớm ngay khi mới phát hiện các ổ rệp sáp bột hai tua dài trên chùm hoa/quả non hoặc khi rầy nhảy chớm xuất hiện ở đọt non.",
+        "Phun ướt đều mặt dưới lá non, chùm hoa và kẽ quả vào lúc sáng sớm hoặc chiều mát.",
+        "Bảo tồn quần thể thiên địch tự nhiên (bọ mắt vàng, bọ rùa, nhện bắt mồi, ong ký sinh sâu non).",
+      ],
+    };
+  }
+  if (name.includes("trắng xanh") || active.includes("beauveria") || active.includes("metarhizium")) {
+    return {
+      usage:
+        "Chế phẩm nấm ký sinh côn trùng sinh học (Nấm trắng Beauveria bassiana 1×10⁹ bào tử/g + Nấm xanh Metarhizium anisopliae 0,5×10⁹ bào tử/g); bào tử nấm bám vào cơ thể sâu rầy, nảy mầm xuyên qua vỏ kitin gây chết tự nhiên và lây nhiễm sang cá thể khác.",
+      targets: [
+        "Rệp sáp bột hai tua dài (Ferrisia virgata) & Rệp sáp mềm (Pseudococcus sp.)",
+        "Rầy nhảy hại đọt non (Allocaridara malayensis)",
+        "Sâu đục quả sầu riêng (Conogethes punctiferalis)",
+        "Nhện đỏ, bọ vòi voi và mọt đục cành",
+      ],
+      stage: "Phun phòng định kỳ hoặc phun luân phiên/phối trộn giai đoạn ra lộc, ra hoa và đậu quả (tháng 3–9)",
+      dosage: "Pha 25 – 50 g cho bình 25 lít nước (200 – 400 g cho phuy 200 lít nước sạch)",
+      instructions: [
+        "Phun vào chiều mát hoặc ngày trời râm mát có độ ẩm cao để bào tử nấm phát triển mạnh nhất.",
+        "Theo Tài liệu IPM 2026, có thể sử dụng luân phiên khi phối trộn với Dinotefuran ≥ 89% (Sida 20WP) hoặc Acetamiprid ≥ 97% (Ascend 20SP) để tăng hiệu lực dập dịch rệp sáp và rầy nhảy.",
+        "Không pha chung với thuốc trừ nấm hóa học; cách ly tối thiểu 7–10 ngày nếu trước đó có phun thuốc trừ bệnh.",
+      ],
+    };
+  }
+  if (name.includes("bitadin") || active.includes("granulosis")) {
+    return {
+      usage:
+        "Chế phẩm sinh học thế hệ mới kết hợp vi khuẩn Bacillus thuringiensis var. kurstaki (16.000 IU) và virus nhân đa diện Granulosis virus (10⁸ PIB), gây nhiễm trùng đường ruột và tiêu diệt chuyên biệt sâu non bộ cánh phấn đục quả.",
+      targets: [
+        "Sâu đục quả sầu riêng (Conogethes punctiferalis)",
+        "Sâu róm sầu riêng (Euproctis subnota) & Sâu róm đường chỉ đỏ (E. scintillans)",
+        "Sâu khoang (Spodoptera litura) & Sâu cuốn lá",
+        "Hỗ trợ quản lý nhện đỏ và bọ vòi voi",
+      ],
+      stage: "Giai đoạn cây ra hoa và đậu quả (tháng 3 đến tháng 8), phun ngay khi sâu non mới nở chưa đục sâu vào vỏ quả",
+      dosage: "Pha 20 – 30 g cho bình 25 lít nước (200 g cho phuy 200 lít nước)",
+      instructions: [
+        "Phun ướt kỹ bề mặt chùm quả non, kẽ tiếp giáp giữa các quả trong chùm vào chiều mát.",
+        "Theo Tài liệu IPM 2026, khuyến cáo sử dụng luân phiên khi phối trộn: Spirotetramat ≥ 96% (Movento 150OD) + Bitadin WP để quản lý đồng thời sâu đục quả, rệp sáp và rầy nhảy.",
+        "An toàn tuyệt đối cho ong thụ phấn, thiên địch và không để lại dư lượng hóa học trên quả.",
+      ],
+    };
+  }
+  if (name.includes("trichoderma") || active.includes("streptomyces") || active.includes("bacillus spp")) {
+    return {
+      usage:
+        "Tổ hợp 3 nhóm vi sinh vật đối kháng mật độ cao (Nấm Trichoderma spp. ≥ 10⁸ bào tử/g + Vi khuẩn Bacillus spp. ≥ 10⁸ bào tử/g + Xạ khuẩn Streptomyces spp. ≥ 10⁸ bào tử/g) dùng phun phòng bệnh héo ngọn và ủ phân chuồng kiểm soát bệnh xì mủ, vàng lá thối rễ.",
+      targets: [
+        "Bệnh héo ngọn / chết ngược cành (Diaporthe durionigena, Lasiodiplodia theobromae)",
+        "Bệnh xì mủ thân, cành (Phytophthora palmivora)",
+        "Bệnh vàng lá thối rễ (Phytopythium vexans, Phytophthora palmivora, Fusarium sp.)",
+        "Bệnh đốm lá (Phomopsis durionis) & Thán thư (Colletotrichum siamense)",
+      ],
+      stage: "Phun lá cuối mùa mưa (tháng 11) phòng héo ngọn; ủ phân chuồng bón gốc trước mùa mưa (tháng 4 – đầu tháng 5)",
+      dosage: "Phun lá: Pha tỷ lệ 1:1000 với nước sạch · Ủ phân chuồng: 3 kg chế phẩm / 1 tấn phân chuồng hoai mục",
+      instructions: [
+        "Phòng bệnh héo ngọn: Pha chế phẩm với nước sạch tỷ lệ 1:1000 sao cho tan đều, phun ướt đều mặt lá vào chiều mát khi trời khô ráo vào cuối mùa mưa (tháng 11).",
+        "Phòng bệnh xì mủ & thối rễ: Ủ trộn 3 kg chế phẩm/tấn phân chuồng hoai mục trước khi bón 7–10 ngày ở độ ẩm 50–60% (bóp chặt tay thấy nước rỉ qua kẽ tay), phủ kín bạt tới khi bón vào vùng rễ theo hình chiếu tán cây.",
+        "Áp dụng đồng bộ cho cả vườn chưa biểu hiện bệnh và vườn đang có cây bị bệnh xì mủ.",
+      ],
+    };
+  }
+  if (name.includes("acrobat") || active.includes("dimethomorph")) {
+    return {
+      usage:
+        "Thuốc trừ bệnh hỗn hợp nội hấp và tiếp xúc (Dimethomorph 90g/kg + Mancozeb 600g/kg), phá hủy quá trình hình thành vách tế bào nấm bệnh, đặc trị bệnh héo ngọn và bệnh xì mủ trên sầu riêng theo phác đồ Viện BVTV 2026.",
+      targets: [
+        "Bệnh héo ngọn / chết ngược cành (Diaporthe durionigena)",
+        "Bệnh xì mủ thân, cành (Phytophthora palmivora)",
+        "Bệnh tàn rụi lá & Bệnh thối nâu quả (Phytophthora palmivora)",
+      ],
+      stage: "Bệnh héo ngọn: Tháng 11 – tháng 2 (khi tỷ lệ bệnh ≥ 5%) · Bệnh xì mủ: Mùa mưa (tháng 5 – tháng 11)",
+      dosage: "Phun lá: Pha theo khuyến cáo nhà sản xuất tùy tuổi cây · Quét thân: Pha đậm đặc quét lên vết bệnh đã cạo",
+      instructions: [
+        "Đối với bệnh héo ngọn: Khi thấy rụng lá và khô đầu cành từ đỉnh ngọn xuống với tỷ lệ bệnh ≥ 5%, cắt bỏ cành bệnh nặng và phun ướt đều mặt lá vào sáng sớm hoặc chiều mát 2 lần cách nhau 7 – 10 ngày.",
+        "Đối với bệnh xì mủ: Cạo sạch lớp vỏ ngoài ở vị trí xì mủ (loại bỏ toàn bộ mô bệnh chết, thối mục), sau đó quét thuốc lên phần mặt đã cạo kết hợp tiêm thân Agri-Fos 400SL.",
+        "Tuân thủ thời gian cách ly tối thiểu 14 ngày trước khi thu hoạch.",
+      ],
+    };
+  }
+  if (name.includes("agri-fos") || active.includes("phosphorous acid")) {
+    return {
+      usage:
+        "Thuốc trừ bệnh lưu dẫn 2 chiều (lên ngọn và xuống rễ) chứa hoạt chất Phosphorous acid 400 g/l, trực tiếp tiêu diệt sợi nấm Phytophthora và kích hoạt hệ thống kháng bệnh chủ động của cây sầu riêng.",
+      targets: [
+        "Bệnh xì mủ thân, cành (Phytophthora palmivora)",
+        "Bệnh vàng lá thối rễ (Phytophthora palmivora, Phytopythium vexans)",
+        "Bệnh thối nâu quả & Bệnh tàn rụi",
+      ],
+      stage: "Mùa mưa (tháng 5 – tháng 11) hoặc ngay khi phát hiện vết nứt chảy nhựa trên thân chính, cành cấp 1",
+      dosage: "Tiêm trực tiếp vào thân cây theo liều lượng khuyến cáo của nhà sản xuất (chỉ tiêm cây đường kính thân ≥ 15 cm)",
+      instructions: [
+        "Chỉ áp dụng tiêm thân đối với những cây sầu riêng có đường kính thân ≥ 15 cm; tiêm 2 lần cách nhau 15 ngày và bắt buộc tiêm vào ngày khô ráo.",
+        "Kết hợp cạo sạch vết bệnh xì mủ trên vỏ thân và quét thuốc Metalaxyl-M + Mancozeb hoặc Acrobat MZ 90/600 WP bên ngoài.",
+        "Đối với những vườn sầu riêng có tỷ lệ bệnh xì mủ cao hơn 30%, cần tiêm Agri-Fos 400SL vào thân đối với cả cây bị bệnh và cây chưa bị bệnh.",
+      ],
+    };
+  }
+  if (name.includes("ridomil") || active.includes("metalaxyl")) {
+    return {
+      usage:
+        "Thuốc trừ nấm bệnh phổ rộng kết hợp hoạt chất nội hấp cực mạnh Metalaxyl-M (40g/kg) và tiếp xúc bảo vệ Mancozeb (640g/kg), chuyên dùng quét vết bệnh xì mủ và phun luân phiên trừ bệnh đốm lá, thán thư.",
+      targets: [
+        "Bệnh xì mủ thân, gốc rễ (Phytophthora palmivora)",
+        "Bệnh đốm lá (Phomopsis durionis) & Bệnh thán thư (Colletotrichum siamense)",
+        "Bệnh tàn rụi lá & Bệnh thối nâu quả",
+      ],
+      stage: "Quét thân mùa mưa (tháng 5–11) hoặc phun luân phiên lần 1, lần 2 khi cây ra lá non phòng đốm lá, thán thư",
+      dosage: "Phun tán lá: 400 – 500 g / phuy 200 lít nước · Quét vết bệnh: Pha 25 – 30 g / 1 lít nước quét lên vết cạo",
+      instructions: [
+        "Khi xử lý xì mủ: Cạo sạch vỏ bệnh thối mục, quét dung dịch thuốc lên mặt vết cạo vào ngày tạnh ráo.",
+        "Khi phòng trừ đốm lá, thán thư: Phun luân phiên trong phác đồ 3 lần (cách nhau 7–10 ngày) cùng với Propineb, Metiram complex và Trifloxystrobin + Tebuconazole.",
+        "Ngừng sử dụng tối thiểu 14 ngày trước khi thu hoạch để đảm bảo an toàn dư lượng xuất khẩu.",
+      ],
+    };
+  }
+  if (name.includes("anvil") || name.includes("huivil") || active.includes("hexaconazole")) {
+    return {
+      usage:
+        "Thuốc trừ nấm nội hấp nhóm Triazole (Hexaconazole ≥ 85%), thấm sâu nhanh và kìm hãm tổng hợp ergosterol màng tế bào nấm, đặc trị bệnh héo ngọn (chết ngược cành), đốm lá, thán thư và nấm hồng.",
+      targets: [
+        "Bệnh héo ngọn / chết ngược cành (Diaporthe durionigena, Lasiodiplodia theobromae)",
+        "Bệnh đốm lá (Phomopsis durionis) & Bệnh thán thư (Colletotrichum siamense)",
+        "Bệnh nấm hồng hại cành (Corticium salmonicolor) & Bệnh thối đen quả",
+      ],
+      stage: "Giai đoạn bệnh héo ngọn phát triển mạnh (tháng 11 – tháng 2) hoặc lần phun thứ 3 trừ bệnh đốm lá, thán thư",
+      dosage: "Pha 200 – 300 ml cho phuy 200 lít nước (25 – 35 ml / bình 25 lít), phun ướt đều 2 mặt lá và cành",
+      instructions: [
+        "Đối với bệnh héo ngọn: Khi tỷ lệ cành rụng lá, khô ngọn ≥ 5%, cắt bỏ cành bệnh nặng và phun 2 lần cách nhau 7–10 ngày vào sáng sớm hoặc chiều mát.",
+        "Đối với bệnh đốm lá, thán thư: Sử dụng ở lần phun thứ 3 (sau 2 lần phun Propineb / Mancozeb+Metalaxyl-M) để khóa chặt mầm bệnh giúp bộ lá bánh tẻ xanh dày.",
+      ],
+    };
+  }
+  if (name.includes("nativo") || active.includes("trifloxystrobin") || active.includes("tebuconazole")) {
+    return {
+      usage:
+        "Thuốc trừ nấm thế hệ mới phối hợp hai hoạt chất Trifloxystrobin và Tebuconazole, tác động kép vừa bảo vệ bề mặt vừa nội hấp diệt trừ tận gốc nấm gây bệnh đốm lá, thán thư và thối đen quả.",
+      targets: [
+        "Bệnh đốm lá sầu riêng (Phomopsis durionis)",
+        "Bệnh thán thư lá non (Colletotrichum siamense)",
+        "Bệnh thối đen quả (Lasiodiplodia theobromae) & Héo ngọn",
+      ],
+      stage: "Phun luân phiên 3 lần (cách nhau 7–10 ngày) giai đoạn cây ra cơi đọt non và dưỡng bộ lá",
+      dosage: "Pha 100 – 120 g cho phuy 200 lít nước (12 – 15 g / bình 25 lít nước)",
+      instructions: [
+        "Sử dụng luân phiên trong quy trình 3 lần phun phòng trừ bệnh đốm lá và thán thư theo hướng dẫn của Viện BVTV 2026.",
+        "Lưu ý ở lần phun thứ 2 khi cây đang ra đọt non: Nên kết hợp phun trừ thêm nhóm côn trùng chích hút (Nitenpyram + Buprofezin) để bảo vệ đọt toàn diện.",
+      ],
+    };
+  }
+  if (name.includes("antracol") || active.includes("propineb") || active.includes("metiram")) {
+    return {
+      usage:
+        "Thuốc trừ nấm tiếp xúc phổ rộng chứa hoạt chất Propineb (và vi lượng kẽm Zn++ dễ tiêu), tạo lớp màng áo giáp bảo vệ lá non chống lại sự nảy mầm của bào tử nấm đốm lá và thán thư.",
+      targets: [
+        "Bệnh đốm lá (Phomopsis durionis)",
+        "Bệnh thán thư lá (Colletotrichum siamense)",
+        "Bệnh đốm rong và bổ sung vi lượng Kẽm giúp lá xanh dày",
+      ],
+      stage: "Phun ở Lần 1 và Lần 2 (cách nhau 7–10 ngày) khi cây vừa mở lá non",
+      dosage: "Pha 400 – 500 g cho phuy 200 lít nước (50 g / bình 25 lít nước)",
+      instructions: [
+        "Phun ướt đều 2 mặt lá non ở lần 1 và lần 2; đến lần 3 chuyển sang phun Hexaconazole hoặc Trifloxystrobin + Tebuconazole.",
+        "Không pha chung với các loại thuốc có tính kiềm mạnh (như dung dịch Bordeaux hoặc vôi).",
+      ],
+    };
+  }
+  if (name.includes("movento") || active.includes("spirotetramat")) {
+    return {
+      usage:
+        "Thuốc trừ sâu rầy lưu dẫn 2 chiều duy nhất hiện nay (Spirotetramat ≥ 96%), vận chuyển qua cả mạch gỗ và mạch nhựa đến tận các kẽ quả, chùm hoa và rễ để tiêu diệt triệt để rệp sáp, rầy nhảy và sâu đục quả.",
+      targets: [
+        "Rệp sáp bột hai tua dài (Ferrisia virgata) & Rệp sáp mềm (Pseudococcus sp.)",
+        "Rầy nhảy hại búp và lá non (Allocaridara malayensis)",
+        "Sâu đục quả sầu riêng (Conogethes punctiferalis)",
+        "Bọ trĩ hại hoa và đọt non (Scirtothrips dorsalis)",
+      ],
+      stage: "Giai đoạn ra lộc non (tháng 6–9) và giai đoạn ra hoa, đậu quả (tháng 3–8) ngay khi phát hiện ổ rệp/sâu",
+      dosage: "Pha 150 – 200 ml cho phuy 200 lít nước (20 ml / bình 25 lít nước)",
+      instructions: [
+        "Theo Tài liệu IPM 2026: Sử dụng luân phiên với Penalty 40WP (Acetamiprid + Buprofezin) và Sida 20WP (Dinotefuran).",
+        "Công thức phối trộn sinh học – hóa học khuyến cáo: Spirotetramat ≥ 96% (Movento 150OD) + Bacillus thuringiensis var. kurstaki 16.000 IU + Granulosis virus 10⁸ PIB (Bitadin WP).",
+        "Có thể kết hợp với dầu khoáng để tăng độ bám dính và hiệu quả diệt rệp sáp ẩn trong rãnh gai quả.",
+      ],
+    };
+  }
+  if (name.includes("penalty") || (active.includes("acetamiprid") && active.includes("buprofezin"))) {
+    return {
+      usage:
+        "Thuốc đặc trị rầy rệp và sâu đục quả kết hợp hoàn hảo 2 hoạt chất: Acetamiprid 20% (lưu dẫn, tiếp xúc hạ gục nhanh thành trùng) và Buprofezin 20% (ức chế lột xác diệt ấu trùng và làm ung trứng).",
+      targets: [
+        "Rệp sáp bột hai tua dài (Ferrisia virgata)",
+        "Rầy nhảy hại sầu riêng (Allocaridara malayensis)",
+        "Sâu đục quả sầu riêng (Conogethes punctiferalis)",
+        "Rầy xanh, bọ trĩ và rệp muội",
+      ],
+      stage: "Giai đoạn cây ra lộc non và giai đoạn ra hoa, đậu quả (tháng 3 đến tháng 8)",
+      dosage: "Pha 150 – 200 g cho phuy 200 lít nước (20 – 25 g / bình 25 lít nước)",
+      instructions: [
+        "Phun sớm khi thấy xuất hiện các ổ rệp sáp trên cuống quả non hoặc khi rầy nhảy xuất hiện ở mặt dưới lá non.",
+        "Luân phiên với Movento 150OD (Spirotetramat) và Sida 20WP (Dinotefuran) để ngăn ngừa tính kháng thuốc của quần thể sâu hại.",
+      ],
+    };
+  }
+  if (name.includes("sida") || active.includes("dinotefuran")) {
+    return {
+      usage:
+        "Thuốc trừ sâu rầy nội hấp thế hệ thứ 3 (Dinotefuran ≥ 89%), thấm sâu cực nhanh qua lá và vỏ quả, tác động mạnh lên hệ thần kinh côn trùng chích hút và sâu đục quả.",
+      targets: [
+        "Rệp sáp bột hai tua dài (Ferrisia virgata)",
+        "Rầy nhảy hại búp và lá non (Allocaridara malayensis)",
+        "Sâu đục quả sầu riêng (Conogethes punctiferalis)",
+        "Bọ trĩ và rầy xanh",
+      ],
+      stage: "Giai đoạn cây ra lộc non và giai đoạn ra hoa, nuôi quả (tháng 3 – tháng 8)",
+      dosage: "Pha 100 – 150 g cho phuy 200 lít nước (15 – 20 g / bình 25 lít nước)",
+      instructions: [
+        "Công thức phối trộn sinh học – hóa học theo Tài liệu IPM 2026: Dinotefuran ≥ 89% (Sida 20WP) + Beauveria bassiana 1×10⁹ bào tử/g + Metarhizium anisopliae 0,5×10⁹ bào tử/g (Trắng xanh WP).",
+        "Phun vào sáng sớm hoặc chiều mát, tránh phun khi hoa đang xả nhụy để bảo vệ thiên địch và côn trùng thụ phấn.",
+      ],
+    };
+  }
+  if (name.includes("enspray") || active.includes("petroleum") || name.includes("confidor")) {
+    return {
+      usage:
+        "Phác đồ phối hợp thuốc nội hấp Imidacloprid ≥ 96% (Confidor 200SL) với Dầu khoáng tinh chế (Petroleum spray oil – SK Enspray 99EC) giúp làm ngạt thở rệp sáp, nhện đỏ, tăng bám dính và giảm lượng thuốc hóa học.",
+      targets: [
+        "Rệp sáp bột hai tua dài (Ferrisia virgata)",
+        "Rầy nhảy (Allocaridara malayensis) & Rầy xanh",
+        "Bọ trĩ (Scirtothrips dorsalis) & Nhện đỏ (Eutetranychus sp.)",
+      ],
+      stage: "Giai đoạn cây ra đọt non hoặc chớm xuất hiện ổ rệp sáp, nhện đỏ trên tán lá và quả non",
+      dosage: "Confidor 200SL (100–150 ml) + Dầu khoáng SK Enspray 99EC (300–400 ml) cho phuy 200 lít nước",
+      instructions: [
+        "Pha thuốc Imidacloprid tan đều trước, sau đó mới cho dầu khoáng vào khuấy đều và phun ngay.",
+        "Không phun khi trời nắng nóng trên 33°C hoặc khi cây đang bị suy kiệt, thiếu nước.",
+      ],
+    };
+  }
+  if (name.includes("ascend") || active.includes("acetamiprid")) {
+    return {
+      usage:
+        "Hoạt chất Acetamiprid ≥ 97% có khả năng thấm sâu và lưu dẫn mạnh, diệt trừ nhanh nhóm côn trùng chích hút kháng thuốc trên đọt non và quả sầu riêng.",
+      targets: [
+        "Rệp sáp bột hai tua dài (Ferrisia virgata)",
+        "Rầy nhảy hại búp và lá non (Allocaridara malayensis)",
+        "Bọ trĩ và rệp muội",
+      ],
+      stage: "Giai đoạn cây bung lộc non và giai đoạn nuôi quả non",
+      dosage: "Pha 100 – 150 g cho phuy 200 lít nước (15 – 20 g / bình 25 lít)",
+      instructions: [
+        "Theo Tài liệu IPM 2026, khuyến cáo phối trộn luân phiên: Acetamiprid ≥ 97% (Ascend 20SP) + Beauveria bassiana 1×10⁹ bào tử/g + Metarhizium anisopliae 0,5×10⁹ bào tử/g (Trắng xanh WP).",
+        "Phun ướt đều mặt dưới lá non và vùng cuống quả.",
+      ],
+    };
+  }
+  if (name.includes("acnipyram") || name.includes("nitensuper") || active.includes("nitenpyram")) {
+    return {
+      usage:
+        "Tổ hợp hoạt chất Nitenpyram (hạ gục tức thời rầy trưởng thành) và Buprofezin (diệt ấu trùng, ung trứng), chuyên dùng bảo vệ cơi đọt non kết hợp trong phác đồ phòng bệnh đốm lá, thán thư.",
+      targets: [
+        "Rầy nhảy hại đọt non (Allocaridara malayensis)",
+        "Rầy xanh (Cicadellidae sp.) & Rệp muội (Aphis sp.)",
+        "Rệp sáp trên cành và lá non",
+      ],
+      stage: "Giai đoạn cây ra đọt non (kết hợp trong lần phun thứ 2 của phác đồ trừ bệnh đốm lá, thán thư)",
+      dosage: "Pha 100 – 150 g cho phuy 200 lít nước (15 g / bình 25 lít nước)",
+      instructions: [
+        "Theo Tài liệu IPM 2026: Ở lần phun thứ 2 phòng trừ bệnh đốm lá, thán thư khi cây đang ra đọt non, phun kết hợp nhóm Nitenpyram (Acnipyram/Nitensuper) + Buprofezin (Applaud/Butyl) để bảo vệ trọn vẹn cơi lá.",
+      ],
+    };
+  }
   if (active.includes("buprofezin") || name.includes("buprofezin")) {
     return {
       usage: "Ức chế tổng hợp chitin, ngăn cản côn trùng lột xác, làm ung trứng và triệt tiêu lứa rầy non tiếp theo.",
       targets: [
-        "Rầy phấn trắng (rầy bông sầu riêng)",
-        "Rầy xanh (rầy nhảy hại đọt non)",
-        "Rệp sáp bông & rệp sáp trái non",
-        "Rệp dính, rệp sáp giả",
+        "Rầy nhảy (Allocaridara malayensis)",
+        "Rệp sáp bột hai tua dài (Ferrisia virgata)",
+        "Rệp sáp mềm nhiều tua dài (Pseudococcus sp.)",
+        "Rầy xanh (Cicadellidae sp.)",
       ],
       stage: "Phun khi rầy non mới nở (tuổi 1–3) hoặc giai đoạn cây nhú đọt non, mở lá bàng, mắt cua",
       dosage: "Pha 100 – 150 ml cho phuy 200 lít nước (10 – 15 ml / bình 25 lít)",
@@ -586,10 +884,10 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
     return {
       usage: "Trừ sâu sinh học phổ rộng chiết xuất từ xạ khuẩn, tác động vị độc & tiếp xúc, thấm sâu cực nhanh vào biểu bì lá.",
       targets: [
-        "Nhện đỏ hại lá (mặt dưới lá)",
-        "Bọ trĩ (bù lạch hại hoa và đọt non)",
-        "Sâu đục trái non & cuống trái",
-        "Sâu vẽ bùa trên lá non",
+        "Nhện đỏ hại lá (Tetranychus sp. / Eutetranychus sp.)",
+        "Bọ trĩ hại hoa (Scirtothrips dorsalis)",
+        "Rầy nhảy hại búp và lá non (Allocaridara malayensis)",
+        "Sâu ăn bông & sâu cuốn lá",
       ],
       stage: "Phun sớm khi nhện đỏ chớm xuất hiện mùa khô hoặc giai đoạn cây nhú đọt, chùm hoa non",
       dosage: "Pha 15 – 25 ml cho bình 25 lít nước (150 – 200 ml cho phuy 200 lít)",
@@ -605,16 +903,15 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
     return {
       usage: "Thuốc lưu dẫn nội hấp cực mạnh (hai chiều), hấp thu nhanh qua rễ và tán lá, bảo vệ toàn diện các cơi đọt non mới bung.",
       targets: [
-        "Rầy nhảy (rầy xanh hại sầu riêng)",
-        "Bọ trĩ gây cháy bìa lá non",
-        "Rệp sáp đọt non & rệp vảy",
-        "Bọ xít muỗi chích hút cuống hoa",
+        "Rầy nhảy (Allocaridara malayensis)",
+        "Bọ trĩ hại hoa và lá non (Scirtothrips dorsalis)",
+        "Rệp sáp bột hai tua dài (Ferrisia virgata)",
+        "Rệp muội (Aphis sp.)",
       ],
       stage: "Phun phòng ngừa khi cây bắt đầu nhú mắt cua hoặc vừa bung đọt non mới",
       dosage: "Pha 20 – 30 g cho bình 25 lít nước (hoặc 100 g cho phuy 200 lít nước)",
       instructions: [
-        "Phun ướt đều tán lá, thân cành và những nơi côn trùng chích hút ẩn nấp.",
-        "Thuốc có tính nội hấp di chuyển khắp thân cây, bảo vệ được cả những đọt non mọc sau khi phun.",
+        "Kết hợp với dầu khoáng (SK Enspray 99EC) theo khuyến cáo của Viện BVTV 2026 để tăng hiệu quả diệt trừ nhóm sâu chích hút và giảm lượng thuốc hóa học.",
         "Không phun trực tiếp khi sầu riêng đang bung hoa nở rộ (xả nhụy) để bảo vệ ong mật thụ phấn.",
         "Thời gian cách ly an toàn tối thiểu 14 ngày trước khi thu hoạch theo tiêu chuẩn xuất khẩu GACC.",
       ],
@@ -624,18 +921,18 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
     return {
       usage: "Thuốc trừ sâu sinh học thế hệ mới diệt sâu miệng nhai kháng thuốc, tác động tiếp xúc và vị độc cực mạnh, an toàn xuất khẩu.",
       targets: [
-        "Sâu đục quả (sâu đục trái sầu riêng)",
-        "Sâu đục cuống hoa & cuống trái",
-        "Sâu ăn bông & sâu cắn phá gai",
-        "Sâu lông, sâu róm hại tán lá",
+        "Sâu đục quả sầu riêng (Conogethes punctiferalis)",
+        "Sâu róm sầu riêng (Euproctis subnota) & Sâu róm đường chỉ đỏ (E. scintillans)",
+        "Sâu khoang (Spodoptera litura)",
+        "Sâu cuốn lá (Tortricidae sp.)",
       ],
       stage: "Phun khi sâu non mới xuất hiện (tuổi 1–2) hoặc thời điểm định kỳ trái bằng quả trứng gà",
       dosage: "Pha 15 – 20 ml cho bình 25 lít nước (150 – 200 ml cho phuy 200 lít nước)",
       instructions: [
         "Phun ướt đẫm và kỹ vào bề mặt chùm trái non, kẽ trái, cuống trái nơi sâu hay đẻ trứng và đục vào.",
         "Phun sớm khi sâu non chưa đục sâu vào bên trong cơm sầu riêng để đạt hiệu quả 100%.",
-        "Kết hợp tỉa bớt trái méo, tạo chùm trái thông thoáng và bao trái đúng thời điểm để hạn chế sâu tấn công.",
-        "Thời gian cách ly ngắn (5 – 7 ngày), phù hợp cho các đợt xử lý bảo vệ trái trước thu hoạch.",
+        "Kết hợp tỉa bớt trái méo, tạo chùm trái thông thoáng để hạn chế sâu tấn công.",
+        "Thời gian cách ly ngắn (7 – 10 ngày), phù hợp cho các đợt xử lý bảo vệ trái trước thu hoạch.",
       ],
     };
   }
@@ -676,13 +973,13 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
   }
 
   return {
-    usage: "Đặc trị sâu hại và côn trùng chích hút theo danh mục BVTV được phép sử dụng.",
-    targets: ["Sâu đục thân", "Rầy chích hút", "Bọ trĩ", "Nhện đỏ"],
-    stage: "Phun theo đúng hướng dẫn trên nhãn thuốc và đảm bảo thời gian cách ly PHI",
-    dosage: "Pha theo tỷ lệ khuyến cáo in trên nhãn bao bì sản phẩm",
+    usage: "Đặc trị sâu bệnh hại sầu riêng theo danh mục thuốc BVTV được phép sử dụng ở Việt Nam và quy trình IPM VietGAP 2026.",
+    targets: ["Bệnh xì mủ, héo ngọn, đốm lá, thán thư", "Rệp sáp bột hai tua dài, rầy nhảy, sâu đục quả, nhện đỏ"],
+    stage: "Sử dụng theo ngưỡng kinh tế và nguyên tắc 4 đúng (đúng thuốc, đúng lúc, đúng liều lượng, đúng cách)",
+    dosage: "Pha theo tỷ lệ khuyến cáo in trên nhãn bao bì của nhà sản xuất",
     instructions: [
       "Trang bị đầy đủ đồ bảo hộ khi pha chế và phun thuốc.",
-      "Phun ướt đều tán lá vào sáng sớm hoặc chiều mát.",
+      "Phun ướt đều mặt lá vào sáng sớm hoặc chiều mát.",
       "Tuân thủ nghiêm ngặt thời gian cách ly trước thu hoạch (PHI).",
     ],
   };
@@ -698,7 +995,6 @@ export function PesticideDetailModal({
   const status = PESTICIDE_STATUS[item.status];
   const isAllowed = item.status === "allowed";
   const isRestricted = item.status === "restricted";
-  const isBanned = item.status === "banned";
   const imgSrc = getPesticideImage(item);
   const efficacy = getPesticideEfficacy(item);
 
@@ -852,6 +1148,166 @@ export function PesticideDetailModal({
 const DEFAULT_PESTICIDES: PesticideDto[] = [
   {
     id: 1,
+    name: "ABT 2WP (Sinh học Bt + Abamectin)",
+    activeIngredient: "Abamectin 9g/kg + Bacillus thuringiensis var. kurstaki 11g/kg",
+    concentration: "9 g/kg + 11 g/kg",
+    manufacturer: "Viện Bảo vệ thực vật / Sinh học VN",
+    mrlMgKg: 0.01,
+    isolationDays: 5,
+    status: "allowed",
+  },
+  {
+    id: 2,
+    name: "Trắng xanh WP (Nấm xanh – Nấm trắng)",
+    activeIngredient: "Beauveria bassiana 1×10⁹ bào tử/g + Metarhizium anisopliae 0,5×10⁹ bào tử/g",
+    concentration: "1,5×10⁹ bào tử/g",
+    manufacturer: "Viện Bảo vệ thực vật (PPRI)",
+    mrlMgKg: null,
+    isolationDays: 3,
+    status: "allowed",
+  },
+  {
+    id: 3,
+    name: "Bitadin WP (Sinh học Bt + Granulosis virus)",
+    activeIngredient: "Bacillus thuringiensis var. kurstaki 16.000 IU + Granulosis virus 10⁸ PIB",
+    concentration: "16.000 IU + 10⁸ PIB",
+    manufacturer: "Viện Bảo vệ thực vật (PPRI)",
+    mrlMgKg: null,
+    isolationDays: 3,
+    status: "allowed",
+  },
+  {
+    id: 4,
+    name: "Chế phẩm Vi sinh Trichoderma – Bacillus – Streptomyces",
+    activeIngredient: "Trichoderma spp. + Bacillus spp. + Streptomyces spp.",
+    concentration: "≥ 10⁸ bào tử/g(ml)",
+    manufacturer: "Viện Khoa học Nông nghiệp Việt Nam (VAAS)",
+    mrlMgKg: null,
+    isolationDays: 0,
+    status: "allowed",
+  },
+  {
+    id: 5,
+    name: "Acrobat MZ 90/600 WP",
+    activeIngredient: "Dimethomorph 90g/kg + Mancozeb 600g/kg",
+    concentration: "90 g/kg + 600 g/kg",
+    manufacturer: "BASF",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 6,
+    name: "Agri-Fos 400SL",
+    activeIngredient: "Phosphorous acid",
+    concentration: "400 g/l",
+    manufacturer: "Agrichem (Úc)",
+    mrlMgKg: 2.0,
+    isolationDays: 7,
+    status: "allowed",
+  },
+  {
+    id: 7,
+    name: "Ridomil Gold 68WG",
+    activeIngredient: "Metalaxyl-M 40g/kg + Mancozeb 640g/kg",
+    concentration: "40 g/kg + 640 g/kg",
+    manufacturer: "Syngenta",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 8,
+    name: "Anvil 5SC (Huivil)",
+    activeIngredient: "Hexaconazole ≥ 85%",
+    concentration: "50 g/l",
+    manufacturer: "Syngenta",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 9,
+    name: "Nativo 750WG",
+    activeIngredient: "Trifloxystrobin + Tebuconazole",
+    concentration: "750 g/kg",
+    manufacturer: "Bayer CropScience",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 10,
+    name: "Antracol 70WP",
+    activeIngredient: "Propineb (Metiram complex)",
+    concentration: "700 g/kg",
+    manufacturer: "Bayer CropScience",
+    mrlMgKg: 0.1,
+    isolationDays: 10,
+    status: "allowed",
+  },
+  {
+    id: 11,
+    name: "Movento 150OD",
+    activeIngredient: "Spirotetramat ≥ 96%",
+    concentration: "150 g/l",
+    manufacturer: "Bayer CropScience",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 12,
+    name: "Penalty 40WP",
+    activeIngredient: "Acetamiprid 20% + Buprofezin 20%",
+    concentration: "20% + 20% (400 g/kg)",
+    manufacturer: "Nihon Nohyaku / Map Pacific",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 13,
+    name: "Sida 20WP",
+    activeIngredient: "Dinotefuran ≥ 89%",
+    concentration: "200 g/kg",
+    manufacturer: "Mitsui Chemicals / BVTV",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 14,
+    name: "Confidor 200SL + Dầu khoáng SK Enspray 99EC",
+    activeIngredient: "Imidacloprid ≥ 96% + Petroleum spray oil",
+    concentration: "200 g/l + 99% EC",
+    manufacturer: "Bayer / SK Energy",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 15,
+    name: "Ascend 20SP",
+    activeIngredient: "Acetamiprid ≥ 97%",
+    concentration: "200 g/kg",
+    manufacturer: "Nisso / BVTV",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 16,
+    name: "Acnipyram / Nitensuper + Applaud / Butyl",
+    activeIngredient: "Nitenpyram + Buprofezin",
+    concentration: "500 g/kg",
+    manufacturer: "Nihon Nohyaku / BVTV",
+    mrlMgKg: 0.05,
+    isolationDays: 14,
+    status: "allowed",
+  },
+  {
+    id: 17,
     name: "Buprofezin 400SC",
     activeIngredient: "Buprofezin",
     concentration: "400 g/l",
@@ -861,7 +1317,7 @@ const DEFAULT_PESTICIDES: PesticideDto[] = [
     status: "allowed",
   },
   {
-    id: 2,
+    id: 18,
     name: "Abamectin 1.8EC",
     activeIngredient: "Abamectin",
     concentration: "1.8%",
@@ -871,7 +1327,7 @@ const DEFAULT_PESTICIDES: PesticideDto[] = [
     status: "allowed",
   },
   {
-    id: 3,
+    id: 19,
     name: "Imidacloprid 70WG",
     activeIngredient: "Imidacloprid",
     concentration: "70%",
@@ -881,17 +1337,17 @@ const DEFAULT_PESTICIDES: PesticideDto[] = [
     status: "allowed",
   },
   {
-    id: 4,
-    name: "Carbaryl 80WP",
-    activeIngredient: "Carbaryl",
-    concentration: "80%",
-    manufacturer: "Various",
-    mrlMgKg: null,
-    isolationDays: null,
-    status: "banned",
+    id: 20,
+    name: "Emamectin 1.9EC",
+    activeIngredient: "Emamectin benzoate",
+    concentration: "1.9%",
+    manufacturer: "Rotam",
+    mrlMgKg: 0.02,
+    isolationDays: 10,
+    status: "allowed",
   },
   {
-    id: 5,
+    id: 21,
     name: "Chlorpyrifos 40EC",
     activeIngredient: "Chlorpyrifos",
     concentration: "40%",
@@ -901,14 +1357,14 @@ const DEFAULT_PESTICIDES: PesticideDto[] = [
     status: "restricted",
   },
   {
-    id: 6,
-    name: "Emamectin 1.9EC",
-    activeIngredient: "Emamectin benzoate",
-    concentration: "1.9%",
-    manufacturer: "Rotam",
-    mrlMgKg: 0.02,
-    isolationDays: 10,
-    status: "allowed",
+    id: 22,
+    name: "Carbaryl 80WP",
+    activeIngredient: "Carbaryl",
+    concentration: "80%",
+    manufacturer: "Various",
+    mrlMgKg: null,
+    isolationDays: null,
+    status: "banned",
   },
 ];
 
@@ -1073,6 +1529,34 @@ function PesticideList() {
 export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
   {
     id: 1,
+    name: "Phân chuồng hoai mục ủ Vi sinh đối kháng (Trichoderma – Bacillus – Streptomyces)",
+    category: "organic",
+    formula: "Phân chuồng hoai mục (độ ẩm 50–60%) + Trichoderma spp., Bacillus spp., Streptomyces spp. (≥ 10⁸ bào tử/g)",
+    manufacturer: "Quy trình Viện Bảo vệ Thực vật (PPRI 2026)",
+    dosage: "Ủ trộn 3 kg chế phẩm vi sinh / 1 tấn phân chuồng hoai mục trước khi bón 7 – 10 ngày",
+    applicationMethod: "Bón vào đất vùng rễ theo hình chiếu tán cây hoặc giữa 2 hàng giao tán rồi phủ đất mặt",
+    status: "encouraged",
+    timing: "Trước mùa mưa (tháng 4 đến đầu tháng 5 hàng năm)",
+    image: "/fertilizers/organic.png",
+    description:
+      "Quản lý các bệnh hại trong đất, đặc biệt là bệnh xì mủ (Phytophthora palmivora) và vàng lá thối rễ (Phytopythium vexans); áp dụng cho cả vườn chưa có và đang có triệu chứng bệnh.",
+  },
+  {
+    id: 2,
+    name: "Phân hữu cơ truyền thống kết hợp Nấm rễ Arbuscular Mycorrhizae",
+    category: "microbial",
+    formula: "Phân chuồng, bò, gà, rơm cỏ khô ủ hoai + Nấm rễ Arbuscular mycorrhizae + Trichoderma, Streptomyces",
+    manufacturer: "Quy trình Viện Khoa học Nông nghiệp VN (VAAS 2026)",
+    dosage: "50 – 100 kg phân hữu cơ/cây/năm + 100 – 150 g nấm rễ Mycorrhizae/cây/năm",
+    applicationMethod: "Bón quanh vùng rễ tơ theo hình chiếu tán cây kết hợp lấp đất giữ ẩm",
+    status: "encouraged",
+    timing: "Sau thu hoạch & đầu mùa mưa",
+    image: "/fertilizers/humic.png",
+    description:
+      "Diệt mầm bệnh trong đất, mở rộng hệ thống lông hút cộng sinh và tăng sức đề kháng tự nhiên giúp cây chống chịu bệnh đốm lá (Phomopsis durionis) và thán thư (Colletotrichum siamense).",
+  },
+  {
+    id: 3,
     name: "Hữu cơ Vi sinh Đất Mẹ 70% OM",
     category: "organic",
     formula: "Chất hữu cơ: 70% · Axit Humic: 12% · Nấm Trichoderma: 1×10⁶ CFU/g",
@@ -1085,7 +1569,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     description: "Phân bón hữu cơ vi sinh cao cấp chuyên dùng cho sầu riêng, cung cấp dinh dưỡng thiết yếu và tăng cường hệ vi sinh đất.",
   },
   {
-    id: 2,
+    id: 4,
     name: "NPK 12-12-17+TE Gốc Sunfat (Bio-Agri)",
     category: "npk",
     formula: "Đạm (N): 12% · Lân (P₂O₅): 12% · Kali Sunfat (K₂SO₄): 17% · TE (Bo, Mg, Zn)",
@@ -1098,7 +1582,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     description: "Dinh dưỡng khoáng cân đối 100% gốc Kali Sunfat không chứa Clo, giúp cơm vàng óng, dày cơm và đạt chuẩn xuất khẩu GACC.",
   },
   {
-    id: 3,
+    id: 5,
     name: "Phân bón lá Canxi Bo Sữa Bo Amino Kẽm",
     category: "foliar",
     formula: "Canxi (CaO): 12% · Bo hữu hiệu: 35.000 ppm · Kẽm (Zn): 15.000 ppm · Amino Acid: 10%",
@@ -1111,7 +1595,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     description: "Đặc trị rụng hoa, tăng tỷ lệ đậu trái, chống nứt gai, dai cuống và hỗ trợ trái lớn nhanh đồng đều.",
   },
   {
-    id: 4,
+    id: 6,
     name: "Gói Axit Humic Đậm Đặc & Trichoderma (Duri-Root)",
     category: "microbial",
     formula: "Axit Humic: 85% · Axit Fulvic: 10% · Kali hữu hiệu: 10% · Trichoderma: 2×10⁹ CFU/g",
@@ -1124,7 +1608,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     description: "Kích rễ phát triển cực mạnh, cải thiện độ phì nhiêu của đất và đối kháng nấm bệnh Phytophthora gây xì mủ.",
   },
   {
-    id: 5,
+    id: 7,
     name: "NPK 20-20-15+TE Đầu Trâu Chuyên Đọt",
     category: "npk",
     formula: "Đạm (N): 20% · Lân (P₂O₅): 20% · Kali (K₂O): 15% · Vi lượng Bo, Kẽm, Đồng",
@@ -1137,7 +1621,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     description: "Cung cấp đạm và lân cao giúp cơi đọt bung mập khỏe, phiến lá dày bóng, tăng diện tích quang hợp nuôi cây sung mãn.",
   },
   {
-    id: 6,
+    id: 8,
     name: "Kali Clorua (KCl / Muối Ớt Đỏ) — Cảnh báo cấm",
     category: "restricted",
     formula: "Kali (K₂O): 60% · Hàm lượng Clo (Cl⁻): > 45%",
@@ -1170,6 +1654,38 @@ export interface FertilizerEfficacy {
 export function getFertilizerEfficacy(item: FertilizerDto): FertilizerEfficacy {
   const name = item.name.toLowerCase();
   const cat = item.category;
+
+  if (name.includes("phân chuồng hoai mục") || name.includes("streptomyces")) {
+    return {
+      usage:
+        "Quy trình ủ trộn phân chuồng hoai mục với 3 chủng vi sinh vật đối kháng (Trichoderma spp., Bacillus spp., Streptomyces spp. ≥ 10⁸ bào tử/g) giúp kiểm soát tận gốc nấm Phytophthora palmivora gây bệnh xì mủ và Phytopythium vexans gây vàng lá thối rễ.",
+      targets: [
+        "Đối kháng nấm xì mủ Phytophthora palmivora",
+        "Phòng vàng lá thối rễ Phytopythium vexans & Fusarium sp.",
+        "Áp dụng cho cả vườn chưa bệnh và đang có cây bệnh",
+        "Cải tạo cấu trúc đất vùng rễ bền vững",
+      ],
+      timing: "Bón vào thời điểm trước mùa mưa (tháng 4 đến đầu tháng 5 hàng năm)",
+      dosageAdvice:
+        "Ủ trộn 3 kg chế phẩm vi sinh / 1 tấn phân chuồng hoai mục trước khi bón 7 – 10 ngày ở độ ẩm 50–60% (bóp chặt tay thấy nước rỉ qua kẽ tay), phủ kín bạt; bón theo hình chiếu tán cây rồi phủ đất mặt.",
+    };
+  }
+
+  if (name.includes("mycorrhizae") || name.includes("nấm rễ")) {
+    return {
+      usage:
+        "Kết hợp phân hữu cơ truyền thống ủ hoai mục (phân bò, gà, rơm cỏ khô) với nấm rễ cộng sinh Arbuscular mycorrhizae và Trichoderma, Streptomyces giúp diệt mầm bệnh trong đất và tăng sức đề kháng chống bệnh đốm lá, thán thư.",
+      targets: [
+        "Tăng sức đề kháng phòng bệnh đốm lá & thán thư",
+        "Mở rộng mạng lưới nấm rễ cộng sinh hút lân & vi lượng",
+        "Diệt mầm nấm hại trong đất",
+        "Phục hồi bộ lá xanh dày sau thu hoạch",
+      ],
+      timing: "Bón định kỳ sau thu hoạch và đầu mùa mưa hàng năm",
+      dosageAdvice:
+        "50 – 100 kg phân hữu cơ ủ hoai mục/cây/năm kết hợp 100 – 150 g nấm rễ Arbuscular mycorrhizae/cây/năm.",
+    };
+  }
 
   if (cat === "organic" || name.includes("đất mẹ") || name.includes("hữu cơ")) {
     return {
@@ -1323,7 +1839,7 @@ export function FertilizerDetailModal({
             <strong className="pt-pesticide-spec-value">
               {item.dosage}
             </strong>
-            <span className="pt-pesticide-spec-hint">Chuẩn VietGAP Krông Búk</span>
+            <span className="pt-pesticide-spec-hint">Chuẩn VietGAP HTX Cư Né</span>
           </div>
 
           <div className="pt-pesticide-spec-card">
@@ -1351,7 +1867,7 @@ export function FertilizerDetailModal({
               ? "Phân Kali đỏ (KCl) chứa hàm lượng ion Clorua trên 45% làm tế bào cơm sầu riêng ngậm nước, gây hiện tượng sượng cơm, nhão thịt và làm chua đất. Toàn bộ sầu riêng phục vụ xuất khẩu bắt buộc phải dùng Kali Sunfat (K2SO4)."
               : isEncouraged
               ? "Khuyến khích tăng cường bón phân hữu cơ vi sinh và Axit Humic hàng năm giúp đất tơi xốp, kích thích giun đất và vi sinh vật đối kháng tự nhiên bảo vệ bộ rễ sầu riêng bền lực qua nhiều mùa vụ."
-              : "Bón phân đúng thời điểm sinh trưởng của cây, kết hợp tưới đủ ẩm. Bắt buộc ghi chép ngày bón, tên phân và khối lượng vào Cổng nhật ký điện tử PUC Krông Búk."}
+              : "Bón phân đúng thời điểm sinh trưởng của cây, kết hợp tưới đủ ẩm. Bắt buộc ghi chép ngày bón, tên phân và khối lượng vào Cổng nhật ký điện tử PUC HTX Cư Né."}
           </p>
         </div>
       </div>
@@ -2046,6 +2562,304 @@ function VarietyList() {
   );
 }
 
+export function DiseaseDetailModal({
+  item,
+  onClose,
+}: {
+  item: DiseaseOrPestItem;
+  onClose: () => void;
+}) {
+  const isDisease = item.kind === "disease";
+  const isVeryCommon = item.prevalenceCode === "++++" || item.prevalenceCode === "+++";
+
+  return (
+    <div className="pt-pesticide-modal-body">
+      <div className="pt-pesticide-header-info" style={{ paddingTop: 4 }}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+          <Pill tone={isVeryCommon ? "red" : "gold"}>
+            Mức độ: {item.prevalenceCode} ({item.prevalenceLabel})
+          </Pill>
+          <span className="pt-training-code-pill">
+            {isDisease ? "Bệnh hại sầu riêng" : "Sâu hại sầu riêng"}
+          </span>
+        </div>
+        <h3 className="pt-pesticide-modal-title">{item.name}</h3>
+        <p className="pt-pesticide-modal-mfg">
+          Tác nhân khoa học: <em>{item.scientificName}</em>
+        </p>
+      </div>
+
+      <div className="pt-pesticide-efficacy-card">
+        <div className="pt-efficacy-row">
+          <span className="pt-efficacy-label">Tổng quan mức độ nguy hại</span>
+          <p className="pt-efficacy-desc">{item.summary}</p>
+        </div>
+
+        <div className="pt-efficacy-timing">
+          <span>Bộ phận bị hại chính:</span>
+          <strong>{item.affectedParts}</strong>
+        </div>
+
+        <div className="pt-efficacy-timing">
+          <span>Thời điểm bùng phát mạnh:</span>
+          <strong style={{ color: "#b45309" }}>{item.peakSeason}</strong>
+        </div>
+
+        <div className="pt-efficacy-row" style={{ marginTop: 6 }}>
+          <span className="pt-efficacy-label">Triệu chứng nhận diện thực địa</span>
+          <ul className="pt-efficacy-bullet-list">
+            {item.symptoms.map((sym, idx) => (
+              <li key={idx} className="pt-efficacy-bullet-item">
+                {sym}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="pt-pesticide-efficacy-card">
+        <div className="pt-efficacy-row">
+          <span className="pt-efficacy-label" style={{ color: "#15803d" }}>
+            1. Biện pháp Canh tác & Sinh học (Ưu tiên theo IPM 2026)
+          </span>
+          <ul className="pt-efficacy-bullet-list">
+            {item.culturalAndBioControl.map((step, idx) => (
+              <li key={idx} className="pt-efficacy-bullet-item">
+                {step}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="pt-efficacy-row" style={{ marginTop: 8 }}>
+          <span className="pt-efficacy-label" style={{ color: "#1d4ed8" }}>
+            2. Biện pháp Hóa học & Luân phiên hoạt chất (Nguyên tắc 4 đúng)
+          </span>
+          <ul className="pt-efficacy-bullet-list">
+            {item.chemicalControl.map((step, idx) => (
+              <li key={idx} className="pt-efficacy-bullet-item">
+                {step}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="pt-pesticide-safety-tips">
+        <h4 className="pt-pesticide-modal-section-title">Thuốc & Chế phẩm khuyến cáo trong danh mục</h4>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+          {item.recommendedProducts.map((prod) => (
+            <Pill key={prod} tone="green">
+              {prod}
+            </Pill>
+          ))}
+        </div>
+      </div>
+
+      <div className="pt-training-modal-actions">
+        <button
+          type="button"
+          className="pt-btn pt-btn-primary"
+          style={{ width: "100%", justifyContent: "center" }}
+          onClick={onClose}
+        >
+          Đã hiểu & Đóng
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function DiseaseAndIpmList() {
+  const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<"all" | "disease" | "pest" | "care">("all");
+  const [selectedItem, setSelectedItem] = useState<DiseaseOrPestItem | null>(null);
+
+  const counts = useMemo(
+    () => ({
+      all: DISEASES_AND_PESTS_2026.length,
+      disease: DISEASES_AND_PESTS_2026.filter((d) => d.kind === "disease").length,
+      pest: DISEASES_AND_PESTS_2026.filter((d) => d.kind === "pest").length,
+      care: CARE_PROCESS_2026.length,
+    }),
+    [],
+  );
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return DISEASES_AND_PESTS_2026.filter((item) => {
+      const matchesQ =
+        !q ||
+        `${item.name} ${item.scientificName} ${item.affectedParts} ${item.summary} ${item.recommendedProducts.join(" ")}`
+          .toLowerCase()
+          .includes(q);
+      const matchesKind =
+        kindFilter === "all" || kindFilter === "care" || item.kind === kindFilter;
+      return matchesQ && matchesKind;
+    });
+  }, [query, kindFilter]);
+
+  return (
+    <section className="pt-pest-section" aria-labelledby="ipm-heading">
+      <div className="pt-pest-header">
+        <h2 id="ipm-heading" className="pt-pest-title">
+          Sâu bệnh hại & Quy trình IPM VietGAP 2026
+        </h2>
+      </div>
+
+      <div className="pt-pest-wrap">
+        <div className="pt-pest-search-box">
+          <Search size={16} className="pt-pest-search-icon" aria-hidden="true" />
+          <input
+            className="pt-pest-search-input"
+            type="search"
+            placeholder="Tìm bệnh xì mủ, héo ngọn, rệp sáp, rầy nhảy, hoạt chất..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Tìm kiếm sâu bệnh hại và quy trình IPM"
+          />
+          {query && (
+            <button
+              type="button"
+              className="pt-pest-search-clear"
+              onClick={() => setQuery("")}
+              aria-label="Xóa từ khóa tìm kiếm"
+            >
+              <CloseCircleIcon size={20} />
+            </button>
+          )}
+        </div>
+
+        <div className="pt-pest-filter-bar" role="tablist" aria-label="Lọc theo nhóm sâu bệnh và quy trình">
+          <button
+            type="button"
+            className={`pt-pest-filter-chip ${kindFilter === "all" ? "is-active" : ""}`}
+            onClick={() => setKindFilter("all")}
+          >
+            Tất cả <span className="pt-pest-filter-count">{counts.all}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-banned ${kindFilter === "disease" ? "is-active" : ""}`}
+            onClick={() => setKindFilter("disease")}
+          >
+            10 Bệnh hại <span className="pt-pest-filter-count">{counts.disease}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-restricted ${kindFilter === "pest" ? "is-active" : ""}`}
+            onClick={() => setKindFilter("pest")}
+          >
+            Sâu hại chính <span className="pt-pest-filter-count">{counts.pest}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-allowed ${kindFilter === "care" ? "is-active" : ""}`}
+            onClick={() => setKindFilter("care")}
+          >
+            Quy trình chăm sóc & IPM <span className="pt-pest-filter-count">{counts.care}</span>
+          </button>
+        </div>
+
+        {(kindFilter === "all" || kindFilter === "care") && !query && (
+          <Card title="4 Nguyên tắc Quản lý dịch hại tổng hợp (IPM) – Viện BVTV 2026">
+            <div className="pt-training-modules" style={{ marginTop: 4 }}>
+              {IPM_2026_PRINCIPLES.map((p) => (
+                <div key={p.no} className="pt-training-module-item">
+                  <span className="pt-training-module-idx">{p.no}</span>
+                  <div className="pt-training-module-text">
+                    <strong>{p.title}</strong>
+                    <p>{p.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {kindFilter === "care" && (
+          <Card title="Quy trình Chăm sóc, Cắt tỉa, Vệ sinh vườn & Ủ phân vi sinh theo mùa vụ">
+            <div className="pt-training-modules" style={{ marginTop: 4 }}>
+              {CARE_PROCESS_2026.map((step, idx) => (
+                <div key={step.phase} className="pt-training-module-item">
+                  <span className="pt-training-module-idx">{idx + 1}</span>
+                  <div className="pt-training-module-text">
+                    <strong>
+                      {step.title} ({step.timing})
+                    </strong>
+                    <ul className="pt-efficacy-bullet-list" style={{ marginTop: 6 }}>
+                      {step.actions.map((act, i) => (
+                        <li key={i} className="pt-efficacy-bullet-item">
+                          {act}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {kindFilter !== "care" && (
+          <div className="pt-pest-list">
+            {shown.map((item) => {
+              const isDisease = item.kind === "disease";
+              const imgSrc = isDisease ? "/pesticides/amber.png" : "/pesticides/green.png";
+              return (
+                <article
+                  key={item.id}
+                  className={`pt-pest-card ${isDisease ? "pt-pest-card-restricted" : "pt-pest-card-allowed"}`}
+                  onClick={() => setSelectedItem(item)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedItem(item);
+                    }
+                  }}
+                  title="Bấm để xem triệu chứng và phác đồ xử lý IPM 2026"
+                >
+                  <div className="pt-pest-card-img-wrap">
+                    <img
+                      src={imgSrc}
+                      alt={item.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="pt-pest-card-img"
+                    />
+                  </div>
+                  <div className="pt-pest-card-content">
+                    <h3 className="pt-pest-card-name">{item.name}</h3>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                      {item.affectedParts} · Mức độ {item.prevalenceCode}
+                    </div>
+                  </div>
+                  <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
+                </article>
+              );
+            })}
+          </div>
+        )}
+
+        {kindFilter !== "care" && shown.length === 0 && (
+          <EmptyState icon="search">Không tìm thấy sâu bệnh hại phù hợp với từ khóa.</EmptyState>
+        )}
+
+        {selectedItem && (
+          <Sheet
+            title="Phác đồ Quản lý Dịch hại Tổng hợp (IPM 2026)"
+            onClose={() => setSelectedItem(null)}
+          >
+            <DiseaseDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+          </Sheet>
+        )}
+      </div>
+    </section>
+  );
+}
+
 const LEARN_VIEW_BY_ACTION: Partial<Record<PortalAction, View>> = {
   "learn-pesticides": "pesticides",
   "learn-fertilizers": "fertilizers",
@@ -2059,6 +2873,7 @@ export default function LearnTab({ initialAction }: { initialAction?: PortalActi
     { id: "pesticides", label: "Thuốc BVTV" },
     { id: "fertilizers", label: "Phân bón" },
     { id: "varieties", label: "Giống cây" },
+    { id: "diseases", label: "Sâu bệnh & IPM" },
   ];
 
   return (
@@ -2080,6 +2895,7 @@ export default function LearnTab({ initialAction }: { initialAction?: PortalActi
       {view === "pesticides" && <PesticideList />}
       {view === "fertilizers" && <FertilizerList />}
       {view === "varieties" && <VarietyList />}
+      {view === "diseases" && <DiseaseAndIpmList />}
     </div>
   );
 }
