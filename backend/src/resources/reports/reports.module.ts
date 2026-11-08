@@ -38,6 +38,65 @@ function toCsv(headers: string[], rows: unknown[][]): string {
   return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
 
+const HOUSEHOLD_STATUS_VN: Record<string, string> = {
+  qualified: "Đạt chuẩn",
+  pending: "Chờ duyệt",
+  warning: "Cảnh báo",
+  revoked: "Thu hồi",
+};
+
+const MRL_STATUS_VN: Record<string, string> = {
+  pass: "Đạt",
+  warning: "Cảnh báo",
+  fail: "Vượt ngưỡng",
+};
+
+const LAB_RESULT_VN: Record<string, string> = {
+  pass: "Đạt",
+  warning: "Cảnh báo",
+  fail: "Không đạt",
+};
+
+const VIOLATION_SEVERITY_VN: Record<string, string> = {
+  high: "Nghiêm trọng",
+  medium: "Trung bình",
+  low: "Nhẹ",
+};
+
+const VIOLATION_STATUS_VN: Record<string, string> = {
+  open: "Đang mở",
+  resolved: "Đã khắc phục",
+};
+
+const HARVEST_STATUS_VN: Record<string, string> = {
+  exported: "Đã xuất khẩu",
+  harvested: "Đã thu hoạch",
+  inspecting: "Đang kiểm định",
+  allocated: "Đã cấp mã",
+};
+
+function formatDateVn(value: unknown): string {
+  if (!value) return "";
+  if (value instanceof Date) {
+    const d = String(value.getDate()).padStart(2, "0");
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const y = value.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+  const s = String(value).trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return s;
+}
+
+export interface ReportDataPayload {
+  type: ReportType;
+  filename: string;
+  headers: string[];
+  rows: string[][];
+  total: number;
+}
+
 export interface ReportFilter {
   from?: string;
   to?: string;
@@ -51,19 +110,50 @@ export class ReportsService {
     private readonly audit: AuditService,
   ) {}
 
-  async exportCsv(type: string, rawQuery: Record<string, unknown>, user: AuthUser, ip?: string): Promise<{ filename: string; csv: string }> {
+  async getReportData(
+    type: string,
+    rawQuery: Record<string, unknown>,
+    user: AuthUser,
+    ip?: string,
+    recordAudit = true,
+  ): Promise<ReportDataPayload> {
     if (!REPORT_TYPES.includes(type as ReportType)) {
       throw badRequest("Loại báo cáo không hợp lệ.");
     }
     const filter = this.parseFilter(rawQuery, user);
-    const csv = await this.buildReport(type as ReportType, filter, user);
+    const { headers, rows } = await this.buildReportTable(type as ReportType, filter, user);
 
-    await this.audit.write(
-      { ip, user },
-      { action: "Xuất báo cáo", object: `Báo cáo ${type}`, detail: JSON.stringify(filter) },
+    if (recordAudit) {
+      await this.audit.write(
+        { ip, user },
+        { action: "Xuất báo cáo", object: `Báo cáo ${type}`, detail: JSON.stringify(filter) },
+      );
+    }
+
+    const stringRows = rows.map((row) =>
+      row.map((cell) => (cell === null || cell === undefined ? "" : String(cell))),
     );
 
-    return { filename: `${type}.csv`, csv };
+    return {
+      type: type as ReportType,
+      filename: `${type}.csv`,
+      headers,
+      rows: stringRows,
+      total: stringRows.length,
+    };
+  }
+
+  async exportCsv(
+    type: string,
+    rawQuery: Record<string, unknown>,
+    user: AuthUser,
+    ip?: string,
+  ): Promise<{ filename: string; csv: string }> {
+    const data = await this.getReportData(type, rawQuery, user, ip, true);
+    return {
+      filename: data.filename,
+      csv: toCsv(data.headers, data.rows),
+    };
   }
 
   private parseFilter(raw: Record<string, unknown>, user: AuthUser): ReportFilter {
@@ -90,7 +180,11 @@ export class ReportsService {
     return filter;
   }
 
-  private async buildReport(type: ReportType, filter: ReportFilter, user: AuthUser): Promise<string> {
+  private async buildReportTable(
+    type: ReportType,
+    filter: ReportFilter,
+    user: AuthUser,
+  ): Promise<{ headers: string[]; rows: unknown[][] }> {
     switch (type) {
       case "households": {
         const params: unknown[] = [];
@@ -111,9 +205,9 @@ export class ReportsService {
           params,
         );
         const fullCccd = canSeeCccd(user);
-        return toCsv(
-          ["Mã hộ", "Tên chủ hộ", "CCCD", "Điện thoại", "Thôn", "Số thửa", "Diện tích (ha)", "Trạng thái"],
-          rows.map((r) => [
+        return {
+          headers: ["Mã hộ", "Tên chủ hộ", "CCCD", "Điện thoại", "Thôn / Tổ", "Số thửa", "Diện tích (ha)", "Trạng thái"],
+          rows: rows.map((r) => [
             r.code,
             r.name,
             fullCccd ? r.cccd : maskCccd(r.cccd),
@@ -121,9 +215,9 @@ export class ReportsService {
             r.village_name,
             r.plot_count,
             r.area_ha,
-            r.status,
+            HOUSEHOLD_STATUS_VN[String(r.status)] ?? r.status,
           ]),
-        );
+        };
       }
 
       case "journal": {
@@ -139,10 +233,10 @@ export class ReportsService {
            LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
-        return toCsv(
-          ["Ngày ghi", "Mã hộ", "Hộ nông dân", "Thôn", "Mã thửa", "Hoạt động", "Chi tiết", "Người ghi"],
-          rows.map((r) => [
-            r.entry_on,
+        return {
+          headers: ["Ngày ghi", "Mã hộ", "Hộ nông dân", "Thôn / Tổ", "Mã thửa", "Hoạt động", "Chi tiết", "Người ghi"],
+          rows: rows.map((r) => [
+            formatDateVn(r.entry_on),
             r.household_code,
             r.household_name,
             r.village_name,
@@ -151,7 +245,7 @@ export class ReportsService {
             r.detail,
             r.recorder,
           ]),
-        );
+        };
       }
 
       case "spray": {
@@ -169,12 +263,12 @@ export class ReportsService {
            LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
-        return toCsv(
-          [
+        return {
+          headers: [
             "Ngày phun",
             "Mã hộ",
             "Hộ nông dân",
-            "Thôn",
+            "Thôn / Tổ",
             "Mã thửa",
             "Tên thuốc BVTV",
             "Hoạt chất",
@@ -183,8 +277,8 @@ export class ReportsService {
             "Cách ly (ngày)",
             "Kết quả MRL",
           ],
-          rows.map((r) => [
-            r.sprayed_on,
+          rows: rows.map((r) => [
+            formatDateVn(r.sprayed_on),
             r.household_code,
             r.household_name,
             r.village_name,
@@ -194,9 +288,9 @@ export class ReportsService {
             r.dose,
             r.area_ha,
             r.isolation_days,
-            r.mrl_status,
+            MRL_STATUS_VN[String(r.mrl_status)] ?? r.mrl_status,
           ]),
-        );
+        };
       }
 
       case "lab-tests": {
@@ -213,13 +307,13 @@ export class ReportsService {
            LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
-        return toCsv(
-          [
+        return {
+          headers: [
             "Mã mẫu",
             "Ngày lấy mẫu",
             "Mã hộ",
             "Hộ nông dân",
-            "Thôn",
+            "Thôn / Tổ",
             "Mã thửa",
             "Cadimi (mg/kg)",
             "Vàng O",
@@ -228,9 +322,9 @@ export class ReportsService {
             "Kết quả",
             "Đơn vị kiểm nghiệm",
           ],
-          rows.map((r) => [
+          rows: rows.map((r) => [
             r.code,
-            r.sampled_on,
+            formatDateVn(r.sampled_on),
             r.household_code,
             r.household_name,
             r.village_name,
@@ -239,10 +333,10 @@ export class ReportsService {
             r.yellow_o_positive ? "Dương tính" : "Âm tính",
             r.residue_mg_kg,
             r.chlorpyrifos_mg_kg ?? "KPH",
-            r.result,
+            LAB_RESULT_VN[String(r.result)] ?? r.result,
             r.lab,
           ]),
-        );
+        };
       }
 
       case "violations": {
@@ -257,8 +351,8 @@ export class ReportsService {
            LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
-        return toCsv(
-          [
+        return {
+          headers: [
             "Mã",
             "Ngày phát hiện",
             "Mức độ",
@@ -270,23 +364,43 @@ export class ReportsService {
             "Ngày đóng",
             "Ghi chú xử lý",
           ],
-          rows.map((r) => [
+          rows: rows.map((r) => [
             r.id,
-            r.detected_on,
-            r.severity,
+            formatDateVn(r.detected_on),
+            VIOLATION_SEVERITY_VN[String(r.severity)] ?? r.severity,
             r.title,
             r.household_label,
             r.plot_code,
-            r.status,
+            VIOLATION_STATUS_VN[String(r.status)] ?? r.status,
             r.farmer_response,
-            r.resolved_on,
+            formatDateVn(r.resolved_on),
             r.resolution_notes,
           ]),
-        );
+        };
       }
 
       case "harvest": {
-        const { where, params } = this.dateVillageWhere("hl.harvested_on", null, filter);
+        const params: unknown[] = [];
+        const conds: string[] = [];
+        if (filter.from) {
+          params.push(filter.from);
+          conds.push(`hl.harvested_on >= $${params.length}::date`);
+        }
+        if (filter.to) {
+          params.push(filter.to);
+          conds.push(`hl.harvested_on <= $${params.length}::date`);
+        }
+        if (filter.villageId) {
+          params.push(filter.villageId);
+          conds.push(
+            `EXISTS (
+               SELECT 1 FROM harvest_contributions hc
+               JOIN households h ON h.id = hc.household_id
+               WHERE hc.lot_id = hl.id AND h.village_id = $${params.length}
+             )`,
+          );
+        }
+        const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
         const { rows } = await this.db.query(
           `SELECT hl.code, hl.harvested_on, hl.weight_tons, hl.household_count,
                   hl.buyer, hl.market, hl.packhouse_code, hl.status
@@ -296,8 +410,8 @@ export class ReportsService {
            LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
-        return toCsv(
-          [
+        return {
+          headers: [
             "Mã lô",
             "Ngày thu hoạch",
             "Khối lượng (tấn)",
@@ -307,17 +421,17 @@ export class ReportsService {
             "Mã nhà đóng gói",
             "Trạng thái",
           ],
-          rows.map((r) => [
+          rows: rows.map((r) => [
             r.code,
-            r.harvested_on,
+            formatDateVn(r.harvested_on),
             r.weight_tons,
             r.household_count,
             r.buyer,
             r.market,
             r.packhouse_code,
-            r.status,
+            HARVEST_STATUS_VN[String(r.status)] ?? r.status,
           ]),
-        );
+        };
       }
 
       case "training-registrations": {
@@ -334,19 +448,28 @@ export class ReportsService {
            LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
-        return toCsv(
-          ["Khóa tập huấn", "Ngày tổ chức", "Mã hộ", "Hộ nông dân", "Điện thoại", "Thôn", "Trạng thái", "Thời gian đăng ký"],
-          rows.map((r) => [
+        return {
+          headers: [
+            "Khóa tập huấn",
+            "Ngày tổ chức",
+            "Mã hộ",
+            "Hộ nông dân",
+            "Điện thoại",
+            "Thôn / Tổ",
+            "Trạng thái",
+            "Thời gian đăng ký",
+          ],
+          rows: rows.map((r) => [
             r.title,
-            r.held_on,
+            formatDateVn(r.held_on),
             r.household_code,
             r.household_name,
             r.phone,
             r.village_name,
             r.status,
-            r.registered_at,
+            formatDateVn(r.registered_at),
           ]),
-        );
+        };
       }
     }
   }
@@ -384,6 +507,14 @@ export class ReportsController {
     @Ip() ip: string,
     @Res() res: Response,
   ) {
+    if (query.format === "json") {
+      const data = await this.reports.getReportData(type, query, user, ip, query.audit === "1");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).json(data);
+      return;
+    }
+
     const { filename, csv } = await this.reports.exportCsv(type, query, user, ip);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
