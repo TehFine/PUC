@@ -13,6 +13,7 @@ import VarietyFormModal from "@/components/admin/catalog/VarietyFormModal";
 import VillageFormModal from "@/components/admin/catalog/VillageFormModal";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
+  DiseaseAndIpmList,
   enrichVariety,
   FertilizerDetailModal,
   getFertilizerImage,
@@ -28,7 +29,7 @@ import { useApiList } from "@/hooks/use-api";
 import type { FertilizerDto, PesticideDto, VarietyDto } from "@/types/api";
 import type { FertilizerRecord, PesticideRecord, VarietyRecord, VillageRecord } from "@/types/catalog";
 
-type Tab = "pesticide" | "fertilizer" | "variety" | "village" | "standards";
+type Tab = "pesticide" | "fertilizer" | "variety" | "diseases" | "village" | "standards";
 
 interface StandardDoc {
   title: string;
@@ -38,6 +39,18 @@ interface StandardDoc {
 }
 
 const STANDARDS: StandardDoc[] = [
+  {
+    title: "Quy trình Quản lý dịch hại tổng hợp (IPM) Cây Sầu riêng theo VietGAP 2026",
+    desc: "Tài liệu kỹ thuật của Viện Khoa học Nông nghiệp Việt Nam (VAAS) & Viện Bảo vệ Thực vật (PPRI) năm 2026 áp dụng cho vùng trồng sầu riêng Đắk Lắk, Đắk Nông gắn với liên kết tiêu thụ chuỗi.",
+    tags: ["Bắt buộc", "Viện BVTV 2026", "VietGAP & IPM"],
+    details: [
+      "Thực hiện 4 nguyên tắc IPM: Trồng cây khỏe – Bảo vệ thiên địch (bọ mắt vàng, bọ rùa, nhện, ong ký sinh) – Thăm đồng thường xuyên – Nông dân trở thành chuyên gia.",
+      "Quản lý trọng điểm 10 bệnh hại (đặc biệt bệnh xì mủ Phytophthora palmivora và bệnh héo ngọn Diaporthe durionigena) và 21 loài sâu hại (đặc biệt rệp sáp bột hai tua dài Ferrisia virgata, rầy nhảy Allocaridara malayensis, sâu đục quả Conogethes punctiferalis).",
+      "Biện pháp sinh học: Ủ trộn 3 kg chế phẩm vi sinh đối kháng (Trichoderma spp., Bacillus spp., Streptomyces spp. ≥ 10⁸ bào tử/g) với 1 tấn phân chuồng hoai mục ở độ ẩm 50–60% trước khi bón 7–10 ngày vào tháng 4 – đầu tháng 5; phun phòng héo ngọn tỷ lệ 1:1000 vào cuối mùa mưa (tháng 11).",
+      "Biện pháp canh tác: Cắt tỉa tạo tán thông thoáng sau thu hoạch (tháng 9–10) vào ngày nắng ráo; tỉa chùm hoa dày và nhiễm rệp sáp (tháng 1–2); đào hố giao tán giữa 4 cây thu gom tàn dư trước mùa mưa.",
+      "Biện pháp hóa học 4 đúng: Tiêm thân Phosphorous acid (Agri-Fos 400SL) cho cây đường kính ≥ 15 cm kết hợp cạo quét Metalaxyl-M + Mancozeb / Acrobat MZ 90/600 WP trị xì mủ; phối hợp dầu khoáng và luân phiên chế phẩm sinh học (ABT 2WP, Trắng xanh WP, Bitadin WP) với thuốc hóa học (Movento 150OD, Penalty 40WP, Sida 20WP).",
+    ],
+  },
   {
     title: "VietGAP – Rau quả tươi",
     desc: "TCVN 11892-1:2017 – Quy trình thực hành nông nghiệp tốt cho rau quả tươi tại Việt Nam. Áp dụng bắt buộc với tất cả hộ xuất khẩu.",
@@ -250,6 +263,7 @@ export default function Catalog() {
           { id: "pesticide", label: `Thuốc BVTV (${pesticides.total})` },
           { id: "fertilizer", label: `Phân bón (${fertilizers.total})` },
           { id: "variety", label: `Giống cây (${varieties.total})` },
+          { id: "diseases", label: "Sâu bệnh & IPM 2026" },
           { id: "village", label: `Thôn / Tổ (${villages.total})` },
           { id: "standards", label: "Tiêu chuẩn" },
         ].map(({ id, label }) => (
@@ -772,6 +786,9 @@ export default function Catalog() {
           )}
         </div>
       )}
+
+      {/* ─── 3b. SÂU BỆNH HẠI & QUY TRÌNH IPM 2026 ─── */}
+      {tab === "diseases" && <DiseaseAndIpmList />}
 
       {/* ─── 4. THÔN / TỔ (Thẻ trực quan đồng bộ) ─── */}
       {tab === "village" && (
