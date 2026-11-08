@@ -120,12 +120,6 @@ export default function RadialNavWheel({
   // Vùng tiêu đề: chạm vào đây luôn kéo popup; trong danh sách thì cuộn tới đầu rồi kéo tiếp để đóng
   const headRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setSelectedTab(currentTab);
-    }
-  }, [currentTab, isOpen]);
-
   const handleOpen = useCallback(() => {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     if (selectTimerRef.current) clearTimeout(selectTimerRef.current);

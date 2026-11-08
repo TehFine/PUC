@@ -6,7 +6,6 @@ import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
 import { AuthBusyBorderRing, AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
-import { AppleSpinner } from "@/components/ui/Skeleton";
 import { api, ApiError } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
 

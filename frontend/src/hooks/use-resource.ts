@@ -49,10 +49,7 @@ export function useResource<TDto, TView>(resource: string, mapper: (dto: TDto) =
   }, [load, resource]);
 
   useEffect(() => {
-    const existingCache = resourceCache.get(resource) as TView[] | undefined;
-    if (existingCache !== undefined) {
-      setData(existingCache);
-      setLoading(false);
+    if (resourceCache.has(resource)) {
       return;
     }
     let active = true;

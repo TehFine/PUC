@@ -32,13 +32,11 @@ export function HarvestAssetTagCard({
 
   const watermarkSub =
     lot.status === "exported" || lot.status === "delivered"
-      ? "HTX KRÔNG BÚK · ĐÃ KIỂM TRA"
-      : "HTX KRÔNG BÚK · GIÁM SÁT";
+      ? "HTX CƯ NÉ · ĐÃ KIỂM TRA"
+      : "HTX CƯ NÉ · GIÁM SÁT";
 
   useEffect(() => {
-    const cached = qrDataUrlCache.get(codeKey);
-    if (cached) {
-      setQrSrc(cached);
+    if (qrDataUrlCache.has(codeKey)) {
       return;
     }
     let active = true;
@@ -83,7 +81,7 @@ export function HarvestAssetTagCard({
         <div className="pt-asset-sub-title">
           <span>SẦU RIÊNG TƯƠI</span>
           <span className="pt-asset-dot">·</span>
-          <span className="pt-asset-hide-mobile">HTX KRÔNG BÚK</span>
+          <span className="pt-asset-hide-mobile">HTX CƯ NÉ</span>
           <span className="pt-asset-dot pt-asset-hide-mobile">·</span>
           <span>{pucCode}</span>
         </div>
@@ -144,9 +142,7 @@ function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string |
   const [src, setSrc] = useState<string>(() => qrDataUrlCache.get(codeKey) ?? "");
 
   useEffect(() => {
-    const cached = qrDataUrlCache.get(codeKey);
-    if (cached) {
-      setSrc(cached);
+    if (qrDataUrlCache.has(codeKey)) {
       return;
     }
     let active = true;

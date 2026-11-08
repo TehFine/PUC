@@ -5,7 +5,6 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
 import { AuthBusyBorderRing, AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
-import { AppleSpinner } from "@/components/ui/Skeleton";
 import { ApiError, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
 
@@ -57,27 +56,19 @@ export default function LoginPage() {
     }
   }, []);
 
-  // Điều hướng nếu đã có phiên đăng nhập hợp lệ; nếu đã đăng xuất (anonymous) thì mở khóa ngay biểu mẫu
+  // Điều hướng nếu đã có phiên đăng nhập hợp lệ
   useEffect(() => {
     if (status === "authenticated") {
-      setRedirecting(true);
       router.replace(homePathFor(session?.user.role));
-    } else if (status === "anonymous") {
-      setSubmitting(false);
-      setGoogleSubmitting(false);
-      setRedirecting(false);
     }
   }, [status, session, router]);
 
-  // Đảm bảo dọn dẹp khi trang login mount (kể cả khi khôi phục từ Router Cache của Next.js) và unmount
+  // Đảm bảo dọn dẹp khi trang login unmount
   useEffect(() => {
-    if (status !== "authenticated") {
-      resetForm();
-    }
+    const form = formRef.current;
     return () => {
-      formRef.current?.reset();
+      form?.reset();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Lắng nghe sự kiện đăng xuất, hết hạn phiên và phục hồi từ bfcache của mobile browser

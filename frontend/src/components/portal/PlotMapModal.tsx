@@ -5,15 +5,10 @@ import { createPortal } from "react-dom";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
 import {
-  MapPin,
   ExternalLink,
   QrCode,
   ChevronDown,
   ChevronUp,
-  Maximize2,
-  TreePine,
-  ShieldCheck,
-  Layers,
 } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import type { PortalPlot } from "@/types/portal";
@@ -86,7 +81,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     }, 320);
   }, [isClosing, onClose]);
 
-  const handleTouchStart = (source: "topbar" | "popup") => (e: React.TouchEvent) => {
+  const startTouch = (source: "topbar" | "popup", e: React.TouchEvent) => {
     if (isClosing) return;
     const touch = e.touches[0];
     if (!touch) return;
@@ -98,6 +93,8 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     };
     hasDraggedRef.current = false;
   };
+  const handleTopbarTouchStart = (e: React.TouchEvent) => startTouch("topbar", e);
+  const handlePopupTouchStart = (e: React.TouchEvent) => startTouch("popup", e);
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current || isClosing) return;
@@ -527,7 +524,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               ? "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease"
               : "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease",
         }}
-        onTouchStart={handleTouchStart("topbar")}
+        onTouchStart={handleTopbarTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
@@ -591,7 +588,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               ? "transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease"
               : "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
-        onTouchStart={handleTouchStart("popup")}
+        onTouchStart={handlePopupTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}

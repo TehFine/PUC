@@ -94,10 +94,6 @@ export function usePublic<T>(path: string): State<T> {
   });
 
   useEffect(() => {
-    if (resolvedCache.has(path)) {
-      setState({ data: resolvedCache.get(path) as T, error: false, loading: false });
-      return;
-    }
     let active = true;
     load<T>(path)
       .then((data) => active && setState({ data, error: false, loading: false }))
