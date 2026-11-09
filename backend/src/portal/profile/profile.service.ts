@@ -13,7 +13,7 @@ export class ProfileService {
   async profile(user: AuthUser) {
     const householdId = householdIdOf(user);
     const account = (
-      await this.db.query("SELECT full_name, username, last_login_at FROM users WHERE id = $1", [user.id])
+      await this.db.query("SELECT full_name, username, email, last_login_at FROM users WHERE id = $1", [user.id])
     ).rows[0];
     const household = (
       await this.db.query(

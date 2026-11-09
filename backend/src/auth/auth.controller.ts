@@ -1,10 +1,18 @@
-import { Body, Controller, Get, HttpCode, Ip, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Ip, Patch, Post, Req, Res } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
 import type { AuthUser } from "./auth-user";
 import { CurrentUser, Public } from "./auth.decorators";
 import { AuthService, RefreshRejected } from "./auth.service";
-import { ChangePasswordDto, GoogleLoginDto, LoginDto, RegisterDto } from "./dto/auth.dto";
+import {
+  ChangePasswordDto,
+  ForgotPasswordCccdDto,
+  ForgotPasswordRequestDto,
+  GoogleLoginDto,
+  LoginDto,
+  RegisterDto,
+  UpdateProfileDto,
+} from "./dto/auth.dto";
 import { REFRESH_COOKIE, TokensService } from "./tokens.service";
 
 // Giới hạn chặt hơn cho đăng nhập (nới ra khi chạy test).
@@ -18,6 +26,8 @@ const REFRESH_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 30;
 const REFRESH_WINDOW_MS = 60 * 1000;
 // Đổi mật khẩu: giới hạn 10 lần/15 phút để chống dò mật khẩu hiện tại.
 const CHANGE_PASSWORD_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 10;
+// Quên mật khẩu: giới hạn 8 lần/15 phút mỗi IP để chống dò số CCCD hoặc gửi yêu cầu rác.
+const FORGOT_PASSWORD_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 8;
 
 @Controller("auth")
 export class AuthController {
@@ -34,6 +44,12 @@ export class AuthController {
     const { tokens, ...session } = await this.auth.login(dto, { ip, userAgent: req.get("user-agent") });
     this.tokens.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     return session;
+  }
+
+  @Public()
+  @Get("google/config")
+  googleConfig() {
+    return this.auth.googleConfig();
   }
 
   @Public()
@@ -90,6 +106,11 @@ export class AuthController {
     return this.auth.sessionOf(user);
   }
 
+  @Patch("profile")
+  updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto, @Ip() ip: string) {
+    return this.auth.updateProfile(user, dto, ip);
+  }
+
   @Throttle({ default: { limit: CHANGE_PASSWORD_LIMIT, ttl: LOGIN_WINDOW_MS } })
   @Post("change-password")
   @HttpCode(200)
@@ -102,5 +123,21 @@ export class AuthController {
     await this.auth.changePassword(user, dto, ip);
     this.tokens.clearAuthCookies(res);
     return { ok: true };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: FORGOT_PASSWORD_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Post("forgot-password/verify-cccd")
+  @HttpCode(200)
+  async resetPasswordWithCccd(@Body() dto: ForgotPasswordCccdDto, @Req() req: Request, @Ip() ip: string) {
+    return this.auth.resetPasswordWithCccd(dto, { ip, userAgent: req.get("user-agent") });
+  }
+
+  @Public()
+  @Throttle({ default: { limit: FORGOT_PASSWORD_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Post("forgot-password/request")
+  @HttpCode(200)
+  async requestPasswordReset(@Body() dto: ForgotPasswordRequestDto, @Req() req: Request, @Ip() ip: string) {
+    return this.auth.requestPasswordReset(dto, { ip, userAgent: req.get("user-agent") });
   }
 }

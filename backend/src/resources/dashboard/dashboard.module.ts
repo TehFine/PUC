@@ -56,7 +56,10 @@ export class DashboardService {
          (SELECT count(*)::int FROM households h WHERE h.status = 'qualified' ${hhAnd}) AS qualified_households,
          (SELECT count(*)::int FROM violations v WHERE v.status = 'open' ${violWhere}) AS open_violations,
          (SELECT count(*)::int FROM approvals a WHERE a.status = 'pending' ${apprWhere}) AS pending_approvals,
-         (SELECT count(*)::int FROM users u WHERE u.status = 'pending' AND u.role = 'farmer' ${regWhere}) AS pending_registrations,
+         (
+           (SELECT count(*)::int FROM users u WHERE u.status = 'pending' AND u.role = 'farmer' ${regWhere}) +
+           (SELECT count(*)::int FROM password_reset_requests r JOIN users u ON u.id = r.user_id WHERE r.status = 'pending' ${regWhere})
+         ) AS pending_registrations,
          (SELECT count(*)::int FROM harvest_declarations hd JOIN households h ON h.id = hd.household_id WHERE hd.status = 'submitted' ${hhAnd}) AS pending_declarations,
          (SELECT count(*)::int FROM lab_tests lt JOIN households h ON h.id = lt.household_id ${hhWhere}) AS lab_tests,
          (SELECT count(*)::int FROM lab_tests lt JOIN households h ON h.id = lt.household_id WHERE lt.result = 'pass' ${hhAnd}) AS lab_tests_passed,

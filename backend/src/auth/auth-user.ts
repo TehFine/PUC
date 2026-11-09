@@ -4,6 +4,7 @@ export interface AuthUser {
   id: number;
   fullName: string;
   username: string;
+  email?: string | null;
   role: Role;
   villageId: number | null;
   /** Hộ gắn với tài khoản nông dân (null với các vai trò khác). */

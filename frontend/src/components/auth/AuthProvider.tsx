@@ -9,6 +9,7 @@ type Status = "loading" | "authenticated" | "anonymous";
 
 export interface GoogleLoginPayload {
   credential?: string;
+  email?: string;
 }
 
 interface AuthContextValue {
@@ -16,6 +17,7 @@ interface AuthContextValue {
   session: AuthSession | null;
   login: (username: string, password: string) => Promise<void>;
   loginWithGoogle: (payload?: GoogleLoginPayload) => Promise<void>;
+  updateProfile: (payload: { fullName?: string; email?: string | null }) => Promise<void>;
   logout: () => Promise<void>;
   /** Kiểm tra quyền theo ma trận backend trả về (backend vẫn là nơi quyết định cuối cùng). */
   can: (resource: string, action: Action) => boolean;
@@ -62,6 +64,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus("authenticated");
   }, []);
 
+  const updateProfile = useCallback(async (payload: { fullName?: string; email?: string | null }) => {
+    const result = await api.patch<AuthSession>("/auth/profile", payload);
+    setSession(result);
+  }, []);
+
   const logout = useCallback(async () => {
     setSession(null);
     setStatus("anonymous");
@@ -89,8 +96,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ status, session, login, loginWithGoogle, logout, can }),
-    [status, session, login, loginWithGoogle, logout, can],
+    () => ({ status, session, login, loginWithGoogle, updateProfile, logout, can }),
+    [status, session, login, loginWithGoogle, updateProfile, logout, can],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

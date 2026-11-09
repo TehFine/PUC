@@ -5,8 +5,17 @@ import { AppException, badRequest, unauthorized } from "../common/errors/app.exc
 import { AuditService } from "../audit/audit.service";
 import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import type { AuthUser } from "./auth-user";
-import type { ChangePasswordDto, GoogleLoginDto, LoginDto, RegisterDto } from "./dto/auth.dto";
+import type {
+  ChangePasswordDto,
+  ForgotPasswordCccdDto,
+  ForgotPasswordRequestDto,
+  GoogleLoginDto,
+  LoginDto,
+  RegisterDto,
+  UpdateProfileDto,
+} from "./dto/auth.dto";
 import { permissionsFor, type Action, type Role } from "./permissions";
 import { TokensService } from "./tokens.service";
 
@@ -20,6 +29,7 @@ interface UserRow {
   id: number;
   full_name: string;
   username: string;
+  email: string | null;
   password_hash: string;
   role: Role;
   status: string;
@@ -54,6 +64,7 @@ export class AuthService {
     private readonly db: DatabaseService,
     private readonly tokens: TokensService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
     config: ConfigService<AppConfig, true>,
   ) {
     this.refreshTtlDays = config.get("jwt", { infer: true }).refreshTtlDays;
@@ -67,6 +78,7 @@ export class AuthService {
         id: user.id,
         fullName: user.fullName,
         username: user.username,
+        email: user.email ?? null,
         role: user.role,
         villageId: user.villageId,
         householdId: user.householdId,
@@ -79,7 +91,7 @@ export class AuthService {
     const cleanUsername = dto.username.trim();
     // Chỉ khớp đúng tên đăng nhập: không có bí danh theo vai trò, không đăng nhập bằng số điện thoại của hộ.
     const { rows } = await this.db.query<UserRow>(
-      `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+      `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
        FROM users u
        WHERE u.username = $1`,
       [cleanUsername],
@@ -140,6 +152,7 @@ export class AuthService {
       id: user.id,
       fullName: user.full_name,
       username: user.username,
+      email: user.email,
       role: user.role,
       villageId: user.village_id,
       householdId: user.household_id,
@@ -189,36 +202,94 @@ export class AuthService {
     }
   }
 
+  async googleConfig() {
+    if (this.googleClientId) {
+      return {
+        mode: "oauth" as const,
+        clientId: this.googleClientId,
+        demoAccounts: [],
+      };
+    }
+    if (!this.isProduction) {
+      const { rows } = await this.db.query<{
+        id: number;
+        full_name: string;
+        username: string;
+        email: string;
+        village_name: string | null;
+        household_code: string | null;
+      }>(
+        `SELECT u.id, u.full_name, u.username, u.email,
+                v.name AS village_name, h.code AS household_code
+         FROM users u
+         LEFT JOIN households h ON h.id = u.household_id
+         LEFT JOIN villages v ON v.id = COALESCE(u.village_id, h.village_id)
+         WHERE u.role = 'farmer' AND u.status = 'active' AND u.household_id IS NOT NULL AND u.email IS NOT NULL
+         ORDER BY u.id ASC
+         LIMIT 6`,
+      );
+      return {
+        mode: "demo" as const,
+        clientId: null,
+        demoAccounts: rows.map((r) => ({
+          id: r.id,
+          fullName: r.full_name,
+          username: r.username,
+          email: r.email,
+          villageName: r.village_name,
+          householdCode: r.household_code,
+        })),
+      };
+    }
+    return {
+      mode: "disabled" as const,
+      clientId: null,
+      demoAccounts: [],
+    };
+  }
+
   async loginWithGoogle(dto: GoogleLoginDto, meta: ClientMeta): Promise<SessionResult & { tokens: IssuedTokens }> {
     let user: UserRow | undefined;
 
     if (dto.credential) {
       const { email } = await this.verifyGoogleIdToken(dto.credential);
       const { rows } = await this.db.query<UserRow>(
-        `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+        `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
          FROM users u
-         WHERE LOWER(u.username) = $1 AND position('@' in u.username) > 0
+         WHERE LOWER(u.email) = $1 OR (LOWER(u.username) = $1 AND position('@' in u.username) > 0)
          LIMIT 1`,
         [email],
       );
       user = rows[0];
     } else if (!this.isProduction && !this.googleClientId) {
       // Chế độ trải nghiệm nhanh trên môi trường dev/demo (khi chưa cấu hình GOOGLE_CLIENT_ID):
-      // chỉ đăng nhập vào tài khoản nông dân mẫu, tuyệt đối không cấp quyền quản trị viên.
-      const { rows } = await this.db.query<UserRow>(
-        `SELECT u.id, u.full_name, u.username, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
-         FROM users u
-         WHERE u.role = 'farmer' AND u.status = 'active' AND u.household_id IS NOT NULL
-         ORDER BY u.id ASC
-         LIMIT 1`,
-      );
-      user = rows[0];
+      // cho phép chọn tài khoản hộ nông dân theo email liên kết, tuyệt đối không cấp quyền quản trị viên.
+      if (dto.email) {
+        const cleanEmail = dto.email.trim().toLowerCase();
+        const { rows } = await this.db.query<UserRow>(
+          `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+           FROM users u
+           WHERE u.role = 'farmer' AND (LOWER(u.email) = $1 OR LOWER(u.username) = $1)
+           LIMIT 1`,
+          [cleanEmail],
+        );
+        user = rows[0];
+      } else {
+        const { rows } = await this.db.query<UserRow>(
+          `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+           FROM users u
+           WHERE u.role = 'farmer' AND u.status = 'active' AND u.household_id IS NOT NULL
+           ORDER BY u.id ASC
+           LIMIT 1`,
+        );
+        user = rows[0];
+      }
     } else {
       throw unauthorized("Vui lòng cung cấp thông tin xác thực Google hợp lệ.");
     }
 
     if (!user) {
-      throw unauthorized("Tài khoản Google này chưa được liên kết với tài khoản nào trong hệ thống.");
+      throw unauthorized("Địa chỉ email Google này chưa được liên kết với tài khoản hộ nông dân nào trong hệ thống HTX Cư Né.");
     }
 
     if (user.locked_until && user.locked_until.getTime() > Date.now()) {
@@ -246,6 +317,7 @@ export class AuthService {
       id: user.id,
       fullName: user.full_name,
       username: user.username,
+      email: user.email,
       role: user.role,
       villageId: user.village_id,
       householdId: user.household_id,
@@ -258,17 +330,18 @@ export class AuthService {
    * được cho tới khi cán bộ HTX duyệt và gắn vào một hộ (xem RegistrationsService).
    */
   async register(dto: RegisterDto, meta: ClientMeta): Promise<{ status: "pending" }> {
-    const duplicate = new AppException(409, "Số điện thoại này đã được đăng ký. Hãy đăng nhập hoặc liên hệ cán bộ HTX.", "CONFLICT");
+    const duplicate = new AppException(409, "Số điện thoại hoặc email này đã được đăng ký. Hãy đăng nhập hoặc liên hệ cán bộ HTX.", "CONFLICT");
     if (dto.villageId) {
       const village = await this.db.query("SELECT 1 FROM villages WHERE id = $1", [dto.villageId]);
       if (village.rowCount === 0) throw badRequest("Thôn đã chọn không tồn tại.");
     }
     const passwordHash = await bcrypt.hash(dto.password, 12);
+    const cleanEmail = dto.email?.trim().toLowerCase() || null;
     try {
       await this.db.query(
-        `INSERT INTO users (full_name, username, password_hash, role, status, village_id, register_note)
-         VALUES ($1, $2, $3, 'farmer', 'pending', $4, $5)`,
-        [dto.fullName, dto.phone, passwordHash, dto.villageId ?? null, dto.note ?? null],
+        `INSERT INTO users (full_name, username, email, password_hash, role, status, village_id, register_note)
+         VALUES ($1, $2, $3, $4, 'farmer', 'pending', $5, $6)`,
+        [dto.fullName, dto.phone, cleanEmail, passwordHash, dto.villageId ?? null, dto.note ?? null],
       );
     } catch (error) {
       if ((error as { code?: string }).code === "23505") throw duplicate;
@@ -370,6 +443,213 @@ export class AuthService {
     }
     await this.revokeAllSessions(user.id);
     await this.audit.write({ ip, user }, { action: "Đổi mật khẩu", object: user.username });
+  }
+
+  /** Tự cập nhật họ tên hiển thị và email Google liên kết của tài khoản đang đăng nhập. */
+  async updateProfile(user: AuthUser, dto: UpdateProfileDto, ip?: string): Promise<SessionResult> {
+    const nextName = dto.fullName !== undefined ? dto.fullName.trim() : user.fullName;
+    if (!nextName) throw badRequest("Họ và tên không được để trống.");
+    const nextEmail = dto.email !== undefined ? dto.email : (user.email ?? null);
+
+    try {
+      await this.db.query("UPDATE users SET full_name = $2, email = $3 WHERE id = $1", [user.id, nextName, nextEmail]);
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new AppException(409, "Địa chỉ email Google này đã được liên kết với một tài khoản khác.", "CONFLICT");
+      }
+      throw error;
+    }
+
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Cập nhật hồ sơ cá nhân",
+        object: user.username,
+        detail: nextEmail ? `Email: ${nextEmail}` : "Gỡ liên kết email",
+      },
+    );
+
+    return this.sessionOf({
+      ...user,
+      fullName: nextName,
+      email: nextEmail,
+    });
+  }
+
+  /**
+   * Khôi phục mật khẩu tức thì cho hộ dân bằng cách đối chiếu tên đăng nhập / số điện thoại
+   * với số CCCD 12 chữ số trong hồ sơ hộ đã đăng ký với HTX.
+   */
+  async resetPasswordWithCccd(dto: ForgotPasswordCccdDto, meta: ClientMeta): Promise<{ ok: true; mode: "instant" }> {
+    const cleanUsername = dto.username.trim();
+    const cleanCccd = dto.cccd.trim();
+    const passwordHashPromise = bcrypt.hash(dto.newPassword, 12);
+
+    const { rows } = await this.db.query<{
+      id: number;
+      full_name: string;
+      username: string;
+      role: Role;
+      status: string;
+      failed_login_count: number;
+      locked_until: Date | null;
+      household_cccd: string | null;
+    }>(
+      `SELECT u.id, u.full_name, u.username, u.role, u.status,
+              u.failed_login_count, u.locked_until,
+              COALESCE(h1.cccd, h2.cccd) AS household_cccd
+       FROM users u
+       LEFT JOIN households h1 ON h1.id = u.household_id
+       LEFT JOIN households h2 ON u.household_id IS NULL AND h2.phone = u.username
+       WHERE u.username = $1
+       LIMIT 1`,
+      [cleanUsername],
+    );
+    const user = rows[0];
+    const passwordHash = await passwordHashPromise;
+
+    if (user?.locked_until && user.locked_until.getTime() > Date.now()) {
+      throw new AppException(
+        429,
+        "Tài khoản đang tạm khóa do xác thực sai nhiều lần. Vui lòng thử lại sau 15 phút hoặc gửi yêu cầu nhờ cán bộ HTX duyệt.",
+        "ACCOUNT_LOCKED",
+      );
+    }
+
+    if (!user || !user.household_cccd || user.household_cccd !== cleanCccd) {
+      if (user) {
+        const { rows: failRows } = await this.db.query<{ locked: boolean }>(
+          `UPDATE users
+           SET failed_login_count = CASE WHEN failed_login_count + 1 >= $2 THEN 0 ELSE failed_login_count + 1 END,
+               locked_until = CASE WHEN failed_login_count + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END
+           WHERE id = $1
+           RETURNING (locked_until IS NOT NULL AND locked_until > now()) AS locked`,
+          [user.id, MAX_FAILED_LOGINS, LOCK_MINUTES],
+        );
+        if (failRows[0]?.locked) {
+          await this.revokeAllSessions(user.id);
+        }
+        await this.audit.write(
+          { ip: meta.ip },
+          { action: "Khôi phục mật khẩu bằng CCCD thất bại", object: user.username },
+          { id: user.id, name: user.full_name },
+        );
+        if (!user.household_cccd) {
+          throw badRequest(
+            "Tài khoản này chưa gắn với hồ sơ hộ có số CCCD. Vui lòng chuyển sang mục Gửi yêu cầu nhờ cán bộ HTX duyệt.",
+          );
+        }
+      }
+      throw badRequest(
+        "Số điện thoại/tên đăng nhập hoặc số CCCD 12 chữ số không khớp với hồ sơ hộ trong hệ thống.",
+      );
+    }
+
+    if (user.status === "pending") {
+      throw new AppException(
+        403,
+        "Tài khoản đang chờ cán bộ HTX duyệt đăng ký ban đầu. Vui lòng quay lại sau khi được thông báo.",
+        "ACCOUNT_PENDING",
+      );
+    }
+    if (user.status !== "active") {
+      throw new AppException(
+        403,
+        "Tài khoản đang bị khóa bởi quản trị viên. Vui lòng gửi yêu cầu nhờ cán bộ HTX duyệt.",
+        "ACCOUNT_DISABLED",
+      );
+    }
+
+    const updated = await this.db.query(
+      `UPDATE users
+       SET password_hash = $2, failed_login_count = 0, locked_until = NULL
+       WHERE id = $1 AND (locked_until IS NULL OR locked_until <= now())`,
+      [user.id, passwordHash],
+    );
+    if (updated.rowCount === 0) {
+      throw new AppException(
+        429,
+        "Tài khoản đang tạm khóa do xác thực sai nhiều lần. Vui lòng thử lại sau.",
+        "ACCOUNT_LOCKED",
+      );
+    }
+
+    await this.db.query("DELETE FROM password_reset_requests WHERE user_id = $1 AND status = 'pending'", [user.id]);
+    await this.revokeAllSessions(user.id);
+    await this.audit.write(
+      { ip: meta.ip },
+      { action: "Đặt lại mật khẩu (xác minh CCCD)", object: user.username },
+      { id: user.id, name: user.full_name },
+    );
+
+    return { ok: true, mode: "instant" };
+  }
+
+  /**
+   * Gửi yêu cầu cấp lại mật khẩu chờ Cán bộ HTX / Quản trị viên duyệt.
+   * Mật khẩu mới được băm ngay khi lưu, khi cán bộ duyệt sẽ áp dụng trực tiếp.
+   */
+  async requestPasswordReset(dto: ForgotPasswordRequestDto, meta: ClientMeta): Promise<{ ok: true; mode: "request" }> {
+    const cleanUsername = dto.username.trim();
+    const cleanFullName = dto.fullName.trim();
+    const cleanNote = dto.note?.trim() || null;
+    const passwordHashPromise = bcrypt.hash(dto.newPassword, 12);
+
+    const { rows } = await this.db.query<{
+      id: number;
+      full_name: string;
+      username: string;
+      status: string;
+    }>("SELECT id, full_name, username, status FROM users WHERE username = $1 LIMIT 1", [cleanUsername]);
+    const user = rows[0];
+    const passwordHash = await passwordHashPromise;
+
+    if (!user) {
+      throw badRequest(
+        "Không tìm thấy tài khoản với số điện thoại hoặc tên đăng nhập này. Nếu chưa có tài khoản, vui lòng chọn Đăng ký.",
+      );
+    }
+    if (user.status === "pending") {
+      throw new AppException(
+        403,
+        "Tài khoản này đang chờ cán bộ HTX duyệt đăng ký ban đầu.",
+        "ACCOUNT_PENDING",
+      );
+    }
+
+    const existing = await this.db.query<{ id: number }>(
+      "SELECT id FROM password_reset_requests WHERE user_id = $1 AND status = 'pending' LIMIT 1",
+      [user.id],
+    );
+    if (existing.rows[0]) {
+      await this.db.query(
+        `UPDATE password_reset_requests
+         SET full_name = $2, new_password_hash = $3, note = $4, request_ip = $5, created_at = now()
+         WHERE id = $1`,
+        [existing.rows[0].id, cleanFullName, passwordHash, cleanNote, meta.ip ?? null],
+      );
+    } else {
+      await this.db.query(
+        `INSERT INTO password_reset_requests (user_id, username, full_name, new_password_hash, note, status, request_ip)
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
+        [user.id, user.username, cleanFullName, passwordHash, cleanNote, meta.ip ?? null],
+      );
+    }
+
+    await this.notifications.notifyRoles(["admin", "htx_officer"], {
+      kind: "system",
+      title: `Yêu cầu cấp lại mật khẩu: ${cleanFullName} (${user.username})`,
+      body: cleanNote ? `Ghi chú: ${cleanNote}` : "Chờ cán bộ HTX đối chiếu và phê duyệt.",
+      link: "/admin?section=registrations",
+    });
+
+    await this.audit.write(
+      { ip: meta.ip },
+      { action: "Gửi yêu cầu cấp lại mật khẩu", object: user.username, detail: cleanNote ?? undefined },
+      { id: user.id, name: cleanFullName },
+    );
+
+    return { ok: true, mode: "request" };
   }
 
   private revokeAllSessions(userId: number) {

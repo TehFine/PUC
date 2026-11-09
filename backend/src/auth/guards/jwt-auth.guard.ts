@@ -32,13 +32,14 @@ export class JwtAuthGuard implements CanActivate {
       id: number;
       full_name: string;
       username: string;
+      email: string | null;
       role: Role;
       status: string;
       village_id: number | null;
       household_id: number | null;
       locked_until: Date | null;
     }>(
-      "SELECT id, full_name, username, role, status, village_id, household_id, locked_until FROM users WHERE id = $1",
+      "SELECT id, full_name, username, email, role, status, village_id, household_id, locked_until FROM users WHERE id = $1",
       [userId],
     );
 
@@ -51,6 +52,7 @@ export class JwtAuthGuard implements CanActivate {
       id: row.id,
       fullName: row.full_name,
       username: row.username,
+      email: row.email,
       role: row.role,
       villageId: row.village_id,
       householdId: row.household_id,

@@ -40,4 +40,24 @@ export class RegistrationsController {
   reject(@Param("id", ParseRecordIdPipe) id: number, @CurrentUser() user: AuthUser, @Ip() ip: string) {
     return this.service.reject(id, user, ip);
   }
+
+  @Get("password-resets")
+  @Authorize("registrations", "read")
+  listPasswordResets() {
+    return this.service.listPasswordResets();
+  }
+
+  @Post("password-resets/:id/approve")
+  @HttpCode(200)
+  @Authorize("registrations", "update")
+  approvePasswordReset(@Param("id", ParseRecordIdPipe) id: number, @CurrentUser() user: AuthUser, @Ip() ip: string) {
+    return this.service.approvePasswordReset(id, user, ip);
+  }
+
+  @Post("password-resets/:id/reject")
+  @HttpCode(200)
+  @Authorize("registrations", "delete")
+  rejectPasswordReset(@Param("id", ParseRecordIdPipe) id: number, @CurrentUser() user: AuthUser, @Ip() ip: string) {
+    return this.service.rejectPasswordReset(id, user, ip);
+  }
 }

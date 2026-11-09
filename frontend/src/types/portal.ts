@@ -38,7 +38,7 @@ export interface PortalOverview {
 }
 
 export interface PortalProfile {
-  account: { fullName: string; username: string; lastLoginAt: string | null };
+  account: { fullName: string; username: string; email?: string | null; lastLoginAt: string | null };
   household: {
     code: string;
     name: string;

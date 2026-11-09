@@ -1,14 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
 import { AuditService } from "../audit/audit.service";
-import { AppException, notFound } from "../common/errors/app.exception";
+import { AppException, forbidden, notFound } from "../common/errors/app.exception";
 import { DatabaseService } from "../database/database.service";
 
 const toCamel = (key: string) => key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 const camelRows = (rows: Record<string, unknown>[]) =>
   rows.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [toCamel(key), value])));
 
-/** Duyệt tài khoản hộ dân tự đăng ký: gắn tài khoản chờ duyệt vào một hộ rồi kích hoạt, hoặc từ chối. */
+/** Duyệt tài khoản hộ dân tự đăng ký & duyệt yêu cầu cấp lại mật khẩu. */
 @Injectable()
 export class RegistrationsService {
   constructor(
@@ -16,18 +16,52 @@ export class RegistrationsService {
     private readonly audit: AuditService,
   ) {}
 
-  /** Tài khoản chờ duyệt, kèm hộ gợi ý (hộ chưa có tài khoản và trùng số điện thoại). */
+  /** Tài khoản chờ duyệt (kèm hộ gợi ý) và danh sách yêu cầu cấp lại mật khẩu đang chờ duyệt. */
   async listPending() {
+    const [regRes, resetRes] = await Promise.all([
+      this.db.query(
+        `SELECT u.id, u.full_name, u.username AS phone, u.register_note AS note, u.created_at,
+                u.village_id, v.name AS village_name,
+                h.id AS suggested_household_id, h.code AS suggested_household_code, h.name AS suggested_household_name
+         FROM users u
+         LEFT JOIN villages v ON v.id = u.village_id
+         LEFT JOIN households h ON h.phone = u.username
+           AND NOT EXISTS (SELECT 1 FROM users x WHERE x.household_id = h.id)
+         WHERE u.status = 'pending' AND u.role = 'farmer'
+         ORDER BY u.created_at`,
+      ),
+      this.db.query(
+        `SELECT r.id, r.user_id, r.username, r.full_name, r.note, r.created_at,
+                u.full_name AS account_name, u.role, u.status AS account_status,
+                v.name AS village_name,
+                h.code AS household_code, h.name AS household_name
+         FROM password_reset_requests r
+         JOIN users u ON u.id = r.user_id
+         LEFT JOIN households h ON h.id = u.household_id
+         LEFT JOIN villages v ON v.id = COALESCE(u.village_id, h.village_id)
+         WHERE r.status = 'pending'
+         ORDER BY r.created_at DESC`,
+      ),
+    ]);
+    return {
+      data: camelRows(regRes.rows),
+      passwordResets: camelRows(resetRes.rows),
+      total: regRes.rows.length + resetRes.rows.length,
+    };
+  }
+
+  async listPasswordResets() {
     const { rows } = await this.db.query(
-      `SELECT u.id, u.full_name, u.username AS phone, u.register_note AS note, u.created_at,
-              u.village_id, v.name AS village_name,
-              h.id AS suggested_household_id, h.code AS suggested_household_code, h.name AS suggested_household_name
-       FROM users u
-       LEFT JOIN villages v ON v.id = u.village_id
-       LEFT JOIN households h ON h.phone = u.username
-         AND NOT EXISTS (SELECT 1 FROM users x WHERE x.household_id = h.id)
-       WHERE u.status = 'pending' AND u.role = 'farmer'
-       ORDER BY u.created_at`,
+      `SELECT r.id, r.user_id, r.username, r.full_name, r.note, r.created_at,
+              u.full_name AS account_name, u.role, u.status AS account_status,
+              v.name AS village_name,
+              h.code AS household_code, h.name AS household_name
+       FROM password_reset_requests r
+       JOIN users u ON u.id = r.user_id
+       LEFT JOIN households h ON h.id = u.household_id
+       LEFT JOIN villages v ON v.id = COALESCE(u.village_id, h.village_id)
+       WHERE r.status = 'pending'
+       ORDER BY r.created_at DESC`,
     );
     return { data: camelRows(rows), total: rows.length };
   }
@@ -74,6 +108,76 @@ export class RegistrationsService {
     );
     if (!rows[0]) throw notFound("Không có đăng ký nào đang chờ duyệt với mã này.");
     await this.audit.write({ ip, user }, { action: "Từ chối đăng ký tài khoản", object: rows[0].username });
+    return { ok: true };
+  }
+
+  async approvePasswordReset(id: number, user: AuthUser, ip?: string) {
+    const { rows } = await this.db.query<{
+      id: number;
+      user_id: number;
+      username: string;
+      full_name: string;
+      new_password_hash: string;
+      role: string;
+    }>(
+      `SELECT r.id, r.user_id, r.username, r.full_name, r.new_password_hash, u.role
+       FROM password_reset_requests r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.id = $1 AND r.status = 'pending'`,
+      [id],
+    );
+    const req = rows[0];
+    if (!req) throw notFound("Không có yêu cầu cấp lại mật khẩu nào đang chờ duyệt với mã này.");
+    if (req.role === "admin" && user.role !== "admin") {
+      throw forbidden("Chỉ quản trị viên mới được phép duyệt đặt lại mật khẩu cho tài khoản quản trị viên.");
+    }
+
+    await this.db.query(
+      `UPDATE users
+       SET password_hash = $2,
+           failed_login_count = 0,
+           locked_until = NULL,
+           status = CASE WHEN status = 'locked' THEN 'active' ELSE status END
+       WHERE id = $1`,
+      [req.user_id, req.new_password_hash],
+    );
+    await this.db.query(
+      "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+      [req.user_id],
+    );
+    await this.db.query(
+      "UPDATE password_reset_requests SET status = 'approved', reviewed_by = $2, reviewed_at = now() WHERE id = $1",
+      [id, user.id],
+    );
+
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Duyệt cấp lại mật khẩu",
+        object: req.username,
+        detail: `Yêu cầu #${id} (${req.full_name})`,
+      },
+    );
+    return { id, userId: req.user_id, status: "approved" };
+  }
+
+  async rejectPasswordReset(id: number, user: AuthUser, ip?: string) {
+    const { rows } = await this.db.query<{ username: string; full_name: string }>(
+      `UPDATE password_reset_requests
+       SET status = 'rejected', reviewed_by = $2, reviewed_at = now()
+       WHERE id = $1 AND status = 'pending'
+       RETURNING username, full_name`,
+      [id, user.id],
+    );
+    if (!rows[0]) throw notFound("Không có yêu cầu cấp lại mật khẩu nào đang chờ duyệt với mã này.");
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Từ chối cấp lại mật khẩu",
+        object: rows[0].username,
+        detail: `Yêu cầu #${id} (${rows[0].full_name})`,
+      },
+    );
     return { ok: true };
   }
 }
