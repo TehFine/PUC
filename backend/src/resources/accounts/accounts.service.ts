@@ -13,11 +13,11 @@ export class AccountsService extends BaseCrudService {
       resource: "accounts",
       label: "Tài khoản",
       table: "users",
-      fields: `t.id, t.full_name, t.username, t.role, t.status, t.village_id,
+      fields: `t.id, t.full_name, t.username, t.email, t.role, t.status, t.village_id,
       v.name AS village_name, t.household_id, t.last_login_at, t.created_at`,
       from: `users t LEFT JOIN villages v ON v.id = t.village_id`,
       orderBy: "t.id",
-      search: ["t.full_name", "t.username"],
+      search: ["t.full_name", "t.username", "t.email"],
       filters: { role: "t.role", status: "t.status" },
       virtual: ["password"],
     });

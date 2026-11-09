@@ -7,6 +7,7 @@ export interface AccountRecord {
   id: number;
   fullName: string;
   username: string;
+  email?: string | null;
   role: Role;
   status: AccountStatus;
   villageId: number | null;
@@ -20,6 +21,7 @@ export interface AccountRecord {
 export interface AccountInput {
   fullName: string;
   username: string;
+  email?: string | null;
   password?: string;
   role: Role;
   status: AccountStatus;

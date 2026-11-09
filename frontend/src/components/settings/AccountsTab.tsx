@@ -154,7 +154,14 @@ export default function AccountsTab({
                       <span style={{ fontWeight: 500 }}>{a.fullName}</span>
                     </div>
                   </td>
-                  <td style={{ fontFamily: "monospace", fontSize: 12 }}>{a.username}</td>
+                  <td>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 12 }}>{a.username}</span>
+                      {a.email && (
+                        <span style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{a.email}</span>
+                      )}
+                    </div>
+                  </td>
                   <td>
                     <span
                       style={{

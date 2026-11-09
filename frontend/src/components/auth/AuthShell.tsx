@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import AuthSlides from "./AuthSlides";
 import "./auth.css";
 
-type Variant = "login" | "register";
+type Variant = "login" | "register" | "forgot";
 
 const CHECK = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -36,11 +36,31 @@ const ASIDE = {
     alt: "Bà con nông dân thu hoạch sầu riêng trong vườn",
     heading: (
       <>
-        Cùng HTX đưa sầu riêng <em>đạt chuẩn</em> xuất khẩu
+        Quản trị <em>chặt chẽ</em> chuẩn hồ sơ xuất khẩu
       </>
     ),
-    lead: "Đăng ký một lần, cán bộ HTX sẽ gắn tài khoản vào đúng hộ của bạn để bắt đầu ghi nhật ký vườn.",
-    points: ["Điền thông tin đăng ký, chỉ mất vài phút", "Cán bộ HTX đối chiếu hồ sơ và duyệt tài khoản", "Đăng nhập bằng số điện thoại, bắt đầu ghi nhật ký"],
+    lead: "Mọi hồ sơ nông hộ và ranh giới thửa đất đều được Ban Quản trị HTX thẩm định, thiết lập chuẩn xác trước khi ban hành tài khoản.",
+    points: [
+      "Cán bộ HTX & Trưởng thôn kiểm tra thực địa, lập hồ sơ hộ",
+      "Quản trị viên ban hành tài khoản gắn trực tiếp mã vùng trồng",
+      "Bà con nhận bàn giao tài khoản và ghi nhật ký canh tác ngay",
+    ],
+    numbered: true,
+  },
+  forgot: {
+    photo: "/landing/durian-landscape-real.jpg",
+    alt: "Vườn sầu riêng canh tác theo tiêu chuẩn VietGAP tại HTX Cư Né, Đắk Lắk",
+    heading: (
+      <>
+        Khôi phục mật khẩu <em>nhanh chóng</em> &amp; an toàn
+      </>
+    ),
+    lead: "Đặt lại mật khẩu ngay lập tức bằng số Căn cước công dân (CCCD) của chủ hộ, hoặc gửi yêu cầu để cán bộ HTX xác nhận.",
+    points: [
+      "Xác minh SĐT và số CCCD 12 số để đặt mật khẩu mới ngay",
+      "Hoặc gửi yêu cầu để cán bộ HTX đối chiếu và phê duyệt",
+      "Mật khẩu mới được mã hóa an toàn, bảo mật nhật ký canh tác",
+    ],
     numbered: true,
   },
 } as const;
@@ -59,7 +79,12 @@ interface AuthShellProps {
 /** Khung chia đôi màn hình dùng chung cho đăng nhập và đăng ký: bên trái giới thiệu, bên phải biểu mẫu. */
 export default function AuthShell({ variant, title, subtitle, wide = false, hideSwitch = false, children }: AuthShellProps) {
   const aside = ASIDE[variant];
-  const other = variant === "login" ? { href: "/register", text: "Chưa có tài khoản?", action: "Đăng ký" } : { href: "/login", text: "Đã có tài khoản?", action: "Đăng nhập" };
+  const other =
+    variant === "login"
+      ? { href: "/register", text: "Chưa có tài khoản?", action: "Quy trình cấp TK" }
+      : variant === "forgot"
+        ? { href: "/login", text: "Nhớ lại mật khẩu?", action: "Đăng nhập" }
+        : { href: "/login", text: "Đã được cấp tài khoản?", action: "Đăng nhập" };
 
   return (
     <main className="auth">

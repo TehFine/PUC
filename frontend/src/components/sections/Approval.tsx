@@ -142,7 +142,7 @@ export default function Approval() {
       ? [
           {
             id: "registrations" as const,
-            label: regCount > 0 ? `Đăng ký tài khoản (${regCount})` : "Đăng ký tài khoản",
+            label: regCount > 0 ? `Cấp lại mật khẩu (${regCount})` : "Cấp lại mật khẩu",
             badge: regCount,
           },
         ]

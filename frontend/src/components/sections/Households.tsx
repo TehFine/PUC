@@ -10,6 +10,7 @@ import { formatVn } from "@/components/admin/shared/form-utils";
 import { badgeOf, HOUSEHOLD_STATUS, optionsOf } from "@/components/admin/shared/labels";
 import { useVillageOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
+import HouseholdAccountModal from "@/components/admin/households/HouseholdAccountModal";
 import HouseholdDetailModal from "@/components/admin/households/HouseholdDetailModal";
 import HouseholdFormModal from "@/components/admin/households/HouseholdFormModal";
 import HouseholdImportModal from "@/components/admin/households/HouseholdImportModal";
@@ -44,6 +45,7 @@ export default function Households() {
 
   const [viewing, setViewing] = useState<HouseholdRecord | null>(null);
   const [editing, setEditing] = useState<HouseholdRecord | "new" | null>(null);
+  const [issuingAccount, setIssuingAccount] = useState<HouseholdRecord | null>(null);
   const [deleting, setDeleting] = useState<HouseholdRecord | null>(null);
   const [importing, setImporting] = useState(false);
 
@@ -221,9 +223,23 @@ export default function Households() {
                         Xem
                       </button>
                       {canUpdate && (
-                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(h)}>
-                          Sửa
-                        </button>
+                        <>
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(h)}>
+                            Sửa
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${h.accountId ? "btn-outline" : "btn-primary"}`}
+                            onClick={() => setIssuingAccount(h)}
+                            title={
+                              h.accountId
+                                ? `Tài khoản đã cấp: ${h.accountUsername}. Bấm để cấp lại mật khẩu.`
+                                : "Ban hành tài khoản đăng nhập cho hộ nông dân này"
+                            }
+                          >
+                            {h.accountId ? "Cấp lại TK" : "Ban hành TK"}
+                          </button>
+                        </>
                       )}
                       {canDelete && (
                         <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeleting(h)}>
@@ -262,6 +278,14 @@ export default function Households() {
           villageOptions={villageOptions}
           onClose={() => setEditing(null)}
           onSaved={() => void list.refresh()}
+        />
+      )}
+
+      {issuingAccount && (
+        <HouseholdAccountModal
+          household={issuingAccount}
+          onClose={() => setIssuingAccount(null)}
+          onIssued={() => void list.refresh()}
         />
       )}
 

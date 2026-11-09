@@ -27,6 +27,7 @@ export default function AccountFormModal({
 
   const [fullName, setFullName] = useState(initial?.fullName ?? "");
   const [username, setUsername] = useState(initial?.username ?? "");
+  const [email, setEmail] = useState(initial?.email ?? "");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>(initial?.role ?? "farmer");
   const [status, setStatus] = useState<AccountStatus>(initial?.status ?? "active");
@@ -38,6 +39,7 @@ export default function AccountFormModal({
     const body: Record<string, unknown> = {
       fullName: fullName.trim(),
       username: username.trim(),
+      email: email.trim() ? email.trim().toLowerCase() : null,
       role,
       status,
       villageId: villageId ? Number(villageId) : null,
@@ -89,6 +91,14 @@ export default function AccountFormModal({
           onChange={setUsername}
           maxLength={64}
           placeholder="VD: 0912345678 hoặc cb_thon1"
+        />
+        <TextField
+          label="Email Google liên kết (tùy chọn)"
+          type="email"
+          value={email}
+          onChange={setEmail}
+          maxLength={120}
+          placeholder="VD: tenban@gmail.com"
         />
         <TextField
           label={initial ? "Đặt lại mật khẩu (để trống nếu giữ nguyên)" : "Mật khẩu khởi tạo"}

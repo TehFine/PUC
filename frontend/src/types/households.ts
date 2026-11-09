@@ -6,6 +6,10 @@ export type HouseholdStatus = HouseholdDto["status"];
 export interface HouseholdRow extends HouseholdDto {
   createdAt?: string;
   updatedAt?: string;
+  accountId?: number | null;
+  accountUsername?: string | null;
+  accountEmail?: string | null;
+  accountStatus?: "active" | "locked" | "pending" | null;
 }
 
 export type HouseholdRecord = HouseholdRow;

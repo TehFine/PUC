@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import bcrypt from "bcryptjs";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import type { AuthUser } from "../../auth/auth-user";
@@ -7,9 +8,9 @@ import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import type { ListQueryDto } from "../../common/crud/list-query.dto";
 import { villageScope } from "../../common/crud/village-scope";
-import { AppException, forbidden } from "../../common/errors/app.exception";
+import { AppException, badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
-import { CreateHouseholdDto } from "./households.dto";
+import { CreateHouseholdDto, IssueHouseholdAccountDto } from "./households.dto";
 
 /** Chỉ quản trị viên và cán bộ HTX (người duyệt hồ sơ) được xem/tìm theo số CCCD đầy đủ. */
 const CCCD_FULL_ACCESS: Role[] = ["admin", "htx_officer"];
@@ -44,8 +45,9 @@ export class HouseholdsService extends BaseCrudService {
       label: "Hộ nông dân",
       table: "households",
       fields: `t.id, t.code, t.name, t.cccd, t.phone, t.village_id, v.name AS village_name,
-      t.plot_count, t.area_ha, t.status, t.created_at, t.updated_at`,
-      from: `households t JOIN villages v ON v.id = t.village_id`,
+      t.plot_count, t.area_ha, t.status, t.created_at, t.updated_at,
+      u.id AS account_id, u.username AS account_username, u.email AS account_email, u.status AS account_status`,
+      from: `households t JOIN villages v ON v.id = t.village_id LEFT JOIN users u ON u.household_id = t.id`,
       orderBy: "t.id",
       search: ["t.name", "t.code", "t.cccd", "t.phone"],
       // Vai trò không được xem CCCD cũng không được dò CCCD qua ô tìm kiếm.
@@ -143,5 +145,112 @@ export class HouseholdsService extends BaseCrudService {
       },
     );
     return result;
+  }
+
+  /**
+   * Ban hành hoặc cấp lại tài khoản đăng nhập cho hộ nông dân sau khi đã thiết lập hồ sơ hộ.
+   */
+  async issueAccount(householdId: number, dto: IssueHouseholdAccountDto, user: AuthUser, ip?: string) {
+    const { rows: hhRows } = await this.db.query<{
+      id: number;
+      code: string;
+      name: string;
+      phone: string;
+      village_id: number;
+    }>("SELECT id, code, name, phone, village_id FROM households WHERE id = $1", [householdId]);
+    const hh = hhRows[0];
+    if (!hh) throw notFound("Không tìm thấy hồ sơ hộ nông dân này.");
+
+    const cleanUsername = (dto.username?.trim() || hh.phone.trim()).replace(/\s+/g, "");
+    if (!/^[0-9A-Za-z._-]{3,64}$/.test(cleanUsername)) {
+      throw badRequest("Tên đăng nhập gồm 3–64 ký tự chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.");
+    }
+    const cleanEmail =
+      dto.email !== undefined
+        ? dto.email
+        : /^0[0-9]{9}$/.test(cleanUsername)
+          ? `nongho.${cleanUsername}@gmail.com`
+          : null;
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+
+    const { rows: existingByHh } = await this.db.query<{ id: number; username: string }>(
+      "SELECT id, username FROM users WHERE household_id = $1 LIMIT 1",
+      [householdId],
+    );
+
+    try {
+      let accountId: number;
+      let actionLabel: string;
+
+      if (existingByHh[0]) {
+        accountId = existingByHh[0].id;
+        actionLabel = "Cấp lại tài khoản hộ nông dân";
+        await this.db.query(
+          `UPDATE users
+           SET full_name = $2,
+               username = $3,
+               email = $4,
+               password_hash = $5,
+               village_id = $6,
+               role = 'farmer',
+               status = 'active',
+               failed_login_count = 0,
+               locked_until = NULL
+           WHERE id = $1`,
+          [accountId, hh.name, cleanUsername, cleanEmail, passwordHash, hh.village_id],
+        );
+        await this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [
+          accountId,
+        ]);
+      } else {
+        actionLabel = "Ban hành tài khoản hộ nông dân";
+        const { rows: ins } = await this.db.query<{ id: number }>(
+          `INSERT INTO users (full_name, username, email, password_hash, role, status, village_id, household_id)
+           VALUES ($1, $2, $3, $4, 'farmer', 'active', $5, $6)
+           ON CONFLICT (username) DO UPDATE SET
+             full_name = EXCLUDED.full_name,
+             email = COALESCE(EXCLUDED.email, users.email),
+             password_hash = EXCLUDED.password_hash,
+             role = 'farmer',
+             status = 'active',
+             village_id = EXCLUDED.village_id,
+             household_id = EXCLUDED.household_id,
+             failed_login_count = 0,
+             locked_until = NULL
+           WHERE users.household_id IS NULL OR users.household_id = EXCLUDED.household_id
+           RETURNING id`,
+          [hh.name, cleanUsername, cleanEmail, passwordHash, hh.village_id, householdId],
+        );
+        if (!ins[0]) {
+          throw new AppException(409, `Tên đăng nhập "${cleanUsername}" đang thuộc về một tài khoản khác.`, "CONFLICT");
+        }
+        accountId = ins[0].id;
+      }
+
+      await this.audit.write(
+        { ip, user },
+        {
+          action: actionLabel,
+          object: cleanUsername,
+          detail: `Hộ ${hh.code} – ${hh.name}`,
+        },
+      );
+
+      return {
+        accountId,
+        householdId: hh.id,
+        householdCode: hh.code,
+        fullName: hh.name,
+        username: cleanUsername,
+        email: cleanEmail,
+        status: "active",
+      };
+    } catch (error) {
+      if (error instanceof AppException) throw error;
+      if ((error as { code?: string }).code === "23505") {
+        throw new AppException(409, "Tên đăng nhập hoặc email Google này đã được gắn cho tài khoản khác.", "CONFLICT");
+      }
+      throw error;
+    }
   }
 }
