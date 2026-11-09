@@ -8,9 +8,11 @@ import {
   ClipboardCheck,
   Globe,
   House,
+  Mail,
   NotebookPen,
   Scale,
   TreePine,
+  UserCheck,
   type LucideIcon,
 } from "lucide-react";
 import { FormEvent, startTransition, useCallback, useEffect, useMemo, useState } from "react";
@@ -174,7 +176,7 @@ export default function PortalApp() {
 function PortalAppContent() {
   const router = useRouter();
   const { lang, setLang, t } = usePortalLang();
-  const { status, session, logout } = useAuth();
+  const { status, session, logout, updateProfile } = useAuth();
   const { data: overview } = usePortal<PortalOverview>("overview");
   const { data: profile } = usePortal<PortalProfile>("profile");
   const notifications = useSharedQuery<NotificationList>(
@@ -194,8 +196,16 @@ function PortalAppContent() {
   const [navWheelOpen, setNavWheelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [editAccountOpen, setEditAccountOpen] = useState(false);
+  const [accountNameInput, setAccountNameInput] = useState("");
+  const [accountEmailInput, setAccountEmailInput] = useState("");
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+  const [clearingRead, setClearingRead] = useState(false);
+  const [notifFilter, setNotifFilter] = useState<"all" | "unread">("all");
   const [localReadIds, setLocalReadIds] = useState<number[]>([]);
+  const [localClearedIds, setLocalClearedIds] = useState<number[]>([]);
 
   const openSupport = useCallback(() => setSupportOpen(true), []);
   const closeSupport = useCallback(() => setSupportOpen(false), []);
@@ -299,27 +309,29 @@ function PortalAppContent() {
   const fallbackNotifItems = useMemo<AppNotification[]>(() => {
     if (apiNotifItems.length > 0) return [];
     const reminders = (overview?.reminders ?? []).filter((r) => r.kind !== "training");
-    return reminders.map((r, idx) => {
-      const id = -(idx + 1);
-      const isRead = localReadIds.includes(id);
-      const prefix =
-        r.kind === "violation" || r.kind === "journal"
-          ? "Cảnh báo vi phạm: "
-          : r.kind === "schedule"
-            ? "Lịch kiểm tra: "
-            : "";
-      const title = prefix && !r.title.startsWith(prefix) ? `${prefix}${r.title}` : r.title;
-      return {
-        id,
-        kind: (r.kind === "journal" || r.kind === "isolation" ? "violation" : r.kind) as AppNotification["kind"],
-        title,
-        body: r.detail ?? null,
-        link: `/portal?tab=${r.tab}`,
-        readAt: isRead ? new Date().toISOString() : null,
-        createdAt: r.date ?? new Date().toISOString(),
-      };
-    });
-  }, [apiNotifItems.length, overview?.reminders, localReadIds]);
+    return reminders
+      .map((r, idx) => {
+        const id = -(idx + 1);
+        const isRead = localReadIds.includes(id);
+        const prefix =
+          r.kind === "violation" || r.kind === "journal"
+            ? "Cảnh báo vi phạm: "
+            : r.kind === "schedule"
+              ? "Lịch kiểm tra: "
+              : "";
+        const title = prefix && !r.title.startsWith(prefix) ? `${prefix}${r.title}` : r.title;
+        return {
+          id,
+          kind: (r.kind === "journal" || r.kind === "isolation" ? "violation" : r.kind) as AppNotification["kind"],
+          title,
+          body: r.detail ?? null,
+          link: `/portal?tab=${r.tab}`,
+          readAt: isRead ? new Date().toISOString() : null,
+          createdAt: r.date ?? new Date().toISOString(),
+        };
+      })
+      .filter((item) => !localClearedIds.includes(item.id));
+  }, [apiNotifItems.length, overview?.reminders, localReadIds, localClearedIds]);
 
   if (status !== "authenticated" || session?.user.role !== "farmer") {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
@@ -328,6 +340,7 @@ function PortalAppContent() {
   const profHousehold = profile?.household ?? overview?.household;
   const profAccount = profile?.account;
   const displayName = profHousehold?.name || profAccount?.fullName || session?.user.fullName || "Hộ thành viên";
+  const linkedEmail = profAccount?.email ?? session?.user.email ?? null;
   const householdStatus = HOUSEHOLD_STATUS[profHousehold?.status ?? "pending"] ?? HOUSEHOLD_STATUS.pending;
   const initials =
     displayName
@@ -343,6 +356,38 @@ function PortalAppContent() {
     apiNotifItems.length > 0
       ? (notifications.data?.unread ?? apiNotifItems.filter((n) => !n.readAt).length)
       : fallbackNotifItems.filter((n) => !n.readAt).length;
+  const readCount = notifItems.filter((n) => Boolean(n.readAt)).length;
+  const visibleNotifItems = notifFilter === "unread" ? notifItems.filter((n) => !n.readAt) : notifItems;
+
+  const openEditAccount = () => {
+    setAccountNameInput(profAccount?.fullName || session?.user.fullName || displayName);
+    setAccountEmailInput(linkedEmail ?? "");
+    setAccountError(null);
+    closeProfile();
+    setEditAccountOpen(true);
+  };
+
+  const handleSaveAccount = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!accountNameInput.trim()) {
+      setAccountError("Tên hiển thị không được để trống.");
+      return;
+    }
+    setSavingAccount(true);
+    setAccountError(null);
+    try {
+      await updateProfile({
+        fullName: accountNameInput.trim(),
+        email: accountEmailInput.trim() ? accountEmailInput.trim().toLowerCase() : null,
+      });
+      invalidateQueries(portalPath("profile"), portalPath("overview"));
+      setEditAccountOpen(false);
+    } catch (err) {
+      setAccountError(errorMessage(err, "Không thể cập nhật thông tin tài khoản."));
+    } finally {
+      setSavingAccount(false);
+    }
+  };
 
   const handleMarkRead = async (item: AppNotification) => {
     if (!item.readAt) {
@@ -375,6 +420,24 @@ function PortalAppContent() {
       // Ignore
     } finally {
       setMarkingAll(false);
+    }
+  };
+
+  const handleClearRead = async () => {
+    if (clearingRead || readCount === 0) return;
+    setClearingRead(true);
+    try {
+      if (apiNotifItems.length === 0 && fallbackNotifItems.length > 0) {
+        const readIds = fallbackNotifItems.filter((n) => Boolean(n.readAt)).map((n) => n.id);
+        setLocalClearedIds((prev) => Array.from(new Set([...prev, ...readIds])));
+      } else {
+        await api.post("/notifications/clear-read");
+        invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
+      }
+    } catch {
+      // Ignore
+    } finally {
+      setClearingRead(false);
     }
   };
 
@@ -519,6 +582,18 @@ function PortalAppContent() {
                 </div>
               </div>
 
+              <div className="pt-profile-row">
+                <span className="pt-profile-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, color: "#166534" }}>
+                  <Mail size={20} />
+                </span>
+                <div className="pt-profile-row-content">
+                  <span className="pt-profile-label">Email liên kết Google</span>
+                  <strong className="pt-profile-val">
+                    {linkedEmail || "Chưa liên kết"}
+                  </strong>
+                </div>
+              </div>
+
               {profile?.household.cccdMasked && (
                 <div className="pt-profile-row">
                   <RadialPngIcon src="/id-card.png" size={24} className="pt-profile-icon" />
@@ -590,6 +665,18 @@ function PortalAppContent() {
               <button
                 type="button"
                 className="pt-profile-intro-btn"
+                onClick={openEditAccount}
+              >
+                <span className="pt-profile-action-icon" aria-hidden="true" style={{ color: "#166534" }}>
+                  <UserCheck size={20} />
+                </span>
+                <span className="pt-profile-action-title">{t("Cập nhật Email Google & Tài khoản")}</span>
+                <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
+              </button>
+
+              <button
+                type="button"
+                className="pt-profile-intro-btn"
                 onClick={() => {
                   closeProfile();
                   setPasswordOpen(true);
@@ -635,32 +722,64 @@ function PortalAppContent() {
       {notifOpen && (
         <Sheet title={t("Thông báo từ HTX")} onClose={() => setNotifOpen(false)}>
           <div className="pt-stack" style={{ gap: 14 }}>
-            {unreadCount > 0 && (
-              <div className="pt-notif-toolbar">
-                <span className="pt-notif-summary">
-                  Bạn có <strong>{unreadCount}</strong> thông báo chưa đọc
-                </span>
-                <BusyButton
-                  type="button"
-                  className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
-                  busy={markingAll}
-                  busyLabel="Đang đánh dấu…"
-                  onClick={() => void handleMarkAllRead()}
-                >
-                  <span>Đánh dấu đã đọc hết</span>
-                </BusyButton>
+            {notifItems.length > 0 && (
+              <div className="pt-notif-toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "inline-flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    className={`pt-btn pt-btn-sm ${notifFilter === "all" ? "pt-btn-primary" : "pt-btn-ghost"}`}
+                    onClick={() => setNotifFilter("all")}
+                  >
+                    Tất cả ({notifItems.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`pt-btn pt-btn-sm ${notifFilter === "unread" ? "pt-btn-primary" : "pt-btn-ghost"}`}
+                    onClick={() => setNotifFilter("unread")}
+                  >
+                    Chưa đọc ({unreadCount})
+                  </button>
+                </div>
+                <div style={{ display: "inline-flex", gap: 6, marginLeft: "auto" }}>
+                  {unreadCount > 0 && (
+                    <BusyButton
+                      type="button"
+                      className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
+                      busy={markingAll}
+                      busyLabel="Đang đánh dấu…"
+                      onClick={() => void handleMarkAllRead()}
+                    >
+                      <span>Đọc hết</span>
+                    </BusyButton>
+                  )}
+                  {readCount > 0 && (
+                    <BusyButton
+                      type="button"
+                      className="pt-btn pt-btn-ghost pt-btn-sm"
+                      busy={clearingRead}
+                      busyLabel="Đang xóa…"
+                      onClick={() => void handleClearRead()}
+                    >
+                      <span>Xóa đã đọc ({readCount})</span>
+                    </BusyButton>
+                  )}
+                </div>
               </div>
             )}
 
             <StateBlock loading={notifications.loading} error={notifications.error} variant="rows" />
 
-            {!notifications.loading && notifItems.length === 0 && (
-              <EmptyState icon="none">Hiện chưa có thông báo mới nào từ HTX.</EmptyState>
+            {!notifications.loading && visibleNotifItems.length === 0 && (
+              <EmptyState icon="none">
+                {notifFilter === "unread"
+                  ? "Bạn đã đọc hết tất cả thông báo."
+                  : "Hiện chưa có thông báo mới nào từ HTX."}
+              </EmptyState>
             )}
 
-            {notifItems.length > 0 && (
+            {visibleNotifItems.length > 0 && (
               <ul className="pt-notif-list">
-                {notifItems.map((item) => {
+                {visibleNotifItems.map((item) => {
                   const isUnread = !item.readAt;
                   return (
                     <li
@@ -692,6 +811,57 @@ function PortalAppContent() {
               </ul>
             )}
           </div>
+        </Sheet>
+      )}
+
+      {editAccountOpen && (
+        <Sheet
+          title={t("Cập nhật Email Google & Tài khoản")}
+          onClose={() => setEditAccountOpen(false)}
+          className="pt-password-sheet"
+        >
+          <form className="pt-form" onSubmit={handleSaveAccount}>
+            <Field label="Tên hiển thị tài khoản" htmlFor="pt-acc-name">
+              <input
+                id="pt-acc-name"
+                type="text"
+                value={accountNameInput}
+                onChange={(e) => setAccountNameInput(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Email liên kết đăng nhập Google" htmlFor="pt-acc-email">
+              <input
+                id="pt-acc-email"
+                type="email"
+                placeholder="vi-du@gmail.com"
+                value={accountEmailInput}
+                onChange={(e) => setAccountEmailInput(e.target.value)}
+              />
+            </Field>
+            <p className="pt-hint">
+              Email này giúp bạn đăng nhập 1 chạm bằng nút <strong>Tiếp tục với Google</strong> trên màn hình đăng nhập. Các thông tin pháp lý hộ canh tác (CCCD, diện tích, thửa đất) do Ban quản trị HTX thiết lập và quản lý.
+            </p>
+            <InlineError message={accountError} />
+            <div className="pt-form-actions">
+              <button
+                type="button"
+                className="pt-btn pt-btn-ghost"
+                onClick={() => setEditAccountOpen(false)}
+                disabled={savingAccount}
+              >
+                Hủy
+              </button>
+              <BusyButton
+                type="submit"
+                className="pt-btn pt-btn-primary"
+                busy={savingAccount}
+                busyLabel="Đang lưu…"
+              >
+                Lưu thay đổi
+              </BusyButton>
+            </div>
+          </form>
         </Sheet>
       )}
 

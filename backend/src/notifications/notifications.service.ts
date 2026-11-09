@@ -247,6 +247,11 @@ export class NotificationsService {
     return { ok: true };
   }
 
+  async clearRead(userId: number) {
+    const res = await this.db.query("DELETE FROM notifications WHERE user_id = $1 AND read_at IS NOT NULL", [userId]);
+    return { ok: true, deleted: res.rowCount ?? 0 };
+  }
+
   private async insert(recipientsSql: string, params: unknown[]) {
     try {
       this.lastSyncedAt.clear();

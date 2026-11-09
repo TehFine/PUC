@@ -31,6 +31,8 @@ export default function NotificationBell() {
   const { data, loading, error, refresh } = useApi<NotificationList>("/notifications");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [filterMode, setFilterMode] = useState<"all" | "unread">("all");
 
   useEffect(() => onCountsChanged(() => void refresh()), [refresh]);
 
@@ -41,6 +43,8 @@ export default function NotificationBell() {
 
   const items: NotificationItem[] = (data?.data ?? []).filter((n) => n.kind !== "training");
   const unread = items.filter((n) => !n.readAt).length;
+  const readCount = items.length - unread;
+  const visibleItems = filterMode === "unread" ? items.filter((n) => !n.readAt) : items;
 
   const markRead = async (item: NotificationItem) => {
     if (!item.readAt) {
@@ -70,6 +74,18 @@ export default function NotificationBell() {
     }
   };
 
+  const clearRead = async () => {
+    if (clearing || readCount === 0) return;
+    setClearing(true);
+    try {
+      await api.post("/notifications/clear-read");
+      await refresh();
+    } catch {
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div className="admin-notif-wrap">
       <button
@@ -95,32 +111,64 @@ export default function NotificationBell() {
       {open && (
         <Sheet title="Thông báo từ HTX" onClose={() => setOpen(false)}>
           <div className="pt-stack" style={{ gap: 14 }}>
-            {unread > 0 && (
-              <div className="pt-notif-toolbar">
-                <span className="pt-notif-summary">
-                  Bạn có <strong>{unread}</strong> thông báo chưa đọc
-                </span>
-                <BusyButton
-                  type="button"
-                  className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
-                  busy={busy}
-                  busyLabel="Đang đánh dấu…"
-                  onClick={() => void markAllRead()}
-                >
-                  <span>Đánh dấu đã đọc hết</span>
-                </BusyButton>
+            {items.length > 0 && (
+              <div className="pt-notif-toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "inline-flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    className={`pt-btn pt-btn-sm ${filterMode === "all" ? "pt-btn-primary" : "pt-btn-ghost"}`}
+                    onClick={() => setFilterMode("all")}
+                  >
+                    Tất cả ({items.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`pt-btn pt-btn-sm ${filterMode === "unread" ? "pt-btn-primary" : "pt-btn-ghost"}`}
+                    onClick={() => setFilterMode("unread")}
+                  >
+                    Chưa đọc ({unread})
+                  </button>
+                </div>
+                <div style={{ display: "inline-flex", gap: 6, marginLeft: "auto" }}>
+                  {unread > 0 && (
+                    <BusyButton
+                      type="button"
+                      className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
+                      busy={busy}
+                      busyLabel="Đang đánh dấu…"
+                      onClick={() => void markAllRead()}
+                    >
+                      <span>Đọc hết</span>
+                    </BusyButton>
+                  )}
+                  {readCount > 0 && (
+                    <BusyButton
+                      type="button"
+                      className="pt-btn pt-btn-ghost pt-btn-sm"
+                      busy={clearing}
+                      busyLabel="Đang xóa…"
+                      onClick={() => void clearRead()}
+                    >
+                      <span>Xóa đã đọc ({readCount})</span>
+                    </BusyButton>
+                  )}
+                </div>
               </div>
             )}
 
             <StateBlock loading={loading && items.length === 0} error={error} variant="rows" />
 
-            {!loading && items.length === 0 && (
-              <EmptyState icon="none">Hiện chưa có thông báo mới nào từ HTX.</EmptyState>
+            {!loading && visibleItems.length === 0 && (
+              <EmptyState icon="none">
+                {filterMode === "unread"
+                  ? "Bạn đã đọc hết tất cả thông báo."
+                  : "Hiện chưa có thông báo mới nào từ HTX."}
+              </EmptyState>
             )}
 
-            {items.length > 0 && (
+            {visibleItems.length > 0 && (
               <ul className="pt-notif-list">
-                {items.map((item) => {
+                {visibleItems.map((item) => {
                   const isUnread = !item.readAt;
                   return (
                     <li

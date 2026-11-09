@@ -34,7 +34,7 @@ const FAQ_ITEMS: FaqItem[] = [
     id: "banned",
     kicker: "HỖ TRỢ 3 · TÀI KHOẢN",
     title: "Quên mật khẩu hoặc đổi số điện thoại",
-    desc: "Liên hệ Ban quản trị HTX hoặc Trưởng thôn để được kiểm tra và cấp lại mật khẩu đăng nhập.",
+    desc: "Chọn 'Quên mật khẩu?' tại màn hình đăng nhập để đặt lại ngay bằng số CCCD 12 số hoặc gửi yêu cầu nhờ cán bộ HTX phê duyệt.",
     nodeType: "danger",
     capsuleBg: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)",
     cardClass: "pt-vietgap-card-banned",
