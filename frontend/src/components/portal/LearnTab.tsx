@@ -2574,6 +2574,23 @@ export function DiseaseDetailModal({
 
   return (
     <div className="pt-pesticide-modal-body">
+      <div className="pt-pesticide-showcase-wrap" style={{ padding: "4px 0 2px" }}>
+        <img
+          src={item.image}
+          alt={`Hình ảnh thực tế ${item.name}`}
+          loading="lazy"
+          decoding="async"
+          className="pt-pesticide-showcase-img"
+          style={{
+            width: "100%",
+            height: 230,
+            objectFit: "cover",
+            borderRadius: 16,
+            boxShadow: "0 8px 24px rgba(15, 23, 42, 0.1)",
+          }}
+        />
+      </div>
+
       <div className="pt-pesticide-header-info" style={{ paddingTop: 4 }}>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
           <Pill tone={isVeryCommon ? "red" : "gold"}>
@@ -2805,7 +2822,7 @@ export function DiseaseAndIpmList() {
           <div className="pt-pest-list">
             {shown.map((item) => {
               const isDisease = item.kind === "disease";
-              const imgSrc = isDisease ? "/pesticides/amber.png" : "/pesticides/green.png";
+              const imgSrc = item.image;
               return (
                 <article
                   key={item.id}
@@ -2828,6 +2845,7 @@ export function DiseaseAndIpmList() {
                       loading="lazy"
                       decoding="async"
                       className="pt-pest-card-img"
+                      style={{ objectFit: "cover", borderRadius: 14 }}
                     />
                   </div>
                   <div className="pt-pest-card-content">
