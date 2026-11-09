@@ -109,6 +109,44 @@ export class PublicController {
     return (await this.db.query<{ id: number; name: string }>("SELECT id, name FROM villages ORDER BY name")).rows;
   }
 
+  /** Danh sách mã lô thu hoạch & mã tem mẫu để hiển thị trên trang cổng tra cứu công khai `/trace`. */
+  @Public()
+  @Get("trace-samples")
+  @Header("Cache-Control", "public, max-age=120")
+  async traceSamples() {
+    const [lotsRes, stampsRes, plotsRes] = await Promise.all([
+      this.db.query(
+        `SELECT code, harvested_on, (weight_tons * 1000)::float8 AS weight_kg, buyer, market, status
+         FROM harvest_lots
+         ORDER BY harvested_on DESC, id DESC
+         LIMIT 6`,
+      ),
+      this.db.query(
+        `SELECT fs.serial_code AS code, fs.fruit_weight_kg::float8 AS weight_kg, fs.grade,
+                COALESCE(fs.harvest_date::text, fs.activated_at::date::text) AS issued_at,
+                fs.plot_code AS lot_code, h.name AS household_name
+         FROM farmer_stamps fs
+         JOIN households h ON h.id = fs.household_id
+         ORDER BY fs.activated_at DESC NULLS LAST, fs.id DESC
+         LIMIT 6`,
+      ),
+      this.db.query(
+        `SELECT p.code, COALESCE(p.area_ha * 18000, 18000)::float8 AS weight_kg,
+                ('Hộ ' || COALESCE(p.owner_name, h.name, 'thành viên HTX')) AS buyer,
+                COALESCE(p.zone_code, '66-PUC-SR0001-00728') AS market,
+                p.status
+         FROM plots p
+         LEFT JOIN households h ON h.id = p.household_id
+         ORDER BY p.id ASC
+         LIMIT 6`,
+      ),
+    ]);
+    return {
+      lots: camelRows(lotsRes.rows.length > 0 ? lotsRes.rows : plotsRes.rows),
+      stamps: camelRows(stampsRes.rows),
+    };
+  }
+
   /** Tra cứu hồ sơ truy xuất nguồn gốc công khai bằng mã lô, mã tem QR hoặc mã định danh từng quả/thùng */
   @Public()
   @Throttle({ default: { limit: process.env.NODE_ENV === "test" ? 1000 : 60, ttl: 60_000 } })

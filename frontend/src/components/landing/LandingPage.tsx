@@ -152,12 +152,12 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               Tại HTX Cư Né, Đắk Lắk, bà con ghi nhật ký chăm sóc vườn, theo dõi mã vùng trồng và kết quả kiểm nghiệm ngay trên điện thoại, để sầu riêng đạt chuẩn trước khi xuất khẩu.
             </p>
             <div className="lp-hero-cta">
-              <Link href="/register" className="lp-btn lp-btn-solid">
-                Đăng ký tài khoản hộ dân
+              <Link href="/login" className="lp-btn lp-btn-solid">
+                Đăng nhập hệ thống
               </Link>
-              <a href="#quy-trinh" className="lp-btn lp-btn-ghost">
-                Xem quy trình chăm sóc
-              </a>
+              <Link href="/trace" className="lp-btn lp-btn-ghost">
+                Tra cứu nguồn gốc QR
+              </Link>
             </div>
           </div>
 
@@ -253,6 +253,11 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               <p className="lp-code-note">
                 Mã này nối thửa đất, nhật ký, kết quả kiểm nghiệm và lô thu hoạch về đúng hộ. Mã vùng trồng chính thức do cơ quan nhà nước cấp; hệ thống giúp hộ chuẩn bị đủ hồ sơ để được cấp.
               </p>
+              <div style={{ marginTop: 16 }}>
+                <Link href="/trace" className="lp-btn lp-btn-solid" style={{ display: "inline-flex" }}>
+                  Tra cứu tem QR & lô thu hoạch
+                </Link>
+              </div>
             </div>
             <figure className="lp-photo">
               <Image src="/landing/traceability.jpg" alt="Trái sầu riêng đặt trên thùng gỗ" fill sizes="(max-width: 900px) 100vw, 44vw" />
@@ -372,14 +377,14 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
           <div className="lp-wrap lp-cta-box">
             <div className="lp-cta-copy">
               <span className="lp-pill lp-pill-green">Bắt đầu cùng HTX</span>
-              <h2 id="cta-title">Sẵn sàng đưa vườn của bạn vào hệ thống?</h2>
-              <p>Hộ dân đăng ký tài khoản bằng số điện thoại; cán bộ HTX sẽ duyệt và gắn tài khoản với hộ của bạn. Đã có tài khoản, đăng nhập để ghi nhật ký và theo dõi hồ sơ.</p>
+              <h2 id="cta-title">Quản lý vùng trồng & cấp tài khoản chặt chẽ</h2>
+              <p>Ban quản trị HTX thiết lập hồ sơ pháp lý, thửa đất rồi trực tiếp ban hành tài khoản cho từng hộ thành viên. Đã có tài khoản, đăng nhập để ghi nhật ký và theo dõi hồ sơ.</p>
               <div className="lp-cta-actions">
-                <Link href="/register" className="lp-btn lp-btn-solid">
-                  Đăng ký
-                </Link>
-                <Link href="/login" className="lp-btn lp-btn-ghost">
+                <Link href="/login" className="lp-btn lp-btn-solid">
                   Đăng nhập
+                </Link>
+                <Link href="/register" className="lp-btn lp-btn-ghost">
+                  Quy trình cấp tài khoản
                 </Link>
               </div>
             </div>
@@ -428,9 +433,10 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
           </nav>
 
           <nav className="lp-footer-col" aria-label="Tài khoản">
-            <h2>Tài khoản</h2>
+            <h2>Tài khoản & Tra cứu</h2>
             <Link href="/login">Đăng nhập</Link>
-            <Link href="/register">Đăng ký hộ dân</Link>
+            <Link href="/register">Quy trình cấp tài khoản</Link>
+            <Link href="/trace">Tra cứu truy xuất QR</Link>
           </nav>
         </div>
 
