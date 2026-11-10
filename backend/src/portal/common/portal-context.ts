@@ -61,15 +61,21 @@ export async function assertPlotOwned(
   if (!code) throw badRequest("Vui lòng chọn thửa đất.");
 
   if (await plotsTableExists(db)) {
-    const { rows } = await db.query<{ has_plots: boolean; owned: boolean; foreign_owned: boolean }>(
+    const { rows } = await db.query<{
+      has_plots: boolean;
+      owned: boolean;
+      unowned_plot_exists: boolean;
+      foreign_owned: boolean;
+    }>(
       `SELECT
          EXISTS (SELECT 1 FROM plots WHERE household_id = $1) AS has_plots,
          EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id = $1) AS owned,
+         EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id IS NULL) AS unowned_plot_exists,
          EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id IS NOT NULL AND household_id <> $1) AS foreign_owned`,
       [householdId, code],
     );
     const check = rows[0];
-    if (check.foreign_owned || (check.has_plots && !check.owned)) {
+    if (check.foreign_owned || check.unowned_plot_exists || (check.has_plots && !check.owned)) {
       throw badRequest(`Thửa "${code}" không thuộc hộ của bạn.`);
     }
     return code;

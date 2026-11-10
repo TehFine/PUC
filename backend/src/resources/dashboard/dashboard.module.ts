@@ -30,7 +30,6 @@ export class DashboardService {
     const villageId = isVillageScoped ? (user.villageId ?? -1) : null;
     const params = villageId !== null ? [villageId] : [];
     const hhWhere = villageId !== null ? "WHERE h.village_id = $1" : "";
-    const hhAnd = villageId !== null ? "AND h.village_id = $1" : "";
     const violWhere =
       villageId !== null
         ? "AND v.household_id IN (SELECT id FROM households WHERE village_id = $1)"
@@ -45,39 +44,45 @@ export class DashboardService {
 
     const plotsCountExpr =
       hasPlots && villageId === null
-        ? `GREATEST((SELECT count(*)::int FROM plots), (SELECT COALESCE(sum(h.plot_count), 0)::int FROM households h))`
-        : `(SELECT COALESCE(sum(h.plot_count), 0)::int FROM households h ${hhWhere})`;
+        ? `GREATEST((SELECT count(*)::int FROM plots), (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh))`
+        : `(SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh)`;
 
     const countsQuery = this.db.query(
-      `SELECT
-         (SELECT count(*)::int FROM households h ${hhWhere}) AS households,
+      `WITH hh AS (
+         SELECT h.id, h.status, h.plot_count, h.area_ha
+         FROM households h
+         ${hhWhere}
+       )
+       SELECT
+         (SELECT count(*)::int FROM hh) AS households,
          ${plotsCountExpr} AS plots,
-         (SELECT COALESCE(sum(h.area_ha), 0)::float8 FROM households h ${hhWhere}) AS area_ha,
-         (SELECT count(*)::int FROM households h WHERE h.status = 'qualified' ${hhAnd}) AS qualified_households,
+         (SELECT COALESCE(sum(hh.area_ha), 0)::float8 FROM hh) AS area_ha,
+         (SELECT count(*)::int FROM hh WHERE hh.status = 'qualified') AS qualified_households,
          (SELECT count(*)::int FROM violations v WHERE v.status = 'open' ${violWhere}) AS open_violations,
          (SELECT count(*)::int FROM approvals a WHERE a.status = 'pending' ${apprWhere}) AS pending_approvals,
          (
            (SELECT count(*)::int FROM users u WHERE u.status = 'pending' AND u.role = 'farmer' ${regWhere}) +
            (SELECT count(*)::int FROM password_reset_requests r JOIN users u ON u.id = r.user_id WHERE r.status = 'pending' ${regWhere})
          ) AS pending_registrations,
-         (SELECT count(*)::int FROM harvest_declarations hd JOIN households h ON h.id = hd.household_id WHERE hd.status = 'submitted' ${hhAnd}) AS pending_declarations,
-         (SELECT count(*)::int FROM lab_tests lt JOIN households h ON h.id = lt.household_id ${hhWhere}) AS lab_tests,
-         (SELECT count(*)::int FROM lab_tests lt JOIN households h ON h.id = lt.household_id WHERE lt.result = 'pass' ${hhAnd}) AS lab_tests_passed,
+         (SELECT count(*)::int FROM harvest_declarations hd JOIN hh ON hh.id = hd.household_id WHERE hd.status = 'submitted') AS pending_declarations,
+         (SELECT count(*)::int FROM lab_tests lt JOIN hh ON hh.id = lt.household_id) AS lab_tests,
+         (SELECT count(*)::int FROM lab_tests lt JOIN hh ON hh.id = lt.household_id WHERE lt.result = 'pass') AS lab_tests_passed,
          (SELECT COALESCE(sum(weight_tons), 0)::float8 FROM harvest_lots) AS harvest_tons,
          (SELECT count(*)::int FROM harvest_lots) AS harvest_lots,
          (SELECT count(*)::int FROM training_courses) AS training_courses,
-         (SELECT count(*)::int FROM journal_entries je JOIN households h ON h.id = je.household_id WHERE je.entry_on >= ${TODAY_VN_SQL} - 30 ${hhAnd}) AS journal_last_30_days`,
+         (SELECT count(*)::int FROM journal_entries je JOIN hh ON hh.id = je.household_id WHERE je.entry_on >= ${TODAY_VN_SQL} - 30) AS journal_last_30_days,
+         COALESCE(
+           (
+             SELECT json_agg(json_build_object('status', s.status, 'count', s.count) ORDER BY s.status)
+             FROM (SELECT hh.status, count(*)::int AS count FROM hh GROUP BY hh.status) s
+           ),
+           '[]'::json
+         ) AS household_status`,
       params,
     );
-    const [countsRes, statusRes, villagesRes, trendRes, violationsRes, approvalsRes, scheduleRes] = await Promise.all([
+
+    const [countsRes, villagesRes, trendRes, listsRes] = await Promise.all([
       countsQuery,
-      this.db.query(
-        `SELECT h.status, count(*)::int AS count
-         FROM households h ${hhWhere}
-         GROUP BY h.status
-         ORDER BY h.status`,
-        params,
-      ),
       this.db.query(
         `SELECT v.id, v.name,
                 count(h.id)::int AS households,
@@ -109,28 +114,79 @@ export class DashboardService {
          ORDER BY m.month_start ASC`,
         params,
       ),
-      this.db.query(
-        `SELECT v.id, v.severity, v.title, v.household_label, v.detected_on, v.status
-         FROM violations v
-         WHERE 1=1 ${violWhere}
-         ORDER BY v.detected_on DESC, v.id DESC
-         LIMIT 5`,
+      this.db.query<{
+        recent_violations: Record<string, unknown>[];
+        pending_approvals: Record<string, unknown>[];
+        upcoming_schedule: Record<string, unknown>[];
+      }>(
+        `SELECT
+           COALESCE(
+             (
+               SELECT json_agg(
+                 json_build_object(
+                   'id', v.id,
+                   'severity', v.severity,
+                   'title', v.title,
+                   'householdLabel', v.household_label,
+                   'detectedOn', to_char(v.detected_on, 'YYYY-MM-DD'),
+                   'status', v.status
+                 )
+               )
+               FROM (
+                 SELECT v.id, v.severity, v.title, v.household_label, v.detected_on, v.status
+                 FROM violations v
+                 WHERE 1=1 ${violWhere}
+                 ORDER BY v.detected_on DESC, v.id DESC
+                 LIMIT 5
+               ) v
+             ),
+             '[]'::json
+           ) AS recent_violations,
+           COALESCE(
+             (
+               SELECT json_agg(
+                 json_build_object(
+                   'id', a.id,
+                   'code', a.code,
+                   'applicantName', a.applicant_name,
+                   'requestType', a.request_type,
+                   'submittedOn', to_char(a.submitted_on, 'YYYY-MM-DD'),
+                   'priority', a.priority
+                 )
+               )
+               FROM (
+                 SELECT a.id, a.code, a.applicant_name, a.request_type, a.submitted_on, a.priority
+                 FROM approvals a
+                 WHERE a.status = 'pending' ${apprWhere}
+                 ORDER BY a.submitted_on DESC, a.id DESC
+                 LIMIT 5
+               ) a
+             ),
+             '[]'::json
+           ) AS pending_approvals,
+           COALESCE(
+             (
+               SELECT json_agg(
+                 json_build_object(
+                   'id', s.id,
+                   'scheduledOn', to_char(s.scheduled_on, 'YYYY-MM-DD'),
+                   'title', s.title,
+                   'officer', s.officer,
+                   'kind', s.kind,
+                   'plotCount', s.plot_count
+                 )
+               )
+               FROM (
+                 SELECT id, scheduled_on, title, officer, kind, plot_count
+                 FROM inspection_schedule
+                 WHERE scheduled_on >= ${TODAY_VN_SQL}
+                 ORDER BY scheduled_on ASC, id ASC
+                 LIMIT 5
+               ) s
+             ),
+             '[]'::json
+           ) AS upcoming_schedule`,
         params,
-      ),
-      this.db.query(
-        `SELECT a.id, a.code, a.applicant_name, a.request_type, a.submitted_on, a.priority
-         FROM approvals a
-         WHERE a.status = 'pending' ${apprWhere}
-         ORDER BY a.submitted_on DESC, a.id DESC
-         LIMIT 5`,
-        params,
-      ),
-      this.db.query(
-        `SELECT id, scheduled_on, title, officer, kind, plot_count
-         FROM inspection_schedule
-         WHERE scheduled_on >= ${TODAY_VN_SQL}
-         ORDER BY scheduled_on ASC, id ASC
-         LIMIT 5`,
       ),
     ]);
 
@@ -149,13 +205,15 @@ export class DashboardService {
       harvestLots: number;
       trainingCourses: number;
       journalLast30Days: number;
+      householdStatus: { status: string; count: number }[];
     }>(countsRes.rows[0]);
 
-    const { harvestLots, ...counts } = rawCounts;
+    const { harvestLots, householdStatus, ...counts } = rawCounts;
+    const listsRow = listsRes.rows[0];
 
     return {
       counts,
-      householdStatus: camelRows(statusRes.rows),
+      householdStatus,
       villages: camelRows(villagesRes.rows),
       journalTrend: camelRows(trendRes.rows),
       labTests: {
@@ -163,9 +221,9 @@ export class DashboardService {
         pass: counts.labTestsPassed,
         fail: Math.max(0, counts.labTests - counts.labTestsPassed),
       },
-      recentViolations: camelRows(violationsRes.rows),
-      pendingApprovals: camelRows(approvalsRes.rows),
-      upcomingSchedule: camelRows(scheduleRes.rows),
+      recentViolations: listsRow?.recent_violations ?? [],
+      pendingApprovals: listsRow?.pending_approvals ?? [],
+      upcomingSchedule: listsRow?.upcoming_schedule ?? [],
       harvest: {
         lots: harvestLots,
         tons: counts.harvestTons,

@@ -165,7 +165,7 @@ export class PublicController {
     const farmerStampSql = hasPlots
       ? `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.status,
                 fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
-                h.name AS household_name, '********' || right(h.cccd, 4) AS household_cccd,
+                h.name AS household_name,
                 h.code AS household_code, v.name AS village_name,
                 p.zone_code, p.variety, COALESCE(p.area_ha, h.area_ha)::float8 AS area_ha, p.planted_year
          FROM farmer_stamps fs
@@ -176,7 +176,7 @@ export class PublicController {
          LIMIT 1`
       : `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.status,
                 fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
-                h.name AS household_name, '********' || right(h.cccd, 4) AS household_cccd,
+                h.name AS household_name,
                 h.code AS household_code, v.name AS village_name,
                 NULL::text AS zone_code, NULL::text AS variety, h.area_ha::float8 AS area_ha, NULL::int AS planted_year
          FROM farmer_stamps fs
@@ -487,13 +487,27 @@ export class PublicController {
          FROM lab_tests lt
          JOIN households h ON h.id = lt.household_id
          WHERE lt.result = 'pass'
+           AND (
+             EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1 AND hc.household_id = lt.household_id)
+             OR (
+               NOT EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1)
+               AND h.status = 'qualified'
+             )
+           )
          ORDER BY lt.sampled_on DESC LIMIT 4`,
+        [internalLotId],
       ),
       this.db.query(
         `SELECT je.entry_on, je.plot_code, je.activity, je.detail, je.recorder, h.name AS household_name
          FROM journal_entries je
          JOIN households h ON h.id = je.household_id
+         WHERE EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1 AND hc.household_id = je.household_id)
+            OR (
+              NOT EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1)
+              AND h.status = 'qualified'
+            )
          ORDER BY je.entry_on DESC LIMIT 6`,
+        [internalLotId],
       ),
     ]);
 

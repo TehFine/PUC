@@ -12,8 +12,8 @@ export class RegistrationsController {
 
   @Get()
   @Authorize("registrations", "read")
-  list() {
-    return this.service.listPending();
+  list(@CurrentUser() user: AuthUser) {
+    return this.service.listPending(user);
   }
 
   @Get("households")
@@ -43,8 +43,8 @@ export class RegistrationsController {
 
   @Get("password-resets")
   @Authorize("registrations", "read")
-  listPasswordResets() {
-    return this.service.listPasswordResets();
+  listPasswordResets(@CurrentUser() user: AuthUser) {
+    return this.service.listPasswordResets(user);
   }
 
   @Post("password-resets/:id/approve")

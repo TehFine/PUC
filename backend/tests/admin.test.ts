@@ -62,7 +62,7 @@ describe("vá bảo mật đăng nhập và truy xuất công khai", () => {
     const stampTrace = await request(app).get("/api/public/trace/KB-H001-000001");
     expect(stampTrace.status).toBe(200);
     expect(stampTrace.body.isFarmerStamp).toBe(true);
-    expect(stampTrace.body.farmerStamp.householdCccd).toBe("********6789");
+    expect(stampTrace.body.farmerStamp).not.toHaveProperty("householdCccd");
     expect(stampTrace.body.farmerStamp).not.toHaveProperty("householdPhone");
     expect(stampTrace.body.farmerStamp).not.toHaveProperty("id");
     expect(stampTrace.body.farmerStamp).not.toHaveProperty("allocationId");
@@ -502,6 +502,46 @@ describe("bản tin, bảng điều khiển và xuất báo cáo CSV", () => {
     }
 
     expect((await htx.get("/api/reports/loai-la")).status).toBe(400);
+
+    // Xem trước JSON (không ghi audit) vs Xuất từ modal (audit=1) + Việt hóa nhãn enum
+    const sysAdmin = await loggedIn(USERS.admin);
+    const previewViolations = await htx.get("/api/reports/violations?format=json&from=2024-01-01&to=2026-12-31");
+    expect(previewViolations.status).toBe(200);
+    expect(Array.isArray(previewViolations.body.headers)).toBe(true);
+    for (const row of previewViolations.body.rows as string[][]) {
+      expect(["critical", "warning", "open", "resolved"]).not.toContain(row[3]);
+      expect(["critical", "warning", "open", "resolved"]).not.toContain(row[5]);
+    }
+
+    const beforeCount = Number(
+      (
+        await db.query<{ cnt: string }>(
+          `SELECT count(*)::text AS cnt FROM audit_logs WHERE action = 'Xuất báo cáo' AND object = 'Báo cáo training-registrations'`,
+        )
+      ).rows[0].cnt,
+    );
+    expect((await htx.get("/api/reports/training-registrations?format=json")).status).toBe(200);
+    const afterPreviewCount = Number(
+      (
+        await db.query<{ cnt: string }>(
+          `SELECT count(*)::text AS cnt FROM audit_logs WHERE action = 'Xuất báo cáo' AND object = 'Báo cáo training-registrations'`,
+        )
+      ).rows[0].cnt,
+    );
+    expect(afterPreviewCount).toBe(beforeCount);
+
+    const auditedJson = await htx.get("/api/reports/training-registrations?format=json&audit=1");
+    expect(auditedJson.status).toBe(200);
+    for (const row of auditedJson.body.rows as string[][]) {
+      expect(["registered", "attended", "absent", "cancelled"]).not.toContain(row[6]);
+    }
+    const logs = await sysAdmin.get("/api/audit-log?pageSize=10");
+    expect(logs.status).toBe(200);
+    expect(
+      (logs.body.data as Array<{ action: string; object: string }>).some(
+        (l) => l.action === "Xuất báo cáo" && l.object === "Báo cáo training-registrations",
+      ),
+    ).toBe(true);
   });
 });
 
@@ -803,5 +843,201 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     // Kiểm tra bộ nhớ đệm If-None-Match -> 304 Not Modified
     const cached = await htx.get(`/api/uploads/${up.body.id}`).set("If-None-Match", etag);
     expect(cached.status).toBe(304);
+  });
+
+  it("CRIT-01 & CRIT-02: issue-account không tự bịa email @gmail.com và chặn htx_officer ghi đè tài khoản admin", async () => {
+    const htx = await loggedIn(USERS.htx);
+    const admin = await loggedIn(USERS.admin);
+
+    const hh = await htx.post("/api/households").send({
+      code: "KB-SEC-HH01",
+      name: "Hộ Kiểm Thử Bảo Mật",
+      cccd: "260777666555",
+      phone: "0971112233",
+      villageId: 1,
+      plotCount: 1,
+      areaHa: 1.2,
+      status: "qualified",
+    });
+    expect(hh.status).toBe(201);
+
+    // Thử truyền username trùng với quản trị viên -> phải bị chặn 409 CONFLICT
+    const hijackAttempt = await htx.post(`/api/households/${hh.body.id}/issue-account`).send({
+      username: USERS.admin,
+      password: "HijackPassword123",
+    });
+    expect(hijackAttempt.status).toBe(409);
+
+    // Tài khoản admin vẫn nguyên vẹn vai trò và mật khẩu
+    const adminMe = await admin.get("/api/auth/me");
+    expect(adminMe.status).toBe(200);
+    expect(adminMe.body.user.role).toBe("admin");
+
+    // Cấp tài khoản hợp lệ cho nông hộ -> không tự sinh email giả @gmail.com
+    const issued = await htx.post(`/api/households/${hh.body.id}/issue-account`).send({
+      username: "0971112233",
+      password: "FarmerPassword123",
+    });
+    expect(issued.status).toBe(200);
+    expect(issued.body.email).toBeNull();
+    const userInDb = await db.query<{ role: string; email: string | null }>(
+      "SELECT role, email FROM users WHERE id = $1",
+      [issued.body.accountId],
+    );
+    expect(userInDb.rows[0].role).toBe("farmer");
+    expect(userInDb.rows[0].email).toBeNull();
+  });
+
+  it("CRIT-03 & HIGH-01: chặn chiếm quyền cán bộ qua verify-cccd SĐT hộ và tắt Google demo mặc định", async () => {
+    const htx = await loggedIn(USERS.htx);
+
+    // Tạo hộ có SĐT trùng với username của inspector
+    const hhSamePhone = await htx.post("/api/households").send({
+      code: "KB-SEC-HH02",
+      name: "Hộ Trùng SĐT Cán Bộ",
+      cccd: "260444333222",
+      phone: USERS.inspector,
+      villageId: 1,
+      plotCount: 1,
+      areaHa: 1.0,
+      status: "qualified",
+    });
+    expect(hhSamePhone.status).toBe(201);
+
+    // Kẻ tấn công thử đặt lại mật khẩu tài khoản inspector bằng CCCD của hộ vừa tạo -> phải thất bại 400
+    const cccdReset = await request(app).post("/api/auth/forgot-password/verify-cccd").send({
+      username: USERS.inspector,
+      cccd: "260444333222",
+      newPassword: "AttackerPassword123",
+    });
+    expect(cccdReset.status).toBe(400);
+
+    // Google demo mode bị tắt mặc định khi chưa cấu hình GOOGLE_CLIENT_ID
+    const gConfig = await request(app).get("/api/auth/google/config");
+    expect(gConfig.status).toBe(200);
+    expect(gConfig.body.mode).toBe("disabled");
+
+    const gLogin = await request(app).post("/api/auth/google").send({});
+    expect(gLogin.status).toBe(401);
+  });
+
+  it("HIGH-03: htx_officer không được duyệt đặt lại mật khẩu cho cán bộ và chặn ghi đè yêu cầu pending", async () => {
+    const admin = await loggedIn(USERS.admin);
+    const htx = await loggedIn(USERS.htx);
+
+    const staffAcc = await admin.post("/api/accounts").send({
+      fullName: "Cán bộ Test Reset",
+      username: "0965554433",
+      password: "OldStaffPassword123",
+      role: "inspector",
+    });
+    expect(staffAcc.status).toBe(201);
+
+    // Gửi yêu cầu đặt lại mật khẩu lần 1
+    const req1 = await request(app).post("/api/auth/forgot-password/request").send({
+      username: "0965554433",
+      fullName: "Cán bộ Test Reset",
+      newPassword: "FirstValidPassword123",
+      note: "Quên mật khẩu lần 1",
+    });
+    expect(req1.status).toBe(200);
+
+    // Kẻ khác gửi đè yêu cầu thứ 2 khi yêu cầu 1 chưa hết hạn -> phản hồi đồng nhất nhưng không ghi đè hash
+    const req2 = await request(app).post("/api/auth/forgot-password/request").send({
+      username: "0965554433",
+      fullName: "Cán bộ Test Reset",
+      newPassword: "HijackedSecondPassword999",
+      note: "Ghi đè trái phép",
+    });
+    expect(req2.status).toBe(200);
+
+    const reqRow = await db.query<{ id: number }>(
+      `SELECT id FROM password_reset_requests WHERE user_id = $1 AND status = 'pending' LIMIT 1`,
+      [staffAcc.body.id],
+    );
+    expect(reqRow.rows).toHaveLength(1);
+    const resetId = reqRow.rows[0].id;
+
+    // htx_officer không thấy và không được duyệt yêu cầu của cán bộ (403)
+    const htxList = await htx.get("/api/registrations/password-resets?status=pending");
+    expect(htxList.status).toBe(200);
+    expect((htxList.body.data as Array<{ id: number }>).some((r) => r.id === resetId)).toBe(false);
+    expect((await htx.post(`/api/registrations/password-resets/${resetId}/approve`)).status).toBe(403);
+
+    // Admin duyệt -> mật khẩu được áp dụng đúng là mật khẩu của lần 1 (không bị lần 2 ghi đè)
+    expect((await admin.post(`/api/registrations/password-resets/${resetId}/approve`)).status).toBe(200);
+    expect((await login("0965554433", "HijackedSecondPassword999")).res.status).toBe(401);
+    expect((await login("0965554433", "FirstValidPassword123")).res.status).toBe(200);
+  });
+
+  it("HIGH-05, HIGH-06, MED-04 & MED-08: chống DoS phiên đang hoạt động, thu hồi JWT ngay khi logout, xác thực đổi email và giữ MRL thuốc cấm khi PATCH", async () => {
+    const admin = await loggedIn(USERS.admin);
+    const htx = await loggedIn(USERS.htx);
+
+    const acc = await admin.post("/api/accounts").send({
+      fullName: "Tài khoản Kiểm Thử Phiên",
+      username: "0961112299",
+      password: "SessionPassword123",
+      role: "village_officer",
+      villageId: 1,
+    });
+    expect(acc.status).toBe(201);
+
+    const { agent: activeSession, res: loginRes } = await login("0961112299", "SessionPassword123");
+    expect(loginRes.status).toBe(200);
+    const setCookies = (loginRes.headers["set-cookie"] as unknown as string[]) ?? [];
+    const accessCookie = setCookies.find((c) => c.startsWith("htx_access="))?.split(";")[0] ?? "";
+    expect(accessCookie).toContain("htx_access=");
+
+    // HIGH-06: Đổi email không gửi mật khẩu hiện tại -> 400; gửi đúng mật khẩu -> 200; email giả nongho.* -> 400
+    expect(
+      (await activeSession.patch("/api/auth/profile").send({ email: "canbo.thuc@htx.vn" })).status,
+    ).toBe(400);
+    expect(
+      (
+        await activeSession
+          .patch("/api/auth/profile")
+          .send({ email: "nongho.12345@gmail.com", currentPassword: "SessionPassword123" })
+      ).status,
+    ).toBe(400);
+    const okProfile = await activeSession
+      .patch("/api/auth/profile")
+      .send({ email: "canbo.thuc@htx.vn", currentPassword: "SessionPassword123" });
+    expect(okProfile.status).toBe(200);
+    expect(okProfile.body.user.email).toBe("canbo.thuc@htx.vn");
+
+    // HIGH-05: Kẻ bên ngoài cố tình nhập sai mật khẩu 5 lần gây khóa đăng nhập mới (429),
+    // nhưng KHÔNG được đánh sập phiên làm việc hợp lệ đang mở sẵn của chủ tài khoản
+    for (let i = 0; i < 5; i += 1) {
+      await request(app).post("/api/auth/login").send({ username: "0961112299", password: "WrongExternalPassword999" });
+    }
+    expect((await login("0961112299", "SessionPassword123")).res.status).toBe(429);
+    expect((await activeSession.get("/api/auth/me")).status).toBe(200);
+
+    // MED-08: Khi người dùng bấm Đăng xuất, JWT access token cũ bị vô hiệu hóa ngay lập tức nhờ token_version
+    expect((await activeSession.post("/api/auth/logout")).status).toBe(200);
+    expect(
+      (await request(app).get("/api/auth/me").set("Cookie", accessCookie)).status,
+    ).toBe(401);
+
+    // MED-04: PATCH bản ghi phun thuốc cấm mà bỏ trống pesticideId không được lách mrlStatus thành 'pass'
+    const pesticides = await htx.get("/api/pesticides?pageSize=100");
+    const banned = pesticides.body.data.find((p: { status: string }) => p.status === "banned");
+    const sprayCreated = await htx.post("/api/spray").send({
+      sprayedOn: "2024-11-08",
+      householdId: 1,
+      pesticideId: banned.id,
+      plotCode: "TH1-001",
+      dose: "0.4 lít/ha",
+      areaHa: 0.5,
+    });
+    expect(sprayCreated.status).toBe(201);
+    expect(sprayCreated.body.mrlStatus).toBe("exceeded");
+
+    const sprayPatched = await htx
+      .patch(`/api/spray/${sprayCreated.body.id}`)
+      .send({ mrlStatus: "pass", dose: "0.3 lít/ha" });
+    expect(sprayPatched.status).toBe(200);
+    expect(sprayPatched.body.mrlStatus).toBe("exceeded");
   });
 });

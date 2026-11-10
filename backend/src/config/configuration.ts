@@ -26,6 +26,10 @@ class EnvironmentVariables {
   @IsIn(["true", "false"])
   DATABASE_SSL = "false";
 
+  @IsOptional()
+  @IsIn(["true", "false"])
+  DATABASE_SSL_REJECT_UNAUTHORIZED?: string;
+
   @IsString()
   @MinLength(32, { message: "JWT_ACCESS_SECRET cần tối thiểu 32 ký tự" })
   JWT_ACCESS_SECRET!: string;
@@ -53,6 +57,14 @@ class EnvironmentVariables {
   @IsString()
   GOOGLE_CLIENT_ID?: string;
 
+  @IsOptional()
+  @IsIn(["true", "false"])
+  ALLOW_DEV_DEMO_LOGIN?: string;
+
+  @IsOptional()
+  @IsString()
+  TRUST_PROXY?: string;
+
   @IsString()
   UPLOAD_DIR = "uploads";
 
@@ -67,11 +79,13 @@ export interface AppConfig {
   isProduction: boolean;
   port: number;
   corsOrigins: string[];
-  database: { url: string; ssl: boolean };
+  trustProxy: string[] | boolean | number;
+  database: { url: string; ssl: boolean; sslRejectUnauthorized: boolean };
   jwt: { accessSecret: string; accessTtlMin: number; refreshTtlDays: number };
   cookieSecure: boolean;
   seedPassword?: string;
   googleClientId?: string;
+  allowDevDemoLogin: boolean;
   uploads: { dir: string; maxBytes: number };
 }
 
@@ -93,20 +107,58 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("Cấu hình môi trường không hợp lệ:\n  - CORS_ORIGIN: Phải là danh sách origin http(s) cụ thể, không dùng '*' hoặc 'null'");
   }
 
+  const isProduction = env.NODE_ENV === NodeEnv.Production;
+  if (isProduction) {
+    if (/change-me|example|htx_dev_password/i.test(env.JWT_ACCESS_SECRET) || new Set(env.JWT_ACCESS_SECRET).size < 10) {
+      throw new Error(
+        "Cấu hình môi trường không hợp lệ:\n  - JWT_ACCESS_SECRET: Không được dùng khóa mẫu hoặc khóa có độ ngẫu nhiên thấp khi NODE_ENV=production",
+      );
+    }
+    if (env.ALLOW_DEV_DEMO_LOGIN === "true") {
+      throw new Error(
+        "Cấu hình môi trường không hợp lệ:\n  - ALLOW_DEV_DEMO_LOGIN: Không được bật chế độ đăng nhập thử nghiệm khi NODE_ENV=production",
+      );
+    }
+  }
+
+  const rawTrustProxy = env.TRUST_PROXY?.trim();
+  let trustProxy: string[] | boolean | number = ["loopback"];
+  if (rawTrustProxy) {
+    if (rawTrustProxy === "true") trustProxy = true;
+    else if (rawTrustProxy === "false") trustProxy = false;
+    else if (/^\d+$/.test(rawTrustProxy)) trustProxy = Number(rawTrustProxy);
+    else {
+      trustProxy = rawTrustProxy
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+
+  const sslRejectUnauthorized = env.DATABASE_SSL_REJECT_UNAUTHORIZED
+    ? env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
+    : isProduction;
+
   return {
     nodeEnv: env.NODE_ENV,
-    isProduction: env.NODE_ENV === NodeEnv.Production,
+    isProduction,
     port: env.PORT,
     corsOrigins,
-    database: { url: env.DATABASE_URL, ssl: env.DATABASE_SSL === "true" },
+    trustProxy,
+    database: {
+      url: env.DATABASE_URL,
+      ssl: env.DATABASE_SSL === "true",
+      sslRejectUnauthorized,
+    },
     jwt: {
       accessSecret: env.JWT_ACCESS_SECRET,
       accessTtlMin: env.ACCESS_TOKEN_TTL_MIN,
       refreshTtlDays: env.REFRESH_TOKEN_TTL_DAYS,
     },
-    cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === "true" : env.NODE_ENV === NodeEnv.Production,
+    cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === "true" : isProduction,
     seedPassword: env.SEED_PASSWORD,
     googleClientId: env.GOOGLE_CLIENT_ID?.trim() || undefined,
+    allowDevDemoLogin: !isProduction && env.ALLOW_DEV_DEMO_LOGIN === "true",
     uploads: { dir: env.UPLOAD_DIR, maxBytes: env.UPLOAD_MAX_MB * 1024 * 1024 },
   };
 }

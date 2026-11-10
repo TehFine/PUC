@@ -18,13 +18,17 @@ import type { Request, Response } from "express";
 import { memoryStorage } from "multer";
 import type { AuthUser } from "../auth/auth-user";
 import { CurrentUser, Public } from "../auth/auth.decorators";
-import { notFound } from "../common/errors/app.exception";
+import { AppException, notFound } from "../common/errors/app.exception";
 import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
 import { UploadDto } from "./upload.dto";
 import { type AttachmentRow, PUBLIC_PURPOSES, UploadsService } from "./uploads.service";
 
 /** Giới hạn cứng của multer (lớn hơn UPLOAD_MAX_MB / giới hạn video một chút; kiểm tra chính xác trong service). */
 const MULTER_LIMIT_BYTES = 25 * 1024 * 1024;
+const MAX_CONCURRENT_UPLOADS = 6;
+let activeUploadCount = 0;
+
+const SENSITIVE_PRIVATE_PURPOSES = new Set(["approval", "violation"]);
 
 const findOr404 = async (service: UploadsService, id: number) => {
   const attachment = await service.find(id);
@@ -34,7 +38,11 @@ const findOr404 = async (service: UploadsService, id: number) => {
 
 const applySafeFileHeaders = (res: Response, attachment: AttachmentRow) => {
   res.setHeader("Content-Type", attachment.mime_type);
-  res.setHeader("Content-Disposition", "inline");
+  if (attachment.mime_type === "application/pdf") {
+    res.setHeader("Content-Disposition", 'attachment; filename="tai-lieu-ho-so.pdf"');
+  } else {
+    res.setHeader("Content-Disposition", "inline");
+  }
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   res.setHeader("Accept-Ranges", "bytes");
@@ -110,17 +118,24 @@ export class UploadsController {
   @Post("uploads")
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @UseInterceptors(FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: MULTER_LIMIT_BYTES, files: 1 } }))
-  upload(
+  async upload(
     @UploadedFile(new ParseFilePipeBuilder().build({ fileIsRequired: false })) file: Express.Multer.File | undefined,
     @Body() dto: UploadDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.uploads.save(file, dto.purpose, user);
+    if (activeUploadCount >= MAX_CONCURRENT_UPLOADS) {
+      throw new AppException(429, "Máy chủ đang xử lý nhiều tệp tải lên cùng lúc. Vui lòng thử lại sau giây lát.", "TOO_MANY_UPLOADS");
+    }
+    activeUploadCount += 1;
+    try {
+      return await this.uploads.save(file, dto.purpose, user);
+    } finally {
+      activeUploadCount -= 1;
+    }
   }
 
   /** Xem tệp (cần đăng nhập và có quyền với hộ sở hữu tệp). */
   @Get("uploads/:id")
-  @Header("Cache-Control", "private, max-age=86400")
   async download(
     @Param("id", ParseRecordIdPipe) id: number,
     @CurrentUser() user: AuthUser,
@@ -129,6 +144,11 @@ export class UploadsController {
   ) {
     const attachment = await findOr404(this.uploads, id);
     await this.uploads.assertReadable(attachment, user);
+    if (attachment.mime_type === "application/pdf" || SENSITIVE_PRIVATE_PURPOSES.has(attachment.purpose)) {
+      res.setHeader("Cache-Control", "private, no-store");
+    } else {
+      res.setHeader("Cache-Control", "private, max-age=3600");
+    }
     return streamAttachment(this.uploads, attachment, req, res);
   }
 

@@ -164,14 +164,23 @@ export class UploadsService implements OnModuleInit {
 
   /**
    * Kiểm tra các tệp do chính người dùng này tải lên đúng mục đích, trước khi gắn vào một bản ghi nghiệp vụ.
-   * Trả về danh sách id (đã khử trùng lặp).
+   * Đồng thời liên kết `household_id` nếu tệp do cán bộ tải lên cho một hộ cụ thể để hộ đó và cán bộ thôn đúng phạm vi xem được.
    */
-  async assertUsable(ids: number[] | undefined | null, user: AuthUser, purpose: UploadPurpose): Promise<number[]> {
+  async assertUsable(
+    ids: number[] | undefined | null,
+    user: AuthUser,
+    purpose: UploadPurpose,
+    householdId?: number | null,
+  ): Promise<number[]> {
     const unique = [...new Set((ids ?? []).filter((id) => id !== null && id !== undefined))];
     if (unique.length === 0) return [];
+    const targetHouseholdId = householdId ?? user.householdId ?? null;
     const { rows } = await this.db.query<{ id: number }>(
-      `SELECT id FROM attachments WHERE id = ANY($1::bigint[]) AND owner_user_id = $2 AND purpose = $3`,
-      [unique, user.id, purpose],
+      `UPDATE attachments
+       SET household_id = COALESCE(household_id, $4)
+       WHERE id = ANY($1::bigint[]) AND owner_user_id = $2 AND purpose = $3
+       RETURNING id`,
+      [unique, user.id, purpose, targetHouseholdId],
     );
     if (rows.length !== unique.length) throw badRequest("Tệp đính kèm không hợp lệ hoặc không thuộc về bạn.");
     return unique;
@@ -182,13 +191,17 @@ export class UploadsService implements OnModuleInit {
     return rows[0] ?? null;
   }
 
-  /** Quyền xem tệp: tệp công khai; người tải lên; hộ dân cùng hộ; cán bộ (thôn: chỉ hộ trong thôn mình và đúng phân quyền). */
+  /** Quyền xem tệp: tệp công khai; hộ dân cùng hộ; cán bộ đúng phân quyền hiện tại (thôn: chỉ hộ trong thôn mình phụ trách). */
   async assertReadable(attachment: AttachmentRow, user: AuthUser | undefined) {
     if (PUBLIC_PURPOSES.has(attachment.purpose)) return;
     if (!user) throw notFound();
-    if (attachment.owner_user_id === user.id) return;
     if (user.role === "farmer") {
-      if (attachment.household_id !== null && attachment.household_id === user.householdId) return;
+      if (
+        (attachment.household_id !== null && attachment.household_id === user.householdId) ||
+        (attachment.household_id === null && attachment.owner_user_id === user.id)
+      ) {
+        return;
+      }
       throw notFound();
     }
     const requiredResource = PURPOSE_RESOURCE[attachment.purpose];
@@ -197,6 +210,7 @@ export class UploadsService implements OnModuleInit {
     }
     if (user.role === "village_officer") {
       if (attachment.household_id === null) {
+        if (attachment.owner_user_id === user.id) return;
         throw notFound();
       }
       const { rows } = await this.db.query("SELECT 1 FROM households WHERE id = $1 AND village_id = $2", [

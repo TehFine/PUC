@@ -23,23 +23,27 @@ export class TokensService {
     this.cookieSecure = config.get("cookieSecure", { infer: true });
   }
 
-  signAccessToken(userId: number): Promise<string> {
+  signAccessToken(userId: number, tokenVersion = 0): Promise<string> {
     return this.jwt.signAsync(
-      {},
+      { ver: tokenVersion },
       { subject: String(userId), algorithm: "HS256", issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
     );
   }
 
-  /** Trả về id người dùng nếu token hợp lệ, ngược lại null. */
-  async verifyAccessToken(token: string): Promise<number | null> {
+  /** Trả về id người dùng và phiên bản token nếu token hợp lệ, ngược lại null. */
+  async verifyAccessToken(token: string): Promise<{ userId: number; tokenVersion: number } | null> {
     try {
-      const payload = await this.jwt.verifyAsync<{ sub?: string }>(token, {
+      const payload = await this.jwt.verifyAsync<{ sub?: string; ver?: number }>(token, {
         algorithms: ["HS256"],
         issuer: JWT_ISSUER,
         audience: JWT_AUDIENCE,
       });
-      const id = Number(payload.sub);
-      return Number.isInteger(id) && id > 0 ? id : null;
+      const userId = Number(payload.sub);
+      const tokenVersion = payload.ver === undefined ? 0 : Number(payload.ver);
+      if (!Number.isInteger(userId) || userId <= 0 || !Number.isInteger(tokenVersion) || tokenVersion < 0) {
+        return null;
+      }
+      return { userId, tokenVersion };
     } catch {
       return null;
     }

@@ -37,6 +37,15 @@ export class ViolationsService extends BaseCrudService {
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     const out: Record<string, unknown> = { ...input, _method: context.method };
+    if (context.method === "PATCH" && context.id !== undefined && out.status !== undefined) {
+      const curRes = await this.db.query<{ status: string }>("SELECT status FROM violations WHERE id = $1", [
+        context.id,
+      ]);
+      const currentStatus = curRes.rows[0]?.status;
+      if (currentStatus === "open" && out.status === "resolved") {
+        throw badRequest("Vui lòng dùng chức năng Xác nhận khắc phục để đóng vi phạm kèm biên bản xử lý.");
+      }
+    }
     if (out.householdId) {
       const { rows } = await this.db.query<{ name: string; village_name: string }>(
         `SELECT h.name, v.name AS village_name

@@ -100,16 +100,28 @@ export abstract class BaseCrudService {
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const total = (
-      await this.db.query<{ total: number }>(`SELECT count(*)::int AS total FROM ${config.from} ${where}`, params)
-    ).rows[0].total;
-
-    const { rows } = await this.db.query(
-      `SELECT ${config.fields} FROM ${config.from} ${where} ORDER BY ${config.orderBy}
+    const { rows } = await this.db.query<Record<string, unknown> & { __total_count?: number }>(
+      `SELECT ${config.fields}, count(*) OVER()::int AS __total_count
+       FROM ${config.from} ${where}
+       ORDER BY ${config.orderBy}
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, (page - 1) * pageSize],
     );
-    return { data: rows.map(mapRow), total, page, pageSize };
+
+    let total = 0;
+    if (rows.length > 0) {
+      total = Number(rows[0].__total_count ?? 0);
+    } else if (page > 1) {
+      total = (
+        await this.db.query<{ total: number }>(`SELECT count(*)::int AS total FROM ${config.from} ${where}`, params)
+      ).rows[0].total;
+    }
+
+    const data = rows.map((row) => {
+      const { __total_count: _ignored, ...rest } = row;
+      return mapRow(rest);
+    });
+    return { data, total, page, pageSize };
   }
 
   async findOne(id: number, user: AuthUser) {

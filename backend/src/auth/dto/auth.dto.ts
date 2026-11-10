@@ -58,6 +58,18 @@ export class UpdateProfileDto {
   @IsEmail({}, { message: "Địa chỉ email Google không hợp lệ." })
   @MaxLength(120)
   email?: string | null;
+
+  /** Bắt buộc khi thay đổi hoặc gỡ địa chỉ email liên kết OAuth. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  currentPassword?: string;
+
+  /** Tùy chọn: Google ID Token để xác minh quyền sở hữu hộp thư mới khi liên kết. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  googleCredential?: string;
 }
 
 /** Hộ dân tự đăng ký: luôn tạo tài khoản vai trò nông dân ở trạng thái chờ duyệt (không nhận vai trò từ client). */

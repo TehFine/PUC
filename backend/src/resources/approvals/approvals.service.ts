@@ -7,7 +7,7 @@ import { badRequest, forbidden } from "../../common/errors/app.exception";
 import { camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
-import { assertExists } from "../shared/state";
+import { assertExists, invalidState } from "../shared/state";
 
 @Injectable()
 export class ApprovalsService extends BaseCrudService {
@@ -77,11 +77,18 @@ export class ApprovalsService extends BaseCrudService {
     return this.findOne(id, user);
   }
 
-  /** Duyệt/từ chối hồ sơ qua PATCH thì kiểm tra quyền duyệt và ghi lại người duyệt, thời điểm duyệt. */
+  /** Duyệt/từ chối hồ sơ qua PATCH thì kiểm tra quyền duyệt, trạng thái pending và ghi lại người duyệt, thời điểm duyệt. */
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     if (input.householdId !== undefined && input.householdId !== null) {
       const hh = await this.db.query("SELECT 1 FROM households WHERE id = $1", [input.householdId]);
       if (hh.rowCount === 0) throw badRequest("Hộ nông dân không tồn tại.");
+    }
+    if (context.method === "PATCH" && context.id !== undefined && input.status !== undefined) {
+      const curRes = await this.db.query<{ status: string }>("SELECT status FROM approvals WHERE id = $1", [context.id]);
+      const currentStatus = curRes.rows[0]?.status;
+      if (currentStatus && currentStatus !== "pending" && input.status !== currentStatus) {
+        throw invalidState("Chỉ xử lý chuyển trạng thái đối với hồ sơ đang chờ duyệt.");
+      }
     }
     if (input.status === "approved" || input.status === "rejected") {
       if (!can(context.user.role, "approvals", "update")) {

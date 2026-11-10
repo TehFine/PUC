@@ -17,7 +17,8 @@ export class RegistrationsService {
   ) {}
 
   /** Tài khoản chờ duyệt (kèm hộ gợi ý) và danh sách yêu cầu cấp lại mật khẩu đang chờ duyệt. */
-  async listPending() {
+  async listPending(user?: AuthUser) {
+    const isAdmin = user?.role === "admin";
     const [regRes, resetRes] = await Promise.all([
       this.db.query(
         `SELECT u.id, u.full_name, u.username AS phone, u.register_note AS note, u.created_at,
@@ -31,7 +32,7 @@ export class RegistrationsService {
          ORDER BY u.created_at`,
       ),
       this.db.query(
-        `SELECT r.id, r.user_id, r.username, r.full_name, r.note, r.created_at,
+        `SELECT r.id, r.user_id, r.username, r.full_name, r.note, r.created_at, r.expires_at,
                 u.full_name AS account_name, u.role, u.status AS account_status,
                 v.name AS village_name,
                 h.code AS household_code, h.name AS household_name
@@ -40,7 +41,10 @@ export class RegistrationsService {
          LEFT JOIN households h ON h.id = u.household_id
          LEFT JOIN villages v ON v.id = COALESCE(u.village_id, h.village_id)
          WHERE r.status = 'pending'
+           AND r.expires_at > now()
+           AND ($1::boolean OR (u.role = 'farmer' AND u.status = 'active'))
          ORDER BY r.created_at DESC`,
+        [isAdmin],
       ),
     ]);
     return {
@@ -50,9 +54,10 @@ export class RegistrationsService {
     };
   }
 
-  async listPasswordResets() {
+  async listPasswordResets(user?: AuthUser) {
+    const isAdmin = user?.role === "admin";
     const { rows } = await this.db.query(
-      `SELECT r.id, r.user_id, r.username, r.full_name, r.note, r.created_at,
+      `SELECT r.id, r.user_id, r.username, r.full_name, r.note, r.created_at, r.expires_at,
               u.full_name AS account_name, u.role, u.status AS account_status,
               v.name AS village_name,
               h.code AS household_code, h.name AS household_name
@@ -61,7 +66,10 @@ export class RegistrationsService {
        LEFT JOIN households h ON h.id = u.household_id
        LEFT JOIN villages v ON v.id = COALESCE(u.village_id, h.village_id)
        WHERE r.status = 'pending'
+         AND r.expires_at > now()
+         AND ($1::boolean OR (u.role = 'farmer' AND u.status = 'active'))
        ORDER BY r.created_at DESC`,
+      [isAdmin],
     );
     return { data: camelRows(rows), total: rows.length };
   }
@@ -119,27 +127,35 @@ export class RegistrationsService {
       full_name: string;
       new_password_hash: string;
       role: string;
+      account_status: string;
     }>(
-      `SELECT r.id, r.user_id, r.username, r.full_name, r.new_password_hash, u.role
+      `SELECT r.id, r.user_id, r.username, r.full_name, r.new_password_hash, u.role, u.status AS account_status
        FROM password_reset_requests r
        JOIN users u ON u.id = r.user_id
-       WHERE r.id = $1 AND r.status = 'pending'`,
+       WHERE r.id = $1 AND r.status = 'pending' AND r.expires_at > now()`,
       [id],
     );
     const req = rows[0];
-    if (!req) throw notFound("Không có yêu cầu cấp lại mật khẩu nào đang chờ duyệt với mã này.");
-    if (req.role === "admin" && user.role !== "admin") {
-      throw forbidden("Chỉ quản trị viên mới được phép duyệt đặt lại mật khẩu cho tài khoản quản trị viên.");
+    if (!req) throw notFound("Không có yêu cầu cấp lại mật khẩu nào đang chờ duyệt hoặc yêu cầu đã hết hạn 24h.");
+    if (user.role !== "admin") {
+      if (req.role !== "farmer") {
+        throw forbidden("Chỉ quản trị viên mới được phép duyệt đặt lại mật khẩu cho tài khoản cán bộ hoặc quản trị viên.");
+      }
+      if (req.account_status !== "active") {
+        throw forbidden("Tài khoản đã bị khóa hoặc chưa kích hoạt; chỉ quản trị viên mới được phép mở khóa.");
+      }
     }
 
+    const canUnlockLocked = user.role === "admin";
     await this.db.query(
       `UPDATE users
        SET password_hash = $2,
            failed_login_count = 0,
            locked_until = NULL,
-           status = CASE WHEN status = 'locked' THEN 'active' ELSE status END
+           token_version = token_version + 1,
+           status = CASE WHEN $3::boolean AND status = 'locked' THEN 'active' ELSE status END
        WHERE id = $1`,
-      [req.user_id, req.new_password_hash],
+      [req.user_id, req.new_password_hash, canUnlockLocked],
     );
     await this.db.query(
       "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
@@ -162,12 +178,17 @@ export class RegistrationsService {
   }
 
   async rejectPasswordReset(id: number, user: AuthUser, ip?: string) {
+    const isAdmin = user.role === "admin";
     const { rows } = await this.db.query<{ username: string; full_name: string }>(
-      `UPDATE password_reset_requests
+      `UPDATE password_reset_requests r
        SET status = 'rejected', reviewed_by = $2, reviewed_at = now()
-       WHERE id = $1 AND status = 'pending'
-       RETURNING username, full_name`,
-      [id, user.id],
+       FROM users u
+       WHERE r.id = $1
+         AND r.user_id = u.id
+         AND r.status = 'pending'
+         AND ($3::boolean OR (u.role = 'farmer' AND u.status = 'active'))
+       RETURNING r.username, r.full_name`,
+      [id, user.id, isAdmin],
     );
     if (!rows[0]) throw notFound("Không có yêu cầu cấp lại mật khẩu nào đang chờ duyệt với mã này.");
     await this.audit.write(

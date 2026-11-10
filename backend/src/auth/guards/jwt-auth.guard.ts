@@ -7,17 +7,50 @@ import { IS_PUBLIC_KEY } from "../auth.decorators";
 import type { Role } from "../permissions";
 import { ACCESS_COOKIE, TokensService } from "../tokens.service";
 
+interface UserRow {
+  id: number;
+  full_name: string;
+  username: string;
+  email: string | null;
+  role: Role;
+  status: string;
+  village_id: number | null;
+  household_id: number | null;
+  token_version: number;
+}
+
 /**
  * Yêu cầu đăng nhập cho mọi route trừ route gắn @Public().
- * Luôn đọc lại người dùng từ CSDL để đổi vai trò/khóa tài khoản có hiệu lực ngay.
+ * Luôn đọc lại người dùng từ CSDL để đổi vai trò/khóa tài khoản/thu hồi token_version có hiệu lực ngay;
+ * gộp các truy vấn đồng thời (inflight coalescing) trong cùng thời điểm để tiết kiệm kết nối pool.
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+  private readonly inflightUsers = new Map<number, Promise<UserRow | undefined>>();
+
   constructor(
     private readonly reflector: Reflector,
     private readonly tokens: TokensService,
     private readonly db: DatabaseService,
   ) {}
+
+  private loadUser(userId: number): Promise<UserRow | undefined> {
+    const running = this.inflightUsers.get(userId);
+    if (running) return running;
+
+    const query = this.db
+      .query<UserRow>(
+        "SELECT id, full_name, username, email, role, status, village_id, household_id, token_version FROM users WHERE id = $1",
+        [userId],
+      )
+      .then((res) => res.rows[0])
+      .finally(() => {
+        this.inflightUsers.delete(userId);
+      });
+
+    this.inflightUsers.set(userId, query);
+    return query;
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
@@ -25,26 +58,11 @@ export class JwtAuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<Request>();
     const token = request.cookies?.[ACCESS_COOKIE] as string | undefined;
-    const userId = token ? await this.tokens.verifyAccessToken(token) : null;
-    if (!userId) throw unauthorized();
+    const verified = token ? await this.tokens.verifyAccessToken(token) : null;
+    if (!verified) throw unauthorized();
 
-    const { rows } = await this.db.query<{
-      id: number;
-      full_name: string;
-      username: string;
-      email: string | null;
-      role: Role;
-      status: string;
-      village_id: number | null;
-      household_id: number | null;
-      locked_until: Date | null;
-    }>(
-      "SELECT id, full_name, username, email, role, status, village_id, household_id, locked_until FROM users WHERE id = $1",
-      [userId],
-    );
-
-    const row = rows[0];
-    if (!row || row.status !== "active" || (row.locked_until && row.locked_until.getTime() > Date.now())) {
+    const row = await this.loadUser(verified.userId);
+    if (!row || row.status !== "active" || row.token_version !== verified.tokenVersion) {
       throw unauthorized();
     }
 

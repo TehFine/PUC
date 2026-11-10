@@ -4,6 +4,7 @@ import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.
 import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
 import { attachmentUrlSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
+import { assertPlotOwned } from "../../portal/common/portal-context";
 
 @Injectable()
 export class JournalService extends BaseCrudService {
@@ -26,6 +27,21 @@ export class JournalService extends BaseCrudService {
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     await assertHouseholdInScope(this.db, input, context.user);
-    return input;
+    const out = { ...input };
+    let existing: { household_id: number; plot_code: string | null } | undefined;
+    if (context.method === "PATCH" && context.id !== undefined && (out.plotCode !== undefined || out.householdId !== undefined)) {
+      const exRes = await this.db.query<{ household_id: number; plot_code: string | null }>(
+        "SELECT household_id, plot_code FROM journal_entries WHERE id = $1",
+        [context.id],
+      );
+      existing = exRes.rows[0];
+    }
+    const effectiveHouseholdId = Number(out.householdId ?? existing?.household_id ?? 0);
+    const effectivePlotCode =
+      out.plotCode !== undefined ? (typeof out.plotCode === "string" ? out.plotCode : null) : (existing?.plot_code ?? null);
+    if (effectiveHouseholdId > 0 && effectivePlotCode) {
+      out.plotCode = await assertPlotOwned(this.db, effectiveHouseholdId, effectivePlotCode);
+    }
+    return out;
   }
 }

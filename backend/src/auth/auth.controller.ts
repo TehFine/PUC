@@ -13,7 +13,7 @@ import {
   RegisterDto,
   UpdateProfileDto,
 } from "./dto/auth.dto";
-import { REFRESH_COOKIE, TokensService } from "./tokens.service";
+import { ACCESS_COOKIE, REFRESH_COOKIE, TokensService } from "./tokens.service";
 
 // Giới hạn chặt hơn cho đăng nhập (nới ra khi chạy test).
 const LOGIN_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 20;
@@ -96,7 +96,10 @@ export class AuthController {
   @Post("logout")
   @HttpCode(200)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    await this.auth.logout(req.cookies?.[REFRESH_COOKIE] as string | undefined);
+    await this.auth.logout(
+      req.cookies?.[REFRESH_COOKIE] as string | undefined,
+      req.cookies?.[ACCESS_COOKIE] as string | undefined,
+    );
     this.tokens.clearAuthCookies(res);
     return { ok: true };
   }

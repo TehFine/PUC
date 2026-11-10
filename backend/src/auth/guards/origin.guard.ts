@@ -46,8 +46,13 @@ export class OriginGuard implements CanActivate {
       return true;
     }
 
-    if (!this.isTest && request.headers.cookie) {
-      throw forbidden("Thiếu thông tin nguồn gửi yêu cầu (Origin/Referer).");
+    if (!this.isTest) {
+      if (request.headers.cookie) {
+        throw forbidden("Thiếu thông tin nguồn gửi yêu cầu (Origin/Referer).");
+      }
+      if (!request.headers["x-requested-with"]) {
+        throw forbidden("Thiếu thông tin xác thực nguồn gửi yêu cầu.");
+      }
     }
 
     return true;

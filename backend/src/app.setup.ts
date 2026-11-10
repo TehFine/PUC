@@ -3,6 +3,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import cookieParser from "cookie-parser";
 import { json } from "express";
 import helmet from "helmet";
+import { apiCompressionMiddleware } from "./common/http/compression.middleware";
 import type { AppConfig } from "./config/configuration";
 
 /**
@@ -12,7 +13,7 @@ import type { AppConfig } from "./config/configuration";
 export function configureApp(app: NestExpressApplication): void {
   const config = app.get<ConfigService<AppConfig, true>>(ConfigService);
 
-  app.set("trust proxy", ["loopback", "linklocal", "uniquelocal"]);
+  app.set("trust proxy", config.get("trustProxy", { infer: true }));
   app.disable("x-powered-by");
 
   app.use(
@@ -31,7 +32,7 @@ export function configureApp(app: NestExpressApplication): void {
     origin: config.get("corsOrigins", { infer: true }),
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
     maxAge: 600,
   });
 
@@ -39,6 +40,7 @@ export function configureApp(app: NestExpressApplication): void {
   app.use("/api/plots/import", json({ limit: "10mb" }));
   app.use(json({ limit: "1mb" }));
   app.use(cookieParser());
+  app.use(apiCompressionMiddleware);
 
   // Mặc định không lưu bộ nhớ đệm cho các API có xác thực (các route tệp sẽ ghi đè khi cần).
   app.use("/api", (_req: unknown, res: { setHeader: (k: string, v: string) => void }, next: () => void) => {

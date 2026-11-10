@@ -78,7 +78,7 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   portal: { read: FARMER, create: FARMER },
   // Duyệt tài khoản hộ dân tự đăng ký (xem, duyệt = update, từ chối = delete).
   registrations: { read: HTX, update: HTX, delete: HTX },
-  contracts: { read: STAFF, create: HTX, update: HTX, delete: ADMIN },
+  contracts: { read: OVERSIGHT, create: HTX, update: HTX, delete: ADMIN },
   enterprises: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   fertilizers: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   // Bản tin: cán bộ HTX soạn/đăng; người xem công khai đọc qua /api/public/news.

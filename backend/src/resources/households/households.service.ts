@@ -165,18 +165,38 @@ export class HouseholdsService extends BaseCrudService {
     if (!/^[0-9A-Za-z._-]{3,64}$/.test(cleanUsername)) {
       throw badRequest("Tên đăng nhập gồm 3–64 ký tự chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.");
     }
-    const cleanEmail =
-      dto.email !== undefined
-        ? dto.email
-        : /^0[0-9]{9}$/.test(cleanUsername)
-          ? `nongho.${cleanUsername}@gmail.com`
-          : null;
+    // Không tự sinh địa chỉ @gmail.com giả định chưa xác minh chủ sở hữu (chống Google OAuth Pre-Takeover).
+    const cleanEmail = dto.email ? dto.email.trim().toLowerCase() : null;
+    if (cleanEmail && /(?:^nongho\.[0-9]+@gmail\.com$|\.htxcune@gmail\.com$)/i.test(cleanEmail)) {
+      throw badRequest("Không được gắn địa chỉ email giả định tự sinh. Vui lòng nhập email thực tế hoặc để trống.");
+    }
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
-    const { rows: existingByHh } = await this.db.query<{ id: number; username: string }>(
-      "SELECT id, username FROM users WHERE household_id = $1 LIMIT 1",
+    const { rows: existingByHh } = await this.db.query<{ id: number; username: string; role: string }>(
+      "SELECT id, username, role FROM users WHERE household_id = $1 LIMIT 1",
       [householdId],
     );
+    if (existingByHh[0] && existingByHh[0].role !== "farmer") {
+      throw new AppException(409, "Hồ sơ hộ này đang liên kết với tài khoản không phải nông hộ.", "CONFLICT");
+    }
+
+    const { rows: existingByUsername } = await this.db.query<{
+      id: number;
+      role: string;
+      household_id: number | null;
+    }>("SELECT id, role, household_id FROM users WHERE username = $1 LIMIT 1", [cleanUsername]);
+    if (
+      existingByUsername[0] &&
+      existingByUsername[0].id !== existingByHh[0]?.id &&
+      (existingByUsername[0].role !== "farmer" ||
+        (existingByUsername[0].household_id !== null && existingByUsername[0].household_id !== householdId))
+    ) {
+      throw new AppException(409, `Tên đăng nhập "${cleanUsername}" đang thuộc về một tài khoản khác.`, "CONFLICT");
+    }
+
+    if (cleanEmail) {
+      await this.db.query("UPDATE users SET email = NULL WHERE status = 'pending' AND LOWER(email) = $1", [cleanEmail]);
+    }
 
     try {
       let accountId: number;
@@ -185,7 +205,7 @@ export class HouseholdsService extends BaseCrudService {
       if (existingByHh[0]) {
         accountId = existingByHh[0].id;
         actionLabel = "Cấp lại tài khoản hộ nông dân";
-        await this.db.query(
+        const updated = await this.db.query(
           `UPDATE users
            SET full_name = $2,
                username = $3,
@@ -195,10 +215,14 @@ export class HouseholdsService extends BaseCrudService {
                role = 'farmer',
                status = 'active',
                failed_login_count = 0,
-               locked_until = NULL
-           WHERE id = $1`,
+               locked_until = NULL,
+               token_version = token_version + 1
+           WHERE id = $1 AND role = 'farmer'`,
           [accountId, hh.name, cleanUsername, cleanEmail, passwordHash, hh.village_id],
         );
+        if (updated.rowCount === 0) {
+          throw new AppException(409, "Không thể ghi đè tài khoản không thuộc vai trò nông hộ.", "CONFLICT");
+        }
         await this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [
           accountId,
         ]);
@@ -209,15 +233,17 @@ export class HouseholdsService extends BaseCrudService {
            VALUES ($1, $2, $3, $4, 'farmer', 'active', $5, $6)
            ON CONFLICT (username) DO UPDATE SET
              full_name = EXCLUDED.full_name,
-             email = COALESCE(EXCLUDED.email, users.email),
+             email = EXCLUDED.email,
              password_hash = EXCLUDED.password_hash,
              role = 'farmer',
              status = 'active',
              village_id = EXCLUDED.village_id,
              household_id = EXCLUDED.household_id,
              failed_login_count = 0,
-             locked_until = NULL
-           WHERE users.household_id IS NULL OR users.household_id = EXCLUDED.household_id
+             locked_until = NULL,
+             token_version = users.token_version + 1
+           WHERE users.role = 'farmer'
+             AND (users.household_id IS NULL OR users.household_id = EXCLUDED.household_id)
            RETURNING id`,
           [hh.name, cleanUsername, cleanEmail, passwordHash, hh.village_id, householdId],
         );
@@ -225,6 +251,9 @@ export class HouseholdsService extends BaseCrudService {
           throw new AppException(409, `Tên đăng nhập "${cleanUsername}" đang thuộc về một tài khoản khác.`, "CONFLICT");
         }
         accountId = ins[0].id;
+        await this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [
+          accountId,
+        ]);
       }
 
       await this.audit.write(

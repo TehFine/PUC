@@ -5,9 +5,13 @@ types.setTypeParser(20, (value) => Number(value));
 types.setTypeParser(1700, (value) => Number.parseFloat(value));
 types.setTypeParser(1082, (value) => value);
 
-export function createPool(options: { url: string; ssl: boolean }): Pool {
+export function createPool(options: { url: string; ssl: boolean; sslRejectUnauthorized?: boolean }): Pool {
   const poolMax = Number(process.env.DB_POOL_MAX) || 4;
-  const strictSsl = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true";
+  const strictSsl =
+    options.sslRejectUnauthorized ??
+    (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED
+      ? process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
+      : process.env.NODE_ENV === "production");
   const pool = new Pool({
     connectionString: options.url,
     ssl: options.ssl ? { rejectUnauthorized: strictSsl } : undefined,

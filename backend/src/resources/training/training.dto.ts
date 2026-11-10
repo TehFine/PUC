@@ -1,4 +1,4 @@
-import { PartialType } from "@nestjs/mapped-types";
+import { OmitType, PartialType } from "@nestjs/mapped-types";
 import { IsBoolean, IsIn, IsInt, IsOptional, IsPositive, Matches } from "class-validator";
 import { Count, IsoDate, OptionalField, OptionalText, Text } from "../../common/validation/fields";
 
@@ -40,7 +40,7 @@ export class CreateTrainingCourseDto {
   completed?: boolean;
 }
 
-export class UpdateTrainingCourseDto extends PartialType(CreateTrainingCourseDto) {}
+export class UpdateTrainingCourseDto extends PartialType(OmitType(CreateTrainingCourseDto, ["enrolled"] as const)) {}
 
 export class UpdateRegistrationStatusDto {
   @IsIn(["registered", "attended", "absent", "cancelled"])

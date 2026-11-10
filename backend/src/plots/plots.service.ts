@@ -391,20 +391,36 @@ export class PlotsService {
         };
       });
 
+    const byCode = new Map<string, (typeof features)[number]>();
+    for (const feature of features) {
+      byCode.set(feature.properties.code, feature);
+    }
+    const uniqueFeatures = Array.from(byCode.values());
+    const BATCH_SIZE = 200;
+
     const pool = this.db.pool;
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      for (const feature of features) {
-        const p = feature.properties;
+      for (let offset = 0; offset < uniqueFeatures.length; offset += BATCH_SIZE) {
+        const chunk = uniqueFeatures.slice(offset, offset + BATCH_SIZE);
         await client.query(
           `
             INSERT INTO plots (
               code, sheet_no, parcel_no, owner_name, village, zone_code, variety,
               planted_year, area_ha, source, status, source_ref, geom
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'cadastral', $10, $11,
-                    ST_SetSRID(ST_GeomFromGeoJSON($12), 4326))
+            SELECT
+              u.code, u.sheet_no, u.parcel_no, u.owner_name, u.village, u.zone_code, u.variety,
+              u.planted_year, u.area_ha, 'cadastral', u.status, $11,
+              ST_SetSRID(ST_GeomFromGeoJSON(u.geom_json), 4326)
+            FROM UNNEST(
+              $1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
+              $6::text[], $7::text[], $8::int[], $9::numeric[], $10::text[], $12::text[]
+            ) AS u(
+              code, sheet_no, parcel_no, owner_name, village,
+              zone_code, variety, planted_year, area_ha, status, geom_json
+            )
             ON CONFLICT (code) DO UPDATE SET
               sheet_no = EXCLUDED.sheet_no,
               parcel_no = EXCLUDED.parcel_no,
@@ -420,18 +436,18 @@ export class PlotsService {
               updated_at = now()
           `,
           [
-            p.code,
-            p.sheet,
-            p.parcel,
-            p.owner,
-            p.village,
-            p.zone,
-            p.variety,
-            p.year ?? null,
-            p.areaHa,
-            p.status,
+            chunk.map((f) => f.properties.code),
+            chunk.map((f) => f.properties.sheet),
+            chunk.map((f) => f.properties.parcel),
+            chunk.map((f) => f.properties.owner),
+            chunk.map((f) => f.properties.village),
+            chunk.map((f) => f.properties.zone),
+            chunk.map((f) => f.properties.variety),
+            chunk.map((f) => f.properties.year ?? null),
+            chunk.map((f) => f.properties.areaHa),
+            chunk.map((f) => f.properties.status),
             importSource ?? null,
-            JSON.stringify(feature.geometry),
+            chunk.map((f) => JSON.stringify(f.geometry)),
           ],
         );
       }

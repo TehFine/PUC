@@ -4,6 +4,7 @@ import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.
 import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
+import { assertPlotOwned } from "../../portal/common/portal-context";
 
 @Injectable()
 export class SprayService extends BaseCrudService {
@@ -26,10 +27,29 @@ export class SprayService extends BaseCrudService {
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     await assertHouseholdInScope(this.db, input, context.user);
     const out = { ...input };
-    if (out.pesticideId !== undefined && out.pesticideId !== null) {
+
+    let existing: { pesticide_id: number; household_id: number; plot_code: string | null } | undefined;
+    if (context.method === "PATCH" && context.id !== undefined) {
+      const exRes = await this.db.query<{ pesticide_id: number; household_id: number; plot_code: string | null }>(
+        "SELECT pesticide_id, household_id, plot_code FROM spray_records WHERE id = $1",
+        [context.id],
+      );
+      existing = exRes.rows[0];
+    }
+
+    const effectiveHouseholdId = Number(out.householdId ?? existing?.household_id ?? 0);
+    const effectivePlotCode =
+      out.plotCode !== undefined ? (typeof out.plotCode === "string" ? out.plotCode : null) : (existing?.plot_code ?? null);
+    if (effectiveHouseholdId > 0 && effectivePlotCode) {
+      out.plotCode = await assertPlotOwned(this.db, effectiveHouseholdId, effectivePlotCode);
+    }
+
+    const effectivePesticideId =
+      out.pesticideId !== undefined && out.pesticideId !== null ? out.pesticideId : existing?.pesticide_id;
+    if (effectivePesticideId !== undefined && effectivePesticideId !== null) {
       const { rows } = await this.db.query<{ status: string; isolation_days: number | null }>(
         "SELECT status, isolation_days FROM pesticides WHERE id = $1",
-        [out.pesticideId],
+        [effectivePesticideId],
       );
       if (rows.length === 0) throw badRequest("Thuốc BVTV không tồn tại.");
       const pesticide = rows[0];

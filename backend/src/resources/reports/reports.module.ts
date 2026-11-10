@@ -40,13 +40,16 @@ function toCsv(headers: string[], rows: unknown[][]): string {
 
 const HOUSEHOLD_STATUS_VN: Record<string, string> = {
   qualified: "Đạt chuẩn",
+  improve: "Cần cải thiện",
   pending: "Chờ duyệt",
+  violation: "Vi phạm",
   warning: "Cảnh báo",
   revoked: "Thu hồi",
 };
 
 const MRL_STATUS_VN: Record<string, string> = {
   pass: "Đạt",
+  exceeded: "Vượt ngưỡng",
   warning: "Cảnh báo",
   fail: "Vượt ngưỡng",
 };
@@ -58,6 +61,8 @@ const LAB_RESULT_VN: Record<string, string> = {
 };
 
 const VIOLATION_SEVERITY_VN: Record<string, string> = {
+  critical: "Nghiêm trọng",
+  warning: "Cảnh báo",
   high: "Nghiêm trọng",
   medium: "Trung bình",
   low: "Nhẹ",
@@ -70,9 +75,19 @@ const VIOLATION_STATUS_VN: Record<string, string> = {
 
 const HARVEST_STATUS_VN: Record<string, string> = {
   exported: "Đã xuất khẩu",
+  delivered: "Đã giao hàng",
+  in_transit: "Đang vận chuyển",
+  sampling: "Đang lấy mẫu",
   harvested: "Đã thu hoạch",
   inspecting: "Đang kiểm định",
   allocated: "Đã cấp mã",
+};
+
+const TRAINING_REG_STATUS_VN: Record<string, string> = {
+  registered: "Đã đăng ký",
+  attended: "Có mặt",
+  absent: "Vắng mặt",
+  cancelled: "Đã hủy",
 };
 
 function formatDateVn(value: unknown): string {
@@ -121,7 +136,7 @@ export class ReportsService {
       throw badRequest("Loại báo cáo không hợp lệ.");
     }
     const filter = this.parseFilter(rawQuery, user);
-    const { headers, rows } = await this.buildReportTable(type as ReportType, filter, user);
+    const { headers, rows } = await this.buildReportTable(type as ReportType, filter, user, recordAudit);
 
     if (recordAudit) {
       await this.audit.write(
@@ -130,7 +145,9 @@ export class ReportsService {
       );
     }
 
-    const stringRows = rows.map((row) =>
+    const total = rows.length;
+    const exposedRows = recordAudit ? rows : rows.slice(0, 50);
+    const stringRows = exposedRows.map((row) =>
       row.map((cell) => (cell === null || cell === undefined ? "" : String(cell))),
     );
 
@@ -139,7 +156,7 @@ export class ReportsService {
       filename: `${type}.csv`,
       headers,
       rows: stringRows,
-      total: stringRows.length,
+      total,
     };
   }
 
@@ -184,6 +201,7 @@ export class ReportsService {
     type: ReportType,
     filter: ReportFilter,
     user: AuthUser,
+    allowUnmaskedCccd = false,
   ): Promise<{ headers: string[]; rows: unknown[][] }> {
     switch (type) {
       case "households": {
@@ -204,7 +222,8 @@ export class ReportsService {
            LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
-        const fullCccd = canSeeCccd(user);
+        // Chỉ trả CCCD đầy đủ khi người dùng có quyền VÀ yêu cầu được ghi vào audit_logs (xuất thật).
+        const fullCccd = allowUnmaskedCccd && canSeeCccd(user);
         return {
           headers: ["Mã hộ", "Tên chủ hộ", "CCCD", "Điện thoại", "Thôn / Tổ", "Số thửa", "Diện tích (ha)", "Trạng thái"],
           rows: rows.map((r) => [
@@ -466,7 +485,7 @@ export class ReportsService {
             r.household_name,
             r.phone,
             r.village_name,
-            r.status,
+            TRAINING_REG_STATUS_VN[String(r.status)] ?? r.status,
             formatDateVn(r.registered_at),
           ]),
         };

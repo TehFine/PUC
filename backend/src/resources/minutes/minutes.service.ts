@@ -15,6 +15,11 @@ export class MinutesService extends BaseCrudService {
       orderBy: "t.held_on DESC, t.id DESC",
       search: ["t.code", "t.location", "t.officer"],
       filters: { result: "t.result" },
+      scope: (user, params) => {
+        if (user.role !== "village_officer") return null;
+        params.push(user.villageId ?? -1);
+        return `EXISTS (SELECT 1 FROM villages v WHERE v.id = $${params.length} AND t.location ILIKE '%' || v.name || '%')`;
+      },
     });
   }
 }

@@ -193,7 +193,7 @@ describe("phân quyền theo vai trò", () => {
     const agent = await loggedIn(USERS.villageOfficer);
     const body = { entryOn: "2024-11-02", plotCode: "TH2-001", activity: "Tưới nước", recorder: "Cán bộ Thôn" };
     expect((await agent.post("/api/journal").send({ ...body, householdId: 2 })).status).toBe(403);
-    expect((await agent.post("/api/journal").send({ ...body, householdId: 1 })).status).toBe(201);
+    expect((await agent.post("/api/journal").send({ ...body, plotCode: "TH1-001", householdId: 1 })).status).toBe(201);
   });
 
   it("Nông dân chỉ xem được danh mục", async () => {
@@ -549,7 +549,18 @@ describe("đăng ký tài khoản hộ dân (/api/auth/register)", () => {
     expect(list.status).toBe(200);
     const row = list.body.data.find((item: { phone: string }) => item.phone === PHONE_A);
     expect(row).toMatchObject({ fullName: "Hộ Đăng Ký Thử", phone: PHONE_A });
-    expect(JSON.stringify(list.body)).not.toMatch(/password|hash/i);
+    expect(JSON.stringify(list.body.data)).not.toMatch(/password|hash/i);
+    expect(JSON.stringify(list.body.passwordResets)).not.toMatch(/password|hash/i);
+  });
+
+  it("nén gzip cho phản hồi JSON >= 1 KB khi trình duyệt gửi Accept-Encoding: gzip", async () => {
+    const htx = await loggedIn(USERS.htx);
+    const res = await htx.get("/api/pesticides?pageSize=500").set("Accept-Encoding", "gzip");
+    expect(res.status).toBe(200);
+    expect(res.headers["content-encoding"]).toBe("gzip");
+    expect(res.headers.vary).toMatch(/Accept-Encoding/i);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.total).toBe(res.body.data.length);
   });
 
   it("duyệt: gắn vào hộ rồi mới đăng nhập được; mỗi hộ chỉ một tài khoản", async () => {

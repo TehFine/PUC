@@ -37,7 +37,10 @@ interface UserRow {
   household_id: number | null;
   failed_login_count: number;
   locked_until: Date | null;
+  token_version: number;
 }
+
+const SYNTHETIC_EMAIL_RE = /(?:^nongho\.[0-9]+@gmail\.com$|\.htxcune@gmail\.com$)/i;
 
 export interface ClientMeta {
   ip?: string;
@@ -59,6 +62,7 @@ export class AuthService {
   private readonly refreshTtlDays: number;
   private readonly isProduction: boolean;
   private readonly googleClientId?: string;
+  private readonly allowDevDemoLogin: boolean;
 
   constructor(
     private readonly db: DatabaseService,
@@ -70,6 +74,7 @@ export class AuthService {
     this.refreshTtlDays = config.get("jwt", { infer: true }).refreshTtlDays;
     this.isProduction = config.get("isProduction", { infer: true });
     this.googleClientId = config.get("googleClientId", { infer: true });
+    this.allowDevDemoLogin = config.get("allowDevDemoLogin", { infer: true });
   }
 
   sessionOf(user: AuthUser): SessionResult {
@@ -91,7 +96,8 @@ export class AuthService {
     const cleanUsername = dto.username.trim();
     // Chỉ khớp đúng tên đăng nhập: không có bí danh theo vai trò, không đăng nhập bằng số điện thoại của hộ.
     const { rows } = await this.db.query<UserRow>(
-      `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+      `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
+              u.village_id, u.household_id, u.failed_login_count, u.locked_until, u.token_version
        FROM users u
        WHERE u.username = $1`,
       [cleanUsername],
@@ -105,17 +111,14 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user?.password_hash ?? DUMMY_HASH);
     if (!user || !valid) {
       if (user) {
-        const { rows: failRows } = await this.db.query<{ locked: boolean }>(
+        // Chỉ khóa tạm hành vi đăng nhập mới (locked_until), KHÔNG hủy các phiên hợp lệ đang hoạt động của quản trị viên/cán bộ.
+        await this.db.query(
           `UPDATE users
            SET failed_login_count = CASE WHEN failed_login_count + 1 >= $2 THEN 0 ELSE failed_login_count + 1 END,
                locked_until = CASE WHEN failed_login_count + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END
-           WHERE id = $1
-           RETURNING (locked_until IS NOT NULL AND locked_until > now()) AS locked`,
+           WHERE id = $1`,
           [user.id, MAX_FAILED_LOGINS, LOCK_MINUTES],
         );
-        if (failRows[0]?.locked) {
-          await this.revokeAllSessions(user.id);
-        }
         await this.audit.write(
           { ip: meta.ip },
           { action: "Đăng nhập thất bại", object: user.username },
@@ -141,7 +144,7 @@ export class AuthService {
     if (unlocked.rowCount === 0) {
       throw new AppException(429, "Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
     }
-    const tokens = await this.issueSession(user.id, meta);
+    const tokens = await this.issueSession(user.id, meta, user.token_version);
     await this.audit.write(
       { ip: meta.ip },
       { action: "Đăng nhập", object: user.username },
@@ -210,7 +213,7 @@ export class AuthService {
         demoAccounts: [],
       };
     }
-    if (!this.isProduction) {
+    if (!this.isProduction && this.allowDevDemoLogin) {
       const { rows } = await this.db.query<{
         id: number;
         full_name: string;
@@ -253,21 +256,28 @@ export class AuthService {
 
     if (dto.credential) {
       const { email } = await this.verifyGoogleIdToken(dto.credential);
+      if (SYNTHETIC_EMAIL_RE.test(email)) {
+        throw unauthorized("Địa chỉ email giả định tự sinh không được phép dùng để đăng nhập OAuth.");
+      }
       const { rows } = await this.db.query<UserRow>(
-        `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+        `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
+                u.village_id, u.household_id, u.failed_login_count, u.locked_until, u.token_version
          FROM users u
-         WHERE LOWER(u.email) = $1 OR (LOWER(u.username) = $1 AND position('@' in u.username) > 0)
+         WHERE LOWER(u.email) = $1
+           AND u.email IS NOT NULL
+         ORDER BY CASE WHEN u.status = 'active' THEN 0 ELSE 1 END, u.id ASC
          LIMIT 1`,
         [email],
       );
       user = rows[0];
-    } else if (!this.isProduction && !this.googleClientId) {
-      // Chế độ trải nghiệm nhanh trên môi trường dev/demo (khi chưa cấu hình GOOGLE_CLIENT_ID):
+    } else if (!this.isProduction && this.allowDevDemoLogin && !this.googleClientId) {
+      // Chế độ trải nghiệm nhanh trên môi trường dev nội bộ (chỉ khi bật tường minh ALLOW_DEV_DEMO_LOGIN=true):
       // cho phép chọn tài khoản hộ nông dân theo email liên kết, tuyệt đối không cấp quyền quản trị viên.
       if (dto.email) {
         const cleanEmail = dto.email.trim().toLowerCase();
         const { rows } = await this.db.query<UserRow>(
-          `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+          `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
+                  u.village_id, u.household_id, u.failed_login_count, u.locked_until, u.token_version
            FROM users u
            WHERE u.role = 'farmer' AND (LOWER(u.email) = $1 OR LOWER(u.username) = $1)
            LIMIT 1`,
@@ -276,7 +286,8 @@ export class AuthService {
         user = rows[0];
       } else {
         const { rows } = await this.db.query<UserRow>(
-          `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status, u.village_id, u.household_id, u.failed_login_count, u.locked_until
+          `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
+                  u.village_id, u.household_id, u.failed_login_count, u.locked_until, u.token_version
            FROM users u
            WHERE u.role = 'farmer' AND u.status = 'active' AND u.household_id IS NOT NULL
            ORDER BY u.id ASC
@@ -289,7 +300,7 @@ export class AuthService {
     }
 
     if (!user) {
-      throw unauthorized("Địa chỉ email Google này chưa được liên kết với tài khoản hộ nông dân nào trong hệ thống HTX Cư Né.");
+      throw unauthorized("Địa chỉ email Google này chưa được liên kết với tài khoản nào trong hệ thống HTX Cư Né.");
     }
 
     if (user.locked_until && user.locked_until.getTime() > Date.now()) {
@@ -306,7 +317,7 @@ export class AuthService {
       "UPDATE users SET failed_login_count = 0, locked_until = NULL, last_login_at = now() WHERE id = $1",
       [user.id],
     );
-    const tokens = await this.issueSession(user.id, meta);
+    const tokens = await this.issueSession(user.id, meta, user.token_version);
     await this.audit.write(
       { ip: meta.ip },
       { action: "Đăng nhập bằng Google", object: user.username },
@@ -337,6 +348,18 @@ export class AuthService {
     }
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const cleanEmail = dto.email?.trim().toLowerCase() || null;
+    if (cleanEmail) {
+      if (SYNTHETIC_EMAIL_RE.test(cleanEmail)) {
+        throw badRequest("Địa chỉ email không hợp lệ.");
+      }
+      const existingEmail = await this.db.query(
+        "SELECT 1 FROM users WHERE LOWER(email) = $1 AND status <> 'pending' LIMIT 1",
+        [cleanEmail],
+      );
+      if (existingEmail.rowCount && existingEmail.rowCount > 0) {
+        throw duplicate;
+      }
+    }
     try {
       await this.db.query(
         `INSERT INTO users (full_name, username, email, password_hash, role, status, village_id, register_note)
@@ -361,9 +384,9 @@ export class AuthService {
       expires_at: Date;
       revoked_at: Date | null;
       status: string;
-      locked_until: Date | null;
+      token_version: number;
     }>(
-      `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked_at, u.status, u.locked_until
+      `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked_at, u.status, u.token_version
        FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id
        WHERE rt.token_hash = $1`,
       [this.tokens.hashToken(token)],
@@ -378,11 +401,7 @@ export class AuthService {
       }
       throw new RefreshRejected();
     }
-    if (
-      row.expires_at.getTime() < Date.now() ||
-      row.status !== "active" ||
-      (row.locked_until && row.locked_until.getTime() > Date.now())
-    ) {
+    if (row.expires_at.getTime() < Date.now() || row.status !== "active") {
       throw new RefreshRejected();
     }
 
@@ -393,14 +412,25 @@ export class AuthService {
     if (revoked.rowCount === 0) {
       throw new RefreshRejected();
     }
-    return this.issueSession(row.user_id, meta);
+    return this.issueSession(row.user_id, meta, row.token_version);
   }
 
-  async logout(token: string | undefined): Promise<void> {
-    if (!token) return;
-    await this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL", [
-      this.tokens.hashToken(token),
-    ]);
+  async logout(refreshToken: string | undefined, accessToken?: string): Promise<void> {
+    let userId: number | null = null;
+    if (refreshToken) {
+      const res = await this.db.query<{ user_id: number }>(
+        "UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL RETURNING user_id",
+        [this.tokens.hashToken(refreshToken)],
+      );
+      userId = res.rows[0]?.user_id ?? null;
+    }
+    if (!userId && accessToken) {
+      const verified = await this.tokens.verifyAccessToken(accessToken);
+      userId = verified?.userId ?? null;
+    }
+    if (userId) {
+      await this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]);
+    }
   }
 
   async changePassword(user: AuthUser, dto: ChangePasswordDto, ip?: string): Promise<void> {
@@ -449,7 +479,50 @@ export class AuthService {
   async updateProfile(user: AuthUser, dto: UpdateProfileDto, ip?: string): Promise<SessionResult> {
     const nextName = dto.fullName !== undefined ? dto.fullName.trim() : user.fullName;
     if (!nextName) throw badRequest("Họ và tên không được để trống.");
-    const nextEmail = dto.email !== undefined ? dto.email : (user.email ?? null);
+    const currentEmail = user.email ? user.email.trim().toLowerCase() : null;
+    const nextEmail = dto.email !== undefined ? dto.email : currentEmail;
+    const emailChanged = dto.email !== undefined && nextEmail !== currentEmail;
+
+    if (emailChanged) {
+      if (nextEmail && SYNTHETIC_EMAIL_RE.test(nextEmail)) {
+        throw badRequest("Không được liên kết địa chỉ email giả định tự sinh.");
+      }
+      if (!dto.currentPassword) {
+        throw badRequest("Vui lòng nhập mật khẩu hiện tại để xác nhận thay đổi hoặc gỡ địa chỉ email liên kết.");
+      }
+      const { rows } = await this.db.query<{
+        password_hash: string;
+        locked_until: Date | null;
+      }>("SELECT password_hash, locked_until FROM users WHERE id = $1", [user.id]);
+      const current = rows[0];
+      if (!current) throw unauthorized();
+      if (current.locked_until && current.locked_until.getTime() > Date.now()) {
+        throw new AppException(429, "Tài khoản tạm khóa do nhập sai mật khẩu nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
+      }
+      if (!(await bcrypt.compare(dto.currentPassword, current.password_hash))) {
+        const { rows: failRows } = await this.db.query<{ locked: boolean }>(
+          `UPDATE users
+           SET failed_login_count = CASE WHEN failed_login_count + 1 >= $2 THEN 0 ELSE failed_login_count + 1 END,
+               locked_until = CASE WHEN failed_login_count + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END
+           WHERE id = $1
+           RETURNING (locked_until IS NOT NULL AND locked_until > now()) AS locked`,
+          [user.id, MAX_FAILED_LOGINS, LOCK_MINUTES],
+        );
+        if (failRows[0]?.locked) {
+          await this.revokeAllSessions(user.id);
+        }
+        throw badRequest("Mật khẩu hiện tại không đúng.");
+      }
+      if (nextEmail && dto.googleCredential) {
+        const verifiedGoogle = await this.verifyGoogleIdToken(dto.googleCredential);
+        if (verifiedGoogle.email !== nextEmail) {
+          throw badRequest("Email trong Google Token không trùng khớp với địa chỉ email bạn muốn liên kết.");
+        }
+      }
+      if (nextEmail) {
+        await this.db.query("UPDATE users SET email = NULL WHERE status = 'pending' AND LOWER(email) = $1", [nextEmail]);
+      }
+    }
 
     try {
       await this.db.query("UPDATE users SET full_name = $2, email = $3 WHERE id = $1", [user.id, nextName, nextEmail]);
@@ -477,13 +550,15 @@ export class AuthService {
   }
 
   /**
-   * Khôi phục mật khẩu tức thì cho hộ dân bằng cách đối chiếu tên đăng nhập / số điện thoại
-   * với số CCCD 12 chữ số trong hồ sơ hộ đã đăng ký với HTX.
+   * Khôi phục mật khẩu tức thì chỉ dành riêng cho tài khoản nông hộ đã gắn hồ sơ hộ (`role = 'farmer'` & `household_id IS NOT NULL`)
+   * thông qua số CCCD 12 chữ số của chính hộ đó; tuyệt đối không áp dụng cho quản trị viên/cán bộ và không suy diễn theo SĐT.
    */
   async resetPasswordWithCccd(dto: ForgotPasswordCccdDto, meta: ClientMeta): Promise<{ ok: true; mode: "instant" }> {
     const cleanUsername = dto.username.trim();
     const cleanCccd = dto.cccd.trim();
     const passwordHashPromise = bcrypt.hash(dto.newPassword, 12);
+    const genericMismatchMessage =
+      "Số điện thoại/tên đăng nhập hoặc số CCCD 12 chữ số không khớp với hồ sơ hộ nông dân đang hoạt động.";
 
     const { rows } = await this.db.query<{
       id: number;
@@ -497,11 +572,12 @@ export class AuthService {
     }>(
       `SELECT u.id, u.full_name, u.username, u.role, u.status,
               u.failed_login_count, u.locked_until,
-              COALESCE(h1.cccd, h2.cccd) AS household_cccd
+              h1.cccd AS household_cccd
        FROM users u
-       LEFT JOIN households h1 ON h1.id = u.household_id
-       LEFT JOIN households h2 ON u.household_id IS NULL AND h2.phone = u.username
+       JOIN households h1 ON h1.id = u.household_id
        WHERE u.username = $1
+         AND u.role = 'farmer'
+         AND u.household_id IS NOT NULL
        LIMIT 1`,
       [cleanUsername],
     );
@@ -516,54 +592,29 @@ export class AuthService {
       );
     }
 
-    if (!user || !user.household_cccd || user.household_cccd !== cleanCccd) {
+    if (!user || !user.household_cccd || user.household_cccd !== cleanCccd || user.status !== "active") {
       if (user) {
-        const { rows: failRows } = await this.db.query<{ locked: boolean }>(
+        // Chỉ đặt locked_until cho lần đăng nhập/khôi phục tiếp theo, không hủy phiên đang online của người dùng thật.
+        await this.db.query(
           `UPDATE users
            SET failed_login_count = CASE WHEN failed_login_count + 1 >= $2 THEN 0 ELSE failed_login_count + 1 END,
                locked_until = CASE WHEN failed_login_count + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END
-           WHERE id = $1
-           RETURNING (locked_until IS NOT NULL AND locked_until > now()) AS locked`,
+           WHERE id = $1`,
           [user.id, MAX_FAILED_LOGINS, LOCK_MINUTES],
         );
-        if (failRows[0]?.locked) {
-          await this.revokeAllSessions(user.id);
-        }
         await this.audit.write(
           { ip: meta.ip },
           { action: "Khôi phục mật khẩu bằng CCCD thất bại", object: user.username },
           { id: user.id, name: user.full_name },
         );
-        if (!user.household_cccd) {
-          throw badRequest(
-            "Tài khoản này chưa gắn với hồ sơ hộ có số CCCD. Vui lòng chuyển sang mục Gửi yêu cầu nhờ cán bộ HTX duyệt.",
-          );
-        }
       }
-      throw badRequest(
-        "Số điện thoại/tên đăng nhập hoặc số CCCD 12 chữ số không khớp với hồ sơ hộ trong hệ thống.",
-      );
-    }
-
-    if (user.status === "pending") {
-      throw new AppException(
-        403,
-        "Tài khoản đang chờ cán bộ HTX duyệt đăng ký ban đầu. Vui lòng quay lại sau khi được thông báo.",
-        "ACCOUNT_PENDING",
-      );
-    }
-    if (user.status !== "active") {
-      throw new AppException(
-        403,
-        "Tài khoản đang bị khóa bởi quản trị viên. Vui lòng gửi yêu cầu nhờ cán bộ HTX duyệt.",
-        "ACCOUNT_DISABLED",
-      );
+      throw badRequest(genericMismatchMessage);
     }
 
     const updated = await this.db.query(
       `UPDATE users
        SET password_hash = $2, failed_login_count = 0, locked_until = NULL
-       WHERE id = $1 AND (locked_until IS NULL OR locked_until <= now())`,
+       WHERE id = $1 AND role = 'farmer' AND (locked_until IS NULL OR locked_until <= now())`,
       [user.id, passwordHash],
     );
     if (updated.rowCount === 0) {
@@ -587,7 +638,7 @@ export class AuthService {
 
   /**
    * Gửi yêu cầu cấp lại mật khẩu chờ Cán bộ HTX / Quản trị viên duyệt.
-   * Mật khẩu mới được băm ngay khi lưu, khi cán bộ duyệt sẽ áp dụng trực tiếp.
+   * Không tiết lộ trạng thái tồn tại của tài khoản và không cho phép ghi đè mật khẩu của yêu cầu đang chờ duyệt còn hiệu lực.
    */
   async requestPasswordReset(dto: ForgotPasswordRequestDto, meta: ClientMeta): Promise<{ ok: true; mode: "request" }> {
     const cleanUsername = dto.username.trim();
@@ -599,47 +650,42 @@ export class AuthService {
       id: number;
       full_name: string;
       username: string;
+      role: Role;
       status: string;
-    }>("SELECT id, full_name, username, status FROM users WHERE username = $1 LIMIT 1", [cleanUsername]);
+    }>("SELECT id, full_name, username, role, status FROM users WHERE username = $1 LIMIT 1", [cleanUsername]);
     const user = rows[0];
     const passwordHash = await passwordHashPromise;
 
-    if (!user) {
-      throw badRequest(
-        "Không tìm thấy tài khoản với số điện thoại hoặc tên đăng nhập này. Nếu chưa có tài khoản, vui lòng chọn Đăng ký.",
-      );
-    }
-    if (user.status === "pending") {
-      throw new AppException(
-        403,
-        "Tài khoản này đang chờ cán bộ HTX duyệt đăng ký ban đầu.",
-        "ACCOUNT_PENDING",
-      );
+    if (!user || user.status === "pending") {
+      return { ok: true, mode: "request" };
     }
 
+    // Hủy tự động các yêu cầu quá hạn trước khi kiểm tra yêu cầu đang chờ duyệt
+    await this.db.query(
+      "UPDATE password_reset_requests SET status = 'rejected' WHERE user_id = $1 AND status = 'pending' AND expires_at <= now()",
+      [user.id],
+    );
+
     const existing = await this.db.query<{ id: number }>(
-      "SELECT id FROM password_reset_requests WHERE user_id = $1 AND status = 'pending' LIMIT 1",
+      "SELECT id FROM password_reset_requests WHERE user_id = $1 AND status = 'pending' AND expires_at > now() LIMIT 1",
       [user.id],
     );
     if (existing.rows[0]) {
-      await this.db.query(
-        `UPDATE password_reset_requests
-         SET full_name = $2, new_password_hash = $3, note = $4, request_ip = $5, created_at = now()
-         WHERE id = $1`,
-        [existing.rows[0].id, cleanFullName, passwordHash, cleanNote, meta.ip ?? null],
-      );
-    } else {
-      await this.db.query(
-        `INSERT INTO password_reset_requests (user_id, username, full_name, new_password_hash, note, status, request_ip)
-         VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
-        [user.id, user.username, cleanFullName, passwordHash, cleanNote, meta.ip ?? null],
-      );
+      // Giữ nguyên new_password_hash ban đầu để ngăn người lạ ghi đè mật khẩu ngay trước khi cán bộ bấm duyệt.
+      return { ok: true, mode: "request" };
     }
 
-    await this.notifications.notifyRoles(["admin", "htx_officer"], {
+    await this.db.query(
+      `INSERT INTO password_reset_requests (user_id, username, full_name, new_password_hash, note, status, request_ip, expires_at)
+       VALUES ($1, $2, $3, $4, $5, 'pending', $6, now() + interval '24 hours')`,
+      [user.id, user.username, cleanFullName, passwordHash, cleanNote, meta.ip ?? null],
+    );
+
+    const recipientRoles = user.role === "farmer" && user.status === "active" ? ["admin", "htx_officer"] : ["admin"];
+    await this.notifications.notifyRoles(recipientRoles, {
       kind: "system",
       title: `Yêu cầu cấp lại mật khẩu: ${cleanFullName} (${user.username})`,
-      body: cleanNote ? `Ghi chú: ${cleanNote}` : "Chờ cán bộ HTX đối chiếu và phê duyệt.",
+      body: cleanNote ? `Ghi chú: ${cleanNote}` : "Chờ đối chiếu và phê duyệt.",
       link: "/admin?section=registrations",
     });
 
@@ -652,14 +698,22 @@ export class AuthService {
     return { ok: true, mode: "request" };
   }
 
-  private revokeAllSessions(userId: number) {
-    return this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [
-      userId,
+  private async revokeAllSessions(userId: number) {
+    await Promise.all([
+      this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]),
+      this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [userId]),
     ]);
   }
 
-  private async issueSession(userId: number, meta: ClientMeta): Promise<IssuedTokens> {
+  private async issueSession(userId: number, meta: ClientMeta, knownTokenVersion?: number): Promise<IssuedTokens> {
     const refresh = this.tokens.newRefreshToken();
+    let tokenVersion = knownTokenVersion;
+    if (tokenVersion === undefined) {
+      const vRes = await this.db.query<{ token_version: number }>("SELECT token_version FROM users WHERE id = $1", [
+        userId,
+      ]);
+      tokenVersion = vRes.rows[0]?.token_version ?? 0;
+    }
     await this.db.query(
       `DELETE FROM refresh_tokens
        WHERE user_id = $1 AND (expires_at < now() OR revoked_at < now() - interval '1 day')`,
@@ -670,7 +724,7 @@ export class AuthService {
        VALUES ($1, $2, now() + make_interval(days => $3), $4, $5)`,
       [userId, refresh.hash, this.refreshTtlDays, meta.userAgent?.slice(0, 300) ?? null, meta.ip ?? null],
     );
-    return { accessToken: await this.tokens.signAccessToken(userId), refreshToken: refresh.token };
+    return { accessToken: await this.tokens.signAccessToken(userId, tokenVersion), refreshToken: refresh.token };
   }
 }
 

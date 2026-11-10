@@ -46,10 +46,15 @@ export class AccountsService extends BaseCrudService {
       const household = await this.db.query("SELECT 1 FROM households WHERE id = $1", [next.householdId]);
       if (household.rowCount === 0) throw badRequest("Hộ nông dân được chọn không tồn tại.");
     }
+    if (typeof next.email === "string" && next.email.trim()) {
+      await this.db.query("UPDATE users SET email = NULL WHERE status = 'pending' AND LOWER(email) = LOWER($1)", [
+        next.email.trim(),
+      ]);
+    }
     return next;
   }
 
-  /** Khóa tài khoản, đổi mật khẩu, đổi vai trò hoặc đổi phạm vi thôn/hộ thì thu hồi mọi phiên đăng nhập. */
+  /** Khóa tài khoản, đổi mật khẩu, đổi vai trò hoặc đổi phạm vi thôn/hộ thì tăng token_version và thu hồi mọi phiên đăng nhập. */
   protected override async afterWrite(userId: number, input: Record<string, unknown>) {
     if (
       input.status === "locked" ||
@@ -59,7 +64,12 @@ export class AccountsService extends BaseCrudService {
       input.householdId !== undefined ||
       input.username !== undefined
     ) {
-      await this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [userId]);
+      await Promise.all([
+        this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]),
+        this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [
+          userId,
+        ]),
+      ]);
     }
   }
 
