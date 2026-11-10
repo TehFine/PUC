@@ -21,7 +21,7 @@ import {
 } from "./ipm-2026-data";
 import { getTrainingKicker, usePortalTrainings, type TrainingCourseItem } from "./training-shared";
 import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
-import { Card, EmptyState, Pill, SectionDivider, Sheet, StateBlock } from "./ui";
+import { Card, EmptyState, FadeFilterBar, Pill, SectionDivider, SegmentedTabs, Sheet, StateBlock } from "./ui";
 
 export { getTrainingKicker, usePortalTrainings, type TrainingCourseItem };
 
@@ -1369,7 +1369,7 @@ const DEFAULT_PESTICIDES: PesticideDto[] = [
 ];
 
 function PesticideList() {
-  const { data: apiData } = useSharedQuery<ListResponse<PesticideDto> | PesticideDto[]>("/pesticides?pageSize=200");
+  const { data: apiData } = useSharedQuery<ListResponse<PesticideDto> | PesticideDto[]>("/pesticides?pageSize=500");
   const data = useMemo(() => {
     const rows = Array.isArray(apiData) ? apiData : (apiData?.data ?? []);
     return rows.length > 0 ? rows : DEFAULT_PESTICIDES;
@@ -1433,7 +1433,7 @@ function PesticideList() {
         </div>
 
         {/* Thanh filter trạng thái */}
-        <div className="pt-pest-filter-bar" role="tablist" aria-label="Lọc theo trạng thái thuốc">
+        <FadeFilterBar ariaLabel="Lọc theo trạng thái thuốc" activeKey={statusFilter}>
           <button
             type="button"
             className={`pt-pest-filter-chip ${statusFilter === "all" ? "is-active" : ""}`}
@@ -1462,7 +1462,7 @@ function PesticideList() {
           >
             Bị cấm <span className="pt-pest-filter-count">{counts.banned}</span>
           </button>
-        </div>
+        </FadeFilterBar>
 
         {/* Danh sách thẻ thuốc trực quan cố định kích thước */}
         <div className="pt-pest-list">
@@ -1898,7 +1898,7 @@ export function FertilizerDetailModal({
 }
 
 function FertilizerList() {
-  const { data: apiData } = useSharedQuery<ListResponse<FertilizerDto> | FertilizerDto[]>("/fertilizers?pageSize=200");
+  const { data: apiData } = useSharedQuery<ListResponse<FertilizerDto> | FertilizerDto[]>("/fertilizers?pageSize=500");
   const fertilizers = useMemo(() => {
     const rows = Array.isArray(apiData) ? apiData : (apiData?.data ?? []);
     return rows.length > 0 ? rows : DEFAULT_FERTILIZERS;
@@ -1966,7 +1966,7 @@ function FertilizerList() {
         </div>
 
         {/* Thanh filter phân loại phân bón */}
-        <div className="pt-pest-filter-bar" role="tablist" aria-label="Lọc theo phân loại phân bón">
+        <FadeFilterBar ariaLabel="Lọc theo phân loại phân bón" activeKey={categoryFilter}>
           <button
             type="button"
             className={`pt-pest-filter-chip ${categoryFilter === "all" ? "is-active" : ""}`}
@@ -2009,7 +2009,7 @@ function FertilizerList() {
           >
             Kiểm soát Clo <span className="pt-pest-filter-count">{counts.restricted}</span>
           </button>
-        </div>
+        </FadeFilterBar>
 
         {/* Danh sách thẻ phân bón trực quan giống hệt thuốc BVTV */}
         <div className="pt-pest-list">
@@ -2393,7 +2393,7 @@ export function enrichVariety(item: VarietyDto): VarietyDto {
 }
 
 function VarietyList() {
-  const { data: apiData } = useSharedQuery<ListResponse<VarietyDto> | VarietyDto[]>("/varieties?pageSize=200");
+  const { data: apiData } = useSharedQuery<ListResponse<VarietyDto> | VarietyDto[]>("/varieties?pageSize=500");
   const varieties = useMemo(() => {
     const rows = Array.isArray(apiData) ? apiData : (apiData?.data ?? []);
     return rows.length > 0 ? rows.map(enrichVariety) : DEFAULT_VARIETIES;
@@ -2460,7 +2460,7 @@ function VarietyList() {
         </div>
 
         {/* Thanh filter phân loại giống sầu riêng */}
-        <div className="pt-pest-filter-bar" role="tablist" aria-label="Lọc theo phân loại giống sầu riêng">
+        <FadeFilterBar ariaLabel="Lọc theo phân loại giống sầu riêng" activeKey={categoryFilter}>
           <button
             type="button"
             className={`pt-pest-filter-chip ${categoryFilter === "all" ? "is-active" : ""}`}
@@ -2496,7 +2496,7 @@ function VarietyList() {
           >
             Giống mới tiềm năng <span className="pt-pest-filter-count">{counts.new}</span>
           </button>
-        </div>
+        </FadeFilterBar>
 
         {/* Danh sách thẻ giống sầu riêng */}
         <div className="pt-pest-list">
@@ -2664,7 +2664,7 @@ export function DiseaseDetailModal({
 
       <div className="pt-pesticide-safety-tips">
         <h4 className="pt-pesticide-modal-section-title">Thuốc & Chế phẩm khuyến cáo trong danh mục</h4>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+        <div className="pt-pesticide-recommended-pills">
           {item.recommendedProducts.map((prod) => (
             <Pill key={prod} tone="green">
               {prod}
@@ -2747,7 +2747,7 @@ export function DiseaseAndIpmList() {
           )}
         </div>
 
-        <div className="pt-pest-filter-bar" role="tablist" aria-label="Lọc theo nhóm sâu bệnh và quy trình">
+        <FadeFilterBar ariaLabel="Lọc theo nhóm sâu bệnh và quy trình" activeKey={kindFilter}>
           <button
             type="button"
             className={`pt-pest-filter-chip ${kindFilter === "all" ? "is-active" : ""}`}
@@ -2776,7 +2776,7 @@ export function DiseaseAndIpmList() {
           >
             Quy trình chăm sóc & IPM <span className="pt-pest-filter-count">{counts.care}</span>
           </button>
-        </div>
+        </FadeFilterBar>
 
         {(kindFilter === "all" || kindFilter === "care") && !query && (
           <Card title="4 Nguyên tắc Quản lý dịch hại tổng hợp (IPM) – Viện BVTV 2026">
@@ -2896,7 +2896,7 @@ export default function LearnTab({ initialAction }: { initialAction?: PortalActi
 
   return (
     <div className="pt-stack">
-      <div className="pt-segmented" role="tablist" aria-label="Kiến thức">
+      <SegmentedTabs ariaLabel="Kiến thức" activeKey={view}>
         {items.map((item) => (
           <button
             key={item.id}
@@ -2909,7 +2909,7 @@ export default function LearnTab({ initialAction }: { initialAction?: PortalActi
             {item.label}
           </button>
         ))}
-      </div>
+      </SegmentedTabs>
       {view === "pesticides" && <PesticideList />}
       {view === "fertilizers" && <FertilizerList />}
       {view === "varieties" && <VarietyList />}

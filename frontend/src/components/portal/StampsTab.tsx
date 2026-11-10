@@ -18,7 +18,7 @@ import type {
 } from "@/types/portal";
 import { HarvestAssetTagCard, HarvestLotQrModal } from "./harvest/HarvestLotTicket";
 import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
-import { EmptyState, Pill, SectionDivider, StateBlock } from "./ui";
+import { EmptyState, Pill, SectionDivider, SegmentedTabs, StateBlock } from "./ui";
 
 import type { PortalAction } from "./PortalSearch";
 interface HarvestRule {
@@ -217,7 +217,7 @@ export default function StampsTab({ overview, plots = [], initialAction }: Props
       <SectionDivider />
 
       {/* ─── 2. THANH ĐIỀU HƯỚNG CHỨC NĂNG ─── */}
-      <div className="pt-segmented pt-harvest-segmented" role="tablist" aria-label="Chế độ thu hoạch">
+      <SegmentedTabs ariaLabel="Chế độ thu hoạch" activeKey={subTab} className="pt-harvest-segmented">
         <button
           type="button"
           role="tab"
@@ -238,7 +238,7 @@ export default function StampsTab({ overview, plots = [], initialAction }: Props
           <span className="tab-label-desktop">Lô hàng xuất kho ({harvest.data?.data.length ?? 0})</span>
           <span className="tab-label-mobile">Lô hàng ({harvest.data?.data.length ?? 0})</span>
         </button>
-      </div>
+      </SegmentedTabs>
 
       {/* ─── CHẾ ĐỘ 1: LÔ HÀNG ĐÃ XUẤT KHO & TEM QR ─── */}
       {subTab === "harvest_lots" && (
@@ -589,12 +589,11 @@ export default function StampsTab({ overview, plots = [], initialAction }: Props
           margin: 0;
           letter-spacing: -0.015em;
         }
-        .pt-harvest-segmented {
+        :global(.pt-harvest-segmented) {
           display: flex;
           width: 100%;
           max-width: 640px;
-          gap: 4px;
-          padding: 4px;
+          padding: 0;
           border: 1px solid var(--border);
           border-radius: 12px;
           background: #fff;
@@ -602,7 +601,11 @@ export default function StampsTab({ overview, plots = [], initialAction }: Props
           box-sizing: border-box;
           margin-bottom: 20px;
         }
-        .pt-harvest-segmented button {
+        :global(.pt-harvest-segmented .pt-segmented-track) {
+          gap: 4px;
+          padding: 4px;
+        }
+        :global(.pt-harvest-segmented) button {
           flex: 1 1 0;
           min-width: 0;
           padding: 8px 10px;
@@ -622,16 +625,16 @@ export default function StampsTab({ overview, plots = [], initialAction }: Props
           white-space: nowrap;
           transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
         }
-        .pt-harvest-segmented button:hover {
+        :global(.pt-harvest-segmented) button:hover {
           background: rgba(20, 55, 47, 0.05);
           color: var(--ink);
         }
-        .pt-harvest-segmented button.active {
+        :global(.pt-harvest-segmented) button.active {
           background: var(--ink);
           color: #fff;
           box-shadow: none;
         }
-        .pt-harvest-segmented button:focus-visible {
+        :global(.pt-harvest-segmented) button:focus-visible {
           outline: 2px solid var(--green-600);
           outline-offset: 2px;
         }
@@ -860,11 +863,11 @@ export default function StampsTab({ overview, plots = [], initialAction }: Props
           text-align: center;
         }
         @media (max-width: 640px) {
-          .pt-harvest-segmented {
+          :global(.pt-harvest-segmented) {
             max-width: 100%;
             margin-bottom: 14px;
           }
-          .pt-harvest-segmented button {
+          :global(.pt-harvest-segmented) button {
             padding: 7px 6px;
             font-size: 12px;
           }

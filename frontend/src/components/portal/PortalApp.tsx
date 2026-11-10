@@ -199,6 +199,7 @@ function PortalAppContent() {
   const [editAccountOpen, setEditAccountOpen] = useState(false);
   const [accountNameInput, setAccountNameInput] = useState("");
   const [accountEmailInput, setAccountEmailInput] = useState("");
+  const [accountPasswordInput, setAccountPasswordInput] = useState("");
   const [savingAccount, setSavingAccount] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
@@ -359,9 +360,14 @@ function PortalAppContent() {
   const readCount = notifItems.filter((n) => Boolean(n.readAt)).length;
   const visibleNotifItems = notifFilter === "unread" ? notifItems.filter((n) => !n.readAt) : notifItems;
 
+  const normalizedLinkedEmail = linkedEmail ? linkedEmail.trim().toLowerCase() : null;
+  const normalizedAccountEmailInput = accountEmailInput.trim() ? accountEmailInput.trim().toLowerCase() : null;
+  const accountEmailChanged = normalizedAccountEmailInput !== normalizedLinkedEmail;
+
   const openEditAccount = () => {
     setAccountNameInput(profAccount?.fullName || session?.user.fullName || displayName);
     setAccountEmailInput(linkedEmail ?? "");
+    setAccountPasswordInput("");
     setAccountError(null);
     closeProfile();
     setEditAccountOpen(true);
@@ -373,13 +379,19 @@ function PortalAppContent() {
       setAccountError("Tên hiển thị không được để trống.");
       return;
     }
+    if (accountEmailChanged && !accountPasswordInput) {
+      setAccountError("Vui lòng nhập mật khẩu hiện tại để xác nhận thay đổi địa chỉ email liên kết.");
+      return;
+    }
     setSavingAccount(true);
     setAccountError(null);
     try {
       await updateProfile({
         fullName: accountNameInput.trim(),
-        email: accountEmailInput.trim() ? accountEmailInput.trim().toLowerCase() : null,
+        email: normalizedAccountEmailInput,
+        ...(accountEmailChanged ? { currentPassword: accountPasswordInput } : {}),
       });
+      setAccountPasswordInput("");
       invalidateQueries(portalPath("profile"), portalPath("overview"));
       setEditAccountOpen(false);
     } catch (err) {
@@ -723,8 +735,8 @@ function PortalAppContent() {
         <Sheet title={t("Thông báo từ HTX")} onClose={() => setNotifOpen(false)}>
           <div className="pt-stack" style={{ gap: 14 }}>
             {notifItems.length > 0 && (
-              <div className="pt-notif-toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
-                <div style={{ display: "inline-flex", gap: 6 }}>
+              <div className="pt-notif-toolbar">
+                <div className="pt-notif-filter-group">
                   <button
                     type="button"
                     className={`pt-btn pt-btn-sm ${notifFilter === "all" ? "pt-btn-primary" : "pt-btn-ghost"}`}
@@ -740,30 +752,32 @@ function PortalAppContent() {
                     Chưa đọc ({unreadCount})
                   </button>
                 </div>
-                <div style={{ display: "inline-flex", gap: 6, marginLeft: "auto" }}>
-                  {unreadCount > 0 && (
-                    <BusyButton
-                      type="button"
-                      className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
-                      busy={markingAll}
-                      busyLabel="Đang đánh dấu…"
-                      onClick={() => void handleMarkAllRead()}
-                    >
-                      <span>Đọc hết</span>
-                    </BusyButton>
-                  )}
-                  {readCount > 0 && (
-                    <BusyButton
-                      type="button"
-                      className="pt-btn pt-btn-ghost pt-btn-sm"
-                      busy={clearingRead}
-                      busyLabel="Đang xóa…"
-                      onClick={() => void handleClearRead()}
-                    >
-                      <span>Xóa đã đọc ({readCount})</span>
-                    </BusyButton>
-                  )}
-                </div>
+                {(unreadCount > 0 || readCount > 0) && (
+                  <div className="pt-notif-action-group">
+                    {unreadCount > 0 && (
+                      <BusyButton
+                        type="button"
+                        className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
+                        busy={markingAll}
+                        busyLabel="Đang đánh dấu…"
+                        onClick={() => void handleMarkAllRead()}
+                      >
+                        <span>Đọc hết</span>
+                      </BusyButton>
+                    )}
+                    {readCount > 0 && (
+                      <BusyButton
+                        type="button"
+                        className="pt-btn pt-btn-ghost pt-btn-sm"
+                        busy={clearingRead}
+                        busyLabel="Đang xóa…"
+                        onClick={() => void handleClearRead()}
+                      >
+                        <span>Xóa đã đọc ({readCount})</span>
+                      </BusyButton>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -839,6 +853,19 @@ function PortalAppContent() {
                 onChange={(e) => setAccountEmailInput(e.target.value)}
               />
             </Field>
+            {accountEmailChanged && (
+              <Field label="Mật khẩu hiện tại (xác nhận đổi email)" htmlFor="pt-acc-current-password">
+                <input
+                  id="pt-acc-current-password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Nhập mật khẩu hiện tại của bạn"
+                  value={accountPasswordInput}
+                  onChange={(e) => setAccountPasswordInput(e.target.value)}
+                  required
+                />
+              </Field>
+            )}
             <p className="pt-hint">
               Email này giúp bạn đăng nhập 1 chạm bằng nút <strong>Tiếp tục với Google</strong> trên màn hình đăng nhập. Các thông tin pháp lý hộ canh tác (CCCD, diện tích, thửa đất) do Ban quản trị HTX thiết lập và quản lý.
             </p>

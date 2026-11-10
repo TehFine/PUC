@@ -4355,6 +4355,7 @@ body.pt-body {
 
 /* Thanh bộ lọc trạng thái (Filter Chips) */
 .pt-pest-filter-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -4366,9 +4367,39 @@ body.pt-body {
   padding-bottom: 2px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  --seg-fade-l: 0px;
+  --seg-fade-r: 0px;
 }
 .pt-pest-filter-bar::-webkit-scrollbar {
   display: none;
+}
+.pt-pest-filter-bar.has-edge-fade {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    rgba(0, 0, 0, 0.14) calc(var(--seg-fade-l) * 0.2),
+    rgba(0, 0, 0, 0.48) calc(var(--seg-fade-l) * 0.5),
+    rgba(0, 0, 0, 0.84) calc(var(--seg-fade-l) * 0.8),
+    #000 var(--seg-fade-l),
+    #000 calc(100% - var(--seg-fade-r)),
+    rgba(0, 0, 0, 0.84) calc(100% - var(--seg-fade-r) * 0.8),
+    rgba(0, 0, 0, 0.48) calc(100% - var(--seg-fade-r) * 0.5),
+    rgba(0, 0, 0, 0.14) calc(100% - var(--seg-fade-r) * 0.2),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    rgba(0, 0, 0, 0.14) calc(var(--seg-fade-l) * 0.2),
+    rgba(0, 0, 0, 0.48) calc(var(--seg-fade-l) * 0.5),
+    rgba(0, 0, 0, 0.84) calc(var(--seg-fade-l) * 0.8),
+    #000 var(--seg-fade-l),
+    #000 calc(100% - var(--seg-fade-r)),
+    rgba(0, 0, 0, 0.84) calc(100% - var(--seg-fade-r) * 0.8),
+    rgba(0, 0, 0, 0.48) calc(100% - var(--seg-fade-r) * 0.5),
+    rgba(0, 0, 0, 0.14) calc(100% - var(--seg-fade-r) * 0.2),
+    transparent 100%
+  );
 }
 .pt-pest-filter-chip {
   display: inline-flex;
@@ -4744,6 +4775,10 @@ body.pt-body {
   flex-direction: column;
   gap: 18px;
   padding: 4px 0 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 /* Vùng hiển thị chai thuốc: Không khung bao quanh, nằm trực tiếp trên nền modal */
@@ -4831,6 +4866,10 @@ body.pt-body {
   outline: none;
   border-radius: 18px;
   box-shadow: none;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .pt-efficacy-row {
@@ -5055,6 +5094,32 @@ body.pt-body {
   border-radius: 18px;
   padding: 16px 18px;
   box-shadow: none;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.pt-pesticide-recommended-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.pt-pesticide-safety-tips .pt-pill,
+.pt-pesticide-recommended-pills .pt-pill {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.4;
+  padding: 6px 12px;
+  border-radius: 16px;
+  box-sizing: border-box;
 }
 
 .pt-pesticide-safety-list {
@@ -5099,6 +5164,11 @@ body.pt-body {
   }
   .pt-pesticide-specs-grid {
     grid-template-columns: 1fr;
+  }
+  .pt-pesticide-efficacy-card,
+  .pt-pesticide-safety-tips,
+  .pt-pesticide-alert-box {
+    padding: 14px 15px;
   }
 }
 
@@ -5268,15 +5338,30 @@ body.pt-body {
   align-items: center;
   justify-content: center;
   min-height: 34px;
+  max-width: 100%;
   padding: 7px 16px;
-  border-radius: 999px;
+  border-radius: 18px;
   border: none;
   outline: none;
   font-family: var(--font-body-stack);
   font-size: 14.5px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.3;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: break-word;
   box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .pt-pesticide-header-info .pt-pest-status-badge,
+  .pt-pesticide-header-info .pt-fert-status-badge,
+  .pt-pesticide-header-info .pt-training-code-pill,
+  .pt-pesticide-header-info .pt-pill {
+    font-size: 13px;
+    padding: 6px 14px;
+    min-height: 30px;
+  }
 }
 
 .pt-training-hero-title {
@@ -5591,23 +5676,66 @@ body.pt-body {
   line-height: 1.5;
 }
 
-/* Segmented control */
+/* Segmented control (Hiệu ứng mờ dần 2 đầu kiểu thanh Camera iPhone) */
 .pt-segmented {
+  position: relative;
   display: flex;
   width: fit-content;
   max-width: 100%;
-  gap: 6px;
-  padding: 5px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 2px 10px rgba(20, 55, 47, 0.04);
   box-sizing: border-box;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow: hidden;
 }
-.pt-segmented::-webkit-scrollbar {
+.pt-segmented-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 6px;
+  padding: 5px;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  --seg-fade-l: 0px;
+  --seg-fade-r: 0px;
+}
+.pt-segmented::-webkit-scrollbar,
+.pt-segmented-track::-webkit-scrollbar {
   display: none;
+}
+.pt-segmented-track.has-edge-fade {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    rgba(0, 0, 0, 0.14) calc(var(--seg-fade-l) * 0.2),
+    rgba(0, 0, 0, 0.48) calc(var(--seg-fade-l) * 0.5),
+    rgba(0, 0, 0, 0.84) calc(var(--seg-fade-l) * 0.8),
+    #000 var(--seg-fade-l),
+    #000 calc(100% - var(--seg-fade-r)),
+    rgba(0, 0, 0, 0.84) calc(100% - var(--seg-fade-r) * 0.8),
+    rgba(0, 0, 0, 0.48) calc(100% - var(--seg-fade-r) * 0.5),
+    rgba(0, 0, 0, 0.14) calc(100% - var(--seg-fade-r) * 0.2),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0px,
+    rgba(0, 0, 0, 0.14) calc(var(--seg-fade-l) * 0.2),
+    rgba(0, 0, 0, 0.48) calc(var(--seg-fade-l) * 0.5),
+    rgba(0, 0, 0, 0.84) calc(var(--seg-fade-l) * 0.8),
+    #000 var(--seg-fade-l),
+    #000 calc(100% - var(--seg-fade-r)),
+    rgba(0, 0, 0, 0.84) calc(100% - var(--seg-fade-r) * 0.8),
+    rgba(0, 0, 0, 0.48) calc(100% - var(--seg-fade-r) * 0.5),
+    rgba(0, 0, 0, 0.14) calc(100% - var(--seg-fade-r) * 0.2),
+    transparent 100%
+  );
 }
 .pt-segmented button {
   flex: 1 0 auto;
@@ -8468,9 +8596,21 @@ body.pt-body {
 
 .pt-notif-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.pt-notif-filter-group,
+.pt-notif-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pt-notif-action-group {
+  margin-left: auto;
 }
 
 .pt-notif-summary {
@@ -8485,14 +8625,14 @@ body.pt-body {
   font-weight: 700;
 }
 
+.pt-notif-toolbar .pt-btn,
 .pt-notif-markall-btn {
-  white-space: nowrap !important;
+  white-space: nowrap;
   flex-shrink: 0;
-  padding: 8px 12px !important;
-  font-size: 12.5px !important;
-  line-height: 1 !important;
-  gap: 5px !important;
-  border-radius: 8px !important;
+  padding: 9px 16px;
+  font-size: 13px;
+  line-height: 1.25;
+  border-radius: 7px;
 }
 
 .pt-notif-list {
@@ -8593,15 +8733,32 @@ body.pt-body {
 
 @media (max-width: 640px) {
   .pt-notif-toolbar {
+    flex-direction: column;
+    align-items: stretch;
     gap: 8px;
+  }
+  .pt-notif-filter-group,
+  .pt-notif-action-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    margin-left: 0;
+  }
+  .pt-notif-action-group:has(> :only-child) {
+    grid-template-columns: minmax(0, 1fr);
   }
   .pt-notif-summary {
     font-size: 12.5px;
   }
+  .pt-notif-toolbar .pt-btn,
   .pt-notif-markall-btn {
-    padding: 7.5px 10px !important;
-    font-size: 12px !important;
-    gap: 4px !important;
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    padding: 9.5px 12px;
+    font-size: 13px;
+    border-radius: 9px !important;
   }
   .pt-notif-item,
   .pt-list > li.pt-notif-item,

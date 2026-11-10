@@ -219,3 +219,138 @@ export function Field({ label, htmlFor, children }: { label: string; htmlFor: st
     </div>
   );
 }
+
+/**
+ * Đồng bộ lớp mặt nạ mờ dần ở 2 đầu (kiểu thanh điều hướng chế độ Camera trên iPhone)
+ * và tự động trượt mượt đưa nút tab đang chọn về vùng trung tâm khi bấm.
+ */
+function useCameraDialFade(
+  trackRef: React.RefObject<HTMLDivElement | null>,
+  activeKey?: string,
+  maxFade = 52,
+) {
+  const hasMountedRef = useRef(false);
+
+  const syncFade = useCallback(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const overflow = el.scrollWidth - el.clientWidth;
+    if (overflow <= 2) {
+      el.classList.remove("has-edge-fade");
+      el.style.setProperty("--seg-fade-l", "0px");
+      el.style.setProperty("--seg-fade-r", "0px");
+      return;
+    }
+    el.classList.add("has-edge-fade");
+    const sl = Math.max(0, el.scrollLeft);
+    const sr = Math.max(0, overflow - sl);
+    const fadeL = sl <= 1 ? 0 : Math.min(maxFade, Math.round(sl * 1.6));
+    const fadeR = sr <= 1 ? 0 : Math.min(maxFade, Math.round(sr * 1.6));
+    el.style.setProperty("--seg-fade-l", `${fadeL}px`);
+    el.style.setProperty("--seg-fade-r", `${fadeR}px`);
+  }, [trackRef, maxFade]);
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+
+    syncFade();
+    const rafId = requestAnimationFrame(syncFade);
+    el.addEventListener("scroll", syncFade, { passive: true });
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(syncFade);
+      ro.observe(el);
+    } else {
+      window.addEventListener("resize", syncFade);
+    }
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      el.removeEventListener("scroll", syncFade);
+      if (ro) ro.disconnect();
+      else window.removeEventListener("resize", syncFade);
+    };
+  }, [trackRef, syncFade]);
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const isFirst = !hasMountedRef.current;
+    hasMountedRef.current = true;
+
+    const overflow = el.scrollWidth - el.clientWidth;
+    if (overflow > 2) {
+      const activeBtn = el.querySelector<HTMLElement>(
+        '[aria-selected="true"], button.active, button.is-active',
+      );
+      if (activeBtn) {
+        const target =
+          activeBtn.offsetLeft + activeBtn.offsetWidth / 2 - el.clientWidth / 2;
+        const clamped = Math.max(0, Math.min(overflow, target));
+        el.scrollTo({
+          left: clamped,
+          behavior: isFirst ? "auto" : "smooth",
+        });
+      }
+    }
+    requestAnimationFrame(syncFade);
+  }, [activeKey, trackRef, syncFade]);
+}
+
+/** Thanh chứa các nút tab con với hiệu ứng mờ dần ở 2 đầu như Camera iPhone. */
+export function SegmentedTabs({
+  ariaLabel,
+  activeKey,
+  className = "",
+  children,
+}: {
+  ariaLabel: string;
+  activeKey?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  useCameraDialFade(trackRef, activeKey, 52);
+
+  return (
+    <div className={`pt-segmented ${className}`.trim()}>
+      <div
+        ref={trackRef}
+        className="pt-segmented-track"
+        role="tablist"
+        aria-label={ariaLabel}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Thanh bộ lọc chip ngang với hiệu ứng mờ dần ở 2 đầu khi tràn màn hình. */
+export function FadeFilterBar({
+  ariaLabel,
+  activeKey,
+  className = "",
+  children,
+}: {
+  ariaLabel: string;
+  activeKey?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  useCameraDialFade(trackRef, activeKey, 48);
+
+  return (
+    <div
+      ref={trackRef}
+      className={`pt-pest-filter-bar ${className}`.trim()}
+      role="tablist"
+      aria-label={ariaLabel}
+    >
+      {children}
+    </div>
+  );
+}

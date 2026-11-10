@@ -112,8 +112,8 @@ export default function NotificationBell() {
         <Sheet title="Thông báo từ HTX" onClose={() => setOpen(false)}>
           <div className="pt-stack" style={{ gap: 14 }}>
             {items.length > 0 && (
-              <div className="pt-notif-toolbar" style={{ flexWrap: "wrap", gap: 8 }}>
-                <div style={{ display: "inline-flex", gap: 6 }}>
+              <div className="pt-notif-toolbar">
+                <div className="pt-notif-filter-group">
                   <button
                     type="button"
                     className={`pt-btn pt-btn-sm ${filterMode === "all" ? "pt-btn-primary" : "pt-btn-ghost"}`}
@@ -129,30 +129,32 @@ export default function NotificationBell() {
                     Chưa đọc ({unread})
                   </button>
                 </div>
-                <div style={{ display: "inline-flex", gap: 6, marginLeft: "auto" }}>
-                  {unread > 0 && (
-                    <BusyButton
-                      type="button"
-                      className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
-                      busy={busy}
-                      busyLabel="Đang đánh dấu…"
-                      onClick={() => void markAllRead()}
-                    >
-                      <span>Đọc hết</span>
-                    </BusyButton>
-                  )}
-                  {readCount > 0 && (
-                    <BusyButton
-                      type="button"
-                      className="pt-btn pt-btn-ghost pt-btn-sm"
-                      busy={clearing}
-                      busyLabel="Đang xóa…"
-                      onClick={() => void clearRead()}
-                    >
-                      <span>Xóa đã đọc ({readCount})</span>
-                    </BusyButton>
-                  )}
-                </div>
+                {(unread > 0 || readCount > 0) && (
+                  <div className="pt-notif-action-group">
+                    {unread > 0 && (
+                      <BusyButton
+                        type="button"
+                        className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
+                        busy={busy}
+                        busyLabel="Đang đánh dấu…"
+                        onClick={() => void markAllRead()}
+                      >
+                        <span>Đọc hết</span>
+                      </BusyButton>
+                    )}
+                    {readCount > 0 && (
+                      <BusyButton
+                        type="button"
+                        className="pt-btn pt-btn-ghost pt-btn-sm"
+                        busy={clearing}
+                        busyLabel="Đang xóa…"
+                        onClick={() => void clearRead()}
+                      >
+                        <span>Xóa đã đọc ({readCount})</span>
+                      </BusyButton>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
