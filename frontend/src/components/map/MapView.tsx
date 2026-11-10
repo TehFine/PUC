@@ -28,14 +28,17 @@ import DrawHint from "./DrawHint";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { AppleLoadingPill } from "@/components/ui/Skeleton";
+import { isLowEndDevice } from "@/lib/network";
 import {
   defaultForm,
   EMPTY_PREVIEW,
+  formatEdgeMeters,
   panelHeading,
   polygonFromLatLngs,
   previewFromLatLngs,
+  renderCadastralDimensions,
 } from "./map-helpers";
-import { createBaseLayers, MAP_CENTER, type BaseLayers } from "./map-layers";
+import { createBaseLayers, MAP_CENTER, MAX_MAP_ZOOM, type BaseLayers } from "./map-layers";
 import type {
   BaseLayer,
   ComparisonState,
@@ -82,6 +85,7 @@ export default function MapView({
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const baseLayersRef = useRef<Partial<BaseLayers>>({});
   const plotGroupRef = useRef<Leaflet.FeatureGroup | null>(null);
+  const dimensionGroupRef = useRef<Leaflet.LayerGroup | null>(null);
   const draftGroupRef = useRef<Leaflet.LayerGroup | null>(null);
   const compareGroupRef = useRef<Leaflet.LayerGroup | null>(null);
   const plotLayersRef = useRef<Map<string, Leaflet.Path>>(new Map());
@@ -95,7 +99,8 @@ export default function MapView({
 
   const [ready, setReady] = useState(false);
   const [mode, setMode] = useState<Mode>("idle");
-  const [baseLayer, setBaseLayer] = useState<BaseLayer>("map");
+  const [baseLayer, setBaseLayer] = useState<BaseLayer>("satellite");
+  const [zoomLevel, setZoomLevel] = useState<number>(13);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [comparison, setComparison] = useState<ComparisonState | null>(null);
@@ -185,6 +190,24 @@ export default function MapView({
         points.map((point) => [point.lat, point.lng] as Leaflet.LatLngTuple),
         { color, weight: 2, opacity: 0.9, dashArray: "4 4", interactive: false },
       ).addTo(group);
+
+      // Hiển thị chiều dài thực tế từng cạnh (mét) ngay khi đang vẽ / chỉnh sửa hình dạng thửa (giới hạn <= 24 đỉnh)
+      if (points.length <= 24) {
+        const edgeCount = points.length >= 3 ? points.length : points.length - 1;
+        for (let i = 0; i < edgeCount; i += 1) {
+          const p1 = points[i];
+          const p2 = points[(i + 1) % points.length];
+          const meters = p1.distanceTo(p2);
+          if (!Number.isFinite(meters) || meters < 2.5) continue;
+          const mid = L.latLng((p1.lat + p2.lat) / 2, (p1.lng + p2.lng) / 2);
+          const dimIcon = L.divIcon({
+            className: "plot-edge-dim-wrap",
+            html: `<span class="plot-edge-dim-badge is-draft">${formatEdgeMeters(meters)}</span>`,
+            iconSize: [0, 0],
+          });
+          L.marker(mid, { icon: dimIcon, interactive: false, keyboard: false }).addTo(group);
+        }
+      }
     }
 
     if (editMode) {
@@ -426,6 +449,7 @@ export default function MapView({
   useEffect(() => {
     let disposed = false;
     let resizeObserver: ResizeObserver | null = null;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
     const init = async () => {
       const imported = (await import("leaflet")) as unknown as {
@@ -435,22 +459,33 @@ export default function MapView({
       if (disposed || !mapElementRef.current) return;
 
       leafletRef.current = L;
+      const lowEnd = isLowEndDevice();
       const map = L.map(mapElementRef.current, {
         zoomControl: false,
         attributionControl: false,
         minZoom: 9,
-        maxZoom: 19,
+        maxZoom: MAX_MAP_ZOOM,
+        zoomSnap: lowEnd ? 0.5 : 0.25,
+        zoomDelta: lowEnd ? 1 : 0.5,
+        wheelPxPerZoomLevel: lowEnd ? 60 : 90,
+        fadeAnimation: !lowEnd,
         preferCanvas: true,
       }).setView(MAP_CENTER, 13);
 
       mapRef.current = map;
+      L.control.scale({ imperial: false, metric: true, position: "bottomleft" }).addTo(map);
       const layers = createBaseLayers(L);
       baseLayersRef.current = layers;
-      layers.map.addTo(map);
+      layers.satellite.addTo(map);
 
       plotGroupRef.current = L.featureGroup().addTo(map);
+      dimensionGroupRef.current = L.layerGroup().addTo(map);
       draftGroupRef.current = L.layerGroup().addTo(map);
       compareGroupRef.current = L.layerGroup().addTo(map);
+
+      map.on("zoomend", () => {
+        setZoomLevel(map.getZoom());
+      });
 
       map.on("click", (event) => {
         const latlng = L.latLng(event.latlng.lat, event.latlng.lng);
@@ -469,7 +504,12 @@ export default function MapView({
         }
       });
 
-      resizeObserver = new ResizeObserver(() => map.invalidateSize());
+      resizeObserver = new ResizeObserver(() => {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          if (!disposed && mapRef.current) mapRef.current.invalidateSize({ pan: false });
+        }, 120);
+      });
       resizeObserver.observe(mapElementRef.current);
       setReady(true);
     };
@@ -478,17 +518,32 @@ export default function MapView({
 
     return () => {
       disposed = true;
+      if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver?.disconnect();
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
       plotGroupRef.current = null;
+      dimensionGroupRef.current = null;
       draftGroupRef.current = null;
       compareGroupRef.current = null;
       setReady(false);
     };
   }, []);
+
+  // Vẽ mốc đỉnh địa chính + số đo chiều dài từng cạnh (mét) khi phóng sát (Z >= 17) vào thửa đang chọn
+  useEffect(() => {
+    const L = leafletRef.current;
+    const dimGroup = dimensionGroupRef.current;
+    if (!ready || !L || !dimGroup) return;
+
+    dimGroup.clearLayers();
+    if (mode !== "idle" || draft || comparison || !selectedFeature || zoomLevel < 17) {
+      return;
+    }
+    renderCadastralDimensions(L, dimGroup, selectedFeature.geometry, isLowEndDevice());
+  }, [ready, selectedFeature, mode, draft, comparison, zoomLevel]);
 
   useEffect(() => {
     return () => {
@@ -646,7 +701,7 @@ export default function MapView({
       if (map && initialPoints.length > 0) {
         const bounds = L.latLngBounds(initialPoints);
         if (bounds.isValid()) {
-          map.fitBounds(bounds.pad(0.65), { maxZoom: 18 });
+          map.fitBounds(bounds.pad(0.5), { maxZoom: 19.5 });
         }
       }
     },
@@ -722,8 +777,20 @@ export default function MapView({
     setSelectedCode(null);
   }, [cancelDraft]);
 
-  const zoomIn = () => mapRef.current?.zoomIn();
-  const zoomOut = () => mapRef.current?.zoomOut();
+  const zoomIn = () => mapRef.current?.zoomIn(1);
+  const zoomOut = () => mapRef.current?.zoomOut(1);
+
+  const focusSelectedPlot = useCallback(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    if (!L || !map || !selectedFeature) return;
+    const pts = extractOpenRingLatLngs(L, selectedFeature);
+    if (pts.length === 0) return;
+    const bounds = L.latLngBounds(pts);
+    if (bounds.isValid()) {
+      map.fitBounds(bounds.pad(0.32), { maxZoom: 19.5 });
+    }
+  }, [selectedFeature]);
 
   const fitPlots = () => {
     const map = mapRef.current;
@@ -894,7 +961,13 @@ export default function MapView({
         onImport={() => fileInputRef.current?.click()}
       />
 
-      <MapZoomControls onZoomIn={zoomIn} onZoomOut={zoomOut} onFit={fitPlots} />
+      <MapZoomControls
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        onFit={fitPlots}
+        onFocusSelected={selectedFeature && mode === "idle" ? focusSelectedPlot : undefined}
+        zoomLevel={ready ? zoomLevel : undefined}
+      />
 
       {mode !== "idle" && (
         <DrawHint
@@ -983,6 +1056,7 @@ export default function MapView({
           overlaps={overlaps}
           onCompare={startCompare}
           onEditShape={() => startEditShape(selectedFeature)}
+          onFocusPlot={focusSelectedPlot}
           onClose={() => setSelectedCode(null)}
         />
       )}

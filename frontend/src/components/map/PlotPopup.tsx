@@ -22,6 +22,7 @@ interface PlotPopupProps {
   overlaps: PlotOverlap[];
   onCompare: () => void;
   onEditShape?: () => void;
+  onFocusPlot?: () => void;
   onClose: () => void;
 }
 
@@ -29,7 +30,14 @@ interface PlotPopupProps {
  * Bảng thông tin thửa đất nằm bên cạnh phải bản đồ (không làm mờ nền bản đồ phía sau).
  * Chỉ hiển thị thông tin quy hoạch của thửa; thông tin cá nhân (họ tên đầy đủ, nguồn nhập, chủ hộ của thửa chồng lấn…) được ẩn.
  */
-export default function PlotPopup({ feature, overlaps, onCompare, onEditShape, onClose }: PlotPopupProps) {
+export default function PlotPopup({
+  feature,
+  overlaps,
+  onCompare,
+  onEditShape,
+  onFocusPlot,
+  onClose,
+}: PlotPopupProps) {
   const props = feature.properties;
   const popupRef = useRef<HTMLElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
@@ -180,6 +188,16 @@ export default function PlotPopup({ feature, overlaps, onCompare, onEditShape, o
       </p>
 
       <div className="pp-actions" style={{ flexWrap: "wrap" }}>
+        {onFocusPlot && (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={onFocusPlot}
+            title="Phóng to sát thửa đất (Z18.5) để xem ranh giới chi tiết và số đo từng cạnh"
+          >
+            Phóng sát thửa
+          </button>
+        )}
         {onEditShape && (
           <button type="button" className="btn btn-primary btn-sm" onClick={onEditShape}>
             Sửa hình dạng thửa

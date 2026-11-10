@@ -34,17 +34,27 @@ export default function MapToolbar({
       <div className="map-toolgroup">
         <button
           type="button"
-          className={`map-tool ${baseLayer === "map" ? "active" : ""}`}
-          onClick={() => onBaseLayerChange("map")}
+          className={`map-tool ${baseLayer === "satellite" ? "active" : ""}`}
+          onClick={() => onBaseLayerChange("satellite")}
+          title="Ảnh vệ tinh độ nét cao kèm mạng lưới đường liên thôn và ranh giới"
         >
-          Bản đồ tối
+          Vệ tinh HD
         </button>
         <button
           type="button"
-          className={`map-tool ${baseLayer === "satellite" ? "active" : ""}`}
-          onClick={() => onBaseLayerChange("satellite")}
+          className={`map-tool ${baseLayer === "streets" ? "active" : ""}`}
+          onClick={() => onBaseLayerChange("streets")}
+          title="Bản đồ giao thông & địa hình chi tiết OpenStreetMap"
         >
-          Vệ tinh
+          Đường phố
+        </button>
+        <button
+          type="button"
+          className={`map-tool ${baseLayer === "map" ? "active" : ""}`}
+          onClick={() => onBaseLayerChange("map")}
+          title="Bản đồ nền tối tương phản cao"
+        >
+          Nền tối
         </button>
       </div>
       <div className="map-toolgroup map-toolgroup-col">

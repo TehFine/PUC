@@ -1578,19 +1578,96 @@ body {
 
 
 .plot-tooltip {
-  background: rgba(255, 255, 255, 0.94) !important;
-  border: 1px solid rgba(20, 55, 47, 0.14) !important;
-  box-shadow: none !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(20, 55, 47, 0.18) !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.14) !important;
   color: #14372f !important;
   font-size: 9.5px !important;
   font-weight: 600 !important;
   line-height: 1.3 !important;
-  padding: 1px 3px !important;
+  padding: 2px 5px !important;
   border-radius: 6px !important;
   white-space: nowrap !important;
+  pointer-events: none !important;
 }
 
 .plot-tooltip::before { display: none !important; }
+
+.plot-tooltip-inner.is-mid {
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.plot-tooltip-inner.is-rich {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 1px 2px;
+}
+
+.plot-tooltip-title {
+  font-size: 11px;
+  font-weight: 750;
+  color: #064e3b;
+  letter-spacing: -0.01em;
+}
+
+.plot-tooltip-meta {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.plot-edge-dim-wrap {
+  pointer-events: none !important;
+}
+
+.plot-edge-dim-badge {
+  display: inline-block;
+  transform: translate(-50%, -50%);
+  padding: 1.5px 5.5px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fef08a;
+  border: 1px solid rgba(250, 204, 21, 0.55);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.plot-edge-dim-badge.is-draft {
+  background: rgba(120, 53, 15, 0.9);
+  color: #fef3c7;
+  border-color: rgba(251, 191, 36, 0.7);
+}
+
+.map-zoom-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: monospace;
+  color: var(--green-700, #15803d);
+  background: rgba(22, 163, 74, 0.09);
+  border-radius: 11px;
+  user-select: none;
+}
+
+.leaflet-control-scale-line {
+  background: rgba(15, 23, 42, 0.82) !important;
+  color: #f8fafc !important;
+  border-color: rgba(248, 250, 252, 0.75) !important;
+  border-radius: 4px !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  padding: 1px 6px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28) !important;
+}
 
 .zone-stats {
   display: grid;
@@ -2597,13 +2674,114 @@ select.form-input {
 }
 
 .leaflet-popup-content-wrapper {
-  border-radius: var(--r-md) !important;
-  box-shadow: var(--shadow-md) !important;
-  border: 1px solid var(--border);
+  border-radius: 16px !important;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08) !important;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 0 !important;
 }
 
-.leaflet-popup-content { margin: 11px 13px !important; font-size: 12px !important; line-height: 1.6 !important; }
+.leaflet-popup-content { margin: 13px 16px !important; font-size: 12.5px !important; line-height: 1.5 !important; width: auto !important; }
 .leaflet-popup-tip { box-shadow: none !important; }
+
+.pt-balanced-popup .leaflet-popup-content {
+  margin: 0 !important;
+}
+
+.pt-balanced-popup a.leaflet-popup-close-button {
+  top: 8px !important;
+  right: 8px !important;
+  width: 22px !important;
+  height: 22px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  background: rgba(15, 23, 42, 0.06) !important;
+  color: #475569 !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pt-balanced-popup a.leaflet-popup-close-button:hover {
+  background: rgba(15, 23, 42, 0.12) !important;
+  color: #0f172a !important;
+}
+
+.pt-leaflet-card {
+  font-family: inherit;
+  color: #0f172a;
+}
+
+.pt-leaflet-card-pin {
+  padding: 14px 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pt-leaflet-pin-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.pt-leaflet-pin-coords {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-leaflet-card-poly {
+  padding: 13px 16px 14px;
+  min-width: 224px;
+}
+
+.pt-leaflet-card-head {
+  padding-right: 24px;
+  padding-bottom: 7px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  font-size: 14px;
+  font-weight: 700;
+  color: #065f46;
+  line-height: 1.3;
+}
+
+.pt-leaflet-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pt-leaflet-card-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.pt-leaflet-card-row span {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.pt-leaflet-card-row strong {
+  color: #0f172a;
+  font-weight: 600;
+  text-align: right;
+}
 
 /* ─── RESPONSIVE ──────────────────────────────── */
 @media (max-width: 1450px) {
@@ -4539,6 +4717,20 @@ html.is-scrolling-down .zones-map-area .plotmap-zoom,
   contain: layout style;
 }
 
+/* Ẩn dựng (lazy layout/paint) cho danh sách dài ngoài khung nhìn trên thiết bị di động */
+.pt-pest-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+}
+
+@media print {
+  .pt-pest-card,
+  .lp-section {
+    content-visibility: visible !important;
+    contain-intrinsic-size: none !important;
+  }
+}
+
 /* Chế độ tối ưu phần cứng (kích hoạt tự động trên máy CPU <= 4 nhân, RAM <= 4GB, hoặc mạng yếu) */
 html[data-perf="lite"] *,
 html[data-perf="lite"] *::before,
@@ -4548,6 +4740,14 @@ html[data-net="slow"] *::before,
 html[data-net="slow"] *::after {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+}
+
+html[data-perf="lite"] * {
+  will-change: auto !important;
+}
+
+html[data-perf="lite"] :is(.pt-minimap-pin-pulse, .pt-plot-minimap-loading) {
+  animation: none !important;
 }
 
 html[data-perf="lite"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card, .lp-stat-card, .lp-step, .lp-news-card),

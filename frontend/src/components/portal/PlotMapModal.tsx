@@ -11,6 +11,13 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { renderCadastralDimensions } from "@/components/map/map-helpers";
+import {
+  createGoogleSatelliteLayer,
+  createGoogleStreetsLayer,
+  MAX_MAP_ZOOM,
+} from "@/components/map/map-layers";
+import { isLowEndDevice } from "@/lib/network";
 import type { PortalPlot } from "@/types/portal";
 import { PLOT_STATUS } from "@/lib/portal-labels";
 import { lockRootScroll } from "@/lib/scroll-lock";
@@ -50,6 +57,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   const polygonLayerRef = useRef<Leaflet.GeoJSON | null>(null);
 
   const [layerMode, setLayerMode] = useState<LayerMode>("satellite");
+  const layerModeRef = useRef<LayerMode>("satellite");
   const [ready, setReady] = useState(false);
   const [infoExpanded, setInfoExpanded] = useState(() => {
     if (typeof window !== "undefined" && window.innerWidth <= 640) {
@@ -291,11 +299,19 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           delete leafletContainer._leaflet_id;
         }
 
+        const lowEnd = isLowEndDevice();
+
         const map = L.map(containerRef.current, {
           zoomControl: false, // Tự đặt controls hoặc dùng nút nổi
           attributionControl: false,
+          minZoom: 10,
+          maxZoom: MAX_MAP_ZOOM,
+          zoomSnap: lowEnd ? 0.5 : 0.25,
+          zoomDelta: lowEnd ? 1 : 0.5,
+          wheelPxPerZoomLevel: lowEnd ? 60 : 90,
+          fadeAnimation: !lowEnd,
           preferCanvas: true,
-        }).setView([lat, lng], 17);
+        }).setView([lat, lng], 17.5);
 
         if (disposed) {
           map.remove();
@@ -303,48 +319,26 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         }
 
         mapRef.current = map;
+        L.control.scale({ imperial: false, metric: true, position: "bottomleft" }).addTo(map);
 
-        // 1. Lớp vệ tinh hybrid độ nét cao Esri World Imagery (siêu nét, hiển thị ranh giới & nhãn buôn thôn chuẩn xác, không bị chặn)
-        const satBase = L.tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-          {
-            maxNativeZoom: 18,
-            maxZoom: 20,
-            attribution: "Esri, Maxar, Earthstar Geographics",
-          },
-        );
-        const satLabels = L.tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-          {
-            maxNativeZoom: 18,
-            maxZoom: 20,
-          },
-        );
-        const satellite = L.layerGroup([satBase, satLabels]);
+        // 1. Lớp vệ tinh Hybrid siêu nét (native Z21 tại Krông Búk, rõ từng tán cây sầu riêng & tên thôn/đường)
+        const satellite = createGoogleSatelliteLayer(L, lowEnd, MAX_MAP_ZOOM);
         satLayerRef.current = satellite;
 
-        // 2. Lớp bản đồ đường xá Esri World Street Map (rõ tên thôn buôn, đường liên xã Krông Búk).
-        //    Dùng cùng máy chủ Esri với lớp vệ tinh để nằm trong danh sách img-src của CSP (next.config.ts).
-        //    Esri chỉ có dữ liệu đường xá khu vực Krông Búk đến zoom 17 (zoom 18+ trả ô "Map data not yet available"),
-        //    nên giới hạn maxNativeZoom = 17 để Leaflet tự phóng to ảnh zoom 17 khi người dùng zoom sâu hơn.
-        const streets = L.tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-          {
-            maxNativeZoom: 17,
-            maxZoom: 20,
-            attribution: "Esri, HERE, Garmin, © OpenStreetMap",
-          },
-        );
+        // 2. Lớp bản đồ địa hình & giao thông tiếng Việt (không bị nhà mạng chặn DNS như tile.openstreetmap.org)
+        const streets = createGoogleStreetsLayer(L, lowEnd, MAX_MAP_ZOOM);
         streetLayerRef.current = streets;
 
-        // Mặc định nạp lớp theo layerMode
-        if (layerMode === "satellite") {
+        // Mặc định nạp lớp theo layerMode hiện tại
+        if (layerModeRef.current === "satellite") {
           satellite.addTo(map);
         } else {
           streets.addTo(map);
         }
 
-        // 3. Vẽ ranh giới thửa đất nếu có
+        const dimensionGroup = L.layerGroup().addTo(map);
+
+        // 3. Vẽ ranh giới thửa đất kèm mốc đỉnh địa chính & chiều dài từng cạnh (mét) khi phóng sát
         if (plot.geometryJson) {
           try {
             const geojson = JSON.parse(plot.geometryJson);
@@ -354,26 +348,46 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 weight: 3.5,
                 opacity: 0.95,
                 fillColor: "#059669",
-                fillOpacity: 0.28,
+                fillOpacity: 0.22,
               },
             }).addTo(map);
             polygonLayerRef.current = poly;
 
-            poly.bindPopup(`
-              <div style="font-family: inherit; font-size: 13px; line-height: 1.5; color: #0f172a; padding: 2px 0;">
-                <strong style="font-size: 14px; color: #065f46;">Thửa đất ${escapeHtml(plot.code)}</strong><br/>
-                <span>Chủ hộ: <b>${escapeHtml(householdName)}</b></span><br/>
-                <span>Diện tích: <b>${escapeHtml(Number(plot.areaHa).toLocaleString("vi-VN", { maximumFractionDigits: 2 }))} ha</b></span><br/>
-                <span>Giống: <b>${escapeHtml(plot.variety || "Sầu riêng")}</b></span>
+            poly.bindPopup(
+              `
+              <div class="pt-leaflet-card pt-leaflet-card-poly">
+                <div class="pt-leaflet-card-head">Thửa đất ${escapeHtml(plot.code)}</div>
+                <div class="pt-leaflet-card-rows">
+                  <div class="pt-leaflet-card-row"><span>Chủ hộ</span><strong>${escapeHtml(householdName)}</strong></div>
+                  <div class="pt-leaflet-card-row"><span>Diện tích</span><strong>${escapeHtml(Number(plot.areaHa).toLocaleString("vi-VN", { maximumFractionDigits: 2 }))} ha</strong></div>
+                  <div class="pt-leaflet-card-row"><span>Giống</span><strong>${escapeHtml(plot.variety || "Sầu riêng")}</strong></div>
+                </div>
               </div>
-            `);
+            `,
+              { className: "pt-balanced-popup", maxWidth: 280 },
+            );
+
+            const syncDimensions = () => {
+              const z = map.getZoom();
+              poly.setStyle({
+                fillOpacity: z >= 18 ? 0.14 : 0.24,
+                weight: z >= 18 ? 3.8 : 3.2,
+              });
+              if (z >= 17) {
+                renderCadastralDimensions(L, dimensionGroup, geojson, lowEnd);
+              } else {
+                dimensionGroup.clearLayers();
+              }
+            };
 
             const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
             map.fitBounds(poly.getBounds(), {
               paddingTopLeft: [isMobile ? 70 : 60, 20],
               paddingBottomRight: [20, isMobile ? 80 : 60],
-              maxZoom: 18,
+              maxZoom: 19,
             });
+            syncDimensions();
+            map.on("zoomend", syncDimensions);
           } catch {
             // Bỏ qua lỗi json
           }
@@ -394,12 +408,15 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           iconAnchor: [18, 18],
         });
 
-        L.marker([lat, lng], { icon: pinIcon }).addTo(map).bindPopup(`
-          <div style="font-family: inherit; font-size: 13px; color: #0f172a;">
-            <strong>Vị trí trung tâm thửa đất ${escapeHtml(plot.code)}</strong><br/>
-            Tọa độ: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}
+        L.marker([lat, lng], { icon: pinIcon }).addTo(map).bindPopup(
+          `
+          <div class="pt-leaflet-card pt-leaflet-card-pin">
+            <strong class="pt-leaflet-pin-title">Vị trí trung tâm thửa đất ${escapeHtml(plot.code)}</strong>
+            <span class="pt-leaflet-pin-coords">Tọa độ: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}</span>
           </div>
-        `);
+        `,
+          { className: "pt-balanced-popup", offset: [0, -6], maxWidth: 320 },
+        );
 
         // Giữ map responsive an toàn, tránh vòng lặp resize gây giật lag
         let lastW = 0;
@@ -463,10 +480,27 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     if (mode === "satellite") {
       if (map.hasLayer(street)) map.removeLayer(street);
       if (!map.hasLayer(sat)) sat.addTo(map);
+      if (map.getZoom() < 17.5) {
+        if (polygonLayerRef.current) {
+          const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
+          map.fitBounds(polygonLayerRef.current.getBounds(), {
+            paddingTopLeft: [isMobile ? 70 : 60, 20],
+            paddingBottomRight: [20, isMobile ? 80 : 60],
+            maxZoom: 18.5,
+          });
+        } else {
+          map.setZoom(18);
+        }
+      }
     } else {
       if (map.hasLayer(sat)) map.removeLayer(sat);
       if (!map.hasLayer(street)) street.addTo(map);
+      // Khi chuyển sang Bản đồ đường xá/địa hình ở vùng rẫy nông thôn, thu phóng về Z16 để thấy ngay đường liên thôn & suối quanh thửa
+      if (map.getZoom() > 16) {
+        map.setView([lat, lng], 16, { animate: true });
+      }
     }
+    layerModeRef.current = mode;
     setLayerMode(mode);
   };
 
@@ -536,12 +570,33 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
         {/* Cụm công cụ điều khiển nổi góc phải */}
         <div className="pt-mapmodal-top-actions">
+          <div className="pt-mapmodal-layer-pill" aria-label="Phóng to hoặc thu nhỏ bản đồ">
+            <button
+              type="button"
+              className="pt-mapmodal-pill-btn"
+              onClick={() => mapRef.current?.zoomOut(1)}
+              title="Thu nhỏ"
+              aria-label="Thu nhỏ bản đồ"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="pt-mapmodal-pill-btn"
+              onClick={() => mapRef.current?.zoomIn(1)}
+              title="Phóng to chi tiết (tối đa Z22)"
+              aria-label="Phóng to bản đồ"
+            >
+              +
+            </button>
+          </div>
+
           <div className="pt-mapmodal-layer-pill">
             <button
               type="button"
               className={`pt-mapmodal-pill-btn ${layerMode === "satellite" ? "is-active" : ""}`}
               onClick={() => switchLayer("satellite")}
-              title="Chuyển chế độ xem ảnh vệ tinh"
+              title="Chuyển chế độ xem ảnh vệ tinh độ nét cao"
             >
               Vệ tinh
             </button>
@@ -549,7 +604,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               type="button"
               className={`pt-mapmodal-pill-btn ${layerMode === "streets" ? "is-active" : ""}`}
               onClick={() => switchLayer("streets")}
-              title="Chuyển chế độ xem bản đồ giao thông"
+              title="Chuyển chế độ xem bản đồ giao thông chi tiết"
             >
               Bản đồ
             </button>

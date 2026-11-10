@@ -70,17 +70,49 @@ export interface PlotOverlap {
   areaHa: number;
 }
 
+function getPolygonBbox(poly: Polygon): [number, number, number, number] | null {
+  const ring = poly.coordinates?.[0];
+  if (!ring || ring.length === 0) return null;
+  let minLng = Infinity;
+  let minLat = Infinity;
+  let maxLng = -Infinity;
+  let maxLat = -Infinity;
+  for (let i = 0; i < ring.length; i += 1) {
+    const lng = ring[i][0];
+    const lat = ring[i][1];
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+  }
+  return [minLng, minLat, maxLng, maxLat];
+}
+
+function bboxesOverlap(a: [number, number, number, number], b: [number, number, number, number]): boolean {
+  return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+}
+
 export function findOverlaps(target: PlotFeature, collection: PlotCollection | null): PlotOverlap[] {
   if (!collection) return [];
-  return collection.features
-    .filter((feature) => feature.properties.code !== target.properties.code)
-    .map((feature) => ({
-      code: feature.properties.code,
-      owner: feature.properties.owner,
-      areaHa: overlapAreaHa(target.geometry, feature.geometry),
-    }))
-    .filter((item) => item.areaHa > 0.0005)
-    .sort((a, b) => b.areaHa - a.areaHa);
+  const targetBbox = getPolygonBbox(target.geometry);
+  if (!targetBbox) return [];
+
+  const overlaps: PlotOverlap[] = [];
+  for (let i = 0; i < collection.features.length; i += 1) {
+    const feature = collection.features[i];
+    if (feature.properties.code === target.properties.code) continue;
+    const candidateBbox = getPolygonBbox(feature.geometry);
+    if (!candidateBbox || !bboxesOverlap(targetBbox, candidateBbox)) continue;
+    const areaHa = overlapAreaHa(target.geometry, feature.geometry);
+    if (areaHa > 0.0005) {
+      overlaps.push({
+        code: feature.properties.code,
+        owner: feature.properties.owner,
+        areaHa,
+      });
+    }
+  }
+  return overlaps.sort((a, b) => b.areaHa - a.areaHa);
 }
 
 export interface PlotComparison {
