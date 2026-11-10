@@ -1,16 +1,17 @@
 import { Noto_Serif_Display, Plus_Jakarta_Sans } from "next/font/google";
 
 /**
- * Chữ tiêu đề serif tương phản cao, kiểu tạp chí (theo bộ ảnh tham chiếu trong uiux/).
- * Hỗ trợ tiếng Việt và có trục độ rộng (wdth) để co hẹp chữ khi cần.
+ * Chữ tiêu đề serif tương phản cao, kiểu tạp chí (chỉ dùng trên trang giới thiệu, tắt preload toàn cục
+ * để các trang làm việc /portal và /admin không tải thêm font serif vào RAM trên máy cấu hình yếu).
  */
 export const display = Noto_Serif_Display({
-  subsets: ["latin", "latin-ext", "vietnamese"],
+  subsets: ["latin", "vietnamese"],
   weight: "variable",
-  style: ["normal", "italic"],
+  style: ["normal"],
   axes: ["wdth"],
   variable: "--font-display",
   display: "swap",
+  preload: false,
 });
 
 /**
@@ -18,7 +19,7 @@ export const display = Noto_Serif_Display({
  * Hỗ trợ tiếng Việt đầy đủ, đường nét dứt khoát, cao cấp và tương phản mạnh mẽ.
  */
 export const heroSans = Plus_Jakarta_Sans({
-  subsets: ["latin", "latin-ext", "vietnamese"],
+  subsets: ["latin", "vietnamese"],
   weight: "variable",
   variable: "--font-hero-sans",
   display: "swap",

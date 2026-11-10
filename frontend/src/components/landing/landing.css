@@ -878,6 +878,8 @@ html:has(.lp) body {
 /* ─── Mục nội dung ──────────────────────────────── */
 .lp-section {
   padding: clamp(72px, 9vw, 120px) 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 560px;
 }
 .lp-section.is-beige {
   background: var(--lp-beige);

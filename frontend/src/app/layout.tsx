@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { display, heroSans } from "@/components/landing/fonts";
+import { heroSans } from "@/components/landing/fonts";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import NetworkStatus from "@/components/ui/NetworkStatus";
@@ -8,7 +8,6 @@ import { Toaster } from "@/components/ui/Toast";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
-  weight: ["300", "400", "500", "600", "700"],
   variable: "--font-inter",
   display: "swap",
 });
@@ -42,7 +41,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" suppressHydrationWarning>
-      <body className={`${inter.variable} ${display.variable} ${heroSans.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${heroSans.variable} font-sans antialiased`}>
         <NetworkStatus />
         <AuthProvider>{children}</AuthProvider>
         <Toaster />

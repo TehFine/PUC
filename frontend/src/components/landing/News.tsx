@@ -7,6 +7,8 @@ import { NEWS_CATEGORIES, type NewsArticle } from "./news-data";
 import { useNewsArticles } from "@/lib/news-store";
 import { lockRootScroll } from "@/lib/scroll-lock";
 
+const shouldSkipImageOpt = (src: string) => src.startsWith("/api/") || /^https?:\/\//i.test(src);
+
 export default function News() {
   const { articles } = useNewsArticles();
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -64,7 +66,7 @@ export default function News() {
               fill
               sizes="(max-width: 900px) 100vw, 560px"
               priority
-              unoptimized={featured.image.startsWith("/api/")}
+              unoptimized={shouldSkipImageOpt(featured.image)}
             />
             <span className="lp-clip-arrow" aria-hidden="true">
               <svg viewBox="0 0 42 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ overflow: "visible", display: "block" }}>
@@ -115,7 +117,7 @@ export default function News() {
                   alt={item.imageAlt}
                   fill
                   sizes="(max-width: 768px) 100vw, 360px"
-                  unoptimized={item.image.startsWith("/api/")}
+                  unoptimized={shouldSkipImageOpt(item.image)}
                 />
               </div>
 
@@ -182,7 +184,7 @@ export default function News() {
                   alt={readingArticle.imageAlt}
                   fill
                   sizes="(max-width: 900px) 100vw, 760px"
-                  unoptimized={readingArticle.image.startsWith("/api/")}
+                  unoptimized={shouldSkipImageOpt(readingArticle.image)}
                 />
                 <figcaption>{readingArticle.imageAlt}</figcaption>
               </figure>
