@@ -17,7 +17,12 @@ interface AuthContextValue {
   session: AuthSession | null;
   login: (username: string, password: string) => Promise<void>;
   loginWithGoogle: (payload?: GoogleLoginPayload) => Promise<void>;
-  updateProfile: (payload: { fullName?: string; email?: string | null }) => Promise<void>;
+  updateProfile: (payload: {
+    fullName?: string;
+    email?: string | null;
+    currentPassword?: string;
+    googleCredential?: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   /** Kiểm tra quyền theo ma trận backend trả về (backend vẫn là nơi quyết định cuối cùng). */
   can: (resource: string, action: Action) => boolean;
@@ -64,10 +69,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus("authenticated");
   }, []);
 
-  const updateProfile = useCallback(async (payload: { fullName?: string; email?: string | null }) => {
-    const result = await api.patch<AuthSession>("/auth/profile", payload);
-    setSession(result);
-  }, []);
+  const updateProfile = useCallback(
+    async (payload: {
+      fullName?: string;
+      email?: string | null;
+      currentPassword?: string;
+      googleCredential?: string;
+    }) => {
+      const result = await api.patch<AuthSession>("/auth/profile", payload);
+      setSession(result);
+    },
+    [],
+  );
 
   const logout = useCallback(async () => {
     setSession(null);

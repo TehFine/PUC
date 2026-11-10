@@ -31,16 +31,21 @@ export default function UserMenu() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [fullNameInput, setFullNameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
+  const [profilePasswordInput, setProfilePasswordInput] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
   if (!session) return null;
   const { fullName, username, email, role } = session.user;
   const title = `${fullName} – ${ROLE_LABELS[role]}`;
+  const normalizedCurrentEmail = email ? email.trim().toLowerCase() : null;
+  const normalizedNextEmail = emailInput.trim() ? emailInput.trim().toLowerCase() : null;
+  const emailChanged = normalizedNextEmail !== normalizedCurrentEmail;
 
   const openEditProfile = () => {
     setFullNameInput(fullName);
     setEmailInput(email ?? "");
+    setProfilePasswordInput("");
     setProfileError(null);
     setOpen(false);
     setEditingProfile(true);
@@ -52,13 +57,19 @@ export default function UserMenu() {
       setProfileError("Họ tên hiển thị không được để trống.");
       return;
     }
+    if (emailChanged && !profilePasswordInput) {
+      setProfileError("Vui lòng nhập mật khẩu hiện tại để xác nhận thay đổi địa chỉ email liên kết.");
+      return;
+    }
     setSavingProfile(true);
     setProfileError(null);
     try {
       await updateProfile({
         fullName: fullNameInput.trim(),
-        email: emailInput.trim() ? emailInput.trim().toLowerCase() : null,
+        email: normalizedNextEmail,
+        ...(emailChanged ? { currentPassword: profilePasswordInput } : {}),
       });
+      setProfilePasswordInput("");
       setEditingProfile(false);
     } catch (err) {
       setProfileError(errorMessage(err, "Không thể cập nhật thông tin tài khoản."));
@@ -224,6 +235,19 @@ export default function UserMenu() {
                 onChange={(e) => setEmailInput(e.target.value)}
               />
             </Field>
+            {emailChanged && (
+              <Field label="Mật khẩu hiện tại (xác nhận đổi email)" htmlFor="um-current-password">
+                <input
+                  id="um-current-password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Nhập mật khẩu hiện tại của bạn"
+                  value={profilePasswordInput}
+                  onChange={(e) => setProfilePasswordInput(e.target.value)}
+                  required
+                />
+              </Field>
+            )}
             <p className="pt-hint">
               Email này được dùng để đăng nhập nhanh bằng nút <strong>Tiếp tục với Google</strong> trên màn hình đăng nhập.
             </p>

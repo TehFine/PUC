@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
-import { translateViToZh, usePortalLang } from "./i18n";
+import { usePortalLang } from "./i18n";
 import type { PortalTabId } from "./PortalApp";
 import { RadialPngIcon } from "./RadialIcons";
 import { Sheet, useSheetClose } from "./ui";
@@ -204,33 +204,47 @@ function normalize(text: string): string {
     .trim();
 }
 
-const INDEX = ENTRIES.map((entry) => {
-  const zhTitle = translateViToZh(entry.title);
-  const zhWhere = translateViToZh(entry.where);
-  const haystack = normalize(`${entry.title} ${entry.where} ${zhTitle} ${zhWhere} ${entry.keywords}`);
+interface IndexedEntry {
+  entry: SearchEntry;
+  haystack: string;
+  words: string[];
+}
+
+const VI_INDEX: IndexedEntry[] = ENTRIES.map((entry) => {
+  const haystack = normalize(`${entry.title} ${entry.where} ${entry.keywords}`);
   return { entry, haystack, words: haystack.split(" ") };
 });
+
+function buildZhIndex(translate: (vi: string) => string): IndexedEntry[] {
+  return ENTRIES.map((entry) => {
+    const zhTitle = translate(entry.title);
+    const zhWhere = translate(entry.where);
+    const haystack = normalize(`${entry.title} ${entry.where} ${zhTitle} ${zhWhere} ${entry.keywords}`);
+    return { entry, haystack, words: haystack.split(" ") };
+  });
+}
 
 /**
  * Chấm điểm: mỗi chữ gõ vào phải xuất hiện trong mục (ở đầu một từ được điểm cao hơn giữa từ).
  * Không đòi hỏi gõ đúng thứ tự hay đủ dấu, gõ 1 chữ cái vẫn có gợi ý.
  */
-function searchEntries(query: string): SearchEntry[] {
+function searchEntries(query: string, index: IndexedEntry[]): SearchEntry[] {
   const tokens = normalize(query).split(" ").filter(Boolean);
   if (tokens.length === 0) return [];
   const titleOf = (e: SearchEntry) => normalize(e.title);
 
-  return INDEX.map(({ entry, haystack, words }) => {
-    let score = 0;
-    for (const token of tokens) {
-      if (words.some((w) => w === token)) score += 3;
-      else if (words.some((w) => w.startsWith(token))) score += 2;
-      else if (haystack.includes(token)) score += 1;
-      else return { entry, score: 0 };
-    }
-    if (titleOf(entry).includes(tokens.join(" "))) score += 2;
-    return { entry, score };
-  })
+  return index
+    .map(({ entry, haystack, words }) => {
+      let score = 0;
+      for (const token of tokens) {
+        if (words.some((w) => w === token)) score += 3;
+        else if (words.some((w) => w.startsWith(token))) score += 2;
+        else if (haystack.includes(token)) score += 1;
+        else return { entry, score: 0 };
+      }
+      if (titleOf(entry).includes(tokens.join(" "))) score += 2;
+      return { entry, score };
+    })
     .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 8)
@@ -264,7 +278,8 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const touchStartY = useRef<number | null>(null);
-  const results = useMemo(() => searchEntries(query), [query]);
+  const activeIndex = useMemo(() => (isZh ? buildZhIndex(t) : VI_INDEX), [isZh, t]);
+  const results = useMemo(() => searchEntries(query, activeIndex), [query, activeIndex]);
   const hasQuery = query.trim().length > 0;
 
   // Máy tính có chuột: tự đặt con trỏ vào ô nhập sau khi popup trượt lên xong.

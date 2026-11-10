@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, errorMessage } from "@/lib/api-client";
+import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, api, errorMessage } from "@/lib/api-client";
 import type { ListResponse } from "@/types/api";
 
 interface CacheEntry {
@@ -10,8 +10,30 @@ interface CacheEntry {
 }
 
 const CACHE_FRESH_MS = 25_000;
+const MAX_CACHE_ENTRIES = 80;
 const apiCache = new Map<string, CacheEntry>();
 const inflightRequests = new Map<string, Promise<unknown>>();
+let authEpoch = 0;
+
+function setApiCacheEntry(path: string, data: unknown) {
+  if (apiCache.has(path)) {
+    apiCache.delete(path);
+  } else if (apiCache.size >= MAX_CACHE_ENTRIES) {
+    const oldest = apiCache.keys().next().value;
+    if (oldest !== undefined) apiCache.delete(oldest);
+  }
+  apiCache.set(path, { data, timestamp: Date.now() });
+}
+
+if (typeof window !== "undefined") {
+  const clearAll = () => {
+    authEpoch += 1;
+    apiCache.clear();
+    inflightRequests.clear();
+  };
+  window.addEventListener(AUTH_LOGOUT_EVENT, clearAll);
+  window.addEventListener(AUTH_EXPIRED_EVENT, clearAll);
+}
 
 /** Xóa bộ nhớ đệm API (gọi tự động sau khi mutation thành công hoặc khi làm mới thủ công). */
 export function invalidateApiCache(prefix?: string) {
@@ -33,14 +55,19 @@ function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
   const existing = inflightRequests.get(path) as Promise<T> | undefined;
   if (existing) return existing;
 
+  const requestEpoch = authEpoch;
   const request = api
     .get<T>(path)
     .then((result) => {
-      apiCache.set(path, { data: result, timestamp: Date.now() });
+      if (requestEpoch === authEpoch) {
+        setApiCacheEntry(path, result);
+      }
       return result;
     })
     .finally(() => {
-      inflightRequests.delete(path);
+      if (inflightRequests.get(path) === request) {
+        inflightRequests.delete(path);
+      }
     });
 
   inflightRequests.set(path, request);
@@ -109,7 +136,7 @@ export function useApi<T>(path: string | null) {
     setData((prev) => {
       const resolved = typeof next === "function" ? (next as (prev: T | null) => T | null)(prev) : next;
       if (latest.current && resolved !== null) {
-        apiCache.set(latest.current, { data: resolved, timestamp: Date.now() });
+        setApiCacheEntry(latest.current, resolved);
       }
       return resolved;
     });

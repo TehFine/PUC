@@ -21,7 +21,11 @@ let refreshing: Promise<boolean> | null = null;
 
 // Dùng chung một lần làm mới cho nhiều request 401 đồng thời (refresh token xoay vòng, chỉ dùng được một lần).
 function refreshSession(): Promise<boolean> {
-  refreshing ??= fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" })
+  refreshing ??= fetch("/api/auth/refresh", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "X-Requested-With": "XMLHttpRequest" },
+  })
     .then((response) => response.ok)
     .catch(() => false)
     .finally(() => {
@@ -30,15 +34,27 @@ function refreshSession(): Promise<boolean> {
   return refreshing;
 }
 
-// Các endpoint này tự xử lý 401 (sai mật khẩu, refresh hết hạn…) nên không thử làm mới phiên.
-const NO_REFRESH_PATHS = ["/auth/login", "/auth/refresh", "/auth/logout"];
+// Các endpoint này tự xử lý 401 (sai mật khẩu, đăng nhập Google, quên mật khẩu…) nên không thử làm mới phiên.
+const NO_REFRESH_PATHS = [
+  "/auth/login",
+  "/auth/google",
+  "/auth/register",
+  "/auth/forgot-password",
+  "/auth/refresh",
+  "/auth/logout",
+];
 const isAuthPath = (path: string) => NO_REFRESH_PATHS.some((prefix) => path.startsWith(prefix));
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const send = async () => {
     const startedAt = performance.now();
+    const method = (init?.method ?? "GET").toUpperCase();
+    const isMutating = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+    const headers = isMutating
+      ? { "X-Requested-With": "XMLHttpRequest", ...(init?.headers as Record<string, string> | undefined) }
+      : init?.headers;
     try {
-      return await fetch(`/api${path}`, { cache: "no-store", credentials: "same-origin", ...init });
+      return await fetch(`/api${path}`, { cache: "no-store", credentials: "same-origin", ...init, headers });
     } finally {
       reportRequestTime(performance.now() - startedAt);
     }
