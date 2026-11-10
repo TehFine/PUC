@@ -6,10 +6,43 @@ import { toast } from "@/components/ui/Toast";
 import { api } from "@/lib/api-client";
 import type { HouseholdRecord } from "@/types/households";
 
-function generateDefaultPassword(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  const tail = digits.length >= 4 ? digits.slice(-4) : "2026";
-  return `Cune@${tail}`;
+const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const LOWER = "abcdefghijkmnopqrstuvwxyz";
+const DIGITS = "23456789";
+const SYMBOLS = "@#$!";
+const ALL_CHARS = UPPER + LOWER + DIGITS + SYMBOLS;
+
+function randomChar(charset: string, buf: Uint32Array, index: number): string {
+  return charset[buf[index] % charset.length];
+}
+
+/** Sinh mật khẩu ngẫu nhiên mật mã học 12 ký tự (không phụ thuộc số điện thoại). */
+function generateSecurePassword(): string {
+  const randomValues = new Uint32Array(24);
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(randomValues);
+  } else {
+    for (let i = 0; i < randomValues.length; i += 1) {
+      randomValues[i] = Math.floor(Math.random() * 0xffffffff);
+    }
+  }
+  const chars = [
+    randomChar(UPPER, randomValues, 0),
+    randomChar(LOWER, randomValues, 1),
+    randomChar(DIGITS, randomValues, 2),
+    randomChar(SYMBOLS, randomValues, 3),
+  ];
+  for (let i = 4; i < 12; i += 1) {
+    chars.push(randomChar(ALL_CHARS, randomValues, i));
+  }
+  // Xáo trộn Fisher–Yates bằng các số ngẫu nhiên còn lại
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = randomValues[12 + i] % (i + 1);
+    const tmp = chars[i];
+    chars[i] = chars[j];
+    chars[j] = tmp;
+  }
+  return chars.join("");
 }
 
 export default function HouseholdAccountModal({
@@ -23,11 +56,8 @@ export default function HouseholdAccountModal({
 }) {
   const hasExisting = Boolean(household.accountId);
   const [username, setUsername] = useState(household.accountUsername || household.phone || "");
-  const [email, setEmail] = useState(
-    household.accountEmail ||
-      (/^0[0-9]{9}$/.test(household.phone.trim()) ? `nongho.${household.phone.trim()}@gmail.com` : ""),
-  );
-  const [password, setPassword] = useState(() => generateDefaultPassword(household.phone));
+  const [email, setEmail] = useState(household.accountEmail || "");
+  const [password, setPassword] = useState(() => generateSecurePassword());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issuedResult, setIssuedResult] = useState<{
@@ -194,7 +224,7 @@ export default function HouseholdAccountModal({
       </div>
 
       <div className="form-group">
-        <label htmlFor="issue-acc-email">Email Google liên kết (để đăng nhập bằng Google)</label>
+        <label htmlFor="issue-acc-email">Email Google thực tế của chủ hộ (tùy chọn – để trống nếu chưa có)</label>
         <input
           id="issue-acc-email"
           type="email"
@@ -202,7 +232,7 @@ export default function HouseholdAccountModal({
           value={email}
           disabled={busy}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="VD: nongho.0974564405@gmail.com"
+          placeholder="Để trống nếu hộ chưa cung cấp Gmail cá nhân"
         />
       </div>
 
@@ -216,9 +246,9 @@ export default function HouseholdAccountModal({
             className="btn btn-outline btn-sm"
             style={{ padding: "2px 8px", fontSize: 11.5 }}
             disabled={busy}
-            onClick={() => setPassword(generateDefaultPassword(username || household.phone))}
+            onClick={() => setPassword(generateSecurePassword())}
           >
-            Tạo mặc định
+            Tạo ngẫu nhiên mới
           </button>
         </div>
         <input
@@ -229,7 +259,7 @@ export default function HouseholdAccountModal({
           value={password}
           disabled={busy}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="VD: Cune@4405"
+          placeholder="Mật khẩu khởi tạo ngẫu nhiên"
         />
       </div>
 

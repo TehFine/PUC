@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/Toast";
 import { useApiList } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
 import type { VillageRecord } from "@/types/catalog";
+import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
 
 type ReportBackendType =
   | "households"
@@ -15,7 +16,8 @@ type ReportBackendType =
   | "spray"
   | "lab-tests"
   | "violations"
-  | "harvest";
+  | "harvest"
+  | "training-registrations";
 
 interface ReportSpec {
   id: string;
@@ -76,6 +78,13 @@ const REPORTS: ReportSpec[] = [
     desc: "Sản lượng, thị trường tiêu thụ, đơn vị thu mua và trạng thái vận chuyển từng lô",
     formats: ["CSV (Excel)", "In / PDF"],
   },
+  {
+    id: "training-registrations",
+    type: "training-registrations",
+    title: "Báo cáo đăng ký & Điểm danh tập huấn",
+    desc: "Danh sách hộ nông dân đăng ký tham gia các lớp tập huấn kỹ thuật và trạng thái điểm danh",
+    formats: ["CSV (Excel)", "In / PDF"],
+  },
 ];
 
 function escapeHtml(text: string): string {
@@ -87,36 +96,17 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function csvCellClient(value: string): string {
-  const safe = /^[=+\-@\t\r\n|]/.test(value) || /^\s+[=+\-@|]/.test(value) ? `'${value}` : value;
-  if (/[",\r\n]/.test(safe)) {
-    return `"${safe.replace(/"/g, '""')}"`;
-  }
-  return safe;
-}
-
-function buildCsvBlob(headers: string[], rows: string[][]): Blob {
-  const lines = [
-    headers.map(csvCellClient).join(","),
-    ...rows.map((r) => r.map(csvCellClient).join(",")),
-  ];
-  return new Blob([`\uFEFF${lines.join("\r\n")}\r\n`], { type: "text/csv;charset=utf-8;" });
-}
-
 function formatIsoToVn(iso: string): string {
   if (!iso) return "";
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
 
-function openPrintableReport(
+function buildPrintableReportHtml(
   report: ReportSpec,
   data: ReportDataPayload,
   meta: { from: string; to: string; villageName: string },
-): boolean {
-  const win = window.open("", "_blank", "width=1080,height=800");
-  if (!win) return false;
-
+): string {
   const now = new Date();
   const day = String(now.getDate()).padStart(2, "0");
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -144,14 +134,18 @@ function openPrintableReport(
           )
           .join("");
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(report.title)} - HTX Cư Né</title>
   <style>
     @page { size: A4 landscape; margin: 14mm; }
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
     body {
       font-family: "Times New Roman", Times, serif;
       color: #0f172a;
@@ -231,6 +225,13 @@ function openPrintableReport(
       font-family: Arial, Helvetica, sans-serif;
       font-size: 12px;
     }
+    thead {
+      display: table-header-group;
+    }
+    tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
     th, td {
       border: 1px solid #475569;
       padding: 7px 8px;
@@ -256,6 +257,7 @@ function openPrintableReport(
       display: flex;
       justify-content: space-between;
       margin-top: 26px;
+      break-inside: avoid;
       page-break-inside: avoid;
     }
     .sig-box {
@@ -286,8 +288,8 @@ function openPrintableReport(
 </head>
 <body>
   <div class="print-toolbar">
-    <button type="button" class="print-btn" onclick="window.print()">In báo cáo / Lưu PDF</button>
-    <button type="button" class="print-btn secondary" onclick="window.close()">Đóng cửa sổ</button>
+    <button type="button" id="report-btn-print" class="print-btn">In báo cáo / Lưu PDF</button>
+    <button type="button" id="report-btn-close" class="print-btn secondary">Đóng cửa sổ</button>
   </div>
   <div class="doc-header">
     <div class="doc-org">
@@ -328,18 +330,74 @@ function openPrintableReport(
       <div class="sig-note">(Ký tên, đóng dấu)</div>
     </div>
   </div>
-  <script>
-    window.addEventListener("load", function() {
-      setTimeout(function() { window.print(); }, 250);
-    });
-  </script>
 </body>
 </html>`;
+}
 
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  return true;
+/** Dự phòng in qua iframe ẩn khi trình duyệt di động hoặc WebView chặn mở cửa sổ mới. */
+function printHtmlViaHiddenIframe(html: string): void {
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.setAttribute("aria-hidden", "true");
+  document.body.appendChild(iframe);
+
+  const cleanup = () => {
+    setTimeout(() => {
+      iframe.remove();
+    }, 60_000);
+  };
+
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } finally {
+      cleanup();
+    }
+  };
+
+  const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+  if (doc) {
+    doc.open();
+    doc.write(html);
+    doc.close();
+  } else {
+    iframe.remove();
+  }
+}
+
+function renderPrintableReport(
+  win: Window | null,
+  report: ReportSpec,
+  data: ReportDataPayload,
+  meta: { from: string; to: string; villageName: string },
+): void {
+  const html = buildPrintableReportHtml(report, data, meta);
+  if (win && !win.closed) {
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.document.getElementById("report-btn-print")?.addEventListener("click", () => {
+      win.focus();
+      win.print();
+    });
+    win.document.getElementById("report-btn-close")?.addEventListener("click", () => {
+      win.close();
+    });
+    setTimeout(() => {
+      if (!win.closed) {
+        win.focus();
+        win.print();
+      }
+    }, 250);
+    return;
+  }
+  printHtmlViaHiddenIframe(html);
 }
 
 export default function Reports() {
@@ -413,43 +471,34 @@ export default function Reports() {
     }
     setError(null);
     setDownloading(true);
+    // Mở cửa sổ in đồng bộ ngay trong sự kiện click để trình duyệt Safari / Mobile không chặn popup
+    const popupWin = targetFormat === "PDF" ? window.open("", "_blank", "width=1080,height=800") : null;
     try {
-      const data =
-        previewData && previewData.type === report.type
-          ? previewData
-          : await api.get<ReportDataPayload>(
-              `/reports/${report.type}${buildQueryString({ format: "json", audit: "1" })}`,
-            );
+      // Luôn tải bản xuất đầy đủ (audit=1) thay vì tái sử dụng bản xem trước (vốn chỉ lấy tối đa 50 dòng & che CCCD).
+      const data = await api.get<ReportDataPayload>(
+        `/reports/${report.type}${buildQueryString({ format: "json", audit: "1" })}`,
+      );
 
       const selectedVillageName =
         villages.rows.find((v) => String(v.id) === villageId)?.name || "Tất cả thôn / tổ";
 
       if (targetFormat === "PDF") {
-        const opened = openPrintableReport(report, data, {
+        renderPrintableReport(popupWin, report, data, {
           from,
           to,
           villageName: selectedVillageName,
         });
-        if (!opened) {
-          throw new Error("Trình duyệt đã chặn cửa sổ bật lên. Vui lòng cho phép mở cửa sổ in.");
-        }
         toast.success(`Đã mở bản in / PDF cho "${report.title}" (${data.total} bản ghi).`);
         setSelectedReport(null);
       } else {
-        const blob = buildCsvBlob(data.headers, data.rows);
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = objectUrl;
-        link.download = `bao-cao-${report.type}-${to || todayIso()}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(objectUrl);
+        const blob = buildUtf8CsvBlob(data.headers, data.rows);
+        triggerBlobDownload(blob, `bao-cao-${report.type}-${to || todayIso()}.csv`);
 
         toast.success(`Đã tải xuống CSV "${report.title}" (${data.total} bản ghi).`);
         setSelectedReport(null);
       }
     } catch (err) {
+      if (popupWin && !popupWin.closed) popupWin.close();
       const msg = errorMessage(err, "Không xuất được báo cáo.");
       setError(msg);
       toast.error(msg);

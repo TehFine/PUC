@@ -10,6 +10,7 @@ import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
 import { badgeOf, optionsOf, SEVERITY, VIOLATION_STATUS } from "@/components/admin/shared/labels";
 import { formatDate, formatDateTime } from "@/utils/format";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { HouseholdRow } from "@/types/households";
 import type { ViolationRow, ViolationSeverity, ViolationStatus } from "@/types/journal";
 
@@ -113,8 +114,7 @@ export function ViolationDetailModal({
                 Gửi lúc: {formatDateTime(violation.farmerResponseAt)}
               </div>
             )}
-            {violation.farmerResponsePhotoUrl &&
-              /^(\/api\/uploads\/\d+|\/[A-Za-z0-9._/-]+|https?:\/\/)/i.test(violation.farmerResponsePhotoUrl) && (
+            {isSafeMediaUrl(violation.farmerResponsePhotoUrl) && (
               <div style={{ marginTop: 10, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -312,8 +312,10 @@ export function ViolationFormModal({
       detectedOn,
       plotCode: textOrNull(plotCode),
       description: textOrNull(description),
-      status,
     };
+    if (!isEdit) {
+      payload.status = status;
+    }
     if (householdId) {
       payload.householdId = Number(householdId);
     }
@@ -381,20 +383,36 @@ export function ViolationFormModal({
           error={fieldErrors.title}
         />
 
-        <FormGrid>
-          <SelectField
-            label="Mức độ"
-            value={severity}
-            onChange={(val) => setSeverity(val as ViolationSeverity)}
-            options={SEVERITY_OPTIONS}
-          />
-          <SelectField
-            label="Trạng thái"
-            value={status}
-            onChange={(val) => setStatus(val as ViolationStatus)}
-            options={STATUS_OPTIONS}
-          />
-        </FormGrid>
+        {isEdit ? (
+          <>
+            <SelectField
+              label="Mức độ"
+              value={severity}
+              onChange={(val) => setSeverity(val as ViolationSeverity)}
+              options={SEVERITY_OPTIONS}
+            />
+            {initial?.status === "open" && (
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
+                Để đóng cảnh báo đang mở, vui lòng dùng nút “Xử lý vi phạm” để ghi nhận biên bản khắc phục.
+              </div>
+            )}
+          </>
+        ) : (
+          <FormGrid>
+            <SelectField
+              label="Mức độ"
+              value={severity}
+              onChange={(val) => setSeverity(val as ViolationSeverity)}
+              options={SEVERITY_OPTIONS}
+            />
+            <SelectField
+              label="Trạng thái"
+              value={status}
+              onChange={(val) => setStatus(val as ViolationStatus)}
+              options={STATUS_OPTIONS}
+            />
+          </FormGrid>
+        )}
 
         <TextField
           label="Mã thửa (plotCode)"

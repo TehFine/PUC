@@ -158,6 +158,7 @@ export default function Testing() {
                 barSize={14}
                 radius={[7, 7, 0, 0]}
                 background={{ fill: "rgba(20, 55, 47, 0.04)", radius: 7 }}
+                isAnimationActive={typeof document === "undefined" || document.documentElement.dataset.perf !== "lite"}
               >
                 {cdData.map((e, i) => (
                   <Cell key={i} fill={e.cd > 0.04 ? "url(#cdBadGrad)" : "url(#cdOkGrad)"} />

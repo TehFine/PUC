@@ -5,7 +5,9 @@ import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Download, Printer } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { isLowEndDevice } from "@/lib/network";
 import { lockRootScroll } from "@/lib/scroll-lock";
+import { triggerBlobDownload } from "@/utils/download";
 import { formatDate } from "@/utils/format";
 import { useSheetSwipe } from "./use-sheet-swipe";
 
@@ -64,20 +66,47 @@ function jpegBytesToA4PdfBlob(jpegBytes: Uint8Array, pixelWidth: number, pixelHe
   return new Blob(chunks, { type: "application/pdf" });
 }
 
-/** Kết xuất tờ giấy A4 (.cert-paper 790x1117) sang file PDF độ phân giải cao (2x) và tải thẳng về máy. */
+/** Thu thập quy tắc CSS an toàn cho foreignObject (bỏ @import / @font-face ngoài để không làm bẩn Canvas). */
+function collectEmbeddedCssForSvg(): string {
+  const chunks: string[] = [];
+
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSImportRule || rule instanceof CSSFontFaceRule) continue;
+      const text = rule.cssText;
+      if (/url\s*\(\s*["']?(?!data:)/i.test(text)) continue;
+      chunks.push(text);
+    }
+  }
+
+  for (const el of Array.from(document.querySelectorAll("style"))) {
+    const raw = el.textContent ?? "";
+    if (!raw.trim()) continue;
+    const cleaned = raw.replace(/url\s*\(\s*["']?(?!data:)[^)"']+["']?\s*\)/gi, "none");
+    chunks.push(cleaned);
+  }
+
+  return chunks.join("\n");
+}
+
+/** Kết xuất tờ giấy A4 (.cert-paper 790x1117) sang file PDF độ phân giải cao và tải thẳng về máy. */
 async function exportCertPaperToPdf(paperEl: HTMLElement, fileName: string): Promise<void> {
   const width = 790;
   const height = 1117;
-  const scale = 2;
-  const outW = width * scale;
-  const outH = height * scale;
+  const scale = isLowEndDevice() ? 1.5 : 2;
+  const outW = Math.round(width * scale);
+  const outH = Math.round(height * scale);
 
   const clone = paperEl.cloneNode(true) as HTMLElement;
   clone.querySelectorAll(".cert-paper-fold, .no-print").forEach((node) => node.remove());
 
-  const styles = Array.from(document.querySelectorAll("style"))
-    .map((el) => el.textContent ?? "")
-    .join("\n");
+  const styles = collectEmbeddedCssForSvg();
 
   const svgNS = "http://www.w3.org/2000/svg";
   const xhtmlNS = "http://www.w3.org/1999/xhtml";
@@ -86,6 +115,22 @@ async function exportCertPaperToPdf(paperEl: HTMLElement, fileName: string): Pro
   svg.setAttribute("width", String(outW));
   svg.setAttribute("height", String(outH));
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const styleEl = document.createElementNS(svgNS, "style");
+  styleEl.textContent = `${styles}
+    .cert-paper {
+      width: ${width}px !important;
+      min-height: ${height}px !important;
+      height: ${height}px !important;
+      margin: 0 !important;
+      box-shadow: none !important;
+      clip-path: none !important;
+      border-radius: 0 !important;
+      background: #ffffff !important;
+      box-sizing: border-box !important;
+    }
+  `;
+  svg.appendChild(styleEl);
 
   const fo = document.createElementNS(svgNS, "foreignObject");
   fo.setAttribute("x", "0");
@@ -100,22 +145,6 @@ async function exportCertPaperToPdf(paperEl: HTMLElement, fileName: string): Pro
     `width:${width}px;height:${height}px;background:#ffffff;overflow:hidden;margin:0;padding:0;`,
   );
 
-  const styleEl = document.createElementNS(xhtmlNS, "style");
-  styleEl.textContent = `${styles}
-    .cert-paper {
-      width: ${width}px !important;
-      min-height: ${height}px !important;
-      height: ${height}px !important;
-      margin: 0 !important;
-      box-shadow: none !important;
-      clip-path: none !important;
-      border-radius: 0 !important;
-      background: #ffffff !important;
-      box-sizing: border-box !important;
-    }
-  `;
-
-  wrapper.appendChild(styleEl);
   wrapper.appendChild(clone);
   fo.appendChild(wrapper);
   svg.appendChild(fo);
@@ -133,29 +162,23 @@ async function exportCertPaperToPdf(paperEl: HTMLElement, fileName: string): Pro
   const canvas = document.createElement("canvas");
   canvas.width = outW;
   canvas.height = outH;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas context unavailable");
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, outW, outH);
-  ctx.drawImage(img, 0, 0, outW, outH);
+  try {
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) throw new Error("Canvas context unavailable");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, outW, outH);
+    ctx.drawImage(img, 0, 0, outW, outH);
 
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.94);
-  const base64 = dataUrl.split(",")[1] ?? "";
-  const binary = atob(base64);
-  const jpegBytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    jpegBytes[i] = binary.charCodeAt(i);
+    const jpegBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!jpegBlob) throw new Error("JPEG encoding failed");
+    const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
+
+    const pdfBlob = jpegBytesToA4PdfBlob(jpegBytes, outW, outH);
+    triggerBlobDownload(pdfBlob, fileName);
+  } finally {
+    canvas.width = 0;
+    canvas.height = 0;
   }
-
-  const pdfBlob = jpegBytesToA4PdfBlob(jpegBytes, outW, outH);
-  const blobUrl = URL.createObjectURL(pdfBlob);
-  const link = document.createElement("a");
-  link.href = blobUrl;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
 }
 
 export interface LabTestCertificateItem {
@@ -480,11 +503,18 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                   <strong>VN-DLK-0028</strong>
                 </div>
                 {qrDataUrl && (
-                  <div className="cert-qr-wrap">
+                  <a
+                    href={`/trace/${encodeURIComponent(plotCode)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cert-qr-wrap"
+                    style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
+                    title={`Bấm vào mã QR để mở trang truy xuất nguồn gốc lô ${plotCode}`}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={qrDataUrl} alt="Mã QR xác thực phiếu" className="cert-qr-img" />
-                    <span className="cert-qr-caption">Quét tra cứu gốc</span>
-                  </div>
+                    <span className="cert-qr-caption">Quét / Chạm tra cứu</span>
+                  </a>
                 )}
               </div>
             </div>
@@ -887,11 +917,18 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                       <strong>VN-DLK-0028</strong>
                     </div>
                     {qrDataUrl && (
-                      <div className="cert-m-qr">
+                      <a
+                        href={`/trace/${encodeURIComponent(plotCode)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="cert-m-qr"
+                        style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
+                        title={`Bấm vào mã QR để mở trang truy xuất nguồn gốc lô ${plotCode}`}
+                      >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={qrDataUrl} alt="Mã QR xác thực phiếu" />
-                        <span>Quét tra cứu gốc</span>
-                      </div>
+                        <span>Quét / Chạm tra cứu</span>
+                      </a>
                     )}
                   </div>
                 </div>
@@ -2607,6 +2644,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             width: 210mm !important;
             max-width: none !important;
             margin: 0 !important;
+            transform: none !important;
           }
 
           .no-print,

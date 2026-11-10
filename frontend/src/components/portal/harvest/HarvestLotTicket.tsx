@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, QrCode } from "lucide-react";
+import { ArrowUpRight, Download, QrCode } from "lucide-react";
 import QRCode from "qrcode";
 import { formatKg, HARVEST_STATUS } from "@/lib/portal-labels";
+import { triggerDataUrlDownload } from "@/utils/download";
 import { formatDate } from "@/utils/format";
 import type { PortalHarvest } from "@/types/portal";
 import { Sheet } from "../ui";
@@ -249,14 +250,22 @@ export function HarvestLotQrModal({
 
             <div className="pt-ticket-stub">
               <div className="pt-ticket-qr-wrap">
-                <div className="pt-qr-frame">
+                <a
+                  href={`/trace/${encodeURIComponent(lot.qrCode || lot.lotCode)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pt-qr-frame"
+                  style={{ textDecoration: "none", cursor: "pointer" }}
+                  title={`Bấm vào mã QR để xem trang truy xuất lô ${lot.lotCode}`}
+                  aria-label={`Bấm vào mã QR để xem trang truy xuất lô ${lot.lotCode}`}
+                >
                   <TicketQrImage lotCode={lot.lotCode} qrCode={lot.qrCode} />
-                </div>
+                </a>
                 <div className="pt-ticket-barcode-num">
                   <span>{lot.qrCode || lot.lotCode}</span>
                 </div>
                 <p className="pt-ticket-scan-hint">
-                  Quét mã QR để kiểm tra nguồn gốc &amp; nhật ký canh tác
+                  Quét hoặc chạm trực tiếp vào mã QR để kiểm tra nguồn gốc &amp; nhật ký canh tác
                 </p>
               </div>
             </div>
@@ -271,15 +280,31 @@ export function HarvestLotQrModal({
             </div>
           </div>
 
-          <a
-            href={`/trace/${encodeURIComponent(lot.lotCode)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="pt-btn pt-btn-primary pt-ticket-open-btn"
-          >
-            <span>Xem toàn bộ hồ sơ truy xuất</span>
-            <ArrowUpRight size={17} strokeWidth={2.4} aria-hidden="true" />
-          </a>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+            <button
+              type="button"
+              className="pt-btn pt-btn-ghost pt-ticket-open-btn"
+              onClick={() => {
+                const codeKey = `H:${lot.qrCode || lot.lotCode}`;
+                const dataUrl = qrDataUrlCache.get(codeKey);
+                if (dataUrl) {
+                  triggerDataUrlDownload(dataUrl, `QR-lo-hang-${lot.lotCode}.png`);
+                }
+              }}
+            >
+              <Download size={16} strokeWidth={2.2} aria-hidden="true" />
+              <span>Tải mã QR</span>
+            </button>
+            <a
+              href={`/trace/${encodeURIComponent(lot.qrCode || lot.lotCode)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pt-btn pt-btn-primary pt-ticket-open-btn"
+            >
+              <span>Xem toàn bộ hồ sơ truy xuất</span>
+              <ArrowUpRight size={17} strokeWidth={2.4} aria-hidden="true" />
+            </a>
+          </div>
         </div>
       </div>
     </Sheet>

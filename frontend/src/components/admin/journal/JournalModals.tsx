@@ -10,6 +10,7 @@ import { api } from "@/lib/api-client";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
 import { formatDate } from "@/utils/format";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { JournalRow } from "@/types/journal";
 
 export function JournalDetailModal({
@@ -94,7 +95,7 @@ export function JournalDetailModal({
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>
             Hình ảnh thực địa
           </div>
-          {entry.photoUrl && /^(\/api\/uploads\/\d+|\/[A-Za-z0-9._/-]+|https?:\/\/)/i.test(entry.photoUrl) ? (
+          {isSafeMediaUrl(entry.photoUrl) ? (
             <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

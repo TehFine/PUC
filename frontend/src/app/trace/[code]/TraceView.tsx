@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { SkeletonCards } from "@/components/ui/Skeleton";
+import { safeDecodeURIComponent } from "@/utils/url-safety";
 import {
   ArrowLeft,
   Search,
   Share2,
+  Printer,
   Check,
   CheckCircle2,
   Tag,
@@ -33,7 +35,6 @@ interface TraceData {
     grade: "A" | "B" | "C" | null;
     harvestDate: string | null;
     householdName: string;
-    householdCccd: string;
     householdCode: string;
     householdPhone: string;
     villageName: string;
@@ -154,7 +155,7 @@ const formatDate = (dateStr: string) => {
 
 export default function TraceView() {
   const params = useParams();
-  const code = typeof params.code === "string" ? decodeURIComponent(params.code) : "";
+  const code = typeof params.code === "string" ? safeDecodeURIComponent(params.code) : "";
   const router = useRouter();
   const [data, setData] = useState<TraceData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -242,6 +243,20 @@ export default function TraceView() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     }
+  };
+
+  const handlePrint = () => {
+    if (typeof window === "undefined") return;
+    const prevTitle = document.title;
+    const safeCode = (code || "PUC").replace(/[^a-zA-Z0-9_-]+/g, "-");
+    document.title = `Ho-so-truy-xuat-${safeCode}`;
+    const restore = () => {
+      document.title = prevTitle;
+      window.removeEventListener("afterprint", restore);
+    };
+    window.addEventListener("afterprint", restore);
+    window.print();
+    setTimeout(restore, 1500);
   };
 
   const totalLotKg = data?.lot?.weightTons
@@ -367,13 +382,13 @@ export default function TraceView() {
                     >
                       <CheckCircle2 size={13} color={data.farmerStamp.status === "activated" ? "#15803d" : "#b45309"} />
                       <span>
-                        {data.farmerStamp.status === "activated" ? "CHÍNH CHỦ ĐÃ KÍCH HOẠT" : "ĐÃ CẤP THEO CCCD DUY NHẤT"}
+                        {data.farmerStamp.status === "activated" ? "CHÍNH CHỦ ĐÃ KÍCH HOẠT" : "ĐÃ CẤP THEO MÃ NÔNG HỘ"}
                       </span>
                     </span>
                   </div>
                 </div>
                 <p className="tr-item-sub">
-                  Tem cấp phát cho nông hộ <strong>{data.farmerStamp.householdName}</strong> (CCCD: {data.farmerStamp.householdCccd}) theo định mức diện tích của vườn sầu riêng HTX Cư Né.
+                  Tem cấp phát cho nông hộ <strong>{data.farmerStamp.householdName}</strong> (Mã hộ: {data.farmerStamp.householdCode}) theo định mức diện tích của vườn sầu riêng HTX Cư Né.
                 </p>
               </section>
             )}
@@ -413,8 +428,8 @@ export default function TraceView() {
                     <span className="tr-asset-id-label">CHỦ HỘ</span>
                     <strong className="tr-asset-id-val">{data.farmerStamp.householdName}</strong>
                     <span className="tr-asset-dot">·</span>
-                    <span className="tr-asset-id-label">CCCD</span>
-                    <strong className="tr-asset-id-val">{data.farmerStamp.householdCccd}</strong>
+                    <span className="tr-asset-id-label">MÃ HỘ</span>
+                    <strong className="tr-asset-id-val">{data.farmerStamp.householdCode}</strong>
                   </div>
 
                   <div className="tr-asset-meta">
@@ -871,8 +886,12 @@ export default function TraceView() {
               </section>
             )}
 
-            {/* ─── Thao tác nhanh cho điện thoại ─── */}
+            {/* ─── Thao tác nhanh cho điện thoại & máy tính ─── */}
             <div className="tr-actions">
+              <button type="button" className="tr-print-btn" onClick={handlePrint}>
+                <Printer size={18} strokeWidth={2.2} aria-hidden="true" />
+                <span>In hồ sơ / Lưu PDF</span>
+              </button>
               <button type="button" className="tr-share-btn" onClick={handleShare}>
                 {copied ? (
                   <>

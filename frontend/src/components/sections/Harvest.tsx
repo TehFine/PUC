@@ -15,6 +15,7 @@ import BatchQrModal from "@/components/harvest/BatchQrModal";
 import { KpiChartView, renderKpiValue, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
 import { Modal } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import type {
   ContractRecord,
   EnterpriseRecord,
@@ -885,7 +886,7 @@ export default function Harvest() {
           }}
         />
       )}
-      {previewPhoto && /^(\/api\/uploads\/\d+|\/[A-Za-z0-9._/-]+|https?:\/\/)/i.test(previewPhoto.url) && (
+      {previewPhoto && isSafeMediaUrl(previewPhoto.url) && (
         <Modal
           title={previewPhoto.title}
           onClose={() => setPreviewPhoto(null)}

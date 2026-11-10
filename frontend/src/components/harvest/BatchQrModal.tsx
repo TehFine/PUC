@@ -9,6 +9,7 @@ import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import type { HarvestItem } from "@/types/entities";
 import { api } from "@/lib/api-client";
 import { lockRootScroll } from "@/lib/scroll-lock";
+import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
 
 export interface BatchQrLot {
   id?: number;
@@ -36,14 +37,6 @@ function getPublicBaseUrl(): string {
   if (envUrl) return envUrl.replace(/\/+$/, "");
   if (typeof window !== "undefined") return window.location.origin;
   return "";
-}
-
-function escapeCsvCell(value: unknown): string {
-  const str = value === null || value === undefined ? "" : String(value);
-  if (/[",\r\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
 }
 
 export default function BatchQrModal({ lot, onClose }: Props) {
@@ -214,34 +207,37 @@ export default function BatchQrModal({ lot, onClose }: Props) {
   const handleExportCsv = () => {
     if (filteredItems.length === 0) return;
     const baseUrl = getPublicBaseUrl();
-    const header = "Số thứ tự,Mã định danh Serial,Loại tem,Hạng,Khối lượng (kg),Đường dẫn truy xuất\n";
-    const rows = filteredItems.map((item, idx) => {
-      const url = `${baseUrl}/trace/${encodeURIComponent(item.serialCode)}`;
-      return [
-        idx + 1,
-        item.serialCode,
-        item.itemType === "fruit" ? "Quả" : "Thùng",
-        item.grade ?? "A",
-        item.weightKg ?? "",
-        url,
-      ]
-        .map(escapeCsvCell)
-        .join(",");
-    });
-    const blob = new Blob(["\uFEFF" + header + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = `Danh_sach_tem_${lot.code}_${itemType}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(objectUrl);
+    const headers = [
+      "Số thứ tự",
+      "Mã định danh Serial",
+      "Loại tem",
+      "Hạng",
+      "Khối lượng (kg)",
+      "Đường dẫn truy xuất",
+    ];
+    const rows = filteredItems.map((item, idx) => [
+      idx + 1,
+      item.serialCode,
+      item.itemType === "fruit" ? "Quả" : "Thùng",
+      item.grade ?? "A",
+      item.weightKg ?? "",
+      `${baseUrl}/trace/${encodeURIComponent(item.serialCode)}`,
+    ]);
+    const blob = buildUtf8CsvBlob(headers, rows);
+    triggerBlobDownload(blob, `Danh_sach_tem_${lot.code}_${itemType}.csv`);
   };
 
-  // In tem bằng window.print
+  // In tem bằng window.print (gán tạm title để trình duyệt Lưu PDF ra tên file chuẩn)
   const handlePrint = () => {
+    const previousTitle = document.title;
+    document.title = `Tem-dinh-danh-${lot.code}-${itemType}`;
+    const restoreTitle = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+    window.addEventListener("afterprint", restoreTitle);
     window.print();
+    setTimeout(restoreTitle, 1500);
   };
 
   const copyCode = (code: string) => {
@@ -962,16 +958,22 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         }
 
         /* ─── CSS KHI IN ẤN (WINDOW.PRINT) ─── */
+        @page {
+          size: A4 portrait;
+          margin: 10mm;
+        }
+
         @media print {
-          body * {
-            visibility: hidden !important;
+          html,
+          body {
+            overflow: visible !important;
+            height: auto !important;
+            min-height: 0 !important;
+            background: #ffffff !important;
           }
-          .batch-qr-overlay,
-          .batch-qr-modal,
-          .batch-qr-preview-area,
-          .print-sheet,
-          .print-sheet * {
-            visibility: visible !important;
+
+          body > *:not(.batch-qr-overlay) {
+            display: none !important;
           }
 
           .no-print {
@@ -979,50 +981,78 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           }
 
           .batch-qr-overlay {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
+            position: static !important;
+            inset: auto !important;
+            display: block !important;
             width: 100% !important;
             height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
             background: #ffffff !important;
             padding: 0 !important;
             margin: 0 !important;
+            opacity: 1 !important;
+            animation: none !important;
           }
 
           .batch-qr-modal {
+            position: static !important;
+            display: block !important;
             box-shadow: none !important;
             border: none !important;
+            border-radius: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            transform: none !important;
+            animation: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
           }
 
           .batch-qr-preview-area {
             background: #ffffff !important;
             padding: 0 !important;
             overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+          }
+
+          .print-sheet,
+          .print-sheet * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
 
           .print-sheet-fruit {
+            display: grid !important;
             grid-template-columns: repeat(3, 1fr) !important;
             gap: 8mm !important;
+            break-inside: auto;
             page-break-inside: auto;
           }
 
           .stamp-fruit {
             border: 1px solid #000 !important;
             box-shadow: none !important;
+            break-inside: avoid;
             page-break-inside: avoid;
           }
 
           .print-sheet-box {
+            display: grid !important;
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 10mm !important;
+            break-inside: auto;
             page-break-inside: auto;
           }
 
           .stamp-box {
             border: 1.5px solid #000 !important;
             box-shadow: none !important;
+            break-inside: avoid;
             page-break-inside: avoid;
           }
         }

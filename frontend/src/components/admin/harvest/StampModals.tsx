@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/Toast";
 import { useApi, useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import type { FarmerStampRecord, HouseholdOption, StampAllocationRecord } from "@/types/harvest";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 
 export function StampAllocationModal({
   onClose,
@@ -159,7 +160,7 @@ export function StampListModal({
                   <td>{s.fruitWeightKg ? `${s.fruitWeightKg} kg` : "—"}</td>
                   <td style={{ fontSize: 12 }}>{s.activatedAt ? s.activatedAt.slice(0, 10) : "—"}</td>
                   <td>
-                    {s.photoUrl && /^(\/api\/uploads\/\d+|\/[A-Za-z0-9._/-]+|https?:\/\/)/i.test(s.photoUrl) ? (
+                    {isSafeMediaUrl(s.photoUrl) ? (
                       <a href={s.photoUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
                         Xem ảnh
                       </a>

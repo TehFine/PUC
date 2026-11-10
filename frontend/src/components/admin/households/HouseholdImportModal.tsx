@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Modal, FormError } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
+import { triggerBlobDownload } from "@/utils/download";
 import { useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
@@ -164,13 +165,9 @@ export default function HouseholdImportModal({
   };
 
   const downloadSample = () => {
-    const blob = new Blob(["\uFEFF" + SAMPLE_CSV], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "mau-nhap-ho-nong-dan.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    const normalizedCsv = SAMPLE_CSV.replace(/\r?\n/g, "\r\n");
+    const blob = new Blob([`\uFEFF${normalizedCsv}\r\n`], { type: "text/csv;charset=utf-8;" });
+    triggerBlobDownload(blob, "mau-nhap-ho-nong-dan.csv");
   };
 
   const runImport = async () => {
