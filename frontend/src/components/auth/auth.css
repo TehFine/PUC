@@ -202,51 +202,38 @@
 .auth-alt {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 40px;
-  padding: 6px 15px;
-  border-radius: 999px;
+  justify-content: center;
+  min-height: 38px;
+  padding: 7px 15px;
+  border-radius: 10px;
   border: 0;
   outline: none;
   background: var(--au-mist);
   box-shadow: none;
-  font-size: 14.5px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--au-ink-soft);
   white-space: nowrap;
   transition:
-    color 0.2s ease,
-    background 0.2s ease,
-    transform 0.2s ease;
+    color 0.18s ease,
+    background 0.18s ease;
 }
 .auth-back:hover,
 .auth-alt:hover {
   color: var(--au-ink);
   background: #e6efe0;
-  transform: translateY(-1px);
-}
-.auth-back:active,
-.auth-alt:active {
-  transform: translateY(0);
 }
 .auth-alt {
-  color: var(--au-text);
+  color: var(--au-green-deep);
 }
 .auth-alt strong {
   font-weight: 600;
-  color: var(--au-green-deep);
-}
-.auth-alt .auth-arrow {
   color: var(--au-green-deep);
 }
 .auth-arrow {
   display: inline-block;
   transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.auth-back:hover .auth-arrow {
-  transform: translateX(-5px);
-}
-.auth-alt:hover .auth-arrow,
 .auth-submit:hover:not(:disabled) .auth-arrow {
   transform: translateX(6px);
 }
@@ -407,11 +394,11 @@ select.auth-input {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  padding: 5px;
-  margin-bottom: 22px;
+  padding: 4px;
+  margin-bottom: 20px;
   border: 0;
   outline: none;
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--au-mist);
 }
 .auth-mode-tab {
@@ -420,11 +407,11 @@ select.auth-input {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  min-height: 52px;
+  min-height: 42px;
   padding: 8px 12px;
   border: 0;
   outline: none;
-  border-radius: 14px;
+  border-radius: 10px;
   background: transparent;
   color: var(--au-text);
   font: inherit;
@@ -433,7 +420,7 @@ select.auth-input {
   line-height: 1.25;
   text-align: center;
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 .auth-mode-tab span {
   font-size: 12px;
@@ -553,13 +540,13 @@ select.auth-input {
   font-weight: 600;
   line-height: 1.3;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(248, 242, 58, 0.34);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  box-shadow: none;
+  transition: transform 0.2s ease, background 0.2s ease;
 }
 .auth-submit:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   background: #fbf65a;
-  box-shadow: 0 14px 34px rgba(248, 242, 58, 0.55);
+  box-shadow: none;
 }
 .auth-submit:active:not(:disabled) {
   transform: translateY(0);
@@ -980,26 +967,27 @@ select.auth-input {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
+  flex-wrap: nowrap;
+  padding: 9px 12px;
   border: 0;
-  border-radius: 13px;
+  border-radius: 12px;
   background: #ffffff;
 }
 .auth-contact-hotline > span {
   font-size: 13.5px;
   font-weight: 500;
   color: var(--au-text);
+  white-space: nowrap;
 }
 .auth-hotline-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
+  padding: 5px 11px;
   border: 0;
   outline: none;
-  border-radius: 999px;
+  border-radius: 8px;
   background: #edf6ee;
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--au-green-deep) !important;
@@ -1119,9 +1107,10 @@ select.auth-input {
   }
   .auth-back,
   .auth-alt {
-    min-height: 38px;
+    min-height: 36px;
     padding: 6px 13px;
-    font-size: 14px;
+    border-radius: 10px;
+    font-size: 13.5px;
   }
   .auth-panel {
     margin-block: 0;
@@ -1191,10 +1180,9 @@ select.auth-input {
   }
   .auth-back,
   .auth-alt {
-    padding: 5px 11px;
+    padding: 6px 11px;
     font-size: 13px;
-    min-height: 36px;
-    gap: 6px;
+    min-height: 34px;
   }
   .auth-submit,
   .auth-google-btn {
