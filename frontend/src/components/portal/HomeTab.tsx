@@ -208,10 +208,6 @@ export default function HomeTab({
           unit: "kg",
         };
   const pucCode = household.code ? household.code.replace(/-(?:H|T)\d+$/i, "") : "—";
-  const householdShortCode = household.code
-    ? household.code.match(/([HT]\d+)$/i)?.[1]?.toUpperCase() ??
-      (household.code.length > 14 ? household.code.slice(-8) : household.code)
-    : "—";
 
   const handleActionClick = (target: PortalTabId) => {
     onNavigate(target);
@@ -220,120 +216,96 @@ export default function HomeTab({
   return (
     <div className="pt-stack">
       <section className="pt-hero-shell" aria-label="Tổng quan hộ canh tác">
-        <div className="pt-hero-canvas">
+        <div className="pt-spec-rows">
+          <header className="pt-spec-head">
+            <span className="pt-spec-kicker">Chủ hộ</span>
+            <h1 className="pt-spec-title">{household.name}</h1>
+          </header>
+
+          <div className="pt-spec-zone-row">
+            <span className="pt-spec-kicker">Mã vùng</span>
+            <span className="pt-spec-val-code">{pucCode}</span>
+          </div>
+
           <button
             type="button"
-            className="pt-hero-pill-btn"
-            onClick={() => onNavigate("diary")}
-            title="Mở nhật ký canh tác để ghi chép hoạt động"
+            className="pt-spec-metric"
+            onClick={() => onNavigate("plots")}
           >
-            Ghi nhật ký
+            <span className="pt-spec-metric-bar">
+              <span className="pt-spec-kicker">Số thửa</span>
+            </span>
+            <span className="pt-spec-metric-body">
+              <span aria-hidden="true" />
+              <span className="pt-spec-big-val">
+                <span className="pt-spec-big-num">{household.plotCount}</span>
+                <span className="pt-spec-unit">Thửa đất</span>
+              </span>
+            </span>
           </button>
 
-          <h1 className="pt-hero-editorial-title">{household.name}</h1>
-
-          <div className="pt-hero-editorial-subgrid">
-            <div className="pt-hero-subcell">
-              <span className="pt-hero-sub-muted">Trạng thái vùng trồng</span>
-              <span className="pt-hero-sub-ink">{status.label}</span>
-            </div>
-
-            <div className="pt-hero-subcell">
-              <span className="pt-hero-sub-muted">Khu vực canh tác</span>
-              <span className="pt-hero-sub-ink">{household.villageName || "HTX Cư Né"}</span>
-            </div>
-
-            <div className="pt-hero-subcell">
-              <span className="pt-hero-sub-muted">Mã vùng trồng PUC</span>
-              <span className="pt-hero-sub-ink is-tabular">{pucCode}</span>
-            </div>
-
-            <div className="pt-hero-subcell">
-              <span className="pt-hero-sub-muted">
-                {household.villageLeader ? (
-                  <>
-                    <span>Trưởng thôn</span>: {household.villageLeader}
-                  </>
-                ) : (
-                  "Vùng sầu riêng VietGAP"
-                )}
+          <button
+            type="button"
+            className="pt-spec-metric"
+            onClick={() => onNavigate("plots")}
+          >
+            <span className="pt-spec-metric-bar">
+              <span className="pt-spec-kicker">Diện tích</span>
+            </span>
+            <span className="pt-spec-metric-body">
+              <span aria-hidden="true" />
+              <span className="pt-spec-big-val">
+                <span className="pt-spec-big-num">{areaFormatted}</span>
+                <span className="pt-spec-unit">ha</span>
               </span>
-              <span className="pt-hero-sub-muted">Liên kết HTX Cư Né, Đắk Lắk</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="pt-spec-metric"
+            onClick={() => onNavigate("stamps")}
+          >
+            <span className="pt-spec-metric-bar">
+              <span className="pt-spec-kicker">Sản lượng</span>
+            </span>
+            <span className="pt-spec-metric-body">
+              <span aria-hidden="true" />
+              <span className="pt-spec-big-val">
+                <span className="pt-spec-big-num">{harvestDisplay.num}</span>
+                <span className="pt-spec-unit">{harvestDisplay.unit}</span>
+              </span>
+            </span>
+          </button>
+
+          <div className="pt-spec-detail-row">
+            <span className="pt-spec-kicker">Chứng nhận</span>
+            <div className="pt-spec-val-stack">
+              <span>{status.label}</span>
+            </div>
+          </div>
+
+          <div className="pt-spec-detail-row">
+            <span className="pt-spec-kicker">Địa bàn</span>
+            <div className="pt-spec-val-stack">
+              <span>{household.villageName || "HTX Cư Né"}</span>
+              {household.villageLeader && (
+                <span>
+                  <span>Trưởng thôn</span>: {household.villageLeader}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="pt-hero-ledger" role="region" aria-label="Thông số canh tác">
+        <div className="pt-hero-footer">
           <button
             type="button"
-            className="pt-hero-row"
-            onClick={() => onNavigate("plots")}
-          >
-            <span className="pt-hero-row-left">
-              <span className="pt-hero-row-title">Số thửa canh tác</span>
-              <span className="pt-hero-row-sub">Bản đồ &amp; ranh giới GIS</span>
-            </span>
-            <span className="pt-hero-row-right">
-              <span className="pt-hero-row-meta" title={household.code}>
-                <span>Mã hộ</span> {householdShortCode}
-              </span>
-              <span className="pt-hero-row-val">
-                {household.plotCount} <span className="pt-hero-row-unit">thửa</span>
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className="pt-hero-row"
-            onClick={() => onNavigate("plots")}
-          >
-            <span className="pt-hero-row-left">
-              <span className="pt-hero-row-title">Diện tích vùng trồng</span>
-              <span className="pt-hero-row-sub">Sầu riêng VietGAP</span>
-            </span>
-            <span className="pt-hero-row-right">
-              <span className="pt-hero-row-meta">Tổng diện tích</span>
-              <span className="pt-hero-row-val">
-                {areaFormatted} <span className="pt-hero-row-unit">ha</span>
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className="pt-hero-row"
-            onClick={() => onNavigate("stamps")}
-          >
-            <span className="pt-hero-row-left">
-              <span className="pt-hero-row-title">Sản lượng thu hoạch</span>
-              <span className="pt-hero-row-sub">Lô xuất kho &amp; tem QR</span>
-            </span>
-            <span className="pt-hero-row-right">
-              <span className="pt-hero-row-meta">Đã nghiệm thu</span>
-              <span className="pt-hero-row-val">
-                {harvestDisplay.num} <span className="pt-hero-row-unit">{harvestDisplay.unit}</span>
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className="pt-hero-row"
+            className="pt-widget-topbar-btn is-primary pt-hero-diary-btn"
             onClick={() => onNavigate("diary")}
+            title="Mở nhật ký canh tác để ghi chép hoạt động"
           >
-            <span className="pt-hero-row-left">
-              <span className="pt-hero-row-title">Nhật ký chăm sóc</span>
-              <span className="pt-hero-row-sub">
-                {stats.lastJournalOn ? formatDate(stats.lastJournalOn) : "Chưa có bản ghi"}
-              </span>
-            </span>
-            <span className="pt-hero-row-right">
-              <span className="pt-hero-row-meta">30 ngày gần đây</span>
-              <span className="pt-hero-row-val">
-                {stats.journalLast30Days} <span className="pt-hero-row-unit">lượt</span>
-              </span>
-            </span>
+            Ghi nhật ký
           </button>
         </div>
       </section>
