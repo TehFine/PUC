@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "leaflet/dist/leaflet.css";
+import "./portal.css";
 import type * as Leaflet from "leaflet";
 import {
   ExternalLink,

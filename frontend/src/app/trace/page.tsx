@@ -8,9 +8,11 @@ import { ArrowRight, CheckCircle2, QrCode, Search, ShieldCheck, Sprout } from "l
 import { api } from "@/lib/api-client";
 
 interface SampleLot {
+  sampleType?: "lot" | "plot";
   code: string;
-  harvestedOn: string;
-  weightKg: number;
+  harvestedOn: string | null;
+  weightKg: number | null;
+  areaHa?: number | null;
   buyer: string | null;
   market: string | null;
   status: string | null;
@@ -319,17 +321,25 @@ export default function TraceLookupPage() {
                         borderRadius: 6,
                       }}
                     >
-                      {lot.code}
+                      {lot.sampleType === "plot" ? `Lô vườn: ${lot.code}` : lot.code}
                     </span>
                     <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>
-                      {Number(lot.weightKg).toLocaleString("vi-VN")} kg
+                      {lot.weightKg !== null && lot.weightKg !== undefined
+                        ? `${Number(lot.weightKg).toLocaleString("vi-VN")} kg`
+                        : lot.areaHa !== null && lot.areaHa !== undefined
+                          ? `Diện tích: ${lot.areaHa} ha`
+                          : "Chưa thu hoạch"}
                     </span>
                   </div>
                   <strong style={{ fontSize: 14.5, color: "#0f172a" }}>
                     {lot.buyer || "HTX Nông nghiệp Cư Né"}
                   </strong>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12.5, color: "#475569" }}>
-                    <span>Thị trường: {lot.market || "Xuất khẩu chính ngạch"}</span>
+                    <span>
+                      {lot.sampleType === "plot"
+                        ? `Mã vùng trồng: ${lot.market || "66-PUC-SR0001-00728"}`
+                        : `Thị trường: ${lot.market || "Xuất khẩu chính ngạch"}`}
+                    </span>
                     <span style={{ color: "#15803d", fontWeight: 600 }}>Xem chứng nhận →</span>
                   </div>
                 </Link>
