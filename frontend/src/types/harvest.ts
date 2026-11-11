@@ -67,6 +67,35 @@ export interface HarvestContributionRecord {
 
 export type HarvestDeclarationStatus = "submitted" | "confirmed" | "rejected";
 
+export type HarvestPlanStatus = "ready" | "notified" | "missing_journal";
+
+export interface HarvestPlanRecord {
+  id: string;
+  householdId: number;
+  householdName: string;
+  householdCode: string;
+  villageName: string | null;
+  plotCode: string;
+  variety: string;
+  areaHa: number;
+  hasAccount: boolean;
+  journalCount: number;
+  lastJournalOn: string | null;
+  lastActivity: string | null;
+  milestoneActivity: string | null;
+  milestoneOn: string | null;
+  phiSafeOn: string | null;
+  lastPesticide: string | null;
+  inIsolation: boolean;
+  phiAdjusted: boolean;
+  computedHarvestOn: string | null;
+  estimatedYieldKg: number;
+  calculationBasis: string;
+  planStatus: HarvestPlanStatus;
+  notifiedAt: string | null;
+  notifiedBody: string | null;
+}
+
 export interface HarvestDeclarationRecord {
   id: number;
   householdId: number;

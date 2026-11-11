@@ -1,31 +1,29 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, Printer, QrCode, Users } from "lucide-react";
+import { BellRing, CheckCircle2, Printer, QrCode, Users } from "lucide-react";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
 import { useDebounced } from "@/components/admin/catalog/use-debounced";
-import DeclarationReviewModal from "@/components/admin/harvest/DeclarationReviewModal";
 import { ContractFormModal, EnterpriseFormModal } from "@/components/admin/harvest/EnterpriseContractModals";
 import HarvestLotFormModal, { LOT_STATUS_LABELS } from "@/components/admin/harvest/HarvestLotFormModal";
+import HarvestPlanNotifyModal from "@/components/admin/harvest/HarvestPlanNotifyModal";
 import LotContributionsModal from "@/components/admin/harvest/LotContributionsModal";
 import { StampAllocationModal, StampListModal } from "@/components/admin/harvest/StampModals";
 import BatchQrModal from "@/components/harvest/BatchQrModal";
 import { KpiChartView, renderKpiValue, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
-import { Modal } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
-import { isSafeMediaUrl } from "@/utils/url-safety";
 import type {
   ContractRecord,
   EnterpriseRecord,
-  HarvestDeclarationRecord,
-  HarvestDeclarationStatus,
   HarvestLotRecord,
+  HarvestPlanRecord,
+  HarvestPlanStatus,
   StampAllocationRecord,
 } from "@/types/harvest";
 
-type HarvestTab = "lots" | "declarations" | "stamps" | "contracts" | "enterprises";
+type HarvestTab = "lots" | "plans" | "stamps" | "contracts" | "enterprises";
 
 const CONTRACT_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   active: { label: "Đang hiệu lực", cls: "badge-green" },
@@ -33,10 +31,10 @@ const CONTRACT_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   expired: { label: "Hết hạn", cls: "badge-red" },
 };
 
-const DECLARATION_STATUS_BADGE: Record<HarvestDeclarationStatus, { label: string; cls: string }> = {
-  submitted: { label: "Chờ xác nhận", cls: "badge-gold" },
-  confirmed: { label: "Đã xác nhận", cls: "badge-green" },
-  rejected: { label: "Từ chối", cls: "badge-red" },
+const PLAN_STATUS_BADGE: Record<HarvestPlanStatus, { label: string; cls: string }> = {
+  ready: { label: "Đủ căn cứ tính lịch", cls: "badge-gold" },
+  notified: { label: "Đã thông báo hộ dân", cls: "badge-green" },
+  missing_journal: { label: "Chưa có nhật ký", cls: "badge-gray" },
 };
 
 export default function Harvest() {
@@ -58,16 +56,15 @@ export default function Harvest() {
   const [contribLot, setContribLot] = useState<HarvestLotRecord | null>(null);
   const [printingLot, setPrintingLot] = useState<HarvestLotRecord | null>(null);
 
-  // 2. Khai báo thu hoạch
-  const [declQ, setDeclQ] = useState("");
-  const [declStatus, setDeclStatus] = useState("");
-  const debouncedDeclQ = useDebounced(declQ);
-  const declarations = useApiList<HarvestDeclarationRecord>("harvest-declarations", {
-    q: debouncedDeclQ,
-    status: declStatus,
+  // 2. Dự báo & tính lịch thu hoạch từ nhật ký chăm sóc
+  const [planQ, setPlanQ] = useState("");
+  const [planStatus, setPlanStatus] = useState("");
+  const debouncedPlanQ = useDebounced(planQ);
+  const harvestPlans = useApiList<HarvestPlanRecord>("harvest-plan", {
+    q: debouncedPlanQ,
+    status: planStatus,
   });
-  const [reviewingDecl, setReviewingDecl] = useState<{ item: HarvestDeclarationRecord; mode: "confirm" | "reject" } | null>(null);
-  const [previewPhoto, setPreviewPhoto] = useState<{ title: string; url: string } | null>(null);
+  const [notifyingPlan, setNotifyingPlan] = useState<HarvestPlanRecord | null>(null);
 
   // 3. Cấp phát tem nông hộ
   const [stampQ, setStampQ] = useState("");
@@ -191,7 +188,7 @@ export default function Harvest() {
               <span>In dải tem nhanh</span>
             </button>
           )}
-          {tab !== "declarations" && (
+          {tab !== "plans" && (
             <button type="button" className="btn btn-primary" onClick={handlePrimaryAction}>
               {tab === "lots"
                 ? "Tạo lô hàng mới"
@@ -227,10 +224,10 @@ export default function Harvest() {
         </button>
         <button
           type="button"
-          className={`tab-btn ${tab === "declarations" ? "active" : ""}`}
-          onClick={() => setTab("declarations")}
+          className={`tab-btn ${tab === "plans" ? "active" : ""}`}
+          onClick={() => setTab("plans")}
         >
-          Đơn khai báo ({declarations.total})
+          Tính lịch thu hoạch ({harvestPlans.total})
         </button>
         <button type="button" className={`tab-btn ${tab === "stamps" ? "active" : ""}`} onClick={() => setTab("stamps")}>
           Cấp phát tem ({stampAllocations.total})
@@ -425,29 +422,31 @@ export default function Harvest() {
         </div>
       )}
 
-      {/* ─── TAB 2: KHAI BÁO THU HOẠCH TỪ HỘ DÂN ─── */}
-      {tab === "declarations" && (
+      {/* ─── TAB 2: TÍNH LỊCH THU HOẠCH TỪ NHẬT KÝ CHĂM SÓC & THÔNG BÁO HỘ DÂN ─── */}
+      {tab === "plans" && (
         <div className="card">
           <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
-            <div className="card-header-left">Danh sách khai báo thu hoạch từ nông hộ</div>
+            <div className="card-header-left">
+              Tính toán ngày thu hoạch từ nhật ký chăm sóc &amp; gửi thông báo hộ dân
+            </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <input
                 type="text"
                 className="filter-input"
                 style={{ width: 220 }}
-                placeholder="Tìm theo hộ, mã thửa…"
-                value={declQ}
-                onChange={(e) => setDeclQ(e.target.value)}
+                placeholder="Tìm theo hộ, mã thửa, thôn…"
+                value={planQ}
+                onChange={(e) => setPlanQ(e.target.value)}
               />
               <select
                 className="filter-select"
-                value={declStatus}
-                onChange={(e) => setDeclStatus(e.target.value)}
+                value={planStatus}
+                onChange={(e) => setPlanStatus(e.target.value)}
               >
                 <option value="">Mọi trạng thái</option>
-                <option value="submitted">Chờ xác nhận</option>
-                <option value="confirmed">Đã xác nhận</option>
-                <option value="rejected">Từ chối</option>
+                <option value="ready">Đủ căn cứ tính lịch</option>
+                <option value="notified">Đã thông báo hộ dân</option>
+                <option value="missing_journal">Chưa có nhật ký</option>
               </select>
             </div>
           </div>
@@ -455,93 +454,84 @@ export default function Harvest() {
             <table>
               <thead>
                 <tr>
-                  <th>Ngày thu</th>
                   <th>Hộ nông dân</th>
                   <th>Thôn</th>
-                  <th>Mã thửa</th>
-                  <th>Tổng KL (kg)</th>
-                  <th>Phân loại A / B</th>
-                  <th>Ảnh thực tế</th>
-                  <th>Ghi chú / Phản hồi</th>
+                  <th>Thửa / Giống</th>
+                  <th>Căn cứ nhật ký chăm sóc</th>
+                  <th>An toàn cách ly PHI</th>
+                  <th>Ngày cắt dự kiến</th>
+                  <th>SL ước tính</th>
                   <th>Trạng thái</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 <ListStatusRow
-                  colSpan={10}
-                  loading={declarations.loading}
-                  error={declarations.error}
-                  empty={declarations.rows.length === 0}
-                  onRetry={declarations.refresh}
+                  colSpan={9}
+                  loading={harvestPlans.loading}
+                  error={harvestPlans.error}
+                  empty={harvestPlans.rows.length === 0}
+                  onRetry={harvestPlans.refresh}
                 />
-                {declarations.rows.map((d) => {
-                  const st = DECLARATION_STATUS_BADGE[d.status] ?? DECLARATION_STATUS_BADGE.submitted;
+                {harvestPlans.rows.map((p) => {
+                  const st = PLAN_STATUS_BADGE[p.planStatus] ?? PLAN_STATUS_BADGE.missing_journal;
                   return (
-                    <tr key={d.id}>
-                      <td>{d.harvestedOn ? d.harvestedOn.slice(0, 10) : "—"}</td>
+                    <tr key={p.id}>
                       <td>
-                        <strong style={{ color: "#14372f" }}>{d.householdName || `#${d.householdId}`}</strong>
-                        {d.householdCode && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{d.householdCode}</div>}
+                        <strong style={{ color: "#14372f" }}>{p.householdName}</strong>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{p.householdCode}</div>
                       </td>
-                      <td>{d.villageName || "—"}</td>
-                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 600 }}>{d.plotCode}</td>
-                      <td style={{ fontWeight: 600 }}>{formatVn(Number(d.weightKg), 1)} kg</td>
+                      <td>{p.villageName || "—"}</td>
+                      <td>
+                        <div style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, color: "#14372f" }}>
+                          {p.plotCode}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                          {p.variety} · {formatVn(p.areaHa, 2)} ha
+                        </div>
+                      </td>
+                      <td style={{ fontSize: 12, maxWidth: 260 }}>
+                        <div>{p.calculationBasis}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                          {p.journalCount} lượt ghi nhật ký chăm sóc
+                        </div>
+                      </td>
                       <td style={{ fontSize: 12 }}>
-                        A: {d.gradeAKg !== null ? `${formatVn(Number(d.gradeAKg), 1)} kg` : "—"} · B:{" "}
-                        {d.gradeBKg !== null ? `${formatVn(Number(d.gradeBKg), 1)} kg` : "—"}
-                      </td>
-                      <td>
-                        {d.photoUrl ? (
-                          <button
-                            type="button"
-                            className="btn btn-outline btn-sm"
-                            onClick={() =>
-                              setPreviewPhoto({
-                                title: `Ảnh thu hoạch – ${d.householdName || d.plotCode}`,
-                                url: d.photoUrl!,
-                              })
-                            }
-                          >
-                            Xem ảnh
-                          </button>
+                        {p.phiSafeOn ? (
+                          <span style={{ color: p.inIsolation ? "#b45309" : "#166534", fontWeight: 600 }}>
+                            {p.inIsolation ? `Cách ly đến ${p.phiSafeOn}` : `An toàn (sau ${p.phiSafeOn})`}
+                          </span>
                         ) : (
-                          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>Không có</span>
+                          <span style={{ color: "#166534" }}>Không vướng cách ly</span>
                         )}
                       </td>
-                      <td style={{ fontSize: 12, maxWidth: 220 }}>
-                        {d.note && <div>{d.note}</div>}
-                        {d.reviewNote && (
-                          <div style={{ color: d.status === "rejected" ? "#b73c20" : "#166534", fontWeight: 500 }}>
-                            HTX: {d.reviewNote}
-                          </div>
-                        )}
-                        {!d.note && !d.reviewNote && "—"}
+                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: p.computedHarvestOn ? "#166534" : "var(--text-muted)" }}>
+                        {p.computedHarvestOn || "Chưa đủ dữ liệu"}
+                      </td>
+                      <td style={{ fontWeight: 600 }}>
+                        ~{formatVn(p.estimatedYieldKg, 0)} kg
                       </td>
                       <td>
                         <span className={`badge ${st.cls}`}>{st.label}</span>
+                        {p.notifiedAt && (
+                          <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 3 }}>
+                            Gửi: {p.notifiedAt.slice(0, 10)}
+                          </div>
+                        )}
                       </td>
                       <td className="table-actions-cell">
-                        {d.status === "submitted" ? (
-                          <div className="table-actions">
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              onClick={() => setReviewingDecl({ item: d, mode: "confirm" })}
-                            >
-                              Xác nhận
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-danger btn-sm"
-                              onClick={() => setReviewingDecl({ item: d, mode: "reject" })}
-                            >
-                              Từ chối
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Đã xử lý</span>
-                        )}
+                        <div className="table-actions">
+                          <button
+                            type="button"
+                            className={`btn ${p.planStatus === "notified" ? "btn-outline" : "btn-primary"} btn-sm`}
+                            onClick={() => setNotifyingPlan(p)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+                            title="Tính toán / điều chỉnh ngày thu hoạch và gửi thông báo tới tài khoản hộ dân"
+                          >
+                            <BellRing size={13} strokeWidth={2.2} />
+                            <span>{p.planStatus === "notified" ? "Gửi lại lịch" : "Thông báo hộ dân"}</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -874,38 +864,16 @@ export default function Harvest() {
       )}
       {printingLot && <BatchQrModal lot={printingLot} onClose={() => setPrintingLot(null)} />}
 
-      {/* Modals Khai báo thu hoạch */}
-      {reviewingDecl && (
-        <DeclarationReviewModal
-          declaration={reviewingDecl.item}
-          mode={reviewingDecl.mode}
-          onClose={() => setReviewingDecl(null)}
+      {/* Modal thông báo lịch thu hoạch tới hộ dân */}
+      {notifyingPlan && (
+        <HarvestPlanNotifyModal
+          plan={notifyingPlan}
+          onClose={() => setNotifyingPlan(null)}
           onDone={() => {
-            setReviewingDecl(null);
-            void declarations.refresh();
+            setNotifyingPlan(null);
+            void harvestPlans.refresh();
           }}
         />
-      )}
-      {previewPhoto && isSafeMediaUrl(previewPhoto.url) && (
-        <Modal
-          title={previewPhoto.title}
-          onClose={() => setPreviewPhoto(null)}
-          width={640}
-          footer={
-            <button type="button" className="btn btn-primary" onClick={() => setPreviewPhoto(null)}>
-              Đóng
-            </button>
-          }
-        >
-          <div style={{ textAlign: "center" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={previewPhoto.url}
-              alt={previewPhoto.title}
-              style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 12, objectFit: "contain" }}
-            />
-          </div>
-        </Modal>
       )}
 
       {/* Modals Cấp phát tem nông hộ */}
