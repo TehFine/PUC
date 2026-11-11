@@ -19,6 +19,9 @@ import {
   Tag,
   Package,
   QrCode,
+  Clock,
+  AlertTriangle,
+  ShieldAlert,
 } from "lucide-react";
 import "./trace.css";
 
@@ -38,14 +41,40 @@ interface TraceDiaryEntry {
   isolationDays?: number | null;
 }
 
+interface TraceOpenViolation {
+  severity: "critical" | "warning";
+  title: string;
+  detectedOn: string;
+  plotCode?: string | null;
+  description?: string | null;
+}
+
+interface TraceCompliance {
+  plotStatus: string;
+  householdStatus?: string | null;
+  hasZoneCode: boolean;
+  hasGisBoundary: boolean;
+  gisSource?: "declared" | "measured" | "cadastral" | "demo" | string | null;
+  diaryCount: number;
+  lastDiaryOn?: string | null;
+  activeIsolationUntil?: string | null;
+  hasMrlViolation: boolean;
+  openViolationsCount: number;
+  openViolations?: TraceOpenViolation[];
+  latestLabResult?: string | null;
+  latestLabCode?: string | null;
+}
+
 interface TraceData {
+  verifiedAt?: string;
   stampType?: "farmer_fruit" | "plot_signboard" | "lot" | "item";
   isFarmerStamp?: boolean;
   isPlotSignboard?: boolean;
+  compliance?: TraceCompliance | null;
   farmerStamp?: {
-    id: number;
-    allocationId: number;
-    householdId: number;
+    id?: number;
+    allocationId?: number;
+    householdId?: number;
     plotCode: string | null;
     serialCode: string;
     status: "allocated" | "activated" | "revoked";
@@ -55,7 +84,7 @@ interface TraceData {
     harvestDate: string | null;
     householdName: string;
     householdCode: string;
-    householdPhone: string;
+    householdPhone?: string;
     householdStatus?: string | null;
     avatarUrl?: string | null;
     villageName: string;
@@ -82,7 +111,9 @@ interface TraceData {
     variety?: string | null;
     plantedYear?: number | null;
     areaHa?: number;
+    gisAreaHa?: number | null;
     status?: string;
+    updatedAt?: string | null;
     householdCode?: string | null;
     householdStatus?: string | null;
     avatarUrl?: string | null;
@@ -91,7 +122,7 @@ interface TraceData {
     lng?: number | null;
   } | null;
   lot?: {
-    id: number;
+    id?: number;
     code: string;
     qrCode: string;
     harvestedOn: string;
@@ -103,8 +134,8 @@ interface TraceData {
     packhouseCode?: string;
   } | null;
   item?: {
-    id: number;
-    lotId: number;
+    id?: number;
+    lotId?: number;
     itemType: "fruit" | "box";
     serialCode: string;
     weightKg: number;
@@ -117,19 +148,19 @@ interface TraceData {
       name: string;
       taxCode: string;
       treatmentMethod: string;
-      gradeAPct: number;
-      gradeBPct: number;
-      gradeCPct: number;
-      avgBrix: number;
+      gradeAPct: number | null;
+      gradeBPct: number | null;
+      gradeCPct: number | null;
+      avgBrix: number | null;
     };
     transport: {
       transporter: string;
       vehiclePlate: string;
-      temperatureC: number;
+      temperatureC: number | null;
       departedAt: string;
       estimatedArrival: string;
     };
-    contract: {
+    contract?: {
       code: string;
       title: string;
     };
@@ -175,11 +206,17 @@ interface TraceData {
   }[];
 }
 
-const formatDate = (dateStr: string) => {
+const formatDate = (dateStr?: string | null) => {
   if (!dateStr) return "—";
   try {
     const d = new Date(dateStr);
-    return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone: "Asia/Ho_Chi_Minh",
+    });
   } catch {
     return dateStr;
   }
@@ -386,32 +423,98 @@ function renderDiaryDetailText(detail: string) {
   });
 }
 
-/** Thẻ bộ 3 huy hiệu chứng nhận VietGAP – GACC (Trung Quốc) – GlobalGAP. */
-function CertificationSealsCard({ status }: { status?: string | null }) {
-  const statusLabel =
-    status === "pending"
-      ? "Đang thẩm định"
-      : status === "improve"
-        ? "Cần khắc phục"
-        : status === "violation"
-          ? "Tạm dừng mã"
-          : "Đã kiểm định";
+type PillarTone = "verified" | "warn" | "danger" | "neutral";
 
-  const statusTone =
-    status === "pending" || status === "improve"
-      ? "is-warn"
-      : status === "violation"
-        ? "is-danger"
-        : "is-verified";
+/** Thẻ 3 trụ cột xác thực minh bạch tại vườn: Mã vùng PUC · Canh tác VietGAP · Nghị định thư GACC. */
+function CertificationSealsCard({
+  hasZoneCode,
+  plotStatus,
+  diaryCount,
+  activeIsolationUntil,
+  hasViolationOrMrl,
+  latestLabResult,
+  effectiveStatus,
+}: {
+  hasZoneCode: boolean;
+  plotStatus: string;
+  diaryCount: number;
+  activeIsolationUntil?: string | null;
+  hasViolationOrMrl: boolean;
+  latestLabResult?: string | null;
+  effectiveStatus: "approved" | "isolation" | "pending" | "improve" | "violation";
+}) {
+  // 1. Trụ cột Mã vùng trồng PUC
+  const pucPillar: { badge: string; tone: PillarTone } = !hasZoneCode
+    ? { badge: "Chưa cấp mã", tone: "neutral" }
+    : plotStatus === "violation"
+      ? { badge: "Tạm dừng mã", tone: "danger" }
+      : plotStatus === "pending"
+        ? { badge: "Đang thẩm định", tone: "warn" }
+        : plotStatus === "improve"
+          ? { badge: "Cần bổ sung", tone: "warn" }
+          : { badge: "Đã cấp mã", tone: "verified" };
+
+  // 2. Trụ cột Thực hành canh tác VietGAP (dựa trên nhật ký, PHI, vi phạm thực tế)
+  const vietgapPillar: { badge: string; tone: PillarTone } = hasViolationOrMrl
+    ? { badge: "Có vi phạm", tone: "danger" }
+    : activeIsolationUntil
+      ? { badge: "Đang cách ly", tone: "warn" }
+      : diaryCount > 0
+        ? plotStatus === "approved"
+          ? { badge: "Có nhật ký", tone: "verified" }
+          : { badge: "Đang theo dõi", tone: "warn" }
+        : { badge: "Chưa ghi chép", tone: "neutral" };
+
+  // 3. Trụ cột Nghị định thư GACC & Kiểm nghiệm ATTP
+  const gaccPillar: { badge: string; tone: PillarTone } =
+    latestLabResult === "fail"
+      ? { badge: "Mẫu không đạt", tone: "danger" }
+      : effectiveStatus === "violation"
+        ? { badge: "Tạm dừng XK", tone: "danger" }
+        : effectiveStatus === "isolation"
+          ? { badge: "Chờ hết PHI", tone: "warn" }
+          : latestLabResult === "pass" && effectiveStatus === "approved"
+            ? { badge: "Đạt kiểm nghiệm", tone: "verified" }
+            : effectiveStatus === "approved"
+              ? { badge: "Chờ mẫu KN", tone: "neutral" }
+              : { badge: "Đang thẩm định", tone: "warn" };
 
   return (
-    <section className="tr-puc-certs-card" aria-label="Chứng nhận tiêu chuẩn vùng trồng">
+    <section className="tr-puc-certs-card" aria-label="Đối chiếu tiêu chuẩn vùng trồng">
       <div className="tr-puc-certs-grid">
-        {/* 1. Huy hiệu VietGAP */}
+        {/* 1. Huy hiệu Mã vùng trồng PUC */}
         <div className="tr-cert-item">
           <div className="tr-cert-emblem" aria-hidden="true">
-            <svg viewBox="0 0 64 64" width="54" height="54">
-              <circle cx="32" cy="32" r="30" fill="#ffffff" stroke="#1f8a4c" strokeWidth="2.8" />
+            <svg viewBox="0 0 64 64" width="52" height="52">
+              <circle cx="32" cy="32" r="30" fill="#f2fbf5" stroke="#15803d" strokeWidth="2.4" />
+              <circle cx="32" cy="32" r="24.5" fill="#ffffff" stroke="#86efac" strokeWidth="1.2" />
+              <path
+                d="M32 12 L46 17.5 V29.5 C46 39 39.8 46.2 32 50 C24.2 46.2 18 39 18 29.5 V17.5 Z"
+                fill="#166534"
+              />
+              <text
+                x="32"
+                y="34"
+                textAnchor="middle"
+                fill="#ffffff"
+                fontSize="11"
+                fontWeight="900"
+                letterSpacing="0.5"
+                fontFamily="system-ui, -apple-system, sans-serif"
+              >
+                PUC
+              </text>
+            </svg>
+          </div>
+          <span className="tr-cert-label">Mã vùng PUC</span>
+          <span className={`tr-cert-pill is-${pucPillar.tone}`}>{pucPillar.badge}</span>
+        </div>
+
+        {/* 2. Huy hiệu VietGAP */}
+        <div className="tr-cert-item">
+          <div className="tr-cert-emblem" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="52" height="52">
+              <circle cx="32" cy="32" r="30" fill="#ffffff" stroke="#1f8a4c" strokeWidth="2.6" />
               <path d="M6 36 C16 32, 48 32, 58 36 A28 28 0 0 1 6 36 Z" fill="#1f8a4c" />
               <path
                 d="M22 44 C26 39, 33 38, 38 43 C33 47, 26 47, 22 44 Z"
@@ -436,12 +539,13 @@ function CertificationSealsCard({ status }: { status?: string | null }) {
             </svg>
           </div>
           <span className="tr-cert-label">VietGAP</span>
+          <span className={`tr-cert-pill is-${vietgapPillar.tone}`}>{vietgapPillar.badge}</span>
         </div>
 
-        {/* 2. Huy hiệu GACC (Trung Quốc) */}
+        {/* 3. Huy hiệu GACC (Trung Quốc) */}
         <div className="tr-cert-item">
           <div className="tr-cert-emblem" aria-hidden="true">
-            <svg viewBox="0 0 64 64" width="54" height="54">
+            <svg viewBox="0 0 64 64" width="52" height="52">
               <circle cx="32" cy="32" r="30" fill="#f8fafc" stroke="#3b5f75" strokeWidth="2.2" />
               <circle
                 cx="32"
@@ -467,43 +571,9 @@ function CertificationSealsCard({ status }: { status?: string | null }) {
               </text>
             </svg>
           </div>
-          <span className="tr-cert-label">
-            GACC
-            <br />
-            <small>(Trung Quốc)</small>
-          </span>
+          <span className="tr-cert-label">Nghị định thư GACC</span>
+          <span className={`tr-cert-pill is-${gaccPillar.tone}`}>{gaccPillar.badge}</span>
         </div>
-
-        {/* 3. Huy hiệu GlobalGAP */}
-        <div className="tr-cert-item">
-          <div className="tr-cert-emblem" aria-hidden="true">
-            <svg viewBox="0 0 64 64" width="54" height="54">
-              <circle cx="32" cy="32" r="30" fill="#ffffff" stroke="#dce7e0" strokeWidth="2" />
-              <circle cx="32" cy="32" r="26" fill="#f7fbf9" />
-              <path
-                d="M38.5 20.5 A10 10 0 1 0 41.2 29.5 H32.5 V25.8 H45 V30 A13.2 13.2 0 1 1 39.8 17.4 Z"
-                fill="#22a05b"
-              />
-              <text
-                x="32"
-                y="48"
-                textAnchor="middle"
-                fill="#15803d"
-                fontSize="8.2"
-                fontWeight="800"
-                letterSpacing="-0.1"
-                fontFamily="system-ui, -apple-system, sans-serif"
-              >
-                GlobalGAP
-              </text>
-            </svg>
-          </div>
-          <span className="tr-cert-label">GlobalGAP</span>
-        </div>
-      </div>
-
-      <div className={`tr-puc-cert-status ${statusTone}`}>
-        <span>{statusLabel}</span>
       </div>
     </section>
   );
@@ -512,18 +582,26 @@ function CertificationSealsCard({ status }: { status?: string | null }) {
 /** Khối Nhật ký canh tác chứng minh (Timeline dọc có icon tròn phân màu theo nghiệp vụ). */
 function ProvenDiarySection({
   diaries,
+  totalCount,
   title = "NHẬT KÝ CANH TÁC CHỨNG MINH",
   subtitle,
   emptyMessage = "Hộ nông dân chưa ghi nhận nhật ký canh tác hoặc đợt phun thuốc nào trên lô đất này.",
+  className = "",
 }: {
   diaries: TraceDiaryEntry[];
+  totalCount?: number;
   title?: string;
   subtitle?: string;
   emptyMessage?: string;
+  className?: string;
 }) {
+  const count = totalCount ?? diaries.length;
   return (
-    <section className="tr-card tr-puc-journal-card">
-      <h2 className="tr-puc-journal-title">{title}</h2>
+    <section className={`tr-card tr-puc-journal-card ${className}`.trim()}>
+      <div className="tr-puc-journal-head">
+        <h2 className="tr-puc-journal-title">{title}</h2>
+        {count > 0 && <span className="tr-count-badge">{count} bản ghi</span>}
+      </div>
       {subtitle && <p className="tr-card-sub">{subtitle}</p>}
 
       {diaries.length === 0 ? (
@@ -541,9 +619,18 @@ function ProvenDiarySection({
                 </div>
                 <div className="tr-proof-body">
                   <strong className="tr-proof-heading">
-                    {formatDate(d.entryOn)} - {d.activity}
+                    <span className="tr-proof-date">{formatDate(d.entryOn)}</span>
+                    <span className="tr-proof-sep">–</span>
+                    <span>{d.activity}</span>
                   </strong>
                   {d.detail && <p className="tr-proof-detail">{renderDiaryDetailText(d.detail)}</p>}
+                  {(d.recorder || d.plotCode) && (
+                    <div className="tr-proof-meta">
+                      {d.recorder && <span>Người ghi: {d.recorder}</span>}
+                      {d.recorder && d.plotCode && <span aria-hidden="true">·</span>}
+                      {d.plotCode && <span>Lô: {d.plotCode}</span>}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -669,7 +756,9 @@ export default function TraceView() {
     ? data.lot.weightTons * 1000
     : (data?.farmerStamp?.fruitWeightKg ?? 0);
 
-  const isPlotTransparencyView = Boolean(data?.plot && !data?.farmerStamp && !data?.lot);
+  const isPlotTransparencyView = Boolean(
+    data?.isPlotSignboard || (data?.plot && !data?.farmerStamp && !data?.lot),
+  );
 
   const openPlotGisModal = () => {
     if (!data?.plot) return;
@@ -690,10 +779,10 @@ export default function TraceView() {
         sheet: data.plot.sheetNo ?? null,
         parcel: data.plot.parcelNo ?? null,
         village: data.plot.village ?? null,
-        zoneCode: data.plot.zoneCode || data.puc.code,
+        zoneCode: data.plot.zoneCode || (data.puc.code !== "Chưa cấp mã PUC" ? data.puc.code : null),
         variety: data.plot.variety ?? null,
         plantedYear: data.plot.plantedYear ?? null,
-        areaHa: Number(data.plot.areaHa ?? 0),
+        areaHa: Number(data.plot.areaHa ?? data.plot.gisAreaHa ?? 0),
         source: data.plot.source ?? "cadastral",
         status: validStatus,
         lat: data.plot.lat ?? null,
@@ -737,20 +826,6 @@ export default function TraceView() {
 
   return (
     <div className="tr-root">
-      {/* ─── Thanh đầu trang tối giản ─── */}
-      <header className="tr-topbar">
-        <div className={`tr-wrap tr-topbar-inner ${isPlotTransparencyView ? "is-plot-narrow" : ""}`}>
-          <Link href="/" className="tr-back-btn">
-            <ArrowLeft size={18} strokeWidth={2.4} aria-hidden="true" />
-            <span>Trang chủ</span>
-          </Link>
-
-          <span className="tr-verify-tag">
-            {isPlotTransparencyView ? "Minh bạch mã vùng trồng PUC" : "Hồ sơ xác thực GACC"}
-          </span>
-        </div>
-      </header>
-
       <main className={`tr-wrap tr-main ${isPlotTransparencyView ? "is-plot-narrow" : ""}`}>
         {loading ? (
           <SkeletonCards count={3} label="Đang nạp hồ sơ minh bạch vùng trồng & truy xuất…" />
@@ -770,6 +845,12 @@ export default function TraceView() {
                 <span>Tìm kiếm</span>
               </button>
             </form>
+            <div className="tr-error-actions">
+              <Link href="/" className="tr-home-btn">
+                <ArrowLeft size={17} strokeWidth={2.3} aria-hidden="true" />
+                <span>Trang chủ</span>
+              </Link>
+            </div>
           </div>
         ) : data && isPlotTransparencyView && data.plot ? (
           /* ═══════════════════════════════════════════════════════════════════════════
@@ -778,47 +859,114 @@ export default function TraceView() {
              ═══════════════════════════════════════════════════════════════════════════ */
           (() => {
             const plot = data.plot;
-            const ownerName = plot.ownerName || "Hộ xã viên HTX Cư Né";
+            const compliance = data.compliance ?? null;
+            const ownerName = plot.ownerName || "Chưa cập nhật chủ hộ";
             const avatarUrl = plot.avatarUrl || data.households?.[0]?.avatarUrl || null;
             const hasGisBoundary = Boolean(
-              plot.geometryJson || (plot.lat !== null && plot.lat !== undefined && plot.lng !== null && plot.lng !== undefined),
+              plot.geometryJson ||
+                (plot.lat !== null && plot.lat !== undefined && plot.lng !== null && plot.lng !== undefined),
             );
-            const effectiveStatus =
-              plot.status === "violation" || plot.householdStatus === "violation"
+            const realZoneCode =
+              plot.zoneCode && plot.zoneCode !== "Chưa cấp mã PUC"
+                ? plot.zoneCode
+                : data.puc.code && data.puc.code !== "Chưa cấp mã PUC"
+                  ? data.puc.code
+                  : null;
+            const hasZoneCode = Boolean(compliance?.hasZoneCode ?? realZoneCode);
+            const openViolations = compliance?.openViolations ?? [];
+            const openViolationsCount = compliance?.openViolationsCount ?? openViolations.length;
+            const activeIsolationUntil = compliance?.activeIsolationUntil ?? null;
+            const hasMrlViolation = Boolean(
+              compliance?.hasMrlViolation ||
+                data.diaries.some((d) => d.mrlStatus && d.mrlStatus !== "pass"),
+            );
+            const latestLab = data.labTests[0] ?? null;
+            const hasLabFailure = Boolean(
+              latestLab &&
+                (latestLab.result !== "pass" ||
+                  Number(latestLab.cdMgKg) > 0.05 ||
+                  latestLab.yellowOPositive ||
+                  (latestLab.chlorpyrifosMgKg ?? 0) > 0.01),
+            );
+            const latestLabEffectiveResult = latestLab
+              ? hasLabFailure
+                ? "fail"
+                : "pass"
+              : null;
+
+            const effectiveStatus: "approved" | "isolation" | "pending" | "improve" | "violation" =
+              plot.status === "violation" ||
+              plot.householdStatus === "violation" ||
+              openViolationsCount > 0 ||
+              hasMrlViolation ||
+              hasLabFailure
                 ? "violation"
-                : plot.status === "improve" || plot.householdStatus === "improve"
-                  ? "improve"
-                  : plot.status === "pending" || plot.householdStatus === "pending"
-                    ? "pending"
-                    : "approved";
+                : activeIsolationUntil
+                  ? "isolation"
+                  : plot.status === "improve" || plot.householdStatus === "improve"
+                    ? "improve"
+                    : plot.status === "pending" || plot.householdStatus === "pending" || !hasZoneCode
+                      ? "pending"
+                      : "approved";
 
             const statusBadgeText =
               effectiveStatus === "violation"
-                ? "TẠM DỪNG MÃ XUẤT KHẨU"
-                : effectiveStatus === "improve"
-                  ? "CẦN KHẮC PHỤC KỸ THUẬT"
-                  : effectiveStatus === "pending"
-                    ? "ĐANG THẨM ĐỊNH HỒ SƠ PUC"
-                    : "ĐỦ ĐIỀU KIỆN XUẤT KHẨU";
+                ? hasLabFailure
+                  ? "MẪU KIỂM NGHIỆM CHƯA ĐẠT"
+                  : openViolationsCount > 0 || hasMrlViolation
+                    ? "ĐANG CÓ CẢNH BÁO KỸ THUẬT"
+                    : "TẠM DỪNG MÃ XUẤT KHẨU"
+                : effectiveStatus === "isolation"
+                  ? `ĐANG CÁCH LY PHI (ĐẾN ${formatDate(activeIsolationUntil)})`
+                  : effectiveStatus === "improve"
+                    ? "CẦN KHẮC PHỤC KỸ THUẬT"
+                    : effectiveStatus === "pending"
+                      ? "ĐANG THẨM ĐỊNH HỒ SƠ PUC"
+                      : "ĐỦ ĐIỀU KIỆN XUẤT KHẨU";
 
-            const locationDisplay = plot.village
-              ? `${plot.village}, Xã Ea Khăl, Đắk Lắk`
-              : data.puc.location;
+            const watermarkMeta =
+              effectiveStatus === "violation"
+                ? { center: "CẢNH BÁO", bottom: "GIÁM SÁT VÙNG TRỒNG" }
+                : effectiveStatus === "isolation"
+                  ? { center: "ĐANG CÁCH LY", bottom: "KIỂM SOÁT PHI" }
+                  : effectiveStatus === "pending" || effectiveStatus === "improve"
+                    ? { center: "CHỜ THẨM ĐỊNH", bottom: "HỒ SƠ VÙNG TRỒNG" }
+                    : { center: "ĐÃ ĐỊNH DANH", bottom: "MÃ VÙNG TRỒNG PUC" };
 
-            const areaDisplay = plot.areaHa
-              ? `${Number(plot.areaHa).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha`
-              : "—";
+            const locationDisplay = data.puc.location || plot.village || "Chưa cập nhật vị trí";
+
+            const areaHaNum = Number(plot.areaHa || plot.gisAreaHa || 0);
+            const areaDisplay =
+              areaHaNum > 0
+                ? `${areaHaNum.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha`
+                : "Chưa cập nhật";
 
             const varietyMeta = plot.variety
-              ? ` (${plot.variety}${plot.plantedYear ? ` · trồng ${plot.plantedYear}` : ""})`
+              ? `${plot.variety}${plot.plantedYear ? ` · trồng ${plot.plantedYear}` : ""}`
               : plot.plantedYear
-                ? ` (trồng ${plot.plantedYear})`
-                : "";
+                ? `Trồng năm ${plot.plantedYear}`
+                : null;
 
             const sheetParcelDisplay =
               plot.sheetNo || plot.parcelNo
-                ? `${plot.sheetNo || "—"} / ${plot.parcelNo || "—"}`
+                ? `Tờ ${plot.sheetNo || "—"} / Thửa ${plot.parcelNo || "—"}`
                 : "Chưa cập nhật";
+
+            const coordsDisplay =
+              plot.lat !== null &&
+              plot.lat !== undefined &&
+              plot.lng !== null &&
+              plot.lng !== undefined
+                ? `${Number(plot.lat).toFixed(4)}°B, ${Number(plot.lng).toFixed(4)}°Đ`
+                : null;
+
+            const totalDiaryCount = compliance?.diaryCount ?? data.diaries.length;
+
+            const rawStandard = (data.puc.standard || "").trim();
+            const conciseStandard =
+              rawStandard.includes("VietGAP") && rawStandard.includes("GACC")
+                ? "VietGAP · Nghị định thư GACC"
+                : rawStandard || "VietGAP";
 
             const householdsList = data.households ?? [];
             const realContribHousehold = householdsList.find(
@@ -827,9 +975,10 @@ export default function TraceView() {
 
             return (
               <>
-                {/* ─── Khối 1: Banner Xanh Rừng + Thẻ Hồ Sơ Chủ Hộ & Thửa Đất ─── */}
-                <div className="tr-puc-stage">
-                  <section className="tr-puc-banner">
+                {/* ─── Hồ Sơ Minh Bạch Mã Vùng Trồng Thống Nhất Khung Căn Chỉnh ─── */}
+                <div className="tr-puc-dossier">
+                  {/* 1. Banner Xanh Rừng (Mobile căn trục giữa · Laptop dàn ngang 2 bên) */}
+                  <section className={`tr-puc-banner is-${effectiveStatus}`}>
                     <div className="tr-puc-banner-inner">
                       <div className="tr-puc-crest" aria-hidden="true">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -841,222 +990,349 @@ export default function TraceView() {
                       </div>
 
                       <div className="tr-puc-banner-body">
-                        <h1 className="tr-puc-banner-title">TRUY XUẤT NGUỒN GỐC</h1>
+                        <div className="tr-puc-banner-heading">
+                          <h1 className="tr-puc-banner-title">TRUY XUẤT NGUỒN GỐC</h1>
+                          <p className="tr-puc-banner-sub">
+                            Hồ sơ định danh mã số vùng trồng PUC &amp; giám sát canh tác thực địa – {data.puc.name}
+                          </p>
+                        </div>
+
                         <div className={`tr-puc-status-pill is-${effectiveStatus}`}>
-                          {/* Huy hiệu dấu tích răng cưa chuẩn kiểm định */}
-                          <svg
-                            viewBox="0 0 24 24"
-                            width="18"
-                            height="18"
-                            fill="none"
-                            className="tr-puc-status-seal"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M12 1.8l2.4 1.6 2.9-.3 1.2 2.6 2.6 1.2-.3 2.9 1.6 2.4-1.6 2.4.3 2.9-2.6 1.2-1.2 2.6-2.9-.3-2.4 1.6-2.4-1.6-2.9.3-1.2-2.6-2.6-1.2.3-2.9L1.6 12l1.6-2.4-.3-2.9 2.6-1.2 1.2-2.6 2.9.3L12 1.8Z"
-                              fill="currentColor"
-                            />
-                            <path
-                              d="M8.3 12.2l2.4 2.4 5.1-5.2"
-                              stroke="#ffffff"
-                              strokeWidth="2.3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                          <span>{statusBadgeText}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="tr-puc-hero-card" aria-label="Thông tin chủ hộ và thửa đất canh tác">
-                    <div className="tr-puc-hero-watermark" aria-hidden="true">
-                      <WatermarkStamp
-                        topText="HTX SẦU RIÊNG CƯ NÉ"
-                        centerText="ĐÃ ĐỊNH DANH"
-                        bottomText="MÃ VÙNG TRỒNG PUC"
-                      />
-                    </div>
-
-                    <div className="tr-puc-hero-grid">
-                      {/* Cột trái: Ảnh đại diện hộ + Tên chủ hộ */}
-                      <div className="tr-puc-owner-col">
-                        <HouseholdPortrait avatarUrl={avatarUrl} name={ownerName} />
-                        <div className="tr-puc-owner-caption">
-                          <span className="tr-puc-owner-lbl">Chủ hộ:</span>
-                          <strong className="tr-puc-owner-name">{ownerName}</strong>
-                        </div>
-                      </div>
-
-                      {/* Cột phải: Thông số định danh vùng trồng & Nút GIS */}
-                      <div className="tr-puc-specs-col">
-                        <div className="tr-puc-spec-line">
-                          <span className="tr-puc-spec-lbl">Mã vùng trồng: </span>
-                          <strong className="tr-puc-spec-val">{data.puc.code}</strong>
-                        </div>
-
-                        <div className="tr-puc-spec-line">
-                          <span className="tr-puc-spec-lbl">Mã lô vườn: </span>
-                          <strong className="tr-puc-spec-val tr-puc-plot-chip">{plot.code}</strong>
-                        </div>
-
-                        <div className="tr-puc-spec-line">
-                          <span className="tr-puc-spec-lbl">Vị trí: </span>
-                          <strong className="tr-puc-spec-val">{locationDisplay}</strong>
-                        </div>
-
-                        <div className="tr-puc-spec-line">
-                          <span className="tr-puc-spec-lbl">Diện tích: </span>
-                          <strong className="tr-puc-spec-val">
-                            {areaDisplay}
-                            {varietyMeta && <span className="tr-puc-spec-note">{varietyMeta}</span>}
-                          </strong>
-                        </div>
-
-                        <div className="tr-puc-spec-line">
-                          <span className="tr-puc-spec-lbl">Số tờ/Thửa: </span>
-                          <strong className="tr-puc-spec-val">{sheetParcelDisplay}</strong>
-                        </div>
-
-                        {hasGisBoundary ? (
-                          <button
-                            type="button"
-                            className="tr-puc-gis-btn"
-                            onClick={openPlotGisModal}
-                          >
+                          {effectiveStatus === "approved" ? (
                             <svg
                               viewBox="0 0 24 24"
                               width="17"
                               height="17"
                               fill="none"
+                              className="tr-puc-status-seal"
                               aria-hidden="true"
-                              className="tr-puc-gis-pin"
                             >
                               <path
-                                d="M12 2.2C7.86 2.2 4.5 5.56 4.5 9.7c0 5.38 6.42 11.45 6.7 11.7a1.2 1.2 0 0 0 1.6 0c.28-.25 6.7-6.32 6.7-11.7 0-4.14-3.36-7.5-7.5-7.5Zm0 10.3a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6Z"
+                                d="M12 1.8l2.4 1.6 2.9-.3 1.2 2.6 2.6 1.2-.3 2.9 1.6 2.4-1.6 2.4.3 2.9-2.6 1.2-1.2 2.6-2.9-.3-2.4 1.6-2.4-1.6-2.9.3-1.2-2.6-2.6-1.2.3-2.9L1.6 12l1.6-2.4-.3-2.9 2.6-1.2 1.2-2.6 2.9.3L12 1.8Z"
                                 fill="currentColor"
                               />
+                              <path
+                                d="M8.3 12.2l2.4 2.4 5.1-5.2"
+                                stroke="#ffffff"
+                                strokeWidth="2.3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
                             </svg>
-                            <span>Xem bản đồ ranh giới GIS</span>
-                          </button>
-                        ) : (
-                          <div className="tr-puc-gis-empty">Chưa cập nhật tọa độ ranh giới GIS</div>
-                        )}
+                          ) : effectiveStatus === "violation" ? (
+                            <ShieldAlert size={16} strokeWidth={2.4} className="tr-puc-status-seal" aria-hidden="true" />
+                          ) : effectiveStatus === "improve" ? (
+                            <AlertTriangle size={16} strokeWidth={2.4} className="tr-puc-status-seal" aria-hidden="true" />
+                          ) : (
+                            <Clock size={16} strokeWidth={2.4} className="tr-puc-status-seal" aria-hidden="true" />
+                          )}
+                          <span>{statusBadgeText}</span>
+                        </div>
                       </div>
+
+                      <div className="tr-puc-crest-spacer" aria-hidden="true" />
                     </div>
                   </section>
+
+                  {/* Phần thân hồ sơ: Điện thoại xếp dọc 1 cột · Laptop chia 2 cột cân xứng */}
+                  <div className="tr-puc-dossier-body">
+                    <div className="tr-puc-col-left">
+                      <div className="tr-puc-col-left-sticky">
+                        {/* 2. Thẻ Hồ Sơ Chủ Hộ & Thông Số Thửa Đất */}
+                        <section className="tr-puc-hero-card" aria-label="Thông tin chủ hộ và thửa đất canh tác">
+                          <div className="tr-puc-hero-watermark" aria-hidden="true">
+                            <WatermarkStamp
+                              topText="HTX SẦU RIÊNG CƯ NÉ"
+                              centerText={watermarkMeta.center}
+                              bottomText={watermarkMeta.bottom}
+                            />
+                          </div>
+
+                          <div className="tr-puc-hero-grid">
+                            {/* Cột trái: Ảnh đại diện hộ + Tên chủ hộ */}
+                            <div className="tr-puc-owner-col">
+                              <HouseholdPortrait avatarUrl={avatarUrl} name={ownerName} />
+                              <div className="tr-puc-owner-caption">
+                                <span className="tr-puc-owner-lbl">Chủ hộ</span>
+                                <strong className="tr-puc-owner-name">{ownerName}</strong>
+                              </div>
+                            </div>
+
+                            {/* Cột phải: Bảng thông số định danh căn cột thẳng hàng */}
+                            <dl className="tr-puc-specs-col">
+                              <div className="tr-puc-spec-row">
+                                <dt className="tr-puc-spec-lbl">Mã vùng trồng</dt>
+                                <dd className="tr-puc-spec-val is-num">
+                                  {realZoneCode || <span className="tr-puc-muted">Chưa cấp mã</span>}
+                                </dd>
+                              </div>
+
+                              <div className="tr-puc-spec-row">
+                                <dt className="tr-puc-spec-lbl">Mã lô vườn</dt>
+                                <dd className="tr-puc-spec-val tr-puc-plot-inline">
+                                  <span className="tr-puc-plot-chip">{plot.code}</span>
+                                </dd>
+                              </div>
+
+                              <div className="tr-puc-spec-row">
+                                <dt className="tr-puc-spec-lbl">Vị trí</dt>
+                                <dd className="tr-puc-spec-val">{locationDisplay}</dd>
+                              </div>
+
+                              <div className="tr-puc-spec-row">
+                                <dt className="tr-puc-spec-lbl">Diện tích</dt>
+                                <dd className="tr-puc-spec-val is-num">
+                                  <span>{areaDisplay}</span>
+                                  {varietyMeta && <span className="tr-puc-spec-note"> · {varietyMeta}</span>}
+                                </dd>
+                              </div>
+
+                              <div className="tr-puc-spec-row">
+                                <dt className="tr-puc-spec-lbl">Địa chính</dt>
+                                <dd className="tr-puc-spec-val is-num">{sheetParcelDisplay}</dd>
+                              </div>
+                            </dl>
+                          </div>
+
+                          {/* Thanh hành động GIS trải đều chân thẻ, cân đối 2 cột trên */}
+                          {hasGisBoundary ? (
+                            <button
+                              type="button"
+                              className="tr-puc-gis-btn"
+                              onClick={openPlotGisModal}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                width="17"
+                                height="17"
+                                fill="none"
+                                aria-hidden="true"
+                                className="tr-puc-gis-pin"
+                              >
+                                <path
+                                  d="M12 2.2C7.86 2.2 4.5 5.56 4.5 9.7c0 5.38 6.42 11.45 6.7 11.7a1.2 1.2 0 0 0 1.6 0c.28-.25 6.7-6.32 6.7-11.7 0-4.14-3.36-7.5-7.5-7.5Zm0 10.3a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6Z"
+                                  fill="currentColor"
+                                />
+                              </svg>
+                              <span>Xem trên bản đồ</span>
+                            </button>
+                          ) : (
+                            <div className="tr-puc-gis-empty">Chưa cập nhật tọa độ ranh giới GIS trên hệ thống</div>
+                          )}
+                        </section>
+
+                        {/* Thẻ Đơn vị quản lý vùng trồng & Mã QR truy xuất (Cân đối trên cả Mobile & Laptop) */}
+                        <section
+                          className="tr-puc-legal-card"
+                          aria-label="Đơn vị quản lý vùng trồng và mã QR truy xuất"
+                        >
+                          <div className="tr-puc-legal-head">
+                            <div className="tr-puc-legal-heading">
+                              <span className="tr-puc-legal-kicker">ĐƠN VỊ QUẢN LÝ MÃ VÙNG</span>
+                              <strong className="tr-puc-legal-org">{data.puc.name}</strong>
+                            </div>
+
+                            <div className="tr-puc-legal-qr-box">
+                              {qrSrc ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={qrSrc}
+                                  alt={`Mã QR truy xuất lô ${plot.code}`}
+                                  className="tr-asset-qr-img"
+                                />
+                              ) : (
+                                <div className="tr-asset-qr-loading" aria-hidden="true">
+                                  <QrCode size={24} strokeWidth={1.8} />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <dl className="tr-puc-specs-col tr-puc-legal-specs">
+                            <div className="tr-puc-spec-row">
+                              <dt className="tr-puc-spec-lbl">Quy chuẩn</dt>
+                              <dd className="tr-puc-spec-val">{conciseStandard}</dd>
+                            </div>
+
+                            <div className="tr-puc-spec-row">
+                              <dt className="tr-puc-spec-lbl">Tọa độ GIS</dt>
+                              <dd className="tr-puc-spec-val is-num">
+                                {coordsDisplay || (hasGisBoundary ? "Đã có ranh giới GIS" : "Chưa cập nhật")}
+                              </dd>
+                            </div>
+                          </dl>
+                        </section>
+                      </div>
+                    </div>
+
+                    <div className="tr-puc-col-right">
+                      {/* 3. Thẻ 3 Trụ Cột Xác Thực Đối Xứng (PUC · VietGAP · GACC) */}
+                      <CertificationSealsCard
+                        hasZoneCode={hasZoneCode}
+                        plotStatus={String(plot.status || "pending")}
+                        diaryCount={totalDiaryCount}
+                        activeIsolationUntil={activeIsolationUntil}
+                        hasViolationOrMrl={openViolationsCount > 0 || hasMrlViolation}
+                        latestLabResult={latestLabEffectiveResult}
+                        effectiveStatus={effectiveStatus}
+                      />
+
+                      {/* 4. Thông báo minh bạch khi lô đất đang cách ly PHI hoặc có vi phạm mở */}
+                      {(activeIsolationUntil || openViolations.length > 0 || hasMrlViolation) && (
+                        <section
+                          className={`tr-puc-alert-card ${
+                            openViolations.length > 0 || hasMrlViolation ? "is-danger" : "is-warn"
+                          }`}
+                          aria-label="Cảnh báo giám sát kỹ thuật tại vườn"
+                        >
+                          <div className="tr-puc-alert-head">
+                            {openViolations.length > 0 || hasMrlViolation ? (
+                              <ShieldAlert size={18} strokeWidth={2.3} aria-hidden="true" />
+                            ) : (
+                              <Clock size={18} strokeWidth={2.3} aria-hidden="true" />
+                            )}
+                            <strong>
+                              {openViolations.length > 0 || hasMrlViolation
+                                ? "Cảnh báo tuân thủ kỹ thuật đang mở"
+                                : "Lô vườn đang trong thời gian cách ly thuốc BVTV (PHI)"}
+                            </strong>
+                          </div>
+                          {activeIsolationUntil && (
+                            <p className="tr-puc-alert-desc">
+                              Chưa thu hái xuất khẩu cho tới khi hoàn tất thời gian cách ly vào ngày{" "}
+                              <strong>{formatDate(activeIsolationUntil)}</strong>.
+                            </p>
+                          )}
+                          {hasMrlViolation && (
+                            <p className="tr-puc-alert-desc">
+                              Hệ thống ghi nhận đợt phun thuốc có nguy cơ vượt ngưỡng dư lượng MRL cần kiểm tra lại trước khi thu hoạch.
+                            </p>
+                          )}
+                          {openViolations.map((v, idx) => (
+                            <p key={idx} className="tr-puc-alert-desc">
+                              • <strong>{formatDate(v.detectedOn)}:</strong> {v.title}
+                              {v.description ? ` — ${v.description}` : ""}
+                            </p>
+                          ))}
+                        </section>
+                      )}
+
+                      {/* 5. Nhật Ký Canh Tác Chứng Minh */}
+                      <ProvenDiarySection diaries={data.diaries} totalCount={totalDiaryCount} />
+
+                      {/* 6. Phiếu kiểm nghiệm an toàn thực phẩm tại vườn (hiển thị minh bạch cả đạt & vượt ngưỡng) */}
+                      {latestLab && (
+                        <section className="tr-card">
+                          <div className="tr-card-header">
+                            <h2 className="tr-card-title">Phiếu kiểm nghiệm an toàn thực phẩm</h2>
+                            <span className={hasLabFailure ? "tr-badge-red" : "tr-badge-green"}>
+                              {hasLabFailure ? "Không đạt chuẩn" : "Đạt chuẩn"}
+                            </span>
+                          </div>
+                          <p className="tr-card-sub">
+                            Phiếu kiểm nghiệm <strong>{latestLab.code}</strong> ({formatDate(latestLab.sampledOn)}) tại{" "}
+                            {latestLab.lab}.
+                          </p>
+                          <div className="tr-safety-list">
+                            <div className="tr-safety-item">
+                              <div className="tr-safety-info">
+                                <strong className="tr-safety-name">Kim loại nặng Cadimi (Cd)</strong>
+                                <span className="tr-safety-detail">
+                                  Kết quả: {latestLab.cdMgKg} mg/kg (Ngưỡng tối đa: 0.05 mg/kg)
+                                </span>
+                              </div>
+                              <span className={Number(latestLab.cdMgKg) <= 0.05 ? "tr-pass-pill" : "tr-fail-pill"}>
+                                {Number(latestLab.cdMgKg) <= 0.05 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
+                              </span>
+                            </div>
+
+                            <div className="tr-safety-item">
+                              <div className="tr-safety-info">
+                                <strong className="tr-safety-name">Chất nhuộm Vàng O (Auramine O)</strong>
+                                <span className="tr-safety-detail">
+                                  Kết quả: {latestLab.yellowOPositive ? "Dương tính" : "Âm tính (Không phát hiện)"}
+                                </span>
+                              </div>
+                              <span className={latestLab.yellowOPositive ? "tr-fail-pill" : "tr-pass-pill"}>
+                                {latestLab.yellowOPositive ? "KHÔNG ĐẠT" : "AN TOÀN"}
+                              </span>
+                            </div>
+
+                            <div className="tr-safety-item">
+                              <div className="tr-safety-info">
+                                <strong className="tr-safety-name">Dư lượng thuốc trừ sâu Chlorpyrifos</strong>
+                                <span className="tr-safety-detail">
+                                  Kết quả:{" "}
+                                  {latestLab.chlorpyrifosMgKg !== null &&
+                                  latestLab.chlorpyrifosMgKg !== undefined
+                                    ? `${latestLab.chlorpyrifosMgKg} mg/kg (Ngưỡng: 0.01 mg/kg)`
+                                    : "KPH (Không phát hiện dư lượng)"}
+                                </span>
+                              </div>
+                              <span className={(latestLab.chlorpyrifosMgKg ?? 0) <= 0.01 ? "tr-pass-pill" : "tr-fail-pill"}>
+                                {(latestLab.chlorpyrifosMgKg ?? 0) <= 0.01 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
+                              </span>
+                            </div>
+                          </div>
+                        </section>
+                      )}
+
+                      {/* 7. Sản lượng thu hoạch thực tế đã đóng góp (nếu có) */}
+                      {realContribHousehold && (
+                        <section className="tr-card">
+                          <div className="tr-card-header">
+                            <h2 className="tr-card-title">Sản lượng thu hoạch đã đóng góp</h2>
+                            <span className="tr-badge-green">{realContribHousehold.lotCount} lô hàng</span>
+                          </div>
+                          <div className="tr-farmer-item">
+                            <div className="tr-farmer-row-left">
+                              <HouseholdPortrait
+                                avatarUrl={realContribHousehold.avatarUrl || avatarUrl}
+                                name={realContribHousehold.householdName}
+                                className="tr-farmer-avatar"
+                              />
+                              <div className="tr-farmer-main">
+                                <strong className="tr-farmer-name">{realContribHousehold.householdName}</strong>
+                                <span className="tr-farmer-sub">
+                                  Mã hộ: {realContribHousehold.householdCode}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="tr-farmer-qty">
+                              <span className="tr-farmer-kg">
+                                {Number(
+                                  realContribHousehold.weightKg ?? realContribHousehold.contributedKg ?? 0,
+                                ).toLocaleString("vi-VN")}{" "}
+                                kg
+                              </span>
+                              <span className="tr-farmer-pct">Tổng sản lượng thực tế</span>
+                            </div>
+                          </div>
+                        </section>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                {/* ─── Khối 2: Dải Huy Hiệu Chứng Nhận VietGAP · GACC · GlobalGAP ─── */}
-                <CertificationSealsCard status={effectiveStatus} />
-
-                {/* ─── Khối 3: NHẬT KÝ CANH TÁC CHỨNG MINH (Phun thuốc + Bón phân + Chăm sóc) ─── */}
-                <ProvenDiarySection diaries={data.diaries} />
-
-                {/* ─── Khối 4 (Tùy chọn thực tế): Kiểm nghiệm an toàn thực phẩm tại vườn (nếu có mẫu) ─── */}
-                {data.labTests.length > 0 && (
-                  <section className="tr-card">
-                    <div className="tr-card-header">
-                      <h2 className="tr-card-title">Phiếu kiểm nghiệm an toàn thực phẩm</h2>
-                      <span className="tr-badge-green">
-                        {data.labTests[0].result === "pass" ? "Đạt chuẩn" : "Cần lưu ý"}
-                      </span>
-                    </div>
-                    <p className="tr-card-sub">
-                      Phiếu kiểm nghiệm {data.labTests[0].code} ({formatDate(data.labTests[0].sampledOn)}) tại{" "}
-                      {data.labTests[0].lab}.
-                    </p>
-                    <div className="tr-safety-list">
-                      <div className="tr-safety-item">
-                        <div className="tr-safety-info">
-                          <strong className="tr-safety-name">Kim loại nặng Cadimi (Cd)</strong>
-                          <span className="tr-safety-detail">
-                            Kết quả: {data.labTests[0].cdMgKg} mg/kg (Ngưỡng tối đa: 0.05 mg/kg)
-                          </span>
-                        </div>
-                        <span className="tr-pass-pill">
-                          {Number(data.labTests[0].cdMgKg) <= 0.05 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
-                        </span>
-                      </div>
-
-                      <div className="tr-safety-item">
-                        <div className="tr-safety-info">
-                          <strong className="tr-safety-name">Chất nhuộm Vàng O (Auramine O)</strong>
-                          <span className="tr-safety-detail">
-                            Kết quả: {data.labTests[0].yellowOPositive ? "Dương tính" : "Âm tính (Không phát hiện)"}
-                          </span>
-                        </div>
-                        <span className="tr-pass-pill">
-                          {data.labTests[0].yellowOPositive ? "KHÔNG ĐẠT" : "AN TOÀN"}
-                        </span>
-                      </div>
-
-                      <div className="tr-safety-item">
-                        <div className="tr-safety-info">
-                          <strong className="tr-safety-name">Dư lượng thuốc trừ sâu Chlorpyrifos</strong>
-                          <span className="tr-safety-detail">
-                            Kết quả:{" "}
-                            {data.labTests[0].chlorpyrifosMgKg !== null &&
-                            data.labTests[0].chlorpyrifosMgKg !== undefined
-                              ? `${data.labTests[0].chlorpyrifosMgKg} mg/kg`
-                              : "KPH (Không phát hiện dư lượng)"}
-                          </span>
-                        </div>
-                        <span className="tr-pass-pill">
-                          {(data.labTests[0].chlorpyrifosMgKg ?? 0) <= 0.01 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
-                        </span>
-                      </div>
-                    </div>
-                  </section>
-                )}
-
-                {/* ─── Khối 5 (Chỉ hiện khi hộ ĐÃ CÓ đóng góp sản lượng thực tế vào lô thu hoạch) ─── */}
-                {realContribHousehold && (
-                  <section className="tr-card">
-                    <div className="tr-card-header">
-                      <h2 className="tr-card-title">Sản lượng thu hoạch đã đóng góp</h2>
-                      <span className="tr-badge-green">{realContribHousehold.lotCount} lô hàng</span>
-                    </div>
-                    <div className="tr-farmer-item">
-                      <div className="tr-farmer-row-left">
-                        <HouseholdPortrait
-                          avatarUrl={realContribHousehold.avatarUrl || avatarUrl}
-                          name={realContribHousehold.householdName}
-                          className="tr-farmer-avatar"
-                        />
-                        <div className="tr-farmer-main">
-                          <strong className="tr-farmer-name">{realContribHousehold.householdName}</strong>
-                          <span className="tr-farmer-sub">
-                            Mã hộ: {realContribHousehold.householdCode}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="tr-farmer-qty">
-                        <span className="tr-farmer-kg">
-                          {Number(realContribHousehold.weightKg ?? realContribHousehold.contributedKg ?? 0).toLocaleString("vi-VN")} kg
-                        </span>
-                        <span className="tr-farmer-pct">Tổng sản lượng thực tế</span>
-                      </div>
-                    </div>
-                  </section>
-                )}
-
-                {/* ─── Thao tác In hồ sơ PDF & Chia sẻ liên kết minh bạch ─── */}
+                {/* ─── Thao tác Trang chủ · In hồ sơ PDF · Chia sẻ liên kết minh bạch ─── */}
                 <div className="tr-actions">
+                  <Link href="/" className="tr-home-btn">
+                    <ArrowLeft size={17} strokeWidth={2.3} aria-hidden="true" />
+                    <span>Trang chủ</span>
+                  </Link>
                   <button type="button" className="tr-print-btn" onClick={handlePrint}>
-                    <Printer size={18} strokeWidth={2.2} aria-hidden="true" />
+                    <Printer size={17} strokeWidth={2.2} aria-hidden="true" />
                     <span>In hồ sơ / Lưu PDF</span>
                   </button>
                   <button type="button" className="tr-share-btn" onClick={handleShare}>
                     {copied ? (
                       <>
-                        <Check size={18} strokeWidth={2.4} aria-hidden="true" />
+                        <Check size={17} strokeWidth={2.4} aria-hidden="true" />
                         <span>Đã sao chép liên kết</span>
                       </>
                     ) : (
                       <>
-                        <Share2 size={18} strokeWidth={2.2} aria-hidden="true" />
+                        <Share2 size={17} strokeWidth={2.2} aria-hidden="true" />
                         <span>Chia sẻ hồ sơ vùng trồng</span>
                       </>
                     )}
@@ -1113,18 +1389,13 @@ export default function TraceView() {
 
             {/* ─── Khối Xác thực Tem Nông Hộ Quả Sầu Riêng Tận Vườn (CheckVN) ─── */}
             {data.farmerStamp && (
-              <section
-                className="tr-item-banner"
-                style={{
-                  borderLeft: `4px solid ${data.farmerStamp.status === "activated" ? "#16a34a" : "#f59e0b"}`,
-                }}
-              >
+              <section className="tr-item-banner">
                 <div
                   className="tr-item-badge"
                   style={
                     data.farmerStamp.status === "activated"
                       ? undefined
-                      : { background: "#fef3c7", borderColor: "#fcd34d", color: "#b45309" }
+                      : { background: "#fef3c7", color: "#b45309" }
                   }
                 >
                   <Tag size={14} />
@@ -1308,423 +1579,488 @@ export default function TraceView() {
               </section>
             )}
 
-            {/* ─── Thẻ 2: Hành trình Chuỗi Cung Ứng (Vùng trồng -> Sơ chế đóng gói -> Vận chuyển -> Xuất khẩu) ─── */}
-            <section className="tr-card">
-              <div className="tr-card-header">
-                <h2 className="tr-card-title">Hành trình Chuỗi Cung Ứng Khép Kín</h2>
-                <span className="tr-badge-green">Minh bạch 100%</span>
-              </div>
-              <p className="tr-card-sub">
-                Hồ sơ theo dõi xuyên suốt từ vườn sầu riêng, cơ sở đóng gói sơ chế, xe vận chuyển lạnh đến cảng xuất khẩu.
-              </p>
-
-              <div className="tr-timeline-steps" role="list">
-                <div className="tr-step-item">
-                  <div className="tr-step-segment">
-                    <div className="tr-step-track-col" aria-hidden="true">
-                      <div
-                        className="tr-step-capsule"
-                        style={{ background: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)" }}
-                      >
-                        <div className="tr-step-dot" />
-                        <div className="tr-step-dot" />
-                      </div>
+            {/* ─── Thân chi tiết Lô hàng / Tem nông hộ: Điện thoại 1 cột · Laptop dàn đều 2 cột ─── */}
+            <div className="tr-lot-grid">
+              <div className="tr-lot-col-main">
+                {/* ─── Thẻ 2: Hành trình Chuỗi Cung Ứng (Chỉ hiển thị khi lô hàng xuất kho có dữ liệu sơ chế & vận chuyển) ─── */}
+                {data.supplyChain && (
+                  <section className="tr-card tr-lot-order-supply">
+                    <div className="tr-card-header">
+                      <h2 className="tr-card-title">Hành trình Chuỗi Cung Ứng Khép Kín</h2>
+                      <span className="tr-badge-green">Theo hồ sơ lô hàng</span>
                     </div>
-                    <div className="tr-step-content tr-step-card-blue">
-                      <div className="tr-step-head">
-                        <strong>1. VÙNG TRỒNG LIÊN KẾT (PUC)</strong>
-                        <span className="tr-step-tag">Khảo sát &amp; Canh tác</span>
-                      </div>
-                      <p className="tr-step-desc">
-                        Vùng trồng sầu riêng tập trung HTX Cư Né, mã số <strong>{data.puc.code}</strong>. Canh tác an toàn sinh học theo quy trình VietGAP, kiểm soát nhật ký phân bón và thời gian cách ly thuốc BVTV (PHI).
-                      </p>
-                      {data.supplyChain?.contract && (
-                        <div className="tr-step-subdetail">
-                          <span>
-                            Hợp đồng bao tiêu: <strong>{data.supplyChain.contract.code}</strong>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="tr-step-transfer" aria-hidden="true">
-                    <div className="tr-step-transfer-track">
-                      <div className="tr-step-mini-dot" />
-                      <div className="tr-step-mini-dot" />
-                      <div className="tr-step-mini-dot" />
-                    </div>
-                  </div>
-                </div>
+                    <p className="tr-card-sub">
+                      Hồ sơ đối chiếu xuyên suốt từ vùng trồng, cơ sở đóng gói sơ chế, vận chuyển lạnh đến thị trường tiêu thụ.
+                    </p>
 
-                <div className="tr-step-item">
-                  <div className="tr-step-segment">
-                    <div className="tr-step-track-col" aria-hidden="true">
-                      <div
-                        className="tr-step-capsule"
-                        style={{ background: "linear-gradient(180deg, #10b981 0%, #34d399 100%)" }}
-                      >
-                        <div className="tr-step-dot" />
-                        <div className="tr-step-dot" />
-                      </div>
-                    </div>
-                    <div className="tr-step-content tr-step-card-mint">
-                      <div className="tr-step-head">
-                        <strong>2. SƠ CHẾ &amp; ĐÓNG GÓI (PHC)</strong>
-                        <span className="tr-step-tag">Nhà máy đóng gói</span>
-                      </div>
-                      <p className="tr-step-desc">
-                        Tại <strong>{data.supplyChain?.packhouse.name || "Cơ sở đóng gói Đắk Lắk"}</strong> (Mã PHC:{" "}
-                        <strong>{data.supplyChain?.packhouse.code || "VN-DLPH-0089"}</strong>).
-                        <br />• <strong>Phương pháp sơ chế:</strong>{" "}
-                        {data.supplyChain?.packhouse.treatmentMethod ||
-                          "Rửa áp lực Ozone, sấy ráo khí động học, khử khuẩn nấm sinh học."}
-                        <br />• <strong>Phân loại chất lượng:</strong> Hạng A (
-                        {data.supplyChain?.packhouse.gradeAPct ?? 72.5}%) · Độ ngọt bình quân đạt{" "}
-                        <strong>{data.supplyChain?.packhouse.avgBrix ?? 33.2}° Brix</strong>.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="tr-step-transfer" aria-hidden="true">
-                    <div className="tr-step-transfer-track">
-                      <div className="tr-step-mini-dot" />
-                      <div className="tr-step-mini-dot" />
-                      <div className="tr-step-mini-dot" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="tr-step-item">
-                  <div className="tr-step-segment">
-                    <div className="tr-step-track-col" aria-hidden="true">
-                      <div
-                        className="tr-step-capsule"
-                        style={{ background: "linear-gradient(180deg, #8b5cf6 0%, #a78bfa 100%)" }}
-                      >
-                        <div className="tr-step-dot" />
-                        <div className="tr-step-dot" />
-                      </div>
-                    </div>
-                    <div className="tr-step-content tr-step-card-lavender">
-                      <div className="tr-step-head">
-                        <strong>3. VẬN CHUYỂN CHUỖI LẠNH (COLD CHAIN)</strong>
-                        <span className="tr-step-tag">Bảo quản nhiệt độ</span>
-                      </div>
-                      <p className="tr-step-desc">
-                        Đơn vị logistics:{" "}
-                        <strong>{data.supplyChain?.transport.transporter || "Vận tải Lạnh Á Châu"}</strong>.
-                        <br />
-                        Xe container lạnh biển số{" "}
-                        <strong>{data.supplyChain?.transport.vehiclePlate || "47C-289.45"}</strong> duy trì nhiệt độ bảo quản chuẩn{" "}
-                        <strong>{data.supplyChain?.transport.temperatureC ?? 13.5}°C</strong> trong suốt hành trình đưa hàng đến cửa khẩu xuất khẩu.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="tr-step-transfer" aria-hidden="true">
-                    <div className="tr-step-transfer-track">
-                      <div className="tr-step-mini-dot" />
-                      <div className="tr-step-mini-dot" />
-                      <div className="tr-step-mini-dot" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="tr-step-item">
-                  <div className="tr-step-segment">
-                    <div className="tr-step-track-col" aria-hidden="true">
-                      <div
-                        className="tr-step-capsule"
-                        style={{ background: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)" }}
-                      >
-                        <div className="tr-step-dot" />
-                        <div className="tr-step-dot" />
-                      </div>
-                    </div>
-                    <div className="tr-step-content tr-step-card-peach">
-                      <div className="tr-step-head">
-                        <strong>4. KIỂM ĐỊNH &amp; DÁN TEM TRUY XUẤT</strong>
-                        <span className="tr-step-tag">
-                          Thị trường {data.lot?.market || "Xuất khẩu & Nội địa"}
-                        </span>
-                      </div>
-                      <p className="tr-step-desc">
-                        Lô hàng đã được kiểm nghiệm độc lập Cadimi an toàn, 100% âm tính chất cấm Vàng O, kích hoạt dải tem QR CheckVN dán trên từng quả và thùng hàng đưa ra thị trường tiêu thụ.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* ─── Thẻ 3: Kiểm tra an toàn thực phẩm ─── */}
-            <section className="tr-card">
-              <div className="tr-card-header">
-                <h2 className="tr-card-title">Kiểm tra an toàn thực phẩm</h2>
-                <span className="tr-badge-green">
-                  {data.labTests[0]
-                    ? data.labTests[0].result === "pass"
-                      ? "Đạt chuẩn"
-                      : "Không đạt"
-                    : "Chưa có mẫu"}
-                </span>
-              </div>
-              <p className="tr-card-sub">
-                {data.labTests[0]
-                  ? `Phiếu kiểm nghiệm ${data.labTests[0].code} (${formatDate(data.labTests[0].sampledOn)}) tại ${data.labTests[0].lab}.`
-                  : "Chưa có phiếu kiểm nghiệm gắn với mã truy xuất này."}
-              </p>
-
-              {data.labTests[0] && (
-                <div className="tr-safety-list">
-                  <div className="tr-safety-item">
-                    <div className="tr-safety-info">
-                      <strong className="tr-safety-name">Kim loại nặng Cadimi (Cd)</strong>
-                      <span className="tr-safety-detail">
-                        Kết quả: {data.labTests[0].cdMgKg} mg/kg (Mức tối đa cho phép: 0.05 mg/kg)
-                      </span>
-                    </div>
-                    <span className="tr-pass-pill">
-                      {Number(data.labTests[0].cdMgKg) <= 0.05 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
-                    </span>
-                  </div>
-
-                  <div className="tr-safety-item">
-                    <div className="tr-safety-info">
-                      <strong className="tr-safety-name">Chất nhuộm Vàng O (Chất cấm)</strong>
-                      <span className="tr-safety-detail">
-                        Kết quả: {data.labTests[0].yellowOPositive ? "Dương tính" : "Âm tính (Không phát hiện)"}
-                      </span>
-                    </div>
-                    <span className="tr-pass-pill">
-                      {data.labTests[0].yellowOPositive ? "KHÔNG ĐẠT" : "AN TOÀN"}
-                    </span>
-                  </div>
-
-                  <div className="tr-safety-item">
-                    <div className="tr-safety-info">
-                      <strong className="tr-safety-name">Dư lượng thuốc trừ sâu Chlorpyrifos</strong>
-                      <span className="tr-safety-detail">
-                        Kết quả:{" "}
-                        {data.labTests[0].chlorpyrifosMgKg !== null &&
-                        data.labTests[0].chlorpyrifosMgKg !== undefined
-                          ? `${data.labTests[0].chlorpyrifosMgKg} mg/kg`
-                          : "KPH (Không phát hiện dư lượng)"}
-                      </span>
-                    </div>
-                    <span className="tr-pass-pill">
-                      {(data.labTests[0].chlorpyrifosMgKg ?? 0) <= 0.01 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </section>
-
-            {/* ─── Thẻ 4: Thông số vùng trồng & Chứng nhận ─── */}
-            <section className="tr-card">
-              <div className="tr-card-header">
-                <h2 className="tr-card-title">Hồ sơ pháp lý &amp; Vùng trồng</h2>
-              </div>
-
-              <div className="tr-data-list">
-                <div className="tr-data-row">
-                  <span className="tr-data-label">Mã số vùng trồng (PUC)</span>
-                  <strong className="tr-data-val highlight">{data.puc.code}</strong>
-                </div>
-
-                <div className="tr-data-row">
-                  <span className="tr-data-label">Mã cơ sở đóng gói (PHC)</span>
-                  <strong className="tr-data-val highlight">
-                    {data.supplyChain?.packhouse.code || "VN-DLPH-0089"}
-                  </strong>
-                </div>
-
-                <div className="tr-data-row">
-                  <span className="tr-data-label">Đơn vị đại diện</span>
-                  <strong className="tr-data-val">{data.puc.name}</strong>
-                </div>
-
-                <div className="tr-data-row">
-                  <span className="tr-data-label">Địa chỉ vùng trồng</span>
-                  <strong className="tr-data-val">{data.puc.location}</strong>
-                </div>
-
-                <div className="tr-data-row">
-                  <span className="tr-data-label">Quy chuẩn áp dụng</span>
-                  <strong className="tr-data-val">{data.puc.standard}</strong>
-                </div>
-
-                <div className="tr-data-row">
-                  <span className="tr-data-label">
-                    {data.lot ? "Doanh nghiệp thu mua" : "Đơn vị quản lý & liên kết"}
-                  </span>
-                  <strong className="tr-data-val">
-                    {data.lot?.buyer || "HTX Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né"}
-                  </strong>
-                </div>
-
-                <div className="tr-data-row">
-                  <span className="tr-data-label">
-                    {data.lot ? "Thị trường tiêu thụ" : "Định hướng thị trường"}
-                  </span>
-                  <strong className="tr-data-val">
-                    {data.lot?.market || "Xuất khẩu chính ngạch & Nội địa"}
-                  </strong>
-                </div>
-              </div>
-            </section>
-
-            {/* ─── Thẻ 5: Hộ nông dân canh tác / Đóng góp lô hàng thực tế (Có ảnh đại diện hộ) ─── */}
-            {(() => {
-              const householdsList = data.households ?? [];
-              const sumContribKg = householdsList.reduce(
-                (sum, h) => sum + (h.weightKg && h.weightKg > 0 ? Number(h.weightKg) : 0),
-                0,
-              );
-              const denomKg = totalLotKg > 0 ? totalLotKg : sumContribKg;
-
-              const sectionTitle = data.farmerStamp
-                ? "Hộ nông dân canh tác & sở hữu tem"
-                : "Hộ nông dân đóng góp lô hàng";
-
-              const sectionSub = data.farmerStamp
-                ? "Thông tin hộ xã viên được cấp mã tem truy xuất nguồn gốc tại vườn."
-                : "Sản lượng sầu riêng thực tế ghi nhận từ các hộ xã viên tham gia đóng góp vào lô hàng này.";
-
-              const stampHasGis = Boolean(
-                data.farmerStamp &&
-                  (data.farmerStamp.geometryJson ||
-                    (data.farmerStamp.lat !== null &&
-                      data.farmerStamp.lat !== undefined &&
-                      data.farmerStamp.lng !== null &&
-                      data.farmerStamp.lng !== undefined)),
-              );
-
-              return (
-                <section className="tr-card">
-                  <div className="tr-card-header">
-                    <h2 className="tr-card-title">{sectionTitle}</h2>
-                    <span className="tr-count-badge">{householdsList.length} hộ</span>
-                  </div>
-                  <p className="tr-card-sub">{sectionSub}</p>
-
-                  {householdsList.length === 0 ? (
-                    <div className="tr-farmer-empty">
-                      Chưa ghi nhận số liệu đóng góp sản lượng của hộ nông dân cho lô hàng này.
-                    </div>
-                  ) : (
-                    <div className="tr-farmer-list">
-                      {householdsList.map((h, i) => {
-                        const realWeightKg =
-                          h.weightKg !== null && h.weightKg !== undefined && Number(h.weightKg) > 0
-                            ? Number(h.weightKg)
-                            : null;
-                        const pct =
-                          realWeightKg !== null && denomKg > 0
-                            ? ((realWeightKg / denomKg) * 100).toFixed(1)
-                            : null;
-
-                        return (
-                          <div key={i} className="tr-farmer-item">
-                            <div className="tr-farmer-row-left">
-                              <HouseholdPortrait
-                                avatarUrl={h.avatarUrl ?? data.farmerStamp?.avatarUrl}
-                                name={h.householdName}
-                                className="tr-farmer-avatar"
-                              />
-                              <div className="tr-farmer-main">
-                                <strong className="tr-farmer-name">{h.householdName}</strong>
-                                <span className="tr-farmer-sub">
-                                  Thôn: {h.village} · Mã hộ: {h.householdCode}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="tr-farmer-qty">
-                              {data.farmerStamp ? (
-                                data.farmerStamp.status === "activated" && realWeightKg !== null ? (
-                                  <>
-                                    <span className="tr-farmer-kg">
-                                      {realWeightKg.toLocaleString("vi-VN")} kg
-                                    </span>
-                                    <span className="tr-farmer-pct">Khối lượng quả thu hái</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span className="tr-farmer-pending">Chưa kích hoạt thu hái</span>
-                                    <span className="tr-farmer-pct">
-                                      {(h.contributedKg ?? 0) > 0
-                                        ? `Đã góp ${Number(h.contributedKg).toLocaleString("vi-VN")} kg (${h.lotCount ?? 1} lô)`
-                                        : "Chưa đóng góp lô hàng"}
-                                    </span>
-                                  </>
-                                )
-                              ) : realWeightKg !== null ? (
-                                <>
-                                  <span className="tr-farmer-kg">
-                                    {realWeightKg.toLocaleString("vi-VN")} kg
-                                  </span>
-                                  {pct !== null && <span className="tr-farmer-pct">({pct}%)</span>}
-                                </>
-                              ) : (
-                                <span className="tr-farmer-pending">Chưa ghi nhận sản lượng</span>
-                              )}
+                    <div className="tr-timeline-steps" role="list">
+                      <div className="tr-step-item">
+                        <div className="tr-step-segment">
+                          <div className="tr-step-track-col" aria-hidden="true">
+                            <div
+                              className="tr-step-capsule"
+                              style={{ background: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)" }}
+                            >
+                              <div className="tr-step-dot" />
+                              <div className="tr-step-dot" />
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          <div className="tr-step-content tr-step-card-blue">
+                            <div className="tr-step-head">
+                              <strong>1. VÙNG TRỒNG LIÊN KẾT (PUC)</strong>
+                              <span className="tr-step-tag">Khảo sát &amp; Canh tác</span>
+                            </div>
+                            <p className="tr-step-desc">
+                              Vùng trồng sầu riêng tập trung HTX Cư Né, mã số <strong>{data.puc.code}</strong>. Canh tác theo quy trình VietGAP, kiểm soát nhật ký phân bón và thời gian cách ly thuốc BVTV (PHI).
+                            </p>
+                            {data.supplyChain.contract && (
+                              <div className="tr-step-subdetail">
+                                <span>
+                                  Hợp đồng bao tiêu: <strong>{data.supplyChain.contract.code}</strong>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="tr-step-transfer" aria-hidden="true">
+                          <div className="tr-step-transfer-track">
+                            <div className="tr-step-mini-dot" />
+                            <div className="tr-step-mini-dot" />
+                            <div className="tr-step-mini-dot" />
+                          </div>
+                        </div>
+                      </div>
 
-                  {stampHasGis && (
-                    <div style={{ marginTop: 12 }}>
-                      <button
-                        type="button"
-                        className="tr-puc-gis-btn"
-                        onClick={openStampGisModal}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="17"
-                          height="17"
-                          fill="none"
-                          aria-hidden="true"
-                          className="tr-puc-gis-pin"
+                      <div className="tr-step-item">
+                        <div className="tr-step-segment">
+                          <div className="tr-step-track-col" aria-hidden="true">
+                            <div
+                              className="tr-step-capsule"
+                              style={{ background: "linear-gradient(180deg, #10b981 0%, #34d399 100%)" }}
+                            >
+                              <div className="tr-step-dot" />
+                              <div className="tr-step-dot" />
+                            </div>
+                          </div>
+                          <div className="tr-step-content tr-step-card-mint">
+                            <div className="tr-step-head">
+                              <strong>2. SƠ CHẾ &amp; ĐÓNG GÓI (PHC)</strong>
+                              <span className="tr-step-tag">Nhà máy đóng gói</span>
+                            </div>
+                            <p className="tr-step-desc">
+                              Tại <strong>{data.supplyChain.packhouse.name || "Cơ sở đóng gói liên kết HTX Cư Né"}</strong> (Mã PHC:{" "}
+                              <strong>{data.supplyChain.packhouse.code || "VN-DLPH-0089"}</strong>).
+                              {data.supplyChain.packhouse.treatmentMethod && (
+                                <>
+                                  <br />• <strong>Phương pháp sơ chế:</strong> {data.supplyChain.packhouse.treatmentMethod}
+                                </>
+                              )}
+                              {(data.supplyChain.packhouse.gradeAPct !== null ||
+                                data.supplyChain.packhouse.avgBrix !== null) && (
+                                <>
+                                  <br />• <strong>Phân loại chất lượng:</strong>{" "}
+                                  {data.supplyChain.packhouse.gradeAPct !== null
+                                    ? `Hạng A (${data.supplyChain.packhouse.gradeAPct}%)`
+                                    : ""}
+                                  {data.supplyChain.packhouse.gradeAPct !== null &&
+                                  data.supplyChain.packhouse.avgBrix !== null
+                                    ? " · "
+                                    : ""}
+                                  {data.supplyChain.packhouse.avgBrix !== null ? (
+                                    <>
+                                      Độ ngọt bình quân <strong>{data.supplyChain.packhouse.avgBrix}° Brix</strong>
+                                    </>
+                                  ) : null}
+                                  .
+                                </>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="tr-step-transfer" aria-hidden="true">
+                          <div className="tr-step-transfer-track">
+                            <div className="tr-step-mini-dot" />
+                            <div className="tr-step-mini-dot" />
+                            <div className="tr-step-mini-dot" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="tr-step-item">
+                        <div className="tr-step-segment">
+                          <div className="tr-step-track-col" aria-hidden="true">
+                            <div
+                              className="tr-step-capsule"
+                              style={{ background: "linear-gradient(180deg, #8b5cf6 0%, #a78bfa 100%)" }}
+                            >
+                              <div className="tr-step-dot" />
+                              <div className="tr-step-dot" />
+                            </div>
+                          </div>
+                          <div className="tr-step-content tr-step-card-lavender">
+                            <div className="tr-step-head">
+                              <strong>3. VẬN CHUYỂN CHUỖI LẠNH (COLD CHAIN)</strong>
+                              <span className="tr-step-tag">Bảo quản nhiệt độ</span>
+                            </div>
+                            <p className="tr-step-desc">
+                              {data.supplyChain.transport.transporter || data.supplyChain.transport.vehiclePlate ? (
+                                <>
+                                  Đơn vị vận chuyển:{" "}
+                                  <strong>
+                                    {data.supplyChain.transport.transporter || "Đang cập nhật đơn vị vận tải"}
+                                  </strong>
+                                  {data.supplyChain.transport.vehiclePlate ? (
+                                    <>
+                                      {" "}
+                                      · Biển số <strong>{data.supplyChain.transport.vehiclePlate}</strong>
+                                    </>
+                                  ) : null}
+                                  {data.supplyChain.transport.temperatureC !== null ? (
+                                    <>
+                                      {" "}
+                                      · Bảo quản ở <strong>{data.supplyChain.transport.temperatureC}°C</strong>
+                                    </>
+                                  ) : null}
+                                  .
+                                </>
+                              ) : (
+                                "Thông tin phương tiện vận chuyển lạnh sẽ được cập nhật khi lô hàng xuất bến."
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="tr-step-transfer" aria-hidden="true">
+                          <div className="tr-step-transfer-track">
+                            <div className="tr-step-mini-dot" />
+                            <div className="tr-step-mini-dot" />
+                            <div className="tr-step-mini-dot" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="tr-step-item">
+                        <div className="tr-step-segment">
+                          <div className="tr-step-track-col" aria-hidden="true">
+                            <div
+                              className="tr-step-capsule"
+                              style={{ background: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)" }}
+                            >
+                              <div className="tr-step-dot" />
+                              <div className="tr-step-dot" />
+                            </div>
+                          </div>
+                          <div className="tr-step-content tr-step-card-peach">
+                            <div className="tr-step-head">
+                              <strong>4. ĐỐI CHIẾU KIỂM ĐỊNH &amp; DÁN TEM QR</strong>
+                              <span className="tr-step-tag">
+                                Thị trường {data.lot?.market || "Xuất khẩu & Nội địa"}
+                              </span>
+                            </div>
+                            <p className="tr-step-desc">
+                              {data.labTests[0]
+                                ? data.labTests[0].result === "pass"
+                                  ? `Đã có phiếu kiểm nghiệm ${data.labTests[0].code} đạt chuẩn an toàn thực phẩm trước khi lưu hành tem QR.`
+                                  : `Phiếu kiểm nghiệm ${data.labTests[0].code} đang ghi nhận chỉ tiêu cần rà soát kỹ thuật.`
+                                : "Đang chờ đồng bộ phiếu kiểm nghiệm độc lập cho lô hàng trước khi thông quan xuất khẩu."}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {/* ─── Thẻ 5: Hộ nông dân canh tác / Đóng góp lô hàng thực tế (Có ảnh đại diện hộ) ─── */}
+                {(() => {
+                  const householdsList = data.households ?? [];
+                  const sumContribKg = householdsList.reduce(
+                    (sum, h) => sum + (h.weightKg && h.weightKg > 0 ? Number(h.weightKg) : 0),
+                    0,
+                  );
+                  const denomKg = totalLotKg > 0 ? totalLotKg : sumContribKg;
+
+                  const sectionTitle = data.farmerStamp
+                    ? "Hộ nông dân canh tác & sở hữu tem"
+                    : "Hộ nông dân đóng góp lô hàng";
+
+                  const sectionSub = data.farmerStamp
+                    ? "Thông tin hộ xã viên được cấp mã tem truy xuất nguồn gốc tại vườn."
+                    : "Sản lượng sầu riêng thực tế ghi nhận từ các hộ xã viên tham gia đóng góp vào lô hàng này.";
+
+                  const stampHasGis = Boolean(
+                    data.farmerStamp &&
+                      (data.farmerStamp.geometryJson ||
+                        (data.farmerStamp.lat !== null &&
+                          data.farmerStamp.lat !== undefined &&
+                          data.farmerStamp.lng !== null &&
+                          data.farmerStamp.lng !== undefined)),
+                  );
+
+                  return (
+                    <section className="tr-card tr-lot-order-farmers">
+                      <div className="tr-card-header">
+                        <h2 className="tr-card-title">{sectionTitle}</h2>
+                        <span className="tr-count-badge">{householdsList.length} hộ</span>
+                      </div>
+                      <p className="tr-card-sub">{sectionSub}</p>
+
+                      {householdsList.length === 0 ? (
+                        <div className="tr-farmer-empty">
+                          Chưa ghi nhận số liệu đóng góp sản lượng của hộ nông dân cho lô hàng này.
+                        </div>
+                      ) : (
+                        <div className="tr-farmer-list">
+                          {householdsList.map((h, i) => {
+                            const realWeightKg =
+                              h.weightKg !== null && h.weightKg !== undefined && Number(h.weightKg) > 0
+                                ? Number(h.weightKg)
+                                : null;
+                            const pct =
+                              realWeightKg !== null && denomKg > 0
+                                ? ((realWeightKg / denomKg) * 100).toFixed(1)
+                                : null;
+
+                            return (
+                              <div key={i} className="tr-farmer-item">
+                                <div className="tr-farmer-row-left">
+                                  <HouseholdPortrait
+                                    avatarUrl={h.avatarUrl ?? data.farmerStamp?.avatarUrl}
+                                    name={h.householdName}
+                                    className="tr-farmer-avatar"
+                                  />
+                                  <div className="tr-farmer-main">
+                                    <strong className="tr-farmer-name">{h.householdName}</strong>
+                                    <span className="tr-farmer-sub">
+                                      Thôn: {h.village} · Mã hộ: {h.householdCode}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="tr-farmer-qty">
+                                  {data.farmerStamp ? (
+                                    data.farmerStamp.status === "activated" && realWeightKg !== null ? (
+                                      <>
+                                        <span className="tr-farmer-kg">
+                                          {realWeightKg.toLocaleString("vi-VN")} kg
+                                        </span>
+                                        <span className="tr-farmer-pct">Khối lượng quả thu hái</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="tr-farmer-pending">Chưa kích hoạt thu hái</span>
+                                        <span className="tr-farmer-pct">
+                                          {(h.contributedKg ?? 0) > 0
+                                            ? `Đã góp ${Number(h.contributedKg).toLocaleString("vi-VN")} kg (${h.lotCount ?? 1} lô)`
+                                            : "Chưa đóng góp lô hàng"}
+                                        </span>
+                                      </>
+                                    )
+                                  ) : realWeightKg !== null ? (
+                                    <>
+                                      <span className="tr-farmer-kg">
+                                        {realWeightKg.toLocaleString("vi-VN")} kg
+                                      </span>
+                                      {pct !== null && <span className="tr-farmer-pct">({pct}%)</span>}
+                                    </>
+                                  ) : (
+                                    <span className="tr-farmer-pending">Chưa ghi nhận sản lượng</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {stampHasGis && (
+                        <div style={{ marginTop: 12 }}>
+                          <button
+                            type="button"
+                            className="tr-puc-gis-btn"
+                            onClick={openStampGisModal}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              width="17"
+                              height="17"
+                              fill="none"
+                              aria-hidden="true"
+                              className="tr-puc-gis-pin"
+                            >
+                              <path
+                                d="M12 2.2C7.86 2.2 4.5 5.56 4.5 9.7c0 5.38 6.42 11.45 6.7 11.7a1.2 1.2 0 0 0 1.6 0c.28-.25 6.7-6.32 6.7-11.7 0-4.14-3.36-7.5-7.5-7.5Zm0 10.3a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6Z"
+                                fill="currentColor"
+                              />
+                            </svg>
+                            <span>Xem trên bản đồ</span>
+                          </button>
+                        </div>
+                      )}
+                    </section>
+                  );
+                })()}
+
+                {/* ─── Thẻ 6: Nhật ký canh tác chứng minh tại vườn ─── */}
+                {data.diaries.length > 0 && (
+                  <ProvenDiarySection
+                    diaries={data.diaries}
+                    title="NHẬT KÝ CANH TÁC CHỨNG MINH"
+                    subtitle="Lịch sử phun thuốc BVTV (kèm thời gian cách ly PHI), bón phân và chăm sóc tại vườn."
+                    className="tr-lot-order-diary"
+                  />
+                )}
+              </div>
+
+              <div className="tr-lot-col-side">
+                {/* ─── Thẻ 3: Kiểm tra an toàn thực phẩm ─── */}
+                {(() => {
+                  const firstLab = data.labTests[0] ?? null;
+                  const isLabFail = Boolean(
+                    firstLab &&
+                      (firstLab.result !== "pass" ||
+                        Number(firstLab.cdMgKg) > 0.05 ||
+                        firstLab.yellowOPositive ||
+                        (firstLab.chlorpyrifosMgKg ?? 0) > 0.01),
+                  );
+                  return (
+                    <section className="tr-card tr-lot-order-lab">
+                      <div className="tr-card-header">
+                        <h2 className="tr-card-title">Kiểm tra an toàn thực phẩm</h2>
+                        <span
+                          className={
+                            !firstLab ? "tr-badge-neutral" : isLabFail ? "tr-badge-red" : "tr-badge-green"
+                          }
                         >
-                          <path
-                            d="M12 2.2C7.86 2.2 4.5 5.56 4.5 9.7c0 5.38 6.42 11.45 6.7 11.7a1.2 1.2 0 0 0 1.6 0c.28-.25 6.7-6.32 6.7-11.7 0-4.14-3.36-7.5-7.5-7.5Zm0 10.3a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6Z"
-                            fill="currentColor"
-                          />
-                        </svg>
-                        <span>Xem bản đồ ranh giới GIS của vườn</span>
-                      </button>
-                    </div>
-                  )}
-                </section>
-              );
-            })()}
+                          {firstLab ? (isLabFail ? "Không đạt" : "Đạt chuẩn") : "Chưa có mẫu"}
+                        </span>
+                      </div>
+                      <p className="tr-card-sub">
+                        {firstLab
+                          ? `Phiếu kiểm nghiệm ${firstLab.code} (${formatDate(firstLab.sampledOn)}) tại ${firstLab.lab}.`
+                          : "Chưa có phiếu kiểm nghiệm gắn với mã truy xuất này trên hệ thống."}
+                      </p>
 
-            {/* ─── Thẻ 6: Nhật ký canh tác chứng minh tại vườn ─── */}
-            {data.diaries.length > 0 && (
-              <ProvenDiarySection
-                diaries={data.diaries}
-                title="NHẬT KÝ CANH TÁC CHỨNG MINH"
-                subtitle="Lịch sử phun thuốc BVTV (kèm thời gian cách ly PHI), bón phân và chăm sóc tại vườn."
-              />
-            )}
+                      {firstLab && (
+                        <div className="tr-safety-list">
+                          <div className="tr-safety-item">
+                            <div className="tr-safety-info">
+                              <strong className="tr-safety-name">Kim loại nặng Cadimi (Cd)</strong>
+                              <span className="tr-safety-detail">
+                                Kết quả: {firstLab.cdMgKg} mg/kg (Mức tối đa cho phép: 0.05 mg/kg)
+                              </span>
+                            </div>
+                            <span className={Number(firstLab.cdMgKg) <= 0.05 ? "tr-pass-pill" : "tr-fail-pill"}>
+                              {Number(firstLab.cdMgKg) <= 0.05 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
+                            </span>
+                          </div>
+
+                          <div className="tr-safety-item">
+                            <div className="tr-safety-info">
+                              <strong className="tr-safety-name">Chất nhuộm Vàng O (Chất cấm)</strong>
+                              <span className="tr-safety-detail">
+                                Kết quả: {firstLab.yellowOPositive ? "Dương tính" : "Âm tính (Không phát hiện)"}
+                              </span>
+                            </div>
+                            <span className={firstLab.yellowOPositive ? "tr-fail-pill" : "tr-pass-pill"}>
+                              {firstLab.yellowOPositive ? "KHÔNG ĐẠT" : "AN TOÀN"}
+                            </span>
+                          </div>
+
+                          <div className="tr-safety-item">
+                            <div className="tr-safety-info">
+                              <strong className="tr-safety-name">Dư lượng thuốc trừ sâu Chlorpyrifos</strong>
+                              <span className="tr-safety-detail">
+                                Kết quả:{" "}
+                                {firstLab.chlorpyrifosMgKg !== null &&
+                                firstLab.chlorpyrifosMgKg !== undefined
+                                  ? `${firstLab.chlorpyrifosMgKg} mg/kg`
+                                  : "KPH (Không phát hiện dư lượng)"}
+                              </span>
+                            </div>
+                            <span className={(firstLab.chlorpyrifosMgKg ?? 0) <= 0.01 ? "tr-pass-pill" : "tr-fail-pill"}>
+                              {(firstLab.chlorpyrifosMgKg ?? 0) <= 0.01 ? "ĐẠT CHUẨN" : "VƯỢT NGƯỠNG"}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </section>
+                  );
+                })()}
+
+                {/* ─── Thẻ 4: Thông số vùng trồng & Chứng nhận ─── */}
+                <section className="tr-card tr-lot-order-legal">
+                  <div className="tr-card-header">
+                    <h2 className="tr-card-title">Hồ sơ pháp lý &amp; Vùng trồng</h2>
+                  </div>
+
+                  <div className="tr-data-list">
+                    <div className="tr-data-row">
+                      <span className="tr-data-label">Mã số vùng trồng (PUC)</span>
+                      <strong className="tr-data-val highlight">{data.puc.code}</strong>
+                    </div>
+
+                    <div className="tr-data-row">
+                      <span className="tr-data-label">Mã cơ sở đóng gói (PHC)</span>
+                      <strong className="tr-data-val highlight">
+                        {data.supplyChain?.packhouse.code || "VN-DLPH-0089"}
+                      </strong>
+                    </div>
+
+                    <div className="tr-data-row">
+                      <span className="tr-data-label">Đơn vị đại diện</span>
+                      <strong className="tr-data-val">{data.puc.name}</strong>
+                    </div>
+
+                    <div className="tr-data-row">
+                      <span className="tr-data-label">Địa chỉ vùng trồng</span>
+                      <strong className="tr-data-val">{data.puc.location}</strong>
+                    </div>
+
+                    <div className="tr-data-row">
+                      <span className="tr-data-label">Quy chuẩn áp dụng</span>
+                      <strong className="tr-data-val">{data.puc.standard}</strong>
+                    </div>
+
+                    <div className="tr-data-row">
+                      <span className="tr-data-label">
+                        {data.lot ? "Doanh nghiệp thu mua" : "Đơn vị quản lý & liên kết"}
+                      </span>
+                      <strong className="tr-data-val">
+                        {data.lot?.buyer || "HTX Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né"}
+                      </strong>
+                    </div>
+
+                    <div className="tr-data-row">
+                      <span className="tr-data-label">
+                        {data.lot ? "Thị trường tiêu thụ" : "Định hướng thị trường"}
+                      </span>
+                      <strong className="tr-data-val">
+                        {data.lot?.market || "Xuất khẩu chính ngạch & Nội địa"}
+                      </strong>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
 
             {/* ─── Thao tác nhanh cho điện thoại & máy tính ─── */}
             <div className="tr-actions">
+              <Link href="/" className="tr-home-btn">
+                <ArrowLeft size={17} strokeWidth={2.3} aria-hidden="true" />
+                <span>Trang chủ</span>
+              </Link>
               <button type="button" className="tr-print-btn" onClick={handlePrint}>
-                <Printer size={18} strokeWidth={2.2} aria-hidden="true" />
+                <Printer size={17} strokeWidth={2.2} aria-hidden="true" />
                 <span>In hồ sơ / Lưu PDF</span>
               </button>
               <button type="button" className="tr-share-btn" onClick={handleShare}>
                 {copied ? (
                   <>
-                    <Check size={18} strokeWidth={2.4} aria-hidden="true" />
+                    <Check size={17} strokeWidth={2.4} aria-hidden="true" />
                     <span>Đã sao chép liên kết</span>
                   </>
                 ) : (
                   <>
-                    <Share2 size={18} strokeWidth={2.2} aria-hidden="true" />
+                    <Share2 size={17} strokeWidth={2.2} aria-hidden="true" />
                     <span>Chia sẻ hồ sơ truy xuất</span>
                   </>
                 )}
