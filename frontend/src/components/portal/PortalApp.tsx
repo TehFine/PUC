@@ -15,7 +15,6 @@ import {
   Scale,
   Trash2,
   TreePine,
-  UserCheck,
   type LucideIcon,
 } from "lucide-react";
 import { type ChangeEvent, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -692,43 +691,45 @@ function PortalAppContent() {
             </div>
 
             <div className="pt-profile-photo-card">
-              <div className="pt-profile-photo-info">
-                <strong className="pt-profile-photo-title">
-                  {t("Ảnh đại diện hộ & Hồ sơ truy xuất QR")}
-                </strong>
-                <span className="pt-profile-photo-desc">
-                  {t("Hiển thị trên màn hình Truy xuất nguồn gốc khi cán bộ, doanh nghiệp quét mã QR tại vườn.")}
-                </span>
-              </div>
-              <div className="pt-profile-photo-actions">
-                <button
-                  type="button"
-                  className="pt-profile-photo-upload-btn"
-                  onClick={() => avatarInputRef.current?.click()}
-                  disabled={uploadingAvatar}
-                >
-                  <Camera size={15} strokeWidth={2.2} aria-hidden="true" />
-                  <span>
-                    {uploadingAvatar
-                      ? t("Đang tải ảnh…")
-                      : avatarUrl
-                        ? t("Đổi ảnh hộ")
-                        : t("Tải ảnh hộ lên")}
+              <div className="pt-profile-photo-main">
+                <div className="pt-profile-photo-info">
+                  <strong className="pt-profile-photo-title">
+                    {t("Ảnh đại diện hộ")}
+                  </strong>
+                  <span className="pt-profile-photo-desc">
+                    {t("Hiển thị trên hồ sơ truy xuất QR")}
                   </span>
-                </button>
-                {avatarUrl && (
+                </div>
+                <div className="pt-profile-photo-actions">
                   <button
                     type="button"
-                    className="pt-profile-photo-remove-btn"
-                    onClick={() => void handleRemoveAvatar()}
+                    className="pt-profile-photo-upload-btn"
+                    onClick={() => avatarInputRef.current?.click()}
                     disabled={uploadingAvatar}
-                    title={t("Gỡ ảnh đại diện hiện tại")}
-                    aria-label={t("Gỡ ảnh đại diện hiện tại")}
                   >
-                    <Trash2 size={14} strokeWidth={2.1} aria-hidden="true" />
-                    <span>{t("Gỡ")}</span>
+                    <RadialPngIcon src="/up-loading.png" size={15} />
+                    <span>
+                      {uploadingAvatar
+                        ? t("Đang tải ảnh…")
+                        : avatarUrl
+                          ? t("Đổi ảnh")
+                          : t("Tải ảnh lên")}
+                    </span>
                   </button>
-                )}
+                  {avatarUrl && (
+                    <button
+                      type="button"
+                      className="pt-profile-photo-remove-btn"
+                      onClick={() => void handleRemoveAvatar()}
+                      disabled={uploadingAvatar}
+                      title={t("Gỡ ảnh đại diện hiện tại")}
+                      aria-label={t("Gỡ ảnh đại diện hiện tại")}
+                    >
+                      <Trash2 size={14} strokeWidth={2.1} aria-hidden="true" />
+                      <span>{t("Gỡ")}</span>
+                    </button>
+                  )}
+                </div>
               </div>
               {avatarError && <InlineError message={avatarError} />}
             </div>
@@ -829,8 +830,8 @@ function PortalAppContent() {
                 className="pt-profile-intro-btn"
                 onClick={openEditAccount}
               >
-                <span className="pt-profile-action-icon" aria-hidden="true" style={{ color: "#166534" }}>
-                  <UserCheck size={20} />
+                <span className="pt-profile-action-icon" aria-hidden="true">
+                  <RadialPngIcon src="/update.png" size={21} />
                 </span>
                 <span className="pt-profile-action-title">{t("Cập nhật Email Google & Tài khoản")}</span>
                 <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />

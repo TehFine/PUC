@@ -101,6 +101,10 @@ const EXACT_MAP: Record<string, string> = {
 
   // ─── Hồ sơ tài khoản & Đổi mật khẩu & Thông báo ───
   "Thông tin tài khoản": "账户信息",
+  "Ảnh đại diện hộ": "农户头像",
+  "Hiển thị trên hồ sơ truy xuất QR": "显示在溯源二维码档案上",
+  "Tải ảnh lên": "上传照片",
+  "Đổi ảnh": "更换照片",
   "Ảnh đại diện hộ & Hồ sơ truy xuất QR": "农户头像与溯源二维码档案照",
   "Hiển thị trên màn hình Truy xuất nguồn gốc khi cán bộ, doanh nghiệp quét mã QR tại vườn.":
     "当检查人员或出口企业在果园扫描二维码时，将显示在溯源档案页面上。",
