@@ -1413,26 +1413,97 @@ body {
 
 .plotmap-hint {
   position: absolute;
-  top: 52px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 56px;
+  left: 16px;
+  right: auto;
+  transform: none;
   z-index: 645;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  max-width: calc(100% - 376px);
-  padding: 10px 12px 10px 18px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 288px;
+  max-width: calc(100% - 32px);
+  padding: 15px 16px;
   background: rgba(255, 255, 255, 0.98);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  box-shadow: var(--shadow-md);
+  border: 1px solid rgba(20, 55, 47, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05);
+  animation: fadeIn 0.18s ease;
 }
 
-.plotmap-hint-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.plotmap-hint-text strong { font-size: 12.5px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
-.plotmap-hint-text span { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.plotmap-hint-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.plotmap-hint-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.plotmap-hint-head strong {
+  font-family: var(--font-display-stack);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.plotmap-hint-head span {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.plotmap-hint-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 9px 10px;
+  background: #f4f7f5;
+  border-radius: 12px;
+  border: 1px solid rgba(20, 55, 47, 0.06);
+}
+.plotmap-hint-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.plotmap-hint-stat small {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.plotmap-hint-stat b {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plotmap-hint-edit-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.plotmap-hint-edit-tools .btn {
+  justify-content: center;
+  padding: 6px 6px;
+  font-size: 11.5px;
+}
+
+.plotmap-hint-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.plotmap-hint-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
 
 .plotmap-loading {
   position: absolute;
@@ -2205,8 +2276,9 @@ body {
   .zones-map-area .plotmap-hint {
     top: 132px;
     left: 372px;
-    right: 372px;
-    max-width: none;
+    right: auto;
+    width: 292px;
+    max-width: calc(100vw - 404px);
     transform: none;
   }
 }
@@ -2219,6 +2291,12 @@ body {
   .zones-map-area .plotmap-toolbar {
     left: 332px;
     right: 24px;
+  }
+
+  .zones-map-area .plotmap-hint {
+    left: 332px;
+    right: auto;
+    max-width: calc(100vw - 360px);
   }
 
   .zones-map-area .plotmap-panel,
@@ -3480,9 +3558,9 @@ select.form-input {
   .zones-map-area .plotmap-hint {
     top: 256px;
     left: 10px;
-    right: 10px;
+    right: auto;
+    width: min(284px, calc(100vw - 20px));
     transform: none;
-    max-width: none;
   }
 
   /* Bottom sheet: tổng quan / chi tiết vùng / danh sách thửa */
@@ -4369,10 +4447,10 @@ select.form-input {
   .zones-map-area .plotmap-zoom { display: none; }
   .zones-map-area .plotmap-hint {
     top: 160px;
-    left: 8px;
-    right: 8px;
+    left: 10px;
+    right: auto;
+    width: min(276px, calc(100vw - 20px));
     transform: none;
-    max-width: none;
   }
   .zones-map-area .plotmap-panel,
   .zones-map-area .plotmap-popup {
