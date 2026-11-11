@@ -256,14 +256,13 @@ export default function Harvest() {
               <input
                 type="text"
                 className="filter-input"
-                style={{ width: 220, padding: "5px 10px" }}
+                style={{ width: 220 }}
                 placeholder="Tìm mã lô, đơn vị mua…"
                 value={lotQ}
                 onChange={(e) => setLotQ(e.target.value)}
               />
               <select
                 className="filter-select"
-                style={{ padding: "5px 9px" }}
                 value={lotMarket}
                 onChange={(e) => setLotMarket(e.target.value)}
               >
@@ -276,7 +275,6 @@ export default function Harvest() {
               </select>
               <select
                 className="filter-select"
-                style={{ padding: "5px 9px" }}
                 value={lotStatus}
                 onChange={(e) => setLotStatus(e.target.value)}
               >
@@ -436,14 +434,13 @@ export default function Harvest() {
               <input
                 type="text"
                 className="filter-input"
-                style={{ width: 220, padding: "5px 10px" }}
+                style={{ width: 220 }}
                 placeholder="Tìm theo hộ, mã thửa…"
                 value={declQ}
                 onChange={(e) => setDeclQ(e.target.value)}
               />
               <select
                 className="filter-select"
-                style={{ padding: "5px 9px" }}
                 value={declStatus}
                 onChange={(e) => setDeclStatus(e.target.value)}
               >
@@ -564,7 +561,7 @@ export default function Harvest() {
               <input
                 type="text"
                 className="filter-input"
-                style={{ width: 220, padding: "5px 10px" }}
+                style={{ width: 220 }}
                 placeholder="Tìm mã đợt, hộ dân, vụ mùa…"
                 value={stampQ}
                 onChange={(e) => setStampQ(e.target.value)}
@@ -652,7 +649,7 @@ export default function Harvest() {
               <input
                 type="text"
                 className="filter-input"
-                style={{ width: 220, padding: "5px 10px" }}
+                style={{ width: 220 }}
                 placeholder="Tìm số hợp đồng, tiêu đề…"
                 value={contractQ}
                 onChange={(e) => setContractQ(e.target.value)}
@@ -749,7 +746,7 @@ export default function Harvest() {
               <input
                 type="text"
                 className="filter-input"
-                style={{ width: 220, padding: "5px 10px" }}
+                style={{ width: 220 }}
                 placeholder="Tìm mã DN, tên doanh nghiệp…"
                 value={entQ}
                 onChange={(e) => setEntQ(e.target.value)}
