@@ -101,6 +101,7 @@ export type PortalKey =
   | "schedule"
   | "violations"
   | "harvest"
+  | "harvest-notices"
   | "harvest-declarations"
   | "stamps"
   | "approvals"

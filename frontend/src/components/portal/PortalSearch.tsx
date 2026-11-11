@@ -20,7 +20,6 @@ export type PortalAction =
   | "journal-add"
   | "spray-add"
   | "spray-list"
-  | "decl-add"
   | "harvest-lots"
   | "learn-pesticides"
   | "learn-fertilizers"
@@ -84,19 +83,12 @@ const ENTRIES: SearchEntry[] = [
     popular: true,
   },
   {
-    id: "decl-add",
-    title: "Khai báo thu hái",
-    where: "Thu hoạch › Khai báo",
-    keywords: "khai bao thu hai thu hoach hai trai san luong kg can trong luong loai a b ban",
-    target: { kind: "tab", tab: "stamps", action: "decl-add" },
-    popular: true,
-  },
-  {
     id: "harvest-lots",
     title: "Lô hàng, tem & mã QR",
-    where: "Thu hoạch › Lô hàng",
-    keywords: "lo hang tem ma qr truy xuat nguon goc kich hoat xuat khau",
+    where: "Thu hoạch",
+    keywords: "thu hoach hai trai san luong lo hang tem ma qr truy xuat nguon goc kich hoat xuat khau",
     target: { kind: "tab", tab: "stamps", action: "harvest-lots" },
+    popular: true,
   },
   {
     id: "plots",

@@ -182,6 +182,15 @@ export interface PortalHarvest {
   status: "exported" | "delivered" | "in_transit" | "sampling";
 }
 
+export interface PortalHarvestNotice {
+  id: number;
+  title: string;
+  body: string | null;
+  link: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
 export type HarvestDeclarationStatus = "submitted" | "confirmed" | "rejected";
 
 export interface PortalHarvestDeclaration {

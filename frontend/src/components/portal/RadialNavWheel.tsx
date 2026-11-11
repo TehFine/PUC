@@ -61,7 +61,7 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     id: "stamps",
     label: "Thu hoạch",
-    desc: "Khai báo sản lượng và lô xuất kho.",
+    desc: "Theo dõi lô xuất kho và tem truy xuất.",
     icon: QrTagIcon,
     color: "#111827",
     activeColor: "#e05a2b",

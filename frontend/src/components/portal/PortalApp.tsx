@@ -630,7 +630,7 @@ function PortalAppContent() {
           {tab === "home" && <HomeTab onNavigate={navigate} />}
           {tab === "plots" && <PlotsTab />}
           {tab === "diary" && <DiaryTab initialAction={intent.action} />}
-          {tab === "stamps" && <StampsTab overview={overview} initialAction={intent.action} />}
+          {tab === "stamps" && <StampsTab overview={overview} />}
           {tab === "inspection" && <InspectionTab onNavigate={navigate} />}
           {tab === "learn" && <LearnTab initialAction={intent.action} />}
           <SupportFooter onOpen={openSupport} />
