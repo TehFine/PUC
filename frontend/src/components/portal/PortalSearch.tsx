@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortalLang } from "./i18n";
 import type { PortalTabId } from "./PortalApp";
 import { RadialPngIcon } from "./RadialIcons";
-import { Sheet, useSheetClose } from "./ui";
+import { DrawerSummaryFooter, Sheet, useSheetClose } from "./ui";
 
 /**
  * Tìm kiếm "chức năng" cho bà con: gõ bất kỳ chữ nào (có dấu hay không dấu đều được) để được gợi ý
@@ -272,14 +273,26 @@ function ResultList({ items, onPick }: { items: SearchEntry[]; onPick: (target: 
   );
 }
 
-function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void }) {
+const FALLBACK_ENTRIES = [
+  ...ENTRIES.filter((e) => e.id === "support"),
+  ...POPULAR.filter((e) => e.id !== "support"),
+];
+
+function SearchPanel({
+  query,
+  setQuery,
+  results,
+  onPick,
+}: {
+  query: string;
+  setQuery: (next: string) => void;
+  results: SearchEntry[];
+  onPick: (target: PortalSearchTarget) => void;
+}) {
   const close = useSheetClose();
   const { isZh, t } = usePortalLang();
-  const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const touchStartY = useRef<number | null>(null);
-  const activeIndex = useMemo(() => (isZh ? buildZhIndex(t) : VI_INDEX), [isZh, t]);
-  const results = useMemo(() => searchEntries(query, activeIndex), [query, activeIndex]);
   const hasQuery = query.trim().length > 0;
 
   // Máy tính có chuột: tự đặt con trỏ vào ô nhập sau khi popup trượt lên xong.
@@ -288,7 +301,7 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
   useEffect(() => {
     const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     if (!canHover) return;
-    const timer = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 360);
+    const timer = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 320);
     return () => clearTimeout(timer);
   }, []);
 
@@ -347,7 +360,7 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
             onClick={(e) => {
               e.preventDefault();
               setQuery("");
-              inputRef.current?.focus();
+              inputRef.current?.focus({ preventScroll: true });
             }}
             aria-label={t("Xóa từ khóa tìm kiếm")}
           >
@@ -370,21 +383,89 @@ function SearchPanel({ onPick }: { onPick: (target: PortalSearchTarget) => void 
         </p>
       )}
 
-      <h3 className="pt-search-heading">{t("Gợi ý")}</h3>
+      <h3 className="pt-search-heading">
+        {hasQuery && results.length > 0 ? t("Kết quả phù hợp") : t("Gợi ý")}
+      </h3>
 
       <div className="pt-search-scroll">
         {!hasQuery && <ResultList items={POPULAR} onPick={pick} />}
 
         {hasQuery && results.length > 0 && <ResultList items={results} onPick={pick} />}
 
-        {hasQuery && results.length === 0 && (
-          <ResultList
-            items={[...ENTRIES.filter((e) => e.id === "support"), ...POPULAR.filter((e) => e.id !== "support")]}
-            onPick={pick}
-          />
-        )}
+        {hasQuery && results.length === 0 && <ResultList items={FALLBACK_ENTRIES} onPick={pick} />}
       </div>
     </div>
+  );
+}
+
+function SearchDrawerFooter({
+  query,
+  results,
+  onPick,
+}: {
+  query: string;
+  results: SearchEntry[];
+  onPick: (target: PortalSearchTarget) => void;
+}) {
+  const close = useSheetClose();
+  const { t } = usePortalLang();
+  const hasQuery = query.trim().length > 0;
+  const topMatch = hasQuery ? results[0] : undefined;
+
+  const trigger = (target: PortalSearchTarget) => {
+    onPick(target);
+    if (close) close();
+  };
+
+  return (
+    <DrawerSummaryFooter
+      actions={
+        topMatch ? (
+          <button
+            type="button"
+            className="pt-drawer-cta"
+            onClick={() => trigger(topMatch.target)}
+          >
+            <span>{t("Mở kết quả đầu")}</span>
+            <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="pt-drawer-cta"
+            onClick={() => trigger({ kind: "global", action: "support" })}
+          >
+            <span>{t("Liên hệ hỗ trợ HTX")}</span>
+            <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+        )
+      }
+    />
+  );
+}
+
+function PortalSearchDialog({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (target: PortalSearchTarget) => void;
+}) {
+  const { isZh, t } = usePortalLang();
+  const [query, setQuery] = useState("");
+  const activeIndex = useMemo(() => (isZh ? buildZhIndex(t) : VI_INDEX), [isZh, t]);
+  const results = useMemo(() => searchEntries(query, activeIndex), [query, activeIndex]);
+
+  return (
+    <Sheet
+      variant="drawer"
+      title={t("Tìm chức năng")}
+      onClose={onClose}
+      className="pt-search-sheet"
+      footer={<SearchDrawerFooter query={query} results={results} onPick={onPick} />}
+    >
+      <SearchPanel query={query} setQuery={setQuery} results={results} onPick={onPick} />
+    </Sheet>
   );
 }
 
@@ -425,13 +506,12 @@ export function PortalSearchButton({
         <RadialPngIcon src="/search.png" size={18} />
       </button>
       {open && (
-        <Sheet title={t("Tìm chức năng")} onClose={handleClosed} className="pt-search-sheet">
-          <SearchPanel
-            onPick={(target) => {
-              pendingRef.current = target;
-            }}
-          />
-        </Sheet>
+        <PortalSearchDialog
+          onClose={handleClosed}
+          onPick={(target) => {
+            pendingRef.current = target;
+          }}
+        />
       )}
     </>
   );

@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine } from "lucide-react";
+import { ArrowRight, CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
@@ -47,13 +47,33 @@ const EMPTY_ICONS = {
   lab: Microscope,
 };
 
-export type EmptyIconName = keyof typeof EMPTY_ICONS | "none";
+export type EmptyIconName = keyof typeof EMPTY_ICONS | "none" | "recyclebin" | "empty";
 
 export function EmptyState({ icon, children }: { icon: EmptyIconName; children: ReactNode }) {
   if (icon === "none") {
     return (
       <div className="pt-empty">
         <RadialPngIcon src="/none.png" size={44} className="pt-empty-none-icon" />
+        <p>{children}</p>
+      </div>
+    );
+  }
+  if (icon === "recyclebin") {
+    return (
+      <div className="pt-empty">
+        <span aria-hidden="true">
+          <RadialPngIcon src="/recyclebin.png" size={25} />
+        </span>
+        <p>{children}</p>
+      </div>
+    );
+  }
+  if (icon === "empty") {
+    return (
+      <div className="pt-empty">
+        <span aria-hidden="true">
+          <RadialPngIcon src="/empty.png" size={23} />
+        </span>
         <p>{children}</p>
       </div>
     );
@@ -80,25 +100,84 @@ export function StateBlock({ loading, error, variant = "cards" }: { loading: boo
   return null;
 }
 
-const SheetCloseContext = createContext<(() => void) | null>(null);
+export const SheetCloseContext = createContext<(() => void) | null>(null);
 export const useSheetClose = () => useContext(SheetCloseContext);
 
-/** Hộp thoại dạng bảng trượt từ dưới lên, hỗ trợ vuốt kéo xuống (swipe/drag down to dismiss) mượt mà */
+/** Nhận diện màn hình lớn / laptop (>= 760px) và tự động đồng bộ khi thay đổi kích thước cửa sổ */
+export function useIsDesktopViewport(minWidth = 760): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(`(min-width: ${minWidth}px)`).matches : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia(`(min-width: ${minWidth}px)`);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [minWidth]);
+
+  return matches;
+}
+
+export interface DrawerSummaryRow {
+  label: string;
+  value: ReactNode;
+  tone?: "default" | "accent" | "danger";
+}
+
+/** Khung tổng kết & nút hành động ghim cố định ở chân Drawer màn hình lớn */
+export function DrawerSummaryFooter({
+  rows,
+  actions,
+}: {
+  rows?: DrawerSummaryRow[];
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="pt-drawer-summary">
+      {rows && rows.length > 0 && (
+        <div className="pt-drawer-summary-rows">
+          {rows.map((row) => (
+            <div key={row.label} className="pt-drawer-summary-row">
+              <span className="pt-drawer-summary-label">{row.label}</span>
+              <strong
+                className={`pt-drawer-summary-val ${row.tone && row.tone !== "default" ? `is-${row.tone}` : ""}`.trim()}
+              >
+                {row.value}
+              </strong>
+            </div>
+          ))}
+        </div>
+      )}
+      {actions && <div className="pt-drawer-summary-actions">{actions}</div>}
+    </div>
+  );
+}
+
+/** Hộp thoại dạng ngăn kéo dọc cạnh phải trên màn hình lớn (mặc định `variant="drawer"`), hoặc Bottom Sheet trên di động */
 export function Sheet({
   title,
   onClose,
   children,
+  footer,
+  variant = "drawer",
   className = "",
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  footer?: ReactNode;
+  variant?: "modal" | "drawer";
   className?: string;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const dragZoneRef = useRef<HTMLDivElement>(null);
   const isClosingRef = useRef(false);
+  const isDesktop = useIsDesktopViewport(760);
+  const isDesktopDrawer = variant === "drawer" && isDesktop;
 
   // Đóng dialog mượt mà trực tiếp từ vị trí hiện tại (không bật lại keyframe CSS làm nhảy về 0)
   const handleClose = useCallback(() => {
@@ -107,11 +186,16 @@ export function Sheet({
 
     const sheet = sheetRef.current;
     const backdrop = backdropRef.current;
-    const isDesktop = typeof window !== "undefined" && window.innerWidth >= 760;
+    const desktopNow = typeof window !== "undefined" && window.innerWidth >= 760;
+    const closeDuration = desktopNow && variant === "drawer" ? 240 : 220;
+
     if (sheet) {
       sheet.style.animation = "none";
       sheet.style.pointerEvents = "none";
-      if (isDesktop) {
+      if (desktopNow && variant === "drawer") {
+        sheet.style.transition = "transform 240ms cubic-bezier(0.32, 0.72, 0, 1)";
+        sheet.style.transform = "translate3d(100%, 0, 0)";
+      } else if (desktopNow) {
         sheet.style.transition = "transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out";
         sheet.style.transform = "translate3d(0, 12px, 0) scale(0.97)";
         sheet.style.opacity = "0";
@@ -123,14 +207,14 @@ export function Sheet({
     if (backdrop) {
       backdrop.style.animation = "none";
       backdrop.style.pointerEvents = "none";
-      backdrop.style.transition = "opacity 200ms ease-out";
+      backdrop.style.transition = "opacity 210ms ease-out";
       backdrop.style.opacity = "0";
     }
 
     setTimeout(() => {
       onClose();
-    }, 220);
-  }, [onClose]);
+    }, closeDuration);
+  }, [onClose, variant]);
 
   // Khóa cuộn ở tầng root (<html>) & lắng nghe phím ESC
   useEffect(() => {
@@ -160,34 +244,54 @@ export function Sheet({
     return () => clearTimeout(timer);
   }, []);
 
-  // Vuốt kiểu khung bình luận TikTok / Facebook: cuộn nội dung đến đầu rồi kéo tiếp xuống để đóng popup
-  useSheetSwipe({ sheetRef, handleRef: dragZoneRef, onDismiss: handleClose });
+  // Vuốt kiểu khung bình luận TikTok / Facebook trên mobile; tắt trên ngăn kéo dọc desktop
+  useSheetSwipe({
+    sheetRef,
+    handleRef: dragZoneRef,
+    onDismiss: handleClose,
+    enabled: !isDesktopDrawer,
+  });
 
   const sheetNode = (
     <SheetCloseContext.Provider value={handleClose}>
       <div
         ref={backdropRef}
-        className="pt-sheet-backdrop"
+        className={`pt-sheet-backdrop ${variant === "drawer" ? "is-drawer" : ""}`.trim()}
         onMouseDown={(event) => event.target === event.currentTarget && handleClose()}
       >
         <div
           ref={sheetRef}
-          className={`pt-sheet ${className}`.trim()}
+          className={`pt-sheet ${variant === "drawer" ? "is-drawer" : ""} ${className}`.trim()}
           role="dialog"
           aria-modal="true"
           aria-label={title}
         >
-          {/* Vùng thanh cầm & tiêu đề: nhận thao tác kéo vuốt xuống mượt mà */}
+          {/* Vùng thanh cầm & tiêu đề */}
           <div ref={dragZoneRef} className="pt-sheet-topbar">
             <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
               <div className="pt-sheet-handle-bar" />
             </div>
 
             <header className="pt-sheet-head">
+              {variant === "drawer" && (
+                <button
+                  type="button"
+                  className="pt-drawer-back-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleClose();
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  aria-label="Thu gọn bảng"
+                  title="Thu gọn"
+                >
+                  <ArrowRight size={19} strokeWidth={2.2} aria-hidden="true" />
+                </button>
+              )}
               <h2>{title}</h2>
               <button
                 type="button"
-                className="pt-icon-btn"
+                className="pt-icon-btn pt-sheet-close-btn"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleClose();
@@ -197,12 +301,19 @@ export function Sheet({
               >
                 <CloseCircleIcon size={28} />
               </button>
+              {variant === "drawer" && <span className="pt-drawer-head-spacer" aria-hidden="true" />}
             </header>
           </div>
 
           <div className="pt-sheet-body">
             {children}
           </div>
+
+          {footer && (
+            <footer className="pt-sheet-footer">
+              {footer}
+            </footer>
+          )}
         </div>
       </div>
     </SheetCloseContext.Provider>

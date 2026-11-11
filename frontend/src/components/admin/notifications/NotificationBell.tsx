@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ArrowRight } from "lucide-react";
 import { onCountsChanged, requestAdminNavigate, requestApprovalTab } from "@/components/admin/shared/counts-events";
 import { RadialPngIcon } from "@/components/portal/RadialIcons";
 import { BusyButton } from "@/components/portal/shared/controls";
-import { EmptyState, Sheet, StateBlock } from "@/components/portal/ui";
+import { DrawerSummaryFooter, EmptyState, Sheet, StateBlock, useIsDesktopViewport, useSheetClose } from "@/components/portal/ui";
 import { useApi } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import { formatDate } from "@/utils/format";
@@ -27,8 +28,23 @@ function resolveSectionFromLink(link: string | null, kind?: string): string | nu
   return null;
 }
 
+function AdminDrawerCloseCta() {
+  const close = useSheetClose();
+  return (
+    <button
+      type="button"
+      className="pt-drawer-cta"
+      onClick={() => close?.()}
+    >
+      <span>Đã nắm thông tin</span>
+      <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
+    </button>
+  );
+}
+
 export default function NotificationBell() {
   const { data, loading, error, refresh } = useApi<NotificationList>("/notifications");
+  const isDesktopDrawer = useIsDesktopViewport(760);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -109,7 +125,45 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <Sheet title="Thông báo từ HTX" onClose={() => setOpen(false)}>
+        <Sheet
+          variant="drawer"
+          title="Thông báo từ HTX"
+          onClose={() => setOpen(false)}
+          className="pt-notif-sheet"
+          footer={
+            <DrawerSummaryFooter
+              actions={
+                <>
+                  {readCount > 0 && (
+                    <BusyButton
+                      type="button"
+                      className="pt-drawer-cta-ghost"
+                      busy={clearing}
+                      busyLabel="Đang xóa…"
+                      onClick={() => void clearRead()}
+                    >
+                      <span>Xóa đã đọc ({readCount})</span>
+                    </BusyButton>
+                  )}
+                  {unread > 0 ? (
+                    <BusyButton
+                      type="button"
+                      className="pt-drawer-cta"
+                      busy={busy}
+                      busyLabel="Đang đánh dấu…"
+                      onClick={() => void markAllRead()}
+                    >
+                      <span>Đánh dấu đọc hết</span>
+                      <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
+                    </BusyButton>
+                  ) : (
+                    <AdminDrawerCloseCta />
+                  )}
+                </>
+              }
+            />
+          }
+        >
           <div className="pt-stack" style={{ gap: 14 }}>
             {items.length > 0 && (
               <div className="pt-notif-toolbar">
@@ -129,7 +183,7 @@ export default function NotificationBell() {
                     Chưa đọc ({unread})
                   </button>
                 </div>
-                {(unread > 0 || readCount > 0) && (
+                {!isDesktopDrawer && (unread > 0 || readCount > 0) && (
                   <div className="pt-notif-action-group">
                     {unread > 0 && (
                       <BusyButton
@@ -161,11 +215,19 @@ export default function NotificationBell() {
             <StateBlock loading={loading && items.length === 0} error={error} variant="rows" />
 
             {!loading && visibleItems.length === 0 && (
-              <EmptyState icon="none">
-                {filterMode === "unread"
-                  ? "Bạn đã đọc hết tất cả thông báo."
-                  : "Hiện chưa có thông báo mới nào từ HTX."}
-              </EmptyState>
+              isDesktopDrawer ? (
+                <p className="pt-drawer-empty-note">
+                  {filterMode === "unread"
+                    ? "Bạn đã đọc hết tất cả thông báo."
+                    : "Hiện chưa có thông báo mới nào từ HTX."}
+                </p>
+              ) : (
+                <EmptyState icon="none">
+                  {filterMode === "unread"
+                    ? "Bạn đã đọc hết tất cả thông báo."
+                    : "Hiện chưa có thông báo mới nào từ HTX."}
+                </EmptyState>
+              )
             )}
 
             {visibleItems.length > 0 && (

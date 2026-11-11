@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { ArrowRight } from "lucide-react";
+import { SheetCloseContext, useIsDesktopViewport } from "@/components/portal/ui";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { lockRootScroll } from "@/lib/scroll-lock";
 
 /**
- * Hộp thoại dùng chung cho khu quản trị — đồng bộ thiết kế và thao tác vuốt đóng (Bottom Sheet / Modal)
- * với Cổng hộ dân (`Sheet` trong `portal/ui.tsx`).
+ * Hộp thoại dùng chung cho khu quản trị — đồng bộ thiết kế ngăn kéo dọc cạnh phải trên màn hình lớn
+ * (`variant="drawer"`) và thao tác vuốt đóng Bottom Sheet trên di động với Cổng hộ dân (`Sheet`).
  */
 export function Modal({
   title,
@@ -16,6 +18,7 @@ export function Modal({
   children,
   footer,
   width = 560,
+  variant = "drawer",
   closeOnBackdrop = true,
   className = "",
 }: {
@@ -24,6 +27,7 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   width?: number;
+  variant?: "drawer" | "modal";
   closeOnBackdrop?: boolean;
   className?: string;
 }) {
@@ -33,6 +37,8 @@ export function Modal({
   const dragZoneRef = useRef<HTMLDivElement>(null);
   const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
+  const isDesktop = useIsDesktopViewport(760);
+  const isDesktopDrawer = variant === "drawer" && isDesktop;
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -44,11 +50,16 @@ export function Modal({
 
     const sheet = panelRef.current;
     const backdrop = backdropRef.current;
-    const isDesktop = typeof window !== "undefined" && window.innerWidth >= 760;
+    const desktopNow = typeof window !== "undefined" && window.innerWidth >= 760;
+    const closeDuration = desktopNow && variant === "drawer" ? 240 : 220;
+
     if (sheet) {
       sheet.style.animation = "none";
       sheet.style.pointerEvents = "none";
-      if (isDesktop) {
+      if (desktopNow && variant === "drawer") {
+        sheet.style.transition = "transform 240ms cubic-bezier(0.32, 0.72, 0, 1)";
+        sheet.style.transform = "translate3d(100%, 0, 0)";
+      } else if (desktopNow) {
         sheet.style.transition = "transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out";
         sheet.style.transform = "translate3d(0, 12px, 0) scale(0.97)";
         sheet.style.opacity = "0";
@@ -60,14 +71,14 @@ export function Modal({
     if (backdrop) {
       backdrop.style.animation = "none";
       backdrop.style.pointerEvents = "none";
-      backdrop.style.transition = "opacity 200ms ease-out";
+      backdrop.style.transition = "opacity 210ms ease-out";
       backdrop.style.opacity = "0";
     }
 
     setTimeout(() => {
       onCloseRef.current();
-    }, 220);
-  }, []);
+    }, closeDuration);
+  }, [variant]);
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -126,53 +137,81 @@ export function Modal({
     return () => clearTimeout(timer);
   }, []);
 
-  useSheetSwipe({ sheetRef: panelRef, handleRef: dragZoneRef, onDismiss: handleClose });
+  useSheetSwipe({
+    sheetRef: panelRef,
+    handleRef: dragZoneRef,
+    onDismiss: handleClose,
+    enabled: !isDesktopDrawer,
+  });
 
   const modalNode = (
-    <div
-      ref={backdropRef}
-      className="modal-overlay pt-sheet-backdrop"
-      onMouseDown={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget) handleClose();
-      }}
-    >
+    <SheetCloseContext.Provider value={handleClose}>
       <div
-        ref={panelRef}
-        className={`modal pt-sheet ${className}`.trim()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        style={{ "--modal-max-w": `${width}px` } as CSSProperties}
+        ref={backdropRef}
+        className={`modal-overlay pt-sheet-backdrop ${variant === "drawer" ? "is-drawer" : ""}`.trim()}
+        onMouseDown={(event) => {
+          if (closeOnBackdrop && event.target === event.currentTarget) handleClose();
+        }}
       >
-        <div ref={dragZoneRef} className="modal-topbar pt-sheet-topbar">
-          <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
-            <div className="pt-sheet-handle-bar" />
+        <div
+          ref={panelRef}
+          className={`modal pt-sheet ${variant === "drawer" ? "is-drawer" : ""} ${className}`.trim()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex={-1}
+          style={
+            {
+              "--modal-max-w": `${width}px`,
+              ...(width > 580 ? { "--drawer-w": `${width}px` } : {}),
+            } as CSSProperties
+          }
+        >
+          <div ref={dragZoneRef} className="modal-topbar pt-sheet-topbar">
+            <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
+              <div className="pt-sheet-handle-bar" />
+            </div>
+
+            <header className="modal-header pt-sheet-head">
+              {variant === "drawer" && (
+                <button
+                  type="button"
+                  className="pt-drawer-back-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleClose();
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  aria-label="Thu gọn bảng"
+                  title="Thu gọn"
+                >
+                  <ArrowRight size={19} strokeWidth={2.2} aria-hidden="true" />
+                </button>
+              )}
+              <h2 id={titleId}>{title}</h2>
+              <button
+                type="button"
+                className="pt-icon-btn pt-sheet-close-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClose();
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                aria-label="Đóng"
+              >
+                <CloseCircleIcon size={28} />
+              </button>
+              {variant === "drawer" && <span className="pt-drawer-head-spacer" aria-hidden="true" />}
+            </header>
           </div>
 
-          <header className="modal-header pt-sheet-head">
-            <h2 id={titleId}>{title}</h2>
-            <button
-              type="button"
-              className="pt-icon-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClose();
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              aria-label="Đóng"
-            >
-              <CloseCircleIcon size={28} />
-            </button>
-          </header>
+          <div className="modal-body pt-sheet-body">
+            {children}
+          </div>
+          {footer && <div className="modal-footer">{footer}</div>}
         </div>
-
-        <div className="modal-body pt-sheet-body">
-          {children}
-        </div>
-        {footer && <div className="modal-footer">{footer}</div>}
       </div>
-    </div>
+    </SheetCloseContext.Provider>
   );
 
   return typeof document !== "undefined" ? createPortal(modalNode, document.body) : modalNode;
@@ -205,6 +244,7 @@ export function ConfirmDialog({
       title={title}
       onClose={pending ? () => undefined : onClose}
       width={460}
+      variant="modal"
       className="modal-confirm-sheet"
       footer={
         <>

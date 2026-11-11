@@ -121,7 +121,7 @@ export default function ChangePasswordModal({
   onSuccessLogout: () => Promise<void>;
 }) {
   return (
-    <Sheet title="Đổi mật khẩu tài khoản" onClose={onClose} className="pt-password-sheet">
+    <Sheet variant="drawer" title="Đổi mật khẩu tài khoản" onClose={onClose} className="pt-password-sheet">
       <ChangePasswordFormContent
         onClose={onClose}
         onSuccess={() => {

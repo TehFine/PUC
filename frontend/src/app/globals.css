@@ -2631,7 +2631,7 @@ body {
   margin: 0;
 }
 
-.modal-header button {
+.modal-header button:not(.pt-drawer-back-btn) {
   background: transparent;
   border: none;
   color: var(--ink);
@@ -2646,7 +2646,7 @@ body {
   padding: 0;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.modal-header button:hover {
+.modal-header button:not(.pt-drawer-back-btn):hover {
   background: transparent;
   color: var(--ink);
   opacity: 0.72;
@@ -2685,7 +2685,12 @@ body {
   border-radius: 10px;
 }
 
-@media (min-width: 760px) {
+.pt-drawer-back-btn,
+.pt-drawer-head-spacer {
+  display: none;
+}
+
+@media screen and (min-width: 760px) {
   .modal-overlay,
   .modal-overlay.pt-sheet-backdrop {
     align-items: center;
@@ -2707,6 +2712,100 @@ body {
   }
   .modal-footer {
     padding: 14px 24px 20px;
+  }
+
+  /* Ngăn kéo dọc cạnh phải cho Modal chi tiết trên màn hình lớn / laptop */
+  .modal-overlay.pt-sheet-backdrop.is-drawer {
+    justify-content: flex-end !important;
+    align-items: stretch !important;
+    padding: 0 !important;
+    background: rgba(15, 23, 42, 0.44) !important;
+  }
+  .modal.pt-sheet.is-drawer {
+    width: min(var(--drawer-w, clamp(540px, 40vw, 620px)), 92vw) !important;
+    max-width: min(var(--drawer-w, clamp(540px, 40vw, 620px)), 92vw) !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: -16px 0 48px rgba(15, 23, 42, 0.16), -1px 0 0 rgba(15, 23, 42, 0.06) !important;
+    animation: pt-drawer-slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  }
+  .modal.pt-sheet.is-drawer .pt-sheet-handle-zone,
+  .modal.pt-sheet.is-drawer .pt-sheet-close-btn {
+    display: none !important;
+  }
+  .modal.pt-sheet.is-drawer .modal-header {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
+    align-items: center;
+    gap: 14px;
+    padding: 22px 28px 18px;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  }
+  .modal.pt-sheet.is-drawer .pt-drawer-back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: 10px;
+    background: #f2f4f7;
+    color: #111827;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .modal.pt-sheet.is-drawer .pt-drawer-back-btn svg {
+    transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .modal.pt-sheet.is-drawer .pt-drawer-back-btn:hover {
+    background: #e5e8ee;
+    color: #0f172a;
+  }
+  .modal.pt-sheet.is-drawer .pt-drawer-back-btn:hover svg {
+    transform: translateX(2px);
+  }
+  .modal.pt-sheet.is-drawer .pt-drawer-back-btn:active {
+    transform: scale(0.94);
+    background: #dce0e8;
+  }
+  .modal.pt-sheet.is-drawer .pt-drawer-head-spacer {
+    display: block;
+    width: 40px;
+    height: 40px;
+  }
+  .modal.pt-sheet.is-drawer .modal-header h2 {
+    font-size: 17.5px !important;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    text-align: center;
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .modal.pt-sheet.is-drawer .modal-body {
+    padding: 20px 28px 24px;
+  }
+  .modal.pt-sheet.is-drawer .modal-footer {
+    padding: 15px 28px 18px;
+    border-top: 1px solid #e5e7eb;
+  }
+}
+
+@keyframes pt-drawer-slide-in {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
   }
 }
 
