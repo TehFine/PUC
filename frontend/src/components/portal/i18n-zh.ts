@@ -37,6 +37,7 @@ const EXACT_MAP: Record<string, string> = {
   "Tổng quan nông hộ và nhắc nhở.": "农户概况与今日待办提醒。",
   "Bản đồ ranh giới các thửa vườn.": "果园地块边界与卫星地图。",
   "Ghi chép canh tác và phun thuốc.": "农事作业与农药施用记录。",
+  "Theo dõi lô xuất kho và tem truy xuất.": "查看出库批次与电子溯源封签。",
   "Khai báo sản lượng và lô xuất kho.": "采收产量申报与出库批次。",
   "Lịch lấy mẫu và phiếu kiểm định.": "采样计划与实验室检测报告。",
   "Vật tư VietGAP và lớp tập huấn.": "VietGAP农资名录与技术培训。",
@@ -241,6 +242,24 @@ const EXACT_MAP: Record<string, string> = {
   "Cắt thủ công, chu kỳ 45 ngày": "人工除草，周期 45 天",
 
   // ─── Trang chủ (HomeTab) ───
+  "Chủ hộ HTX": "合作社农户",
+  "Vùng trồng": "果园资质",
+  "Khu vực canh tác": "种植区域",
+  "Mã vùng trồng PUC": "注册果园代码",
+  "Vùng sầu riêng VietGAP": "VietGAP 认证榴莲产区",
+  "Liên kết HTX Cư Né, Đắk Lắk": "签约多乐省居内合作社",
+  "Số thửa canh tác": "种植地块数量",
+  "Bản đồ & ranh giới GIS": "GIS 卫星图与边界",
+  "Mã hộ": "农户编码",
+  "Diện tích vùng trồng": "果园种植面积",
+  "Sầu riêng VietGAP": "VietGAP 标准榴莲",
+  "Tổng diện tích": "核定总面积",
+  "Sản lượng thu hoạch": "累计采收产量",
+  "Lô xuất kho & tem QR": "出库批次与溯源签",
+  "Đã nghiệm thu": "合作社已验收",
+  "Nhật ký chăm sóc": "农事管护日志",
+  "30 ngày gần đây": "最近 30 天",
+  "lượt": "次",
   "Hộ canh tác sầu riêng VietGAP liên kết Hợp tác xã Cư Né, Đắk Lắk.":
     "多乐省居内合作社 (Cư Né, Đắk Lắk) VietGAP 认证榴莲签约种植户。",
   "Hộ canh tác sầu riêng VietGAP liên kết Hợp tác xã Krông Búk, Đắk Lắk.":
@@ -531,7 +550,14 @@ const EXACT_MAP: Record<string, string> = {
   "Cảnh báo an toàn dư lượng": "农残安全风险预警",
 
   // ─── Tab Thu hoạch & Tem (StampsTab, FruitStampsView & HarvestLotTicket) ───
+  "Lịch thu hoạch dự kiến từ HTX": "合作社预计采收计划",
   "Quy chuẩn thu hoạch": "采收与品控标准",
+  "QUY CHUẨN 1 · LỊCH THU HOẠCH TỰ ĐỘNG": "标准 1 · 自动排定采收期",
+  "HTX tính toán ngày thu hoạch & gửi thông báo": "合作社核算采收日期并推送通知",
+  "Khi đến mùa thu hoạch, HTX trực tiếp tính toán ngày cắt dự kiến dựa trên nhật ký chăm sóc và thời gian cách ly thuốc của hộ dân, sau đó gửi thông báo lịch thu hoạch qua hệ thống.":
+    "进入采收季时，合作社直接根据社员农户填报的农事管护日志与农药安全间隔期核算预计采果日期，并通过系统推送采收通知。",
+  "Chưa có lô thu hoạch nào của hộ bạn được xuất kho. Khi đến mùa vụ, HTX sẽ tính toán ngày thu hoạch dựa trên nhật ký chăm sóc và thông báo đến bạn qua hệ thống.":
+    "您的农户名下暂无已出库的采收批次。进入采收季后，合作社将根据农事管护日志核算采收日期并通过系统通知您。",
   "Bà con nông dân đăng ký ngày dự kiến thu hoạch và sản lượng ước tính trên cổng để HTX bố trí lịch kiểm định.":
     "社员农户在门户登记预计采收日期与预估产量，以便合作社安排品控核验日程。",
   "Cán bộ kỹ thuật HTX cùng Kiểm tra viên KCS trực tiếp về vườn kiểm tra cách ly thuốc BVTV (thời gian PHI) và cân đo phân loại.":
