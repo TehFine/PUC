@@ -45,7 +45,7 @@ export function MinuteDetailModal({
       <div style={{ display: "grid", gap: 12, padding: 16, borderRadius: 16, background: "var(--mist)" }}>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Số biên bản</div>
-          <div style={{ fontWeight: 700, fontFamily: "monospace", color: "#256b45" }}>{minute.code}</div>
+          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>{minute.code}</div>
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày kiểm tra</div>

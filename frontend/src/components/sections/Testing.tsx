@@ -285,9 +285,9 @@ export default function Testing() {
                 const chlorAbsent = t.chlorpyrifosMgKg === null || t.chlorpyrifosMgKg === undefined || Number(t.chlorpyrifosMgKg) === 0;
                 return (
                   <tr key={t.id}>
-                    <td style={{ fontFamily: "monospace", fontSize: 12, color: "#256b45", fontWeight: 600 }}>{t.code}</td>
-                    <td style={{ fontSize: 12 }}>
-                      <strong>{t.householdName}</strong> · <span style={{ fontFamily: "monospace" }}>{t.plotCode}</span>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 600 }}>{t.code}</td>
+                    <td style={{ fontSize: 12.5 }}>
+                      <strong>{t.householdName}</strong> · <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{t.plotCode}</span>
                     </td>
                     <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(t.sampledOn)}</td>
                     <td

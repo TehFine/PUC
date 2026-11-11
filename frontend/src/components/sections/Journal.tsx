@@ -263,8 +263,10 @@ export default function Journal() {
                       <span
                         style={{
                           display: "inline-block",
-                          fontFamily: "monospace",
-                          fontSize: 12,
+                          fontFamily: "var(--font-num-stack)",
+                          fontVariantNumeric: "tabular-nums",
+                          letterSpacing: "0.015em",
+                          fontSize: 12.5,
                           color: zc.text,
                           background: zc.bg,
                           border: "none",
@@ -537,7 +539,7 @@ export default function Journal() {
                     <tr key={s.id}>
                       <td style={{ whiteSpace: "nowrap" }}>{formatDate(s.sprayedOn)}</td>
                       <td style={{ fontWeight: 500 }}>{s.householdName}</td>
-                      <td style={{ fontFamily: "monospace", fontSize: 12, color: "#256b45", fontWeight: 600 }}>
+                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 600 }}>
                         {s.plotCode || "—"}
                       </td>
                       <td>{s.pesticideName}</td>

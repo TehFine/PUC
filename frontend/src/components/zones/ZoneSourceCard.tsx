@@ -28,7 +28,7 @@ export default function ZoneSourceCard({
                   border: "none",
                 }}
               >
-                <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700 }}>{zone.code}</span>{" "}
+                <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em", fontSize: 11.5, fontWeight: 700 }}>{zone.code}</span>{" "}
                 <strong>{zone.count}</strong>
               </span>
             );

@@ -84,7 +84,7 @@ export function ViolationDetailModal({
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã thửa</div>
-          <div style={{ fontWeight: 700, fontFamily: "monospace", color: "#256b45" }}>{violation.plotCode || "—"}</div>
+          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>{violation.plotCode || "—"}</div>
         </div>
       </div>
 

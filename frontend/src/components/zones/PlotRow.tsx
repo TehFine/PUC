@@ -12,8 +12,10 @@ export default function PlotRow({ feature }: { feature: PlotFeature }) {
       <span
         className="badge"
         style={{
-          fontFamily: "monospace",
-          fontSize: 10.5,
+          fontFamily: "var(--font-num-stack)",
+          fontVariantNumeric: "tabular-nums",
+          letterSpacing: "0.01em",
+          fontSize: 11,
           background: zc.bg,
           color: zc.text,
           border: "none",

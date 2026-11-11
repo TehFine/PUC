@@ -149,7 +149,7 @@ export default function ApprovalDetailModal({
       >
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã hồ sơ</div>
-          <div style={{ fontWeight: 700, fontFamily: "monospace", color: "#256b45" }}>{record.code}</div>
+          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>{record.code}</div>
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Người nộp / Hộ dân</div>
@@ -165,7 +165,7 @@ export default function ApprovalDetailModal({
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã thửa (plotCode)</div>
-          <div style={{ fontWeight: 600, fontFamily: "monospace" }}>{record.plotCode || "—"}</div>
+          <div style={{ fontWeight: 600, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{record.plotCode || "—"}</div>
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mức ưu tiên &amp; Trạng thái</div>

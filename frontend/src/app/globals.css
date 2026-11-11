@@ -63,12 +63,16 @@
   /* Chữ tiêu đề sans-serif hiện đại đồng bộ với trang người dùng (Plus Jakarta Sans & Inter) */
   --font-display-stack: var(--font-hero-sans), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-body-stack: var(--font-inter), -apple-system, "Segoe UI", sans-serif;
+  --font-num-stack: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-num-stack);
 }
 
 /* next/font gắn --font-hero-sans và --font-inter lên <body>, nên phải ghép chuỗi font ở đây thì mới nhận được */
 body {
   --font-display-stack: var(--font-hero-sans), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-body-stack: var(--font-inter), -apple-system, "Segoe UI", sans-serif;
+  --font-num-stack: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-num-stack);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1082,6 +1086,7 @@ body {
   border-bottom: 1px solid var(--border);
   color: #3d544b;
   vertical-align: middle;
+  font-variant-numeric: tabular-nums;
 }
 
 .table-actions-cell,
@@ -1814,9 +1819,10 @@ body {
   display: inline-flex;
   align-items: center;
   padding: 0 9px;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  font-family: monospace;
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
   color: var(--green-700, #15803d);
   background: rgba(22, 163, 74, 0.09);
   border-radius: 11px;
@@ -2935,7 +2941,15 @@ select.form-input {
 .fmt-btn.active { background: var(--green-100); border-color: var(--green-600); color: var(--ink); font-weight: 600; }
 
 /* ─── MISC ────────────────────────────────────── */
-.mono { font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 12px; }
+.mono,
+code {
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
+}
+.mono {
+  font-size: 13px;
+}
 .empty-state { text-align: center; padding: 40px; color: var(--text-muted); font-size: 13px; }
 
 /* Leaflet – keep it flat and subtle */
@@ -5062,9 +5076,11 @@ html[data-net="slow"] svg {
 }
 
 .zone-legend-code {
-  font-family: monospace;
-  font-size: 12px;
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
   font-weight: 700;
+  letter-spacing: 0.015em;
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;

@@ -294,7 +294,7 @@ export default function Registrations({
                 return (
                   <tr key={row.id}>
                     <td style={{ fontWeight: 500 }}>{row.fullName}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{row.username}</td>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>{row.username}</td>
                     <td>
                       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <span style={{ fontWeight: 500 }}>{row.accountName}</span>
@@ -378,7 +378,7 @@ export default function Registrations({
                 {filteredRows.map((row) => (
                   <tr key={row.id}>
                     <td style={{ fontWeight: 500 }}>{row.fullName}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>{row.phone}</td>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>{row.phone}</td>
                     <td>{row.villageName ?? "—"}</td>
                     <td>{row.note ?? "—"}</td>
                     <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(row.createdAt)}</td>

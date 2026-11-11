@@ -129,7 +129,9 @@ export default function PlotPopup({
             border: "none",
             borderRadius: 8,
             padding: "4px 9px",
-            fontFamily: "monospace",
+            fontFamily: "var(--font-num-stack)",
+            fontVariantNumeric: "tabular-nums",
+            letterSpacing: "0.01em",
           }}
         >
           {props.zone || zc.zoneCode}
@@ -159,7 +161,9 @@ export default function PlotPopup({
                   ? {
                       color: zc.text,
                       fontWeight: 700,
-                      fontFamily: "monospace",
+                      fontFamily: "var(--font-num-stack)",
+                      fontVariantNumeric: "tabular-nums",
+                      letterSpacing: "0.01em",
                     }
                   : undefined
               }

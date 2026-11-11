@@ -61,7 +61,7 @@ export function JournalDetailModal({
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã thửa</div>
-          <div style={{ fontWeight: 700, fontFamily: "monospace", color: "#256b45" }}>{entry.plotCode}</div>
+          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>{entry.plotCode}</div>
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Hoạt động</div>
@@ -74,7 +74,7 @@ export function JournalDetailModal({
         {(entry.latitude != null || entry.longitude != null) && (
           <div>
             <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Tọa độ GPS</div>
-            <div style={{ fontFamily: "monospace", fontSize: 12 }}>
+            <div style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5 }}>
               {entry.latitude?.toFixed(5)}, {entry.longitude?.toFixed(5)}
             </div>
           </div>

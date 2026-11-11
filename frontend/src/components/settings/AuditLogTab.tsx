@@ -79,15 +79,15 @@ export default function AuditLogTab() {
             />
             {list.rows.map((log) => (
               <tr key={log.id}>
-                <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
                   {log.occurredAt ? new Date(log.occurredAt).toLocaleString("vi-VN") : "—"}
                 </td>
                 <td style={{ fontWeight: 500 }}>{log.userName || "Hệ thống"}</td>
-                <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-muted)" }}>{log.ip || "—"}</td>
+                <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "var(--text-muted)" }}>{log.ip || "—"}</td>
                 <td>
                   <span className={`badge ${ACTION_COLORS[log.action] || "badge-gray"}`}>{log.action}</span>
                 </td>
-                <td style={{ fontSize: 12, color: "#256b45", fontFamily: "monospace" }}>{log.object || "—"}</td>
+                <td style={{ fontSize: 12.5, color: "#256b45", fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{log.object || "—"}</td>
                 <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{log.detail || "—"}</td>
               </tr>
             ))}

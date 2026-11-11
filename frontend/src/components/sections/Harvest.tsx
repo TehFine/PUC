@@ -318,7 +318,7 @@ export default function Harvest() {
                   const kg = Math.round(tons * 1000);
                   return (
                     <tr key={h.id}>
-                      <td style={{ fontFamily: "monospace", fontSize: 12, color: "#256b45", fontWeight: 700 }}>{h.code}</td>
+                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 700 }}>{h.code}</td>
                       <td>{h.harvestedOn ? h.harvestedOn.slice(0, 10) : "—"}</td>
                       <td style={{ fontWeight: 600 }}>
                         {formatVn(tons, 2)} tấn
@@ -350,7 +350,8 @@ export default function Harvest() {
                             background: "#f0fdf4",
                             color: "#166534",
                             border: "1px solid #bbf7d0",
-                            fontFamily: "monospace",
+                            fontFamily: "var(--font-num-stack)",
+                            fontVariantNumeric: "tabular-nums",
                           }}
                         >
                           {h.packhouseCode || "VN-DLPH-0089"}
@@ -487,7 +488,7 @@ export default function Harvest() {
                         {d.householdCode && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{d.householdCode}</div>}
                       </td>
                       <td>{d.villageName || "—"}</td>
-                      <td style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 600 }}>{d.plotCode}</td>
+                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 600 }}>{d.plotCode}</td>
                       <td style={{ fontWeight: 600 }}>{formatVn(Number(d.weightKg), 1)} kg</td>
                       <td style={{ fontSize: 12 }}>
                         A: {d.gradeAKg !== null ? `${formatVn(Number(d.gradeAKg), 1)} kg` : "—"} · B:{" "}
@@ -596,7 +597,7 @@ export default function Harvest() {
                 />
                 {stampAllocations.rows.map((s) => (
                   <tr key={s.id}>
-                    <td style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#166534" }}>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, color: "#166534" }}>
                       {s.allocationCode}
                     </td>
                     <td>{s.allocatedOn ? s.allocatedOn.slice(0, 10) : "—"}</td>
@@ -610,7 +611,7 @@ export default function Harvest() {
                     <td style={{ textAlign: "center" }}>
                       <strong>{s.activatedCount ?? 0}</strong> / {s.quantityAllocated}
                     </td>
-                    <td style={{ fontFamily: "monospace", fontSize: 11.5 }}>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
                       {s.fromSerial} → {s.toSerial}
                     </td>
                     <td>
@@ -687,7 +688,7 @@ export default function Harvest() {
                   const b = CONTRACT_STATUS_BADGE[c.status] || { label: c.status, cls: "badge-green" };
                   return (
                     <tr key={c.id}>
-                      <td style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#1e3a8a" }}>{c.code}</td>
+                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, color: "#1e3a8a" }}>{c.code}</td>
                       <td>
                         <strong style={{ display: "block", color: "#14372f", fontSize: 13 }}>{c.title}</strong>
                         {c.notes && <small style={{ color: "#64748b" }}>{c.notes}</small>}
@@ -705,7 +706,8 @@ export default function Harvest() {
                             background: "#f0fdf4",
                             color: "#166534",
                             border: "1px solid #bbf7d0",
-                            fontFamily: "monospace",
+                            fontFamily: "var(--font-num-stack)",
+                            fontVariantNumeric: "tabular-nums",
                           }}
                         >
                           {c.packhouseCode || "VN-DLPH-0089"}
@@ -779,11 +781,11 @@ export default function Harvest() {
                 />
                 {enterprises.rows.map((e) => (
                   <tr key={e.id}>
-                    <td style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#166534" }}>{e.code}</td>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, color: "#166534" }}>{e.code}</td>
                     <td>
                       <strong style={{ color: "#14372f", fontSize: 13.5 }}>{e.name}</strong>
                     </td>
-                    <td style={{ fontFamily: "monospace" }}>{e.taxCode || "—"}</td>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{e.taxCode || "—"}</td>
                     <td>{e.representative || "—"}</td>
                     <td>{e.phone || "—"}</td>
                     <td>
@@ -796,7 +798,8 @@ export default function Harvest() {
                           background: "#ecfdf5",
                           color: "#065f46",
                           border: "1px solid #a7f3d0",
-                          fontFamily: "monospace",
+                          fontFamily: "var(--font-num-stack)",
+                          fontVariantNumeric: "tabular-nums",
                           display: "inline-flex",
                           alignItems: "center",
                           gap: 4,

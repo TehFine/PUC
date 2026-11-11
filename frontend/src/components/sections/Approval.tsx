@@ -256,10 +256,10 @@ export default function Approval() {
                   const st = badgeOf(APPROVAL_STATUS, p.status);
                   return (
                     <tr key={p.id}>
-                      <td style={{ fontFamily: "monospace", fontSize: 12, color: "#256b45", fontWeight: 600 }}>{p.code}</td>
+                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 600 }}>{p.code}</td>
                       <td style={{ fontWeight: 500 }}>{p.applicantName}</td>
                       <td>{p.requestType}</td>
-                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>{p.plotCode || "—"}</td>
+                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5 }}>{p.plotCode || "—"}</td>
                       <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(p.submittedOn)}</td>
                       <td style={{ textAlign: "center" }}>
                         <span style={{ background: "#f4f5f3", padding: "2px 8px", borderRadius: 6, fontSize: 11.5 }}>
@@ -468,7 +468,7 @@ export default function Approval() {
                   const resBadge = badgeOf(MINUTE_RESULT, m.result);
                   return (
                     <tr key={m.id}>
-                      <td style={{ fontFamily: "monospace", fontSize: 12, color: "#256b45", fontWeight: 600 }}>{m.code}</td>
+                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 600 }}>{m.code}</td>
                       <td style={{ whiteSpace: "nowrap" }}>{formatDate(m.heldOn)}</td>
                       <td>{m.location}</td>
                       <td>{m.officer}</td>

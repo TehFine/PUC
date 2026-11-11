@@ -113,7 +113,7 @@ export default function TrainingRegistrationsModal({
               const st = badgeOf(REGISTRATION_STATUS, reg.status);
               return (
                 <tr key={reg.id}>
-                  <td style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 600, color: "#256b45" }}>
+                  <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 600, color: "#256b45" }}>
                     {reg.householdCode || `#${reg.householdId}`}
                   </td>
                   <td style={{ fontWeight: 500 }}>{reg.householdName || `Hộ #${reg.householdId}`}</td>

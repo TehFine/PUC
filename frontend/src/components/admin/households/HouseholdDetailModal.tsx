@@ -96,7 +96,9 @@ export default function HouseholdDetailModal({
               style={{
                 display: "inline-block",
                 fontWeight: 700,
-                fontFamily: "monospace",
+                fontFamily: "var(--font-num-stack)",
+                fontVariantNumeric: "tabular-nums",
+                letterSpacing: "0.015em",
                 fontSize: 13,
                 color: zc.text,
                 background: zc.bg,
@@ -111,11 +113,20 @@ export default function HouseholdDetailModal({
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Số CCCD</div>
-          <div style={{ fontWeight: 600, fontFamily: "monospace" }}>{household.cccd}</div>
+          <div
+            style={{
+              fontWeight: 600,
+              fontFamily: "var(--font-num-stack)",
+              fontVariantNumeric: "tabular-nums",
+              letterSpacing: "0.015em",
+            }}
+          >
+            {household.cccd}
+          </div>
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Số điện thoại</div>
-          <div style={{ fontWeight: 600 }}>{household.phone}</div>
+          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{household.phone}</div>
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Thôn / Tổ</div>
@@ -165,12 +176,12 @@ export default function HouseholdDetailModal({
                 const center = plotCenterCoords(f);
                 return (
                   <tr key={p.code}>
-                    <td style={{ fontFamily: "monospace", fontWeight: 700, color: zc.text }}>{p.code}</td>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: zc.text }}>{p.code}</td>
                     <td>{p.parcel || "—"}</td>
                     <td>{p.sheet || "—"}</td>
                     <td style={{ fontWeight: 600 }}>{formatVn(p.areaHa, 2)} ha</td>
                     <td>{p.variety || "—"}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: 12 }}>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5 }}>
                       {formatCoords(center?.lat, center?.lng)}
                     </td>
                     <td>
@@ -231,7 +242,7 @@ export default function HouseholdDetailModal({
               {journal.rows.map((j) => (
                 <tr key={j.id}>
                   <td style={{ whiteSpace: "nowrap" }}>{formatDate(j.entryOn)}</td>
-                  <td style={{ fontFamily: "monospace", fontWeight: 600, color: "#256b45" }}>{j.plotCode}</td>
+                  <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "#256b45" }}>{j.plotCode}</td>
                   <td>{j.activity}</td>
                   <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{j.detail || "—"}</td>
                   <td style={{ fontSize: 12 }}>{j.recorder}</td>
@@ -289,7 +300,7 @@ export default function HouseholdDetailModal({
                         <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>{v.description}</div>
                       )}
                     </td>
-                    <td style={{ fontFamily: "monospace" }}>{v.plotCode || "—"}</td>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{v.plotCode || "—"}</td>
                     <td>
                       <span className={`badge ${st.badge}`}>{st.label}</span>
                     </td>
@@ -328,8 +339,8 @@ export default function HouseholdDetailModal({
                 const resBadge = badgeOf(LAB_RESULT, t.result);
                 return (
                   <tr key={t.id}>
-                    <td style={{ fontFamily: "monospace", fontWeight: 600, color: "#256b45" }}>{t.code}</td>
-                    <td style={{ fontFamily: "monospace" }}>{t.plotCode}</td>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "#256b45" }}>{t.code}</td>
+                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{t.plotCode}</td>
                     <td style={{ whiteSpace: "nowrap" }}>{formatDate(t.sampledOn)}</td>
                     <td>{formatVn(t.cdMgKg, 3)}</td>
                     <td>{formatVn(t.residueMgKg, 3)}</td>

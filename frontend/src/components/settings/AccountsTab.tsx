@@ -156,7 +156,7 @@ export default function AccountsTab({
                   </td>
                   <td>
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 12 }}>{a.username}</span>
+                      <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 13 }}>{a.username}</span>
                       {a.email && (
                         <span style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{a.email}</span>
                       )}

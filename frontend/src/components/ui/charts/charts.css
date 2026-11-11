@@ -208,10 +208,11 @@
   height: 100%;
 }
 .vc-ruler-scale {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: -0.02em;
+  font-family: var(--font-num-stack, var(--font-inter), -apple-system, "Segoe UI", sans-serif);
+  font-variant-numeric: tabular-nums;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   user-select: none;
 }
 
@@ -667,8 +668,9 @@
 }
 
 .sbm-scale-text {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  letter-spacing: -0.02em;
+  font-family: var(--font-num-stack, var(--font-inter), -apple-system, "Segoe UI", sans-serif);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 .sbm-list {

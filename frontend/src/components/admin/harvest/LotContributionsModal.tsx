@@ -144,7 +144,7 @@ export default function LotContributionsModal({
             ) : (
               rows.map((item) => (
                 <tr key={item.id}>
-                  <td style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 600 }}>{item.householdCode || `#${item.householdId}`}</td>
+                  <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 600 }}>{item.householdCode || `#${item.householdId}`}</td>
                   <td style={{ fontWeight: 500 }}>{item.householdName || "—"}</td>
                   <td>{item.villageName || "—"}</td>
                   <td style={{ fontWeight: 600 }}>{formatVn(Number(item.weightKg), 1)} kg</td>

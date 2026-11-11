@@ -154,7 +154,7 @@ export function StampListModal({
             ) : (
               stamps.map((s) => (
                 <tr key={s.id}>
-                  <td style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700 }}>{s.serialCode}</td>
+                  <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700 }}>{s.serialCode}</td>
                   <td>{s.plotCode || "—"}</td>
                   <td>{s.grade ? `Hạng ${s.grade}` : "—"}</td>
                   <td>{s.fruitWeightKg ? `${s.fruitWeightKg} kg` : "—"}</td>

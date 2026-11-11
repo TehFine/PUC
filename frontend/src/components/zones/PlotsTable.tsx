@@ -68,8 +68,10 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                   <td>
                     <span
                       style={{
-                        fontFamily: "monospace",
-                        fontSize: 12,
+                        fontFamily: "var(--font-num-stack)",
+                        fontVariantNumeric: "tabular-nums",
+                        letterSpacing: "0.015em",
+                        fontSize: 12.5,
                         fontWeight: 700,
                         color: zc.text,
                         background: zc.bg,
@@ -86,14 +88,16 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                   <td>{props.parcel || "—"}</td>
                   <td style={{ fontWeight: 600 }}>{props.owner || "—"}</td>
                   <td>{formatHa(plotArea(feature))}</td>
-                  <td style={{ fontFamily: "monospace", fontSize: 11.5, color: "var(--text-secondary)" }}>
+                  <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "var(--text-secondary)" }}>
                     {formatCoords(center?.lat, center?.lng)}
                   </td>
                   <td>
                     <span
                       style={{
-                        fontFamily: "monospace",
-                        fontSize: 11.5,
+                        fontFamily: "var(--font-num-stack)",
+                        fontVariantNumeric: "tabular-nums",
+                        letterSpacing: "0.015em",
+                        fontSize: 12,
                         fontWeight: 600,
                         background: zc.bg,
                         color: zc.text,

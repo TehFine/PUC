@@ -162,24 +162,24 @@ export default function HouseholdAccountModal({
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <span style={{ color: "var(--text-secondary)" }}>Mã hộ / Vùng trồng:</span>
-            <strong style={{ fontFamily: "monospace" }}>{household.code}</strong>
+            <strong style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{household.code}</strong>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <span style={{ color: "var(--text-secondary)" }}>Tên đăng nhập (SĐT):</span>
-            <strong style={{ fontFamily: "monospace", color: "var(--green-800)", fontSize: 15 }}>
+            <strong style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "var(--green-800)", fontSize: 15 }}>
               {issuedResult.username}
             </strong>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <span style={{ color: "var(--text-secondary)" }}>Mật khẩu đã ban hành:</span>
-            <strong style={{ fontFamily: "monospace", color: "#b45309", fontSize: 15 }}>
+            <strong style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", color: "#b45309", fontSize: 15 }}>
               {issuedResult.password}
             </strong>
           </div>
           {issuedResult.email && (
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
               <span style={{ color: "var(--text-secondary)" }}>Email Google liên kết:</span>
-              <strong style={{ fontFamily: "monospace" }}>{issuedResult.email}</strong>
+              <strong style={{ fontFamily: "var(--font-num-stack)" }}>{issuedResult.email}</strong>
             </div>
           )}
         </div>
@@ -255,7 +255,7 @@ export default function HouseholdAccountModal({
           id="issue-acc-password"
           type="text"
           className="form-input"
-          style={{ fontFamily: "monospace", fontWeight: 600 }}
+          style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", fontWeight: 600 }}
           value={password}
           disabled={busy}
           onChange={(e) => setPassword(e.target.value)}

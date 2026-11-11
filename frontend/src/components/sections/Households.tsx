@@ -192,8 +192,19 @@ export default function Households() {
                 <tr key={h.id} style={{ background: zc.rowTint }}>
                   <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{(page - 1) * PAGE_SIZE + i + 1}</td>
                   <td style={{ fontWeight: 600 }}>{h.name}</td>
-                  <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-secondary)" }}>{h.cccd}</td>
-                  <td style={{ color: "var(--text-secondary)" }}>{h.phone}</td>
+                  <td
+                    style={{
+                      fontFamily: "var(--font-num-stack)",
+                      fontVariantNumeric: "tabular-nums",
+                      fontSize: 13.5,
+                      fontWeight: 500,
+                      letterSpacing: "0.015em",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {h.cccd}
+                  </td>
+                  <td style={{ color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{h.phone}</td>
                   <td>{h.villageName || `Thôn #${h.villageId}`}</td>
                   <td style={{ textAlign: "center", fontWeight: 600 }}>{h.plotCount}</td>
                   <td style={{ fontWeight: 500 }}>{formatVn(h.areaHa, 2)} ha</td>
@@ -201,8 +212,10 @@ export default function Households() {
                     <span
                       style={{
                         display: "inline-block",
-                        fontFamily: "monospace",
-                        fontSize: 12,
+                        fontFamily: "var(--font-num-stack)",
+                        fontVariantNumeric: "tabular-nums",
+                        fontSize: 12.5,
+                        letterSpacing: "0.015em",
                         background: zc.bg,
                         color: zc.text,
                         border: "none",
