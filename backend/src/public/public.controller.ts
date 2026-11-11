@@ -149,6 +149,18 @@ export class PublicController {
     };
   }
 
+  /** Chuẩn hóa địa danh hành chính thực tế từ tên thôn và mã vùng trồng (Ea Khăl vs Cư Né - Krông Búk). */
+  private resolveLocationDisplay(village?: unknown, zoneCode?: unknown): string {
+    const v = typeof village === "string" ? village.trim() : "";
+    const z = typeof zoneCode === "string" ? zoneCode.trim() : "";
+    if (v && (/xã\s/i.test(v) || /đắk\s*lắk/i.test(v))) {
+      return /đắk\s*lắk/i.test(v) ? v : `${v}, Tỉnh Đắk Lắk`;
+    }
+    const isEaKhal = /ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(v) || /^66-PUC-SR0001-/i.test(z);
+    const commune = isEaKhal ? "Xã Ea Khăl, Tỉnh Đắk Lắk" : "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+    return v ? `${v}, ${commune}` : commune;
+  }
+
   /** Tra cứu hồ sơ truy xuất nguồn gốc công khai bằng mã lô, mã tem QR hoặc mã định danh từng quả/thùng */
   @Public()
   @Throttle({ default: { limit: process.env.NODE_ENV === "test" ? 1000 : 60, ttl: 60_000 } })
@@ -159,6 +171,7 @@ export class PublicController {
     if (!cleanCode || cleanCode.length > 80 || !/^[A-Za-z0-9._/-]+$/.test(cleanCode)) {
       throw notFound(`Không tìm thấy hồ sơ lô hàng hoặc mã tem "${cleanCode.slice(0, 80)}". Vui lòng kiểm tra lại tem QR.`);
     }
+    const verifiedAt = new Date().toISOString();
     const hasPlots =
       (await this.db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")).rows[0]
         ?.reg !== null;
@@ -171,14 +184,14 @@ export class PublicController {
                 h.code AS household_code, v.name AS village_name,
                 ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
                 p.zone_code, p.variety, COALESCE(p.area_ha, h.area_ha)::float8 AS area_ha, p.planted_year,
-                p.sheet_no, p.parcel_no, p.source AS plot_source,
+                p.sheet_no, p.parcel_no, p.source AS plot_source, p.status AS plot_status,
                 ST_AsGeoJSON(p.geom) AS geometry_json,
                 ST_Y(ST_Centroid(p.geom))::float8 AS lat,
                 ST_X(ST_Centroid(p.geom))::float8 AS lng
          FROM farmer_stamps fs
          JOIN households h ON h.id = fs.household_id
          JOIN villages v ON v.id = h.village_id
-         LEFT JOIN plots p ON p.code = fs.plot_code
+         LEFT JOIN plots p ON upper(p.code) = upper(fs.plot_code)
          WHERE upper(fs.serial_code) = upper($1)
          LIMIT 1`
       : `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.status,
@@ -187,7 +200,7 @@ export class PublicController {
                 h.code AS household_code, v.name AS village_name,
                 ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
                 NULL::text AS zone_code, NULL::text AS variety, h.area_ha::float8 AS area_ha, NULL::int AS planted_year,
-                NULL::text AS sheet_no, NULL::text AS parcel_no, NULL::text AS plot_source,
+                NULL::text AS sheet_no, NULL::text AS parcel_no, NULL::text AS plot_source, NULL::text AS plot_status,
                 NULL::text AS geometry_json, NULL::float8 AS lat, NULL::float8 AS lng
          FROM farmer_stamps fs
          JOIN households h ON h.id = fs.household_id
@@ -200,6 +213,7 @@ export class PublicController {
     if (farmerStampRes.rowCount && farmerStampRes.rows[0]) {
       const rawStamp = camelRow<Record<string, unknown>>(farmerStampRes.rows[0]);
       const householdId = Number(rawStamp.householdId);
+      const stampPlotCode = typeof rawStamp.plotCode === "string" && rawStamp.plotCode.trim() ? rawStamp.plotCode.trim() : null;
       const { householdId: _omitHouseholdId, ...farmerStamp } = rawStamp;
       void _omitHouseholdId;
 
@@ -244,11 +258,14 @@ export class PublicController {
           [householdId],
         ),
         this.db.query(
-          `SELECT code, plot_code, sampled_on, cd_mg_kg, yellow_o_positive, residue_mg_kg, chlorpyrifos_mg_kg, result, lab
+          `SELECT code, plot_code, sampled_on, cd_mg_kg::float8 AS cd_mg_kg, yellow_o_positive,
+                  residue_mg_kg::float8 AS residue_mg_kg, chlorpyrifos_mg_kg::float8 AS chlorpyrifos_mg_kg, result, lab
            FROM lab_tests
-           WHERE household_id = $1 AND result = 'pass'
-           ORDER BY sampled_on DESC LIMIT 4`,
-          [householdId],
+           WHERE household_id = $1
+           ORDER BY (CASE WHEN $2::text IS NOT NULL AND upper(plot_code) = upper($2) THEN 0 ELSE 1 END),
+                    sampled_on DESC, id DESC
+           LIMIT 4`,
+          [householdId, stampPlotCode],
         ),
         this.db.query<{ contributed_kg: number; lot_count: number }>(
           `SELECT COALESCE(SUM(hc.weight_kg), 0)::float8 AS contributed_kg,
@@ -269,15 +286,20 @@ export class PublicController {
         ? String(farmerStamp.harvestDate)
         : farmerStamp.activatedAt
           ? String(farmerStamp.activatedAt).split("T")[0]
-          : new Date().toISOString().split("T")[0];
+          : "";
 
+      const derivedZoneFromHousehold = String(farmerStamp.householdCode || "").replace(/-(?:H|T)\d+$/i, "");
       const resolvedPucCode = String(
         farmerStamp.zoneCode ||
-          String(farmerStamp.householdCode || "").replace(/-H\d+$/i, "") ||
-          "66-PUC-SR0001-00728",
+          (derivedZoneFromHousehold && derivedZoneFromHousehold !== farmerStamp.householdCode
+            ? derivedZoneFromHousehold
+            : "VN-DLOR-0086"),
       );
+      const stampLocation = this.resolveLocationDisplay(farmerStamp.villageName, resolvedPucCode);
+      const stampLabTests = camelRows<{ result: string; code: string }>(labTestsRes.rows);
 
       return {
+        verifiedAt,
         stampType: "farmer_fruit",
         isFarmerStamp: true,
         farmerStamp,
@@ -299,7 +321,7 @@ export class PublicController {
           {
             householdName: String(farmerStamp.householdName),
             householdCode: String(farmerStamp.householdCode),
-            village: String(farmerStamp.villageName || "Xã Ea Khăl"),
+            village: String(farmerStamp.villageName || "Chưa gán thôn"),
             avatarUrl: (farmerStamp.avatarUrl as string | null) ?? null,
             weightKg: stampWeightKg,
             contributedKg: contribRow.contributed_kg > 0 ? contribRow.contributed_kg : null,
@@ -307,57 +329,49 @@ export class PublicController {
             areaHa: farmerStamp.areaHa !== null && farmerStamp.areaHa !== undefined ? Number(farmerStamp.areaHa) : null,
           },
         ],
-        supplyChain: {
-          packhouse: {
-            code: "VN-DLPH-0089",
-            name: "Cơ sở đóng gói sầu riêng HTX Cư Né – Đắk Lắk",
-            taxCode: "6001234567",
-            treatmentMethod: "Làm sạch áp lực, khử khuẩn, dán tem QR quả và đóng hộp",
-            gradeAPct: farmerStamp.grade === "A" ? 100 : 70,
-            gradeBPct: farmerStamp.grade === "B" ? 100 : 30,
-            gradeCPct: farmerStamp.grade === "C" ? 100 : 0,
-            avgBrix: 32.5,
-          },
-          transport: {
-            transporter: "Đội vận chuyển lạnh liên kết HTX",
-            vehiclePlate: "47C-289.15",
-            temperatureC: 13.5,
-            departedAt: harvestDateStr,
-            estimatedArrival: harvestDateStr,
-          },
-          contract: {
-            code: "HD-2026/CN-EK01",
-            title: "Hợp đồng liên kết bao tiêu nông hộ HTX Cư Né",
-          },
-        },
         puc: {
           code: resolvedPucCode,
-          name: `Vùng trồng sầu riêng ${farmerStamp.villageName || "Ea Khăl"} – HTX Cư Né`,
+          name: `Vùng trồng sầu riêng ${farmerStamp.villageName || "HTX Cư Né"}`,
           crop: "Sầu riêng (Durian - Durio zibethinus)",
-          variety: (farmerStamp.variety as string) || "Đô Na",
-          location: `${farmerStamp.villageName || "Thôn 2"}, Xã Ea Khăl, Tỉnh Đắk Lắk`,
+          variety: (farmerStamp.variety as string) || "Chưa cập nhật giống",
+          location: stampLocation,
           standard: "VietGAP & Nghị định thư kiểm dịch thực vật Việt Nam - Trung Quốc (GACC)",
           validUntil: "2027-12-31",
         },
         diaries: camelRows(diariesRes.rows),
-        labTests: camelRows(labTestsRes.rows),
+        labTests: stampLabTests,
         certifications: [
           {
             title: "Mã số vùng trồng (PUC)",
             code: resolvedPucCode,
-            status: "Đạt chuẩn xuất khẩu",
-            authority: "Cục Bảo vệ Thực vật – Bộ NN&PTNT",
+            status:
+              farmerStamp.plotStatus === "violation" || farmerStamp.householdStatus === "violation"
+                ? "Tạm dừng mã vùng trồng"
+                : farmerStamp.plotStatus === "pending" || farmerStamp.householdStatus === "pending"
+                  ? "Đang thẩm định hồ sơ"
+                  : "Đã cấp mã vùng trồng",
+            authority: "Chi cục Trồng trọt & BVTV Đắk Lắk / Cục BVTV",
           },
           {
             title: "Kiểm soát tem Nông hộ",
             code: String(farmerStamp.serialCode),
-            status: farmerStamp.status === "activated" ? "Đã kích hoạt thu hái tại vườn" : "Tem đã cấp nhưng chưa kích hoạt",
-            authority: "Hệ thống CheckVN & HTX Cư Né",
+            status:
+              farmerStamp.status === "activated"
+                ? "Đã kích hoạt thu hái tại vườn"
+                : farmerStamp.status === "revoked"
+                  ? "Tem đã thu hồi"
+                  : "Tem đã cấp nhưng chưa kích hoạt",
+            authority: "Hệ thống quản lý HTX Cư Né",
           },
           {
-            title: "Chứng nhận VietGAP",
-            status: "Đạt tiêu chuẩn VietGAP",
-            authority: "Trung tâm Chứng nhận Nông nghiệp",
+            title: "Kiểm nghiệm an toàn thực phẩm",
+            code: stampLabTests[0]?.code,
+            status: stampLabTests[0]
+              ? stampLabTests[0].result === "pass"
+                ? "Mẫu gần nhất đạt chuẩn"
+                : "Mẫu gần nhất không đạt"
+              : "Chưa có mẫu kiểm nghiệm",
+            authority: "Đơn vị kiểm nghiệm độc lập",
           },
         ],
       };
@@ -387,8 +401,9 @@ export class PublicController {
       `SELECT l.id, l.code, l.qr_code, l.harvested_on, l.weight_tons::float8 AS weight_tons,
               l.household_count, l.buyer, l.market, l.status,
               e.name AS enterprise_name, e.tax_code AS enterprise_tax_code,
-              l.packhouse_code, l.grade_a_pct, l.grade_b_pct, l.grade_c_pct, l.avg_brix, l.treatment_method,
-              l.transporter, l.vehicle_plate, l.temperature_c, l.departed_at, l.estimated_arrival,
+              l.packhouse_code, l.grade_a_pct::float8 AS grade_a_pct, l.grade_b_pct::float8 AS grade_b_pct,
+              l.grade_c_pct::float8 AS grade_c_pct, l.avg_brix::float8 AS avg_brix, l.treatment_method,
+              l.transporter, l.vehicle_plate, l.temperature_c::float8 AS temperature_c, l.departed_at, l.estimated_arrival,
               c.code AS contract_code, c.title AS contract_title
        FROM harvest_lots l
        LEFT JOIN enterprises e ON e.id = l.enterprise_id
@@ -405,7 +420,9 @@ export class PublicController {
           `SELECT p.household_id, p.code, p.sheet_no, p.parcel_no, p.source,
                   COALESCE(p.owner_name, h.name) AS owner_name,
                   COALESCE(p.village, v.name) AS village, p.zone_code, p.variety, p.planted_year,
-                  p.area_ha::float8 AS area_ha, p.status,
+                  p.area_ha::float8 AS area_ha,
+                  ROUND((ST_Area(p.geom::geography) / 10000.0)::numeric, 4)::float8 AS gis_area_ha,
+                  p.status, p.updated_at,
                   h.code AS household_code, h.status AS household_status,
                   ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
                   ST_AsGeoJSON(p.geom) AS geometry_json,
@@ -428,8 +445,17 @@ export class PublicController {
           const { householdId: _omitPlotHouseholdId, ...plot } = rawPlot;
           void _omitPlotHouseholdId;
 
-          const plotPucCode = String(plot.zoneCode || "66-PUC-SR0001-00728");
-          const [diariesRes, labTestsRes, plotContribsRes] = await Promise.all([
+          const derivedHouseholdZone = String(plot.householdCode || "").replace(/-(?:H|T)\d+$/i, "");
+          const realZoneCode =
+            typeof plot.zoneCode === "string" && plot.zoneCode.trim()
+              ? plot.zoneCode.trim()
+              : derivedHouseholdZone && derivedHouseholdZone !== plot.householdCode
+                ? derivedHouseholdZone
+                : null;
+          const plotPucCode = realZoneCode || "Chưa cấp mã PUC";
+          const plotLocation = this.resolveLocationDisplay(plot.village, realZoneCode);
+
+          const [diariesRes, diaryStatsRes, labTestsRes, violationsRes, plotContribsRes] = await Promise.all([
             this.db.query(
               `SELECT entry_on, plot_code, activity, detail, recorder, kind, mrl_status, isolation_days
                FROM (
@@ -452,7 +478,7 @@ export class PublicController {
                  JOIN pesticides p ON p.id = sr.pesticide_id
                  JOIN households h ON h.id = sr.household_id
                  WHERE upper(sr.plot_code) = upper($1)
-                    OR ($2::bigint IS NOT NULL AND sr.household_id = $2 AND sr.plot_code IS NULL)
+                    OR ($2::bigint IS NOT NULL AND sr.household_id = $2 AND (sr.plot_code IS NULL OR sr.plot_code = ''))
                  UNION ALL
                  SELECT je.entry_on,
                         je.plot_code,
@@ -470,12 +496,60 @@ export class PublicController {
                LIMIT 10`,
               [plot.code, plotHouseholdId],
             ),
+            this.db.query<{
+              diary_count: number;
+              last_diary_on: string | null;
+              active_isolation_until: string | null;
+              has_mrl_violation: boolean;
+            }>(
+              `WITH plot_sprays AS (
+                 SELECT sr.sprayed_on, sr.isolation_days, sr.mrl_status
+                 FROM spray_records sr
+                 WHERE upper(sr.plot_code) = upper($1)
+                    OR ($2::bigint IS NOT NULL AND sr.household_id = $2 AND (sr.plot_code IS NULL OR sr.plot_code = ''))
+               ),
+               plot_journals AS (
+                 SELECT je.entry_on
+                 FROM journal_entries je
+                 WHERE upper(je.plot_code) = upper($1)
+               )
+               SELECT (
+                        (SELECT COUNT(*) FROM plot_sprays) +
+                        (SELECT COUNT(*) FROM plot_journals)
+                      )::int AS diary_count,
+                      GREATEST(
+                        (SELECT MAX(sprayed_on) FROM plot_sprays),
+                        (SELECT MAX(entry_on) FROM plot_journals)
+                      )::text AS last_diary_on,
+                      (
+                        SELECT MAX(sprayed_on + isolation_days)::text
+                        FROM plot_sprays
+                        WHERE isolation_days > 0
+                          AND (sprayed_on + isolation_days) > (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+                      ) AS active_isolation_until,
+                      COALESCE((SELECT BOOL_OR(mrl_status <> 'pass') FROM plot_sprays), false) AS has_mrl_violation`,
+              [plot.code, plotHouseholdId],
+            ),
             this.db.query(
-              `SELECT code, plot_code, sampled_on, cd_mg_kg, yellow_o_positive, residue_mg_kg, chlorpyrifos_mg_kg, result, lab
+              `SELECT code, plot_code, sampled_on, cd_mg_kg::float8 AS cd_mg_kg, yellow_o_positive,
+                      residue_mg_kg::float8 AS residue_mg_kg, chlorpyrifos_mg_kg::float8 AS chlorpyrifos_mg_kg, result, lab
                FROM lab_tests
                WHERE upper(plot_code) = upper($1)
-               ORDER BY sampled_on DESC LIMIT 4`,
+               ORDER BY sampled_on DESC, id DESC
+               LIMIT 4`,
               [plot.code],
+            ),
+            this.db.query(
+              `SELECT severity, title, detected_on, plot_code, description
+               FROM violations
+               WHERE status = 'open'
+                 AND (
+                   upper(plot_code) = upper($1)
+                   OR ($2::bigint IS NOT NULL AND household_id = $2 AND (plot_code IS NULL OR upper(plot_code) = upper($1)))
+                 )
+               ORDER BY detected_on DESC, id DESC
+               LIMIT 5`,
+              [plot.code, plotHouseholdId],
             ),
             plotHouseholdId
               ? this.db.query(
@@ -509,11 +583,55 @@ export class PublicController {
             0,
           );
           const latestRealLot = realPlotContribs[0] ?? null;
+          const statsRow = diaryStatsRes.rows[0] ?? {
+            diary_count: 0,
+            last_diary_on: null,
+            active_isolation_until: null,
+            has_mrl_violation: false,
+          };
+          const openViolations = camelRows<{
+            severity: "critical" | "warning";
+            title: string;
+            detectedOn: string;
+            plotCode: string | null;
+            description: string | null;
+          }>(violationsRes.rows);
+          const plotLabTests = camelRows<{
+            code: string;
+            plotCode: string;
+            sampledOn: string;
+            cdMgKg: number;
+            yellowOPositive: boolean;
+            residueMgKg: number;
+            chlorpyrifosMgKg: number | null;
+            result: string;
+            lab: string;
+          }>(labTestsRes.rows);
+          const latestLab = plotLabTests[0] ?? null;
 
           return {
+            verifiedAt,
             stampType: "plot_signboard",
             isPlotSignboard: true,
-            plot,
+            plot: {
+              ...plot,
+              zoneCode: realZoneCode,
+            },
+            compliance: {
+              plotStatus: String(plot.status || "pending"),
+              householdStatus: (plot.householdStatus as string | null) ?? null,
+              hasZoneCode: Boolean(realZoneCode),
+              hasGisBoundary: Boolean(plot.geometryJson),
+              gisSource: (plot.source as string | null) ?? "declared",
+              diaryCount: Number(statsRow.diary_count || 0),
+              lastDiaryOn: statsRow.last_diary_on,
+              activeIsolationUntil: statsRow.active_isolation_until,
+              hasMrlViolation: Boolean(statsRow.has_mrl_violation),
+              openViolationsCount: openViolations.length,
+              openViolations,
+              latestLabResult: latestLab ? latestLab.result : null,
+              latestLabCode: latestLab ? latestLab.code : null,
+            },
             lot: latestRealLot
               ? {
                   code: latestRealLot.code,
@@ -524,14 +642,14 @@ export class PublicController {
                   buyer: latestRealLot.buyer,
                   market: latestRealLot.market,
                   status: latestRealLot.status,
-                  packhouseCode: latestRealLot.packhouseCode || "VN-DLPH-0089",
+                  packhouseCode: latestRealLot.packhouseCode || undefined,
                 }
               : null,
             households: [
               {
-                householdName: String(plot.ownerName || "Hộ Nông Dân"),
-                householdCode: String(plot.householdCode || `${plotPucCode}-H01`),
-                village: String(plot.village || "Xã Ea Khăl"),
+                householdName: String(plot.ownerName || "Chưa cập nhật chủ hộ"),
+                householdCode: String(plot.householdCode || "Chưa gán mã hộ"),
+                village: String(plot.village || "Chưa gán thôn"),
                 avatarUrl: (plot.avatarUrl as string | null) ?? null,
                 weightKg: totalContributedKg > 0 ? totalContributedKg : null,
                 contributedKg: totalContributedKg > 0 ? totalContributedKg : null,
@@ -539,57 +657,56 @@ export class PublicController {
                 areaHa: plot.areaHa !== null && plot.areaHa !== undefined ? Number(plot.areaHa) : null,
               },
             ],
-            supplyChain: {
-              packhouse: {
-                code: "VN-DLPH-0089",
-                name: "Cơ sở Đóng gói & Sơ chế HTX Cư Né",
-                taxCode: "6001289456",
-                treatmentMethod: "Quy trình sơ chế khử khuẩn xuất khẩu VietGAP/GACC",
-                gradeAPct: 75.0,
-                gradeBPct: 25.0,
-                gradeCPct: 0.0,
-                avgBrix: 32.5,
-              },
-              transport: {
-                transporter: "Vận tải chuyên dùng HTX Cư Né",
-                vehiclePlate: "47C-289.45",
-                temperatureC: 13.5,
-                departedAt: new Date().toISOString().split("T")[0],
-                estimatedArrival: new Date().toISOString().split("T")[0],
-              },
-              contract: {
-                code: "HD-2026/CN-EK01",
-                title: "Hợp đồng bao tiêu liên kết chuỗi giá trị",
-              },
-            },
             puc: {
               code: plotPucCode,
-              name: `Vùng trồng sầu riêng ${plot.village || "Ea Khăl"} – HTX Cư Né`,
+              name: plot.village
+                ? `Vùng trồng sầu riêng ${plot.village} – HTX Cư Né`
+                : "Vùng trồng sầu riêng liên kết HTX Cư Né",
               crop: "Sầu riêng (Durian - Durio zibethinus)",
-              variety: String(plot.variety || "Đô Na"),
-              location: `${plot.village || "Thôn 2"}, Xã Ea Khăl, Tỉnh Đắk Lắk`,
+              variety: String(plot.variety || "Chưa cập nhật giống"),
+              location: plotLocation,
               standard: "VietGAP & Nghị định thư kiểm dịch thực vật Việt Nam - Trung Quốc (GACC)",
               validUntil: "2027-12-31",
             },
             diaries: camelRows(diariesRes.rows),
-            labTests: camelRows(labTestsRes.rows),
+            labTests: plotLabTests,
             certifications: [
               {
                 title: "Mã số vùng trồng (PUC)",
-                code: plotPucCode,
-                status: "Đạt chuẩn xuất khẩu",
-                authority: "Cục Bảo vệ Thực vật – Bộ NN&PTNT",
+                code: realZoneCode ?? undefined,
+                status:
+                  !realZoneCode
+                    ? "Chưa được cấp mã vùng trồng"
+                    : plot.status === "approved"
+                      ? "Đã cấp mã & duyệt ranh giới"
+                      : plot.status === "pending"
+                        ? "Đang chờ thẩm định hồ sơ"
+                        : plot.status === "improve"
+                          ? "Cần khắc phục kỹ thuật"
+                          : "Tạm dừng mã vùng trồng",
+                authority: "Chi cục Trồng trọt & BVTV tỉnh Đắk Lắk",
               },
               {
-                title: "Biển cắm đầu lô vườn QR",
-                code: String(plot.code),
-                status: "Đã cắm biển định danh tại vườn",
-                authority: "HTX Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né",
+                title: "Thực hành canh tác VietGAP",
+                status:
+                  openViolations.length > 0 || statsRow.has_mrl_violation
+                    ? "Đang có cảnh báo vi phạm kỹ thuật"
+                    : statsRow.active_isolation_until
+                      ? `Đang cách ly thuốc BVTV đến ${statsRow.active_isolation_until}`
+                      : Number(statsRow.diary_count || 0) > 0
+                        ? `Đã ghi nhận ${statsRow.diary_count} nhật ký canh tác`
+                        : "Chưa ghi nhận nhật ký canh tác trên hệ thống",
+                authority: "Ban Kỹ thuật & Khuyến nông HTX Cư Né",
               },
               {
-                title: "Chứng nhận VietGAP",
-                status: "Đạt tiêu chuẩn VietGAP",
-                authority: "Trung tâm Chứng nhận Nông nghiệp",
+                title: "Kiểm nghiệm an toàn thực phẩm (GACC)",
+                code: latestLab?.code,
+                status: latestLab
+                  ? latestLab.result === "pass"
+                    ? "Mẫu kiểm nghiệm gần nhất đạt chuẩn"
+                    : "Mẫu kiểm nghiệm gần nhất vượt ngưỡng"
+                  : "Chưa có phiếu kiểm nghiệm cho lô đất này",
+                authority: latestLab?.lab || "Trung tâm kiểm nghiệm được chỉ định",
               },
             ],
           };
@@ -622,12 +739,14 @@ export class PublicController {
     const [labTestsRes, diariesRes] = await Promise.all([
       this.db.query(
         `SELECT lt.code, h.name AS household_name, lt.plot_code, lt.sampled_on,
-                lt.cd_mg_kg, lt.yellow_o_positive, lt.residue_mg_kg, lt.chlorpyrifos_mg_kg, lt.result, lt.lab
+                lt.cd_mg_kg::float8 AS cd_mg_kg, lt.yellow_o_positive,
+                lt.residue_mg_kg::float8 AS residue_mg_kg, lt.chlorpyrifos_mg_kg::float8 AS chlorpyrifos_mg_kg,
+                lt.result, lt.lab
          FROM lab_tests lt
          JOIN households h ON h.id = lt.household_id
-         WHERE lt.result = 'pass'
-           AND EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1 AND hc.household_id = lt.household_id)
-         ORDER BY lt.sampled_on DESC LIMIT 4`,
+         WHERE EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1 AND hc.household_id = lt.household_id)
+         ORDER BY lt.sampled_on DESC, lt.id DESC
+         LIMIT 4`,
         [internalLotId],
       ),
       this.db.query(
@@ -674,74 +793,95 @@ export class PublicController {
       ),
     ]);
 
+    const lotLabTests = camelRows<{
+      code: string;
+      householdName?: string;
+      plotCode: string;
+      sampledOn: string;
+      cdMgKg: number;
+      yellowOPositive: boolean;
+      residueMgKg: number;
+      chlorpyrifosMgKg: number | null;
+      result: string;
+      lab: string;
+    }>(labTestsRes.rows);
+    const latestLotLab = lotLabTests[0] ?? null;
+
     return {
+      verifiedAt,
       lot,
       item: scannedItem,
       supplyChain: {
         packhouse: {
-          code: lot.packhouseCode || "VN-DLPH-0089",
-          name: lot.enterpriseName || "Cơ sở Đóng gói & Sơ chế HTX Cư Né (GACC)",
-          taxCode: lot.enterpriseTaxCode || "6001289456",
-          treatmentMethod: lot.treatmentMethod || "Rửa sục khí Ozone, sấy ráo khí động học, xử lý nấm sinh học",
-          gradeAPct: Number(lot.gradeAPct || 72.5),
-          gradeBPct: Number(lot.gradeBPct || 21.0),
-          gradeCPct: Number(lot.gradeCPct || 6.5),
-          avgBrix: Number(lot.avgBrix || 33.2),
+          code: (lot.packhouseCode as string) || "VN-DLPH-0089",
+          name: (lot.enterpriseName as string) || "Cơ sở Đóng gói & Sơ chế HTX Cư Né",
+          taxCode: (lot.enterpriseTaxCode as string) || "",
+          treatmentMethod: (lot.treatmentMethod as string) || "",
+          gradeAPct: lot.gradeAPct !== null && lot.gradeAPct !== undefined ? Number(lot.gradeAPct) : null,
+          gradeBPct: lot.gradeBPct !== null && lot.gradeBPct !== undefined ? Number(lot.gradeBPct) : null,
+          gradeCPct: lot.gradeCPct !== null && lot.gradeCPct !== undefined ? Number(lot.gradeCPct) : null,
+          avgBrix: lot.avgBrix !== null && lot.avgBrix !== undefined ? Number(lot.avgBrix) : null,
         },
         transport: {
-          transporter: lot.transporter || "Công ty Vận tải Lạnh Á Châu Express",
-          vehiclePlate: lot.vehiclePlate || "47C-289.45",
-          temperatureC: Number(lot.temperatureC || 13.5),
-          departedAt: lot.departedAt || "2024-10-21T08:30:00+07:00",
-          estimatedArrival: lot.estimatedArrival || "2024-10-23T18:00:00+07:00",
+          transporter: (lot.transporter as string) || "",
+          vehiclePlate: (lot.vehiclePlate as string) || "",
+          temperatureC: lot.temperatureC !== null && lot.temperatureC !== undefined ? Number(lot.temperatureC) : null,
+          departedAt: (lot.departedAt as string) || "",
+          estimatedArrival: (lot.estimatedArrival as string) || "",
         },
-        contract: {
-          code: lot.contractCode || "HD-2024/VP-KB01",
-          title: lot.contractTitle || "Hợp đồng bao tiêu sầu riêng liên kết chuỗi giá trị",
-        },
+        ...(lot.contractCode
+          ? {
+              contract: {
+                code: String(lot.contractCode),
+                title: String(lot.contractTitle || "Hợp đồng liên kết tiêu thụ nông sản"),
+              },
+            }
+          : {}),
       },
       puc: {
         code: "VN-DLOR-0086",
         name: "Vùng trồng sầu riêng HTX Nông nghiệp Cư Né",
         crop: "Sầu riêng (Durian - Durio zibethinus)",
-        variety: "Monthong (Dona) & Ri6 Đắk Lắk",
-        location: "Xã Cư Né & Cư Kbô, Huyện Krông Búk, Tỉnh Đắk Lắk",
+        variety: "Monthong (Đô Na) & Ri6 Đắk Lắk",
+        location: "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk",
         standard: "VietGAP & Nghị định thư kiểm dịch thực vật Việt Nam - Trung Quốc (GACC)",
         validUntil: "2027-12-31",
       },
       households,
-      labTests: camelRows(labTestsRes.rows),
+      labTests: lotLabTests,
       diaries: camelRows(diariesRes.rows),
       certifications: [
         {
           title: "Mã số vùng trồng (PUC)",
           code: "VN-DLOR-0086",
-          status: "Đạt chuẩn xuất khẩu",
+          status: "Đã đăng ký xuất khẩu",
           authority: "Cục Bảo vệ Thực vật – Bộ NN&PTNT",
         },
         {
           title: "Cơ sở đóng gói (PHC)",
           code: String(lot.packhouseCode || "VN-DLPH-0089"),
-          status: "Đã cấp phép xuất khẩu chính ngạch",
+          status: "Đủ điều kiện đóng gói xuất khẩu",
           authority: "Tổng cục Hải quan Trung Quốc (GACC)",
         },
         {
           title: "Kiểm nghiệm Cadimi (Cd)",
           standard: "≤ 0.05 mg/kg (Mức tối đa cho phép)",
-          status: "Đạt (0.01 - 0.02 mg/kg)",
-          authority: "Trung tâm Quatest 3 / Vinacontrol",
+          status: latestLotLab
+            ? Number(latestLotLab.cdMgKg) <= 0.05
+              ? `Đạt (${latestLotLab.cdMgKg} mg/kg)`
+              : `Vượt ngưỡng (${latestLotLab.cdMgKg} mg/kg)`
+            : "Chưa có phiếu kiểm nghiệm",
+          authority: latestLotLab?.lab || "Đơn vị kiểm nghiệm độc lập",
         },
         {
           title: "Kiểm tra chất cấm Vàng O (Auramine O)",
           standard: "Tuyệt đối không được phép sử dụng",
-          status: "Âm tính 100%",
-          authority: "TT Kiểm nghiệm Chất lượng Đắk Lắk",
-        },
-        {
-          title: "Thời gian cách ly thuốc BVTV (PHI)",
-          standard: "Tuân thủ nghiêm ngặt MRL nước nhập khẩu",
-          status: "Cách ly ≥ 14 - 21 ngày trước hái",
-          authority: "Ban Kỹ thuật & Khuyến nông HTX",
+          status: latestLotLab
+            ? latestLotLab.yellowOPositive
+              ? "Không đạt (Phát hiện dương tính)"
+              : "Âm tính (Không phát hiện)"
+            : "Chưa có phiếu kiểm nghiệm",
+          authority: latestLotLab?.lab || "Đơn vị kiểm nghiệm độc lập",
         },
       ],
     };
