@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Ip, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Ip, Param, Post, Query } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { CrudController } from "../../common/crud/crud-controller.factory";
@@ -6,10 +6,36 @@ import { ParseRecordIdPipe, strictPipe } from "../../common/pipes/validation.pip
 import {
   CreateHarvestLotDto,
   GenerateItemsDto,
+  NotifyHarvestPlanDto,
   UpdateHarvestLotDto,
   UpsertContributionDto,
 } from "./harvest.dto";
 import { HarvestService } from "./harvest.service";
+
+@Controller("harvest-plan")
+export class HarvestPlanController {
+  constructor(private readonly harvestService: HarvestService) {}
+
+  @Get()
+  @Authorize("harvest", "read")
+  listPlan(
+    @CurrentUser() user: AuthUser,
+    @Query("q") q?: string,
+    @Query("status") status?: string,
+  ) {
+    return this.harvestService.listHarvestPlan(user, { q, status });
+  }
+
+  @Post("notify")
+  @Authorize("harvest", "update")
+  notifyPlan(
+    @Body(strictPipe(NotifyHarvestPlanDto)) dto: NotifyHarvestPlanDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.harvestService.notifyHarvestPlan(dto, user, ip);
+  }
+}
 
 @Controller("harvest")
 export class HarvestController extends CrudController(

@@ -112,3 +112,22 @@ export class UpsertContributionDto {
   @Max(500_000)
   weightKg!: number;
 }
+
+export class NotifyHarvestPlanDto {
+  @RecordId()
+  householdId!: number;
+
+  @Text(50)
+  plotCode!: string;
+
+  @IsoDate()
+  harvestDate!: string;
+
+  @OptionalField()
+  @NonNegative()
+  @Max(500_000)
+  estimatedYieldKg?: number;
+
+  @OptionalText(400)
+  note?: string;
+}
