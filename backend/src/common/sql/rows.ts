@@ -10,6 +10,10 @@ export const camelRows = <T = Record<string, unknown>>(rows: Record<string, unkn
 /** Ngày hôm nay theo giờ Việt Nam, dạng YYYY-MM-DD. */
 export const todayVn = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
 
-/** Đường dẫn tải tệp đính kèm (dùng trong cột SELECT: `attachmentUrl('j.photo_id')`). */
+/** Đường dẫn tải tệp đính kèm riêng tư (dùng trong cột SELECT: `attachmentUrlSql('j.photo_id')`). */
 export const attachmentUrlSql = (column: string) =>
   `CASE WHEN ${column} IS NULL THEN NULL ELSE '/api/uploads/' || ${column} END`;
+
+/** Đường dẫn tải tệp công khai (ảnh bản tin, danh mục, ảnh đại diện hộ trên trang truy xuất). */
+export const publicAttachmentUrlSql = (column: string) =>
+  `CASE WHEN ${column} IS NULL THEN NULL ELSE '/api/public/files/' || ${column} END`;

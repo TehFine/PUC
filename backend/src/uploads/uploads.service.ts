@@ -10,13 +10,20 @@ import { badRequest, forbidden, notFound } from "../common/errors/app.exception"
 import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
 
-export const UPLOAD_PURPOSES = ["journal", "harvest", "stamp", "approval", "violation", "news", "catalog"] as const;
+export const UPLOAD_PURPOSES = ["journal", "harvest", "stamp", "approval", "violation", "news", "catalog", "avatar"] as const;
 export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
 
 /** Mục đích hộ dân được phép tải tệp lên; các mục đích còn lại chỉ dành cho cán bộ. */
-const FARMER_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["journal", "harvest", "stamp", "approval", "violation"]);
-/** Tệp dùng trên trang công khai (ảnh bản tin, ảnh danh mục) – ai cũng xem được. */
-export const PUBLIC_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["news", "catalog"]);
+const FARMER_PURPOSES: ReadonlySet<UploadPurpose> = new Set([
+  "journal",
+  "harvest",
+  "stamp",
+  "approval",
+  "violation",
+  "avatar",
+]);
+/** Tệp dùng trên trang công khai (ảnh bản tin, ảnh danh mục, ảnh đại diện hộ trên trang truy xuất) – ai cũng xem được. */
+export const PUBLIC_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["news", "catalog", "avatar"]);
 
 const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
   journal: "journal",
@@ -24,6 +31,7 @@ const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
   stamp: "stamps",
   approval: "approvals",
   violation: "violations",
+  avatar: "households",
 };
 
 const PURPOSE_WRITE_RESOURCE: Record<UploadPurpose, ResourceKey> = {
@@ -34,6 +42,7 @@ const PURPOSE_WRITE_RESOURCE: Record<UploadPurpose, ResourceKey> = {
   violation: "violations",
   news: "news",
   catalog: "pesticides",
+  avatar: "households",
 };
 
 const VIDEO_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["journal", "harvest", "approval", "violation", "news"]);

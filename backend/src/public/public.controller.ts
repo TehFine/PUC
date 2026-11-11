@@ -2,7 +2,7 @@ import { Controller, Get, Header, Param } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { Public } from "../auth/auth.decorators";
 import { notFound } from "../common/errors/app.exception";
-import { camelRow, camelRows } from "../common/sql/rows";
+import { camelRow, camelRows, publicAttachmentUrlSql } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
 
 /**
@@ -116,7 +116,8 @@ export class PublicController {
   async traceSamples() {
     const [lotsRes, stampsRes, plotsRes] = await Promise.all([
       this.db.query(
-        `SELECT code, harvested_on, (weight_tons * 1000)::float8 AS weight_kg, buyer, market, status
+        `SELECT 'lot'::text AS sample_type, code, harvested_on, (weight_tons * 1000)::float8 AS weight_kg,
+                NULL::float8 AS area_ha, buyer, market, status
          FROM harvest_lots
          ORDER BY harvested_on DESC, id DESC
          LIMIT 6`,
@@ -131,7 +132,8 @@ export class PublicController {
          LIMIT 6`,
       ),
       this.db.query(
-        `SELECT p.code, COALESCE(p.area_ha * 18000, 18000)::float8 AS weight_kg,
+        `SELECT 'plot'::text AS sample_type, p.code, NULL::date AS harvested_on, NULL::float8 AS weight_kg,
+                p.area_ha::float8 AS area_ha,
                 ('Hộ ' || COALESCE(p.owner_name, h.name, 'thành viên HTX')) AS buyer,
                 COALESCE(p.zone_code, '66-PUC-SR0001-00728') AS market,
                 p.status
@@ -165,9 +167,14 @@ export class PublicController {
     const farmerStampSql = hasPlots
       ? `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.status,
                 fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
-                h.name AS household_name,
+                h.name AS household_name, h.status AS household_status,
                 h.code AS household_code, v.name AS village_name,
-                p.zone_code, p.variety, COALESCE(p.area_ha, h.area_ha)::float8 AS area_ha, p.planted_year
+                ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
+                p.zone_code, p.variety, COALESCE(p.area_ha, h.area_ha)::float8 AS area_ha, p.planted_year,
+                p.sheet_no, p.parcel_no, p.source AS plot_source,
+                ST_AsGeoJSON(p.geom) AS geometry_json,
+                ST_Y(ST_Centroid(p.geom))::float8 AS lat,
+                ST_X(ST_Centroid(p.geom))::float8 AS lng
          FROM farmer_stamps fs
          JOIN households h ON h.id = fs.household_id
          JOIN villages v ON v.id = h.village_id
@@ -176,9 +183,12 @@ export class PublicController {
          LIMIT 1`
       : `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.status,
                 fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
-                h.name AS household_name,
+                h.name AS household_name, h.status AS household_status,
                 h.code AS household_code, v.name AS village_name,
-                NULL::text AS zone_code, NULL::text AS variety, h.area_ha::float8 AS area_ha, NULL::int AS planted_year
+                ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
+                NULL::text AS zone_code, NULL::text AS variety, h.area_ha::float8 AS area_ha, NULL::int AS planted_year,
+                NULL::text AS sheet_no, NULL::text AS parcel_no, NULL::text AS plot_source,
+                NULL::text AS geometry_json, NULL::float8 AS lat, NULL::float8 AS lng
          FROM farmer_stamps fs
          JOIN households h ON h.id = fs.household_id
          JOIN villages v ON v.id = h.village_id
@@ -193,12 +203,44 @@ export class PublicController {
       const { householdId: _omitHouseholdId, ...farmerStamp } = rawStamp;
       void _omitHouseholdId;
 
-      const [diariesRes, labTestsRes] = await Promise.all([
+      const [diariesRes, labTestsRes, contribSumRes] = await Promise.all([
         this.db.query(
-          `SELECT entry_on, plot_code, activity, detail, recorder
-           FROM journal_entries
-           WHERE household_id = $1
-           ORDER BY entry_on DESC LIMIT 6`,
+          `SELECT entry_on, plot_code, activity, detail, recorder, kind, mrl_status, isolation_days
+           FROM (
+             SELECT sr.sprayed_on AS entry_on,
+                    COALESCE(sr.plot_code, '') AS plot_code,
+                    ('Phun thuốc BVTV (' || p.name || ')') AS activity,
+                    ('Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày (' ||
+                      CASE
+                        WHEN sr.mrl_status <> 'pass' THEN 'VƯỢT NGƯỠNG'
+                        WHEN sr.isolation_days > 0 AND (sr.sprayed_on + sr.isolation_days) > (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+                          THEN 'ĐANG CÁCH LY ĐẾN ' || to_char(sr.sprayed_on + sr.isolation_days, 'DD/MM/YYYY')
+                        ELSE 'AN TOÀN'
+                      END || ')') AS detail,
+                    h.name AS recorder,
+                    'spray'::text AS kind,
+                    sr.mrl_status,
+                    sr.isolation_days,
+                    sr.id AS sort_id
+             FROM spray_records sr
+             JOIN pesticides p ON p.id = sr.pesticide_id
+             JOIN households h ON h.id = sr.household_id
+             WHERE sr.household_id = $1
+             UNION ALL
+             SELECT je.entry_on,
+                    je.plot_code,
+                    je.activity,
+                    je.detail,
+                    je.recorder,
+                    'journal'::text AS kind,
+                    NULL::text AS mrl_status,
+                    NULL::int AS isolation_days,
+                    je.id AS sort_id
+             FROM journal_entries je
+             WHERE je.household_id = $1
+           ) combined
+           ORDER BY entry_on DESC, sort_id DESC
+           LIMIT 10`,
           [householdId],
         ),
         this.db.query(
@@ -208,7 +250,20 @@ export class PublicController {
            ORDER BY sampled_on DESC LIMIT 4`,
           [householdId],
         ),
+        this.db.query<{ contributed_kg: number; lot_count: number }>(
+          `SELECT COALESCE(SUM(hc.weight_kg), 0)::float8 AS contributed_kg,
+                  COUNT(*)::int AS lot_count
+           FROM harvest_contributions hc
+           WHERE hc.household_id = $1`,
+          [householdId],
+        ),
       ]);
+
+      const stampWeightKg =
+        farmerStamp.fruitWeightKg !== null && farmerStamp.fruitWeightKg !== undefined
+          ? Number(farmerStamp.fruitWeightKg)
+          : null;
+      const contribRow = contribSumRes.rows[0] ?? { contributed_kg: 0, lot_count: 0 };
 
       const harvestDateStr = farmerStamp.harvestDate
         ? String(farmerStamp.harvestDate)
@@ -226,23 +281,30 @@ export class PublicController {
         stampType: "farmer_fruit",
         isFarmerStamp: true,
         farmerStamp,
-        lot: {
-          code: String(farmerStamp.serialCode),
-          qrCode: String(farmerStamp.serialCode),
-          harvestedOn: harvestDateStr,
-          weightTons: Number(farmerStamp.fruitWeightKg ? (Number(farmerStamp.fruitWeightKg) / 1000).toFixed(4) : 0.0035),
-          householdCount: 1,
-          buyer: "HTX Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né",
-          market: "Xuất khẩu chính ngạch & Nội địa",
-          status: farmerStamp.status === "activated" ? "harvested" : "allocated",
-          packhouseCode: "VN-DLPH-0089",
-        },
+        lot:
+          stampWeightKg !== null
+            ? {
+                code: String(farmerStamp.serialCode),
+                qrCode: String(farmerStamp.serialCode),
+                harvestedOn: harvestDateStr,
+                weightTons: Number((stampWeightKg / 1000).toFixed(4)),
+                householdCount: 1,
+                buyer: "HTX Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né",
+                market: "Xuất khẩu chính ngạch & Nội địa",
+                status: farmerStamp.status === "activated" ? "harvested" : "allocated",
+                packhouseCode: "VN-DLPH-0089",
+              }
+            : null,
         households: [
           {
             householdName: String(farmerStamp.householdName),
             householdCode: String(farmerStamp.householdCode),
             village: String(farmerStamp.villageName || "Xã Ea Khăl"),
-            weightKg: Number(farmerStamp.fruitWeightKg || 3.5),
+            avatarUrl: (farmerStamp.avatarUrl as string | null) ?? null,
+            weightKg: stampWeightKg,
+            contributedKg: contribRow.contributed_kg > 0 ? contribRow.contributed_kg : null,
+            lotCount: contribRow.lot_count,
+            areaHa: farmerStamp.areaHa !== null && farmerStamp.areaHa !== undefined ? Number(farmerStamp.areaHa) : null,
           },
         ],
         supplyChain: {
@@ -340,56 +402,141 @@ export class PublicController {
       // 3. Kiểm tra nếu mã quét là mã Lô đất canh tác / Biển cắm vườn (chỉ khi có bảng plots)
       if (hasPlots) {
         const plotRes = await this.db.query(
-          `SELECT p.code, p.owner_name, p.village, p.zone_code, p.variety, p.planted_year,
-                  p.area_ha::float8 AS area_ha, p.status, h.code AS household_code
+          `SELECT p.household_id, p.code, p.sheet_no, p.parcel_no, p.source,
+                  COALESCE(p.owner_name, h.name) AS owner_name,
+                  COALESCE(p.village, v.name) AS village, p.zone_code, p.variety, p.planted_year,
+                  p.area_ha::float8 AS area_ha, p.status,
+                  h.code AS household_code, h.status AS household_status,
+                  ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
+                  ST_AsGeoJSON(p.geom) AS geometry_json,
+                  ST_Y(ST_Centroid(p.geom))::float8 AS lat,
+                  ST_X(ST_Centroid(p.geom))::float8 AS lng
            FROM plots p
            LEFT JOIN households h ON h.id = p.household_id
+           LEFT JOIN villages v ON v.id = h.village_id
            WHERE upper(p.code) = upper($1)
            LIMIT 1`,
           [cleanCode],
         );
 
         if (plotRes.rowCount && plotRes.rows[0]) {
-          const plot = camelRow<Record<string, unknown>>(plotRes.rows[0]);
+          const rawPlot = camelRow<Record<string, unknown>>(plotRes.rows[0]);
+          const plotHouseholdId =
+            rawPlot.householdId !== null && rawPlot.householdId !== undefined
+              ? Number(rawPlot.householdId)
+              : null;
+          const { householdId: _omitPlotHouseholdId, ...plot } = rawPlot;
+          void _omitPlotHouseholdId;
+
           const plotPucCode = String(plot.zoneCode || "66-PUC-SR0001-00728");
-          const [diariesRes, labTestsRes] = await Promise.all([
+          const [diariesRes, labTestsRes, plotContribsRes] = await Promise.all([
             this.db.query(
-              `SELECT entry_on, plot_code, activity, detail, recorder
-               FROM journal_entries
-               WHERE plot_code = $1
-               ORDER BY entry_on DESC LIMIT 6`,
-              [plot.code],
+              `SELECT entry_on, plot_code, activity, detail, recorder, kind, mrl_status, isolation_days
+               FROM (
+                 SELECT sr.sprayed_on AS entry_on,
+                        COALESCE(sr.plot_code, $1::text) AS plot_code,
+                        ('Phun thuốc BVTV (' || p.name || ')') AS activity,
+                        ('Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày (' ||
+                          CASE
+                            WHEN sr.mrl_status <> 'pass' THEN 'VƯỢT NGƯỠNG'
+                            WHEN sr.isolation_days > 0 AND (sr.sprayed_on + sr.isolation_days) > (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+                              THEN 'ĐANG CÁCH LY ĐẾN ' || to_char(sr.sprayed_on + sr.isolation_days, 'DD/MM/YYYY')
+                            ELSE 'AN TOÀN'
+                          END || ')') AS detail,
+                        h.name AS recorder,
+                        'spray'::text AS kind,
+                        sr.mrl_status,
+                        sr.isolation_days,
+                        sr.id AS sort_id
+                 FROM spray_records sr
+                 JOIN pesticides p ON p.id = sr.pesticide_id
+                 JOIN households h ON h.id = sr.household_id
+                 WHERE upper(sr.plot_code) = upper($1)
+                    OR ($2::bigint IS NOT NULL AND sr.household_id = $2 AND sr.plot_code IS NULL)
+                 UNION ALL
+                 SELECT je.entry_on,
+                        je.plot_code,
+                        je.activity,
+                        je.detail,
+                        je.recorder,
+                        'journal'::text AS kind,
+                        NULL::text AS mrl_status,
+                        NULL::int AS isolation_days,
+                        je.id AS sort_id
+                 FROM journal_entries je
+                 WHERE upper(je.plot_code) = upper($1)
+               ) combined
+               ORDER BY entry_on DESC, sort_id DESC
+               LIMIT 10`,
+              [plot.code, plotHouseholdId],
             ),
             this.db.query(
               `SELECT code, plot_code, sampled_on, cd_mg_kg, yellow_o_positive, residue_mg_kg, chlorpyrifos_mg_kg, result, lab
                FROM lab_tests
-               WHERE plot_code = $1 AND result = 'pass'
+               WHERE upper(plot_code) = upper($1)
                ORDER BY sampled_on DESC LIMIT 4`,
               [plot.code],
             ),
+            plotHouseholdId
+              ? this.db.query(
+                  `SELECT hl.code, hl.qr_code, hl.harvested_on, hl.weight_tons::float8 AS weight_tons,
+                          hl.household_count, hl.buyer, hl.market, hl.status, hl.packhouse_code,
+                          hc.weight_kg::float8 AS contributed_kg
+                   FROM harvest_contributions hc
+                   JOIN harvest_lots hl ON hl.id = hc.lot_id
+                   WHERE hc.household_id = $1
+                   ORDER BY hl.harvested_on DESC, hc.id DESC`,
+                  [plotHouseholdId],
+                )
+              : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
           ]);
+
+          const realPlotContribs = camelRows<{
+            code: string;
+            qrCode: string | null;
+            harvestedOn: string;
+            weightTons: number;
+            householdCount: number;
+            buyer: string;
+            market: string;
+            status: string;
+            packhouseCode: string | null;
+            contributedKg: number;
+          }>(plotContribsRes.rows);
+
+          const totalContributedKg = realPlotContribs.reduce(
+            (sum, item) => sum + Number(item.contributedKg || 0),
+            0,
+          );
+          const latestRealLot = realPlotContribs[0] ?? null;
 
           return {
             stampType: "plot_signboard",
             isPlotSignboard: true,
             plot,
-            lot: {
-              code: String(plot.code),
-              qrCode: String(plot.code),
-              harvestedOn: new Date().toISOString().split("T")[0],
-              weightTons: Number(plot.areaHa ? (Number(plot.areaHa) * 20).toFixed(1) : 48.0),
-              householdCount: 1,
-              buyer: "HTX Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né",
-              market: "Xuất khẩu chính ngạch & Nội địa",
-              status: "harvested",
-              packhouseCode: "VN-DLPH-0089",
-            },
+            lot: latestRealLot
+              ? {
+                  code: latestRealLot.code,
+                  qrCode: latestRealLot.qrCode || latestRealLot.code,
+                  harvestedOn: latestRealLot.harvestedOn,
+                  weightTons: latestRealLot.weightTons,
+                  householdCount: latestRealLot.householdCount,
+                  buyer: latestRealLot.buyer,
+                  market: latestRealLot.market,
+                  status: latestRealLot.status,
+                  packhouseCode: latestRealLot.packhouseCode || "VN-DLPH-0089",
+                }
+              : null,
             households: [
               {
                 householdName: String(plot.ownerName || "Hộ Nông Dân"),
                 householdCode: String(plot.householdCode || `${plotPucCode}-H01`),
                 village: String(plot.village || "Xã Ea Khăl"),
-                weightKg: Number(plot.areaHa ? (Number(plot.areaHa) * 20000).toFixed(0) : 48000),
+                avatarUrl: (plot.avatarUrl as string | null) ?? null,
+                weightKg: totalContributedKg > 0 ? totalContributedKg : null,
+                contributedKg: totalContributedKg > 0 ? totalContributedKg : null,
+                lotCount: realPlotContribs.length,
+                areaHa: plot.areaHa !== null && plot.areaHa !== undefined ? Number(plot.areaHa) : null,
               },
             ],
             supplyChain: {
@@ -457,9 +604,11 @@ export class PublicController {
     const { id: _omitId, ...lot } = rawLot;
     void _omitId;
 
-    // Lấy danh sách hộ tham gia lô hàng
+    // Lấy danh sách hộ thực tế đã đóng góp vào lô hàng (không tự bịa số liệu khi chưa có đóng góp)
     const contribsRes = await this.db.query(
-      `SELECT h.name AS household_name, h.code AS household_code, v.name AS village, hc.weight_kg::float8 AS weight_kg
+      `SELECT h.name AS household_name, h.code AS household_code, v.name AS village,
+              ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
+              hc.weight_kg::float8 AS weight_kg
        FROM harvest_contributions hc
        JOIN households h ON h.id = hc.household_id
        JOIN villages v ON v.id = h.village_id
@@ -468,17 +617,7 @@ export class PublicController {
       [internalLotId],
     );
 
-    let households = camelRows(contribsRes.rows);
-    if (households.length === 0) {
-      const fallbackHouseholds = await this.db.query(
-        `SELECT h.name AS household_name, h.code AS household_code, v.name AS village, 450 AS weight_kg
-         FROM households h
-         JOIN villages v ON v.id = h.village_id
-         WHERE h.status = 'qualified'
-         LIMIT 4`,
-      );
-      households = camelRows(fallbackHouseholds.rows);
-    }
+    const households = camelRows(contribsRes.rows);
 
     const [labTestsRes, diariesRes] = await Promise.all([
       this.db.query(
@@ -487,26 +626,50 @@ export class PublicController {
          FROM lab_tests lt
          JOIN households h ON h.id = lt.household_id
          WHERE lt.result = 'pass'
-           AND (
-             EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1 AND hc.household_id = lt.household_id)
-             OR (
-               NOT EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1)
-               AND h.status = 'qualified'
-             )
-           )
+           AND EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1 AND hc.household_id = lt.household_id)
          ORDER BY lt.sampled_on DESC LIMIT 4`,
         [internalLotId],
       ),
       this.db.query(
-        `SELECT je.entry_on, je.plot_code, je.activity, je.detail, je.recorder, h.name AS household_name
-         FROM journal_entries je
-         JOIN households h ON h.id = je.household_id
-         WHERE EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1 AND hc.household_id = je.household_id)
-            OR (
-              NOT EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1)
-              AND h.status = 'qualified'
-            )
-         ORDER BY je.entry_on DESC LIMIT 6`,
+        `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days
+         FROM (
+           SELECT sr.sprayed_on AS entry_on,
+                  COALESCE(sr.plot_code, '') AS plot_code,
+                  ('Phun thuốc BVTV (' || p.name || ')') AS activity,
+                  ('Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày (' ||
+                    CASE
+                      WHEN sr.mrl_status <> 'pass' THEN 'VƯỢT NGƯỠNG'
+                      WHEN sr.isolation_days > 0 AND (sr.sprayed_on + sr.isolation_days) > (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+                        THEN 'ĐANG CÁCH LY ĐẾN ' || to_char(sr.sprayed_on + sr.isolation_days, 'DD/MM/YYYY')
+                      ELSE 'AN TOÀN'
+                    END || ')') AS detail,
+                  h.name AS recorder,
+                  h.name AS household_name,
+                  'spray'::text AS kind,
+                  sr.mrl_status,
+                  sr.isolation_days,
+                  sr.id AS sort_id
+           FROM spray_records sr
+           JOIN pesticides p ON p.id = sr.pesticide_id
+           JOIN households h ON h.id = sr.household_id
+           WHERE EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1 AND hc.household_id = sr.household_id)
+           UNION ALL
+           SELECT je.entry_on,
+                  je.plot_code,
+                  je.activity,
+                  je.detail,
+                  je.recorder,
+                  h.name AS household_name,
+                  'journal'::text AS kind,
+                  NULL::text AS mrl_status,
+                  NULL::int AS isolation_days,
+                  je.id AS sort_id
+           FROM journal_entries je
+           JOIN households h ON h.id = je.household_id
+           WHERE EXISTS (SELECT 1 FROM harvest_contributions hc WHERE hc.lot_id = $1 AND hc.household_id = je.household_id)
+         ) combined
+         ORDER BY entry_on DESC, sort_id DESC
+         LIMIT 10`,
         [internalLotId],
       ),
     ]);

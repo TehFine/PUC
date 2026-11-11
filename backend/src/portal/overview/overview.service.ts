@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { notFound } from "../../common/errors/app.exception";
-import { camelRow, camelRows } from "../../common/sql/rows";
+import { camelRow, camelRows, publicAttachmentUrlSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { householdIdOf, PORTAL_TABS, TODAY_VN_SQL } from "../common/portal-context";
@@ -28,7 +28,8 @@ export class OverviewService {
     const household = (
       await this.db.query(
         `SELECT h.id, h.code, h.name, h.phone, h.plot_count, h.area_ha, h.status,
-                v.name AS village_name, v.leader AS village_leader
+                v.name AS village_name, v.leader AS village_leader,
+                ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url
          FROM households h JOIN villages v ON v.id = h.village_id WHERE h.id = $1`,
         [id],
       )
@@ -40,9 +41,17 @@ export class OverviewService {
         `SELECT
            (SELECT count(*)::int FROM violations WHERE household_id = $1 AND status = 'open') AS open_violations,
            (SELECT count(*)::int FROM approvals WHERE household_id = $1 AND status = 'pending') AS pending_approvals,
-           (SELECT max(entry_on) FROM journal_entries WHERE household_id = $1) AS last_journal_on,
-           (SELECT count(*)::int FROM journal_entries
-              WHERE household_id = $1 AND entry_on >= (${TODAY_VN_SQL} - 30)) AS "journalLast30Days",
+           GREATEST(
+             (SELECT max(entry_on) FROM journal_entries WHERE household_id = $1),
+             (SELECT max(sprayed_on) FROM spray_records WHERE household_id = $1)
+           ) AS last_journal_on,
+           (
+             (SELECT count(*)::int FROM journal_entries
+                WHERE household_id = $1 AND entry_on >= (${TODAY_VN_SQL} - 30))
+             +
+             (SELECT count(*)::int FROM spray_records
+                WHERE household_id = $1 AND sprayed_on >= (${TODAY_VN_SQL} - 30))
+           ) AS "journalLast30Days",
            (SELECT coalesce(sum(weight_kg), 0)::float8 FROM harvest_contributions WHERE household_id = $1) AS harvest_total_kg,
            (SELECT count(*)::int FROM notifications WHERE user_id = $2 AND read_at IS NULL) AS unread_notifications`,
         [id, user.id],
@@ -84,7 +93,12 @@ export class OverviewService {
                     coalesce(' · Thửa ' || dv.plot_code, '')
                 END AS detail,
                 '${PORTAL_TABS.diary}' AS tab, coalesce(j.last_on, dv.detected_on) AS date
-         FROM (SELECT max(entry_on) AS last_on FROM journal_entries WHERE household_id = $1) j
+         FROM (
+           SELECT GREATEST(
+             (SELECT max(entry_on) FROM journal_entries WHERE household_id = $1),
+             (SELECT max(sprayed_on) FROM spray_records WHERE household_id = $1)
+           ) AS last_on
+         ) j
          CROSS JOIN today
          LEFT JOIN LATERAL (
            SELECT v.plot_code, v.detected_on, v.farmer_response_at
