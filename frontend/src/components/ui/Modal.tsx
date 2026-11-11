@@ -44,11 +44,18 @@ export function Modal({
 
     const sheet = panelRef.current;
     const backdrop = backdropRef.current;
+    const isDesktop = typeof window !== "undefined" && window.innerWidth >= 760;
     if (sheet) {
       sheet.style.animation = "none";
       sheet.style.pointerEvents = "none";
-      sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-      sheet.style.transform = "translate3d(0, 105%, 0)";
+      if (isDesktop) {
+        sheet.style.transition = "transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out";
+        sheet.style.transform = "translate3d(0, 12px, 0) scale(0.97)";
+        sheet.style.opacity = "0";
+      } else {
+        sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+        sheet.style.transform = "translate3d(0, 105%, 0)";
+      }
     }
     if (backdrop) {
       backdrop.style.animation = "none";
@@ -73,7 +80,9 @@ export function Modal({
           'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
         ) ?? [],
       );
-    (focusable().find((el) => el.tagName !== "BUTTON") ?? focusable()[0] ?? panel)?.focus();
+    (focusable().find((el) => el.tagName !== "BUTTON") ?? focusable()[0] ?? panel)?.focus({
+      preventScroll: true,
+    });
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -88,17 +97,17 @@ export function Modal({
       const last = items[items.length - 1];
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     };
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
       unlockScroll();
-      previousFocus?.focus?.();
+      previousFocus?.focus?.({ preventScroll: true });
     };
   }, [handleClose]);
 

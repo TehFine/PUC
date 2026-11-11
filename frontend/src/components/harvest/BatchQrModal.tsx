@@ -60,11 +60,18 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     isClosingRef.current = true;
     const sheet = sheetRef.current;
     const backdrop = backdropRef.current;
+    const isDesktop = typeof window !== "undefined" && window.innerWidth >= 760;
     if (sheet) {
       sheet.style.animation = "none";
       sheet.style.pointerEvents = "none";
-      sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-      sheet.style.transform = "translate3d(0, 105%, 0)";
+      if (isDesktop) {
+        sheet.style.transition = "transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out";
+        sheet.style.transform = "translate3d(0, 12px, 0) scale(0.97)";
+        sheet.style.opacity = "0";
+      } else {
+        sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+        sheet.style.transform = "translate3d(0, 105%, 0)";
+      }
     }
     if (backdrop) {
       backdrop.style.animation = "none";
@@ -702,6 +709,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         .batch-qr-preview-area {
           padding: 20px 24px;
           overflow-y: auto;
+          overscroll-behavior: contain;
           flex: 1;
           background: #eef2ef;
         }

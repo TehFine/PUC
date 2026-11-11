@@ -417,6 +417,8 @@ export function PortalSearchButton({
         type="button"
         className={`pt-notif-btn pt-search-btn ${className}`.trim()}
         onClick={() => setOpen(true)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         aria-label={t("Tìm chức năng")}
         title={t("Tìm chức năng")}
       >
