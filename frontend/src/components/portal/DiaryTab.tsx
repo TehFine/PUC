@@ -532,6 +532,8 @@ function JournalDetailModal({
   onClose: () => void;
   onDeleted: () => void;
 }) {
+  const sheetClose = useSheetClose();
+  const closeModal = sheetClose ?? onClose;
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -655,7 +657,7 @@ function JournalDetailModal({
             onConfirm={handleDelete}
           />
         )}
-        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={onClose} disabled={deleting}>
+        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={closeModal} disabled={deleting}>
           Đóng chi tiết
         </button>
       </div>
@@ -672,6 +674,8 @@ function SprayDetailModal({
   onClose: () => void;
   onDeleted: () => void;
 }) {
+  const sheetClose = useSheetClose();
+  const closeModal = sheetClose ?? onClose;
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -786,7 +790,7 @@ function SprayDetailModal({
             onConfirm={handleDelete}
           />
         )}
-        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={onClose} disabled={deleting}>
+        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={closeModal} disabled={deleting}>
           Đóng chi tiết
         </button>
       </div>
@@ -916,7 +920,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
       >
         <StateBlock loading={violations.loading} error={violations.error} />
         {!violations.loading && violationsList.length === 0 && (
-          <EmptyState icon="ok">Hộ của bạn không có cảnh báo hay vi phạm nhật ký nào. Hãy tiếp tục duy trì ghi chép đúng quy chuẩn VietGAP.</EmptyState>
+          <EmptyState icon="recyclebin">Hộ của bạn không có cảnh báo hay vi phạm nhật ký nào. Hãy tiếp tục duy trì ghi chép đúng quy chuẩn VietGAP.</EmptyState>
         )}
         {violationsList.length > 0 && (
           <ul className="pt-list">
@@ -1028,7 +1032,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
             <StateBlock loading={active.loading} error={active.error} />
 
             {view === "journal" && journal.data && journal.data.data.length === 0 && (
-              <EmptyState icon="diary">Chưa có nhật ký nào. Bấm “Thêm mới” để ghi công việc đầu tiên.</EmptyState>
+              <EmptyState icon="empty">Chưa có nhật ký nào. Bấm “Thêm mới” để ghi công việc đầu tiên.</EmptyState>
             )}
             {view === "journal" && journal.data && journal.data.data.length > 0 && (
               <ul className="pt-widget-list pt-diary-widget-list" role="list">

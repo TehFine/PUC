@@ -1,3 +1,4 @@
+import { RadialPngIcon } from "./RadialIcons";
 import { Sheet } from "./ui";
 import type { PortalOverview } from "@/types/portal";
 
@@ -73,10 +74,17 @@ export function SystemSupportModal({
         <section className="pt-support-sec">
           <h3 className="pt-support-sec-title">Kênh liên hệ trực tiếp</h3>
           <div className="pt-support-box">
-            <div className="pt-support-row">
+            <div className="pt-support-row pt-support-row-call">
               <span className="pt-support-label">Hotline kỹ thuật HTX</span>
               <strong className="pt-support-val">
-                <a href="tel:0914123456">0914 123 456</a>
+                <a
+                  href="tel:0366663778"
+                  className="pt-support-call-pill"
+                  title="Bấm để gọi trực tiếp Hotline kỹ thuật HTX"
+                >
+                  <RadialPngIcon src="/call.png" size={14} />
+                  <span>0366 663 778</span>
+                </a>
               </strong>
             </div>
             <div className="pt-support-row">

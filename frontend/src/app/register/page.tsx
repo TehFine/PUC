@@ -59,7 +59,24 @@ export default function RegisterPage() {
         >
           <strong>Liên hệ cấp tài khoản hộ thành viên:</strong>
           <div style={{ marginTop: 4, color: "var(--au-text)" }}>
-            Hotline kỹ thuật HTX Cư Né: <a href="tel:0914123456" style={{ fontWeight: 700, color: "var(--au-green-deep)" }}>0914 123 456</a> · Văn phòng HTX tại Xã Cư Né, Krông Búk, Đắk Lắk (hoặc liên hệ trực tiếp Trưởng thôn phụ trách).
+            Hotline kỹ thuật HTX Cư Né:{" "}
+            <a
+              href="tel:0366663778"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "2px 10px",
+                borderRadius: 999,
+                border: "1.5px solid rgba(22, 101, 52, 0.34)",
+                background: "#ffffff",
+                fontWeight: 700,
+                color: "var(--au-green-deep)",
+                textDecoration: "none",
+              }}
+            >
+              0366 663 778
+            </a>{" "}
+            · Văn phòng HTX tại Xã Cư Né, Krông Búk, Đắk Lắk (hoặc liên hệ trực tiếp Trưởng thôn phụ trách).
           </div>
         </div>
 
