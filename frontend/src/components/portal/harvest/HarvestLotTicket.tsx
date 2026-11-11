@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Download, QrCode } from "lucide-react";
 import QRCode from "qrcode";
+import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { formatKg, HARVEST_STATUS } from "@/lib/portal-labels";
 import { triggerDataUrlDownload } from "@/utils/download";
 import { formatDate } from "@/utils/format";
@@ -27,14 +28,20 @@ export function HarvestAssetTagCard({
   const status = HARVEST_STATUS[lot.status];
 
   const watermarkTitle =
-    lot.status === "exported" || lot.status === "delivered"
+    lot.status === "exported"
       ? "ĐÃ XUẤT KHO"
-      : (status?.label || lot.status).toUpperCase();
+      : lot.status === "delivered"
+        ? "ĐÃ GIAO HÀNG"
+        : lot.status === "in_transit"
+          ? "ĐANG VẬN CHUYỂN"
+          : lot.status === "sampling"
+            ? "ĐANG LẤY MẪU"
+            : (status?.label || lot.status).toUpperCase();
 
-  const watermarkSub =
+  const watermarkBottom =
     lot.status === "exported" || lot.status === "delivered"
-      ? "HTX CƯ NÉ · ĐÃ KIỂM TRA"
-      : "HTX CƯ NÉ · GIÁM SÁT";
+      ? "KIỂM ĐỊNH VIETGAP"
+      : "GIÁM SÁT VÙNG TRỒNG";
 
   useEffect(() => {
     if (qrDataUrlCache.has(codeKey)) {
@@ -72,10 +79,11 @@ export function HarvestAssetTagCard({
   return (
     <div className="pt-asset-card" data-status={lot.status}>
       <div className="pt-asset-watermark" aria-hidden="true">
-        <div className="pt-asset-watermark-inner">
-          <span className="pt-asset-watermark-title">{watermarkTitle}</span>
-          <span className="pt-asset-watermark-sub">{watermarkSub}</span>
-        </div>
+        <WatermarkStamp
+          topText="HTX SẦU RIÊNG CƯ NÉ"
+          centerText={watermarkTitle}
+          bottomText={watermarkBottom}
+        />
       </div>
 
       <div className="pt-asset-left">

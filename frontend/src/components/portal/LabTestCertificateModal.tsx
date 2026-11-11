@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Download, Printer } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { isLowEndDevice } from "@/lib/network";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { triggerBlobDownload } from "@/utils/download";
@@ -468,8 +469,11 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
             {/* WATERMARK CHÌM Ở TÂM TỜ GIẤY */}
             <div className="cert-watermark" aria-hidden="true">
-              <div className="cert-watermark-text">PUC · BẢN GỐC CHỨNG THỰC</div>
-              <div className="cert-watermark-sub">ISO/IEC 17025:2017</div>
+              <WatermarkStamp
+                topText="HTX SẦU RIÊNG CƯ NÉ"
+                centerText={test.result === "fail" ? "KHÔNG ĐẠT CHUẨN" : "BẢN CHỨNG THỰC"}
+                bottomText="CHUẨN ISO/IEC 17025"
+              />
             </div>
 
             {/* 1. HEADER CÔNG VĂN CHUẨN NHÀ NƯỚC */}
@@ -882,8 +886,11 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
               <PaperDogEarFold idPrefix="m1" />
 
               <div className="cert-watermark" aria-hidden="true">
-                <div className="cert-watermark-text" style={{ fontSize: 36 }}>PUC · BẢN GỐC CHỨNG THỰC</div>
-                <div className="cert-watermark-sub" style={{ fontSize: 22 }}>ISO/IEC 17025:2017</div>
+                <WatermarkStamp
+                  topText="HTX SẦU RIÊNG CƯ NÉ"
+                  centerText={test.result === "fail" ? "KHÔNG ĐẠT CHUẨN" : "BẢN CHỨNG THỰC"}
+                  bottomText="CHUẨN ISO/IEC 17025"
+                />
               </div>
 
               <div className="cert-m-top-group">
@@ -1093,8 +1100,11 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           <div className="cert-mobile-a4-frame">
             <div className="cert-mobile-a4-canvas is-continuation">
               <div className="cert-watermark" aria-hidden="true">
-                <div className="cert-watermark-text" style={{ fontSize: 36 }}>PUC · BẢN GỐC CHỨNG THỰC</div>
-                <div className="cert-watermark-sub" style={{ fontSize: 22 }}>ISO/IEC 17025:2017</div>
+                <WatermarkStamp
+                  topText="HTX SẦU RIÊNG CƯ NÉ"
+                  centerText={test.result === "fail" ? "KHÔNG ĐẠT CHUẨN" : "BẢN CHỨNG THỰC"}
+                  bottomText="CHUẨN ISO/IEC 17025"
+                />
               </div>
 
               {/* Running Header gọn gàng nối tiếp từ Trang 1 */}
@@ -1343,6 +1353,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           backdrop-filter: blur(6px);
           overflow-y: auto;
           overflow-x: auto;
+          overscroll-behavior: contain;
           -webkit-overflow-scrolling: touch;
           touch-action: pan-x pan-y pinch-zoom;
           padding: 24px 16px;
@@ -1523,29 +1534,21 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
         .cert-watermark {
           position: absolute;
-          top: 50%;
+          top: 52%;
           left: 50%;
-          transform: translate(-50%, -50%) rotate(-25deg);
+          width: 340px;
+          height: 302px;
+          transform: translate(-50%, -50%) rotate(-16deg);
           pointer-events: none;
           user-select: none;
-          text-align: center;
-          opacity: 0.038;
+          color: #dc2626;
+          opacity: 0.105;
           z-index: 1;
         }
 
-        .cert-watermark-text {
-          font-size: 54px;
-          font-weight: 900;
-          letter-spacing: 4px;
-          color: #0f2942;
-          white-space: nowrap;
-        }
-
-        .cert-watermark-sub {
-          font-size: 32px;
-          font-weight: 800;
-          letter-spacing: 2px;
-          color: #0f2942;
+        .cert-mobile-a4-canvas .cert-watermark {
+          width: 228px;
+          height: 202px;
         }
 
         /* 1. Header công văn */
