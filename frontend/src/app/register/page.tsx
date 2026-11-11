@@ -20,8 +20,8 @@ export default function RegisterPage() {
   return (
     <AuthShell
       variant="register"
-      title="Quy trình ban hành tài khoản"
-      subtitle="Để đảm bảo quản trị vùng trồng chặt chẽ, hồ sơ hộ và tài khoản đăng nhập do Ban Quản trị HTX Cư Né trực tiếp thiết lập và bàn giao."
+      title="Cấp tài khoản"
+      subtitle="Tài khoản hộ dân do HTX Cư Né trực tiếp lập và bàn giao."
       wide
     >
       <div>
@@ -29,33 +29,33 @@ export default function RegisterPage() {
           <li>
             <b>1</b>
             <span>
-              <strong>Thiết lập hồ sơ hộ &amp; thửa đất:</strong> Cán bộ HTX và Trưởng thôn tiếp nhận thông tin CCCD, số điện thoại, đo đạc tọa độ thửa đất và lập hồ sơ hộ trên hệ thống quản trị.
+              <strong>Lập hồ sơ hộ:</strong> Gửi CCCD, số điện thoại và thông tin thửa đất cho Trưởng thôn hoặc cán bộ HTX.
             </span>
           </li>
           <li>
             <b>2</b>
             <span>
-              <strong>Ban hành tài khoản thành viên:</strong> Sau khi hồ sơ hộ hoàn tất, Quản trị viên HTX trực tiếp ban hành tài khoản (theo số điện thoại chủ hộ) kèm phiếu bàn giao mật khẩu khởi tạo.
+              <strong>Nhận tài khoản:</strong> HTX cấp tài khoản theo số điện thoại kèm mật khẩu ban đầu.
             </span>
           </li>
           <li>
             <b>3</b>
             <span>
-              <strong>Đăng nhập &amp; Quản lý nhật ký vườn:</strong> Bà con dùng tài khoản được bàn giao để đăng nhập và đổi mật khẩu cá nhân ngay trên Cổng hộ dân.
+              <strong>Đăng nhập sử dụng:</strong> Vào hệ thống, đổi mật khẩu riêng và ghi nhật ký vườn.
             </span>
           </li>
         </ol>
 
         <div className="auth-contact-card">
-          <strong className="auth-contact-title">Liên hệ cấp tài khoản hộ thành viên</strong>
+          <strong className="auth-contact-title">Liên hệ cấp tài khoản</strong>
           <div className="auth-contact-hotline">
-            <span>Hotline kỹ thuật HTX Cư Né</span>
+            <span>Hotline HTX</span>
             <a href="tel:0366663778" className="auth-hotline-pill">
               0366 663 778
             </a>
           </div>
           <p className="auth-contact-note">
-            Văn phòng HTX tại Xã Cư Né, Krông Búk, Đắk Lắk (hoặc liên hệ trực tiếp Trưởng thôn phụ trách).
+            Văn phòng HTX Cư Né hoặc gặp Trưởng thôn.
           </p>
         </div>
 
@@ -67,9 +67,9 @@ export default function RegisterPage() {
         </Link>
 
         <p className="auth-switch-hint">
-          <span>Đã được cấp tài khoản nhưng quên mật khẩu?</span>
+          <span>Quên mật khẩu?</span>
           <Link href="/forgot-password" className="auth-switch-btn">
-            Khôi phục mật khẩu →
+            Lấy lại mật khẩu
           </Link>
         </p>
       </div>

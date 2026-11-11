@@ -119,17 +119,11 @@ export default function AuthShell({ variant, title, subtitle, wide = false, hide
       <section className="auth-main">
         <div className="auth-top">
           <Link href="/" className="auth-back">
-            <span className="auth-arrow" aria-hidden="true">
-              ←
-            </span>
             Trang chủ
           </Link>
           {!hideSwitch && (
             <Link href={other.href} className="auth-alt">
               <strong>{other.label}</strong>
-              <span className="auth-arrow" aria-hidden="true">
-                →
-              </span>
             </Link>
           )}
         </div>

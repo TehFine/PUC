@@ -202,7 +202,7 @@ function ForgotPasswordContent() {
     <AuthShell
       variant="forgot"
       title="Quên mật khẩu"
-      subtitle="Chọn xác minh bằng số CCCD để đặt lại ngay hoặc gửi yêu cầu nhờ cán bộ HTX duyệt."
+      subtitle="Chọn cách đặt lại mật khẩu tài khoản."
       wide
     >
       <div className="auth-mode-tabs" role="tablist" aria-label="Phương thức khôi phục mật khẩu">
@@ -215,7 +215,6 @@ function ForgotPasswordContent() {
           onClick={() => switchMode("cccd")}
         >
           <strong>Xác minh CCCD</strong>
-          <span>Đặt lại mật khẩu ngay</span>
         </button>
         <button
           type="button"
@@ -226,7 +225,6 @@ function ForgotPasswordContent() {
           onClick={() => switchMode("request")}
         >
           <strong>Nhờ cán bộ HTX</strong>
-          <span>Gửi yêu cầu chờ duyệt</span>
         </button>
       </div>
 
@@ -239,8 +237,7 @@ function ForgotPasswordContent() {
         <div className={mode === "cccd" ? "auth-row" : undefined}>
           <AuthField
             id="forgot-username"
-            label="Số điện thoại hoặc Tên đăng nhập"
-            hint={mode === "cccd" ? "SĐT 10 số của chủ hộ đã đăng ký." : "Tài khoản cần đặt lại mật khẩu."}
+            label="Số điện thoại / Tên đăng nhập"
           >
             <input
               id="forgot-username"
@@ -256,8 +253,7 @@ function ForgotPasswordContent() {
           {mode === "cccd" && (
             <AuthField
               id="forgot-cccd"
-              label="Số CCCD chủ hộ (12 số)"
-              hint="Đối chiếu với hồ sơ hộ tại HTX."
+              label="Số CCCD (12 số)"
             >
               <input
                 id="forgot-cccd"
@@ -275,7 +271,7 @@ function ForgotPasswordContent() {
 
         {mode === "request" && (
           <>
-            <AuthField id="forgot-fullname" label="Họ và tên người yêu cầu">
+            <AuthField id="forgot-fullname" label="Họ và tên">
               <input
                 id="forgot-fullname"
                 className={`auth-input${isFieldInvalid("name") ? " is-error" : ""}`}
@@ -289,14 +285,14 @@ function ForgotPasswordContent() {
 
             <AuthField
               id="forgot-note"
-              label="Thôn, mã hộ hoặc ghi chú đối chiếu"
+              label="Ghi chú đối chiếu"
               optional
             >
               <input
                 id="forgot-note"
                 className="auth-input"
                 maxLength={300}
-                placeholder="Ví dụ: Thôn 2 – hộ HO-012, nhờ cán bộ cấp lại mật khẩu"
+                placeholder="Ví dụ: Thôn 2 – hộ HO-012"
                 value={form.note}
                 disabled={submitting}
                 onChange={set("note")}
@@ -309,21 +305,20 @@ function ForgotPasswordContent() {
           <AuthField
             id="forgot-password"
             label="Mật khẩu mới"
-            hint="Tối thiểu 8 ký tự, có cả chữ và số."
           >
             <PasswordInput
               id="forgot-password"
               className={isFieldInvalid("password") ? "is-error" : ""}
               show={showPassword}
               autoComplete="new-password"
-              placeholder="Nhập mật khẩu mới"
+              placeholder="Tối thiểu 8 ký tự chữ và số"
               value={form.newPassword}
               disabled={submitting}
               onChange={set("newPassword")}
             />
           </AuthField>
 
-          <AuthField id="forgot-confirm" label="Nhập lại mật khẩu mới">
+          <AuthField id="forgot-confirm" label="Nhập lại mật khẩu">
             <PasswordInput
               id="forgot-confirm"
               className={isFieldInvalid("password") ? "is-error" : ""}
@@ -351,12 +346,12 @@ function ForgotPasswordContent() {
             <>
               <AuthBusyBorderRing />
               <span>
-                {mode === "cccd" ? "Đang đối chiếu CCCD & cập nhật…" : "Đang gửi yêu cầu lên HTX…"}
+                {mode === "cccd" ? "Đang xác minh…" : "Đang gửi yêu cầu…"}
               </span>
             </>
           ) : (
             <>
-              {mode === "cccd" ? "Xác minh & Đặt lại mật khẩu" : "Gửi yêu cầu cấp lại mật khẩu"}
+              {mode === "cccd" ? "Đặt lại mật khẩu" : "Gửi yêu cầu"}
               <span className="auth-arrow" aria-hidden="true">
                 →
               </span>
@@ -368,16 +363,16 @@ function ForgotPasswordContent() {
       <p className="auth-switch-hint">
         {mode === "cccd" ? (
           <>
-            <span>Không nhớ số CCCD trong hồ sơ hoặc là tài khoản cán bộ?</span>
+            <span>Không nhớ số CCCD?</span>
             <button type="button" className="auth-switch-btn" onClick={() => switchMode("request")}>
-              Nhờ cán bộ HTX duyệt →
+              Nhờ cán bộ HTX duyệt
             </button>
           </>
         ) : (
           <>
-            <span>Hộ dân đã đăng ký số CCCD 12 số trong hồ sơ HTX?</span>
+            <span>Đã đăng ký số CCCD?</span>
             <button type="button" className="auth-switch-btn" onClick={() => switchMode("cccd")}>
-              Xác minh CCCD đặt lại ngay →
+              Đặt lại ngay bằng CCCD
             </button>
           </>
         )}
