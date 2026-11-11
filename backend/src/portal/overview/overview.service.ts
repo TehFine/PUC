@@ -149,12 +149,13 @@ export class OverviewService {
            AND c.held_on BETWEEN today.d AND today.d + 7
 
          UNION ALL
-         SELECT 5, 'harvest', 'Từ chối khai báo thu hái',
-                'Thửa ' || d.plot_code || ' · ' || to_char(d.harvested_on, 'DD/MM/YYYY'),
-                '${PORTAL_TABS.stamps}', (d.reviewed_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
-         FROM harvest_declarations d, today
-         WHERE d.household_id = $1 AND d.status = 'rejected'
-           AND (d.reviewed_at IS NULL OR d.reviewed_at >= now() - interval '30 days')
+         SELECT 5, 'harvest', n.title,
+                n.body,
+                '${PORTAL_TABS.stamps}', (n.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+         FROM notifications n
+         JOIN users u ON u.id = n.user_id
+         WHERE u.household_id = $1 AND n.kind = 'harvest' AND n.read_at IS NULL
+           AND n.created_at >= now() - interval '30 days'
        ) r
        ORDER BY priority, date NULLS FIRST
        LIMIT 20`,

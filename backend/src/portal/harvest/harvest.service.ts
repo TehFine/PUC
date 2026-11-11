@@ -41,6 +41,19 @@ export class HarvestService {
     return { data: camelRows(rows) };
   }
 
+  /** Thông báo lịch thu hoạch dự kiến do HTX tính toán từ nhật ký chăm sóc và gửi cho hộ dân. */
+  async notices(user: AuthUser) {
+    const { rows } = await this.db.query(
+      `SELECT n.id, n.title, n.body, n.link, n.read_at, n.created_at
+       FROM notifications n
+       WHERE n.user_id = $1 AND n.kind = 'harvest'
+       ORDER BY n.created_at DESC, n.id DESC
+       LIMIT 20`,
+      [user.id],
+    );
+    return { data: camelRows(rows) };
+  }
+
   async declarations(user: AuthUser) {
     const { rows } = await this.db.query(
       `SELECT ${DECLARATION_COLUMNS}

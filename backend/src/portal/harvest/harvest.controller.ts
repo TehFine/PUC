@@ -16,6 +16,12 @@ export class HarvestController {
     return this.service.harvest(user);
   }
 
+  @Get("harvest-notices")
+  @Authorize("portal", "read")
+  notices(@CurrentUser() user: AuthUser) {
+    return this.service.notices(user);
+  }
+
   @Get("harvest-declarations")
   @Authorize("portal", "read")
   declarations(@CurrentUser() user: AuthUser) {
