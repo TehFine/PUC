@@ -1842,15 +1842,15 @@ body.pt-body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 4px;
     flex: 0 0 auto;
     width: fit-content;
     max-width: none;
     margin: 0 auto;
-    padding: 4px;
-    background: rgba(20, 55, 47, 0.04);
-    border: 1px solid var(--border);
-    border-radius: 999px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
     box-shadow: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -1859,17 +1859,58 @@ body.pt-body {
     position: relative;
     flex-direction: row;
     gap: 0;
-    padding: 10px 22px;
-    border-radius: 999px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    background-color: transparent;
+    color: var(--ink-soft);
     font-family: var(--font-display-stack);
     font-variation-settings: normal;
-    font-size: 16px;
-    font-weight: 650;
-    letter-spacing: -0.015em;
+    font-size: 15.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     white-space: nowrap;
+    transition: background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s ease;
   }
   .pt-tab svg { display: none; }
-  .pt-tab.active { box-shadow: none; }
+  .pt-tab::after {
+    content: "";
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 0;
+    height: 2.5px;
+    border-radius: 999px;
+    background-color: var(--ink);
+    transform: scaleX(0);
+    transform-origin: center;
+    opacity: 0;
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+    pointer-events: none;
+  }
+  .pt-tab:hover {
+    background-color: transparent;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .pt-tab:not(.active):hover {
+      background-color: rgba(15, 23, 42, 0.055);
+      color: var(--ink);
+    }
+  }
+  .pt-tab:active {
+    transform: none;
+  }
+  .pt-tab:not(.active):active {
+    background-color: rgba(15, 23, 42, 0.085);
+  }
+  .pt-tab.active {
+    background-color: transparent;
+    color: var(--ink);
+    box-shadow: none;
+  }
+  .pt-tab.active::after {
+    transform: scaleX(1);
+    opacity: 1;
+  }
 }
 
 /* ── Hero Shell (Container cho hiệu ứng lõm góc trên bên phải bằng SVG) ── */

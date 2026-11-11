@@ -369,8 +369,8 @@ html:has(.lp) body {
   min-width: 0;
 }
 .lp-links > a {
-  padding: 9px clamp(12px, 0.85vw, 18px);
-  border-radius: 999px;
+  padding: 8px clamp(12px, 0.85vw, 16px);
+  border-radius: 6px;
   font-family: var(--lp-font-display);
   font-weight: 600;
   font-size: clamp(15.5px, 0.95vw + 4px, 17px);
@@ -379,11 +379,13 @@ html:has(.lp) body {
   white-space: nowrap;
   flex-shrink: 0;
   line-height: 1.25;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.lp-links > a:hover {
-  color: var(--lp-ink);
-  background: rgba(20, 55, 47, 0.07);
+@media (hover: hover) and (pointer: fine) {
+  .lp-links > a:hover {
+    color: var(--lp-ink);
+    background-color: rgba(15, 23, 42, 0.055);
+  }
 }
 .lp-auth {
   display: flex;
