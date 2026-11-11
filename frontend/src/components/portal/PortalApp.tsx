@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
   BookOpen,
   Camera,
   ClipboardCheck,
@@ -38,9 +39,23 @@ import RadialNavWheel from "./RadialNavWheel";
 import { BusyButton, InlineError } from "./shared/controls";
 import { uploadPortalFile, validatePickedFile } from "./shared/media";
 import { SupportFooter, SystemSupportModal } from "./SystemSupport";
-import { EmptyState, Field, Sheet, StateBlock, useSheetClose } from "./ui";
+import { DrawerSummaryFooter, EmptyState, Field, Sheet, StateBlock, useIsDesktopViewport, useSheetClose } from "./ui";
 
 const PortalTabLoading = () => <StateBlock loading error={null} />;
+
+function DrawerCloseCta({ label }: { label: string }) {
+  const close = useSheetClose();
+  return (
+    <button
+      type="button"
+      className="pt-drawer-cta"
+      onClick={() => close?.()}
+    >
+      <span>{label}</span>
+      <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
+    </button>
+  );
+}
 
 const DiaryTab = dynamic(() => import("./DiaryTab"), { loading: PortalTabLoading });
 const InspectionTab = dynamic(() => import("./InspectionTab"), { loading: PortalTabLoading });
@@ -195,6 +210,7 @@ function PortalAppContent() {
     return "home";
   });
   const [profileOpen, setProfileOpen] = useState(false);
+  const isDesktopDrawer = useIsDesktopViewport(760);
   const [supportOpen, setSupportOpen] = useState(false);
   const [navWheelOpen, setNavWheelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -546,29 +562,8 @@ function PortalAppContent() {
             })}
           </nav>
 
-          {/* Cụm Avatar tài khoản + Chuông thông báo */}
+          {/* Cụm Chuông thông báo + Tìm kiếm + Avatar tài khoản */}
           <div className="pt-topbar-profile" style={{ gap: 8 }}>
-            {/* Tìm chức năng (máy tính): gõ bất kỳ chữ nào để được gợi ý đúng tab và thao tác */}
-            <PortalSearchButton id="portal-search-toggle" className="is-desktop" onPick={handleSearchPick} />
-            <button
-              id="portal-profile-toggle"
-              type="button"
-              className={`pt-avatar-btn ${profileOpen ? "is-active" : ""}`}
-              onClick={toggleProfile}
-              aria-expanded={profileOpen}
-              aria-haspopup="dialog"
-              title={`Hồ sơ: ${displayName}`}
-            >
-              <span className="pt-avatar">
-                {avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarUrl} alt={displayName} className="pt-avatar-img" />
-                ) : (
-                  initials
-                )}
-              </span>
-            </button>
-
             <button
               id="portal-notifications-toggle"
               type="button"
@@ -586,6 +581,28 @@ function PortalAppContent() {
               {unreadCount > 0 && (
                 <span className="pt-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
               )}
+            </button>
+
+            {/* Tìm chức năng (máy tính): gõ bất kỳ chữ nào để được gợi ý đúng tab và thao tác */}
+            <PortalSearchButton id="portal-search-toggle" className="is-desktop" onPick={handleSearchPick} />
+
+            <button
+              id="portal-profile-toggle"
+              type="button"
+              className={`pt-avatar-btn ${profileOpen ? "is-active" : ""}`}
+              onClick={toggleProfile}
+              aria-expanded={profileOpen}
+              aria-haspopup="dialog"
+              title={`Hồ sơ: ${displayName}`}
+            >
+              <span className="pt-avatar">
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrl} alt={displayName} className="pt-avatar-img" />
+                ) : (
+                  initials
+                )}
+              </span>
             </button>
           </div>
 
@@ -623,6 +640,7 @@ function PortalAppContent() {
 
       {profileOpen && (
         <Sheet
+          variant="drawer"
           title={t("Thông tin tài khoản")}
           onClose={closeProfile}
           className="pt-profile-sheet"
@@ -864,7 +882,45 @@ function PortalAppContent() {
       )}
 
       {notifOpen && (
-        <Sheet title={t("Thông báo từ HTX")} onClose={() => setNotifOpen(false)}>
+        <Sheet
+          variant="drawer"
+          title={t("Thông báo từ HTX")}
+          onClose={() => setNotifOpen(false)}
+          className="pt-notif-sheet"
+          footer={
+            <DrawerSummaryFooter
+              actions={
+                <>
+                  {readCount > 0 && (
+                    <BusyButton
+                      type="button"
+                      className="pt-drawer-cta-ghost"
+                      busy={clearingRead}
+                      busyLabel={t("Đang xóa…")}
+                      onClick={() => void handleClearRead()}
+                    >
+                      <span>{t("Xóa đã đọc")} ({readCount})</span>
+                    </BusyButton>
+                  )}
+                  {unreadCount > 0 ? (
+                    <BusyButton
+                      type="button"
+                      className="pt-drawer-cta"
+                      busy={markingAll}
+                      busyLabel={t("Đang đánh dấu…")}
+                      onClick={() => void handleMarkAllRead()}
+                    >
+                      <span>{t("Đánh dấu đọc hết")}</span>
+                      <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
+                    </BusyButton>
+                  ) : (
+                    <DrawerCloseCta label={t("Đã nắm thông tin")} />
+                  )}
+                </>
+              }
+            />
+          }
+        >
           <div className="pt-stack" style={{ gap: 14 }}>
             {notifItems.length > 0 && (
               <div className="pt-notif-toolbar">
@@ -884,7 +940,7 @@ function PortalAppContent() {
                     Chưa đọc ({unreadCount})
                   </button>
                 </div>
-                {(unreadCount > 0 || readCount > 0) && (
+                {!isDesktopDrawer && (unreadCount > 0 || readCount > 0) && (
                   <div className="pt-notif-action-group">
                     {unreadCount > 0 && (
                       <BusyButton
@@ -916,11 +972,19 @@ function PortalAppContent() {
             <StateBlock loading={notifications.loading} error={notifications.error} variant="rows" />
 
             {!notifications.loading && visibleNotifItems.length === 0 && (
-              <EmptyState icon="none">
-                {notifFilter === "unread"
-                  ? "Bạn đã đọc hết tất cả thông báo."
-                  : "Hiện chưa có thông báo mới nào từ HTX."}
-              </EmptyState>
+              isDesktopDrawer ? (
+                <p className="pt-drawer-empty-note">
+                  {notifFilter === "unread"
+                    ? t("Bạn đã đọc hết tất cả thông báo.")
+                    : t("Hiện chưa có thông báo mới nào từ HTX.")}
+                </p>
+              ) : (
+                <EmptyState icon="none">
+                  {notifFilter === "unread"
+                    ? "Bạn đã đọc hết tất cả thông báo."
+                    : "Hiện chưa có thông báo mới nào từ HTX."}
+                </EmptyState>
+              )
             )}
 
             {visibleNotifItems.length > 0 && (
@@ -962,6 +1026,7 @@ function PortalAppContent() {
 
       {editAccountOpen && (
         <Sheet
+          variant="drawer"
           title={t("Cập nhật Email Google & Tài khoản")}
           onClose={() => setEditAccountOpen(false)}
           className="pt-password-sheet"
@@ -1025,7 +1090,12 @@ function PortalAppContent() {
       )}
 
       {passwordOpen && (
-        <Sheet title={t("Đổi mật khẩu tài khoản")} onClose={() => setPasswordOpen(false)} className="pt-password-sheet">
+        <Sheet
+          variant="drawer"
+          title={t("Đổi mật khẩu tài khoản")}
+          onClose={() => setPasswordOpen(false)}
+          className="pt-password-sheet"
+        >
           <ChangePasswordForm
             onSuccess={() => {
               setPasswordOpen(false);

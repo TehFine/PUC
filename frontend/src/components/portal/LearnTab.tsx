@@ -21,7 +21,7 @@ import {
 } from "./ipm-2026-data";
 import { getTrainingKicker, usePortalTrainings, type TrainingCourseItem } from "./training-shared";
 import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
-import { Card, EmptyState, FadeFilterBar, Pill, SectionDivider, SegmentedTabs, Sheet, StateBlock } from "./ui";
+import { Card, EmptyState, FadeFilterBar, Pill, SectionDivider, SegmentedTabs, Sheet, StateBlock, useSheetClose } from "./ui";
 
 export { getTrainingKicker, usePortalTrainings, type TrainingCourseItem };
 
@@ -192,6 +192,8 @@ export function TrainingDetailModal({
   item: TrainingCourseItem;
   onClose: () => void;
 }) {
+  const sheetClose = useSheetClose();
+  const closeModal = sheetClose ?? onClose;
   const [myStatus, setMyStatus] = useState(item.myStatus ?? null);
   const [enrolledDelta, setEnrolledDelta] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -352,7 +354,7 @@ export function TrainingDetailModal({
         <button
           type="button"
           className="pt-btn pt-btn-ghost"
-          onClick={onClose}
+          onClick={closeModal}
           disabled={busy}
         >
           Đóng
@@ -992,6 +994,8 @@ export function PesticideDetailModal({
   item: PesticideDto;
   onClose: () => void;
 }) {
+  const sheetClose = useSheetClose();
+  const closeModal = sheetClose ?? onClose;
   const status = PESTICIDE_STATUS[item.status];
   const isAllowed = item.status === "allowed";
   const isRestricted = item.status === "restricted";
@@ -1136,7 +1140,7 @@ export function PesticideDetailModal({
           type="button"
           className="pt-btn pt-btn-primary"
           style={{ width: "100%", justifyContent: "center" }}
-          onClick={onClose}
+          onClick={closeModal}
         >
           Đã hiểu & Đóng
         </button>
@@ -1747,6 +1751,8 @@ export function FertilizerDetailModal({
   item: FertilizerDto;
   onClose: () => void;
 }) {
+  const sheetClose = useSheetClose();
+  const closeModal = sheetClose ?? onClose;
   const imgSrc = getFertilizerImage(item);
   const efficacy = getFertilizerEfficacy(item);
   const isEncouraged = item.status === "encouraged";
@@ -1888,7 +1894,7 @@ export function FertilizerDetailModal({
           type="button"
           className="pt-btn pt-btn-primary"
           style={{ width: "100%", justifyContent: "center" }}
-          onClick={onClose}
+          onClick={closeModal}
         >
           Đã hiểu & Đóng
         </button>
@@ -2207,6 +2213,8 @@ export function VarietyDetailModal({
   item: VarietyDto;
   onClose: () => void;
 }) {
+  const sheetClose = useSheetClose();
+  const closeModal = sheetClose ?? onClose;
   const imgSrc = getVarietyImage(item);
   const isExport = item.category === "export";
   const isPremium = item.category === "premium" || item.category === "new";
@@ -2356,7 +2364,7 @@ export function VarietyDetailModal({
           type="button"
           className="pt-btn pt-btn-primary"
           style={{ width: "100%", justifyContent: "center" }}
-          onClick={onClose}
+          onClick={closeModal}
         >
           Đã hiểu & Đóng
         </button>
@@ -2569,6 +2577,8 @@ export function DiseaseDetailModal({
   item: DiseaseOrPestItem;
   onClose: () => void;
 }) {
+  const sheetClose = useSheetClose();
+  const closeModal = sheetClose ?? onClose;
   const isDisease = item.kind === "disease";
   const isVeryCommon = item.prevalenceCode === "++++" || item.prevalenceCode === "+++";
 
@@ -2678,7 +2688,7 @@ export function DiseaseDetailModal({
           type="button"
           className="pt-btn pt-btn-primary"
           style={{ width: "100%", justifyContent: "center" }}
-          onClick={onClose}
+          onClick={closeModal}
         >
           Đã hiểu & Đóng
         </button>

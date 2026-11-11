@@ -179,6 +179,19 @@ function ActivateStampForm({
   );
 }
 
+function StampCloseButton({ onFallback }: { onFallback: () => void }) {
+  const sheetClose = useSheetClose();
+  return (
+    <button
+      type="button"
+      className="pt-btn pt-btn-primary pt-btn-block"
+      onClick={sheetClose ?? onFallback}
+    >
+      Đóng
+    </button>
+  );
+}
+
 export function FruitStampsView({ plots }: { plots: PortalPlot[] }) {
   const stampsQuery = usePortal<PortalStampsResponse>("stamps");
   const [activateModal, setActivateModal] = useState<{ serial?: string; plotCode?: string } | null>(null);
@@ -417,13 +430,7 @@ export function FruitStampsView({ plots }: { plots: PortalPlot[] }) {
             )}
 
             <div className="pt-detail-footer">
-              <button
-                type="button"
-                className="pt-btn pt-btn-primary pt-btn-block"
-                onClick={() => setSelectedStamp(null)}
-              >
-                Đóng
-              </button>
+              <StampCloseButton onFallback={() => setSelectedStamp(null)} />
             </div>
           </div>
         </Sheet>

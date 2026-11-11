@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Mail, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ChangePasswordModal from "@/components/admin/notifications/ChangePasswordModal";
-import NotificationBell from "@/components/admin/notifications/NotificationBell";
 import { RadialPngIcon } from "@/components/portal/RadialIcons";
 import { BusyButton, InlineError } from "@/components/portal/shared/controls";
 import { Field, Sheet } from "@/components/portal/ui";
@@ -92,10 +91,9 @@ export default function UserMenu() {
         <span className="user-avatar">{initials(fullName)}</span>
       </button>
 
-      <NotificationBell />
-
       {open && (
         <Sheet
+          variant="drawer"
           title="Thông tin tài khoản"
           onClose={() => setOpen(false)}
           className="pt-profile-sheet"
@@ -212,6 +210,7 @@ export default function UserMenu() {
 
       {editingProfile && (
         <Sheet
+          variant="drawer"
           title="Cập nhật hồ sơ & Email Google"
           onClose={() => setEditingProfile(false)}
           className="pt-password-sheet"

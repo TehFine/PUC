@@ -9257,7 +9257,11 @@ body.pt-body {
     height: 40px;
     flex-shrink: 0;
   }
+  .pt-topbar-profile .pt-avatar-btn {
+    order: 1;
+  }
   .pt-topbar-profile .pt-notif-btn {
+    order: 2;
     flex-shrink: 0;
   }
   .pt-topbar-profile .pt-avatar {

@@ -318,6 +318,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
       <style jsx global>{`
         .pt-sheet.pt-signboard-sheet {
           max-width: 740px;
+          --drawer-w: 760px;
         }
 
         .signboard-sheet-content {

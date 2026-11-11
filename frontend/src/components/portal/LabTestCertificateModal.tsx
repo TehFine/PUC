@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
-import { Download, Printer } from "lucide-react";
+import { ArrowRight, Download, Printer } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { isLowEndDevice } from "@/lib/network";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { triggerBlobDownload } from "@/utils/download";
 import { formatDate } from "@/utils/format";
+import { useIsDesktopViewport } from "./ui";
 import { useSheetSwipe } from "./use-sheet-swipe";
 
 /** Đóng gói mảng byte ảnh JPEG thành file PDF 1.4 khổ A4 chuẩn (595.28 x 841.89 pt). */
@@ -286,27 +287,57 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
   const paperRef = useRef<HTMLDivElement>(null);
   const mobileStackRef = useRef<HTMLDivElement>(null);
   const [sheetScale, setSheetScale] = useState<number>(0.68);
+  const isDesktop = useIsDesktopViewport(760);
 
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
     closingRef.current = true;
     const container = containerRef.current;
     const backdrop = backdropRef.current;
+    const desktopNow = typeof window !== "undefined" && window.innerWidth >= 760;
+    const closeDuration = desktopNow ? 240 : 220;
+
     if (container) {
-      container.style.transition = "transform 220ms cubic-bezier(0.25, 1, 0.5, 1)";
-      container.style.transform = "translate3d(0, 100%, 0)";
+      container.style.animation = "none";
+      container.style.pointerEvents = "none";
+      container.style.transition = desktopNow
+        ? "transform 240ms cubic-bezier(0.32, 0.72, 0, 1)"
+        : "transform 220ms cubic-bezier(0.25, 1, 0.5, 1)";
+      container.style.transform = desktopNow ? "translate3d(100%, 0, 0)" : "translate3d(0, 100%, 0)";
     }
     if (backdrop) {
-      backdrop.style.transition = "opacity 220ms ease-out";
+      backdrop.style.animation = "none";
+      backdrop.style.pointerEvents = "none";
+      backdrop.style.transition = "opacity 210ms ease-out";
       backdrop.style.opacity = "0";
     }
     setTimeout(() => {
       closingRef.current = false;
       onClose();
-    }, 220);
+    }, closeDuration);
   }, [onClose]);
 
-  useSheetSwipe({ sheetRef: containerRef, handleRef: toolbarRef, onDismiss: handleClose });
+  useSheetSwipe({
+    sheetRef: containerRef,
+    handleRef: toolbarRef,
+    onDismiss: handleClose,
+    enabled: !isDesktop,
+  });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (closingRef.current) return;
+      if (containerRef.current) {
+        containerRef.current.style.animation = "none";
+        containerRef.current.style.transform = "translate3d(0, 0, 0)";
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.animation = "none";
+        backdropRef.current.style.opacity = "1";
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, []);
 
   const isPass = test.result === "pass" || test.result === "Đạt";
   const householdName = test.householdName || "Nguyễn Văn An";
@@ -419,6 +450,15 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         {/* THANH ĐIỀU KHIỂN THAO TÁC NGOÀI TỜ GIẤY (NO-PRINT) */}
         <div ref={toolbarRef} className="cert-toolbar no-print">
           <div className="cert-toolbar-left">
+            <button
+              type="button"
+              className="cert-drawer-back-btn"
+              onClick={handleClose}
+              title="Thu gọn phiếu (Esc)"
+              aria-label="Thu gọn phiếu kiểm nghiệm"
+            >
+              <ArrowRight size={19} strokeWidth={2.2} aria-hidden="true" />
+            </button>
             <span className="cert-status-badge">
               <span className="cert-status-main">Phiếu kiểm nghiệm điện tử</span>
               <span className="cert-status-sep" aria-hidden="true">·</span>
@@ -1393,9 +1433,13 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         .cert-toolbar-left {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
           min-width: 0;
           flex: 1;
+        }
+
+        .cert-drawer-back-btn {
+          display: none;
         }
 
         .cert-status-badge {
@@ -2020,6 +2064,121 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         /* ── BẢN 2 TRANG A4 LIỀN MẠCH TRÊN MOBILE (MẶC ĐỊNH ẨN TRÊN DESKTOP) ── */
         .cert-mobile-a4-stack {
           display: none;
+        }
+
+        /* ── MÀN HÌNH LỚN / LAPTOP: NGĂN KÉO TRƯỢT DỌC TỪ CẠNH PHẢI ── */
+        @keyframes certDrawerSlideIn {
+          from { transform: translate3d(100%, 0, 0); }
+          to { transform: translate3d(0, 0, 0); }
+        }
+
+        @media screen and (min-width: 760px) {
+          .cert-modal-backdrop {
+            padding: 0;
+            justify-content: flex-end;
+            align-items: stretch;
+            overflow: hidden;
+            background: rgba(15, 23, 42, 0.44);
+            -webkit-backdrop-filter: none;
+            backdrop-filter: none;
+          }
+
+          .cert-modal-container {
+            width: min(856px, 94vw);
+            max-width: min(856px, 94vw);
+            height: 100dvh;
+            margin: 0;
+            gap: 0;
+            background: #f1f5f9;
+            box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18), -1px 0 0 rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+            animation: certDrawerSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          }
+
+          .cert-toolbar {
+            flex-shrink: 0;
+            padding: 16px 24px;
+            background: #ffffff;
+            color: #0f172a;
+            border-radius: 0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: none;
+          }
+
+          .cert-drawer-back-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            border: none;
+            border-radius: 10px;
+            background: #f2f4f7;
+            color: #111827;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: background-color 0.16s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+          }
+
+          .cert-drawer-back-btn svg {
+            transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+          }
+
+          .cert-drawer-back-btn:hover {
+            background: #e5e8ee;
+            color: #0f172a;
+          }
+
+          .cert-drawer-back-btn:hover svg {
+            transform: translateX(2px);
+          }
+
+          .cert-drawer-back-btn:active {
+            transform: scale(0.94);
+            background: #dce0e8;
+          }
+
+          .cert-status-badge {
+            font-size: 14px;
+            color: #0f172a;
+          }
+
+          .cert-status-main {
+            font-family: var(--font-display-stack, inherit);
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: #0f172a;
+          }
+
+          .cert-status-sep {
+            color: #cbd5e1;
+          }
+
+          .cert-status-sub {
+            font-size: 13px;
+            font-weight: 600;
+            color: #166534;
+          }
+
+          .cert-btn-close {
+            display: none;
+          }
+
+          .cert-paper-shadow-wrap.cert-desktop-only {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: auto;
+            padding: 22px 24px 36px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(15, 23, 42, 0.16) transparent;
+          }
         }
 
         /* ── RESPONSIVE MOBILE: HIỂN THỊ 2 TỜ GIẤY ĐÚNG TỶ LỆ A4 (210 : 297) LIỀN MẠCH ── */
