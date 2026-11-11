@@ -806,7 +806,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         .stamp-puc {
           font-weight: 700;
           color: #0f372a;
-          font-family: monospace;
+          font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+          font-variant-numeric: tabular-nums;
           font-size: 9.5px;
         }
         .stamp-crop {
@@ -828,7 +829,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         }
 
         .fruit-serial-code {
-          font-family: monospace;
+          font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+          font-variant-numeric: tabular-nums;
           font-size: 10.5px;
           font-weight: 700;
           color: #1b4d3e;
@@ -944,7 +946,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           color: #0f372a;
         }
         .serial-highlight {
-          font-family: monospace;
+          font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+          font-variant-numeric: tabular-nums;
           color: #b45309 !important;
           cursor: pointer;
         }

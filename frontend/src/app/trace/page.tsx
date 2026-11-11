@@ -312,7 +312,9 @@ export default function TraceLookupPage() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <span
                       style={{
-                        fontFamily: "monospace",
+                        fontFamily: "var(--font-num-stack)",
+                        fontVariantNumeric: "tabular-nums",
+                        letterSpacing: "0.015em",
                         fontWeight: 700,
                         fontSize: 14,
                         color: "#166534",
@@ -364,7 +366,9 @@ export default function TraceLookupPage() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <span
                       style={{
-                        fontFamily: "monospace",
+                        fontFamily: "var(--font-num-stack)",
+                        fontVariantNumeric: "tabular-nums",
+                        letterSpacing: "0.015em",
                         fontWeight: 700,
                         fontSize: 13.5,
                         color: "#1e40af",

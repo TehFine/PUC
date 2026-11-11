@@ -64,7 +64,7 @@ async function renderSignboardPngBlob(
     ctx.font = "700 24px Arial, sans-serif";
     ctx.fillText("MÃ SỐ LÔ CANH TÁC:", 84, 273);
     ctx.fillStyle = "#15803d";
-    ctx.font = "900 32px monospace";
+    ctx.font = '900 32px Inter, -apple-system, "Segoe UI", Arial, sans-serif';
     ctx.fillText(plot.code, 380, 275);
 
     // Các dòng thông tin lô
@@ -123,7 +123,7 @@ async function renderSignboardPngBlob(
     ctx.font = "800 20px Arial, sans-serif";
     ctx.fillText("QUÉT QR XEM HỒ SƠ LÔ VƯỜN", qrBoxX + qrBoxW / 2, qrBoxY + 356);
     ctx.fillStyle = "#475569";
-    ctx.font = "600 17px monospace";
+    ctx.font = '700 18px Inter, -apple-system, "Segoe UI", Arial, sans-serif';
     ctx.fillText(plot.code, qrBoxX + qrBoxW / 2, qrBoxY + 392);
 
     // Chân biển
@@ -480,7 +480,9 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           border-radius: 6px;
         }
         .big-code {
-          font-family: monospace;
+          font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+          font-variant-numeric: tabular-nums;
+          letter-spacing: 0.015em;
           font-size: 16px;
           color: #15803d;
           font-weight: 900;

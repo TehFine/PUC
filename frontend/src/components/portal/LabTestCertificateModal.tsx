@@ -1662,7 +1662,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         .cert-doc-number strong,
         .cert-puc-code strong {
           color: #0f2942;
-          font-family: monospace;
+          font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+          font-variant-numeric: tabular-nums;
           font-size: 12px;
         }
 
@@ -1912,7 +1913,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         }
 
         .cert-box {
-          font-family: monospace;
+          font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+          font-variant-numeric: tabular-nums;
           font-size: 12px;
         }
 
@@ -2042,7 +2044,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         }
 
         .cert-barcode-val {
-          font-family: monospace;
+          font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+          font-variant-numeric: tabular-nums;
           font-size: 10px;
           letter-spacing: 0.1em;
           color: #0f2942;
@@ -2339,7 +2342,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
           .cert-m-running-code strong {
             color: #0f2942;
-            font-family: monospace;
+            font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+            font-variant-numeric: tabular-nums;
           }
 
           .cert-m-top-group {
@@ -2406,7 +2410,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
           .cert-m-doc strong {
             color: #0f2942;
-            font-family: monospace;
+            font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+            font-variant-numeric: tabular-nums;
             font-size: 9.6px;
           }
 
@@ -2734,7 +2739,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           }
 
           .cert-m-barcode-val {
-            font-family: monospace;
+            font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+            font-variant-numeric: tabular-nums;
             font-size: 8.5px;
             letter-spacing: 0.08em;
             color: #0f2942;

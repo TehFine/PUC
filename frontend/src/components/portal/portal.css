@@ -438,9 +438,10 @@ body.pt-body {
 .pt-asset-id-val {
   font-size: 13.5px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   color: #0f172a;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-num-stack, var(--font-inter), -apple-system, "Segoe UI", sans-serif);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Dòng 4: Ngày thu hoạch & Nơi nhận */
@@ -957,10 +958,11 @@ body.pt-body {
 }
 
 .pt-ticket-barcode-num {
-  font-family: "Courier New", Courier, monospace, var(--font-hero-sans);
+  font-family: var(--font-num-stack, var(--font-inter), -apple-system, "Segoe UI", sans-serif);
+  font-variant-numeric: tabular-nums;
   font-size: 13.5px;
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   color: #0f172a;
   padding: 5px 14px;
   background: #f8fafc;
@@ -3358,10 +3360,12 @@ body.pt-body {
 }
 
 .pt-detail-gps-coords {
-  font-size: 12.5px;
-  font-family: monospace;
+  font-size: 13px;
+  font-family: var(--font-num-stack, var(--font-inter), -apple-system, "Segoe UI", sans-serif);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
   color: var(--ink);
-  font-weight: 550;
+  font-weight: 600;
 }
 
 .pt-detail-section {
@@ -8138,8 +8142,11 @@ body.pt-body {
 }
 
 .pt-mapmodal-coords-text {
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-family: var(--font-num-stack, var(--font-inter), -apple-system, "Segoe UI", sans-serif);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
   color: #059669;
 }
 
