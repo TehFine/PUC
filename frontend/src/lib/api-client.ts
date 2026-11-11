@@ -90,7 +90,15 @@ const jsonRequest = (method: string, body?: unknown): RequestInit => ({
 });
 
 /** Mục đích tải tệp (khớp backend `UPLOAD_PURPOSES`). */
-export type UploadPurpose = "journal" | "harvest" | "stamp" | "approval" | "violation" | "news" | "catalog";
+export type UploadPurpose =
+  | "journal"
+  | "harvest"
+  | "stamp"
+  | "approval"
+  | "violation"
+  | "news"
+  | "catalog"
+  | "avatar";
 
 export interface UploadedFile {
   id: number;

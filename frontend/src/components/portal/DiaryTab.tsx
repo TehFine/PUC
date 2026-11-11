@@ -5,7 +5,7 @@ import { RadialPngIcon } from "./RadialIcons";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
-import { JOURNAL_ACTIVITIES, todayIso, toNumber } from "@/lib/portal-labels";
+import { daysUntil, JOURNAL_ACTIVITIES, todayIso, toNumber } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type {
@@ -13,6 +13,7 @@ import type {
   CreateSprayBody,
   PortalJournalEntry,
   PortalList,
+  PortalPlot,
   PortalPlots,
   PortalSprayRecord,
   PortalViolation,
@@ -30,7 +31,34 @@ function canDeleteEntry(entry: PortalJournalEntry): boolean {
   return Date.now() - createdMs < 24 * 60 * 60 * 1000;
 }
 
-function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDone: () => void; onClose: () => void }) {
+function canDeleteSpray(record: PortalSprayRecord): boolean {
+  if (typeof record.canDelete === "boolean") return record.canDelete;
+  if (record.pesticideStatus === "banned") return false;
+  if (!record.createdAt) return false;
+  const createdMs = new Date(record.createdAt).getTime();
+  if (!Number.isFinite(createdMs)) return false;
+  return Date.now() - createdMs < 24 * 60 * 60 * 1000;
+}
+
+function addIsoDays(isoDate: string, days: number): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
+  if (!m) return null;
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+}
+
+function JournalForm({
+  plotCodes,
+  onDone,
+  onClose,
+  onSwitchToSpray,
+}: {
+  plotCodes: string[];
+  onDone: () => void;
+  onClose: () => void;
+  onSwitchToSpray?: () => void;
+}) {
   const sheetClose = useSheetClose();
   const [entryOn, setEntryOn] = useState(todayIso());
   const [plotCode, setPlotCode] = useState(plotCodes[0] ?? "");
@@ -166,6 +194,33 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
         </select>
       </Field>
 
+      {activity === "Phun thuốc BVTV" && onSwitchToSpray && (
+        <div
+          className="pt-notice"
+          style={{
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: 12,
+            padding: "10px 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 13, color: "#166534", lineHeight: 1.45 }}>
+            Để hệ thống tự động tính <strong>thời gian cách ly PHI</strong> và hiển thị đúng tên hoạt chất trên mã QR truy xuất, bạn nên ghi tại biểu mẫu <strong>Phun thuốc BVTV</strong> chuyên dụng.
+          </span>
+          <button
+            type="button"
+            className="pt-btn pt-btn-sm pt-btn-primary"
+            style={{ alignSelf: "flex-start" }}
+            onClick={onSwitchToSpray}
+          >
+            Mở mẫu Phun thuốc BVTV
+          </button>
+        </div>
+      )}
+
       <Field label="Ghi chú & Vật tư sử dụng" htmlFor="pj-detail">
         <textarea
           id="pj-detail"
@@ -236,29 +291,50 @@ function JournalForm({ plotCodes, onDone, onClose }: { plotCodes: string[]; onDo
 }
 
 function SprayForm({
-  plotCodes,
-  plotsHint,
+  plotsList,
   onDone,
   onClose,
 }: {
-  plotCodes: string[];
-  plotsHint: string;
+  plotsList: PortalPlot[];
   onDone: () => void;
   onClose: () => void;
 }) {
   const sheetClose = useSheetClose();
   const pesticides = useCatalog<PesticideDto>("pesticides");
+  const plotCodes = plotsList.map((p) => p.code);
+  const defaultPlotCode = plotCodes[0] ?? "";
+  const defaultPlotArea = plotsList[0]?.areaHa ? String(plotsList[0].areaHa) : "";
+
   const [sprayedOn, setSprayedOn] = useState(todayIso());
   const [plotCode, setPlotCode] = useState<string | null>(null);
   const [pesticideId, setPesticideId] = useState("");
   const [dose, setDose] = useState("");
-  const [areaHa, setAreaHa] = useState("");
+  const [areaHa, setAreaHa] = useState(defaultPlotArea);
+  const [areaTouched, setAreaTouched] = useState(false);
   const [source, setSource] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const effectivePlot = plotCode ?? plotCodes[0] ?? "";
+  const effectivePlot = plotCode ?? defaultPlotCode;
   const chosen = pesticides.rows.find((item) => String(item.id) === pesticideId);
+
+  const handlePlotChange = (nextCode: string) => {
+    setPlotCode(nextCode);
+    if (!areaTouched) {
+      if (!nextCode) {
+        const total = plotsList.reduce((sum, p) => sum + Number(p.areaHa || 0), 0);
+        if (total > 0) setAreaHa(String(Number(total.toFixed(2))));
+      } else {
+        const matched = plotsList.find((p) => p.code === nextCode);
+        if (matched?.areaHa) setAreaHa(String(matched.areaHa));
+      }
+    }
+  };
+
+  const safeFromIso =
+    chosen && (chosen.isolationDays ?? 0) > 0
+      ? addIsoDays(sprayedOn, chosen.isolationDays ?? 0)
+      : null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -301,12 +377,12 @@ function SprayForm({
             <select
               id="ps-plot"
               value={effectivePlot}
-              onChange={(e) => setPlotCode(e.target.value)}
+              onChange={(e) => handlePlotChange(e.target.value)}
             >
               <option value="">Tất cả thửa / Toàn vườn</option>
-              {plotCodes.map((code) => (
-                <option key={code} value={code}>
-                  Thửa {code}
+              {plotsList.map((p) => (
+                <option key={p.code} value={p.code}>
+                  Thửa {p.code} ({p.areaHa} ha)
                 </option>
               ))}
             </select>
@@ -328,31 +404,64 @@ function SprayForm({
           {pesticides.rows.map((item) => (
             <option key={item.id} value={item.id}>
               {item.name}
-              {item.status === "banned" ? " (BỊ CẤM)" : ""}
+              {item.status === "banned"
+                ? " (BỊ CẤM)"
+                : item.status === "restricted"
+                  ? " (HẠN CHẾ)"
+                  : ""}
             </option>
           ))}
         </select>
       </Field>
       {chosen?.status === "banned" && (
         <p className="pt-form-error" role="alert">
-          Thuốc này nằm trong danh mục bị cấm. Không được dùng cho sầu riêng xuất khẩu. Nếu đã lỡ dùng, bạn vẫn nên ghi lại trung thực và báo cán bộ HTX.
+          Thuốc này nằm trong danh mục bị cấm. Không được dùng cho sầu riêng xuất khẩu. Nếu đã lỡ dùng, bạn vẫn nên ghi lại trung thực để cán bộ kỹ thuật HTX kịp thời hỗ trợ xử lý.
+        </p>
+      )}
+      {chosen?.status === "restricted" && (
+        <p
+          className="pt-hint"
+          role="status"
+          style={{
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            color: "#92400e",
+            borderRadius: 10,
+            padding: "8px 10px",
+          }}
+        >
+          Hoạt chất thuộc diện kiểm soát đặc biệt. Chỉ sử dụng theo hướng dẫn của cán bộ kỹ thuật HTX và tuân thủ nghiêm thời gian cách ly {chosen.isolationDays ?? 0} ngày.
         </p>
       )}
       {chosen && chosen.status !== "banned" && (
-        <p className="pt-hint">Thời gian cách ly: {chosen.isolationDays ?? 0} ngày trước khi thu hoạch.</p>
+        <p className="pt-hint">
+          Thời gian cách ly: <strong>{chosen.isolationDays ?? 0} ngày</strong> trước thu hoạch
+          {safeFromIso ? ` (được phép thu hái từ ngày ${formatDate(safeFromIso)})` : ""}.
+        </p>
       )}
       <div className="pt-field-row">
         <Field label="Liều lượng" htmlFor="ps-dose">
-          <input id="ps-dose" placeholder="0.5 lít/ha" value={dose} onChange={(e) => setDose(e.target.value)} required />
+          <input id="ps-dose" placeholder="100ml / bình 20L" value={dose} onChange={(e) => setDose(e.target.value)} required />
         </Field>
-        <Field label="Diện tích (ha)" htmlFor="ps-area">
-          <input id="ps-area" type="number" inputMode="decimal" step="0.01" min="0.01" value={areaHa} onChange={(e) => setAreaHa(e.target.value)} required />
+        <Field label="Diện tích phun (ha)" htmlFor="ps-area">
+          <input
+            id="ps-area"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0.01"
+            value={areaHa}
+            onChange={(e) => {
+              setAreaTouched(true);
+              setAreaHa(e.target.value);
+            }}
+            required
+          />
         </Field>
       </div>
-      <Field label="Nơi mua (không bắt buộc)" htmlFor="ps-source">
-        <input id="ps-source" placeholder="Tên đại lý" value={source} onChange={(e) => setSource(e.target.value)} />
+      <Field label="Nơi mua / Đại lý VTNN (không bắt buộc)" htmlFor="ps-source">
+        <input id="ps-source" placeholder="Tên cửa hàng vật tư nông nghiệp" value={source} onChange={(e) => setSource(e.target.value)} />
       </Field>
-      <p className="pt-hint">{plotsHint}</p>
       <InlineError message={error} />
       <div className="pt-form-actions">
         <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose} disabled={saving}>
@@ -554,9 +663,41 @@ function JournalDetailModal({
   );
 }
 
-function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onClose: () => void }) {
+function SprayDetailModal({
+  record,
+  onClose,
+  onDeleted,
+}: {
+  record: PortalSprayRecord;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const isPass = record.mrlStatus === "pass";
   const isBanned = record.pesticideStatus === "banned";
+  const isRestricted = record.pesticideStatus === "restricted";
+  const allowDelete = canDeleteSpray(record);
+
+  const safeDateIso =
+    record.isolationEndsOn ||
+    (record.isolationDays > 0 ? addIsoDays(record.sprayedOn, record.isolationDays) : null);
+  const remainingPhiDays = safeDateIso ? daysUntil(safeDateIso) : null;
+  const inIsolation = remainingPhiDays !== null && remainingPhiDays > 0;
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.delete(`/portal/spray/${record.id}`);
+      invalidatePortal("spray", "journal", "overview");
+      onDeleted();
+    } catch (err) {
+      setDeleteError(errorMessage(err, "Không xóa được bản ghi phun thuốc."));
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="pt-diary-detail-body">
@@ -570,6 +711,8 @@ function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onCl
             {record.plotCode && <span className="pt-detail-badge-plot">Thửa {record.plotCode}</span>}
             <span className="pt-detail-date">{formatDate(record.sprayedOn)}</span>
             {isPass ? <Pill tone="green">Đạt chuẩn MRL</Pill> : <Pill tone="red">Không đạt chuẩn</Pill>}
+            {inIsolation && <Pill tone="gold">Còn cách ly {remainingPhiDays} ngày</Pill>}
+            {isRestricted && <Pill tone="gold">Hạn chế</Pill>}
             {isBanned && <Pill tone="red">Thuốc cấm</Pill>}
           </div>
         </div>
@@ -583,7 +726,7 @@ function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onCl
         <div className="pt-detail-cell">
           <span className="pt-detail-cell-label">Diện tích phun</span>
           <span className="pt-detail-cell-value">
-            {record.areaHa} ha{record.plotCode ? ` · Thửa ${record.plotCode}` : ""}
+            {record.areaHa} ha{record.plotCode ? ` · Thửa ${record.plotCode}` : " · Toàn vườn"}
           </span>
         </div>
         <div className="pt-detail-cell">
@@ -591,8 +734,10 @@ function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onCl
           <span className="pt-detail-cell-value">{record.isolationDays} ngày</span>
         </div>
         <div className="pt-detail-cell">
-          <span className="pt-detail-cell-label">Ngày thực hiện phun</span>
-          <span className="pt-detail-cell-value">{formatDate(record.sprayedOn)}</span>
+          <span className="pt-detail-cell-label">Được phép thu hái từ</span>
+          <span className="pt-detail-cell-value">
+            {safeDateIso ? formatDate(safeDateIso) : formatDate(record.sprayedOn)}
+          </span>
         </div>
       </div>
 
@@ -607,17 +752,41 @@ function SprayDetailModal({ record, onClose }: { record: PortalSprayRecord; onCl
 
       <div className={`pt-detail-compliance-box ${isPass && !isBanned ? "is-safe" : "is-warning"}`}>
         <div className="pt-detail-compliance-title">
-          {isPass && !isBanned ? "Đáp ứng tiêu chuẩn xuất khẩu VietGAP" : "Cảnh báo an toàn dư lượng"}
+          {isBanned
+            ? "Cảnh báo hoạt chất cấm xuất khẩu"
+            : inIsolation
+              ? `Đang trong thời gian cách ly PHI (còn ${remainingPhiDays} ngày)`
+              : isPass
+                ? "Đáp ứng tiêu chuẩn an toàn VietGAP & GACC"
+                : "Cảnh báo an toàn dư lượng"}
         </div>
         <div className="pt-detail-compliance-desc">
-          {isPass && !isBanned
-            ? `Thời gian cách ly bắt buộc tối thiểu ${record.isolationDays} ngày trước thu hoạch để đảm bảo an toàn tuyệt đối.`
-            : "Hoạt chất nằm trong danh mục hạn chế hoặc không đạt tiêu chuẩn MRL. Vui lòng tham vấn cán bộ kỹ thuật."}
+          {isBanned
+            ? "Hoạt chất nằm trong danh mục cấm sử dụng. Thông tin đã được chuyển tới cán bộ kỹ thuật HTX để hỗ trợ khoanh vùng xử lý."
+            : inIsolation && safeDateIso
+              ? `Tuyệt đối chưa thu hái hoặc kích hoạt tem quả trên thửa này trước ngày ${formatDate(safeDateIso)}.`
+              : `Đã đảm bảo thời gian cách ly tối thiểu ${record.isolationDays} ngày trước thu hoạch.`}
         </div>
       </div>
 
-      <div className="pt-detail-footer">
-        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={onClose}>
+      <InlineError message={deleteError} />
+
+      <div className="pt-detail-footer" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {allowDelete && (
+          <ConfirmButton
+            label={
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <RadialPngIcon src="/trash.png" size={15} />
+                <span>Xóa bản ghi này (trong 24h)</span>
+              </span>
+            }
+            question="Xác nhận xóa bản ghi phun thuốc nhập nhầm này?"
+            confirmLabel="Xóa bản ghi"
+            busy={deleting}
+            onConfirm={handleDelete}
+          />
+        )}
+        <button type="button" className="pt-btn pt-btn-primary pt-btn-block" onClick={onClose} disabled={deleting}>
           Đóng chi tiết
         </button>
       </div>
@@ -728,7 +897,8 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
   const spray = usePortal<PortalList<PortalSprayRecord>>("spray");
   const violations = usePortal<PortalList<PortalViolation>>("violations");
   const plots = usePortal<PortalPlots>("plots");
-  const plotCodes = plots.data?.available ? plots.data.data.map((plot) => plot.code) : [];
+  const plotsList = plots.data?.available ? plots.data.data : [];
+  const plotCodes = plotsList.map((plot) => plot.code);
   const violationsList = violations.data?.data ?? [];
 
   const done = () => {
@@ -987,14 +1157,21 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
 
       {form === "journal" && (
         <Sheet title="Ghi nhật ký canh tác" onClose={() => setForm(null)}>
-          <JournalForm plotCodes={plotCodes} onDone={done} onClose={() => setForm(null)} />
+          <JournalForm
+            plotCodes={plotCodes}
+            onDone={done}
+            onClose={() => setForm(null)}
+            onSwitchToSpray={() => {
+              setView("spray");
+              setForm("spray");
+            }}
+          />
         </Sheet>
       )}
       {form === "spray" && (
         <Sheet title="Ghi nhật ký phun thuốc" onClose={() => setForm(null)}>
           <SprayForm
-            plotCodes={plotCodes}
-            plotsHint="Mẹo: ghi thêm nhật ký canh tác “Phun thuốc” để cán bộ đối chiếu theo thửa."
+            plotsList={plotsList}
             onDone={done}
             onClose={() => setForm(null)}
           />
@@ -1013,7 +1190,11 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
 
       {selectedSpray && (
         <Sheet title="Chi tiết lần phun thuốc" onClose={() => setSelectedSpray(null)}>
-          <SprayDetailModal record={selectedSpray} onClose={() => setSelectedSpray(null)} />
+          <SprayDetailModal
+            record={selectedSpray}
+            onClose={() => setSelectedSpray(null)}
+            onDeleted={() => setSelectedSpray(null)}
+          />
         </Sheet>
       )}
 

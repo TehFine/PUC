@@ -321,71 +321,30 @@ body.pt-body {
     0 2px 6px -1px rgba(15, 23, 42, 0.04);
 }
 
-/* ── DẤU MỘC WATERMARK KIỂM SOÁT XUẤT HÀNG (DỜI SANG PHẢI, MỜ NHẸ, KHÔNG RỐI CHỮ) ── */
+/* ── DẤU MỘC WATERMARK KIỂM SOÁT XUẤT HÀNG (VÒNG TRÒN ĐỒNG TÂM + DẢI BĂNG ÂM BẢN) ── */
 .pt-asset-watermark {
   position: absolute;
   top: 50%;
-  right: 120px;
-  transform: translateY(-50%) rotate(-13deg);
+  right: 118px;
+  width: 156px;
+  height: 138px;
+  transform: translateY(-50%) rotate(-12deg);
   pointer-events: none;
   user-select: none;
   z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  max-width: 260px;
-}
-
-.pt-asset-watermark-inner {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 5px 16px 6px;
-  border: 1.5px double rgba(220, 38, 38, 0.14);
-  border-radius: 8px;
-  box-shadow: 
-    inset 0 0 0 1px rgba(220, 38, 38, 0.05),
-    0 0 0 1px rgba(220, 38, 38, 0.02);
-  background: rgba(254, 242, 242, 0.06);
-  mix-blend-mode: multiply;
-  text-align: center;
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  color: #dc2626;
+  opacity: 0.125;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  transition: transform 0.22s ease, opacity 0.22s ease;
 }
 
-.pt-asset-card:hover .pt-asset-watermark-inner {
-  transform: scale(1.02);
-  border-color: rgba(220, 38, 38, 0.24);
-}
-
-.pt-asset-watermark-title {
-  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Impact", "Arial Black", "Arial-BoldMT", sans-serif;
-  font-size: 23px;
-  font-weight: 950;
-  letter-spacing: 0.14em;
-  color: rgba(220, 38, 38, 0.14);
-  text-transform: uppercase;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-.pt-asset-card:hover .pt-asset-watermark-title {
-  color: rgba(220, 38, 38, 0.25);
-}
-
-.pt-asset-watermark-sub {
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  color: rgba(220, 38, 38, 0.12);
-  text-transform: uppercase;
-  margin-top: 2px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.pt-asset-card:hover .pt-asset-watermark-sub {
-  color: rgba(220, 38, 38, 0.22);
+.pt-asset-card:hover .pt-asset-watermark {
+  opacity: 0.165;
+  transform: translateY(-50%) rotate(-12deg) scale(1.02);
 }
 
 /* ── CỘT TRÁI: THÔNG TIN TEM LÔ HÀNG (CHỮ THUẦN THANH LỊCH, KHÔNG BADGE) ── */
@@ -635,34 +594,15 @@ body.pt-body {
     gap: 3.5px;
   }
 
-  /* Watermark trên mobile: Dời sang phía phải, mờ nhẹ 0.11 */
+  /* Watermark trên mobile: Dời sang phía phải, độ mờ vừa phải cân đối */
   .pt-asset-watermark {
     top: 50%;
-    right: 68px;
+    right: 74px;
     left: auto;
+    width: 112px;
+    height: 100px;
     transform: translateY(-50%) rotate(-10deg);
-    max-width: 175px;
-  }
-
-  .pt-asset-watermark-inner {
-    padding: 2.5px 8px 3px;
-    border-width: 1.2px;
-    border-color: rgba(220, 38, 38, 0.11);
-    background: rgba(254, 242, 242, 0.04);
-    border-radius: 5px;
-  }
-
-  .pt-asset-watermark-title {
-    font-size: 14px;
-    letter-spacing: 0.08em;
-    color: rgba(220, 38, 38, 0.12);
-  }
-
-  .pt-asset-watermark-sub {
-    font-size: 6px;
-    letter-spacing: 0.1em;
-    color: rgba(220, 38, 38, 0.10);
-    margin-top: 1px;
+    opacity: 0.115;
   }
 
   .pt-asset-sub-title {
@@ -1079,6 +1019,33 @@ body.pt-body {
 }
 
 /* Nút Avatar hình tròn duy nhất */
+@keyframes pt-topbar-tap {
+  0% {
+    transform: scale(0.97);
+    background-color: #f8fafc;
+  }
+  38% {
+    transform: scale(0.93);
+    background-color: #eef2f6;
+  }
+  100% {
+    transform: scale(1);
+    background-color: #ffffff;
+  }
+}
+
+@keyframes pt-avatar-tap {
+  0% {
+    transform: scale(0.97);
+  }
+  38% {
+    transform: scale(0.93);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 .pt-avatar-btn {
   display: grid;
   place-items: center;
@@ -1088,17 +1055,19 @@ body.pt-body {
   cursor: pointer;
   border-radius: 50%;
   outline: none;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
-.pt-avatar-btn:hover {
-  transform: scale(1.08);
+@media (hover: hover) and (pointer: fine) {
+  .pt-avatar-btn:hover {
+    opacity: 0.9;
+  }
 }
 .pt-avatar-btn:active {
-  transform: scale(0.95);
+  transform: scale(0.94);
 }
-.pt-avatar-btn.is-active .pt-avatar {
-  box-shadow: 0 0 0 3px rgba(240, 219, 51, 0.55), 0 4px 14px rgba(20, 55, 47, 0.16);
+.pt-avatar-btn.is-active {
+  animation: pt-avatar-tap 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .pt-avatar {
@@ -1117,7 +1086,15 @@ body.pt-body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   flex-shrink: 0;
   user-select: none;
+  overflow: hidden;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.pt-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 /* Lớp phủ mờ (Backdrop Scrim) làm mờ hậu cảnh để người dùng focus vào popup profile */
@@ -1153,12 +1130,6 @@ body.pt-body {
   to {
     opacity: 0;
   }
-}
-
-/* Nút avatar khi popup đang mở nổi lên trên backdrop */
-.pt-avatar-btn.is-active {
-  position: relative;
-  z-index: 125;
 }
 
 /* Popup chi tiết tài khoản khi bấm vào avatar (mặc định trên Desktop ở góc phải) */
@@ -1396,9 +1367,37 @@ body.pt-body {
   border-radius: 20px;
 }
 
+.pt-profile-avatar-trigger {
+  position: relative;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 50%;
+  outline: none;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pt-profile-avatar-trigger:hover:not(:disabled) {
+    opacity: 0.92;
+  }
+}
+
+.pt-profile-avatar-trigger:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.pt-profile-avatar-trigger:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .pt-profile-avatar-lg {
-  width: 54px;
-  height: 54px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   background: var(--yellow);
   color: var(--ink);
@@ -1408,10 +1407,119 @@ body.pt-body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  border: 2px solid #ffffff;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.14);
   flex-shrink: 0;
   user-select: none;
+  overflow: hidden;
+}
+
+.pt-profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pt-profile-avatar-cam {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #166534;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.22);
+}
+
+.pt-profile-photo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 13px 15px;
+  border-radius: 16px;
+  background: #f8fbf9;
+  border: 1px dashed #b9d7c4;
+}
+
+.pt-profile-photo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pt-profile-photo-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #14372f;
+}
+
+.pt-profile-photo-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #556c62;
+}
+
+.pt-profile-photo-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pt-profile-photo-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: none;
+  background: #166534;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+
+.pt-profile-photo-upload-btn:hover:not(:disabled) {
+  background: #14532d;
+}
+
+.pt-profile-photo-upload-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.pt-profile-photo-upload-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.pt-profile-photo-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #b91c1c;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.pt-profile-photo-remove-btn:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 
 .pt-profile-head-info {
@@ -1623,7 +1731,7 @@ body.pt-body {
   box-shadow: none;
 }
 
-/* Nút tròn điều hướng có dấu mũi tên (đặt ở góc phải thay thế vị trí avatar cũ) */
+/* Nút tròn điều hướng (đặt ở góc phải trên giao diện di động) */
 .pt-nav-btn {
   display: grid;
   place-items: center;
@@ -1631,32 +1739,31 @@ body.pt-body {
   height: 42px;
   padding: 0;
   border-radius: 50%;
-  border: 1.5px solid var(--border);
+  border: 1px solid var(--border);
   background: #ffffff;
   color: var(--ink);
-  box-shadow: 0 4px 14px rgba(20, 55, 47, 0.08);
+  box-shadow: 0 2px 8px rgba(20, 55, 47, 0.06);
   cursor: pointer;
   outline: none;
-  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
               box-shadow 0.2s ease,
-              background 0.2s ease,
-              border-color 0.2s ease,
-              color 0.2s ease;
+              background-color 0.2s ease,
+              border-color 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
-.pt-nav-btn:hover {
-  transform: scale(1.08);
-  border-color: rgba(20, 55, 47, 0.25);
-  box-shadow: 0 6px 18px rgba(20, 55, 47, 0.14);
+@media (hover: hover) and (pointer: fine) {
+  .pt-nav-btn:hover {
+    background-color: #f8fafc;
+    border-color: rgba(20, 55, 47, 0.2);
+    box-shadow: 0 4px 12px rgba(20, 55, 47, 0.09);
+  }
 }
 .pt-nav-btn:active {
-  transform: scale(0.95);
+  transform: scale(0.94);
+  background-color: #eef2f6;
 }
 .pt-nav-btn.is-active {
-  background: var(--ink);
-  color: var(--yellow);
-  border-color: var(--ink);
-  box-shadow: 0 0 0 3px rgba(240, 219, 51, 0.55), 0 4px 14px rgba(20, 55, 47, 0.16);
+  animation: pt-topbar-tap 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .pt-nav-menu-mask {
   display: inline-block;
@@ -5872,7 +5979,7 @@ body.pt-body {
   position: fixed;
   inset: 0;
   z-index: 100;
-  width: 100vw;
+  width: 100%;
   height: 100dvh;
   display: flex;
   align-items: flex-end;
@@ -6507,7 +6614,7 @@ body.pt-body {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  width: 100vw;
+  width: 100%;
   height: 100dvh;
   display: flex;
   justify-content: center;
@@ -8565,11 +8672,23 @@ body.pt-body {
   justify-content: center;
   cursor: pointer;
   box-shadow: none;
-  transition: transform 0.15s ease, background 0.15s ease;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+              background-color 0.2s ease,
+              border-color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
 }
-.pt-notif-btn:hover {
-  background: #f8fafc;
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .pt-notif-btn:hover {
+    background-color: #f8fafc;
+    border-color: rgba(20, 55, 47, 0.2);
+  }
+}
+.pt-notif-btn:active {
+  transform: scale(0.94);
+  background-color: #eef2f6;
+}
+.pt-notif-btn[aria-expanded="true"] {
+  animation: pt-topbar-tap 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .pt-notif-badge {
   position: absolute;

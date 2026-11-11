@@ -24,6 +24,7 @@ export interface PortalOverview {
     status: HouseholdStatus;
     villageName: string;
     villageLeader: string | null;
+    avatarUrl?: string | null;
   };
   stats: {
     openViolations: number;
@@ -49,6 +50,7 @@ export interface PortalProfile {
     plotCount: number;
     areaHa: number;
     status: HouseholdStatus;
+    avatarUrl?: string | null;
   };
 }
 
@@ -111,8 +113,11 @@ export interface PortalSprayRecord {
   dose: string;
   areaHa: number;
   isolationDays: number;
+  isolationEndsOn?: string | null;
   mrlStatus: "pass" | "exceeded";
   plotCode?: string | null;
+  createdAt?: string | null;
+  canDelete?: boolean;
 }
 
 export interface CreateSprayBody {

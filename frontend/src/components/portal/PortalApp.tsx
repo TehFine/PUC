@@ -5,17 +5,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
+  Camera,
   ClipboardCheck,
   Globe,
   House,
   Mail,
   NotebookPen,
   Scale,
+  Trash2,
   TreePine,
   UserCheck,
   type LucideIcon,
 } from "lucide-react";
-import { FormEvent, startTransition, useCallback, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { invalidateQueries, NOTIFICATIONS_PATH, portalPath, usePortal, useSharedQuery } from "@/hooks/use-portal";
@@ -34,6 +36,7 @@ import { PortalSearchButton, type PortalAction, type PortalSearchTarget } from "
 import { RadialPngIcon } from "./RadialIcons";
 import RadialNavWheel from "./RadialNavWheel";
 import { BusyButton, InlineError } from "./shared/controls";
+import { uploadPortalFile, validatePickedFile } from "./shared/media";
 import { SupportFooter, SystemSupportModal } from "./SystemSupport";
 import { EmptyState, Field, Sheet, StateBlock, useSheetClose } from "./ui";
 
@@ -202,6 +205,10 @@ function PortalAppContent() {
   const [accountPasswordInput, setAccountPasswordInput] = useState("");
   const [savingAccount, setSavingAccount] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [localAvatarOverride, setLocalAvatarOverride] = useState<string | null | undefined>(undefined);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [clearingRead, setClearingRead] = useState(false);
   const [notifFilter, setNotifFilter] = useState<"all" | "unread">("all");
@@ -342,6 +349,8 @@ function PortalAppContent() {
   const profAccount = profile?.account;
   const displayName = profHousehold?.name || profAccount?.fullName || session?.user.fullName || "Hộ thành viên";
   const linkedEmail = profAccount?.email ?? session?.user.email ?? null;
+  const serverAvatarUrl = profile?.household.avatarUrl ?? overview?.household.avatarUrl ?? null;
+  const avatarUrl = localAvatarOverride !== undefined ? localAvatarOverride : serverAvatarUrl;
   const householdStatus = HOUSEHOLD_STATUS[profHousehold?.status ?? "pending"] ?? HOUSEHOLD_STATUS.pending;
   const initials =
     displayName
@@ -351,6 +360,50 @@ function PortalAppContent() {
       .map((w) => w[0])
       .join("")
       .toUpperCase() || "HD";
+
+  const handleAvatarChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || uploadingAvatar) return;
+
+    const validationError = validatePickedFile(file);
+    if (validationError) {
+      setAvatarError(validationError);
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setAvatarError(null);
+    try {
+      const attachmentId = await uploadPortalFile(file, "avatar");
+      const saved = await api.patch<{ avatarUrl: string | null }>("/portal/profile/avatar", {
+        avatarId: attachmentId,
+      });
+      setLocalAvatarOverride(saved.avatarUrl);
+      invalidateQueries(portalPath("profile"));
+      invalidateQueries(portalPath("overview"));
+    } catch (err) {
+      setAvatarError(errorMessage(err, "Không thể tải ảnh đại diện lên. Vui lòng thử lại."));
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (uploadingAvatar || !avatarUrl) return;
+    setUploadingAvatar(true);
+    setAvatarError(null);
+    try {
+      await api.patch<{ avatarUrl: string | null }>("/portal/profile/avatar", { avatarId: null });
+      setLocalAvatarOverride(null);
+      invalidateQueries(portalPath("profile"));
+      invalidateQueries(portalPath("overview"));
+    } catch (err) {
+      setAvatarError(errorMessage(err, "Không thể gỡ ảnh đại diện."));
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const notifItems = apiNotifItems.length > 0 ? apiNotifItems : fallbackNotifItems;
   const unreadCount =
@@ -506,7 +559,14 @@ function PortalAppContent() {
               aria-haspopup="dialog"
               title={`Hồ sơ: ${displayName}`}
             >
-              <span className="pt-avatar">{initials}</span>
+              <span className="pt-avatar">
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrl} alt={displayName} className="pt-avatar-img" />
+                ) : (
+                  initials
+                )}
+              </span>
             </button>
 
             <button
@@ -517,6 +577,8 @@ function PortalAppContent() {
                 setNotifOpen(true);
                 invalidateQueries(NOTIFICATIONS_PATH);
               }}
+              aria-expanded={notifOpen}
+              aria-haspopup="dialog"
               aria-label={unreadCount > 0 ? `Thông báo (${unreadCount} chưa đọc)` : "Thông báo"}
               title="Thông báo từ HTX"
             >
@@ -566,10 +628,38 @@ function PortalAppContent() {
           className="pt-profile-sheet"
         >
           <div id="portal-profile-dropdown" className="pt-profile-sheet-content">
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => void handleAvatarChange(e)}
+              style={{ display: "none" }}
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+
             <div className="pt-profile-popup-head">
-              <div className="pt-profile-avatar-lg">
-                <span>{initials}</span>
-              </div>
+              <button
+                type="button"
+                className="pt-profile-avatar-trigger"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                title={t("Bấm để tải lên hoặc đổi ảnh đại diện hộ")}
+                aria-label={t("Tải lên hoặc đổi ảnh đại diện hộ")}
+              >
+                <div className="pt-profile-avatar-lg">
+                  {avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatarUrl} alt={displayName} className="pt-profile-avatar-img" />
+                  ) : (
+                    <span>{initials}</span>
+                  )}
+                </div>
+                <span className="pt-profile-avatar-cam" aria-hidden="true">
+                  <Camera size={13} strokeWidth={2.4} />
+                </span>
+              </button>
+
               <div className="pt-profile-head-info">
                 <strong className="pt-profile-name">{displayName}</strong>
                 <div className="pt-profile-badges">
@@ -581,6 +671,48 @@ function PortalAppContent() {
                   </span>
                 </div>
               </div>
+            </div>
+
+            <div className="pt-profile-photo-card">
+              <div className="pt-profile-photo-info">
+                <strong className="pt-profile-photo-title">
+                  {t("Ảnh đại diện hộ & Hồ sơ truy xuất QR")}
+                </strong>
+                <span className="pt-profile-photo-desc">
+                  {t("Hiển thị trên màn hình Truy xuất nguồn gốc khi cán bộ, doanh nghiệp quét mã QR tại vườn.")}
+                </span>
+              </div>
+              <div className="pt-profile-photo-actions">
+                <button
+                  type="button"
+                  className="pt-profile-photo-upload-btn"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                >
+                  <Camera size={15} strokeWidth={2.2} aria-hidden="true" />
+                  <span>
+                    {uploadingAvatar
+                      ? t("Đang tải ảnh…")
+                      : avatarUrl
+                        ? t("Đổi ảnh hộ")
+                        : t("Tải ảnh hộ lên")}
+                  </span>
+                </button>
+                {avatarUrl && (
+                  <button
+                    type="button"
+                    className="pt-profile-photo-remove-btn"
+                    onClick={() => void handleRemoveAvatar()}
+                    disabled={uploadingAvatar}
+                    title={t("Gỡ ảnh đại diện hiện tại")}
+                    aria-label={t("Gỡ ảnh đại diện hiện tại")}
+                  >
+                    <Trash2 size={14} strokeWidth={2.1} aria-hidden="true" />
+                    <span>{t("Gỡ")}</span>
+                  </button>
+                )}
+              </div>
+              {avatarError && <InlineError message={avatarError} />}
             </div>
 
             <div className="pt-profile-details">
