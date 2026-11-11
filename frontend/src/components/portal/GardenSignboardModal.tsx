@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { ArrowUpRight, Download, Printer, QrCode } from "lucide-react";
+import { Download, Printer } from "lucide-react";
 import type { PortalPlot } from "@/types/portal";
 import { triggerBlobDownload } from "@/utils/download";
 import { Sheet } from "./ui";
@@ -96,9 +96,9 @@ async function renderSignboardPngBlob(
 
     // Khung QR bên phải
     const qrBoxX = 890;
-    const qrBoxY = 236;
+    const qrBoxY = 272;
     const qrBoxW = 356;
-    const qrBoxH = 440;
+    const qrBoxH = 356;
     ctx.fillStyle = "#f8fafc";
     ctx.fillRect(qrBoxX, qrBoxY, qrBoxW, qrBoxH);
     ctx.save();
@@ -115,16 +115,8 @@ async function renderSignboardPngBlob(
         image.onerror = reject;
         image.src = qrDataUrl;
       });
-      ctx.drawImage(qrImg, qrBoxX + 38, qrBoxY + 28, 280, 280);
+      ctx.drawImage(qrImg, qrBoxX + 28, qrBoxY + 28, 300, 300);
     }
-
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#15803d";
-    ctx.font = "800 20px Arial, sans-serif";
-    ctx.fillText("QUÉT QR XEM HỒ SƠ LÔ VƯỜN", qrBoxX + qrBoxW / 2, qrBoxY + 356);
-    ctx.fillStyle = "#475569";
-    ctx.font = '700 18px Inter, -apple-system, "Segoe UI", Arial, sans-serif';
-    ctx.fillText(plot.code, qrBoxX + qrBoxW / 2, qrBoxY + 392);
 
     // Chân biển
     ctx.strokeStyle = "#cbd5e1";
@@ -296,14 +288,6 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
                 ) : (
                   <div className="plate-qr-skeleton" />
                 )}
-                <div className="plate-qr-caption">
-                  <QrCode size={13} style={{ display: "inline", verticalAlign: "-2px", marginRight: 4 }} />
-                  QUÉT QR XEM HỒ SƠ LÔ VƯỜN
-                </div>
-                <div className="plate-qr-tap-hint no-print">
-                  <span>Chạm vào QR để xem ngay</span>
-                  <ArrowUpRight size={12} strokeWidth={2.5} aria-hidden="true" />
-                </div>
               </a>
             </div>
 
@@ -524,34 +508,12 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           outline-offset: 2px;
         }
 
-        .plate-qr-tap-hint {
-          margin-top: 6px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 3px;
-          padding: 3.5px 9px;
-          border-radius: 999px;
-          background: #dcfce7;
-          color: #166534;
-          font-size: 10.5px;
-          font-weight: 700;
-          line-height: 1.2;
-        }
-
-        .plate-qr-img {
-          width: 140px;
-          height: 140px;
+        .plate-qr-img,
+        .plate-qr-skeleton {
+          width: 154px;
+          height: 154px;
           border-radius: 4px;
           display: block;
-        }
-
-        .plate-qr-caption {
-          font-size: 9.5px;
-          font-weight: 800;
-          color: #15803d;
-          margin-top: 6px;
-          text-align: center;
         }
 
         .plate-bottom {
@@ -676,14 +638,10 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
             padding: 10px;
           }
 
-          .plate-qr-img {
-            width: 140px;
-            height: 140px;
-          }
-
-          .plate-qr-caption {
-            font-size: 9px;
-            margin-top: 5px;
+          .plate-qr-img,
+          .plate-qr-skeleton {
+            width: 144px;
+            height: 144px;
           }
 
           .plate-bottom {
