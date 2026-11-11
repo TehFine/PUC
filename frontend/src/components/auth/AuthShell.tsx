@@ -81,10 +81,8 @@ export default function AuthShell({ variant, title, subtitle, wide = false, hide
   const aside = ASIDE[variant];
   const other =
     variant === "login"
-      ? { href: "/register", text: "Chưa có tài khoản?", action: "Quy trình cấp TK" }
-      : variant === "forgot"
-        ? { href: "/login", text: "Nhớ lại mật khẩu?", action: "Đăng nhập" }
-        : { href: "/login", text: "Đã được cấp tài khoản?", action: "Đăng nhập" };
+      ? { href: "/register", label: "Cấp tài khoản" }
+      : { href: "/login", label: "Đăng nhập" };
 
   return (
     <main className="auth">
@@ -128,9 +126,7 @@ export default function AuthShell({ variant, title, subtitle, wide = false, hide
           </Link>
           {!hideSwitch && (
             <Link href={other.href} className="auth-alt">
-              <span>
-                {other.text} <strong>{other.action}</strong>
-              </span>
+              <strong>{other.label}</strong>
               <span className="auth-arrow" aria-hidden="true">
                 →
               </span>

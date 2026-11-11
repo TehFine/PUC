@@ -513,12 +513,7 @@ export default function LoginPage() {
                   </button>
                   <button
                     type="submit"
-                    className="auth-google-cancel-btn"
-                    style={{
-                      background: "var(--au-ink)",
-                      color: "#fff",
-                      borderColor: "var(--au-ink)",
-                    }}
+                    className="auth-google-cancel-btn is-primary"
                     disabled={googleSubmitting || !customEmail.trim()}
                   >
                     {googleSubmitting ? "Đang xác thực…" : "Tiếp tục"}

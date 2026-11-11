@@ -368,16 +368,16 @@ function ForgotPasswordContent() {
       <p className="auth-switch-hint">
         {mode === "cccd" ? (
           <>
-            Không nhớ số CCCD trong hồ sơ hoặc là tài khoản cán bộ?
+            <span>Không nhớ số CCCD trong hồ sơ hoặc là tài khoản cán bộ?</span>
             <button type="button" className="auth-switch-btn" onClick={() => switchMode("request")}>
-              Gửi yêu cầu nhờ cán bộ HTX duyệt
+              Nhờ cán bộ HTX duyệt →
             </button>
           </>
         ) : (
           <>
-            Hộ dân đã đăng ký số CCCD 12 số trong hồ sơ HTX?
+            <span>Hộ dân đã đăng ký số CCCD 12 số trong hồ sơ HTX?</span>
             <button type="button" className="auth-switch-btn" onClick={() => switchMode("cccd")}>
-              Xác minh CCCD để đặt lại ngay
+              Xác minh CCCD đặt lại ngay →
             </button>
           </>
         )}

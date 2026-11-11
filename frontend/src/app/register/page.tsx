@@ -46,51 +46,30 @@ export default function RegisterPage() {
           </li>
         </ol>
 
-        <div
-          style={{
-            padding: "14px 18px",
-            marginBottom: 22,
-            borderRadius: 16,
-            background: "var(--au-mist)",
-            border: "1px solid rgba(47, 143, 111, 0.2)",
-            fontSize: 14.5,
-            lineHeight: 1.55,
-          }}
-        >
-          <strong>Liên hệ cấp tài khoản hộ thành viên:</strong>
-          <div style={{ marginTop: 4, color: "var(--au-text)" }}>
-            Hotline kỹ thuật HTX Cư Né:{" "}
-            <a
-              href="tel:0366663778"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "2px 10px",
-                borderRadius: 999,
-                border: "1.5px solid rgba(22, 101, 52, 0.34)",
-                background: "#ffffff",
-                fontWeight: 700,
-                color: "var(--au-green-deep)",
-                textDecoration: "none",
-              }}
-            >
+        <div className="auth-contact-card">
+          <strong className="auth-contact-title">Liên hệ cấp tài khoản hộ thành viên</strong>
+          <div className="auth-contact-hotline">
+            <span>Hotline kỹ thuật HTX Cư Né</span>
+            <a href="tel:0366663778" className="auth-hotline-pill">
               0366 663 778
-            </a>{" "}
-            · Văn phòng HTX tại Xã Cư Né, Krông Búk, Đắk Lắk (hoặc liên hệ trực tiếp Trưởng thôn phụ trách).
+            </a>
           </div>
+          <p className="auth-contact-note">
+            Văn phòng HTX tại Xã Cư Né, Krông Búk, Đắk Lắk (hoặc liên hệ trực tiếp Trưởng thôn phụ trách).
+          </p>
         </div>
 
         <Link href="/login" className="auth-submit is-link">
-          Đã nhận bàn giao tài khoản? Đăng nhập ngay
+          <span>Đã có tài khoản? Đăng nhập</span>
           <span className="auth-arrow" aria-hidden="true">
             →
           </span>
         </Link>
 
         <p className="auth-switch-hint">
-          Đã được cấp tài khoản nhưng quên mật khẩu?
+          <span>Đã được cấp tài khoản nhưng quên mật khẩu?</span>
           <Link href="/forgot-password" className="auth-switch-btn">
-            Khôi phục mật khẩu tại đây
+            Khôi phục mật khẩu →
           </Link>
         </p>
       </div>
