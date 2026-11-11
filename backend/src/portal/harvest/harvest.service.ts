@@ -7,7 +7,13 @@ import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { ADMIN_LINKS, HTX_ROLES } from "../common/admin-links";
-import { assertPlotOwned, type ClientContext, exceedsWithTolerance, householdIdOf } from "../common/portal-context";
+import {
+  assertPlotNotInIsolation,
+  assertPlotOwned,
+  type ClientContext,
+  exceedsWithTolerance,
+  householdIdOf,
+} from "../common/portal-context";
 import type { CreateHarvestDeclarationDto } from "./harvest.dto";
 
 const DECLARATION_COLUMNS = `d.id, d.plot_code, d.harvested_on, d.weight_kg, d.grade_a_kg, d.grade_b_kg,
@@ -60,6 +66,7 @@ export class HarvestService {
     }
 
     const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
+    await assertPlotNotInIsolation(this.db, householdId, plotCode, harvestedOn);
     const [photoId] = await this.uploads.assertUsable(dto.photoId ? [dto.photoId] : [], user, "harvest");
 
     const inserted = await this.db.query<{ id: number }>(

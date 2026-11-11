@@ -1,6 +1,7 @@
 /** Đường dẫn khu quản trị dùng trong thông báo gửi cán bộ (`/admin?section=<SectionId>`). */
 export const ADMIN_LINKS = {
   approval: "/admin?section=approval",
+  journal: "/admin?section=journal",
   violations: "/admin?section=journal",
   harvest: "/admin?section=harvest",
   training: "/admin?section=training",

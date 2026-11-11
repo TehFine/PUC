@@ -125,3 +125,46 @@ export async function withTransaction<T>(db: DatabaseService, fn: (client: PoolC
 
 /** So sánh số thực có sai số làm tròn (khối lượng lưu 1 chữ số thập phân). */
 export const exceedsWithTolerance = (value: number, limit: number) => value - limit > 1e-6;
+
+/**
+ * Chặn thu hái hoặc kích hoạt tem quả khi thửa đất đang còn trong thời gian cách ly thuốc BVTV (PHI)
+ * hoặc có đợt phun thuốc cấm trên thửa trong vòng 60 ngày gần nhất.
+ */
+export async function assertPlotNotInIsolation(
+  db: Pick<DatabaseService, "query">,
+  householdId: number,
+  plotCode: string,
+  targetDate: string,
+): Promise<void> {
+  const { rows } = await db.query<{
+    pesticide_name: string;
+    safe_from: string;
+    pesticide_status: string;
+  }>(
+    `SELECT p.name AS pesticide_name,
+            to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') AS safe_from,
+            p.status AS pesticide_status
+     FROM spray_records s
+     JOIN pesticides p ON p.id = s.pesticide_id
+     WHERE s.household_id = $1
+       AND (s.plot_code IS NULL OR upper(s.plot_code) = upper($2))
+       AND s.sprayed_on <= $3::date
+       AND (
+         (s.isolation_days > 0 AND (s.sprayed_on + s.isolation_days) > $3::date)
+         OR (p.status = 'banned' AND s.sprayed_on >= ($3::date - 60))
+       )
+     ORDER BY (s.sprayed_on + s.isolation_days) DESC, s.id DESC
+     LIMIT 1`,
+    [householdId, plotCode, targetDate],
+  );
+  const active = rows[0];
+  if (!active) return;
+  if (active.pesticide_status === "banned") {
+    throw badRequest(
+      `Thửa "${plotCode}" có ghi nhận sử dụng hoạt chất cấm (${active.pesticide_name}), không đủ điều kiện thu hái hoặc dán tem xuất khẩu. Vui lòng liên hệ cán bộ kỹ thuật HTX.`,
+    );
+  }
+  throw badRequest(
+    `Thửa "${plotCode}" đang trong thời gian cách ly thuốc BVTV (${active.pesticide_name}), chỉ được phép thu hái từ ngày ${active.safe_from}.`,
+  );
+}

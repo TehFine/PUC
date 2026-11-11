@@ -5,7 +5,7 @@ import { badRequest, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql, camelRow, camelRows, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { UploadsService } from "../../uploads/uploads.service";
-import { assertPlotOwned, type ClientContext, householdIdOf } from "../common/portal-context";
+import { assertPlotNotInIsolation, assertPlotOwned, type ClientContext, householdIdOf } from "../common/portal-context";
 import type { ActivatePortalStampDto } from "./stamps.dto";
 
 const STAMP_COLUMNS = `id, allocation_id, plot_code, serial_code, status, activated_at, fruit_weight_kg, grade,
@@ -72,8 +72,9 @@ export class StampsService {
     const householdId = householdIdOf(user);
     const cleanSerial = dto.serialCode.trim();
     const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
-    const [photoId] = await this.uploads.assertUsable(dto.photoId ? [dto.photoId] : [], user, "stamp");
     const today = todayVn();
+    await assertPlotNotInIsolation(this.db, householdId, plotCode, today);
+    const [photoId] = await this.uploads.assertUsable(dto.photoId ? [dto.photoId] : [], user, "stamp");
 
     const updated = await this.db.query(
       `UPDATE farmer_stamps
