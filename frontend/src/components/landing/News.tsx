@@ -1,207 +1,277 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
-import { NEWS_CATEGORIES, type NewsArticle } from "./news-data";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNewsArticles } from "@/lib/news-store";
 import { lockRootScroll } from "@/lib/scroll-lock";
 
 const shouldSkipImageOpt = (src: string) => src.startsWith("/api/") || /^https?:\/\//i.test(src);
 
+function getNewsFocusPosition(imageSrc: string): string {
+  if (imageSrc.includes("news-field-visit")) return "center 58%";
+  if (imageSrc.includes("news-training")) return "center 50%";
+  if (imageSrc.includes("news-protection")) return "center 45%";
+  return "center 48%";
+}
+
 export default function News() {
   const { articles } = useNewsArticles();
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [readingArticle, setReadingArticle] = useState<NewsArticle | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [canPrev, setCanPrev] = useState(false);
+  const [canNext, setCanNext] = useState(true);
 
-  // Khóa cuộn trang khi mở modal đọc bài viết
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef({
+    active: false,
+    startX: 0,
+    startScrollLeft: 0,
+    moved: false,
+  });
+
+  const readingArticle =
+    activeIndex !== null && articles[activeIndex] ? articles[activeIndex] : null;
+
+  const syncScrollBounds = useCallback(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    setCanPrev(el.scrollLeft > 8);
+    setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+  }, []);
+
   useEffect(() => {
-    if (!readingArticle) return;
+    const raf = window.requestAnimationFrame(syncScrollBounds);
+    window.addEventListener("resize", syncScrollBounds, { passive: true });
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", syncScrollBounds);
+    };
+  }, [articles.length, syncScrollBounds]);
+
+  const scrollByStep = useCallback((direction: -1 | 1) => {
+    const el = trackRef.current;
+    if (!el) return;
+    const firstCard = el.querySelector<HTMLElement>(".sw-training-slide");
+    const step = firstCard ? firstCard.offsetWidth + 32 : el.clientWidth * 0.72;
+    el.scrollBy({ left: direction * step, behavior: "smooth" });
+  }, []);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !trackRef.current) return;
+    dragStateRef.current = {
+      active: true,
+      startX: e.clientX,
+      startScrollLeft: trackRef.current.scrollLeft,
+      moved: false,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const state = dragStateRef.current;
+    if (!state.active || !trackRef.current) return;
+    const dx = e.clientX - state.startX;
+    if (!state.moved && Math.abs(dx) > 6) {
+      state.moved = true;
+      setIsDragging(true);
+    }
+    if (state.moved) {
+      e.preventDefault();
+      trackRef.current.scrollLeft = state.startScrollLeft - dx;
+    }
+  };
+
+  const stopDragging = () => {
+    if (!dragStateRef.current.active) return;
+    dragStateRef.current.active = false;
+    setIsDragging(false);
+  };
+
+  const closeDrawer = useCallback(() => setActiveIndex(null), []);
+  const nextArticle = useCallback(() => {
+    setActiveIndex((prev) =>
+      prev === null || articles.length === 0 ? null : (prev + 1) % articles.length,
+    );
+  }, [articles.length]);
+  const prevArticle = useCallback(() => {
+    setActiveIndex((prev) =>
+      prev === null || articles.length === 0
+        ? null
+        : (prev - 1 + articles.length) % articles.length,
+    );
+  }, [articles.length]);
+
+  useEffect(() => {
+    if (activeIndex === null) return;
     const unlockScroll = lockRootScroll();
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setReadingArticle(null);
+      if (e.key === "Escape") closeDrawer();
+      if (e.key === "ArrowRight") nextArticle();
+      if (e.key === "ArrowLeft") prevArticle();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       unlockScroll();
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [readingArticle]);
-
-  const filteredArticles =
-    selectedCategory === "all"
-      ? articles
-      : articles.filter((item) => item.category === selectedCategory);
-
-  const featured = filteredArticles.find((a) => a.featured) ?? filteredArticles[0];
-  const regularList = filteredArticles.filter((a) => a !== featured);
+  }, [activeIndex, closeDrawer, nextArticle, prevArticle]);
 
   return (
-    <div className="lp-news-root">
-      {/* Bộ lọc chuyên mục bản tin */}
-      <div className="lp-news-tabs-wrap">
-        <div className="lp-news-tabs" role="tablist" aria-label="Lọc chuyên mục bản tin">
-          {NEWS_CATEGORIES.map((cat) => (
+    <section id="tin-tuc" className="sw-section" aria-labelledby="tintuc-title">
+      {/* Hàng tiêu đề mục tinh gọn, đồng bộ với phần Tập huấn */}
+      <header className="sw-grid sw-sec-head">
+        <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
+
+        <div className="sw-cell sw-col-2-3 sw-head-main">
+          <span className="sw-sec-index">04 / Tin tức</span>
+          <h2 id="tintuc-title" className="sw-sec-title">
+            Bản tin nhà nông
+          </h2>
+        </div>
+
+        <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
+      </header>
+
+      {/* Dải danh sách bản tin nằm ngang cuộn mượt + nút Trước / Tiếp theo ngay bên dưới */}
+      <div className="sw-training-strip-shell">
+        <div
+          ref={trackRef}
+          className={`sw-training-strip ${isDragging ? "is-dragging" : ""}`}
+          onScroll={syncScrollBounds}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={stopDragging}
+          onMouseLeave={stopDragging}
+        >
+          {articles.map((article, idx) => {
+            const focusPos = getNewsFocusPosition(article.image);
+
+            return (
+              <article
+                key={article.id}
+                className="sw-training-slide"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  if (dragStateRef.current.moved) {
+                    dragStateRef.current.moved = false;
+                    return;
+                  }
+                  setActiveIndex(idx);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setActiveIndex(idx);
+                  }
+                }}
+              >
+                <div className="sw-training-photo">
+                  <Image
+                    src={article.image}
+                    alt={article.imageAlt}
+                    fill
+                    draggable={false}
+                    priority={idx === 0}
+                    unoptimized={shouldSkipImageOpt(article.image)}
+                    sizes="(max-width: 560px) 84vw, (max-width: 960px) 46vw, 30vw"
+                    style={{ objectFit: "cover", objectPosition: focusPos }}
+                  />
+                </div>
+
+                <div className="sw-training-caption">
+                  <h3 className="sw-training-slide-title is-news">{article.title}</h3>
+                  <p className="sw-training-slide-sub">
+                    {article.categoryLabel} · {article.date}
+                  </p>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="sw-training-strip-foot">
+          <div className="sw-training-scroll-btns" aria-label="Cuộn danh sách bản tin">
             <button
-              key={cat.id}
               type="button"
-              role="tab"
-              aria-selected={selectedCategory === cat.id}
-              className={`lp-news-tab ${selectedCategory === cat.id ? "is-active" : ""}`}
-              onClick={() => setSelectedCategory(cat.id)}
+              className="eh-step-btn"
+              disabled={!canPrev}
+              onClick={() => scrollByStep(-1)}
             >
-              {cat.label}
+              Trước
             </button>
-          ))}
+            <button
+              type="button"
+              className="eh-step-btn"
+              disabled={!canNext}
+              onClick={() => scrollByStep(1)}
+            >
+              Tiếp
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Bài viết tiêu điểm (Featured Card) */}
-      {featured && (
-        <article className="lp-news-featured lp-glass" onClick={() => setReadingArticle(featured)}>
-          <div className="lp-news-feat-media lp-clip">
-            <Image
-              src={featured.image}
-              alt={featured.imageAlt}
-              fill
-              sizes="(max-width: 900px) 100vw, 560px"
-              priority
-              unoptimized={shouldSkipImageOpt(featured.image)}
-            />
-            <span className="lp-clip-arrow" aria-hidden="true">
-              <svg viewBox="0 0 42 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ overflow: "visible", display: "block" }}>
-                <path d="M1 8h36M30 2.5 37 8l-7 5.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </span>
-          </div>
-
-          <div className="lp-news-feat-body">
-            <div className="lp-news-meta">
-              <span className={`lp-news-badge is-${featured.tagTone}`}>{featured.categoryLabel}</span>
-              <span className="lp-news-date">{featured.date}</span>
-              <span className="lp-news-read">{featured.readTime}</span>
-            </div>
-
-            <h3 className="lp-news-feat-title">{featured.title}</h3>
-            <p className="lp-news-feat-desc">{featured.excerpt}</p>
-
-            <div className="lp-news-feat-foot">
-              <span className="lp-news-author">{featured.author}</span>
-              <button
-                type="button"
-                className="lp-news-read-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setReadingArticle(featured);
-                }}
-              >
-                Đọc toàn bộ bài viết →
-              </button>
-            </div>
-          </div>
-        </article>
-      )}
-
-      {/* Lưới các bài viết tiếp theo */}
-      {regularList.length > 0 && (
-        <div className="lp-news-grid">
-          {regularList.map((item) => (
-            <article
-              key={item.id}
-              className="lp-news-card lp-glass"
-              onClick={() => setReadingArticle(item)}
-            >
-              <div className="lp-news-card-media">
-                <Image
-                  src={item.image}
-                  alt={item.imageAlt}
-                  fill
-                  sizes="(max-width: 768px) 100vw, 360px"
-                  unoptimized={shouldSkipImageOpt(item.image)}
-                />
-              </div>
-
-              <div className="lp-news-card-body">
-                <div className="lp-news-meta">
-                  <span className={`lp-news-badge is-${item.tagTone}`}>{item.categoryLabel}</span>
-                  <span className="lp-news-date">{item.date}</span>
-                </div>
-
-                <h4 className="lp-news-card-title">{item.title}</h4>
-                <p className="lp-news-card-desc">{item.excerpt}</p>
-
-                <div className="lp-news-card-foot">
-                  <span className="lp-news-read">{item.readTime}</span>
-                  <span className="lp-news-link">Đọc tiếp →</span>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-
-      {/* Modal / Bảng đọc toàn bộ nội dung bài báo */}
+      {/* Ngăn trượt từ cạnh phải màn hình hiển thị chi tiết bài báo (giống phần Tập huấn) */}
       {readingArticle && (
         <div
-          className="lp-news-modal-backdrop"
-          onClick={() => setReadingArticle(null)}
+          className="sw-side-backdrop"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="reading-title"
+          aria-labelledby="news-drawer-title"
+          onClick={closeDrawer}
         >
-          <div className="lp-news-modal-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="lp-news-modal-drag" aria-hidden="true" />
-            <header className="lp-news-modal-head">
-              <div className="lp-news-meta">
-                <span className={`lp-news-badge is-${readingArticle.tagTone}`}>
-                  {readingArticle.categoryLabel}
-                </span>
-                <span className="lp-news-date">{readingArticle.date}</span>
-                <span className="lp-news-read">{readingArticle.readTime}</span>
+          <aside className="sw-side-drawer" onClick={(e) => e.stopPropagation()}>
+            <header className="sw-side-head">
+              <div className="sw-modal-meta">
+                <span>{readingArticle.categoryLabel}</span>
+                <span>·</span>
+                <span>{readingArticle.date}</span>
+                <span>·</span>
+                <span>{readingArticle.readTime}</span>
               </div>
               <button
                 type="button"
-                className="lp-news-modal-close"
-                aria-label="Đóng bài viết"
-                onClick={() => setReadingArticle(null)}
+                className="sw-side-close"
+                aria-label="Đóng bản tin"
+                onClick={closeDrawer}
               >
-                <CloseCircleIcon size={28} />
+                <span>Đóng</span>
+                <span className="sw-side-close-x" aria-hidden="true">
+                  ×
+                </span>
               </button>
             </header>
 
-            <div className="lp-news-modal-scroll">
-              <h2 id="reading-title" className="lp-news-modal-title">
-                {readingArticle.title}
-              </h2>
-
-              <p className="lp-news-modal-author">
-                Tác giả: <strong>{readingArticle.author}</strong> · Phát hành nội bộ HTX Cư Né
-              </p>
-
-              <figure className="lp-news-modal-photo">
+            <div className="sw-side-scroll">
+              <div className="sw-side-photo-stage">
                 <Image
                   src={readingArticle.image}
                   alt={readingArticle.imageAlt}
-                  fill
-                  sizes="(max-width: 900px) 100vw, 760px"
+                  width={1200}
+                  height={760}
                   unoptimized={shouldSkipImageOpt(readingArticle.image)}
+                  className="sw-side-photo-full"
+                  priority
                 />
-                <figcaption>{readingArticle.imageAlt}</figcaption>
-              </figure>
+              </div>
 
-              <div className="lp-news-modal-body">
-                <p className="lp-news-lead">{readingArticle.content.lead}</p>
+              <div className="sw-side-content">
+                <span className="sw-micro">Thực hiện: {readingArticle.author}</span>
+                <h2 id="news-drawer-title" className="sw-side-title">
+                  {readingArticle.title}
+                </h2>
+                <p className="sw-side-lead">{readingArticle.content.lead}</p>
 
                 {readingArticle.content.sections.map((sec) => (
-                  <section key={sec.heading} className="lp-news-modal-sec">
-                    <h3>{sec.heading}</h3>
-                    {sec.paragraphs.map((p, idx) => (
-                      <p key={idx}>{p}</p>
+                  <section key={sec.heading} className="sw-side-section">
+                    <h4>{sec.heading}</h4>
+                    {sec.paragraphs.map((p, i) => (
+                      <p key={i}>{p}</p>
                     ))}
                     {sec.bulletPoints && (
-                      <ul className="lp-news-bullets">
-                        {sec.bulletPoints.map((bp, bpIdx) => (
-                          <li key={bpIdx}>{bp}</li>
+                      <ul className="sw-clean-list">
+                        {sec.bulletPoints.map((bp, bi) => (
+                          <li key={bi}>{bp}</li>
                         ))}
                       </ul>
                     )}
@@ -209,34 +279,25 @@ export default function News() {
                 ))}
 
                 {readingArticle.content.takeaway && (
-                  <div className="lp-news-takeaway">
-                    <div className="lp-news-takeaway-label">KHUYẾN CÁO NHÀ NÔNG</div>
+                  <div className="sw-side-callout">
+                    <span className="sw-micro">Khuyến cáo nhà nông</span>
                     <p>{readingArticle.content.takeaway}</p>
                   </div>
                 )}
-
-                <div className="lp-news-support-box">
-                  <strong>Bà con cần hướng dẫn cụ thể tại vườn?</strong>
-                  <p>
-                    Vui lòng liên hệ cán bộ khuyến nông phụ trách thôn hoặc gửi yêu cầu trực tiếp qua{" "}
-                    <strong>Cổng hộ dân</strong> để được kỹ sư HTX về tận vườn hỗ trợ kiểm tra và xử lý kịp thời.
-                  </p>
-                </div>
               </div>
-
-              <footer className="lp-news-modal-foot">
-                <button
-                  type="button"
-                  className="lp-btn lp-btn-solid"
-                  onClick={() => setReadingArticle(null)}
-                >
-                  Đã hiểu, quay lại bản tin
-                </button>
-              </footer>
             </div>
-          </div>
+
+            <footer className="sw-side-foot">
+              <button type="button" className="eh-step-btn" onClick={prevArticle}>
+                <span>Bản tin trước</span>
+              </button>
+              <button type="button" className="eh-step-btn" onClick={nextArticle}>
+                <span>Tiếp</span>
+              </button>
+            </footer>
+          </aside>
         </div>
       )}
-    </div>
+    </section>
   );
 }

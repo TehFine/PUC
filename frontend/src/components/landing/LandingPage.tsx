@@ -1,461 +1,389 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import AutoEnter from "./AutoEnter";
-import BannedList from "./BannedList";
 import Catalog from "./Catalog";
-import { CODE_PARTS, CODE_STEPS, EXPORT_CHECKLIST, STANDARDS } from "./data";
+import EditorialHero from "./EditorialHero";
 import Faq from "./Faq";
-import { display, heroSans } from "./fonts";
-import HeroDash from "./HeroDash";
-import Nav from "./Nav";
 import News from "./News";
-import Season from "./Season";
-import Showcase from "./Showcase";
-import Stages from "./Stages";
 import TrainingGallery from "./TrainingGallery";
 import "./landing.css";
-
-interface SectionImage {
-  src: string;
-  alt: string;
-  caption?: string;
-}
-
-function Section({
-  id,
-  tone = "white",
-  eyebrow,
-  title,
-  intro,
-  image,
-  imageStyle = "cut",
-  children,
-}: {
-  id: string;
-  tone?: "white" | "beige" | "mist";
-  eyebrow: string;
-  title: string;
-  intro?: string;
-  image?: SectionImage;
-  imageStyle?: "cut" | "scoop";
-  children: ReactNode;
-}) {
-  return (
-    <section id={id} className={`lp-section is-${tone}`} aria-labelledby={`${id}-title`}>
-      <div className="lp-wrap">
-        <header className={`lp-section-head ${image ? "has-image" : ""}`}>
-          <div className="lp-section-text">
-            <span className="lp-pill">{eyebrow}</span>
-            <h2 id={`${id}-title`}>{title}</h2>
-            {intro && <p className="lp-intro">{intro}</p>}
-          </div>
-          {image && (
-            <figure className={imageStyle === "scoop" ? "lp-photo-scoop lp-section-photo" : "lp-clip lp-section-photo"}>
-              <Image src={image.src} alt={image.alt} fill sizes="(max-width: 900px) 100vw, 380px" />
-              {imageStyle === "scoop" ? <ScoopBadge /> : <Arrow />}
-            </figure>
-          )}
-        </header>
-        {children}
-      </div>
-    </section>
-  );
-}
-
-/** Mũi tên nằm ở góc cắt chéo của thẻ ảnh/thẻ nội dung. */
-function Arrow() {
-  return (
-    <svg className="lp-clip-arrow" viewBox="0 0 42 16" aria-hidden="true" style={{ overflow: "visible" }}>
-      <path d="M1 8h36M30 2.5 37 8l-7 5.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-/** Nút tròn mũi tên chéo ↗ nằm ở góc lõm phía trên bên phải của thẻ/ảnh. */
-function ScoopBadge() {
-  return (
-    <span className="lp-scoop-badge" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M7 17L17 7M7 7h10v10" />
-      </svg>
-    </span>
-  );
-}
-
-/* Biểu tượng nét mảnh một màu (kế thừa currentColor), vẽ theo hình khối đơn giản để không giống emoji */
-function IconSun() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3 18h18M7 18a5 5 0 0 1 10 0M12 6.5v2.5M5.4 10.4l1.8 1.8M18.6 10.4l-1.8 1.8M2.5 14.5H5M19 14.5h2.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconLeaf() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M5 19C5 10 10 5 19 5c0 9-5 14-14 14ZM5 19l9-9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconDrop() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3.5c3.5 4.5 5.5 7.3 5.5 10.5a5.5 5.5 0 0 1-11 0c0-3.2 2-6 5.5-10.5ZM9.5 14.5a2.5 2.5 0 0 0 2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconSprout() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 20v-8M12 12c0-3.5 2.5-6 7-6 0 3.5-2.5 6-7 6ZM12 15c0-2.5-2-4.5-6-4.5 0 2.5 2 4.5 6 4.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+import "./swiss-landing.css";
 
 /**
- * Trang giới thiệu công khai (phong cách sáng, chữ serif tạp chí, nền trời – đồng cỏ, điểm nhấn vàng chanh theo bộ ảnh trong uiux/).
- * `autoEnter` (trang chủ `/`): người đã đăng nhập được chuyển thẳng vào khu vực làm việc.
+ * Trang giới thiệu công khai theo lưới kiến trúc Thụy Sĩ 4 cột tinh gọn, dễ theo dõi:
+ * - Mỗi bức ảnh chỉ đi kèm DUY NHẤT 1 ô tiêu đề rõ ràng ngay bên cạnh + khoảng trắng thoáng.
+ * - Phần Tập huấn và Bản tin mở rộng khung hình để thấy trọn vẹn cán bộ & nhà vườn,
+ *   khi bấm vào trượt ngăn chi tiết mượt từ cạnh phải màn hình.
+ * - Danh mục thuốc BVTV & Khuyến cáo gộp thành 1 bảng đơn giản chuyển đổi bằng nút bấm.
+ * - Chân trang đồng bộ khung lưới 4 cột với đầy đủ thông tin liên hệ, hỗ trợ và dịch vụ.
  */
 export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean }) {
   return (
-    <div className={`lp ${display.variable} ${heroSans.variable}`} id="top">
+    <div className="lp sw-page" id="top">
       {autoEnter && <AutoEnter />}
-      <svg width="0" height="0" aria-hidden="true" focusable="false" style={{ position: "absolute" }}>
-        <defs>
-          <clipPath id="lp-funnel-clip" clipPathUnits="objectBoundingBox">
-            <path d="M0,0.06 Q0.5,-0.04 1,0.06 V0.4 C1,0.62 0.64,0.84 0.5,1 C0.36,0.84 0,0.62 0,0.4 Z" />
-          </clipPath>
-          {/* Đường cắt góc trên bên phải lõm mượt (scoop) kèm bán kính bo ngoài và trong */}
-          <clipPath id="lp-scoop-clip" clipPathUnits="objectBoundingBox">
-            <path d="M 0.06,0 L 0.74,0 C 0.78,0 0.80,0.03 0.80,0.07 L 0.80,0.19 C 0.80,0.23 0.83,0.26 0.87,0.26 L 0.94,0.26 C 0.98,0.26 1,0.29 1,0.33 L 1,0.94 C 1,0.98 0.98,1 0.94,1 L 0.06,1 C 0.02,1 0,0.98 0,0.94 L 0,0.06 C 0,0.02 0.02,0 0.06,0 Z" />
-          </clipPath>
-        </defs>
-      </svg>
-      <Nav />
+
+      <EditorialHero />
 
       <main>
-        <section className="lp-hero" aria-labelledby="hero-title">
-          <div className="lp-wrap lp-hero-copy">
-            <h1 id="hero-title" className="lp-hero-title">
-              <span className="lp-hero-title-dark">
-                Sầu riêng <em>minh bạch</em>
-              </span>{" "}
-              <span className="lp-hero-title-mute">
-                từ vườn đến thị trường
-              </span>
-            </h1>
-            <p className="lp-hero-lead">
-              Tại HTX Cư Né, Đắk Lắk, bà con ghi nhật ký chăm sóc vườn, theo dõi mã vùng trồng và kết quả kiểm nghiệm ngay trên điện thoại, để sầu riêng đạt chuẩn trước khi xuất khẩu.
-            </p>
-            <div className="lp-hero-cta">
-              <Link href="/login" className="lp-btn lp-btn-solid">
-                Đăng nhập hệ thống
-              </Link>
-              <Link href="/trace" className="lp-btn lp-btn-ghost">
-                Tra cứu nguồn gốc QR
-              </Link>
+        {/* ─── 01. HỆ THỐNG VÙNG TRỒNG (1 Ảnh = 1 Ô nội dung bên cạnh + Khoảng trắng thoáng) ─── */}
+        <section id="he-thong" className="sw-section" aria-labelledby="hethong-title">
+          <header className="sw-grid sw-sec-head">
+            <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
+            <div className="sw-cell sw-col-2-3 sw-head-main">
+              <span className="sw-sec-index">01 / Hệ thống</span>
+              <h2 id="hethong-title" className="sw-sec-title">
+                Chuỗi canh tác sầu riêng
+              </h2>
             </div>
-          </div>
+            <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
+          </header>
 
-          <div className="lp-stage">
-            <HeroDash />
-            <div className="lp-funnel">
-              <Image src="/landing/durian-landscape-real.jpg" alt="Vườn sầu riêng trên đất đỏ bazan và triền đồi Krông Búk, Đắk Lắk" fill priority sizes="(max-width: 1100px) 100vw, 1100px" />
+          {/* Hàng 1: Ảnh 2 cột trái | 1 ô nội dung Cột 3 | Khoảng thở trắng Cột 4 */}
+          <div className="sw-grid sw-checker-row">
+            <div className="sw-media sw-col-1-2 is-pos-estate">
+              <Image
+                src="/landing/lux-estate-dawn.jpg"
+                alt="Toàn cảnh triền đồi sầu riêng trong sương sớm cùng nhà trạm kiến trúc tối giản tại Đắk Lắk"
+                fill
+                sizes="(max-width: 960px) 100vw, 50vw"
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 56%)" }}
+              />
             </div>
-            <a href="#gioi-thieu" className="lp-orb" aria-label="Khám phá hệ thống">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M5 12h14m-5.5-6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </a>
-          </div>
-        </section>
-
-        <section id="gioi-thieu" className="lp-about" aria-labelledby="about-title">
-          <div className="lp-wrap lp-about-copy">
-            <span className="lp-pill lp-pill-green">Về hệ thống</span>
-            <h2 id="about-title" className="lp-about-title">
-              <span className="lp-about-title-lead">
-                Chăm sóc vườn <em className="lp-nowrap">có ghi chép</em>,
-              </span>{" "}
-              <span className="lp-about-title-tail">
-                giữ trọn uy tín trái sầu riêng
-              </span>
-            </h2>
-            <p className="lp-intro">
-              Từ ranh giới thửa đất, từng lần bón phân, phun thuốc đến kết quả kiểm nghiệm, mọi thứ đều được ghi lại để biết mỗi trái sầu riêng đến từ khu vườn nào.
-            </p>
-          </div>
-
-          <div className="lp-about-photo">
-            <figure className="lp-tree">
-              <Image src="/landing/durian-tree.jpg" alt="Trái sầu riêng treo trên cành trong vườn" fill sizes="280px" />
-            </figure>
-            <span className="lp-tile lp-tile-left" aria-hidden="true">
-              <IconSun />
-            </span>
-            <span className="lp-tile lp-tile-right" aria-hidden="true">
-              <IconDrop />
-            </span>
-          </div>
-
-          <div className="lp-arc">
-            <p className="lp-statement">
-              Gieo mầm minh bạch
-              <span className="lp-bubble blue" aria-hidden="true">
-                <IconSprout />
-              </span>
-              từ ghi chép nhỏ nâng tầm
-              <span className="lp-bubble green" aria-hidden="true">
-                <IconLeaf />
-              </span>
-              trái sầu riêng Việt trên thị trường quốc tế
-            </p>
-          </div>
-        </section>
-
-        <Section
-          id="he-thong"
-          tone="beige"
-          eyebrow="Hệ thống quản lý"
-          title="Một nơi để quản lý toàn bộ vùng trồng"
-          intro="Từ bản đồ thửa đất, nhật ký phun thuốc đến kết quả kiểm nghiệm, mọi thông tin đều được ghi lại, kiểm tra chéo và lưu giữ trong cùng một nơi."
-        >
-          <Showcase />
-        </Section>
-
-        <Section
-          id="ma-vung"
-          eyebrow="Mã vùng trồng"
-          title="Mã vùng trồng là “căn cước” của khu vườn"
-          intro="Nước nhập khẩu muốn biết từng lô sầu riêng được trồng ở vườn nào. Mã vùng trồng nối liền ranh giới đất, chủ vườn, giống cây và nhật ký chăm sóc lại với nhau."
-        >
-          <div className="lp-code-grid">
-            <div className="lp-code-card lp-glass">
-              <p className="lp-label">
-                Mã hộ được ghép từ 4 phần
-              </p>
-              <div className="lp-code-parts" role="img" aria-label="Ví dụ mã KB-VT-001-H001">
-                {CODE_PARTS.map((item, index) => (
-                  <div key={item.part}>
-                    <b>
-                      {item.part}
-                      {index < CODE_PARTS.length - 1 && <span aria-hidden="true">–</span>}
-                    </b>
-                    <strong>{item.label}</strong>
-                    <small>{item.note}</small>
-                  </div>
-                ))}
-              </div>
-              <p className="lp-code-note">
-                Mã này nối thửa đất, nhật ký, kết quả kiểm nghiệm và lô thu hoạch về đúng hộ. Mã vùng trồng chính thức do cơ quan nhà nước cấp; hệ thống giúp hộ chuẩn bị đủ hồ sơ để được cấp.
-              </p>
-              <div style={{ marginTop: 16 }}>
-                <Link href="/trace" className="lp-btn lp-btn-solid" style={{ display: "inline-flex" }}>
-                  Tra cứu tem QR & lô thu hoạch
-                </Link>
-              </div>
-            </div>
-            <figure className="lp-photo">
-              <Image src="/landing/traceability.jpg" alt="Trái sầu riêng đặt trên thùng gỗ" fill sizes="(max-width: 900px) 100vw, 44vw" />
-            </figure>
-          </div>
-
-          <ol className="lp-timeline">
-            {CODE_STEPS.map((step, index) => (
-              <li key={step.title} className="lp-glass">
-                <b>{String(index + 1).padStart(2, "0")}</b>
-                <strong>{step.title}</strong>
-                <p>{step.text}</p>
-              </li>
-            ))}
-          </ol>
-        </Section>
-
-        <Section
-          id="quy-trinh"
-          tone="mist"
-          eyebrow="Quy trình chăm sóc"
-          title="Chăm sóc vườn theo từng giai đoạn"
-          intro="Chọn một giai đoạn để xem việc cần làm và những thông tin cần ghi vào nhật ký. Ghi chép đầy đủ là điều kiện đầu tiên của mọi tiêu chuẩn xuất khẩu."
-          image={{ src: "/landing/durian-flower.jpg", alt: "Hoa sầu riêng nở trên cành" }}
-          imageStyle="cut"
-        >
-          <Stages />
-          <Season />
-        </Section>
-
-        <Section
-          id="tap-huan"
-          tone="white"
-          eyebrow="Đồng hành cùng nhà nông"
-          title="Tập huấn thực địa & Hướng dẫn kỹ thuật"
-          intro="Hình ảnh thực tế các buổi tập huấn do Sở Nông nghiệp, cơ quan chuyên ngành và các kỹ sư nông học trực tiếp hướng dẫn bà con xã viên và cán bộ HTX về quy trình canh tác VietGAP, quản lý sâu bệnh và số hóa nhật ký vùng trồng."
-        >
-          <TrainingGallery />
-        </Section>
-
-        <Section
-          id="tra-cuu"
-          tone="beige"
-          eyebrow="Tra cứu"
-          title="Danh mục thuốc, giống và lịch tập huấn"
-          intro="Dữ liệu được lấy trực tiếp từ hệ thống nên luôn trùng với danh mục mà cán bộ HTX đang áp dụng."
-        >
-          <Catalog />
-        </Section>
-
-        <Section
-          id="tieu-chuan"
-          tone="white"
-          eyebrow="Tiêu chuẩn xuất khẩu"
-          title="Điều cần đạt trước khi hàng rời vườn"
-          intro="Những yêu cầu chính của nước nhập khẩu mà bà con cần nắm. Mỗi mục đều liên quan đến việc ghi chép và kiểm nghiệm trong hệ thống."
-          image={{ src: "/landing/durian-open.jpg", alt: "Trái sầu riêng bổ ra với cơm vàng" }}
-          imageStyle="scoop"
-        >
-          <ul className="lp-standards">
-            {STANDARDS.map((item) => (
-              <li key={item.title} className="lp-glass">
-                <p className="lp-label">
-                  {item.tag}
+            <div className="sw-cell sw-col-3 sw-between">
+              <span className="sw-micro">Bản đồ số</span>
+              <div className="sw-caption-block">
+                <h3 className="sw-caption-title">Bản đồ vùng trồng</h3>
+                <p className="sw-caption-meta">
+                  <span>Đo đạc tọa độ từng thửa vườn</span>
+                  <span>Krông Búk, Đắk Lắk</span>
                 </p>
-                <h3>{item.title}</h3>
-                <p>{item.text}</p>
-              </li>
-            ))}
-          </ul>
-
-          <div className="lp-export-grid">
-            <BannedList />
-            <div className="lp-checklist lp-glass">
-              <p className="lp-label">
-                Danh sách kiểm tra trước khi xuất
-              </p>
-              <ul className="lp-checks">
-                {EXPORT_CHECKLIST.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          <aside className="lp-notice" aria-labelledby="notice-title">
-            <span className="lp-notice-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                <path d="M12 11v5.5M12 7.5v.01" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </span>
-            <div className="lp-notice-body">
-              <strong id="notice-title">Lưu ý quan trọng</strong>
-              <p>
-                Nội dung mang tính hướng dẫn chung, không thay thế văn bản pháp luật. Quy định của từng thị trường thay đổi theo thời gian; hãy hỏi lại hướng dẫn mới nhất của cơ quan bảo vệ thực vật và đơn vị nhập khẩu.
-              </p>
-            </div>
-          </aside>
-        </Section>
-
-        <Section
-          id="tin-tuc"
-          tone="beige"
-          eyebrow="Bản tin nhà nông"
-          title="Tin tức, kỹ thuật & hoạt động vùng trồng"
-          intro="Cập nhật nhanh hướng dẫn bón phân, thuốc bảo vệ thực vật được phép, các buổi tập huấn thực địa và thông tin chỉ đạo mùa vụ từ HTX Cư Né."
-        >
-          <News />
-        </Section>
-
-        <Section id="hoi-dap" tone="mist" eyebrow="Hỏi đáp" title="Những câu hỏi thường gặp">
-          <Faq />
-        </Section>
-
-        <section className="lp-cta" aria-labelledby="cta-title">
-          <div className="lp-wrap lp-cta-box">
-            <div className="lp-cta-copy">
-              <span className="lp-pill lp-pill-green">Bắt đầu cùng HTX</span>
-              <h2 id="cta-title">Quản lý vùng trồng & cấp tài khoản chặt chẽ</h2>
-              <p>Ban quản trị HTX thiết lập hồ sơ pháp lý, thửa đất rồi trực tiếp ban hành tài khoản cho từng hộ thành viên. Đã có tài khoản, đăng nhập để ghi nhật ký và theo dõi hồ sơ.</p>
-              <div className="lp-cta-actions">
-                <Link href="/login" className="lp-btn lp-btn-solid">
-                  Đăng nhập
-                </Link>
-                <Link href="/register" className="lp-btn lp-btn-ghost">
-                  Quy trình cấp tài khoản
-                </Link>
               </div>
             </div>
-            <figure className="lp-clip lp-cta-photo">
-              <Image src="/landing/harvest.jpg" alt="Bà con nông dân thu hoạch sầu riêng trong vườn" fill sizes="(max-width: 900px) 100vw, 520px" />
-              <Arrow />
-            </figure>
+            <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
           </div>
+
+          {/* Hàng 2: Khoảng thở trắng Cột 1 | 1 ô nội dung Cột 2 | Ảnh 2 cột phải */}
+          <div className="sw-grid sw-checker-row">
+            <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
+            <div className="sw-cell sw-col-2 sw-between">
+              <span className="sw-micro">Nhật ký mùa vụ</span>
+              <div className="sw-caption-block">
+                <h3 className="sw-caption-title">Chăm sóc & ra hoa</h3>
+                <p className="sw-caption-meta">
+                  <span>Ghi lịch bón phân, phun thuốc</span>
+                  <span>Tự động tính ngày cách ly</span>
+                </p>
+              </div>
+            </div>
+            <div className="sw-media sw-col-3-4">
+              <Image
+                src="/landing/lux-blossom.jpg"
+                alt="Chùm hoa sầu riêng màu kem ngà bung nở trên cành gỗ mộc trong nắng sớm"
+                fill
+                sizes="(max-width: 960px) 100vw, 50vw"
+                style={{ objectFit: "cover", objectPosition: "center 52%" }}
+              />
+            </div>
+          </div>
+
+          {/* Hàng 3: Ảnh 2 cột trái | 1 ô nội dung Cột 3 | Khoảng thở trắng Cột 4 */}
+          <div className="sw-grid sw-checker-row">
+            <div className="sw-media sw-col-1-2 is-pos-harvest">
+              <Image
+                src="/landing/lux-harvest.jpg"
+                alt="Người nông dân đội nón lá nâng niu trái sầu riêng vừa thu hoạch bên giỏ mây trong sương sớm"
+                fill
+                sizes="(max-width: 960px) 100vw, 50vw"
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 16%)" }}
+              />
+            </div>
+            <div className="sw-cell sw-col-3 sw-between">
+              <span className="sw-micro">Cổng hộ dân</span>
+              <div className="sw-caption-block">
+                <h3 className="sw-caption-title">Thu hoạch đúng chuẩn</h3>
+                <p className="sw-caption-meta">
+                  <span>Theo dõi lịch cắt trái & sản lượng</span>
+                  <span>Ngay trên điện thoại nhà vườn</span>
+                </p>
+              </div>
+            </div>
+            <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
+          </div>
+
+          {/* Hàng 4: 2 ô trắng Cột 1–2 | Ảnh vuông 1 cột Cột 3 | 1 ô nội dung Cột 4 */}
+          <div className="sw-grid sw-checker-row">
+            <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
+            <div className="sw-cell sw-col-2 sw-empty-cell" aria-hidden="true" />
+            <div className="sw-media sw-col-3 is-pos-arils">
+              <Image
+                src="/landing/lux-arils-square.jpg"
+                alt="Múi sầu riêng chín vàng đặt trên đĩa gốm thủ công bên trái sầu riêng tách vỏ trên bàn gỗ sồi"
+                fill
+                sizes="(max-width: 960px) 100vw, 25vw"
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 62%)" }}
+              />
+            </div>
+            <div className="sw-cell sw-col-4 sw-between">
+              <span className="sw-micro">An toàn thực phẩm</span>
+              <div className="sw-caption-block">
+                <h3 className="sw-caption-title">Kiểm nghiệm mẫu trái</h3>
+                <p className="sw-caption-meta">
+                  <span>Kiểm soát dư lượng & Cadimi</span>
+                  <span>Tuyệt đối không Vàng O</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Hàng 5: Ảnh 2 cột trái | 1 ô nội dung Cột 3 | Khoảng thở trắng Cột 4 */}
+          <div className="sw-grid sw-checker-row">
+            <div className="sw-media sw-col-1-2 is-pos-export">
+              <Image
+                src="/landing/lux-export-bench.jpg"
+                alt="Ba trái sầu riêng tuyển chọn đồng đều đặt cùng sổ tay vải lanh trên bàn gỗ sồi trong không gian kiến trúc tối giản"
+                fill
+                sizes="(max-width: 960px) 100vw, 50vw"
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 68%)" }}
+              />
+            </div>
+            <div className="sw-cell sw-col-3 sw-between">
+              <div className="sw-caption-block">
+                <h3 className="sw-caption-title">Tuyển chọn xuất khẩu</h3>
+                <p className="sw-caption-meta">
+                  <span>Đồng bộ từ nhà vườn đến kho</span>
+                  <span>Xuất khẩu chính ngạch GACC</span>
+                </p>
+              </div>
+              <span className="sw-micro">HTX Nông nghiệp Cư Né</span>
+            </div>
+            <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
+          </div>
+        </section>
+
+        {/* ─── 02. MÃ VÙNG ĐỊNH DANH (Bố cục bất đối xứng gọn gàng, đúng mẫu Hình 3) ─── */}
+        <section id="ma-vung" className="sw-section" aria-labelledby="mavung-title">
+          <header className="sw-grid sw-sec-head">
+            <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
+            <div className="sw-cell sw-col-2-3 sw-head-main">
+              <span className="sw-sec-index">02 / Vùng trồng</span>
+              <h2 id="mavung-title" className="sw-sec-title">
+                Mã vùng định danh
+              </h2>
+            </div>
+            <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
+          </header>
+
+          <div className="sw-asymmetric-bento">
+            {/* Cột 1 xuyên 2 hàng: Ảnh cành sầu riêng khổ dọc */}
+            <div className="sw-bento-tall-photo">
+              <Image
+                src="/landing/lux-branch-vertical.jpg"
+                alt="Cành sầu riêng trưởng thành mang ba trái chín treo tự nhiên bên hệ lam gỗ sồi và tường đá vôi ấm"
+                fill
+                sizes="(max-width: 960px) 100vw, 25vw"
+                style={{ objectFit: "cover", objectPosition: "center 50%" }}
+              />
+            </div>
+
+            {/* Hàng 1 – Cột 2: Thông tin mã vùng ngắn gọn */}
+            <div className="sw-cell sw-bento-top-info sw-between">
+              <span className="sw-micro">Định danh PUC</span>
+              <div className="sw-caption-block">
+                <h3 className="sw-caption-title">Mã số vùng trồng</h3>
+                <p className="sw-caption-meta">
+                  <span>Xã Cư Né, Huyện Krông Búk</span>
+                  <span>Tỉnh Đắk Lắk, Tây Nguyên</span>
+                  <span>Định danh riêng từng thửa vườn</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Hàng 1 – Cột 3 & 4: Ảnh ngang trái sầu riêng gắn thẻ QR */}
+            <div className="sw-bento-wide-photo">
+              <Image
+                src="/landing/lux-qr-atelier.jpg"
+                alt="Trái sầu riêng gắn thẻ mã QR tối giản đặt trên mặt bàn đá travertine bên hệ lam gỗ sồi"
+                fill
+                sizes="(max-width: 960px) 100vw, 50vw"
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 66%)" }}
+              />
+            </div>
+
+            {/* Hàng 2 – Cột 2: Khoảng thở trắng tinh khiết */}
+            <div className="sw-bento-bot-empty" aria-hidden="true" />
+
+            {/* Hàng 2 – Cột 3: Thẩm định tại vườn */}
+            <div className="sw-cell sw-bento-bot-col3">
+              <div className="sw-caption-block">
+                <h3 className="sw-caption-title">Cấp mã tại vườn</h3>
+                <p className="sw-caption-meta">
+                  <span>Đo vẽ bản đồ ranh giới GPS</span>
+                  <span>Kiểm tra giống cây & nhật ký</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Hàng 2 – Cột 4: Dán tem QR xuất kho */}
+            <div className="sw-cell sw-bento-bot-col4">
+              <div className="sw-caption-block">
+                <h3 className="sw-caption-title">Tem QR xuất kho</h3>
+                <p className="sw-caption-meta">
+                  <span>Kiểm nghiệm mẫu trước cắt trái</span>
+                  <span>Gắn tem riêng từng lô thu hoạch</span>
+                  <span>Truy xuất minh bạch đến từng hộ</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── 03. TẬP HUẤN THỰC ĐỊA (Khung hình mở rộng + Ngăn chi tiết trượt từ cạnh phải) ─── */}
+        <TrainingGallery />
+
+        {/* ─── 04. BẢN TIN NHÀ NÔNG (Khung hình mở rộng + Ngăn chi tiết trượt từ cạnh phải) ─── */}
+        <News />
+
+        {/* ─── 05. THUỐC BVTV & KHUYẾN CÁO (Bảng đơn giản bấm chuyển mục) ─── */}
+        <Catalog />
+
+        {/* ─── 06. HỎI ĐÁP THƯỜNG GẶP ─── */}
+        <section id="hoi-dap" className="sw-section" aria-labelledby="hoidap-title">
+          <header className="sw-grid sw-sec-head">
+            <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
+            <div className="sw-cell sw-col-2-3 sw-head-main">
+              <span className="sw-sec-index">06 / Hỏi đáp</span>
+              <h2 id="hoidap-title" className="sw-sec-title">
+                Câu hỏi thường gặp
+              </h2>
+            </div>
+            <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
+          </header>
+
+          <Faq />
         </section>
       </main>
 
-      <footer className="lp-footer">
-        <div className="lp-wrap lp-footer-grid">
-          <div className="lp-footer-brand">
-            <a href="#top" className="lp-logo" aria-label="HTX Cư Né – về đầu trang">
-              <Image className="lp-logo-mark" src="/logo.png" alt="" width={40} height={40} />
-              <strong>Cư Né</strong>
-            </a>
-            <p>Ghi nhật ký vườn, quản lý mã vùng trồng và kết quả kiểm nghiệm, giúp sầu riêng Đắk Lắk minh bạch từ vườn đến thị trường.</p>
-            <div className="lp-footer-actions">
-              <Link href="/login" className="lp-footer-btn">
-                Đăng nhập
-              </Link>
-              <Link href="/register" className="lp-footer-btn is-solid">
-                Đăng ký
-              </Link>
+      {/* ─── CHÂN TRANG KIẾN TRÚC 4 CỘT ĐẦY ĐỦ NỘI DUNG ─── */}
+      <footer className="sw-section sw-footer" aria-label="Thông tin liên hệ HTX Nông nghiệp Cư Né">
+        <div className="sw-grid sw-footer-main">
+          {/* Cột 1: Giới thiệu đơn vị vận hành */}
+          <div className="sw-cell sw-col-1 sw-between">
+            <div>
+              <a href="#top" className="eh-brand sw-footer-brand">
+                <Image src="/newlogo.png" alt="" width={24} height={24} className="eh-brand-logo" />
+                <span>HTX Nông nghiệp Cư Né</span>
+              </a>
+              <p className="sw-muted-sm sw-footer-desc">
+                <span className="sw-hide-mobile">
+                  Nền tảng số hóa quản lý mã vùng trồng, nhật ký canh tác, kiểm nghiệm an toàn thực phẩm và truy xuất nguồn gốc sầu riêng Đắk Lắk xuất khẩu chính ngạch.
+                </span>
+                <span className="sw-only-mobile">
+                  Số hóa mã vùng trồng, nhật ký canh tác và truy xuất sầu riêng Đắk Lắk xuất khẩu.
+                </span>
+              </p>
             </div>
-            <small>© HTX Cư Né, Đắk Lắk</small>
+            <div className="sw-meta-pair">
+              <span>Quy mô liên kết</span>
+              <strong>5 thôn · Xã Cư Né, Krông Búk</strong>
+            </div>
           </div>
 
-          <nav className="lp-footer-col" aria-label="Hệ thống">
-            <h2>Hệ thống</h2>
-            <a href="#gioi-thieu">Giới thiệu</a>
-            <a href="#he-thong">Các chức năng quản lý</a>
-            <a href="#ma-vung">Mã vùng trồng</a>
-          </nav>
+          {/* Cột 2: Địa chỉ & Hỗ trợ nhà vườn */}
+          <div className="sw-cell sw-col-2 sw-between">
+            <div>
+              <h3 className="sw-footer-heading">Liên hệ & Hỗ trợ</h3>
+              <ul className="sw-footer-info">
+                <li>
+                  <span>Địa chỉ</span>
+                  <strong>Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk</strong>
+                </li>
+                <li>
+                  <span>Lịch làm việc</span>
+                  <strong>Thứ Hai – Thứ Bảy (07:30 – 17:00)</strong>
+                </li>
+                <li>
+                  <span>Hỗ trợ kỹ thuật</span>
+                  <strong>Ban Kỹ thuật HTX & Cán bộ phụ trách thôn</strong>
+                </li>
+                <li>
+                  <span>Giám sát vùng trồng</span>
+                  <strong>Tổ Bảo vệ Thực vật & Kiểm tra nội bộ</strong>
+                </li>
+              </ul>
+            </div>
+            <Link href="/trace" className="sw-action-inline">
+              Tra cứu tem nguồn gốc QR
+            </Link>
+          </div>
 
-          <nav className="lp-footer-col" aria-label="Kiến thức">
-            <h2>Kiến thức</h2>
-            <a href="#quy-trinh">Quy trình chăm sóc</a>
-            <a href="#tap-huan">Tập huấn thực địa</a>
-            <a href="#tra-cuu">Tra cứu danh mục</a>
-            <a href="#tieu-chuan">Tiêu chuẩn xuất khẩu</a>
-            <a href="#tin-tuc">Bản tin nhà nông</a>
-            <a href="#hoi-dap">Hỏi đáp</a>
-          </nav>
+          {/* Cột 3: Cổng dịch vụ hệ thống */}
+          <div className="sw-cell sw-col-3 sw-between">
+            <div>
+              <h3 className="sw-footer-heading">Cổng dịch vụ số</h3>
+              <ul className="sw-footer-links">
+                <li>
+                  <Link href="/login">Đăng nhập Cổng hộ dân & Cán bộ</Link>
+                </li>
+                <li>
+                  <Link href="/register">Đăng ký tài khoản hộ thành viên</Link>
+                </li>
+                <li>
+                  <Link href="/trace">Kiểm tra mã lô & tem truy xuất QR</Link>
+                </li>
+                <li>
+                  <a href="#tra-cuu">Tra cứu danh mục thuốc BVTV</a>
+                </li>
+                <li>
+                  <a href="#quy-trinh">Xem khuyến cáo chăm sóc theo vụ</a>
+                </li>
+              </ul>
+            </div>
+            <span className="sw-micro">Hỗ trợ trực tiếp trên điện thoại & máy tính</span>
+          </div>
 
-          <nav className="lp-footer-col" aria-label="Tài khoản">
-            <h2>Tài khoản & Tra cứu</h2>
-            <Link href="/login">Đăng nhập</Link>
-            <Link href="/register">Quy trình cấp tài khoản</Link>
-            <Link href="/trace">Tra cứu truy xuất QR</Link>
-          </nav>
+          {/* Cột 4: Chuyên mục trang & Tiêu chuẩn */}
+          <div className="sw-cell sw-col-4 sw-between sw-hide-mobile">
+            <div>
+              <h3 className="sw-footer-heading">Chuyên mục trang</h3>
+              <ul className="sw-footer-links">
+                <li>
+                  <a href="#he-thong">01. Chuỗi canh tác sầu riêng</a>
+                </li>
+                <li>
+                  <a href="#ma-vung">02. Mã số vùng trồng định danh</a>
+                </li>
+                <li>
+                  <a href="#tap-huan">03. Tập huấn canh tác</a>
+                </li>
+                <li>
+                  <a href="#tin-tuc">04. Bản tin & Khuyến nông</a>
+                </li>
+                <li>
+                  <a href="#hoi-dap">06. Giải đáp câu hỏi thường gặp</a>
+                </li>
+              </ul>
+            </div>
+            <a href="#top" className="sw-action-inline">
+              Về đầu trang
+            </a>
+          </div>
         </div>
 
-        <p className="lp-wrap lp-footer-note">
-          Ảnh và giao diện trên trang là minh họa. Số liệu tổng hợp lấy từ hệ thống; không hiển thị thông tin cá nhân của từng hộ.
-        </p>
-
-        <div className="lp-footer-mark" aria-hidden="true">
-          <span>Cư Né</span>
+        {/* Hàng đáy chân trang đồng bộ 4 cột */}
+        <div className="sw-grid sw-footer-bar">
+          <div className="sw-cell sw-col-1">
+            <span className="sw-micro">© 2026 HTX Nông nghiệp Cư Né · Đắk Lắk</span>
+          </div>
+          <div className="sw-cell sw-col-2 sw-hide-mobile">
+            <span className="sw-micro">Tiêu chuẩn: VietGAP · Nghị định thư GACC · An toàn MRL</span>
+          </div>
+          <div className="sw-cell sw-col-3 sw-hide-mobile">
+            <span className="sw-micro">Bảo mật thông tin hộ dân · Lưu vết kiểm tra minh bạch</span>
+          </div>
+          <div className="sw-cell sw-col-4 sw-footer-bar-end">
+            <span className="sw-micro">Hệ thống Quản lý Vùng trồng PUC</span>
+          </div>
         </div>
-
-        <a href="#top" className="lp-totop">
-          Về đầu trang
-          <span>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 19V5m-6 6 6-6 6 6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-        </a>
       </footer>
     </div>
   );

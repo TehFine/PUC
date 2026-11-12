@@ -1,24 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
-import "./training.css";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { lockRootScroll } from "@/lib/scroll-lock";
 
 export interface TrainingItem {
   id: number;
   src: string;
   category: "vietgap" | "policy";
   categoryLabel: string;
-  tagTone: "green" | "blue" | "gold";
   title: string;
+  shortNote: string;
   speaker: string;
   location: string;
   date: string;
   description: string;
   highlights: string[];
   aspectRatio: "4/3" | "3/4";
+  objectPosition: string;
 }
 
 export const TRAINING_ITEMS: TrainingItem[] = [
@@ -27,394 +26,412 @@ export const TRAINING_ITEMS: TrainingItem[] = [
     src: "/training/1.jpg",
     category: "policy",
     categoryLabel: "Chỉ đạo & Chính sách",
-    tagTone: "blue",
-    title: "Hội nghị triển khai thí điểm truy xuất nguồn gốc sầu riêng Đắk Lắk",
-    speaker: "Sở Nông nghiệp & Môi trường phối hợp cùng UBND Huyện & HTX Cư Né",
-    location: "Hội trường Hội nghị Huyện Krông Búk",
-    date: "Đợt 1 / Vụ mùa xuất khẩu",
+    title: "Thí điểm truy xuất nguồn gốc",
+    shortNote: "Hội trường huyện Krông Búk\nGắn mã vùng trồng xuất khẩu",
+    speaker: "Sở Nông nghiệp & Môi trường phối hợp UBND huyện & HTX Cư Né",
+    location: "Hội trường huyện Krông Búk",
+    date: "Đợt 1 · Vụ mùa xuất khẩu",
     description:
-      "Hội nghị cấp Tỉnh triển khai mô hình quản lý số hóa, giám sát chuỗi giá trị và gắn mã số vùng trồng phục vụ kiểm dịch xuất khẩu chính ngạch.",
-    highlights: ["Thí điểm truy xuất nguồn gốc", "Gắn mã vùng trồng GACC", "Chỉ đạo liên ngành"],
+      "Triển khai mô hình quản lý số hóa, giám sát chuỗi giá trị và gắn mã số vùng trồng phục vụ kiểm dịch xuất khẩu chính ngạch cho các hộ trồng sầu riêng.",
+    highlights: [
+      "Thí điểm truy xuất nguồn gốc toàn vùng",
+      "Đăng ký mã số vùng trồng chính ngạch GACC",
+      "Phối hợp giám sát giữa cơ quan chuyên môn và HTX",
+    ],
     aspectRatio: "4/3",
+    objectPosition: "54% center",
   },
   {
     id: 2,
     src: "/training/2.jpg",
     category: "policy",
     categoryLabel: "Quy chuẩn xuất khẩu",
-    tagTone: "blue",
-    title: "Phổ biến quy chuẩn kiểm nghiệm và hàng rào kỹ thuật kiểm dịch",
-    speaker: "Đại diện Cơ quan Bảo vệ Thực vật & Kiểm nghiệm chuyên ngành",
-    location: "Hội trường Hội nghị Huyện Krông Búk",
+    title: "Quy chuẩn kiểm nghiệm & kiểm dịch",
+    shortNote: "Cơ quan Bảo vệ Thực vật\nKiểm soát dư lượng MRL",
+    speaker: "Cơ quan Bảo vệ Thực vật & Kiểm nghiệm chuyên ngành",
+    location: "Hội trường huyện Krông Búk",
     date: "Chuyên đề pháp lý & kiểm dịch",
     description:
-      "Đại diện cơ quan chuyên môn hướng dẫn chi tiết quy chuẩn kiểm tra mã vùng trồng, mức dư lượng thuốc BVTV (MRL) và các quy định an toàn thực phẩm.",
-    highlights: ["Mức giới hạn MRL", "Quy trình kiểm dịch thực vật", "Bảo vệ thương hiệu"],
+      "Hướng dẫn chi tiết quy chuẩn kiểm tra mã vùng trồng, giới hạn dư lượng thuốc bảo vệ thực vật (MRL) và quy định an toàn thực phẩm trước khi thu hoạch.",
+    highlights: [
+      "Tuân thủ giới hạn dư lượng thuốc MRL",
+      "Kiểm dịch thực vật đối với sinh vật gây hại",
+      "Giữ vững uy tín vùng trồng xuất khẩu",
+    ],
     aspectRatio: "4/3",
+    objectPosition: "62% center",
   },
   {
     id: 3,
     src: "/training/3.jpg",
     category: "policy",
     categoryLabel: "Số hóa dữ liệu",
-    tagTone: "gold",
-    title: "Làm việc bàn tròn & hướng dẫn phần mềm quản lý vùng trồng",
+    title: "Tập huấn phần mềm bản đồ số",
+    shortNote: "Tổ kỹ thuật số HTX Cư Né\nHướng dẫn cán bộ phụ trách thôn",
     speaker: "Tổ kỹ thuật số HTX & Chuyên viên quản trị dữ liệu",
     location: "Phòng họp kỹ thuật HTX Cư Né",
-    date: "Tập huấn cán bộ thôn & tổ trưởng",
+    date: "Tập huấn cán bộ thôn",
     description:
-      "Cán bộ HTX và chuyên viên hướng dẫn đại diện các thôn thực hành thao tác trên phần mềm: quản lý bản đồ thửa đất, gắn hộ dân và kiểm tra chéo nhật ký.",
-    highlights: ["Phần mềm quản lý PUC", "Vẽ ranh thửa trên bản đồ", "Kiểm tra chéo nhật ký"],
+      "Thực hành thao tác trực tiếp trên hệ thống: đo vẽ bản đồ thửa đất, gắn hồ sơ hộ thành viên và kiểm tra chéo nhật ký canh tác hàng tuần.",
+    highlights: [
+      "Đo vẽ tọa độ ranh giới thửa đất thực tế",
+      "Gắn mã định danh riêng cho từng hộ dân",
+      "Hỗ trợ bà con ghi chép nhật ký trên điện thoại",
+    ],
     aspectRatio: "4/3",
+    objectPosition: "center center",
   },
   {
     id: 4,
     src: "/training/4.jpg",
     category: "vietgap",
     categoryLabel: "Tiêu chuẩn VietGAP",
-    tagTone: "green",
-    title: "Khóa tập huấn kỹ thuật quản lý dịch hại tổng hợp (IPM) trên sầu riêng",
-    speaker: "Chuyên gia Chi cục Trồng trọt & Bảo vệ Thực vật tỉnh Đắk Lắk",
-    location: "Nhà văn hóa cộng đồng buôn/thôn Krông Búk",
-    date: "Tập huấn thường kỳ cho hộ dân",
+    title: "Quản lý dịch hại tổng hợp IPM",
+    shortNote: "Chi cục Trồng trọt & BVTV\nPhòng trừ sâu bệnh an toàn",
+    speaker: "Chi cục Trồng trọt & Bảo vệ Thực vật tỉnh Đắk Lắk",
+    location: "Nhà văn hóa cộng đồng Krông Búk",
+    date: "Tập huấn định kỳ hộ dân",
     description:
-      "Đông đảo bà con xã viên tham dự lớp tập huấn kỹ thuật phòng trừ sâu đục quả, rệp sáp, nấm Phytophthora bằng giải pháp sinh học đạt chuẩn VietGAP.",
-    highlights: ["Kỹ thuật quản lý dịch hại IPM", "Danh mục thuốc được phép", "An toàn thời gian cách ly"],
+      "Phòng trừ sâu đục quả, rệp sáp và nấm Phytophthora bằng giải pháp sinh học an toàn, tuân thủ nghiêm ngặt danh mục cho phép và thời gian cách ly.",
+    highlights: [
+      "Ưu tiên chế phẩm sinh học và bảo vệ thiên địch",
+      "Chỉ sử dụng thuốc trong danh mục được phép",
+      "Đảm bảo đủ số ngày cách ly trước ngày cắt trái",
+    ],
     aspectRatio: "4/3",
+    objectPosition: "center center",
   },
   {
     id: 5,
     src: "/training/5.jpg",
     category: "vietgap",
-    categoryLabel: "Đối thoại thực tế",
-    tagTone: "green",
-    title: "Chuyên gia đối thoại & giải đáp vướng mắc canh tác cùng bà con",
-    speaker: "Kỹ sư nông nghiệp đầu ngành & Cán bộ kỹ thuật HTX",
-    location: "Hội trường tập huấn kỹ thuật HTX",
+    categoryLabel: "Đối thoại thực địa",
+    title: "Kỹ thuật xiết nước làm bông",
+    shortNote: "Kỹ sư nông nghiệp HTX\nGiải đáp trực tiếp mùa vụ",
+    speaker: "Kỹ sư nông nghiệp & Cán bộ kỹ thuật HTX Cư Né",
+    location: "Hội trường tập huấn HTX",
     date: "Tọa đàm kỹ thuật nhà nông",
     description:
-      "Giải đáp chi tiết từng vướng mắc thực tế của bà con: nhận biết thời điểm xiết nước làm bông, xử lý rụng trái non và nguyên tắc bón phân cân đối.",
-    highlights: ["Đối thoại hỏi đáp trực tiếp", "Kỹ thuật xiết nước làm bông", "Bón phân đúng thời điểm"],
+      "Giải đáp trực tiếp vướng mắc mùa vụ của bà con: nhận biết thời điểm xiết nước tạo mầm hoa, hạn chế rụng trái non và bón phân cân đối theo tuổi cây.",
+    highlights: [
+      "Xác định đúng thời điểm xiết nước nhú mắt cua",
+      "Chăm sóc hoa và hạn chế rụng trái non",
+      "Bón phân cân đối theo từng giai đoạn sinh trưởng",
+    ],
     aspectRatio: "4/3",
+    objectPosition: "68% center",
   },
   {
     id: 6,
     src: "/training/6.jpg",
     category: "vietgap",
-    categoryLabel: "Chuỗi giá trị BLF",
-    tagTone: "gold",
-    title: "Chuyển giao mô hình sản xuất sầu riêng bền vững (Better Life Farming)",
-    speaker: "Chuyên gia Nông học Better Life Farming (BLF / Bayer)",
-    location: "Trung tâm chuyển giao tiến bộ kỹ thuật",
+    categoryLabel: "Chuỗi giá trị bền vững",
+    title: "Mô hình canh tác bền vững",
+    shortNote: "Chuyên gia nông học\nLiên kết chuỗi tiêu thụ",
+    speaker: "Chuyên gia Nông học Better Life Farming",
+    location: "Trung tâm chuyển giao kỹ thuật",
     date: "Chuyên đề chuỗi liên kết",
     description:
-      "Giới thiệu các giải pháp sản xuất bền vững trong toàn chuỗi giá trị ngành hàng sầu riêng: liên kết giữa nông học, công nghệ số và kết nối thị trường tiêu thụ.",
-    highlights: ["Mô hình Better Life Farming", "Nông nghiệp bền vững", "Liên kết chuỗi cung ứng"],
+      "Kết hợp quy trình nông học chuẩn mực, ghi chép nhật ký số minh bạch và liên kết đầu ra ổn định cho toàn chuỗi giá trị sầu riêng Đắk Lắk.",
+    highlights: [
+      "Áp dụng mô hình canh tác sầu riêng bền vững",
+      "Đồng bộ quy trình kỹ thuật giữa các hộ thành viên",
+      "Liên kết tiêu thụ chính ngạch ổn định lâu dài",
+    ],
     aspectRatio: "3/4",
+    objectPosition: "center 48%",
   },
   {
     id: 7,
     src: "/training/7.jpg",
     category: "vietgap",
-    categoryLabel: "Dinh dưỡng chuyên sâu",
-    tagTone: "green",
-    title: "Giải pháp nông học toàn diện: Phục hồi rễ, dưỡng cơi đọt & nuôi trái",
+    categoryLabel: "Dinh dưỡng cây trồng",
+    title: "Phục hồi rễ & nuôi cơm vàng",
+    shortNote: "Đào tạo chuyên sâu nhà vườn\nChống xì mủ và sượng múi",
     speaker: "Chuyên gia dinh dưỡng cây trồng nhiệt đới",
-    location: "Lớp đào tạo chuyên sâu cán bộ & nhà vườn",
+    location: "Lớp đào tạo chuyên sâu nhà vườn",
     date: "Kỹ thuật chuyên sâu vụ mùa",
     description:
-      "Hướng dẫn chi tiết phác đồ dinh dưỡng theo chu kỳ sinh trưởng của cây: bảo vệ rễ chống nghẽn rễ, dưỡng cơi đọt dày bóng, nuôi hoa và chống rụng múi.",
-    highlights: ["Sơ đồ dinh dưỡng phục hồi rễ", "Kỹ thuật nuôi cơi đọt khỏe", "Chống thối cuống, nứt gai"],
+      "Hướng dẫn phác đồ dinh dưỡng theo chu kỳ sinh trưởng: bảo vệ bộ rễ khỏe, dưỡng cơi đọt dày bóng, nuôi trái tròn đều và chống sượng múi.",
+    highlights: [
+      "Phục hồi hệ rễ khỏe mạnh sau thu hoạch",
+      "Dưỡng cơi đọt đồng loạt trước mùa làm bông",
+      "Nuôi trái tròn đều, cơm vàng dày múi",
+    ],
     aspectRatio: "3/4",
+    objectPosition: "center 48%",
   },
 ];
-
-const TRUST_METRICS = [
-  {
-    num: "100%",
-    label: "Hộ liên kết được tập huấn",
-    desc: "Cầm tay chỉ việc theo sổ tay quy trình VietGAP",
-  },
-  {
-    num: "Chuyên gia",
-    label: "Đồng hành thực địa",
-    desc: "Sở Nông nghiệp, WASI và kỹ sư đầu ngành",
-  },
-  {
-    num: "VietGAP",
-    label: "Kiểm soát dịch hại IPM",
-    desc: "Tuân thủ nghiêm ngặt danh mục & cách ly",
-  },
-  {
-    num: "Số hóa",
-    label: "Nhật ký vườn điện tử",
-    desc: "Ghi chép minh bạch từ gốc cây đến thị trường",
-  },
-];
-
-type CategoryFilter = "all" | "vietgap" | "policy";
 
 export default function TrainingGallery() {
-  const [filter, setFilter] = useState<CategoryFilter>("all");
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [drawerIndex, setDrawerIndex] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [canPrev, setCanPrev] = useState(false);
+  const [canNext, setCanNext] = useState(true);
 
-  const filteredItems = TRAINING_ITEMS.filter((item) => {
-    if (filter === "all") return true;
-    return item.category === filter;
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef({
+    active: false,
+    startX: 0,
+    startScrollLeft: 0,
+    moved: false,
   });
 
-  const activeLightboxItem = lightboxIndex !== null ? TRAINING_ITEMS[lightboxIndex] : null;
+  const activeItem = drawerIndex !== null ? TRAINING_ITEMS[drawerIndex] : null;
 
-  const openLightbox = (indexInAll: number) => {
-    setLightboxIndex(indexInAll);
-  };
+  const syncScrollBounds = useCallback(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    setCanPrev(el.scrollLeft > 8);
+    setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+  }, []);
 
-  const closeLightbox = () => {
-    setLightboxIndex(null);
-  };
-
-  const nextLightbox = () => {
-    if (lightboxIndex === null) return;
-    setLightboxIndex((lightboxIndex + 1) % TRAINING_ITEMS.length);
-  };
-
-  const prevLightbox = () => {
-    if (lightboxIndex === null) return;
-    setLightboxIndex((lightboxIndex - 1 + TRAINING_ITEMS.length) % TRAINING_ITEMS.length);
-  };
-
-  // Keyboard navigation for lightbox
   useEffect(() => {
-    if (lightboxIndex === null) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeLightbox();
-      if (e.key === "ArrowRight") nextLightbox();
-      if (e.key === "ArrowLeft") prevLightbox();
+    const raf = window.requestAnimationFrame(syncScrollBounds);
+    window.addEventListener("resize", syncScrollBounds, { passive: true });
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", syncScrollBounds);
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [lightboxIndex]);
+  }, [syncScrollBounds]);
+
+  const scrollByStep = useCallback((direction: -1 | 1) => {
+    const el = trackRef.current;
+    if (!el) return;
+    const firstCard = el.querySelector<HTMLElement>(".sw-training-slide");
+    const step = firstCard ? firstCard.offsetWidth + 32 : el.clientWidth * 0.72;
+    el.scrollBy({ left: direction * step, behavior: "smooth" });
+  }, []);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !trackRef.current) return;
+    dragStateRef.current = {
+      active: true,
+      startX: e.clientX,
+      startScrollLeft: trackRef.current.scrollLeft,
+      moved: false,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const state = dragStateRef.current;
+    if (!state.active || !trackRef.current) return;
+    const dx = e.clientX - state.startX;
+    if (!state.moved && Math.abs(dx) > 6) {
+      state.moved = true;
+      setIsDragging(true);
+    }
+    if (state.moved) {
+      e.preventDefault();
+      trackRef.current.scrollLeft = state.startScrollLeft - dx;
+    }
+  };
+
+  const stopDragging = () => {
+    if (!dragStateRef.current.active) return;
+    dragStateRef.current.active = false;
+    setIsDragging(false);
+  };
+
+  const closeDrawer = useCallback(() => setDrawerIndex(null), []);
+  const nextDrawer = useCallback(() => {
+    setDrawerIndex((prev) => (prev === null ? null : (prev + 1) % TRAINING_ITEMS.length));
+  }, []);
+  const prevDrawer = useCallback(() => {
+    setDrawerIndex((prev) =>
+      prev === null ? null : (prev - 1 + TRAINING_ITEMS.length) % TRAINING_ITEMS.length,
+    );
+  }, []);
+
+  useEffect(() => {
+    if (drawerIndex === null) return;
+    const unlock = lockRootScroll();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeDrawer();
+      if (e.key === "ArrowRight") nextDrawer();
+      if (e.key === "ArrowLeft") prevDrawer();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      unlock();
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [drawerIndex, closeDrawer, nextDrawer, prevDrawer]);
 
   return (
-    <div className="lp-training">
-      {/* 4 Thẻ chỉ số tin cậy hàng đầu */}
-      <div className="lp-training-metrics">
-        {TRUST_METRICS.map((m, idx) => (
-          <div key={idx} className="lp-training-metric lp-glass">
-            <div className="lp-training-metric-num">{m.num}</div>
-            <strong className="lp-training-metric-label">{m.label}</strong>
-            <small className="lp-training-metric-desc">{m.desc}</small>
-          </div>
-        ))}
-      </div>
+    <section id="tap-huan" className="sw-section" aria-labelledby="taphuan-title">
+      {/* Hàng tiêu đề mục tinh gọn */}
+      <header className="sw-grid sw-sec-head">
+        <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
 
-      {/* Bộ lọc phân loại */}
-      <div className="lp-training-nav">
-        <div className="lp-training-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filter === "all"}
-            className={`lp-training-tab ${filter === "all" ? "is-active" : ""}`}
-            onClick={() => setFilter("all")}
-          >
-            Tất cả tư liệu ({TRAINING_ITEMS.length})
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filter === "vietgap"}
-            className={`lp-training-tab ${filter === "vietgap" ? "is-active" : ""}`}
-            onClick={() => setFilter("vietgap")}
-          >
-            Kỹ thuật VietGAP & Dinh dưỡng ({TRAINING_ITEMS.filter((i) => i.category === "vietgap").length})
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filter === "policy"}
-            className={`lp-training-tab ${filter === "policy" ? "is-active" : ""}`}
-            onClick={() => setFilter("policy")}
-          >
-            Hội nghị & Truy xuất nguồn gốc ({TRAINING_ITEMS.filter((i) => i.category === "policy").length})
-          </button>
+        <div className="sw-cell sw-col-2-3 sw-head-main">
+          <span className="sw-sec-index">03 / Tập huấn</span>
+          <h2 id="taphuan-title" className="sw-sec-title">
+            Tập huấn canh tác
+          </h2>
         </div>
-      </div>
 
-      {/* Grid thư viện ảnh tư liệu */}
-      <div className="lp-training-grid">
-        {filteredItems.map((item, idx) => {
-          const originalIndex = TRAINING_ITEMS.findIndex((it) => it.id === item.id);
-          
-          // Tính toán cột span cân đối 100% dòng (Row 1: 6+6, Row 2: 4+4+4, Row 3: 6+6)
-          let colClass = "lp-col-4";
-          if (filter === "all") {
-            if (idx === 0 || idx === 1) colClass = "lp-col-6 is-featured";
-            else if (idx >= 2 && idx <= 4) colClass = "lp-col-4";
-            else colClass = "lp-col-6";
-          } else if (filter === "vietgap") {
-            colClass = "lp-col-6 is-featured";
-          } else if (filter === "policy") {
-            colClass = "lp-col-4";
-          }
+        <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
+      </header>
 
-          const isFeatured = colClass.includes("is-featured");
-
-          return (
+      {/* Dải danh sách nằm ngang cuộn mượt + nút Trước / Tiếp theo ngay bên dưới */}
+      <div className="sw-training-strip-shell">
+        <div
+          ref={trackRef}
+          className={`sw-training-strip ${isDragging ? "is-dragging" : ""}`}
+          onScroll={syncScrollBounds}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={stopDragging}
+          onMouseLeave={stopDragging}
+        >
+          {TRAINING_ITEMS.map((item, idx) => (
             <article
               key={item.id}
-              className={`lp-training-card lp-glass ${colClass} is-${item.aspectRatio.replace("/", "-")}`}
-              onClick={() => openLightbox(originalIndex)}
+              className="sw-training-slide"
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                if (dragStateRef.current.moved) {
+                  dragStateRef.current.moved = false;
+                  return;
+                }
+                setDrawerIndex(idx);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDrawerIndex(idx);
+                }
+              }}
             >
-              <div className="lp-training-photo-wrap">
+              <div className="sw-training-photo">
                 <Image
                   src={item.src}
                   alt={item.title}
                   fill
-                  sizes={isFeatured ? "(max-width: 900px) 100vw, 680px" : "(max-width: 900px) 100vw, 420px"}
-                  className="lp-training-photo"
+                  draggable={false}
+                  sizes="(max-width: 560px) 84vw, (max-width: 960px) 46vw, 30vw"
+                  style={{ objectFit: "cover", objectPosition: item.objectPosition }}
                 />
-                <div className="lp-training-overlay">
-                  <span className="lp-training-zoom" aria-label="Xem ảnh phóng to">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8" />
-                      <path d="m21 21-4.3-4.3" />
-                      <path d="M11 8v6M8 11h6" />
-                    </svg>
-                  </span>
-                </div>
-                <div className="lp-training-badge">
-                  <span className={`lp-pill lp-pill-${item.tagTone}`}>{item.categoryLabel}</span>
-                </div>
               </div>
 
-              <div className="lp-training-content">
-                <div className="lp-training-meta">
-                  <span className="lp-training-speaker">{item.speaker}</span>
-                  <span className="lp-training-date">{item.date}</span>
-                </div>
-
-                <h3 className="lp-training-title">{item.title}</h3>
-                <p className="lp-training-desc">{item.description}</p>
-
-                <div className="lp-training-highlights">
-                  {item.highlights.map((h, i) => (
-                    <span key={i} className="lp-training-highlight-tag">
-                      #{h}
-                    </span>
-                  ))}
-                </div>
+              <div className="sw-training-caption">
+                <h3 className="sw-training-slide-title">{item.title}</h3>
+                <p className="sw-training-slide-sub">
+                  {item.categoryLabel} · {item.location}
+                </p>
               </div>
             </article>
-          );
-        })}
-      </div>
-
-      {/* Banner cam kết chất lượng & Đăng ký tham gia */}
-      <div className="lp-training-cta lp-glass">
-        <div className="lp-training-cta-info">
-          <h3>Bà con xã viên muốn đăng ký tham gia các khóa tập huấn tiếp theo?</h3>
-          <p>
-            HTX Cư Né tổ chức các buổi hướng dẫn thực tế định kỳ theo mùa vụ. Cán bộ HTX sẽ thông báo lịch cụ thể qua nhóm Zalo thôn và tài khoản ứng dụng của từng hộ.
-          </p>
+          ))}
         </div>
-        <div className="lp-training-cta-actions">
-          <a
-            href="#tra-cuu"
-            className="lp-btn lp-btn-ghost"
-            onClick={() => {
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("lp:catalog-tab", { detail: "training" }));
-              }
-            }}
-          >
-            Xem lịch tập huấn sắp tới
-          </a>
-          <Link href="/register" className="lp-btn lp-btn-solid">
-            Đăng ký tài khoản hộ dân
-          </Link>
-        </div>
-      </div>
 
-      {/* Lightbox Modal phóng to hình ảnh */}
-      {activeLightboxItem && (
-        <div className="lp-lightbox" role="dialog" aria-modal="true" onClick={closeLightbox}>
-          <div className="lp-lightbox-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="lp-lightbox-head">
-              <div className="lp-lightbox-title-group">
-                <span className={`lp-pill lp-pill-${activeLightboxItem.tagTone}`}>
-                  {activeLightboxItem.categoryLabel}
-                </span>
-                <span className="lp-lightbox-counter">
-                  {(lightboxIndex ?? 0) + 1} / {TRAINING_ITEMS.length}
-                </span>
-              </div>
-              <button type="button" className="lp-lightbox-close" onClick={closeLightbox} aria-label="Đóng ảnh phóng to">
-                <CloseCircleIcon size={28} />
-              </button>
-            </div>
-
-            <div className="lp-lightbox-media">
-              <Image
-                src={activeLightboxItem.src}
-                alt={activeLightboxItem.title}
-                width={1276}
-                height={956}
-                className="lp-lightbox-img"
-                priority
-              />
-
-              <button
-                type="button"
-                className="lp-lightbox-arrow prev"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  prevLightbox();
-                }}
-                aria-label="Ảnh trước đó"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m15 18-6-6 6-6" />
-                </svg>
-              </button>
-
-              <button
-                type="button"
-                className="lp-lightbox-arrow next"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  nextLightbox();
-                }}
-                aria-label="Ảnh tiếp theo"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="lp-lightbox-foot">
-              <h3>{activeLightboxItem.title}</h3>
-              <div className="lp-lightbox-meta">
-                <p className="lp-lightbox-speaker">
-                  <strong>Đơn vị / Diễn giả:</strong> <span>{activeLightboxItem.speaker}</span>
-                </p>
-                <p className="lp-lightbox-location">
-                  <strong>Địa điểm & Chuyên đề:</strong> <em>{activeLightboxItem.location}</em> · <span>{activeLightboxItem.date}</span>
-                </p>
-              </div>
-              <p className="lp-lightbox-desc">{activeLightboxItem.description}</p>
-              <div className="lp-lightbox-tags">
-                {activeLightboxItem.highlights.map((h, i) => (
-                  <span key={i} className="lp-training-highlight-tag">
-                    ✓ {h}
-                  </span>
-                ))}
-              </div>
-            </div>
+        <div className="sw-training-strip-foot">
+          <div className="sw-training-scroll-btns" aria-label="Cuộn danh sách tập huấn">
+            <button
+              type="button"
+              className="eh-step-btn"
+              disabled={!canPrev}
+              onClick={() => scrollByStep(-1)}
+            >
+              Trước
+            </button>
+            <button
+              type="button"
+              className="eh-step-btn"
+              disabled={!canNext}
+              onClick={() => scrollByStep(1)}
+            >
+              Tiếp
+            </button>
           </div>
         </div>
+      </div>
+
+      {/* Ngăn trượt từ cạnh phải màn hình hiển thị chi tiết buổi tập huấn */}
+      {activeItem && (
+        <div
+          className="sw-side-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="training-drawer-title"
+          onClick={closeDrawer}
+        >
+          <aside className="sw-side-drawer" onClick={(e) => e.stopPropagation()}>
+            <header className="sw-side-head">
+              <div className="sw-modal-meta">
+                <span>{activeItem.categoryLabel}</span>
+                <span>·</span>
+                <span>
+                  {String((drawerIndex ?? 0) + 1).padStart(2, "0")} /{" "}
+                  {String(TRAINING_ITEMS.length).padStart(2, "0")}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="sw-side-close"
+                aria-label="Đóng chi tiết tập huấn"
+                onClick={closeDrawer}
+              >
+                <span>Đóng</span>
+                <span className="sw-side-close-x" aria-hidden="true">
+                  ×
+                </span>
+              </button>
+            </header>
+
+            <div className="sw-side-scroll">
+              <div className="sw-side-photo-stage">
+                <Image
+                  src={activeItem.src}
+                  alt={activeItem.title}
+                  width={1200}
+                  height={900}
+                  className="sw-side-photo-full"
+                  priority
+                />
+              </div>
+
+              <div className="sw-side-content">
+                <span className="sw-micro">{activeItem.date}</span>
+                <h3 id="training-drawer-title" className="sw-side-title">
+                  {activeItem.title}
+                </h3>
+                <p className="sw-side-lead">{activeItem.description}</p>
+
+                <dl className="sw-detail-dl sw-mt-20">
+                  <div>
+                    <dt>Đơn vị hướng dẫn</dt>
+                    <dd>{activeItem.speaker}</dd>
+                  </div>
+                  <div>
+                    <dt>Địa điểm tổ chức</dt>
+                    <dd>{activeItem.location}</dd>
+                  </div>
+                </dl>
+
+                <div className="sw-side-section">
+                  <h4>Nội dung trọng tâm</h4>
+                  <ul className="sw-clean-list">
+                    {activeItem.highlights.map((h) => (
+                      <li key={h}>{h}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <footer className="sw-side-foot">
+              <button type="button" className="eh-step-btn" onClick={prevDrawer}>
+                <span>Tư liệu trước</span>
+              </button>
+              <button type="button" className="eh-step-btn" onClick={nextDrawer}>
+                <span>Tiếp</span>
+              </button>
+            </footer>
+          </aside>
+        </div>
       )}
-    </div>
+    </section>
   );
 }

@@ -4,11 +4,9 @@
 export const NAV_LINKS = [
   { href: "#he-thong", label: "Hệ thống" },
   { href: "#ma-vung", label: "Vùng trồng" },
-  { href: "#quy-trinh", label: "Quy trình" },
   { href: "#tap-huan", label: "Tập huấn" },
-  { href: "#tra-cuu", label: "Tra cứu" },
-  { href: "#tieu-chuan", label: "Tiêu chuẩn" },
-  { href: "#tin-tuc", label: "Bản tin" },
+  { href: "#tin-tuc", label: "Tin tức" },
+  { href: "#tra-cuu", label: "Khuyến cáo" },
   { href: "#hoi-dap", label: "Hỏi đáp" },
 ];
 
@@ -198,25 +196,37 @@ export const FAQ = [
   {
     q: "Mã vùng trồng là gì và vì sao vườn của tôi cần có?",
     a: "Mã vùng trồng giống như “số căn cước” của khu vườn: gắn với ranh giới đất, chủ vườn, giống cây và nhật ký chăm sóc. Nước nhập khẩu muốn biết mỗi lô sầu riêng đến từ vườn nào; không có mã thì khó xuất khẩu chính ngạch (đường chính thức).",
+    shortA:
+      "Là “số căn cước” định danh thửa vườn, chủ hộ và nhật ký canh tác — điều kiện bắt buộc để xuất khẩu chính ngạch.",
   },
   {
     q: "Tôi muốn đăng ký mã vùng trồng thì làm thế nào?",
     a: "Bấm Đăng ký ở góc trên, điền họ tên, số điện thoại và mật khẩu. Cán bộ HTX sẽ kiểm tra và xác nhận tài khoản đó đúng là của hộ bạn. Sau đó bạn đăng nhập bằng số điện thoại và gửi hồ sơ vùng trồng ngay trong mục Hồ sơ. Cán bộ sẽ đến đo đất, xem vườn rồi mới duyệt cấp mã.",
+    shortA:
+      "Bấm Đăng ký bằng số điện thoại để HTX xác nhận, sau đó gửi hồ sơ trong mục Hồ sơ để cán bộ đến đo đất và cấp mã.",
   },
   {
     q: "Tôi không rành công nghệ, ghi nhật ký có khó không?",
     a: "Rất đơn giản: chọn ngày, thửa, công việc rồi bấm lưu. Giao diện hộ dân thiết kế cho điện thoại. Nếu cần, cán bộ thôn có thể hỗ trợ ghi giúp và hộ vẫn xem lại được.",
+    shortA:
+      "Chỉ cần chọn ngày, thửa vườn, công việc rồi bấm lưu ngay trên điện thoại; cán bộ thôn luôn sẵn sàng hỗ trợ.",
   },
   {
     q: "Nếu lỡ dùng thuốc bị cấm thì sao?",
     a: "Hãy ghi lại trung thực và báo ngay cán bộ HTX. Hệ thống sẽ đánh dấu lại để cán bộ hướng dẫn bạn chờ thêm ngày cách ly hoặc xử lý lô thu hoạch. Che giấu sẽ gây rủi ro lớn hơn nhiều cho cả vườn và cả vùng.",
+    shortA:
+      "Báo ngay cho cán bộ HTX để được hướng dẫn chờ cách ly hoặc xử lý riêng lô hàng, tránh ảnh hưởng cả vùng trồng.",
   },
   {
     q: "Dữ liệu cá nhân của hộ có bị công khai không?",
     a: "Không. Trang này chỉ hiện số liệu chung và các danh mục dùng chung. Thông tin của từng hộ chỉ chính hộ đó và cán bộ phụ trách mới xem được; mọi lần chỉnh sửa đều được ghi lại để biết ai đã làm gì.",
+    shortA:
+      "Không. Thông tin riêng của từng hộ được bảo mật, chỉ chủ hộ và cán bộ phụ trách mới có quyền truy cập.",
   },
   {
     q: "Những quy định xuất khẩu trên trang này có luôn đúng không?",
     a: "Nội dung mang tính hướng dẫn chung để hộ dân hiểu quy trình. Quy định của từng thị trường thay đổi theo thời gian, vì vậy hãy luôn hỏi lại hướng dẫn mới nhất của cơ quan bảo vệ thực vật và đơn vị nhập khẩu.",
+    shortA:
+      "Đây là hướng dẫn chuẩn hiện hành; khi vào vụ xuất khẩu, bà con đối chiếu thêm thông báo mới nhất từ Ban Kỹ thuật HTX.",
   },
 ];

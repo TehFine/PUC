@@ -2,68 +2,44 @@ import { SEASON } from "./data";
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
-/** Lịch mùa vụ tham khảo (Tây Nguyên): mỗi thanh trải theo tháng bằng grid-column. */
 export default function Season() {
   return (
-    <div className="lp-season lp-glass">
-      <p className="lp-label">
-        LỊCH MÙA VỤ THAM KHẢO · TÂY NGUYÊN
-      </p>
-      <div className="lp-season-scroll">
-        <div className="lp-season-grid" role="img" aria-label="Lịch mùa vụ sầu riêng theo tháng">
-          {MONTHS.map((month) => (
-            <span key={month} className="lp-season-month" style={{ gridColumn: month, gridRow: 1 }}>
-              T{month}
-            </span>
-          ))}
-          {SEASON.map((bar, row) => (
-            <span
-              key={`${bar.label}-${bar.start}`}
-              className={`lp-season-bar ${bar.tone}`}
-              style={{ gridColumn: `${bar.start} / ${bar.end + 1}`, gridRow: row + 2 }}
-            >
-              {bar.label}
-            </span>
+    <div className="sw-grid sw-season-band">
+      <div className="sw-cell sw-col-1 sw-between">
+        <div>
+          <span className="sw-micro">Chu kỳ sinh trưởng</span>
+          <h3 className="sw-cell-title sw-mt-8">Lịch mùa vụ Tây Nguyên</h3>
+        </div>
+        <p className="sw-muted-sm">
+          Thời điểm thực tế thay đổi theo giống, độ cao và thời tiết từng năm; bà con đối chiếu thêm cùng cán bộ kỹ thuật HTX.
+        </p>
+      </div>
+
+      <div className="sw-cell sw-col-2-4 sw-season-matrix-wrap">
+        <div className="sw-season-months" aria-hidden="true">
+          {MONTHS.map((m) => (
+            <span key={m}>T{m}</span>
           ))}
         </div>
-      </div>
-      {/* Bản gọn cho điện thoại: mỗi giai đoạn một dòng, thanh 12 tháng bên dưới */}
-      <div className="lp-season-compact">
-        <div className="lp-season-ruler" aria-hidden="true">
-          {MONTHS.map((month) => (
-            <span key={month}>{month}</span>
+
+        <div className="sw-season-rows" role="list" aria-label="Lịch mùa vụ sầu riêng theo tháng">
+          {SEASON.map((bar) => (
+            <div key={`${bar.label}-${bar.start}`} className="sw-season-item" role="listitem">
+              <div className="sw-season-meta">
+                <span className="sw-season-label">{bar.label}</span>
+                <span className="sw-season-range">
+                  {bar.start === bar.end ? `Tháng ${bar.start}` : `Tháng ${bar.start} – ${bar.end}`}
+                </span>
+              </div>
+              <div className="sw-season-track" aria-hidden="true">
+                <span
+                  className="sw-season-fill"
+                  style={{ gridColumn: `${bar.start} / ${bar.end + 1}` }}
+                />
+              </div>
+            </div>
           ))}
         </div>
-        {SEASON.map((bar) => (
-          <div key={`${bar.label}-${bar.start}`} className="lp-season-row">
-            <div className="lp-season-row-head">
-              <span>{bar.label}</span>
-              <em>{bar.start === bar.end ? `T${bar.start}` : `T${bar.start}–T${bar.end}`}</em>
-            </div>
-            <div className="lp-season-track">
-              <i className={bar.tone} style={{ gridColumn: `${bar.start} / ${bar.end + 1}` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="lp-season-note">
-        <svg
-          className="lp-season-note-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 16v-4" />
-          <path d="M12 8h.01" />
-        </svg>
-        <span>
-          Thời điểm thực tế thay đổi theo giống, độ cao và thời tiết từng năm; hãy hỏi thêm cán bộ kỹ thuật của HTX.
-        </span>
       </div>
     </div>
   );

@@ -116,7 +116,7 @@ export default function Nav() {
           aria-label="HTX Cư Né – về đầu trang"
           onClick={() => handleLinkClick("")}
         >
-          <Image className="lp-logo-mark" src="/logo.png" alt="" width={40} height={40} priority />
+          <Image className="lp-logo-mark" src="/newlogo.png" alt="" width={40} height={40} priority />
           <strong>Cư Né</strong>
         </a>
 

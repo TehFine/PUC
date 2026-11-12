@@ -1,155 +1,135 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
+import { useState } from "react";
 import { STAGES } from "./data";
 
-/** Quy trình chăm sóc theo từng giai đoạn: chọn giai đoạn ở bên trái, xem việc cần làm bên phải. */
+const STAGE_PHOTOS: Record<string, { src: string; alt: string; pos?: string }> = {
+  dat: {
+    src: "/landing/lux-estate-dawn.jpg",
+    alt: "Quy hoạch triền đồi sầu riêng thoát nước trong sương sớm tại Đắk Lắk",
+    pos: "center 56%",
+  },
+  giong: {
+    src: "/landing/durian-orchard-real.jpg",
+    alt: "Hàng cây sầu riêng giống ghép khỏe mạnh trên đất đỏ bazan Đắk Lắk",
+    pos: "center 48%",
+  },
+  phan: {
+    src: "/landing/lux-branch-vertical.jpg",
+    alt: "Cành sầu riêng nuôi trái đồng đều nhờ chế độ dinh dưỡng hữu cơ cân đối",
+    pos: "center 50%",
+  },
+  nuoc: {
+    src: "/landing/lux-blossom.jpg",
+    alt: "Chùm hoa sầu riêng nở đều trên cành sau giai đoạn điều tiết nước làm bông",
+    pos: "center 52%",
+  },
+  "sau-benh": {
+    src: "/landing/durian-open.jpg",
+    alt: "Múi sầu riêng vàng ươm không sâu bệnh nhờ quản lý dịch hại tổng hợp IPM",
+    pos: "center 55%",
+  },
+  "thu-hoach": {
+    src: "/landing/lux-harvest.jpg",
+    alt: "Người nông dân đội nón lá nâng niu trái sầu riêng vừa thu hoạch đúng độ chín",
+    pos: "38% 22%",
+  },
+  "sau-thu": {
+    src: "/landing/lux-qr-atelier.jpg",
+    alt: "Trái sầu riêng gắn thẻ mã QR truy xuất nguồn gốc đặt trên bàn đá travertine",
+    pos: "28% 64%",
+  },
+};
+
 export default function Stages() {
   const [activeId, setActiveId] = useState(STAGES[0].id);
-  const index = Math.max(0, STAGES.findIndex((stage) => stage.id === activeId));
+  const index = Math.max(0, STAGES.findIndex((s) => s.id === activeId));
   const stage = STAGES[index];
+  const photo = STAGE_PHOTOS[stage.id] ?? STAGE_PHOTOS.dat;
 
-  const listRef = useRef<HTMLDivElement>(null);
-  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const animRef = useRef<number | null>(null);
-
-  // Cuộn mượt đưa nút chỉ định vào chính giữa màn hình (nhanh lúc đầu, chậm dần khi về vị trí giữa)
-  const scrollToButton = (targetIndex: number) => {
-    const container = listRef.current;
-    const btn = buttonRefs.current[targetIndex];
-    if (!container || !btn) return;
-
-    // Chỉ thực hiện khi danh sách ở dạng thanh cuộn ngang (mobile/tablet)
-    const isHorizontal = container.scrollWidth > container.clientWidth;
-    if (!isHorizontal) return;
-
-    if (animRef.current !== null) {
-      cancelAnimationFrame(animRef.current);
-      animRef.current = null;
-    }
-
-    // Tính toán độ lệch chính xác theo bounding client rect để tâm nút nằm chính giữa container
-    const containerRect = container.getBoundingClientRect();
-    const btnRect = btn.getBoundingClientRect();
-    const currentBtnCenter = btnRect.left + btnRect.width / 2;
-    const currentContainerCenter = containerRect.left + containerRect.width / 2;
-    const delta = currentBtnCenter - currentContainerCenter;
-
-    const maxScroll = container.scrollWidth - container.clientWidth;
-    const targetScrollLeft = Math.max(0, Math.min(container.scrollLeft + delta, maxScroll));
-
-    const startScrollLeft = container.scrollLeft;
-    const distance = targetScrollLeft - startScrollLeft;
-    if (Math.abs(distance) < 1) return;
-
-    const duration = 540; // 540ms: nhịp nhàng, thanh thoát
-    let startTime: number | null = null;
-
-    // Easing nhanh lúc đầu và hãm dần đều khi gần về vị trí chính giữa màn hình (Quartic Ease-Out)
-    const easeOutQuart = (t: number) => 1 - Math.pow(1 - t, 4);
-
-    const step = (now: number) => {
-      if (startTime === null) startTime = now;
-      const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / duration);
-      const eased = easeOutQuart(progress);
-
-      container.scrollLeft = startScrollLeft + distance * eased;
-
-      if (progress < 1) {
-        animRef.current = requestAnimationFrame(step);
-      } else {
-        animRef.current = null;
-      }
-    };
-
-    animRef.current = requestAnimationFrame(step);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (animRef.current !== null) {
-        cancelAnimationFrame(animRef.current);
-      }
-    };
-  }, []);
-
-  const handleTabClick = (position: number) => {
-    setActiveId(STAGES[position].id);
-    // Khi bấm vào nút bất kỳ, nút tiếp theo tự động nhảy đến giữa màn hình để người dùng bấm tiếp
-    const nextPosition = position < STAGES.length - 1 ? position + 1 : position;
-    scrollToButton(nextPosition);
-  };
-
-  const handleNavClick = (newIndex: number) => {
-    setActiveId(STAGES[newIndex].id);
-    scrollToButton(newIndex);
-  };
+  const prev = () => setActiveId(STAGES[(index - 1 + STAGES.length) % STAGES.length].id);
+  const next = () => setActiveId(STAGES[(index + 1) % STAGES.length].id);
 
   return (
-    <div className="lp-stages">
+    <div className="sw-grid sw-stages-band">
+      {/* Cột 1: Danh sách 7 giai đoạn */}
       <div
-        ref={listRef}
-        className="lp-stage-list"
+        className="sw-cell sw-col-1 sw-stage-navlist"
         role="tablist"
-        aria-label="Các giai đoạn chăm sóc"
-        aria-orientation="vertical"
+        aria-label="Các giai đoạn chăm sóc sầu riêng"
       >
-        {STAGES.map((item, position) => (
-          <button
-            key={item.id}
-            ref={(el) => {
-              buttonRefs.current[position] = el;
-            }}
-            type="button"
-            role="tab"
-            id={`stage-tab-${item.id}`}
-            aria-selected={item.id === activeId}
-            aria-controls="stage-panel"
-            className={item.id === activeId ? "on" : ""}
-            onClick={() => handleTabClick(position)}
-          >
-            <b>{String(position + 1).padStart(2, "0")}</b>
-            <span>{item.label}</span>
-          </button>
-        ))}
+        {STAGES.map((item, pos) => {
+          const active = item.id === activeId;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              id={`stage-tab-${item.id}`}
+              aria-selected={active}
+              aria-controls="stage-panel"
+              className={`sw-stage-tab ${active ? "is-active" : ""}`}
+              onClick={() => setActiveId(item.id)}
+            >
+              <span className="sw-stage-idx">{String(pos + 1).padStart(2, "0")}</span>
+              <span className="sw-stage-name">{item.label}</span>
+            </button>
+          );
+        })}
       </div>
 
+      {/* Cột 2–3: Chi tiết giai đoạn đang chọn */}
       <article
-        className="lp-stage-panel lp-glass"
         id="stage-panel"
         role="tabpanel"
         aria-labelledby={`stage-tab-${stage.id}`}
         key={stage.id}
+        className="sw-cell sw-col-2-3 sw-stage-detail eh-fade-block"
       >
-        <p className="lp-label">{stage.tag.toUpperCase()}</p>
-        <h3>{stage.title}</h3>
-        <ul className="lp-checks">
-          {stage.items.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-        <div className="lp-stage-log">
-          <span className="lp-label">GHI VÀO NHẬT KÝ</span>
-          <p>{stage.log}</p>
+        <div>
+          <span className="sw-micro">{stage.tag}</span>
+          <h3 className="sw-cell-title sw-mt-8">{stage.title}</h3>
+          <ul className="sw-clean-list sw-mt-16">
+            {stage.items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
         </div>
-        <div className="lp-stage-nav">
-          <button
-            type="button"
-            disabled={index === 0}
-            onClick={() => handleNavClick(index - 1)}
-          >
-            ← Giai đoạn trước
-          </button>
-          <button
-            type="button"
-            disabled={index === STAGES.length - 1}
-            onClick={() => handleNavClick(index + 1)}
-          >
-            Giai đoạn sau →
-          </button>
+
+        <div className="sw-stage-foot">
+          <div className="sw-stage-logbox">
+            <span className="sw-micro">Ghi vào nhật ký điện tử</span>
+            <p>{stage.log}</p>
+          </div>
+          <div className="sw-stage-arrows">
+            <button type="button" className="eh-step-btn is-prev" onClick={prev}>
+              <svg className="eh-arrow-icon" width="22" height="10" viewBox="0 0 26 10" fill="none" aria-hidden="true">
+                <path d="M25.25 5H1.25M5.25 1L1.25 5L5.25 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span>Trước</span>
+            </button>
+            <button type="button" className="eh-step-btn is-next" onClick={next}>
+              <span>Tiếp</span>
+              <svg className="eh-arrow-icon" width="22" height="10" viewBox="0 0 26 10" fill="none" aria-hidden="true">
+                <path d="M0.75 5H24.75M20.75 1L24.75 5L20.75 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
         </div>
       </article>
+
+      {/* Cột 4: Ảnh thực tế minh họa theo từng giai đoạn */}
+      <div className="sw-media sw-col-4 sw-stage-photo">
+        <Image
+          key={photo.src}
+          src={photo.src}
+          alt={photo.alt}
+          fill
+          sizes="(max-width: 960px) 100vw, 25vw"
+          style={{ objectFit: "cover", objectPosition: photo.pos ?? "center" }}
+        />
+      </div>
     </div>
   );
 }
