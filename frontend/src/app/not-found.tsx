@@ -39,7 +39,7 @@ export default function NotFoundPage() {
             marginBottom: 16,
           }}
         >
-          <Image src="/logo.png" alt="HTX Cư Né" width={44} height={44} />
+          <Image src="/newlogo.png" alt="HTX Cư Né" width={44} height={44} />
         </div>
 
         <span

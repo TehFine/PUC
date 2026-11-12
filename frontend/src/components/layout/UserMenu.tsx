@@ -185,7 +185,7 @@ export default function UserMenu() {
                 title="Về trang giới thiệu HTX Cư Né"
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">
-                  <Image src="/logo.png" alt="" width={24} height={24} />
+                  <Image src="/newlogo.png" alt="" width={24} height={24} />
                 </span>
                 <span className="pt-profile-action-title">Trang giới thiệu HTX</span>
                 <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
