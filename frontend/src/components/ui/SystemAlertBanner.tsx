@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
@@ -29,7 +29,7 @@ function saveDismissedId(key: string): void {
   }
 }
 
-export default function SystemAlertBanner() {
+function SystemAlertBannerInner() {
   const { session } = useAuth();
   const pathname = usePathname() || "";
   const { runtimeIncident, broadcastAlert, recoveredAt, checking } = useSystemAlertSnapshot();
@@ -167,4 +167,12 @@ export default function SystemAlertBanner() {
   }
 
   return null;
+}
+
+export default function SystemAlertBanner() {
+  return (
+    <Suspense fallback={null}>
+      <SystemAlertBannerInner />
+    </Suspense>
+  );
 }
