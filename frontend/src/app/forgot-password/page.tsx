@@ -152,9 +152,6 @@ function ForgotPasswordContent() {
           </ol>
           <Link href="/login" className="auth-submit is-link">
             Đăng nhập ngay
-            <span className="auth-arrow" aria-hidden="true">
-              →
-            </span>
           </Link>
         </div>
       </AuthShell>
@@ -189,9 +186,6 @@ function ForgotPasswordContent() {
           </ol>
           <Link href="/login" className="auth-submit is-link">
             Về trang đăng nhập
-            <span className="auth-arrow" aria-hidden="true">
-              →
-            </span>
           </Link>
         </div>
       </AuthShell>
@@ -349,13 +343,10 @@ function ForgotPasswordContent() {
                 {mode === "cccd" ? "Đang xác minh…" : "Đang gửi yêu cầu…"}
               </span>
             </>
+          ) : mode === "cccd" ? (
+            "Đặt lại mật khẩu"
           ) : (
-            <>
-              {mode === "cccd" ? "Đặt lại mật khẩu" : "Gửi yêu cầu"}
-              <span className="auth-arrow" aria-hidden="true">
-                →
-              </span>
-            </>
+            "Gửi yêu cầu"
           )}
         </button>
       </form>

@@ -92,7 +92,7 @@ export default function AuthShell({ variant, title, subtitle, wide = false, hide
 
         <Link href="/" className="auth-brand" aria-label="HTX Cư Né – về trang giới thiệu">
           <span className="auth-brand-mark">
-            <Image src="/logo.png" alt="" width={36} height={36} priority />
+            <Image src="/newlogo.png" alt="" width={36} height={36} priority />
           </span>
           <span className="auth-brand-text">
             <strong>Cư Né</strong>
