@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, QrCode, Search, ShieldCheck, Sprout } from "lucide-react";
 import { api } from "@/lib/api-client";
+import "./[code]/trace.css";
 
 interface SampleLot {
   sampleType?: "lot" | "plot";
@@ -81,6 +82,7 @@ export default function TraceLookupPage() {
         }}
       >
         <div
+          className="tr-lookup-header-inner"
           style={{
             maxWidth: 1080,
             margin: "0 auto",
@@ -99,18 +101,24 @@ export default function TraceLookupPage() {
               gap: 10,
               textDecoration: "none",
               color: "#14372f",
+              minWidth: 0,
             }}
           >
-            <Image src="/logo.png" alt="HTX Cư Né" width={36} height={36} style={{ borderRadius: 10 }} />
-            <div>
-              <strong style={{ display: "block", fontSize: 15, lineHeight: 1.2 }}>HTX Nông nghiệp Cư Né</strong>
-              <span style={{ fontSize: 12, color: "#475569" }}>Cổng truy xuất nguồn gốc nông sản</span>
+            <Image src="/newlogo.png" alt="HTX Cư Né" width={34} height={34} style={{ borderRadius: 10, flexShrink: 0 }} />
+            <div style={{ minWidth: 0 }}>
+              <strong className="tr-lookup-brand-title" style={{ display: "block", fontSize: 15, lineHeight: 1.2 }}>
+                HTX Nông nghiệp Cư Né
+              </strong>
+              <span className="tr-lookup-brand-sub" style={{ fontSize: 12, color: "#475569" }}>
+                Cổng truy xuất nguồn gốc nông sản
+              </span>
             </div>
           </Link>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="tr-lookup-nav" style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Link
               href="/"
+              className="tr-lookup-btn"
               style={{
                 padding: "8px 14px",
                 borderRadius: 999,
@@ -121,10 +129,11 @@ export default function TraceLookupPage() {
                 border: "1px solid rgba(20, 55, 47, 0.16)",
               }}
             >
-              Trang chủ HTX
+              Trang chủ
             </Link>
             <Link
               href="/login"
+              className="tr-lookup-btn"
               style={{
                 padding: "8px 16px",
                 borderRadius: 999,
@@ -141,7 +150,7 @@ export default function TraceLookupPage() {
         </div>
       </header>
 
-      <main style={{ maxWidth: 960, margin: "0 auto", padding: "48px 20px 80px" }}>
+      <main className="tr-lookup-main" style={{ maxWidth: 960, margin: "0 auto", padding: "48px 20px 80px" }}>
         <section style={{ textAlign: "center", maxWidth: 680, margin: "0 auto 40px" }}>
           <span
             style={{
@@ -178,25 +187,26 @@ export default function TraceLookupPage() {
 
           <form
             onSubmit={handleSubmit}
+            className="tr-lookup-form"
             style={{
               marginTop: 26,
               display: "flex",
               gap: 10,
-              background: "#ffffff",
-              padding: 8,
-              borderRadius: 16,
-              border: "1.5px solid #cbd5e1",
-              boxShadow: "0 14px 34px rgba(15, 41, 34, 0.08)",
+              background: "#f4f5f7",
+              padding: 6,
+              borderRadius: 8,
+              border: "none",
+              boxShadow: "none",
               flexWrap: "wrap",
             }}
           >
-            <div style={{ flex: "1 1 260px", display: "flex", alignItems: "center", gap: 10, paddingLeft: 12 }}>
-              <Search size={20} style={{ color: "#64748b", flexShrink: 0 }} />
+            <div className="tr-lookup-input-wrap" style={{ flex: "1 1 260px", display: "flex", alignItems: "center", gap: 10, paddingLeft: 10 }}>
+              <Search size={18} strokeWidth={1.85} style={{ color: "#2c2c2e", flexShrink: 0 }} />
               <input
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="Nhập mã lô hoặc mã tem (VD: LOT-SR-2026-001, TEM-CN-...)"
+                placeholder="Nhập mã lô hoặc mã tem (VD: LOT-SR-2026-001)"
                 aria-label="Mã lô hoặc mã tem truy xuất"
                 style={{
                   width: "100%",
@@ -211,6 +221,7 @@ export default function TraceLookupPage() {
             </div>
             <button
               type="submit"
+              className="tr-lookup-submit"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -270,6 +281,7 @@ export default function TraceLookupPage() {
         </section>
 
         <section
+          className="tr-lookup-samples-box"
           style={{
             background: "#ffffff",
             borderRadius: 18,
@@ -292,7 +304,7 @@ export default function TraceLookupPage() {
           {loading ? (
             <p style={{ color: "#64748b", fontSize: 14, padding: "12px 0" }}>Đang tải danh sách lô hàng xác thực…</p>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+            <div className="tr-lookup-samples-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
               {(samples?.lots ?? []).map((lot) => (
                 <Link
                   key={lot.code}

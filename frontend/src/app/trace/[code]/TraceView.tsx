@@ -983,7 +983,7 @@ export default function TraceView() {
                       <div className="tr-puc-crest" aria-hidden="true">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src="/logo.png"
+                          src="/newlogo.png"
                           alt="Biểu trưng HTX Sầu Riêng Cư Né"
                           className="tr-puc-crest-img"
                         />

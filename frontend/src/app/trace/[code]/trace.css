@@ -1003,20 +1003,30 @@
 .tr-search-input {
   width: 100%;
   min-height: 46px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: none;
-  background: #f3f7f4;
-  color: #14372f;
+  padding: 10px 14px 10px 40px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background-color: #f4f5f7;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232c2c2e' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 13px center;
+  background-size: 17px 17px;
+  color: #111827;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   outline: none;
   box-sizing: border-box;
+  transition: background-color 0.18s ease;
+}
+
+.tr-search-input::placeholder {
+  color: #6e6e73;
+  font-weight: 400;
 }
 
 .tr-search-input:focus {
-  background: #eaf2ed;
-  box-shadow: 0 0 0 2px rgba(22, 101, 52, 0.16);
+  background-color: #ededf0;
+  box-shadow: none;
 }
 
 .tr-search-btn {
@@ -2722,4 +2732,59 @@
     page-break-inside: avoid;
   }
 }
+
+/* ─── Đáp ứng trang tra cứu công khai (/trace) trên Điện thoại ─── */
+@media (max-width: 640px) {
+  .tr-lookup-header-inner {
+    padding: 11px 14px !important;
+    gap: 8px !important;
+  }
+
+  .tr-lookup-brand-sub {
+    display: none !important;
+  }
+
+  .tr-lookup-brand-title {
+    font-size: 14px !important;
+  }
+
+  .tr-lookup-nav {
+    gap: 6px !important;
+    flex-shrink: 0;
+  }
+
+  .tr-lookup-btn {
+    padding: 7px 11px !important;
+    font-size: 12.5px !important;
+    white-space: nowrap;
+  }
+
+  .tr-lookup-main {
+    padding: 28px 16px 56px !important;
+  }
+
+  .tr-lookup-form {
+    flex-direction: column;
+    align-items: stretch !important;
+    padding: 8px !important;
+  }
+
+  .tr-lookup-input-wrap {
+    flex: 1 1 auto !important;
+    padding-left: 6px !important;
+  }
+
+  .tr-lookup-submit {
+    width: 100%;
+  }
+
+  .tr-lookup-samples-box {
+    padding: 18px 14px !important;
+  }
+
+  .tr-lookup-samples-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 
