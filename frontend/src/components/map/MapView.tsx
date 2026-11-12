@@ -992,9 +992,6 @@ export default function MapView({
       {showPanel && (
         <aside ref={panelRef} className="plotmap-panel">
           <div ref={panelHeadRef} className="pt-sheet-topbar">
-            <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
-              <div className="pt-sheet-handle-bar" />
-            </div>
             <div className="plotmap-panel-head">
               <div>
                 <div className="plotmap-kicker">{panelKicker}</div>

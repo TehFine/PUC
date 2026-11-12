@@ -7,9 +7,9 @@ import "./skeleton.css";
 type Toast = { kind: "slow" | "offline" | "ok"; text: string } | null;
 
 const MESSAGES = {
-  slow: "Mạng đang yếu, trang có thể tải chậm hơn bình thường.",
-  offline: "Bạn đang mất kết nối mạng. Trang sẽ tiếp tục khi có mạng lại.",
-  ok: "Đã kết nối lại.",
+  slow: "Mạng yếu, đang tải chậm",
+  offline: "Mất kết nối, đang chờ mạng",
+  ok: "Đã kết nối lại mạng",
 } as const;
 
 function IosSpinner({ className }: { className?: string }) {
@@ -17,8 +17,8 @@ function IosSpinner({ className }: { className?: string }) {
     <svg
       className={className}
       viewBox="0 0 24 24"
-      width="18"
-      height="18"
+      width="19"
+      height="19"
       fill="currentColor"
       aria-hidden="true"
     >
@@ -34,6 +34,24 @@ function IosSpinner({ className }: { className?: string }) {
       <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(270 12 12)" opacity="0.25" />
       <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(300 12 12)" opacity="0.17" />
       <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(330 12 12)" opacity="0.08" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4.5 10.5l3.6 3.6L15.5 6.8" />
     </svg>
   );
 }
@@ -263,7 +281,7 @@ export default function NetworkStatus() {
   return (
     <div
       ref={toastRef}
-      className={`net-toast is-${toast.kind === "slow" ? "slow" : toast.kind}${
+      className={`net-toast is-${toast.kind}${
         isDismissing ? " is-dismissing" : ""
       }${isDragging ? " is-dragging" : ""}${isSnapping ? " is-snapping" : ""}`}
       role="button"
@@ -280,29 +298,14 @@ export default function NetworkStatus() {
       onClick={triggerDismiss}
       onKeyDown={handleKeyDown}
     >
-      <div className="net-toast-handle" aria-hidden="true" />
-      <div className="net-toast-body">
-        {toast.kind === "slow" ? (
-          <IosSpinner className="net-toast-ios-spinner" />
+      <span className="net-toast-badge" aria-hidden="true">
+        {toast.kind === "ok" ? (
+          <CheckIcon />
         ) : (
-          <span className="net-toast-dot" aria-hidden="true" />
+          <IosSpinner className="net-toast-ios-spinner" />
         )}
-        <span className="net-toast-text">{toast.text}</span>
-        <span className="net-toast-action" aria-hidden="true" title="Vuốt lên hoặc bấm để ẩn">
-          <svg
-            viewBox="0 0 16 16"
-            width="12"
-            height="12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M3 10l5-5 5 5" />
-          </svg>
-        </span>
-      </div>
+      </span>
+      <span className="net-toast-text">{toast.text}</span>
     </div>
   );
 }

@@ -104,9 +104,6 @@ export default function PlotPopup({
       onClick={(event) => event.stopPropagation()}
     >
       <div ref={headRef} className="pt-sheet-topbar">
-        <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
-          <div className="pt-sheet-handle-bar" />
-        </div>
         <header className="pp-head">
           <div>
             <div className="pp-kicker" style={{ color: zc.text }}>

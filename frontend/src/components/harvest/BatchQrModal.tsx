@@ -272,9 +272,6 @@ export default function BatchQrModal({ lot, onClose }: Props) {
       >
         {/* Header Modal */}
         <div ref={dragZoneRef} className="pt-sheet-topbar no-print">
-          <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
-            <div className="pt-sheet-handle-bar" />
-          </div>
           <div className="batch-qr-header">
             <div>
               <div className="batch-qr-subtitle">Truy xuất nguồn gốc CheckVN &amp; GACC</div>
@@ -571,7 +568,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         }
 
         .batch-qr-header {
-          padding: 8px 22px 14px;
+          padding: 18px 22px 14px;
           border-bottom: 1px solid rgba(20, 55, 47, 0.07);
           display: flex;
           align-items: center;

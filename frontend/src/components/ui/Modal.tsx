@@ -168,10 +168,6 @@ export function Modal({
           }
         >
           <div ref={dragZoneRef} className="modal-topbar pt-sheet-topbar">
-            <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
-              <div className="pt-sheet-handle-bar" />
-            </div>
-
             <header className="modal-header pt-sheet-head">
               {variant === "drawer" && (
                 <button

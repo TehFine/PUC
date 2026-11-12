@@ -135,9 +135,6 @@ export default function Zones() {
             data-sheet={sheet ?? "none"}
           >
             <div ref={sheetHeadRef} className="sheet-head pt-sheet-topbar">
-              <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
-                <div className="pt-sheet-handle-bar" />
-              </div>
               <div className="sheet-head-row">
                 <span className="sheet-title">
                   {sheet === "list"
