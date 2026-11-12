@@ -76,7 +76,7 @@ function JournalForm({
   const getGps = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setCoords(null);
-      setGpsStatus("Thiết bị hoặc trình duyệt không hỗ trợ định vị GPS.");
+      setGpsStatus("Thiết bị không hỗ trợ GPS");
       return;
     }
     setLocating(true);
@@ -94,8 +94,8 @@ function JournalForm({
         setCoords(null);
         setGpsStatus(
           err.code === err.PERMISSION_DENIED
-            ? "Chưa cấp quyền vị trí GPS. Bạn vẫn có thể lưu nhật ký không kèm tọa độ."
-            : "Không lấy được tín hiệu GPS hiện tại. Bạn vẫn có thể lưu nhật ký.",
+            ? "Chưa cấp quyền vị trí GPS"
+            : "Không lấy được tín hiệu GPS",
         );
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
@@ -238,7 +238,7 @@ function JournalForm({
           <span className="pt-journal-gps-desc">
             {coords
               ? `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`
-              : gpsStatus || "Chưa định vị (khuyến nghị gắn GPS xác thực tại vườn)"}
+              : gpsStatus || "Chưa định vị"}
           </span>
         </div>
         <button
@@ -489,7 +489,6 @@ interface VietgapRule {
   title: string;
   desc: string;
   nodeType: "active" | "warn" | "danger";
-  capsuleBg: string;
   cardClass: string;
 }
 
@@ -500,7 +499,6 @@ const VIETGAP_RULES: VietgapRule[] = [
     title: "Ghi nhật ký 7 ngày/lần",
     desc: "Cập nhật đều đặn các việc tưới tiêu, bón phân, tỉa cành, bao trái phục vụ kiểm tra vùng trồng.",
     nodeType: "active",
-    capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
     cardClass: "pt-vietgap-card-frequency",
   },
   {
@@ -509,7 +507,6 @@ const VIETGAP_RULES: VietgapRule[] = [
     title: "Cách ly trước thu hoạch",
     desc: "Ngưng dùng phân thuốc trước ngày thu hoạch đúng thời hạn (PHI) để không vượt tồn dư cho phép.",
     nodeType: "warn",
-    capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
     cardClass: "pt-vietgap-card-phi",
   },
   {
@@ -518,7 +515,6 @@ const VIETGAP_RULES: VietgapRule[] = [
     title: "Cấm thuốc ngoài danh mục",
     desc: "Tuyệt đối không dùng chất nhuộm màu (Vàng O), hoạt chất cấm Chlorpyrifos hoặc thuốc chưa cấp phép.",
     nodeType: "danger",
-    capsuleBg: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)",
     cardClass: "pt-vietgap-card-banned",
   },
 ];
@@ -1120,41 +1116,17 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
             </h2>
           </div>
           <div className="pt-vietgap-timeline" role="list">
-            {VIETGAP_RULES.map((rule, idx, arr) => {
-              const isLast = idx === arr.length - 1;
-
-              return (
-                <div key={rule.id} className="pt-vietgap-step">
-                  <div className="pt-vietgap-segment">
-                    <div className="pt-vietgap-track-col" aria-hidden="true">
-                      <div
-                        className="pt-vietgap-capsule"
-                        style={{ background: rule.capsuleBg }}
-                      >
-                        <div className="pt-vietgap-dot" />
-                        <div className="pt-vietgap-dot" />
-                      </div>
-                    </div>
-
-                    <div className={`pt-vietgap-content pt-vietgap-card ${rule.cardClass}`}>
-                      <span className="pt-timeline-kicker">{rule.kicker}</span>
-                      <h3 className="pt-timeline-title">{rule.title}</h3>
-                      <p className="pt-timeline-desc">{rule.desc}</p>
-                    </div>
+            {VIETGAP_RULES.map((rule) => (
+              <div key={rule.id} className="pt-vietgap-step" role="listitem">
+                <div className="pt-vietgap-segment">
+                  <div className={`pt-vietgap-content pt-vietgap-card ${rule.cardClass}`}>
+                    <span className="pt-timeline-kicker">{rule.kicker}</span>
+                    <h3 className="pt-timeline-title">{rule.title}</h3>
+                    <p className="pt-timeline-desc">{rule.desc}</p>
                   </div>
-
-                  {!isLast && (
-                    <div className="pt-vietgap-transfer" aria-hidden="true">
-                      <div className="pt-vietgap-transfer-track">
-                        <div className="pt-vietgap-mini-dot" />
-                        <div className="pt-vietgap-mini-dot" />
-                        <div className="pt-vietgap-mini-dot" />
-                      </div>
-                    </div>
-                  )}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </section>
       </div>

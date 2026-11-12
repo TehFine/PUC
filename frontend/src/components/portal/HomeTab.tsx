@@ -9,13 +9,6 @@ import type { PortalList, PortalOverview, PortalReminder, PortalScheduleItem, Po
 import type { PortalTabId } from "./PortalApp";
 import { SectionDivider, StateBlock } from "./ui";
 
-const SCHEDULE_THEMES = [
-  { capsuleBg: "linear-gradient(180deg, #10b981 0%, #059669 100%)" },
-  { capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)" },
-  { capsuleBg: "linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%)" },
-  { capsuleBg: "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)" },
-];
-
 function getScheduleKicker(item: PortalScheduleItem): string {
   if (item.title && item.title.toLowerCase().startsWith("lấy mẫu")) {
     return "Lấy mẫu";
@@ -217,84 +210,73 @@ export default function HomeTab({
     <div className="pt-stack">
       <section className="pt-hero-shell" aria-label="Tổng quan hộ canh tác">
         <div className="pt-spec-rows">
-          <header className="pt-spec-head">
-            <span className="pt-spec-kicker">Chủ hộ</span>
-            <h1 className="pt-spec-title">{household.name}</h1>
+          <header className="pt-spec-row is-no-meta">
+            <span className="pt-spec-primary">Chủ hộ</span>
+            <span className="pt-spec-sub">HTX Cư Né</span>
+            <h1 className="pt-spec-val">{household.name}</h1>
           </header>
 
-          <div className="pt-spec-zone-row">
-            <span className="pt-spec-kicker">Mã vùng</span>
-            <span className="pt-spec-val-code">{pucCode}</span>
+          <div className="pt-spec-row">
+            <span className="pt-spec-primary">Mã vùng</span>
+            <span className="pt-spec-meta">Mã vùng trồng PUC</span>
+            <span className="pt-spec-sub">Định danh xuất khẩu</span>
+            <span className="pt-spec-val">{pucCode}</span>
           </div>
 
           <button
             type="button"
-            className="pt-spec-metric"
+            className="pt-spec-row is-interactive"
             onClick={() => onNavigate("plots")}
           >
-            <span className="pt-spec-metric-bar">
-              <span className="pt-spec-kicker">Số thửa</span>
-            </span>
-            <span className="pt-spec-metric-body">
-              <span aria-hidden="true" />
-              <span className="pt-spec-big-val">
-                <span className="pt-spec-big-num">{household.plotCount}</span>
-                <span className="pt-spec-unit">Thửa đất</span>
-              </span>
-            </span>
+            <span className="pt-spec-primary">Số thửa</span>
+            <span className="pt-spec-meta">Thửa đất</span>
+            <span className="pt-spec-sub">Thửa đất canh tác</span>
+            <span className="pt-spec-val">{household.plotCount}</span>
           </button>
 
           <button
             type="button"
-            className="pt-spec-metric"
+            className="pt-spec-row is-interactive"
             onClick={() => onNavigate("plots")}
           >
-            <span className="pt-spec-metric-bar">
-              <span className="pt-spec-kicker">Diện tích</span>
-            </span>
-            <span className="pt-spec-metric-body">
-              <span aria-hidden="true" />
-              <span className="pt-spec-big-val">
-                <span className="pt-spec-big-num">{areaFormatted}</span>
-                <span className="pt-spec-unit">ha</span>
-              </span>
-            </span>
+            <span className="pt-spec-primary">Diện tích</span>
+            <span className="pt-spec-meta">Hecta (ha)</span>
+            <span className="pt-spec-sub">Tổng diện tích</span>
+            <span className="pt-spec-val">{areaFormatted}</span>
           </button>
 
           <button
             type="button"
-            className="pt-spec-metric"
+            className="pt-spec-row is-interactive"
             onClick={() => onNavigate("stamps")}
           >
-            <span className="pt-spec-metric-bar">
-              <span className="pt-spec-kicker">Sản lượng</span>
+            <span className="pt-spec-primary">Sản lượng</span>
+            <span className="pt-spec-meta">
+              {harvestDisplay.unit === "tấn" ? "Tấn xuất kho" : "Kg xuất kho"}
             </span>
-            <span className="pt-spec-metric-body">
-              <span aria-hidden="true" />
-              <span className="pt-spec-big-val">
-                <span className="pt-spec-big-num">{harvestDisplay.num}</span>
-                <span className="pt-spec-unit">{harvestDisplay.unit}</span>
-              </span>
-            </span>
+            <span className="pt-spec-sub">Sản lượng thu hoạch</span>
+            <span className="pt-spec-val">{harvestDisplay.num}</span>
           </button>
 
-          <div className="pt-spec-detail-row">
-            <span className="pt-spec-kicker">Chứng nhận</span>
-            <div className="pt-spec-val-stack">
-              <span>{status.label}</span>
-            </div>
+          <div className="pt-spec-row is-no-meta">
+            <span className="pt-spec-primary">Chứng nhận</span>
+            <span className="pt-spec-sub">Tiêu chuẩn VietGAP</span>
+            <span className="pt-spec-val">{status.label}</span>
           </div>
 
-          <div className="pt-spec-detail-row">
-            <span className="pt-spec-kicker">Địa bàn</span>
-            <div className="pt-spec-val-stack">
-              <span>{household.villageName || "HTX Cư Né"}</span>
-              {household.villageLeader && (
-                <span>
+          <div className="pt-spec-row">
+            <span className="pt-spec-primary">Địa bàn</span>
+            <span className="pt-spec-meta">
+              {household.villageLeader ? (
+                <>
                   <span>Trưởng thôn</span>: {household.villageLeader}
-                </span>
+                </>
+              ) : (
+                "HTX Cư Né"
               )}
-            </div>
+            </span>
+            <span className="pt-spec-sub">Khu vực canh tác</span>
+            <span className="pt-spec-val">{household.villageName || "HTX Cư Né"}</span>
           </div>
         </div>
 
@@ -392,27 +374,15 @@ export default function HomeTab({
           <p className="pt-muted pt-schedule-empty">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
         ) : (
           <div className="pt-vietgap-timeline" role="list">
-            {schedule.data.data.slice(0, 4).map((item, idx, arr) => {
-              const theme = SCHEDULE_THEMES[idx % SCHEDULE_THEMES.length];
-              const isLast = idx === arr.length - 1;
+            {schedule.data.data.slice(0, 4).map((item) => {
               const kicker = getScheduleKicker(item);
               const conciseTitle = getConciseScheduleTitle(item.title);
               const relNote = relativeDayLabel(item.scheduledOn);
               const formattedDate = formatDate(item.scheduledOn);
 
               return (
-                <div key={item.id} className="pt-vietgap-step">
+                <div key={item.id} className="pt-vietgap-step" role="listitem">
                   <div className="pt-vietgap-segment">
-                    <div className="pt-vietgap-track-col" aria-hidden="true">
-                      <div
-                        className="pt-vietgap-capsule pt-home-timeline-capsule"
-                        style={{ background: theme.capsuleBg }}
-                      >
-                        <div className="pt-vietgap-dot" />
-                        <div className="pt-vietgap-dot" />
-                      </div>
-                    </div>
-
                     <div
                       className="pt-training-clean-card"
                       role="button"
@@ -436,16 +406,6 @@ export default function HomeTab({
                       </div>
                     </div>
                   </div>
-
-                  {!isLast && (
-                    <div className="pt-vietgap-transfer" aria-hidden="true">
-                      <div className="pt-vietgap-transfer-track">
-                        <div className="pt-vietgap-mini-dot" />
-                        <div className="pt-vietgap-mini-dot" />
-                        <div className="pt-vietgap-mini-dot" />
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}

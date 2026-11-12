@@ -482,6 +482,11 @@ function PortalAppContent() {
         }
       }
     }
+    if (item.kind === "system") {
+      setNotifOpen(false);
+      setSupportOpen(true);
+      return;
+    }
     const target = resolveNotificationTarget(item);
     setNotifOpen(false);
     navigate(target);
@@ -528,7 +533,7 @@ function PortalAppContent() {
           {/* Logo thương hiệu HTX Cư Né (hiển thị trên Desktop/Laptop) */}
           <Link href={INTRO_PATH} className="pt-brand" aria-label="HTX Cư Né – về trang giới thiệu" title="Về trang giới thiệu">
             <span className="pt-brand-mark" aria-hidden="true">
-              <Image src="/logo.png" alt="" width={30} height={30} />
+              <Image src="/newlogo.png" alt="" width={32} height={32} />
             </span>
             <div className="pt-brand-text">
               <strong>HTX Cư Né</strong>
@@ -805,7 +810,7 @@ function PortalAppContent() {
                   <Globe size={21} strokeWidth={2.1} />
                 </span>
                 <span className="pt-profile-action-title">{t("Ngôn ngữ")}</span>
-                <div className="pt-lang-seg">
+                <div className="pt-lang-seg" data-no-translate translate="no">
                   <button
                     type="button"
                     className={`pt-lang-seg-btn ${lang === "vi" ? "is-active" : ""}`}
@@ -859,7 +864,7 @@ function PortalAppContent() {
                 title={t("Về trang giới thiệu HTX Cư Né")}
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">
-                  <Image src="/logo.png" alt="" width={24} height={24} />
+                  <Image src="/newlogo.png" alt="" width={24} height={24} />
                 </span>
                 <span className="pt-profile-action-title">{t("Trang giới thiệu HTX")}</span>
                 <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
@@ -995,7 +1000,7 @@ function PortalAppContent() {
                   return (
                     <li
                       key={item.id}
-                      className={`pt-notif-item ${isUnread ? "is-unread" : ""}`}
+                      className={`pt-notif-item ${isUnread ? "is-unread" : ""} ${item.kind === "system" ? "is-system" : ""}`.trim()}
                       role="button"
                       tabIndex={0}
                       onClick={() => void handleMarkRead(item)}
@@ -1110,7 +1115,6 @@ function PortalAppContent() {
       <SystemSupportModal
         open={supportOpen}
         onClose={closeSupport}
-        household={overview?.household}
       />
 
       <RadialNavWheel

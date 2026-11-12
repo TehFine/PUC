@@ -13,22 +13,10 @@ import { EmptyState, SectionDivider, StateBlock } from "./ui";
 const LabTestCertificateModal = dynamic(() => import("./LabTestCertificateModal"), { ssr: false });
 
 const ROUTE_THEMES = [
-  {
-    capsuleBg: "linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%)",
-    titleColor: "#92400e",
-  },
-  {
-    capsuleBg: "linear-gradient(180deg, #f43f5e 0%, #fb7185 100%)",
-    titleColor: "#9f1239",
-  },
-  {
-    capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
-    titleColor: "#065f46",
-  },
-  {
-    capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
-    titleColor: "#1e40af",
-  },
+  { titleColor: "#92400e" },
+  { titleColor: "#9f1239" },
+  { titleColor: "#065f46" },
+  { titleColor: "#1e40af" },
 ];
 
 export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?: (tab: PortalTabId) => void }) {
@@ -94,21 +82,13 @@ export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?
         )}
         {schedule.data && schedule.data.data.length > 0 && (
           <div className="pt-transit-timeline" role="list">
-            {schedule.data.data.map((item, idx, arr) => {
+            {schedule.data.data.map((item, idx) => {
               const theme = ROUTE_THEMES[idx % ROUTE_THEMES.length];
-              const isLast = idx === arr.length - 1;
               const rel = relativeDayLabel(item.scheduledOn);
 
               return (
-                <div key={item.id} className="pt-transit-step">
+                <div key={item.id} className="pt-transit-step" role="listitem">
                   <div className="pt-transit-segment">
-                    <div className="pt-transit-track-col" aria-hidden="true">
-                      <div className="pt-transit-capsule" style={{ background: theme.capsuleBg }}>
-                        <div className="pt-transit-dot" />
-                        <div className="pt-transit-dot" />
-                      </div>
-                    </div>
-
                     <div className="pt-transit-content">
                       <div className="pt-transit-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                         <h3 className="pt-transit-title" style={{ color: theme.titleColor }}>
@@ -130,16 +110,6 @@ export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?
                       {item.note && <p className="pt-transit-desc">{item.note}</p>}
                     </div>
                   </div>
-
-                  {!isLast && (
-                    <div className="pt-transit-transfer" aria-hidden="true">
-                      <div className="pt-transit-transfer-track">
-                        <div className="pt-transit-mini-dot" />
-                        <div className="pt-transit-mini-dot" />
-                        <div className="pt-transit-mini-dot" />
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}

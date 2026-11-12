@@ -44,6 +44,7 @@ const EXACT_MAP: Record<string, string> = {
 
   // ─── Tìm kiếm chức năng ───
   "Tìm chức năng": "搜索功能",
+  "Tìm kiếm chức năng...": "搜索功能...",
   "Bạn muốn làm gì?": "您想办理什么业务？",
   "Gợi ý": "常用推荐",
   "Ghi nhật ký canh tác": "记录农事日志",
@@ -76,6 +77,8 @@ const EXACT_MAP: Record<string, string> = {
   "Tài khoản": "账户",
   "Đổi mật khẩu": "修改密码",
   "Đổi ngôn ngữ (Tiếng Việt / 中文)": "切换语言 (Tiếng Việt / 中文)",
+  "Tiếng Việt": "Tiếng Việt",
+  "中文": "中文",
   "Gọi hỗ trợ, hotline HTX": "联系技术支持与合作社热线",
   "Hỗ trợ": "帮助支持",
   "Kết quả phù hợp": "匹配结果",
@@ -253,6 +256,10 @@ const EXACT_MAP: Record<string, string> = {
   "Tấn xuất kho": "已出库 (吨)",
   "Chứng nhận": "果园认证",
   "Mã vùng": "注册代码",
+  "Định danh xuất khẩu": "出口溯源标识",
+  "Thửa đất canh tác": "果园种植地块",
+  "Trạng thái vùng": "果园认证状态",
+  "Tiêu chuẩn VietGAP": "VietGAP 认证标准",
   "Hộ canh tác sầu riêng liên kết Hợp tác xã Cư Né, Đắk Lắk":
     "多乐省居内合作社 (Cư Né, Đắk Lắk) 签约榴莲种植户",
   "Thửa đất của hộ": "本户果园地块",
@@ -494,13 +501,11 @@ const EXACT_MAP: Record<string, string> = {
   "Mô tả công việc (ví dụ: Bón phân hữu cơ vi sinh 5 kg/gốc, tưới ẩm, tỉa cành thông thoáng...)":
     "描述作业内容（例如：每株施用有机微生物肥 5 公斤、灌溉保湿、修剪通风枝条...）",
   "Tọa độ GPS vườn (tùy chọn)": "果园 GPS 坐标（选填）",
-  "Chưa định vị (khuyến nghị gắn GPS xác thực tại vườn)": "尚未定位（建议在果园现场获取 GPS 认证）",
+  "Chưa định vị": "尚未定位",
   "Lấy vị trí định vị của vườn hiện tại": "获取当前果园 GPS 定位",
-  "Thiết bị hoặc trình duyệt không hỗ trợ định vị GPS.": "当前设备或浏览器不支持 GPS 定位。",
-  "Chưa cấp quyền vị trí GPS. Bạn vẫn có thể lưu nhật ký không kèm tọa độ.":
-    "未授予 GPS 位置权限，您仍可保存不含坐标的农事日志。",
-  "Không lấy được tín hiệu GPS hiện tại. Bạn vẫn có thể lưu nhật ký.":
-    "无法获取当前 GPS 信号，您仍可直接保存农事日志。",
+  "Thiết bị không hỗ trợ GPS": "设备不支持 GPS",
+  "Chưa cấp quyền vị trí GPS": "未授予 GPS 定位权限",
+  "Không lấy được tín hiệu GPS": "无法获取 GPS 信号",
   "Đang lấy GPS…": "正在获取 GPS…",
   "Cập nhật GPS": "更新 GPS",
   "Định vị vườn": "果园定位",
@@ -600,6 +605,7 @@ const EXACT_MAP: Record<string, string> = {
   "Lô hàng xuất kho": "出库批次与溯源",
   "Lô hàng & Mã QR": "出库批次与二维码",
   "Chưa có lô thu hoạch nào của hộ bạn được xuất kho.": "您的农户名下暂无已出库的采收批次。",
+  "Chưa có lô thu hoạch nào được xuất kho.": "暂无已出库的采收批次。",
   "Khai báo đợt thu hái sầu riêng gửi HTX": "向合作社提交本批次榴莲采收申报",
   "Thửa đất canh tác thu hái": "采收地块编号",
   "Ngày cắt trái": "采果日期",

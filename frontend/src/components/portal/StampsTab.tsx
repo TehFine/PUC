@@ -21,7 +21,6 @@ interface HarvestRule {
   title: string;
   desc: string;
   nodeType: "active" | "warn" | "danger";
-  capsuleBg: string;
   cardClass: string;
 }
 
@@ -32,7 +31,6 @@ const HARVEST_RULES: HarvestRule[] = [
     title: "HTX tính toán ngày thu hoạch & gửi thông báo",
     desc: "Khi đến mùa thu hoạch, HTX trực tiếp tính toán ngày cắt dự kiến dựa trên nhật ký chăm sóc và thời gian cách ly thuốc của hộ dân, sau đó gửi thông báo lịch thu hoạch qua hệ thống.",
     nodeType: "active",
-    capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
     cardClass: "pt-vietgap-card-frequency",
   },
   {
@@ -41,7 +39,6 @@ const HARVEST_RULES: HarvestRule[] = [
     title: "Thẩm định tồn dư BVTV & Phân loại quả",
     desc: "Cán bộ kỹ thuật HTX cùng Kiểm tra viên KCS trực tiếp về vườn kiểm tra cách ly thuốc BVTV (thời gian PHI) và cân đo phân loại.",
     nodeType: "warn",
-    capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
     cardClass: "pt-vietgap-card-phi",
   },
   {
@@ -50,7 +47,6 @@ const HARVEST_RULES: HarvestRule[] = [
     title: "Kích hoạt tem niêm phong điện tử",
     desc: "HTX nghiệm thu xuất khẩu chính ngạch và kích hoạt tem niêm phong điện tử truy xuất nguồn gốc khi đóng gói xuất xưởng.",
     nodeType: "danger",
-    capsuleBg: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)",
     cardClass: "pt-vietgap-card-banned",
   },
 ];
@@ -115,35 +111,17 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           </h2>
         </div>
         <div className="pt-vietgap-timeline" role="list">
-          {HARVEST_RULES.map((rule, idx, arr) => {
-            const isLast = idx === arr.length - 1;
-            return (
-              <div key={rule.id} className="pt-vietgap-step">
-                <div className="pt-vietgap-segment">
-                  <div className="pt-vietgap-track-col" aria-hidden="true">
-                    <div className="pt-vietgap-capsule" style={{ background: rule.capsuleBg }}>
-                      <div className="pt-vietgap-dot" />
-                      <div className="pt-vietgap-dot" />
-                    </div>
-                  </div>
-                  <div className={`pt-vietgap-content pt-vietgap-card ${rule.cardClass}`}>
-                    <span className="pt-timeline-kicker">{rule.kicker}</span>
-                    <h3 className="pt-timeline-title">{rule.title}</h3>
-                    <p className="pt-timeline-desc">{rule.desc}</p>
-                  </div>
+          {HARVEST_RULES.map((rule) => (
+            <div key={rule.id} className="pt-vietgap-step" role="listitem">
+              <div className="pt-vietgap-segment">
+                <div className={`pt-vietgap-content pt-vietgap-card ${rule.cardClass}`}>
+                  <span className="pt-timeline-kicker">{rule.kicker}</span>
+                  <h3 className="pt-timeline-title">{rule.title}</h3>
+                  <p className="pt-timeline-desc">{rule.desc}</p>
                 </div>
-                {!isLast && (
-                  <div className="pt-vietgap-transfer" aria-hidden="true">
-                    <div className="pt-vietgap-transfer-track">
-                      <div className="pt-vietgap-mini-dot" />
-                      <div className="pt-vietgap-mini-dot" />
-                      <div className="pt-vietgap-mini-dot" />
-                    </div>
-                  </div>
-                )}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </section>
 
@@ -164,7 +142,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
           <StateBlock loading={harvest.loading} error={harvest.error} />
           {harvest.data && harvest.data.data.length === 0 && (
             <EmptyState icon="harvest">
-              Chưa có lô thu hoạch nào của hộ bạn được xuất kho. Khi đến mùa vụ, HTX sẽ tính toán ngày thu hoạch dựa trên nhật ký chăm sóc và thông báo đến bạn qua hệ thống.
+              Chưa có lô thu hoạch nào được xuất kho.
             </EmptyState>
           )}
           {harvest.data && harvest.data.data.length > 0 && (

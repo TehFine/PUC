@@ -53,7 +53,7 @@ export function EmptyState({ icon, children }: { icon: EmptyIconName; children: 
   if (icon === "none") {
     return (
       <div className="pt-empty">
-        <RadialPngIcon src="/none.png" size={44} className="pt-empty-none-icon" />
+        <RadialPngIcon src="/none.png" size={44} className="pt-empty-icon" />
         <p>{children}</p>
       </div>
     );
@@ -61,9 +61,7 @@ export function EmptyState({ icon, children }: { icon: EmptyIconName; children: 
   if (icon === "recyclebin") {
     return (
       <div className="pt-empty">
-        <span aria-hidden="true">
-          <RadialPngIcon src="/recyclebin.png" size={25} />
-        </span>
+        <RadialPngIcon src="/recyclebin.png" size={34} className="pt-empty-icon" />
         <p>{children}</p>
       </div>
     );
@@ -71,9 +69,7 @@ export function EmptyState({ icon, children }: { icon: EmptyIconName; children: 
   if (icon === "empty") {
     return (
       <div className="pt-empty">
-        <span aria-hidden="true">
-          <RadialPngIcon src="/empty.png" size={23} />
-        </span>
+        <RadialPngIcon src="/empty.png" size={32} className="pt-empty-icon" />
         <p>{children}</p>
       </div>
     );
@@ -81,7 +77,7 @@ export function EmptyState({ icon, children }: { icon: EmptyIconName; children: 
   const Icon = EMPTY_ICONS[icon];
   return (
     <div className="pt-empty">
-      <span aria-hidden="true">
+      <span className="pt-empty-icon" aria-hidden="true">
         <Icon />
       </span>
       <p>{children}</p>
@@ -266,12 +262,8 @@ export function Sheet({
           aria-modal="true"
           aria-label={title}
         >
-          {/* Vùng thanh cầm & tiêu đề */}
+          {/* Vùng tiêu đề (hỗ trợ kéo xuống để đóng) */}
           <div ref={dragZoneRef} className="pt-sheet-topbar">
-            <div className="pt-sheet-handle-zone" title="Kéo hoặc vuốt xuống để đóng">
-              <div className="pt-sheet-handle-bar" />
-            </div>
-
             <header className="pt-sheet-head">
               {variant === "drawer" && (
                 <button
@@ -332,58 +324,48 @@ export function Field({ label, htmlFor, children }: { label: string; htmlFor: st
 }
 
 /**
- * Đồng bộ lớp mặt nạ mờ dần ở 2 đầu (kiểu thanh điều hướng chế độ Camera trên iPhone)
+ * Giữ lớp mờ dần tinh tế cố định ở 2 cạnh khi thanh tab tràn ngang
  * và tự động trượt mượt đưa nút tab đang chọn về vùng trung tâm khi bấm.
  */
 function useCameraDialFade(
   trackRef: React.RefObject<HTMLDivElement | null>,
   activeKey?: string,
-  maxFade = 52,
+  containerRef?: React.RefObject<HTMLDivElement | null>,
 ) {
   const hasMountedRef = useRef(false);
 
-  const syncFade = useCallback(() => {
+  const syncOverflow = useCallback(() => {
     const el = trackRef.current;
     if (!el) return;
-    const overflow = el.scrollWidth - el.clientWidth;
-    if (overflow <= 2) {
-      el.classList.remove("has-edge-fade");
-      el.style.setProperty("--seg-fade-l", "0px");
-      el.style.setProperty("--seg-fade-r", "0px");
-      return;
-    }
-    el.classList.add("has-edge-fade");
-    const sl = Math.max(0, el.scrollLeft);
-    const sr = Math.max(0, overflow - sl);
-    const fadeL = sl <= 1 ? 0 : Math.min(maxFade, Math.round(sl * 1.6));
-    const fadeR = sr <= 1 ? 0 : Math.min(maxFade, Math.round(sr * 1.6));
-    el.style.setProperty("--seg-fade-l", `${fadeL}px`);
-    el.style.setProperty("--seg-fade-r", `${fadeR}px`);
-  }, [trackRef, maxFade]);
+    const host = containerRef?.current ?? el;
+    const style = window.getComputedStyle(el);
+    const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const intrinsicWidth = el.scrollWidth - padX;
+    const isOverflowing = intrinsicWidth - el.clientWidth > 2;
+    host.classList.toggle("has-edge-fade", isOverflowing);
+  }, [trackRef, containerRef]);
 
   useEffect(() => {
     const el = trackRef.current;
     if (!el) return;
 
-    syncFade();
-    const rafId = requestAnimationFrame(syncFade);
-    el.addEventListener("scroll", syncFade, { passive: true });
+    syncOverflow();
+    const rafId = requestAnimationFrame(syncOverflow);
 
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(syncFade);
+      ro = new ResizeObserver(syncOverflow);
       ro.observe(el);
     } else {
-      window.addEventListener("resize", syncFade);
+      window.addEventListener("resize", syncOverflow);
     }
 
     return () => {
       cancelAnimationFrame(rafId);
-      el.removeEventListener("scroll", syncFade);
       if (ro) ro.disconnect();
-      else window.removeEventListener("resize", syncFade);
+      else window.removeEventListener("resize", syncOverflow);
     };
-  }, [trackRef, syncFade]);
+  }, [trackRef, syncOverflow]);
 
   useEffect(() => {
     const el = trackRef.current;
@@ -391,6 +373,7 @@ function useCameraDialFade(
     const isFirst = !hasMountedRef.current;
     hasMountedRef.current = true;
 
+    syncOverflow();
     const overflow = el.scrollWidth - el.clientWidth;
     if (overflow > 2) {
       const activeBtn = el.querySelector<HTMLElement>(
@@ -406,11 +389,10 @@ function useCameraDialFade(
         });
       }
     }
-    requestAnimationFrame(syncFade);
-  }, [activeKey, trackRef, syncFade]);
+  }, [activeKey, trackRef, syncOverflow]);
 }
 
-/** Thanh chứa các nút tab con với hiệu ứng mờ dần ở 2 đầu như Camera iPhone. */
+/** Thanh chứa các nút tab con với hiệu ứng mờ dần cố định ở 2 cạnh dock. */
 export function SegmentedTabs({
   ariaLabel,
   activeKey,
@@ -422,24 +404,27 @@ export function SegmentedTabs({
   className?: string;
   children: ReactNode;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
-  useCameraDialFade(trackRef, activeKey, 52);
+  useCameraDialFade(trackRef, activeKey, containerRef);
 
   return (
-    <div className={`pt-segmented ${className}`.trim()}>
-      <div
-        ref={trackRef}
-        className="pt-segmented-track"
-        role="tablist"
-        aria-label={ariaLabel}
-      >
-        {children}
+    <div ref={containerRef} className={`pt-segmented ${className}`.trim()}>
+      <div className="pt-segmented-viewport">
+        <div
+          ref={trackRef}
+          className="pt-segmented-track"
+          role="tablist"
+          aria-label={ariaLabel}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
 }
 
-/** Thanh bộ lọc chip ngang với hiệu ứng mờ dần ở 2 đầu khi tràn màn hình. */
+/** Thanh bộ lọc chip ngang với hiệu ứng mờ dần cố định ở 2 đầu khi tràn màn hình. */
 export function FadeFilterBar({
   ariaLabel,
   activeKey,
@@ -452,7 +437,7 @@ export function FadeFilterBar({
   children: ReactNode;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
-  useCameraDialFade(trackRef, activeKey, 48);
+  useCameraDialFade(trackRef, activeKey);
 
   return (
     <div

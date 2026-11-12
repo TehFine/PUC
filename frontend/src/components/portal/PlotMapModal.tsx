@@ -670,7 +670,6 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               : "Vuốt lên để mở rộng hoặc vuốt xuống để tắt"
           }
         >
-          <div className="pt-mapmodal-popup-handle" aria-hidden="true" />
           <div className="pt-mapmodal-popup-header-row">
             <div className="pt-mapmodal-popup-header-main">
               <div className="pt-mapmodal-popup-title-line">

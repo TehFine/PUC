@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Search } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortalLang } from "./i18n";
@@ -325,7 +325,7 @@ function SearchPanel({
       }}
     >
       <label className="pt-search-field">
-        <RadialPngIcon src="/search.png" size={18} />
+        <Search size={17} strokeWidth={1.85} className="pt-search-field-icon" aria-hidden="true" />
         <input
           ref={inputRef}
           type="search"
@@ -334,7 +334,7 @@ function SearchPanel({
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          placeholder={t("Bạn muốn làm gì?")}
+          placeholder={t("Tìm kiếm chức năng...")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {

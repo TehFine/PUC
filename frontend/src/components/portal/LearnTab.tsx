@@ -48,41 +48,6 @@ function getRelativeScheduleNote(dateStr: string | null): string {
   return "";
 }
 
-const TRAINING_THEMES = [
-  {
-    badgeBg: "#f59e0b",
-    badgeColor: "#ffffff",
-    capsuleBg: "linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%)",
-    tagBg: "#fef3c7",
-    tagColor: "#b45309",
-    titleColor: "#92400e",
-  },
-  {
-    badgeBg: "#f43f5e",
-    badgeColor: "#ffffff",
-    capsuleBg: "linear-gradient(180deg, #f43f5e 0%, #fb7185 100%)",
-    tagBg: "#ffe4e6",
-    tagColor: "#be123c",
-    titleColor: "#9f1239",
-  },
-  {
-    badgeBg: "#10b981",
-    badgeColor: "#ffffff",
-    capsuleBg: "linear-gradient(180deg, #10b981 0%, #34d399 100%)",
-    tagBg: "#d1fae5",
-    tagColor: "#047857",
-    titleColor: "#065f46",
-  },
-  {
-    badgeBg: "#3b82f6",
-    badgeColor: "#ffffff",
-    capsuleBg: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)",
-    tagBg: "#dbeafe",
-    tagColor: "#1d4ed8",
-    titleColor: "#1e40af",
-  },
-];
-
 function getTrainingDetailedInfo(title: string) {
   const lower = title.toLowerCase();
   if (lower.includes("vietgap")) {
@@ -417,9 +382,7 @@ export function TrainingList() {
 
         {!loading && !error && upcoming.length > 0 && (
           <div className="pt-transit-timeline" role="list">
-            {upcoming.map((item, idx, arr) => {
-              const theme = TRAINING_THEMES[idx % TRAINING_THEMES.length];
-              const isLast = idx === arr.length - 1;
+            {upcoming.map((item) => {
               const rel = getRelativeScheduleNote(item.heldOn);
               const kicker = getTrainingKicker(item.title);
               const formattedDate = formatDate(item.heldOn);
@@ -429,18 +392,8 @@ export function TrainingList() {
               const myStatusInfo = item.myStatus ? TRAINING_MY_STATUS[item.myStatus] : null;
 
               return (
-                <div key={item.id} className="pt-transit-step">
+                <div key={item.id} className="pt-transit-step" role="listitem">
                   <div className="pt-transit-segment">
-                    <div className="pt-transit-track-col" aria-hidden="true">
-                      <div
-                        className="pt-transit-capsule"
-                        style={{ background: theme.capsuleBg }}
-                      >
-                        <div className="pt-transit-dot" />
-                        <div className="pt-transit-dot" />
-                      </div>
-                    </div>
-
                     <div
                       className="pt-training-clean-card"
                       role="button"
@@ -473,16 +426,6 @@ export function TrainingList() {
                       </div>
                     </div>
                   </div>
-
-                  {!isLast && (
-                    <div className="pt-transit-transfer" aria-hidden="true">
-                      <div className="pt-transit-transfer-track">
-                        <div className="pt-transit-mini-dot" />
-                        <div className="pt-transit-mini-dot" />
-                        <div className="pt-transit-mini-dot" />
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}

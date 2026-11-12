@@ -257,9 +257,6 @@ export default function RadialNavWheel({
         className="pt-radial-sheet"
       >
         <div ref={headRef} className="pt-radial-sheet-head">
-          <div className="pt-sheet-handle-zone" aria-hidden="true" style={{ paddingTop: 0, paddingBottom: 10 }}>
-            <div className="pt-sheet-handle-bar" />
-          </div>
           <h2 className="pt-radial-sheet-title">{t("Điều hướng")}</h2>
         </div>
 
