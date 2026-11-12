@@ -279,15 +279,15 @@ export default function EditorialHero() {
           </button>
         </div>
 
-        {/* Hàng 2 – Cột 1 & 2: Ảnh sầu riêng nghệ thuật bên trái */}
+        {/* Hàng 2 – Cột 1 & 2: Ảnh sầu riêng tách múi thực tế ngay tại vùng trồng Cư Né */}
         <div className="eh-cell-media is-top-left">
           <Image
-            src="/landing/durian-editorial-hero.jpg"
-            alt="Sầu riêng Đắk Lắk chín vàng tách múi đặt trên kệ gỗ sồi ấm trong không gian kiến trúc tối giản"
+            src="/landing/real-hero-cune.jpg"
+            alt="Sầu riêng Cư Né chín vàng tách múi đặt trên bàn gỗ mộc giữa triền đồi sầu riêng đất đỏ Đắk Lắk"
             fill
             priority
             sizes="(max-width: 960px) 100vw, 50vw"
-            style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 78%)" }}
+            style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 62%)" }}
           />
         </div>
 
@@ -350,15 +350,15 @@ export default function EditorialHero() {
           </div>
         </div>
 
-        {/* Hàng 3 – Cột 3 & 4: Ảnh toàn cảnh đồi sầu riêng nắng vàng xen kẽ bên phải */}
+        {/* Hàng 3 – Cột 3 & 4: Ảnh hộ dân và cán bộ HTX ghi nhật ký & kiểm tra tem QR tại vườn */}
         <div className="eh-cell-media is-bottom-right">
           <Image
-            src="/landing/hero.jpg"
-            alt="Toàn cảnh đồi sầu riêng mang trái trong sương sớm nắng vàng tại Đắk Lắk"
+            src="/landing/real-hero-diary-qr.jpg"
+            alt="Nhà vườn và cán bộ kỹ thuật HTX Cư Né ghi nhật ký mùa vụ và kiểm tra tem QR lô sầu riêng ngay trên điện thoại tại vườn"
             fill
             priority
             sizes="(max-width: 960px) 100vw, 50vw"
-            style={{ objectFit: "cover", objectPosition: "center 52%" }}
+            style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 38%)" }}
           />
         </div>
       </section>

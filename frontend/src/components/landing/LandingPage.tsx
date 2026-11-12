@@ -42,11 +42,11 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
           <div className="sw-grid sw-checker-row">
             <div className="sw-media sw-col-1-2 is-pos-estate">
               <Image
-                src="/landing/lux-estate-dawn.jpg"
-                alt="Toàn cảnh triền đồi sầu riêng trong sương sớm cùng nhà trạm kiến trúc tối giản tại Đắk Lắk"
+                src="/landing/real-map-survey.jpg"
+                alt="Cán bộ kỹ thuật HTX đo đạc tọa độ GPS và đối chiếu bản đồ ranh giới từng thửa vườn sầu riêng tại Krông Búk, Đắk Lắk"
                 fill
                 sizes="(max-width: 960px) 100vw, 50vw"
-                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 56%)" }}
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 38%)" }}
               />
             </div>
             <div className="sw-cell sw-col-3 sw-between">
@@ -75,13 +75,13 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
                 </p>
               </div>
             </div>
-            <div className="sw-media sw-col-3-4">
+            <div className="sw-media sw-col-3-4 is-pos-blossom">
               <Image
-                src="/landing/lux-blossom.jpg"
-                alt="Chùm hoa sầu riêng màu kem ngà bung nở trên cành gỗ mộc trong nắng sớm"
+                src="/landing/real-blossom-care.jpg"
+                alt="Nhà vườn kiểm tra chùm hoa sầu riêng đang nở và ghi chép lịch chăm sóc mùa vụ tại vườn"
                 fill
                 sizes="(max-width: 960px) 100vw, 50vw"
-                style={{ objectFit: "cover", objectPosition: "center 52%" }}
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 36%)" }}
               />
             </div>
           </div>
@@ -116,11 +116,11 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
             <div className="sw-cell sw-col-2 sw-empty-cell" aria-hidden="true" />
             <div className="sw-media sw-col-3 is-pos-arils">
               <Image
-                src="/landing/lux-arils-square.jpg"
-                alt="Múi sầu riêng chín vàng đặt trên đĩa gốm thủ công bên trái sầu riêng tách vỏ trên bàn gỗ sồi"
+                src="/landing/real-lab-test.jpg"
+                alt="Kỹ thuật viên kiểm nghiệm mẫu cơm sầu riêng trên khay inox cùng cân phân tích và dụng cụ đo an toàn thực phẩm"
                 fill
                 sizes="(max-width: 960px) 100vw, 25vw"
-                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 62%)" }}
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 48%)" }}
               />
             </div>
             <div className="sw-cell sw-col-4 sw-between">
@@ -139,11 +139,11 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
           <div className="sw-grid sw-checker-row">
             <div className="sw-media sw-col-1-2 is-pos-export">
               <Image
-                src="/landing/lux-export-bench.jpg"
-                alt="Ba trái sầu riêng tuyển chọn đồng đều đặt cùng sổ tay vải lanh trên bàn gỗ sồi trong không gian kiến trúc tối giản"
+                src="/landing/real-export-packhouse.jpg"
+                alt="Nhân viên kho đóng gói phân loại sầu riêng gắn thẻ cuống đồng bộ vào thùng xuất khẩu chính ngạch"
                 fill
                 sizes="(max-width: 960px) 100vw, 50vw"
-                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 68%)" }}
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 46%)" }}
               />
             </div>
             <div className="sw-cell sw-col-3 sw-between">
@@ -174,14 +174,14 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
           </header>
 
           <div className="sw-asymmetric-bento">
-            {/* Cột 1 xuyên 2 hàng: Ảnh cành sầu riêng khổ dọc */}
+            {/* Cột 1 xuyên 2 hàng: Ảnh cây sầu riêng thực tế mang trái trên đất đỏ bazan */}
             <div className="sw-bento-tall-photo">
               <Image
-                src="/landing/lux-branch-vertical.jpg"
-                alt="Cành sầu riêng trưởng thành mang ba trái chín treo tự nhiên bên hệ lam gỗ sồi và tường đá vôi ấm"
+                src="/landing/real-puc-orchard-vertical.jpg"
+                alt="Cây sầu riêng trưởng thành sai trái trên nền đất đỏ bazan lắp hệ thống tưới nhỏ giọt tại vùng trồng Cư Né, Đắk Lắk"
                 fill
                 sizes="(max-width: 960px) 100vw, 25vw"
-                style={{ objectFit: "cover", objectPosition: "center 50%" }}
+                style={{ objectFit: "cover", objectPosition: "center 44%" }}
               />
             </div>
 
@@ -198,14 +198,14 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               </div>
             </div>
 
-            {/* Hàng 1 – Cột 3 & 4: Ảnh ngang trái sầu riêng gắn thẻ QR */}
+            {/* Hàng 1 – Cột 3 & 4: Ảnh thực tế quét mã QR trên tem cuống lô sầu riêng */}
             <div className="sw-bento-wide-photo">
               <Image
-                src="/landing/lux-qr-atelier.jpg"
-                alt="Trái sầu riêng gắn thẻ mã QR tối giản đặt trên mặt bàn đá travertine bên hệ lam gỗ sồi"
+                src="/landing/real-qr-trace-lot.jpg"
+                alt="Quét mã QR truy xuất nguồn gốc gắn trên cuống trái sầu riêng vừa thu hoạch tại nhà đóng gói"
                 fill
                 sizes="(max-width: 960px) 100vw, 50vw"
-                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 66%)" }}
+                style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 52%)" }}
               />
             </div>
 

@@ -1373,7 +1373,7 @@ html:has(.lp) body {
     margin: 0 var(--eh-pad-x);
     aspect-ratio: 3 / 4;
     border: none;
-    --mob-pos: 18% 78%;
+    --mob-pos: 49% 62%;
   }
 
   /* Khối dẫn chuyện chuyển nhịp căn giữa với khoảng nghỉ rộng trước ảnh dọc thứ 2 */
@@ -1421,6 +1421,7 @@ html:has(.lp) body {
     margin: 0 var(--eh-pad-x);
     aspect-ratio: 3 / 3.85;
     border: none;
+    --mob-pos: 58% 38%;
   }
 
   /* Khối số liệu vùng trồng 2×2 thoáng mắt bên dưới ảnh dọc thứ 2 */
