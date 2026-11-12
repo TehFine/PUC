@@ -47,6 +47,24 @@ export class NotificationsService {
     await this.notifyRoles(["farmer"], input);
   }
 
+  /** Gửi tới toàn bộ tài khoản đang hoạt động trên hệ thống (thông báo khẩn / bảo trì). */
+  async notifyAllUsers(input: NotificationInput): Promise<void> {
+    await this.insert(
+      `SELECT id FROM users WHERE status = 'active'`,
+      [input.kind, input.title, input.body ?? null, input.link ?? null],
+    );
+  }
+
+  /** Tự động đánh dấu đã đọc các thông báo hệ thống gắn với một mã sự cố khi sự cố đã khắc phục. */
+  async resolveByLink(link: string): Promise<void> {
+    try {
+      this.lastSyncedAt.clear();
+      await this.db.query("UPDATE notifications SET read_at = now() WHERE link = $1 AND read_at IS NULL", [link]);
+    } catch (error) {
+      this.logger.error(`Không cập nhật được trạng thái thông báo sự cố: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   async list(userOrId: AuthUser | number, limit = 50) {
     const userId = typeof userOrId === "number" ? userOrId : userOrId.id;
     if (typeof userOrId !== "number") {

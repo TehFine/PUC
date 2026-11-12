@@ -4,12 +4,14 @@ import { useState } from "react";
 import AccountsTab from "@/components/settings/AccountsTab";
 import AuditLogTab from "@/components/settings/AuditLogTab";
 import RolesTab from "@/components/settings/RolesTab";
+import SystemAlertsTab from "@/components/settings/SystemAlertsTab";
 
-type Tab = "accounts" | "roles" | "audit";
+type Tab = "accounts" | "roles" | "alerts" | "audit";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "accounts", label: "Tài khoản" },
   { id: "roles", label: "Phân quyền" },
+  { id: "alerts", label: "Thông báo khẩn" },
   { id: "audit", label: "Nhật ký thao tác" },
 ];
 
@@ -47,6 +49,7 @@ export default function SystemSettings() {
 
       {tab === "accounts" && <AccountsTab createTrigger={createTrigger} />}
       {tab === "roles" && <RolesTab />}
+      {tab === "alerts" && <SystemAlertsTab />}
       {tab === "audit" && <AuditLogTab />}
     </>
   );

@@ -4,6 +4,7 @@ import { heroSans } from "@/components/landing/fonts";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import NetworkStatus from "@/components/ui/NetworkStatus";
+import SystemAlertBanner from "@/components/ui/SystemAlertBanner";
 import { Toaster } from "@/components/ui/Toast";
 
 const inter = Inter({
@@ -43,7 +44,10 @@ export default function RootLayout({
     <html lang="vi" suppressHydrationWarning>
       <body className={`${inter.variable} ${heroSans.variable} font-sans antialiased`}>
         <NetworkStatus />
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <SystemAlertBanner />
+          {children}
+        </AuthProvider>
         <Toaster />
       </body>
     </html>

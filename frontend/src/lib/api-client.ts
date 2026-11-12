@@ -1,4 +1,5 @@
 import { reportRequestTime } from "@/lib/network";
+import { reportServerFailure, reportServerHealthy } from "@/lib/system-alert";
 
 export class ApiError extends Error {
   constructor(
@@ -55,6 +56,12 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       : init?.headers;
     try {
       return await fetch(`/api${path}`, { cache: "no-store", credentials: "same-origin", ...init, headers });
+    } catch (err) {
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
+      if (!isAbort) {
+        reportServerFailure("unreachable");
+      }
+      throw err;
     } finally {
       reportRequestTime(performance.now() - startedAt);
     }
@@ -76,8 +83,14 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       code?: string;
       details?: { path: string; message: string }[];
     } | null;
+    if (response.status >= 500) {
+      reportServerFailure("server_error", response.status, body?.error);
+    } else {
+      reportServerHealthy();
+    }
     throw new ApiError(body?.error ?? "Không xử lý được yêu cầu.", response.status, body?.code, body?.details);
   }
+  reportServerHealthy();
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;

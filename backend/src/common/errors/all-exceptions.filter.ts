@@ -1,6 +1,7 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from "@nestjs/common";
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger, Optional } from "@nestjs/common";
 import { ThrottlerException } from "@nestjs/throttler";
 import type { Response } from "express";
+import { NotificationsService } from "../../notifications/notifications.service";
 import { AppException, ValidationException } from "./app.exception";
 
 const PG_MESSAGES: Record<string, { status: number; message: string }> = {
@@ -33,11 +34,35 @@ interface ErrorBody {
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger("Exceptions");
+  private recentInternalErrors: number[] = [];
+  private lastInternalAlertAt = 0;
+
+  constructor(@Optional() private readonly notifications?: NotificationsService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
     const { status, body } = this.toResponse(exception);
+    if (status >= 500) {
+      this.recordInternalError();
+    }
     response.status(status).json(body);
+  }
+
+  private recordInternalError(): void {
+    if (!this.notifications) return;
+    const now = Date.now();
+    this.recentInternalErrors = this.recentInternalErrors.filter((ts) => now - ts <= 120_000);
+    this.recentInternalErrors.push(now);
+    if (this.recentInternalErrors.length >= 3 && now - this.lastInternalAlertAt >= 30 * 60_000) {
+      this.lastInternalAlertAt = now;
+      this.recentInternalErrors = [];
+      void this.notifications.notifyRoles(["admin", "htx_officer"], {
+        kind: "system",
+        title: "[KHẨN] Phát hiện sự cố lỗi máy chủ nội bộ (500)",
+        body: "Hệ thống vừa ghi nhận nhiều lỗi xử lý 500 liên tiếp. Vui lòng kiểm tra trạng thái dịch vụ trong Quản trị hệ thống.",
+        link: "/admin?section=system",
+      });
+    }
   }
 
   private toResponse(exception: unknown): { status: number; body: ErrorBody } {
