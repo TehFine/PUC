@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { homePathFor } from "@/lib/routes";
+import { lockRootScroll } from "@/lib/scroll-lock";
 import { NAV_LINKS } from "./data";
 import DwellSlideshow, { type DwellSlide } from "./DwellSlideshow";
 import { usePublic, type PublicOverview } from "./use-public";
@@ -14,6 +15,18 @@ const HERO_TOP_LEFT_SLIDES: readonly DwellSlide[] = [
     alt: "Sầu riêng Cư Né chín vàng tách múi đặt trên bàn gỗ mộc giữa triền đồi sầu riêng đất đỏ Đắk Lắk",
     objectPosition: "center 62%",
     mobileObjectPosition: "49% 62%",
+  },
+  {
+    src: "/landing/cune-orchard-village.jpg",
+    alt: "Thành viên Hợp tác xã Cư Né kiểm tra chùm trái sầu riêng giữa hàng cây đất đỏ bazan lắp hệ thống tưới tại Krông Búk, Đắk Lắk",
+    objectPosition: "center 56%",
+    desktopOnly: true,
+  },
+  {
+    src: "/landing/durian-landscape-real.jpg",
+    alt: "Toàn cảnh vùng đồi sầu riêng đất đỏ bazan Cư Né, huyện Krông Búk, tỉnh Đắk Lắk trong sương sớm",
+    objectPosition: "center 52%",
+    desktopOnly: true,
   },
   {
     src: "/landing/durian-editorial-hero.jpg",
@@ -35,6 +48,12 @@ const HERO_BOTTOM_RIGHT_SLIDES: readonly DwellSlide[] = [
     alt: "Nhà vườn và cán bộ kỹ thuật HTX Cư Né ghi nhật ký mùa vụ và kiểm tra tem QR lô sầu riêng ngay trên điện thoại tại vườn",
     objectPosition: "center 38%",
     mobileObjectPosition: "58% 38%",
+  },
+  {
+    src: "/landing/cune-trace-journey.jpg",
+    alt: "Cán bộ kiểm định HTX và nông hộ đối chiếu mã QR gắn cuống sầu riêng bên lô thùng xuất khẩu tại điểm tập kết Cư Né",
+    objectPosition: "center 44%",
+    desktopOnly: true,
   },
   {
     src: "/landing/lux-hero-trace-gallery.jpg",
@@ -186,13 +205,13 @@ export default function EditorialHero() {
 
   useEffect(() => {
     if (!menuOpen) return;
+    const unlock = lockRootScroll();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
     };
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      document.body.style.overflow = "";
+      unlock();
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [menuOpen]);
@@ -226,7 +245,7 @@ export default function EditorialHero() {
               {authenticated ? (
                 <Link
                   href={workspaceHref}
-                  className="eh-init-link is-emphasis"
+                  className="eh-init-link"
                   tabIndex={showStickyHeader ? -1 : 0}
                 >
                   Vào hệ thống
@@ -234,7 +253,7 @@ export default function EditorialHero() {
               ) : (
                 <Link
                   href="/login"
-                  className="eh-init-link is-emphasis"
+                  className="eh-init-link"
                   tabIndex={showStickyHeader ? -1 : 0}
                 >
                   Đăng nhập
@@ -304,7 +323,7 @@ export default function EditorialHero() {
               {authenticated ? (
                 <Link
                   href={workspaceHref}
-                  className="eh-init-link is-emphasis"
+                  className="eh-init-link"
                   tabIndex={showStickyHeader ? -1 : 0}
                 >
                   Vào hệ thống
@@ -312,7 +331,7 @@ export default function EditorialHero() {
               ) : (
                 <Link
                   href="/login"
-                  className="eh-init-link is-emphasis"
+                  className="eh-init-link"
                   tabIndex={showStickyHeader ? -1 : 0}
                 >
                   Đăng nhập
@@ -460,6 +479,7 @@ export default function EditorialHero() {
         <div className="eh-cell-media is-top-left">
           <DwellSlideshow
             slides={HERO_TOP_LEFT_SLIDES}
+            desktopLeadSrc="/landing/cune-orchard-village.jpg"
             priorityFirst
             staggerMs={0}
             sizes="(max-width: 768px) calc(100vw - 44px), (max-width: 960px) 100vw, 50vw"

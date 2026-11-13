@@ -17,6 +17,12 @@ const MAP_SURVEY_SLIDES: readonly DwellSlide[] = [
     mobileObjectPosition: "54% 38%",
   },
   {
+    src: "/landing/cune-gis-aerial-plots.jpg",
+    alt: "Toàn cảnh các thửa vườn sầu riêng phân ranh giới trên đất đỏ bazan Krông Búk cùng tổ kỹ thuật đo đạc mốc tọa độ GPS",
+    objectPosition: "center 56%",
+    desktopOnly: true,
+  },
+  {
     src: "/landing/lux-map-atelier.jpg",
     alt: "Sầu riêng xuất khẩu đặt cạnh bản vẽ địa hình thửa vườn và compa đồng trên bàn đá travertine bên vách gỗ sồi",
     objectPosition: "center 56%",
@@ -38,6 +44,12 @@ const BLOSSOM_CARE_SLIDES: readonly DwellSlide[] = [
     mobileObjectPosition: "66% 36%",
   },
   {
+    src: "/landing/cune-diary-phi-check.jpg",
+    alt: "Nhà vườn Cư Né cập nhật nhật ký chăm bón và theo dõi ngày cách ly an toàn trên điện thoại cạnh gốc sầu riêng đang nuôi trái",
+    objectPosition: "center 46%",
+    desktopOnly: true,
+  },
+  {
     src: "/landing/real-seasonal-care-orchard.jpg",
     alt: "Cán bộ kỹ thuật HTX cùng nhà vườn kiểm tra chùm mắt cua trên cành, điều tiết béc tưới giữ ẩm dưới gốc và đối chiếu nhật ký mùa vụ",
     objectPosition: "center 40%",
@@ -49,6 +61,12 @@ const BLOSSOM_CARE_SLIDES: readonly DwellSlide[] = [
     objectPosition: "center 38%",
     mobileObjectPosition: "50% 38%",
   },
+  {
+    src: "/stages/stage-04-nuoc.jpg",
+    alt: "Chùm bông sầu riêng nở đều trên cành lớn kết hợp béc tưới phun mưa giữ ẩm dưới tán vườn đất đỏ Đắk Lắk",
+    objectPosition: "center 44%",
+    desktopOnly: true,
+  },
 ];
 
 const HARVEST_STANDARD_SLIDES: readonly DwellSlide[] = [
@@ -57,6 +75,12 @@ const HARVEST_STANDARD_SLIDES: readonly DwellSlide[] = [
     alt: "Người nông dân đội nón lá nâng niu trái sầu riêng vừa thu hoạch bên giỏ mây trong sương sớm",
     objectPosition: "center 16%",
     mobileObjectPosition: "40% 24%",
+  },
+  {
+    src: "/landing/cune-portal-harvest-check.jpg",
+    alt: "Nhà vườn Cư Né kiểm tra độ chín và xác nhận phiếu thu hoạch trên điện thoại, xếp trái vào sọt lót xốp trên bạt sạch tại vườn",
+    objectPosition: "center 46%",
+    desktopOnly: true,
   },
   {
     src: "/stages/stage-06-thu-hoach.jpg",
@@ -80,6 +104,12 @@ const LAB_PURITY_SLIDES: readonly DwellSlide[] = [
     mobileObjectPosition: "55% 48%",
   },
   {
+    src: "/landing/cune-lab-cadmium-test.jpg",
+    alt: "Chuyên viên phòng thí nghiệm chiết tách mẫu cơm sầu riêng kiểm định chỉ tiêu Cadimi và chất cấm Vàng O trên máy sắc ký",
+    objectPosition: "center 48%",
+    desktopOnly: true,
+  },
+  {
     src: "/landing/lux-arils-square.jpg",
     alt: "Múi sầu riêng vàng ươm tự nhiên đặt trên đĩa gốm thủ công trong không gian nan gỗ sáng thoáng",
     objectPosition: "center 52%",
@@ -99,6 +129,12 @@ const EXPORT_SELECT_SLIDES: readonly DwellSlide[] = [
     alt: "Nhân viên kho đóng gói phân loại sầu riêng gắn thẻ cuống đồng bộ vào thùng xuất khẩu chính ngạch",
     objectPosition: "center 46%",
     mobileObjectPosition: "50% 46%",
+  },
+  {
+    src: "/landing/cune-gacc-export-loading.jpg",
+    alt: "Cân kiểm định trọng lượng sầu riêng gắn tem truy xuất, đóng thùng pallet và bốc xếp lên xe container lạnh xuất khẩu chính ngạch GACC",
+    objectPosition: "center 48%",
+    desktopOnly: true,
   },
   {
     src: "/landing/lux-export-bench.jpg",
@@ -122,6 +158,12 @@ const PUC_VERTICAL_SLIDES: readonly DwellSlide[] = [
     mobileObjectPosition: "center 48%",
   },
   {
+    src: "/landing/cune-puc-plot-vertical.jpg",
+    alt: "Cán bộ kỹ thuật HTX và nông hộ xã Cư Né đối chiếu hồ sơ thửa vườn bên trụ định danh mã QR tại đầu lô vườn sầu riêng đất đỏ bazan",
+    objectPosition: "center 46%",
+    desktopOnly: true,
+  },
+  {
     src: "/landing/lux-branch-vertical.jpg",
     alt: "Cành sầu riêng sai trái nổi bật giữa không gian kiến trúc đá tự nhiên và hệ lam gỗ ấm áp",
     objectPosition: "center 48%",
@@ -141,6 +183,12 @@ const QR_LOT_WIDE_SLIDES: readonly DwellSlide[] = [
     alt: "Quét mã QR truy xuất nguồn gốc gắn trên cuống trái sầu riêng vừa thu hoạch tại nhà đóng gói",
     objectPosition: "center 52%",
     mobileObjectPosition: "62% 52%",
+  },
+  {
+    src: "/landing/cune-qr-warehouse-dispatch.jpg",
+    alt: "Nhân sự kỹ thuật HTX dán tem mã QR lên cuống trái và quét máy tính bảng đối chiếu từng sọt lô nông hộ trước khi xuất kho",
+    objectPosition: "center 42%",
+    desktopOnly: true,
   },
   {
     src: "/stages/stage-07-sau-thu.jpg",
@@ -243,6 +291,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
             <div className="sw-media sw-col-1-2 is-pos-harvest">
               <DwellSlideshow
                 slides={HARVEST_STANDARD_SLIDES}
+                desktopLeadSrc="/landing/cune-portal-harvest-check.jpg"
                 mobileCollage={false}
                 sizes="(max-width: 768px) 46vw, (max-width: 960px) 100vw, 50vw"
               />
@@ -328,6 +377,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
             <div className="sw-bento-tall-photo">
               <DwellSlideshow
                 slides={PUC_VERTICAL_SLIDES}
+                desktopLeadSrc="/landing/cune-puc-plot-vertical.jpg"
                 mobileCollage={false}
                 staggerMs={0}
                 sizes="(max-width: 768px) 46vw, (max-width: 960px) 50vw, 25vw"

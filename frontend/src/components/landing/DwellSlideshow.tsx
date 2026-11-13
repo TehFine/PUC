@@ -4,11 +4,13 @@ import Image from "next/image";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
+import { useNetworkQuality, usePerformanceTier } from "@/lib/network";
 
 export interface DwellSlide {
   src: string;
@@ -17,6 +19,8 @@ export interface DwellSlide {
   objectPosition?: string;
   /** Vị trí căn khung riêng trên màn hình dọc di động <= 768px (nếu khác desktop) */
   mobileObjectPosition?: string;
+  /** Chỉ hiển thị bổ sung trên màn hình laptop/desktop (> 768px), giữ nguyên bố cục di động */
+  desktopOnly?: boolean;
 }
 
 interface DwellSlideshowProps {
@@ -30,6 +34,43 @@ interface DwellSlideshowProps {
   staggerMs?: number;
   /** Chu kỳ chuyển tiếp giữa các hình khi người dùng vẫn dừng lại xem (ms) */
   intervalMs?: number;
+  /** Ảnh ưu tiên mở đầu trên màn hình laptop/desktop ngay sau khi giải mã xong */
+  desktopLeadSrc?: string;
+}
+
+/* ─── Bộ theo dõi khung nhìn Laptop/Desktop (> 768px) dùng chung toàn trang ─── */
+
+let desktopMql: MediaQueryList | null = null;
+const desktopViewportListeners = new Set<() => void>();
+
+function subscribeDesktopViewport(listener: () => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {};
+  }
+  if (!desktopMql) {
+    desktopMql = window.matchMedia("(min-width: 769px)");
+    desktopMql.addEventListener("change", () => {
+      desktopViewportListeners.forEach((fn) => fn());
+    });
+  }
+  desktopViewportListeners.add(listener);
+  return () => {
+    desktopViewportListeners.delete(listener);
+  };
+}
+
+function getDesktopViewportSnapshot(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+  if (!desktopMql) {
+    desktopMql = window.matchMedia("(min-width: 769px)");
+  }
+  return desktopMql.matches;
+}
+
+function getDesktopViewportServerSnapshot(): boolean {
+  return false;
 }
 
 /* ─── Bộ điều phối cuộn & tầm nhìn dùng chung toàn trang (1 listener duy nhất) ─── */
@@ -161,6 +202,20 @@ function observePrewarm(el: Element, cb: PrewarmCallback): () => void {
   };
 }
 
+function normalizeTriptychSizes(sizes: string, useTriptych: boolean): string {
+  if (!useTriptych) return sizes;
+  // Trên di động <= 768px, khung ghép 3 ảnh chia 2 cột (~46vw–50vw mỗi ảnh), tránh tải ảnh 100vw thừa RAM.
+  const replaced = sizes.replace(
+    /\(max-width:\s*768px\)\s*(?:calc\([^)]+\)|100vw)/g,
+    "(max-width: 768px) 50vw",
+  );
+  if (replaced !== sizes) return replaced;
+  if (!sizes.includes("768px") && !sizes.includes("50vw")) {
+    return `(max-width: 768px) 50vw, ${sizes}`;
+  }
+  return sizes;
+}
+
 export default function DwellSlideshow({
   slides,
   sizes,
@@ -168,11 +223,35 @@ export default function DwellSlideshow({
   mobileCollage = true,
   staggerMs = 0,
   intervalMs = DEFAULT_INTERVAL_MS,
+  desktopLeadSrc,
 }: DwellSlideshowProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const [slideState, setSlideState] = useState<{ active: number; prev: number | null }>({
-    active: 0,
-    prev: null,
+  const perfTier = usePerformanceTier();
+  const netQuality = useNetworkQuality();
+  const isDesktopViewport = useSyncExternalStore(
+    subscribeDesktopViewport,
+    getDesktopViewportSnapshot,
+    getDesktopViewportServerSnapshot,
+  );
+
+  // Trên điện thoại yếu hoặc mạng chậm: tắt tự động nạp/chuyển ảnh để tiết kiệm RAM & 3G/4G;
+  // trên laptop/desktop mạng ổn định vẫn cho phép trình chiếu đầy đủ bộ ảnh.
+  const disableAutoCycle =
+    netQuality !== "good" ||
+    (!isDesktopViewport && perfTier === "lite") ||
+    (typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  const activeSlides = useMemo(
+    () => (isDesktopViewport ? slides : slides.filter((s) => !s.desktopOnly)),
+    [isDesktopViewport, slides],
+  );
+
+  const firstSrc = activeSlides[0]?.src ?? "";
+  const [slideState, setSlideState] = useState<{ activeSrc: string; prevSrc: string | null }>({
+    activeSrc: firstSrc,
+    prevSrc: null,
   });
   const [secondaryMounted, setSecondaryMounted] = useState(false);
   const [inView, setInView] = useState(false);
@@ -182,36 +261,51 @@ export default function DwellSlideshow({
     getIdleServerSnapshot,
   );
 
-  // Theo dõi các slide phụ đã giải mã xong để không bao giờ chuyển sang khung trống
-  const loadedIndicesRef = useRef<Set<number>>(new Set([0]));
+  // Theo dõi các slide đã giải mã xong theo URL để giữ trạng thái ổn định khi bổ sung slide desktop
+  const loadedSrcsRef = useRef<Set<string>>(firstSrc ? new Set([firstSrc]) : new Set());
   const [loadedVersion, setLoadedVersion] = useState(0);
+  const manualInteractedRef = useRef(false);
+  const appliedDesktopLeadRef = useRef(false);
 
-  const slideCount = slides.length;
-  const safeActive = slideState.active < slideCount ? slideState.active : 0;
-  const safePrev =
-    slideState.prev !== null && slideState.prev < slideCount && slideState.prev !== safeActive
-      ? slideState.prev
-      : null;
+  const slideCount = activeSlides.length;
+  const mobileSlideCount = useMemo(
+    () => slides.filter((s) => !s.desktopOnly).length,
+    [slides],
+  );
+  const useTriptych = mobileCollage && mobileSlideCount >= 3;
+  const effectiveSizes = useMemo(
+    () => normalizeTriptychSizes(sizes, useTriptych),
+    [sizes, useTriptych],
+  );
 
-  const markSlideLoaded = useCallback((idx: number) => {
-    if (loadedIndicesRef.current.has(idx)) return;
-    loadedIndicesRef.current.add(idx);
+  const resolvedActiveIdx = useMemo(() => {
+    const idx = activeSlides.findIndex((s) => s.src === slideState.activeSrc);
+    return idx >= 0 ? idx : 0;
+  }, [activeSlides, slideState.activeSrc]);
+
+  const resolvedPrevIdx = useMemo(() => {
+    if (!slideState.prevSrc) return null;
+    const idx = activeSlides.findIndex((s) => s.src === slideState.prevSrc);
+    return idx >= 0 && idx !== resolvedActiveIdx ? idx : null;
+  }, [activeSlides, resolvedActiveIdx, slideState.prevSrc]);
+
+  const markSlideLoaded = useCallback((src: string) => {
+    if (loadedSrcsRef.current.has(src)) return;
+    loadedSrcsRef.current.add(src);
     setLoadedVersion((v) => v + 1);
   }, []);
 
-  // Gắn observer nạp trước ảnh phụ khi khung sắp lọt vào tầm mắt
   useEffect(() => {
-    if (slideCount <= 1 || secondaryMounted) return;
+    if (disableAutoCycle || slideCount <= 1 || secondaryMounted) return;
     const el = rootRef.current;
     if (!el) return;
     return observePrewarm(el, () => {
       setSecondaryMounted(true);
     });
-  }, [slideCount, secondaryMounted]);
+  }, [disableAutoCycle, slideCount, secondaryMounted]);
 
-  // Gắn observer kiểm tra khung hình đang nằm rõ trong vùng người dùng dừng xem
   useEffect(() => {
-    if (slideCount <= 1) return;
+    if (disableAutoCycle || slideCount <= 1) return;
     const el = rootRef.current;
     if (!el) return;
     return observeActiveVisibility(el, (visible) => {
@@ -220,9 +314,34 @@ export default function DwellSlideshow({
         setSecondaryMounted(true);
       }
     });
-  }, [slideCount]);
+  }, [disableAutoCycle, slideCount]);
 
-  // Chu kỳ tự nhảy chuyển hình mượt mà chỉ khi đang hiển thị rõ & người dùng dừng cuộn
+  // Trên laptop/desktop: nếu có ảnh mở đầu đặc thù vùng trồng (desktopLeadSrc), chuyển mượt sang ngay khi ảnh tải xong
+  useEffect(() => {
+    if (
+      !isDesktopViewport ||
+      !desktopLeadSrc ||
+      appliedDesktopLeadRef.current ||
+      manualInteractedRef.current
+    ) {
+      return;
+    }
+    if (!activeSlides.some((s) => s.src === desktopLeadSrc)) return;
+    if (!loadedSrcsRef.current.has(desktopLeadSrc)) return;
+
+    appliedDesktopLeadRef.current = true;
+    const timer = window.setTimeout(() => {
+      setSlideState((s) =>
+        s.activeSrc === desktopLeadSrc
+          ? s
+          : { activeSrc: desktopLeadSrc, prevSrc: s.activeSrc },
+      );
+    }, 80);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeSlides, desktopLeadSrc, isDesktopViewport, loadedVersion]);
+
   const hasAdvancedInCurrentDwellRef = useRef(false);
 
   useEffect(() => {
@@ -232,18 +351,18 @@ export default function DwellSlideshow({
   }, [inView, isScrollIdle]);
 
   useEffect(() => {
-    if (slideCount <= 1 || !secondaryMounted || !inView || !isScrollIdle) {
+    if (disableAutoCycle || slideCount <= 1 || !secondaryMounted || !inView || !isScrollIdle) {
       return;
     }
 
-    const stageEl = rootRef.current;
-    if (stageEl && window.getComputedStyle(stageEl).display === "grid") {
+    // Khi đang ở bố cục lưới ghép 3 ảnh tĩnh trên màn hình hẹp thì không chạy timer chuyển slide
+    if (useTriptych && !isDesktopViewport) {
       return;
     }
 
-    const nextIndex = (safeActive + 1) % slideCount;
-    if (!loadedIndicesRef.current.has(nextIndex)) {
-      // Đợi ảnh kế tiếp giải mã xong (loadedVersion tăng sẽ tự kích hoạt lại effect này)
+    const nextIndex = (resolvedActiveIdx + 1) % slideCount;
+    const nextSlide = activeSlides[nextIndex];
+    if (!nextSlide || !loadedSrcsRef.current.has(nextSlide.src)) {
       return;
     }
 
@@ -254,8 +373,11 @@ export default function DwellSlideshow({
     const timer = window.setTimeout(() => {
       hasAdvancedInCurrentDwellRef.current = true;
       setSlideState((s) => {
-        const cur = s.active < slideCount ? s.active : 0;
-        return { active: (cur + 1) % slideCount, prev: cur };
+        const curIdx = activeSlides.findIndex((item) => item.src === s.activeSrc);
+        const safeCur = curIdx >= 0 ? curIdx : 0;
+        const target = activeSlides[(safeCur + 1) % activeSlides.length];
+        if (!target || target.src === s.activeSrc) return s;
+        return { activeSrc: target.src, prevSrc: activeSlides[safeCur]?.src ?? null };
       });
     }, baseDelay);
 
@@ -263,29 +385,42 @@ export default function DwellSlideshow({
       window.clearTimeout(timer);
     };
   }, [
+    activeSlides,
+    disableAutoCycle,
     inView,
     intervalMs,
+    isDesktopViewport,
     isScrollIdle,
     loadedVersion,
-    safeActive,
+    resolvedActiveIdx,
     secondaryMounted,
     slideCount,
     staggerMs,
+    useTriptych,
   ]);
 
   if (slideCount === 0) return null;
-
-  const useTriptych = mobileCollage && slideCount >= 3;
 
   return (
     <div
       ref={rootRef}
       className={`sw-dwell-stage${useTriptych ? " has-triptych" : ""}`}
     >
-      {slides.map((slide, idx) => {
-        if ((useTriptych ? idx >= 3 : idx > 0) && !secondaryMounted) return null;
-        const isActive = idx === safeActive;
-        const isLeaving = idx === safePrev;
+      {activeSlides.map((slide, idx) => {
+        const isNeededInitially =
+          (!isDesktopViewport && useTriptych && idx < 3) ||
+          idx === 0 ||
+          (isDesktopViewport && desktopLeadSrc === slide.src);
+        if (
+          !isNeededInitially &&
+          !secondaryMounted &&
+          idx !== resolvedActiveIdx &&
+          idx !== resolvedPrevIdx
+        ) {
+          return null;
+        }
+        const isActive = idx === resolvedActiveIdx;
+        const isLeaving = idx === resolvedPrevIdx;
         const desktopPos = slide.objectPosition ?? "center 50%";
         const styleVars = {
           "--dwell-desk-pos": desktopPos,
@@ -293,6 +428,8 @@ export default function DwellSlideshow({
             ? { "--dwell-mob-pos": slide.mobileObjectPosition }
             : {}),
         } as CSSProperties;
+
+        const isPriorityHero = idx === 0 && priorityFirst;
 
         return (
           <span
@@ -304,26 +441,18 @@ export default function DwellSlideshow({
             <Image
               ref={(img) => {
                 if (img && img.complete && img.naturalWidth > 0) {
-                  markSlideLoaded(idx);
+                  markSlideLoaded(slide.src);
                 }
               }}
               src={slide.src}
               alt={slide.alt}
               fill
-              priority={idx === 0 && priorityFirst}
-              loading={
-                priorityFirst
-                  ? idx === 0
-                    ? undefined
-                    : useTriptych && idx < 3
-                      ? "eager"
-                      : "lazy"
-                  : "lazy"
-              }
+              priority={isPriorityHero}
+              loading={isPriorityHero ? undefined : "lazy"}
               decoding="async"
-              sizes={sizes}
+              sizes={effectiveSizes}
               className="sw-dwell-img"
-              onLoad={() => markSlideLoaded(idx)}
+              onLoad={() => markSlideLoaded(slide.src)}
             />
           </span>
         );
@@ -331,19 +460,22 @@ export default function DwellSlideshow({
 
       {slideCount > 1 && (
         <div className="sw-dwell-dots" aria-hidden="true">
-          {slides.map((slide, idx) => (
+          {activeSlides.map((slide, idx) => (
             <button
               key={slide.src}
               type="button"
               tabIndex={-1}
-              className={`sw-dwell-dot ${idx === safeActive ? "is-active" : ""}`}
+              className={`sw-dwell-dot ${idx === resolvedActiveIdx ? "is-active" : ""}`}
               onClick={(e) => {
                 e.stopPropagation();
-                if (idx === 0 || loadedIndicesRef.current.has(idx)) {
+                manualInteractedRef.current = true;
+                if (idx === 0 || loadedSrcsRef.current.has(slide.src) || disableAutoCycle) {
                   hasAdvancedInCurrentDwellRef.current = true;
                   setSlideState((s) => {
-                    const cur = s.active < slideCount ? s.active : 0;
-                    return cur === idx ? s : { active: idx, prev: cur };
+                    const curSrc = activeSlides[resolvedActiveIdx]?.src ?? firstSrc;
+                    return curSrc === slide.src
+                      ? s
+                      : { activeSrc: slide.src, prevSrc: curSrc };
                   });
                 } else {
                   setSecondaryMounted(true);

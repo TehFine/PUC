@@ -40,44 +40,37 @@ interface CatalogCardItem {
     label: string;
     text: string;
   };
-  searchText: string;
 }
 
 const TAB_CONFIG: Array<{
   id: GuidanceTab;
   label: string;
   heading: string;
-  searchPlaceholder: string;
 }> = [
   {
     id: "allowed",
     label: "Được phép",
     heading: "Danh mục thuốc BVTV được phép",
-    searchPlaceholder: "Tìm tên thuốc, hoạt chất...",
   },
   {
     id: "banned",
     label: "Chất cấm",
     heading: "Chất cấm & kiểm soát nghiêm ngặt",
-    searchPlaceholder: "Tìm tên chất cấm, hoạt chất...",
   },
   {
     id: "fertilizers",
     label: "Phân bón",
     heading: "Phân bón & chế phẩm vi sinh",
-    searchPlaceholder: "Tìm phân bón, công thức...",
   },
   {
     id: "advisory",
     label: "Mùa vụ",
     heading: "Quy trình chăm sóc 07 giai đoạn",
-    searchPlaceholder: "Tìm giai đoạn, công việc...",
   },
   {
     id: "varieties",
     label: "Giống cây",
     heading: "Giống sầu riêng chủ lực",
-    searchPlaceholder: "Tìm tên giống, nguồn gốc...",
   },
 ];
 
@@ -433,6 +426,18 @@ function pickAllowedVisual(
   return candidate;
 }
 
+function shouldSkipImageOpt(src: string): boolean {
+  return src.startsWith("/api/") || /^https?:\/\//i.test(src);
+}
+
+function isInstantScrollPreferred(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    (document.documentElement.dataset.perf === "lite" ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+  );
+}
+
 function shortenTitle(raw: string): string {
   return raw
     .replace(/\s*\(Sinh học[^)]*\)/i, " Sinh học")
@@ -444,7 +449,6 @@ function shortenTitle(raw: string): string {
 export default function Catalog() {
   const { data } = usePublic<PublicCatalog>("catalog");
   const [tab, setTab] = useState<GuidanceTab>("allowed");
-  const [query, setQuery] = useState("");
   const [drawerIndex, setDrawerIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [canPrev, setCanPrev] = useState(false);
@@ -464,7 +468,6 @@ export default function Catalog() {
 
   const handleSelectTab = useCallback((nextTab: GuidanceTab, btn?: HTMLButtonElement | null) => {
     setTab(nextTab);
-    setQuery("");
     setDrawerIndex(null);
     if (stripRef.current) {
       stripRef.current.scrollTo({ left: 0, behavior: "auto" });
@@ -491,7 +494,6 @@ export default function Catalog() {
     const handleSwitch = (e: Event) => {
       const custom = e as CustomEvent<string>;
       const detail = custom.detail;
-      setQuery("");
       setDrawerIndex(null);
       if (detail === "pesticides" || detail === "allowed") setTab("allowed");
       else if (detail === "banned") setTab("banned");
@@ -580,7 +582,6 @@ export default function Catalog() {
             label: "Ghi chép nhật ký bắt buộc",
             text: "Ghi rõ tên thương phẩm, ngày phun, liều pha và mã thửa trên ứng dụng HTX để hệ thống tự động tính ngày cách ly an toàn.",
           },
-          searchText: `${p.name} ${p.activeIngredient} ${p.manufacturer ?? ""}`.toLowerCase(),
         });
       });
 
@@ -612,7 +613,6 @@ export default function Catalog() {
           label: "Cảnh báo an toàn vùng trồng",
           text: "Chỉ một lô phát hiện tồn dư Vàng O sẽ làm ảnh hưởng trực tiếp tới uy tín và hiệu lực xuất khẩu của toàn bộ HTX Cư Né.",
         },
-        searchText: "vàng o auramine o thuốc nhuộm tạo màu cấm tuyệt đối",
       },
       {
         id: "ban-cadmium",
@@ -640,7 +640,6 @@ export default function Catalog() {
           label: "Lưu trữ chứng từ vật tư",
           text: "Bà con giữ đầy đủ hóa đơn và bao bì phân bón từng đợt để đối chiếu truy nguyên nguồn gốc khi đoàn kiểm tra yêu cầu.",
         },
-        searchText: "cadimi cd cadmium kim loại nặng đất phân bón kiểm nghiệm",
       },
       {
         id: "ban-kcl",
@@ -663,7 +662,6 @@ export default function Catalog() {
           "Kiểm tra kỹ thành phần trên bao NPK: chỉ chọn loại ghi rõ 'K₂SO₄ / Kali Sunfat / Chlorine-free (< 2% Cl)'.",
           "Tuyệt đối không mua Kali đỏ (muối ớt) rời để rải gốc ở giai đoạn làm bông hoặc nuôi trái.",
         ],
-        searchText: "kali clorua kcl muối ớt kali đỏ clo sượng múi",
       },
     ];
 
@@ -720,7 +718,6 @@ export default function Catalog() {
           "Rà soát toàn bộ kho chứa vật tư nông nghiệp tại vườn, loại bỏ ngay các chai/gói cũ chứa hoạt chất cấm.",
           "Liên hệ Ban Kỹ thuật HTX Cư Né để được tư vấn chế phẩm sinh học hoặc hoạt chất được phép thay thế.",
         ],
-        searchText: `${p.name} ${p.activeIngredient} cấm sử dụng`.toLowerCase(),
       });
     });
 
@@ -746,7 +743,6 @@ export default function Catalog() {
           "Tuyệt đối không phun dưới tán, không quét thân và không tồn trữ vỏ bao bì hoạt chất cấm trong khuôn viên vườn.",
           "Nếu phát hiện lỡ sử dụng, chủ hộ báo ngay cho Cán bộ kỹ thuật HTX để khoanh vùng và xử lý riêng, tránh ảnh hưởng cả vùng.",
         ],
-        searchText: `${item.name} ${item.active} ${item.note}`.toLowerCase(),
       });
     });
 
@@ -766,7 +762,7 @@ export default function Catalog() {
         // Đảm bảo hai thẻ kế nhau có hình đại diện phong phú
         const prevImg = idx > 0 ? fertFallbacks[(idx - 1) % fertFallbacks.length] : "";
         const imgSrc = rawImg === prevImg ? fertFallbacks[idx % fertFallbacks.length] : rawImg;
-        const isJpg = imgSrc.endsWith(".jpg");
+        const isJpg = /\.(jpe?g|webp)$/i.test(imgSrc) || imgSrc.startsWith("/api/");
 
         return {
           id: `fert-${f.name}-${idx}`,
@@ -795,7 +791,6 @@ export default function Catalog() {
             "Kết hợp tưới đủ ẩm ngay sau khi bón để dinh dưỡng hòa tan và vi sinh vật có ích phát triển ổn định.",
             "Lưu hóa đơn mua phân bón và ghi đợt bón vào nhật ký điện tử của thửa đất.",
           ],
-          searchText: `${f.name} ${f.formula ?? ""} ${f.timing ?? ""} ${f.description ?? ""}`.toLowerCase(),
         };
       });
 
@@ -827,7 +822,6 @@ export default function Catalog() {
           label: "Nội dung bắt buộc ghi vào nhật ký canh tác",
           text: stage.log,
         },
-        searchText: `${stage.label} ${stage.title} ${stage.tag} ${stage.items.join(" ")} ${stage.log}`.toLowerCase(),
       };
     });
 
@@ -875,7 +869,6 @@ export default function Catalog() {
           "Khai báo chính xác cơ cấu giống, năm trồng và số lượng cây của từng thửa trên bản đồ số HTX Cư Né.",
           "Thu hoạch đúng tuổi trái từng giống; tuyệt đối không cắt non làm giảm độ đường và chất lượng xuất khẩu.",
         ],
-        searchText: `${v.name} ${v.origin ?? ""} ${v.description ?? ""}`.toLowerCase(),
       };
     });
 
@@ -888,12 +881,7 @@ export default function Catalog() {
     };
   }, [data]);
 
-  const currentItems = useMemo(() => {
-    const base = allTabItems[tab] ?? [];
-    const term = query.trim().toLowerCase();
-    if (!term) return base;
-    return base.filter((item) => item.searchText.includes(term));
-  }, [allTabItems, tab, query]);
+  const currentItems = allTabItems[tab] ?? [];
 
   const activeTabMeta = TAB_CONFIG.find((t) => t.id === tab) ?? TAB_CONFIG[0];
   const activeDrawerItem = drawerIndex !== null ? currentItems[drawerIndex] ?? null : null;
@@ -979,13 +967,9 @@ export default function Catalog() {
     const cardsPerViewport = strip.clientWidth >= 960 ? 2 : 1;
     const delta = singleStep * cardsPerViewport * direction;
 
-    const reducedMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
     strip.scrollBy({
       left: delta,
-      behavior: reducedMotion ? "auto" : "smooth",
+      behavior: isInstantScrollPreferred() ? "auto" : "smooth",
     });
   }, []);
 
@@ -998,13 +982,10 @@ export default function Catalog() {
 
     const rect = track.getBoundingClientRect();
     const clickRatio = Math.min(1, Math.max(0, (e.clientX - rect.left) / Math.max(1, rect.width)));
-    const reducedMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     strip.scrollTo({
       left: clickRatio * maxScroll,
-      behavior: reducedMotion ? "auto" : "smooth",
+      behavior: isInstantScrollPreferred() ? "auto" : "smooth",
     });
   }, []);
 
@@ -1113,139 +1094,95 @@ export default function Catalog() {
         </div>
       </div>
 
-      {/* Không gian trưng bày thẻ hình vuông cuộn ngang tối giản */}
+      {/* Không gian trưng bày thẻ vuông cuộn ngang tối giản (không dùng ô tìm kiếm) */}
       <div className="sw-cat-showcase">
         <div className="sw-cat-headbar">
           <div className="sw-cat-head-left">
             <h3 className="sw-cat-heading">{activeTabMeta.heading}</h3>
           </div>
-
-          <div className="sw-cat-head-right">
-            <div className="sw-cat-search">
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setDrawerIndex(null);
-                  if (stripRef.current) {
-                    stripRef.current.scrollTo({ left: 0, behavior: "auto" });
-                  }
-                }}
-                placeholder={activeTabMeta.searchPlaceholder}
-                aria-label={activeTabMeta.searchPlaceholder}
-              />
-              {query && (
-                <button
-                  type="button"
-                  className="sw-cat-search-clear"
-                  aria-label="Xóa từ khóa tìm kiếm"
-                  onClick={() => setQuery("")}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          </div>
         </div>
 
-        {currentItems.length === 0 ? (
-          <div className="sw-cat-empty">
-            <p className="sw-muted-sm">
-              Không tìm thấy mục nào khớp với từ khóa &ldquo;{query}&rdquo;.
-            </p>
+        <div
+          ref={stripRef}
+          className={`sw-cat-strip ${isDragging ? "is-dragging" : ""}`}
+          onScroll={handleStripScroll}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={stopDragging}
+          onMouseLeave={stopDragging}
+        >
+          {currentItems.map((item, idx) => (
+            <article
+              key={item.id}
+              className="sw-cat-card"
+              role="button"
+              tabIndex={0}
+              aria-label={`Xem chi tiết ${item.title}`}
+              onClick={() => {
+                if (dragRef.current.moved) {
+                  dragRef.current.moved = false;
+                  return;
+                }
+                setDrawerIndex(idx);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDrawerIndex(idx);
+                }
+              }}
+            >
+              <div className={`sw-cat-stage is-${item.imageFit}`}>
+                <Image
+                  src={item.imageSrc}
+                  alt={item.imageAlt ?? item.title}
+                  fill
+                  draggable={false}
+                  unoptimized={shouldSkipImageOpt(item.imageSrc)}
+                  sizes="(max-width: 768px) 85vw, (max-width: 960px) 46vw, 31vw"
+                  className="sw-cat-img"
+                />
+              </div>
+
+              <div className="sw-cat-caption">
+                <h4 className="sw-cat-title">{item.title}</h4>
+                <p className="sw-cat-sub">{item.subtitle}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {/* Thanh tiến trình mảnh toàn dải + nút Trước / Tiếp đồng bộ hệ thống */}
+        <div className="sw-cat-foot">
+          <div
+            ref={progressTrackRef}
+            className="sw-cat-progress-track"
+            onClick={handleSeekTrack}
+            title="Nhấn vào thanh để chuyển nhanh vị trí danh sách"
+            aria-hidden="true"
+          >
+            <span ref={progressThumbRef} className="sw-cat-progress-thumb" />
+          </div>
+
+          <div className="sw-training-scroll-btns" aria-label="Điều hướng danh mục">
             <button
               type="button"
-              className="sw-action-inline"
-              onClick={() => setQuery("")}
+              className="eh-step-btn"
+              disabled={!canPrev}
+              onClick={() => scrollByCards(-1)}
             >
-              Xem lại toàn bộ danh mục
+              Trước
+            </button>
+            <button
+              type="button"
+              className="eh-step-btn"
+              disabled={!canNext}
+              onClick={() => scrollByCards(1)}
+            >
+              Tiếp
             </button>
           </div>
-        ) : (
-          <>
-            <div
-              ref={stripRef}
-              className={`sw-cat-strip ${isDragging ? "is-dragging" : ""}`}
-              onScroll={handleStripScroll}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={stopDragging}
-              onMouseLeave={stopDragging}
-            >
-              {currentItems.map((item, idx) => (
-                <article
-                  key={item.id}
-                  className="sw-cat-card"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Xem chi tiết ${item.title}`}
-                  onClick={() => {
-                    if (dragRef.current.moved) {
-                      dragRef.current.moved = false;
-                      return;
-                    }
-                    setDrawerIndex(idx);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setDrawerIndex(idx);
-                    }
-                  }}
-                >
-                  <div className={`sw-cat-stage is-${item.imageFit}`}>
-                    <Image
-                      src={item.imageSrc}
-                      alt={item.imageAlt ?? item.title}
-                      fill
-                      draggable={false}
-                      sizes="(max-width: 768px) 85vw, (max-width: 960px) 46vw, 31vw"
-                      className="sw-cat-img"
-                    />
-                  </div>
-
-                  <div className="sw-cat-caption">
-                    <h4 className="sw-cat-title">{item.title}</h4>
-                    <p className="sw-cat-sub">{item.subtitle}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {/* Thanh tiến trình mảnh toàn dải + nút Trước / Tiếp đồng bộ hệ thống */}
-            <div className="sw-cat-foot">
-              <div
-                ref={progressTrackRef}
-                className="sw-cat-progress-track"
-                onClick={handleSeekTrack}
-                title="Nhấn vào thanh để chuyển nhanh vị trí danh sách"
-                aria-hidden="true"
-              >
-                <span ref={progressThumbRef} className="sw-cat-progress-thumb" />
-              </div>
-
-              <div className="sw-training-scroll-btns" aria-label="Điều hướng danh mục">
-                <button
-                  type="button"
-                  className="eh-step-btn"
-                  disabled={!canPrev}
-                  onClick={() => scrollByCards(-1)}
-                >
-                  Trước
-                </button>
-                <button
-                  type="button"
-                  className="eh-step-btn"
-                  disabled={!canNext}
-                  onClick={() => scrollByCards(1)}
-                >
-                  Tiếp
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+        </div>
       </div>
 
       {/* Ngăn trượt bên phải hiển thị đầy đủ thông số kỹ thuật, cách ly & quy định */}
@@ -1289,6 +1226,7 @@ export default function Catalog() {
                   alt={activeDrawerItem.imageAlt ?? activeDrawerItem.fullTitle}
                   width={720}
                   height={720}
+                  unoptimized={shouldSkipImageOpt(activeDrawerItem.imageSrc)}
                   style={
                     activeDrawerItem.drawerObjectPosition
                       ? { objectPosition: activeDrawerItem.drawerObjectPosition }

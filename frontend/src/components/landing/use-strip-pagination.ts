@@ -178,13 +178,14 @@ export function useStripPagination(
       setCanPrev(targetLeft > 6);
       setCanNext(targetLeft < maxScrollRef.current - 6);
 
-      const reducedMotion =
+      const instantScroll =
         typeof window !== "undefined" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        (document.documentElement.dataset.perf === "lite" ||
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
       el.scrollTo({
         left: targetLeft,
-        behavior: reducedMotion ? "auto" : "smooth",
+        behavior: instantScroll ? "auto" : "smooth",
       });
     },
     [trackRef],
