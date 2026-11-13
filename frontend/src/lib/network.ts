@@ -138,11 +138,17 @@ function subscribe(listener: () => void) {
   window.addEventListener("offline", listener);
   const connection = getConnection();
   connection?.addEventListener("change", listener);
+  const motionMq =
+    typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)")
+      : null;
+  motionMq?.addEventListener?.("change", listener);
   return () => {
     listeners.delete(listener);
     window.removeEventListener("online", listener);
     window.removeEventListener("offline", listener);
     connection?.removeEventListener("change", listener);
+    motionMq?.removeEventListener?.("change", listener);
   };
 }
 

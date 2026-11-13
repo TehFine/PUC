@@ -5101,24 +5101,14 @@ html.is-scrolling-down .zones-map-area .plotmap-zoom,
 .violation-item,
 .pt-pest-card,
 .pt-notif-item,
-.batch-qr-ticket,
-.lp-stat-card,
-.lp-step,
-.lp-news-card {
+.batch-qr-ticket {
   contain: layout style;
 }
 
 /* Ẩn dựng (lazy layout/paint) cho danh sách dài ngoài khung nhìn trên thiết bị di động & laptop */
 .pt-pest-card {
   content-visibility: auto;
-  contain-intrinsic-size: auto 96px;
-}
-
-@media (min-width: 641px) {
-  .table-wrap tbody tr {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 52px;
-  }
+  contain-intrinsic-size: auto 112px;
 }
 
 @media (max-width: 640px) {
@@ -5130,8 +5120,6 @@ html.is-scrolling-down .zones-map-area .plotmap-zoom,
 
 @media print {
   .pt-pest-card,
-  .lp-section,
-  .table-wrap tbody tr,
   .table-wrap .responsive-table tbody tr {
     content-visibility: visible !important;
     contain-intrinsic-size: none !important;
@@ -5157,8 +5145,8 @@ html[data-perf="lite"] :is(.pt-minimap-pin-pulse, .pt-plot-minimap-loading, .pt-
   animation: none !important;
 }
 
-html[data-perf="lite"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card, .lp-stat-card, .lp-step, .lp-news-card),
-html[data-net="slow"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card, .lp-stat-card, .lp-step, .lp-news-card) {
+html[data-perf="lite"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card),
+html[data-net="slow"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card) {
   filter: none !important;
 }
 
@@ -5168,7 +5156,9 @@ html[data-net="slow"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card
 }
 
 html[data-perf="lite"] svg,
-html[data-net="slow"] svg {
+html[data-net="slow"] svg,
+html[data-perf="lite"] .kpi-card svg rect,
+html[data-net="slow"] .kpi-card svg rect {
   filter: none !important;
 }
 

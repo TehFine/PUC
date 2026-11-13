@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isLowEndDevice, useNetworkQuality, type NetQuality } from "@/lib/network";
+import { useNetworkQuality, usePerformanceTier, type NetQuality } from "@/lib/network";
 import "./skeleton.css";
 
 type Toast = { kind: "slow" | "offline" | "ok"; text: string } | null;
@@ -62,6 +62,7 @@ function CheckIcon() {
  */
 export default function NetworkStatus() {
   const quality = useNetworkQuality();
+  const tier = usePerformanceTier();
   const [toast, setToast] = useState<Toast>(null);
   const [isDismissing, setIsDismissing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -79,12 +80,12 @@ export default function NetworkStatus() {
 
   useEffect(() => {
     document.documentElement.dataset.net = quality;
-    document.documentElement.dataset.perf = isLowEndDevice() ? "lite" : "full";
+    document.documentElement.dataset.perf = tier;
     return () => {
       delete document.documentElement.dataset.net;
       delete document.documentElement.dataset.perf;
     };
-  }, [quality]);
+  }, [quality, tier]);
 
   /** Kích hoạt hiệu ứng di chuyển ngược lên cạnh trên màn hình và biến mất */
   const triggerDismiss = useCallback(() => {

@@ -61,7 +61,7 @@ export function StandardBenchmarkMeter({ standards, initialIndex = 0 }: Standard
   const uid = useId().replace(/:/g, "");
 
   const activeStd = standards[selectedIdx] ?? standards[0];
-  const currentPct = hoverPct ?? activeStd.pct;
+  const currentPct = hoverPct ?? activeStd?.pct ?? 0;
   const rating = getRating(currentPct);
 
   const isMini = width > 0 && width < 340;

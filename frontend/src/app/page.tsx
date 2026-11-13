@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#171b13",
+  themeColor: "#ffffff",
 };
 
 // Trang chủ: khách xem giới thiệu; người đã đăng nhập được chuyển thẳng vào /admin hoặc /portal.

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { NEWS_ARTICLES, type NewsArticle } from "@/components/landing/news-data";
+import { reportRequestTime } from "@/lib/network";
 import type { NewsCategory, PublicNewsRecord } from "@/types/news";
 
 export const NEWS_CATEGORY_META: Record<
@@ -45,28 +46,52 @@ export function mapPublicNewsToArticle(record: PublicNewsRecord & { id?: number 
   };
 }
 
-async function fetchPublicArticles(): Promise<NewsArticle[]> {
-  const response = await fetch("/api/public/news", { cache: "no-store" });
-  if (!response.ok) return NEWS_ARTICLES;
-  const body = (await response.json()) as
-    | { data?: (PublicNewsRecord & { id?: number })[] }
-    | (PublicNewsRecord & { id?: number })[];
-  const rawList = Array.isArray(body) ? body : (body.data ?? []);
-  return rawList.length > 0 ? rawList.map(mapPublicNewsToArticle) : NEWS_ARTICLES;
+let cachedNewsArticles: NewsArticle[] | null = null;
+let inflightNewsPromise: Promise<NewsArticle[]> | null = null;
+const NEWS_TIMEOUT_MS = 18_000;
+
+async function fetchPublicArticles(force = false): Promise<NewsArticle[]> {
+  if (!force && cachedNewsArticles) return cachedNewsArticles;
+  if (!force && inflightNewsPromise) return inflightNewsPromise;
+
+  const request = (async () => {
+    const start = performance.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), NEWS_TIMEOUT_MS);
+    try {
+      const response = await fetch("/api/public/news", { signal: controller.signal });
+      reportRequestTime(performance.now() - start);
+      if (!response.ok) return cachedNewsArticles ?? NEWS_ARTICLES;
+      const body = (await response.json()) as
+        | { data?: (PublicNewsRecord & { id?: number })[] }
+        | (PublicNewsRecord & { id?: number })[];
+      const rawList = Array.isArray(body) ? body : (body.data ?? []);
+      const resolved = rawList.length > 0 ? rawList.map(mapPublicNewsToArticle) : NEWS_ARTICLES;
+      cachedNewsArticles = resolved;
+      return resolved;
+    } finally {
+      clearTimeout(timer);
+    }
+  })().finally(() => {
+    inflightNewsPromise = null;
+  });
+
+  inflightNewsPromise = request;
+  return request;
 }
 
 /**
  * Hook tải bản tin đã xuất bản từ `GET /api/public/news`.
- * Nếu ngoại tuyến hoặc danh sách rỗng thì dùng `NEWS_ARTICLES` mặc định.
+ * Có bộ nhớ đệm trong phiên và timeout an toàn cho mạng 3G/4G yếu; ngoại tuyến dùng `NEWS_ARTICLES`.
  */
 export function useNewsArticles() {
-  const [articles, setArticles] = useState<NewsArticle[]>(NEWS_ARTICLES);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [articles, setArticles] = useState<NewsArticle[]>(() => cachedNewsArticles ?? NEWS_ARTICLES);
+  const [loading, setLoading] = useState<boolean>(() => cachedNewsArticles === null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const next = await fetchPublicArticles();
+      const next = await fetchPublicArticles(true);
       setArticles(next);
     } catch {
       // Ngoại tuyến: giữ danh sách bài viết mẫu NEWS_ARTICLES
@@ -76,8 +101,9 @@ export function useNewsArticles() {
   }, []);
 
   useEffect(() => {
+    if (cachedNewsArticles) return;
     let active = true;
-    fetchPublicArticles()
+    fetchPublicArticles(false)
       .then((next) => {
         if (active) setArticles(next);
       })
@@ -92,9 +118,5 @@ export function useNewsArticles() {
     };
   }, []);
 
-  return {
-    articles,
-    loading,
-    refresh,
-  };
+  return { articles, loading, refresh };
 }

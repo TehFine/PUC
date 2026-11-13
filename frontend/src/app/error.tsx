@@ -16,6 +16,16 @@ export default function GlobalErrorPage({
   const autoRetriedRef = useRef(false);
 
   const handleRecover = () => {
+    const msg = error?.message ?? "";
+    if (
+      typeof window !== "undefined" &&
+      (msg.includes("is not defined") ||
+        msg.includes("Failed to construct") ||
+        msg.includes("ChunkLoadError"))
+    ) {
+      window.location.reload();
+      return;
+    }
     startTransition(() => {
       router.refresh();
       reset();
@@ -33,11 +43,23 @@ export default function GlobalErrorPage({
       ) {
         autoRetriedRef.current = true;
         const timer = window.setTimeout(() => {
+          try {
+            const key = "puc_hmr_reload_ts";
+            const prev = Number(window.sessionStorage.getItem(key) || "0");
+            const now = Date.now();
+            if (now - prev > 8000) {
+              window.sessionStorage.setItem(key, String(now));
+              window.location.reload();
+              return;
+            }
+          } catch {
+            // Bỏ qua nếu trình duyệt chặn sessionStorage
+          }
           startTransition(() => {
             router.refresh();
             reset();
           });
-        }, 250);
+        }, 850);
         return () => window.clearTimeout(timer);
       }
     }

@@ -81,6 +81,7 @@ function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
  * `path = null` để tạm chưa tải (ví dụ chờ người dùng chọn bản ghi).
  */
 export function useApi<T>(path: string | null) {
+  const [trackedPath, setTrackedPath] = useState<string | null>(path);
   const [data, setData] = useState<T | null>(() => {
     if (path === null) return null;
     const cached = apiCache.get(path);
@@ -92,6 +93,14 @@ export function useApi<T>(path: string | null) {
   });
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(path);
+
+  if (trackedPath !== path) {
+    setTrackedPath(path);
+    const cached = path !== null ? apiCache.get(path) : undefined;
+    setData(cached ? (cached.data as T) : null);
+    setLoading(path !== null && !cached);
+    setError(null);
+  }
 
   useEffect(() => {
     latest.current = path;
@@ -120,6 +129,7 @@ export function useApi<T>(path: string | null) {
       if (latest.current === current) setData(result);
     } catch (err) {
       if (latest.current === current && !cached) {
+        setData(null);
         setError(errorMessage(err, "Không tải được dữ liệu."));
       }
     } finally {

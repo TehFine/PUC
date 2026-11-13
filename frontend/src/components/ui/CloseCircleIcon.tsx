@@ -7,11 +7,12 @@ export interface CloseCircleIconProps extends Omit<React.ImgHTMLAttributes<HTMLI
 
 export function CloseCircleIcon({
   size = 28,
-  strokeWidth: _strokeWidth,
+  strokeWidth,
   className,
   style,
   ...props
 }: CloseCircleIconProps) {
+  void strokeWidth;
   return (
     <img
       src="/close.png"

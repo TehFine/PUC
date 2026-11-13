@@ -35,7 +35,7 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
-const PERF_BOOTSTRAP_SCRIPT = `(function(){try{var d=document.documentElement,q=new URLSearchParams(location.search).get("perf");if(q==="lite"||q==="full"){d.dataset.perf=q;return;}var n=navigator,c=n.connection,l=(n.hardwareConcurrency>0&&n.hardwareConcurrency<=4)||(n.deviceMemory>0&&n.deviceMemory<=4)||!!(c&&(c.saveData||c.effectiveType==="2g"||c.effectiveType==="slow-2g"))||(typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches);d.dataset.perf=l?"lite":"full";}catch(e){}})();`;
+const PERF_BOOTSTRAP_SCRIPT = `(function(){try{var d=document.documentElement,sp=new URLSearchParams(location.search),qp=sp.get("perf"),qn=sp.get("net"),n=navigator,c=n.connection;var net=(qn==="slow"||qn==="offline"||qn==="good")?qn:(!n.onLine?"offline":(c&&(c.effectiveType==="2g"||c.effectiveType==="slow-2g"||((c.rtt||0)>=1000&&(c.downlink||10)>0&&(c.downlink||10)<0.5))?"slow":"good"));d.dataset.net=net;if(qp==="lite"||qp==="full"){d.dataset.perf=qp;return;}var l=net!=="good"||(n.hardwareConcurrency>0&&n.hardwareConcurrency<=4)||(n.deviceMemory>0&&n.deviceMemory<=4)||!!(c&&c.saveData)||(typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches);d.dataset.perf=l?"lite":"full";}catch(e){}})();`;
 
 export default function RootLayout({
   children,

@@ -3,31 +3,19 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV === "development";
 
 /**
- * CSP cho các trang giao diện. Next cần script/style nội tuyến (dữ liệu RSC, hydrate) nên giữ 'unsafe-inline';
- * 'unsafe-eval' và ws: chỉ bật khi chạy dev (HMR). Ảnh nền bản đồ lấy từ Esri & OpenStreetMap.
+ * CSP hợp nhất cho toàn bộ ứng dụng để điều hướng mềm (Next.js <Link> / router.push)
+ * giữa /, /login, /trace, /portal và /admin luôn hoạt động xuyên suốt:
+ * - Hỗ trợ đăng nhập Google Identity Services (accounts.google.com, oauth2.googleapis.com)
+ * - Hỗ trợ tải mảnh bản đồ vệ tinh & GIS (Google Maps tiles, Esri ArcGIS, CartoDB)
  */
-const baseCsp = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.google.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.basemaps.cartocdn.com https://*.googleusercontent.com",
-  "media-src 'self' blob:",
-  "font-src 'self' data:",
-  `connect-src 'self' https://translate.googleapis.com${isDev ? " ws: wss:" : ""}`,
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
-
-const loginCsp = [
+const appCsp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' https://accounts.google.com${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline' https://accounts.google.com",
-  "img-src 'self' data: blob: https://*.googleusercontent.com",
+  "img-src 'self' data: blob: https://*.google.com https://server.arcgisonline.com https://services.arcgisonline.com https://*.basemaps.cartocdn.com https://*.googleusercontent.com",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  `connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com${isDev ? " ws: wss:" : ""}`,
+  `connect-src 'self' https://translate.googleapis.com https://accounts.google.com https://oauth2.googleapis.com${isDev ? " ws: wss:" : ""}`,
   "frame-src https://accounts.google.com",
   "object-src 'none'",
   "base-uri 'self'",
@@ -46,13 +34,7 @@ const commonHeaders = [
 ];
 
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: baseCsp },
-  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-  ...commonHeaders,
-];
-
-const loginSecurityHeaders = [
-  { key: "Content-Security-Policy", value: loginCsp },
+  { key: "Content-Security-Policy", value: appCsp },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
   ...commonHeaders,
 ];
@@ -81,9 +63,8 @@ const nextConfig: NextConfig = {
     // Các đường dẫn /api/* được proxy sang backend (đã có helmet), nên chỉ áp cho trang giao diện.
     return [
       { source: "/((?!api/).*)", headers: securityHeaders },
-      { source: "/login", headers: loginSecurityHeaders },
       {
-        source: "/:folder(diseases|pesticides|fertilizers|varieties|training|landing|fonts)/:path*",
+        source: "/:folder(diseases|pesticides|fertilizers|varieties|training|landing|stages|fonts)/:path*",
         headers: immutableAssetHeaders,
       },
     ];
