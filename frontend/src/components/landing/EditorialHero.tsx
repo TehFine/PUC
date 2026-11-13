@@ -494,10 +494,7 @@ export default function EditorialHero() {
           <div>
             <h2 className="eh-feature-title">Vùng trồng Cư Né</h2>
             <p className="eh-feature-sub eh-feature-desktop-sub">
-              <span>
-                {areaStr} ha · {plotsStr} thửa · {villagesStr} thôn
-              </span>
-              <span>Krông Búk, Đắk Lắk</span>
+              {areaStr} ha · {plotsStr} thửa · {villagesStr} thôn · Krông Búk, Đắk Lắk
             </p>
             <p className="eh-feature-mobile-lead">
               Liên kết canh tác chuẩn VietGAP &amp; xuất khẩu chính ngạch tại Krông Búk, Đắk Lắk.
