@@ -14,6 +14,7 @@ import VillageFormModal from "@/components/admin/catalog/VillageFormModal";
 import { useDebounced } from "@/components/admin/catalog/use-debounced";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
+  CareProtocol2026List,
   DiseaseAndIpmList,
   enrichVariety,
   FertilizerDetailModal,
@@ -24,6 +25,7 @@ import {
   VarietyDetailModal,
 } from "@/components/portal/LearnTab";
 import { DISEASES_AND_PESTS_2026 } from "@/components/portal/ipm-2026-data";
+import { DURIAN_PROTOCOL_2026_2027 } from "@/lib/durian-protocol-2026-2027";
 import "@/components/portal/portal.css";
 import { EmptyState, Sheet } from "@/components/portal/ui";
 import { Modal } from "@/components/ui/Modal";
@@ -31,7 +33,7 @@ import { useApiList } from "@/hooks/use-api";
 import type { FertilizerDto, PesticideDto, VarietyDto } from "@/types/api";
 import type { FertilizerRecord, PesticideRecord, VarietyRecord, VillageRecord } from "@/types/catalog";
 
-type Tab = "pesticide" | "fertilizer" | "variety" | "diseases" | "village" | "standards";
+type Tab = "protocol" | "pesticide" | "fertilizer" | "variety" | "diseases" | "village" | "standards";
 
 interface StandardDoc {
   title: string;
@@ -41,6 +43,18 @@ interface StandardDoc {
 }
 
 const STANDARDS: StandardDoc[] = [
+  {
+    title: "Quy trình Chăm sóc Sầu riêng chuẩn HTX Cư Né niên vụ 2026–2027",
+    desc: "Tài liệu kỹ thuật chuẩn gồm 8 giai đoạn sinh trưởng (Chuẩn bị vườn, Cơi đọt 1, Cơi đọt 2, Tạo mầm, Nuôi bông, Nuôi trái, Kéo cơi theo bông, Làm cơm) và phác đồ điều tiết đọt SenPro. Chỉ khi nông hộ tuân thủ đúng quy trình này và ghi nhật ký đầy đủ, HTX mới đảm bảo sản phẩm được thu mua đúng giá, giá cao.",
+    tags: ["Bắt buộc", "Chuẩn 2026–2027", "Bảo chứng thu mua giá cao"],
+    details: [
+      "Giai đoạn Chuẩn bị (30 ngày) & Cơi đọt 1–2 (45–60 ngày): Rửa vườn, bón vôi, hữu cơ, Trichoderma, Soil Harmony; đổ gốc 25–30L Amino X + Magic One (1:1000), bón NPK 2:2:1 (1 kg/gốc), phun Grapo + Amino Ca+; dự trữ 3–5 kg lân nung chảy Văn Điển và già hóa lá lụa bằng Brixup (1:400) + MKP (Bo + Mg).",
+      "Giai đoạn Tạo mầm (15–30 ngày) & Nuôi bông (50–60 ngày): Xiết nước kết hợp phun 10:60:10 / MKP + Combi; nhấp nước khi mắt cua 1 cm, phun Bloom (1:400) + 500g KNO₃; bông 3 cm bón NPK 2:1:1 (1 kg/gốc); bông 7–12 cm phun Bloom + Amino Ca+; bông 15–20 cm đổ gốc Magic One + 1 kg K₂SO₄ và phun 500 ml Brixup + 500g Kali Bo / 200L nước.",
+      "Giai đoạn Nuôi trái (Ngày 0–60) & Kéo cơi theo bông (Ngày 65–90): Luân phiên đổ gốc Magic One (1:400) + 1 kg K₂SO₄ + 500g MgSO₄ với Ca(NO₃)₂ (1 kg), kết hợp phun Bloom + Amino Ca+ và Brixup + Kali Bo theo các mốc đuôi chuột, trứng cút, trứng gà, nắm tay, cái chén; Ngày 65 & Ngày 80 bón NPK 12:11:18 gốc Sunfat (500g/gốc).",
+      "Giai đoạn Làm cơm (Ngày 105 & Ngày 120, trái 3–4 kg): Phun 500 ml Brixup + 500g Kali Bo và đổ gốc Magic One (1:400) + 1 kg K₂SO₄ giúp cơm vàng ráo tự nhiên, nặng ký.",
+      "Phác đồ điều tiết đọt non bằng SenPro: Đọt Mũi giáo pha 1/400 (già lá/chặn đọt 7–10 ngày); Đọt Hạt gạo pha 1/800 (già lá/chặn đọt 7–10 ngày); Đọt Đuôi tôm pha 1/300 (rụng đọt trong 3 ngày). Bắt buộc ghi nhật ký đầy đủ để HTX đối chiếu nghiệm thu giá cao.",
+    ],
+  },
   {
     title: "Quy trình Quản lý dịch hại tổng hợp (IPM) Cây Sầu riêng theo VietGAP 2026",
     desc: "Tài liệu kỹ thuật của Viện Khoa học Nông nghiệp Việt Nam (VAAS) & Viện Bảo vệ Thực vật (PPRI) năm 2026 áp dụng cho vùng trồng sầu riêng Đắk Lắk, Đắk Nông gắn với liên kết tiêu thụ chuỗi.",
@@ -267,6 +281,10 @@ export default function Catalog() {
       <div className="tab-bar">
         {[
           {
+            id: "protocol",
+            label: `Quy trình 2026–2027 (${DURIAN_PROTOCOL_2026_2027.length})`,
+          },
+          {
             id: "pesticide",
             label:
               pesticides.loading && pesticides.total === 0
@@ -307,6 +325,9 @@ export default function Catalog() {
           </button>
         ))}
       </div>
+
+      {/* ─── 0. QUY TRÌNH CHĂM SÓC SẦU RIÊNG CHUẨN 2026–2027 ─── */}
+      {tab === "protocol" && <CareProtocol2026List />}
 
       {/* ─── 1. THUỐC BVTV (Thiết kế theo Cổng người dùng) ─── */}
       {tab === "pesticide" && (

@@ -278,6 +278,18 @@ export default function HomeTab({
             <span className="pt-spec-sub">Khu vực canh tác</span>
             <span className="pt-spec-val">{household.villageName || "HTX Cư Né"}</span>
           </div>
+
+          <button
+            type="button"
+            className="pt-spec-row is-interactive"
+            onClick={() => onNavigate("learn")}
+            title="Xem khuyến nghị quy trình chăm sóc sầu riêng chuẩn 2026–2027 để đảm bảo thu mua đúng giá, giá cao"
+          >
+            <span className="pt-spec-primary">Quy trình</span>
+            <span className="pt-spec-meta">Bảo chứng thu mua giá cao</span>
+            <span className="pt-spec-sub">Khuyến nghị chăm sóc</span>
+            <span className="pt-spec-val">2026–2027</span>
+          </button>
         </div>
 
         <div className="pt-hero-footer">

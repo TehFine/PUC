@@ -9381,3 +9381,218 @@ html[data-perf="lite"] .pt-mapmodal-close-round-btn {
   filter: none !important;
 }
 
+/* ── Quy trình chăm sóc sầu riêng chuẩn 2026–2027 & Cam kết thu mua giá cao ── */
+.pt-protocol-guarantee-card {
+  background: linear-gradient(180deg, #f4fbf6 0%, #ffffff 100%);
+  border: 1px solid rgba(21, 128, 61, 0.22);
+  border-radius: 22px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+html[data-perf="lite"] .pt-protocol-guarantee-card {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.pt-protocol-guarantee-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.pt-protocol-guarantee-title {
+  margin: 0;
+  font-family: var(--font-display-stack);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.32;
+  letter-spacing: -0.015em;
+  color: #0f172a;
+}
+
+.pt-protocol-guarantee-desc {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.56;
+  color: #334155;
+}
+
+.pt-protocol-pillars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.pt-protocol-pillar {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pt-protocol-pillar strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #14532d;
+  line-height: 1.35;
+}
+
+.pt-protocol-pillar span {
+  font-size: 12.25px;
+  line-height: 1.48;
+  color: #475569;
+}
+
+.pt-protocol-match-hint {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #15803d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pt-protocol-milestone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.pt-protocol-milestone-item {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pt-protocol-milestone-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pt-protocol-day-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  border: 1px solid rgba(21, 128, 61, 0.2);
+  color: #166534;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pt-protocol-state-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.pt-protocol-milestone-action {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.56;
+  color: #1e293b;
+}
+
+.pt-senpro-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.pt-senpro-box {
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pt-senpro-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pt-senpro-state {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: #0f172a;
+}
+
+.pt-senpro-ratio {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.pt-senpro-effect {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #15803d;
+  line-height: 1.42;
+}
+
+@media (max-width: 720px) {
+  .pt-protocol-guarantee-card {
+    padding: 15px 15px;
+    border-radius: 20px;
+  }
+
+  .pt-protocol-guarantee-title {
+    font-size: 15.5px;
+  }
+
+  .pt-protocol-guarantee-desc {
+    font-size: 13px;
+  }
+
+  .pt-protocol-pillars {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .pt-senpro-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+

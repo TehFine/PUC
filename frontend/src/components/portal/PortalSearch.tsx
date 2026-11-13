@@ -21,9 +21,11 @@ export type PortalAction =
   | "spray-add"
   | "spray-list"
   | "harvest-lots"
+  | "learn-protocol"
   | "learn-pesticides"
   | "learn-fertilizers"
-  | "learn-varieties";
+  | "learn-varieties"
+  | "learn-diseases";
 
 /** Thao tác ở cấp toàn cổng (mở hộp thoại trên thanh đầu trang). */
 export type PortalGlobalAction = "notifications" | "profile" | "password" | "support";
@@ -121,6 +123,15 @@ const ENTRIES: SearchEntry[] = [
     target: { kind: "tab", tab: "inspection" },
   },
   {
+    id: "care-protocol-2026",
+    title: "Quy trình chăm sóc chuẩn 2026–2027",
+    where: "Kiến thức › Quy trình chăm sóc",
+    keywords:
+      "quy trinh cham soc sau rieng 2026 2027 khuyen nghi mua vu coi dot tao mam nuoi bong nuoi trai keo coi lam com senpro amino magic brixup kali bo thu mua dung gia gia cao bao tieu htx",
+    target: { kind: "tab", tab: "learn", action: "learn-protocol" },
+    popular: true,
+  },
+  {
     id: "pesticides",
     title: "Thuốc được phép / bị cấm",
     where: "Kiến thức › Thuốc BVTV",
@@ -140,6 +151,13 @@ const ENTRIES: SearchEntry[] = [
     where: "Kiến thức › Giống cây",
     keywords: "giong sau rieng cay musang king ri6 monthong dona",
     target: { kind: "tab", tab: "learn", action: "learn-varieties" },
+  },
+  {
+    id: "diseases-ipm",
+    title: "Sâu bệnh hại & IPM VietGAP",
+    where: "Kiến thức › Sâu bệnh & IPM",
+    keywords: "sau benh hai ipm xi mu heo ngon rep sap ray nhay sau duc qua",
+    target: { kind: "tab", tab: "learn", action: "learn-diseases" },
   },
   {
     id: "home",

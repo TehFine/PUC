@@ -12,6 +12,13 @@ import {
 } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
+import {
+  DURIAN_PROTOCOL_2026_2027,
+  HTX_PRICE_GUARANTEE_POLICY,
+  SENPRO_SHOOT_PROTOCOL,
+  type DurianProtocolStage,
+  type ProtocolGroup,
+} from "@/lib/durian-protocol-2026-2027";
 import type { PortalAction } from "./PortalSearch";
 import {
   CARE_PROCESS_2026,
@@ -25,7 +32,7 @@ import { Card, EmptyState, FadeFilterBar, Pill, SectionDivider, SegmentedTabs, S
 
 export { getTrainingKicker, usePortalTrainings, type TrainingCourseItem };
 
-type View = "pesticides" | "fertilizers" | "varieties" | "diseases";
+type View = "protocol" | "pesticides" | "fertilizers" | "varieties" | "diseases";
 type StatusFilter = "all" | "allowed" | "restricted" | "banned";
 type FertilizerFilter = "all" | "organic" | "npk" | "foliar" | "microbial" | "restricted";
 type VarietyFilter = "all" | "export" | "native" | "premium" | "new";
@@ -2831,16 +2838,333 @@ export function DiseaseAndIpmList() {
   );
 }
 
+export function CareProtocolDetailModal({
+  stage,
+  onClose,
+}: {
+  stage: DurianProtocolStage;
+  onClose: () => void;
+}) {
+  const sheetClose = useSheetClose();
+  const closeModal = sheetClose ?? onClose;
+  const isSenPro = stage.id === "senpro";
+
+  return (
+    <div className="pt-pesticide-modal">
+      <div className="pt-pesticide-showcase-wrap" style={{ padding: "4px 0 8px" }}>
+        <img
+          src={stage.imageSrc}
+          alt={stage.imageAlt}
+          className="pt-pesticide-showcase-img"
+          style={{
+            objectFit: "cover",
+            width: "100%",
+            height: 205,
+            borderRadius: 18,
+          }}
+        />
+      </div>
+
+      <div className="pt-pesticide-modal-header">
+        <div className="pt-training-modal-badges" style={{ justifyContent: "center" }}>
+          <Pill tone="green">
+            {isSenPro ? "Phụ lục kỹ thuật · 2026–2027" : `Giai đoạn ${stage.order} / 08 · ${stage.duration}`}
+          </Pill>
+          <span className="pt-training-code-pill">Bảo chứng thu mua giá cao</span>
+        </div>
+        <h3 className="pt-pesticide-modal-title">
+          {stage.order}. {stage.name}
+        </h3>
+        <p className="pt-pesticide-modal-mfg">
+          Quy trình chăm sóc sầu riêng chuẩn HTX Cư Né niên vụ 2026–2027
+        </p>
+      </div>
+
+      <div className="pt-pesticide-efficacy-card">
+        <div className="pt-efficacy-row">
+          <span className="pt-efficacy-label">Mục tiêu kỹ thuật giai đoạn</span>
+          <p className="pt-efficacy-desc">{stage.summary}</p>
+        </div>
+
+        <div className="pt-efficacy-row" style={{ marginTop: 8 }}>
+          <span className="pt-efficacy-label" style={{ color: "#15803d" }}>
+            {isSenPro
+              ? "Tỷ lệ pha SenPro theo từng trạng thái đọt non"
+              : "Lịch trình thực hành trên vườn (Ngày dự kiến · Trạng thái · Sản phẩm)"}
+          </span>
+          <div className="pt-protocol-milestone-list">
+            {stage.milestones.map((m, idx) => (
+              <div key={`${m.targetDay}-${m.treeState}-${idx}`} className="pt-protocol-milestone-item">
+                <div className="pt-protocol-milestone-head">
+                  <span className="pt-protocol-day-pill">{m.targetDay}</span>
+                  <span className="pt-protocol-state-pill">{m.treeState}</span>
+                </div>
+                <p className="pt-protocol-milestone-action">{m.action}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-pesticide-efficacy-card">
+        <div className="pt-efficacy-row">
+          <span className="pt-efficacy-label" style={{ color: "#1d4ed8" }}>
+            Nguyên tắc tuân thủ bắt buộc tại vườn
+          </span>
+          <ul className="pt-efficacy-bullet-list">
+            {stage.keyRules.map((rule, idx) => (
+              <li key={idx} className="pt-efficacy-bullet-item">
+                {rule}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="pt-pesticide-safety-tips">
+        <h4 className="pt-pesticide-modal-section-title">
+          Yêu cầu ghi nhật ký & Cam kết thu mua đúng giá, giá cao
+        </h4>
+        <p style={{ margin: "4px 0 0", fontSize: 13, lineHeight: 1.55, color: "#334155" }}>
+          {stage.diaryRequirement} Chỉ khi hộ thành viên tuân thủ đúng quy trình chuẩn 2026–2027 và cập nhật nhật ký đầy đủ, HTX Cư Né mới đủ cơ sở bảo chứng chất lượng xuất khẩu và cam kết thu mua sản phẩm đúng giá, giá cao.
+        </p>
+      </div>
+
+      <div className="pt-training-modal-actions">
+        <button
+          type="button"
+          className="pt-btn pt-btn-primary"
+          style={{ width: "100%", justifyContent: "center" }}
+          onClick={closeModal}
+        >
+          Đã nắm rõ quy trình
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function CareProtocol2026List() {
+  const [query, setQuery] = useState("");
+  const [groupFilter, setGroupFilter] = useState<"all" | ProtocolGroup>("all");
+  const [selectedStage, setSelectedStage] = useState<DurianProtocolStage | null>(null);
+
+  const counts = useMemo(
+    () => ({
+      all: DURIAN_PROTOCOL_2026_2027.length,
+      recovery: DURIAN_PROTOCOL_2026_2027.filter((s) => s.group === "recovery").length,
+      flowering: DURIAN_PROTOCOL_2026_2027.filter((s) => s.group === "flowering").length,
+      fruiting: DURIAN_PROTOCOL_2026_2027.filter((s) => s.group === "fruiting").length,
+      senpro: DURIAN_PROTOCOL_2026_2027.filter((s) => s.group === "senpro").length,
+    }),
+    [],
+  );
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return DURIAN_PROTOCOL_2026_2027.filter((stage) => {
+      const matchesGroup = groupFilter === "all" || stage.group === groupFilter;
+      if (!matchesGroup) return false;
+      if (!q) return true;
+      const milestoneText = stage.milestones
+        .map((m) => `${m.treeState} ${m.targetDay} ${m.action}`)
+        .join(" ");
+      const haystack = `${stage.order} ${stage.name} ${stage.duration} ${stage.summary} ${milestoneText} ${stage.keyRules.join(" ")}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [query, groupFilter]);
+
+  return (
+    <section className="pt-pest-section" aria-labelledby="protocol-2026-heading">
+      <div className="pt-pest-header">
+        <h2 id="protocol-2026-heading" className="pt-pest-title">
+          Khuyến nghị quy trình chăm sóc sầu riêng chuẩn 2026–2027
+        </h2>
+      </div>
+
+      <div className="pt-pest-wrap">
+        <div className="pt-protocol-guarantee-card" role="note" aria-label="Chính sách thu mua giá cao khi tuân thủ quy trình chuẩn">
+          <span className="pt-protocol-guarantee-badge">{HTX_PRICE_GUARANTEE_POLICY.badge}</span>
+          <h3 className="pt-protocol-guarantee-title">{HTX_PRICE_GUARANTEE_POLICY.headline}</h3>
+          <p className="pt-protocol-guarantee-desc">{HTX_PRICE_GUARANTEE_POLICY.desktopNote}</p>
+          <div className="pt-protocol-pillars">
+            {HTX_PRICE_GUARANTEE_POLICY.pillars.map((pillar) => (
+              <div key={pillar.title} className="pt-protocol-pillar">
+                <strong>{pillar.title}</strong>
+                <span>{pillar.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="pt-pest-search-box">
+          <Search size={16} className="pt-pest-search-icon" aria-hidden="true" />
+          <input
+            className="pt-pest-search-input"
+            type="search"
+            placeholder="Tìm giai đoạn, trạng thái (trứng gà, cái chén...), số ngày, Brixup, Kali Bo, SenPro..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Tìm kiếm trong quy trình chăm sóc sầu riêng 2026–2027"
+          />
+          {query && (
+            <button
+              type="button"
+              className="pt-pest-search-clear"
+              onClick={() => setQuery("")}
+              aria-label="Xóa từ khóa tìm kiếm"
+            >
+              <CloseCircleIcon size={20} />
+            </button>
+          )}
+        </div>
+
+        <FadeFilterBar ariaLabel="Lọc theo giai đoạn sinh trưởng sầu riêng" activeKey={groupFilter}>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip ${groupFilter === "all" ? "is-active" : ""}`}
+            onClick={() => setGroupFilter("all")}
+          >
+            Tất cả <span className="pt-pest-filter-count">{counts.all}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-allowed ${groupFilter === "recovery" ? "is-active" : ""}`}
+            onClick={() => setGroupFilter("recovery")}
+          >
+            Phục hồi & Cơi đọt <span className="pt-pest-filter-count">{counts.recovery}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-restricted ${groupFilter === "flowering" ? "is-active" : ""}`}
+            onClick={() => setGroupFilter("flowering")}
+          >
+            Tạo mầm & Nuôi bông <span className="pt-pest-filter-count">{counts.flowering}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-allowed ${groupFilter === "fruiting" ? "is-active" : ""}`}
+            onClick={() => setGroupFilter("fruiting")}
+          >
+            Nuôi trái & Làm cơm <span className="pt-pest-filter-count">{counts.fruiting}</span>
+          </button>
+          <button
+            type="button"
+            className={`pt-pest-filter-chip is-banned ${groupFilter === "senpro" ? "is-active" : ""}`}
+            onClick={() => setGroupFilter("senpro")}
+          >
+            Chặn đọt SenPro <span className="pt-pest-filter-count">{counts.senpro}</span>
+          </button>
+        </FadeFilterBar>
+
+        <div className="pt-pest-list">
+          {shown.map((stage) => {
+            const q = query.trim().toLowerCase();
+            const matchedMilestone = q
+              ? stage.milestones.find((m) =>
+                  `${m.treeState} ${m.targetDay} ${m.action}`.toLowerCase().includes(q),
+                )
+              : undefined;
+
+            return (
+              <article
+                key={stage.id}
+                className={`pt-pest-card ${stage.id === "senpro" ? "pt-pest-card-restricted" : "pt-pest-card-encouraged"}`}
+                onClick={() => setSelectedStage(stage)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedStage(stage);
+                  }
+                }}
+                title={`Bấm để xem định lượng chi tiết ${stage.name}`}
+              >
+                <div className="pt-pest-card-img-wrap">
+                  <img
+                    src={stage.imageSrc}
+                    alt={stage.imageAlt}
+                    loading="lazy"
+                    decoding="async"
+                    className="pt-pest-card-img"
+                    style={{ objectFit: "cover", borderRadius: 14 }}
+                  />
+                </div>
+                <div className="pt-pest-card-content">
+                  <h3 className="pt-pest-card-name">
+                    {stage.order}. {stage.name}
+                  </h3>
+                  <p className="pt-pest-card-sub">
+                    <strong>{stage.duration}</strong> · {stage.milestones.length} mốc định lượng chi tiết
+                  </p>
+                  {matchedMilestone ? (
+                    <div className="pt-protocol-match-hint">
+                      {matchedMilestone.targetDay} ({matchedMilestone.treeState}): {matchedMilestone.action}
+                    </div>
+                  ) : (
+                    <div className="pt-pest-card-metric">
+                      <span>{stage.cardSubtitle}</span>
+                    </div>
+                  )}
+                </div>
+                <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
+              </article>
+            );
+          })}
+        </div>
+
+        {shown.length === 0 && (
+          <EmptyState icon="search">
+            Không tìm thấy giai đoạn hoặc sản phẩm phù hợp với từ khóa.
+          </EmptyState>
+        )}
+
+        {(groupFilter === "all" || groupFilter === "senpro") && !query && (
+          <Card title="Bảng tra cứu nhanh: Dùng SenPro điều tiết & chặn đọt non (2026–2027)">
+            <div className="pt-senpro-grid">
+              {SENPRO_SHOOT_PROTOCOL.map((rule) => (
+                <div key={rule.shootState} className="pt-senpro-box">
+                  <div className="pt-senpro-top">
+                    <span className="pt-senpro-state">Đọt {rule.shootState}</span>
+                    <span className="pt-senpro-ratio">Tỷ lệ {rule.ratio}</span>
+                  </div>
+                  <p className="pt-senpro-effect">{rule.effect}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {selectedStage && (
+          <Sheet
+            title="Quy trình chăm sóc chuẩn 2026–2027"
+            onClose={() => setSelectedStage(null)}
+          >
+            <CareProtocolDetailModal
+              stage={selectedStage}
+              onClose={() => setSelectedStage(null)}
+            />
+          </Sheet>
+        )}
+      </div>
+    </section>
+  );
+}
+
 const LEARN_VIEW_BY_ACTION: Partial<Record<PortalAction, View>> = {
+  "learn-protocol": "protocol",
   "learn-pesticides": "pesticides",
   "learn-fertilizers": "fertilizers",
   "learn-varieties": "varieties",
+  "learn-diseases": "diseases",
 };
 
 export default function LearnTab({ initialAction }: { initialAction?: PortalAction } = {}) {
-  // Mở sẵn đúng mục khi bà con chọn gợi ý từ ô tìm kiếm
-  const [view, setView] = useState<View>(() => (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) || "pesticides");
+  // Mở sẵn Quy trình chăm sóc chuẩn 2026–2027 làm mặc định (hoặc mở đúng mục từ thanh tìm kiếm)
+  const [view, setView] = useState<View>(() => (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) || "protocol");
   const items: { id: View; label: string }[] = [
+    { id: "protocol", label: "Quy trình chăm sóc" },
     { id: "pesticides", label: "Thuốc BVTV" },
     { id: "fertilizers", label: "Phân bón" },
     { id: "varieties", label: "Giống cây" },
@@ -2863,6 +3187,7 @@ export default function LearnTab({ initialAction }: { initialAction?: PortalActi
           </button>
         ))}
       </SegmentedTabs>
+      {view === "protocol" && <CareProtocol2026List />}
       {view === "pesticides" && <PesticideList />}
       {view === "fertilizers" && <FertilizerList />}
       {view === "varieties" && <VarietyList />}
