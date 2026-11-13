@@ -48,9 +48,12 @@ export default function RegisterPage() {
               03
             </span>
             <div className="auth-timeline-body">
-              <strong className="auth-timeline-title">Đăng nhập &amp; ghi nhật ký mùa vụ</strong>
+              <strong className="auth-timeline-title">Tuân thủ quy trình chuẩn 2026–2027 &amp; ghi nhật ký</strong>
               <p className="auth-timeline-desc">
-                Truy cập cổng thành viên, đổi sang mật khẩu cá nhân và cập nhật nhật ký canh tác điện tử.
+                Áp dụng đúng khuyến nghị quy trình chăm sóc sầu riêng 2026–2027 của HTX và cập nhật nhật ký đầy đủ để được đảm bảo thu mua đúng giá, giá cao.{" "}
+                <Link href="/#quy-trinh" className="auth-switch-btn" style={{ marginLeft: 0 }}>
+                  Xem quy trình 2026–2027 →
+                </Link>
               </p>
             </div>
           </li>

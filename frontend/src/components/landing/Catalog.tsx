@@ -10,7 +10,11 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { lockRootScroll } from "@/lib/scroll-lock";
-import { STAGES } from "./data";
+import {
+  DURIAN_PROTOCOL_2026_2027,
+  HTX_PRICE_GUARANTEE_POLICY,
+  type ProtocolMilestone,
+} from "@/lib/durian-protocol-2026-2027";
 import {
   usePublic,
   type PublicCatalog,
@@ -19,7 +23,7 @@ import {
   type PublicVariety,
 } from "./use-public";
 
-type GuidanceTab = "allowed" | "banned" | "fertilizers" | "advisory" | "varieties";
+type GuidanceTab = "advisory" | "allowed" | "banned" | "fertilizers" | "varieties";
 
 interface CatalogCardItem {
   id: string;
@@ -34,6 +38,8 @@ interface CatalogCardItem {
   fullTitle: string;
   lead: string;
   specs: Array<{ label: string; value: string }>;
+  milestonesTitle?: string;
+  milestones?: readonly ProtocolMilestone[];
   guidelinesTitle: string;
   guidelines: string[];
   callout?: {
@@ -48,6 +54,11 @@ const TAB_CONFIG: Array<{
   heading: string;
 }> = [
   {
+    id: "advisory",
+    label: "Quy trình chăm sóc",
+    heading: "Khuyến nghị quy trình chăm sóc sầu riêng chuẩn 2026–2027",
+  },
+  {
     id: "allowed",
     label: "Được phép",
     heading: "Danh mục thuốc BVTV được phép",
@@ -61,11 +72,6 @@ const TAB_CONFIG: Array<{
     id: "fertilizers",
     label: "Phân bón",
     heading: "Phân bón & chế phẩm vi sinh",
-  },
-  {
-    id: "advisory",
-    label: "Mùa vụ",
-    heading: "Quy trình chăm sóc 07 giai đoạn",
   },
   {
     id: "varieties",
@@ -336,47 +342,6 @@ const FALLBACK_VARIETIES: PublicVariety[] = [
   },
 ];
 
-const STAGE_PHOTOS: Record<
-  string,
-  { src: string; alt: string; drawerPos: string }
-> = {
-  dat: {
-    src: "/stages/stage-01-dat.jpg",
-    alt: "Kỹ thuật viên lấy mẫu kiểm tra độ pH đất đỏ bazan trên khu vườn đã lên mô cao và đào mương thoát nước trước khi trồng",
-    drawerPos: "center 58%",
-  },
-  giong: {
-    src: "/stages/stage-02-giong.jpg",
-    alt: "Cây giống sầu riêng ghép khỏe mạnh trồng trên mô đất đỏ bazan có cọc tre cố định, lưới che nắng và tủ rơm giữ ẩm gốc",
-    drawerPos: "center 56%",
-  },
-  phan: {
-    src: "/stages/stage-03-phan.jpg",
-    alt: "Nhà vườn bón phân hữu cơ ủ hoai vi sinh theo rãnh tròn chiếu mép tán quanh gốc sầu riêng",
-    drawerPos: "center 68%",
-  },
-  nuoc: {
-    src: "/stages/stage-04-nuoc.jpg",
-    alt: "Chùm nụ mắt cua và hoa sầu riêng bung nở dưới cành gỗ lớn cùng hệ thống béc tưới giữ ẩm đều dưới gốc",
-    drawerPos: "center 46%",
-  },
-  "sau-benh": {
-    src: "/stages/stage-05-sau-benh.jpg",
-    alt: "Cán bộ kỹ thuật dùng kính lúp kiểm tra mặt dưới lá và nhà vườn tỉa cành tạo độ thông thoáng phòng trừ sâu bệnh IPM",
-    drawerPos: "center 48%",
-  },
-  "thu-hoach": {
-    src: "/stages/stage-06-thu-hoach.jpg",
-    alt: "Thu hoạch sầu riêng đúng độ chín bằng kéo sạch và xếp trái vào sọt nhựa lót xốp trên bạt sạch gắn phiếu mã lô tại vườn",
-    drawerPos: "center 54%",
-  },
-  "sau-thu": {
-    src: "/stages/stage-07-sau-thu.jpg",
-    alt: "Phân loại sầu riêng tại cơ sở đóng gói đạt chuẩn, gắn tem mã QR truy xuất lên cuống trái và đóng thùng xuất khẩu",
-    drawerPos: "center 46%",
-  },
-};
-
 const STUDIO_POOL: Array<{ src: string; fit: "studio-jpg" | "studio-png" }> = [
   { src: "/pesticides/cat-bio-wp.jpg", fit: "studio-jpg" },
   { src: "/pesticides/cat-microbial-jar.jpg", fit: "studio-jpg" },
@@ -448,7 +413,7 @@ function shortenTitle(raw: string): string {
 
 export default function Catalog() {
   const { data } = usePublic<PublicCatalog>("catalog");
-  const [tab, setTab] = useState<GuidanceTab>("allowed");
+  const [tab, setTab] = useState<GuidanceTab>("advisory");
   const [drawerIndex, setDrawerIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [canPrev, setCanPrev] = useState(false);
@@ -794,33 +759,41 @@ export default function Catalog() {
         };
       });
 
-    // 4. Quy trình mùa vụ 07 giai đoạn
-    const advisoryList: CatalogCardItem[] = STAGES.map((stage, idx) => {
-      const stepNum = String(idx + 1).padStart(2, "0");
-      const stagePhoto = STAGE_PHOTOS[stage.id] ?? STAGE_PHOTOS.dat;
+    // 4. Quy trình chăm sóc sầu riêng chuẩn niên vụ 2026–2027 (8 giai đoạn + Phác đồ SenPro)
+    const advisoryList: CatalogCardItem[] = DURIAN_PROTOCOL_2026_2027.map((stage) => {
+      const isSenPro = stage.id === "senpro";
       return {
         id: `stage-${stage.id}`,
-        title: `${stepNum}. ${stage.label}`,
-        subtitle: `${stage.tag} · Ghi nhật ký chuẩn mã vùng`,
-        imageSrc: stagePhoto.src,
-        imageAlt: stagePhoto.alt,
-        drawerObjectPosition: stagePhoto.drawerPos,
+        title: `${stage.order}. ${stage.name}`,
+        subtitle: stage.cardSubtitle,
+        imageSrc: stage.imageSrc,
+        imageAlt: stage.imageAlt,
+        drawerObjectPosition: stage.drawerObjectPosition,
         imageFit: "photo",
-        categoryLabel: `Giai đoạn ${stepNum} / ${String(STAGES.length).padStart(2, "0")}`,
-        eyebrow: `Thời điểm áp dụng: ${stage.tag}`,
-        fullTitle: `${stepNum}. ${stage.title}`,
-        lead: stage.items[0] ?? "",
+        categoryLabel: isSenPro
+          ? "Phụ lục điều tiết đọt · Quy trình 2026–2027"
+          : `Giai đoạn ${stage.order} / 08 · Quy trình 2026–2027`,
+        eyebrow: `${HTX_PRICE_GUARANTEE_POLICY.badge} · Thời gian: ${stage.duration}`,
+        fullTitle: `${stage.order}. ${stage.name} (${stage.duration})`,
+        lead: stage.summary,
         specs: [
-          { label: "Thứ tự quy trình", value: `Giai đoạn ${stepNum} — ${stage.label}` },
-          { label: "Thời điểm trong vụ", value: stage.tag },
-          { label: "Mức độ giám sát", value: stage.id === "sau-benh" ? "Rủi ro dư lượng cao nhất" : "Giám sát định kỳ theo thửa" },
-          { label: "Đối tượng thực hiện", value: "Chủ hộ canh tác & Cán bộ kỹ thuật thôn" },
+          {
+            label: "Hạng mục quy trình",
+            value: isSenPro ? "Chuyên đề chặn / già đọt non" : `Giai đoạn ${stage.order} — ${stage.name}`,
+          },
+          { label: "Thời gian dự kiến", value: stage.duration },
+          { label: "Số mốc tác động", value: `${stage.milestones.length} mốc định lượng chi tiết` },
+          { label: "Quyền lợi tuân thủ", value: "Bảo chứng thu mua đúng giá, giá cao" },
         ],
-        guidelinesTitle: "Khuyến cáo thực hành tại vườn",
-        guidelines: stage.items,
+        milestonesTitle: isSenPro
+          ? "Bảng tỷ lệ pha SenPro theo trạng thái đọt non"
+          : "Lịch thực hành chi tiết (Trạng thái · Ngày dự kiến · Sản phẩm & Hành động)",
+        milestones: stage.milestones,
+        guidelinesTitle: "Nguyên tắc tuân thủ bắt buộc tại vườn",
+        guidelines: stage.keyRules,
         callout: {
-          label: "Nội dung bắt buộc ghi vào nhật ký canh tác",
-          text: stage.log,
+          label: "Điều kiện đảm bảo thu mua đúng giá, giá cao của HTX Cư Né",
+          text: `${stage.diaryRequirement} Chỉ khi hộ thành viên tuân thủ đúng định lượng quy trình chuẩn 2026–2027 và ghi nhật ký đầy đủ, HTX mới bảo chứng chất lượng xuất khẩu và đảm bảo thu mua đúng giá, giá cao.`,
         },
       };
     });
@@ -1102,6 +1075,16 @@ export default function Catalog() {
           </div>
         </div>
 
+        {tab === "advisory" && (
+          <div className="sw-cat-protocol-banner" role="note" aria-label="Cam kết thu mua theo quy trình chuẩn">
+            <span className="sw-micro">{HTX_PRICE_GUARANTEE_POLICY.badge}</span>
+            <p className="sw-cat-protocol-note">
+              <span className="sw-hide-mobile">{HTX_PRICE_GUARANTEE_POLICY.desktopNote}</span>
+              <span className="sw-only-mobile">{HTX_PRICE_GUARANTEE_POLICY.mobileNote}</span>
+            </p>
+          </div>
+        )}
+
         <div
           ref={stripRef}
           className={`sw-cat-strip ${isDragging ? "is-dragging" : ""}`}
@@ -1252,6 +1235,33 @@ export default function Catalog() {
                     </div>
                   ))}
                 </dl>
+
+                {activeDrawerItem.milestones && activeDrawerItem.milestones.length > 0 && (
+                  <div className="sw-side-section">
+                    <h4>
+                      {activeDrawerItem.milestonesTitle ??
+                        "Lịch thực hành chi tiết theo trạng thái & ngày dự kiến"}
+                    </h4>
+                    <div className="sw-protocol-steps" role="list">
+                      {activeDrawerItem.milestones.map((m, mIdx) => (
+                        <div
+                          key={`${m.targetDay}-${m.treeState}-${mIdx}`}
+                          className="sw-protocol-step"
+                          role="listitem"
+                        >
+                          <div className="sw-protocol-step-meta">
+                            <span className="sw-protocol-day">{m.targetDay}</span>
+                            <span className="sw-protocol-sep" aria-hidden="true">
+                              ·
+                            </span>
+                            <span className="sw-protocol-state">{m.treeState}</span>
+                          </div>
+                          <p className="sw-protocol-action">{m.action}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="sw-side-section">
                   <h4>{activeDrawerItem.guidelinesTitle}</h4>

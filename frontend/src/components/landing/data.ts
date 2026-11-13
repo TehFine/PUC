@@ -201,9 +201,15 @@ export const FAQ = [
   },
   {
     q: "Tôi muốn đăng ký mã vùng trồng thì làm thế nào?",
-    a: "Bấm Đăng ký ở góc trên, điền họ tên, số điện thoại và mật khẩu. Cán bộ HTX sẽ kiểm tra và xác nhận tài khoản đó đúng là của hộ bạn. Sau đó bạn đăng nhập bằng số điện thoại và gửi hồ sơ vùng trồng ngay trong mục Hồ sơ. Cán bộ sẽ đến đo đất, xem vườn rồi mới duyệt cấp mã.",
+    a: "Bấm Đăng ký ở góc trên để xem hướng dẫn lập hồ sơ với Trưởng thôn hoặc cán bộ kỹ thuật HTX. Sau khi đối chiếu đất đai và đo vẽ GPS tại vườn, HTX sẽ bàn giao tài khoản theo số điện thoại để hộ bắt đầu áp dụng quy trình chăm sóc chuẩn và ghi nhật ký mùa vụ.",
     shortA:
-      "Bấm Đăng ký bằng số điện thoại để HTX xác nhận, sau đó gửi hồ sơ trong mục Hồ sơ để cán bộ đến đo đất và cấp mã.",
+      "Liên hệ Trưởng thôn hoặc cán bộ HTX lập hồ sơ đo đạc GPS thửa vườn để được cấp mã và bàn giao tài khoản thành viên.",
+  },
+  {
+    q: "Làm thế nào để sầu riêng của hộ tham gia HTX được đảm bảo thu mua đúng giá, giá cao?",
+    a: "Hộ thành viên cần học và tuân thủ nghiêm ngặt Quy trình chăm sóc sầu riêng chuẩn niên vụ 2026–2027 của HTX Cư Né (từ khâu Chuẩn bị vườn, Cơi đọt 1–2, Tạo mầm, Nuôi bông, Nuôi trái, Kéo cơi, Làm cơm đến điều tiết đọt SenPro), kết hợp ghi nhật ký đầy đủ và tôn trọng thời gian cách ly. Chỉ khi tuân thủ đúng quy trình chuẩn này, trái mới đồng đều 3–4 kg, lên cơm vàng ráo, đạt kiểm nghiệm Cadimi & MRL để HTX bảo chứng bao tiêu đúng giá, giá cao.",
+    shortA:
+      "Tuân thủ đúng Quy trình chăm sóc chuẩn 2026–2027 của HTX và ghi nhật ký đầy đủ để trái đạt chuẩn xuất khẩu, được HTX đảm bảo thu mua đúng giá, giá cao.",
   },
   {
     q: "Tôi không rành công nghệ, ghi nhật ký có khó không?",
