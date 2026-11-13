@@ -7,7 +7,6 @@ import { usePortal } from "@/hooks/use-portal";
 import { relativeDayLabel } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalLabTest, PortalList, PortalScheduleItem } from "@/types/portal";
-import type { PortalTabId } from "./PortalApp";
 import { EmptyState, SectionDivider, StateBlock } from "./ui";
 
 const LabTestCertificateModal = dynamic(() => import("./LabTestCertificateModal"), { ssr: false });
@@ -19,7 +18,7 @@ const ROUTE_THEMES = [
   { titleColor: "#1e40af" },
 ];
 
-export default function InspectionTab({ onNavigate: _onNavigate }: { onNavigate?: (tab: PortalTabId) => void }) {
+export default function InspectionTab() {
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
   const tests = usePortal<PortalList<PortalLabTest>>("lab-tests");
   const [selectedTest, setSelectedTest] = useState<PortalLabTest | null>(null);

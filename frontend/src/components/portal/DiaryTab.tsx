@@ -691,7 +691,7 @@ function SprayDetailModal({
     setDeleteError(null);
     try {
       await api.delete(`/portal/spray/${record.id}`);
-      invalidatePortal("spray", "journal", "overview");
+      invalidatePortal("spray", "journal", "overview", "violations");
       onDeleted();
     } catch (err) {
       setDeleteError(errorMessage(err, "Không xóa được bản ghi phun thuốc."));

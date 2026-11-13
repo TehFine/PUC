@@ -321,7 +321,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
   const lat = plot.lat ?? 13.125;
   const lng = plot.lng ?? 108.185;
-  const status = PLOT_STATUS[plot.status];
+  const status = PLOT_STATUS[plot.status] ?? PLOT_STATUS.pending;
 
   useEffect(() => {
     if (!mounted) return;
@@ -728,10 +728,10 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Diện tích</span>
                   <strong className="pt-mapmodal-stat-val">
-                    {plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
+                    {(plot.areaHa ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
                   </strong>
                   <span className="pt-mapmodal-stat-sub">
-                    ({(plot.areaHa * 10000).toLocaleString("vi-VN")} m²)
+                    ({((plot.areaHa ?? 0) * 10000).toLocaleString("vi-VN")} m²)
                   </span>
                 </div>
 
@@ -741,7 +741,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                     Thửa #{plot.parcel || "—"} · Tờ #{plot.sheet || "—"}
                   </strong>
                   <span className="pt-mapmodal-stat-sub">
-                    Nguồn: {SOURCE_LABEL[plot.source]}
+                    Nguồn: {SOURCE_LABEL[plot.source] ?? "Khảo sát thực địa"}
                   </span>
                 </div>
 

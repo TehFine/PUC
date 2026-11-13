@@ -396,7 +396,7 @@ function PortalAppContent() {
   const profAccount = profile?.account;
   const displayName = profHousehold?.name || profAccount?.fullName || session?.user.fullName || "Hộ thành viên";
   const linkedEmail = profAccount?.email ?? session?.user.email ?? null;
-  const serverAvatarUrl = profile?.household.avatarUrl ?? overview?.household.avatarUrl ?? null;
+  const serverAvatarUrl = profile?.household?.avatarUrl ?? overview?.household?.avatarUrl ?? null;
   const avatarUrl = localAvatarOverride !== undefined ? localAvatarOverride : serverAvatarUrl;
   const householdStatus = HOUSEHOLD_STATUS[profHousehold?.status ?? "pending"] ?? HOUSEHOLD_STATUS.pending;
   const initials =
@@ -668,7 +668,7 @@ function PortalAppContent() {
           {tab === "plots" && <PlotsTab />}
           {tab === "diary" && <DiaryTab initialAction={intent.action} />}
           {tab === "stamps" && <StampsTab overview={overview} />}
-          {tab === "inspection" && <InspectionTab onNavigate={navigate} />}
+          {tab === "inspection" && <InspectionTab />}
           {tab === "learn" && <LearnTab initialAction={intent.action} />}
           <SupportFooter onOpen={openSupport} />
         </div>
@@ -794,7 +794,7 @@ function PortalAppContent() {
                 </div>
               </div>
 
-              {profile?.household.cccdMasked && (
+              {profile?.household?.cccdMasked && (
                 <div className="pt-profile-row">
                   <RadialPngIcon src="/id-card.png" size={24} className="pt-profile-icon" />
                   <div className="pt-profile-row-content">

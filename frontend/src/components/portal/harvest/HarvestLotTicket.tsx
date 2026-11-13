@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Download, QrCode } from "lucide-react";
 import QRCode from "qrcode";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
@@ -10,7 +10,18 @@ import { formatDate } from "@/utils/format";
 import type { PortalHarvest } from "@/types/portal";
 import { Sheet } from "../ui";
 
+const MAX_QR_CACHE = 64;
 const qrDataUrlCache = new Map<string, string>();
+
+function setQrCacheEntry(key: string, url: string) {
+  if (qrDataUrlCache.has(key)) {
+    qrDataUrlCache.delete(key);
+  } else if (qrDataUrlCache.size >= MAX_QR_CACHE) {
+    const oldest = qrDataUrlCache.keys().next().value;
+    if (oldest !== undefined) qrDataUrlCache.delete(oldest);
+  }
+  qrDataUrlCache.set(key, url);
+}
 
 interface HarvestAssetTagCardProps {
   lot: PortalHarvest;
@@ -23,9 +34,16 @@ export function HarvestAssetTagCard({
   pucCode = "66-PUC-SR0001-00728",
   onOpenModal,
 }: HarvestAssetTagCardProps) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const codeKey = `M:${lot.qrCode || lot.lotCode}`;
-  const [qrSrc, setQrSrc] = useState<string>(() => qrDataUrlCache.get(codeKey) ?? "");
-  const status = HARVEST_STATUS[lot.status];
+  const [asyncQr, setAsyncQr] = useState<{ key: string; url: string } | null>(null);
+  const [nearView, setNearView] = useState<boolean>(
+    () =>
+      qrDataUrlCache.has(codeKey) ||
+      (typeof window !== "undefined" && typeof IntersectionObserver === "undefined"),
+  );
+  const qrSrc = qrDataUrlCache.get(codeKey) ?? (asyncQr?.key === codeKey ? asyncQr.url : "");
+  const status = HARVEST_STATUS[lot.status] ?? HARVEST_STATUS.sampling;
 
   const watermarkTitle =
     lot.status === "exported"
@@ -44,9 +62,24 @@ export function HarvestAssetTagCard({
       : "GIÁM SÁT VÙNG TRỒNG";
 
   useEffect(() => {
-    if (qrDataUrlCache.has(codeKey)) {
-      return;
-    }
+    if (nearView) return;
+    const el = cardRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNearView(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "240px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [nearView]);
+
+  useEffect(() => {
+    if (!nearView || qrDataUrlCache.has(codeKey)) return;
     let active = true;
     const origin =
       typeof window !== "undefined" && window.location.origin
@@ -64,8 +97,8 @@ export function HarvestAssetTagCard({
       errorCorrectionLevel: "M",
     })
       .then((url) => {
-        qrDataUrlCache.set(codeKey, url);
-        if (active) setQrSrc(url);
+        setQrCacheEntry(codeKey, url);
+        if (active) setAsyncQr({ key: codeKey, url });
       })
       .catch(() => {
         // Ignore QR generation error
@@ -74,10 +107,10 @@ export function HarvestAssetTagCard({
     return () => {
       active = false;
     };
-  }, [codeKey, lot.qrCode, lot.lotCode]);
+  }, [nearView, codeKey, lot.qrCode, lot.lotCode]);
 
   return (
-    <div className="pt-asset-card" data-status={lot.status}>
+    <div ref={cardRef} className="pt-asset-card" data-status={lot.status}>
       <div className="pt-asset-watermark" aria-hidden="true">
         <WatermarkStamp
           topText="HTX SẦU RIÊNG CƯ NÉ"
@@ -170,7 +203,7 @@ function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string |
       errorCorrectionLevel: "H",
     })
       .then((url) => {
-        qrDataUrlCache.set(codeKey, url);
+        setQrCacheEntry(codeKey, url);
         if (active) setSrc(url);
       })
       .catch(() => {});

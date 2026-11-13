@@ -125,7 +125,7 @@ export default function PlotsTab() {
       {signboardPlot && (
         <GardenSignboardModal
           plot={signboardPlot}
-          householdName={overview.data?.household.name || "Hộ nông dân HTX Cư Né"}
+          householdName={overview.data?.household?.name || "Hộ nông dân HTX Cư Né"}
           onClose={() => setSignboardPlot(null)}
         />
       )}
@@ -134,7 +134,7 @@ export default function PlotsTab() {
         <PlotMapModal
           key={mapViewPlot.id || mapViewPlot.code}
           plot={mapViewPlot}
-          householdName={overview.data?.household.name || "Hộ nông dân HTX Cư Né"}
+          householdName={overview.data?.household?.name || "Hộ nông dân HTX Cư Né"}
           onClose={() => setMapViewPlot(null)}
           onOpenSignboard={(p) => {
             setMapViewPlot(null);

@@ -64,7 +64,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
   const effectivePlots = plots.length > 0 ? plots : (plotsData.data?.data ?? []);
   const resolvedPucCode =
     effectivePlots[0]?.zoneCode ||
-    (overview?.household.code ? overview.household.code.replace(/-(?:H|T)\d+$/i, "") : "66-PUC-SR0001-00728");
+    (overview?.household?.code ? overview.household.code.replace(/-(?:H|T)\d+$/i, "") : "66-PUC-SR0001-00728");
 
   const notices = noticesQuery.data?.data ?? [];
   const [selectedLotForQr, setSelectedLotForQr] = useState<PortalHarvest | null>(null);
@@ -90,7 +90,9 @@ export default function StampsTab({ overview, plots = [] }: Props) {
                   <div className="pt-harvest-notice-body">
                     <div className="pt-harvest-notice-top">
                       <h3 className="pt-harvest-notice-title">{item.title}</h3>
-                      <span className="pt-harvest-notice-date">{formatDate(item.createdAt.slice(0, 10))}</span>
+                      <span className="pt-harvest-notice-date">
+                        {item.createdAt ? formatDate(item.createdAt.slice(0, 10)) : "—"}
+                      </span>
                     </div>
                     {item.body && <p className="pt-harvest-notice-desc">{item.body}</p>}
                   </div>

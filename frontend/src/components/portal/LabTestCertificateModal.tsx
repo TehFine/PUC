@@ -324,14 +324,16 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
   }, []);
 
   const isPass = test.result === "pass" || test.result === "Đạt";
-  const householdName = test.householdName || "Nguyễn Văn An";
-  const plotCode = test.plotCode || "TH1";
+  const householdName = test.householdName || "Chưa cập nhật";
+  const plotCode = test.plotCode || test.code || "—";
 
   // Tạo URL QR Code truy xuất hồ sơ kiểm nghiệm gốc
   useEffect(() => {
-    const traceUrl = typeof window !== "undefined"
-      ? `${window.location.origin}/trace/${encodeURIComponent(plotCode)}`
-      : "";
+    const qrTargetCode = test.plotCode || test.code || "";
+    const traceUrl =
+      typeof window !== "undefined" && qrTargetCode
+        ? `${window.location.origin}/trace/${encodeURIComponent(qrTargetCode)}`
+        : "";
     if (traceUrl) {
       QRCode.toDataURL(traceUrl, {
         margin: 1,
@@ -341,7 +343,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         .then(setQrDataUrl)
         .catch(() => {});
     }
-  }, [test.code, plotCode]);
+  }, [test.plotCode, test.code]);
 
   // Tự động đo chiều rộng khung mobile để scale tờ giấy chuẩn xác tỷ lệ A4 (520 x 735.43)
   useEffect(() => {

@@ -188,8 +188,8 @@ export default function HomeTab({
   }
 
   const { household, stats } = overview.data;
-  const status = HOUSEHOLD_STATUS[household.status] ?? HOUSEHOLD_STATUS.pending;
-  const areaFormatted = household.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+  const status = HOUSEHOLD_STATUS[household?.status ?? "pending"] ?? HOUSEHOLD_STATUS.pending;
+  const areaFormatted = (household?.areaHa ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 });
   const harvestDisplay =
     stats.harvestTotalKg >= 1000
       ? {
