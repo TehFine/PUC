@@ -1,0 +1,725 @@
+/* ==========================================================================
+   CỔNG TRA CỨU MÃ LÔ & TEM QR (/trace)
+   Phong cách Lưới Kiến Trúc Thụy Sĩ 4 Cột (Swiss 4-Column Architectural Grid)
+   Đồng bộ 100% hệ quy chiếu thị giác với Landing Page HTX Nông nghiệp Cư Né
+   ========================================================================== */
+
+.sw-trace-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sw-trace-page main {
+  flex: 1 0 auto;
+}
+
+/* ─── Thanh điều hướng cố định tối giản (Không viền quanh logo HTX Cư Né) ─── */
+.sw-trace-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 45;
+  width: 100%;
+  height: 56px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--sw-line);
+}
+
+.sw-trace-topbar-inner {
+  height: 100%;
+  padding: 0 var(--sw-edge-x);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.lp.sw-page .sw-trace-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: none !important;
+  outline: none;
+  box-shadow: none !important;
+  background: transparent !important;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--sw-ink);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.lp.sw-page .sw-trace-brand:hover {
+  opacity: 0.78;
+}
+
+.sw-trace-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(18px, 2.2vw, 32px);
+}
+
+.sw-trace-nav a {
+  position: relative;
+  padding: 4px 0;
+  font-size: 13.5px;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  color: var(--sw-muted);
+  white-space: nowrap;
+  transition: color 0.16s ease;
+}
+
+.sw-trace-nav a:hover {
+  color: var(--sw-ink);
+}
+
+.sw-trace-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.lp.sw-page .sw-trace-top-link {
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--sw-ink);
+  padding: 6px 2px;
+  white-space: nowrap;
+  transition: opacity 0.16s ease;
+}
+
+.lp.sw-page .sw-trace-top-link:hover {
+  opacity: 0.68;
+}
+
+.sw-trace-top-sep {
+  width: 1px;
+  height: 14px;
+  background: #dcdcd8;
+  flex-shrink: 0;
+}
+
+.lp.sw-page .sw-trace-auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 15px;
+  border: 1px solid var(--sw-ink);
+  border-radius: 0;
+  background: var(--sw-ink);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.lp.sw-page .sw-trace-auth-btn:hover {
+  background: #2b2b29;
+  border-color: #2b2b29;
+}
+
+/* ─── Khu vực Mở đầu (Hero Tra cứu 4 cột: 2 cột Form · 2 cột Nhiếp ảnh nghệ thuật) ─── */
+.sw-trace-hero-row {
+  min-height: clamp(440px, 42vw, 600px);
+}
+
+.sw-trace-hero-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: clamp(28px, 3.2vw, 44px);
+  padding: clamp(32px, 3.8vw, 54px) var(--sw-pad-x) clamp(32px, 3.8vw, 54px) 0;
+}
+
+.sw-trace-hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sw-trace-kicker {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sw-muted);
+}
+
+.sw-trace-hero-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 580px;
+}
+
+.lp.sw-page .sw-trace-title {
+  margin: 0;
+  font-size: clamp(28px, 3.15vw, 46px);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.028em;
+  color: var(--sw-ink);
+}
+
+.lp.sw-page .sw-trace-lead {
+  margin: 0;
+  font-size: clamp(14.5px, 1.05vw, 16px);
+  font-weight: 400;
+  line-height: 1.65;
+  color: var(--sw-muted);
+  max-width: 52ch;
+}
+
+/* Ô nhập mã lô / mã tem góc cạnh chuẩn kiến trúc */
+.sw-trace-form {
+  margin-top: 6px;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border: 1px solid #cfcfc9;
+  background: #fafaf8;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.sw-trace-form:focus-within {
+  border-color: var(--sw-ink);
+  background: #ffffff;
+}
+
+.sw-trace-input-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+.sw-trace-search-icon {
+  color: var(--sw-muted);
+  flex-shrink: 0;
+}
+
+.sw-trace-input {
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 450;
+  color: var(--sw-ink);
+}
+
+.sw-trace-input::placeholder {
+  color: #8d8d88;
+  font-weight: 400;
+}
+
+.sw-trace-input:focus-visible {
+  outline: none;
+}
+
+.lp.sw-page .sw-trace-clear {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--sw-muted);
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.lp.sw-page .sw-trace-clear:hover {
+  color: var(--sw-ink);
+}
+
+.lp.sw-page .sw-trace-submit {
+  flex-shrink: 0;
+  height: 48px;
+  padding: 0 22px;
+  border: none;
+  border-left: 1px solid var(--sw-ink);
+  border-radius: 0;
+  background: var(--sw-ink);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.16s ease;
+}
+
+.lp.sw-page .sw-trace-submit:hover {
+  background: #2b2b29;
+}
+
+/* Gợi ý mã tra cứu nhanh */
+.sw-trace-quick {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.sw-trace-quick-label {
+  font-size: 12.5px;
+  color: var(--sw-subtle);
+  margin-right: 2px;
+}
+
+.lp.sw-page .sw-trace-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #dfdfd9;
+  background: #ffffff;
+  font-family: var(--font-num-stack, var(--font-inter), sans-serif);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--sw-ink);
+  white-space: nowrap;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.lp.sw-page .sw-trace-chip:hover {
+  border-color: var(--sw-ink);
+  background: #f6f6f3;
+}
+
+.sw-trace-hero-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--sw-line);
+}
+
+.sw-trace-hero-media {
+  min-height: clamp(440px, 42vw, 600px);
+}
+
+/* ─── 01 / Hồ sơ xác thực: Lưới hồ sơ mẫu 4 cột chuẩn Thụy Sĩ ─── */
+.sw-trace-dossier-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: auto;
+  margin: 0 var(--sw-edge-x);
+  border-bottom: none;
+}
+
+.lp.sw-page .sw-trace-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 22px;
+  min-height: 236px;
+  padding: clamp(22px, 2.3vw, 32px) var(--sw-pad-x);
+  background: #ffffff;
+  border-right: 1px solid var(--sw-line);
+  border-bottom: 1px solid var(--sw-line);
+  transition: background-color 0.18s ease;
+  contain: layout style;
+}
+
+.lp.sw-page .sw-trace-card:nth-child(4n) {
+  border-right: none;
+}
+
+/* Tránh nhân đôi đường kẻ đáy với khung ngoài */
+.sw-trace-dossier-grid {
+  border-bottom: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lp.sw-page .sw-trace-card:hover {
+    background: #fafaf8;
+  }
+
+  .lp.sw-page .sw-trace-card:hover .sw-trace-card-cta {
+    color: var(--sw-ink);
+    transform: translateX(2px);
+  }
+}
+
+.sw-trace-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sw-trace-card-kind {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sw-subtle);
+  white-space: nowrap;
+}
+
+.sw-trace-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.lp.sw-page .sw-trace-card-code {
+  margin: 0;
+  font-family: var(--font-num-stack, var(--font-inter), sans-serif);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(16.5px, 1.35vw, 19px);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--sw-ink);
+  word-break: break-word;
+}
+
+.sw-trace-card-owner {
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #262624;
+}
+
+.sw-trace-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sw-muted);
+}
+
+.sw-trace-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--sw-line);
+}
+
+.sw-trace-card-date {
+  font-family: var(--font-num-stack, var(--font-inter), sans-serif);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--sw-subtle);
+}
+
+.sw-trace-card-cta {
+  font-size: 13px;
+  font-weight: 500;
+  color: #454542;
+  white-space: nowrap;
+  transition: color 0.16s ease, transform 0.16s ease;
+}
+
+/* Trạng thái đang tải / danh sách trống */
+.sw-trace-state {
+  grid-column: 1 / -1;
+  padding: 52px var(--sw-pad-x);
+  text-align: center;
+  font-size: 14.5px;
+  color: var(--sw-muted);
+  border-bottom: 1px solid var(--sw-line);
+  background: #ffffff;
+}
+
+/* ─── 02 / Minh bạch: Ba lớp đối chiếu + Khung ảnh kiểm nghiệm vuông ─── */
+.sw-trace-pillars > .sw-col-1 {
+  padding-left: 0;
+}
+
+.sw-trace-purity-media {
+  aspect-ratio: 1 / 1;
+  min-height: var(--sw-row-h);
+}
+
+/* ─── Đáp ứng Màn hình Laptop vừa / Tablet ngang (<= 1180px) ─── */
+@media (max-width: 1180px) {
+  .sw-trace-dossier-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lp.sw-page .sw-trace-card:nth-child(4n) {
+    border-right: 1px solid var(--sw-line);
+  }
+
+  .lp.sw-page .sw-trace-card:nth-child(2n) {
+    border-right: none;
+  }
+}
+
+/* ─── Đáp ứng Tablet dọc (<= 960px) ─── */
+@media (max-width: 960px) {
+  .sw-trace-nav {
+    display: none;
+  }
+
+  .sw-trace-hero-row {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .sw-trace-hero-panel,
+  .sw-trace-hero-media {
+    grid-column: 1 / -1 !important;
+    border-right: none !important;
+  }
+
+  .sw-trace-hero-panel {
+    padding: 32px 0;
+    border-bottom: 1px solid var(--sw-line);
+  }
+
+  .sw-trace-hero-media {
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+  }
+
+  .sw-trace-pillars {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sw-trace-pillars > .sw-col-1 {
+    grid-column: 1;
+    border-bottom: 1px solid var(--sw-line);
+  }
+
+  .sw-trace-pillars > .sw-col-2 {
+    grid-column: 2;
+    border-right: none;
+    border-bottom: 1px solid var(--sw-line);
+  }
+
+  .sw-trace-pillars > .sw-col-3 {
+    grid-column: 1;
+    padding-left: 0;
+  }
+
+  .sw-trace-pillars > .sw-col-4 {
+    grid-column: 2;
+    aspect-ratio: auto;
+  }
+}
+
+/* ─── Đáp ứng Điện thoại di động (<= 768px) đồng bộ 100% với swiss-landing.css ─── */
+@media (max-width: 768px) {
+  .sw-trace-topbar {
+    height: 52px;
+  }
+
+  .sw-trace-topbar-inner {
+    padding: 0 var(--sw-pad-x);
+    gap: 10px;
+  }
+
+  .lp.sw-page .sw-trace-brand {
+    font-size: 15px;
+    gap: 8px;
+  }
+
+  .sw-trace-top-actions {
+    gap: 10px;
+  }
+
+  .lp.sw-page .sw-trace-top-link {
+    font-size: 13px;
+  }
+
+  .lp.sw-page .sw-trace-auth-btn {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12.5px;
+  }
+
+  .sw-trace-hero-row {
+    display: flex;
+    flex-direction: column;
+    border-bottom: none;
+  }
+
+  .sw-trace-hero-panel {
+    padding: 28px var(--sw-pad-x) 24px !important;
+    gap: 20px;
+    border-bottom: none !important;
+  }
+
+  .sw-trace-hero-body {
+    gap: 14px;
+    max-width: 100%;
+  }
+
+  .lp.sw-page .sw-trace-title {
+    font-size: clamp(26px, 7.2vw, 32px);
+    line-height: 1.14;
+  }
+
+  .lp.sw-page .sw-trace-lead {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .sw-trace-form {
+    flex-direction: column;
+    border: none;
+    background: transparent;
+    gap: 8px;
+  }
+
+  .sw-trace-input-wrap {
+    border: 1px solid #cfcfc9;
+    background: #fafaf8;
+    padding: 0 12px;
+  }
+
+  .sw-trace-input-wrap:focus-within {
+    border-color: var(--sw-ink);
+    background: #ffffff;
+  }
+
+  .sw-trace-input {
+    height: 46px;
+    font-size: 15px;
+  }
+
+  .lp.sw-page .sw-trace-submit {
+    width: 100%;
+    height: 46px;
+    border: 1px solid var(--sw-ink);
+  }
+
+  .sw-trace-hero-foot {
+    display: none;
+  }
+
+  .sw-trace-hero-media {
+    width: auto !important;
+    margin: 0 var(--sw-pad-x) !important;
+    aspect-ratio: 4 / 3;
+    min-height: 0 !important;
+    border: none !important;
+  }
+
+  /* Lưới hồ sơ mẫu trên di động: xếp dọc gọn gàng, ngăn bằng đường mảnh */
+  .sw-trace-dossier-grid {
+    grid-template-columns: 1fr;
+    width: auto;
+    margin: 8px var(--sw-pad-x) 0;
+    border-top: 1px solid #d8d8d4;
+  }
+
+  .lp.sw-page .sw-trace-card {
+    min-height: 0;
+    padding: 20px 0;
+    gap: 14px;
+    border-right: none !important;
+    border-bottom: 1px solid #d8d8d4;
+  }
+
+  .lp.sw-page .sw-trace-card:hover {
+    background: #ffffff;
+  }
+
+  .sw-trace-card-foot {
+    padding-top: 10px;
+    border-top: none;
+  }
+
+  .sw-trace-state {
+    padding: 36px 0;
+    border-bottom: 1px solid #d8d8d4;
+  }
+
+  /* 02 / Minh bạch trên di động */
+  .sw-trace-pillars {
+    display: flex !important;
+    flex-direction: column;
+    width: auto !important;
+    margin: 0 var(--sw-pad-x);
+    border-bottom: none !important;
+  }
+
+  .sw-trace-pillars > .sw-cell {
+    padding: 20px 0 !important;
+    border-right: none !important;
+    border-bottom: 1px solid #d8d8d4 !important;
+    gap: 10px;
+  }
+
+  .sw-trace-pillars > .sw-cell:first-child {
+    border-top: 1px solid #d8d8d4;
+  }
+
+  .sw-trace-purity-media {
+    width: 100% !important;
+    margin: 20px 0 0 !important;
+    aspect-ratio: 1 / 1;
+    min-height: 0 !important;
+    border: none !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .sw-trace-top-sep {
+    display: none;
+  }
+
+  .sw-trace-top-actions {
+    gap: 8px;
+  }
+
+  .lp.sw-page .sw-trace-top-link {
+    font-size: 12.5px;
+  }
+
+  .lp.sw-page .sw-trace-auth-btn {
+    padding: 0 10px;
+    font-size: 12px;
+  }
+}
+
+html[data-perf="lite"] .sw-trace-card,
+html[data-perf="lite"] .sw-trace-card-cta,
+html[data-perf="lite"] .sw-trace-chip,
+html[data-perf="lite"] .sw-trace-submit,
+html[data-perf="lite"] .sw-trace-form {
+  transition: none !important;
+}
+

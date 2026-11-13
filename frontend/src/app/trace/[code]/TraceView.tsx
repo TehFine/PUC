@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -232,6 +232,9 @@ function HouseholdPortrait({
   name: string;
   className?: string;
 }) {
+  const uid = useId().replace(/:/g, "");
+  const skyId = `trOrchardSky-${uid}`;
+  const shirtId = `trShirtGrad-${uid}`;
   const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
   const validUrl = avatarUrl && avatarUrl !== brokenUrl ? avatarUrl : null;
 
@@ -244,6 +247,7 @@ function HouseholdPortrait({
           alt={`Ảnh đại diện hộ ${name}`}
           className="tr-puc-portrait-img"
           loading="lazy"
+          decoding="async"
           onError={() => setBrokenUrl(validUrl)}
         />
       ) : (
@@ -254,44 +258,43 @@ function HouseholdPortrait({
           aria-label={`Chân dung mặc định chủ hộ ${name}`}
         >
           <defs>
-            <linearGradient id="trOrchardSky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#d9eadc" />
-              <stop offset="58%" stopColor="#bdd9c3" />
-              <stop offset="100%" stopColor="#8eb897" />
+            <linearGradient id={skyId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f4f2ed" />
+              <stop offset="60%" stopColor="#eae6de" />
+              <stop offset="100%" stopColor="#ddd8cd" />
             </linearGradient>
-            <linearGradient id="trShirtGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#e2e8f0" />
-              <stop offset="100%" stopColor="#cbd5e1" />
+            <linearGradient id={shirtId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#323230" />
+              <stop offset="100%" stopColor="#1c1c1a" />
             </linearGradient>
           </defs>
-          <rect width="120" height="128" fill="url(#trOrchardSky)" />
-          {/* Tán lá vườn sầu riêng mờ phía sau */}
-          <circle cx="20" cy="30" r="26" fill="#4f855c" opacity="0.28" />
-          <circle cx="102" cy="26" r="28" fill="#3f744d" opacity="0.26" />
-          <circle cx="14" cy="72" r="22" fill="#3d6f4a" opacity="0.22" />
-          <circle cx="106" cy="74" r="24" fill="#4f855c" opacity="0.24" />
-          {/* Vai & áo sơ mi lịch sự */}
+          <rect width="120" height="128" fill={`url(#${skyId})`} />
+          {/* Đường nét kiến trúc tối giản phía sau */}
+          <line x1="0" y1="34" x2="120" y2="34" stroke="#d5cfc3" strokeWidth="0.8" />
+          <line x1="28" y1="0" x2="28" y2="128" stroke="#d5cfc3" strokeWidth="0.8" />
+          <line x1="92" y1="0" x2="92" y2="128" stroke="#d5cfc3" strokeWidth="0.8" />
+          {/* Vai & áo lịch sự */}
           <path
             d="M14 128 C16 99, 35 88, 60 88 C85 88, 104 99, 106 128 Z"
-            fill="url(#trShirtGrad)"
+            fill={`url(#${shirtId})`}
           />
-          <path d="M46 88 L60 106 L74 88 L67 84 L60 95 L53 84 Z" fill="#ffffff" opacity="0.92" />
+          <path d="M46 88 L60 105 L74 88 L67 84 L60 94 L53 84 Z" fill="#f7f6f2" opacity="0.95" />
           {/* Cổ & khuôn mặt */}
-          <rect x="52" y="70" width="16" height="18" rx="6" fill="#d9a17c" />
-          <ellipse cx="60" cy="52" rx="20" ry="23" fill="#e5b28f" />
+          <rect x="52" y="70" width="16" height="18" rx="6" fill="#d3a07d" />
+          <ellipse cx="60" cy="52" rx="20" ry="23" fill="#dfa986" />
           {/* Mái tóc gọn gàng */}
           <path
             d="M40 49 C40 31, 50 25, 61 25 C72 25, 80 32, 80 49 C77 40, 70 36, 60 36 C49 36, 43 40, 40 49 Z"
-            fill="#2b333c"
+            fill="#222220"
           />
           {/* Nét mặt điềm đạm */}
-          <circle cx="53" cy="52" r="1.8" fill="#2b333c" />
-          <circle cx="67" cy="52" r="1.8" fill="#2b333c" />
+          <circle cx="53" cy="52" r="1.7" fill="#222220" />
+          <circle cx="67" cy="52" r="1.7" fill="#222220" />
           <path
-            d="M54.5 63.5 Q60 66.8 65.5 63.5"
+            d="M54.5 63.5 Q60 66.5 65.5 63.5"
             fill="none"
-            stroke="#8c583a"
-            strokeWidth="1.8"
+            stroke="#84553a"
+            strokeWidth="1.6"
             strokeLinecap="round"
           />
         </svg>
@@ -485,21 +488,21 @@ function CertificationSealsCard({
         {/* 1. Huy hiệu Mã vùng trồng PUC */}
         <div className="tr-cert-item">
           <div className="tr-cert-emblem" aria-hidden="true">
-            <svg viewBox="0 0 64 64" width="52" height="52">
-              <circle cx="32" cy="32" r="30" fill="#f2fbf5" stroke="#15803d" strokeWidth="2.4" />
-              <circle cx="32" cy="32" r="24.5" fill="#ffffff" stroke="#86efac" strokeWidth="1.2" />
+            <svg viewBox="0 0 64 64" width="50" height="50">
+              <circle cx="32" cy="32" r="30" fill="#fafaf8" stroke="#121212" strokeWidth="1.4" />
+              <circle cx="32" cy="32" r="25" fill="#ffffff" stroke="#d8d8d4" strokeWidth="1" />
               <path
-                d="M32 12 L46 17.5 V29.5 C46 39 39.8 46.2 32 50 C24.2 46.2 18 39 18 29.5 V17.5 Z"
-                fill="#166534"
+                d="M32 13 L45 18 V29.5 C45 38.5 39.2 45.4 32 49 C24.8 45.4 19 38.5 19 29.5 V18 Z"
+                fill="#121212"
               />
               <text
                 x="32"
                 y="34"
                 textAnchor="middle"
                 fill="#ffffff"
-                fontSize="11"
-                fontWeight="900"
-                letterSpacing="0.5"
+                fontSize="10.5"
+                fontWeight="700"
+                letterSpacing="0.7"
                 fontFamily="system-ui, -apple-system, sans-serif"
               >
                 PUC
@@ -513,25 +516,18 @@ function CertificationSealsCard({
         {/* 2. Huy hiệu VietGAP */}
         <div className="tr-cert-item">
           <div className="tr-cert-emblem" aria-hidden="true">
-            <svg viewBox="0 0 64 64" width="52" height="52">
-              <circle cx="32" cy="32" r="30" fill="#ffffff" stroke="#1f8a4c" strokeWidth="2.6" />
-              <path d="M6 36 C16 32, 48 32, 58 36 A28 28 0 0 1 6 36 Z" fill="#1f8a4c" />
-              <path
-                d="M22 44 C26 39, 33 38, 38 43 C33 47, 26 47, 22 44 Z"
-                fill="#bbf7d0"
-              />
-              <path
-                d="M33 47 C36 42, 42 41, 46 44 C43 48, 37 49, 33 47 Z"
-                fill="#86efac"
-              />
+            <svg viewBox="0 0 64 64" width="50" height="50">
+              <circle cx="32" cy="32" r="30" fill="#fafaf8" stroke="#1c4e30" strokeWidth="1.4" />
+              <circle cx="32" cy="32" r="25" fill="#ffffff" stroke="#cde2d3" strokeWidth="1" />
+              <path d="M10 36.5 C19 33.5, 45 33.5, 54 36.5 A24 24 0 0 1 10 36.5 Z" fill="#1c4e30" />
               <text
                 x="32"
-                y="27"
+                y="28"
                 textAnchor="middle"
-                fill="#166534"
-                fontSize="11.2"
-                fontWeight="900"
-                letterSpacing="-0.2"
+                fill="#1c4e30"
+                fontSize="10.4"
+                fontWeight="700"
+                letterSpacing="-0.1"
                 fontFamily="system-ui, -apple-system, sans-serif"
               >
                 VietGAP
@@ -545,26 +541,26 @@ function CertificationSealsCard({
         {/* 3. Huy hiệu GACC (Trung Quốc) */}
         <div className="tr-cert-item">
           <div className="tr-cert-emblem" aria-hidden="true">
-            <svg viewBox="0 0 64 64" width="52" height="52">
-              <circle cx="32" cy="32" r="30" fill="#f8fafc" stroke="#3b5f75" strokeWidth="2.2" />
+            <svg viewBox="0 0 64 64" width="50" height="50">
+              <circle cx="32" cy="32" r="30" fill="#fafaf8" stroke="#2c3e48" strokeWidth="1.4" />
               <circle
                 cx="32"
                 cy="32"
-                r="26"
+                r="25"
                 fill="none"
-                stroke="#648396"
+                stroke="#9caab2"
                 strokeWidth="1"
                 strokeDasharray="2.2 1.8"
               />
-              <circle cx="32" cy="32" r="21" fill="#2c5368" />
+              <circle cx="32" cy="32" r="20.5" fill="#1e2d35" />
               <text
                 x="32"
                 y="35.5"
                 textAnchor="middle"
                 fill="#ffffff"
-                fontSize="11.5"
-                fontWeight="900"
-                letterSpacing="0.5"
+                fontSize="10.8"
+                fontWeight="700"
+                letterSpacing="0.6"
                 fontFamily="system-ui, -apple-system, sans-serif"
               >
                 GACC
@@ -678,7 +674,7 @@ export default function TraceView() {
       margin: 0,
       width: 320,
       color: {
-        dark: "#0f172a",
+        dark: "#121212",
         light: "#ffffff",
       },
       errorCorrectionLevel: "M",
@@ -826,6 +822,25 @@ export default function TraceView() {
 
   return (
     <div className="tr-root">
+      <header className="tr-topbar">
+        <div className={`tr-wrap tr-topbar-inner ${isPlotTransparencyView ? "is-plot-narrow" : ""}`}>
+          <Link href="/" className="tr-brand">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/newlogo.png" alt="" width={22} height={22} className="tr-brand-img" decoding="async" />
+            <span>HTX Cư Né</span>
+          </Link>
+
+          <div className="tr-topbar-actions">
+            <Link href="/trace" className="tr-top-btn">
+              Tra cứu mã khác
+            </Link>
+            <Link href="/" className="tr-top-btn is-solid">
+              Trang chủ
+            </Link>
+          </div>
+        </div>
+      </header>
+
       <main className={`tr-wrap tr-main ${isPlotTransparencyView ? "is-plot-narrow" : ""}`}>
         {loading ? (
           <SkeletonCards count={3} label="Đang nạp hồ sơ minh bạch vùng trồng & truy xuất…" />
@@ -986,6 +1001,7 @@ export default function TraceView() {
                           src="/newlogo.png"
                           alt="Biểu trưng HTX Sầu Riêng Cư Né"
                           className="tr-puc-crest-img"
+                          decoding="async"
                         />
                       </div>
 
@@ -1139,6 +1155,7 @@ export default function TraceView() {
                                   src={qrSrc}
                                   alt={`Mã QR truy xuất lô ${plot.code}`}
                                   className="tr-asset-qr-img"
+                                  decoding="async"
                                 />
                               ) : (
                                 <div className="tr-asset-qr-loading" aria-hidden="true">
@@ -1376,7 +1393,7 @@ export default function TraceView() {
                       </span>
                     )}
                     <span className="tr-secure-pill">
-                      <CheckCircle2 size={13} color="#15803d" />
+                      <CheckCircle2 size={13} aria-hidden="true" />
                       <span>TEM ĐIỆN TỬ HỢP LỆ</span>
                     </span>
                   </div>
@@ -1391,12 +1408,9 @@ export default function TraceView() {
             {data.farmerStamp && (
               <section className="tr-item-banner">
                 <div
-                  className="tr-item-badge"
-                  style={
-                    data.farmerStamp.status === "activated"
-                      ? undefined
-                      : { background: "#fef3c7", color: "#b45309" }
-                  }
+                  className={`tr-item-badge ${
+                    data.farmerStamp.status === "activated" ? "" : "is-pending"
+                  }`.trim()}
                 >
                   <Tag size={14} />
                   <span>
@@ -1419,13 +1433,11 @@ export default function TraceView() {
                       <span className="tr-weight-pill">{data.farmerStamp.fruitWeightKg} kg / Quả</span>
                     )}
                     <span
-                      className="tr-secure-pill"
-                      style={{ color: data.farmerStamp.status === "activated" ? "#15803d" : "#b45309" }}
+                      className={`tr-secure-pill ${
+                        data.farmerStamp.status === "activated" ? "" : "is-pending"
+                      }`.trim()}
                     >
-                      <CheckCircle2
-                        size={13}
-                        color={data.farmerStamp.status === "activated" ? "#15803d" : "#b45309"}
-                      />
+                      <CheckCircle2 size={13} aria-hidden="true" />
                       <span>
                         {data.farmerStamp.status === "activated"
                           ? "CHÍNH CHỦ ĐÃ KÍCH HOẠT"
@@ -1489,10 +1501,12 @@ export default function TraceView() {
                 <div className="tr-asset-right">
                   <div className="tr-asset-qr-box">
                     {qrSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={qrSrc}
                         alt={`Mã QR tra cứu ${data.farmerStamp.serialCode}`}
                         className="tr-asset-qr-img"
+                        decoding="async"
                       />
                     ) : (
                       <div className="tr-asset-qr-loading" aria-hidden="true">
@@ -1564,10 +1578,12 @@ export default function TraceView() {
                 <div className="tr-asset-right">
                   <div className="tr-asset-qr-box">
                     {qrSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={qrSrc}
                         alt={`Mã QR tra cứu nguồn gốc lô ${data.lot?.code ?? code}`}
                         className="tr-asset-qr-img"
+                        decoding="async"
                       />
                     ) : (
                       <div className="tr-asset-qr-loading" aria-hidden="true">
@@ -1597,10 +1613,7 @@ export default function TraceView() {
                       <div className="tr-step-item">
                         <div className="tr-step-segment">
                           <div className="tr-step-track-col" aria-hidden="true">
-                            <div
-                              className="tr-step-capsule"
-                              style={{ background: "linear-gradient(180deg, #3b82f6 0%, #60a5fa 100%)" }}
-                            >
+                            <div className="tr-step-capsule">
                               <div className="tr-step-dot" />
                               <div className="tr-step-dot" />
                             </div>
@@ -1634,10 +1647,7 @@ export default function TraceView() {
                       <div className="tr-step-item">
                         <div className="tr-step-segment">
                           <div className="tr-step-track-col" aria-hidden="true">
-                            <div
-                              className="tr-step-capsule"
-                              style={{ background: "linear-gradient(180deg, #10b981 0%, #34d399 100%)" }}
-                            >
+                            <div className="tr-step-capsule">
                               <div className="tr-step-dot" />
                               <div className="tr-step-dot" />
                             </div>
@@ -1689,10 +1699,7 @@ export default function TraceView() {
                       <div className="tr-step-item">
                         <div className="tr-step-segment">
                           <div className="tr-step-track-col" aria-hidden="true">
-                            <div
-                              className="tr-step-capsule"
-                              style={{ background: "linear-gradient(180deg, #8b5cf6 0%, #a78bfa 100%)" }}
-                            >
+                            <div className="tr-step-capsule">
                               <div className="tr-step-dot" />
                               <div className="tr-step-dot" />
                             </div>
@@ -1741,10 +1748,7 @@ export default function TraceView() {
                       <div className="tr-step-item">
                         <div className="tr-step-segment">
                           <div className="tr-step-track-col" aria-hidden="true">
-                            <div
-                              className="tr-step-capsule"
-                              style={{ background: "linear-gradient(180deg, #f97316 0%, #fb923c 100%)" }}
-                            >
+                            <div className="tr-step-capsule">
                               <div className="tr-step-dot" />
                               <div className="tr-step-dot" />
                             </div>

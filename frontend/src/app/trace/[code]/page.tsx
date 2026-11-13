@@ -26,8 +26,18 @@ export default function TracePage() {
   return (
     <Suspense
       fallback={
-        <div style={{ textAlign: "center", padding: "80px 20px", color: "#14372f", fontWeight: 700 }}>
-          Đang nạp hồ sơ xác thực truy xuất nguồn gốc...
+        <div
+          style={{
+            minHeight: "100dvh",
+            background: "#fafaf9",
+            textAlign: "center",
+            padding: "96px 20px",
+            color: "#666662",
+            fontSize: 14.5,
+            fontWeight: 500,
+          }}
+        >
+          Đang nạp hồ sơ xác thực truy xuất nguồn gốc…
         </div>
       }
     >
