@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { SkeletonCards } from "@/components/ui/Skeleton";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
+import { reportRequestTime } from "@/lib/network";
 import { safeDecodeURIComponent } from "@/utils/url-safety";
 import type { PlotStatus, PortalPlot } from "@/types/portal";
 import {
@@ -642,8 +643,10 @@ export default function TraceView() {
   const code = typeof params.code === "string" ? safeDecodeURIComponent(params.code) : "";
   const router = useRouter();
   const [data, setData] = useState<TraceData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(() => Boolean(code));
+  const [error, setError] = useState<string | null>(() =>
+    code ? null : "Mã truy xuất không hợp lệ.",
+  );
   const [searchCode, setSearchCode] = useState(code);
   const [copied, setCopied] = useState(false);
   const [qrSrc, setQrSrc] = useState<string>("");
@@ -655,8 +658,10 @@ export default function TraceView() {
   const [prevCode, setPrevCode] = useState(code);
   if (prevCode !== code) {
     setPrevCode(code);
-    setLoading(true);
-    setError(null);
+    setData(null);
+    setQrSrc("");
+    setLoading(Boolean(code));
+    setError(code ? null : "Mã truy xuất không hợp lệ.");
     setSearchCode(code);
     setGisModalPlot(null);
   }
@@ -692,30 +697,48 @@ export default function TraceView() {
   useEffect(() => {
     if (!code) return;
     let active = true;
+    const start = performance.now();
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 20_000);
 
-    fetch(`/api/public/trace/${encodeURIComponent(code)}`)
+    fetch(`/api/public/trace/${encodeURIComponent(code)}`, {
+      signal: controller.signal,
+    })
       .then((res) => {
+        reportRequestTime(performance.now() - start);
         if (!res.ok) {
-          throw new Error(
+          const httpErr = new Error(
             res.status === 404
               ? `Không tìm thấy thông tin lô hàng, thửa đất hoặc mã tem "${code}". Quý khách vui lòng kiểm tra lại mã QR.`
               : "Có lỗi xảy ra khi truy vấn dữ liệu từ máy chủ. Quý khách vui lòng thử lại sau.",
           );
+          httpErr.name = "TraceHttpError";
+          throw httpErr;
         }
         return res.json();
       })
       .then((payload: TraceData) => {
         if (active) setData(payload);
       })
-      .catch((err: Error) => {
-        if (active) setError(err.message);
+      .catch((err: unknown) => {
+        if (!active) return;
+        if (err instanceof Error && err.name === "TraceHttpError") {
+          setError(err.message);
+        } else if (err instanceof Error && err.name === "AbortError") {
+          setError("Kết nối mạng quá chậm hoặc gián đoạn. Quý khách vui lòng thử tải lại trang.");
+        } else {
+          setError("Không thể kết nối máy chủ để tra cứu. Quý khách vui lòng kiểm tra mạng và thử lại.");
+        }
       })
       .finally(() => {
+        window.clearTimeout(timeoutId);
         if (active) setLoading(false);
       });
 
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
+      controller.abort();
     };
   }, [code]);
 
@@ -726,9 +749,34 @@ export default function TraceView() {
     }
   };
 
-  const handleShare = () => {
-    if (typeof window !== "undefined") {
-      void navigator.clipboard.writeText(window.location.href);
+  const handleShare = async () => {
+    if (typeof window === "undefined") return;
+    const url = window.location.href;
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        ok = true;
+      }
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = url;
+        ta.setAttribute("readonly", "true");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch {
+        ok = false;
+      }
+    }
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     }

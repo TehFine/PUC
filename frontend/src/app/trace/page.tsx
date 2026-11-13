@@ -4,7 +4,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Search } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import DwellSlideshow, { type DwellSlide } from "@/components/landing/DwellSlideshow";
 import LandingFooter from "@/components/landing/LandingFooter";
@@ -40,6 +39,8 @@ interface TraceSamplesResponse {
 }
 
 type SampleTab = "all" | "lots" | "stamps";
+
+let cachedTraceSamples: TraceSamplesResponse | null = null;
 
 const TRACE_HERO_SLIDES: readonly DwellSlide[] = [
   {
@@ -124,18 +125,20 @@ export default function TraceLookupPage() {
   const router = useRouter();
   const { status, session } = useAuth();
   const [code, setCode] = useState("");
-  const [samples, setSamples] = useState<TraceSamplesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [samples, setSamples] = useState<TraceSamplesResponse | null>(() => cachedTraceSamples);
+  const [loading, setLoading] = useState<boolean>(() => cachedTraceSamples === null);
   const [tab, setTab] = useState<SampleTab>("all");
 
   const authenticated = status === "authenticated";
   const workspaceHref = homePathFor(session?.user.role);
 
   useEffect(() => {
+    if (cachedTraceSamples) return;
     let active = true;
     api
       .get<TraceSamplesResponse>("/public/trace-samples")
       .then((res) => {
+        cachedTraceSamples = res;
         if (active) setSamples(res);
       })
       .catch(() => {})
@@ -210,12 +213,11 @@ export default function TraceLookupPage() {
 
       <main>
         {/* ─── KHU VỰC MỞ ĐẦU: LƯỚI 4 CỘT (2 CỘT TRA CỨU · 2 CỘT NHIẾP ẢNH SẦU RIÊNG QR) ─── */}
-        <section id="tra-cuu-ma" className="sw-section" aria-labelledby="trace-hero-title">
+        <section id="tra-cuu-ma" className="sw-section sw-trace-hero-sec" aria-labelledby="trace-hero-title">
           <div className="sw-grid sw-trace-hero-row">
             <div className="sw-cell sw-col-1-2 sw-trace-hero-panel">
               <div className="sw-trace-hero-head">
-                <span className="sw-trace-kicker">Xác thực nguồn gốc · VietGAP &amp; GACC</span>
-                <span className="sw-micro">PUC Digital Dossier</span>
+                <span className="sw-trace-kicker">Truy xuất nguồn gốc · HTX Cư Né</span>
               </div>
 
               <div className="sw-trace-hero-body">
@@ -223,17 +225,31 @@ export default function TraceLookupPage() {
                   Tra cứu mã lô &amp; tem QR
                 </h1>
                 <p className="sw-trace-lead">
-                  Nhập mã lô thu hoạch, mã thửa vườn hoặc mã tem QR dán trên từng trái sầu riêng để kiểm tra mã số vùng trồng PUC, phiếu kiểm nghiệm Cadimi &amp; Vàng O cùng nhật ký canh tác của hộ thành viên.
+                  Nhập mã trên tem hoặc lô hàng để xem vùng trồng và kết quả kiểm nghiệm.
                 </p>
 
                 <form onSubmit={handleSubmit} className="sw-trace-form" role="search">
                   <div className="sw-trace-input-wrap">
-                    <Search size={17} strokeWidth={1.7} className="sw-trace-search-icon" aria-hidden="true" />
+                    <svg
+                      width="17"
+                      height="17"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="sw-trace-search-icon"
+                      aria-hidden="true"
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.3-4.3" />
+                    </svg>
                     <input
                       type="text"
                       value={code}
                       onChange={(e) => setCode(e.target.value)}
-                      placeholder="Nhập mã lô, mã thửa hoặc mã tem (VD: LOT-SR-2026-001)"
+                      placeholder="Nhập mã lô, mã thửa hoặc tem QR..."
                       aria-label="Mã lô, mã thửa vườn hoặc mã tem truy xuất"
                       className="sw-trace-input"
                       autoComplete="off"
@@ -252,14 +268,13 @@ export default function TraceLookupPage() {
                   </div>
                   <button type="submit" className="sw-trace-submit">
                     <span>Tra cứu hồ sơ</span>
-                    <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
                   </button>
                 </form>
 
                 {quickCodes.length > 0 && (
                   <div className="sw-trace-quick" aria-label="Mã mẫu tra cứu nhanh">
-                    <span className="sw-trace-quick-label">Thử nhanh:</span>
-                    {quickCodes.map((sampleCode) => (
+                    <span className="sw-trace-quick-label">Mã mẫu:</span>
+                    {quickCodes.slice(0, 3).map((sampleCode) => (
                       <Link
                         key={sampleCode}
                         href={`/trace/${encodeURIComponent(sampleCode)}`}
@@ -273,8 +288,8 @@ export default function TraceLookupPage() {
               </div>
 
               <div className="sw-trace-hero-foot">
-                <span className="sw-micro">HTX Nông nghiệp Cư Né · Huyện Krông Búk, Đắk Lắk</span>
-                <span className="sw-micro">Đối chiếu thời gian thực</span>
+                <span className="sw-micro">HTX Nông nghiệp Cư Né · Krông Búk, Đắk Lắk</span>
+                <span className="sw-micro">Đối chiếu trực tuyến</span>
               </div>
             </div>
 
@@ -319,7 +334,7 @@ export default function TraceLookupPage() {
                 className={`sw-tab-pill ${tab === "lots" ? "is-active" : ""}`}
                 onClick={() => setTab("lots")}
               >
-                Lô thu hoạch &amp; Thửa vườn {!loading && lots.length > 0 ? `(${lots.length})` : ""}
+                Lô &amp; Thửa vườn {!loading && lots.length > 0 ? `(${lots.length})` : ""}
               </button>
               <button
                 type="button"
@@ -328,7 +343,7 @@ export default function TraceLookupPage() {
                 className={`sw-tab-pill ${tab === "stamps" ? "is-active" : ""}`}
                 onClick={() => setTab("stamps")}
               >
-                Tem QR nông hộ {!loading && stamps.length > 0 ? `(${stamps.length})` : ""}
+                Tem QR {!loading && stamps.length > 0 ? `(${stamps.length})` : ""}
               </button>
             </div>
           </div>
@@ -347,6 +362,11 @@ export default function TraceLookupPage() {
                     const badge = formatLotBadge(lot);
                     const isPlot = lot.sampleType === "plot";
                     const dateLabel = formatViDate(lot.harvestedOn);
+                    const footLabel = dateLabel
+                      ? `Ngày ${dateLabel}`
+                      : isPlot
+                        ? ""
+                        : "Hồ sơ lô hàng";
                     return (
                       <Link
                         key={`lot-${lot.code}`}
@@ -377,10 +397,10 @@ export default function TraceLookupPage() {
                         </div>
 
                         <div className="sw-trace-card-foot">
-                          <span className="sw-trace-card-date">
-                            {dateLabel ? `Ngày ${dateLabel}` : isPlot ? " Định danh GIS" : "Hồ sơ lô hàng"}
-                          </span>
-                          <span className="sw-trace-card-cta">Xem hồ sơ →</span>
+                          {footLabel && (
+                            <span className="sw-trace-card-date">{footLabel}</span>
+                          )}
+                          <span className="sw-trace-card-cta">Xem hồ sơ</span>
                         </div>
                       </Link>
                     );
@@ -420,7 +440,7 @@ export default function TraceLookupPage() {
                           <span className="sw-trace-card-date">
                             {dateLabel ? `Cấp ${dateLabel}` : "Tem điện tử"}
                           </span>
-                          <span className="sw-trace-card-cta">Kiểm tra tem →</span>
+                          <span className="sw-trace-card-cta">Kiểm tra tem</span>
                         </div>
                       </Link>
                     );
@@ -447,11 +467,10 @@ export default function TraceLookupPage() {
             <div className="sw-cell sw-col-1 sw-between">
               <span className="sw-micro">01 · Định danh địa lý</span>
               <div className="sw-caption-block">
-                <h3 className="sw-caption-title">Mã số vùng trồng PUC</h3>
+                <h3 className="sw-caption-title">Mã số vùng trồng</h3>
                 <p className="sw-caption-meta">
-                  <span>Đo đạc tọa độ ranh giới thửa vườn GPS</span>
-                  <span>Gắn đúng hộ thành viên tại xã Cư Né</span>
-                  <span>Đáp ứng Nghị định thư xuất khẩu GACC</span>
+                  <span>Đo đạc tọa độ ranh giới GPS</span>
+                  <span>Định danh đúng hộ thành viên</span>
                 </p>
               </div>
             </div>
@@ -459,11 +478,10 @@ export default function TraceLookupPage() {
             <div className="sw-cell sw-col-2 sw-between">
               <span className="sw-micro">02 · Giám sát thực địa</span>
               <div className="sw-caption-block">
-                <h3 className="sw-caption-title">Nhật ký mùa vụ &amp; PHI</h3>
+                <h3 className="sw-caption-title">Nhật ký canh tác</h3>
                 <p className="sw-caption-meta">
-                  <span>Lưu vết lịch sử bón phân &amp; phun thuốc</span>
-                  <span>Cảnh báo tự động thời gian cách ly PHI</span>
-                  <span>Thẩm định nội bộ bởi cán bộ kỹ thuật</span>
+                  <span>Lưu vết phân bón &amp; thuốc BVTV</span>
+                  <span>Kiểm soát ngày cách ly an toàn</span>
                 </p>
               </div>
             </div>
@@ -473,9 +491,8 @@ export default function TraceLookupPage() {
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Kiểm nghiệm độc lập</h3>
                 <p className="sw-caption-meta">
-                  <span>Xét nghiệm kim loại nặng Cadimi (Cd)</span>
-                  <span>Kiểm soát chất cấm Vàng O (Auramine O)</span>
-                  <span>Đạt ngưỡng dư lượng MRL trước cắt trái</span>
+                  <span>Xét nghiệm Cadimi &amp; Vàng O</span>
+                  <span>Đạt chuẩn dư lượng trước cắt trái</span>
                 </p>
               </div>
             </div>
