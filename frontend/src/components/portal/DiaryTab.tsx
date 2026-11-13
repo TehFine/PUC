@@ -1052,6 +1052,8 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                         alt=""
                         width={20}
                         height={20}
+                        loading="lazy"
+                        decoding="async"
                         className="pt-widget-note-icon"
                         aria-hidden="true"
                       />
@@ -1092,6 +1094,8 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                         alt=""
                         width={20}
                         height={20}
+                        loading="lazy"
+                        decoding="async"
                         className="pt-widget-note-icon"
                         aria-hidden="true"
                       />

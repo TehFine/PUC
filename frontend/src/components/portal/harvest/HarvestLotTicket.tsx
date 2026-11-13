@@ -127,6 +127,8 @@ export function HarvestAssetTagCard({
                 src={qrSrc}
                 alt={`Mã QR tra cứu nguồn gốc lô ${lot.lotCode}`}
                 className="pt-asset-qr-img"
+                loading="lazy"
+                decoding="async"
               />
             ) : (
               <div className="pt-asset-qr-loading" aria-hidden="true">
@@ -182,7 +184,7 @@ function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string |
     return <QrCode size={110} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />;
   }
 
-  return <img src={src} alt={`Mã QR ${lotCode}`} className="pt-qr-frame-img" />;
+  return <img src={src} alt={`Mã QR ${lotCode}`} className="pt-qr-frame-img" decoding="async" />;
 }
 
 export function HarvestLotQrModal({

@@ -20,7 +20,8 @@ interface SharedCacheEntry {
 
 const MAX_CACHE_ENTRIES = 60;
 const DYNAMIC_FRESH_MS = 25_000;
-const CATALOG_FRESH_MS = 90_000;
+const CATALOG_FRESH_MS = 600_000;
+const EMPTY_ARRAY: never[] = [];
 
 const cache = new Map<string, SharedCacheEntry>();
 const inflight = new Map<string, Promise<unknown>>();
@@ -153,7 +154,11 @@ export function useSharedQuery<T>(key: string | null) {
       setError(null);
       try {
         const result = await fetchShared<T>(key);
-        setData(result);
+        setData((prev) =>
+          key === NOTIFICATIONS_PATH && prev !== null && JSON.stringify(prev) === JSON.stringify(result)
+            ? prev
+            : result,
+        );
       } catch (err) {
         // Giữ dữ liệu cũ nếu đã có; chỉ báo lỗi khi chưa có gì để hiển thị.
         if (!cache.has(key)) setError(errorMessage(err, "Không tải được dữ liệu."));
@@ -173,7 +178,11 @@ export function useSharedQuery<T>(key: string | null) {
       fetchShared<T>(key)
         .then((result) => {
           if (!active) return;
-          setData(result);
+          setData((prev) =>
+            key === NOTIFICATIONS_PATH && prev !== null && JSON.stringify(prev) === JSON.stringify(result)
+              ? prev
+              : result,
+          );
           setError(null);
         })
         .catch((err) => {
@@ -234,6 +243,6 @@ export function usePortal<T>(path: PortalKey) {
 /** Danh mục dùng chung (`/api/pesticides`, `/api/varieties`, `/api/fertilizers`), trả mảng bản ghi. */
 export function useCatalog<T>(resource: "pesticides" | "varieties" | "fertilizers") {
   const state = useSharedQuery<ListResponse<T> | T[]>(`/${resource}?pageSize=500`);
-  const rows = Array.isArray(state.data) ? state.data : (state.data?.data ?? []);
+  const rows = Array.isArray(state.data) ? state.data : (state.data?.data ?? (EMPTY_ARRAY as T[]));
   return { rows, loaded: state.data !== null, loading: state.loading, error: state.error, refresh: state.refresh };
 }

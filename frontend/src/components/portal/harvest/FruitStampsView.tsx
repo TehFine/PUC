@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { CheckCircle2, QrCode, Tag } from "lucide-react";
 import { invalidatePortal, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
@@ -34,6 +34,12 @@ function ActivateStampForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const effectivePlot = plotCode || plots[0]?.code || "";
+  const suggestedStamps = useMemo(() => {
+    const q = serialCode.trim().toLowerCase();
+    if (!q) return unactivatedStamps.slice(0, 60);
+    const filtered = unactivatedStamps.filter((s) => s.serialCode.toLowerCase().includes(q));
+    return (filtered.length > 0 ? filtered : unactivatedStamps).slice(0, 60);
+  }, [serialCode, unactivatedStamps]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -85,9 +91,9 @@ function ActivateStampForm({
           onChange={(e) => setSerialCode(e.target.value)}
           required
         />
-        {unactivatedStamps.length > 0 && (
+        {suggestedStamps.length > 0 && (
           <datalist id="st-unactivated-list">
-            {unactivatedStamps.map((s) => (
+            {suggestedStamps.map((s) => (
               <option key={s.id} value={s.serialCode}>
                 {s.serialCode}
                 {s.plotCode ? ` (Thửa ${s.plotCode})` : ""}

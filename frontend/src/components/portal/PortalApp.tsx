@@ -320,12 +320,44 @@ function PortalAppContent() {
       () => import("./InspectionTab"),
       () => import("./LearnTab"),
     ];
-    const timers = loaders.map((load, idx) =>
-      window.setTimeout(() => {
-        void load();
-      }, 1800 + idx * 450),
-    );
-    return () => timers.forEach((t) => window.clearTimeout(t));
+    let cancelled = false;
+    let timerId = 0;
+    let idleId = 0;
+    const ric =
+      typeof window !== "undefined" && "requestIdleCallback" in window
+        ? (window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number })
+            .requestIdleCallback
+        : null;
+    const cic =
+      typeof window !== "undefined" && "cancelIdleCallback" in window
+        ? (window as Window & { cancelIdleCallback: (id: number) => void }).cancelIdleCallback
+        : null;
+
+    const runStep = (idx: number) => {
+      if (cancelled || idx >= loaders.length) return;
+      const exec = () => {
+        if (cancelled) return;
+        loaders[idx]()
+          .catch(() => {})
+          .finally(() => {
+            if (!cancelled) {
+              timerId = window.setTimeout(() => runStep(idx + 1), 650);
+            }
+          });
+      };
+      if (ric) {
+        idleId = ric(exec, { timeout: 2400 });
+      } else {
+        timerId = window.setTimeout(exec, 650);
+      }
+    };
+
+    timerId = window.setTimeout(() => runStep(0), 2200);
+    return () => {
+      cancelled = true;
+      if (timerId) window.clearTimeout(timerId);
+      if (idleId && cic) cic(idleId);
+    };
   }, [status, session?.user.role]);
 
   const apiNotifItems = (notifications.data?.data ?? []).filter((n) => n.kind !== "training");

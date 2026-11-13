@@ -293,7 +293,7 @@ body.pt-body {
 @media (min-width: 860px) {
   .pt-asset-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
     gap: 16px;
   }
 }
@@ -1106,7 +1106,8 @@ body.pt-body {
 .pt-profile-backdrop {
   position: fixed;
   inset: 0;
-  width: 100vw;
+  width: 100%;
+  height: 100vh;
   height: 100dvh;
   background: rgba(15, 23, 42, 0.5);
   z-index: 110;
@@ -5674,16 +5675,7 @@ body.pt-body {
 }
 .pt-segmented.has-edge-fade .pt-segmented-viewport::before,
 .pt-segmented.has-edge-fade .pt-segmented-viewport::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: calc(var(--seg-fade) * 0.72);
-  z-index: 2;
-  pointer-events: none;
-  background: transparent;
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
+  display: none;
 }
 .pt-segmented.has-edge-fade .pt-segmented-viewport::before {
   left: 0;
@@ -7602,7 +7594,7 @@ body.pt-body {
 .pt-mapmodal-fullscreen {
   position: fixed;
   inset: 0;
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   height: 100dvh;
   z-index: 99999;
@@ -7611,7 +7603,6 @@ body.pt-body {
   padding: 0;
   overflow: hidden;
   animation: pt-modal-fade 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity;
 }
 
 .pt-mapmodal-fullscreen.is-closing {
@@ -9047,6 +9038,8 @@ body.pt-body {
 }
 
 .pt-sheet.pt-search-sheet {
+  height: min(92vh, calc(100vh - 24px));
+  max-height: min(92vh, calc(100vh - 24px));
   height: min(92dvh, calc(100dvh - 24px));
   max-height: min(92dvh, calc(100dvh - 24px));
 }
@@ -9274,3 +9267,101 @@ body.pt-body {
   line-height: 1.5;
   color: var(--text-secondary);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TỐI ƯU HIỆU NĂNG CUỘN, CHỐNG NÓNG MÁY & TƯƠNG THÍCH LAPTOP / MOBILE NHỎ
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Bỏ qua tính toán layout & paint các mục danh sách nằm ngoài màn hình */
+.pt-diary-widget-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+}
+
+.pt-asset-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 156px;
+}
+
+.pt-notif-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 76px;
+}
+
+@media print {
+  .pt-diary-widget-item,
+  .pt-asset-card,
+  .pt-notif-item {
+    content-visibility: visible !important;
+    contain-intrinsic-size: none !important;
+  }
+}
+
+/* Laptop vừa & nhỏ (1000px – 1200px, ví dụ 1366×768 scale 125% ≈ 1093px):
+   thu gọn thanh tab ngang để đủ cả 6 tab + tìm kiếm + thông báo + hồ sơ không bị chật */
+@media (min-width: 1000px) and (max-width: 1200px) {
+  .pt-topbar {
+    padding: 10px 18px;
+  }
+
+  .pt-tabs {
+    gap: 2px;
+  }
+
+  .pt-tab {
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+
+  .pt-tab::after {
+    left: 10px;
+    right: 10px;
+  }
+
+  .pt-main {
+    padding: 22px 22px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Màn hình thấp (Laptop 1366×768 / 1280×720 hoặc xoay ngang): popup bản đồ cuộn gọn gàng */
+@media (max-height: 740px) {
+  .pt-mapmodal-floating-popup.is-expanded {
+    max-height: calc(100vh - 88px);
+    max-height: calc(100dvh - 88px);
+    overflow-y: auto;
+  }
+}
+
+/* Điện thoại nhỏ (<= 420px & <= 380px): không cắt tiêu đề tab hay thanh đầu bản đồ */
+@media (max-width: 420px) {
+  .pt-mapmodal-top-sub {
+    display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .pt-mobile-tab-title {
+    max-width: calc(100% - 196px);
+  }
+}
+
+/* Thiết bị cấu hình yếu (data-perf="lite"): dùng mặt phẳng đặc thay blur, giảm bóng đổ nặng */
+html[data-perf="lite"] .pt-sheet-backdrop,
+html[data-perf="lite"] .pt-topbar,
+html[data-perf="lite"] .pt-bottom-nav,
+html[data-perf="lite"] .pt-mapmodal-topbar,
+html[data-perf="lite"] .pt-mapmodal-floating-popup {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-perf="lite"] .pt-topbar,
+html[data-perf="lite"] .pt-bottom-nav {
+  background: #ffffff !important;
+}
+
+html[data-perf="lite"] .pt-asset-card,
+html[data-perf="lite"] .pt-card {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+

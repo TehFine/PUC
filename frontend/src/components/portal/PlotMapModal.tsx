@@ -68,9 +68,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   });
   const [mounted] = useState(() => typeof document !== "undefined");
 
-  // Vuốt lên để mở rộng popup, vuốt xuống để thu gọn / tắt popup (Swipe up & down)
-  const [dragY, setDragY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  // Vuốt lên để mở rộng popup, vuốt xuống để thu gọn / tắt popup (cập nhật trực tiếp trên DOM qua rAF, không setState mỗi frame)
   const [isClosing, setIsClosing] = useState(false);
   const touchStartRef = useRef<{
     y: number;
@@ -80,10 +78,64 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   } | null>(null);
   const hasDraggedRef = useRef(false);
   const popupRef = useRef<HTMLDivElement>(null);
+  const topbarRef = useRef<HTMLDivElement>(null);
+  const dragRafRef = useRef<number | null>(null);
+  const pendingDragYRef = useRef(0);
+
+  const flushDragDom = useCallback(
+    (y: number, dragging: boolean) => {
+      const popup = popupRef.current;
+      const topbar = topbarRef.current;
+      if (popup) {
+        popup.classList.toggle("is-dragging", dragging);
+        popup.style.transform = y !== 0 ? `translate3d(0, ${y}px, 0)` : "";
+      }
+      if (topbar) {
+        topbar.style.transition = dragging ? "none" : "";
+        topbar.style.transform =
+          !infoExpanded && y > 0 ? `translate3d(0, ${Math.min(y * 0.25, 24)}px, 0)` : "";
+      }
+    },
+    [infoExpanded],
+  );
+
+  const scheduleDragDom = useCallback(
+    (y: number) => {
+      pendingDragYRef.current = y;
+      if (dragRafRef.current !== null) return;
+      dragRafRef.current = window.requestAnimationFrame(() => {
+        dragRafRef.current = null;
+        flushDragDom(pendingDragYRef.current, true);
+      });
+    },
+    [flushDragDom],
+  );
+
+  const resetDragDom = useCallback(() => {
+    if (dragRafRef.current !== null) {
+      window.cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    pendingDragYRef.current = 0;
+    flushDragDom(0, false);
+  }, [flushDragDom]);
+
+  useEffect(() => {
+    return () => {
+      if (dragRafRef.current !== null) {
+        window.cancelAnimationFrame(dragRafRef.current);
+      }
+    };
+  }, []);
 
   // Đóng modal êm ái với animation mượt mà (smooth graceful exit)
   const handleRequestClose = useCallback(() => {
     if (isClosing) return;
+    if (dragRafRef.current !== null) {
+      window.cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    popupRef.current?.classList.remove("is-dragging");
     setIsClosing(true);
     setTimeout(() => {
       onClose();
@@ -122,9 +174,8 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         return;
       }
       hasDraggedRef.current = true;
-      setIsDragging(true);
       const dampened = deltaY <= 50 ? deltaY : 50 + Math.pow(deltaY - 50, 0.88);
-      setDragY(Math.max(0, dampened));
+      scheduleDragDom(Math.max(0, dampened));
       if (e.cancelable) e.preventDefault();
       return;
     }
@@ -132,12 +183,11 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     // 2. Kéo lên trên popup (Swipe Up để mở rộng thông tin thửa đất)
     if (source === "popup" && deltaY < -5) {
       hasDraggedRef.current = true;
-      setIsDragging(true);
       const absY = Math.abs(deltaY);
       const upwardDampened = infoExpanded
         ? -Math.min(16, Math.pow(absY, 0.72))
         : -Math.min(42, Math.pow(absY, 0.84));
-      setDragY(upwardDampened);
+      scheduleDragDom(upwardDampened);
       if (e.cancelable) e.preventDefault();
     }
   };
@@ -146,11 +196,10 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     if (!touchStartRef.current || isClosing) return;
     const { y: startY, time: startTime, source } = touchStartRef.current;
     touchStartRef.current = null;
-    setIsDragging(false);
 
     const touch = e.changedTouches[0];
     if (!touch) {
-      setDragY(0);
+      resetDragDom();
       return;
     }
 
@@ -161,15 +210,15 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     if (source === "popup") {
       // Vuốt lên -> Mở rộng popup thông tin thửa đất
       if (deltaY < -20 || (velocity < -0.15 && deltaY < -10)) {
+        resetDragDom();
         setInfoExpanded(true);
-        setDragY(0);
         return;
       }
 
       // Vuốt xuống khi popup đang mở rộng -> Thu gọn popup về thanh đáy
       if (infoExpanded && (deltaY > 36 || (velocity > 0.22 && deltaY > 16))) {
+        resetDragDom();
         setInfoExpanded(false);
-        setDragY(0);
         return;
       }
 
@@ -179,7 +228,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         return;
       }
 
-      setDragY(0);
+      resetDragDom();
       return;
     }
 
@@ -187,7 +236,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     if (deltaY > 65 || (velocity > 0.3 && deltaY > 25)) {
       handleRequestClose();
     } else {
-      setDragY(0);
+      resetDragDom();
     }
   };
 
@@ -209,24 +258,21 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
       if (deltaY > 5) {
         hasDraggedRef.current = true;
-        setIsDragging(true);
         const dampened = deltaY <= 50 ? deltaY : 50 + Math.pow(deltaY - 50, 0.88);
-        setDragY(Math.max(0, dampened));
+        scheduleDragDom(Math.max(0, dampened));
       } else if (deltaY < -5) {
         hasDraggedRef.current = true;
-        setIsDragging(true);
         const absY = Math.abs(deltaY);
         const upwardDampened = infoExpanded
           ? -Math.min(16, Math.pow(absY, 0.72))
           : -Math.min(42, Math.pow(absY, 0.84));
-        setDragY(upwardDampened);
+        scheduleDragDom(upwardDampened);
       }
     };
 
     const onMouseUp = (upEvent: MouseEvent) => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
-      setIsDragging(false);
 
       const deltaY = upEvent.clientY - startY;
       const deltaTime = Math.max(1, Date.now() - startTime);
@@ -234,15 +280,15 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
       // Vuốt lên -> Mở rộng popup
       if (deltaY < -20 || (velocity < -0.15 && deltaY < -10)) {
+        resetDragDom();
         setInfoExpanded(true);
-        setDragY(0);
         return;
       }
 
       // Vuốt xuống khi đang mở -> Thu gọn popup
       if (infoExpanded && (deltaY > 36 || (velocity > 0.22 && deltaY > 16))) {
+        resetDragDom();
         setInfoExpanded(false);
-        setDragY(0);
         return;
       }
 
@@ -252,7 +298,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         return;
       }
 
-      setDragY(0);
+      resetDragDom();
     };
 
     window.addEventListener("mousemove", onMouseMove);
@@ -521,16 +567,8 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       aria-modal="true"
       aria-label={`Bản đồ thửa đất ${plot.code}`}
       style={{
-        opacity: isClosing
-          ? 0
-          : !infoExpanded && dragY > 0
-            ? Math.max(0.45, 1 - dragY / 850)
-            : undefined,
-        transition: isDragging
-          ? "none"
-          : isClosing
-            ? "opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1)"
-            : "opacity 0.28s ease",
+        opacity: isClosing ? 0 : undefined,
+        transition: isClosing ? "opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1)" : undefined,
       }}
     >
       {/* 1. TOÀN CẢNH BẢN ĐỒ TRÀN VIỀN (100% VIEWPORT) */}
@@ -541,23 +579,12 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
       {/* 2. THANH ĐIỀU HƯỚNG NỔI TRÊN ĐỈNH (TOP BAR) */}
       <div
+        ref={topbarRef}
         className="pt-mapmodal-topbar"
         style={{
-          transform: isClosing
-            ? "translateY(-24px)"
-            : !infoExpanded && dragY > 0
-              ? `translateY(${Math.min(dragY * 0.25, 24)}px)`
-              : undefined,
-          opacity: isClosing
-            ? 0
-            : !infoExpanded && dragY > 0
-              ? Math.max(0.4, 1 - dragY / 260)
-              : undefined,
-          transition: isDragging
-            ? "none"
-            : isClosing
-              ? "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease"
-              : "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease",
+          transform: isClosing ? "translateY(-24px)" : undefined,
+          opacity: isClosing ? 0 : undefined,
+          transition: "transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease",
         }}
         onTouchStart={handleTopbarTouchStart}
         onTouchMove={handleTouchMove}
@@ -626,23 +653,13 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       {/* 3. POPUP NỔI HIỂN THỊ THÔNG TIN THỬA ĐẤT CỦA HỘ ĐÓ */}
       <div
         ref={popupRef}
-        className={`pt-mapmodal-floating-popup ${infoExpanded ? "is-expanded" : "is-minimized"} ${isDragging ? "is-dragging" : ""} ${isClosing ? "is-closing" : ""}`}
+        className={`pt-mapmodal-floating-popup ${infoExpanded ? "is-expanded" : "is-minimized"} ${isClosing ? "is-closing" : ""}`}
         style={{
-          transform: isClosing
-            ? "translateY(115%)"
-            : dragY !== 0
-              ? `translateY(${dragY}px)`
-              : undefined,
-          opacity: isClosing
-            ? 0
-            : !infoExpanded && dragY > 0
-              ? Math.max(0.65, 1 - dragY / 650)
-              : undefined,
-          transition: isDragging
-            ? "none"
-            : isClosing
-              ? "transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease"
-              : "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1)",
+          transform: isClosing ? "translateY(115%)" : undefined,
+          opacity: isClosing ? 0 : undefined,
+          transition: isClosing
+            ? "transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease"
+            : "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
         onTouchStart={handlePopupTouchStart}
         onTouchMove={handleTouchMove}

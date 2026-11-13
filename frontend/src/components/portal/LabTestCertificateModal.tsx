@@ -205,7 +205,6 @@ interface Props {
 /** Góc gấp giấy trắng 3D (Dog-Ear Fold) với ID riêng biệt tránh xung đột SVG defs giữa Desktop & Mobile */
 function PaperDogEarFold({ idPrefix }: { idPrefix: string }) {
   const shadowId = `certFoldShadow-${idPrefix}`;
-  const contactId = `certFoldContact-${idPrefix}`;
   const surfaceId = `certFoldSurface-${idPrefix}`;
   const rimId = `certFoldRim-${idPrefix}`;
 
@@ -213,21 +212,11 @@ function PaperDogEarFold({ idPrefix }: { idPrefix: string }) {
     <div className="cert-paper-fold no-print" aria-hidden="true">
       <svg width="100%" height="100%" viewBox="0 0 96 96" fill="none">
         <defs>
-          <filter id={shadowId} x="0" y="0" width="96" height="96" filterUnits="userSpaceOnUse">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="5.5" />
-            <feOffset dx="-4" dy="6" />
-            <feComponentTransfer>
-              <feFuncA type="linear" slope="0.26" />
-            </feComponentTransfer>
-          </filter>
-
-          <filter id={contactId} x="0" y="0" width="96" height="96" filterUnits="userSpaceOnUse">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="2.2" />
-            <feOffset dx="-1.5" dy="2.5" />
-            <feComponentTransfer>
-              <feFuncA type="linear" slope="0.22" />
-            </feComponentTransfer>
-          </filter>
+          <linearGradient id={shadowId} x1="46" y1="42" x2="18" y2="78" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#0f172a" stopOpacity="0.22" />
+            <stop offset="52%" stopColor="#0f172a" stopOpacity="0.09" />
+            <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
+          </linearGradient>
 
           <linearGradient id={surfaceId} x1="62" y1="34" x2="26" y2="70" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#d8dee6" />
@@ -245,14 +234,8 @@ function PaperDogEarFold({ idPrefix }: { idPrefix: string }) {
         </defs>
 
         <path
-          d="M28 2 L28 52 Q28 68 44 68 L94 68 Z"
-          fill="#0f172a"
-          filter={`url(#${shadowId})`}
-        />
-        <path
-          d="M28 2 L28 52 Q28 68 44 68 L94 68 Z"
-          fill="#0f172a"
-          filter={`url(#${contactId})`}
+          d="M20 8 L20 58 Q20 75 38 75 L88 75 Z"
+          fill={`url(#${shadowId})`}
         />
         <path
           d="M28 0 L28 51 Q28 68 45 68 L96 68 L28 0 Z"
@@ -330,6 +313,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
       if (containerRef.current) {
         containerRef.current.style.animation = "none";
         containerRef.current.style.transform = "translate3d(0, 0, 0)";
+        containerRef.current.style.willChange = "auto";
       }
       if (backdropRef.current) {
         backdropRef.current.style.animation = "none";
@@ -361,23 +345,37 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
   // Tự động đo chiều rộng khung mobile để scale tờ giấy chuẩn xác tỷ lệ A4 (520 x 735.43)
   useEffect(() => {
+    if (isDesktop) return;
     const el = mobileStackRef.current;
     if (!el) return;
-    const updateScale = () => {
+    let rafId = 0;
+    const measure = () => {
+      rafId = 0;
       const w = el.clientWidth;
       if (w > 0) {
-        setSheetScale(w / 520);
+        const next = w / 520;
+        setSheetScale((prev) => (Math.abs(prev - next) < 0.002 ? prev : next));
       }
     };
-    updateScale();
-    const ro = new ResizeObserver(updateScale);
-    ro.observe(el);
-    window.addEventListener("resize", updateScale);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", updateScale);
+    const scheduleMeasure = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(measure);
     };
-  }, []);
+    measure();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(scheduleMeasure);
+      ro.observe(el);
+      return () => {
+        if (rafId) window.cancelAnimationFrame(rafId);
+        ro.disconnect();
+      };
+    }
+    window.addEventListener("resize", scheduleMeasure, { passive: true });
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", scheduleMeasure);
+    };
+  }, [isDesktop]);
 
   // Phím ESC đóng modal
   useEffect(() => {
@@ -912,9 +910,11 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════════
-            2. BẢN MOBILE (<= 640PX): 2 TỜ GIẤY CHUẨN TỶ LỆ A4 (210 : 297) LIỀN MẠCH
+            2. BẢN MOBILE (< 760PX): 2 TỜ GIẤY CHUẨN TỶ LỆ A4 (210 : 297) LIỀN MẠCH
                Người dùng lướt dọc trực tiếp từ Trang 1 xuống Trang 2 & hỗ trợ zoom
+               (Không mount trên Desktop để tiết kiệm 2x cây DOM + SVG Watermark)
             ═══════════════════════════════════════════════════════════════════════ */}
+        {!isDesktop && (
         <div
           ref={mobileStackRef}
           className="cert-mobile-a4-stack no-print"
@@ -1380,17 +1380,17 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* CSS RIÊNG DÀNH CHO TỜ GIẤY PHIẾU XÉT NGHIỆM VÀ KHỔ IN A4 */}
       <style jsx>{`
-        /* ── Backdrop mờ nền đen ── */
+        /* ── Backdrop mờ nền đen (không dùng backdrop-filter để cuộn 60fps không nóng GPU) ── */
         .cert-modal-backdrop {
           position: fixed;
           inset: 0;
           z-index: 9999;
-          background: rgba(15, 23, 42, 0.72);
-          backdrop-filter: blur(6px);
+          background: rgba(15, 23, 42, 0.82);
           overflow-y: auto;
           overflow-x: auto;
           overscroll-behavior: contain;
@@ -1543,9 +1543,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           --fold-size: 68px;
           --fold-box: 96px;
           position: relative;
-          filter:
-            drop-shadow(0 12px 24px rgba(15, 23, 42, 0.22))
-            drop-shadow(0 28px 54px rgba(15, 23, 42, 0.32));
+          filter: drop-shadow(0 12px 26px rgba(15, 23, 42, 0.24));
         }
 
         .cert-paper {
@@ -2089,6 +2087,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           .cert-modal-container {
             width: min(856px, 94vw);
             max-width: min(856px, 94vw);
+            height: 100vh;
             height: 100dvh;
             margin: 0;
             gap: 0;
@@ -2184,8 +2183,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           }
         }
 
-        /* ── RESPONSIVE MOBILE: HIỂN THỊ 2 TỜ GIẤY ĐÚNG TỶ LỆ A4 (210 : 297) LIỀN MẠCH ── */
-        @media (max-width: 640px) {
+        /* ── RESPONSIVE MOBILE / TABLET NHỎ (< 760px): HIỂN THỊ 2 TỜ GIẤY ĐÚNG TỶ LỆ A4 (210 : 297) LIỀN MẠCH ── */
+        @media (max-width: 759px) {
           .cert-modal-backdrop {
             padding: 10px 8px 22px;
           }
@@ -2265,6 +2264,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             flex-direction: column;
             gap: 14px;
             width: 100%;
+            max-width: 540px;
+            margin: 0 auto;
           }
 
           /* Khung bao mỗi tờ giấy khóa đúng chuẩn tỷ lệ A4 (210 : 297) */
@@ -2272,9 +2273,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             position: relative;
             width: 100%;
             aspect-ratio: 210 / 297;
-            filter:
-              drop-shadow(0 8px 18px rgba(15, 23, 42, 0.24))
-              drop-shadow(0 18px 36px rgba(15, 23, 42, 0.28));
+            filter: drop-shadow(0 10px 22px rgba(15, 23, 42, 0.24));
           }
 
           /* Tờ giấy A4 gốc kích thước chuẩn 520 x 735.43 (210 : 297) được scale khớp 100% khung */
@@ -2772,6 +2771,42 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             color: #0f2942;
             font-weight: 800;
           }
+        }
+
+        /* Màn hình hẹp 320px–380px: thu gọn thanh công cụ để không tràn hoặc che nút tải PDF */
+        @media (max-width: 380px) {
+          .cert-toolbar {
+            padding: 8px 9px;
+            gap: 6px;
+          }
+
+          .cert-status-sub {
+            display: none;
+          }
+
+          .cert-toolbar-right {
+            gap: 5px;
+          }
+
+          .cert-btn-action {
+            padding: 6px 9px;
+            font-size: 11px;
+          }
+
+          .cert-btn-print {
+            padding: 6px 8px;
+          }
+        }
+
+        /* Thiết bị yếu (data-perf="lite"): tắt drop-shadow và mix-blend-mode để cuộn mượt không nóng máy */
+        :global(html[data-perf="lite"]) .cert-paper-shadow-wrap,
+        :global(html[data-perf="lite"]) .cert-mobile-a4-frame {
+          filter: none;
+        }
+
+        :global(html[data-perf="lite"]) .cert-red-stamp,
+        :global(html[data-perf="lite"]) .cert-m-red-stamp {
+          mix-blend-mode: normal;
         }
 
         /* ── CHẾ ĐỘ IN ẤN CHUẨN A4 (PRINT MEDIA) ──
