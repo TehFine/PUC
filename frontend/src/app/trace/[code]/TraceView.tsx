@@ -1113,13 +1113,9 @@ export default function TraceView() {
                           </div>
 
                           <div className="tr-puc-hero-grid">
-                            {/* Cột trái: Ảnh đại diện hộ + Tên chủ hộ */}
+                            {/* Cột trái: Ảnh đại diện hộ */}
                             <div className="tr-puc-owner-col">
                               <HouseholdPortrait avatarUrl={avatarUrl} name={ownerName} />
-                              <div className="tr-puc-owner-caption">
-                                <span className="tr-puc-owner-lbl">Chủ hộ</span>
-                                <strong className="tr-puc-owner-name">{ownerName}</strong>
-                              </div>
                             </div>
 
                             {/* Cột phải: Bảng thông số định danh căn cột thẳng hàng */}
@@ -1129,6 +1125,11 @@ export default function TraceView() {
                                 <dd className="tr-puc-spec-val is-num">
                                   {realZoneCode || <span className="tr-puc-muted">Chưa cấp mã</span>}
                                 </dd>
+                              </div>
+
+                              <div className="tr-puc-spec-row">
+                                <dt className="tr-puc-spec-lbl">Chủ hộ</dt>
+                                <dd className="tr-puc-spec-val">{ownerName}</dd>
                               </div>
 
                               <div className="tr-puc-spec-row">
