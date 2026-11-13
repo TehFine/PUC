@@ -225,10 +225,8 @@ function PortalAppContent() {
   const [localAvatarOverride, setLocalAvatarOverride] = useState<string | null | undefined>(undefined);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
-  const [clearingRead, setClearingRead] = useState(false);
   const [notifFilter, setNotifFilter] = useState<"all" | "unread">("all");
   const [localReadIds, setLocalReadIds] = useState<number[]>([]);
-  const [localClearedIds, setLocalClearedIds] = useState<number[]>([]);
 
   const openSupport = useCallback(() => setSupportOpen(true), []);
   const closeSupport = useCallback(() => setSupportOpen(false), []);
@@ -384,9 +382,8 @@ function PortalAppContent() {
           readAt: isRead ? new Date().toISOString() : null,
           createdAt: r.date ?? new Date().toISOString(),
         };
-      })
-      .filter((item) => !localClearedIds.includes(item.id));
-  }, [apiNotifItems.length, overview?.reminders, localReadIds, localClearedIds]);
+      });
+  }, [apiNotifItems.length, overview?.reminders, localReadIds]);
 
   if (status !== "authenticated" || session?.user.role !== "farmer") {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
@@ -457,7 +454,6 @@ function PortalAppContent() {
     apiNotifItems.length > 0
       ? (notifications.data?.unread ?? apiNotifItems.filter((n) => !n.readAt).length)
       : fallbackNotifItems.filter((n) => !n.readAt).length;
-  const readCount = notifItems.filter((n) => Boolean(n.readAt)).length;
   const visibleNotifItems = notifFilter === "unread" ? notifItems.filter((n) => !n.readAt) : notifItems;
 
   const normalizedLinkedEmail = linkedEmail ? linkedEmail.trim().toLowerCase() : null;
@@ -537,24 +533,6 @@ function PortalAppContent() {
       // Ignore
     } finally {
       setMarkingAll(false);
-    }
-  };
-
-  const handleClearRead = async () => {
-    if (clearingRead || readCount === 0) return;
-    setClearingRead(true);
-    try {
-      if (apiNotifItems.length === 0 && fallbackNotifItems.length > 0) {
-        const readIds = fallbackNotifItems.filter((n) => Boolean(n.readAt)).map((n) => n.id);
-        setLocalClearedIds((prev) => Array.from(new Set([...prev, ...readIds])));
-      } else {
-        await api.post("/notifications/clear-read");
-        invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
-      }
-    } catch {
-      // Ignore
-    } finally {
-      setClearingRead(false);
     }
   };
 
@@ -928,33 +906,20 @@ function PortalAppContent() {
           footer={
             <DrawerSummaryFooter
               actions={
-                <>
-                  {readCount > 0 && (
-                    <BusyButton
-                      type="button"
-                      className="pt-drawer-cta-ghost"
-                      busy={clearingRead}
-                      busyLabel={t("Đang xóa…")}
-                      onClick={() => void handleClearRead()}
-                    >
-                      <span>{t("Xóa đã đọc")} ({readCount})</span>
-                    </BusyButton>
-                  )}
-                  {unreadCount > 0 ? (
-                    <BusyButton
-                      type="button"
-                      className="pt-drawer-cta"
-                      busy={markingAll}
-                      busyLabel={t("Đang đánh dấu…")}
-                      onClick={() => void handleMarkAllRead()}
-                    >
-                      <span>{t("Đánh dấu đọc hết")}</span>
-                      <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
-                    </BusyButton>
-                  ) : (
-                    <DrawerCloseCta label={t("Đã nắm thông tin")} />
-                  )}
-                </>
+                unreadCount > 0 ? (
+                  <BusyButton
+                    type="button"
+                    className="pt-drawer-cta"
+                    busy={markingAll}
+                    busyLabel={t("Đang đánh dấu…")}
+                    onClick={() => void handleMarkAllRead()}
+                  >
+                    <span>{t("Đánh dấu đọc hết")}</span>
+                    <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
+                  </BusyButton>
+                ) : (
+                  <DrawerCloseCta label={t("Đã nắm thông tin")} />
+                )
               }
             />
           }
@@ -978,30 +943,17 @@ function PortalAppContent() {
                     Chưa đọc ({unreadCount})
                   </button>
                 </div>
-                {!isDesktopDrawer && (unreadCount > 0 || readCount > 0) && (
+                {!isDesktopDrawer && unreadCount > 0 && (
                   <div className="pt-notif-action-group">
-                    {unreadCount > 0 && (
-                      <BusyButton
-                        type="button"
-                        className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
-                        busy={markingAll}
-                        busyLabel="Đang đánh dấu…"
-                        onClick={() => void handleMarkAllRead()}
-                      >
-                        <span>Đọc hết</span>
-                      </BusyButton>
-                    )}
-                    {readCount > 0 && (
-                      <BusyButton
-                        type="button"
-                        className="pt-btn pt-btn-ghost pt-btn-sm"
-                        busy={clearingRead}
-                        busyLabel="Đang xóa…"
-                        onClick={() => void handleClearRead()}
-                      >
-                        <span>Xóa đã đọc ({readCount})</span>
-                      </BusyButton>
-                    )}
+                    <BusyButton
+                      type="button"
+                      className="pt-btn pt-btn-ghost pt-btn-sm pt-notif-markall-btn"
+                      busy={markingAll}
+                      busyLabel="Đang đánh dấu…"
+                      onClick={() => void handleMarkAllRead()}
+                    >
+                      <span>Đọc hết</span>
+                    </BusyButton>
                   </div>
                 )}
               </div>
