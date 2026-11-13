@@ -15,6 +15,7 @@ export interface PublicPesticide {
   name: string;
   activeIngredient: string;
   concentration: string | null;
+  manufacturer?: string | null;
   mrlMgKg: number | null;
   isolationDays: number | null;
   status: "allowed" | "restricted" | "banned";
@@ -25,6 +26,25 @@ export interface PublicVariety {
   origin: string | null;
   weightRange: string | null;
   harvestYears: string | null;
+  description: string | null;
+  category?: string | null;
+  fleshColor?: string | null;
+  brix?: string | null;
+  yieldPerHa?: string | null;
+  imageUrl?: string | null;
+  farmingTechniques?: string | null;
+}
+
+export interface PublicFertilizer {
+  name: string;
+  category: "organic" | "npk" | "foliar" | "microbial" | "restricted";
+  formula: string | null;
+  manufacturer: string | null;
+  dosage: string | null;
+  applicationMethod: string | null;
+  timing: string | null;
+  status: "encouraged" | "allowed" | "warning";
+  imageUrl: string | null;
   description: string | null;
 }
 
@@ -40,6 +60,7 @@ export interface PublicCourse {
 export interface PublicCatalog {
   pesticides: PublicPesticide[];
   varieties: PublicVariety[];
+  fertilizers?: PublicFertilizer[];
   training: PublicCourse[];
 }
 

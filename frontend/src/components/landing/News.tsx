@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNewsArticles } from "@/lib/news-store";
 import { lockRootScroll } from "@/lib/scroll-lock";
+import { useStripPagination } from "./use-strip-pagination";
 
 const shouldSkipImageOpt = (src: string) => src.startsWith("/api/") || /^https?:\/\//i.test(src);
 
@@ -18,8 +19,6 @@ export default function News() {
   const { articles } = useNewsArticles();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [canPrev, setCanPrev] = useState(false);
-  const [canNext, setCanNext] = useState(true);
 
   const trackRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef({
@@ -32,32 +31,20 @@ export default function News() {
   const readingArticle =
     activeIndex !== null && articles[activeIndex] ? articles[activeIndex] : null;
 
-  const syncScrollBounds = useCallback(() => {
-    const el = trackRef.current;
-    if (!el) return;
-    setCanPrev(el.scrollLeft > 8);
-    setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
-  }, []);
-
-  useEffect(() => {
-    const raf = window.requestAnimationFrame(syncScrollBounds);
-    window.addEventListener("resize", syncScrollBounds, { passive: true });
-    return () => {
-      window.cancelAnimationFrame(raf);
-      window.removeEventListener("resize", syncScrollBounds);
-    };
-  }, [articles.length, syncScrollBounds]);
-
-  const scrollByStep = useCallback((direction: -1 | 1) => {
-    const el = trackRef.current;
-    if (!el) return;
-    const firstCard = el.querySelector<HTMLElement>(".sw-training-slide");
-    const step = firstCard ? firstCard.offsetWidth + 32 : el.clientWidth * 0.72;
-    el.scrollBy({ left: direction * step, behavior: "smooth" });
-  }, []);
+  const {
+    stopCount,
+    activeStop,
+    canPrev,
+    canNext,
+    handleStripScroll,
+    cancelProgrammaticLock,
+    scrollToStop,
+    scrollByStep,
+  } = useStripPagination(trackRef, articles.length);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0 || !trackRef.current) return;
+    cancelProgrammaticLock();
     dragStateRef.current = {
       active: true,
       startX: e.clientX,
@@ -131,12 +118,14 @@ export default function News() {
         <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
       </header>
 
-      {/* Dải danh sách bản tin nằm ngang cuộn mượt + nút Trước / Tiếp theo ngay bên dưới */}
+      {/* Dải danh sách bản tin nằm ngang cuộn mượt + dấu chấm phân trang + nút Trước / Tiếp ngay bên dưới */}
       <div className="sw-training-strip-shell">
         <div
           ref={trackRef}
           className={`sw-training-strip ${isDragging ? "is-dragging" : ""}`}
-          onScroll={syncScrollBounds}
+          onScroll={handleStripScroll}
+          onTouchStart={cancelProgrammaticLock}
+          onWheel={cancelProgrammaticLock}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={stopDragging}
@@ -171,7 +160,6 @@ export default function News() {
                     alt={article.imageAlt}
                     fill
                     draggable={false}
-                    priority={idx === 0}
                     unoptimized={shouldSkipImageOpt(article.image)}
                     sizes="(max-width: 560px) 84vw, (max-width: 960px) 46vw, 30vw"
                     style={{ objectFit: "cover", objectPosition: focusPos }}
@@ -190,6 +178,31 @@ export default function News() {
         </div>
 
         <div className="sw-training-strip-foot">
+          {stopCount > 1 && (
+            <div
+              className="sw-strip-dots"
+              role="tablist"
+              aria-label="Chọn trang danh sách bản tin"
+            >
+              {Array.from({ length: stopCount }, (_, i) => {
+                const isCurrent = i === activeStop;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    role="tab"
+                    aria-selected={isCurrent}
+                    aria-label={`Trang bản tin ${i + 1} trên ${stopCount}`}
+                    className={`sw-strip-dot ${isCurrent ? "is-active" : ""}`}
+                    onClick={() => scrollToStop(i)}
+                  >
+                    <span className="sw-strip-dot-circle" aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="sw-training-scroll-btns" aria-label="Cuộn danh sách bản tin">
             <button
               type="button"

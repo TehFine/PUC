@@ -162,8 +162,9 @@ export const NEWS_ARTICLES: NewsArticle[] = [
     date: "18/10/2026",
     readTime: "5 phút đọc",
     author: "KS. Nguyễn Thành Long – HTX Cư Né",
-    image: "/landing/durian-tree.jpg",
-    imageAlt: "Cây sầu riêng trĩu quả xanh mướt trên nền đất đỏ giàu dinh dưỡng hữu cơ",
+    image: "/landing/news-organic-care.jpg",
+    imageAlt:
+      "Kỹ sư nông nghiệp hướng dẫn bà con kiểm tra độ ẩm phân chuồng hoai mục ủ nấm đối kháng Trichoderma và cắt tỉa vệ sinh vườn sầu riêng",
     content: {
       lead: "Áp dụng 4 nguyên tắc IPM (Trồng cây khỏe – Bảo vệ thiên địch – Thăm đồng thường xuyên – Nông dân trở thành chuyên gia), quy trình chăm sóc vườn sầu riêng năm 2026 tại HTX Cư Né đặt trọng tâm vào cải tạo đất sinh học và vệ sinh đồng ruộng.",
       sections: [

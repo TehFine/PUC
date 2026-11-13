@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { lockRootScroll } from "@/lib/scroll-lock";
+import { useStripPagination } from "./use-strip-pagination";
 
 export interface TrainingItem {
   id: number;
@@ -166,8 +167,6 @@ export const TRAINING_ITEMS: TrainingItem[] = [
 export default function TrainingGallery() {
   const [drawerIndex, setDrawerIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [canPrev, setCanPrev] = useState(false);
-  const [canNext, setCanNext] = useState(true);
 
   const trackRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef({
@@ -179,32 +178,20 @@ export default function TrainingGallery() {
 
   const activeItem = drawerIndex !== null ? TRAINING_ITEMS[drawerIndex] : null;
 
-  const syncScrollBounds = useCallback(() => {
-    const el = trackRef.current;
-    if (!el) return;
-    setCanPrev(el.scrollLeft > 8);
-    setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
-  }, []);
-
-  useEffect(() => {
-    const raf = window.requestAnimationFrame(syncScrollBounds);
-    window.addEventListener("resize", syncScrollBounds, { passive: true });
-    return () => {
-      window.cancelAnimationFrame(raf);
-      window.removeEventListener("resize", syncScrollBounds);
-    };
-  }, [syncScrollBounds]);
-
-  const scrollByStep = useCallback((direction: -1 | 1) => {
-    const el = trackRef.current;
-    if (!el) return;
-    const firstCard = el.querySelector<HTMLElement>(".sw-training-slide");
-    const step = firstCard ? firstCard.offsetWidth + 32 : el.clientWidth * 0.72;
-    el.scrollBy({ left: direction * step, behavior: "smooth" });
-  }, []);
+  const {
+    stopCount,
+    activeStop,
+    canPrev,
+    canNext,
+    handleStripScroll,
+    cancelProgrammaticLock,
+    scrollToStop,
+    scrollByStep,
+  } = useStripPagination(trackRef, TRAINING_ITEMS.length);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0 || !trackRef.current) return;
+    cancelProgrammaticLock();
     dragStateRef.current = {
       active: true,
       startX: e.clientX,
@@ -274,12 +261,14 @@ export default function TrainingGallery() {
         <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
       </header>
 
-      {/* Dải danh sách nằm ngang cuộn mượt + nút Trước / Tiếp theo ngay bên dưới */}
+      {/* Dải danh sách nằm ngang cuộn mượt + dấu chấm phân trang + nút Trước / Tiếp ngay bên dưới */}
       <div className="sw-training-strip-shell">
         <div
           ref={trackRef}
           className={`sw-training-strip ${isDragging ? "is-dragging" : ""}`}
-          onScroll={syncScrollBounds}
+          onScroll={handleStripScroll}
+          onTouchStart={cancelProgrammaticLock}
+          onWheel={cancelProgrammaticLock}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={stopDragging}
@@ -327,6 +316,31 @@ export default function TrainingGallery() {
         </div>
 
         <div className="sw-training-strip-foot">
+          {stopCount > 1 && (
+            <div
+              className="sw-strip-dots"
+              role="tablist"
+              aria-label="Chọn trang danh sách tập huấn"
+            >
+              {Array.from({ length: stopCount }, (_, i) => {
+                const isCurrent = i === activeStop;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    role="tab"
+                    aria-selected={isCurrent}
+                    aria-label={`Trang tập huấn ${i + 1} trên ${stopCount}`}
+                    className={`sw-strip-dot ${isCurrent ? "is-active" : ""}`}
+                    onClick={() => scrollToStop(i)}
+                  >
+                    <span className="sw-strip-dot-circle" aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="sw-training-scroll-btns" aria-label="Cuộn danh sách tập huấn">
             <button
               type="button"
@@ -399,7 +413,7 @@ export default function TrainingGallery() {
                 </h3>
                 <p className="sw-side-lead">{activeItem.description}</p>
 
-                <dl className="sw-detail-dl sw-mt-20">
+                <dl className="sw-detail-dl">
                   <div>
                     <dt>Đơn vị hướng dẫn</dt>
                     <dd>{activeItem.speaker}</dd>

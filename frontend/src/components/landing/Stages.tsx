@@ -6,39 +6,39 @@ import { STAGES } from "./data";
 
 const STAGE_PHOTOS: Record<string, { src: string; alt: string; pos?: string }> = {
   dat: {
-    src: "/landing/lux-estate-dawn.jpg",
-    alt: "Quy hoạch triền đồi sầu riêng thoát nước trong sương sớm tại Đắk Lắk",
-    pos: "center 56%",
+    src: "/stages/stage-01-dat.jpg",
+    alt: "Kỹ thuật viên lấy mẫu kiểm tra độ pH đất đỏ bazan trên khu vườn đã lên mô cao và đào mương thoát nước trước khi trồng",
+    pos: "center 58%",
   },
   giong: {
-    src: "/landing/durian-orchard-real.jpg",
-    alt: "Hàng cây sầu riêng giống ghép khỏe mạnh trên đất đỏ bazan Đắk Lắk",
-    pos: "center 48%",
+    src: "/stages/stage-02-giong.jpg",
+    alt: "Cây giống sầu riêng ghép khỏe mạnh trồng trên mô đất đỏ bazan có cọc tre cố định, lưới che nắng và tủ rơm giữ ẩm gốc",
+    pos: "center 56%",
   },
   phan: {
-    src: "/landing/lux-branch-vertical.jpg",
-    alt: "Cành sầu riêng nuôi trái đồng đều nhờ chế độ dinh dưỡng hữu cơ cân đối",
-    pos: "center 50%",
+    src: "/stages/stage-03-phan.jpg",
+    alt: "Nhà vườn bón phân hữu cơ ủ hoai vi sinh theo rãnh tròn chiếu mép tán quanh gốc sầu riêng",
+    pos: "center 64%",
   },
   nuoc: {
-    src: "/landing/lux-blossom.jpg",
-    alt: "Chùm hoa sầu riêng nở đều trên cành sau giai đoạn điều tiết nước làm bông",
-    pos: "center 52%",
+    src: "/stages/stage-04-nuoc.jpg",
+    alt: "Chùm nụ mắt cua và hoa sầu riêng bung nở dưới cành gỗ lớn cùng hệ thống béc tưới giữ ẩm đều dưới gốc",
+    pos: "center 46%",
   },
   "sau-benh": {
-    src: "/landing/durian-open.jpg",
-    alt: "Múi sầu riêng vàng ươm không sâu bệnh nhờ quản lý dịch hại tổng hợp IPM",
-    pos: "center 55%",
+    src: "/stages/stage-05-sau-benh.jpg",
+    alt: "Cán bộ kỹ thuật dùng kính lúp kiểm tra mặt dưới lá và nhà vườn tỉa cành tạo độ thông thoáng phòng trừ sâu bệnh IPM",
+    pos: "center 48%",
   },
   "thu-hoach": {
-    src: "/landing/lux-harvest.jpg",
-    alt: "Người nông dân đội nón lá nâng niu trái sầu riêng vừa thu hoạch đúng độ chín",
-    pos: "38% 22%",
+    src: "/stages/stage-06-thu-hoach.jpg",
+    alt: "Thu hoạch sầu riêng đúng độ chín bằng kéo sạch và xếp trái vào sọt nhựa lót xốp trên bạt sạch gắn phiếu mã lô tại vườn",
+    pos: "center 54%",
   },
   "sau-thu": {
-    src: "/landing/lux-qr-atelier.jpg",
-    alt: "Trái sầu riêng gắn thẻ mã QR truy xuất nguồn gốc đặt trên bàn đá travertine",
-    pos: "28% 64%",
+    src: "/stages/stage-07-sau-thu.jpg",
+    alt: "Phân loại sầu riêng tại cơ sở đóng gói đạt chuẩn, gắn tem mã QR truy xuất lên cuống trái và đóng thùng xuất khẩu",
+    pos: "center 46%",
   },
 };
 
