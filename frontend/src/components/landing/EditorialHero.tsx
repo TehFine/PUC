@@ -1,12 +1,57 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { homePathFor } from "@/lib/routes";
 import { NAV_LINKS } from "./data";
+import DwellSlideshow, { type DwellSlide } from "./DwellSlideshow";
 import { usePublic, type PublicOverview } from "./use-public";
+
+const HERO_TOP_LEFT_SLIDES: readonly DwellSlide[] = [
+  {
+    src: "/landing/real-hero-cune.jpg",
+    alt: "Sầu riêng Cư Né chín vàng tách múi đặt trên bàn gỗ mộc giữa triền đồi sầu riêng đất đỏ Đắk Lắk",
+    objectPosition: "center 62%",
+    mobileObjectPosition: "49% 62%",
+  },
+  {
+    src: "/landing/durian-editorial-hero.jpg",
+    alt: "Sầu riêng nguyên trái và múi sầu riêng vàng ươm trưng bày nghệ thuật trên kệ gỗ sồi và nền đá travertine",
+    objectPosition: "center 56%",
+    mobileObjectPosition: "46% 58%",
+  },
+  {
+    src: "/landing/lux-hero-plinth.jpg",
+    alt: "Sầu riêng tuyển chọn và múi vàng ươm đặt trên bệ đá travertine bên vách nan gỗ sồi ấm áp",
+    objectPosition: "center 54%",
+    mobileObjectPosition: "55% 56%",
+  },
+];
+
+const HERO_BOTTOM_RIGHT_SLIDES: readonly DwellSlide[] = [
+  {
+    src: "/landing/real-hero-diary-qr.jpg",
+    alt: "Nhà vườn và cán bộ kỹ thuật HTX Cư Né ghi nhật ký mùa vụ và kiểm tra tem QR lô sầu riêng ngay trên điện thoại tại vườn",
+    objectPosition: "center 38%",
+    mobileObjectPosition: "58% 38%",
+  },
+  {
+    src: "/landing/lux-hero-trace-gallery.jpg",
+    alt: "Sầu riêng gắn tem QR và sổ nhật ký mùa vụ cùng điện thoại trên bàn gỗ sồi đá tự nhiên sang trọng",
+    objectPosition: "center 54%",
+    mobileObjectPosition: "55% 56%",
+  },
+  {
+    src: "/landing/lux-qr-atelier.jpg",
+    alt: "Sầu riêng gắn thẻ truy xuất nguồn gốc QR tối giản đặt trên quầy đá travertine và vách nan gỗ sồi",
+    objectPosition: "center 54%",
+    mobileObjectPosition: "25% 60%",
+  },
+];
+
+const INITIAL_LEFT_LINKS = NAV_LINKS.slice(0, 4);
+const INITIAL_RIGHT_LINKS = NAV_LINKS.slice(4);
 
 const fmt = (value: number, digits = 0) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: digits });
@@ -29,46 +74,86 @@ export default function EditorialHero() {
   const plotsStr = data ? fmt(data.plots) : "50";
   const villagesStr = data ? fmt(data.villages) : "5";
 
-  const handleSelectNav = (href: string) => {
+  const handleSelectNav = useCallback((href: string) => {
     setActiveHref(href);
     clickLockUntilRef.current = Date.now() + 850;
-  };
+  }, []);
 
   useEffect(() => {
-    const updateScroll = () => {
+    let sectionTops: Array<{ href: string; top: number }> = [];
+    let viewportH = window.innerHeight || 800;
+    let docH = document.documentElement.scrollHeight || 0;
+    let isDesktopNav = window.innerWidth > 960;
+    let rafId = 0;
+    let measureRafId = 0;
+
+    const measureLayout = () => {
+      measureRafId = 0;
       const y = window.scrollY || document.documentElement.scrollTop || 0;
-      setShowStickyHeader(y > 60);
-
-      if (Date.now() < clickLockUntilRef.current) return;
-
-      if (y < 140) {
-        setActiveHref("");
+      viewportH = window.innerHeight || 800;
+      docH = document.documentElement.scrollHeight || 0;
+      isDesktopNav = window.innerWidth > 960;
+      if (!isDesktopNav) {
+        sectionTops = [];
         return;
       }
-
-      const viewportH = window.innerHeight || 800;
-      const docH = document.documentElement.scrollHeight || 0;
-      if (docH > 0 && y + viewportH >= docH - 32) {
-        const last = NAV_LINKS[NAV_LINKS.length - 1];
-        if (last) setActiveHref(last.href);
-        return;
-      }
-
-      const probeY = y + Math.min(viewportH * 0.3, 220);
-      let current = "";
+      const next: Array<{ href: string; top: number }> = [];
       for (const link of NAV_LINKS) {
         const id = link.href.startsWith("#") ? link.href.slice(1) : "";
         if (!id) continue;
         const el = document.getElementById(id);
         if (!el) continue;
-        const top = el.getBoundingClientRect().top + y;
-        if (top <= probeY) {
-          current = link.href;
+        next.push({ href: link.href, top: el.getBoundingClientRect().top + y });
+      }
+      sectionTops = next;
+    };
+
+    const updateScroll = () => {
+      rafId = 0;
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      const nextSticky = isDesktopNav && y > 28;
+      setShowStickyHeader((prev) => (prev === nextSticky ? prev : nextSticky));
+
+      if (!isDesktopNav || Date.now() < clickLockUntilRef.current) return;
+
+      if (y < 140) {
+        setActiveHref((prev) => (prev === "" ? prev : ""));
+        return;
+      }
+
+      if (docH > 0 && y + viewportH >= docH - 32) {
+        const last = NAV_LINKS[NAV_LINKS.length - 1];
+        if (last) {
+          setActiveHref((prev) => (prev === last.href ? prev : last.href));
+        }
+        return;
+      }
+
+      const probeY = y + Math.min(viewportH * 0.3, 220);
+      let current = "";
+      for (let i = 0; i < sectionTops.length; i += 1) {
+        if (sectionTops[i].top <= probeY) {
+          current = sectionTops[i].href;
         } else {
           break;
         }
       }
-      setActiveHref(current);
+      setActiveHref((prev) => (prev === current ? prev : current));
+    };
+
+    const onScroll = () => {
+      if (rafId === 0) {
+        rafId = window.requestAnimationFrame(updateScroll);
+      }
+    };
+
+    const scheduleMeasure = () => {
+      if (measureRafId === 0) {
+        measureRafId = window.requestAnimationFrame(() => {
+          measureLayout();
+          updateScroll();
+        });
+      }
     };
 
     const onHashChange = () => {
@@ -79,14 +164,22 @@ export default function EditorialHero() {
       }
     };
 
-    const rafId = window.requestAnimationFrame(updateScroll);
-    window.addEventListener("scroll", updateScroll, { passive: true });
-    window.addEventListener("resize", updateScroll, { passive: true });
+    scheduleMeasure();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(scheduleMeasure);
+      ro.observe(document.body);
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", scheduleMeasure, { passive: true });
     window.addEventListener("hashchange", onHashChange);
     return () => {
-      window.cancelAnimationFrame(rafId);
-      window.removeEventListener("scroll", updateScroll);
-      window.removeEventListener("resize", updateScroll);
+      if (rafId) window.cancelAnimationFrame(rafId);
+      if (measureRafId) window.cancelAnimationFrame(measureRafId);
+      ro?.disconnect();
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", scheduleMeasure);
       window.removeEventListener("hashchange", onHashChange);
     };
   }, []);
@@ -106,18 +199,150 @@ export default function EditorialHero() {
 
   return (
     <>
-      {/* Thanh Header xuất hiện ngay khi người dùng bắt đầu cuộn xem trang */}
+      {/* Thanh Header chuyển đổi 2 trạng thái: khi mới vào trang (logo giữa, tab 2 bên) -> khi bắt đầu cuộn (thanh điều hướng cố định) */}
       <header
-        className={`eh-sticky-bar ${showStickyHeader ? "is-visible" : ""}`}
-        aria-hidden={!showStickyHeader}
+        className={`eh-sticky-bar ${showStickyHeader ? "is-visible" : "is-initial"}`}
       >
-        <div className="eh-sticky-inner">
+        {/* Trạng thái 1: Khi người dùng mới vào trang, chưa bắt đầu cuộn */}
+        <div className="eh-initial-inner" aria-hidden={showStickyHeader}>
+          <div className="eh-init-cell is-left">
+            <nav className="eh-init-nav" aria-label="Chuyên mục bên trái">
+              {INITIAL_LEFT_LINKS.map((link) => {
+                const isActive = activeHref === link.href;
+                return (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    className={`eh-init-link ${isActive ? "is-active" : ""}`}
+                    tabIndex={showStickyHeader ? -1 : 0}
+                    onClick={() => handleSelectNav(link.href)}
+                  >
+                    {link.label}
+                  </a>
+                );
+              })}
+            </nav>
+            <div className="eh-init-mobile-left">
+              {authenticated ? (
+                <Link
+                  href={workspaceHref}
+                  className="eh-init-link is-emphasis"
+                  tabIndex={showStickyHeader ? -1 : 0}
+                >
+                  Vào hệ thống
+                </Link>
+              ) : (
+                <Link
+                  href="/login"
+                  className="eh-init-link is-emphasis"
+                  tabIndex={showStickyHeader ? -1 : 0}
+                >
+                  Đăng nhập
+                </Link>
+              )}
+            </div>
+          </div>
+
+          <div className="eh-init-cell is-center">
+            <a
+              href="#top"
+              className="eh-brand eh-init-brand"
+              aria-label="HTX Cư Né – Đắk Lắk"
+              tabIndex={showStickyHeader ? -1 : 0}
+              onClick={() => handleSelectNav("")}
+            >
+              <span>HTX Cư Né</span>
+            </a>
+
+            <div className="eh-init-mobile-center">
+              {authenticated ? (
+                <button
+                  type="button"
+                  className="eh-init-link eh-init-logout-btn"
+                  tabIndex={showStickyHeader ? -1 : 0}
+                  onClick={() => {
+                    void logout();
+                  }}
+                >
+                  Đăng xuất
+                </button>
+              ) : (
+                <Link
+                  href="/register"
+                  className="eh-init-link"
+                  tabIndex={showStickyHeader ? -1 : 0}
+                >
+                  Đăng ký
+                </Link>
+              )}
+            </div>
+          </div>
+
+          <div className="eh-init-cell is-right">
+            <nav className="eh-init-nav is-right" aria-label="Chuyên mục & truy cập">
+              {INITIAL_RIGHT_LINKS.map((link) => {
+                const isActive = activeHref === link.href;
+                return (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    className={`eh-init-link ${isActive ? "is-active" : ""}`}
+                    tabIndex={showStickyHeader ? -1 : 0}
+                    onClick={() => handleSelectNav(link.href)}
+                  >
+                    {link.label}
+                  </a>
+                );
+              })}
+              <Link
+                href="/trace"
+                className="eh-init-link"
+                tabIndex={showStickyHeader ? -1 : 0}
+              >
+                Tra cứu QR
+              </Link>
+              {authenticated ? (
+                <Link
+                  href={workspaceHref}
+                  className="eh-init-link is-emphasis"
+                  tabIndex={showStickyHeader ? -1 : 0}
+                >
+                  Vào hệ thống
+                </Link>
+              ) : (
+                <Link
+                  href="/login"
+                  className="eh-init-link is-emphasis"
+                  tabIndex={showStickyHeader ? -1 : 0}
+                >
+                  Đăng nhập
+                </Link>
+              )}
+            </nav>
+            <div className="eh-init-mobile-right">
+              <button
+                type="button"
+                className="eh-menu-btn"
+                aria-label="Mở menu điều hướng"
+                aria-expanded={menuOpen}
+                tabIndex={showStickyHeader ? -1 : 0}
+                onClick={() => setMenuOpen(true)}
+              >
+                <span />
+                <span />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Trạng thái 2: Khi người dùng bắt đầu cuộn trang */}
+        <div className="eh-sticky-inner" aria-hidden={!showStickyHeader}>
           <a
             href="#top"
             className="eh-brand"
+            tabIndex={showStickyHeader ? 0 : -1}
             onClick={() => handleSelectNav("")}
           >
-            <Image src="/newlogo.png" alt="" width={22} height={22} className="eh-brand-logo" />
             <span>HTX Cư Né</span>
           </a>
           <div className="eh-mobile-left-slot">
@@ -220,74 +445,24 @@ export default function EditorialHero() {
         </div>
       </header>
 
+      <div className="eh-header-spacer" aria-hidden="true" />
+
       {/* Phần đầu trang: Lưới 4 cột × 3 hàng đan xen 2 khung ảnh sầu riêng đối xứng chéo */}
       <section className="eh-hero" aria-labelledby="hero-title">
-        {/* Hàng 1 – Cột 1: Khung tên trang (trên di động chuyển thành nút Vào hệ thống / Đăng nhập) */}
-        <div className="eh-cell eh-cell-brand">
-          <a href="#top" className="eh-brand" aria-label="HTX Cư Né – Đắk Lắk">
-            <Image src="/newlogo.png" alt="" width={26} height={26} className="eh-brand-logo" priority />
-            <span>HTX Cư Né</span>
-          </a>
-          <div className="eh-mobile-left-slot">
-            {authenticated ? (
-              <Link href={workspaceHref} className="eh-sticky-btn is-solid">
-                Vào hệ thống
-              </Link>
-            ) : (
-              <Link href="/login" className="eh-sticky-btn is-solid">
-                Đăng nhập
-              </Link>
-            )}
-          </div>
-        </div>
-
-        {/* Hàng 1 – Cột 2 & 3: Tiêu đề chính dàn ngang nằm giữa 2 ô */}
+        {/* Hàng 1: Tiêu đề chính căn giữa thoáng đãng xuyên suốt */}
         <div className="eh-cell eh-cell-headline">
           <h1 id="hero-title" className="eh-headline">
             Sầu riêng minh bạch
           </h1>
         </div>
 
-        {/* Hàng 1 – Cột 4: Nút menu 2 nét ngang (trên di động kèm nút Đăng xuất / Đăng ký) */}
-        <div className="eh-cell eh-cell-nav">
-          <div className="eh-mobile-hero-auth">
-            {authenticated ? (
-              <button
-                type="button"
-                className="eh-sticky-btn"
-                onClick={() => {
-                  void logout();
-                }}
-              >
-                Đăng xuất
-              </button>
-            ) : (
-              <Link href="/register" className="eh-sticky-btn">
-                Đăng ký
-              </Link>
-            )}
-          </div>
-          <button
-            type="button"
-            className="eh-menu-btn"
-            aria-label="Mở menu điều hướng"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen(true)}
-          >
-            <span />
-            <span />
-          </button>
-        </div>
-
-        {/* Hàng 2 – Cột 1 & 2: Ảnh sầu riêng tách múi thực tế ngay tại vùng trồng Cư Né */}
+        {/* Hàng 2 – Cột 1 & 2: Ảnh sầu riêng vùng trồng Cư Né lồng ghép bộ ảnh nghệ thuật sang trọng */}
         <div className="eh-cell-media is-top-left">
-          <Image
-            src="/landing/real-hero-cune.jpg"
-            alt="Sầu riêng Cư Né chín vàng tách múi đặt trên bàn gỗ mộc giữa triền đồi sầu riêng đất đỏ Đắk Lắk"
-            fill
-            priority
-            sizes="(max-width: 960px) 100vw, 50vw"
-            style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 62%)" }}
+          <DwellSlideshow
+            slides={HERO_TOP_LEFT_SLIDES}
+            priorityFirst
+            staggerMs={0}
+            sizes="(max-width: 768px) calc(100vw - 44px), (max-width: 960px) 100vw, 50vw"
           />
         </div>
 
@@ -331,14 +506,18 @@ export default function EditorialHero() {
         {/* Hàng 2 – Cột 4: Khoảng thở trắng thoáng mắt */}
         <div className="eh-cell eh-cell-empty is-row2-col4" aria-hidden="true" />
 
+        {/* Đường kẻ ngang mở đầu cụm tạp chí chia đôi trên di động */}
+        <div className="eh-mob-spread-rule" aria-hidden="true" />
+
         {/* Hàng 3 – Cột 1: Khoảng thở trắng đối xứng */}
         <div className="eh-cell eh-cell-empty is-row3-col1" aria-hidden="true" />
 
-        {/* Hàng 3 – Cột 2: Nội dung đi kèm ảnh Hàng 3 */}
+        {/* Hàng 3 – Cột 2: Nội dung đi kèm ảnh Hàng 3 (trên di động tạo bố cục chữ 2 tầng đường kẻ chữ ├) */}
         <div className="eh-cell eh-cell-story">
           <span className="eh-cell-tag">Truy xuất nguồn gốc</span>
-          <div>
+          <div className="eh-story-upper">
             <h2 className="eh-feature-title">Từ vườn đến xuất khẩu</h2>
+            <p className="eh-story-sub-mob">Truy xuất + Nhật ký số</p>
             <p className="eh-story-text">
               <span className="eh-story-desktop">
                 Bà con ghi nhật ký mùa vụ, theo dõi mã vùng và kiểm nghiệm ngay trên điện thoại để minh bạch từng lô hàng.
@@ -348,17 +527,20 @@ export default function EditorialHero() {
               </span>
             </p>
           </div>
+          <div className="eh-story-spread-note">
+            <p className="eh-story-spread-prose">
+              Bà con ghi chép lịch chăm bón, theo dõi mã số vùng trồng và đối chiếu kiểm nghiệm an toàn minh bạch cho từng lô thu hoạch.
+            </p>
+          </div>
         </div>
 
-        {/* Hàng 3 – Cột 3 & 4: Ảnh hộ dân và cán bộ HTX ghi nhật ký & kiểm tra tem QR tại vườn */}
+        {/* Hàng 3 – Cột 3 & 4: Ảnh nhật ký mùa vụ & tem QR (trên di động là ảnh dọc cao bên trái đường kẻ dọc) */}
         <div className="eh-cell-media is-bottom-right">
-          <Image
-            src="/landing/real-hero-diary-qr.jpg"
-            alt="Nhà vườn và cán bộ kỹ thuật HTX Cư Né ghi nhật ký mùa vụ và kiểm tra tem QR lô sầu riêng ngay trên điện thoại tại vườn"
-            fill
-            priority
-            sizes="(max-width: 960px) 100vw, 50vw"
-            style={{ objectFit: "cover", objectPosition: "var(--mob-pos, center 38%)" }}
+          <DwellSlideshow
+            slides={HERO_BOTTOM_RIGHT_SLIDES}
+            mobileCollage={false}
+            staggerMs={650}
+            sizes="(max-width: 768px) 46vw, (max-width: 960px) 100vw, 50vw"
           />
         </div>
       </section>
@@ -374,11 +556,10 @@ export default function EditorialHero() {
           role="dialog"
           aria-modal="true"
           aria-label="Danh mục trang giới thiệu"
-          onClick={() => setMenuOpen(false)}
+          onClick={(e) => e.stopPropagation()}
         >
           <div className="eh-drawer-head">
             <span className="eh-brand">
-              <Image src="/newlogo.png" alt="" width={22} height={22} className="eh-brand-logo" />
               <span>HTX Cư Né</span>
             </span>
             <button
