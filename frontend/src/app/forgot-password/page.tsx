@@ -129,29 +129,32 @@ function ForgotPasswordContent() {
       <AuthShell
         variant="forgot"
         title="Đã đặt lại mật khẩu"
-        subtitle="Mật khẩu mới đã có hiệu lực ngay lập tức cho tài khoản của bạn."
+        subtitle="Mật khẩu mới đã có hiệu lực cho tài khoản của bạn."
         hideSwitch
       >
         <div aria-live="polite">
           <span className="auth-done-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5 12.5 4.5 4.5L19 7.5" />
             </svg>
           </span>
           <ol className="auth-steps">
             <li>
-              <b>1</b>
+              <b>01</b>
               <span>
                 Tài khoản <strong>{form.username.trim()}</strong> đã được cập nhật mật khẩu mới thành công qua xác minh số CCCD.
               </span>
             </li>
             <li>
-              <b>2</b>
-              <span>Mọi phiên đăng nhập cũ trên thiết bị khác đã được đăng xuất để đảm bảo an toàn.</span>
+              <b>02</b>
+              <span>Mọi phiên đăng nhập cũ trên thiết bị khác đã được thu hồi để đảm bảo an toàn.</span>
             </li>
           </ol>
           <Link href="/login" className="auth-submit is-link">
-            Đăng nhập ngay
+            <span>Đăng nhập ngay</span>
+            <span className="auth-arrow" aria-hidden="true">
+              →
+            </span>
           </Link>
         </div>
       </AuthShell>
@@ -163,29 +166,32 @@ function ForgotPasswordContent() {
       <AuthShell
         variant="forgot"
         title="Đã gửi yêu cầu"
-        subtitle="Yêu cầu cấp lại mật khẩu của bạn đang chờ cán bộ HTX phê duyệt."
+        subtitle="Đang chờ cán bộ HTX đối chiếu và phê duyệt."
         hideSwitch
       >
         <div aria-live="polite">
           <span className="auth-done-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5 12.5 4.5 4.5L19 7.5" />
             </svg>
           </span>
           <ol className="auth-steps">
             <li>
-              <b>1</b>
+              <b>01</b>
               <span>
                 Cán bộ HTX sẽ kiểm tra yêu cầu của tài khoản <strong>{form.username.trim()}</strong> ({form.fullName.trim()}) và xác nhận trên hệ thống.
               </span>
             </li>
             <li>
-              <b>2</b>
-              <span>Ngay sau khi cán bộ bấm duyệt, bạn đăng nhập bằng mật khẩu mới vừa đặt.</span>
+              <b>02</b>
+              <span>Ngay sau khi cán bộ bấm duyệt, bạn đăng nhập bằng mật khẩu mới vừa thiết lập.</span>
             </li>
           </ol>
           <Link href="/login" className="auth-submit is-link">
-            Về trang đăng nhập
+            <span>Về trang đăng nhập</span>
+            <span className="auth-arrow" aria-hidden="true">
+              →
+            </span>
           </Link>
         </div>
       </AuthShell>
@@ -193,12 +199,7 @@ function ForgotPasswordContent() {
   }
 
   return (
-    <AuthShell
-      variant="forgot"
-      title="Quên mật khẩu"
-      subtitle="Chọn cách đặt lại mật khẩu tài khoản."
-      wide
-    >
+    <AuthShell variant="forgot" title="Quên mật khẩu" wide>
       <div className="auth-mode-tabs" role="tablist" aria-label="Phương thức khôi phục mật khẩu">
         <button
           type="button"
@@ -209,6 +210,7 @@ function ForgotPasswordContent() {
           onClick={() => switchMode("cccd")}
         >
           <strong>Xác minh CCCD</strong>
+          <span>Đổi ngay lập tức</span>
         </button>
         <button
           type="button"
@@ -219,6 +221,7 @@ function ForgotPasswordContent() {
           onClick={() => switchMode("request")}
         >
           <strong>Nhờ cán bộ HTX</strong>
+          <span>Đối chiếu &amp; phê duyệt</span>
         </button>
       </div>
 
@@ -247,7 +250,7 @@ function ForgotPasswordContent() {
           {mode === "cccd" && (
             <AuthField
               id="forgot-cccd"
-              label="Số CCCD (12 số)"
+              label="Số CCCD chủ hộ (12 số)"
             >
               <input
                 id="forgot-cccd"
@@ -265,7 +268,7 @@ function ForgotPasswordContent() {
 
         {mode === "request" && (
           <>
-            <AuthField id="forgot-fullname" label="Họ và tên">
+            <AuthField id="forgot-fullname" label="Họ và tên chủ hộ">
               <input
                 id="forgot-fullname"
                 className={`auth-input${isFieldInvalid("name") ? " is-error" : ""}`}
@@ -343,10 +346,13 @@ function ForgotPasswordContent() {
                 {mode === "cccd" ? "Đang xác minh…" : "Đang gửi yêu cầu…"}
               </span>
             </>
-          ) : mode === "cccd" ? (
-            "Đặt lại mật khẩu"
           ) : (
-            "Gửi yêu cầu"
+            <>
+              <span>{mode === "cccd" ? "Đặt lại mật khẩu" : "Gửi yêu cầu"}</span>
+              <span className="auth-arrow" aria-hidden="true">
+                →
+              </span>
+            </>
           )}
         </button>
       </form>
@@ -354,14 +360,14 @@ function ForgotPasswordContent() {
       <p className="auth-switch-hint">
         {mode === "cccd" ? (
           <>
-            <span>Không nhớ số CCCD?</span>
+            <span>Chưa cập nhật số CCCD trên hệ thống?</span>
             <button type="button" className="auth-switch-btn" onClick={() => switchMode("request")}>
               Nhờ cán bộ HTX duyệt
             </button>
           </>
         ) : (
           <>
-            <span>Đã đăng ký số CCCD?</span>
+            <span>Đã đăng ký số CCCD với HTX?</span>
             <button type="button" className="auth-switch-btn" onClick={() => switchMode("cccd")}>
               Đặt lại ngay bằng CCCD
             </button>
@@ -379,4 +385,3 @@ export default function ForgotPasswordPage() {
     </Suspense>
   );
 }
-

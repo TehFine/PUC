@@ -18,62 +18,60 @@ export default function RegisterPage() {
   }, [status, session, router]);
 
   return (
-    <AuthShell
-      variant="register"
-      title="Cấp tài khoản"
-      subtitle="Tài khoản do HTX Cư Né cấp trực tiếp."
-      wide
-    >
+    <AuthShell variant="register" title="Cấp tài khoản" wide>
       <div>
         <ol className="auth-timeline">
           <li>
-            <span className="auth-timeline-rail" aria-hidden="true">
-              <span className="auth-timeline-dot" />
+            <span className="auth-timeline-num" aria-hidden="true">
+              01
             </span>
             <div className="auth-timeline-body">
-              <strong className="auth-timeline-title">Lập hồ sơ hộ</strong>
+              <strong className="auth-timeline-title">Lập hồ sơ nông hộ &amp; thửa vườn</strong>
               <p className="auth-timeline-desc">
-                Gửi CCCD, số điện thoại và thông tin thửa đất cho Trưởng thôn hoặc cán bộ HTX.
+                Cung cấp CCCD, số điện thoại và thông tin ranh giới thửa đất cho Trưởng thôn hoặc cán bộ kỹ thuật HTX.
               </p>
             </div>
           </li>
           <li>
-            <span className="auth-timeline-rail" aria-hidden="true">
-              <span className="auth-timeline-dot" />
+            <span className="auth-timeline-num" aria-hidden="true">
+              02
             </span>
             <div className="auth-timeline-body">
-              <strong className="auth-timeline-title">Nhận tài khoản</strong>
+              <strong className="auth-timeline-title">Thẩm định &amp; bàn giao tài khoản</strong>
               <p className="auth-timeline-desc">
-                HTX cấp tài khoản theo số điện thoại kèm mật khẩu ban đầu.
+                HTX gắn hộ vào đúng mã số vùng trồng (PUC) và cấp tài khoản theo số điện thoại kèm mật khẩu khởi tạo.
               </p>
             </div>
           </li>
           <li>
-            <span className="auth-timeline-rail" aria-hidden="true">
-              <span className="auth-timeline-dot" />
+            <span className="auth-timeline-num" aria-hidden="true">
+              03
             </span>
             <div className="auth-timeline-body">
-              <strong className="auth-timeline-title">Đăng nhập sử dụng</strong>
+              <strong className="auth-timeline-title">Đăng nhập &amp; ghi nhật ký mùa vụ</strong>
               <p className="auth-timeline-desc">
-                Vào hệ thống, đổi mật khẩu riêng và ghi nhật ký vườn.
+                Truy cập cổng thành viên, đổi sang mật khẩu cá nhân và cập nhật nhật ký canh tác điện tử.
               </p>
             </div>
           </li>
         </ol>
 
         <div className="auth-contact-line">
-          <span>Liên hệ HTX Cư Né</span>
+          <span>Liên hệ Văn phòng HTX Cư Né</span>
           <a href="tel:0366663778">0366 663 778</a>
         </div>
 
         <Link href="/login" className="auth-submit is-link">
-          Đã có tài khoản? Đăng nhập
+          <span>Đã có tài khoản? Đăng nhập</span>
+          <span className="auth-arrow" aria-hidden="true">
+            →
+          </span>
         </Link>
 
         <p className="auth-switch-hint">
-          <span>Quên mật khẩu?</span>
+          <span>Quên mật khẩu tài khoản?</span>
           <Link href="/forgot-password" className="auth-switch-btn">
-            Lấy lại mật khẩu
+            Khôi phục mật khẩu
           </Link>
         </p>
       </div>

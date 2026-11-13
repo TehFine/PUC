@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 
-/** Đường line đỏ chạy quanh viền nút khi hệ thống đang xử lý đăng nhập. */
+/** Đường kẻ mảnh góc vuông chạy quanh viền nút khi hệ thống đang xử lý xác thực. */
 export function AuthBusyBorderRing() {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [size, setSize] = useState({ w: 360, h: 56 });
+  const [size, setSize] = useState({ w: 360, h: 48 });
 
   useEffect(() => {
     const el = svgRef.current;
@@ -24,10 +24,9 @@ export function AuthBusyBorderRing() {
     }
   }, []);
 
-  const inset = 3;
+  const inset = 1;
   const rw = Math.max(20, size.w - inset * 2);
   const rh = Math.max(20, size.h - inset * 2);
-  const rx = rh / 2;
 
   return (
     <svg
@@ -42,8 +41,8 @@ export function AuthBusyBorderRing() {
         y={inset}
         width={rw}
         height={rh}
-        rx={rx}
-        ry={rx}
+        rx={0}
+        ry={0}
       />
       <rect
         className="auth-busy-ring-stroke"
@@ -51,8 +50,8 @@ export function AuthBusyBorderRing() {
         y={inset}
         width={rw}
         height={rh}
-        rx={rx}
-        ry={rx}
+        rx={0}
+        ry={0}
         pathLength={100}
       />
     </svg>
@@ -60,7 +59,19 @@ export function AuthBusyBorderRing() {
 }
 
 /** Một ô nhập có nhãn phía trên và dòng gợi ý (tùy chọn) phía dưới. */
-export function AuthField({ id, label, optional, hint, children }: { id: string; label: string; optional?: boolean; hint?: string; children: ReactNode }) {
+export function AuthField({
+  id,
+  label,
+  optional,
+  hint,
+  children,
+}: {
+  id: string;
+  label: string;
+  optional?: boolean;
+  hint?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="auth-field">
       <label htmlFor={id}>
@@ -84,17 +95,30 @@ export function PasswordInput({
   return <input {...props} className={fullClass} type={show ? "text" : "password"} />;
 }
 
-/** Ô tích "Hiện mật khẩu": vùng bấm lớn, dễ dùng cho người lớn tuổi. */
-export function ShowPasswordCheck({ id, checked, onChange }: { id: string; checked: boolean; onChange: (checked: boolean) => void }) {
+/** Ô tích "Hiện mật khẩu" góc vuông dễ quan sát cho bà con nông hộ. */
+export function ShowPasswordCheck({
+  id,
+  checked,
+  onChange,
+}: {
+  id: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
   return (
     <label className="auth-check" htmlFor={id}>
-      <input id={id} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
       Hiện mật khẩu
     </label>
   );
 }
 
-/** Thông báo lỗi viền đỏ phát sáng kèm hiệu ứng rung lắc (không dùng icon). */
+/** Thông báo lỗi viền mảnh tinh gọn chuẩn kiến trúc. */
 export function AuthError({ children }: { children: ReactNode }) {
   return (
     <p className="auth-error" role="alert">
@@ -102,5 +126,3 @@ export function AuthError({ children }: { children: ReactNode }) {
     </p>
   );
 }
-
-

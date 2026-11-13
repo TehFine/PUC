@@ -71,7 +71,7 @@ function loadGoogleIdentityScript(): Promise<void> {
   return gisScriptPromise;
 }
 
-function GoogleLogoIcon({ size = 20 }: { size?: number }) {
+function GoogleLogoIcon({ size = 19 }: { size?: number }) {
   return (
     <svg className="auth-google-icon" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
       <path
@@ -294,8 +294,14 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthShell variant="login" title="Đăng nhập" subtitle="Nhập tên đăng nhập hoặc số điện thoại và mật khẩu của bạn để vào hệ thống.">
-      <form ref={formRef} className={`auth-form${isBusy ? " is-processing" : ""}`} onSubmit={onSubmit} noValidate aria-busy={isBusy}>
+    <AuthShell variant="login" title="Đăng nhập">
+      <form
+        ref={formRef}
+        className={`auth-form${isBusy ? " is-processing" : ""}`}
+        onSubmit={onSubmit}
+        noValidate
+        aria-busy={isBusy}
+      >
         <AuthField id="login-username" label="Tên đăng nhập hoặc Số điện thoại">
           <input
             id="login-username"
@@ -351,13 +357,16 @@ export default function LoginPage() {
             <>
               <AuthBusyBorderRing />
               <span>
-                {isRedirectingAuth
-                  ? "Đang mở hệ thống…"
-                  : "Đang xác thực tài khoản…"}
+                {isRedirectingAuth ? "Đang mở hệ thống…" : "Đang xác thực tài khoản…"}
               </span>
             </>
           ) : (
-            "Đăng nhập"
+            <>
+              <span>Đăng nhập</span>
+              <span className="auth-arrow" aria-hidden="true">
+                →
+              </span>
+            </>
           )}
         </button>
 
@@ -376,9 +385,7 @@ export default function LoginPage() {
             <>
               <AuthBusyBorderRing />
               <span>
-                {isRedirectingAuth
-                  ? "Đang mở hệ thống…"
-                  : "Đang đăng nhập bằng Google…"}
+                {isRedirectingAuth ? "Đang mở hệ thống…" : "Đang đăng nhập bằng Google…"}
               </span>
             </>
           ) : (
@@ -389,6 +396,13 @@ export default function LoginPage() {
           )}
         </button>
       </form>
+
+      <p className="auth-switch-hint">
+        <span>Chưa có tài khoản thành viên?</span>
+        <Link href="/register" className="auth-switch-btn">
+          Xem quy trình cấp tài khoản
+        </Link>
+      </p>
 
       {chooserOpen && (
         <div
@@ -402,7 +416,7 @@ export default function LoginPage() {
         >
           <div className="auth-google-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="auth-google-dialog-head">
-              <GoogleLogoIcon size={28} />
+              <GoogleLogoIcon size={24} />
               <h2 id="google-chooser-title">Chọn một tài khoản</h2>
               <p>
                 để tiếp tục tới <strong>HTX Nông nghiệp Cư Né</strong>
