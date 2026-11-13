@@ -39,16 +39,24 @@ function useWidth<T extends HTMLElement>() {
   useIsomorphicLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    let rafId = 0;
     const initial = Math.round(el.clientWidth);
     if (initial > 0) setWidth(initial);
     const ro = new ResizeObserver(([entry]) => {
       const w = Math.round(entry?.contentRect?.width ?? 0);
       if (w > 0) {
-        setWidth((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+        if (rafId) window.cancelAnimationFrame(rafId);
+        rafId = window.requestAnimationFrame(() => {
+          rafId = 0;
+          setWidth((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+        });
       }
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, []);
   return [ref, width] as const;
 }
@@ -186,6 +194,7 @@ export function AreaTrend({
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const [wrapRef, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const cachedLeftRef = useRef<number | null>(null);
   const n = data.length;
   const defaultIdx = n ? resolveIndex(data, highlight, true) : 0;
   const active = hover ?? defaultIdx;
@@ -297,18 +306,24 @@ export function AreaTrend({
     }
   }
 
-  const selectPointAtClientX = (el: HTMLDivElement, clientX: number) => {
-    const rect = el.getBoundingClientRect();
-    const idx = Math.round((clientX - rect.left - padX) / step);
+  const selectPointAtClientX = (el: HTMLDivElement, clientX: number, forceMeasure = false) => {
+    if (forceMeasure || cachedLeftRef.current === null) {
+      cachedLeftRef.current = el.getBoundingClientRect().left;
+    }
+    const idx = Math.round((clientX - cachedLeftRef.current - padX) / step);
     const clamped = Math.min(Math.max(idx, 0), n - 1);
     setHover((prev) => (prev === clamped ? prev : clamped));
+  };
+  const onEnter = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") return;
+    cachedLeftRef.current = e.currentTarget.getBoundingClientRect().left;
   };
   const onMove = (e: PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "touch") return;
     selectPointAtClientX(e.currentTarget, e.clientX);
   };
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
-    selectPointAtClientX(e.currentTarget, e.clientX);
+    selectPointAtClientX(e.currentTarget, e.clientX, true);
   };
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "ArrowRight") setHover(Math.min(active + 1, n - 1));
@@ -327,9 +342,11 @@ export function AreaTrend({
       role="img"
       aria-label={`${ariaLabel}. ${data[active].label} ${valText}`}
       tabIndex={0}
+      onPointerEnter={onEnter}
       onPointerMove={onMove}
       onClick={onClick}
       onPointerLeave={(e) => {
+        cachedLeftRef.current = null;
         if (e.pointerType !== "touch") setHover(null);
       }}
       onBlur={() => setHover(null)}

@@ -151,6 +151,8 @@ export function useApi<T>(path: string | null) {
   };
 }
 
+const EMPTY_ROWS: never[] = [];
+
 /** Danh sách phân trang chuẩn `{ data, total, page, pageSize }` của backend. */
 export function useApiList<T>(resource: string | null, params: Record<string, string | number | undefined | null> = {}) {
   const query = new URLSearchParams();
@@ -162,7 +164,7 @@ export function useApiList<T>(resource: string | null, params: Record<string, st
   const path = resource === null ? null : `/${resource}?${query.toString()}`;
   const state = useApi<ListResponse<T>>(path);
   return {
-    rows: state.data?.data ?? [],
+    rows: state.data?.data ?? (EMPTY_ROWS as T[]),
     total: state.data?.total ?? 0,
     loading: state.loading,
     error: state.error,

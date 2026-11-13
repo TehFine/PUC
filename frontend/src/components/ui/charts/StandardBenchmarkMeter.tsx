@@ -24,16 +24,24 @@ function useWidth<T extends HTMLElement>() {
   useIsomorphicLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    let rafId = 0;
     const initial = Math.round(el.clientWidth);
     if (initial > 0) setWidth(initial);
     const ro = new ResizeObserver(([entry]) => {
       const w = Math.round(entry.contentRect.width);
       if (w > 0) {
-        setWidth((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+        if (rafId) window.cancelAnimationFrame(rafId);
+        rafId = window.requestAnimationFrame(() => {
+          rafId = 0;
+          setWidth((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+        });
       }
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, []);
   return [ref, width] as const;
 }
@@ -120,16 +128,25 @@ export function StandardBenchmarkMeter({ standards, initialIndex = 0 }: Standard
     ].join(" ");
   };
 
+  const cachedLeftRef = useRef<number | null>(null);
+
   const selectAtClientX = useCallback(
-    (svg: SVGSVGElement, clientX: number) => {
-      const rect = svg.getBoundingClientRect();
-      const x = clientX - rect.left;
+    (svg: SVGSVGElement, clientX: number, forceMeasure = false) => {
+      if (forceMeasure || cachedLeftRef.current === null) {
+        cachedLeftRef.current = svg.getBoundingClientRect().left;
+      }
+      const x = clientX - cachedLeftRef.current;
       const pct = Math.round(((x - PAD_X) / barW) * 100);
       const clamped = Math.min(Math.max(pct, 0), 100);
       setHoverPct((prev) => (prev === clamped ? prev : clamped));
     },
     [PAD_X, barW],
   );
+
+  const handlePointerEnter = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.pointerType === "touch") return;
+    cachedLeftRef.current = e.currentTarget.getBoundingClientRect().left;
+  }, []);
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
@@ -141,12 +158,13 @@ export function StandardBenchmarkMeter({ standards, initialIndex = 0 }: Standard
 
   const handleClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      selectAtClientX(e.currentTarget, e.clientX);
+      selectAtClientX(e.currentTarget, e.clientX, true);
     },
     [selectAtClientX],
   );
 
   const handlePointerLeave = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    cachedLeftRef.current = null;
     if (e.pointerType !== "touch") setHoverPct(null);
   }, []);
 
@@ -196,6 +214,7 @@ export function StandardBenchmarkMeter({ standards, initialIndex = 0 }: Standard
               width={width}
               height={svgH}
               className="sbm-svg"
+              onPointerEnter={handlePointerEnter}
               onPointerMove={handlePointerMove}
               onClick={handleClick}
               onPointerLeave={handlePointerLeave}

@@ -786,5 +786,17 @@
   }
 }
 
+html[data-perf="lite"] :is(.vc-line, .vc-fill, .vc-arc, .vc-bar, .vc-share-fill, .vc-donut-stage) {
+  animation: none !important;
+}
+
+html[data-perf="lite"] :is(.vc-tip, .vc-guide, .vc-meter-rest, .vc-meter-pin, .vc-donut-arc, .vc-donut-cushion, .sbm-floating-badge) {
+  transition: none !important;
+}
+
+html[data-perf="lite"] :is(.vc-col.is-on .vc-bar, .vc-donut-group.is-active .vc-donut-arc) {
+  filter: none !important;
+}
+
 
 

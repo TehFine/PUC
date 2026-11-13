@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { startTransition, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function GlobalErrorPage({
   error,
@@ -11,9 +12,36 @@ export default function GlobalErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const router = useRouter();
+  const autoRetriedRef = useRef(false);
+
+  const handleRecover = () => {
+    startTransition(() => {
+      router.refresh();
+      reset();
+    });
+  };
+
   useEffect(() => {
     console.error("Application error:", error);
-  }, [error]);
+    if (process.env.NODE_ENV === "development" && !autoRetriedRef.current) {
+      const msg = error?.message ?? "";
+      if (
+        msg.includes("is not defined") ||
+        msg.includes("Failed to construct") ||
+        msg.includes("ChunkLoadError")
+      ) {
+        autoRetriedRef.current = true;
+        const timer = window.setTimeout(() => {
+          startTransition(() => {
+            router.refresh();
+            reset();
+          });
+        }, 250);
+        return () => window.clearTimeout(timer);
+      }
+    }
+  }, [error, reset, router]);
 
   return (
     <div
@@ -102,7 +130,7 @@ export default function GlobalErrorPage({
         >
           <button
             type="button"
-            onClick={() => reset()}
+            onClick={handleRecover}
             style={{
               padding: "11px 20px",
               borderRadius: 12,

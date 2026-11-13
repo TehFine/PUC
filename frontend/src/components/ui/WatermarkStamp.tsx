@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { usePerformanceTier } from "@/lib/network";
 
 export interface WatermarkStampProps {
   /** Dòng chữ chính in đậm ở thanh ngang trung tâm (VD: "ĐÃ XUẤT KHO", "BẢN CHỨNG THỰC") */
@@ -87,6 +88,8 @@ export function WatermarkStamp({
   bottomText = "MÃ VÙNG TRỒNG PUC",
   className = "",
 }: WatermarkStampProps) {
+  const perfTier = usePerformanceTier();
+  const useGrain = perfTier !== "lite";
   const rawId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const topArcId = `wm-top-${rawId}`;
   const botArcId = `wm-bot-${rawId}`;
@@ -157,29 +160,31 @@ export function WatermarkStamp({
           </text>
         </mask>
 
-        {/* Mặt nạ hạt mực đóng dấu tự nhiên (distressed ink texture) */}
-        <mask id={grainMaskId} maskUnits="userSpaceOnUse" x="0" y="0" width="360" height="320">
-          <rect x="0" y="0" width="360" height="320" fill="#ffffff" />
-          {STAMP_GRAIN.dots.map((d, idx) => (
-            <circle key={idx} cx={d.cx} cy={d.cy} r={d.r} fill="#000000" fillOpacity={d.op} />
-          ))}
-          {STAMP_GRAIN.scratches.map((s, idx) => (
-            <line
-              key={idx}
-              x1={s.x1}
-              y1={s.y1}
-              x2={s.x2}
-              y2={s.y2}
-              stroke="#000000"
-              strokeWidth={s.sw}
-              strokeOpacity={s.op}
-              strokeLinecap="round"
-            />
-          ))}
-        </mask>
+        {/* Mặt nạ hạt mực đóng dấu tự nhiên (bỏ qua trên máy yếu để giảm tải rasterize SVG mask) */}
+        {useGrain && (
+          <mask id={grainMaskId} maskUnits="userSpaceOnUse" x="0" y="0" width="360" height="320">
+            <rect x="0" y="0" width="360" height="320" fill="#ffffff" />
+            {STAMP_GRAIN.dots.map((d, idx) => (
+              <circle key={idx} cx={d.cx} cy={d.cy} r={d.r} fill="#000000" fillOpacity={d.op} />
+            ))}
+            {STAMP_GRAIN.scratches.map((s, idx) => (
+              <line
+                key={idx}
+                x1={s.x1}
+                y1={s.y1}
+                x2={s.x2}
+                y2={s.y2}
+                stroke="#000000"
+                strokeWidth={s.sw}
+                strokeOpacity={s.op}
+                strokeLinecap="round"
+              />
+            ))}
+          </mask>
+        )}
       </defs>
 
-      <g mask={`url(#${grainMaskId})`}>
+      <g mask={useGrain ? `url(#${grainMaskId})` : undefined}>
         {/* 1. HỆ VÒNG TRÒN ĐỒNG TÂM KÉP & CHỮ UỐN CONG TRÊN - DƯỚI */}
         <g mask={`url(#${circleMaskId})`}>
           {/* Cặp vành tròn ngoài (1 nét dày + 1 nét mảnh sát trong) */}

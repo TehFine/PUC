@@ -35,13 +35,18 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
+const PERF_BOOTSTRAP_SCRIPT = `(function(){try{var d=document.documentElement,q=new URLSearchParams(location.search).get("perf");if(q==="lite"||q==="full"){d.dataset.perf=q;return;}var n=navigator,c=n.connection,l=(n.hardwareConcurrency>0&&n.hardwareConcurrency<=4)||(n.deviceMemory>0&&n.deviceMemory<=4)||!!(c&&(c.saveData||c.effectiveType==="2g"||c.effectiveType==="slow-2g"))||(typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches);d.dataset.perf=l?"lite":"full";}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" suppressHydrationWarning>
+    <html lang="vi" data-scroll-behavior="smooth" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: PERF_BOOTSTRAP_SCRIPT }} />
+      </head>
       <body className={`${inter.variable} ${heroSans.variable} font-sans antialiased`}>
         <NetworkStatus />
         <AuthProvider>

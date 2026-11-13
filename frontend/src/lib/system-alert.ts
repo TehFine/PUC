@@ -201,7 +201,7 @@ function scheduleNextPoll(delayMs: number) {
   if (pollTimer) clearTimeout(pollTimer);
   pollTimer = setTimeout(() => {
     if (typeof document !== "undefined" && document.visibilityState === "hidden") {
-      scheduleNextPoll(delayMs);
+      // Tạm nghỉ hoàn toàn khi tab ẩn; sự kiện visibilitychange sẽ tự đánh thức lại ngay khi mở tab.
       return;
     }
     void checkSystemHealth();

@@ -76,22 +76,35 @@
 
 .sk {
   --sk-base: rgba(20, 55, 47, 0.08);
-  --sk-shine: rgba(255, 255, 255, 0.75);
+  --sk-shine: rgba(255, 255, 255, 0.68);
+  position: relative;
+  overflow: hidden;
   display: block;
   width: var(--sk-w, 100%);
   height: var(--sk-h, 14px);
   border-radius: var(--sk-r, 8px);
-  background: linear-gradient(100deg, var(--sk-base) 30%, var(--sk-shine) 50%, var(--sk-base) 70%);
-  background-size: 300% 100%;
-  animation: sk-shimmer 1.5s ease-in-out infinite;
-}
-html[data-net="slow"] .sk,
-html[data-net="offline"] .sk {
-  animation-duration: 2.2s;
-}
-html[data-perf="lite"] .sk {
   background: var(--sk-base);
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--sk-shine) 50%, transparent 100%);
+  transform: translate3d(-100%, 0, 0);
+  animation: sk-shimmer 1.65s ease-in-out infinite;
+}
+html[data-net="slow"] .sk::after,
+html[data-net="offline"] .sk::after {
+  animation-duration: 2.4s;
+}
+html[data-perf="lite"] .sk::after {
+  display: none;
   animation: none;
+}
+html[data-perf="lite"] .sk-apple-spinner,
+html[data-perf="lite"] .net-toast-ios-spinner {
+  animation-duration: 1.2s;
+  animation-timing-function: steps(8, end);
 }
 .sk-circle {
   --sk-r: 999px;
@@ -199,13 +212,10 @@ html[data-perf="lite"] .sk {
   color: rgba(20, 55, 47, 0.6);
 }
 
-/* Ảnh đang tải: hiện khung nhịp sáng phía sau, ảnh tải xong sẽ phủ lên.
-   Chỉ áp dụng cho ảnh chụp (next/image dạng fill, nền đục), không áp dụng cho logo trong suốt. */
+/* Ảnh đang tải: nền tĩnh dịu mắt phía sau, ảnh tải xong sẽ phủ lên.
+   Tuyệt đối không chạy animation vô hạn trên img[data-nimg="fill"] để tránh vẽ lại liên tục làm nóng máy. */
 img[data-nimg="fill"] {
-  background-color: rgba(20, 55, 47, 0.07);
-  background-image: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.7) 50%, transparent 70%);
-  background-size: 300% 100%;
-  animation: sk-shimmer 1.5s ease-in-out infinite;
+  background-color: rgba(20, 55, 47, 0.055);
 }
 
 /* Thẻ thông báo trạng thái mạng (Tối giản: chỉ icon loading xoay + chữ, không có khung màu bao ngoài icon) */
@@ -313,10 +323,10 @@ img[data-nimg="fill"] {
 
 @keyframes sk-shimmer {
   0% {
-    background-position: 100% 0;
+    transform: translate3d(-100%, 0, 0);
   }
   100% {
-    background-position: 0 0;
+    transform: translate3d(100%, 0, 0);
   }
 }
 @keyframes sk-appear {
@@ -353,8 +363,8 @@ img[data-nimg="fill"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sk,
-  img[data-nimg="fill"] {
+  .sk::after {
+    display: none !important;
     animation: none !important;
   }
   .sk-group,

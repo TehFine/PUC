@@ -128,6 +128,7 @@ export function Modal({
       if (panelRef.current) {
         panelRef.current.style.animation = "none";
         panelRef.current.style.transform = "translate3d(0, 0, 0)";
+        panelRef.current.style.willChange = "auto";
       }
       if (backdropRef.current) {
         backdropRef.current.style.animation = "none";
