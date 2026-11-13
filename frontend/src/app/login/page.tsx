@@ -8,6 +8,7 @@ import AuthShell from "@/components/auth/AuthShell";
 import { AuthBusyBorderRing, AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
 import { api, ApiError, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
+import { lockRootScroll } from "@/lib/scroll-lock";
 
 interface DemoGoogleAccount {
   id: number;
@@ -178,6 +179,21 @@ export default function LoginPage() {
       window.removeEventListener("pageshow", handlePageShow);
     };
   }, [resetForm]);
+
+  useEffect(() => {
+    if (!chooserOpen) return;
+    const unlock = lockRootScroll();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !googleSubmitting) {
+        setChooserOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      unlock();
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [chooserOpen, googleSubmitting]);
 
   const isRedirectingAuth = status === "authenticated" || (redirecting && (submitting || googleSubmitting));
   const isBusy = submitting || googleSubmitting || isRedirectingAuth;

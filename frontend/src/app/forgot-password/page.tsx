@@ -380,7 +380,13 @@ function ForgotPasswordContent() {
 
 export default function ForgotPasswordPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <AuthShell variant="forgot" title="Quên mật khẩu" wide>
+          <div style={{ minHeight: 240 }} aria-busy="true" />
+        </AuthShell>
+      }
+    >
       <ForgotPasswordContent />
     </Suspense>
   );

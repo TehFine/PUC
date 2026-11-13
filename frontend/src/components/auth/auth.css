@@ -1671,8 +1671,15 @@ select.auth-input {
   }
 }
 
-html[data-perf="lite"] .auth-busy-ring-stroke {
+html[data-perf="lite"] .auth-busy-ring-stroke,
+html[data-perf="lite"] .auth-google-backdrop {
   animation: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-perf="lite"] .auth-google-dialog {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
 }
 
 html[data-perf="lite"] .auth-media .sw-dwell-layer.is-active {

@@ -217,7 +217,7 @@ export default function AuthShell({
             <div className="auth-media">
               <DwellSlideshow
                 slides={aside.slides}
-                sizes="(max-width: 960px) 100vw, 52vw"
+                sizes="(max-width: 960px) 50vw, 52vw"
                 priorityFirst
               />
             </div>

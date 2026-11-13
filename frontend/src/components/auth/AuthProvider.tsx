@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const can = useCallback(
-    (resource: string, action: Action) => session?.permissions[resource]?.includes(action) ?? false,
+    (resource: string, action: Action) => session?.permissions?.[resource]?.includes(action) ?? false,
     [session],
   );
 
