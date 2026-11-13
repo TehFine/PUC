@@ -102,23 +102,14 @@ function formatViDate(dateStr: string | null | undefined): string | null {
   });
 }
 
-function formatLotBadge(lot: SampleLot): { text: string; tone: "ok" | "warn" } {
+function formatLotScaleLine(lot: SampleLot): string | null {
   if (lot.weightKg !== null && lot.weightKg !== undefined && Number(lot.weightKg) > 0) {
-    return {
-      text: `${Number(lot.weightKg).toLocaleString("vi-VN")} kg`,
-      tone: "ok",
-    };
+    return `Sản lượng: ${Number(lot.weightKg).toLocaleString("vi-VN")} kg`;
   }
   if (lot.areaHa !== null && lot.areaHa !== undefined && Number(lot.areaHa) > 0) {
-    return {
-      text: `${Number(lot.areaHa).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha`,
-      tone: lot.status === "pending" || lot.status === "improve" ? "warn" : "ok",
-    };
+    return `Diện tích: ${Number(lot.areaHa).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha`;
   }
-  return {
-    text: lot.sampleType === "plot" ? "Hồ sơ PUC" : "Đã định danh",
-    tone: "ok",
-  };
+  return null;
 }
 
 export default function TraceLookupPage() {
@@ -359,7 +350,7 @@ export default function TraceLookupPage() {
               <>
                 {showLots &&
                   visibleLots.map((lot) => {
-                    const badge = formatLotBadge(lot);
+                    const scaleLine = formatLotScaleLine(lot);
                     const isPlot = lot.sampleType === "plot";
                     const dateLabel = formatViDate(lot.harvestedOn);
                     const footLabel = dateLabel
@@ -377,9 +368,6 @@ export default function TraceLookupPage() {
                           <span className="sw-trace-card-kind">
                             {isPlot ? "Thửa vườn PUC" : "Lô thu hoạch"}
                           </span>
-                          <span className={`sw-status-tag ${badge.tone === "ok" ? "is-ok" : "is-warn"}`}>
-                            {badge.text}
-                          </span>
                         </div>
 
                         <div className="sw-trace-card-main">
@@ -388,6 +376,7 @@ export default function TraceLookupPage() {
                             {lot.buyer || "HTX Nông nghiệp Cư Né"}
                           </span>
                           <div className="sw-trace-card-meta">
+                            {scaleLine && <span>{scaleLine}</span>}
                             <span>
                               {isPlot
                                 ? `Mã vùng: ${lot.market || "66-PUC-SR0001-00728"}`
@@ -409,6 +398,10 @@ export default function TraceLookupPage() {
                 {showStamps &&
                   visibleStamps.map((stamp) => {
                     const dateLabel = formatViDate(stamp.issuedAt);
+                    const stampScaleLine =
+                      stamp.weightKg !== null && stamp.weightKg !== undefined
+                        ? `Khối lượng: ${Number(stamp.weightKg).toLocaleString("vi-VN")} kg`
+                        : `Phân hạng: Hạng ${stamp.grade || "A"}`;
                     return (
                       <Link
                         key={`stamp-${stamp.code}`}
@@ -417,17 +410,13 @@ export default function TraceLookupPage() {
                       >
                         <div className="sw-trace-card-top">
                           <span className="sw-trace-card-kind">Tem QR nông hộ</span>
-                          <span className="sw-status-tag is-ok">
-                            {stamp.weightKg !== null && stamp.weightKg !== undefined
-                              ? `${Number(stamp.weightKg).toLocaleString("vi-VN")} kg`
-                              : `Hạng ${stamp.grade || "A"}`}
-                          </span>
                         </div>
 
                         <div className="sw-trace-card-main">
                           <h3 className="sw-trace-card-code">{stamp.code}</h3>
                           <span className="sw-trace-card-owner">Hộ {stamp.householdName}</span>
                           <div className="sw-trace-card-meta">
+                            <span>{stampScaleLine}</span>
                             <span>
                               {stamp.lotCode
                                 ? `Gắn thửa vườn: ${stamp.lotCode}`

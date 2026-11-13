@@ -424,9 +424,10 @@
 .sw-trace-card-meta {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   font-size: 13px;
   line-height: 1.5;
+  font-variant-numeric: tabular-nums;
   color: var(--sw-muted);
 }
 
