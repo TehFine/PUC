@@ -50,9 +50,13 @@ export default function Journal() {
 
   const [tab, setTab] = useState<Tab>("journal");
 
+  // Modals for Spray (khai báo sớm để chỉ tải danh mục thuốc BVTV khi cần mở biểu mẫu)
+  const [editingSpray, setEditingSpray] = useState<SprayRow | "new" | null>(null);
+  const [deletingSpray, setDeletingSpray] = useState<SprayRow | null>(null);
+
   // Options for selectors
   const { households, options: householdOptions } = useHouseholdOptions();
-  const { pesticides, options: pesticideOptions } = usePesticideOptions();
+  const { pesticides, options: pesticideOptions } = usePesticideOptions(Boolean(editingSpray));
 
   // Dashboard summary for real KPIs
   const { data: summary, refresh: refreshSummary } = useApi<DashboardSummary>("/dashboard/summary");
@@ -119,10 +123,6 @@ export default function Journal() {
   const [resolvingViolation, setResolvingViolation] = useState<ViolationRow | null>(null);
   const [editingViolation, setEditingViolation] = useState<ViolationRow | "new" | null>(null);
   const [deletingViolation, setDeletingViolation] = useState<ViolationRow | null>(null);
-
-  // Modals for Spray
-  const [editingSpray, setEditingSpray] = useState<SprayRow | "new" | null>(null);
-  const [deletingSpray, setDeletingSpray] = useState<SprayRow | null>(null);
 
   const tabs: TabItem<Tab>[] = [
     { id: "journal", label: "Nhật ký canh tác", badge: journalList.total },

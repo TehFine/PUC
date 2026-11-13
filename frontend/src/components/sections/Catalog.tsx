@@ -11,6 +11,7 @@ import { FERTILIZER_CATEGORY, FERTILIZER_STATUS, PESTICIDE_STATUS, VARIETY_CATEG
 import PesticideFormModal from "@/components/admin/catalog/PesticideFormModal";
 import VarietyFormModal from "@/components/admin/catalog/VarietyFormModal";
 import VillageFormModal from "@/components/admin/catalog/VillageFormModal";
+import { useDebounced } from "@/components/admin/catalog/use-debounced";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
   DiseaseAndIpmList,
@@ -143,6 +144,7 @@ export default function Catalog() {
 
   // 1. Thuốc BVTV
   const [pestQ, setPestQ] = useState("");
+  const debouncedPestQ = useDebounced(pestQ, 120);
   const [pestStatus, setPestStatus] = useState<"all" | "allowed" | "restricted" | "banned">("all");
   const pesticides = useApiList<PesticideRecord>("pesticides", {});
   const [selectedPesticide, setSelectedPesticide] = useState<PesticideDto | null>(null);
@@ -160,17 +162,18 @@ export default function Catalog() {
   );
 
   const shownPesticides = useMemo(() => {
-    const q = pestQ.trim().toLowerCase();
+    const q = debouncedPestQ.trim().toLowerCase();
     return pesticides.rows.filter((item) => {
       const matchesQ =
         !q || `${item.name} ${item.activeIngredient} ${item.manufacturer ?? ""}`.toLowerCase().includes(q);
       const matchesSt = pestStatus === "all" || item.status === pestStatus;
       return matchesQ && matchesSt;
     });
-  }, [pesticides.rows, pestQ, pestStatus]);
+  }, [pesticides.rows, debouncedPestQ, pestStatus]);
 
   // 2. Phân bón
   const [fertQ, setFertQ] = useState("");
+  const debouncedFertQ = useDebounced(fertQ, 120);
   const [fertCategory, setFertCategory] = useState<"all" | "organic" | "npk" | "foliar" | "microbial" | "restricted">("all");
   const fertilizers = useApiList<FertilizerRecord>("fertilizers", {});
   const [selectedFertilizer, setSelectedFertilizer] = useState<FertilizerDto | null>(null);
@@ -190,7 +193,7 @@ export default function Catalog() {
   );
 
   const shownFertilizers = useMemo(() => {
-    const q = fertQ.trim().toLowerCase();
+    const q = debouncedFertQ.trim().toLowerCase();
     return fertilizers.rows.filter((item) => {
       const matchesQ =
         !q ||
@@ -200,10 +203,11 @@ export default function Catalog() {
       const matchesCat = fertCategory === "all" || item.category === fertCategory;
       return matchesQ && matchesCat;
     });
-  }, [fertilizers.rows, fertQ, fertCategory]);
+  }, [fertilizers.rows, debouncedFertQ, fertCategory]);
 
   // 3. Giống sầu riêng
   const [varQ, setVarQ] = useState("");
+  const debouncedVarQ = useDebounced(varQ, 120);
   const [varCategory, setVarCategory] = useState<"all" | "export" | "native" | "premium" | "new">("all");
   const varieties = useApiList<VarietyRecord>("varieties", {});
   const [selectedVariety, setSelectedVariety] = useState<VarietyDto | null>(null);
@@ -222,7 +226,7 @@ export default function Catalog() {
   );
 
   const shownVarieties = useMemo(() => {
-    const q = varQ.trim().toLowerCase();
+    const q = debouncedVarQ.trim().toLowerCase();
     return varieties.rows.filter((item) => {
       const matchesQ =
         !q ||
@@ -233,20 +237,21 @@ export default function Catalog() {
       const matchesCat = varCategory === "all" || cat === varCategory;
       return matchesQ && matchesCat;
     });
-  }, [varieties.rows, varQ, varCategory]);
+  }, [varieties.rows, debouncedVarQ, varCategory]);
 
   // 4. Thôn / Tổ
   const [vilQ, setVilQ] = useState("");
+  const debouncedVilQ = useDebounced(vilQ, 120);
   const villages = useApiList<VillageRecord>("villages", {});
   const [editingVillage, setEditingVillage] = useState<VillageRecord | "new" | null>(null);
   const [deletingVillage, setDeletingVillage] = useState<VillageRecord | null>(null);
 
   const shownVillages = useMemo(() => {
-    const q = vilQ.trim().toLowerCase();
+    const q = debouncedVilQ.trim().toLowerCase();
     return villages.rows.filter(
       (v) => !q || `${v.name} ${v.leader ?? ""}`.toLowerCase().includes(q),
     );
-  }, [villages.rows, vilQ]);
+  }, [villages.rows, debouncedVilQ]);
 
   // 5. Tiêu chuẩn
   const [viewingStandard, setViewingStandard] = useState<StandardDoc | null>(null);

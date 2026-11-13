@@ -119,10 +119,25 @@ export default function MapView({
     [plots, selectedCode],
   );
 
-  const overlaps = useMemo<PlotOverlap[]>(
-    () => (selectedFeature ? findOverlaps(selectedFeature, plots) : []),
-    [selectedFeature, plots],
-  );
+  const [overlapState, setOverlapState] = useState<{ code: string; items: PlotOverlap[] } | null>(null);
+
+  useEffect(() => {
+    if (!selectedFeature) return;
+    let cancelled = false;
+    const code = selectedFeature.properties.code;
+    const timer = window.setTimeout(() => {
+      if (!cancelled) {
+        setOverlapState({ code, items: findOverlaps(selectedFeature, plots) });
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [selectedFeature, plots]);
+
+  const overlaps =
+    selectedFeature && overlapState?.code === selectedFeature.properties.code ? overlapState.items : [];
 
   const selectedCodeRef = useRef<string | null>(selectedCode);
   const draftRef = useRef<DraftState | null>(draft);
@@ -253,6 +268,7 @@ export default function MapView({
           iconAnchor: [7, 7],
         });
         const marker = L.marker(point, { draggable: true, icon: vertexIcon }).addTo(group);
+        let dragRaf = 0;
         marker.on("drag", () => {
           const pos = marker.getLatLng();
           const next = [...verticesRef.current];
@@ -261,9 +277,18 @@ export default function MapView({
           const tuples = next.map((pt) => [pt.lat, pt.lng] as Leaflet.LatLngTuple);
           polyLayer?.setLatLngs(tuples);
           lineLayer?.setLatLngs(tuples);
-          setPreview(previewFromLatLngs(next));
+          if (dragRaf === 0) {
+            dragRaf = window.requestAnimationFrame(() => {
+              dragRaf = 0;
+              setPreview(previewFromLatLngs(verticesRef.current));
+            });
+          }
         });
         marker.on("dragend", () => {
+          if (dragRaf) {
+            window.cancelAnimationFrame(dragRaf);
+            dragRaf = 0;
+          }
           redrawDraftRef.current(verticesRef.current);
           setPreview(previewFromLatLngs(verticesRef.current));
         });

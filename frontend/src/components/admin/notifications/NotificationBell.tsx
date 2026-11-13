@@ -67,7 +67,7 @@ export default function NotificationBell() {
       try {
         await api.post(`/notifications/${item.id}/read`);
         await refresh();
-      } catch {}
+      } catch { }
     }
     const section = resolveSectionFromLink(item.link, item.kind);
     setOpen(false);

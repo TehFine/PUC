@@ -547,6 +547,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           max-width: 960px !important;
           width: 100%;
           height: min(92dvh, calc(100dvh - 28px));
+          max-height: 92vh;
           max-height: min(92dvh, calc(100dvh - 28px));
           display: flex;
           flex-direction: column;
@@ -563,7 +564,40 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           .batch-qr-modal {
             border-radius: 24px;
             height: auto;
+            max-height: 90vh;
             max-height: 90dvh;
+          }
+        }
+
+        @media (min-width: 760px) and (max-height: 760px) {
+          .batch-qr-overlay {
+            padding: 10px 16px;
+          }
+          .batch-qr-modal {
+            max-height: calc(100vh - 20px);
+            max-height: calc(100dvh - 20px);
+            border-radius: 20px;
+          }
+          .batch-qr-header {
+            padding: 12px 20px 10px !important;
+          }
+          .batch-qr-title {
+            font-size: 16px;
+          }
+          .batch-qr-toolbar {
+            padding: 8px 20px;
+            gap: 10px;
+          }
+          .batch-qr-gen-panel {
+            padding: 10px 20px;
+          }
+          .gen-panel-title {
+            margin-bottom: 6px;
+            font-size: 12.5px;
+          }
+          .batch-qr-preview-area {
+            padding: 14px 20px;
+            min-height: 180px;
           }
         }
 

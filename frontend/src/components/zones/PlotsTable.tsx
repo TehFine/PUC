@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { PlotFeature } from "@/types/geo";
@@ -15,6 +16,20 @@ interface PlotsTableProps {
 const emptyCellStyle = { textAlign: "center", padding: 28, color: "var(--text-muted)" } as const;
 
 export default function PlotsTable({ features, loading, summary, onEditPlot }: PlotsTableProps) {
+  const preparedRows = useMemo(
+    () =>
+      features.map((feature) => {
+        const props = feature.properties;
+        return {
+          props,
+          areaText: formatHa(plotArea(feature)),
+          center: plotCenterCoords(feature),
+          zc: getZoneColor(props.zone || props.code),
+        };
+      }),
+    [features],
+  );
+
   return (
     <div className="card zones-list-card">
       <div className="card-header">
@@ -59,10 +74,7 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                 </td>
               </tr>
             )}
-            {features.map((feature) => {
-              const props = feature.properties;
-              const center = plotCenterCoords(feature);
-              const zc = getZoneColor(props.zone || props.code);
+            {preparedRows.map(({ props, areaText, center, zc }) => {
               return (
                 <tr key={props.code} style={{ background: zc.rowTint }}>
                   <td>
@@ -87,7 +99,7 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                   <td>{props.sheet || "—"}</td>
                   <td>{props.parcel || "—"}</td>
                   <td style={{ fontWeight: 600 }}>{props.owner || "—"}</td>
-                  <td>{formatHa(plotArea(feature))}</td>
+                  <td>{areaText}</td>
                   <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "var(--text-secondary)" }}>
                     {formatCoords(center?.lat, center?.lng)}
                   </td>

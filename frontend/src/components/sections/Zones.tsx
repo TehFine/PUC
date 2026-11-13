@@ -191,8 +191,8 @@ export default function Zones() {
               onOpenZone={openZone}
             />
             <ZoneSourceCard sources={summary.sources} zoneRows={zoneRows} />
-            <ZoneDetailCard zone={activeZoneRow} plots={activeZonePlots} />
-            <AllPlotsCard features={features} zoneCount={summary.zones} />
+            {isMobile && sheet === "zone" && <ZoneDetailCard zone={activeZoneRow} plots={activeZonePlots} />}
+            {isMobile && sheet === "list" && <AllPlotsCard features={features} zoneCount={summary.zones} />}
           </div>
 
           <div className="zones-map-area">

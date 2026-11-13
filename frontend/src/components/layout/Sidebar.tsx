@@ -99,6 +99,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
       if (sheetRef.current) {
         sheetRef.current.style.animation = "none";
         sheetRef.current.style.transform = "translate3d(0, 0, 0)";
+        sheetRef.current.style.willChange = "auto";
       }
       if (backdropRef.current) {
         backdropRef.current.style.animation = "none";
@@ -220,7 +221,17 @@ export default function Sidebar({ active, onNavigate }: Props) {
         <span className="nav-toggle-icon nav-menu-mask" aria-hidden="true" />
       </button>
 
-      <nav id="main-nav" className="sidebar" aria-label="Điều hướng chính">
+      <nav
+        id="main-nav"
+        className="sidebar"
+        aria-label="Điều hướng chính"
+        onWheel={(e) => {
+          const el = e.currentTarget;
+          if (el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+            el.scrollLeft += e.deltaY;
+          }
+        }}
+      >
         {topItems.filter(allowed).map(({ id, label, badge, badgeType }) => (
           <button
             key={id}

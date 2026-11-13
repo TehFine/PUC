@@ -45,12 +45,14 @@ export default function Harvest() {
   const [lotMarket, setLotMarket] = useState("");
   const [lotStatus, setLotStatus] = useState("");
   const debouncedLotQ = useDebounced(lotQ);
-  const lots = useApiList<HarvestLotRecord>("harvest", {
+  const hasLotFilter = Boolean(debouncedLotQ || lotMarket || lotStatus);
+  const allLots = useApiList<HarvestLotRecord>("harvest");
+  const filteredLots = useApiList<HarvestLotRecord>(hasLotFilter ? "harvest" : null, {
     q: debouncedLotQ,
     market: lotMarket,
     status: lotStatus,
   });
-  const allLots = useApiList<HarvestLotRecord>("harvest");
+  const lots = hasLotFilter ? filteredLots : allLots;
   const [editingLot, setEditingLot] = useState<HarvestLotRecord | "new" | null>(null);
   const [deletingLot, setDeletingLot] = useState<HarvestLotRecord | null>(null);
   const [contribLot, setContribLot] = useState<HarvestLotRecord | null>(null);

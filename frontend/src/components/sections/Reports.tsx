@@ -671,7 +671,7 @@ export default function Reports() {
                 {previewLoading ? "Đang tải…" : `Tổng cộng: ${previewData?.total ?? 0} bản ghi`}
               </span>
             </div>
-            <div style={{ maxHeight: 210, overflow: "auto" }}>
+            <div style={{ overflowX: "auto" }}>
               {previewLoading ? (
                 <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--text-muted)" }}>
                   Đang tổng hợp dữ liệu báo cáo…

@@ -30,8 +30,11 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
   const { leaflet, map: mapRef, plotGroup, plotLayers, baseLayers, mode, selectedCode: selectedRef, select } = refs;
 
   const fittedRef = useRef(false);
-  const labelNodesRef = useRef<Map<string, { el: HTMLElement; feature: PlotFeature }>>(new Map());
+  const labelNodesRef = useRef<
+    Map<string, { el: HTMLElement; feature: PlotFeature; offset: [number, number] }>
+  >(new Map());
   const lodTierRef = useRef<PlotLodTier>(0);
+  const permLabelsRef = useRef<boolean>(false);
   const baseLayerRef = useRef<BaseLayer>(baseLayer);
 
   useEffect(() => {
@@ -52,7 +55,10 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
 
     const currentZoom = map.getZoom();
     const initialTier = plotLodTier(currentZoom);
+    const initialPermanent =
+      currentZoom >= 15 && document.documentElement.dataset.perf !== "lite";
     lodTierRef.current = initialTier;
+    permLabelsRef.current = initialPermanent;
 
     plots.features.forEach((feature, index) => {
       const labelOffset: [number, number] = [0, index % 2 === 0 ? -9 : 9];
@@ -68,9 +74,13 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
           // Leaflet nhận HTMLElement trực tiếp; populatePlotTooltip chỉ gán textContent nên chống hoàn toàn XSS.
           const label = document.createElement("span");
           populatePlotTooltip(label, feature, initialTier);
-          labelNodesRef.current.set(feature.properties.code, { el: label, feature });
+          labelNodesRef.current.set(feature.properties.code, {
+            el: label,
+            feature,
+            offset: labelOffset,
+          });
           layer.bindTooltip(label, {
-            permanent: true,
+            permanent: initialPermanent,
             direction: "center",
             offset: labelOffset,
             className: "plot-tooltip",
@@ -105,26 +115,46 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
     const syncZoomLod = () => {
       const zoom = map.getZoom();
       const nextTier = plotLodTier(zoom);
-      if (nextTier === lodTierRef.current) return;
-      lodTierRef.current = nextTier;
+      const isLite = document.documentElement.dataset.perf === "lite";
+      const nextPerm = zoom >= (isLite ? 16 : 15);
+      const tierChanged = nextTier !== lodTierRef.current;
+      const permChanged = nextPerm !== permLabelsRef.current;
+      if (!tierChanged && !permChanged) return;
 
-      labelNodesRef.current.forEach(({ el, feature }) => {
-        populatePlotTooltip(el, feature, nextTier);
-      });
+      lodTierRef.current = nextTier;
+      permLabelsRef.current = nextPerm;
+
+      if (tierChanged) {
+        labelNodesRef.current.forEach(({ el, feature }) => {
+          populatePlotTooltip(el, feature, nextTier);
+        });
+      }
 
       plotLayers.current.forEach((layer, code) => {
         const entry = labelNodesRef.current.get(code);
-        const feature = entry?.feature;
-        layer.setStyle(
-          plotStyle(
-            feature?.properties.source ?? "demo",
-            code === selectedRef.current,
-            feature?.properties.zone || feature?.properties.code,
-            zoom,
-            baseLayerRef.current,
-          ),
-        );
-        if (code === selectedRef.current) layer.bringToFront();
+        if (permChanged && entry) {
+          layer.unbindTooltip();
+          layer.bindTooltip(entry.el, {
+            permanent: nextPerm,
+            direction: "center",
+            offset: entry.offset,
+            className: "plot-tooltip",
+            opacity: 1,
+          });
+        }
+        if (tierChanged) {
+          const feature = entry?.feature;
+          layer.setStyle(
+            plotStyle(
+              feature?.properties.source ?? "demo",
+              code === selectedRef.current,
+              feature?.properties.zone || feature?.properties.code,
+              zoom,
+              baseLayerRef.current,
+            ),
+          );
+          if (code === selectedRef.current) layer.bringToFront();
+        }
       });
     };
 

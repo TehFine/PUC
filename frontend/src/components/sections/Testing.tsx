@@ -30,6 +30,7 @@ import { badgeOf, LAB_RESULT, optionsOf } from "@/components/admin/shared/labels
 import { useHouseholdOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
 import LabTestFormModal from "@/components/admin/testing/LabTestFormModal";
+import { usePerformanceTier } from "@/lib/network";
 import { formatDate } from "@/utils/format";
 import type { LabTestRecord } from "@/types/testing";
 
@@ -38,6 +39,7 @@ const RESULT_OPTIONS = optionsOf(LAB_RESULT);
 
 export default function Testing() {
   const { can } = useAuth();
+  const perfTier = usePerformanceTier();
   const canCreate = can("testing", "create");
   const canUpdate = can("testing", "update");
   const canDelete = can("testing", "delete");
@@ -117,7 +119,7 @@ export default function Testing() {
       <div className="charts-row-3">
         <div className="chart-card">
           <div className="chart-title">Cadmium (Cd) – mg/kg</div>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={180} debounce={120}>
             <BarChart data={cdData} margin={{ left: -20, right: 12, top: 8, bottom: 0 }}>
               <defs>
                 <linearGradient id="cdOkGrad" x1="0" y1="0" x2="0" y2="1">
@@ -158,7 +160,7 @@ export default function Testing() {
                 barSize={14}
                 radius={[7, 7, 0, 0]}
                 background={{ fill: "rgba(20, 55, 47, 0.04)", radius: 7 }}
-                isAnimationActive={typeof document === "undefined" || document.documentElement.dataset.perf !== "lite"}
+                isAnimationActive={perfTier !== "lite"}
               >
                 {cdData.map((e, i) => (
                   <Cell key={i} fill={e.cd > 0.04 ? "url(#cdBadGrad)" : "url(#cdOkGrad)"} />
