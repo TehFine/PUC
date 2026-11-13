@@ -30,7 +30,18 @@ interface ItemWithQr extends HarvestItem {
   qrDataUrl?: string;
 }
 
+const MAX_BATCH_QR_CACHE = 200;
 const batchQrCache = new Map<string, string>();
+
+function setBatchQrCacheEntry(code: string, url: string) {
+  if (batchQrCache.has(code)) {
+    batchQrCache.delete(code);
+  } else if (batchQrCache.size >= MAX_BATCH_QR_CACHE) {
+    const oldest = batchQrCache.keys().next().value;
+    if (oldest !== undefined) batchQrCache.delete(oldest);
+  }
+  batchQrCache.set(code, url);
+}
 
 function getPublicBaseUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_PUBLIC_BASE_URL?.trim();
@@ -46,10 +57,17 @@ export default function BatchQrModal({ lot, onClose }: Props) {
   const [grade, setGrade] = useState<"A" | "B" | "C">("A");
   const [weightKg, setWeightKg] = useState<number>(3.5);
   const [items, setItems] = useState<ItemWithQr[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(lot.id));
   const [generating, startGenerating] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [prevLotId, setPrevLotId] = useState(lot.id);
+  if (prevLotId !== lot.id) {
+    setPrevLotId(lot.id);
+    setItems([]);
+    setError(null);
+    setLoading(Boolean(lot.id));
+  }
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const dragZoneRef = useRef<HTMLDivElement>(null);
@@ -146,7 +164,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
               width: 160,
               color: { dark: "#0f372a", light: "#ffffff" },
             });
-            batchQrCache.set(item.serialCode, qrDataUrl);
+            setBatchQrCacheEntry(item.serialCode, qrDataUrl);
             return { ...item, qrDataUrl };
           } catch {
             return item;

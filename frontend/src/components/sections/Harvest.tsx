@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { BellRing, CheckCircle2, Printer, QrCode, Users } from "lucide-react";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
@@ -11,7 +12,8 @@ import HarvestLotFormModal, { LOT_STATUS_LABELS } from "@/components/admin/harve
 import HarvestPlanNotifyModal from "@/components/admin/harvest/HarvestPlanNotifyModal";
 import LotContributionsModal from "@/components/admin/harvest/LotContributionsModal";
 import { StampAllocationModal, StampListModal } from "@/components/admin/harvest/StampModals";
-import BatchQrModal from "@/components/harvest/BatchQrModal";
+
+const BatchQrModal = dynamic(() => import("@/components/harvest/BatchQrModal"), { ssr: false });
 import { KpiChartView, renderKpiValue, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
 import { useApiList } from "@/hooks/use-api";
 import type {

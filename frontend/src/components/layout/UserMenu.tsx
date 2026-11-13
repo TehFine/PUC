@@ -14,14 +14,14 @@ import { ROLE_LABELS } from "@/constants/roles";
 import { errorMessage } from "@/lib/api-client";
 import { INTRO_PATH } from "@/lib/routes";
 
-const initials = (name: string) =>
-  name
+const initials = (name: string | null | undefined) =>
+  (name ?? "")
     .split(/\s+/)
     .filter(Boolean)
     .slice(-2)
     .map((part) => part[0])
     .join("")
-    .toUpperCase();
+    .toUpperCase() || "HT";
 
 export default function UserMenu() {
   const { session, logout, updateProfile } = useAuth();

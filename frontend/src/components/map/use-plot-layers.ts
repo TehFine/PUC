@@ -31,7 +31,7 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
 
   const fittedRef = useRef(false);
   const labelNodesRef = useRef<
-    Map<string, { el: HTMLElement; feature: PlotFeature; offset: [number, number] }>
+    Map<string, { el: HTMLElement; feature: PlotFeature; offset: [number, number]; perm: boolean }>
   >(new Map());
   const lodTierRef = useRef<PlotLodTier>(0);
   const permLabelsRef = useRef<boolean>(false);
@@ -55,10 +55,11 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
 
     const currentZoom = map.getZoom();
     const initialTier = plotLodTier(currentZoom);
-    const initialPermanent =
+    const initialAllowPerm =
       currentZoom >= 15 && document.documentElement.dataset.perf !== "lite";
+    const initialViewBounds = initialAllowPerm ? map.getBounds().pad(0.25) : null;
     lodTierRef.current = initialTier;
-    permLabelsRef.current = initialPermanent;
+    permLabelsRef.current = initialAllowPerm;
 
     plots.features.forEach((feature, index) => {
       const labelOffset: [number, number] = [0, index % 2 === 0 ? -9 : 9];
@@ -74,13 +75,19 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
           // Leaflet nhận HTMLElement trực tiếp; populatePlotTooltip chỉ gán textContent nên chống hoàn toàn XSS.
           const label = document.createElement("span");
           populatePlotTooltip(label, feature, initialTier);
+          const layerBounds = (layer as Leaflet.Polygon).getBounds?.();
+          const isPerm = Boolean(
+            initialViewBounds &&
+              (!layerBounds || !layerBounds.isValid() || initialViewBounds.intersects(layerBounds)),
+          );
           labelNodesRef.current.set(feature.properties.code, {
             el: label,
             feature,
             offset: labelOffset,
+            perm: isPerm,
           });
           layer.bindTooltip(label, {
-            permanent: initialPermanent,
+            permanent: isPerm,
             direction: "center",
             offset: labelOffset,
             className: "plot-tooltip",
@@ -107,43 +114,51 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
     }
   }, [plots, ready, leaflet, mapRef, plotGroup, plotLayers, mode, selectedRef, select]);
 
-  // Tự động nâng cấp độ chi tiết nhãn & độ trong suốt polygon khi người dùng zoom sâu vào thửa đất
+  // Tự động nâng cấp độ chi tiết nhãn, cắt tỉa nhãn cố định ngoài khung nhìn & tắt nhãn cố định trên máy yếu
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
+
+    const syncViewportTooltips = (allowPerm: boolean) => {
+      if (!allowPerm && !permLabelsRef.current) return;
+      permLabelsRef.current = allowPerm;
+      const viewBounds = allowPerm ? map.getBounds().pad(0.25) : null;
+
+      plotLayers.current.forEach((layer, code) => {
+        const entry = labelNodesRef.current.get(code);
+        if (!entry) return;
+        const layerBounds = (layer as Leaflet.Polygon).getBounds?.();
+        const shouldPerm = Boolean(
+          viewBounds &&
+            (!layerBounds || !layerBounds.isValid() || viewBounds.intersects(layerBounds)),
+        );
+        if (shouldPerm === entry.perm) return;
+        entry.perm = shouldPerm;
+        layer.unbindTooltip();
+        layer.bindTooltip(entry.el, {
+          permanent: shouldPerm,
+          direction: "center",
+          offset: entry.offset,
+          className: "plot-tooltip",
+          opacity: 1,
+        });
+      });
+    };
 
     const syncZoomLod = () => {
       const zoom = map.getZoom();
       const nextTier = plotLodTier(zoom);
       const isLite = document.documentElement.dataset.perf === "lite";
-      const nextPerm = zoom >= (isLite ? 16 : 15);
+      const allowPerm = !isLite && zoom >= 15;
       const tierChanged = nextTier !== lodTierRef.current;
-      const permChanged = nextPerm !== permLabelsRef.current;
-      if (!tierChanged && !permChanged) return;
-
-      lodTierRef.current = nextTier;
-      permLabelsRef.current = nextPerm;
 
       if (tierChanged) {
+        lodTierRef.current = nextTier;
         labelNodesRef.current.forEach(({ el, feature }) => {
           populatePlotTooltip(el, feature, nextTier);
         });
-      }
-
-      plotLayers.current.forEach((layer, code) => {
-        const entry = labelNodesRef.current.get(code);
-        if (permChanged && entry) {
-          layer.unbindTooltip();
-          layer.bindTooltip(entry.el, {
-            permanent: nextPerm,
-            direction: "center",
-            offset: entry.offset,
-            className: "plot-tooltip",
-            opacity: 1,
-          });
-        }
-        if (tierChanged) {
-          const feature = entry?.feature;
+        plotLayers.current.forEach((layer, code) => {
+          const feature = labelNodesRef.current.get(code)?.feature;
           layer.setStyle(
             plotStyle(
               feature?.properties.source ?? "demo",
@@ -154,13 +169,23 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
             ),
           );
           if (code === selectedRef.current) layer.bringToFront();
-        }
-      });
+        });
+      }
+
+      syncViewportTooltips(allowPerm);
+    };
+
+    const syncMoveTooltips = () => {
+      const isLite = document.documentElement.dataset.perf === "lite";
+      const allowPerm = !isLite && map.getZoom() >= 15;
+      syncViewportTooltips(allowPerm);
     };
 
     map.on("zoomend", syncZoomLod);
+    map.on("moveend", syncMoveTooltips);
     return () => {
       map.off("zoomend", syncZoomLod);
+      map.off("moveend", syncMoveTooltips);
     };
   }, [ready, mapRef, plotLayers, selectedRef]);
 

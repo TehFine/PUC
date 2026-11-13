@@ -49,17 +49,17 @@ export default function Testing() {
   const [resultFilter, setResultFilter] = useState("");
   const [page, setPage] = useState(1);
 
-  const { options: householdOptions } = useHouseholdOptions(canCreate || canUpdate);
+  const [selectedTest, setSelectedTest] = useState<LabTestRecord | null>(null);
+  const [editing, setEditing] = useState<LabTestRecord | "new" | null>(null);
+  const [deleting, setDeleting] = useState<LabTestRecord | null>(null);
+
+  const { options: householdOptions } = useHouseholdOptions(Boolean(editing) && (canCreate || canUpdate));
   const list = useApiList<LabTestRecord>("testing", {
     q: debouncedSearch || undefined,
     result: resultFilter || undefined,
     page,
     pageSize: PAGE_SIZE,
   });
-
-  const [selectedTest, setSelectedTest] = useState<LabTestRecord | null>(null);
-  const [editing, setEditing] = useState<LabTestRecord | "new" | null>(null);
-  const [deleting, setDeleting] = useState<LabTestRecord | null>(null);
 
   const cdData = useMemo(
     () =>
@@ -163,7 +163,7 @@ export default function Testing() {
                 isAnimationActive={perfTier !== "lite"}
               >
                 {cdData.map((e, i) => (
-                  <Cell key={i} fill={e.cd > 0.04 ? "url(#cdBadGrad)" : "url(#cdOkGrad)"} />
+                  <Cell key={i} fill={e.cd > 0.05 ? "url(#cdBadGrad)" : "url(#cdOkGrad)"} />
                 ))}
               </Bar>
             </BarChart>
@@ -182,11 +182,11 @@ export default function Testing() {
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#38a169", display: "inline-block" }} />
-              Đạt chuẩn (&le; 0.04)
+              Đạt chuẩn (&le; 0.05)
             </span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#e0674a", display: "inline-block" }} />
-              Vượt chuẩn (&gt; 0.04)
+              Vượt chuẩn (&gt; 0.05)
             </span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#c0392b", fontWeight: 500 }}>
               <span style={{ width: 12, height: 0, borderTop: "1.5px dashed #e0674a", display: "inline-block" }} />
@@ -295,7 +295,7 @@ export default function Testing() {
                     <td
                       style={{
                         textAlign: "center",
-                        color: Number(t.cdMgKg) > 0.04 ? "#c0392b" : "#256b45",
+                        color: Number(t.cdMgKg) > 0.05 ? "#c0392b" : "#256b45",
                         fontWeight: 600,
                       }}
                     >

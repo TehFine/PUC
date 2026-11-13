@@ -124,7 +124,9 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                   </td>
                   <td>{props.variety || "—"}</td>
                   <td>
-                    <span className={`badge ${SOURCE_BADGE[props.source]}`}>{SOURCE_LABELS[props.source]}</span>
+                    <span className={`badge ${SOURCE_BADGE[props.source] ?? "badge-gray"}`}>
+                      {SOURCE_LABELS[props.source] ?? "Khảo sát"}
+                    </span>
                     {props.sourceRef && (
                       <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 3 }}>
                         {props.sourceRef}
@@ -132,7 +134,9 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                     )}
                   </td>
                   <td>
-                    <span className={`badge ${STATUS_BADGE[props.status]}`}>{STATUS_LABELS[props.status]}</span>
+                    <span className={`badge ${STATUS_BADGE[props.status] ?? "badge-gray"}`}>
+                      {STATUS_LABELS[props.status] ?? "Chờ duyệt"}
+                    </span>
                   </td>
                   {onEditPlot && (
                     <td>

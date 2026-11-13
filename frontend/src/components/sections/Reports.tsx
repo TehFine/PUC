@@ -429,11 +429,21 @@ export default function Reports() {
   const dateRangeError =
     from && to && from > to ? "Ngày bắt đầu không được lớn hơn ngày kết thúc." : null;
 
+  const previewKey =
+    selectedReport && !dateRangeError
+      ? `${selectedReport.type}|${from}|${to}|${villageId}`
+      : null;
+  const [trackedPreviewKey, setTrackedPreviewKey] = useState<string | null>(previewKey);
+  if (trackedPreviewKey !== previewKey) {
+    setTrackedPreviewKey(previewKey);
+    setPreviewData(null);
+    setPreviewLoading(Boolean(previewKey));
+    setError(null);
+  }
+
   // Tự động tải dữ liệu xem trước khi mở modal hoặc đổi bộ lọc
   useEffect(() => {
-    if (!selectedReport || dateRangeError) {
-      return;
-    }
+    if (!selectedReport || dateRangeError) return;
     let active = true;
     const params = new URLSearchParams();
     if (from) params.set("from", from);
@@ -441,19 +451,16 @@ export default function Reports() {
     if (villageId) params.set("villageId", villageId);
     params.set("format", "json");
 
-    Promise.resolve()
-      .then(() => {
-        if (active) {
-          setPreviewLoading(true);
-          setError(null);
-        }
-        return api.get<ReportDataPayload>(`/reports/${selectedReport.type}?${params.toString()}`);
-      })
+    api
+      .get<ReportDataPayload>(`/reports/${selectedReport.type}?${params.toString()}`)
       .then((res) => {
         if (active) setPreviewData(res);
       })
       .catch((err) => {
-        if (active) setError(errorMessage(err, "Không tải được dữ liệu báo cáo."));
+        if (active) {
+          setPreviewData(null);
+          setError(errorMessage(err, "Không tải được dữ liệu báo cáo."));
+        }
       })
       .finally(() => {
         if (active) setPreviewLoading(false);

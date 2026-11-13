@@ -12,10 +12,10 @@ import ImageUploadField from "./ImageUploadField";
 import { toOptions, VARIETY_CATEGORY, VARIETY_STATUS } from "./labels";
 
 const VARIETY_PRESETS = [
-  { label: "Ri6", src: "/durian-ri6.png" },
-  { label: "Monthong (Dona)", src: "/durian-monthong.png" },
-  { label: "Musang King", src: "/durian-musangking.png" },
-  { label: "Black Thorn", src: "/durian-blackthorn.png" },
+  { label: "Ri6", src: "/varieties/ri6.png" },
+  { label: "Monthong (Dona)", src: "/varieties/monthong.png" },
+  { label: "Musang King", src: "/varieties/musangking.png" },
+  { label: "Black Thorn", src: "/varieties/blackthorn.png" },
 ];
 
 /** Thêm / sửa giống sầu riêng (POST/PATCH /varieties). */
@@ -40,7 +40,7 @@ export default function VarietyFormModal({
   const [yieldPerHa, setYieldPerHa] = useState(initial?.yieldPerHa ?? "");
   const [marketPotential, setMarketPotential] = useState(initial?.marketPotential ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [imageUrl, setImageUrl] = useState<string | null>(initial?.imageUrl ?? "/durian-ri6.png");
+  const [imageUrl, setImageUrl] = useState<string | null>(initial?.imageUrl ?? "/varieties/ri6.png");
   const [morphologyText, setMorphologyText] = useState((initial?.morphology ?? []).join("\n"));
   const [density, setDensity] = useState(initial?.farmingTechniques?.density ?? "");
   const [pollination, setPollination] = useState(initial?.farmingTechniques?.pollination ?? "");

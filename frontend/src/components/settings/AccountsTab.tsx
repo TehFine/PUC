@@ -127,7 +127,7 @@ export default function AccountsTab({
               onRetry={list.refresh}
             />
             {list.rows.map((a) => {
-              const initialChar = (a.fullName.trim().split(" ").slice(-1)[0]?.[0] ?? "U").toUpperCase();
+              const initialChar = ((a.fullName ?? "").trim().split(" ").slice(-1)[0]?.[0] ?? "U").toUpperCase();
               const isActive = a.status === "active";
               return (
                 <tr key={a.id}>
