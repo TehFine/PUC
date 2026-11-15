@@ -494,8 +494,29 @@
 
 /* ─── Đáp ứng Tablet dọc (<= 960px) ─── */
 @media (max-width: 960px) {
-  .sw-trace-nav {
+  .sw-trace-topbar {
+    height: 54px;
+    box-sizing: border-box;
+    border-top: 1px solid #dfdeda;
+    border-bottom: 1px solid #e2e1dd;
+    box-shadow: 0 2px 6px rgba(20, 20, 20, 0.045);
+  }
+
+  .lp.sw-page .sw-trace-brand,
+  .sw-trace-nav,
+  .sw-trace-top-sep {
     display: none;
+  }
+
+  .sw-trace-top-actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .lp.sw-page .sw-trace-top-link {
+    padding: 6px 0;
+    font-size: 14px;
   }
 
   .sw-trace-hero-row {
@@ -556,23 +577,15 @@
     gap: 10px;
   }
 
-  .lp.sw-page .sw-trace-brand {
-    font-size: 15px;
-    gap: 8px;
-  }
-
-  .sw-trace-top-actions {
-    gap: 10px;
-  }
-
   .lp.sw-page .sw-trace-top-link {
-    font-size: 13px;
+    padding: 6px 0;
+    font-size: 13.5px;
   }
 
   .lp.sw-page .sw-trace-auth-btn {
-    height: 32px;
-    padding: 0 12px;
-    font-size: 12.5px;
+    height: 34px;
+    padding: 0 13px;
+    font-size: 13px;
   }
 
   main > .sw-trace-hero-sec.sw-section {
@@ -744,22 +757,14 @@
   }
 }
 
-@media (max-width: 380px) {
-  .sw-trace-top-sep {
-    display: none;
-  }
-
-  .sw-trace-top-actions {
-    gap: 8px;
-  }
-
+@media (max-width: 355px) {
   .lp.sw-page .sw-trace-top-link {
     font-size: 12.5px;
   }
 
   .lp.sw-page .sw-trace-auth-btn {
-    padding: 0 10px;
-    font-size: 12px;
+    padding: 0 11px;
+    font-size: 12.5px;
   }
 }
 

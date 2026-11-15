@@ -167,6 +167,14 @@
   border-color: #2b2b29;
 }
 
+@media (max-width: 960px) {
+  .tr-topbar {
+    border-top: 1px solid #dfdeda;
+    border-bottom: 1px solid #e2e1dd;
+    box-shadow: 0 2px 6px rgba(20, 20, 20, 0.045);
+  }
+}
+
 @media (max-width: 480px) {
   .tr-topbar {
     height: 52px;
