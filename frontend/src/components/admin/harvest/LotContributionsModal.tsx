@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatVn, toNumber } from "@/components/admin/catalog/form-utils";
-import { FormGrid, NumberField, SelectField } from "@/components/ui/form/fields";
+import { FormGrid, NumberField, SelectField, TextField } from "@/components/ui/form/fields";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { useApi, useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
-import type { HarvestContributionRecord, HarvestLotRecord, HouseholdOption } from "@/types/harvest";
+import type {
+  HarvestContributionRecord,
+  HarvestLotRecord,
+  HouseholdOption,
+  HouseholdPlotOption,
+} from "@/types/harvest";
 
 export default function LotContributionsModal({
   lot,
@@ -27,13 +32,50 @@ export default function LotContributionsModal({
     : (contribState.data?.data ?? []);
 
   const [householdId, setHouseholdId] = useState("");
+  const [plotOptions, setPlotOptions] = useState<HouseholdPlotOption[]>([]);
+  const [loadingPlots, setLoadingPlots] = useState(false);
+  const [plotCode, setPlotCode] = useState("");
   const [weightKg, setWeightKg] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const hId = Number(householdId);
+    if (!hId) {
+      setPlotOptions([]);
+      setPlotCode("");
+      return;
+    }
+    setLoadingPlots(true);
+    api
+      .get<{ data?: HouseholdPlotOption[] }>(`/harvest-plan/household-plots?householdId=${hId}`)
+      .then((res) => {
+        if (!active) return;
+        const list = res.data ?? [];
+        setPlotOptions(list);
+        setPlotCode(list[0]?.plotCode ?? "");
+      })
+      .catch(() => {
+        if (!active) return;
+        setPlotOptions([]);
+      })
+      .finally(() => {
+        if (active) setLoadingPlots(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [householdId]);
 
   const addMutation = useMutation(async () => {
     const hId = Number(householdId);
     const wKg = toNumber(weightKg) ?? 0;
-    return api.post(`/harvest/${lot.id}/contributions`, { householdId: hId, weightKg: wKg });
+    const trimmedPlot = plotCode.trim();
+    return api.post(`/harvest/${lot.id}/contributions`, {
+      householdId: hId,
+      ...(trimmedPlot ? { plotCode: trimmedPlot } : {}),
+      weightKg: wKg,
+    });
   });
 
   const removeMutation = useMutation(async (cid: number) => {
@@ -50,7 +92,7 @@ export default function LotContributionsModal({
     }
     setLocalError(null);
     if ((await addMutation.run()) !== undefined) {
-      toast.success("Đã cập nhật hộ đóng góp vào lô.");
+      toast.success("Đã ghi nhận thửa nguồn đóng góp vào lô.");
       setWeightKg("");
       await contribState.refresh();
       onChanged();
@@ -66,12 +108,13 @@ export default function LotContributionsModal({
   };
 
   const totalKg = rows.reduce((sum, item) => sum + Number(item.weightKg || 0), 0);
+  const distinctHouseholds = new Set(rows.map((item) => item.householdId)).size;
 
   return (
     <Modal
-      title={`Hộ đóng góp sản lượng – Lô ${lot.code}`}
+      title={`Quan hệ Lô và Thửa nguồn - Lô ${lot.code}`}
       onClose={onClose}
-      width={680}
+      width={740}
       footer={
         <button type="button" className="btn btn-primary" onClick={onClose}>
           Đóng
@@ -79,7 +122,10 @@ export default function LotContributionsModal({
       }
     >
       <div style={{ marginBottom: 16, padding: 14, borderRadius: 12, background: "var(--bg-input, #f6f8f5)", border: "1px solid var(--border)" }}>
-        <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 10 }}>Thêm / cập nhật hộ đóng góp</div>
+        <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>Ghi nhận hộ và thửa đất đóng góp sản lượng</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Lưu chính xác quan hệ lô hàng và thửa nguồn giúp truy vết xuôi hoặc ngược tức thì khi mẫu kiểm nghiệm phát sinh sự cố.
+        </div>
         <FormGrid>
           <SelectField
             label="Hộ nông dân"
@@ -89,14 +135,33 @@ export default function LotContributionsModal({
             placeholder="— Chọn hộ dân —"
             options={households.rows.map((h) => ({
               value: String(h.id),
-              label: `${h.code} – ${h.name}${h.villageName ? ` (${h.villageName})` : ""}`,
+              label: `${h.code} - ${h.name}${h.villageName ? ` (${h.villageName})` : ""}`,
             }))}
           />
+          {plotOptions.length > 0 ? (
+            <SelectField
+              label="Thửa đất nguồn (plotCode)"
+              value={plotCode}
+              onChange={setPlotCode}
+              options={plotOptions.map((p) => ({
+                value: p.plotCode,
+                label: `${p.plotCode}${p.variety ? ` (${p.variety})` : ""}${p.zoneCode ? ` - ${p.zoneCode}` : ""}`,
+              }))}
+            />
+          ) : (
+            <TextField
+              label={loadingPlots ? "Đang tải danh sách thửa…" : "Mã thửa nguồn (plotCode)"}
+              value={plotCode}
+              onChange={setPlotCode}
+              placeholder="VD: TH1-001 (tự động chọn nếu để trống)"
+              maxLength={50}
+            />
+          )}
           <NumberField label="Khối lượng đóng góp (kg)" required value={weightKg} onChange={setWeightKg} min={1} step={10} placeholder="VD: 1200" />
         </FormGrid>
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
           <button type="button" className="btn btn-primary btn-sm" disabled={addMutation.pending} onClick={() => void handleAdd()}>
-            {addMutation.pending ? "Đang lưu…" : "Ghi nhận đóng góp"}
+            {addMutation.pending ? "Đang lưu…" : "Ghi nhận vào lô"}
           </button>
         </div>
         <FormError message={localError ?? addMutation.error ?? removeMutation.error} />
@@ -104,7 +169,7 @@ export default function LotContributionsModal({
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, fontSize: 13 }}>
         <span>
-          Số hộ tham gia: <strong>{rows.length} hộ</strong>
+          Tổng nguồn cung: <strong>{distinctHouseholds} hộ ({rows.length} thửa nguồn)</strong>
         </span>
         <span>
           Tổng khối lượng gom: <strong>{formatVn(totalKg, 1)} kg</strong>
@@ -117,6 +182,7 @@ export default function LotContributionsModal({
             <tr>
               <th>Mã hộ</th>
               <th>Chủ hộ</th>
+              <th>Thửa nguồn</th>
               <th>Thôn / Tổ</th>
               <th>Khối lượng (kg)</th>
               <th>Thao tác</th>
@@ -125,20 +191,20 @@ export default function LotContributionsModal({
           <tbody>
             {contribState.loading ? (
               <tr>
-                <td colSpan={5} className="empty-state">
-                  Đang tải danh sách hộ đóng góp…
+                <td colSpan={6} className="empty-state">
+                  Đang tải danh sách thửa nguồn đóng góp…
                 </td>
               </tr>
             ) : contribState.error ? (
               <tr>
-                <td colSpan={5} className="empty-state" style={{ color: "#b73c20" }}>
+                <td colSpan={6} className="empty-state" style={{ color: "#b73c20" }}>
                   {contribState.error}
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="empty-state">
-                  Chưa có hộ nào được ghi nhận trong lô này.
+                <td colSpan={6} className="empty-state">
+                  Chưa có thửa nguồn nào được ghi nhận trong lô này.
                 </td>
               </tr>
             ) : (
@@ -146,6 +212,9 @@ export default function LotContributionsModal({
                 <tr key={item.id}>
                   <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 600 }}>{item.householdCode || `#${item.householdId}`}</td>
                   <td style={{ fontWeight: 500 }}>{item.householdName || "—"}</td>
+                  <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, color: "#166534" }}>
+                    {item.plotCode || "Chưa gán thửa"}
+                  </td>
                   <td>{item.villageName || "—"}</td>
                   <td style={{ fontWeight: 600 }}>{formatVn(Number(item.weightKg), 1)} kg</td>
                   <td>

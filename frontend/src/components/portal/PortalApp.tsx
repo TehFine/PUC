@@ -223,6 +223,9 @@ function PortalAppContent() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [localAvatarOverride, setLocalAvatarOverride] = useState<string | null | undefined>(undefined);
+  const [savingConsent, setSavingConsent] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
+  const [localConsentOverride, setLocalConsentOverride] = useState<boolean | undefined>(undefined);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [notifFilter, setNotifFilter] = useState<"all" | "unread">("all");
@@ -395,6 +398,8 @@ function PortalAppContent() {
   const linkedEmail = profAccount?.email ?? session?.user.email ?? null;
   const serverAvatarUrl = profile?.household?.avatarUrl ?? overview?.household?.avatarUrl ?? null;
   const avatarUrl = localAvatarOverride !== undefined ? localAvatarOverride : serverAvatarUrl;
+  const publicTraceConsent =
+    localConsentOverride !== undefined ? localConsentOverride : Boolean(profile?.household?.publicTraceConsent);
   const householdStatus = HOUSEHOLD_STATUS[profHousehold?.status ?? "pending"] ?? HOUSEHOLD_STATUS.pending;
   const initials =
     displayName
@@ -446,6 +451,23 @@ function PortalAppContent() {
       setAvatarError(errorMessage(err, "Không thể gỡ ảnh đại diện."));
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const handleToggleTraceConsent = async (next: boolean) => {
+    if (savingConsent) return;
+    setSavingConsent(true);
+    setConsentError(null);
+    try {
+      const saved = await api.patch<{ publicTraceConsent: boolean }>("/portal/profile/trace-consent", {
+        publicTraceConsent: next,
+      });
+      setLocalConsentOverride(saved.publicTraceConsent);
+      invalidateQueries(portalPath("profile"));
+    } catch (err) {
+      setConsentError(errorMessage(err, "Không thể cập nhật tùy chọn hiển thị tên trên QR."));
+    } finally {
+      setSavingConsent(false);
     }
   };
 
@@ -747,6 +769,39 @@ function PortalAppContent() {
                 </div>
               </div>
               {avatarError && <InlineError message={avatarError} />}
+            </div>
+
+            <div className="pt-profile-photo-card" style={{ marginTop: 10 }}>
+              <div className="pt-profile-photo-main">
+                <div className="pt-profile-photo-info">
+                  <strong className="pt-profile-photo-title">
+                    {t("Hiển thị tên hộ trên QR công khai")}
+                  </strong>
+                  <span className="pt-profile-photo-desc">
+                    {publicTraceConsent
+                      ? t("Đang bật - Người tiêu dùng quét QR thấy tên hộ cùng HTX Cư Né")
+                      : t("Đang tắt - Mặc định bảo mật, chỉ hiển thị tên HTX Cư Né")}
+                  </span>
+                </div>
+                <div className="pt-profile-photo-actions">
+                  <button
+                    type="button"
+                    className="pt-profile-photo-upload-btn"
+                    onClick={() => void handleToggleTraceConsent(!publicTraceConsent)}
+                    disabled={savingConsent}
+                    aria-pressed={publicTraceConsent}
+                  >
+                    <span>
+                      {savingConsent
+                        ? t("Đang lưu…")
+                        : publicTraceConsent
+                          ? t("Tắt hiển thị")
+                          : t("Đồng ý hiển thị")}
+                    </span>
+                  </button>
+                </div>
+              </div>
+              {consentError && <InlineError message={consentError} />}
             </div>
 
             <div className="pt-profile-details">

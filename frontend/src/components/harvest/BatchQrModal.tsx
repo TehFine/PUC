@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState, useTransition } from "
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Printer, Download, Sparkles, Tag, Package, RefreshCw } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import type { HarvestItem } from "@/types/entities";
@@ -51,11 +52,14 @@ function getPublicBaseUrl(): string {
 }
 
 export default function BatchQrModal({ lot, onClose }: Props) {
+  const { can } = useAuth();
+  const canGenerate = can("harvest", "update");
   const titleId = useId();
-  const [itemType, setItemType] = useState<"fruit" | "box">("fruit");
+  const [itemType, setItemType] = useState<"fruit" | "box">("box");
+  const [eccLevel, setEccLevel] = useState<"Q" | "M">("Q");
   const [count, setCount] = useState<number>(12);
   const [grade, setGrade] = useState<"A" | "B" | "C">("A");
-  const [weightKg, setWeightKg] = useState<number>(3.5);
+  const [weightKg, setWeightKg] = useState<number>(18.0);
   const [items, setItems] = useState<ItemWithQr[]>([]);
   const [loading, setLoading] = useState(() => Boolean(lot.id));
   const [generating, startGenerating] = useTransition();
@@ -141,8 +145,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     setWeightKg(type === "fruit" ? 3.5 : 18.0);
   };
 
-  // Tải danh sách tem đã có của lô (chia cụm nhỏ + bộ nhớ đệm để không khóa luồng chính trên máy yếu)
-  const fetchItemsWithQr = useCallback(async (lotId: number): Promise<ItemWithQr[]> => {
+  // Tải danh sách tem đã có của lô (mã hóa đường dẫn token ngẫu nhiên /t/:token, tương phản cao #000/#fff, ECC mức M hoặc Q)
+  const fetchItemsWithQr = useCallback(async (lotId: number, level: "Q" | "M"): Promise<ItemWithQr[]> => {
     const res = await api.get<{ data: HarvestItem[] }>(`/harvest/${lotId}/items`);
     const rawItems = res.data;
     const baseUrl = getPublicBaseUrl();
@@ -153,18 +157,21 @@ export default function BatchQrModal({ lot, onClose }: Props) {
       const slice = rawItems.slice(i, i + CHUNK_SIZE);
       const chunkResults = await Promise.all(
         slice.map(async (item) => {
-          const cached = batchQrCache.get(item.serialCode);
+          const tokenOrSerial = item.qrToken || item.serialCode;
+          const cacheKey = `${tokenOrSerial}::${level}`;
+          const cached = batchQrCache.get(cacheKey);
           if (cached) {
             return { ...item, qrDataUrl: cached };
           }
           try {
-            const url = `${baseUrl}/trace/${encodeURIComponent(item.serialCode)}`;
+            const url = `${baseUrl}/t/${encodeURIComponent(tokenOrSerial)}`;
             const qrDataUrl = await QRCode.toDataURL(url, {
-              margin: 1,
-              width: 160,
-              color: { dark: "#0f372a", light: "#ffffff" },
+              errorCorrectionLevel: level,
+              margin: 2,
+              width: 240,
+              color: { dark: "#000000", light: "#ffffff" },
             });
-            setBatchQrCacheEntry(item.serialCode, qrDataUrl);
+            setBatchQrCacheEntry(cacheKey, qrDataUrl);
             return { ...item, qrDataUrl };
           } catch {
             return item;
@@ -184,7 +191,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     let active = true;
     const lotId = lot.id;
     if (!lotId) return;
-    fetchItemsWithQr(lotId)
+    fetchItemsWithQr(lotId, eccLevel)
       .then((list) => {
         if (active) {
           setItems(list);
@@ -202,7 +209,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     return () => {
       active = false;
     };
-  }, [lot.id, fetchItemsWithQr]);
+  }, [lot.id, eccLevel, fetchItemsWithQr]);
 
   // Sinh thêm dải tem mới
   const handleGenerate = () => {
@@ -217,7 +224,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           grade,
           weightKg,
         });
-        const updated = await fetchItemsWithQr(lotId);
+        const updated = await fetchItemsWithQr(lotId, eccLevel);
         setItems(updated);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Không thể sinh tem mới.");
@@ -234,20 +241,33 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     const baseUrl = getPublicBaseUrl();
     const headers = [
       "Số thứ tự",
+      "Mã lô hàng",
       "Mã định danh Serial",
+      "Token chống giả",
+      "Mã vùng trồng (PUC)",
+      "Mã cơ sở đóng gói (PHC)",
       "Loại tem",
       "Hạng",
       "Khối lượng (kg)",
-      "Đường dẫn truy xuất",
+      "Mức sửa lỗi QR",
+      "Đường dẫn truy xuất (/t/token)",
     ];
-    const rows = filteredItems.map((item, idx) => [
-      idx + 1,
-      item.serialCode,
-      item.itemType === "fruit" ? "Quả" : "Thùng",
-      item.grade ?? "A",
-      item.weightKg ?? "",
-      `${baseUrl}/trace/${encodeURIComponent(item.serialCode)}`,
-    ]);
+    const rows = filteredItems.map((item, idx) => {
+      const tokenOrSerial = item.qrToken || item.serialCode;
+      return [
+        idx + 1,
+        lot.code,
+        item.serialCode,
+        tokenOrSerial,
+        item.pucCode || "VN-DLOR-0086",
+        lot.packhouseCode || "VN-DLPH-0089",
+        item.itemType === "fruit" ? "Quả" : "Thùng",
+        item.grade ?? "A",
+        item.weightKg ?? "",
+        eccLevel,
+        `${baseUrl}/t/${encodeURIComponent(tokenOrSerial)}`,
+      ];
+    });
     const blob = buildUtf8CsvBlob(headers, rows);
     triggerBlobDownload(blob, `Danh_sach_tem_${lot.code}_${itemType}.csv`);
   };
@@ -292,9 +312,9 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         <div ref={dragZoneRef} className="pt-sheet-topbar no-print">
           <div className="batch-qr-header">
             <div>
-              <div className="batch-qr-subtitle">Truy xuất nguồn gốc CheckVN &amp; GACC</div>
+              <div className="batch-qr-subtitle">Định danh theo Lô / Thùng - Kết nối Cổng Truy xuất Quốc gia</div>
               <h2 id={titleId} className="batch-qr-title">
-                Bộ sinh &amp; In tem định danh – Lô {lot.code}
+                Bộ sinh &amp; In tem định danh - Lô {lot.code}
               </h2>
             </div>
             <button
@@ -317,23 +337,33 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           <div className="batch-qr-type-switch">
             <button
               type="button"
-              className={`type-btn ${itemType === "fruit" ? "active" : ""}`}
-              onClick={() => handleTypeChange("fruit")}
-            >
-              <Tag size={16} />
-              <span>Tem dán từng quả ({items.filter((i) => i.itemType === "fruit").length})</span>
-            </button>
-            <button
-              type="button"
               className={`type-btn ${itemType === "box" ? "active" : ""}`}
               onClick={() => handleTypeChange("box")}
             >
               <Package size={16} />
-              <span>Tem dán thùng Carton ({items.filter((i) => i.itemType === "box").length})</span>
+              <span>Tem thùng / lô tiêu chuẩn ({items.filter((i) => i.itemType === "box").length})</span>
+            </button>
+            <button
+              type="button"
+              className={`type-btn ${itemType === "fruit" ? "active" : ""}`}
+              onClick={() => handleTypeChange("fruit")}
+            >
+              <Tag size={16} />
+              <span>Tem từng quả - Hàng cao cấp ({items.filter((i) => i.itemType === "fruit").length})</span>
             </button>
           </div>
 
           <div className="batch-qr-actions">
+            <select
+              className="filter-select"
+              style={{ height: 32, fontSize: 12.5, padding: "0 10px" }}
+              value={eccLevel}
+              onChange={(e) => setEccLevel(e.target.value as "Q" | "M")}
+              title="Mức sửa lỗi QR theo quy chuẩn in ấn kho lạnh"
+            >
+              <option value="Q">Sửa lỗi mức Q (25% - Container lạnh)</option>
+              <option value="M">Sửa lỗi mức M (15% - Tiêu chuẩn)</option>
+            </select>
             <button
               type="button"
               className="btn btn-outline btn-sm"
@@ -356,10 +386,15 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         </div>
 
         {/* Khung tạo mới tem con */}
+        {canGenerate && (
         <div className="batch-qr-gen-panel no-print">
           <div className="gen-panel-title">
             <Sparkles size={16} color="#1b4d3e" />
-            <span>Cấp thêm dải mã tem serial mới cho lô {lot.code}</span>
+            <span>
+              {itemType === "box"
+                ? `Cấp dải mã QR thùng / lô cho lô ${lot.code} (Khuyến nghị chuẩn toàn quốc từ 01/07/2026)`
+                : `Cấp dải tem từng quả cho lô ${lot.code} (Chỉ khuyến nghị cho dòng hàng cao cấp / thương hiệu riêng)`}
+            </span>
           </div>
 
           <div className="gen-panel-form">
@@ -417,17 +452,35 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           </div>
           {error && <div className="batch-qr-error">{error}</div>}
         </div>
+        )}
 
         {/* Khung xem trước & In tem nhãn */}
         <div className="batch-qr-preview-area">
           <div className="preview-header no-print">
             <div className="preview-note">
-              <strong>Bản xem trước nhãn in ({filteredItems.length} tem {itemType === "fruit" ? "dán quả" : "dán thùng"})</strong>
-              <span>Khổ in tối ưu cho decal bóc dán nhiệt hoặc in A4 văn phòng</span>
+              <strong>Bản xem trước nhãn in ({filteredItems.length} tem {itemType === "fruit" ? "dán quả ≥ 2,2×2,2 cm" : "dán thùng ≥ 2,8×2,8 cm"})</strong>
+              <span>Đường dẫn QR dùng token ngẫu nhiên chống giả (/t/token), in kèm mã lô, PUC và PHC dạng chữ dự phòng</span>
             </div>
             {filteredItems.length > 0 && (
-              <span className="badge badge-green">Mã QR hợp lệ 100% - Quét trực tiếp bằng camera</span>
+              <span className="badge badge-green">Tương phản Đen/Trắng - Sửa lỗi mức {eccLevel}</span>
             )}
+          </div>
+
+          <div
+            className="no-print"
+            style={{
+              marginBottom: 16,
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "#ffffff",
+              border: "1px solid #d4dfd9",
+              fontSize: 12,
+              color: "#334155",
+              lineHeight: 1.55,
+            }}
+          >
+            <strong style={{ color: "#14372f" }}>Quy chuẩn vật liệu &amp; kiểm thử trước khi in số lượng lớn:</strong>{" "}
+            Sử dụng decal nhựa chịu ẩm, chịu lạnh (vận chuyển container lạnh 12–15 °C), đế keo chống bóc ra dán lại. Không in cứng kết quả kiểm nghiệm lên tem để trạng thái hiệu lực PUC/PHC được đối chiếu thời gian thực khi quét. Bắt buộc quét thử bằng nhiều điện thoại ở các điều kiện ánh sáng khác nhau và xác nhận quy cách nhãn hiện hành với cơ quan chuyên môn (Chi cục TT&amp;BVTV).
           </div>
 
           {loading ? (
@@ -440,10 +493,13 @@ export default function BatchQrModal({ lot, onClose }: Props) {
             </div>
           ) : (
             <div className={`print-sheet print-sheet-${itemType}`}>
-              {filteredItems.map((item) => (
+              {filteredItems.map((item) => {
+                const itemPucCode = item.pucCode || "VN-DLOR-0086";
+                const itemPhcCode = lot.packhouseCode || "VN-DLPH-0089";
+                return (
                 <div key={item.id} className={`stamp-card stamp-${itemType}`}>
                   {itemType === "fruit" ? (
-                    /* ─── Tem dán từng quả (Fruit Decal 40x30mm) ─── */
+                    /* ─── Tem dán từng quả (Fruit Decal - QR in thực tế 22x22mm >= 2x2cm) ─── */
                     <div className="fruit-stamp-inner">
                       <div className="fruit-stamp-header">
                         <div className="fruit-stamp-brand">HTX CƯ NÉ</div>
@@ -457,29 +513,30 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                           <div className="qr-placeholder" />
                         )}
                         <div className="fruit-stamp-details">
-                          <div className="stamp-puc">PUC: VN-DLOR-0086</div>
-                          <div className="stamp-crop">SẦU RIÊNG TƯƠI</div>
+                          <div className="stamp-puc">Lô: {lot.code}</div>
+                          <div className="stamp-puc">PUC: {itemPucCode}</div>
+                          <div className="stamp-puc">PHC: {itemPhcCode}</div>
                           <div className="stamp-weight">{item.weightKg ? `${item.weightKg} kg` : "3.5 kg"}</div>
                         </div>
                       </div>
                       <div className="fruit-stamp-footer">
                         <span
                           className="fruit-serial-code"
-                          title="Bấm để sao chép mã"
+                          title="Mã dự phòng nhập tay khi quét lỗi - Bấm để sao chép"
                           onClick={() => copyCode(item.serialCode)}
                         >
-                          {item.serialCode}
+                          Mã: {item.serialCode}
                         </span>
-                        {copiedCode === item.serialCode && <span className="copied-tag">✔ Đã chép</span>}
+                        {copiedCode === item.serialCode && <span className="copied-tag">Đã chép</span>}
                       </div>
                     </div>
                   ) : (
-                    /* ─── Tem dán thùng carton (Carton Box Label 100x75mm) ─── */
+                    /* ─── Tem dán thùng carton (Carton Box Label - QR in thực tế 28x28mm >= 2x2cm) ─── */
                     <div className="box-stamp-inner">
                       <div className="box-stamp-head">
                         <div className="box-brand">
-                          <strong>HTX SẦU RIÊNG CƯ NÉ – ĐẮK LẮK</strong>
-                          <small>TIÊU CHUẨN XUẤT KHẨU VIETGAP &amp; NGHỊ ĐỊNH THƯ GACC</small>
+                          <strong>HTX SẦU RIÊNG CƯ NÉ - ĐẮK LẮK</strong>
+                          <small>NHÃN ĐỊNH DANH LÔ HÀNG &amp; TRUY XUẤT NGUỒN GỐC</small>
                         </div>
                         <div className="box-stamp-grade-box">
                           HẠNG {item.grade ?? "A"}
@@ -494,52 +551,60 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                           ) : (
                             <div className="qr-placeholder" />
                           )}
-                          <span className="box-qr-caption">QUÉT TRUY XUẤT NGUỒN GỐC</span>
+                          <span className="box-qr-caption">QUÉT MÃ KIỂM TRA</span>
                         </div>
 
                         <div className="box-info-col">
                           <div className="box-field">
-                            <span className="lbl">Mã định danh thùng:</span>
+                            <span className="lbl">Mã lô hàng:</span>
                             <strong
                               className="val serial-highlight"
-                              onClick={() => copyCode(item.serialCode)}
-                              title="Bấm để chép mã"
+                              onClick={() => copyCode(lot.code)}
+                              title="Mã lô dạng chữ đối chiếu khi quét lỗi"
                             >
-                              {item.serialCode}
+                              {lot.code}
                             </strong>
                           </div>
                           <div className="box-field">
                             <span className="lbl">Mã số vùng trồng (PUC):</span>
-                            <strong className="val">VN-DLOR-0086</strong>
+                            <strong className="val">{itemPucCode}</strong>
                           </div>
                           <div className="box-field">
                             <span className="lbl">Mã cơ sở đóng gói (PHC):</span>
-                            <strong className="val">{lot.packhouseCode || "VN-DLPH-0089"}</strong>
+                            <strong className="val">{itemPhcCode}</strong>
+                          </div>
+                          <div className="box-field">
+                            <span className="lbl">Mã thùng dự phòng:</span>
+                            <strong
+                              className="val"
+                              style={{ cursor: "pointer" }}
+                              onClick={() => copyCode(item.serialCode)}
+                              title="Bấm để sao chép mã thùng"
+                            >
+                              {item.serialCode}
+                            </strong>
                           </div>
                           <div className="box-field">
                             <span className="lbl">Quy cách tịnh:</span>
                             <strong className="val">{item.weightKg ? `${item.weightKg} kg / Thùng` : "18.0 kg / Thùng"}</strong>
                           </div>
                           <div className="box-field">
-                            <span className="lbl">Doanh nghiệp xuất khẩu:</span>
-                            <span className="val">{lot.buyer}</span>
-                          </div>
-                          <div className="box-field">
-                            <span className="lbl">Thị trường:</span>
-                            <span className="val">{lot.market}</span>
+                            <span className="lbl">Đơn vị sản xuất:</span>
+                            <span className="val">HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né</span>
                           </div>
                         </div>
                       </div>
 
                       <div className="box-stamp-foot">
-                        <span>Lô hàng: {lot.code}</span>
                         <span>Ngày đóng gói: {displayDate}</span>
-                        <span className="safe-mark">✔ Kiểm nghiệm Cadimi an toàn - Âm tính Vàng O</span>
+                        <span>Thị trường: {lot.market}</span>
+                        <span className="safe-mark">Quét QR để kiểm tra hiệu lực PUC/PHC &amp; phiếu kiểm nghiệm thời gian thực</span>
                       </div>
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1095,10 +1160,20 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           }
 
           .stamp-fruit {
-            border: 1px solid #000 !important;
+            border: 1.5px solid #000 !important;
             box-shadow: none !important;
             break-inside: avoid;
             page-break-inside: avoid;
+          }
+
+          .fruit-qr-img {
+            width: 22mm !important;
+            height: 22mm !important;
+            min-width: 22mm !important;
+            min-height: 22mm !important;
+            border: 1px solid #000 !important;
+            border-radius: 0 !important;
+            image-rendering: pixelated;
           }
 
           .print-sheet-box {
@@ -1114,6 +1189,16 @@ export default function BatchQrModal({ lot, onClose }: Props) {
             box-shadow: none !important;
             break-inside: avoid;
             page-break-inside: avoid;
+          }
+
+          .box-qr-img {
+            width: 28mm !important;
+            height: 28mm !important;
+            min-width: 28mm !important;
+            min-height: 28mm !important;
+            border: 1px solid #000 !important;
+            border-radius: 0 !important;
+            image-rendering: pixelated;
           }
         }
       `}</style>

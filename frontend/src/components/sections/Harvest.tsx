@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
-import { BellRing, CheckCircle2, Printer, QrCode, Users } from "lucide-react";
+import { AlertTriangle, BellRing, CheckCircle2, FileText, Printer, QrCode, Users } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
@@ -10,12 +11,17 @@ import { useDebounced } from "@/components/admin/catalog/use-debounced";
 import { ContractFormModal, EnterpriseFormModal } from "@/components/admin/harvest/EnterpriseContractModals";
 import HarvestLotFormModal, { LOT_STATUS_LABELS } from "@/components/admin/harvest/HarvestLotFormModal";
 import HarvestPlanNotifyModal from "@/components/admin/harvest/HarvestPlanNotifyModal";
+import IncidentTraceModal from "@/components/admin/harvest/IncidentTraceModal";
 import LotContributionsModal from "@/components/admin/harvest/LotContributionsModal";
 import { StampAllocationModal, StampListModal } from "@/components/admin/harvest/StampModals";
+import { toast } from "@/components/ui/Toast";
+import { api, errorMessage } from "@/lib/api-client";
 
 const BatchQrModal = dynamic(() => import("@/components/harvest/BatchQrModal"), { ssr: false });
+const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
+const TraceAccessLogsModal = dynamic(() => import("@/components/admin/harvest/TraceAccessLogsModal"), { ssr: false });
 import { KpiChartView, renderKpiValue, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
-import { useApiList } from "@/hooks/use-api";
+import { useApi, useApiList } from "@/hooks/use-api";
 import type {
   ContractRecord,
   EnterpriseRecord,
@@ -24,6 +30,24 @@ import type {
   HarvestPlanStatus,
   StampAllocationRecord,
 } from "@/types/harvest";
+
+interface GrowingZoneRow {
+  code: string;
+  name: string;
+  commune: string;
+  district: string;
+  province: string;
+  status: "active" | "suspended" | "revoked" | "pending";
+  statusNote?: string | null;
+  validUntil?: string | null;
+}
+
+const ENTERPRISE_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
+  active: { label: "Đang hoạt động", cls: "badge-green" },
+  suspended: { label: "Tạm dừng PHC", cls: "badge-gold" },
+  revoked: { label: "Đã thu hồi PHC", cls: "badge-red" },
+  inactive: { label: "Ngừng hoạt động", cls: "badge-gray" },
+};
 
 type HarvestTab = "lots" | "plans" | "stamps" | "contracts" | "enterprises";
 
@@ -40,6 +64,22 @@ const PLAN_STATUS_BADGE: Record<HarvestPlanStatus, { label: string; cls: string 
 };
 
 export default function Harvest() {
+  const { can } = useAuth();
+  const canReadHouseholds = can("households", "read");
+  const canReadApprovals = can("approvals", "read");
+  const canReadStamps = can("stamps", "read");
+  const canCreateHarvest = can("harvest", "create");
+  const canUpdateHarvest = can("harvest", "update");
+  const canDeleteHarvest = can("harvest", "delete");
+  const canCreateContract = can("contracts", "create");
+  const canUpdateContract = can("contracts", "update");
+  const canDeleteContract = can("contracts", "delete");
+  const canCreateEnterprise = can("enterprises", "create");
+  const canUpdateEnterprise = can("enterprises", "update");
+  const canDeleteEnterprise = can("enterprises", "delete");
+  const canCreateStamps = can("stamps", "create");
+  const canUpdateStamps = can("stamps", "update");
+
   const [tab, setTab] = useState<HarvestTab>("lots");
 
   // 1. Lô thu hoạch
@@ -59,12 +99,15 @@ export default function Harvest() {
   const [deletingLot, setDeletingLot] = useState<HarvestLotRecord | null>(null);
   const [contribLot, setContribLot] = useState<HarvestLotRecord | null>(null);
   const [printingLot, setPrintingLot] = useState<HarvestLotRecord | null>(null);
+  const [incidentLotCode, setIncidentLotCode] = useState<string | null>(null);
+  const [scanningQr, setScanningQr] = useState(false);
+  const [viewingTraceLogs, setViewingTraceLogs] = useState(false);
 
   // 2. Dự báo & tính lịch thu hoạch từ nhật ký chăm sóc
   const [planQ, setPlanQ] = useState("");
   const [planStatus, setPlanStatus] = useState("");
   const debouncedPlanQ = useDebounced(planQ);
-  const harvestPlans = useApiList<HarvestPlanRecord>("harvest-plan", {
+  const harvestPlans = useApiList<HarvestPlanRecord>(canReadHouseholds ? "harvest-plan" : null, {
     q: debouncedPlanQ,
     status: planStatus,
   });
@@ -73,7 +116,7 @@ export default function Harvest() {
   // 3. Cấp phát tem nông hộ
   const [stampQ, setStampQ] = useState("");
   const debouncedStampQ = useDebounced(stampQ);
-  const stampAllocations = useApiList<StampAllocationRecord>("stamp-allocations", { q: debouncedStampQ });
+  const stampAllocations = useApiList<StampAllocationRecord>(canReadStamps ? "stamp-allocations" : null, { q: debouncedStampQ });
   const [creatingStampAllocation, setCreatingStampAllocation] = useState(false);
   const [revokingAllocation, setRevokingAllocation] = useState<StampAllocationRecord | null>(null);
   const [viewingStampsAllocation, setViewingStampsAllocation] = useState<StampAllocationRecord | null>(null);
@@ -90,6 +133,18 @@ export default function Harvest() {
   const enterprises = useApiList<EnterpriseRecord>("enterprises", { q: debouncedEntQ });
   const [editingEnterprise, setEditingEnterprise] = useState<EnterpriseRecord | "new" | null>(null);
   const [deletingEnterprise, setDeletingEnterprise] = useState<EnterpriseRecord | null>(null);
+  const growingZones = useApi<{ data?: GrowingZoneRow[] }>(tab === "enterprises" ? "/growing-zones" : null);
+  const zoneRows = growingZones.data?.data ?? [];
+
+  const handleZoneStatusChange = async (code: string, nextStatus: GrowingZoneRow["status"]) => {
+    try {
+      await api.patch(`/growing-zones/${encodeURIComponent(code)}`, { status: nextStatus });
+      toast.success(`Đã cập nhật trạng thái thời gian thực cho mã vùng ${code}.`);
+      await growingZones.refresh();
+    } catch (err) {
+      toast.error(errorMessage(err, "Không thể cập nhật trạng thái mã vùng trồng."));
+    }
+  };
 
   // Tính KPI thực từ dữ liệu backend
   const kpis = useMemo(() => {
@@ -186,13 +241,32 @@ export default function Harvest() {
           <h1>Chuỗi Cung Ứng &amp; Lô Hàng</h1>
         </div>
         <div className="header-actions">
+          <button type="button" className="btn btn-outline" onClick={() => setScanningQr(true)}>
+            <QrCode size={15} />
+            <span>Quét QR</span>
+          </button>
+          {canReadApprovals && (
+            <button type="button" className="btn btn-outline" onClick={() => setViewingTraceLogs(true)}>
+              <FileText size={15} />
+              <span>Nhật ký xem chi tiết</span>
+            </button>
+          )}
+          {canReadHouseholds && (
+            <button type="button" className="btn btn-outline" onClick={() => setIncidentLotCode("")}>
+              <AlertTriangle size={15} />
+              <span>Truy vết sự cố Lô - Vườn</span>
+            </button>
+          )}
           {tab === "lots" && lots.rows[0] && (
             <button type="button" className="btn btn-outline" onClick={() => setPrintingLot(lots.rows[0])}>
               <Printer size={15} />
-              <span>In dải tem nhanh</span>
+              <span>In tem lô / thùng</span>
             </button>
           )}
-          {tab !== "plans" && (
+          {((tab === "lots" && canCreateHarvest) ||
+            (tab === "stamps" && canCreateStamps) ||
+            (tab === "contracts" && canCreateContract) ||
+            (tab === "enterprises" && canCreateEnterprise)) && (
             <button type="button" className="btn btn-primary" onClick={handlePrimaryAction}>
               {tab === "lots"
                 ? "Tạo lô hàng mới"
@@ -226,16 +300,20 @@ export default function Harvest() {
         <button type="button" className={`tab-btn ${tab === "lots" ? "active" : ""}`} onClick={() => setTab("lots")}>
           Lô thu hoạch ({lots.total})
         </button>
-        <button
-          type="button"
-          className={`tab-btn ${tab === "plans" ? "active" : ""}`}
-          onClick={() => setTab("plans")}
-        >
-          Tính lịch thu hoạch ({harvestPlans.total})
-        </button>
-        <button type="button" className={`tab-btn ${tab === "stamps" ? "active" : ""}`} onClick={() => setTab("stamps")}>
-          Cấp phát tem ({stampAllocations.total})
-        </button>
+        {canReadHouseholds && (
+          <button
+            type="button"
+            className={`tab-btn ${tab === "plans" ? "active" : ""}`}
+            onClick={() => setTab("plans")}
+          >
+            Tính lịch thu hoạch ({harvestPlans.total})
+          </button>
+        )}
+        {canReadStamps && (
+          <button type="button" className={`tab-btn ${tab === "stamps" ? "active" : ""}`} onClick={() => setTab("stamps")}>
+            Cấp phát tem ({stampAllocations.total})
+          </button>
+        )}
         <button type="button" className={`tab-btn ${tab === "contracts" ? "active" : ""}`} onClick={() => setTab("contracts")}>
           Hợp đồng bao tiêu ({contracts.total})
         </button>
@@ -284,6 +362,7 @@ export default function Harvest() {
                 <option value="delivered">Đã giao hàng</option>
                 <option value="in_transit">Đang vận chuyển</option>
                 <option value="sampling">Đang lấy mẫu</option>
+                <option value="revoked">Đã thu hồi</option>
               </select>
             </div>
           </div>
@@ -324,16 +403,20 @@ export default function Harvest() {
                         <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>{formatVn(kg, 0)} kg</div>
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          title="Quản lý danh sách hộ đóng góp trong lô"
-                          onClick={() => setContribLot(h)}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-                        >
-                          <Users size={13} />
-                          <span>{h.householdCount ?? 0} hộ</span>
-                        </button>
+                        {canReadHouseholds ? (
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            title="Quản lý danh sách hộ đóng góp trong lô"
+                            onClick={() => setContribLot(h)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                          >
+                            <Users size={13} />
+                            <span>{h.householdCount ?? 0} hộ</span>
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{h.householdCount ?? 0} hộ</span>
+                        )}
                       </td>
                       <td style={{ fontSize: 12 }}>
                         <strong style={{ color: "#14372f" }}>{h.enterpriseName || h.buyer}</strong>
@@ -373,11 +456,11 @@ export default function Harvest() {
                       </td>
                       <td>
                         <a
-                          href={`/trace/${encodeURIComponent(h.code)}`}
+                          href={h.qrToken ? `/t/${encodeURIComponent(h.qrToken)}` : `/trace/${encodeURIComponent(h.code)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn btn-outline btn-sm"
-                          title="Xem trang quét mã QR truy xuất nguồn gốc"
+                          title="Xem trang quét mã QR truy xuất bằng token ngẫu nhiên chống giả"
                           style={{
                             textDecoration: "none",
                             display: "inline-flex",
@@ -399,22 +482,28 @@ export default function Harvest() {
                           <button
                             type="button"
                             className="btn btn-primary btn-sm"
-                            title="Cấp và in tem dán từng quả sầu riêng hoặc thùng carton"
+                            title="Xem và in tem định danh thùng carton hoặc tem lô"
                             onClick={() => setPrintingLot(h)}
                             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                           >
                             <Printer size={13} strokeWidth={2.2} />
                             <span>In dải tem</span>
                           </button>
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setContribLot(h)}>
-                            Hộ đóng góp
-                          </button>
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingLot(h)}>
-                            Sửa
-                          </button>
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingLot(h)}>
-                            Xóa
-                          </button>
+                          {canReadHouseholds && (
+                            <button type="button" className="btn btn-outline btn-sm" onClick={() => setContribLot(h)}>
+                              Hộ đóng góp
+                            </button>
+                          )}
+                          {canUpdateHarvest && (
+                            <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingLot(h)}>
+                              Sửa
+                            </button>
+                          )}
+                          {canDeleteHarvest && (
+                            <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingLot(h)}>
+                              Xóa
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -619,7 +708,7 @@ export default function Harvest() {
                         <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewingStampsAllocation(s)}>
                           Xem danh sách tem
                         </button>
-                        {s.status === "active" && (
+                        {s.status === "active" && canUpdateStamps && (
                           <button type="button" className="btn btn-danger btn-sm" onClick={() => setRevokingAllocation(s)}>
                             Thu hồi
                           </button>
@@ -714,12 +803,16 @@ export default function Harvest() {
                       </td>
                       <td className="table-actions-cell">
                         <div className="table-actions">
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingContract(c)}>
-                            Sửa
-                          </button>
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingContract(c)}>
-                            Xóa
-                          </button>
+                          {canUpdateContract && (
+                            <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingContract(c)}>
+                              Sửa
+                            </button>
+                          )}
+                          {canDeleteContract && (
+                            <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingContract(c)}>
+                              Xóa
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -731,9 +824,96 @@ export default function Harvest() {
         </div>
       )}
 
-      {/* ─── TAB 5: DOANH NGHIỆP & CƠ SỞ ĐÓNG GÓI PHC ─── */}
+      {/* ─── TAB 5: DOANH NGHIỆP & CƠ SỞ ĐÓNG GÓI PHC + MÃ VÙNG PUC THỜI GIAN THỰC ─── */}
       {tab === "enterprises" && (
-        <div className="card">
+        <>
+          <div className="card" style={{ marginBottom: 18 }}>
+            <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
+              <div className="card-header-left">
+                Trạng thái thời gian thực Mã số vùng trồng (PUC - kiểm tra trực tiếp khi quét QR)
+              </div>
+            </div>
+            <div className="table-wrap" style={{ border: "none", borderRadius: 0, boxShadow: "none" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mã số vùng trồng (PUC)</th>
+                    <th>Tên vùng</th>
+                    <th>Địa bàn hành chính</th>
+                    <th>Hiệu lực đến</th>
+                    <th>Trạng thái thời gian thực</th>
+                    {canUpdateHarvest && <th>Điều chỉnh trạng thái</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {growingZones.loading ? (
+                    <tr>
+                      <td colSpan={canUpdateHarvest ? 6 : 5} className="empty-state">
+                        Đang tải danh sách mã vùng trồng…
+                      </td>
+                    </tr>
+                  ) : zoneRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={canUpdateHarvest ? 6 : 5} className="empty-state">
+                        Chưa có dữ liệu mã số vùng trồng.
+                      </td>
+                    </tr>
+                  ) : (
+                    zoneRows.map((z) => (
+                      <tr key={z.code}>
+                        <td style={{ fontFamily: "var(--font-num-stack)", fontWeight: 700, color: "#166534" }}>{z.code}</td>
+                        <td style={{ fontWeight: 600 }}>{z.name}</td>
+                        <td style={{ fontSize: 12.5 }}>
+                          {z.commune}, {z.district}, {z.province}
+                        </td>
+                        <td>{z.validUntil ? String(z.validUntil).slice(0, 10) : "2027-12-31"}</td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              z.status === "active"
+                                ? "badge-green"
+                                : z.status === "suspended"
+                                  ? "badge-gold"
+                                  : z.status === "revoked"
+                                    ? "badge-red"
+                                    : "badge-gray"
+                            }`}
+                          >
+                            {z.status === "active"
+                              ? "Còn hiệu lực"
+                              : z.status === "suspended"
+                                ? "Tạm dừng hiệu lực"
+                                : z.status === "revoked"
+                                  ? "Đã thu hồi mã"
+                                  : "Đang thẩm định"}
+                          </span>
+                        </td>
+                        {canUpdateHarvest && (
+                          <td>
+                            <select
+                              className="filter-select"
+                              style={{ minWidth: 165 }}
+                              value={z.status}
+                              onChange={(ev) =>
+                                void handleZoneStatusChange(z.code, ev.target.value as GrowingZoneRow["status"])
+                              }
+                            >
+                              <option value="active">Còn hiệu lực</option>
+                              <option value="suspended">Tạm dừng hiệu lực</option>
+                              <option value="revoked">Đã thu hồi mã vùng</option>
+                              <option value="pending">Đang thẩm định</option>
+                            </select>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card">
           <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
             <div className="card-header-left">Hồ sơ pháp lý Doanh nghiệp &amp; Cơ sở đóng gói (Packhouse)</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -770,7 +950,9 @@ export default function Harvest() {
                   empty={enterprises.rows.length === 0}
                   onRetry={enterprises.refresh}
                 />
-                {enterprises.rows.map((e) => (
+                {enterprises.rows.map((e) => {
+                  const eb = ENTERPRISE_STATUS_BADGE[e.status] ?? ENTERPRISE_STATUS_BADGE.inactive;
+                  return (
                   <tr key={e.id}>
                     <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, color: "#166534" }}>{e.code}</td>
                     <td>
@@ -802,26 +984,30 @@ export default function Harvest() {
                     </td>
                     <td style={{ fontSize: 12, color: "#475569", maxWidth: 260 }}>{e.address || "—"}</td>
                     <td>
-                      <span className={`badge ${e.status === "active" ? "badge-green" : "badge-red"}`}>
-                        {e.status === "active" ? "Đang hoạt động" : "Ngừng hoạt động"}
-                      </span>
+                      <span className={`badge ${eb.cls}`}>{eb.label}</span>
                     </td>
                     <td className="table-actions-cell">
                       <div className="table-actions">
-                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingEnterprise(e)}>
-                          Sửa
-                        </button>
-                        <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingEnterprise(e)}>
-                          Xóa
-                        </button>
+                        {canUpdateEnterprise && (
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingEnterprise(e)}>
+                            Sửa
+                          </button>
+                        )}
+                        {canDeleteEnterprise && (
+                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingEnterprise(e)}>
+                            Xóa
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Modals Lô thu hoạch */}
@@ -867,6 +1053,12 @@ export default function Harvest() {
         />
       )}
       {printingLot && <BatchQrModal lot={printingLot} onClose={() => setPrintingLot(null)} />}
+      {incidentLotCode !== null && (
+        <IncidentTraceModal
+          initialLotCode={incidentLotCode || undefined}
+          onClose={() => setIncidentLotCode(null)}
+        />
+      )}
 
       {/* Modal thông báo lịch thu hoạch tới hộ dân */}
       {notifyingPlan && (
@@ -972,6 +1164,9 @@ export default function Harvest() {
           }}
         />
       )}
+
+      {scanningQr && <QrScannerModal onClose={() => setScanningQr(false)} />}
+      {viewingTraceLogs && <TraceAccessLogsModal onClose={() => setViewingTraceLogs(false)} />}
     </>
   );
 }

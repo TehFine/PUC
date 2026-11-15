@@ -7,7 +7,7 @@ import { FormGrid, NumberField, SelectField, TextAreaField, TextField } from "@/
 import { toast } from "@/components/ui/Toast";
 import { useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
-import type { ContractRecord, EnterpriseRecord } from "@/types/harvest";
+import type { ContractRecord, EnterpriseRecord, EnterpriseStatus } from "@/types/harvest";
 
 export function EnterpriseFormModal({
   initial,
@@ -25,7 +25,7 @@ export function EnterpriseFormModal({
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [packhouseCode, setPackhouseCode] = useState(initial?.packhouseCode ?? "VN-DLPH-0089");
   const [address, setAddress] = useState(initial?.address ?? "");
-  const [status, setStatus] = useState<"active" | "inactive">(initial?.status ?? "active");
+  const [status, setStatus] = useState<EnterpriseStatus>(initial?.status ?? "active");
   const [localError, setLocalError] = useState<string | null>(null);
 
   const { run, pending, error } = useMutation(async () => {
@@ -70,11 +70,13 @@ export function EnterpriseFormModal({
         <TextField label="Điện thoại" type="tel" value={phone} onChange={setPhone} maxLength={30} />
         <TextField label="Mã cơ sở đóng gói (PHC)" value={packhouseCode} onChange={setPackhouseCode} maxLength={50} />
         <SelectField
-          label="Trạng thái"
+          label="Trạng thái hiệu lực (kiểm tra thời gian thực khi quét QR)"
           value={status}
-          onChange={(v) => setStatus(v as "active" | "inactive")}
+          onChange={(v) => setStatus(v as EnterpriseStatus)}
           options={[
-            { value: "active", label: "Đang hoạt động" },
+            { value: "active", label: "Đang hoạt động hợp lệ" },
+            { value: "suspended", label: "Tạm dừng hiệu lực PHC" },
+            { value: "revoked", label: "Đã thu hồi mã PHC" },
             { value: "inactive", label: "Ngừng hoạt động" },
           ]}
         />

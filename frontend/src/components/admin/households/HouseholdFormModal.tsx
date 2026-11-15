@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Modal, FormError } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
-import { FormGrid, NumberField, SelectField, TextField, type Option } from "@/components/ui/form/fields";
+import { CheckboxField, FormGrid, NumberField, SelectField, TextField, type Option } from "@/components/ui/form/fields";
 import { useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
@@ -33,6 +33,7 @@ export default function HouseholdFormModal({
   const [plotCount, setPlotCount] = useState(numberText(initial?.plotCount ?? 1));
   const [areaHa, setAreaHa] = useState(numberText(initial?.areaHa ?? 0.5));
   const [status, setStatus] = useState<HouseholdStatus>(initial?.status ?? "pending");
+  const [publicTraceConsent, setPublicTraceConsent] = useState(Boolean(initial?.publicTraceConsent));
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
 
   const save = useMutation(async (payload: Partial<HouseholdInput>) => {
@@ -85,6 +86,7 @@ export default function HouseholdFormModal({
       plotCount: parsedPlots ?? 0,
       areaHa: parsedArea ?? 0,
       status,
+      publicTraceConsent,
     };
     if (shouldSendCccd) {
       payload.cccd = trimmedCccd;
@@ -197,6 +199,12 @@ export default function HouseholdFormModal({
             error={fieldErrors.areaHa}
           />
         </FormGrid>
+
+        <CheckboxField
+          label="Đồng ý hiển thị tên chủ hộ trên trang quét mã QR công khai (mặc định chỉ hiện tên HTX Cư Né)"
+          checked={publicTraceConsent}
+          onChange={setPublicTraceConsent}
+        />
 
         <FormError message={save.error} />
       </form>

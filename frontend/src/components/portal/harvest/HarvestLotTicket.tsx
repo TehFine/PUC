@@ -35,7 +35,9 @@ export function HarvestAssetTagCard({
   onOpenModal,
 }: HarvestAssetTagCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const codeKey = `M:${lot.qrCode || lot.lotCode}`;
+  const tokenOrCode = lot.qrToken || lot.qrCode || lot.lotCode;
+  const routePrefix = lot.qrToken ? "/t/" : "/trace/";
+  const codeKey = `Q:${tokenOrCode}`;
   const [asyncQr, setAsyncQr] = useState<{ key: string; url: string } | null>(null);
   const [nearView, setNearView] = useState<boolean>(
     () =>
@@ -85,16 +87,16 @@ export function HarvestAssetTagCard({
       typeof window !== "undefined" && window.location.origin
         ? window.location.origin
         : "https://krongbuk.puc.vn";
-    const targetUrl = `${origin}/trace/${encodeURIComponent(lot.qrCode || lot.lotCode)}`;
+    const targetUrl = `${origin}${routePrefix}${encodeURIComponent(tokenOrCode)}`;
 
     QRCode.toDataURL(targetUrl, {
-      margin: 0,
+      margin: 1,
       width: 320,
       color: {
-        dark: "#0f172a",
+        dark: "#000000",
         light: "#ffffff",
       },
-      errorCorrectionLevel: "M",
+      errorCorrectionLevel: "Q",
     })
       .then((url) => {
         setQrCacheEntry(codeKey, url);
@@ -107,7 +109,7 @@ export function HarvestAssetTagCard({
     return () => {
       active = false;
     };
-  }, [nearView, codeKey, lot.qrCode, lot.lotCode]);
+  }, [nearView, codeKey, routePrefix, tokenOrCode]);
 
   return (
     <div ref={cardRef} className="pt-asset-card" data-status={lot.status}>
@@ -181,8 +183,18 @@ export function HarvestAssetTagCard({
   );
 }
 
-function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string | null }) {
-  const codeKey = `H:${qrCode || lotCode}`;
+function TicketQrImage({
+  lotCode,
+  qrCode,
+  qrToken,
+}: {
+  lotCode: string;
+  qrCode?: string | null;
+  qrToken?: string | null;
+}) {
+  const tokenOrCode = qrToken || qrCode || lotCode;
+  const routePrefix = qrToken ? "/t/" : "/trace/";
+  const codeKey = `Q:${tokenOrCode}`;
   const [src, setSrc] = useState<string>(() => qrDataUrlCache.get(codeKey) ?? "");
 
   useEffect(() => {
@@ -194,13 +206,13 @@ function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string |
       typeof window !== "undefined" && window.location.origin
         ? window.location.origin
         : "https://krongbuk.puc.vn";
-    const targetUrl = `${origin}/trace/${encodeURIComponent(qrCode || lotCode)}`;
+    const targetUrl = `${origin}${routePrefix}${encodeURIComponent(tokenOrCode)}`;
 
     QRCode.toDataURL(targetUrl, {
-      margin: 0,
+      margin: 1,
       width: 320,
-      color: { dark: "#0f172a", light: "#ffffff" },
-      errorCorrectionLevel: "H",
+      color: { dark: "#000000", light: "#ffffff" },
+      errorCorrectionLevel: "Q",
     })
       .then((url) => {
         setQrCacheEntry(codeKey, url);
@@ -211,7 +223,7 @@ function TicketQrImage({ lotCode, qrCode }: { lotCode: string; qrCode?: string |
     return () => {
       active = false;
     };
-  }, [codeKey, lotCode, qrCode]);
+  }, [codeKey, routePrefix, tokenOrCode]);
 
   if (!src) {
     return <QrCode size={110} strokeWidth={1.8} className="pt-qr-code-icon" aria-hidden="true" />;
@@ -294,7 +306,11 @@ export function HarvestLotQrModal({
             <div className="pt-ticket-stub">
               <div className="pt-ticket-qr-wrap">
                 <a
-                  href={`/trace/${encodeURIComponent(lot.qrCode || lot.lotCode)}`}
+                  href={
+                    lot.qrToken
+                      ? `/t/${encodeURIComponent(lot.qrToken)}`
+                      : `/trace/${encodeURIComponent(lot.qrCode || lot.lotCode)}`
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="pt-qr-frame"
@@ -302,7 +318,7 @@ export function HarvestLotQrModal({
                   title={`Bấm vào mã QR để xem trang truy xuất lô ${lot.lotCode}`}
                   aria-label={`Bấm vào mã QR để xem trang truy xuất lô ${lot.lotCode}`}
                 >
-                  <TicketQrImage lotCode={lot.lotCode} qrCode={lot.qrCode} />
+                  <TicketQrImage lotCode={lot.lotCode} qrCode={lot.qrCode} qrToken={lot.qrToken} />
                 </a>
                 <div className="pt-ticket-barcode-num">
                   <span>{lot.qrCode || lot.lotCode}</span>
@@ -328,7 +344,7 @@ export function HarvestLotQrModal({
               type="button"
               className="pt-btn pt-btn-ghost pt-ticket-open-btn"
               onClick={() => {
-                const codeKey = `H:${lot.qrCode || lot.lotCode}`;
+                const codeKey = `Q:${lot.qrToken || lot.qrCode || lot.lotCode}`;
                 const dataUrl = qrDataUrlCache.get(codeKey);
                 if (dataUrl) {
                   triggerDataUrlDownload(dataUrl, `QR-lo-hang-${lot.lotCode}.png`);
@@ -339,7 +355,11 @@ export function HarvestLotQrModal({
               <span>Tải mã QR</span>
             </button>
             <a
-              href={`/trace/${encodeURIComponent(lot.qrCode || lot.lotCode)}`}
+              href={
+                lot.qrToken
+                  ? `/t/${encodeURIComponent(lot.qrToken)}`
+                  : `/trace/${encodeURIComponent(lot.qrCode || lot.lotCode)}`
+              }
               target="_blank"
               rel="noopener noreferrer"
               className="pt-btn pt-btn-primary pt-ticket-open-btn"

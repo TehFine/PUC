@@ -1,11 +1,13 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { Mail, UserCheck } from "lucide-react";
+import { Laptop, Mail, QrCode, ShieldCheck, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ChangePasswordModal from "@/components/admin/notifications/ChangePasswordModal";
+import { ActiveSessionsSheet, TwoFactorSecuritySheet } from "@/components/layout/UserSecuritySheets";
 import { RadialPngIcon } from "@/components/portal/RadialIcons";
 import { BusyButton, InlineError } from "@/components/portal/shared/controls";
 import { Field, Sheet } from "@/components/portal/ui";
@@ -13,6 +15,8 @@ import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { ROLE_LABELS } from "@/constants/roles";
 import { errorMessage } from "@/lib/api-client";
 import { INTRO_PATH } from "@/lib/routes";
+
+const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
 
 const initials = (name: string | null | undefined) =>
   (name ?? "")
@@ -24,8 +28,11 @@ const initials = (name: string | null | undefined) =>
     .toUpperCase() || "HT";
 
 export default function UserMenu() {
-  const { session, logout, updateProfile } = useAuth();
+  const { session, logout, updateProfile, refreshSession } = useAuth();
   const [open, setOpen] = useState(false);
+  const [scanningQr, setScanningQr] = useState(false);
+  const [managing2fa, setManaging2fa] = useState(false);
+  const [managingSessions, setManagingSessions] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [fullNameInput, setFullNameInput] = useState("");
@@ -35,7 +42,27 @@ export default function UserMenu() {
   const [profileError, setProfileError] = useState<string | null>(null);
 
   if (!session) return null;
-  const { fullName, username, email, role } = session.user;
+  const {
+    fullName,
+    username,
+    email,
+    role,
+    enterpriseId,
+    assignedCommune,
+    assignedRegion,
+    coopCode,
+    twoFactorEnabled,
+  } = session.user;
+  const scopeSummary =
+    role === "enterprise"
+      ? enterpriseId
+        ? `Doanh nghiệp liên kết (#${enterpriseId})`
+        : "Chưa gắn doanh nghiệp"
+      : role === "village_officer"
+        ? assignedCommune || "Xã Cư Né"
+        : role === "inspector"
+          ? assignedRegion || "Tỉnh Đắk Lắk"
+          : `${coopCode || "HTX-CUNE"} (HTX Cư Né, Đắk Lắk)`;
   const title = `${fullName} – ${ROLE_LABELS[role]}`;
   const normalizedCurrentEmail = email ? email.trim().toLowerCase() : null;
   const normalizedNextEmail = emailInput.trim() ? emailInput.trim().toLowerCase() : null;
@@ -79,6 +106,29 @@ export default function UserMenu() {
 
   return (
     <div className="user-menu">
+      {role !== "farmer" && (
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          title="Quét mã QR truy xuất nhanh bằng phiên đăng nhập hiện tại"
+          aria-label="Quét QR truy xuất"
+          onClick={() => setScanningQr(true)}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            height: 36,
+            padding: "0 11px",
+            borderRadius: 999,
+            background: "#ffffff",
+            fontWeight: 600,
+            fontSize: 12.5,
+          }}
+        >
+          <QrCode size={15} />
+          <span>Quét QR</span>
+        </button>
+      )}
       <button
         className={`header-avatar ${open ? "is-active" : ""}`}
         type="button"
@@ -144,13 +194,74 @@ export default function UserMenu() {
               <div className="pt-profile-row">
                 <RadialPngIcon src="/placeholder.png" size={24} className="pt-profile-icon" />
                 <div className="pt-profile-row-content">
-                  <span className="pt-profile-label">Đơn vị quản lý</span>
-                  <strong className="pt-profile-val">HTX Sầu riêng Cư Né, Đắk Lắk</strong>
+                  <span className="pt-profile-label">Phạm vi quản lý</span>
+                  <strong className="pt-profile-val">{scopeSummary}</strong>
+                </div>
+              </div>
+
+              <div className="pt-profile-row">
+                <span className="pt-profile-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, color: twoFactorEnabled ? "#166534" : "#64748b" }}>
+                  <ShieldCheck size={20} />
+                </span>
+                <div className="pt-profile-row-content">
+                  <span className="pt-profile-label">Bảo mật xác thực 2 lớp (OTP)</span>
+                  <strong className="pt-profile-val" style={{ color: twoFactorEnabled ? "#15803d" : undefined }}>
+                    {twoFactorEnabled ? "Đang bật" : "Chưa bật"}
+                  </strong>
                 </div>
               </div>
             </div>
 
             <div className="pt-profile-footer">
+              {role !== "farmer" && (
+                <button
+                  type="button"
+                  className="pt-profile-intro-btn"
+                  onClick={() => {
+                    setOpen(false);
+                    setScanningQr(true);
+                  }}
+                >
+                  <span className="pt-profile-action-icon" aria-hidden="true" style={{ color: "#166534" }}>
+                    <QrCode size={20} />
+                  </span>
+                  <span className="pt-profile-action-title">Quét QR truy xuất nhanh</span>
+                  <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="pt-profile-intro-btn"
+                onClick={() => {
+                  setOpen(false);
+                  setManaging2fa(true);
+                }}
+              >
+                <span className="pt-profile-action-icon" aria-hidden="true" style={{ color: "#166534" }}>
+                  <ShieldCheck size={20} />
+                </span>
+                <span className="pt-profile-action-title">
+                  Xác thực 2 lớp (OTP){twoFactorEnabled ? " - Đang bật" : ""}
+                </span>
+                <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
+              </button>
+
+              <button
+                type="button"
+                className="pt-profile-intro-btn"
+                onClick={() => {
+                  setOpen(false);
+                  setManagingSessions(true);
+                }}
+              >
+                <span className="pt-profile-action-icon" aria-hidden="true" style={{ color: "#166534" }}>
+                  <Laptop size={20} />
+                </span>
+                <span className="pt-profile-action-title">Phiên đăng nhập &amp; Đăng xuất từ xa</span>
+                <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
+              </button>
+
               <button
                 type="button"
                 className="pt-profile-intro-btn"
@@ -279,6 +390,23 @@ export default function UserMenu() {
           onSuccessLogout={logout}
         />
       )}
+
+      {managing2fa && (
+        <TwoFactorSecuritySheet
+          enabled={Boolean(twoFactorEnabled)}
+          onClose={() => setManaging2fa(false)}
+          onChanged={refreshSession}
+        />
+      )}
+
+      {managingSessions && (
+        <ActiveSessionsSheet
+          onClose={() => setManagingSessions(false)}
+          onRevokedCurrent={logout}
+        />
+      )}
+
+      {scanningQr && <QrScannerModal onClose={() => setScanningQr(false)} />}
     </div>
   );
 }

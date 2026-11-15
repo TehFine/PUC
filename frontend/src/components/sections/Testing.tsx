@@ -335,6 +335,17 @@ export default function Testing() {
                           <FileText size={13} />
                           Xem phiếu A4
                         </button>
+                        {t.scanUrl && (
+                          <a
+                            href={t.scanUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-outline btn-sm"
+                            style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                          >
+                            Bản scan gốc
+                          </a>
+                        )}
                         {canUpdate && (
                           <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(t)}>
                             Sửa
