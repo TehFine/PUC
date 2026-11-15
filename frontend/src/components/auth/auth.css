@@ -530,7 +530,7 @@
 select.auth-input {
   appearance: none;
   padding-right: 40px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23121212' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("/icons/chevron-down-ink.svg");
   background-repeat: no-repeat;
   background-position: right 16px center;
   background-size: 16px;
@@ -580,7 +580,7 @@ select.auth-input {
 .auth-check input:checked {
   border-color: var(--au-ink);
   background: var(--au-ink)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E")
+    url("/icons/check-white.svg")
     center / 13px no-repeat;
 }
 
@@ -1247,7 +1247,8 @@ select.auth-input {
   color: var(--au-ink);
 }
 
-.auth-done-icon svg {
+.auth-done-icon svg,
+.auth-done-icon .pub-icon {
   width: 24px;
   height: 24px;
 }

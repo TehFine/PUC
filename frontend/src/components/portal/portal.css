@@ -267,14 +267,16 @@ body.pt-body {
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
-.pt-tab svg { width: 21px; height: 21px; stroke-width: 1.8; transition: transform 0.2s ease, color 0.2s ease; }
+.pt-tab svg,
+.pt-tab .pub-icon { width: 21px; height: 21px; stroke-width: 1.8; transition: transform 0.2s ease, color 0.2s ease; }
 @media (hover: hover) and (pointer: fine) {
   .pt-tab:hover { background: rgba(20, 55, 47, 0.06); }
 }
 .pt-tab:active { transform: scale(0.95); }
 .pt-tab:focus-visible { outline: 2px solid var(--green-600); outline-offset: 1px; }
 .pt-tab.active { background: var(--ink); color: #fff; box-shadow: none; }
-.pt-tab.active svg { color: var(--yellow); transform: translateY(-1px) scale(1.06); }
+.pt-tab.active svg,
+.pt-tab.active .pub-icon { color: var(--yellow); transform: translateY(-1px) scale(1.06); }
 
 /* Topbar right: profile badge & logout */
 .pt-topbar-right {
@@ -1861,7 +1863,8 @@ body.pt-body {
     white-space: nowrap;
     transition: background-color 0.16s ease, color 0.16s ease;
   }
-  .pt-tab svg { display: none; }
+  .pt-tab svg,
+  .pt-tab .pub-icon { display: none; }
   .pt-tab::after {
     content: "";
     position: absolute;
@@ -3370,7 +3373,8 @@ body.pt-body {
   cursor: pointer;
   transition: background-color 0.16s ease, border-color 0.16s ease;
 }
-.pt-reminder svg { flex: none; }
+.pt-reminder svg,
+.pt-reminder .pub-icon { flex: none; }
 .pt-reminder:hover { border-color: #14372f; }
 .pt-reminder:focus-visible { outline: 2px solid var(--green-600); outline-offset: 2px; }
 .pt-reminder-red { background: #fdf1ee; color: #7d281f; }
@@ -5834,7 +5838,8 @@ body.pt-body {
   color: var(--ink-soft);
   background: transparent;
 }
-.pt-empty svg { width: 32px; height: 32px; stroke-width: 1.7; }
+.pt-empty svg,
+.pt-empty .pub-icon { width: 32px; height: 32px; stroke-width: 1.7; }
 
 .pt-search {
   width: 100%;
@@ -5845,7 +5850,7 @@ body.pt-body {
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background-color: #ffffff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232c2c2e' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+  background-image: url("/icons/search-dark.svg");
   background-repeat: no-repeat;
   background-position: left 13px center;
   background-size: 17px 17px;
@@ -5908,6 +5913,7 @@ body.pt-body {
   color: #006ee6 !important;
   box-shadow: none !important;
 }
+.pt-btn { --pub-icon-size: 16px; }
 .pt-btn svg { width: 16px; height: 16px; stroke-width: 2; }
 .pt-icon-btn {
   display: grid;
@@ -5925,6 +5931,7 @@ body.pt-body {
 }
 .pt-icon-btn:hover { background: rgba(15, 23, 42, 0.06); opacity: 0.9; transform: none; }
 .pt-icon-btn svg,
+.pt-icon-btn .pub-icon,
 .pt-icon-btn img { width: 20px; height: 20px; stroke-width: 2; }
 
 /* Bảng trượt + biểu mẫu */
@@ -6200,7 +6207,8 @@ body.pt-body {
       color 0.16s ease;
   }
 
-  .pt-sheet.is-drawer .pt-drawer-back-btn svg {
+  .pt-sheet.is-drawer .pt-drawer-back-btn svg,
+  .pt-sheet.is-drawer .pt-drawer-back-btn .pub-icon {
     transition: transform 0.16s ease;
   }
 
@@ -6210,7 +6218,8 @@ body.pt-body {
     color: #0f172a;
   }
 
-  .pt-sheet.is-drawer .pt-drawer-back-btn:hover svg {
+  .pt-sheet.is-drawer .pt-drawer-back-btn:hover svg,
+  .pt-sheet.is-drawer .pt-drawer-back-btn:hover .pub-icon {
     transform: translateX(2px);
   }
 
@@ -6347,7 +6356,8 @@ body.pt-body {
     transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.pt-drawer-cta svg {
+.pt-drawer-cta svg,
+.pt-drawer-cta .pub-icon {
   flex-shrink: 0;
   transition: transform 0.16s ease;
 }
@@ -6357,7 +6367,8 @@ body.pt-body {
   color: #0f2c25;
 }
 
-.pt-drawer-cta:hover:not(:disabled) svg {
+.pt-drawer-cta:hover:not(:disabled) svg,
+.pt-drawer-cta:hover:not(:disabled) .pub-icon {
   transform: translateX(2px);
 }
 
@@ -6573,7 +6584,7 @@ body.pt-body {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 40px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2314372f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("/icons/chevron-down-forest.svg");
   background-repeat: no-repeat;
   background-position: right 14px center;
   background-size: 16px;

@@ -1,38 +1,63 @@
 import React from "react";
 
-export interface DetailArrowIconProps extends React.SVGProps<SVGSVGElement> {
+export interface DetailArrowIconProps extends React.HTMLAttributes<HTMLSpanElement> {
   size?: number | string;
   strokeWidth?: number | string;
 }
 
 /**
- * Icon mũi tên tròn dẫn vào chi tiết từng mục (hình tròn đặc kèm dấu › bo tròn ở giữa).
+ * Icon mũi tên tròn dẫn vào chi tiết từng mục (sử dụng `/icons/chevron-right.svg` từ `public/`).
  */
 export function DetailArrowIcon({
   size = 22,
-  strokeWidth = 2.5,
+  strokeWidth: _strokeWidth,
   className,
+  style,
   ...props
 }: DetailArrowIconProps) {
+  const pxSize = typeof size === "number" ? `${size}px` : size;
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
+    <span
       className={className}
       aria-hidden="true"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: pxSize,
+        height: pxSize,
+        flexShrink: 0,
+        position: "relative",
+        ...style,
+      }}
       {...props}
     >
-      <circle cx="12" cy="12" r="10.5" fill="var(--detail-arrow-bg, #d4dae2)" />
-      <path
-        d="M10.5 8L14.5 12L10.5 16"
-        stroke="var(--detail-arrow-fg, #1e293b)"
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeLinejoin="round"
+      <span
+        style={{
+          position: "absolute",
+          width: "87.5%",
+          height: "87.5%",
+          borderRadius: "50%",
+          backgroundColor: "var(--detail-arrow-bg, #d4dae2)",
+        }}
       />
-    </svg>
+      <span
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          backgroundColor: "var(--detail-arrow-fg, #1e293b)",
+          WebkitMaskImage: 'url("/icons/chevron-right.svg")',
+          maskImage: 'url("/icons/chevron-right.svg")',
+          WebkitMaskSize: "contain",
+          maskSize: "contain",
+          WebkitMaskRepeat: "no-repeat",
+          maskRepeat: "no-repeat",
+          WebkitMaskPosition: "center",
+          maskPosition: "center",
+        }}
+      />
+    </span>
   );
 }
 

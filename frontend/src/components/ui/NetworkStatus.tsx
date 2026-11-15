@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PublicIcon } from "@/components/ui/PublicIcon";
 import { useNetworkQuality, usePerformanceTier, type NetQuality } from "@/lib/network";
 import "./skeleton.css";
 
@@ -13,47 +14,11 @@ const MESSAGES = {
 } as const;
 
 function IosSpinner({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      width="19"
-      height="19"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <rect x="11" y="2" width="2" height="5.5" rx="1" opacity="1.0" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(30 12 12)" opacity="0.92" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(60 12 12)" opacity="0.84" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(90 12 12)" opacity="0.75" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(120 12 12)" opacity="0.67" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(150 12 12)" opacity="0.58" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(180 12 12)" opacity="0.50" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(210 12 12)" opacity="0.42" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(240 12 12)" opacity="0.33" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(270 12 12)" opacity="0.25" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(300 12 12)" opacity="0.17" />
-      <rect x="11" y="2" width="2" height="5.5" rx="1" transform="rotate(330 12 12)" opacity="0.08" />
-    </svg>
-  );
+  return <PublicIcon src="/icons/spinner.svg" size={19} className={className} />;
 }
 
 function CheckIcon() {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M4.5 10.5l3.6 3.6L15.5 6.8" />
-    </svg>
-  );
+  return <PublicIcon src="/icons/check.svg" size={18} />;
 }
 
 /**

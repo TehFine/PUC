@@ -84,6 +84,27 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+.pub-icon {
+  display: inline-block;
+  width: var(--pub-icon-size, 20px);
+  height: var(--pub-icon-size, 20px);
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  vertical-align: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+.spin {
+  animation: net-ios-spin 0.9s linear infinite;
+}
+
 /* Tắt độ trễ chạm kép trên di động để phản hồi bấm tức thì ở mọi nút/thẻ điều hướng */
 a,
 button,
@@ -575,7 +596,8 @@ body {
   transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
 }
 
-.dash-date-badge svg {
+.dash-date-badge svg,
+.dash-date-badge .pub-icon {
   color: var(--ink-soft);
   opacity: 0.75;
   flex-shrink: 0;
@@ -1036,7 +1058,7 @@ body {
 
 .filter-input:not([type="number"]):not([type="date"]) {
   padding-left: 38px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232c2c2e' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+  background-image: url("/icons/search-dark.svg");
   background-repeat: no-repeat;
   background-position: left 12px center;
   background-size: 16px 16px;
@@ -1048,7 +1070,7 @@ body {
   padding-right: 36px;
   color: var(--ink-soft);
   cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2314372f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("/icons/chevron-down-forest.svg");
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 15px;
@@ -1809,7 +1831,8 @@ input[type="date"].filter-select {
   line-height: 1.45;
   color: var(--text-muted);
 }
-.pp-privacy svg { flex: none; margin-top: 1px; }
+.pp-privacy svg,
+.pp-privacy .pub-icon { flex: none; margin-top: 1px; }
 
 .pp-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 
@@ -2871,6 +2894,7 @@ input[type="date"].filter-select {
   transition: background-color 0.16s ease, opacity 0.16s ease;
 }
 .modal-header button:not(.pt-drawer-back-btn) svg,
+.modal-header button:not(.pt-drawer-back-btn) .pub-icon,
 .modal-header button:not(.pt-drawer-back-btn) img {
   width: 20px;
   height: 20px;
@@ -2998,7 +3022,8 @@ input[type="date"].filter-select {
     flex-shrink: 0;
     transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
   }
-  .modal.pt-sheet.is-drawer .pt-drawer-back-btn svg {
+  .modal.pt-sheet.is-drawer .pt-drawer-back-btn svg,
+  .modal.pt-sheet.is-drawer .pt-drawer-back-btn .pub-icon {
     transition: transform 0.16s ease;
   }
   .modal.pt-sheet.is-drawer .pt-drawer-back-btn:hover {
@@ -3006,7 +3031,8 @@ input[type="date"].filter-select {
     border-color: #cbd5e1;
     color: #0f172a;
   }
-  .modal.pt-sheet.is-drawer .pt-drawer-back-btn:hover svg {
+  .modal.pt-sheet.is-drawer .pt-drawer-back-btn:hover svg,
+  .modal.pt-sheet.is-drawer .pt-drawer-back-btn:hover .pub-icon {
     transform: translateX(2px);
   }
   .modal.pt-sheet.is-drawer .pt-drawer-back-btn:active {
@@ -3086,7 +3112,7 @@ select.form-input {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 40px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2314372f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("/icons/chevron-down-forest.svg");
   background-repeat: no-repeat;
   background-position: right 14px center;
   background-size: 16px;
@@ -4071,7 +4097,8 @@ code {
     font-size: 11.5px;
     gap: 5px;
   }
-  .dash-date-badge svg {
+  .dash-date-badge svg,
+  .dash-date-badge .pub-icon {
     width: 12px;
     height: 12px;
   }

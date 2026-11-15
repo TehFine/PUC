@@ -4,12 +4,7 @@ import "./skeleton.css";
 type Size = number | string;
 const px = (value: Size) => (typeof value === "number" ? `${value}px` : value);
 
-const APPLE_BLADES = Array.from({ length: 12 }, (_, idx) => ({
-  angle: idx * 30,
-  opacity: Number((1 - idx * (0.9 / 12)).toFixed(2)),
-}));
-
-/** Con quay 12 nan chuẩn phong cách Apple (iOS / macOS Activity Indicator). */
+/** Con quay 12 nan chuẩn phong cách Apple (sử dụng `/icons/spinner.svg` từ `public/`). */
 export function AppleSpinner({
   size = 18,
   className = "",
@@ -18,27 +13,17 @@ export function AppleSpinner({
   className?: string;
 }) {
   return (
-    <svg
-      className={`sk-apple-spinner ${className}`.trim()}
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      fill="currentColor"
+    <span
+      className={`pub-icon sk-apple-spinner ${className}`.trim()}
+      style={
+        {
+          "--pub-icon-size": `${size}px`,
+          WebkitMaskImage: 'url("/icons/spinner.svg")',
+          maskImage: 'url("/icons/spinner.svg")',
+        } as CSSProperties
+      }
       aria-hidden="true"
-    >
-      {APPLE_BLADES.map(({ angle, opacity }) => (
-        <rect
-          key={angle}
-          x="11"
-          y="1.75"
-          width="2"
-          height="5.6"
-          rx="1"
-          transform={angle ? `rotate(${angle} 12 12)` : undefined}
-          opacity={opacity}
-        />
-      ))}
-    </svg>
+    />
   );
 }
 
