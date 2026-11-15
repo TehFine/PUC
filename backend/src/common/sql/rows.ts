@@ -14,6 +14,6 @@ export const todayVn = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/
 export const attachmentUrlSql = (column: string) =>
   `CASE WHEN ${column} IS NULL THEN NULL ELSE '/api/uploads/' || ${column} END`;
 
-/** Đường dẫn tải tệp công khai (ảnh bản tin, danh mục, ảnh đại diện hộ trên trang truy xuất). */
+/** Đường dẫn tải tệp công khai qua token ngẫu nhiên 20 ký tự (chống dò quét ID tuần tự). */
 export const publicAttachmentUrlSql = (column: string) =>
-  `CASE WHEN ${column} IS NULL THEN NULL ELSE '/api/public/files/' || ${column} END`;
+  `CASE WHEN ${column} IS NULL THEN NULL ELSE (SELECT '/api/public/files/' || a_pub.public_token FROM attachments a_pub WHERE a_pub.id = ${column}) END`;

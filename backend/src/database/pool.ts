@@ -5,7 +5,12 @@ types.setTypeParser(20, (value) => Number(value));
 types.setTypeParser(1700, (value) => Number.parseFloat(value));
 types.setTypeParser(1082, (value) => value);
 
-export function createPool(options: { url: string; ssl: boolean; sslRejectUnauthorized?: boolean }): Pool {
+export function createPool(options: {
+  url: string;
+  ssl: boolean;
+  sslRejectUnauthorized?: boolean;
+  sslCa?: string;
+}): Pool {
   const poolMax = Number(process.env.DB_POOL_MAX) || 4;
   const strictSsl =
     options.sslRejectUnauthorized ??
@@ -14,7 +19,12 @@ export function createPool(options: { url: string; ssl: boolean; sslRejectUnauth
       : process.env.NODE_ENV === "production");
   const pool = new Pool({
     connectionString: options.url,
-    ssl: options.ssl ? { rejectUnauthorized: strictSsl } : undefined,
+    ssl: options.ssl
+      ? {
+          rejectUnauthorized: strictSsl,
+          ...(options.sslCa ? { ca: options.sslCa } : {}),
+        }
+      : undefined,
     // Giới hạn tối đa 4 kết nối/tiến trình để khi chạy song song cả Render lẫn localhost
     // (hoặc khi nhiều truy vấn Promise.all chạy cùng lúc) không bao giờ vượt ngưỡng
     // pool_size: 15 của Supabase Session Mode (EMAXCONNSESSION). pg.Pool sẽ tự xếp hàng

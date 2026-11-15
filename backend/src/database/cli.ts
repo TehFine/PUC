@@ -19,6 +19,19 @@ async function main() {
       if (ran.length === 0) log("Không có migration mới.");
     } else if (command === "seed") {
       if (config.isProduction) throw new Error("Không được seed dữ liệu mẫu trên môi trường production.");
+      const dbHost = (() => {
+        try {
+          return new URL(config.database.url).hostname.toLowerCase();
+        } catch {
+          return "";
+        }
+      })();
+      const isLocalDb = dbHost === "localhost" || dbHost === "127.0.0.1" || dbHost === "::1" || dbHost === "[::1]";
+      if (!isLocalDb && process.env.ALLOW_REMOTE_SEED !== "true") {
+        throw new Error(
+          `Từ chối chạy seed trên máy chủ CSDL từ xa (${dbHost || "unknown"}). Nếu thực sự là CSDL thử nghiệm, đặt ALLOW_REMOTE_SEED=true.`,
+        );
+      }
       if (!config.seedPassword) {
         throw new Error("Cần đặt SEED_PASSWORD (tối thiểu 8 ký tự) để tạo mật khẩu cho tài khoản mẫu.");
       }

@@ -57,9 +57,15 @@ function toIsoDateText(val: unknown): string {
   return m ? m[1] : s;
 }
 
+function escapeLedgerPart(val: unknown): string {
+  return String(val ?? "")
+    .trim()
+    .replace(/\|/g, "%7C");
+}
+
 /**
  * Chuỗi chuẩn hóa khớp tuyệt đối 100% với hàm trigger PL/pgSQL `puc_compute_ledger_hash`
- * trong PostgreSQL (`017_transparency_field_audit_and_mass_balance.sql`).
+ * trong PostgreSQL (`019_security_hardening.sql`).
  */
 export function buildCanonicalLedgerPayload(input: LedgerHashInput): string {
   const prev = input.prevHash && input.prevHash.trim() ? input.prevHash.trim() : "GENESIS";
@@ -72,9 +78,9 @@ export function buildCanonicalLedgerPayload(input: LedgerHashInput): string {
       prev,
       String(input.householdId ?? 0),
       toIsoDateText(input.entryOn),
-      String(input.plotCode ?? "").trim().toUpperCase(),
-      String(input.activity ?? "").trim(),
-      String(input.recorder ?? "").trim(),
+      escapeLedgerPart(input.plotCode).toUpperCase(),
+      escapeLedgerPart(input.activity),
+      escapeLedgerPart(input.recorder),
       timeliness,
       epochSec,
     ].join("|");
@@ -86,11 +92,11 @@ export function buildCanonicalLedgerPayload(input: LedgerHashInput): string {
       prev,
       String(input.householdId ?? 0),
       toIsoDateText(input.sprayedOn),
-      String(input.plotCode ?? "").trim().toUpperCase(),
+      escapeLedgerPart(input.plotCode).toUpperCase(),
       String(input.pesticideId ?? 0),
-      String(input.dose ?? "").trim(),
+      escapeLedgerPart(input.dose),
       String(input.isolationDays ?? 0),
-      String(input.mrlStatus ?? "").trim(),
+      escapeLedgerPart(input.mrlStatus),
       timeliness,
       epochSec,
     ].join("|");
@@ -99,10 +105,10 @@ export function buildCanonicalLedgerPayload(input: LedgerHashInput): string {
   return [
     "MINUTE-V1",
     prev,
-    String(input.code ?? "").trim().toUpperCase(),
+    escapeLedgerPart(input.code).toUpperCase(),
     toIsoDateText(input.heldOn),
-    String(input.officer ?? "").trim(),
-    String(input.result ?? "").trim(),
+    escapeLedgerPart(input.officer),
+    escapeLedgerPart(input.result),
     timeliness,
     epochSec,
   ].join("|");

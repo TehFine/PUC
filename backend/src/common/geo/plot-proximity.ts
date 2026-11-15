@@ -206,7 +206,11 @@ export async function verifyPlotGpsProximity(
   const numLat = Number(lat);
   const numLng = Number(lng);
   const cleanCode = plotCode.trim();
-  const maxBufferMeters = Math.max(45, Math.min(100, Number(accuracyMeters ?? 45) || 45));
+  const requestedAccuracy =
+    accuracyMeters !== null && accuracyMeters !== undefined && Number.isFinite(Number(accuracyMeters))
+      ? Number(accuracyMeters)
+      : 45;
+  const maxBufferMeters = Math.min(50, Math.max(25, requestedAccuracy));
 
   const regPlots = await db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg");
   if (regPlots.rows[0]?.reg) {
@@ -269,11 +273,11 @@ export async function verifyPlotGpsProximity(
       }
       if (row.center_lat !== null && row.center_lng !== null) {
         const dist = Number(haversineMeters(numLat, numLng, Number(row.center_lat), Number(row.center_lng)).toFixed(1));
-        const insideApprox = dist <= 55;
+        const insideApprox = dist <= 25;
         return {
-          verified: dist <= 120,
+          verified: dist <= maxBufferMeters,
           insidePolygon: insideApprox,
-          distanceMeters: insideApprox ? 0 : Number(Math.max(0, dist - 55).toFixed(1)),
+          distanceMeters: insideApprox ? 0 : Number(Math.max(0, dist - 25).toFixed(1)),
           plotFound: true,
           centerLat: Number(row.center_lat),
           centerLng: Number(row.center_lng),

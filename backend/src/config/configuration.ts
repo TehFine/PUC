@@ -30,6 +30,10 @@ class EnvironmentVariables {
   @IsIn(["true", "false"])
   DATABASE_SSL_REJECT_UNAUTHORIZED?: string;
 
+  @IsOptional()
+  @IsString()
+  DATABASE_CA_CERT?: string;
+
   @IsString()
   @MinLength(32, { message: "JWT_ACCESS_SECRET cần tối thiểu 32 ký tự" })
   JWT_ACCESS_SECRET!: string;
@@ -80,7 +84,7 @@ export interface AppConfig {
   port: number;
   corsOrigins: string[];
   trustProxy: string[] | boolean | number;
-  database: { url: string; ssl: boolean; sslRejectUnauthorized: boolean };
+  database: { url: string; ssl: boolean; sslRejectUnauthorized: boolean; sslCa?: string };
   jwt: { accessSecret: string; accessTtlMin: number; refreshTtlDays: number };
   cookieSecure: boolean;
   seedPassword?: string;
@@ -108,6 +112,8 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const isProduction = env.NODE_ENV === NodeEnv.Production;
+  const rawTrustProxy = env.TRUST_PROXY?.trim();
+
   if (isProduction) {
     if (/change-me|example|htx_dev_password/i.test(env.JWT_ACCESS_SECRET) || new Set(env.JWT_ACCESS_SECRET).size < 10) {
       throw new Error(
@@ -119,9 +125,23 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
         "Cấu hình môi trường không hợp lệ:\n  - ALLOW_DEV_DEMO_LOGIN: Không được bật chế độ đăng nhập thử nghiệm khi NODE_ENV=production",
       );
     }
+    if (env.DATABASE_SSL_REJECT_UNAUTHORIZED === "false") {
+      throw new Error(
+        "Cấu hình môi trường không hợp lệ:\n  - DATABASE_SSL_REJECT_UNAUTHORIZED: Không được tắt kiểm tra chứng chỉ TLS CSDL khi NODE_ENV=production",
+      );
+    }
+    if (env.COOKIE_SECURE === "false") {
+      throw new Error(
+        "Cấu hình môi trường không hợp lệ:\n  - COOKIE_SECURE: Không được tắt cờ Secure của cookie phiên khi NODE_ENV=production",
+      );
+    }
+    if (rawTrustProxy === "true") {
+      throw new Error(
+        "Cấu hình môi trường không hợp lệ:\n  - TRUST_PROXY: Không được đặt 'true' mở toàn bộ trên production; hãy chỉ định số bước nhảy (ví dụ '1') hoặc dải IP proxy tin cậy",
+      );
+    }
   }
 
-  const rawTrustProxy = env.TRUST_PROXY?.trim();
   let trustProxy: string[] | boolean | number = ["loopback"];
   if (rawTrustProxy) {
     if (rawTrustProxy === "true") trustProxy = true;
@@ -135,9 +155,15 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     }
   }
 
+  const rawCa = env.DATABASE_CA_CERT?.trim();
+  const sslCa = rawCa
+    ? rawCa.includes("BEGIN CERTIFICATE")
+      ? rawCa.replace(/\\n/g, "\n")
+      : Buffer.from(rawCa, "base64").toString("utf8")
+    : undefined;
   const sslRejectUnauthorized = env.DATABASE_SSL_REJECT_UNAUTHORIZED
     ? env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
-    : isProduction;
+    : isProduction || Boolean(sslCa);
 
   return {
     nodeEnv: env.NODE_ENV,
@@ -149,6 +175,7 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
       url: env.DATABASE_URL,
       ssl: env.DATABASE_SSL === "true",
       sslRejectUnauthorized,
+      sslCa,
     },
     jwt: {
       accessSecret: env.JWT_ACCESS_SECRET,
