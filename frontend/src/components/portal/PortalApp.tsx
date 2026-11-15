@@ -73,25 +73,28 @@ const TABS: { id: PortalTabId; label: string; icon: LucideIcon }[] = [
   { id: "learn", label: "Kiến thức", icon: BookOpen },
 ];
 
-function resolveNotificationTarget(item: AppNotification): PortalTabId {
+function resolveNotificationTarget(item: AppNotification): { tab: PortalTabId; action?: PortalAction } {
   const kind = (item.kind || "").toLowerCase();
-  if (kind === "violation" || kind === "journal" || kind === "spray") return "diary";
-  if (kind === "harvest") return "stamps";
-  if (kind === "schedule" || kind === "lab") return "inspection";
-  if (kind === "training") return "learn";
-
   const link = (item.link || "").toLowerCase();
-  if (link.includes("plot")) return "plots";
-  if (link.includes("diary") || link.includes("journal") || link.includes("spray") || link.includes("violation")) {
-    return "diary";
+  if (kind === "protocol" || link.includes("view=protocol") || link.includes("care-protocol")) {
+    return { tab: "diary", action: "protocol-timeline" };
   }
-  if (link.includes("stamp") || link.includes("harvest")) return "stamps";
-  if (link.includes("inspect") || link.includes("lab") || link.includes("schedule")) {
-    return "inspection";
-  }
-  if (link.includes("learn") || link.includes("training")) return "learn";
+  if (kind === "violation" || kind === "journal" || kind === "spray") return { tab: "diary" };
+  if (kind === "harvest") return { tab: "stamps" };
+  if (kind === "schedule" || kind === "lab") return { tab: "inspection" };
+  if (kind === "training") return { tab: "learn" };
 
-  return "home";
+  if (link.includes("plot")) return { tab: "plots" };
+  if (link.includes("diary") || link.includes("journal") || link.includes("spray") || link.includes("violation")) {
+    return { tab: "diary" };
+  }
+  if (link.includes("stamp") || link.includes("harvest")) return { tab: "stamps" };
+  if (link.includes("inspect") || link.includes("lab") || link.includes("schedule")) {
+    return { tab: "inspection" };
+  }
+  if (link.includes("learn") || link.includes("training")) return { tab: "learn" };
+
+  return { tab: "home" };
 }
 
 function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onClose: () => void }) {
@@ -240,10 +243,11 @@ function PortalAppContent() {
   // để tab được dựng lại và nhận thao tác mới, kể cả khi đang ở đúng tab đó.
   const [intent, setIntent] = useState<{ action?: PortalAction; nonce: number }>({ nonce: 0 });
 
-  const navigate = useCallback((next: PortalTabId) => {
+  const navigate = useCallback((next: PortalTabId, action?: PortalAction) => {
     setNavWheelOpen(false);
-    // Điều hướng thông thường: bỏ thao tác cũ từ ô tìm kiếm để tab không tự mở lại biểu mẫu
-    setIntent((prev) => (prev.action ? { nonce: prev.nonce } : prev));
+    setIntent((prev) =>
+      action ? { action, nonce: prev.nonce + 1 } : prev.action ? { nonce: prev.nonce } : prev,
+    );
     startTransition(() => {
       setTab(next);
     });
@@ -539,7 +543,7 @@ function PortalAppContent() {
     }
     const target = resolveNotificationTarget(item);
     setNotifOpen(false);
-    navigate(target);
+    navigate(target.tab, target.action);
   };
 
   const handleMarkAllRead = async () => {
@@ -669,7 +673,12 @@ function PortalAppContent() {
           {tab === "diary" && <DiaryTab initialAction={intent.action} />}
           {tab === "stamps" && <StampsTab overview={overview} />}
           {tab === "inspection" && <InspectionTab />}
-          {tab === "learn" && <LearnTab initialAction={intent.action} />}
+          {tab === "learn" && (
+            <LearnTab
+              initialAction={intent.action}
+              onOpenTimeline={() => navigate("diary", "protocol-timeline")}
+            />
+          )}
           <SupportFooter onOpen={openSupport} />
         </div>
       </main>

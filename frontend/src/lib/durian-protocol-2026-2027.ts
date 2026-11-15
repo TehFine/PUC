@@ -39,12 +39,29 @@ export interface SenProRule {
 }
 
 export const HTX_PRICE_GUARANTEE_POLICY = {
-  badge: "Tiêu chuẩn bắt buộc HTX Cư Né - Niên vụ 2026–2027",
-  headline: "Tuân thủ quy trình chuẩn 2026–2027 — Bảo chứng thu mua đúng giá, giá cao",
+  badge: "Tiêu chuẩn bắt buộc HTX Cư Né - Niên vụ 2026-2027",
+  headline: "Tuân thủ quy trình chuẩn 2026-2027 để bảo chứng thu mua đúng giá, giá cao",
   desktopNote:
-    "Quy trình chăm sóc sầu riêng 2026–2027 là tài liệu kỹ thuật chuẩn dành cho người dân học tập và áp dụng khi tham gia Hợp tác xã Nông nghiệp Cư Né. Chỉ khi nhà vườn tuân thủ đúng phác đồ dinh dưỡng, điều tiết cơi đọt, thời gian cách ly và ghi chép nhật ký đầy đủ theo quy trình này, HTX mới đảm bảo chất lượng trái đạt chuẩn xuất khẩu để cam kết thu mua sản phẩm đúng giá, giá cao.",
+    "Áp dụng thống nhất cho nông hộ tham gia HTX Nông nghiệp Cư Né với 3 điều kiện nghiệm thu bắt buộc:",
   mobileNote:
-    "Tài liệu chuẩn bắt buộc khi tham gia HTX Cư Né — tuân thủ đúng quy trình và nhật ký giúp HTX bảo chứng chất lượng, đảm bảo thu mua đúng giá, giá cao.",
+    "Tuân thủ đúng phác đồ, ngày cách ly và nhật ký 8 giai đoạn để HTX cam kết thu mua đúng giá, giá cao.",
+  keyPoints: [
+    {
+      order: "01",
+      label: "Đúng phác đồ kỹ thuật",
+      text: "Bón dinh dưỡng, điều tiết cơi đọt và ngưng thuốc đủ ngày cách ly.",
+    },
+    {
+      order: "02",
+      label: "Đủ nhật ký điện tử",
+      text: "Ghi chép trung thực từng đợt chăm sóc theo 8 giai đoạn chuẩn của HTX.",
+    },
+    {
+      order: "03",
+      label: "Cam kết thu mua giá cao",
+      text: "Trái đạt chuẩn xuất khẩu được HTX nghiệm thu và thu mua đúng giá.",
+    },
+  ],
   pillars: [
     {
       title: "Đồng nhất mẫu mã & Lên cơm chuẩn",
@@ -414,7 +431,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
       "Kỹ thuật viên và nhà vườn kiểm tra trạng thái mầm đọt mũi giáo, hạt gạo và đuôi tôm để điều tiết đọt non đúng tỷ lệ",
     drawerObjectPosition: "center 48%",
     summary:
-      "Phác đồ kỹ thuật chuyên biệt điều tiết và già hóa đọt non bằng SenPro khi cây phóng đọt trùng giai đoạn nuôi bông hoặc nuôi trái non — chìa khóa chống cạnh tranh dinh dưỡng gây rụng trái, sượng cơm.",
+      "Phác đồ kỹ thuật chuyên biệt điều tiết và già hóa đọt non bằng SenPro khi cây phóng đọt trùng giai đoạn nuôi bông hoặc nuôi trái non, giúp chống cạnh tranh dinh dưỡng gây rụng trái và sượng cơm.",
     milestones: SENPRO_SHOOT_PROTOCOL.map((r) => ({
       treeState: `Đọt ${r.shootState}`,
       targetDay: `Tỷ lệ pha ${r.ratio}`,

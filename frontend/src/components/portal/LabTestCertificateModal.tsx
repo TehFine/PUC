@@ -195,6 +195,9 @@ export interface LabTestCertificateItem {
   result: "pass" | "fail" | string;
   lab: string;
   householdName?: string;
+  labAccreditationCode?: string | null;
+  externalVerifyCode?: string | null;
+  externalVerifyUrl?: string | null;
 }
 
 interface Props {
@@ -467,6 +470,23 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           </div>
 
           <div className="cert-toolbar-right">
+            {test.externalVerifyUrl && (
+              <a
+                href={test.externalVerifyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="cert-btn-action"
+                style={{ textDecoration: "none" }}
+                title={
+                  test.externalVerifyCode
+                    ? `Đối chiếu mã ${test.externalVerifyCode} trên cổng phòng kiểm nghiệm độc lập`
+                    : "Mở cổng tra cứu chéo của phòng kiểm nghiệm độc lập"
+                }
+              >
+                <span className="cert-btn-text-desktop">Cổng Lab độc lập</span>
+                <span className="cert-btn-text-mobile">Cổng Lab</span>
+              </a>
+            )}
             <button
               type="button"
               className="cert-btn-action"
@@ -533,7 +553,9 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                 <div className="cert-org-text">
                   <div className="cert-ministry">SỞ NÔNG NGHIỆP &amp; PHÁT TRIỂN NÔNG THÔN TỈNH ĐẮK LẮK</div>
                   <div className="cert-center-name">TRUNG TÂM KIỂM ĐỊNH &amp; KHẢO NGHIỆM CHẤT LƯỢNG NÔNG LÂM THỦY SẢN</div>
-                  <div className="cert-lab-branch">Phòng Hóa nghiệm &amp; Kiểm soát Dư lượng BVTV (ISO/IEC 17025:2017 - VILAS 238)</div>
+                  <div className="cert-lab-branch">
+                    Phòng Hóa nghiệm &amp; Kiểm soát Dư lượng BVTV ({test.labAccreditationCode || "ISO/IEC 17025:2017 - VILAS 238"})
+                  </div>
                 </div>
               </div>
 
@@ -903,9 +925,13 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
               </div>
 
               <div className="cert-security-hash">
-                <span>Mã bảo mật điện tử: </span>
-                <code>PUC-SHA256-{test.code}-CERT-OK</code>
-                <div>Xác thực trực tuyến tại Cổng Dịch vụ công Quốc gia: puc.mard.gov.vn</div>
+                <span>Mã tra cứu chứng thực: </span>
+                <code>{test.externalVerifyCode || `PUC-SHA256-${test.code}-CERT-OK`}</code>
+                <div>
+                  {test.externalVerifyUrl
+                    ? `Đối chiếu chéo độc lập tại: ${test.externalVerifyUrl}`
+                    : "Xác thực trực tuyến tại Cổng Dịch vụ công Quốc gia: puc.mard.gov.vn"}
+                </div>
               </div>
             </div>
           </div>

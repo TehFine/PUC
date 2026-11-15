@@ -17,9 +17,10 @@ async function renderSignboardPngBlob(
   plot: PortalPlot,
   householdName: string,
   qrDataUrl: string,
+  resolvedToken: string | null,
 ): Promise<Blob> {
-  const W = 1320;
-  const H = 840;
+  const W = 1360;
+  const H = 880;
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -28,85 +29,92 @@ async function renderSignboardPngBlob(
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("Không khởi tạo được bộ vẽ ảnh.");
 
-    // Nền trắng & khung viền xanh đậm
+    // Nền trắng & khung viền xanh đậm ngoài trời
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = "#14532d";
     ctx.lineWidth = 10;
     ctx.strokeRect(24, 24, W - 48, H - 48);
 
-    // Tiêu đề quốc hiệu & đơn vị
+    // Tiêu đề quốc hiệu, mô hình điểm cấp xã & 3 ngôn ngữ (VI / 中文 / EN)
     ctx.textAlign = "center";
     ctx.fillStyle = "#b91c1c";
-    ctx.font = "700 22px Arial, sans-serif";
-    ctx.fillText("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", W / 2, 86);
+    ctx.font = "700 20px Arial, sans-serif";
+    ctx.fillText("UBND XÃ CƯ NÉ - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK", W / 2, 78);
 
     ctx.fillStyle = "#14532d";
-    ctx.font = "800 26px Arial, sans-serif";
-    ctx.fillText("HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ – ĐẮK LẮK", W / 2, 124);
+    ctx.font = "800 24px Arial, sans-serif";
+    ctx.fillText("HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - KRÔNG BÚK, ĐẮK LẮK", W / 2, 114);
 
     ctx.fillStyle = "#0f172a";
-    ctx.font = "900 36px Arial, sans-serif";
-    ctx.fillText("BIỂN ĐỊNH DANH LÔ CANH TÁC SẦU RIÊNG", W / 2, 174);
+    ctx.font = "900 34px Arial, sans-serif";
+    ctx.fillText("BIỂN ĐỊNH DANH THỬA VƯỜN SẦU RIÊNG", W / 2, 160);
+
+    ctx.fillStyle = "#334155";
+    ctx.font = "700 20px Arial, sans-serif";
+    ctx.fillText("榴莲注册果园地块标识牌  /  REGISTERED DURIAN PARCEL SIGNBOARD", W / 2, 192);
 
     ctx.strokeStyle = "#14532d";
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(64, 200);
-    ctx.lineTo(W - 64, 200);
+    ctx.moveTo(64, 214);
+    ctx.lineTo(W - 64, 214);
     ctx.stroke();
 
-    // Hộp nổi bật Mã lô canh tác
+    // Hộp nổi bật Mã thửa canh tác
     ctx.fillStyle = "#ecfdf5";
-    ctx.fillRect(64, 230, 790, 68);
+    ctx.fillRect(64, 238, 804, 66);
     ctx.textAlign = "left";
     ctx.fillStyle = "#334155";
-    ctx.font = "700 24px Arial, sans-serif";
-    ctx.fillText("MÃ SỐ LÔ CANH TÁC:", 84, 273);
+    ctx.font = "700 22px Arial, sans-serif";
+    ctx.fillText("MÃ THỬA / 地块编号:", 82, 280);
     ctx.fillStyle = "#15803d";
     ctx.font = '900 32px Inter, -apple-system, "Segoe UI", Arial, sans-serif';
-    ctx.fillText(plot.code, 380, 275);
+    ctx.fillText(plot.code, 390, 282);
 
-    // Các dòng thông tin lô
+    // Các dòng thông tin song ngữ Việt - Trung phục vụ đoàn kiểm tra thực địa
+    const treePart = plot.treeCount && plot.treeCount > 0 ? ` (${plot.treeCount} cây / 株)` : "";
+    const quotaText =
+      plot.maxQuotaKg && plot.maxQuotaKg > 0
+        ? `${Number(plot.maxQuotaKg).toLocaleString("vi-VN")} kg / vụ`
+        : "Theo biên bản thẩm định đầu vụ";
     const parcelInfo =
       plot.parcel || plot.sheet
-        ? `Thửa ${plot.parcel || "—"}, Tờ ${plot.sheet || "—"}`
-        : String(plot.plantedYear || "2020");
+        ? `Thửa ${plot.parcel || "-"}, Tờ ${plot.sheet || "-"}`
+        : `Năm trồng ${plot.plantedYear || "2020"}`;
 
     const rows: [string, string, boolean][] = [
-      ["Mã số vùng trồng (PUC):", plot.zoneCode || "—", true],
-      ["Chủ hộ canh tác:", householdName, true],
-      ["Diện tích lô:", `${plot.areaHa} ha`, false],
-      ["Giống sầu riêng:", plot.variety || "Đô Na", false],
-      ["Số thửa / Tờ bản đồ:", parcelInfo, false],
-      ["Quy chuẩn áp dụng:", "VietGAP & Nghị định thư GACC", false],
+      ["Mã vùng PUC / 果园编码:", plot.zoneCode || "VN-DLOR-0086", true],
+      ["Chủ hộ / 农户代表:", householdName, true],
+      ["Quy mô / 面积与株数:", `${plot.areaHa} ha${treePart}`, false],
+      ["Trần sản lượng / 核定配额:", quotaText, true],
+      ["Giống / 榴莲品种:", plot.variety || "Monthong (Dona) & Ri6", false],
+      ["Địa chính / 地籍档案:", parcelInfo, false],
+      ["Quy chuẩn / 执行标准:", "VietGAP & Nghị định thư GACC (Sổ cái SHA-256)", false],
     ];
 
     let y = 350;
     for (const [label, val, bold] of rows) {
       ctx.fillStyle = "#475569";
-      ctx.font = "600 24px Arial, sans-serif";
+      ctx.font = "600 22px Arial, sans-serif";
       ctx.fillText(label, 68, y);
 
       ctx.fillStyle = "#0f172a";
-      ctx.font = `${bold ? "800" : "600"} 25px Arial, sans-serif`;
-      ctx.fillText(val, 380, y, 470);
-      y += 62;
+      ctx.font = `${bold ? "800" : "600"} 23px Arial, sans-serif`;
+      ctx.fillText(val, 390, y, 476);
+      y += 56;
     }
 
-    // Khung QR bên phải
-    const qrBoxX = 890;
-    const qrBoxY = 272;
-    const qrBoxW = 356;
-    const qrBoxH = 356;
+    // Khung QR chống giả mức Q bên phải
+    const qrBoxX = 906;
+    const qrBoxY = 246;
+    const qrBoxW = 382;
+    const qrBoxH = 448;
     ctx.fillStyle = "#f8fafc";
     ctx.fillRect(qrBoxX, qrBoxY, qrBoxW, qrBoxH);
-    ctx.save();
-    ctx.setLineDash([10, 8]);
-    ctx.strokeStyle = "#94a3b8";
+    ctx.strokeStyle = "#14532d";
     ctx.lineWidth = 3;
     ctx.strokeRect(qrBoxX, qrBoxY, qrBoxW, qrBoxH);
-    ctx.restore();
 
     if (qrDataUrl) {
       const qrImg = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -115,26 +123,45 @@ async function renderSignboardPngBlob(
         image.onerror = reject;
         image.src = qrDataUrl;
       });
-      ctx.drawImage(qrImg, qrBoxX + 28, qrBoxY + 28, 300, 300);
+      ctx.drawImage(qrImg, qrBoxX + 31, qrBoxY + 22, 320, 320);
     }
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#14532d";
+    ctx.font = "800 18px Arial, sans-serif";
+    ctx.fillText("QUÉT ĐỐI CHỨNG GPS TẠI VƯỜN", qrBoxX + qrBoxW / 2, qrBoxY + 372);
+    ctx.fillStyle = "#334155";
+    ctx.font = "700 16px Arial, sans-serif";
+    ctx.fillText("扫码核验果园边界与GPS定位", qrBoxX + qrBoxW / 2, qrBoxY + 398);
+    ctx.fillStyle = "#64748b";
+    ctx.font = "600 15px monospace";
+    ctx.fillText(
+      resolvedToken ? `/t/${resolvedToken}` : `/trace/${plot.code}`,
+      qrBoxX + qrBoxW / 2,
+      qrBoxY + 426,
+    );
 
     // Chân biển
     ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(64, 738);
-    ctx.lineTo(W - 64, 738);
+    ctx.moveTo(64, 766);
+    ctx.lineTo(W - 64, 766);
     ctx.stroke();
 
     ctx.textAlign = "left";
-    ctx.fillStyle = "#64748b";
-    ctx.font = "600 18px Arial, sans-serif";
-    ctx.fillText("Hệ thống truy xuất nguồn gốc nông sản CheckVN - Cục Bảo vệ Thực vật", 64, 778);
+    ctx.fillStyle = "#475569";
+    ctx.font = "600 17px Arial, sans-serif";
+    ctx.fillText(
+      "Liên thông dữ liệu vùng trồng Xã Cư Né - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)",
+      64,
+      808,
+    );
 
     ctx.textAlign = "right";
     ctx.fillStyle = "#b91c1c";
-    ctx.font = "800 18px Arial, sans-serif";
-    ctx.fillText("NGHIÊM CẤM TỰ Ý THAY ĐỔI BIỂN CẮM RANH GIỚI VÙNG TRỒNG", W - 64, 778);
+    ctx.font = "800 17px Arial, sans-serif";
+    ctx.fillText("NGHIÊM CẤM TỰ Ý DI DỜI BIỂN ĐỊNH DANH THỬA VƯỜN", W - 64, 808);
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("Không xuất được tệp ảnh PNG.");
@@ -147,25 +174,83 @@ async function renderSignboardPngBlob(
 
 export default function GardenSignboardModal({ plot, householdName, onClose }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [resolvedToken, setResolvedToken] = useState<string | null>(plot.qrToken ?? null);
+  const [resolvedTreeCount, setResolvedTreeCount] = useState<number | null>(plot.treeCount ?? null);
+  const [resolvedMaxQuotaKg, setResolvedMaxQuotaKg] = useState<number | null>(
+    plot.maxQuotaKg ?? null,
+  );
   const [downloadingPng, setDownloadingPng] = useState(false);
 
   useEffect(() => {
+    setResolvedToken(plot.qrToken ?? null);
+    setResolvedTreeCount(plot.treeCount ?? null);
+    setResolvedMaxQuotaKg(plot.maxQuotaKg ?? null);
+    if (plot.qrToken) return;
+
     let active = true;
-    const url = `${window.location.origin}/trace/${encodeURIComponent(plot.code)}`;
+    fetch(`/api/harvest/plot-signboards?q=${encodeURIComponent(plot.code)}`, {
+      credentials: "include",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then(
+        (
+          payload: {
+            data?: Array<{
+              plotCode: string;
+              qrToken?: string | null;
+              treeCount?: number | null;
+              maxQuotaKg?: number | null;
+            }>;
+          } | null,
+        ) => {
+          if (!active || !payload?.data) return;
+          const exact = payload.data.find(
+            (r) => r.plotCode.toUpperCase() === plot.code.toUpperCase(),
+          );
+          if (exact) {
+            if (exact.qrToken) setResolvedToken(exact.qrToken);
+            if (exact.treeCount) setResolvedTreeCount(exact.treeCount);
+            if (exact.maxQuotaKg) setResolvedMaxQuotaKg(exact.maxQuotaKg);
+          }
+        },
+      )
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [plot.code, plot.qrToken, plot.treeCount, plot.maxQuotaKg]);
+
+  useEffect(() => {
+    let active = true;
+    const pathPart = resolvedToken
+      ? `/t/${encodeURIComponent(resolvedToken)}`
+      : `/trace/${encodeURIComponent(plot.code)}`;
+    const url = `${window.location.origin}${pathPart}`;
     void QRCode.toDataURL(url, {
       margin: 1,
-      width: 320,
-      color: { dark: "#0f372a", light: "#ffffff" },
+      width: 340,
+      errorCorrectionLevel: "Q",
+      color: { dark: "#000000", light: "#ffffff" },
     }).then((res) => {
       if (active) setQrDataUrl(res);
     });
     return () => {
       active = false;
     };
-  }, [plot.code]);
+  }, [plot.code, resolvedToken]);
 
   const safeCode = (plot.code || "lo-vuon").replace(/[^a-zA-Z0-9-_]+/g, "-");
-  const traceHref = `/trace/${encodeURIComponent(plot.code)}`;
+  const traceHref = resolvedToken
+    ? `/t/${encodeURIComponent(resolvedToken)}`
+    : `/trace/${encodeURIComponent(plot.code)}`;
+
+  const enrichedPlot: PortalPlot = {
+    ...plot,
+    qrToken: resolvedToken,
+    treeCount: resolvedTreeCount,
+    maxQuotaKg: resolvedMaxQuotaKg,
+  };
 
   const handlePrint = () => {
     const previousTitle = document.title;
@@ -183,7 +268,12 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
     if (downloadingPng || !qrDataUrl) return;
     setDownloadingPng(true);
     try {
-      const blob = await renderSignboardPngBlob(plot, householdName, qrDataUrl);
+      const blob = await renderSignboardPngBlob(
+        enrichedPlot,
+        householdName,
+        qrDataUrl,
+        resolvedToken,
+      );
       triggerBlobDownload(blob, `Bien-cam-vuon-${safeCode}.png`);
     } catch {
       handlePrint();
@@ -194,14 +284,14 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
   return (
     <Sheet
-      title={`Biển cắm vườn – ${plot.code}`}
+      title={`Biển cắm vườn 3 ngôn ngữ - ${plot.code}`}
       onClose={onClose}
       className="pt-signboard-sheet"
     >
       <div className="signboard-sheet-content">
         <div className="signboard-toolbar no-print">
           <p className="signboard-note">
-            Bà con in biển này ra khổ A4 hoặc tải ảnh sắc nét gửi tiệm in ép plastic chống nước cắm tại đầu lô đất.
+            Biển 3 ngôn ngữ (Việt - Trung - Anh) tích hợp mã QR chống giả mức Q phục vụ đoàn công tác Tỉnh và đối tác thu mua quét đối chứng ranh giới GPS trực tiếp tại đầu thửa vườn.
           </p>
           <div className="signboard-action-btns">
             <button
@@ -226,51 +316,81 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
         </div>
 
         <div className="signboard-preview-wrap">
-          {/* Biển cắm vườn thực tế chuẩn CheckVN & Cục BVTV */}
+          {/* Biển cắm vườn 3 ngôn ngữ phục vụ thẩm định thực địa */}
           <div className="garden-signboard-plate">
             <div className="plate-top">
-              <div className="plate-flag">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
-              <div className="plate-org">HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ – ĐẮK LẮK</div>
-              <div className="plate-main-title">BIỂN ĐỊNH DANH LÔ CANH TÁC SẦU RIÊNG</div>
+              <div className="plate-flag">
+                UBND XÃ CƯ NÉ - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK
+              </div>
+              <div className="plate-org">
+                HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - KRÔNG BÚK, ĐẮK LẮK
+              </div>
+              <div className="plate-main-title">BIỂN ĐỊNH DANH THỬA VƯỜN SẦU RIÊNG</div>
+              <div
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  color: "#334155",
+                  marginTop: 3,
+                }}
+              >
+                榴莲注册果园地块标识牌 / REGISTERED DURIAN PARCEL SIGNBOARD
+              </div>
             </div>
 
             <div className="plate-grid">
               <div className="plate-info">
                 <div className="plate-row highlight-box">
-                  <span className="plate-lbl">MÃ SỐ LÔ CANH TÁC:</span>
+                  <span className="plate-lbl">MÃ THỬA / 地块编号:</span>
                   <strong className="plate-val big-code">{plot.code}</strong>
                 </div>
 
                 <div className="plate-row">
-                  <span className="plate-lbl">Mã số vùng trồng (PUC):</span>
-                  <strong className="plate-val">{plot.zoneCode || "—"}</strong>
+                  <span className="plate-lbl">Mã vùng PUC / 果园编码:</span>
+                  <strong className="plate-val">{plot.zoneCode || "VN-DLOR-0086"}</strong>
                 </div>
 
                 <div className="plate-row">
-                  <span className="plate-lbl">Chủ hộ canh tác:</span>
+                  <span className="plate-lbl">Chủ hộ / 农户代表:</span>
                   <strong className="plate-val">{householdName}</strong>
                 </div>
 
                 <div className="plate-row">
-                  <span className="plate-lbl">Diện tích lô:</span>
-                  <span className="plate-val">{plot.areaHa} ha</span>
-                </div>
-
-                <div className="plate-row">
-                  <span className="plate-lbl">Giống sầu riêng:</span>
-                  <span className="plate-val">{plot.variety || "Đô Na"}</span>
-                </div>
-
-                <div className="plate-row">
-                  <span className="plate-lbl">Số thửa / Tờ bản đồ:</span>
+                  <span className="plate-lbl">Quy mô / 面积与株数:</span>
                   <span className="plate-val">
-                    {plot.parcel || plot.sheet ? `Thửa ${plot.parcel || "—"}, Tờ ${plot.sheet || "—"}` : (plot.plantedYear || "2020")}
+                    {plot.areaHa} ha
+                    {resolvedTreeCount && resolvedTreeCount > 0
+                      ? ` (${resolvedTreeCount} cây / 株)`
+                      : ""}
                   </span>
                 </div>
 
                 <div className="plate-row">
-                  <span className="plate-lbl">Quy chuẩn áp dụng:</span>
-                  <span className="plate-val">VietGAP &amp; Nghị định thư GACC</span>
+                  <span className="plate-lbl">Trần sản lượng / 核定配额:</span>
+                  <strong className="plate-val">
+                    {resolvedMaxQuotaKg && resolvedMaxQuotaKg > 0
+                      ? `${Number(resolvedMaxQuotaKg).toLocaleString("vi-VN")} kg / vụ`
+                      : "Theo biên bản thẩm định đầu vụ"}
+                  </strong>
+                </div>
+
+                <div className="plate-row">
+                  <span className="plate-lbl">Giống / 榴莲品种:</span>
+                  <span className="plate-val">{plot.variety || "Monthong (Dona) & Ri6"}</span>
+                </div>
+
+                <div className="plate-row">
+                  <span className="plate-lbl">Địa chính / 地籍档案:</span>
+                  <span className="plate-val">
+                    {plot.parcel || plot.sheet
+                      ? `Thửa ${plot.parcel || "-"}, Tờ ${plot.sheet || "-"}`
+                      : `Năm trồng ${plot.plantedYear || "2020"}`}
+                  </span>
+                </div>
+
+                <div className="plate-row">
+                  <span className="plate-lbl">Quy chuẩn / 执行标准:</span>
+                  <span className="plate-val">VietGAP &amp; GACC (Sổ cái SHA-256)</span>
                 </div>
               </div>
 
@@ -279,8 +399,8 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
                 target="_blank"
                 rel="noopener noreferrer"
                 className="plate-qr-box plate-qr-link"
-                title={`Bấm vào mã QR để mở trang truy xuất nguồn gốc lô ${plot.code}`}
-                aria-label={`Bấm vào mã QR để mở trang truy xuất nguồn gốc lô ${plot.code}`}
+                title={`Bấm vào mã QR để mở trang truy xuất nguồn gốc thửa ${plot.code}`}
+                aria-label={`Bấm vào mã QR để mở trang truy xuất nguồn gốc thửa ${plot.code}`}
               >
                 {qrDataUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -288,12 +408,39 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
                 ) : (
                   <div className="plate-qr-skeleton" />
                 )}
+                <span
+                  style={{
+                    marginTop: 7,
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    color: "#14532d",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  QUÉT ĐỐI CHỨNG GPS TẠI VƯỜN
+                  <br />
+                  扫码核验果园边界与GPS定位
+                </span>
+                <span
+                  style={{
+                    marginTop: 3,
+                    fontSize: 9.5,
+                    fontFamily: "monospace",
+                    color: "#64748b",
+                  }}
+                >
+                  {resolvedToken ? `/t/${resolvedToken}` : `/trace/${plot.code}`}
+                </span>
               </a>
             </div>
 
             <div className="plate-bottom">
-              <span>Hệ thống truy xuất nguồn gốc nông sản CheckVN - Cục Bảo vệ Thực vật</span>
-              <span className="protect-warning">NGHIÊM CẤM TỰ Ý THAY ĐỔI BIỂN CẮM RANH GIỚI VÙNG TRỒNG</span>
+              <span>
+                Liên thông dữ liệu vùng trồng Xã Cư Né - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)
+              </span>
+              <span className="protect-warning">
+                NGHIÊM CẤM TỰ Ý DI DỜI BIỂN ĐỊNH DANH THỬA VƯỜN
+              </span>
             </div>
           </div>
         </div>

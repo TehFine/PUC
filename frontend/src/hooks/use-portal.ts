@@ -96,6 +96,7 @@ export type PortalKey =
   | "overview"
   | "profile"
   | "plots"
+  | "care-protocol"
   | "journal"
   | "spray"
   | "lab-tests"

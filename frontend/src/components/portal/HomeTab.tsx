@@ -7,6 +7,7 @@ import { daysSince, HOUSEHOLD_STATUS, relativeDayLabel, SCHEDULE_KIND } from "@/
 import { formatDate } from "@/utils/format";
 import type { PortalList, PortalOverview, PortalReminder, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
+import type { PortalAction } from "./PortalSearch";
 import { SectionDivider, StateBlock } from "./ui";
 
 function getScheduleKicker(item: PortalScheduleItem): string {
@@ -38,6 +39,7 @@ interface ActionItem {
   title: string;
   detail?: string | null;
   to: PortalTabId;
+  action?: "protocol-timeline";
 }
 
 function getConciseViolationTitle(v?: PortalViolation | null, count = 1, isDiaryIdle = false): string {
@@ -68,6 +70,10 @@ function normalizeReminderTab(tab: string): PortalTabId {
 function getConciseReminderTitle(rem: PortalReminder): string {
   const raw = (rem.title || "").trim();
   const lower = raw.toLowerCase();
+
+  if (rem.kind === "protocol") {
+    return raw || "Đến lịch chăm sóc theo quy trình";
+  }
 
   if (rem.kind === "journal") {
     return "Chưa ghi nhật ký 7 ngày";
@@ -120,9 +126,11 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
         id: `${rem.kind}-${idx}`,
         title: getConciseReminderTitle(rem),
         detail: rem.detail,
-        to: rem.kind === "violation" || rem.kind === "journal" || rem.kind === "isolation"
-          ? "diary"
-          : normalizeReminderTab(rem.tab),
+        to:
+          rem.kind === "protocol" || rem.kind === "violation" || rem.kind === "journal" || rem.kind === "isolation"
+            ? "diary"
+            : normalizeReminderTab(rem.tab),
+        action: rem.kind === "protocol" ? ("protocol-timeline" as const) : undefined,
       }));
   }
 
@@ -168,7 +176,7 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
 export default function HomeTab({
   onNavigate,
 }: {
-  onNavigate: (tab: PortalTabId) => void;
+  onNavigate: (tab: PortalTabId, action?: PortalAction) => void;
 }) {
   const overview = usePortal<PortalOverview>("overview");
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
@@ -202,8 +210,8 @@ export default function HomeTab({
         };
   const pucCode = household.code ? household.code.replace(/-(?:H|T)\d+$/i, "") : "—";
 
-  const handleActionClick = (target: PortalTabId) => {
-    onNavigate(target);
+  const handleActionClick = (target: PortalTabId, action?: PortalAction) => {
+    onNavigate(target, action);
   };
 
   return (
@@ -327,11 +335,11 @@ export default function HomeTab({
                     role="button"
                     tabIndex={0}
                     className="pt-widget-item pt-reminder-item"
-                    onClick={() => handleActionClick(item.to)}
+                    onClick={() => handleActionClick(item.to, item.action)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        handleActionClick(item.to);
+                        handleActionClick(item.to, item.action);
                       }
                     }}
                   >

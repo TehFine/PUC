@@ -19,6 +19,7 @@ import type {
   PortalViolation,
 } from "@/types/portal";
 import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
+import CareProtocolTimeline from "./CareProtocolTimeline";
 import type { PortalAction } from "./PortalSearch";
 import { Card, EmptyState, Field, Pill, SectionDivider, SegmentedTabs, Sheet, StateBlock, useSheetClose } from "./ui";
 
@@ -48,6 +49,15 @@ function addIsoDays(isoDate: string, days: number): string | null {
   return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 }
 
+function diffDaysFromToday(isoDate: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
+  const tm = /^(\d{4})-(\d{2})-(\d{2})/.exec(todayIso());
+  if (!m || !tm) return 0;
+  const targetUtc = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const nowUtc = Date.UTC(Number(tm[1]), Number(tm[2]) - 1, Number(tm[3]));
+  return Math.round((nowUtc - targetUtc) / (24 * 60 * 60 * 1000));
+}
+
 function JournalForm({
   plotCodes,
   onDone,
@@ -64,6 +74,7 @@ function JournalForm({
   const [plotCode, setPlotCode] = useState(plotCodes[0] ?? "");
   const [activity, setActivity] = useState(JOURNAL_ACTIVITIES[0]);
   const [detail, setDetail] = useState("");
+  const [lateReason, setLateReason] = useState("");
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
@@ -72,6 +83,8 @@ function JournalForm({
   const [error, setError] = useState<string | null>(null);
 
   const effectivePlot = plotCode || plotCodes[0] || "";
+  const minBackdateIso = addIsoDays(todayIso(), -7) ?? undefined;
+  const isLateOver48h = diffDaysFromToday(entryOn) > 2;
 
   const getGps = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -130,6 +143,7 @@ function JournalForm({
         photoId,
         latitude: coords?.latitude,
         longitude: coords?.longitude,
+        lateReason: isLateOver48h && lateReason.trim() ? lateReason.trim() : undefined,
       };
       await api.post<PortalJournalEntry>("/portal/journal", body);
       invalidatePortal("journal", "spray", "violations", "overview");
@@ -148,6 +162,7 @@ function JournalForm({
             id="pj-date"
             type="date"
             className="pt-input-date"
+            min={minBackdateIso}
             max={todayIso()}
             value={entryOn}
             onChange={(e) => setEntryOn(e.target.value)}
@@ -179,6 +194,22 @@ function JournalForm({
           )}
         </Field>
       </div>
+
+      <p className="pt-hint" style={{ marginTop: -4 }}>
+        Sổ cái chống sửa lùi ngày: chỉ cho phép ghi bổ sung tối đa 7 ngày gần nhất và tự động niêm phong mã băm SHA-256 trên máy chủ.
+      </p>
+
+      {isLateOver48h && (
+        <Field label="Lý do ghi bổ sung sau 48 giờ" htmlFor="pj-late-reason">
+          <input
+            id="pj-late-reason"
+            maxLength={250}
+            placeholder="Ví dụ: Vườn xa mất sóng 4G nên về nhà mới tải ảnh lên..."
+            value={lateReason}
+            onChange={(e) => setLateReason(e.target.value)}
+          />
+        </Field>
+      )}
 
       <Field label="Công việc canh tác" htmlFor="pj-activity">
         <select
@@ -312,11 +343,14 @@ function SprayForm({
   const [areaHa, setAreaHa] = useState(defaultPlotArea);
   const [areaTouched, setAreaTouched] = useState(false);
   const [source, setSource] = useState("");
+  const [lateReason, setLateReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const effectivePlot = plotCode ?? defaultPlotCode;
   const chosen = pesticides.rows.find((item) => String(item.id) === pesticideId);
+  const minBackdateIso = addIsoDays(todayIso(), -7) ?? undefined;
+  const isLateOver48h = diffDaysFromToday(sprayedOn) > 2;
 
   const handlePlotChange = (nextCode: string) => {
     setPlotCode(nextCode);
@@ -348,6 +382,7 @@ function SprayForm({
         areaHa: Number(areaHa),
         source: source.trim() || undefined,
         plotCode: effectivePlot.trim() || undefined,
+        lateReason: isLateOver48h && lateReason.trim() ? lateReason.trim() : undefined,
       };
       await api.post("/portal/spray", body);
       invalidatePortal("journal", "spray", "violations", "overview");
@@ -366,6 +401,7 @@ function SprayForm({
             id="ps-date"
             type="date"
             className="pt-input-date"
+            min={minBackdateIso}
             max={todayIso()}
             value={sprayedOn}
             onChange={(e) => setSprayedOn(e.target.value)}
@@ -396,6 +432,22 @@ function SprayForm({
           )}
         </Field>
       </div>
+      <p className="pt-hint" style={{ marginTop: -4 }}>
+        Sổ cái chống sửa lùi ngày: chỉ cho phép khai báo phun thuốc trong vòng 7 ngày gần nhất và tự động khóa thu hái theo thời gian cách ly PHI.
+      </p>
+
+      {isLateOver48h && (
+        <Field label="Lý do khai báo phun thuốc sau 48 giờ" htmlFor="ps-late-reason">
+          <input
+            id="ps-late-reason"
+            maxLength={250}
+            placeholder="Ví dụ: Vườn trên đồi mất mạng di động nên cập nhật bù..."
+            value={lateReason}
+            onChange={(e) => setLateReason(e.target.value)}
+          />
+        </Field>
+      )}
+
       <Field label="Loại thuốc" htmlFor="ps-pesticide">
         <select id="ps-pesticide" value={pesticideId} onChange={(e) => setPesticideId(e.target.value)} required>
           <option value="" disabled>
@@ -481,7 +533,8 @@ function SprayForm({
   );
 }
 
-type View = "journal" | "spray";
+type View = "protocol" | "journal" | "spray";
+type FormKind = "journal" | "spray";
 
 interface VietgapRule {
   id: string;
@@ -564,6 +617,7 @@ function JournalDetailModal({
             <span className="pt-detail-badge-plot">Thửa {entry.plotCode}</span>
             <span className="pt-detail-date">{formatDate(entry.entryOn)}</span>
             {entry.photoUrl && <Pill tone="green">Có ảnh hiện trường</Pill>}
+            {entry.isLateEntry ? <Pill tone="gold">Ghi bổ sung (&gt;48h)</Pill> : <Pill tone="green">Đúng hạn thời gian thực</Pill>}
           </div>
         </div>
       </div>
@@ -598,11 +652,48 @@ function JournalDetailModal({
             aria-hidden="true"
           />
           <div>
-            <div className="pt-detail-gps-title">Tọa độ GPS thực địa</div>
-            <div className="pt-detail-gps-coords">
+            <div className="pt-detail-gps-title">
+              Tọa độ GPS thực địa{entry.gpsVerified ? " - Khớp ranh giới GIS thửa vườn" : ""}
+            </div>
+            <div className="pt-detail-gps-coords" style={{ fontVariantNumeric: "tabular-nums" }}>
               {lat.toFixed(5)}, {lng.toFixed(5)}
+              {!entry.gpsVerified && entry.gpsDistanceM != null
+                ? ` (cách ranh giới ${Math.round(Number(entry.gpsDistanceM))} m)`
+                : ""}
             </div>
           </div>
+        </div>
+      )}
+
+      {entry.recordHash && (
+        <div
+          style={{
+            padding: "10px 12px",
+            background: "#f8fafc",
+            border: "1px solid #cbd5e1",
+            borderRadius: 10,
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#14532d" }}>
+            Niêm phong sổ cái chuỗi băm SHA-256 (Chống sửa lùi ngày)
+          </div>
+          <code
+            style={{
+              display: "block",
+              fontSize: 11,
+              color: "#334155",
+              marginTop: 3,
+              wordBreak: "break-all",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {entry.recordHash}
+          </code>
+          {entry.lateReason && (
+            <div style={{ fontSize: 11.5, color: "#92400e", marginTop: 4 }}>
+              Lý do ghi bổ sung: {entry.lateReason}
+            </div>
+          )}
         </div>
       )}
 
@@ -714,6 +805,7 @@ function SprayDetailModal({
             {inIsolation && <Pill tone="gold">Còn cách ly {remainingPhiDays} ngày</Pill>}
             {isRestricted && <Pill tone="gold">Hạn chế</Pill>}
             {isBanned && <Pill tone="red">Thuốc cấm</Pill>}
+            {record.isLateEntry ? <Pill tone="gold">Ghi bổ sung (&gt;48h)</Pill> : <Pill tone="green">Đúng hạn thời gian thực</Pill>}
           </div>
         </div>
       </div>
@@ -749,6 +841,38 @@ function SprayDetailModal({
           </p>
         </div>
       </div>
+
+      {record.recordHash && (
+        <div
+          style={{
+            padding: "10px 12px",
+            background: "#f8fafc",
+            border: "1px solid #cbd5e1",
+            borderRadius: 10,
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#14532d" }}>
+            Niêm phong sổ cái chuỗi băm SHA-256 (Chống sửa lùi ngày)
+          </div>
+          <code
+            style={{
+              display: "block",
+              fontSize: 11,
+              color: "#334155",
+              marginTop: 3,
+              wordBreak: "break-all",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {record.recordHash}
+          </code>
+          {record.lateReason && (
+            <div style={{ fontSize: 11.5, color: "#92400e", marginTop: 4 }}>
+              Lý do khai báo bổ sung: {record.lateReason}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className={`pt-detail-compliance-box ${isPass && !isBanned ? "is-safe" : "is-warning"}`}>
         <div className="pt-detail-compliance-title">
@@ -883,11 +1007,13 @@ function ViolationResponseForm({
 }
 
 export default function DiaryTab({ initialAction }: { initialAction?: PortalAction } = {}) {
-  // Mở sẵn đúng màn hình khi bà con chọn gợi ý từ ô tìm kiếm
-  const [view, setView] = useState<View>(() =>
-    initialAction === "spray-add" || initialAction === "spray-list" ? "spray" : "journal",
-  );
-  const [form, setForm] = useState<View | null>(() =>
+  // Mở sẵn đúng màn hình khi bà con chọn gợi ý từ ô tìm kiếm hoặc thông báo nhắc lịch
+  const [view, setView] = useState<View>(() => {
+    if (initialAction === "spray-add" || initialAction === "spray-list") return "spray";
+    if (initialAction === "journal-add" || initialAction === "journal-list") return "journal";
+    return "protocol";
+  });
+  const [form, setForm] = useState<FormKind | null>(() =>
     initialAction === "journal-add" ? "journal" : initialAction === "spray-add" ? "spray" : null,
   );
   const [selectedJournal, setSelectedJournal] = useState<PortalJournalEntry | null>(null);
@@ -995,34 +1121,58 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
       <SectionDivider />
 
       <SegmentedTabs ariaLabel="Loại nhật ký" activeKey={view} className="pt-diary-segmented">
-        <button type="button" role="tab" aria-selected={view === "journal"} className={view === "journal" ? "active" : ""} onClick={() => setView("journal")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "protocol"}
+          className={view === "protocol" ? "active" : ""}
+          onClick={() => setView("protocol")}
+        >
+          Lộ trình 2026-2027
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "journal"}
+          className={view === "journal" ? "active" : ""}
+          onClick={() => setView("journal")}
+        >
           Canh tác
         </button>
-        <button type="button" role="tab" aria-selected={view === "spray"} className={view === "spray" ? "active" : ""} onClick={() => setView("spray")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "spray"}
+          className={view === "spray" ? "active" : ""}
+          onClick={() => setView("spray")}
+        >
           Phun thuốc
         </button>
       </SegmentedTabs>
 
-      <div className="pt-grid-2">
-        <section
-          className="pt-reminders-widget pt-diary-widget"
-          aria-label={view === "journal" ? "Nhật ký canh tác" : "Nhật ký phun thuốc"}
-        >
-          <div className="pt-widget-topbar">
-            <div className="pt-widget-topbar-info">
-              <h2 className="pt-widget-topbar-title">
-                {view === "journal" ? "Nhật ký" : "Phun thuốc"}
-              </h2>
+      {view === "protocol" ? (
+        <CareProtocolTimeline />
+      ) : (
+        <div className="pt-grid-2">
+          <section
+            className="pt-reminders-widget pt-diary-widget"
+            aria-label={view === "journal" ? "Nhật ký canh tác" : "Nhật ký phun thuốc"}
+          >
+            <div className="pt-widget-topbar">
+              <div className="pt-widget-topbar-info">
+                <h2 className="pt-widget-topbar-title">
+                  {view === "journal" ? "Nhật ký" : "Phun thuốc"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="pt-widget-topbar-btn is-primary"
+                onClick={() => setForm(view === "journal" ? "journal" : "spray")}
+                title="Thêm ghi chép mới"
+              >
+                Thêm mới
+              </button>
             </div>
-            <button
-              type="button"
-              className="pt-widget-topbar-btn is-primary"
-              onClick={() => setForm(view)}
-              title="Thêm ghi chép mới"
-            >
-              Thêm mới
-            </button>
-          </div>
 
           <div className="pt-widget-sheet">
             <StateBlock loading={active.loading} error={active.error} />
@@ -1134,6 +1284,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
           </div>
         </section>
       </div>
+      )}
 
       {form === "journal" && (
         <Sheet title="Ghi nhật ký canh tác" onClose={() => setForm(null)}>

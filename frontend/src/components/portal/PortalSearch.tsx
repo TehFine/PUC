@@ -17,7 +17,9 @@ import { DrawerSummaryFooter, Sheet, useSheetClose } from "./ui";
 
 /** Thao tác cụ thể bên trong một tab (tab tự mở đúng màn hình / biểu mẫu khi nhận được). */
 export type PortalAction =
+  | "protocol-timeline"
   | "journal-add"
+  | "journal-list"
   | "spray-add"
   | "spray-list"
   | "harvest-lots"
@@ -47,6 +49,14 @@ interface SearchEntry {
 
 const ENTRIES: SearchEntry[] = [
   {
+    id: "protocol-timeline",
+    title: "Lộ trình chăm sóc 2026-2027 & khai báo giai đoạn",
+    where: "Nhật ký › Lộ trình 2026-2027",
+    keywords: "lo trinh timeline quy trinh cham soc giai doan khai bao anh hoa don thuoc phan bon senpro 2026 2027",
+    target: { kind: "tab", tab: "diary", action: "protocol-timeline" },
+    popular: true,
+  },
+  {
     id: "journal-add",
     title: "Ghi nhật ký canh tác",
     where: "Nhật ký › Canh tác",
@@ -65,9 +75,9 @@ const ENTRIES: SearchEntry[] = [
   {
     id: "journal-list",
     title: "Xem nhật ký đã ghi",
-    where: "Nhật ký",
+    where: "Nhật ký › Canh tác",
     keywords: "xem lich su nhat ky da ghi danh sach xoa sua",
-    target: { kind: "tab", tab: "diary" },
+    target: { kind: "tab", tab: "diary", action: "journal-list" },
   },
   {
     id: "spray-list",

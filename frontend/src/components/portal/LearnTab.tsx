@@ -2944,7 +2944,7 @@ export function CareProtocolDetailModal({
   );
 }
 
-export function CareProtocol2026List() {
+export function CareProtocol2026List({ onOpenTimeline }: { onOpenTimeline?: () => void }) {
   const [query, setQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState<"all" | ProtocolGroup>("all");
   const [selectedStage, setSelectedStage] = useState<DurianProtocolStage | null>(null);
@@ -2976,10 +2976,15 @@ export function CareProtocol2026List() {
 
   return (
     <section className="pt-pest-section" aria-labelledby="protocol-2026-heading">
-      <div className="pt-pest-header">
+      <div className="pt-pest-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <h2 id="protocol-2026-heading" className="pt-pest-title">
-          Khuyến nghị quy trình chăm sóc sầu riêng chuẩn 2026–2027
+          Khuyến nghị quy trình chăm sóc sầu riêng chuẩn 2026-2027
         </h2>
+        {onOpenTimeline && (
+          <button type="button" className="pt-btn pt-btn-primary pt-btn-sm" onClick={onOpenTimeline}>
+            Mở lộ trình &amp; khai báo theo thửa vườn
+          </button>
+        )}
       </div>
 
       <div className="pt-pest-wrap">
@@ -3160,8 +3165,14 @@ const LEARN_VIEW_BY_ACTION: Partial<Record<PortalAction, View>> = {
   "learn-diseases": "diseases",
 };
 
-export default function LearnTab({ initialAction }: { initialAction?: PortalAction } = {}) {
-  // Mở sẵn Quy trình chăm sóc chuẩn 2026–2027 làm mặc định (hoặc mở đúng mục từ thanh tìm kiếm)
+export default function LearnTab({
+  initialAction,
+  onOpenTimeline,
+}: {
+  initialAction?: PortalAction;
+  onOpenTimeline?: () => void;
+} = {}) {
+  // Mở sẵn Quy trình chăm sóc chuẩn 2026-2027 làm mặc định (hoặc mở đúng mục từ thanh tìm kiếm)
   const [view, setView] = useState<View>(() => (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) || "protocol");
   const items: { id: View; label: string }[] = [
     { id: "protocol", label: "Quy trình chăm sóc" },
@@ -3187,7 +3198,7 @@ export default function LearnTab({ initialAction }: { initialAction?: PortalActi
           </button>
         ))}
       </SegmentedTabs>
-      {view === "protocol" && <CareProtocol2026List />}
+      {view === "protocol" && <CareProtocol2026List onOpenTimeline={onOpenTimeline} />}
       {view === "pesticides" && <PesticideList />}
       {view === "fertilizers" && <FertilizerList />}
       {view === "varieties" && <VarietyList />}
