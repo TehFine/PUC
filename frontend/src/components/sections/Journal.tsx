@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ShareBar } from "@/components/ui/charts/KpiCharts";
 import { useApi, useApiList } from "@/hooks/use-api";
 import BlockState from "@/components/admin/shared/BlockState";
+import {
+  ADMIN_JOURNAL_TAB_EVENT,
+  consumePendingJournalTab,
+  type AdminJournalTabId,
+} from "@/components/admin/shared/counts-events";
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
 import Pagination from "@/components/admin/shared/Pagination";
 import TabBar, { type TabItem } from "@/components/admin/shared/TabBar";
@@ -14,6 +19,7 @@ import { badgeOf, MRL_STATUS, optionsOf, SEVERITY, VIOLATION_STATUS } from "@/co
 import { useHouseholdOptions, usePesticideOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
 import { getZoneColor } from "@/components/zones/zone-data";
+import CareProtocolAdminTab from "@/components/admin/journal/CareProtocolAdminTab";
 import { JournalDetailModal, JournalFormModal } from "@/components/admin/journal/JournalModals";
 import SprayFormModal from "@/components/admin/journal/SprayFormModal";
 import {
@@ -22,10 +28,11 @@ import {
   ViolationResolveModal,
 } from "@/components/admin/journal/ViolationModals";
 import { formatDate } from "@/utils/format";
+import type { AdminCareProtocolListResponse } from "@/types/care-protocol";
 import type { DashboardSummary } from "@/types/dashboard";
 import type { JournalRow, SprayRow, ViolationRow } from "@/types/journal";
 
-type Tab = "journal" | "violations" | "spray";
+type Tab = AdminJournalTabId;
 const PAGE_SIZE = 25;
 
 const SEVERITY_OPTIONS = optionsOf(SEVERITY);
@@ -48,7 +55,26 @@ export default function Journal() {
   const canUpdateSpray = can("spray", "update");
   const canDeleteSpray = can("spray", "delete");
 
-  const [tab, setTab] = useState<Tab>("journal");
+  const [tab, setTab] = useState<Tab>(() => {
+    const pending = consumePendingJournalTab();
+    if (pending) return pending;
+    if (typeof window !== "undefined") {
+      const qTab = new URLSearchParams(window.location.search).get("tab");
+      if (qTab === "protocol" || qTab === "journal" || qTab === "violations" || qTab === "spray") {
+        return qTab;
+      }
+    }
+    return "protocol";
+  });
+
+  useEffect(() => {
+    const onTab = (event: Event) => {
+      const next = (event as CustomEvent<Tab>).detail;
+      if (next) setTab(next);
+    };
+    window.addEventListener(ADMIN_JOURNAL_TAB_EVENT, onTab);
+    return () => window.removeEventListener(ADMIN_JOURNAL_TAB_EVENT, onTab);
+  }, []);
 
   // Modals for Spray (khai báo sớm để chỉ tải danh mục thuốc BVTV khi cần mở biểu mẫu)
   const [editingSpray, setEditingSpray] = useState<SprayRow | "new" | null>(null);
@@ -58,8 +84,9 @@ export default function Journal() {
   const { households, options: householdOptions } = useHouseholdOptions();
   const { pesticides, options: pesticideOptions } = usePesticideOptions(Boolean(editingSpray));
 
-  // Dashboard summary for real KPIs
+  // Dashboard summary & protocol KPIs
   const { data: summary, refresh: refreshSummary } = useApi<DashboardSummary>("/dashboard/summary");
+  const protocolOverview = useApi<AdminCareProtocolListResponse>("/care-protocol");
 
   // Filters & pagination for Journal
   const [jSearch, setJSearch] = useState("");
@@ -124,7 +151,15 @@ export default function Journal() {
   const [editingViolation, setEditingViolation] = useState<ViolationRow | "new" | null>(null);
   const [deletingViolation, setDeletingViolation] = useState<ViolationRow | null>(null);
 
+  const protocolAlertCount =
+    (protocolOverview.data?.kpi?.overdue ?? 0) + (protocolOverview.data?.kpi?.deviated ?? 0);
+
   const tabs: TabItem<Tab>[] = [
+    {
+      id: "protocol",
+      label: "Tiến độ Quy trình 2026-2027",
+      badge: protocolAlertCount || protocolOverview.data?.kpi?.totalPlans || 0,
+    },
     { id: "journal", label: "Nhật ký canh tác", badge: journalList.total },
     ...(canReadViolations
       ? [{ id: "violations" as const, label: "Vi phạm", badge: openViolations || violationsList.total }]
@@ -132,7 +167,7 @@ export default function Journal() {
     { id: "spray", label: "Nhật ký phun thuốc", badge: sprayList.total },
   ];
 
-  const activeTab: Tab = !canReadViolations && tab === "violations" ? "journal" : tab;
+  const activeTab: Tab = !canReadViolations && tab === "violations" ? "protocol" : tab;
 
   return (
     <>
@@ -196,6 +231,20 @@ export default function Journal() {
       </div>
 
       <TabBar tabs={tabs} active={activeTab} onChange={setTab} />
+
+      {activeTab === "protocol" && (
+        <CareProtocolAdminTab
+          householdOptions={householdOptions}
+          canUpdate={canUpdateJournal}
+          onDataChanged={() => {
+            void protocolOverview.refresh();
+            void journalList.refresh();
+            void violationsList.refresh();
+            void sprayList.refresh();
+            void refreshSummary();
+          }}
+        />
+      )}
 
       {activeTab === "journal" && (
         <>

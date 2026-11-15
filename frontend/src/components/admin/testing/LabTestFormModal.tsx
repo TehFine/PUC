@@ -42,6 +42,11 @@ export default function LabTestFormModal({
   const [result, setResult] = useState<LabResult>(initial?.result ?? "pass");
   const [recordStatus, setRecordStatus] = useState<LabRecordStatus>(initial?.recordStatus ?? "verified");
   const [lab, setLab] = useState(initial?.lab ?? "Trung tâm Kiểm nghiệm Vùng Tây Nguyên");
+  const [labAccreditationCode, setLabAccreditationCode] = useState(
+    initial?.labAccreditationCode ?? "ISO/IEC 17025:2017 - VILAS 238",
+  );
+  const [externalVerifyCode, setExternalVerifyCode] = useState(initial?.externalVerifyCode ?? "");
+  const [externalVerifyUrl, setExternalVerifyUrl] = useState(initial?.externalVerifyUrl ?? "");
   const [scanAttachmentId, setScanAttachmentId] = useState<number | null>(initial?.scanAttachmentId ?? null);
   const [scanUrl, setScanUrl] = useState<string | null>(initial?.scanUrl ?? null);
   const [uploadingScan, setUploadingScan] = useState(false);
@@ -102,6 +107,10 @@ export default function LabTestFormModal({
     if (chlorpyrifosMgKg.trim() && (parsedChlor === undefined || parsedChlor < 0)) {
       errs.chlorpyrifosMgKg = "Giá trị Chlorpyrifos phải là số không âm (hoặc để trống = KPH).";
     }
+    const cleanVerifyUrl = externalVerifyUrl.trim();
+    if (cleanVerifyUrl && !/^https:\/\/[^\s]+$/i.test(cleanVerifyUrl)) {
+      errs.externalVerifyUrl = "Đường dẫn tra cứu chéo độc lập phải bắt đầu bằng https://.";
+    }
 
     setFieldErrors(errs);
     if (hasErrors(errs)) return;
@@ -118,6 +127,9 @@ export default function LabTestFormModal({
       result,
       recordStatus,
       lab: lab.trim(),
+      labAccreditationCode: labAccreditationCode.trim() || null,
+      externalVerifyCode: externalVerifyCode.trim() || null,
+      externalVerifyUrl: cleanVerifyUrl || null,
       scanAttachmentId,
     };
 
@@ -243,6 +255,44 @@ export default function LabTestFormModal({
             options={RECORD_STATUS_OPTIONS}
           />
         </FormGrid>
+
+        <div
+          style={{
+            border: "1px solid #d1fae5",
+            background: "#f0fdf4",
+            padding: "12px 14px",
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#14532d", marginBottom: 8 }}>
+            Xác thực chéo độc lập ISO/IEC 17025 (Dành cho đối tác thu mua &amp; hải quan)
+          </div>
+          <FormGrid>
+            <TextField
+              label="Mã công nhận năng lực Lab (VILAS / CNAS)"
+              value={labAccreditationCode}
+              onChange={setLabAccreditationCode}
+              placeholder="VD: ISO/IEC 17025:2017 - VILAS 238"
+              maxLength={140}
+            />
+            <TextField
+              label="Mã tra cứu phiếu gốc trên cổng Lab"
+              value={externalVerifyCode}
+              onChange={setExternalVerifyCode}
+              placeholder="VD: VILAS238-2026-00891"
+              maxLength={80}
+            />
+          </FormGrid>
+          <TextField
+            label="Đường dẫn cổng tra cứu độc lập của phòng Lab (https://)"
+            value={externalVerifyUrl}
+            onChange={setExternalVerifyUrl}
+            placeholder="https://quatest3.com.vn/tra-cuu-ket-qua"
+            maxLength={300}
+            hint="Đối tác quét QR có thể bấm sang thẳng cổng phòng kiểm nghiệm độc lập để đối chiếu số phiếu."
+            error={fieldErrors.externalVerifyUrl}
+          />
+        </div>
 
         <div className="form-group">
           <label>Bản scan giấy kiểm nghiệm gốc (PDF, JPG, PNG - hiển thị trên QR công khai)</label>

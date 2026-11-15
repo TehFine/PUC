@@ -1,10 +1,19 @@
-import { useMemo } from "react";
+"use client";
+
+import dynamic from "next/dynamic";
+import { useMemo, useState } from "react";
+import { QrCode } from "lucide-react";
 import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { PlotFeature } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
+import type { PortalPlot } from "@/types/portal";
 import { formatCoords, formatHa, plotCenterCoords } from "@/utils/plot-utils";
 import { getZoneColor, plotArea, type PlotsSummary } from "./zone-data";
+
+const GardenSignboardModal = dynamic(() => import("@/components/portal/GardenSignboardModal"), {
+  ssr: false,
+});
 
 interface PlotsTableProps {
   features: PlotFeature[];
@@ -16,13 +25,20 @@ interface PlotsTableProps {
 const emptyCellStyle = { textAlign: "center", padding: 28, color: "var(--text-muted)" } as const;
 
 export default function PlotsTable({ features, loading, summary, onEditPlot }: PlotsTableProps) {
+  const [signboardTarget, setSignboardTarget] = useState<{
+    plot: PortalPlot;
+    householdName: string;
+  } | null>(null);
+
   const preparedRows = useMemo(
     () =>
       features.map((feature) => {
         const props = feature.properties;
+        const areaNum = plotArea(feature);
         return {
           props,
-          areaText: formatHa(plotArea(feature)),
+          areaNum,
+          areaText: formatHa(areaNum),
           center: plotCenterCoords(feature),
           zc: getZoneColor(props.zone || props.code),
         };
@@ -52,7 +68,7 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
               <th>Giống</th>
               <th>Nguồn dữ liệu</th>
               <th>Trạng thái</th>
-              {onEditPlot && <th>Thao tác</th>}
+              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -60,7 +76,7 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
               features.length === 0 &&
               [0, 1, 2, 3, 4].map((row) => (
                 <tr key={`sk-${row}`} aria-hidden="true">
-                  {Array.from({ length: onEditPlot ? 11 : 10 }, (_, cell) => (
+                  {Array.from({ length: 11 }, (_, cell) => (
                     <td key={cell}>
                       <Skeleton h={12} w={cell === 0 ? 70 : "80%"} />
                     </td>
@@ -69,12 +85,12 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
               ))}
             {!loading && features.length === 0 && (
               <tr>
-                <td colSpan={onEditPlot ? 11 : 10} style={emptyCellStyle}>
+                <td colSpan={11} style={emptyCellStyle}>
                   Chưa có thửa đất. Dùng nút “Vẽ thửa” trên bản đồ hoặc nhập GeoJSON địa chính.
                 </td>
               </tr>
             )}
-            {preparedRows.map(({ props, areaText, center, zc }) => {
+            {preparedRows.map(({ props, areaNum, areaText, center, zc }) => {
               return (
                 <tr key={props.code} style={{ background: zc.rowTint }}>
                   <td>
@@ -138,18 +154,51 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                       {STATUS_LABELS[props.status] ?? "Chờ duyệt"}
                     </span>
                   </td>
-                  {onEditPlot && (
-                    <td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button
                         type="button"
                         className="btn btn-outline btn-sm"
-                        onClick={() => onEditPlot(props.code)}
-                        title="Mở bản đồ để chỉnh sửa hình dạng ranh giới thửa đất này"
+                        style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                        title="In biển định danh thửa vườn 3 ngôn ngữ (Việt - Trung - Anh) gắn mã QR"
+                        onClick={() =>
+                          setSignboardTarget({
+                            plot: {
+                              code: props.code,
+                              sheet: props.sheet || null,
+                              parcel: props.parcel || null,
+                              village: props.village || "Xã Cư Né",
+                              zoneCode: props.zone || "VN-DLOR-0086",
+                              variety: props.variety || "Ri6 / Dona",
+                              plantedYear: props.year ?? null,
+                              areaHa: Number((areaNum || props.areaHa || 0).toFixed(2)),
+                              source: props.source,
+                              status: props.status,
+                              qrToken: props.qrToken ?? null,
+                              treeCount: props.treeCount ?? null,
+                              maxQuotaKg: props.seasonQuotaKg ?? null,
+                              lat: center?.lat ?? props.lat ?? null,
+                              lng: center?.lng ?? props.lng ?? null,
+                            },
+                            householdName: props.owner || "Hộ thành viên HTX Cư Né",
+                          })
+                        }
                       >
-                        Sửa hình dạng
+                        <QrCode size={13} />
+                        <span>Biển QR Vườn</span>
                       </button>
-                    </td>
-                  )}
+                      {onEditPlot && (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={() => onEditPlot(props.code)}
+                          title="Mở bản đồ để chỉnh sửa hình dạng ranh giới thửa đất này"
+                        >
+                          Sửa hình dạng
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -162,6 +211,14 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
         </span>
         <span>Nguồn: PostGIS khi có DATABASE_URL, ngược lại dùng dữ liệu mẫu</span>
       </div>
+
+      {signboardTarget && (
+        <GardenSignboardModal
+          plot={signboardTarget.plot}
+          householdName={signboardTarget.householdName}
+          onClose={() => setSignboardTarget(null)}
+        />
+      )}
     </div>
   );
 }

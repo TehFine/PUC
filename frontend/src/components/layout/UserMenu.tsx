@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Laptop, Mail, QrCode, ShieldCheck, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { AdminNotificationBell } from "@/components/admin/notifications/AdminNotificationsSheet";
 import ChangePasswordModal from "@/components/admin/notifications/ChangePasswordModal";
 import { ActiveSessionsSheet, TwoFactorSecuritySheet } from "@/components/layout/UserSecuritySheets";
 import { RadialPngIcon } from "@/components/portal/RadialIcons";
@@ -106,6 +107,7 @@ export default function UserMenu() {
 
   return (
     <div className="user-menu">
+      <AdminNotificationBell enabled={role !== "farmer"} />
       {role !== "farmer" && (
         <button
           type="button"
@@ -118,8 +120,10 @@ export default function UserMenu() {
             alignItems: "center",
             gap: 6,
             height: 36,
-            padding: "0 11px",
-            borderRadius: 999,
+            minHeight: 36,
+            padding: "0 12px",
+            borderRadius: 6,
+            border: "1px solid rgba(20, 55, 47, 0.14)",
             background: "#ffffff",
             fontWeight: 600,
             fontSize: 12.5,

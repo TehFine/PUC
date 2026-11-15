@@ -323,7 +323,22 @@ export default function Testing() {
                     <td>
                       <span className={`badge ${resBadge.badge}`}>{resBadge.label}</span>
                     </td>
-                    <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{t.lab}</td>
+                    <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                      <div>{t.lab}</div>
+                      {t.labAccreditationCode && (
+                        <div
+                          style={{
+                            fontSize: 10.5,
+                            color: "#166534",
+                            fontFamily: "var(--font-num-stack)",
+                            fontVariantNumeric: "tabular-nums",
+                            marginTop: 2,
+                          }}
+                        >
+                          {t.labAccreditationCode}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                         <button
@@ -335,6 +350,28 @@ export default function Testing() {
                           <FileText size={13} />
                           Xem phiếu A4
                         </button>
+                        {t.externalVerifyUrl && (
+                          <a
+                            href={t.externalVerifyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-outline btn-sm"
+                            title={
+                              t.externalVerifyCode
+                                ? `Mã tra cứu cổng Lab độc lập: ${t.externalVerifyCode}`
+                                : "Đối chiếu trực tiếp trên cổng tra cứu của phòng kiểm nghiệm"
+                            }
+                            style={{
+                              textDecoration: "none",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              color: "#166534",
+                            }}
+                          >
+                            Tra cứu chéo Lab
+                          </a>
+                        )}
                         {t.scanUrl && (
                           <a
                             href={t.scanUrl}

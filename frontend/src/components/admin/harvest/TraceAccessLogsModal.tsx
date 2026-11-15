@@ -108,7 +108,9 @@ export default function TraceAccessLogsModal({
                   </div>
                 </td>
                 <td style={{ fontSize: 12 }}>
-                  {ROLE_LABELS[r.userRole] ?? r.userRole}
+                  {r.userRole === "field_auditor"
+                    ? "Đoàn Thẩm định Thực địa"
+                    : (ROLE_LABELS[r.userRole] ?? r.userRole)}
                 </td>
                 <td style={{ fontSize: 12.5 }}>
                   <strong>{r.lotCode || r.scannedCode}</strong>
@@ -118,7 +120,9 @@ export default function TraceAccessLogsModal({
                     ? "Cấp 3 (Quản lý)"
                     : r.viewerTier === "enterprise"
                       ? "Cấp 2 (Doanh nghiệp)"
-                      : "Cấp 1 (Công khai)"}
+                      : r.viewerTier === "field_audit"
+                        ? "Thẩm định thực địa (Thẻ Đoàn)"
+                        : "Cấp 1 (Công khai)"}
                 </td>
                 <td>
                   <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>

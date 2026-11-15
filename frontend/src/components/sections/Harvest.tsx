@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
-import { AlertTriangle, BellRing, CheckCircle2, FileText, Printer, QrCode, Users } from "lucide-react";
+import { AlertTriangle, BellRing, CheckCircle2, FileText, Printer, QrCode, Scale, ShieldCheck, Users } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import { formatVn } from "@/components/admin/catalog/form-utils";
@@ -20,6 +20,8 @@ import { api, errorMessage } from "@/lib/api-client";
 const BatchQrModal = dynamic(() => import("@/components/harvest/BatchQrModal"), { ssr: false });
 const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
 const TraceAccessLogsModal = dynamic(() => import("@/components/admin/harvest/TraceAccessLogsModal"), { ssr: false });
+const PlotQuotasModal = dynamic(() => import("@/components/admin/harvest/PlotQuotasModal"), { ssr: false });
+const FieldAuditPassesModal = dynamic(() => import("@/components/admin/harvest/FieldAuditPassesModal"), { ssr: false });
 import { KpiChartView, renderKpiValue, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
 import { useApi, useApiList } from "@/hooks/use-api";
 import type {
@@ -64,9 +66,10 @@ const PLAN_STATUS_BADGE: Record<HarvestPlanStatus, { label: string; cls: string 
 };
 
 export default function Harvest() {
-  const { can } = useAuth();
+  const { can, session } = useAuth();
   const canReadHouseholds = can("households", "read");
   const canReadApprovals = can("approvals", "read");
+  const canEditEndorsement = session?.user.role === "admin" || session?.user.role === "htx_officer";
   const canReadStamps = can("stamps", "read");
   const canCreateHarvest = can("harvest", "create");
   const canUpdateHarvest = can("harvest", "update");
@@ -102,6 +105,8 @@ export default function Harvest() {
   const [incidentLotCode, setIncidentLotCode] = useState<string | null>(null);
   const [scanningQr, setScanningQr] = useState(false);
   const [viewingTraceLogs, setViewingTraceLogs] = useState(false);
+  const [viewingPlotQuotas, setViewingPlotQuotas] = useState(false);
+  const [viewingFieldPasses, setViewingFieldPasses] = useState(false);
 
   // 2. Dự báo & tính lịch thu hoạch từ nhật ký chăm sóc
   const [planQ, setPlanQ] = useState("");
@@ -245,6 +250,18 @@ export default function Harvest() {
             <QrCode size={15} />
             <span>Quét QR</span>
           </button>
+          {canReadHouseholds && (
+            <button type="button" className="btn btn-outline" onClick={() => setViewingPlotQuotas(true)}>
+              <Scale size={15} />
+              <span>Hạn ngạch &amp; Biển QR Vườn</span>
+            </button>
+          )}
+          {canReadApprovals && (
+            <button type="button" className="btn btn-outline" onClick={() => setViewingFieldPasses(true)}>
+              <ShieldCheck size={15} />
+              <span>Thẻ Đoàn &amp; Bảo chứng Tỉnh</span>
+            </button>
+          )}
           {canReadApprovals && (
             <button type="button" className="btn btn-outline" onClick={() => setViewingTraceLogs(true)}>
               <FileText size={15} />
@@ -1167,6 +1184,16 @@ export default function Harvest() {
 
       {scanningQr && <QrScannerModal onClose={() => setScanningQr(false)} />}
       {viewingTraceLogs && <TraceAccessLogsModal onClose={() => setViewingTraceLogs(false)} />}
+      {viewingPlotQuotas && (
+        <PlotQuotasModal canEdit={canUpdateHarvest} onClose={() => setViewingPlotQuotas(false)} />
+      )}
+      {viewingFieldPasses && (
+        <FieldAuditPassesModal
+          canEdit={canUpdateHarvest}
+          canEditEndorsement={canEditEndorsement}
+          onClose={() => setViewingFieldPasses(false)}
+        />
+      )}
     </>
   );
 }

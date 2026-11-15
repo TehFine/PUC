@@ -22,28 +22,28 @@ const TEMPLATES: {
   message: string;
 }[] = [
   {
-    label: "Sự cố gián đoạn đồng bộ",
+    label: "Chậm đồng bộ tạm thời",
     severity: "critical",
     audience: "all",
-    title: "Hệ thống đang khắc phục sự cố đồng bộ dữ liệu",
+    title: "Hệ thống đang xử lý chậm hơn bình thường",
     message:
-      "Một số thao tác gửi nhật ký hoặc tra cứu có thể chậm hơn bình thường. Kỹ thuật HTX đang xử lý khẩn — bà con vui lòng giữ ảnh hiện trường và thử lại sau ít phút.",
+      "Kỹ thuật HTX đang khắc phục. Vui lòng giữ ảnh vừa chụp và thử lại sau ít phút.",
   },
   {
-    label: "Bảo trì nâng cấp máy chủ",
+    label: "Bảo trì định kỳ",
     severity: "warning",
     audience: "all",
-    title: "Thông báo bảo trì & nâng cấp hệ thống định kỳ",
+    title: "Hệ thống bảo trì ngắn trong 15 phút",
     message:
-      "Hệ thống dự kiến bảo trì ngắn trong khoảng 15–20 phút để nâng cấp hiệu năng. Vui lòng lưu lại các biểu mẫu đang nhập dở.",
+      "Vui lòng lưu lại nội dung đang nhập và quay lại sau ít phút.",
   },
   {
-    label: "Nhắc khẩn hộ nông dân",
+    label: "Tạm ngưng cấp tem mới",
     severity: "critical",
     audience: "farmer",
-    title: "Tạm ngưng cấp mã tem mới để rà soát dữ liệu vùng trồng",
+    title: "Tạm ngưng cấp mã tem mới để rà soát",
     message:
-      "HTX đang đối soát đồng bộ mã vùng trồng. Các hộ cần xuất lô gấp vui lòng liên hệ trực tiếp Hotline kỹ thuật HTX 0366 663 778.",
+      "Hộ cần xuất lô gấp vui lòng gọi hỗ trợ HTX theo số bên dưới.",
   },
 ];
 
