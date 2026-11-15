@@ -100,7 +100,7 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
         name: "Nguyễn Văn An",
         phone: USERS.farmerAn,
       });
-      expect(res.body.household.cccdMasked).toMatch(/^\*{8}\d{4}$/);
+      expect(res.body.household.cccdMasked).toMatch(/^\*{10}\d{2}$/);
       expect(res.body.household).not.toHaveProperty("cccd");
     });
 

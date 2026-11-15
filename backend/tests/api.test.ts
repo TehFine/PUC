@@ -180,9 +180,9 @@ describe("phân quyền theo vai trò", () => {
     for (const username of [USERS.villageOfficer, USERS.inspector]) {
       const agent = await loggedIn(username);
       const one = await agent.get("/api/households/1");
-      expect(one.body.cccd).toBe(`********${full.body.cccd.slice(-4)}`);
+      expect(one.body.cccd).toBe(`**********${full.body.cccd.slice(-2)}`);
       const list = await agent.get("/api/households");
-      expect(list.body.data.every((h: { cccd: string }) => /^\*+\d{4}$/.test(h.cccd))).toBe(true);
+      expect(list.body.data.every((h: { cccd: string }) => /^\*{10}\d{2}$/.test(h.cccd))).toBe(true);
       // Tìm theo CCCD đầy đủ không được trả kết quả (không dò được qua ô tìm kiếm).
       const probe = await agent.get(`/api/households?q=${full.body.cccd}`);
       expect(probe.body.total).toBe(0);

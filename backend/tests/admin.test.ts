@@ -965,10 +965,14 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     expect((htxList.body.data as Array<{ id: number }>).some((r) => r.id === resetId)).toBe(false);
     expect((await htx.post(`/api/registrations/password-resets/${resetId}/approve`)).status).toBe(403);
 
-    // Admin duyệt -> mật khẩu được áp dụng đúng là mật khẩu của lần 1 (không bị lần 2 ghi đè)
-    expect((await admin.post(`/api/registrations/password-resets/${resetId}/approve`)).status).toBe(200);
+    // Admin duyệt -> hệ thống tự cấp mật khẩu tạm thời 1 lần (không áp dụng bất kỳ mật khẩu nào do request không xác thực gửi lên)
+    const approveRes = await admin.post(`/api/registrations/password-resets/${resetId}/approve`);
+    expect(approveRes.status).toBe(200);
+    expect(typeof approveRes.body.temporaryPassword).toBe("string");
+    expect(approveRes.body.temporaryPassword.length).toBeGreaterThanOrEqual(8);
     expect((await login("0965554433", "HijackedSecondPassword999")).res.status).toBe(401);
-    expect((await login("0965554433", "FirstValidPassword123")).res.status).toBe(200);
+    expect((await login("0965554433", "FirstValidPassword123")).res.status).toBe(401);
+    expect((await login("0965554433", approveRes.body.temporaryPassword)).res.status).toBe(200);
   });
 
   it("HIGH-05, HIGH-06, MED-04 & MED-08: chống DoS phiên đang hoạt động, thu hồi JWT ngay khi logout, xác thực đổi email và giữ MRL thuốc cấm khi PATCH", async () => {
@@ -990,7 +994,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     const accessCookie = setCookies.find((c) => c.startsWith("htx_access="))?.split(";")[0] ?? "";
     expect(accessCookie).toContain("htx_access=");
 
-    // HIGH-06: Đổi email không gửi mật khẩu hiện tại -> 400; gửi đúng mật khẩu -> 200; email giả nongho.* -> 400
+    // HIGH-01 & HIGH-06: Gắn email mới bắt buộc kèm cả mật khẩu hiện tại VÀ chứng thực Google OAuth thật (chặn gán trước email giả/lộ mật khẩu)
     expect(
       (await activeSession.patch("/api/auth/profile").send({ email: "canbo.thuc@htx.vn" })).status,
     ).toBe(400);
@@ -1001,11 +1005,19 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
           .send({ email: "nongho.12345@gmail.com", currentPassword: "SessionPassword123" })
       ).status,
     ).toBe(400);
+    expect(
+      (
+        await activeSession
+          .patch("/api/auth/profile")
+          .send({ email: "canbo.thuc@htx.vn", currentPassword: "SessionPassword123" })
+      ).status,
+    ).toBe(400);
     const okProfile = await activeSession
       .patch("/api/auth/profile")
-      .send({ email: "canbo.thuc@htx.vn", currentPassword: "SessionPassword123" });
+      .send({ fullName: "Cán bộ Kiểm Thử Phiên Đã Cập Nhật", email: null, currentPassword: "SessionPassword123" });
     expect(okProfile.status).toBe(200);
-    expect(okProfile.body.user.email).toBe("canbo.thuc@htx.vn");
+    expect(okProfile.body.user.fullName).toBe("Cán bộ Kiểm Thử Phiên Đã Cập Nhật");
+    expect(okProfile.body.user.email).toBeNull();
 
     // HIGH-05: Kẻ bên ngoài cố tình nhập sai mật khẩu 5 lần gây khóa đăng nhập mới (429),
     // nhưng KHÔNG được đánh sập phiên làm việc hợp lệ đang mở sẵn của chủ tài khoản
@@ -1149,8 +1161,9 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
       scanAttachmentId: labUpload.body.id,
     });
     expect(labCreated.status).toBe(201);
-    expect(labCreated.body.scanUrl).toBe(`/api/public/files/${labUpload.body.id}`);
-    expect((await request(app).get(`/api/public/files/${labUpload.body.id}`)).status).toBe(200);
+    expect(labCreated.body.scanUrl).toMatch(/^\/api\/public\/files\/[A-Za-z0-9_-]{16,64}$/);
+    expect((await request(app).get(labCreated.body.scanUrl)).status).toBe(200);
+    expect((await request(app).get(`/api/public/files/${labUpload.body.id}`)).status).toBe(404);
 
     const lotCreated = await htx.post("/api/harvest").send({
       code: "LH-REVOKE-2026",
@@ -1943,7 +1956,8 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     expect(geoMinute.status).toBe(201);
     expect(geoMinute.body.gpsVerified).toBe(true);
     expect(geoMinute.body.recordHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(geoMinute.body.photoUrl).toBe(`/api/public/files/${inspPhoto.body.id}`);
+    expect(geoMinute.body.photoUrl).toMatch(/^\/api\/public\/files\/[A-Za-z0-9_-]{16,64}$/);
+    expect(geoMinute.body.photoUrl).toBe(inspPhoto.body.url);
 
     // ─── TRỤ CỘT 5: Bảo chứng Chính quyền Tỉnh - Xã & Ma trận đối chứng độc lập 3 bên ───
     expect(
@@ -1978,5 +1992,141 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
       finalLotTrace.body.publicData.labTests as Array<{ code: string; externalVerifyUrl: string | null }>
     ).find((t) => t.code === "MK-ISO17025-2026");
     expect(verifiedIsoTest?.externalVerifyUrl).toBe("https://quatest3.com.vn/tra-cuu/QT3-2026-88991");
+  });
+
+  it("Gia cố bảo mật 019: ẩn passToken mẫu, X-Audit-Pass, chặn enterprise ngoài phạm vi verify-gps, khóa Cd/Vàng O, chống xóa hộ có lịch sử và lọc ký tự NUL", async () => {
+    const admin = await loggedIn(USERS.admin);
+    const htx = await loggedIn(USERS.htx);
+    const inspector = await loggedIn(USERS.inspector);
+
+    // 1. /api/public/trace-samples không bao giờ rò rỉ passToken công khai
+    const samples = await request(app).get("/api/public/trace-samples");
+    expect(samples.status).toBe(200);
+    expect(samples.body.demoAuditPass).toBeNull();
+    expect(JSON.stringify(samples.body)).not.toContain("passToken");
+
+    // 2. Cấp thẻ đoàn mới -> chỉ trả passToken 1 lần khi POST, danh sách GET che kín, mã ngắn FAP-* bị từ chối, header X-Audit-Pass hoạt động
+    const signboardsRes = await htx.get("/api/harvest/plot-signboards");
+    const targetSignboard = (
+      signboardsRes.body.data as Array<{
+        plotCode: string;
+        qrToken: string;
+        zoneCode: string;
+        centerLat: number;
+        centerLng: number;
+      }>
+    ).find((s) => s.plotCode === "TH1-001")!;
+
+    const newPass = await htx.post("/api/field-audit-passes").send({
+      delegationName: "Đoàn Kiểm tra Bảo mật Header",
+      organization: "GACC Security Check",
+      allowedZoneCode: targetSignboard.zoneCode,
+      defaultLang: "zh",
+      durationHours: 24,
+    });
+    expect(newPass.status).toBe(201);
+    const secretToken = newPass.body.passToken as string;
+    const shortCode = newPass.body.code as string;
+    expect(secretToken.length).toBeGreaterThanOrEqual(20);
+
+    const listedPasses = await htx.get("/api/field-audit-passes");
+    expect(listedPasses.status).toBe(200);
+    expect(JSON.stringify(listedPasses.body)).not.toContain(secretToken);
+
+    // Dùng mã định danh ngắn FAP-* không mở khóa được hồ sơ thực địa
+    const shortCodeAttempt = await request(app)
+      .get(`/api/public/trace/${targetSignboard.qrToken}`)
+      .set("X-Audit-Pass", shortCode);
+    expect(shortCodeAttempt.status).toBe(200);
+    expect(shortCodeAttempt.body.accessControl.fieldAuditPass?.active).toBe(false);
+    expect(shortCodeAttempt.body).not.toHaveProperty("fieldAuditData");
+
+    // Dùng X-Audit-Pass với passToken đầy đủ mở khóa thành công mà không cần đẩy vào URL query
+    const headerPassScan = await request(app)
+      .get(`/api/public/trace/${targetSignboard.qrToken}`)
+      .set("X-Audit-Pass", secretToken);
+    expect(headerPassScan.status).toBe(200);
+    expect(headerPassScan.body.accessControl.fieldAuditPass?.active).toBe(true);
+    expect(headerPassScan.body.fieldAuditData).toBeDefined();
+
+    // 3. Doanh nghiệp ngoài phạm vi lô của thửa TH1-001 bị chặn verify-gps (403)
+    const foreignEnt = await admin.post("/api/enterprises").send({
+      code: "DN-NGOAI-PHAM-VI-019",
+      name: "Doanh nghiệp Ngoài Phạm Vi Kiểm Thử",
+      taxCode: "0399887766",
+      representative: "Ông Ngoài Vùng",
+      phone: "0909998877",
+      address: "TP. Hồ Chí Minh",
+      status: "active",
+    });
+    expect(foreignEnt.status).toBe(201);
+    const foreignEntId = foreignEnt.body.id as number;
+    const outScopeUser = await admin.post("/api/accounts").send({
+      fullName: "Đối tác Ngoài Phạm Vi GPS",
+      username: "0966001122",
+      password: "Password123",
+      role: "enterprise",
+      enterpriseId: foreignEntId,
+    });
+    expect(outScopeUser.status).toBe(201);
+    const foreignEntAgent = await loggedIn("0966001122", "Password123");
+    const foreignGpsRes = await foreignEntAgent
+      .post(`/api/public/trace/${targetSignboard.qrToken}/verify-gps`)
+      .send({ latitude: targetSignboard.centerLat, longitude: targetSignboard.centerLng });
+    expect(foreignGpsRes.status).toBe(403);
+
+    // 4. Kiểm nghiệm: Vàng O dương tính hoặc Cadimi vượt ngưỡng bị từ chối cứng (400) nếu gửi result: 'pass'
+    const badPassLab = await inspector.post("/api/testing").send({
+      code: "MK-YELLOWO-LOCK-019",
+      householdId: 2,
+      plotCode: "TH2-001",
+      sampledOn: "2026-07-12",
+      cdMgKg: 0.08,
+      yellowOPositive: true,
+      residueMgKg: 0.01,
+      result: "pass",
+      lab: "Vinacontrol",
+    });
+    expect(badPassLab.status).toBe(400);
+
+    // 5. Vi phạm: Chặn gỡ householdId thành null khi PATCH vi phạm đã gắn hộ
+    const violList = await inspector.get("/api/violations?pageSize=20");
+    const linkedViolation = (violList.body.data as Array<{ id: number; householdId: number | null }>).find(
+      (v) => v.householdId !== null,
+    );
+    if (linkedViolation) {
+      const detachAttempt = await inspector
+        .patch(`/api/violations/${linkedViolation.id}`)
+        .send({ householdId: null });
+      expect(detachAttempt.status).toBe(400);
+    }
+
+    // 6. Hộ nông dân có lịch sử nhật ký / tem / lô thu hoạch bị chặn xóa vĩnh viễn
+    const deleteHhWithHistory = await admin.delete("/api/households/1");
+    expect([400, 409]).toContain(deleteHhWithHistory.status);
+
+    // 7. Ký tự NUL (\u0000) bị từ chối/loại bỏ an toàn ở tầng kiểm tra đầu vào (400/200), tuyệt đối không lọt xuống PostgreSQL gây lỗi 500
+    const nulSearch = await htx.get(`/api/households?q=${encodeURIComponent("Nguyễn\u0000Văn")}`);
+    expect([200, 400]).toContain(nulSearch.status);
+
+    // 8. /api/health ẩn cảnh báo nội bộ với khách vãng lai và xóa tên người tạo khi hiển thị cho cán bộ
+    const staffAlert = await admin.post("/api/system-alerts").send({
+      severity: "warning",
+      title: "Cảnh báo nội bộ cán bộ 019",
+      message: "Chỉ hiển thị cho cán bộ nội bộ.",
+      audience: "staff",
+    });
+    expect(staffAlert.status).toBe(201);
+    const publicHealth = await request(app).get("/api/health");
+    expect(publicHealth.status).toBe(200);
+    expect(publicHealth.body.alert).toBeNull();
+
+    const staffHealth = await htx.get("/api/health");
+    expect(staffHealth.status).toBe(200);
+    expect(staffHealth.body.alert?.id).toBe(staffAlert.body.id);
+    expect(staffHealth.body.alert?.createdByName).toBeNull();
+    expect(staffHealth.body.alert?.createdBy).toBeNull();
+
+    expect((await admin.post(`/api/system-alerts/${staffAlert.body.id}/resolve`).send({})).status).toBe(200);
   });
 });
