@@ -13,7 +13,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 Mọi trang và thành phần giao diện trong `frontend/src/` (từ trang chủ, cổng tra cứu QR `/t/[token]`, cổng nông hộ `/portal` đến trang quản trị `/admin`, bao gồm cả modal, popup, toast, badge, thẻ và biểu mẫu nhỏ nhất) bắt buộc tuân thủ bộ quy chuẩn thiết kế tại tệp gốc `../AGENTS.md` (luôn được nạp tự động ở cấp kho mã):
 
 - **Không lạm dụng icon/emoji**: Cấm tuyệt đối emoji; cấm chèn icon trang trí vào tiêu đề, thẻ chỉ số, badge, thông báo hay nút đã có chữ rõ nghĩa; cấm dùng hộp icon nền màu pastel.
-- **Không viền màu cạnh trái**: Cấm dùng `border-left` dày tô màu kiểu callout trên thẻ, cảnh báo hay danh sách.
+- **Không viền màu ở cạnh thẻ / popup / thông báo**: Cấm dùng `border-left` / `border-top` tô màu kiểu callout và cấm đổi màu viền bao quanh (`border-color`) theo trạng thái xanh/đỏ/vàng trên thẻ, popup, toast, cảnh báo hay hộp thoại; luôn giữ viền trung tính mảnh `1px solid #d4d4d2`.
 - **Không chấm tròn trạng thái (`dot`)**: Cấm đặt dấu chấm tròn hoặc chấm nhấp nháy ở đầu thẻ, nhãn phân mục hay thông báo.
 - **Không bo góc quá đà**: Trang giới thiệu công khai (`LandingPage` / `.lp` / `.sw-*` / `.eh-*`) giữ nguyên thiết kế **vuông cạnh tuyệt đối (`border-radius: 0`)**, không tự ý bo góc. Tại các phân hệ nghiệp vụ khác, dùng bo góc sắc gọn `4px` đến `6px` cho nút, ô nhập, badge, toast, popup và `6px` đến `8px` cho hộp thoại, thẻ nghiệp vụ (tuân thủ bán kính đồng tâm cho khối lồng nhau); cấm lạm dụng `999px` (viên thuốc) hoặc bo tròn lớn tràn lan.
 - **Phong cách Swiss Editorial cô đọng**: Ưu tiên nền sáng sạch, viền mảnh `1px`, phân cấp chữ rõ ràng, `tabular-nums` cho con số/mã định danh, và câu chữ ngắn gọn, dễ hiểu ngay từ lần đọc đầu tiên.

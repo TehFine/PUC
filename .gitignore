@@ -30,8 +30,10 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 
-# Dữ liệu PostgreSQL chạy cục bộ
+# Dữ liệu PostgreSQL và tệp tải lên chạy cục bộ
 .local-db/
+uploads/
+**/uploads/
 
 # Nhật ký và tệp hệ thống
 *.log

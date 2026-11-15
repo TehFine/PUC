@@ -46,7 +46,7 @@ async function main() {
     });
     if (ran.length === 0) console.log("Không có migration mới.");
     const seeded = await seedDatabase(pool, { password: SEED_PASSWORD, withPlots: hasPostgis, log: (m) => console.log(m) });
-    if (seeded) console.log(`Đã tạo tài khoản mẫu (mật khẩu: ${SEED_PASSWORD}).`);
+    if (seeded) console.log("Đã khởi tạo tài khoản mẫu cục bộ (sử dụng SEED_PASSWORD trong môi trường dev).");
   } finally {
     await pool.end();
   }

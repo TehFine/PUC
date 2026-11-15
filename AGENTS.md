@@ -12,9 +12,9 @@ Tệp quy tắc gốc này luôn được kích hoạt cho toàn bộ kho mã (`
    - Tuyệt đối **không** tạo "hộp icon nền màu pastel" (ô vuông/tròn `36x36` hoặc `40x40` tô nền nhạt bọc lấy một icon SVG ở góc trên mỗi thẻ).
    - **Chỉ được dùng icon chức năng** khi thật sự cần thiết cho thao tác điều hướng hoặc tiết kiệm diện tích: nút đóng `×`, mũi tên thu gọn/mở rộng/phân trang, kính lúp trong ô tìm kiếm, con mắt ẩn/hiện mật khẩu, nút mở máy ảnh quét QR, hoặc nút chỉ có icon trên thanh công cụ hẹp (bắt buộc kèm `aria-label`).
 
-2. **Cấm viền màu nhấn ở cạnh trái (`border-left` callout stripe)**:
-   - Tuyệt đối **không** dùng `border-left: 3px solid ...` hay `border-left: 4px solid ...` trên thẻ thông tin, hộp cảnh báo, ghi chú, mục nhật ký, thẻ quy trình hay thông báo nổi. Đây là lối mòn rập khuôn khiến giao diện giống tài liệu mẫu tự động.
-   - Thay vào đó, phân tách khối bằng đường viền mảnh đồng nhất `1px solid` (`#d4d4d2`, `#e2e5e3` hoặc `rgba(20, 55, 47, 0.12)`), độ tương phản nền tinh tế (`#ffffff` trên nền `#f7f7f5` hoặc `#f3f7ee`), và phân cấp chữ. Chỉ dùng thanh nhấn mảnh `2px` ở **cạnh trên** (`border-top`) khi thật sự cần phân biệt mức độ cảnh báo hệ thống trên hộp thoại nổi độc lập.
+2. **Cấm viền màu nhấn và đổi màu viền theo trạng thái trên thẻ, popup, thông báo (`border-left` / `border-top` / `border-color`)**:
+   - Tuyệt đối **không** dùng `border-left: 3px solid ...`, `border-left: 4px solid ...`, `border-top: 2px solid ...` hay đổi màu đường viền bao quanh (`border-color: #fecaca` / `#fde68a` / `#bbf7d0` / `#f59e0b`...) trên thẻ thông tin, popup, toast, hộp cảnh báo, hộp xác nhận, ghi chú, mục nhật ký hay thông báo nổi.
+   - Thay vào đó, mọi thẻ, popup và thông báo chỉ dùng đường viền mảnh trung tính đồng nhất `1px solid` (`#d4d4d2`, `#e2e5e3` hoặc `rgba(20, 55, 47, 0.12)`), kết hợp độ tương phản nền tinh tế và màu chữ ngữ nghĩa.
 
 3. **Cấm dấu chấm tròn (`status dot`) ở đầu thẻ, nhãn hoặc thông báo**:
    - Tuyệt đối **không** thêm phần tử chấm tròn màu (`<span className="dot" />`, `::before` hình tròn, hoặc chấm nhấp nháy `animate-ping`) ở đầu badge trạng thái, nhãn phân mục (eyebrow), tiêu đề thẻ, hay thông báo popup/toast.
