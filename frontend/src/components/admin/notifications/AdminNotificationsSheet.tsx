@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck } from "@/components/ui/PublicIcon";
 import {
   notifyCountsChanged,
   requestAdminNavigate,
@@ -113,49 +113,19 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
     <>
       <button
         type="button"
-        className="btn btn-outline btn-sm"
+        className="admin-notif-btn"
         title="Thông báo giám sát quy trình, vi phạm và hồ sơ"
         aria-label={unread > 0 ? `Thông báo quản trị (${unread} chưa đọc)` : "Thông báo quản trị"}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         onClick={() => {
           setOpen(true);
           invalidateQueries(NOTIFICATIONS_PATH);
         }}
-        style={{
-          position: "relative",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: 36,
-          height: 36,
-          minHeight: 36,
-          padding: 0,
-          borderRadius: 6,
-          border: "1px solid rgba(20, 55, 47, 0.14)",
-          background: "#ffffff",
-        }}
       >
-        <Bell size={16} />
+        <Bell size={17} />
         {unread > 0 && (
-          <span
-            style={{
-              position: "absolute",
-              top: -5,
-              right: -5,
-              minWidth: 18,
-              height: 18,
-              padding: "0 4px",
-              borderRadius: 4,
-              background: "#c93b22",
-              color: "#ffffff",
-              fontSize: 10.5,
-              fontWeight: 700,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontVariantNumeric: "tabular-nums",
-              border: "1.5px solid #ffffff",
-            }}
-          >
+          <span className="admin-notif-badge">
             {unread > 99 ? "99+" : unread}
           </span>
         )}

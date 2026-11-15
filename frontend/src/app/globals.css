@@ -212,7 +212,7 @@ body {
   justify-content: center;
   width: 100%;
   height: 64px;
-  padding: 0 216px;
+  padding: 0 232px 0 216px;
   pointer-events: none;
 }
 
@@ -285,9 +285,9 @@ body {
 }
 
 .admin-notif-btn,
-.admin-notif-btn.pt-notif-btn {
+.admin-notif-btn.pt-notif-btn,
+.admin-qr-btn {
   position: relative;
-  width: 36px;
   height: 36px;
   border-radius: 6px;
   border: 1px solid rgba(20, 55, 47, 0.14);
@@ -298,19 +298,38 @@ body {
   justify-content: center;
   cursor: pointer;
   box-shadow: none;
+  box-sizing: border-box;
+  flex-shrink: 0;
   transition: background-color 0.16s ease, border-color 0.16s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
+.admin-notif-btn,
+.admin-notif-btn.pt-notif-btn {
+  width: 36px;
+  padding: 0;
+}
+
+.admin-qr-btn {
+  gap: 6px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .admin-notif-btn:hover,
-  .admin-notif-btn.pt-notif-btn:hover {
+  .admin-notif-btn.pt-notif-btn:hover,
+  .admin-qr-btn:hover {
     background-color: #f8fafc;
     border-color: rgba(20, 55, 47, 0.26);
   }
 }
 .admin-notif-btn:active,
-.admin-notif-btn.pt-notif-btn:active {
+.admin-notif-btn.pt-notif-btn:active,
+.admin-qr-btn:active {
   background-color: #eef2f6;
 }
 .admin-notif-btn[aria-expanded="true"],
@@ -2670,8 +2689,13 @@ input[type="date"].filter-select {
 .report-filter-bar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #ffffff;
 }
 
 .report-filter-field {
@@ -2690,26 +2714,28 @@ input[type="date"].filter-select {
 
 .report-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .report-card {
-  --fill: var(--bg-card);
   display: flex;
   flex-direction: column;
-  background: var(--fill);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 20px 22px;
+  text-align: left;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid rgba(20, 55, 47, 0.12);
+  border-radius: 6px;
+  padding: 18px 20px;
   cursor: pointer;
   box-shadow: none;
-  transition: border-color 0.16s ease;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .report-card:hover {
-    border-color: var(--border-dark);
+    border-color: #14372f;
+    background: #fcfcfb;
   }
 }
 
@@ -2730,21 +2756,22 @@ input[type="date"].filter-select {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: none;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(20, 55, 47, 0.16);
   outline: none;
   font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
   line-height: 1.2;
-  background: #dfe9f8;
-  color: #0084ff;
+  background: #ffffff;
+  color: #14372f;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.16s ease, color 0.16s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .report-format-btn:hover {
@@ -2810,10 +2837,13 @@ input[type="date"].filter-select {
 .role-perm:last-of-type { border-bottom: none; }
 .perm-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 
+  padding-top: 12px;
+  border-top: 1px solid rgba(20, 55, 47, 0.08);
 /* ─── STANDARDS ───────────────────────────────── */
 .standards-list { display: flex; flex-direction: column; gap: 8px; }
 
 .standard-item {
+  flex: 1 1 0;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
@@ -3401,7 +3431,7 @@ code {
 
 /* ─── RESPONSIVE ──────────────────────────────── */
 @media (max-width: 1450px) {
-  .app-header { padding-left: 204px; padding-right: 204px; }
+  .app-header { padding-left: 204px; padding-right: 228px; }
   .sidebar {
     gap: 4px;
     min-width: 0;
@@ -3419,7 +3449,7 @@ code {
 @media (min-width: 901px) and (max-width: 1366px) {
   .app-header {
     padding-left: 76px;
-    padding-right: 204px;
+    padding-right: 224px;
   }
   .header-home {
     left: 24px;
@@ -3488,9 +3518,45 @@ code {
   .user-menu {
     top: 50%;
     left: 16px;
-    right: auto;
-    transform: translateY(-50%);
-    gap: 8px;
+    margin: auto 0;
+    width: 38px;
+    height: 38px;
+    z-index: 125;
+    pointer-events: auto;
+  }
+  .header-avatar .user-avatar {
+    width: 38px;
+    height: 38px;
+  }
+  .admin-notif-btn,
+  .admin-notif-btn.pt-notif-btn {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 60px;
+    margin: auto 0;
+    width: 38px;
+    height: 38px;
+    z-index: 125;
+    pointer-events: auto;
+  }
+  .admin-qr-btn {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 60px;
+    margin: auto 0;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    z-index: 125;
+    pointer-events: auto;
+  }
+  .admin-qr-label {
+    display: none;
+  }
+  .app-shell.is-zones .admin-qr-btn {
+    display: none;
   }
   .admin-notif-dropdown {
     left: 0;
@@ -3505,9 +3571,10 @@ code {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    max-width: calc(100% - 190px);
+    left: 106px;
+    right: 106px;
+    transform: none;
+    max-width: none;
     pointer-events: none;
     opacity: 1;
     z-index: 1;
@@ -3515,22 +3582,24 @@ code {
 
   .mobile-header-title.is-scrolled {
     opacity: 1;
-    transform: translateX(-50%);
+    transform: none;
   }
 
   .mobile-header-title span {
     margin: 0;
-    padding: 6px 10px;
+    padding: 4px 6px;
+    max-width: 100%;
     font-family: var(--font-display-stack);
     font-variation-settings: normal;
     font-weight: 700;
-    font-size: 18.5px;
-    line-height: 1.45;
+    font-size: 18px;
+    line-height: 1.35;
     letter-spacing: 0.005em;
     color: var(--ink);
     white-space: nowrap;
-    overflow: visible;
-    display: inline-block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
   }
 
   /* Ẩn tiêu đề lớn & mô tả phụ ở đầu mỗi tab trên giao diện mobile (chỉ để tên tab trên header) */
@@ -3567,7 +3636,12 @@ code {
   .nav-toggle {
     display: flex;
     position: absolute;
-    top: 50%;
+    display: contents;
+  }
+  .header-avatar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
     right: 16px;
     left: auto;
     transform: translateY(-50%);
@@ -3858,7 +3932,7 @@ code {
   .zones-topbar {
     position: fixed;
     top: 8px;
-    left: 112px;
+    left: 108px;
     right: 62px;
     height: 40px;
     z-index: 102;
@@ -4198,7 +4272,10 @@ code {
 
 @media (max-width: 640px) {
   .app-header { padding: 0 14px; }
-  .user-menu { left: 14px; }
+  .header-avatar { left: 14px; }
+  .admin-notif-btn,
+  .admin-notif-btn.pt-notif-btn { left: 58px; }
+  .admin-qr-btn { right: 58px; }
   .nav-toggle { right: 14px; }
   .content-area { padding: 14px 14px calc(8px + env(safe-area-inset-bottom, 0px)); }
   .modal-header { padding: 14px 16px; }
@@ -4250,9 +4327,9 @@ code {
     box-sizing: border-box;
   }
   .header-actions .btn {
-    flex: 1 1 auto;
+    flex: 1 1 calc(50% - 6px);
     min-width: 0;
-    padding: 8px 8px;
+    padding: 8px 10px;
     font-size: 12px;
     letter-spacing: -0.015em;
     overflow: hidden;
@@ -4285,6 +4362,8 @@ code {
     border-radius: 8px;
     clip-path: none;
   }
+  .mobile-header-title { left: 102px; right: 102px; }
+  .zones-topbar { left: 102px; right: 58px; }
   .kpi-card.has-chart .kpi-chart.is-pad {
     padding: 4px 0 6px;
   }
@@ -4343,6 +4422,14 @@ code {
     min-width: 0;
     flex: 1 1 0%;
     overflow: hidden;
+  .header-actions .btn > span:not(.pub-icon) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .header-actions .btn:last-child:nth-child(odd) {
+    flex-basis: 100%;
+  }
     align-items: flex-end;
     text-align: right;
   }
@@ -4895,17 +4982,17 @@ code {
   }
   .report-card {
     padding: 16px;
-    border-radius: 8px;
+    border-radius: 6px;
   }
   .report-title {
-    font-size: 17.5px;
-    line-height: 1.26;
+    font-size: 16.5px;
+    line-height: 1.28;
     margin-bottom: 6px;
   }
   .report-desc {
     font-size: 12.5px;
     line-height: 1.5;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     min-height: 0;
   }
   .report-formats {
@@ -4914,23 +5001,21 @@ code {
   }
   .report-format-btn {
     flex: 1 1 0;
-    min-height: 38px;
-    padding: 9px 12px;
-    font-size: 13px;
-    border-radius: 6px;
+    min-height: 36px;
+    height: 36px;
+    padding: 0 12px;
+    font-size: 12.5px;
+    border-radius: 4px;
   }
 }
 
 @media (max-width: 400px) {
-  .mobile-header-title {
-    max-width: calc(100% - 166px);
-  }
   .mobile-header-title span {
     font-size: 16.5px;
-    padding: 4px 6px;
+    padding: 4px 4px;
   }
   .zones-topbar {
-    left: 98px;
+    left: 100px;
     right: 56px;
   }
   .zone-view-tab {
@@ -4974,6 +5059,7 @@ code {
   .zones-sidebar,
   .zone-source-card,
   .map-toolgroup,
+    min-width: 0;
   .map-sheet-btn,
   .zone-view-tabs,
   .modal {

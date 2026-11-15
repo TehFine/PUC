@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { Laptop, Mail, QrCode, ShieldCheck, UserCheck } from "lucide-react";
+import { Laptop, Mail, QrCode, ShieldCheck, UserCheck } from "@/components/ui/PublicIcon";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { AdminNotificationBell } from "@/components/admin/notifications/AdminNotificationsSheet";
 import ChangePasswordModal from "@/components/admin/notifications/ChangePasswordModal";
@@ -111,26 +111,13 @@ export default function UserMenu() {
       {role !== "farmer" && (
         <button
           type="button"
-          className="btn btn-outline btn-sm"
+          className="admin-qr-btn"
           title="Quét mã QR truy xuất nhanh bằng phiên đăng nhập hiện tại"
           aria-label="Quét QR truy xuất"
           onClick={() => setScanningQr(true)}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            height: 36,
-            minHeight: 36,
-            padding: "0 12px",
-            borderRadius: 6,
-            border: "1px solid rgba(20, 55, 47, 0.14)",
-            background: "#ffffff",
-            fontWeight: 600,
-            fontSize: 12.5,
-          }}
         >
-          <QrCode size={15} />
-          <span>Quét QR</span>
+          <QrCode size={16} />
+          <span className="admin-qr-label">Quét QR</span>
         </button>
       )}
       <button
