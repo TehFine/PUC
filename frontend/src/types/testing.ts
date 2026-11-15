@@ -16,6 +16,9 @@ export interface LabTestRow {
   chlorpyrifosMgKg: number | null;
   result: LabResult;
   lab: string;
+  labAccreditationCode?: string | null;
+  externalVerifyCode?: string | null;
+  externalVerifyUrl?: string | null;
   recordStatus?: LabRecordStatus;
   scanAttachmentId?: number | null;
   scanUrl?: string | null;
@@ -34,6 +37,9 @@ export interface LabTestInput {
   yellowOPositive: boolean;
   result: LabResult;
   lab: string;
+  labAccreditationCode?: string | null;
+  externalVerifyCode?: string | null;
+  externalVerifyUrl?: string | null;
   recordStatus?: LabRecordStatus;
   scanAttachmentId?: number | null;
 }

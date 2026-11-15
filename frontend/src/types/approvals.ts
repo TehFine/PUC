@@ -63,4 +63,15 @@ export interface MinuteRow {
   location: string;
   officer: string;
   result: MinuteResult;
+  plotCode?: string | null;
+  photoId?: number | null;
+  photoUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  gpsVerified?: boolean;
+  gpsDistanceM?: number | null;
+  recordHash?: string | null;
+  serverRecordedAt?: string | null;
+  isLateEntry?: boolean;
+  lateReason?: string | null;
 }

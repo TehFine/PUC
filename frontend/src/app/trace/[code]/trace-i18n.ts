@@ -235,6 +235,84 @@ export interface TraceUiCopy {
     pillUnsafe: string;
     viewScanFmt: (code: string) => string;
     scanArchivedNote: string;
+    accreditationFmt: (code: string) => string;
+    externalCodeFmt: (code: string) => string;
+    externalVerifyBtn: string;
+  };
+  governance: {
+    kicker: string;
+    portalLinkLabel: string;
+    supervisoryLabel: string;
+    attestationTitle: string;
+    attestationBadge: string;
+    partyStatusVerified: string;
+    partyStatusWarning: string;
+    partyStatusPending: string;
+  };
+  integrity: {
+    title: string;
+    badgeVerified: string;
+    badgeAlert: string;
+    sub: string;
+    chainAlgorithmLabel: string;
+    sealedRecordsLabel: string;
+    sealedRecordsFmt: (total: number, journals: number, sprays: number, minutes: number) => string;
+    onTimeRateLabel: string;
+    onTimeRateFmt: (pct: number, lateCount: number) => string;
+    gpsEvidenceLabel: string;
+    gpsEvidenceFmt: (gpsCount: number) => string;
+    merkleAnchorLabel: string;
+    latestSealLabel: string;
+    massBalanceTitle: string;
+    massBalanceBadgeOk: string;
+    massBalanceBadgeWarn: string;
+    massBalanceSeasonFmt: (year: number, plots: number, trees: number) => string;
+    massBalanceUsedFmt: (usedTons: number, capTons: number, pct: number) => string;
+    massBalanceRemainFmt: (remainTons: number) => string;
+    massBalanceNote: string;
+  };
+  fieldAudit: {
+    passBannerKicker: string;
+    passBannerActiveFmt: (delegation: string, org: string, expiresText: string) => string;
+    passBannerExitBtn: string;
+    passPromptTitle: string;
+    passPromptDesc: string;
+    passInputPlaceholder: string;
+    passApplyBtn: string;
+    passInvalidNote: string;
+    cardKicker: string;
+    cardTitleFmt: (plotCode: string) => string;
+    privacyBadge: string;
+    privacySub: string;
+    plotSpecsTitle: string;
+    farmerRepLabel: string;
+    pucZoneLabel: string;
+    areaTreesLabel: string;
+    areaTreesFmt: (ha: number, trees: number) => string;
+    varietyYearLabel: string;
+    phiSafeBadge: string;
+    phiLockedFmt: (safeFrom: string | null) => string;
+    quotaTitle: string;
+    quotaUsedFmt: (usedKg: string, capKg: string, pct: number) => string;
+    quotaAssessedFmt: (unit: string, dateText: string) => string;
+    gpsMapTitle: string;
+    gpsVerifyBtn: string;
+    gpsVerifyingBtn: string;
+    gpsUnsupportedErr: string;
+    gpsPermissionErr: string;
+    gpsInsideTitle: string;
+    gpsNearTitle: (distM: number) => string;
+    gpsOutsideTitle: (distM: number) => string;
+    gpsAccuracyFmt: (accM: number | null) => string;
+    recentCheckinsTitle: string;
+    noCheckinsYet: string;
+    sealedDiaryTitle: string;
+    sealedSprayTitle: string;
+    sealedMinutesTitle: string;
+    lateTag: string;
+    onTimeTag: string;
+    gpsVerifiedTag: string;
+    emptyRecords: string;
   };
   processPhyto: {
     title: string;
@@ -410,6 +488,95 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       pillUnsafe: "KHÔNG ĐẠT",
       viewScanFmt: (code) => `Xem bản scan giấy kiểm nghiệm gốc (${code})`,
       scanArchivedNote: "Bản scan giấy kiểm nghiệm có dấu đỏ đang lưu trữ tại hồ sơ lô đã duyệt của HTX Cư Né.",
+      accreditationFmt: (code) => `Chuẩn công nhận: ${code}`,
+      externalCodeFmt: (code) => `Mã đối chiếu độc lập: ${code}`,
+      externalVerifyBtn: "Đối chiếu trên cổng Phòng kiểm nghiệm",
+    },
+    governance: {
+      kicker: "Mô hình điểm Truy xuất nguồn gốc Cấp Xã - Tỉnh Đắk Lắk",
+      portalLinkLabel: "Xem cổng thông tin Tỉnh",
+      supervisoryLabel: "Đơn vị giám sát nhà nước:",
+      attestationTitle: "Cơ chế Bảo chứng Độc lập 3 Bên (3-Party Attestation)",
+      attestationBadge: "3 lớp kiểm chứng",
+      partyStatusVerified: "Đã xác nhận",
+      partyStatusWarning: "Cảnh báo",
+      partyStatusPending: "Đang rà soát",
+    },
+    integrity: {
+      title: "Chứng nhận Toàn vẹn Sổ cái SHA-256 & Hạn ngạch Vùng trồng",
+      badgeVerified: "Chuỗi băm nguyên vẹn",
+      badgeAlert: "Phát hiện sai lệch chuỗi",
+      sub: "Mỗi bản ghi canh tác, phun thuốc BVTV và biên bản kiểm tra đều bị khóa dấu thời gian máy chủ và nối chuỗi băm mật mã SHA-256 chống sửa lùi sau thu hoạch.",
+      chainAlgorithmLabel: "Thuật toán niêm phong",
+      sealedRecordsLabel: "Tổng bản ghi niêm phong",
+      sealedRecordsFmt: (total, journals, sprays, minutes) =>
+        `${total} bản ghi (${journals} nhật ký, ${sprays} đợt phun, ${minutes} biên bản)`,
+      onTimeRateLabel: "Tỷ lệ ghi đúng hạn (<= 48h)",
+      onTimeRateFmt: (pct, lateCount) =>
+        lateCount > 0 ? `${pct}% (${lateCount} bản ghi bổ sung muộn có giải trình)` : `${pct}% (Không có bản ghi trễ hạn)`,
+      gpsEvidenceLabel: "Ảnh hiện trường khớp GPS",
+      gpsEvidenceFmt: (gpsCount) => `${gpsCount} ảnh chụp xác thực tọa độ tại thửa`,
+      merkleAnchorLabel: "Mã neo gốc lô (Anchor)",
+      latestSealLabel: "Bản ghi niêm phong mới nhất",
+      massBalanceTitle: "Đối soát Hạn ngạch Sản lượng Vùng trồng (Mass-Balance)",
+      massBalanceBadgeOk: "Trong trần hạn ngạch",
+      massBalanceBadgeWarn: "Chạm ngưỡng trần",
+      massBalanceSeasonFmt: (year, plots, trees) =>
+        `Vụ ${year}: ${plots} thửa định danh (${trees.toLocaleString("vi-VN")} cây đang cho trái)`,
+      massBalanceUsedFmt: (usedTons, capTons, pct) =>
+        `Đã xuất: ${usedTons} / ${capTons} tấn (${pct}%)`,
+      massBalanceRemainFmt: (remainTons) => `Hạn ngạch còn lại: ${remainTons} tấn`,
+      massBalanceNote:
+        "Hệ thống tự động khóa xuất hàng khi tổng sản lượng thu mua chạm trần thẩm định đầu vụ của từng thửa GIS, ngăn chặn triệt để việc trà trộn sầu riêng ngoài vùng vào mã PUC.",
+    },
+    fieldAudit: {
+      passBannerKicker: "Chế độ Đoàn Thẩm định Thực địa (Field Audit Mode)",
+      passBannerActiveFmt: (delegation, org, expiresText) =>
+        `${delegation} (${org}) - Thẻ hiệu lực đến ${expiresText}`,
+      passBannerExitBtn: "Thoát thẻ thẩm định",
+      passPromptTitle: "Dành cho Đoàn công tác Tỉnh & Đối tác Thu mua tại vườn",
+      passPromptDesc:
+        "Nhập Mã Thẻ Đoàn Thẩm định Thực địa do UBND Xã Cư Né hoặc Ban Quản trị HTX cấp để mở ranh giới thửa đất GIS, hạn ngạch sản lượng thửa và đối chứng GPS trực tiếp tại vườn (vẫn bảo mật CCCD & SĐT cá nhân nông hộ).",
+      passInputPlaceholder: "Nhập mã thẻ đoàn (ví dụ: AUDIT-2026-CN01)...",
+      passApplyBtn: "Kích hoạt thẻ thẩm định",
+      passInvalidNote: "Mã thẻ thẩm định không tồn tại, đã hết hạn hoặc bị thu hồi.",
+      cardKicker: "Hồ sơ Thẩm định Thực địa Thửa đất (Bảng QR Tại Vườn)",
+      cardTitleFmt: (plotCode) => `Thửa canh tác định danh ${plotCode}`,
+      privacyBadge: "Bảo mật CCCD & SĐT hộ dân",
+      privacySub:
+        "Hiển thị ranh giới đa giác GIS, định mức sản lượng đầu vụ và sổ cái SHA-256 của thửa đất để đối tác kiểm tra ngẫu nhiên ngoài thực địa.",
+      plotSpecsTitle: "Thông số định danh thửa vườn",
+      farmerRepLabel: "Chủ hộ canh tác",
+      pucZoneLabel: "Mã vùng trồng (PUC)",
+      areaTreesLabel: "Quy mô thửa",
+      areaTreesFmt: (ha, trees) => `${ha} ha (${trees} cây kinh doanh)`,
+      varietyYearLabel: "Giống & năm trồng",
+      phiSafeBadge: "Đạt thời gian cách ly (PHI an toàn)",
+      phiLockedFmt: (safeFrom) =>
+        `Đang cách ly thuốc BVTV${safeFrom ? ` (An toàn từ ${safeFrom})` : ""}`,
+      quotaTitle: "Trần sản lượng thẩm định của thửa (Mass-Balance)",
+      quotaUsedFmt: (usedKg, capKg, pct) => `Đã xuất: ${usedKg} / ${capKg} kg (${pct}%)`,
+      quotaAssessedFmt: (unit, dateText) => `Đơn vị thẩm định: ${unit} (${dateText})`,
+      gpsMapTitle: "Bản đồ Ranh giới Thửa đất GIS & Đối chứng GPS Tại Vườn",
+      gpsVerifyBtn: "Đối chứng vị trí GPS tại vườn",
+      gpsVerifyingBtn: "Đang lấy tọa độ vệ tinh GPS...",
+      gpsUnsupportedErr: "Thiết bị hoặc trình duyệt không hỗ trợ định vị GPS.",
+      gpsPermissionErr: "Không thể lấy tọa độ GPS. Vui lòng bật quyền vị trí trên điện thoại và thử lại.",
+      gpsInsideTitle: "XÁC THỰC THÀNH CÔNG: Đang đứng bên trong ranh giới thửa đất đã đăng ký",
+      gpsNearTitle: (distM) =>
+        `XÁC THỰC TIẾP GIÁP: Đang đứng sát bờ ranh thửa đất (Cách ranh ${distM} m, trong ngưỡng sai số GPS)`,
+      gpsOutsideTitle: (distM) =>
+        `NGOÀI RANH GIỚI THỬA: Vị trí hiện tại cách thửa đất này ${distM} m (Đang xem từ xa)`,
+      gpsAccuracyFmt: (accM) => (accM ? `Sai số vệ tinh khoảng ±${Math.round(accM)} m` : "Định vị trực tiếp trên thiết bị"),
+      recentCheckinsTitle: "Nhật ký Đoàn thẩm định đối chứng GPS tại thửa",
+      noCheckinsYet: "Chưa có lượt bấm đối chứng GPS nào được ghi nhận tại thửa này.",
+      sealedDiaryTitle: "Nhật ký canh tác niêm phong SHA-256 của thửa",
+      sealedSprayTitle: "Nhật ký sử dụng thuốc BVTV & thời gian cách ly (PHI)",
+      sealedMinutesTitle: "Biên bản kiểm tra thực địa của cán bộ xã / HTX",
+      lateTag: "Ghi bổ sung muộn",
+      onTimeTag: "Ghi đúng hạn",
+      gpsVerifiedTag: "Khớp GPS tại vườn",
+      emptyRecords: "Chưa có bản ghi nào trong mục này.",
     },
     processPhyto: {
       title: "Quy trình sản xuất, Mốc ngày & Kiểm dịch",
@@ -590,6 +757,95 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       pillUnsafe: "NON-COMPLIANT",
       viewScanFmt: (code) => `View Original Stamped Lab Certificate (${code})`,
       scanArchivedNote: "Original stamped lab report scan is archived in the approved lot dossier at Cu Ne Cooperative.",
+      accreditationFmt: (code) => `Accreditation: ${code}`,
+      externalCodeFmt: (code) => `Independent Verify ID: ${code}`,
+      externalVerifyBtn: "Cross-check on External Lab Portal",
+    },
+    governance: {
+      kicker: "Commune-Level Pioneer Traceability Model - Dak Lak Province",
+      portalLinkLabel: "Official Provincial Portal",
+      supervisoryLabel: "State Supervisory Authority:",
+      attestationTitle: "Independent 3-Party Attestation Matrix",
+      attestationBadge: "3-Tier Verification",
+      partyStatusVerified: "Verified",
+      partyStatusWarning: "Alert",
+      partyStatusPending: "Under Review",
+    },
+    integrity: {
+      title: "SHA-256 Ledger Integrity Seal & Season Mass-Balance",
+      badgeVerified: "Hash Chain Intact",
+      badgeAlert: "Chain Mismatch Alert",
+      sub: "Every orchard log, pesticide application, and inspection minute is server-timestamped and cryptographically chained with SHA-256 to prevent post-harvest backdating.",
+      chainAlgorithmLabel: "Cryptographic Seal",
+      sealedRecordsLabel: "Total Sealed Entries",
+      sealedRecordsFmt: (total, journals, sprays, minutes) =>
+        `${total} records (${journals} logs, ${sprays} sprays, ${minutes} inspections)`,
+      onTimeRateLabel: "On-time Entry Rate (<= 48h)",
+      onTimeRateFmt: (pct, lateCount) =>
+        lateCount > 0 ? `${pct}% (${lateCount} declared late entries)` : `${pct}% (Zero late backdated entries)`,
+      gpsEvidenceLabel: "Geo-verified Field Photos",
+      gpsEvidenceFmt: (gpsCount) => `${gpsCount} photos matched parcel GPS boundary`,
+      merkleAnchorLabel: "Batch Anchor Digest",
+      latestSealLabel: "Latest Sealed Timestamp",
+      massBalanceTitle: "Growing Zone Season Quota Control (Mass-Balance)",
+      massBalanceBadgeOk: "Within Audited Quota",
+      massBalanceBadgeWarn: "Near Quota Ceiling",
+      massBalanceSeasonFmt: (year, plots, trees) =>
+        `Season ${year}: ${plots} registered plots (${trees.toLocaleString("en-US")} fruiting trees)`,
+      massBalanceUsedFmt: (usedTons, capTons, pct) =>
+        `Dispatched: ${usedTons} / ${capTons} t (${pct}%)`,
+      massBalanceRemainFmt: (remainTons) => `Remaining ceiling: ${remainTons} t`,
+      massBalanceNote:
+        "Server-enforced Mass-Balance automatically blocks lot aggregation above each parcel's audited pre-harvest yield ceiling, preventing external fruit mixing under this PUC.",
+    },
+    fieldAudit: {
+      passBannerKicker: "On-Site Delegation Field Audit Mode",
+      passBannerActiveFmt: (delegation, org, expiresText) =>
+        `${delegation} (${org}) - Pass valid until ${expiresText}`,
+      passBannerExitBtn: "Exit Audit Pass",
+      passPromptTitle: "For Visiting Buyer Delegations & Provincial Inspectors",
+      passPromptDesc:
+        "Enter the Field Audit Pass code issued by Cu Ne Commune People's Committee or Cu Ne Cooperative to unlock exact GIS parcel polygons, plot yield quotas, and live smartphone GPS verification on site (farmer national ID and phone remain protected).",
+      passInputPlaceholder: "Enter delegation pass (e.g. AUDIT-2026-CN01)...",
+      passApplyBtn: "Activate Audit Pass",
+      passInvalidNote: "Field audit pass code was not found, expired, or has been revoked.",
+      cardKicker: "On-Site Orchard Parcel Audit Dossier (Plot Signboard QR)",
+      cardTitleFmt: (plotCode) => `Registered Orchard Parcel ${plotCode}`,
+      privacyBadge: "Farmer ID & Phone Redacted",
+      privacySub:
+        "Displays registered GIS polygon boundaries, pre-season audited yield ceiling, and SHA-256 sealed cultivation logs for random on-site buyer inspections.",
+      plotSpecsTitle: "Registered Parcel Specifications",
+      farmerRepLabel: "Member Grower",
+      pucZoneLabel: "Production Unit Code (PUC)",
+      areaTreesLabel: "Parcel Scale",
+      areaTreesFmt: (ha, trees) => `${ha} ha (${trees} fruiting trees)`,
+      varietyYearLabel: "Variety & Planted Year",
+      phiSafeBadge: "PHI Cleared (Safe to Harvest)",
+      phiLockedFmt: (safeFrom) =>
+        `Active PHI Isolation${safeFrom ? ` (Safe from ${safeFrom})` : ""}`,
+      quotaTitle: "Audited Parcel Season Quota (Mass-Balance)",
+      quotaUsedFmt: (usedKg, capKg, pct) => `Used: ${usedKg} / ${capKg} kg (${pct}%)`,
+      quotaAssessedFmt: (unit, dateText) => `Assessed by: ${unit} (${dateText})`,
+      gpsMapTitle: "GIS Parcel Boundary & Live On-Site Smartphone GPS Check-In",
+      gpsVerifyBtn: "Verify Live GPS Position at Orchard",
+      gpsVerifyingBtn: "Acquiring satellite GPS coordinates...",
+      gpsUnsupportedErr: "Geolocation is not supported on this device or browser.",
+      gpsPermissionErr: "Unable to read GPS location. Please grant location permission on your phone and retry.",
+      gpsInsideTitle: "VERIFIED ON-SITE: Standing inside the registered GIS parcel polygon",
+      gpsNearTitle: (distM) =>
+        `BOUNDARY VERIFIED: Standing at parcel edge (${distM} m from polygon, within GPS tolerance)`,
+      gpsOutsideTitle: (distM) =>
+        `OUTSIDE PARCEL: Current location is ${distM} m away from this orchard (Remote inspection)`,
+      gpsAccuracyFmt: (accM) => (accM ? `Satellite accuracy approx. ±${Math.round(accM)} m` : "Live device GPS fix"),
+      recentCheckinsTitle: "On-Site GPS Audit Check-In Log",
+      noCheckinsYet: "No on-site GPS check-ins recorded for this parcel yet.",
+      sealedDiaryTitle: "SHA-256 Sealed Orchard Cultivation Log",
+      sealedSprayTitle: "Pesticide Application & PHI Compliance Log",
+      sealedMinutesTitle: "Commune / Cooperative Field Inspection Minutes",
+      lateTag: "Late Entry",
+      onTimeTag: "On-Time",
+      gpsVerifiedTag: "GPS Matched",
+      emptyRecords: "No records in this section.",
     },
     processPhyto: {
       title: "Production Standard, Key Dates & Phytosanitary",
@@ -765,6 +1021,95 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       pillUnsafe: "不合格",
       viewScanFmt: (code) => `查看盖章检测报告扫描件原件 (${code})`,
       scanArchivedNote: "加盖红章的纸质检测报告扫描件已归档保存于居内合作社已审核批次卷宗中。",
+      accreditationFmt: (code) => `实验室认可资质：${code}`,
+      externalCodeFmt: (code) => `第三方核验编码：${code}`,
+      externalVerifyBtn: "前往检测机构官网核验真伪",
+    },
+    governance: {
+      kicker: "越南多乐省乡级数字化溯源示范项目 - 居内乡人民政府督办",
+      portalLinkLabel: "访问多乐省政府门户",
+      supervisoryLabel: "政府监督指导单位：",
+      attestationTitle: "三方独立交叉背书机制（农户合作社 - 乡政府监管 - 独立实验室）",
+      attestationBadge: "三方独立核证",
+      partyStatusVerified: "已核验背书",
+      partyStatusWarning: "异常预警",
+      partyStatusPending: "复核中",
+    },
+    integrity: {
+      title: "SHA-256 防篡改农事账本封签与产区总产量配额管控",
+      badgeVerified: "哈希链完整无篡改",
+      badgeAlert: "账本校验预警",
+      sub: "每一笔农事记录、用药记录及现场检查纪要均由服务器锁定时间戳并生成 SHA-256 密码学哈希链，杜绝采后补录或事后篡改。",
+      chainAlgorithmLabel: "防篡改算法",
+      sealedRecordsLabel: "已封存记录总数",
+      sealedRecordsFmt: (total, journals, sprays, minutes) =>
+        `共 ${total} 条（农事 ${journals} 条，用药 ${sprays} 条，巡检 ${minutes} 条）`,
+      onTimeRateLabel: "48小时内及时录入率",
+      onTimeRateFmt: (pct, lateCount) =>
+        lateCount > 0 ? `${pct}%（含 ${lateCount} 条已说明原因的补录记录）` : `${pct}%（全部按时实时录入）`,
+      gpsEvidenceLabel: "GPS 地理围栏核验照片",
+      gpsEvidenceFmt: (gpsCount) => `${gpsCount} 张现场实拍图已匹配地块坐标`,
+      merkleAnchorLabel: "批次根哈希锚点",
+      latestSealLabel: "最新封存时间",
+      massBalanceTitle: "注册果园产季配额总量平衡管控 (Mass-Balance)",
+      massBalanceBadgeOk: "配额范围内合规",
+      massBalanceBadgeWarn: "接近配额上限",
+      massBalanceSeasonFmt: (year, plots, trees) =>
+        `${year} 产季：${plots} 个注册地块（共 ${trees.toLocaleString("zh-CN")} 株结果树）`,
+      massBalanceUsedFmt: (usedTons, capTons, pct) =>
+        `累计出货：${usedTons} / ${capTons} 吨（${pct}%）`,
+      massBalanceRemainFmt: (remainTons) => `剩余可用配额：${remainTons} 吨`,
+      massBalanceNote:
+        "系统按各地块产前实地清点树数与评估上限自动锁定出货配额，严防非注册果园（外地货源）混入本 PUC 编码出口。",
+    },
+    fieldAudit: {
+      passBannerKicker: "采购商与考察团现场核验模式 (Field Audit Mode)",
+      passBannerActiveFmt: (delegation, org, expiresText) =>
+        `${delegation}（${org}） - 核验通行证有效至 ${expiresText}`,
+      passBannerExitBtn: "退出核验通行证",
+      passPromptTitle: "面向中国采购商考察团与政府实地抽检组",
+      passPromptDesc:
+        "输入由居内乡人民政府或合作社签发的“现场考察核验通行码”，即可现场查看该地块精确 GIS 边界、单地块产量配额上限，并使用手机 GPS 实时验证您正站在注册果园地块内（农户身份证与电话仍受隐私保护）。",
+      passInputPlaceholder: "输入考察通行码（例如：AUDIT-2026-CN01）...",
+      passApplyBtn: "启用现场核验通行码",
+      passInvalidNote: "考察通行码不存在、已过期或已被撤销。",
+      cardKicker: "果园地块现场抽检核验档案（果园立牌二维码）",
+      cardTitleFmt: (plotCode) => `注册果园地块编号 ${plotCode}`,
+      privacyBadge: "已脱敏保护农户隐私",
+      privacySub:
+        "展示注册果园 GIS 矢量边界、产季评估产量上限及 SHA-256 哈希封存农事台账，支持采购商在果园现场随机抽检。",
+      plotSpecsTitle: "地块注册核定参数",
+      farmerRepLabel: "种植成员户",
+      pucZoneLabel: "注册果园编码 (PUC)",
+      areaTreesLabel: "地块面积与树数",
+      areaTreesFmt: (ha, trees) => `${ha} 公顷（${trees} 株挂果树）`,
+      varietyYearLabel: "品种与定植年份",
+      phiSafeBadge: "已过安全间隔期（准予采收）",
+      phiLockedFmt: (safeFrom) =>
+        `处于农残安全间隔期锁定期${safeFrom ? `（解封日期 ${safeFrom}）` : ""}`,
+      quotaTitle: "单地块产季核定配额上限 (Mass-Balance)",
+      quotaUsedFmt: (usedKg, capKg, pct) => `已归集出货：${usedKg} / ${capKg} 公斤（${pct}%）`,
+      quotaAssessedFmt: (unit, dateText) => `核定单位：${unit}（${dateText}）`,
+      gpsMapTitle: "注册地块 GIS 精确边界与手机 GPS 现场定位核验",
+      gpsVerifyBtn: "使用手机 GPS 现场核验果园位置",
+      gpsVerifyingBtn: "正在获取手机卫星定位坐标...",
+      gpsUnsupportedErr: "当前设备或浏览器不支持 GPS 地理定位。",
+      gpsPermissionErr: "无法获取 GPS 坐标，请在手机浏览器中允许位置权限后重试。",
+      gpsInsideTitle: "现场核验通过：您当前正站在该注册果园 GIS 边界内部",
+      gpsNearTitle: (distM) =>
+        `边界核验通过：您位于地块边缘（距边界线 ${distM} 米，在卫星定位误差允许范围内）`,
+      gpsOutsideTitle: (distM) =>
+        `不在地块边界内：您当前位置距该果园地块 ${distM} 米（远程查阅模式）`,
+      gpsAccuracyFmt: (accM) => (accM ? `卫星定位精度约 ±${Math.round(accM)} 米` : "手机实时卫星定位"),
+      recentCheckinsTitle: "考察团现场 GPS 打卡核验记录",
+      noCheckinsYet: "该地块暂无现场 GPS 打卡核验记录。",
+      sealedDiaryTitle: "地块 SHA-256 封存农事作业台账",
+      sealedSprayTitle: "植保用药与安全间隔期 (PHI) 台账",
+      sealedMinutesTitle: "乡政府 / 合作社现场巡检纪要",
+      lateTag: "事后补录",
+      onTimeTag: "实时录入",
+      gpsVerifiedTag: "GPS 现场实拍",
+      emptyRecords: "暂无相关记录。",
     },
     processPhyto: {
       title: "生产标准、关键时间节点与植物检疫",
@@ -1080,4 +1425,97 @@ export function localizeTimelineStep(
           };
     }
   }
+}
+
+export function localizeGovernmentEndorsement(
+  gov: {
+    programTitle: string;
+    directiveNo: string;
+    communeAuthority: string;
+    provincialAuthority: string;
+    inspectionUnit: string;
+  },
+  lang: TraceLang,
+): {
+  programTitle: string;
+  directiveNo: string;
+  communeAuthority: string;
+  provincialAuthority: string;
+  inspectionUnit: string;
+} {
+  if (lang === "vi") return gov;
+  if (lang === "zh") {
+    return {
+      programTitle: "越南多乐省政府督办 - 乡级鲜食榴莲数字化全链路溯源先锋示范工程",
+      directiveNo: "多乐省农业数字化转型与输华注册果园编码 (PUC) 标准化督办计划",
+      communeAuthority: "越南多乐省克容布县居内乡人民政府 (UBND Xã Cư Né)",
+      provincialAuthority: "越南多乐省人民委员会 - 农业与环境厅",
+      inspectionUnit: "居内乡社区联合监督组与居内合作社技术委员会",
+    };
+  }
+  return {
+    programTitle: "Dak Lak Provincial Pioneer Commune-Level Durian Traceability Program",
+    directiveNo: "Dak Lak Agricultural Digital Transformation & Export PUC Standardization Initiative",
+    communeAuthority: "Cu Ne Commune People's Committee - Krong Buk District",
+    provincialAuthority: "Dak Lak Provincial People's Committee - Dept. of Agriculture & Environment",
+    inspectionUnit: "Cu Ne Commune Community Supervisory Board & Coop Technical Unit",
+  };
+}
+
+export function localizeAttestationParty(
+  party: {
+    partyKey: string;
+    roleLabel: string;
+    actorName: string;
+    summary: string;
+  },
+  lang: TraceLang,
+): { roleLabel: string; actorName: string; summary: string } {
+  if (lang === "vi") {
+    return {
+      roleLabel: party.roleLabel,
+      actorName: party.actorName,
+      summary: party.summary,
+    };
+  }
+
+  if (party.partyKey === "producer") {
+    return lang === "zh"
+      ? {
+          roleLabel: "第一方：注册农户与生产合作社",
+          actorName: localizeCoopName(party.actorName, "zh"),
+          summary: "全程记录电子农事与植保台账，服务器自动锁定时间戳并生成 SHA-256 哈希链",
+        }
+      : {
+          roleLabel: "Party 1: Member Growers & Producer Coop",
+          actorName: localizeCoopName(party.actorName, "en"),
+          summary: "Electronic orchard & spray logs sealed with server timestamps and SHA-256 hash chain",
+        };
+  }
+
+  if (party.partyKey === "commune_gov") {
+    return lang === "zh"
+      ? {
+          roleLabel: "第二方：乡人民政府与社区监督组",
+          actorName: "居内乡人民政府 (UBND Xã Cư Né) 与社区监督组",
+          summary: "实地清点挂果树核定产季配额上限 (Mass-Balance)，开展不定期现场抽检与封签核验",
+        }
+      : {
+          roleLabel: "Party 2: Commune Government & Supervisory Board",
+          actorName: "Cu Ne Commune People's Committee & Supervisory Unit",
+          summary: "Pre-season tree count & yield quota assessment (Mass-Balance) with periodic field inspections",
+        };
+  }
+
+  return lang === "zh"
+    ? {
+        roleLabel: "第三方：ISO/IEC 17025 独立实验室与检疫机构",
+        actorName: party.actorName,
+        summary: "独立采样检测重金属镉 (Cd)、黄O及农残指标，支持外部实验室官网交叉核验与口岸植物检疫",
+      }
+    : {
+        roleLabel: "Party 3: ISO/IEC 17025 Lab & Plant Quarantine",
+        actorName: party.actorName,
+        summary: "Independent sampling for Cadmium (Cd), Auramine O & MRLs with external lab cross-verification",
+      };
 }

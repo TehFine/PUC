@@ -38,7 +38,7 @@
 .lp.sw-page .sw-trace-brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   padding: 0;
   border: none !important;
   outline: none;
@@ -59,12 +59,16 @@
 .sw-trace-nav {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: clamp(18px, 2.2vw, 32px);
 }
 
 .sw-trace-nav a {
   position: relative;
-  padding: 4px 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0;
   font-size: 13.5px;
   font-weight: 450;
   letter-spacing: -0.01em;
@@ -85,11 +89,14 @@
 }
 
 .lp.sw-page .sw-trace-top-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
   font-size: 13.5px;
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--sw-ink);
-  padding: 6px 2px;
+  padding: 0 2px;
   white-space: nowrap;
   transition: opacity 0.16s ease;
 }
@@ -109,8 +116,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 34px;
-  padding: 0 15px;
+  height: 36px;
+  padding: 0 16px;
   border: 1px solid var(--sw-ink);
   border-radius: 0;
   background: var(--sw-ink);
@@ -206,8 +213,8 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 14px;
+  gap: 12px;
+  padding: 0 16px;
 }
 
 .sw-trace-search-icon {
@@ -226,6 +233,7 @@
   font-family: inherit;
   font-size: 14.5px;
   font-weight: 450;
+  font-variant-numeric: tabular-nums;
   color: var(--sw-ink);
 }
 
@@ -239,8 +247,9 @@
 }
 
 .lp.sw-page .sw-trace-clear {
-  width: 26px;
-  height: 26px;
+  width: 36px;
+  height: 36px;
+  margin-right: -6px;
   padding: 0;
   border: none;
   background: transparent;
@@ -261,7 +270,7 @@
 .lp.sw-page .sw-trace-submit {
   flex-shrink: 0;
   height: 48px;
-  padding: 0 22px;
+  padding: 0 24px;
   border: none;
   border-left: 1px solid var(--sw-ink);
   border-radius: 0;
@@ -270,7 +279,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
+  gap: 8px;
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
@@ -302,9 +311,10 @@
 .lp.sw-page .sw-trace-chip {
   display: inline-flex;
   align-items: center;
-  height: 28px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 12px;
   border: 1px solid #dfdfd9;
+  border-radius: 0;
   background: #ffffff;
   font-family: var(--font-num-stack, var(--font-inter), sans-serif);
   font-variant-numeric: tabular-nums;
@@ -359,7 +369,12 @@
   contain: layout style;
 }
 
+.lp.sw-page .sw-trace-card:nth-child(4n + 1) {
+  padding-left: 0;
+}
+
 .lp.sw-page .sw-trace-card:nth-child(4n) {
+  padding-right: 0;
   border-right: none;
 }
 
@@ -441,6 +456,7 @@
 }
 
 .sw-trace-card-date {
+  min-width: 0;
   font-family: var(--font-num-stack, var(--font-inter), sans-serif);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
@@ -449,6 +465,7 @@
 
 .sw-trace-card-cta {
   margin-left: auto;
+  flex-shrink: 0;
   font-size: 13px;
   font-weight: 500;
   color: #454542;
@@ -483,11 +500,21 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .lp.sw-page .sw-trace-card:nth-child(4n + 1) {
+    padding-left: var(--sw-pad-x);
+  }
+
   .lp.sw-page .sw-trace-card:nth-child(4n) {
+    padding-right: var(--sw-pad-x);
     border-right: 1px solid var(--sw-line);
   }
 
+  .lp.sw-page .sw-trace-card:nth-child(2n + 1) {
+    padding-left: 0;
+  }
+
   .lp.sw-page .sw-trace-card:nth-child(2n) {
+    padding-right: 0;
     border-right: none;
   }
 }
@@ -574,17 +601,18 @@
 
   .sw-trace-topbar-inner {
     padding: 0 var(--sw-pad-x);
-    gap: 10px;
+    gap: 12px;
   }
 
   .lp.sw-page .sw-trace-top-link {
-    padding: 6px 0;
+    min-height: 36px;
+    padding: 0;
     font-size: 13.5px;
   }
 
   .lp.sw-page .sw-trace-auth-btn {
-    height: 34px;
-    padding: 0 13px;
+    height: 36px;
+    padding: 0 14px;
     font-size: 13px;
   }
 
@@ -641,13 +669,15 @@
     flex-direction: column;
     border: none;
     background: transparent;
-    gap: 10px;
+    gap: 8px;
   }
 
   .sw-trace-input-wrap {
+    height: 48px;
+    box-sizing: border-box;
     border: 1px solid #cfcfc9;
     background: #fafaf8;
-    padding: 0 13px;
+    padding: 0 12px;
   }
 
   .sw-trace-input-wrap:focus-within {
@@ -656,13 +686,13 @@
   }
 
   .sw-trace-input {
-    height: 46px;
-    font-size: 14.5px;
+    height: 100%;
+    font-size: 16px;
   }
 
   .lp.sw-page .sw-trace-submit {
     width: 100%;
-    height: 46px;
+    height: 48px;
     border: 1px solid var(--sw-ink);
     font-size: 14px;
   }
@@ -670,7 +700,12 @@
   .sw-trace-quick {
     justify-content: center;
     padding-top: 4px;
-    gap: 7px;
+    gap: 8px;
+  }
+
+  .lp.sw-page .sw-trace-chip {
+    min-height: 36px;
+    padding: 0 12px;
   }
 
   .sw-trace-hero-foot {
@@ -693,7 +728,9 @@
     border-top: 1px solid #e2e2de;
   }
 
-  .lp.sw-page .sw-trace-card {
+  .lp.sw-page .sw-trace-card,
+  .lp.sw-page .sw-trace-card:nth-child(2n + 1),
+  .lp.sw-page .sw-trace-card:nth-child(2n) {
     min-height: 0;
     padding: 22px 0;
     gap: 12px;
@@ -736,7 +773,7 @@
 
   .sw-trace-pillars > .sw-cell {
     order: 1;
-    padding: 20px 8px !important;
+    padding: 20px 0 !important;
     border-right: none !important;
     border-bottom: none !important;
     align-items: center;
@@ -774,5 +811,91 @@ html[data-perf="lite"] .sw-trace-chip,
 html[data-perf="lite"] .sw-trace-submit,
 html[data-perf="lite"] .sw-trace-form {
   transition: none !important;
+}
+
+/* ─── Dải Trải nghiệm Đoàn Thẩm định Thực địa Tại Vườn (Đối tác & Đoàn Tỉnh) ─── */
+.sw-field-audit-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  flex-wrap: wrap;
+  margin: 0 var(--sw-edge-x);
+  padding: 20px 24px;
+  background: #f6f8f5;
+  border-bottom: 1px solid var(--sw-line);
+}
+
+.sw-field-audit-copy {
+  flex: 1 1 440px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sw-field-audit-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #1c4e30;
+}
+
+.sw-field-audit-desc {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--sw-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.sw-field-audit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.lp.sw-page .sw-field-audit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--sw-ink);
+  border-radius: 0;
+  background: #ffffff;
+  color: var(--sw-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.lp.sw-page .sw-field-audit-btn.is-primary {
+  background: #1c4e30;
+  border-color: #1c4e30;
+  color: #ffffff;
+}
+
+.lp.sw-page .sw-field-audit-btn:hover {
+  background: var(--sw-ink);
+  border-color: var(--sw-ink);
+  color: #ffffff;
+}
+
+@media (max-width: 768px) {
+  .sw-field-audit-callout {
+    margin: 12px var(--sw-pad-x) 0;
+    padding: 16px;
+    border: 1px solid #d5dfd7;
+  }
+
+  .sw-field-audit-actions,
+  .lp.sw-page .sw-field-audit-btn {
+    width: 100%;
+  }
 }
 

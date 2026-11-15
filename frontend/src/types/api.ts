@@ -52,11 +52,11 @@ export interface TwoFactorSetupResponse {
 export interface TraceAccessLogDto {
   id: number;
   viewedAt: string;
-  userId: number;
+  userId: number | null;
   username: string;
   fullName: string;
-  userRole: Role;
-  viewerTier: "public" | "enterprise" | "authority";
+  userRole: Role | "field_auditor";
+  viewerTier: "public" | "enterprise" | "authority" | "field_audit";
   scannedCode: string;
   lotCode: string | null;
   scopeGranted: boolean;
@@ -112,17 +112,43 @@ export interface MinuteDto {
   location: string;
   officer: string;
   result: "pass" | "fail" | "improve";
+  householdId?: number | null;
+  householdName?: string | null;
+  plotCode?: string | null;
+  photoId?: number | null;
+  photoUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  gpsVerified?: boolean;
+  gpsDistanceM?: number | null;
+  serverRecordedAt?: string;
+  entryDelayHours?: number;
+  isLateEntry?: boolean;
+  lateReason?: string | null;
+  recordHash?: string | null;
 }
 
 export interface JournalDto {
   id: number;
   entryOn: string;
+  householdId?: number;
   householdName: string;
   plotCode: string;
   activity: string;
   detail: string | null;
   recorder: string;
   hasPhoto: boolean;
+  photoUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  gpsVerified?: boolean;
+  gpsDistanceM?: number | null;
+  captureSource?: "camera" | "upload" | "system";
+  serverRecordedAt?: string;
+  entryDelayHours?: number;
+  isLateEntry?: boolean;
+  lateReason?: string | null;
+  recordHash?: string | null;
 }
 
 export interface ViolationDto {
@@ -138,18 +164,27 @@ export interface ViolationDto {
 export interface SprayDto {
   id: number;
   sprayedOn: string;
+  householdId?: number;
   householdName: string;
+  plotCode?: string | null;
+  pesticideId?: number;
   pesticideName: string;
   source: string | null;
   dose: string;
   areaHa: number;
   isolationDays: number;
   mrlStatus: "pass" | "exceeded";
+  serverRecordedAt?: string;
+  entryDelayHours?: number;
+  isLateEntry?: boolean;
+  lateReason?: string | null;
+  recordHash?: string | null;
 }
 
 export interface LabTestDto {
   id: number;
   code: string;
+  householdId?: number;
   householdName: string;
   plotCode: string;
   sampledOn: string;
@@ -159,6 +194,10 @@ export interface LabTestDto {
   chlorpyrifosMgKg: number | null;
   result: "pass" | "fail";
   lab: string;
+  labAccreditationCode?: string | null;
+  externalVerifyCode?: string | null;
+  externalVerifyUrl?: string | null;
+  recordStatus?: "draft" | "verified";
   scanAttachmentId?: number | null;
   scanUrl?: string | null;
 }
@@ -327,4 +366,72 @@ export interface AuditLogDto {
   action: string;
   object: string | null;
   detail: string | null;
+}
+
+export interface PlotSeasonQuotaDto {
+  id: number;
+  seasonYear: number;
+  householdId: number;
+  householdCode: string;
+  householdName: string;
+  villageName: string | null;
+  plotCode: string;
+  plotQrToken: string | null;
+  zoneCode: string;
+  areaHa: number;
+  treeCount: number;
+  maxQuotaKg: number;
+  usedKg: number;
+  remainingKg: number;
+  utilizationPct: number;
+  assessedBy: string;
+  assessedOn: string | null;
+  note: string | null;
+}
+
+export interface PlotSignboardDto {
+  plotCode: string;
+  qrToken: string;
+  householdId: number | null;
+  householdCode: string | null;
+  householdName: string | null;
+  villageName: string | null;
+  zoneCode: string;
+  variety: string;
+  plantedYear: number | null;
+  areaHa: number;
+  treeCount: number;
+  maxQuotaKg: number | null;
+  centerLat: number | null;
+  centerLng: number | null;
+  geometryJson: string | null;
+}
+
+export interface FieldAuditPassDto {
+  id: number;
+  code: string;
+  passToken: string;
+  delegationName: string;
+  organization: string | null;
+  allowedZoneCode: string | null;
+  defaultLang: "vi" | "en" | "zh";
+  expiresAt: string;
+  status: "active" | "revoked" | "expired" | string;
+  isValidNow: boolean;
+  accessCount: number;
+  lastAccessedAt: string | null;
+  issuedByName: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface EndorsementConfigDto {
+  programTitle: string;
+  directiveNo: string;
+  communeAuthority: string;
+  provincialAuthority: string;
+  officialPortalUrl: string;
+  officialDomain: string;
+  inspectionUnit: string;
+  updatedAt?: string;
 }

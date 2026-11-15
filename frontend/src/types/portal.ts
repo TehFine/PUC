@@ -67,6 +67,9 @@ export interface PortalPlot {
   areaHa: number;
   source: "declared" | "measured" | "cadastral" | "demo";
   status: PlotStatus;
+  qrToken?: string | null;
+  treeCount?: number | null;
+  maxQuotaKg?: number | null;
   lat?: number | null;
   lng?: number | null;
   geometryJson?: string | null;
@@ -89,6 +92,13 @@ export interface PortalJournalEntry {
   photoUrl?: string | null;
   latitude?: number | string | null;
   longitude?: number | string | null;
+  serverRecordedAt?: string | null;
+  entryDelayHours?: number;
+  isLateEntry?: boolean;
+  lateReason?: string | null;
+  recordHash?: string | null;
+  gpsVerified?: boolean;
+  gpsDistanceM?: number | null;
   /** Thời điểm tạo bản ghi (để biết còn trong 24 giờ được phép xóa). */
   createdAt?: string | null;
   /** Server có thể trả sẵn cờ cho phép xóa. */
@@ -103,6 +113,7 @@ export interface CreateJournalBody {
   photoId: number;
   latitude?: number;
   longitude?: number;
+  lateReason?: string;
 }
 
 export interface PortalSprayRecord {
@@ -117,6 +128,11 @@ export interface PortalSprayRecord {
   isolationEndsOn?: string | null;
   mrlStatus: "pass" | "exceeded";
   plotCode?: string | null;
+  serverRecordedAt?: string | null;
+  entryDelayHours?: number;
+  isLateEntry?: boolean;
+  lateReason?: string | null;
+  recordHash?: string | null;
   createdAt?: string | null;
   canDelete?: boolean;
 }
@@ -128,6 +144,7 @@ export interface CreateSprayBody {
   areaHa: number;
   source?: string;
   plotCode?: string;
+  lateReason?: string;
 }
 
 export interface PortalLabTest {
@@ -142,6 +159,9 @@ export interface PortalLabTest {
   result: "pass" | "fail";
   lab: string;
   householdName?: string;
+  labAccreditationCode?: string | null;
+  externalVerifyCode?: string | null;
+  externalVerifyUrl?: string | null;
 }
 
 export interface PortalScheduleItem {
@@ -312,7 +332,15 @@ export interface PortalTraining {
   myStatus: TrainingRegistrationStatus | null;
 }
 
-export type NotificationKind = "approval" | "violation" | "harvest" | "training" | "schedule" | "lab" | "system";
+export type NotificationKind =
+  | "approval"
+  | "violation"
+  | "harvest"
+  | "training"
+  | "schedule"
+  | "lab"
+  | "protocol"
+  | "system";
 
 export interface AppNotification {
   id: number;

@@ -1,6 +1,14 @@
 // Thông báo trong ứng dụng (`GET /notifications`) & thông báo khẩn toàn hệ thống (`GET /health`, `/system-alerts`).
 
-export type NotificationKind = "approval" | "violation" | "harvest" | "training" | "schedule" | "lab" | "system";
+export type NotificationKind =
+  | "approval"
+  | "violation"
+  | "harvest"
+  | "training"
+  | "schedule"
+  | "lab"
+  | "protocol"
+  | "system";
 
 export interface NotificationItem {
   id: number;

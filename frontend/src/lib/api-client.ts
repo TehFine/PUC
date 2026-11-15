@@ -144,7 +144,8 @@ export type UploadPurpose =
   | "news"
   | "catalog"
   | "avatar"
-  | "lab";
+  | "lab"
+  | "inspection";
 
 export interface UploadedFile {
   id: number;
@@ -156,6 +157,7 @@ export interface UploadedFile {
 export const api = {
   get: <T>(path: string) => apiRequest<T>(path),
   post: <T>(path: string, body?: unknown) => apiRequest<T>(path, jsonRequest("POST", body)),
+  put: <T>(path: string, body?: unknown) => apiRequest<T>(path, jsonRequest("PUT", body)),
   patch: <T>(path: string, body: unknown) => apiRequest<T>(path, jsonRequest("PATCH", body)),
   delete: <T>(path: string) => apiRequest<T>(path, jsonRequest("DELETE")),
   /** Tải một tệp lên `/api/uploads` (multipart). Trả về `{ id, url }` để gửi kèm bản ghi nghiệp vụ. */
