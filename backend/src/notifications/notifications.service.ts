@@ -3,7 +3,15 @@ import type { AuthUser } from "../auth/auth-user";
 import { camelRows } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
 
-export type NotificationKind = "approval" | "violation" | "harvest" | "training" | "schedule" | "lab" | "system";
+export type NotificationKind =
+  | "approval"
+  | "violation"
+  | "harvest"
+  | "training"
+  | "schedule"
+  | "lab"
+  | "system"
+  | "protocol";
 
 export interface NotificationInput {
   kind: NotificationKind;
@@ -39,6 +47,27 @@ export class NotificationsService {
     await this.insert(
       `SELECT id FROM users WHERE role = ANY($5::text[]) AND status = 'active'`,
       [input.kind, input.title, input.body ?? null, input.link ?? null, roles],
+    );
+  }
+
+  /**
+   * Gửi cảnh báo tuân thủ quy trình tới Quản trị viên, Cán bộ HTX, Kiểm tra viên
+   * và Cán bộ thôn phụ trách đúng thôn của hộ dân.
+   */
+  async notifyOversightForHousehold(householdId: number, input: NotificationInput): Promise<void> {
+    await this.insert(
+      `SELECT u.id
+       FROM users u
+       WHERE u.status = 'active'
+         AND (
+           u.role IN ('admin', 'htx_officer', 'inspector')
+           OR (
+             u.role = 'village_officer'
+             AND u.village_id IS NOT NULL
+             AND u.village_id = (SELECT h.village_id FROM households h WHERE h.id = $5)
+           )
+         )`,
+      [input.kind, input.title, input.body ?? null, input.link ?? null, householdId],
     );
   }
 

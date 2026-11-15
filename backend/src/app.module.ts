@@ -20,6 +20,7 @@ import { RegistrationsModule } from "./registrations/registrations.module";
 import { ResourcesModule } from "./resources/resources.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { UploadsModule } from "./uploads/uploads.module";
+import { CareProtocolModule } from "./care-protocol/care-protocol.module";
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { UploadsModule } from "./uploads/uploads.module";
     AuthModule,
     PlotsModule,
     PortalModule,
+    CareProtocolModule,
     RegistrationsModule,
     ResourcesModule,
   ],
