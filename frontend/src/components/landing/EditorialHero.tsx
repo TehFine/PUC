@@ -87,11 +87,11 @@ export default function EditorialHero() {
   const authenticated = status === "authenticated";
   const workspaceHref = homePathFor(session?.user.role);
 
-  const householdsStr = data ? fmt(data.households) : "49";
-  const qualifiedStr = data ? fmt(data.qualifiedHouseholds) : "49";
-  const areaStr = data ? fmt(data.areaHa, 1) : "80,5";
-  const plotsStr = data ? fmt(data.plots) : "50";
-  const villagesStr = data ? fmt(data.villages) : "5";
+  const householdsStr = data ? fmt(data.households) : "—";
+  const qualifiedStr = data ? fmt(data.qualifiedHouseholds) : "—";
+  const areaStr = data ? fmt(data.areaHa, 1) : "—";
+  const plotsStr = data ? fmt(data.plots) : "—";
+  const villagesStr = data ? fmt(data.villages) : "—";
 
   const handleSelectNav = useCallback((href: string) => {
     setActiveHref(href);

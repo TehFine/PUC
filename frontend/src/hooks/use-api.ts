@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, api, errorMessage } from "@/lib/api-client";
+import {
+  AUTH_EXPIRED_EVENT,
+  AUTH_LOGOUT_EVENT,
+  DATA_MUTATED_EVENT,
+  DATA_SYNC_CHANNEL,
+  api,
+  errorMessage,
+} from "@/lib/api-client";
 import type { ListResponse } from "@/types/api";
 
 interface CacheEntry {
@@ -33,6 +40,15 @@ if (typeof window !== "undefined") {
   };
   window.addEventListener(AUTH_LOGOUT_EVENT, clearAll);
   window.addEventListener(AUTH_EXPIRED_EVENT, clearAll);
+  window.addEventListener(DATA_MUTATED_EVENT, () => apiCache.clear());
+  if (typeof BroadcastChannel !== "undefined") {
+    try {
+      const bc = new BroadcastChannel(DATA_SYNC_CHANNEL);
+      bc.addEventListener("message", () => apiCache.clear());
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /** Xóa bộ nhớ đệm API (gọi tự động sau khi mutation thành công hoặc khi làm mới thủ công). */

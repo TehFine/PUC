@@ -18,6 +18,34 @@ export const AUTH_EXPIRED_EVENT = "auth:expired";
 /** Sự kiện phát ra khi người dùng đăng xuất khỏi hệ thống. */
 export const AUTH_LOGOUT_EVENT = "auth:logout";
 
+/** Sự kiện & kênh đồng bộ phát ra khi dữ liệu nghiệp vụ trên hệ thống vừa thay đổi (POST/PATCH/PUT/DELETE). */
+export const DATA_MUTATED_EVENT = "puc:data-mutated";
+export const DATA_SYNC_CHANNEL = "puc-data-sync";
+
+let syncChannel: BroadcastChannel | null = null;
+
+function getSyncChannel(): BroadcastChannel | null {
+  if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return null;
+  if (!syncChannel) {
+    try {
+      syncChannel = new BroadcastChannel(DATA_SYNC_CHANNEL);
+    } catch {
+      syncChannel = null;
+    }
+  }
+  return syncChannel;
+}
+
+export function notifyDataMutated(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(DATA_MUTATED_EVENT));
+  try {
+    getSyncChannel()?.postMessage({ type: DATA_MUTATED_EVENT, at: Date.now() });
+  } catch {
+    // Bỏ qua nếu trình duyệt chặn BroadcastChannel.
+  }
+}
+
 let refreshing: Promise<boolean> | null = null;
 
 // Dùng chung một lần làm mới cho nhiều request 401 đồng thời (refresh token xoay vòng, chỉ dùng được một lần).
@@ -47,10 +75,11 @@ const NO_REFRESH_PATHS = [
 const isAuthPath = (path: string) => NO_REFRESH_PATHS.some((prefix) => path.startsWith(prefix));
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const isMutating = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+
   const send = async () => {
     const startedAt = performance.now();
-    const method = (init?.method ?? "GET").toUpperCase();
-    const isMutating = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
     const headers = isMutating
       ? { "X-Requested-With": "XMLHttpRequest", ...(init?.headers as Record<string, string> | undefined) }
       : init?.headers;
@@ -91,6 +120,9 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     throw new ApiError(body?.error ?? "Không xử lý được yêu cầu.", response.status, body?.code, body?.details);
   }
   reportServerHealthy();
+  if (isMutating && !isAuthPath(path)) {
+    notifyDataMutated();
+  }
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;

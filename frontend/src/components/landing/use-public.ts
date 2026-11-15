@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+import { DATA_MUTATED_EVENT, DATA_SYNC_CHANNEL } from "@/lib/api-client";
 import { reportRequestTime } from "@/lib/network";
 
 export interface PublicOverview {
@@ -66,18 +67,94 @@ export interface PublicCatalog {
 
 type State<T> = { data: T | null; error: boolean; loading: boolean };
 
-// Dùng chung một lần gọi cho nhiều thành phần trên trang.
-const cache = new Map<string, Promise<unknown>>();
-const resolvedCache = new Map<string, unknown>();
+interface StoreEntry {
+  state: State<unknown>;
+  updatedAt: number;
+  inflight: Promise<unknown> | null;
+}
 
+const OVERVIEW_STORAGE_KEY = "puc:public-overview:v1";
 const REQUEST_TIMEOUT_MS = 20_000;
 const RETRY_DELAY_MS = 1500;
+const MOUNT_FRESH_MS = 2_000;
+const FOCUS_REVALIDATE_MS = 3_000;
 
-/** Một lần gọi có giới hạn thời gian; thời gian phản hồi được báo cho bộ theo dõi chất lượng mạng. */
+const SERVER_SNAPSHOT: State<never> = Object.freeze({
+  data: null,
+  error: false,
+  loading: true,
+});
+
+const entries = new Map<string, StoreEntry>();
+const listeners = new Set<() => void>();
+let globalListenersAttached = false;
+
+function emitChange() {
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+function isValidOverview(val: unknown): val is PublicOverview {
+  if (!val || typeof val !== "object") return false;
+  const o = val as Record<string, unknown>;
+  return (
+    typeof o.households === "number" &&
+    Number.isFinite(o.households) &&
+    typeof o.qualifiedHouseholds === "number" &&
+    Number.isFinite(o.qualifiedHouseholds) &&
+    typeof o.villages === "number" &&
+    Number.isFinite(o.villages) &&
+    typeof o.plots === "number" &&
+    Number.isFinite(o.plots) &&
+    typeof o.areaHa === "number" &&
+    Number.isFinite(o.areaHa)
+  );
+}
+
+function readPersistedData(path: string): unknown | null {
+  if (path !== "overview" || typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(OVERVIEW_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isValidOverview(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistData(path: string, data: unknown) {
+  if (path !== "overview" || typeof window === "undefined" || !isValidOverview(data)) return;
+  try {
+    window.localStorage.setItem(OVERVIEW_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Bỏ qua nếu trình duyệt chặn localStorage.
+  }
+}
+
+function ensureEntry(path: string): StoreEntry {
+  let entry = entries.get(path);
+  if (!entry) {
+    const persisted = readPersistedData(path);
+    entry = {
+      state: persisted !== null ? { data: persisted, error: false, loading: false } : SERVER_SNAPSHOT,
+      updatedAt: 0,
+      inflight: null,
+    };
+    entries.set(path, entry);
+  }
+  return entry;
+}
+
+/** Một lần gọi không lưu đệm cứng trên trình duyệt; thời gian phản hồi được báo cho bộ theo dõi chất lượng mạng. */
 async function fetchJson<T>(path: string): Promise<T> {
   const startedAt = performance.now();
   try {
-    const response = await fetch(`/api/public/${path}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const response = await fetch(`/api/public/${path}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (!response.ok) throw new Error(String(response.status));
     return (await response.json()) as T;
   } finally {
@@ -85,44 +162,104 @@ async function fetchJson<T>(path: string): Promise<T> {
   }
 }
 
-function load<T>(path: string): Promise<T> {
-  if (!cache.has(path)) {
-    // Mạng chập chờn: tự thử lại một lần trước khi báo lỗi, để người dùng không phải tải lại trang.
-    const request = fetchJson<T>(path)
-      .catch(async () => {
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-        return fetchJson<T>(path);
-      })
-      .then((data) => {
-        resolvedCache.set(path, data);
-        return data;
-      })
-      .catch((error) => {
-        cache.delete(path); // cho phép thử lại ở lần tải sau
-        throw error;
-      });
-    cache.set(path, request);
+function revalidate(path: string, force = false): Promise<unknown> {
+  const entry = ensureEntry(path);
+  if (!force && entry.inflight) return entry.inflight;
+  if (!force && entry.updatedAt > 0 && Date.now() - entry.updatedAt < MOUNT_FRESH_MS) {
+    return Promise.resolve(entry.state.data);
   }
-  return cache.get(path) as Promise<T>;
+
+  const request = fetchJson<unknown>(path)
+    .catch(async () => {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      return fetchJson<unknown>(path);
+    })
+    .then((data) => {
+      persistData(path, data);
+      entry.updatedAt = Date.now();
+      const prevJson = entry.state.data !== null ? JSON.stringify(entry.state.data) : null;
+      const nextJson = JSON.stringify(data);
+      if (prevJson !== nextJson || entry.state.loading || entry.state.error) {
+        entry.state = { data, error: false, loading: false };
+        emitChange();
+      }
+      return data;
+    })
+    .catch((error) => {
+      if (entry.state.data === null && (!entry.state.error || entry.state.loading)) {
+        entry.state = { data: null, error: true, loading: false };
+        emitChange();
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (entry.inflight === request) {
+        entry.inflight = null;
+      }
+    });
+
+  entry.inflight = request;
+  return request;
+}
+
+/** Xóa hiệu lực bộ nhớ đệm công khai và tải lại ngay nếu trang giới thiệu đang hiển thị. */
+export function invalidatePublicCache() {
+  for (const [path, entry] of entries.entries()) {
+    entry.updatedAt = 0;
+    if (listeners.size > 0) {
+      void revalidate(path, true).catch(() => undefined);
+    }
+  }
+}
+
+function attachGlobalListeners() {
+  if (globalListenersAttached || typeof window === "undefined") return;
+  globalListenersAttached = true;
+
+  window.addEventListener(DATA_MUTATED_EVENT, invalidatePublicCache);
+
+  if (typeof BroadcastChannel !== "undefined") {
+    try {
+      const bc = new BroadcastChannel(DATA_SYNC_CHANNEL);
+      bc.addEventListener("message", invalidatePublicCache);
+    } catch {
+      // ignore
+    }
+  }
+
+  const revalidateOnFocus = () => {
+    if (listeners.size === 0) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    const now = Date.now();
+    for (const [path, entry] of entries.entries()) {
+      if (now - entry.updatedAt >= FOCUS_REVALIDATE_MS) {
+        void revalidate(path, true).catch(() => undefined);
+      }
+    }
+  };
+
+  window.addEventListener("focus", revalidateOnFocus);
+  document.addEventListener("visibilitychange", revalidateOnFocus);
 }
 
 export function usePublic<T>(path: string): State<T> {
-  const [state, setState] = useState<State<T>>(() => {
-    if (resolvedCache.has(path)) {
-      return { data: resolvedCache.get(path) as T, error: false, loading: false };
-    }
-    return { data: null, error: false, loading: true };
-  });
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      attachGlobalListeners();
+      listeners.add(onStoreChange);
+      const entry = ensureEntry(path);
+      if (Date.now() - entry.updatedAt >= MOUNT_FRESH_MS) {
+        void revalidate(path).catch(() => undefined);
+      }
+      return () => {
+        listeners.delete(onStoreChange);
+      };
+    },
+    [path],
+  );
 
-  useEffect(() => {
-    let active = true;
-    load<T>(path)
-      .then((data) => active && setState({ data, error: false, loading: false }))
-      .catch(() => active && setState({ data: null, error: true, loading: false }));
-    return () => {
-      active = false;
-    };
-  }, [path]);
+  const getSnapshot = useCallback(() => ensureEntry(path).state as State<T>, [path]);
+  const getServerSnapshot = useCallback(() => SERVER_SNAPSHOT as State<T>, []);
 
-  return state;
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

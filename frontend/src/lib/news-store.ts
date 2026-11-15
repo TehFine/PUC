@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { NEWS_ARTICLES, type NewsArticle } from "@/components/landing/news-data";
+import { DATA_MUTATED_EVENT, DATA_SYNC_CHANNEL } from "@/lib/api-client";
 import { reportRequestTime } from "@/lib/network";
 import type { NewsCategory, PublicNewsRecord } from "@/types/news";
 
@@ -50,6 +51,21 @@ let cachedNewsArticles: NewsArticle[] | null = null;
 let inflightNewsPromise: Promise<NewsArticle[]> | null = null;
 const NEWS_TIMEOUT_MS = 18_000;
 
+if (typeof window !== "undefined") {
+  const clearNewsCache = () => {
+    cachedNewsArticles = null;
+  };
+  window.addEventListener(DATA_MUTATED_EVENT, clearNewsCache);
+  if (typeof BroadcastChannel !== "undefined") {
+    try {
+      const bc = new BroadcastChannel(DATA_SYNC_CHANNEL);
+      bc.addEventListener("message", clearNewsCache);
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function fetchPublicArticles(force = false): Promise<NewsArticle[]> {
   if (!force && cachedNewsArticles) return cachedNewsArticles;
   if (!force && inflightNewsPromise) return inflightNewsPromise;
@@ -59,7 +75,7 @@ async function fetchPublicArticles(force = false): Promise<NewsArticle[]> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), NEWS_TIMEOUT_MS);
     try {
-      const response = await fetch("/api/public/news", { signal: controller.signal });
+      const response = await fetch("/api/public/news", { cache: "no-store", signal: controller.signal });
       reportRequestTime(performance.now() - start);
       if (!response.ok) return cachedNewsArticles ?? NEWS_ARTICLES;
       const body = (await response.json()) as
