@@ -10,7 +10,17 @@ import { badRequest, forbidden, notFound } from "../common/errors/app.exception"
 import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
 
-export const UPLOAD_PURPOSES = ["journal", "harvest", "stamp", "approval", "violation", "news", "catalog", "avatar"] as const;
+export const UPLOAD_PURPOSES = [
+  "journal",
+  "harvest",
+  "stamp",
+  "approval",
+  "violation",
+  "news",
+  "catalog",
+  "avatar",
+  "lab",
+] as const;
 export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
 
 /** Mục đích hộ dân được phép tải tệp lên; các mục đích còn lại chỉ dành cho cán bộ. */
@@ -22,8 +32,8 @@ const FARMER_PURPOSES: ReadonlySet<UploadPurpose> = new Set([
   "violation",
   "avatar",
 ]);
-/** Tệp dùng trên trang công khai (ảnh bản tin, ảnh danh mục, ảnh đại diện hộ trên trang truy xuất) – ai cũng xem được. */
-export const PUBLIC_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["news", "catalog", "avatar"]);
+/** Tệp dùng trên trang công khai (ảnh bản tin, ảnh danh mục, ảnh đại diện hộ đã đồng ý, bản scan phiếu kiểm nghiệm). */
+export const PUBLIC_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["news", "catalog", "avatar", "lab"]);
 
 const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
   journal: "journal",
@@ -32,6 +42,7 @@ const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
   approval: "approvals",
   violation: "violations",
   avatar: "households",
+  lab: "testing",
 };
 
 const PURPOSE_WRITE_RESOURCE: Record<UploadPurpose, ResourceKey> = {
@@ -43,6 +54,7 @@ const PURPOSE_WRITE_RESOURCE: Record<UploadPurpose, ResourceKey> = {
   news: "news",
   catalog: "pesticides",
   avatar: "households",
+  lab: "testing",
 };
 
 const VIDEO_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["journal", "harvest", "approval", "violation", "news"]);
@@ -143,7 +155,9 @@ export class UploadsService implements OnModuleInit {
     if (file.size > limitBytes) {
       throw badRequest(`Tệp vượt quá ${Math.round(limitBytes / 1024 / 1024)} MB.`);
     }
-    if (type.mime === "application/pdf" && purpose !== "approval") throw badRequest("Mục này chỉ nhận tệp ảnh.");
+    if (type.mime === "application/pdf" && purpose !== "approval" && purpose !== "lab") {
+      throw badRequest("Mục này chỉ nhận tệp ảnh.");
+    }
     if (isVideo && !VIDEO_PURPOSES.has(purpose)) throw badRequest("Mục này chỉ nhận tệp ảnh.");
 
     const now = new Date();

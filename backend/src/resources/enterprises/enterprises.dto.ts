@@ -25,8 +25,8 @@ export class CreateEnterpriseDto {
   packhouseCode?: string | null;
 
   @OptionalField()
-  @IsIn(["active", "inactive"])
-  status?: "active" | "inactive";
+  @IsIn(["active", "suspended", "revoked", "inactive"])
+  status?: "active" | "suspended" | "revoked" | "inactive";
 }
 
 export class UpdateEnterpriseDto extends PartialType(CreateEnterpriseDto) {}

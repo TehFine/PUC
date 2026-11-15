@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Ip, Patch } from "@nestjs/common";
-import { IsInt, IsOptional, Min } from "class-validator";
+import { IsBoolean, IsInt, IsOptional, Min } from "class-validator";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { ProfileService } from "./profile.service";
@@ -11,7 +11,12 @@ export class UpdateHouseholdAvatarDto {
   avatarId?: number | null;
 }
 
-/** `GET /api/portal/profile` & `PATCH /api/portal/profile/avatar`. */
+export class UpdateTraceConsentDto {
+  @IsBoolean({ message: "Giá trị đồng ý hiển thị không hợp lệ." })
+  publicTraceConsent!: boolean;
+}
+
+/** `GET /api/portal/profile`, `PATCH /api/portal/profile/avatar` & `PATCH /api/portal/profile/trace-consent`. */
 @Controller("portal")
 export class ProfileController {
   constructor(private readonly service: ProfileService) {}
@@ -26,5 +31,11 @@ export class ProfileController {
   @Authorize("portal", "create")
   updateAvatar(@Body() dto: UpdateHouseholdAvatarDto, @CurrentUser() user: AuthUser, @Ip() ip: string) {
     return this.service.updateAvatar(dto.avatarId ?? null, user, { ip });
+  }
+
+  @Patch("profile/trace-consent")
+  @Authorize("portal", "create")
+  updateTraceConsent(@Body() dto: UpdateTraceConsentDto, @CurrentUser() user: AuthUser, @Ip() ip: string) {
+    return this.service.updateTraceConsent(dto.publicTraceConsent, user, { ip });
   }
 }

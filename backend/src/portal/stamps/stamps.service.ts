@@ -8,7 +8,7 @@ import { UploadsService } from "../../uploads/uploads.service";
 import { assertPlotNotInIsolation, assertPlotOwned, type ClientContext, householdIdOf } from "../common/portal-context";
 import type { ActivatePortalStampDto } from "./stamps.dto";
 
-const STAMP_COLUMNS = `id, allocation_id, plot_code, serial_code, status, activated_at, fruit_weight_kg, grade,
+const STAMP_COLUMNS = `id, allocation_id, plot_code, serial_code, qr_token, status, activated_at, fruit_weight_kg, grade,
   coalesce(${attachmentUrlSql("photo_id")}, photo_url) AS photo_url, harvest_date`;
 
 /** Đợt cấp tem và kích hoạt tem dán quả của hộ. */

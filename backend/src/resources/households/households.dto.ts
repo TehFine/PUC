@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsObject,
@@ -44,6 +45,10 @@ export class CreateHouseholdDto {
   @OptionalField()
   @IsIn(["qualified", "improve", "pending", "violation"])
   status?: "qualified" | "improve" | "pending" | "violation";
+
+  @OptionalField()
+  @IsBoolean()
+  publicTraceConsent?: boolean;
 }
 
 export class UpdateHouseholdDto extends PartialType(CreateHouseholdDto) {}

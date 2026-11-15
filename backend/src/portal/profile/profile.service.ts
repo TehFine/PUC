@@ -25,6 +25,7 @@ export class ProfileService {
       await this.db.query(
         `SELECT h.code, h.name, h.phone, repeat('*', greatest(length(h.cccd) - 4, 0)) || right(h.cccd, 4) AS cccd_masked,
                 v.name AS village_name, v.leader AS village_leader, h.plot_count, h.area_ha, h.status,
+                h.public_trace_consent,
                 ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url
          FROM households h JOIN villages v ON v.id = h.village_id WHERE h.id = $1`,
         [householdId],
@@ -58,5 +59,30 @@ export class ProfileService {
     );
 
     return { avatarUrl: updated.rows[0].avatar_url };
+  }
+
+  async updateTraceConsent(publicTraceConsent: boolean, user: AuthUser, context: ClientContext) {
+    const householdId = householdIdOf(user);
+    const updated = await this.db.query<{ code: string; public_trace_consent: boolean }>(
+      `UPDATE households
+       SET public_trace_consent = $1
+       WHERE id = $2
+       RETURNING code, public_trace_consent`,
+      [publicTraceConsent, householdId],
+    );
+    if (updated.rowCount === 0) throw notFound("Không tìm thấy hộ của tài khoản này.");
+
+    await this.audit.write(
+      { ip: context.ip, user },
+      {
+        action: "Cập nhật quyền hiển thị tên trên QR công khai",
+        object: updated.rows[0].code,
+        detail: publicTraceConsent
+          ? "Đồng ý hiển thị tên hộ trên trang quét QR công khai"
+          : "Ẩn tên hộ trên trang quét QR công khai (chỉ hiện tên HTX)",
+      },
+    );
+
+    return { publicTraceConsent: updated.rows[0].public_trace_consent };
   }
 }

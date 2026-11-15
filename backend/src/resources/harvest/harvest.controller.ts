@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Ip, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Ip, Param, Patch, Post, Query } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { CrudController } from "../../common/crud/crud-controller.factory";
@@ -7,17 +7,85 @@ import {
   CreateHarvestLotDto,
   GenerateItemsDto,
   NotifyHarvestPlanDto,
+  UpdateGrowingZoneStatusDto,
   UpdateHarvestLotDto,
   UpsertContributionDto,
 } from "./harvest.dto";
 import { HarvestService } from "./harvest.service";
 
-@Controller("harvest-plan")
-export class HarvestPlanController {
+@Controller("harvest/incident-trace")
+export class HarvestIncidentController {
+  constructor(private readonly harvestService: HarvestService) {}
+
+  @Get()
+  @Authorize("households", "read")
+  traceIncident(
+    @CurrentUser() user: AuthUser,
+    @Query("plotCode") plotCode?: string,
+    @Query("lotCode") lotCode?: string,
+  ) {
+    return this.harvestService.traceIncident({ plotCode, lotCode }, user);
+  }
+}
+
+@Controller("harvest/trace-access-logs")
+export class HarvestTraceAccessLogsController {
+  constructor(private readonly harvestService: HarvestService) {}
+
+  @Get()
+  @Authorize("approvals", "read")
+  listLogs(
+    @Query("lotCode") lotCode?: string,
+    @Query("q") q?: string,
+    @Query("scopeGranted") scopeGranted?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.harvestService.listTraceAccessLogs({
+      lotCode,
+      q,
+      scopeGranted,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+}
+
+@Controller("growing-zones")
+export class GrowingZonesController {
   constructor(private readonly harvestService: HarvestService) {}
 
   @Get()
   @Authorize("harvest", "read")
+  listZones() {
+    return this.harvestService.listGrowingZones();
+  }
+
+  @Patch(":code")
+  @Authorize("harvest", "update")
+  updateZoneStatus(
+    @Param("code") code: string,
+    @Body(strictPipe(UpdateGrowingZoneStatusDto)) dto: UpdateGrowingZoneStatusDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.harvestService.updateGrowingZoneStatus(code, dto, user, ip);
+  }
+}
+
+@Controller("harvest-plan")
+export class HarvestPlanController {
+  constructor(private readonly harvestService: HarvestService) {}
+
+  @Get("household-plots")
+  @Authorize("households", "read")
+  listHouseholdPlots(
+    @Query("householdId", ParseRecordIdPipe) householdId: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.harvestService.listHouseholdPlots(householdId, user);
+  }
+
+  @Get()
+  @Authorize("households", "read")
   listPlan(
     @CurrentUser() user: AuthUser,
     @Query("q") q?: string,
@@ -49,8 +117,8 @@ export class HarvestController extends CrudController(
 
   @Get(":id/items")
   @Authorize("harvest", "read")
-  async getItems(@Param("id", ParseRecordIdPipe) id: number) {
-    return { data: await this.harvestService.getItems(id) };
+  async getItems(@Param("id", ParseRecordIdPipe) id: number, @CurrentUser() user: AuthUser) {
+    return { data: await this.harvestService.getItems(id, user) };
   }
 
   @Post(":id/generate-items")
@@ -65,7 +133,7 @@ export class HarvestController extends CrudController(
   }
 
   @Get(":id/contributions")
-  @Authorize("harvest", "read")
+  @Authorize("households", "read")
   listContributions(@Param("id", ParseRecordIdPipe) id: number) {
     return this.harvestService.listContributions(id);
   }

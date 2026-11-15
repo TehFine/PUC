@@ -1,13 +1,31 @@
 import { PartialType } from "@nestjs/mapped-types";
 import { IsIn, IsInt, IsNumber, IsPositive, Max, Min } from "class-validator";
-import { Count, IsoDate, NonNegative, OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
+import {
+  Count,
+  IsoDate,
+  NonNegative,
+  OptionalField,
+  OptionalIsoDate,
+  OptionalText,
+  RecordId,
+  Text,
+} from "../../common/validation/fields";
 
 export class CreateHarvestLotDto {
   @Text(40)
   code!: string;
 
+  @OptionalText(120)
+  variety?: string | null;
+
   @IsoDate()
   harvestedOn!: string;
+
+  @OptionalIsoDate()
+  packedOn?: string | null;
+
+  @OptionalIsoDate()
+  exportedOn?: string | null;
 
   @NonNegative()
   weightTons!: number;
@@ -25,8 +43,11 @@ export class CreateHarvestLotDto {
   @OptionalText(100)
   qrCode?: string | null;
 
-  @IsIn(["exported", "delivered", "in_transit", "sampling"])
-  status!: "exported" | "delivered" | "in_transit" | "sampling";
+  @IsIn(["exported", "delivered", "in_transit", "sampling", "revoked"])
+  status!: "exported" | "delivered" | "in_transit" | "sampling" | "revoked";
+
+  @OptionalText(300)
+  revokedReason?: string | null;
 
   @OptionalField()
   @RecordId()
@@ -38,6 +59,18 @@ export class CreateHarvestLotDto {
 
   @OptionalText(50)
   packhouseCode?: string;
+
+  @OptionalText(200)
+  packhouseName?: string | null;
+
+  @OptionalText(300)
+  packhouseAddress?: string | null;
+
+  @OptionalText(100)
+  phytosanitaryCertNo?: string | null;
+
+  @OptionalIsoDate()
+  phytosanitaryIssuedOn?: string | null;
 
   @OptionalField()
   @NonNegative()
@@ -107,10 +140,21 @@ export class UpsertContributionDto {
   @RecordId()
   householdId!: number;
 
+  @OptionalText(50)
+  plotCode?: string | null;
+
   @IsNumber({ allowNaN: false, allowInfinity: false })
   @IsPositive()
   @Max(500_000)
   weightKg!: number;
+}
+
+export class UpdateGrowingZoneStatusDto {
+  @IsIn(["active", "suspended", "revoked", "pending"])
+  status!: "active" | "suspended" | "revoked" | "pending";
+
+  @OptionalText(300)
+  statusNote?: string | null;
 }
 
 export class NotifyHarvestPlanDto {

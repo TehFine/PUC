@@ -1,9 +1,21 @@
 import { Module } from "@nestjs/common";
-import { HarvestController, HarvestPlanController } from "./harvest.controller";
+import {
+  GrowingZonesController,
+  HarvestController,
+  HarvestIncidentController,
+  HarvestPlanController,
+  HarvestTraceAccessLogsController,
+} from "./harvest.controller";
 import { HarvestService } from "./harvest.service";
 
 @Module({
-  controllers: [HarvestPlanController, HarvestController],
+  controllers: [
+    HarvestIncidentController,
+    HarvestTraceAccessLogsController,
+    GrowingZonesController,
+    HarvestPlanController,
+    HarvestController,
+  ],
   providers: [HarvestService],
 })
 export class HarvestModule {}

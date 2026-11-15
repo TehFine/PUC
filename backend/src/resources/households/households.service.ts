@@ -47,7 +47,7 @@ export class HouseholdsService extends BaseCrudService {
       label: "Hộ nông dân",
       table: "households",
       fields: `t.id, t.code, t.name, t.cccd, t.phone, t.village_id, v.name AS village_name,
-      t.plot_count, t.area_ha, t.status, ${publicAttachmentUrlSql("t.avatar_id")} AS avatar_url, t.created_at, t.updated_at,
+      t.plot_count, t.area_ha, t.status, t.public_trace_consent, ${publicAttachmentUrlSql("t.avatar_id")} AS avatar_url, t.created_at, t.updated_at,
       u.id AS account_id, u.username AS account_username, u.email AS account_email, u.status AS account_status`,
       from: `households t JOIN villages v ON v.id = t.village_id LEFT JOIN users u ON u.household_id = t.id`,
       orderBy: "t.id",

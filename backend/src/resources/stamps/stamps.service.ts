@@ -176,7 +176,7 @@ export class StampsService extends BaseCrudService {
     if (alloc.rowCount === 0) throw notFound("Không tìm thấy đợt cấp phát tem.");
 
     const { rows } = await this.db.query(
-      `SELECT id, allocation_id, household_id, plot_code, serial_code, status,
+      `SELECT id, allocation_id, household_id, plot_code, serial_code, qr_token, status,
               activated_at, fruit_weight_kg::float8 AS fruit_weight_kg, grade,
               COALESCE(${attachmentUrlSql("photo_id")}, photo_url) AS photo_url,
               harvest_date, created_at

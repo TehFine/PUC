@@ -34,6 +34,14 @@ export class CreateLabTestDto {
 
   @Text(100)
   lab!: string;
+
+  @IsOptional()
+  @RecordId()
+  scanAttachmentId?: number | null;
+
+  @OptionalField()
+  @IsIn(["draft", "verified"])
+  recordStatus?: "draft" | "verified";
 }
 
 export class UpdateLabTestDto extends PartialType(CreateLabTestDto) {}
