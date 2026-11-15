@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 
 export type PortalLang = "vi" | "zh";
 
@@ -66,6 +67,24 @@ export function PortalLangProvider({ children }: { children: ReactNode }) {
     } catch {
       // Ignore storage errors
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const resetPortalLang = () => {
+      setLangState("vi");
+      try {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // Ignore storage errors
+      }
+    };
+    window.addEventListener(AUTH_LOGOUT_EVENT, resetPortalLang);
+    window.addEventListener(AUTH_EXPIRED_EVENT, resetPortalLang);
+    return () => {
+      window.removeEventListener(AUTH_LOGOUT_EVENT, resetPortalLang);
+      window.removeEventListener(AUTH_EXPIRED_EVENT, resetPortalLang);
+    };
   }, []);
 
   const t = useCallback(

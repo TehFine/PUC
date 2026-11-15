@@ -5,6 +5,7 @@ import { invalidatePortal, useSharedQuery } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
 import { formatClock, PESTICIDE_STATUS, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { FertilizerDto, ListResponse, PesticideDto, VarietyDto } from "@/types/api";
 import {
   Check,
@@ -497,7 +498,15 @@ export function TrainingList() {
   );
 }
 
-export function getPesticideImage(item: { status: string; name?: string; id?: number }): string {
+export function getPesticideImage(item: {
+  status: string;
+  name?: string;
+  id?: number;
+  image?: string | null;
+  imageUrl?: string | null;
+}): string {
+  if (isSafeMediaUrl(item.image)) return item.image;
+  if (isSafeMediaUrl(item.imageUrl)) return item.imageUrl;
   if (item.status === "banned") return "/pesticides/red.png";
   if (item.status === "restricted") return "/pesticides/amber.png";
   const name = (item.name ?? "").toLowerCase();
@@ -1590,7 +1599,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
 ];
 
 export function getFertilizerImage(item: FertilizerDto): string {
-  if (item.image) return item.image;
+  if (isSafeMediaUrl(item.image)) return item.image;
   if (item.category === "organic") return "/fertilizers/organic.png";
   if (item.category === "npk") return "/fertilizers/npk.png";
   if (item.category === "foliar") return "/fertilizers/foliar.png";
@@ -2147,7 +2156,7 @@ export const DEFAULT_VARIETIES: VarietyDto[] = [
 ];
 
 export function getVarietyImage(v: VarietyDto): string {
-  if (v.image) return v.image;
+  if (isSafeMediaUrl(v.image)) return v.image;
   const name = (v.name || "").toLowerCase();
   if (name.includes("monthong") || name.includes("dona")) return "/varieties/monthong.png";
   if (name.includes("ri") || name.includes("ri6") || name.includes("ri 6") || name.includes("ri 7")) return "/varieties/ri6.png";
@@ -2333,7 +2342,12 @@ export function enrichVariety(item: VarietyDto): VarietyDto {
       (item.name.toLowerCase().includes("musang") && d.name.toLowerCase().includes("musang")) ||
       (item.name.toLowerCase().includes("thorn") && d.name.toLowerCase().includes("thorn")),
   );
-  if (!matched) return item;
+  if (!matched) {
+    return {
+      ...item,
+      image: isSafeMediaUrl(item.image) ? item.image : undefined,
+    };
+  }
   return {
     ...matched,
     ...item,
@@ -2343,7 +2357,7 @@ export function enrichVariety(item: VarietyDto): VarietyDto {
     brix: item.brix ?? matched.brix,
     yieldPerHa: item.yieldPerHa ?? matched.yieldPerHa,
     status: item.status ?? matched.status,
-    image: item.image ?? matched.image,
+    image: isSafeMediaUrl(item.image) ? item.image : matched.image,
     marketPotential: item.marketPotential ?? matched.marketPotential,
     morphology: item.morphology?.length ? item.morphology : matched.morphology,
     farmingTechniques: item.farmingTechniques ?? matched.farmingTechniques,
@@ -2534,22 +2548,24 @@ export function DiseaseDetailModal({
 
   return (
     <div className="pt-pesticide-modal-body">
-      <div className="pt-pesticide-showcase-wrap" style={{ padding: "4px 0 2px" }}>
-        <img
-          src={item.image}
-          alt={`Hình ảnh thực tế ${item.name}`}
-          loading="lazy"
-          decoding="async"
-          className="pt-pesticide-showcase-img"
-          style={{
-            width: "100%",
-            height: 230,
-            objectFit: "cover",
-            borderRadius: 16,
-            boxShadow: "0 8px 24px rgba(15, 23, 42, 0.1)",
-          }}
-        />
-      </div>
+      {isSafeMediaUrl(item.image) && (
+        <div className="pt-pesticide-showcase-wrap" style={{ padding: "4px 0 2px" }}>
+          <img
+            src={item.image}
+            alt={`Hình ảnh thực tế ${item.name}`}
+            loading="lazy"
+            decoding="async"
+            className="pt-pesticide-showcase-img"
+            style={{
+              width: "100%",
+              height: 230,
+              objectFit: "cover",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+            }}
+          />
+        </div>
+      )}
 
       <div className="pt-pesticide-header-info" style={{ paddingTop: 4 }}>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
@@ -2782,7 +2798,7 @@ export function DiseaseAndIpmList() {
           <div className="pt-pest-list">
             {shown.map((item) => {
               const isDisease = item.kind === "disease";
-              const imgSrc = item.image;
+              const imgSrc = isSafeMediaUrl(item.image) ? item.image : "/pesticides/amber.png";
               return (
                 <article
                   key={item.id}
@@ -2805,7 +2821,7 @@ export function DiseaseAndIpmList() {
                       loading="lazy"
                       decoding="async"
                       className="pt-pest-card-img"
-                      style={{ objectFit: "cover", borderRadius: 14 }}
+                      style={{ objectFit: "cover", borderRadius: 6 }}
                     />
                   </div>
                   <div className="pt-pest-card-content">

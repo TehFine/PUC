@@ -4,9 +4,12 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNewsArticles } from "@/lib/news-store";
 import { lockRootScroll } from "@/lib/scroll-lock";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import { useStripPagination } from "./use-strip-pagination";
 
-const shouldSkipImageOpt = (src: string) => src.startsWith("/api/") || /^https?:\/\//i.test(src);
+const shouldSkipImageOpt = (src: string) => src.startsWith("/api/");
+const resolveSafeNewsImage = (src?: string | null) =>
+  isSafeMediaUrl(src) ? src : "/landing/news-field-visit.jpg";
 
 function getNewsFocusPosition(imageSrc: string): string {
   if (imageSrc.includes("news-field-visit")) return "center 58%";
@@ -132,7 +135,8 @@ export default function News() {
           onMouseLeave={stopDragging}
         >
           {articles.map((article, idx) => {
-            const focusPos = getNewsFocusPosition(article.image);
+            const safeImg = resolveSafeNewsImage(article.image);
+            const focusPos = getNewsFocusPosition(safeImg);
 
             return (
               <article
@@ -156,11 +160,11 @@ export default function News() {
               >
                 <div className="sw-training-photo">
                   <Image
-                    src={article.image}
+                    src={safeImg}
                     alt={article.imageAlt}
                     fill
                     draggable={false}
-                    unoptimized={shouldSkipImageOpt(article.image)}
+                    unoptimized={shouldSkipImageOpt(safeImg)}
                     sizes="(max-width: 560px) 84vw, (max-width: 960px) 46vw, 30vw"
                     style={{ objectFit: "cover", objectPosition: focusPos }}
                   />
@@ -257,15 +261,20 @@ export default function News() {
 
             <div className="sw-side-scroll">
               <div className="sw-side-photo-stage">
-                <Image
-                  src={readingArticle.image}
-                  alt={readingArticle.imageAlt}
-                  width={1200}
-                  height={760}
-                  unoptimized={shouldSkipImageOpt(readingArticle.image)}
-                  className="sw-side-photo-full"
-                  priority
-                />
+                {(() => {
+                  const safeDrawerImg = resolveSafeNewsImage(readingArticle.image);
+                  return (
+                    <Image
+                      src={safeDrawerImg}
+                      alt={readingArticle.imageAlt}
+                      width={1200}
+                      height={760}
+                      unoptimized={shouldSkipImageOpt(safeDrawerImg)}
+                      className="sw-side-photo-full"
+                      priority
+                    />
+                  );
+                })()}
               </div>
 
               <div className="sw-side-content">
@@ -275,8 +284,8 @@ export default function News() {
                 </h2>
                 <p className="sw-side-lead">{readingArticle.content.lead}</p>
 
-                {readingArticle.content.sections.map((sec) => (
-                  <section key={sec.heading} className="sw-side-section">
+                {readingArticle.content.sections.map((sec, sIdx) => (
+                  <section key={`${sec.heading}-${sIdx}`} className="sw-side-section">
                     <h4>{sec.heading}</h4>
                     {sec.paragraphs.map((p, i) => (
                       <p key={i}>{p}</p>

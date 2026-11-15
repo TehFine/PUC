@@ -10,6 +10,7 @@ import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { textOrNull } from "@/components/admin/shared/form-utils";
 import { APPROVAL_STATUS, badgeOf, PRIORITY } from "@/components/admin/shared/labels";
 import { formatDate } from "@/utils/format";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { ApprovalDetail, ApprovalRow } from "@/types/approvals";
 
 export function ApprovalDecisionModal({
@@ -142,7 +143,7 @@ export default function ApprovalDetailModal({
           gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
           gap: 12,
           padding: 16,
-          borderRadius: 16,
+          borderRadius: 8,
           background: "var(--mist)",
           marginBottom: 16,
         }}
@@ -183,7 +184,7 @@ export default function ApprovalDetailModal({
         <div
           style={{
             padding: "10px 14px",
-            borderRadius: 12,
+            borderRadius: 6,
             background: "var(--bg-input)",
             fontSize: 13.5,
             lineHeight: 1.5,
@@ -201,7 +202,7 @@ export default function ApprovalDetailModal({
           <div
             style={{
               padding: "10px 14px",
-              borderRadius: 12,
+              borderRadius: 6,
               background: record.status === "rejected" ? "#fbe0d8" : "#eef8e3",
               fontSize: 13.5,
               lineHeight: 1.5,
@@ -224,7 +225,7 @@ export default function ApprovalDetailModal({
         {attachments.length > 0 && (
           <div style={{ display: "grid", gap: 10 }}>
             {attachments
-              .filter((att) => /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(att.url))
+              .filter((att) => isSafeMediaUrl(att.url))
               .map((att) => {
                 const isImage = att.mimeType?.startsWith("image/") ?? /\.(png|jpe?g|webp|gif)$/i.test(att.url);
                 const isVideo = att.mimeType?.startsWith("video/") ?? /\.(mp4|webm)$/i.test(att.url);
@@ -233,7 +234,7 @@ export default function ApprovalDetailModal({
                     key={att.id}
                     style={{
                       padding: 10,
-                      borderRadius: 12,
+                      borderRadius: 6,
                       border: "1px solid var(--border)",
                       display: "flex",
                       alignItems: "center",
@@ -249,7 +250,7 @@ export default function ApprovalDetailModal({
                           alt={att.originalName || `Tệp #${att.id}`}
                           loading="lazy"
                           decoding="async"
-                          style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
+                          style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 4, flexShrink: 0 }}
                         />
                       )}
                       {isVideo && (
@@ -258,7 +259,7 @@ export default function ApprovalDetailModal({
                           preload="metadata"
                           playsInline
                           muted
-                          style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
+                          style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 4, flexShrink: 0 }}
                         />
                       )}
                       <div style={{ minWidth: 0 }}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Modal, FormError } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { triggerBlobDownload } from "@/utils/download";
@@ -62,6 +62,9 @@ function resolveStatus(val: string | undefined): HouseholdStatus | undefined {
   return undefined;
 }
 
+const MAX_CSV_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_IMPORT_ROWS = 2000;
+
 export function parseHouseholdsCsv(text: string, villages: VillageDto[]): Partial<HouseholdInput>[] {
   const lines = text
     .replace(/^\uFEFF/, "")
@@ -85,7 +88,7 @@ export function parseHouseholdsCsv(text: string, villages: VillageDto[]): Partia
   const statusIdx = idxOf("status", "trangthai");
 
   const rows: Partial<HouseholdInput>[] = [];
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = 1; i < lines.length && rows.length < MAX_IMPORT_ROWS; i++) {
     const cols = splitCsvLine(lines[i], delimiter);
     if (cols.every((c) => !c)) continue;
 
@@ -148,15 +151,25 @@ export default function HouseholdImportModal({
   const [result, setResult] = useState<HouseholdImportResult | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const parsedRows = csvText.trim() ? parseHouseholdsCsv(csvText, villages) : [];
+  const parsedRows = useMemo(
+    () => (csvText.trim() ? parseHouseholdsCsv(csvText, villages) : []),
+    [csvText, villages],
+  );
 
   const uploader = useMutation(async (rows: Partial<HouseholdInput>[]) => {
-    return api.post<HouseholdImportResult>("/households/import", { rows });
+    return api.post<HouseholdImportResult>("/households/import", { rows: rows.slice(0, MAX_IMPORT_ROWS) });
   });
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
+    if (file.size > MAX_CSV_FILE_BYTES) {
+      setFileName(null);
+      setResult(null);
+      setLocalError("Tệp CSV không được vượt quá 5 MB.");
+      return;
+    }
     setFileName(file.name);
     setResult(null);
     setLocalError(null);
@@ -260,7 +273,7 @@ export default function HouseholdImportModal({
           placeholder={SAMPLE_CSV}
         />
         <small style={{ display: "block", marginTop: 4, color: "var(--text-muted)" }}>
-          Đã nhận diện: <strong>{parsedRows.length}</strong> dòng dữ liệu.
+          Đã nhận diện: <strong>{parsedRows.length}</strong> dòng dữ liệu (tối đa {MAX_IMPORT_ROWS} dòng mỗi đợt nhập).
         </small>
       </div>
 
@@ -270,7 +283,7 @@ export default function HouseholdImportModal({
           style={{
             marginTop: 12,
             padding: "12px 16px",
-            borderRadius: 14,
+            borderRadius: 6,
             background: result.errors.length > 0 ? "#fdf4e8" : "#eef8e3",
             border: "1px solid var(--border)",
             fontSize: 13,

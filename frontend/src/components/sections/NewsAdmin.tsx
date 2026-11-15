@@ -12,6 +12,7 @@ import { useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import { formatVnDate, NEWS_CATEGORY_META } from "@/lib/news-store";
 import type { NewsRecord } from "@/types/news";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 
 export default function NewsAdmin() {
   const [search, setSearch] = useState("");
@@ -153,7 +154,7 @@ export default function NewsAdmin() {
             />
             {newsList.rows.map((article) => {
               const catMeta = NEWS_CATEGORY_META[article.category] ?? NEWS_CATEGORY_META.visit;
-              const imgSrc = article.imageUrl || "/landing/news-field-visit.jpg";
+              const imgSrc = isSafeMediaUrl(article.imageUrl) ? article.imageUrl : "/landing/news-field-visit.jpg";
               const isPublished = article.status === "published";
 
               return (

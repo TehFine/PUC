@@ -32,6 +32,7 @@ import { useDebounced } from "@/components/admin/shared/use-debounced";
 import LabTestFormModal from "@/components/admin/testing/LabTestFormModal";
 import { usePerformanceTier } from "@/lib/network";
 import { formatDate } from "@/utils/format";
+import { isSafeExternalHttpsUrl, isSafeMediaUrl } from "@/utils/url-safety";
 import type { LabTestRecord } from "@/types/testing";
 
 const PAGE_SIZE = 25;
@@ -350,11 +351,12 @@ export default function Testing() {
                           <FileText size={13} />
                           Xem phiếu A4
                         </button>
-                        {t.externalVerifyUrl && (
+                        {isSafeExternalHttpsUrl(t.externalVerifyUrl) && (
                           <a
-                            href={t.externalVerifyUrl}
+                            href={t.externalVerifyUrl.trim()}
                             target="_blank"
                             rel="noopener noreferrer"
+                            referrerPolicy="no-referrer"
                             className="btn btn-outline btn-sm"
                             title={
                               t.externalVerifyCode
@@ -372,7 +374,7 @@ export default function Testing() {
                             Tra cứu chéo Lab
                           </a>
                         )}
-                        {t.scanUrl && (
+                        {isSafeMediaUrl(t.scanUrl) && (
                           <a
                             href={t.scanUrl}
                             target="_blank"

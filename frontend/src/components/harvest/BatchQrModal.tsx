@@ -8,7 +8,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import type { HarvestItem } from "@/types/entities";
-import { api } from "@/lib/api-client";
+import { api, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
 
@@ -33,6 +33,14 @@ interface ItemWithQr extends HarvestItem {
 
 const MAX_BATCH_QR_CACHE = 200;
 const batchQrCache = new Map<string, string>();
+
+if (typeof window !== "undefined") {
+  const clearBatchQrCache = () => {
+    batchQrCache.clear();
+  };
+  window.addEventListener(AUTH_LOGOUT_EVENT, clearBatchQrCache);
+  window.addEventListener(AUTH_EXPIRED_EVENT, clearBatchQrCache);
+}
 
 function setBatchQrCacheEntry(code: string, url: string) {
   if (batchQrCache.has(code)) {

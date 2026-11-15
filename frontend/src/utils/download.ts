@@ -42,15 +42,16 @@ export function triggerDataUrlDownload(dataUrl: string, filename: string): void 
   document.body.removeChild(link);
 }
 
-/** Chống CSV Formula Injection (=, +, -, @, tab, CR/LF, |) và escape dấu nháy kép chuẩn RFC 4180. */
+/** Chống CSV Formula Injection (=, +, -, @, tab, CR/LF, |), loại bỏ CR/NUL trần và luôn bọc chuỗi khác rỗng trong dấu nháy kép chuẩn RFC 4180. */
 export function escapeCsvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   const raw = String(value);
-  const safe = /^[=+\-@\t\r\n|]/.test(raw) || /^\s+[=+\-@|]/.test(raw) ? `'${raw}` : raw;
-  if (/[",\r\n]/.test(safe)) {
-    return `"${safe.replace(/"/g, '""')}"`;
-  }
-  return safe;
+  const cleaned = raw.replace(/\r\n/g, "\n").replace(/[\r\u0000]/g, "");
+  if (cleaned === "") return "";
+  const isFormulaLike =
+    /^[=+\-@\t\r\n|]/.test(raw) || /^[=+\-@\t\r\n|]/.test(cleaned) || /^\s+[=+\-@|]/.test(cleaned);
+  const safe = isFormulaLike ? `'${cleaned}` : cleaned;
+  return `"${safe.replace(/"/g, '""')}"`;
 }
 
 /** Đóng gói bảng dữ liệu thành tệp CSV UTF-8 có BOM (\uFEFF) và CRLF để mở đúng tiếng Việt trong Microsoft Excel. */

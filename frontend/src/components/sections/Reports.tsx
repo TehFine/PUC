@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { todayIso } from "@/components/admin/catalog/form-utils";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
 import { FormError, Modal } from "@/components/ui/Modal";
@@ -401,6 +402,9 @@ function renderPrintableReport(
 }
 
 export default function Reports() {
+  const { session } = useAuth();
+  const canExportAudit =
+    session?.user.role === "admin" || session?.user.role === "htx_officer";
   const villages = useApiList<VillageRecord>("villages");
   const [selectedReport, setSelectedReport] = useState<ReportSpec | null>(null);
   const [from, setFrom] = useState<string>("");
@@ -481,9 +485,11 @@ export default function Reports() {
     // Mở cửa sổ in đồng bộ ngay trong sự kiện click để trình duyệt Safari / Mobile không chặn popup
     const popupWin = targetFormat === "PDF" ? window.open("", "_blank", "width=1080,height=800") : null;
     try {
-      // Luôn tải bản xuất đầy đủ (audit=1) thay vì tái sử dụng bản xem trước (vốn chỉ lấy tối đa 50 dòng & che CCCD).
+      const exportParams: Record<string, string> = canExportAudit
+        ? { format: "json", audit: "1" }
+        : { format: "json" };
       const data = await api.get<ReportDataPayload>(
-        `/reports/${report.type}${buildQueryString({ format: "json", audit: "1" })}`,
+        `/reports/${report.type}${buildQueryString(exportParams)}`,
       );
 
       const selectedVillageName =
@@ -655,7 +661,7 @@ export default function Reports() {
             style={{
               marginTop: 12,
               border: "1px solid var(--border)",
-              borderRadius: 12,
+              borderRadius: 6,
               overflow: "hidden",
               background: "#f8faf9",
             }}

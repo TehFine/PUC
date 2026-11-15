@@ -32,6 +32,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
 import type { FertilizerDto, PesticideDto, VarietyDto } from "@/types/api";
 import type { FertilizerRecord, PesticideRecord, VarietyRecord, VillageRecord } from "@/types/catalog";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 
 type Tab = "protocol" | "pesticide" | "fertilizer" | "variety" | "diseases" | "village" | "standards";
 
@@ -127,7 +128,7 @@ function toFertilizerDto(f: FertilizerRecord): FertilizerDto {
     applicationMethod: f.applicationMethod,
     status: f.status,
     timing: f.timing,
-    image: f.imageUrl ?? undefined,
+    image: isSafeMediaUrl(f.imageUrl) ? f.imageUrl : undefined,
     description: f.description ?? undefined,
   };
 }
@@ -146,7 +147,7 @@ function toVarietyDto(v: VarietyRecord): VarietyDto {
     seedRate: v.seedRate ?? undefined,
     brix: v.brix ?? undefined,
     yieldPerHa: v.yieldPerHa ?? undefined,
-    image: v.imageUrl ?? undefined,
+    image: isSafeMediaUrl(v.imageUrl) ? v.imageUrl : undefined,
     marketPotential: v.marketPotential ?? undefined,
     morphology: v.morphology ?? undefined,
     farmingTechniques: v.farmingTechniques ?? undefined,

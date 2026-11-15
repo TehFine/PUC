@@ -3,6 +3,9 @@
 import { api, type UploadedFile, type UploadPurpose } from "@/lib/api-client";
 import { isLowEndDevice } from "@/lib/network";
 
+/** Tập định dạng ảnh raster an toàn được phép chọn và tải lên (chặn SVG, GIF, HTML giả mạo). */
+export const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
 /** Giới hạn tệp gốc người dùng chọn (trước khi nén). */
 export const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 /** Giới hạn tệp PDF gửi kèm hồ sơ. */
@@ -71,7 +74,9 @@ async function decode(
  * Giải phóng tức thì bộ nhớ canvas/bitmap ngay sau khi nén để tránh tràn RAM trên máy cấu hình thấp.
  */
 export async function compressImage(file: File): Promise<Blob> {
-  if (!file.type.startsWith("image/") || file.type === "image/gif" || file.type === "image/svg+xml") return file;
+  if (!ALLOWED_IMAGE_MIMES.has(file.type)) {
+    throw new Error("Định dạng ảnh không được hỗ trợ. Chỉ nhận JPG, PNG hoặc WEBP.");
+  }
   const lowEnd = isLowEndDevice();
   const maxDimension = lowEnd ? LITE_MAX_DIMENSION : FULL_MAX_DIMENSION;
   const jpegQuality = lowEnd ? LITE_JPEG_QUALITY : FULL_JPEG_QUALITY;
@@ -116,11 +121,25 @@ export function jpegName(name: string): string {
 
 /** Nén (nếu là ảnh) rồi tải lên `/api/uploads`, trả về thông tin tệp đầy đủ (`{ id, url, mimeType, sizeBytes }`). */
 export async function uploadOptimizedFile(file: File, purpose: UploadPurpose): Promise<UploadedFile> {
-  const isImage = file.type.startsWith("image/");
+  const allowPdf = purpose === "approval" || purpose === "lab";
+  const allowVideo =
+    purpose === "journal" ||
+    purpose === "harvest" ||
+    purpose === "approval" ||
+    purpose === "violation" ||
+    purpose === "news";
+  const validationError = validatePickedFile(file, { allowPdf, allowVideo });
+  if (validationError) {
+    throw new Error(validationError);
+  }
+  const isImage = ALLOWED_IMAGE_MIMES.has(file.type);
   const blob = isImage ? await compressImage(file) : file;
   const name = isImage && blob !== file ? jpegName(file.name) : file.name;
   return api.upload(blob, purpose, name);
 }
+
+/** Bí danh chuẩn cho luồng kiểm tra MIME + nén + tải tệp phương tiện lên máy chủ. */
+export const uploadMedia = uploadOptimizedFile;
 
 /** Nén (nếu là ảnh) rồi tải lên `/api/uploads`, trả về id tệp. */
 export async function uploadPortalFile(file: File, purpose: UploadPurpose): Promise<number> {
@@ -133,15 +152,12 @@ export function validatePickedFile(
   file: File,
   options: { allowPdf?: boolean; allowVideo?: boolean } = {},
 ): string | null {
-  const isImage = file.type.startsWith("image/");
-  const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
-  const isVideo =
-    file.type === "video/mp4" ||
-    file.type === "video/webm" ||
-    /\.(mp4|webm)$/i.test(file.name);
+  const isImage = ALLOWED_IMAGE_MIMES.has(file.type);
+  const isPdf = file.type === "application/pdf";
+  const isVideo = file.type === "video/mp4" || file.type === "video/webm";
   if (!isImage && !(options.allowPdf && isPdf) && !(options.allowVideo && isVideo)) {
     if (options.allowPdf && options.allowVideo) return "Chỉ nhận ảnh (JPG, PNG, WEBP), video (MP4, WebM) hoặc tệp PDF.";
-    if (options.allowPdf) return "Chỉ nhận ảnh (JPG, PNG…) hoặc tệp PDF.";
+    if (options.allowPdf) return "Chỉ nhận ảnh (JPG, PNG, WEBP) hoặc tệp PDF.";
     if (options.allowVideo) return "Chỉ nhận ảnh (JPG, PNG, WEBP) hoặc video hiện trường (MP4, WebM).";
     return "Vui lòng chọn tệp ảnh (JPG, PNG, WEBP).";
   }

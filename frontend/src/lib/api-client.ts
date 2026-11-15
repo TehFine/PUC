@@ -74,6 +74,12 @@ const NO_REFRESH_PATHS = [
 ];
 const isAuthPath = (path: string) => NO_REFRESH_PATHS.some((prefix) => path.startsWith(prefix));
 
+export interface RequestOptions {
+  keepalive?: boolean;
+  signal?: AbortSignal;
+  headers?: Record<string, string>;
+}
+
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const isMutating = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
@@ -84,7 +90,13 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       ? { "X-Requested-With": "XMLHttpRequest", ...(init?.headers as Record<string, string> | undefined) }
       : init?.headers;
     try {
-      return await fetch(`/api${path}`, { cache: "no-store", credentials: "same-origin", ...init, headers });
+      return await fetch(`/api${path}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        ...init,
+        keepalive: init?.keepalive,
+        headers,
+      });
     } catch (err) {
       const isAbort = err instanceof DOMException && err.name === "AbortError";
       if (!isAbort) {
@@ -125,14 +137,27 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   }
   if (response.status === 204) return undefined as T;
   const text = await response.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+  if (!text) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError("Phản hồi từ máy chủ không đúng định dạng dữ liệu.", response.status, "INVALID_JSON");
+  }
 }
 
-const jsonRequest = (method: string, body?: unknown): RequestInit => ({
-  method,
-  headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-  body: body === undefined ? undefined : JSON.stringify(body),
-});
+const jsonRequest = (method: string, body?: unknown, options?: RequestOptions): RequestInit => {
+  const headers: Record<string, string> = {
+    ...(body === undefined ? undefined : { "Content-Type": "application/json" }),
+    ...options?.headers,
+  };
+  return {
+    method,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    keepalive: options?.keepalive,
+    signal: options?.signal,
+  };
+};
 
 /** Mục đích tải tệp (khớp backend `UPLOAD_PURPOSES`). */
 export type UploadPurpose =
@@ -155,17 +180,32 @@ export interface UploadedFile {
 }
 
 export const api = {
-  get: <T>(path: string) => apiRequest<T>(path),
-  post: <T>(path: string, body?: unknown) => apiRequest<T>(path, jsonRequest("POST", body)),
-  put: <T>(path: string, body?: unknown) => apiRequest<T>(path, jsonRequest("PUT", body)),
-  patch: <T>(path: string, body: unknown) => apiRequest<T>(path, jsonRequest("PATCH", body)),
-  delete: <T>(path: string) => apiRequest<T>(path, jsonRequest("DELETE")),
+  get: <T>(path: string, options?: RequestOptions) =>
+    apiRequest<T>(path, {
+      keepalive: options?.keepalive,
+      signal: options?.signal,
+      headers: options?.headers,
+    }),
+  post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    apiRequest<T>(path, jsonRequest("POST", body, options)),
+  put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    apiRequest<T>(path, jsonRequest("PUT", body, options)),
+  patch: <T>(path: string, body: unknown, options?: RequestOptions) =>
+    apiRequest<T>(path, jsonRequest("PATCH", body, options)),
+  delete: <T>(path: string, options?: RequestOptions) =>
+    apiRequest<T>(path, jsonRequest("DELETE", undefined, options)),
   /** Tải một tệp lên `/api/uploads` (multipart). Trả về `{ id, url }` để gửi kèm bản ghi nghiệp vụ. */
-  upload: (file: Blob, purpose: UploadPurpose, filename = "upload") => {
+  upload: (file: Blob, purpose: UploadPurpose, filename = "upload", options?: RequestOptions) => {
     const form = new FormData();
     form.append("purpose", purpose);
     form.append("file", file, file instanceof File ? file.name : filename);
-    return apiRequest<UploadedFile>("/uploads", { method: "POST", body: form });
+    return apiRequest<UploadedFile>("/uploads", {
+      method: "POST",
+      body: form,
+      keepalive: options?.keepalive,
+      signal: options?.signal,
+      headers: options?.headers,
+    });
   },
 };
 

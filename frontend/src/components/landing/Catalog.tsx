@@ -15,6 +15,7 @@ import {
   HTX_PRICE_GUARANTEE_POLICY,
   type ProtocolMilestone,
 } from "@/lib/durian-protocol-2026-2027";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import {
   usePublic,
   type PublicCatalog,
@@ -392,7 +393,11 @@ function pickAllowedVisual(
 }
 
 function shouldSkipImageOpt(src: string): boolean {
-  return src.startsWith("/api/") || /^https?:\/\//i.test(src);
+  return src.startsWith("/api/");
+}
+
+function resolveSafeCatalogImage(url: string | null | undefined, fallback: string): string {
+  return isSafeMediaUrl(url) ? url : fallback;
 }
 
 function isInstantScrollPreferred(): boolean {
@@ -723,7 +728,7 @@ export default function Catalog() {
     const fertilizerList: CatalogCardItem[] = rawFertilizers
       .filter((f) => f.category !== "restricted" && f.status !== "warning")
       .map((f, idx) => {
-        const rawImg = f.imageUrl || fertFallbacks[idx % fertFallbacks.length];
+        const rawImg = resolveSafeCatalogImage(f.imageUrl, fertFallbacks[idx % fertFallbacks.length]);
         // Đảm bảo hai thẻ kế nhau có hình đại diện phong phú
         const prevImg = idx > 0 ? fertFallbacks[(idx - 1) % fertFallbacks.length] : "";
         const imgSrc = rawImg === prevImg ? fertFallbacks[idx % fertFallbacks.length] : rawImg;
@@ -766,7 +771,7 @@ export default function Catalog() {
         id: `stage-${stage.id}`,
         title: `${stage.order}. ${stage.name}`,
         subtitle: stage.cardSubtitle,
-        imageSrc: stage.imageSrc,
+        imageSrc: resolveSafeCatalogImage(stage.imageSrc, "/stages/stage-1.jpg"),
         imageAlt: stage.imageAlt,
         drawerObjectPosition: stage.drawerObjectPosition,
         imageFit: "photo",
@@ -807,13 +812,12 @@ export default function Catalog() {
     ];
     const varietyList: CatalogCardItem[] = rawVarieties.map((v, idx) => {
       const lower = v.name.toLowerCase();
-      let imgSrc = v.imageUrl || varFallbacks[idx % varFallbacks.length];
-      if (!v.imageUrl) {
-        if (lower.includes("ri 6") || lower.includes("ri6")) imgSrc = "/varieties/ri6.png";
-        else if (lower.includes("monthong") || lower.includes("dona")) imgSrc = "/varieties/monthong.png";
-        else if (lower.includes("musang")) imgSrc = "/varieties/musangking.png";
-        else if (lower.includes("thorn") || lower.includes("gai đen")) imgSrc = "/varieties/blackthorn.png";
-      }
+      let fallbackImg = varFallbacks[idx % varFallbacks.length];
+      if (lower.includes("ri 6") || lower.includes("ri6")) fallbackImg = "/varieties/ri6.png";
+      else if (lower.includes("monthong") || lower.includes("dona")) fallbackImg = "/varieties/monthong.png";
+      else if (lower.includes("musang")) fallbackImg = "/varieties/musangking.png";
+      else if (lower.includes("thorn") || lower.includes("gai đen")) fallbackImg = "/varieties/blackthorn.png";
+      const imgSrc = resolveSafeCatalogImage(v.imageUrl, fallbackImg);
 
       return {
         id: `var-${v.name}-${idx}`,
@@ -1102,45 +1106,48 @@ export default function Catalog() {
           onMouseUp={stopDragging}
           onMouseLeave={stopDragging}
         >
-          {currentItems.map((item, idx) => (
-            <article
-              key={item.id}
-              className="sw-cat-card"
-              role="button"
-              tabIndex={0}
-              aria-label={`Xem chi tiết ${item.title}`}
-              onClick={() => {
-                if (dragRef.current.moved) {
-                  dragRef.current.moved = false;
-                  return;
-                }
-                setDrawerIndex(idx);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
+          {currentItems.map((item, idx) => {
+            const safeCardSrc = resolveSafeCatalogImage(item.imageSrc, "/varieties/monthong.png");
+            return (
+              <article
+                key={item.id}
+                className="sw-cat-card"
+                role="button"
+                tabIndex={0}
+                aria-label={`Xem chi tiết ${item.title}`}
+                onClick={() => {
+                  if (dragRef.current.moved) {
+                    dragRef.current.moved = false;
+                    return;
+                  }
                   setDrawerIndex(idx);
-                }
-              }}
-            >
-              <div className={`sw-cat-stage is-${item.imageFit}`}>
-                <Image
-                  src={item.imageSrc}
-                  alt={item.imageAlt ?? item.title}
-                  fill
-                  draggable={false}
-                  unoptimized={shouldSkipImageOpt(item.imageSrc)}
-                  sizes="(max-width: 768px) 85vw, (max-width: 960px) 46vw, 31vw"
-                  className="sw-cat-img"
-                />
-              </div>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDrawerIndex(idx);
+                  }
+                }}
+              >
+                <div className={`sw-cat-stage is-${item.imageFit}`}>
+                  <Image
+                    src={safeCardSrc}
+                    alt={item.imageAlt ?? item.title}
+                    fill
+                    draggable={false}
+                    unoptimized={shouldSkipImageOpt(safeCardSrc)}
+                    sizes="(max-width: 768px) 85vw, (max-width: 960px) 46vw, 31vw"
+                    className="sw-cat-img"
+                  />
+                </div>
 
-              <div className="sw-cat-caption">
-                <h4 className="sw-cat-title">{item.title}</h4>
-                <p className="sw-cat-sub">{item.subtitle}</p>
-              </div>
-            </article>
-          ))}
+                <div className="sw-cat-caption">
+                  <h4 className="sw-cat-title">{item.title}</h4>
+                  <p className="sw-cat-sub">{item.subtitle}</p>
+                </div>
+              </article>
+            );
+          })}
         </div>
 
         {/* Thanh tiến trình mảnh toàn dải + nút Trước / Tiếp đồng bộ hệ thống */}
@@ -1212,20 +1219,25 @@ export default function Catalog() {
               <div
                 className={`sw-side-photo-stage sw-cat-drawer-stage is-${activeDrawerItem.imageFit}`}
               >
-                <Image
-                  src={activeDrawerItem.imageSrc}
-                  alt={activeDrawerItem.imageAlt ?? activeDrawerItem.fullTitle}
-                  width={720}
-                  height={720}
-                  unoptimized={shouldSkipImageOpt(activeDrawerItem.imageSrc)}
-                  style={
-                    activeDrawerItem.drawerObjectPosition
-                      ? { objectPosition: activeDrawerItem.drawerObjectPosition }
-                      : undefined
-                  }
-                  className="sw-side-photo-full sw-cat-drawer-img"
-                  priority
-                />
+                {(() => {
+                  const safeDrawerSrc = resolveSafeCatalogImage(activeDrawerItem.imageSrc, "/varieties/monthong.png");
+                  return (
+                    <Image
+                      src={safeDrawerSrc}
+                      alt={activeDrawerItem.imageAlt ?? activeDrawerItem.fullTitle}
+                      width={720}
+                      height={720}
+                      unoptimized={shouldSkipImageOpt(safeDrawerSrc)}
+                      style={
+                        activeDrawerItem.drawerObjectPosition
+                          ? { objectPosition: activeDrawerItem.drawerObjectPosition }
+                          : undefined
+                      }
+                      className="sw-side-photo-full sw-cat-drawer-img"
+                      priority
+                    />
+                  );
+                })()}
               </div>
 
               <div className="sw-side-content">

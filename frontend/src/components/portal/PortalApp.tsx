@@ -27,6 +27,7 @@ import { isLowEndDevice } from "@/lib/network";
 import { HOUSEHOLD_STATUS } from "@/lib/portal-labels";
 import { INTRO_PATH } from "@/lib/routes";
 import { formatDate } from "@/utils/format";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { AppNotification, NotificationList, PortalOverview, PortalProfile } from "@/types/portal";
 import dynamic from "next/dynamic";
 import "./portal.css";
@@ -401,7 +402,8 @@ function PortalAppContent() {
   const displayName = profHousehold?.name || profAccount?.fullName || session?.user.fullName || "Hộ thành viên";
   const linkedEmail = profAccount?.email ?? session?.user.email ?? null;
   const serverAvatarUrl = profile?.household?.avatarUrl ?? overview?.household?.avatarUrl ?? null;
-  const avatarUrl = localAvatarOverride !== undefined ? localAvatarOverride : serverAvatarUrl;
+  const rawAvatarUrl = localAvatarOverride !== undefined ? localAvatarOverride : serverAvatarUrl;
+  const avatarUrl = isSafeMediaUrl(rawAvatarUrl) ? rawAvatarUrl : null;
   const publicTraceConsent =
     localConsentOverride !== undefined ? localConsentOverride : Boolean(profile?.household?.publicTraceConsent);
   const householdStatus = HOUSEHOLD_STATUS[profHousehold?.status ?? "pending"] ?? HOUSEHOLD_STATUS.pending;
@@ -634,6 +636,7 @@ function PortalAppContent() {
               aria-expanded={profileOpen}
               aria-haspopup="dialog"
               title={`Hồ sơ: ${displayName}`}
+              data-no-translate="true"
             >
               <span className="pt-avatar">
                 {avatarUrl ? (
@@ -724,9 +727,9 @@ function PortalAppContent() {
               </button>
 
               <div className="pt-profile-head-info">
-                <strong className="pt-profile-name">{displayName}</strong>
+                <strong className="pt-profile-name" data-no-translate="true">{displayName}</strong>
                 <div className="pt-profile-badges">
-                  <span className="pt-profile-kicker">
+                  <span className="pt-profile-kicker" data-no-translate={profHousehold?.code ? "true" : undefined}>
                     {profHousehold?.code ? `MÃ: ${profHousehold.code}` : "HỘ THÀNH VIÊN"}
                   </span>
                   <span className={`pt-profile-status is-${householdStatus.tone}`}>
@@ -818,7 +821,7 @@ function PortalAppContent() {
                 <RadialPngIcon src="/call.png" size={24} className="pt-profile-icon" />
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Số điện thoại</span>
-                  <strong className="pt-profile-val">
+                  <strong className="pt-profile-val" data-no-translate="true">
                     {profHousehold?.phone || "Chưa cập nhật"}
                   </strong>
                 </div>
@@ -830,7 +833,7 @@ function PortalAppContent() {
                 </span>
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Email liên kết Google</span>
-                  <strong className="pt-profile-val">
+                  <strong className="pt-profile-val" data-no-translate="true">
                     {linkedEmail || "Chưa liên kết"}
                   </strong>
                 </div>
@@ -841,7 +844,7 @@ function PortalAppContent() {
                   <RadialPngIcon src="/id-card.png" size={24} className="pt-profile-icon" />
                   <div className="pt-profile-row-content">
                     <span className="pt-profile-label">CCCD chủ hộ</span>
-                    <strong className="pt-profile-val">{profile.household.cccdMasked}</strong>
+                    <strong className="pt-profile-val" data-no-translate="true">{profile.household.cccdMasked}</strong>
                   </div>
                 </div>
               )}
@@ -861,7 +864,7 @@ function PortalAppContent() {
                   <RadialPngIcon src="/leader.png" size={24} className="pt-profile-icon" />
                   <div className="pt-profile-row-content">
                     <span className="pt-profile-label">Trưởng thôn</span>
-                    <strong className="pt-profile-val">{profHousehold.villageLeader}</strong>
+                    <strong className="pt-profile-val" data-no-translate="true">{profHousehold.villageLeader}</strong>
                   </div>
                 </div>
               )}

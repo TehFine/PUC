@@ -1593,19 +1593,30 @@ const PATTERN_RULES: Array<[RegExp, (...args: string[]) => string]> = [
 
 const DYN_CACHE_STORAGE_KEY = "puc_portal_dyn_zh_cache_v1";
 const MAX_DYN_CACHE_ENTRIES = 1000;
+const ONLINE_TRANSLATE_ENABLED = process.env.NEXT_PUBLIC_ENABLE_ONLINE_TRANSLATE === "true";
 const dynamicZhCache = new Map<string, string>();
 const pendingAutoTranslate = new Set<string>();
+const failedAutoTranslate = new Map<string, number>();
+const autoTranslateQueue: string[] = [];
+let translationEpoch = 0;
 let dynCacheLoaded = false;
-let saveCacheTimer: ReturnType<typeof setTimeout> | null = null;
+let dynSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let domRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-function clearDynTranslationCache() {
-  if (saveCacheTimer) {
-    clearTimeout(saveCacheTimer);
-    saveCacheTimer = null;
+export function clearDynTranslationCache() {
+  translationEpoch += 1;
+  autoTranslateQueue.length = 0;
+  if (dynSaveTimer) {
+    clearTimeout(dynSaveTimer);
+    dynSaveTimer = null;
+  }
+  if (domRefreshTimer) {
+    clearTimeout(domRefreshTimer);
+    domRefreshTimer = null;
   }
   dynamicZhCache.clear();
   pendingAutoTranslate.clear();
+  failedAutoTranslate.clear();
   dynCacheLoaded = false;
   if (typeof window !== "undefined") {
     try {
@@ -1651,9 +1662,9 @@ function ensureDynCacheLoaded() {
 }
 
 function scheduleSaveDynCache() {
-  if (typeof window === "undefined" || saveCacheTimer) return;
-  saveCacheTimer = setTimeout(() => {
-    saveCacheTimer = null;
+  if (typeof window === "undefined" || dynSaveTimer) return;
+  dynSaveTimer = setTimeout(() => {
+    dynSaveTimer = null;
     try {
       const entries = Array.from(dynamicZhCache.entries());
       const sliced =
@@ -1686,21 +1697,21 @@ const VI_DIACRITIC_RE =
   /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗợơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
 
 /** Danh sách họ người Việt phổ biến để giữ nguyên tên riêng của nông hộ / cán bộ / giảng viên. */
-const VI_FAMILY_NAMES = new Set([
+const VN_SURNAMES = new Set([
   "nguyễn", "trần", "lê", "phạm", "hoàng", "huỳnh", "phan", "vũ", "võ",
   "đặng", "bùi", "đỗ", "hồ", "ngô", "dương", "lý", "đinh", "đoàn", "trương",
   "bạch", "mai", "lâm", "tô", "hà", "lưu", "lương", "châu", "tạ", "phùng",
   "trịnh", "vương", "cao", "đào", "tống", "thái", "kiều", "nông", "vi",
-  "lò", "điểu", "ksor", "rơ", "h'", "ama", "ami",
+  "lò", "điểu", "ksor", "rơ", "h'", "y", "y'", "ama", "ami",
 ]);
 
 function isLikelyPersonName(text: string): boolean {
   const words = text.trim().split(/\s+/);
   if (words.length < 2 || words.length > 5) return false;
   const firstLower = words[0].toLowerCase().replace(/[^a-zà-ỹ']/g, "");
-  if (!VI_FAMILY_NAMES.has(firstLower)) return false;
+  if (!VN_SURNAMES.has(firstLower) && !(firstLower.startsWith("y'") && VN_SURNAMES.has("y'"))) return false;
   // Tất cả các từ trong tên người đều viết hoa chữ cái đầu và không chứa dấu câu
-  return words.every((w) => /^[A-ZÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ][a-zà-ỹ']*$/.test(w));
+  return words.every((w) => /^[A-ZÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ][a-zA-Zà-ỹÀ-Ỹ']*$/.test(w));
 }
 
 /**
@@ -1925,8 +1936,9 @@ const ENDPOINT_COOLDOWN_MS = 10 * 60 * 1000;
 const endpointDisabledUntil = { google: 0 };
 
 async function fetchOnlineViToZh(text: string): Promise<string | null> {
+  if (!ONLINE_TRANSLATE_ENABLED) return null;
   const now = Date.now();
-  // Chỉ dùng Google Translate GTX (HTTPS), không gửi dữ liệu sang kho bộ nhớ dịch công cộng của bên thứ ba
+  // Chỉ dùng Google Translate GTX (HTTPS) khi biến môi trường cho phép rõ ràng
   if (now >= endpointDisabledUntil.google) try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl=zh-CN&dt=t&q=${encodeURIComponent(text)}`;
     const res = await fetch(url, { method: "GET" });
@@ -1950,18 +1962,22 @@ async function fetchOnlineViToZh(text: string): Promise<string | null> {
   return null;
 }
 
-/** Chuỗi dịch thất bại: chờ 10 phút mới thử lại (tránh vòng lặp gọi API mỗi lần React render lại). */
-const failedAutoTranslate = new Map<string, number>();
-const autoTranslateQueue: string[] = [];
 const MAX_CONCURRENT_AUTO_TRANSLATE = 2;
 let activeAutoTranslate = 0;
 
 function pumpAutoTranslateQueue() {
+  if (!ONLINE_TRANSLATE_ENABLED) {
+    autoTranslateQueue.length = 0;
+    pendingAutoTranslate.clear();
+    return;
+  }
   while (activeAutoTranslate < MAX_CONCURRENT_AUTO_TRANSLATE && autoTranslateQueue.length > 0) {
     const text = autoTranslateQueue.shift()!;
+    const epoch = translationEpoch;
     activeAutoTranslate += 1;
     void fetchOnlineViToZh(text)
       .then((zh) => {
+        if (epoch !== translationEpoch) return;
         if (zh) {
           dynamicZhCache.set(text, zh);
           failedAutoTranslate.delete(text);
@@ -1972,18 +1988,21 @@ function pumpAutoTranslateQueue() {
         }
       })
       .catch(() => {
+        if (epoch !== translationEpoch) return;
         failedAutoTranslate.set(text, Date.now() + ENDPOINT_COOLDOWN_MS);
       })
       .finally(() => {
-        activeAutoTranslate -= 1;
-        pendingAutoTranslate.delete(text);
-        pumpAutoTranslateQueue();
+        activeAutoTranslate = Math.max(0, activeAutoTranslate - 1);
+        if (epoch === translationEpoch) {
+          pendingAutoTranslate.delete(text);
+          pumpAutoTranslateQueue();
+        }
       });
   }
 }
 
 function queueAutoTranslateViToZh(trimmed: string) {
-  if (typeof window === "undefined") return;
+  if (!ONLINE_TRANSLATE_ENABLED || typeof window === "undefined") return;
   if (pendingAutoTranslate.has(trimmed) || dynamicZhCache.has(trimmed)) return;
   if (!VI_DIACRITIC_RE.test(trimmed) || isLikelyPersonName(trimmed)) return;
   // Không gửi chuỗi chứa dãy số dài (CCCD, số điện thoại, mã định danh) ra ngoài
@@ -2132,6 +2151,7 @@ function translateTextNode(textNode: Text, lang: PortalLang) {
 }
 
 function translateElementAttrs(el: Element, lang: PortalLang) {
+  if (el.closest("[data-no-translate], [translate='no']")) return;
   for (const attr of TRANSLATABLE_ATTRS) {
     const val = el.getAttribute(attr);
     if (!val) continue;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { formatVn, toNumber } from "@/components/admin/catalog/form-utils";
 import { FormGrid, NumberField, SelectField, TextField } from "@/components/ui/form/fields";
 import { FormError, Modal } from "@/components/ui/Modal";
@@ -23,7 +24,9 @@ export default function LotContributionsModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const households = useApiList<HouseholdOption>("households");
+  const { can } = useAuth();
+  const canEdit = can("harvest", "update");
+  const households = useApiList<HouseholdOption>(canEdit ? "households" : null);
   const contribState = useApi<{ data?: HarvestContributionRecord[] } | HarvestContributionRecord[]>(
     `/harvest/${lot.id}/contributions`,
   );
@@ -41,7 +44,7 @@ export default function LotContributionsModal({
   useEffect(() => {
     let active = true;
     const hId = Number(householdId);
-    if (!hId) {
+    if (!canEdit || !hId) {
       setPlotOptions([]);
       setPlotCode("");
       return;
@@ -65,7 +68,7 @@ export default function LotContributionsModal({
     return () => {
       active = false;
     };
-  }, [householdId]);
+  }, [canEdit, householdId]);
 
   const addMutation = useMutation(async () => {
     const hId = Number(householdId);
@@ -121,53 +124,87 @@ export default function LotContributionsModal({
         </button>
       }
     >
-      <div style={{ marginBottom: 16, padding: 14, borderRadius: 12, background: "var(--bg-input, #f6f8f5)", border: "1px solid var(--border)" }}>
-        <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>Ghi nhận hộ và thửa đất đóng góp sản lượng</div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
-          Lưu chính xác quan hệ lô hàng và thửa nguồn giúp truy vết xuôi hoặc ngược tức thì khi mẫu kiểm nghiệm phát sinh sự cố.
-        </div>
-        <FormGrid>
-          <SelectField
-            label="Hộ nông dân"
-            required
-            value={householdId}
-            onChange={setHouseholdId}
-            placeholder="— Chọn hộ dân —"
-            options={households.rows.map((h) => ({
-              value: String(h.id),
-              label: `${h.code} - ${h.name}${h.villageName ? ` (${h.villageName})` : ""}`,
-            }))}
-          />
-          {plotOptions.length > 0 ? (
+      {canEdit && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 14,
+            borderRadius: 6,
+            background: "var(--bg-input, #f6f8f5)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
+            Ghi nhận hộ và thửa đất đóng góp sản lượng
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+            Lưu chính xác quan hệ lô hàng và thửa nguồn giúp truy vết xuôi hoặc ngược tức thì khi mẫu kiểm nghiệm phát sinh sự cố.
+          </div>
+          <FormGrid>
             <SelectField
-              label="Thửa đất nguồn (plotCode)"
-              value={plotCode}
-              onChange={setPlotCode}
-              options={plotOptions.map((p) => ({
-                value: p.plotCode,
-                label: `${p.plotCode}${p.variety ? ` (${p.variety})` : ""}${p.zoneCode ? ` - ${p.zoneCode}` : ""}`,
+              label="Hộ nông dân"
+              required
+              value={householdId}
+              onChange={setHouseholdId}
+              placeholder="Chọn hộ dân"
+              options={households.rows.map((h) => ({
+                value: String(h.id),
+                label: `${h.code} - ${h.name}${h.villageName ? ` (${h.villageName})` : ""}`,
               }))}
             />
-          ) : (
-            <TextField
-              label={loadingPlots ? "Đang tải danh sách thửa…" : "Mã thửa nguồn (plotCode)"}
-              value={plotCode}
-              onChange={setPlotCode}
-              placeholder="VD: TH1-001 (tự động chọn nếu để trống)"
-              maxLength={50}
+            {plotOptions.length > 0 ? (
+              <SelectField
+                label="Thửa đất nguồn (plotCode)"
+                value={plotCode}
+                onChange={setPlotCode}
+                options={plotOptions.map((p) => ({
+                  value: p.plotCode,
+                  label: `${p.plotCode}${p.variety ? ` (${p.variety})` : ""}${p.zoneCode ? ` - ${p.zoneCode}` : ""}`,
+                }))}
+              />
+            ) : (
+              <TextField
+                label={loadingPlots ? "Đang tải danh sách thửa…" : "Mã thửa nguồn (plotCode)"}
+                value={plotCode}
+                onChange={setPlotCode}
+                placeholder="VD: TH1-001 (tự động chọn nếu để trống)"
+                maxLength={50}
+              />
+            )}
+            <NumberField
+              label="Khối lượng đóng góp (kg)"
+              required
+              value={weightKg}
+              onChange={setWeightKg}
+              min={1}
+              step={10}
+              placeholder="VD: 1200"
             />
-          )}
-          <NumberField label="Khối lượng đóng góp (kg)" required value={weightKg} onChange={setWeightKg} min={1} step={10} placeholder="VD: 1200" />
-        </FormGrid>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-          <button type="button" className="btn btn-primary btn-sm" disabled={addMutation.pending} onClick={() => void handleAdd()}>
-            {addMutation.pending ? "Đang lưu…" : "Ghi nhận vào lô"}
-          </button>
+          </FormGrid>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={addMutation.pending}
+              onClick={() => void handleAdd()}
+            >
+              {addMutation.pending ? "Đang lưu…" : "Ghi nhận vào lô"}
+            </button>
+          </div>
+          <FormError message={localError ?? addMutation.error ?? removeMutation.error} />
         </div>
-        <FormError message={localError ?? addMutation.error ?? removeMutation.error} />
-      </div>
+      )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, fontSize: 13 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+          fontSize: 13,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
         <span>
           Tổng nguồn cung: <strong>{distinctHouseholds} hộ ({rows.length} thửa nguồn)</strong>
         </span>
@@ -183,50 +220,71 @@ export default function LotContributionsModal({
               <th>Mã hộ</th>
               <th>Chủ hộ</th>
               <th>Thửa nguồn</th>
-              <th>Thôn / Tổ</th>
+              <th>Thôn hoặc tổ</th>
               <th>Khối lượng (kg)</th>
-              <th>Thao tác</th>
+              {canEdit && <th>Thao tác</th>}
             </tr>
           </thead>
           <tbody>
             {contribState.loading ? (
               <tr>
-                <td colSpan={6} className="empty-state">
+                <td colSpan={canEdit ? 6 : 5} className="empty-state">
                   Đang tải danh sách thửa nguồn đóng góp…
                 </td>
               </tr>
             ) : contribState.error ? (
               <tr>
-                <td colSpan={6} className="empty-state" style={{ color: "#b73c20" }}>
+                <td colSpan={canEdit ? 6 : 5} className="empty-state" style={{ color: "#b73c20" }}>
                   {contribState.error}
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="empty-state">
+                <td colSpan={canEdit ? 6 : 5} className="empty-state">
                   Chưa có thửa nguồn nào được ghi nhận trong lô này.
                 </td>
               </tr>
             ) : (
               rows.map((item) => (
                 <tr key={item.id}>
-                  <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 600 }}>{item.householdCode || `#${item.householdId}`}</td>
-                  <td style={{ fontWeight: 500 }}>{item.householdName || "—"}</td>
-                  <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, color: "#166534" }}>
+                  <td
+                    style={{
+                      fontFamily: "var(--font-num-stack)",
+                      fontVariantNumeric: "tabular-nums",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {item.householdCode || `#${item.householdId}`}
+                  </td>
+                  <td style={{ fontWeight: 500 }}>{item.householdName || "-"}</td>
+                  <td
+                    style={{
+                      fontFamily: "var(--font-num-stack)",
+                      fontVariantNumeric: "tabular-nums",
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      color: "#166534",
+                    }}
+                  >
                     {item.plotCode || "Chưa gán thửa"}
                   </td>
-                  <td>{item.villageName || "—"}</td>
-                  <td style={{ fontWeight: 600 }}>{formatVn(Number(item.weightKg), 1)} kg</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn btn-danger btn-sm"
-                      disabled={removeMutation.pending}
-                      onClick={() => void handleDelete(item.id)}
-                    >
-                      Xóa
-                    </button>
+                  <td>{item.villageName || "-"}</td>
+                  <td style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                    {formatVn(Number(item.weightKg), 1)} kg
                   </td>
+                  {canEdit && (
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        disabled={removeMutation.pending}
+                        onClick={() => void handleDelete(item.id)}
+                      >
+                        Xóa
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}

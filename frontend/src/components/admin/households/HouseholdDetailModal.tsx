@@ -13,6 +13,7 @@ import { badgeOf, HOUSEHOLD_STATUS, LAB_RESULT, SEVERITY, VIOLATION_STATUS } fro
 import { getZoneColor } from "@/components/zones/zone-data";
 import { formatDate } from "@/utils/format";
 import { formatCoords, plotCenterCoords } from "@/utils/plot-utils";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { HouseholdRow } from "@/types/households";
 import type { JournalRow, ViolationRow } from "@/types/journal";
 import type { LabTestRow } from "@/types/testing";
@@ -84,7 +85,7 @@ export default function HouseholdDetailModal({
           gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
           gap: 12,
           padding: 16,
-          borderRadius: 16,
+          borderRadius: 8,
           background: "var(--mist)",
           marginBottom: 18,
         }}
@@ -104,7 +105,7 @@ export default function HouseholdDetailModal({
                 background: zc.bg,
                 border: "none",
                 padding: "4px 10px",
-                borderRadius: 8,
+                borderRadius: 4,
               }}
             >
               {household.code}
@@ -247,14 +248,14 @@ export default function HouseholdDetailModal({
                   <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{j.detail || "—"}</td>
                   <td style={{ fontSize: 12 }}>{j.recorder}</td>
                   <td>
-                    {j.photoUrl && /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(j.photoUrl) ? (
+                    {isSafeMediaUrl(j.photoUrl) ? (
                       <a href={j.photoUrl} target="_blank" rel="noopener noreferrer" className="badge badge-blue">
                         Xem ảnh
                       </a>
                     ) : j.hasPhoto ? (
                       <span className="badge badge-blue">Có</span>
                     ) : (
-                      <span style={{ color: "var(--text-muted)" }}>—</span>
+                      <span style={{ color: "var(--text-muted)" }}>-</span>
                     )}
                   </td>
                 </tr>

@@ -9,6 +9,8 @@ import DwellSlideshow, { type DwellSlide } from "@/components/landing/DwellSlide
 import LandingFooter from "@/components/landing/LandingFooter";
 import { api } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
+import { safeDecodeURIComponent } from "@/utils/url-safety";
+import { persistTraceLang } from "./[code]/trace-i18n";
 import "@/components/landing/landing.css";
 import "@/components/landing/swiss-landing.css";
 import "./swiss-trace.css";
@@ -68,7 +70,7 @@ function resolveTraceInputHref(rawInput: string): string | null {
 
   const tracePathMatch = /(?:^|\/)trace\/([^/?#\s]+)(?:[/?#]|$)/.exec(trimmed);
   if (tracePathMatch?.[1]) {
-    return `/trace/${encodeURIComponent(decodeURIComponent(tracePathMatch[1]))}`;
+    return `/trace/${encodeURIComponent(safeDecodeURIComponent(tracePathMatch[1]))}`;
   }
 
   if (/^[A-Za-z0-9]{12,24}$/.test(trimmed) && /[a-z]/.test(trimmed) && /[A-Z0-9]/.test(trimmed)) {
@@ -163,9 +165,40 @@ export default function TraceLookupPage() {
   const [samples, setSamples] = useState<TraceSamplesResponse | null>(() => cachedTraceSamples);
   const [loading, setLoading] = useState<boolean>(() => cachedTraceSamples === null);
   const [tab, setTab] = useState<SampleTab>("all");
+  const [auditSessionReady, setAuditSessionReady] = useState(false);
 
   const authenticated = status === "authenticated";
   const workspaceHref = homePathFor(session?.user.role);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const rawLang = params.get("lang")?.trim().toLowerCase();
+      if (rawLang === "vi" || rawLang === "zh" || rawLang === "en") {
+        persistTraceLang(rawLang);
+      } else if (rawLang?.startsWith("zh")) {
+        persistTraceLang("zh");
+      }
+
+      const rawPass = params.get("auditPass")?.trim();
+      if (rawPass && /^[A-Za-z0-9_-]{12,80}$/.test(rawPass)) {
+        window.sessionStorage.setItem("puc_audit_pass", rawPass);
+        setAuditSessionReady(true);
+      } else if (window.sessionStorage.getItem("puc_audit_pass")) {
+        setAuditSessionReady(true);
+      }
+
+      if (params.has("auditPass")) {
+        params.delete("auditPass");
+        const qs = params.toString();
+        const cleanUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+        window.history.replaceState(null, "", cleanUrl);
+      }
+    } catch {
+      // Bỏ qua nếu trình duyệt chặn sessionStorage hoặc History API
+    }
+  }, []);
 
   useEffect(() => {
     if (cachedTraceSamples) return;
@@ -425,6 +458,19 @@ export default function TraceLookupPage() {
             </div>
           </div>
 
+          {auditSessionReady && (
+            <div className="sw-field-audit-callout" role="status">
+              <div className="sw-field-audit-copy">
+                <span className="sw-field-audit-kicker">
+                  Phiên Thẩm định Thực địa đã kích hoạt trên trình duyệt này
+                </span>
+                <p className="sw-field-audit-desc">
+                  Khóa thẻ đoàn đã được lưu an toàn trong phiên làm việc tạm thời và ẩn khỏi thanh địa chỉ. Quý đoàn có thể chọn bất kỳ thửa vườn hoặc lô hàng bên dưới, hoặc quét trực tiếp Bảng QR đầu thửa vườn để đối chứng vị trí GPS.
+                </p>
+              </div>
+            </div>
+          )}
+
           {demoAuditPass && firstDemoPlot && (
             <div className="sw-field-audit-callout">
               <div className="sw-field-audit-copy">
@@ -432,7 +478,7 @@ export default function TraceLookupPage() {
                   Mô hình điểm Cấp Xã - Tỉnh Đắk Lắk / Chế độ Thẩm định Thực địa Tại Vườn
                 </span>
                 <p className="sw-field-audit-desc">
-                  Dành cho Đoàn công tác Tỉnh &amp; Đối tác thu mua nước ngoài: Quét Bảng QR cắm tại thửa vườn kết hợp mã thẻ đoàn{" "}
+                  Dành cho Đoàn công tác Tỉnh và Đối tác thu mua nước ngoài: Quét Bảng QR cắm tại thửa vườn kết hợp mã thẻ đoàn{" "}
                   <strong>{demoAuditPass.code}</strong> để mở ranh giới đa giác GIS, trần sản lượng đầu vụ và bấm đối chứng vị trí GPS ngay tại vườn.
                 </p>
               </div>
@@ -442,7 +488,7 @@ export default function TraceLookupPage() {
                     firstDemoPlot.qrToken
                       ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
                       : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
-                  }?auditPass=${encodeURIComponent(demoAuditPass.code)}&lang=vi`}
+                  }?auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}&lang=vi`}
                   className="sw-field-audit-btn is-primary"
                 >
                   Thử Thẻ Đoàn tại Thửa {firstDemoPlot.plotCode} (VI)
@@ -452,7 +498,7 @@ export default function TraceLookupPage() {
                     firstDemoPlot.qrToken
                       ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
                       : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
-                  }?auditPass=${encodeURIComponent(demoAuditPass.code)}&lang=zh`}
+                  }?auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}&lang=zh`}
                   className="sw-field-audit-btn"
                 >
                   体验中国采购团果园核验 (中文)

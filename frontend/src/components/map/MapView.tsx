@@ -898,6 +898,14 @@ export default function MapView({
     event.target.value = "";
     if (!file) return;
 
+    if (file.size > 10 * 1024 * 1024) {
+      setMessage({
+        tone: "error",
+        text: "Tệp GeoJSON không được vượt quá 10 MB.",
+      });
+      return;
+    }
+
     setImporting(true);
     try {
       const text = await file.text();

@@ -410,7 +410,7 @@ export interface PlotSignboardDto {
 export interface FieldAuditPassDto {
   id: number;
   code: string;
-  passToken: string;
+  passToken?: string | null;
   delegationName: string;
   organization: string | null;
   allowedZoneCode: string | null;

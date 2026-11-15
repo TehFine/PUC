@@ -5,8 +5,11 @@ import { FileText, Paperclip } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { AppleSpinner } from "@/components/ui/Skeleton";
 import type { UploadPurpose } from "@/lib/api-client";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import { RadialPngIcon } from "../RadialIcons";
 import { uploadPortalFile, validatePickedFile } from "./media";
+
+export { isSafeMediaUrl };
 
 /* ──────────────────────────── Nút có trạng thái đang xử lý ──────────────────────────── */
 
@@ -188,7 +191,7 @@ export function PhotoField({
           )}
           <div className="pt-photo-preview-bar">
             <span>{picker.file?.name || "Tệp đã chọn"}</span>
-            <span>✓ Đã đính kèm</span>
+            <span>Đã đính kèm</span>
           </div>
           <button
             type="button"
@@ -206,7 +209,7 @@ export function PhotoField({
           <input
             id={id}
             type="file"
-            accept="image/*,video/mp4,video/webm"
+            accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
             capture="environment"
             disabled={disabled}
             onChange={(event) => {
@@ -306,7 +309,7 @@ export function AttachmentsField({
             id={id}
             type="file"
             multiple
-            accept="image/*,video/mp4,video/webm,application/pdf,.pdf"
+            accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,application/pdf,.pdf"
             disabled={disabled}
             onChange={(event) => {
               add(event.target.files);
@@ -321,10 +324,6 @@ export function AttachmentsField({
     </div>
   );
 }
-
-/** Chỉ cho phép URL nội bộ bắt đầu bằng `/` (không phải `//`) hoặc `http(s)://` để chặn `javascript:`. */
-export const isSafeMediaUrl = (url: string | null | undefined): url is string =>
-  typeof url === "string" && /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(url);
 
 /** Ảnh hoặc video hiện trường đã lưu trên server (`/api/uploads/:id`), có liên kết mở tệp gốc. */
 export function StoredPhoto({ url, alt, caption }: { url: string; alt: string; caption?: string }) {

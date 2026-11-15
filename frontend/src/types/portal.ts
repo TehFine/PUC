@@ -162,6 +162,8 @@ export interface PortalLabTest {
   labAccreditationCode?: string | null;
   externalVerifyCode?: string | null;
   externalVerifyUrl?: string | null;
+  scanUrl?: string | null;
+  reportHash?: string | null;
 }
 
 export interface PortalScheduleItem {

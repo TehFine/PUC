@@ -3,6 +3,7 @@
 import { useId, useRef, useState } from "react";
 import { uploadOptimizedFile, validatePickedFile } from "@/components/portal/shared/media";
 import { errorMessage, type UploadPurpose } from "@/lib/api-client";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 
 /**
  * Ô chọn ảnh của Quản trị viên: tự động thu nhỏ (tối đa 1600px) và nén JPEG ~0.8 trên trình duyệt
@@ -60,7 +61,7 @@ export default function ImageUploadField({
           style={{
             width: 132,
             height: 92,
-            borderRadius: 10,
+            borderRadius: 6,
             overflow: "hidden",
             border: "1px solid var(--border)",
             background: "var(--bg-input, #f5f7f4)",
@@ -69,7 +70,7 @@ export default function ImageUploadField({
             flexShrink: 0,
           }}
         >
-          {value && /^(\/(?!\/)[^\s]*|https?:\/\/[^\s]+)$/.test(value) ? (
+          {isSafeMediaUrl(value) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={value}

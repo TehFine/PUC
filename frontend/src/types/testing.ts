@@ -22,6 +22,7 @@ export interface LabTestRow {
   recordStatus?: LabRecordStatus;
   scanAttachmentId?: number | null;
   scanUrl?: string | null;
+  reportHash?: string | null;
 }
 
 export type LabTestRecord = LabTestRow;

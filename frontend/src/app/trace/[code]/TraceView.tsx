@@ -9,8 +9,13 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { SkeletonCards } from "@/components/ui/Skeleton";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { ROLE_LABELS } from "@/constants/roles";
+import { api, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import { reportRequestTime } from "@/lib/network";
-import { safeDecodeURIComponent } from "@/utils/url-safety";
+import {
+  isSafeExternalHttpsUrl,
+  isSafeMediaUrl,
+  safeDecodeURIComponent,
+} from "@/utils/url-safety";
 import type { Role } from "@/types/api";
 import type { PlotStatus, PortalPlot } from "@/types/portal";
 import {
@@ -611,7 +616,7 @@ function AuthorityDiarySection({ diaries }: { diaries: TraceDiaryEntry[] }) {
                         SHA-256 #{d.recordHash.slice(0, 10)}
                       </span>
                     )}
-                    {d.photoUrl && (
+                    {isSafeMediaUrl(d.photoUrl) && (
                       <a
                         href={d.photoUrl}
                         target="_blank"
@@ -647,12 +652,12 @@ function readInitialAuditPass(): string | null {
   if (typeof window === "undefined") return null;
   try {
     const fromQuery = new URLSearchParams(window.location.search).get("auditPass")?.trim();
-    if (fromQuery && /^[A-Za-z0-9_-]{4,64}$/.test(fromQuery)) {
+    if (fromQuery && /^[A-Za-z0-9_-]{4,80}$/.test(fromQuery)) {
       window.sessionStorage.setItem(AUDIT_PASS_SESSION_KEY, fromQuery);
       return fromQuery;
     }
     const fromSession = window.sessionStorage.getItem(AUDIT_PASS_SESSION_KEY)?.trim();
-    if (fromSession && /^[A-Za-z0-9_-]{4,64}$/.test(fromSession)) {
+    if (fromSession && /^[A-Za-z0-9_-]{4,80}$/.test(fromSession)) {
       return fromSession;
     }
   } catch {
@@ -690,10 +695,20 @@ export default function TraceView() {
     householdName: string;
   } | null>(null);
 
-  // Tự động chọn ngôn ngữ theo trình duyệt người quét (4d) ngay sau khi mount
+  // Tự động chọn ngôn ngữ theo trình duyệt người quét (4d) ngay sau khi mount và ẩn auditPass khỏi URL
   useEffect(() => {
     setLang(detectInitialTraceLang());
-    setAuditPass(readInitialAuditPass());
+    const pass = readInitialAuditPass();
+    setAuditPass(pass);
+    try {
+      const nextUrl = new URL(window.location.href);
+      if (nextUrl.searchParams.has("auditPass")) {
+        nextUrl.searchParams.delete("auditPass");
+        window.history.replaceState(null, "", nextUrl.pathname + nextUrl.search + nextUrl.hash);
+      }
+    } catch {
+      // Bỏ qua nếu trình duyệt chặn History API
+    }
   }, []);
 
   const handleChangeLang = (nextLang: TraceLang) => {
@@ -703,8 +718,12 @@ export default function TraceView() {
 
   const handleApplyAuditPass = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = auditPassInput.trim();
-    if (!cleaned || !/^[A-Za-z0-9_-]{4,64}$/.test(cleaned)) return;
+    let cleaned = auditPassInput.trim();
+    const urlMatch = /[?&]auditPass=([A-Za-z0-9_-]{4,80})(?:[&#]|$)/.exec(cleaned);
+    if (urlMatch?.[1]) {
+      cleaned = urlMatch[1];
+    }
+    if (!cleaned || !/^[A-Za-z0-9_-]{4,80}$/.test(cleaned)) return;
     try {
       window.sessionStorage.setItem(AUDIT_PASS_SESSION_KEY, cleaned);
     } catch {
@@ -785,7 +804,6 @@ export default function TraceView() {
 
     const qs = new URLSearchParams();
     if (selectedView) qs.set("view", selectedView);
-    if (auditPass) qs.set("auditPass", auditPass);
     const querySuffix = qs.toString() ? `?${qs.toString()}` : "";
     const encodedCode = encodeURIComponent(code);
     const preferAuthenticatedEndpoint =
@@ -793,15 +811,20 @@ export default function TraceView() {
     const primaryUrl = preferAuthenticatedEndpoint
       ? `/api/trace/${encodedCode}${querySuffix}`
       : `/api/public/trace/${encodedCode}${querySuffix}`;
+    const reqHeaders: HeadersInit | undefined = auditPass
+      ? { "x-audit-pass": auditPass }
+      : undefined;
 
     fetch(primaryUrl, {
       credentials: "include",
+      headers: reqHeaders,
       signal: controller.signal,
     })
       .then((res) => {
         if (res.status === 401 && preferAuthenticatedEndpoint) {
           return fetch(`/api/public/trace/${encodedCode}${querySuffix}`, {
             credentials: "include",
+            headers: reqHeaders,
             signal: controller.signal,
           });
         }
@@ -998,11 +1021,17 @@ export default function TraceView() {
 
   const handleSwitchAccount = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      await api.post("/auth/logout", undefined, { keepalive: true });
     } catch {
       // Bỏ qua lỗi mạng khi đăng xuất
     }
     if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.removeItem(AUDIT_PASS_SESSION_KEY);
+      } catch {
+        // Bỏ qua lỗi xóa sessionStorage
+      }
+      window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
       window.location.href = loginWithNextHref;
     }
   };
@@ -1513,8 +1542,9 @@ export default function TraceView() {
             {pub.governance && (() => {
               const locGov = localizeGovernmentEndorsement(pub.governance.governmentEndorsement, lang);
               const portalUrl = pub.governance.governmentEndorsement.officialPortalUrl;
-              const safePortalUrl =
-                portalUrl && /^https:\/\//i.test(portalUrl) ? portalUrl : null;
+              const safePortalUrl = isSafeExternalHttpsUrl(portalUrl)
+                ? portalUrl.trim()
+                : null;
               return (
                 <section className="tr-card tr-gov-card" aria-labelledby="gov-endorsement-heading">
                   <div className="tr-gov-banner-top">
@@ -1543,6 +1573,7 @@ export default function TraceView() {
                         href={safePortalUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        referrerPolicy="no-referrer"
                         className="tr-gov-portal-btn no-print"
                       >
                         <Globe size={15} strokeWidth={2.1} aria-hidden="true" />
@@ -2040,7 +2071,7 @@ export default function TraceView() {
                                   </div>
                                 </div>
 
-                                {lt.scanUrl ? (
+                                {isSafeMediaUrl(lt.scanUrl) ? (
                                   <a
                                     href={lt.scanUrl}
                                     target="_blank"
@@ -2055,11 +2086,12 @@ export default function TraceView() {
                                   <div className="tr-scan-doc-muted">{t.lab.scanArchivedNote}</div>
                                 )}
 
-                                {lt.externalVerifyUrl && /^https:\/\//i.test(lt.externalVerifyUrl) && (
+                                {isSafeExternalHttpsUrl(lt.externalVerifyUrl) && (
                                   <a
-                                    href={lt.externalVerifyUrl}
+                                    href={lt.externalVerifyUrl.trim()}
                                     target="_blank"
                                     rel="noopener noreferrer"
+                                    referrerPolicy="no-referrer"
                                     className="tr-ext-verify-btn no-print"
                                   >
                                     <ShieldCheck size={15} strokeWidth={2.1} aria-hidden="true" />
@@ -2314,12 +2346,9 @@ export default function TraceView() {
                       </p>
                       <div className="tr-source-plots-grid">
                         {data.enterpriseData.fieldAuditSourcePlots.map((sp) => {
-                          const baseHref = sp.qrToken
+                          const plotHref = sp.qrToken
                             ? `/t/${encodeURIComponent(sp.qrToken)}`
                             : `/trace/${encodeURIComponent(sp.plotCode)}`;
-                          const plotHref = auditPass
-                            ? `${baseHref}?auditPass=${encodeURIComponent(auditPass)}`
-                            : baseHref;
                           return (
                             <Link key={sp.plotCode} href={plotHref} className="tr-source-plot-link">
                               <div className="tr-source-plot-top">
@@ -2375,7 +2404,7 @@ export default function TraceView() {
                               <tr key={lt.code}>
                                 <td className="is-mono">
                                   <div className="tr-lab-code-stack">
-                                    {lt.scanUrl ? (
+                                    {isSafeMediaUrl(lt.scanUrl) ? (
                                       <a
                                         href={lt.scanUrl}
                                         target="_blank"
@@ -2387,11 +2416,12 @@ export default function TraceView() {
                                     ) : (
                                       <span>{lt.code}</span>
                                     )}
-                                    {lt.externalVerifyUrl && /^https:\/\//i.test(lt.externalVerifyUrl) && (
+                                    {isSafeExternalHttpsUrl(lt.externalVerifyUrl) && (
                                       <a
-                                        href={lt.externalVerifyUrl}
+                                        href={lt.externalVerifyUrl.trim()}
                                         target="_blank"
                                         rel="noopener noreferrer"
+                                        referrerPolicy="no-referrer"
                                         className="tr-inline-link is-sub"
                                       >
                                         Đối chiếu Lab
@@ -2642,7 +2672,7 @@ export default function TraceView() {
                               {m.plotCode ? ` - Mã lô vườn: ${m.plotCode}` : ""}
                             </div>
                             <div className="tr-minute-result">Kết luận: {m.result}</div>
-                            {(m.gpsVerified || m.recordHash || m.photoUrl) && (
+                            {(m.gpsVerified || m.recordHash || isSafeMediaUrl(m.photoUrl)) && (
                               <div className="tr-proof-meta tr-minute-seals">
                                 {m.gpsVerified && (
                                   <span className="tr-proof-safe-tag">Khớp GPS tại thửa</span>
@@ -2652,7 +2682,7 @@ export default function TraceView() {
                                     SHA-256 #{m.recordHash.slice(0, 10)}
                                   </span>
                                 )}
-                                {m.photoUrl && (
+                                {isSafeMediaUrl(m.photoUrl) && (
                                   <a
                                     href={m.photoUrl}
                                     target="_blank"

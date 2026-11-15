@@ -74,9 +74,11 @@ export default function Harvest() {
   const canCreateHarvest = can("harvest", "create");
   const canUpdateHarvest = can("harvest", "update");
   const canDeleteHarvest = can("harvest", "delete");
+  const canReadContracts = can("contracts", "read");
   const canCreateContract = can("contracts", "create");
   const canUpdateContract = can("contracts", "update");
   const canDeleteContract = can("contracts", "delete");
+  const canReadEnterprises = can("enterprises", "read");
   const canCreateEnterprise = can("enterprises", "create");
   const canUpdateEnterprise = can("enterprises", "update");
   const canDeleteEnterprise = can("enterprises", "delete");
@@ -129,16 +131,22 @@ export default function Harvest() {
   // 4. Hợp đồng & Doanh nghiệp
   const [contractQ, setContractQ] = useState("");
   const debouncedContractQ = useDebounced(contractQ);
-  const contracts = useApiList<ContractRecord>("contracts", { q: debouncedContractQ });
+  const contracts = useApiList<ContractRecord>(canReadContracts ? "contracts" : null, {
+    q: debouncedContractQ,
+  });
   const [editingContract, setEditingContract] = useState<ContractRecord | "new" | null>(null);
   const [deletingContract, setDeletingContract] = useState<ContractRecord | null>(null);
 
   const [entQ, setEntQ] = useState("");
   const debouncedEntQ = useDebounced(entQ);
-  const enterprises = useApiList<EnterpriseRecord>("enterprises", { q: debouncedEntQ });
+  const enterprises = useApiList<EnterpriseRecord>(canReadEnterprises ? "enterprises" : null, {
+    q: debouncedEntQ,
+  });
   const [editingEnterprise, setEditingEnterprise] = useState<EnterpriseRecord | "new" | null>(null);
   const [deletingEnterprise, setDeletingEnterprise] = useState<EnterpriseRecord | null>(null);
-  const growingZones = useApi<{ data?: GrowingZoneRow[] }>(tab === "enterprises" ? "/growing-zones" : null);
+  const growingZones = useApi<{ data?: GrowingZoneRow[] }>(
+    tab === "enterprises" && canReadEnterprises ? "/growing-zones" : null,
+  );
   const zoneRows = growingZones.data?.data ?? [];
 
   const handleZoneStatusChange = async (code: string, nextStatus: GrowingZoneRow["status"]) => {
@@ -331,16 +339,20 @@ export default function Harvest() {
             Cấp phát tem ({stampAllocations.total})
           </button>
         )}
-        <button type="button" className={`tab-btn ${tab === "contracts" ? "active" : ""}`} onClick={() => setTab("contracts")}>
-          Hợp đồng bao tiêu ({contracts.total})
-        </button>
-        <button
-          type="button"
-          className={`tab-btn ${tab === "enterprises" ? "active" : ""}`}
-          onClick={() => setTab("enterprises")}
-        >
-          Doanh nghiệp &amp; PHC ({enterprises.total})
-        </button>
+        {canReadContracts && (
+          <button type="button" className={`tab-btn ${tab === "contracts" ? "active" : ""}`} onClick={() => setTab("contracts")}>
+            Hợp đồng bao tiêu ({contracts.total})
+          </button>
+        )}
+        {canReadEnterprises && (
+          <button
+            type="button"
+            className={`tab-btn ${tab === "enterprises" ? "active" : ""}`}
+            onClick={() => setTab("enterprises")}
+          >
+            Doanh nghiệp &amp; PHC ({enterprises.total})
+          </button>
+        )}
       </div>
 
       {/* ─── TAB 1: DANH SÁCH LÔ THU HOẠCH ─── */}
@@ -572,12 +584,12 @@ export default function Harvest() {
                   <th>Ngày cắt dự kiến</th>
                   <th>SL ước tính</th>
                   <th>Trạng thái</th>
-                  <th>Thao tác</th>
+                  {canUpdateHarvest && <th>Thao tác</th>}
                 </tr>
               </thead>
               <tbody>
                 <ListStatusRow
-                  colSpan={9}
+                  colSpan={canUpdateHarvest ? 9 : 8}
                   loading={harvestPlans.loading}
                   error={harvestPlans.error}
                   empty={harvestPlans.rows.length === 0}
@@ -629,20 +641,22 @@ export default function Harvest() {
                           </div>
                         )}
                       </td>
-                      <td className="table-actions-cell">
-                        <div className="table-actions">
-                          <button
-                            type="button"
-                            className={`btn ${p.planStatus === "notified" ? "btn-outline" : "btn-primary"} btn-sm`}
-                            onClick={() => setNotifyingPlan(p)}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
-                            title="Tính toán / điều chỉnh ngày thu hoạch và gửi thông báo tới tài khoản hộ dân"
-                          >
-                            <BellRing size={13} strokeWidth={2.2} />
-                            <span>{p.planStatus === "notified" ? "Gửi lại lịch" : "Thông báo hộ dân"}</span>
-                          </button>
-                        </div>
-                      </td>
+                      {canUpdateHarvest && (
+                        <td className="table-actions-cell">
+                          <div className="table-actions">
+                            <button
+                              type="button"
+                              className={`btn ${p.planStatus === "notified" ? "btn-outline" : "btn-primary"} btn-sm`}
+                              onClick={() => setNotifyingPlan(p)}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+                              title="Tính toán hoặc điều chỉnh ngày thu hoạch và gửi thông báo tới tài khoản hộ dân"
+                            >
+                              <BellRing size={13} strokeWidth={2.2} />
+                              <span>{p.planStatus === "notified" ? "Gửi lại lịch" : "Thông báo hộ dân"}</span>
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -741,7 +755,7 @@ export default function Harvest() {
       )}
 
       {/* ─── TAB 4: HỢP ĐỒNG LIÊN KẾT BAO TIÊU ─── */}
-      {tab === "contracts" && (
+      {tab === "contracts" && canReadContracts && (
         <div className="card">
           <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
             <div className="card-header-left">Hợp đồng thu mua bao tiêu nông sản (HTX ↔ Doanh nghiệp)</div>
@@ -842,7 +856,7 @@ export default function Harvest() {
       )}
 
       {/* ─── TAB 5: DOANH NGHIỆP & CƠ SỞ ĐÓNG GÓI PHC + MÃ VÙNG PUC THỜI GIAN THỰC ─── */}
-      {tab === "enterprises" && (
+      {tab === "enterprises" && canReadEnterprises && (
         <>
           <div className="card" style={{ marginBottom: 18 }}>
             <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
@@ -1078,7 +1092,7 @@ export default function Harvest() {
       )}
 
       {/* Modal thông báo lịch thu hoạch tới hộ dân */}
-      {notifyingPlan && (
+      {notifyingPlan && canUpdateHarvest && (
         <HarvestPlanNotifyModal
           plan={notifyingPlan}
           onClose={() => setNotifyingPlan(null)}

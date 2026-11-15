@@ -14,6 +14,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { TRACE_UI_COPY, type TraceLang } from "./trace-i18n";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 
 export interface FieldAuditPlotProfile {
   plotCode: string;
@@ -753,12 +754,9 @@ export default function FieldAuditGpsCheckCard({
               </div>
               <div className="tr-linked-lots-list">
                 {data.linkedLots.map((lot) => {
-                  const baseHref = lot.qrToken
+                  const href = lot.qrToken
                     ? `/t/${encodeURIComponent(lot.qrToken)}`
                     : `/trace/${encodeURIComponent(lot.lotCode)}`;
-                  const href = auditPass
-                    ? `${baseHref}?auditPass=${encodeURIComponent(auditPass)}`
-                    : baseHref;
                   return (
                     <Link key={lot.lotCode} href={href} className="tr-linked-lot-item">
                       <div>
@@ -811,7 +809,7 @@ export default function FieldAuditGpsCheckCard({
                         SHA-256 #{entry.recordHash.slice(0, 10)}
                       </span>
                     )}
-                    {entry.photoUrl && (
+                    {isSafeMediaUrl(entry.photoUrl) && (
                       <a
                         href={entry.photoUrl}
                         target="_blank"
@@ -864,7 +862,7 @@ export default function FieldAuditGpsCheckCard({
                         SHA-256 #{m.recordHash.slice(0, 10)}
                       </span>
                     )}
-                    {m.photoUrl && (
+                    {isSafeMediaUrl(m.photoUrl) && (
                       <a
                         href={m.photoUrl}
                         target="_blank"
