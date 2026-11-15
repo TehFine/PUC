@@ -1,5 +1,7 @@
-import { Controller, Get, Header, Ip, Param, Query, Req } from "@nestjs/common";
+import { Body, Controller, Get, Header, HttpCode, Ip, Param, Post, Query, Req } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
+import { Type } from "class-transformer";
+import { IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 import type { Request } from "express";
 import type { AuthUser } from "../auth/auth-user";
 import { CurrentUser, OptionalAuth, OptionalCurrentUser, Public } from "../auth/auth.decorators";
@@ -11,7 +13,46 @@ import { TraceabilityService } from "./traceability.service";
 
 const PUBLIC_TRACE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 30;
 const AUTH_TRACE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 60;
+const GPS_VERIFY_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 12;
 const TRACE_WINDOW_MS = 60_000;
+
+export class VerifyFieldGpsDto {
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude!: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(10000)
+  accuracyMeters?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  auditPass?: string;
+}
+
+function extractAuditPass(req: Request, queryPass?: string): string | undefined {
+  if (typeof queryPass === "string" && queryPass.trim()) {
+    return queryPass.trim().slice(0, 80);
+  }
+  const headerVal = req.headers["x-audit-pass"];
+  const raw = Array.isArray(headerVal) ? headerVal[0] : headerVal;
+  if (typeof raw === "string" && raw.trim()) {
+    return raw.trim().slice(0, 80);
+  }
+  return undefined;
+}
 
 function extractCountryCode(req: Request): string | undefined {
   const rawCountry =
@@ -134,7 +175,7 @@ export class PublicController {
     return this.traceability.traceSamples();
   }
 
-  /** API 1 (Công khai + tùy chọn phiên): Tra cứu hồ sơ QR bằng token ngẫu nhiên (/t/:token), giới hạn tốc độ chống quét dò token. */
+  /** API 1 (Công khai + tùy chọn phiên / Thẻ Đoàn Thẩm định): Tra cứu hồ sơ QR bằng token ngẫu nhiên (/t/:token), giới hạn tốc độ chống quét dò token. */
   @Public()
   @OptionalAuth()
   @Throttle({ default: { limit: PUBLIC_TRACE_LIMIT, ttl: TRACE_WINDOW_MS } })
@@ -143,6 +184,7 @@ export class PublicController {
   async trace(
     @Param("code") code: string,
     @Query("view") view: string | undefined,
+    @Query("auditPass") auditPass: string | undefined,
     @OptionalCurrentUser() user: AuthUser | undefined,
     @Ip() ip: string,
     @Req() req: Request,
@@ -153,6 +195,32 @@ export class PublicController {
       ip,
       userAgent: typeof ua === "string" ? ua : undefined,
       requestedView: view,
+      auditPass: extractAuditPass(req, auditPass),
+      countryCode: extractCountryCode(req),
+    });
+  }
+
+  /** Đối chứng tọa độ GPS thực địa tại vườn khi quét Bảng QR Thửa Đất (yêu cầu Thẻ Đoàn Thẩm định hoặc tài khoản có phạm vi). */
+  @Public()
+  @OptionalAuth()
+  @Throttle({ default: { limit: GPS_VERIFY_LIMIT, ttl: TRACE_WINDOW_MS } })
+  @Post("trace/:code/verify-gps")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  async verifyLiveGps(
+    @Param("code") code: string,
+    @Body() dto: VerifyFieldGpsDto,
+    @Query("auditPass") queryPass: string | undefined,
+    @OptionalCurrentUser() user: AuthUser | undefined,
+    @Ip() ip: string,
+    @Req() req: Request,
+  ) {
+    const ua = req.headers["user-agent"];
+    return this.traceability.verifyLiveFieldGps(code, dto, {
+      user,
+      ip,
+      userAgent: typeof ua === "string" ? ua : undefined,
+      auditPass: extractAuditPass(req, dto.auditPass || queryPass),
       countryCode: extractCountryCode(req),
     });
   }
@@ -172,6 +240,7 @@ export class AuthenticatedTraceController {
   async traceAuthenticated(
     @Param("code") code: string,
     @Query("view") view: string | undefined,
+    @Query("auditPass") auditPass: string | undefined,
     @CurrentUser() user: AuthUser,
     @Ip() ip: string,
     @Req() req: Request,
@@ -182,6 +251,29 @@ export class AuthenticatedTraceController {
       ip,
       userAgent: typeof ua === "string" ? ua : undefined,
       requestedView: view,
+      auditPass: extractAuditPass(req, auditPass),
+      countryCode: extractCountryCode(req),
+    });
+  }
+
+  @Throttle({ default: { limit: GPS_VERIFY_LIMIT, ttl: TRACE_WINDOW_MS } })
+  @Post(":code/verify-gps")
+  @HttpCode(200)
+  @Header("Cache-Control", "no-store")
+  async verifyLiveGpsAuthenticated(
+    @Param("code") code: string,
+    @Body() dto: VerifyFieldGpsDto,
+    @Query("auditPass") queryPass: string | undefined,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+    @Req() req: Request,
+  ) {
+    const ua = req.headers["user-agent"];
+    return this.traceability.verifyLiveFieldGps(code, dto, {
+      user,
+      ip,
+      userAgent: typeof ua === "string" ? ua : undefined,
+      auditPass: extractAuditPass(req, dto.auditPass || queryPass),
       countryCode: extractCountryCode(req),
     });
   }

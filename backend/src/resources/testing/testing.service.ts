@@ -4,6 +4,7 @@ import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import type { ListQueryDto } from "../../common/crud/list-query.dto";
 import { assertHouseholdInScope } from "../../common/crud/village-scope";
+import { badRequest } from "../../common/errors/app.exception";
 import { publicAttachmentUrlSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -23,7 +24,8 @@ export class TestingService extends BaseCrudService {
       table: "lab_tests",
       fields: `t.id, t.code, t.household_id, h.name AS household_name, t.plot_code, t.sampled_on,
       t.cd_mg_kg, t.yellow_o_positive, t.residue_mg_kg, t.chlorpyrifos_mg_kg, t.result, t.lab,
-      t.record_status, t.scan_attachment_id, ${publicAttachmentUrlSql("t.scan_attachment_id")} AS scan_url`,
+      t.record_status, t.scan_attachment_id, ${publicAttachmentUrlSql("t.scan_attachment_id")} AS scan_url,
+      t.lab_accreditation_code, t.external_verify_code, t.external_verify_url`,
       from: `lab_tests t JOIN households h ON h.id = t.household_id`,
       orderBy: "t.sampled_on DESC, t.id DESC",
       search: ["t.code", "h.name", "t.plot_code", "t.lab"],
@@ -58,20 +60,43 @@ export class TestingService extends BaseCrudService {
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     await assertHouseholdInScope(this.db, input, context.user);
-    if (input.scanAttachmentId !== undefined) {
-      if (input.scanAttachmentId === null) {
-        input.scanAttachmentId = null;
+    const out = { ...input };
+    if (out.externalVerifyUrl !== undefined) {
+      const rawUrl = typeof out.externalVerifyUrl === "string" ? out.externalVerifyUrl.trim() : "";
+      if (!rawUrl) {
+        out.externalVerifyUrl = null;
+      } else if (!/^https:\/\/[^\s<>"'`]+$/i.test(rawUrl)) {
+        throw badRequest("Đường dẫn đối chiếu phòng kiểm nghiệm phải bắt đầu bằng https:// hợp lệ.");
       } else {
-        const [validId] = await this.uploads.assertUsable(
-          [Number(input.scanAttachmentId)],
-          context.user,
-          "lab",
-          input.householdId ? Number(input.householdId) : null,
-        );
-        input.scanAttachmentId = validId ?? null;
+        out.externalVerifyUrl = rawUrl;
       }
     }
-    return { ...input, _method: context.method };
+    if (out.externalVerifyCode !== undefined && typeof out.externalVerifyCode === "string" && !out.externalVerifyCode.trim()) {
+      out.externalVerifyCode = null;
+    }
+    if (out.labAccreditationCode !== undefined && typeof out.labAccreditationCode === "string" && !out.labAccreditationCode.trim()) {
+      out.labAccreditationCode = "VILAS 356 - ISO/IEC 17025 (GACC chỉ định)";
+    }
+    if (out.scanAttachmentId !== undefined) {
+      if (out.scanAttachmentId === null) {
+        out.scanAttachmentId = null;
+      } else {
+        const [validId] = await this.uploads.assertUsable(
+          [Number(out.scanAttachmentId)],
+          context.user,
+          "lab",
+          out.householdId ? Number(out.householdId) : null,
+        );
+        out.scanAttachmentId = validId ?? null;
+      }
+    }
+    if (context.method === "POST" && out.code && !out.externalVerifyCode) {
+      const safeCode = String(out.code).replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
+      if (safeCode) {
+        out.externalVerifyCode = `ISO17025-${safeCode}`;
+      }
+    }
+    return { ...out, _method: context.method };
   }
 
   protected override async afterWrite(_id: number, input: Record<string, unknown>) {

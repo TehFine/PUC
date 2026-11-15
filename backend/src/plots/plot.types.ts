@@ -18,6 +18,9 @@ export interface PlotProperties {
   status: PlotStatus;
   sourceRef?: string;
   householdId?: number;
+  qrToken?: string;
+  treeCount?: number;
+  seasonQuotaKg?: number;
   lat?: number;
   lng?: number;
   persisted?: boolean;

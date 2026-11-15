@@ -23,4 +23,7 @@ export class CreatePortalSprayDto {
 
   @OptionalText(30)
   plotCode?: string | null;
+
+  @OptionalText(250)
+  lateReason?: string | null;
 }

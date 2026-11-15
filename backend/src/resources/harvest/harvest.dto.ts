@@ -175,3 +175,87 @@ export class NotifyHarvestPlanDto {
   @OptionalText(400)
   note?: string;
 }
+
+export class UpsertPlotQuotaDto {
+  @IsInt()
+  @Min(2020)
+  @Max(2100)
+  seasonYear!: number;
+
+  @RecordId()
+  householdId!: number;
+
+  @Text(50)
+  plotCode!: string;
+
+  @OptionalText(50)
+  zoneCode?: string | null;
+
+  @NonNegative()
+  @Max(1000)
+  areaHa!: number;
+
+  @Count()
+  @Max(200_000)
+  treeCount!: number;
+
+  @NonNegative()
+  @Max(5_000_000)
+  maxQuotaKg!: number;
+
+  @OptionalText(150)
+  assessedBy?: string | null;
+
+  @OptionalIsoDate()
+  assessedOn?: string | null;
+
+  @OptionalText(300)
+  note?: string | null;
+}
+
+export class CreateFieldAuditPassDto {
+  @Text(160)
+  delegationName!: string;
+
+  @OptionalText(160)
+  organization?: string | null;
+
+  @OptionalText(50)
+  allowedZoneCode?: string | null;
+
+  @OptionalField()
+  @IsIn(["vi", "en", "zh"])
+  defaultLang?: "vi" | "en" | "zh";
+
+  @OptionalField()
+  @IsInt()
+  @Min(1)
+  @Max(336)
+  durationHours?: number;
+
+  @OptionalText(300)
+  note?: string | null;
+}
+
+export class UpdateEndorsementConfigDto {
+  @Text(240)
+  programTitle!: string;
+
+  @Text(240)
+  directiveNo!: string;
+
+  @Text(200)
+  communeAuthority!: string;
+
+  @Text(200)
+  provincialAuthority!: string;
+
+  @Text(240)
+  officialPortalUrl!: string;
+
+  @Text(160)
+  officialDomain!: string;
+
+  @Text(200)
+  inspectionUnit!: string;
+}

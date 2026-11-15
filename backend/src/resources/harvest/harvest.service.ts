@@ -3,16 +3,19 @@ import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { generateQrToken } from "../../common/crypto/qr-token";
-import { badRequest, notFound } from "../../common/errors/app.exception";
-import { camelRow, camelRows } from "../../common/sql/rows";
+import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
+import { camelRow, camelRows, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { assertPlotOwned, plotsTableExists } from "../../portal/common/portal-context";
 import type {
+  CreateFieldAuditPassDto,
   GenerateItemsDto,
   NotifyHarvestPlanDto,
+  UpdateEndorsementConfigDto,
   UpdateGrowingZoneStatusDto,
   UpsertContributionDto,
+  UpsertPlotQuotaDto,
 } from "./harvest.dto";
 
 function addDaysIso(isoDate: string, days: number): string {
@@ -256,8 +259,12 @@ export class HarvestService extends BaseCrudService {
   }
 
   async upsertContribution(lotId: number, dto: UpsertContributionDto, user: AuthUser, ip?: string) {
-    const lot = await this.db.query("SELECT 1 FROM harvest_lots WHERE id = $1", [lotId]);
+    const lot = await this.db.query<{ harvested_on: string }>(
+      "SELECT harvested_on::text AS harvested_on FROM harvest_lots WHERE id = $1",
+      [lotId],
+    );
     if (lot.rowCount === 0) throw notFound("Không tìm thấy lô hàng.");
+    const lotHarvestedOn = String(lot.rows[0].harvested_on).slice(0, 10);
 
     const household = await this.db.query("SELECT 1 FROM households WHERE id = $1", [dto.householdId]);
     if (household.rowCount === 0) throw badRequest("Hộ nông dân không tồn tại.");
@@ -275,6 +282,74 @@ export class HarvestService extends BaseCrudService {
         [dto.householdId],
       );
       resolvedPlotCode = autoPlot.rows[0]?.code?.trim() || "";
+    }
+
+    if (resolvedPlotCode) {
+      // 1. Khóa cứng tự động theo thời gian cách ly thuốc BVTV (PHI Lock) trên thửa nguồn
+      const phiConflict = await this.db.query<{
+        pesticide_name: string;
+        safe_from: string;
+        pesticide_status: string;
+      }>(
+        `SELECT p.name AS pesticide_name,
+                to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') AS safe_from,
+                p.status AS pesticide_status
+         FROM spray_records s
+         JOIN pesticides p ON p.id = s.pesticide_id
+         WHERE s.household_id = $1
+           AND s.plot_code IS NOT NULL AND upper(s.plot_code) = upper($2)
+           AND s.sprayed_on <= $3::date
+           AND (
+             (s.isolation_days > 0 AND (s.sprayed_on + s.isolation_days) > $3::date)
+             OR (p.status = 'banned' AND s.sprayed_on >= ($3::date - 60))
+           )
+         ORDER BY (s.sprayed_on + s.isolation_days) DESC, s.id DESC
+         LIMIT 1`,
+        [dto.householdId, resolvedPlotCode, lotHarvestedOn],
+      );
+      if (phiConflict.rows[0]) {
+        const hit = phiConflict.rows[0];
+        if (hit.pesticide_status === "banned") {
+          throw badRequest(
+            `Khóa an toàn PHI: Thửa "${resolvedPlotCode}" có ghi nhận sử dụng hoạt chất cấm (${hit.pesticide_name}), hệ thống tự động chặn đưa vào lô thu hoạch xuất khẩu.`,
+          );
+        }
+        throw badRequest(
+          `Khóa an toàn PHI: Thửa "${resolvedPlotCode}" đang trong thời gian cách ly thuốc BVTV (${hit.pesticide_name}), chỉ được phép thu hoạch từ ngày ${hit.safe_from}.`,
+        );
+      }
+
+      // 2. Khóa cứng cân đối hạn ngạch sản lượng đầu vụ (Mass-Balance Quota Lock) chống trộn hàng ngoài vùng
+      const seasonYear = Number(lotHarvestedOn.slice(0, 4)) || new Date().getFullYear();
+      const quotaRes = await this.db.query<{ max_quota_kg: number }>(
+        `SELECT max_quota_kg::float8 AS max_quota_kg
+         FROM plot_season_quotas
+         WHERE season_year = $1 AND upper(plot_code) = upper($2)
+         LIMIT 1`,
+        [seasonYear, resolvedPlotCode],
+      );
+      if (quotaRes.rows[0]) {
+        const maxQuotaKg = Number(quotaRes.rows[0].max_quota_kg);
+        const usedRes = await this.db.query<{ used_kg: number }>(
+          `SELECT COALESCE(SUM(hc.weight_kg), 0)::float8 AS used_kg
+           FROM harvest_contributions hc
+           JOIN harvest_lots hl ON hl.id = hc.lot_id
+           WHERE EXTRACT(YEAR FROM hl.harvested_on)::int = $1
+             AND hl.status <> 'revoked'
+             AND upper(hc.plot_code) = upper($2)
+             AND hc.lot_id <> $3`,
+          [seasonYear, resolvedPlotCode, lotId],
+        );
+        const usedOtherLotsKg = Number(usedRes.rows[0]?.used_kg ?? 0);
+        if (usedOtherLotsKg + dto.weightKg - maxQuotaKg > 1e-6) {
+          const remainingKg = Math.max(0, Number((maxQuotaKg - usedOtherLotsKg).toFixed(1)));
+          throw badRequest(
+            `Vượt hạn ngạch sản lượng thẩm định đầu vụ của thửa "${resolvedPlotCode}" năm ${seasonYear} ` +
+              `(Trần tối đa: ${maxQuotaKg.toLocaleString("vi-VN")} kg, đã xuất các lô khác: ${usedOtherLotsKg.toLocaleString("vi-VN")} kg, ` +
+              `còn lại: ${remainingKg.toLocaleString("vi-VN")} kg). Hệ thống khóa tự động chống trộn hàng ngoài vùng!`,
+          );
+        }
+      }
     }
 
     const { rows } = await this.db.query<{ id: number }>(
@@ -965,5 +1040,334 @@ export class HarvestService extends BaseCrudService {
       values,
     );
     return { data: camelRows(rows) };
+  }
+
+  /** Danh sách hạn ngạch sản lượng đầu vụ từng thửa & mức sử dụng thực tế (Mass-Balance). */
+  async listPlotQuotas(params: { seasonYear?: number; q?: string }, _user: AuthUser) {
+    const seasonYear =
+      params.seasonYear && Number.isFinite(params.seasonYear) ? Number(params.seasonYear) : new Date().getFullYear();
+    const values: unknown[] = [seasonYear];
+    let searchSql = "";
+    if (params.q && params.q.trim()) {
+      values.push(`%${params.q.trim().replace(/[\\%_]/g, "\\$&")}%`);
+      const ref = `$${values.length}`;
+      searchSql = `AND (psq.plot_code ILIKE ${ref} OR psq.zone_code ILIKE ${ref} OR h.name ILIKE ${ref} OR h.code ILIKE ${ref})`;
+    }
+
+    const { rows } = await this.db.query(
+      `SELECT psq.id,
+              psq.season_year,
+              psq.household_id,
+              h.code AS household_code,
+              h.name AS household_name,
+              v.name AS village_name,
+              psq.plot_code,
+              psq.zone_code,
+              psq.area_ha::float8 AS area_ha,
+              psq.tree_count,
+              psq.max_quota_kg::float8 AS max_quota_kg,
+              COALESCE(used.used_kg, 0)::float8 AS used_kg,
+              GREATEST(0, psq.max_quota_kg - COALESCE(used.used_kg, 0))::float8 AS remaining_kg,
+              CASE
+                WHEN psq.max_quota_kg > 0
+                  THEN ROUND(((COALESCE(used.used_kg, 0) / psq.max_quota_kg) * 100)::numeric, 1)::float8
+                ELSE 0
+              END AS utilization_pct,
+              psq.assessed_by,
+              psq.assessed_on::text AS assessed_on,
+              psq.note,
+              pst.qr_token AS plot_qr_token
+       FROM plot_season_quotas psq
+       JOIN households h ON h.id = psq.household_id
+       LEFT JOIN villages v ON v.id = h.village_id
+       LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(psq.plot_code)
+       LEFT JOIN (
+         SELECT upper(hc.plot_code) AS plot_upper,
+                SUM(hc.weight_kg) AS used_kg
+         FROM harvest_contributions hc
+         JOIN harvest_lots hl ON hl.id = hc.lot_id
+         WHERE EXTRACT(YEAR FROM hl.harvested_on)::int = $1
+           AND hl.status <> 'revoked'
+           AND hc.plot_code <> ''
+         GROUP BY upper(hc.plot_code)
+       ) used ON used.plot_upper = upper(psq.plot_code)
+       WHERE psq.season_year = $1
+       ${searchSql}
+       ORDER BY psq.zone_code ASC, psq.plot_code ASC`,
+      values,
+    );
+
+    const mapped = camelRows<{
+      maxQuotaKg: number;
+      usedKg: number;
+      remainingKg: number;
+    }>(rows);
+    const totalMaxQuotaKg = Number(mapped.reduce((s, r) => s + Number(r.maxQuotaKg || 0), 0).toFixed(1));
+    const totalUsedKg = Number(mapped.reduce((s, r) => s + Number(r.usedKg || 0), 0).toFixed(1));
+    const totalRemainingKg = Number(Math.max(0, totalMaxQuotaKg - totalUsedKg).toFixed(1));
+
+    return {
+      seasonYear,
+      summary: {
+        plotCount: mapped.length,
+        totalMaxQuotaKg,
+        totalUsedKg,
+        totalRemainingKg,
+        utilizationPct: totalMaxQuotaKg > 0 ? Number(((totalUsedKg / totalMaxQuotaKg) * 100).toFixed(1)) : 0,
+      },
+      data: mapped,
+    };
+  }
+
+  /** Cập nhật hoặc thêm mới hạn ngạch sản lượng thẩm định đầu vụ cho một thửa đất. */
+  async upsertPlotQuota(dto: UpsertPlotQuotaDto, user: AuthUser, ip?: string) {
+    const hhRes = await this.db.query<{ id: number; name: string }>(
+      "SELECT id, name FROM households WHERE id = $1",
+      [dto.householdId],
+    );
+    if (!hhRes.rows[0]) throw badRequest("Hộ nông dân không tồn tại.");
+    const cleanPlotCode = dto.plotCode.trim().toUpperCase();
+    const zoneCode = dto.zoneCode && dto.zoneCode.trim() ? dto.zoneCode.trim().toUpperCase() : "VN-DLOR-0086";
+    const assessedBy =
+      dto.assessedBy && dto.assessedBy.trim() ? dto.assessedBy.trim() : `Tổ Giám sát Kỹ thuật UBND Xã (${user.fullName})`;
+    const assessedOn = dto.assessedOn && dto.assessedOn.trim() ? dto.assessedOn.trim() : todayVn();
+
+    const { rows } = await this.db.query(
+      `INSERT INTO plot_season_quotas
+         (season_year, household_id, plot_code, zone_code, area_ha, tree_count, max_quota_kg, assessed_by, assessed_on, note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10)
+       ON CONFLICT (season_year, plot_code) DO UPDATE
+         SET household_id = EXCLUDED.household_id,
+             zone_code = EXCLUDED.zone_code,
+             area_ha = EXCLUDED.area_ha,
+             tree_count = EXCLUDED.tree_count,
+             max_quota_kg = EXCLUDED.max_quota_kg,
+             assessed_by = EXCLUDED.assessed_by,
+             assessed_on = EXCLUDED.assessed_on,
+             note = EXCLUDED.note,
+             updated_at = now()
+       RETURNING id, season_year, household_id, plot_code, zone_code, area_ha::float8 AS area_ha,
+                 tree_count, max_quota_kg::float8 AS max_quota_kg, assessed_by, assessed_on::text AS assessed_on, note`,
+      [
+        dto.seasonYear,
+        dto.householdId,
+        cleanPlotCode,
+        zoneCode,
+        dto.areaHa,
+        dto.treeCount,
+        dto.maxQuotaKg,
+        assessedBy,
+        assessedOn,
+        dto.note ?? null,
+      ],
+    );
+
+    // Đảm bảo thửa này cũng có token QR định danh bảng đầu vườn trong `plot_signboard_tokens`
+    await this.db.query(
+      `INSERT INTO plot_signboard_tokens (plot_code, household_id, zone_code, area_ha, tree_count)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (plot_code) DO UPDATE
+         SET household_id = EXCLUDED.household_id,
+             zone_code = EXCLUDED.zone_code,
+             area_ha = EXCLUDED.area_ha,
+             tree_count = EXCLUDED.tree_count`,
+      [cleanPlotCode, dto.householdId, zoneCode, dto.areaHa, dto.treeCount],
+    );
+
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Thẩm định hạn ngạch sản lượng thửa",
+        object: `Thửa ${cleanPlotCode} (Vụ ${dto.seasonYear})`,
+        detail: `${hhRes.rows[0].name} - Trần: ${dto.maxQuotaKg} kg (${dto.areaHa} ha, ${dto.treeCount} cây)`,
+      },
+    );
+
+    return camelRow(rows[0]);
+  }
+
+  /** Danh sách Bảng QR Định Danh Thửa Đất phục vụ in bảng gắn đầu vườn cho xã / HTX. */
+  async listPlotSignboards(params: { q?: string }, _user: AuthUser) {
+    const values: unknown[] = [];
+    let searchSql = "";
+    if (params.q && params.q.trim()) {
+      values.push(`%${params.q.trim().replace(/[\\%_]/g, "\\$&")}%`);
+      const ref = `$${values.length}`;
+      searchSql = `WHERE (pst.plot_code ILIKE ${ref} OR pst.zone_code ILIKE ${ref} OR COALESCE(h.name, '') ILIKE ${ref})`;
+    }
+    const { rows } = await this.db.query(
+      `SELECT pst.plot_code,
+              pst.qr_token,
+              pst.household_id,
+              h.code AS household_code,
+              COALESCE(h.name, 'Hộ thành viên HTX Cư Né') AS household_name,
+              COALESCE(pst.village_name, v.name, 'Xã Cư Né') AS village_name,
+              pst.zone_code,
+              pst.variety,
+              pst.planted_year,
+              pst.area_ha::float8 AS area_ha,
+              COALESCE(psq.tree_count, pst.tree_count) AS tree_count,
+              psq.max_quota_kg::float8 AS max_quota_kg,
+              pst.center_lat::float8 AS center_lat,
+              pst.center_lng::float8 AS center_lng,
+              pst.geometry_json
+       FROM plot_signboard_tokens pst
+       LEFT JOIN households h ON h.id = pst.household_id
+       LEFT JOIN villages v ON v.id = h.village_id
+       LEFT JOIN plot_season_quotas psq
+         ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(pst.plot_code)
+       ${searchSql}
+       ORDER BY pst.zone_code ASC, pst.plot_code ASC`,
+      values,
+    );
+    return { data: camelRows(rows) };
+  }
+
+  /** Danh sách Thẻ Đoàn Thẩm định Thực địa (Field Audit Passes). */
+  async listFieldAuditPasses() {
+    const { rows } = await this.db.query(
+      `SELECT id, code, pass_token, delegation_name, organization, allowed_zone_code,
+              default_lang, expires_at, status, issued_by_name, access_count, last_accessed_at, note, created_at,
+              (status = 'active' AND expires_at > now()) AS is_valid_now
+       FROM field_audit_passes
+       ORDER BY created_at DESC, id DESC
+       LIMIT 100`,
+    );
+    return { data: camelRows(rows) };
+  }
+
+  /** Cấp mới Thẻ Đoàn Thẩm định Thực địa có thời hạn (24h - 336h) cho đoàn đối tác / đoàn tỉnh. */
+  async createFieldAuditPass(dto: CreateFieldAuditPassDto, user: AuthUser, ip?: string) {
+    const durationHours = dto.durationHours && dto.durationHours > 0 ? dto.durationHours : 48;
+    const passToken = generateQrToken(18);
+    const year = new Date().getFullYear();
+    const randSuffix = generateQrToken(4).toUpperCase();
+    const code = `AUDIT-${year}-${randSuffix}`;
+    const zoneCode = dto.allowedZoneCode && dto.allowedZoneCode.trim() ? dto.allowedZoneCode.trim().toUpperCase() : null;
+    const defaultLang = dto.defaultLang ?? "zh";
+
+    const { rows } = await this.db.query(
+      `INSERT INTO field_audit_passes
+         (code, pass_token, delegation_name, organization, allowed_zone_code, default_lang, expires_at, status, issued_by_user_id, issued_by_name, note)
+       VALUES ($1, $2, $3, $4, $5, $6, now() + ($7::int || ' hours')::interval, 'active', $8, $9, $10)
+       RETURNING id, code, pass_token, delegation_name, organization, allowed_zone_code,
+                 default_lang, expires_at, status, issued_by_name, access_count, last_accessed_at, note, created_at,
+                 true AS is_valid_now`,
+      [
+        code,
+        passToken,
+        dto.delegationName.trim(),
+        dto.organization?.trim() || null,
+        zoneCode,
+        defaultLang,
+        durationHours,
+        user.id,
+        user.fullName,
+        dto.note?.trim() || null,
+      ],
+    );
+
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Cấp thẻ Đoàn thẩm định thực địa",
+        object: code,
+        detail: `${dto.delegationName.trim()} - Hiệu lực ${durationHours}h (${zoneCode || "Toàn xã"})`,
+      },
+    );
+
+    return camelRow(rows[0]);
+  }
+
+  /** Thu hồi từ xa Thẻ Đoàn Thẩm định Thực địa. */
+  async revokeFieldAuditPass(id: number, user: AuthUser, ip?: string) {
+    const { rows } = await this.db.query<{ id: number; code: string; delegation_name: string }>(
+      `UPDATE field_audit_passes
+       SET status = 'revoked'
+       WHERE id = $1
+       RETURNING id, code, delegation_name`,
+      [id],
+    );
+    if (!rows[0]) throw notFound("Không tìm thấy thẻ thẩm định thực địa.");
+
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Thu hồi thẻ Đoàn thẩm định thực địa",
+        object: rows[0].code,
+        detail: rows[0].delegation_name,
+      },
+    );
+
+    return { ok: true, id: rows[0].id, code: rows[0].code, status: "revoked" };
+  }
+
+  /** Đọc cấu hình Bảo chứng Chính quyền Tỉnh & UBND Xã cho mô hình điểm cấp xã. */
+  async getEndorsementConfig() {
+    const { rows } = await this.db.query(
+      `SELECT program_title, directive_no, commune_authority, provincial_authority,
+              official_portal_url, official_domain, inspection_unit, updated_at
+       FROM commune_endorsement_config
+       WHERE id = 1`,
+    );
+    if (!rows[0]) {
+      return {
+        programTitle: "Mô hình điểm Truy xuất nguồn gốc Sầu riêng cấp Xã theo chỉ đạo của Tỉnh Đắk Lắk",
+        directiveNo: "Đề án Chuyển đổi số Nông nghiệp & Chuẩn hóa Mã số Vùng trồng Xuất khẩu Tỉnh Đắk Lắk",
+        communeAuthority: "Ủy ban Nhân dân Xã Cư Né - Huyện Krông Búk",
+        provincialAuthority: "Ủy ban Nhân dân Tỉnh Đắk Lắk - Sở Nông nghiệp và Môi trường",
+        officialPortalUrl: "https://daklak.gov.vn",
+        officialDomain: "truyxuat.cune-krongbuk.gov.vn",
+        inspectionUnit: "Tổ Giám sát Cộng đồng Xã Cư Né & Ban Kỹ thuật HTX Nông nghiệp Cư Né",
+      };
+    }
+    return camelRow(rows[0]);
+  }
+
+  /** Cập nhật cấu hình Bảo chứng Chính quyền Tỉnh & UBND Xã (chỉ Quản trị viên / Cán bộ HTX). */
+  async updateEndorsementConfig(dto: UpdateEndorsementConfigDto, user: AuthUser, ip?: string) {
+    if (user.role !== "admin" && user.role !== "htx_officer") {
+      throw forbidden("Chỉ Quản trị viên hoặc Ban quản trị mới được phép cập nhật thông tin bảo chứng chính thức.");
+    }
+    if (!/^https:\/\/[^\s<>"'`]+$/i.test(dto.officialPortalUrl.trim())) {
+      throw badRequest("Đường dẫn Cổng thông tin chính thức của Tỉnh/Xã phải bắt đầu bằng https:// hợp lệ.");
+    }
+
+    const { rows } = await this.db.query(
+      `INSERT INTO commune_endorsement_config
+         (id, program_title, directive_no, commune_authority, provincial_authority, official_portal_url, official_domain, inspection_unit, updated_at)
+       VALUES (1, $1, $2, $3, $4, $5, $6, $7, now())
+       ON CONFLICT (id) DO UPDATE
+         SET program_title = EXCLUDED.program_title,
+             directive_no = EXCLUDED.directive_no,
+             commune_authority = EXCLUDED.commune_authority,
+             provincial_authority = EXCLUDED.provincial_authority,
+             official_portal_url = EXCLUDED.official_portal_url,
+             official_domain = EXCLUDED.official_domain,
+             inspection_unit = EXCLUDED.inspection_unit,
+             updated_at = now()
+       RETURNING program_title, directive_no, commune_authority, provincial_authority,
+                 official_portal_url, official_domain, inspection_unit, updated_at`,
+      [
+        dto.programTitle.trim(),
+        dto.directiveNo.trim(),
+        dto.communeAuthority.trim(),
+        dto.provincialAuthority.trim(),
+        dto.officialPortalUrl.trim(),
+        dto.officialDomain.trim(),
+        dto.inspectionUnit.trim(),
+      ],
+    );
+
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Cập nhật cấu hình bảo chứng Tỉnh & Xã",
+        object: "Bảo chứng mô hình điểm cấp xã",
+        detail: `${dto.officialDomain.trim()} -> ${dto.officialPortalUrl.trim()}`,
+      },
+    );
+
+    return camelRow(rows[0]);
   }
 }

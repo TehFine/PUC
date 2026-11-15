@@ -31,6 +31,9 @@ interface PlotRow {
   status: PlotStatus;
   source_ref: string | null;
   household_id?: string | number | null;
+  qr_token?: string | null;
+  tree_count?: string | number | null;
+  season_quota_kg?: string | number | null;
   lat?: string | number | null;
   lng?: string | number | null;
   geometry_json: string;
@@ -111,6 +114,9 @@ function rowToFeature(row: PlotRow): PlotFeature {
       status: row.status,
       sourceRef: row.source_ref ?? undefined,
       householdId: row.household_id != null ? Number(row.household_id) : undefined,
+      qrToken: row.qr_token ?? undefined,
+      treeCount: row.tree_count != null ? Number(row.tree_count) : undefined,
+      seasonQuotaKg: row.season_quota_kg != null ? asNumber(row.season_quota_kg) : undefined,
       lat: row.lat != null ? asNumber(row.lat) : undefined,
       lng: row.lng != null ? asNumber(row.lng) : undefined,
       persisted: true,
@@ -221,18 +227,61 @@ export class PlotsService {
     if (scopedVillage === "") {
       return { type: "FeatureCollection", features: [] };
     }
+    const hasPlots = (await this.db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")).rows[0]?.reg;
+    if (!hasPlots) {
+      const hasSign = (
+        await this.db.query<{ reg: string | null }>("SELECT to_regclass('public.plot_signboard_tokens') AS reg")
+      ).rows[0]?.reg;
+      if (!hasSign) return { type: "FeatureCollection", features: [] };
+      const paramsFb: unknown[] = [];
+      const whereFb = scopedVillage !== null ? (paramsFb.push(scopedVillage), "AND pst.village_name = $1") : "";
+      const { rows: fbRows } = await this.db.query<PlotRow>(
+        `SELECT ROW_NUMBER() OVER (ORDER BY pst.plot_code)::int AS id,
+                pst.plot_code AS code,
+                ''::text AS sheet,
+                ''::text AS parcel,
+                COALESCE(h.name, '') AS owner,
+                COALESCE(pst.village_name, '') AS village,
+                COALESCE(pst.zone_code, 'VN-DLOR-0086') AS zone,
+                COALESCE(pst.variety, 'Ri6 & Monthong (Dona)') AS variety,
+                pst.planted_year AS year,
+                pst.area_ha,
+                'declared'::text AS source,
+                'approved'::text AS status,
+                NULL::text AS source_ref,
+                pst.household_id,
+                pst.qr_token,
+                COALESCE(psq.tree_count, pst.tree_count) AS tree_count,
+                psq.max_quota_kg AS season_quota_kg,
+                pst.center_lat AS lat,
+                pst.center_lng AS lng,
+                pst.geometry_json
+         FROM plot_signboard_tokens pst
+         LEFT JOIN households h ON h.id = pst.household_id
+         LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(pst.plot_code)
+         WHERE pst.geometry_json IS NOT NULL ${whereFb}
+         ORDER BY pst.zone_code, pst.plot_code`,
+        paramsFb,
+      );
+      return { type: "FeatureCollection", features: fbRows.map(rowToFeature) };
+    }
     const params: unknown[] = [];
-    const where = scopedVillage !== null ? (params.push(scopedVillage), "WHERE village = $1") : "";
+    const where = scopedVillage !== null ? (params.push(scopedVillage), "WHERE p.village = $1") : "";
     const { rows } = await this.db.query<PlotRow>(
       `
-        SELECT id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
-               village, zone_code AS zone, variety, planted_year AS year, area_ha,
-               source, status, source_ref, household_id,
-               ST_Y(ST_Centroid(geom)) AS lat, ST_X(ST_Centroid(geom)) AS lng,
-               ST_AsGeoJSON(geom) AS geometry_json
-        FROM plots
+        SELECT p.id, p.code, p.sheet_no AS sheet, p.parcel_no AS parcel, p.owner_name AS owner,
+               p.village, p.zone_code AS zone, p.variety, p.planted_year AS year, p.area_ha,
+               p.source, p.status, p.source_ref, p.household_id,
+               COALESCE(p.qr_token, pst.qr_token) AS qr_token,
+               COALESCE(psq.tree_count, p.tree_count, pst.tree_count) AS tree_count,
+               COALESCE(psq.max_quota_kg, p.season_quota_kg) AS season_quota_kg,
+               ST_Y(ST_Centroid(p.geom)) AS lat, ST_X(ST_Centroid(p.geom)) AS lng,
+               ST_AsGeoJSON(p.geom) AS geometry_json
+        FROM plots p
+        LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
+        LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(p.code)
         ${where}
-        ORDER BY zone_code, code
+        ORDER BY p.zone_code, p.code
       `,
       params,
     );
@@ -273,7 +322,7 @@ export class PlotsService {
           )
           RETURNING id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
                     village, zone_code AS zone, variety, planted_year AS year, area_ha,
-                    source, status, source_ref, household_id,
+                    source, status, source_ref, household_id, qr_token,
                     ST_Y(ST_Centroid(geom)) AS lat, ST_X(ST_Centroid(geom)) AS lng,
                     ST_AsGeoJSON(geom) AS geometry_json
         `,
@@ -294,6 +343,34 @@ export class PlotsService {
           JSON.stringify(geometry),
         ],
       );
+
+      await pool
+        .query(
+          `INSERT INTO plot_signboard_tokens
+             (plot_code, qr_token, household_id, zone_code, village_name, variety, planted_year, area_ha, tree_count, center_lat, center_lng, geometry_json)
+           VALUES ($1, COALESCE($2, puc_random_qr_token(14)), $3, COALESCE(NULLIF($4, ''), 'VN-DLOR-0086'), $5, $6, $7, $8, GREATEST(30, ROUND($8 * 150)::int), $9, $10, $11)
+           ON CONFLICT (plot_code) DO UPDATE
+             SET household_id = COALESCE(EXCLUDED.household_id, plot_signboard_tokens.household_id),
+                 zone_code = EXCLUDED.zone_code,
+                 area_ha = EXCLUDED.area_ha,
+                 center_lat = EXCLUDED.center_lat,
+                 center_lng = EXCLUDED.center_lng,
+                 geometry_json = EXCLUDED.geometry_json`,
+          [
+            rows[0].code,
+            rows[0].qr_token ?? null,
+            linkedHouseholdId ?? null,
+            properties.zone,
+            properties.village,
+            properties.variety || "Ri6 & Monthong (Dona)",
+            properties.year ?? 2018,
+            properties.areaHa,
+            rows[0].lat ?? null,
+            rows[0].lng ?? null,
+            rows[0].geometry_json,
+          ],
+        )
+        .catch(() => undefined);
 
       await syncHouseholdAndVillageStats(pool, {
         householdIds: linkedHouseholdId ? [linkedHouseholdId] : [],

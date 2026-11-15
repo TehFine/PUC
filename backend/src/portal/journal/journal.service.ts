@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
+import { verifyPlotGpsProximity } from "../../common/geo/plot-proximity";
 import { attachmentUrlSql, camelRow, camelRows, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -14,8 +15,16 @@ import type { CreatePortalJournalDto, ViolationResponseDto } from "./journal.dto
 /** Người ghi của bản ghi do hộ tự tạo trên cổng hộ dân. */
 export const FARMER_RECORDER = "Chủ hộ";
 
+function diffCalendarDays(laterIso: string, earlierIso: string): number {
+  const a = new Date(`${laterIso}T00:00:00Z`).getTime();
+  const b = new Date(`${earlierIso}T00:00:00Z`).getTime();
+  return Math.round((a - b) / 86_400_000);
+}
+
 const JOURNAL_COLUMNS = `j.id, j.entry_on, j.plot_code, j.activity, j.detail, j.recorder, j.has_photo,
   ${attachmentUrlSql("j.photo_id")} AS photo_url, j.latitude, j.longitude, j.created_at,
+  j.server_recorded_at, j.entry_delay_hours::float8 AS entry_delay_hours, j.is_late_entry, j.late_reason,
+  j.record_hash, j.gps_verified, j.gps_distance_m::float8 AS gps_distance_m, j.capture_source,
   (j.recorder = '${FARMER_RECORDER}' AND j.created_at > now() - interval '24 hours'
      AND EXISTS (SELECT 1 FROM attachments a WHERE a.id = j.photo_id AND a.household_id = j.household_id)) AS can_delete`;
 
@@ -45,16 +54,41 @@ export class JournalService {
 
   async create(dto: CreatePortalJournalDto, user: AuthUser, context: ClientContext) {
     const householdId = householdIdOf(user);
-    const entryOn = dto.entryOn ?? todayVn();
-    if (entryOn > todayVn()) throw badRequest("Ngày ghi nhật ký không được ở tương lai.");
+    const today = todayVn();
+    const entryOn = dto.entryOn ?? today;
+    if (entryOn > today) throw badRequest("Ngày ghi nhật ký không được ở tương lai.");
+    const backdatedDays = diffCalendarDays(today, entryOn);
+    if (backdatedDays > 7) {
+      throw badRequest(
+        "Không được ghi lùi nhật ký quá 7 ngày để đảm bảo tính minh bạch sổ cái vùng trồng. Vui lòng liên hệ cán bộ kỹ thuật xã để lập biên bản ghi nhận bổ sung.",
+      );
+    }
     const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
     const [photoId] = await this.uploads.assertUsable([dto.photoId], user, "journal");
     if (!photoId) throw badRequest("Vui lòng chụp hoặc chọn ảnh thực địa.");
 
+    const gpsCheck = await verifyPlotGpsProximity(this.db, plotCode, dto.latitude, dto.longitude);
+    const captureSource = dto.captureSource ?? "camera";
+
     const inserted = await this.db.query<{ id: number }>(
-      `INSERT INTO journal_entries (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, latitude, longitude)
-       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9) RETURNING id`,
-      [entryOn, householdId, plotCode, dto.activity, dto.detail ?? null, FARMER_RECORDER, photoId, dto.latitude ?? null, dto.longitude ?? null],
+      `INSERT INTO journal_entries
+         (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, latitude, longitude, gps_verified, gps_distance_m, capture_source, late_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+      [
+        entryOn,
+        householdId,
+        plotCode,
+        dto.activity,
+        dto.detail ?? null,
+        FARMER_RECORDER,
+        photoId,
+        dto.latitude ?? null,
+        dto.longitude ?? null,
+        gpsCheck.verified,
+        gpsCheck.distanceMeters,
+        captureSource,
+        dto.lateReason ?? null,
+      ],
     );
     const id = inserted.rows[0].id;
 

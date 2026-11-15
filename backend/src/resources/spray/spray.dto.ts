@@ -31,6 +31,9 @@ export class CreateSprayDto {
   @OptionalField()
   @IsIn(["pass", "exceeded"])
   mrlStatus?: "pass" | "exceeded";
+
+  @OptionalText(250)
+  lateReason?: string | null;
 }
 
 export class UpdateSprayDto extends PartialType(CreateSprayDto) {}

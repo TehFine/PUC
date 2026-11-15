@@ -24,6 +24,9 @@ export class CreateJournalDto {
   @OptionalField()
   @IsBoolean()
   hasPhoto?: boolean;
+
+  @OptionalText(250)
+  lateReason?: string | null;
 }
 
 export class UpdateJournalDto extends PartialType(CreateJournalDto) {}

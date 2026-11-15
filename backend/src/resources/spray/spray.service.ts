@@ -14,7 +14,9 @@ export class SprayService extends BaseCrudService {
       label: "Nhật ký phun thuốc",
       table: "spray_records",
       fields: `t.id, t.sprayed_on, t.household_id, h.name AS household_name, t.plot_code,
-      t.pesticide_id, p.name AS pesticide_name, t.source, t.dose, t.area_ha, t.isolation_days, t.mrl_status`,
+      t.pesticide_id, p.name AS pesticide_name, t.source, t.dose, t.area_ha, t.isolation_days, t.mrl_status,
+      t.server_recorded_at, t.entry_delay_hours::float8 AS entry_delay_hours,
+      t.is_late_entry, t.late_reason, t.record_hash`,
       from: `spray_records t JOIN households h ON h.id = t.household_id
       JOIN pesticides p ON p.id = t.pesticide_id`,
       orderBy: "t.sprayed_on DESC, t.id DESC",

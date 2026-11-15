@@ -9,8 +9,15 @@ import { ADMIN_LINKS, INSPECTION_ROLES } from "../common/admin-links";
 import { assertPlotOwned, type ClientContext, householdIdOf } from "../common/portal-context";
 import type { CreatePortalSprayDto } from "./spray.dto";
 
+function diffCalendarDays(laterIso: string, earlierIso: string): number {
+  const a = new Date(`${laterIso}T00:00:00Z`).getTime();
+  const b = new Date(`${earlierIso}T00:00:00Z`).getTime();
+  return Math.round((a - b) / 86_400_000);
+}
+
 const SPRAY_COLUMNS = `s.id, s.sprayed_on, s.plot_code, s.pesticide_id, p.name AS pesticide, p.status AS pesticide_status, s.source,
   s.dose, s.area_ha, s.isolation_days, (s.sprayed_on + s.isolation_days) AS isolation_ends_on, s.mrl_status, s.created_at,
+  s.server_recorded_at, s.entry_delay_hours::float8 AS entry_delay_hours, s.is_late_entry, s.late_reason, s.record_hash,
   (s.created_at > now() - interval '24 hours' AND p.status <> 'banned') AS can_delete`;
 
 /** Nhật ký phun thuốc của hộ. */
@@ -34,8 +41,15 @@ export class SprayService {
 
   async create(dto: CreatePortalSprayDto, user: AuthUser, context: ClientContext) {
     const householdId = householdIdOf(user);
-    const sprayedOn = dto.sprayedOn ?? todayVn();
-    if (sprayedOn > todayVn()) throw badRequest("Ngày phun thuốc không được ở tương lai.");
+    const today = todayVn();
+    const sprayedOn = dto.sprayedOn ?? today;
+    if (sprayedOn > today) throw badRequest("Ngày phun thuốc không được ở tương lai.");
+    const backdatedDays = diffCalendarDays(today, sprayedOn);
+    if (backdatedDays > 7) {
+      throw badRequest(
+        "Không được ghi lùi nhật ký phun thuốc quá 7 ngày để đảm bảo tính toàn vẹn thời gian cách ly (PHI). Vui lòng liên hệ cán bộ kỹ thuật xã để ghi nhận bổ sung.",
+      );
+    }
     const plotCode = dto.plotCode ? await assertPlotOwned(this.db, householdId, dto.plotCode) : null;
 
     const pesticide = (
@@ -49,9 +63,20 @@ export class SprayService {
     // Thuốc bị cấm luôn bị ghi nhận là không đạt để cán bộ kiểm tra theo dõi và cảnh báo ngay.
     const mrlStatus = pesticide.status === "banned" ? "exceeded" : "pass";
     const { rows } = await this.db.query<{ id: number }>(
-      `INSERT INTO spray_records (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-      [sprayedOn, householdId, dto.pesticideId, dto.source ?? null, dto.dose, dto.areaHa, pesticide.isolation_days ?? 0, mrlStatus, plotCode],
+      `INSERT INTO spray_records (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, late_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+      [
+        sprayedOn,
+        householdId,
+        dto.pesticideId,
+        dto.source ?? null,
+        dto.dose,
+        dto.areaHa,
+        pesticide.isolation_days ?? 0,
+        mrlStatus,
+        plotCode,
+        dto.lateReason ?? null,
+      ],
     );
 
     const id = rows[0].id;

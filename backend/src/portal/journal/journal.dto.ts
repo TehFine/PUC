@@ -1,3 +1,4 @@
+import { IsIn } from "class-validator";
 import { RecordId, IsoDate, OptionalField, OptionalText, Text } from "../../common/validation/fields";
 import { OptionalAttachmentId, OptionalNumberIn } from "../common/portal-fields";
 
@@ -25,6 +26,13 @@ export class CreatePortalJournalDto {
 
   @OptionalNumberIn(-180, 180)
   longitude?: number | null;
+
+  @OptionalField()
+  @IsIn(["camera", "upload"])
+  captureSource?: "camera" | "upload";
+
+  @OptionalText(250)
+  lateReason?: string | null;
 }
 
 /** Hộ báo đã khắc phục cảnh báo / vi phạm nhật ký canh tác (kèm ảnh tùy chọn, tải lên với `purpose = violation`). */

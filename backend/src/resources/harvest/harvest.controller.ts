@@ -1,17 +1,111 @@
-import { Body, Controller, Delete, Get, Ip, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Ip, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { CrudController } from "../../common/crud/crud-controller.factory";
 import { ParseRecordIdPipe, strictPipe } from "../../common/pipes/validation.pipes";
 import {
+  CreateFieldAuditPassDto,
   CreateHarvestLotDto,
   GenerateItemsDto,
   NotifyHarvestPlanDto,
+  UpdateEndorsementConfigDto,
   UpdateGrowingZoneStatusDto,
   UpdateHarvestLotDto,
   UpsertContributionDto,
+  UpsertPlotQuotaDto,
 } from "./harvest.dto";
 import { HarvestService } from "./harvest.service";
+
+@Controller("harvest/plot-quotas")
+export class HarvestPlotQuotasController {
+  constructor(private readonly harvestService: HarvestService) {}
+
+  @Get()
+  @Authorize("households", "read")
+  listQuotas(
+    @CurrentUser() user: AuthUser,
+    @Query("seasonYear") seasonYear?: string,
+    @Query("q") q?: string,
+  ) {
+    return this.harvestService.listPlotQuotas(
+      { seasonYear: seasonYear ? Number(seasonYear) : undefined, q },
+      user,
+    );
+  }
+
+  @Put()
+  @Authorize("harvest", "update")
+  upsertQuota(
+    @Body(strictPipe(UpsertPlotQuotaDto)) dto: UpsertPlotQuotaDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.harvestService.upsertPlotQuota(dto, user, ip);
+  }
+}
+
+@Controller("harvest/plot-signboards")
+export class HarvestPlotSignboardsController {
+  constructor(private readonly harvestService: HarvestService) {}
+
+  @Get()
+  @Authorize("households", "read")
+  listSignboards(@CurrentUser() user: AuthUser, @Query("q") q?: string) {
+    return this.harvestService.listPlotSignboards({ q }, user);
+  }
+}
+
+@Controller("harvest/endorsement-config")
+export class EndorsementConfigController {
+  constructor(private readonly harvestService: HarvestService) {}
+
+  @Get()
+  @Authorize("harvest", "read")
+  getConfig() {
+    return this.harvestService.getEndorsementConfig();
+  }
+
+  @Put()
+  @Authorize("harvest", "update")
+  updateConfig(
+    @Body(strictPipe(UpdateEndorsementConfigDto)) dto: UpdateEndorsementConfigDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.harvestService.updateEndorsementConfig(dto, user, ip);
+  }
+}
+
+@Controller("field-audit-passes")
+export class FieldAuditPassesController {
+  constructor(private readonly harvestService: HarvestService) {}
+
+  @Get()
+  @Authorize("approvals", "read")
+  listPasses() {
+    return this.harvestService.listFieldAuditPasses();
+  }
+
+  @Post()
+  @Authorize("harvest", "update")
+  createPass(
+    @Body(strictPipe(CreateFieldAuditPassDto)) dto: CreateFieldAuditPassDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.harvestService.createFieldAuditPass(dto, user, ip);
+  }
+
+  @Patch(":id/revoke")
+  @Authorize("harvest", "update")
+  revokePass(
+    @Param("id", ParseRecordIdPipe) id: number,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.harvestService.revokeFieldAuditPass(id, user, ip);
+  }
+}
 
 @Controller("harvest/incident-trace")
 export class HarvestIncidentController {

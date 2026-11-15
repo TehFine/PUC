@@ -1,6 +1,6 @@
 import { PartialType } from "@nestjs/mapped-types";
 import { IsBoolean, IsIn, IsOptional } from "class-validator";
-import { IsoDate, NonNegative, OptionalField, RecordId, Text } from "../../common/validation/fields";
+import { IsoDate, NonNegative, OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateLabTestDto {
   @Text(40)
@@ -42,6 +42,15 @@ export class CreateLabTestDto {
   @OptionalField()
   @IsIn(["draft", "verified"])
   recordStatus?: "draft" | "verified";
+
+  @OptionalText(140)
+  labAccreditationCode?: string | null;
+
+  @OptionalText(80)
+  externalVerifyCode?: string | null;
+
+  @OptionalText(300)
+  externalVerifyUrl?: string | null;
 }
 
 export class UpdateLabTestDto extends PartialType(CreateLabTestDto) {}

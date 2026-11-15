@@ -20,6 +20,7 @@ export const UPLOAD_PURPOSES = [
   "catalog",
   "avatar",
   "lab",
+  "inspection",
 ] as const;
 export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number];
 
@@ -32,8 +33,8 @@ const FARMER_PURPOSES: ReadonlySet<UploadPurpose> = new Set([
   "violation",
   "avatar",
 ]);
-/** Tệp dùng trên trang công khai (ảnh bản tin, ảnh danh mục, ảnh đại diện hộ đã đồng ý, bản scan phiếu kiểm nghiệm). */
-export const PUBLIC_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["news", "catalog", "avatar", "lab"]);
+/** Tệp dùng trên trang công khai / thẩm định thực địa (ảnh bản tin, danh mục, ảnh đại diện hộ đã đồng ý, bản scan kiểm nghiệm, ảnh kiểm tra vườn). */
+export const PUBLIC_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["news", "catalog", "avatar", "lab", "inspection"]);
 
 const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
   journal: "journal",
@@ -43,6 +44,7 @@ const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
   violation: "violations",
   avatar: "households",
   lab: "testing",
+  inspection: "minutes",
 };
 
 const PURPOSE_WRITE_RESOURCE: Record<UploadPurpose, ResourceKey> = {
@@ -55,9 +57,17 @@ const PURPOSE_WRITE_RESOURCE: Record<UploadPurpose, ResourceKey> = {
   catalog: "pesticides",
   avatar: "households",
   lab: "testing",
+  inspection: "minutes",
 };
 
-const VIDEO_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["journal", "harvest", "approval", "violation", "news"]);
+const VIDEO_PURPOSES: ReadonlySet<UploadPurpose> = new Set([
+  "journal",
+  "harvest",
+  "approval",
+  "violation",
+  "news",
+  "inspection",
+]);
 const DEFAULT_MAX_VIDEO_BYTES = 20 * 1024 * 1024;
 
 interface DetectedType {
