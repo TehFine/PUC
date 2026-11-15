@@ -7,6 +7,7 @@ import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { JWT_AUDIENCE, JWT_ISSUER } from "../src/auth/tokens.service";
+import { generateTotpCode } from "../src/common/crypto/totp";
 import { loadConfig } from "../src/config/configuration";
 import { DatabaseService } from "../src/database/database.service";
 import { TEST_PASSWORD } from "./constants";
@@ -1039,5 +1040,598 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
       .send({ mrlStatus: "pass", dose: "0.3 lít/ha" });
     expect(sprayPatched.status).toBe(200);
     expect(sprayPatched.body.mrlStatus).toBe("exceeded");
+    await htx.delete(`/api/spray/${sprayCreated.body.id}`);
+  });
+
+  it("Truy xuất QR 3 cấp độ: bảo mật dữ liệu cá nhân công khai, phân quyền Doanh nghiệp - Cơ quan quản lý và ghi nhật ký kiểm toán", async () => {
+    const admin = await loggedIn(USERS.admin);
+    const htx = await loggedIn(USERS.htx);
+    const inspector = await loggedIn(USERS.inspector);
+    const farmerAn = await loggedIn(USERS.farmerAn);
+
+    // 1. Cấp 1 (Công khai): không lộ buyer, hợp đồng, tọa độ/thửa, nhật ký thuốc, vi phạm hay tên hộ chưa đồng ý; chặn leo thang qua ?view=authority
+    const pubRes = await request(app).get("/api/public/trace/LH-2024-038?view=authority");
+    expect(pubRes.status).toBe(200);
+    expect(pubRes.body.accessControl.viewerTier).toBe("public");
+    expect(pubRes.body.publicData.timeline).toHaveLength(5);
+    expect(pubRes.body.publicData.growingZone.coarseMap.radiusMeters).toBe(2500);
+    expect(pubRes.body.publicData.producer.consentedHouseholds).toEqual([]);
+    expect(pubRes.body.lot).not.toHaveProperty("buyer");
+    expect(pubRes.body).not.toHaveProperty("enterpriseData");
+    expect(pubRes.body).not.toHaveProperty("authorityData");
+    expect(pubRes.body).not.toHaveProperty("diaries");
+    expect(pubRes.body).not.toHaveProperty("households");
+
+    // 2. Nông hộ bật đồng ý công khai tên trên QR -> hiển thị tên ở Cấp 1; tắt lại -> ẩn ngay lập tức
+    const consentOn = await farmerAn.patch("/api/portal/profile/trace-consent").send({ publicTraceConsent: true });
+    expect(consentOn.status).toBe(200);
+    expect(consentOn.body.publicTraceConsent).toBe(true);
+
+    const pubAfterConsent = await request(app).get("/api/public/trace/LH-2024-038");
+    expect(pubAfterConsent.body.publicData.producer.consentedHouseholds).toContain("Nguyễn Văn An");
+
+    const consentOff = await farmerAn.patch("/api/portal/profile/trace-consent").send({ publicTraceConsent: false });
+    expect(consentOff.status).toBe(200);
+    expect(consentOff.body.publicTraceConsent).toBe(false);
+
+    // 3. Tạo tài khoản vai trò 'enterprise' gắn đúng doanh nghiệp sở hữu lô (DN-VINHPHAT) -> xem được Cấp 2 (sourceZones, detailedLabTests), không xem được Cấp 3 & bị chặn khỏi /api/households
+    const vinhPhatList = await admin.get("/api/enterprises?q=DN-VINHPHAT");
+    const vinhPhatEnt = (vinhPhatList.body.data as Array<{ id: number; code: string }>).find(
+      (e) => e.code === "DN-VINHPHAT",
+    );
+    expect(vinhPhatEnt).toBeDefined();
+
+    const entAcc = await admin.post("/api/accounts").send({
+      fullName: "CSĐG Sầu Riêng Xuất Khẩu",
+      username: "0988776655",
+      password: "EnterprisePassword123",
+      role: "enterprise",
+      enterpriseId: vinhPhatEnt!.id,
+    });
+    expect(entAcc.status).toBe(201);
+
+    const enterpriseAgent = await loggedIn("0988776655", "EnterprisePassword123");
+    expect((await enterpriseAgent.get("/api/households")).status).toBe(403);
+    expect((await enterpriseAgent.get("/api/spray")).status).toBe(403);
+    expect((await enterpriseAgent.get("/api/harvest")).status).toBe(200);
+
+    const entTrace = await enterpriseAgent.get("/api/public/trace/LH-2024-038");
+    expect(entTrace.status).toBe(200);
+    expect(entTrace.body.accessControl.viewerTier).toBe("enterprise");
+    expect(entTrace.body.accessControl.auditLogged).toBe(true);
+    expect(Array.isArray(entTrace.body.enterpriseData.sourceZones)).toBe(true);
+    expect(entTrace.body).not.toHaveProperty("authorityData");
+
+    // 4. Cấp 3 (Cơ quan quản lý - Thanh tra): xem đủ cả Cấp 2 + Cấp 3 (hộ/thửa nguồn, nhật ký canh tác, biên bản kiểm tra) và hỗ trợ xem trước Cấp 1
+    const authTrace = await inspector.get("/api/public/trace/LH-2024-038");
+    expect(authTrace.status).toBe(200);
+    expect(authTrace.body.accessControl.viewerTier).toBe("authority");
+    expect(authTrace.body.accessControl.auditLogged).toBe(true);
+    expect(authTrace.body.enterpriseData).toBeDefined();
+    expect(authTrace.body.authorityData.sourceHouseholds.length).toBeGreaterThan(0);
+    expect(Array.isArray(authTrace.body.authorityData.cultivationDiaries)).toBe(true);
+    expect(Array.isArray(authTrace.body.authorityData.inspectionMinutes)).toBe(true);
+
+    const previewPublic = await inspector.get("/api/public/trace/LH-2024-038?view=public");
+    expect(previewPublic.status).toBe(200);
+    expect(previewPublic.body.accessControl.viewerTier).toBe("public");
+    expect(previewPublic.body.accessControl.actualTier).toBe("authority");
+    expect(previewPublic.body).not.toHaveProperty("enterpriseData");
+    expect(previewPublic.body).not.toHaveProperty("authorityData");
+
+    // Kiểm tra mọi lượt xem mở rộng đã được ghi vào audit_logs
+    const auditLogs = await admin.get("/api/audit-log?search=LH-2024-038&pageSize=20");
+    expect(auditLogs.status).toBe(200);
+    expect(
+      (auditLogs.body.data as Array<{ action: string; object: string }>).some(
+        (l) => l.action === "Tra cứu QR mở rộng" && l.object === "Mã QR LH-2024-038",
+      ),
+    ).toBe(true);
+
+    // 5. Tải bản scan PDF phiếu kiểm nghiệm & thu hồi lô hàng trên máy chủ
+    const tinyPdf = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n", "utf8");
+    const labUpload = await inspector
+      .post("/api/uploads")
+      .field("purpose", "lab")
+      .attach("file", tinyPdf, "phieu-kiem-nghiem.pdf");
+    expect(labUpload.status).toBe(201);
+
+    const labCreated = await inspector.post("/api/testing").send({
+      code: "MK-SCAN-2026",
+      householdId: 1,
+      plotCode: "TH1-001",
+      sampledOn: "2025-11-10",
+      cdMgKg: 0.012,
+      yellowOPositive: false,
+      residueMgKg: 0.015,
+      result: "pass",
+      lab: "Quatest 3",
+      scanAttachmentId: labUpload.body.id,
+    });
+    expect(labCreated.status).toBe(201);
+    expect(labCreated.body.scanUrl).toBe(`/api/public/files/${labUpload.body.id}`);
+    expect((await request(app).get(`/api/public/files/${labUpload.body.id}`)).status).toBe(200);
+
+    const lotCreated = await htx.post("/api/harvest").send({
+      code: "LH-REVOKE-2026",
+      variety: "Monthong (Dona)",
+      harvestedOn: "2025-11-10",
+      packedOn: "2025-11-11",
+      weightTons: 12.5,
+      buyer: "Đối Tác Ẩn Danh Thương Mại",
+      market: "Xuất khẩu Trung Quốc",
+      status: "revoked",
+      revokedReason: "Thu hồi kiểm tra lại niêm phong thùng",
+      phytosanitaryCertNo: "KDTV-VN-2026-0889",
+    });
+    expect(lotCreated.status).toBe(201);
+
+    const revokedTrace = await request(app).get("/api/public/trace/LH-REVOKE-2026");
+    expect(revokedTrace.status).toBe(200);
+    expect(revokedTrace.body.publicData.lotIdentity.status).toBe("revoked");
+    expect(revokedTrace.body.publicData.verification.isAbnormal).toBe(true);
+    expect(revokedTrace.body.publicData.phytosanitary.certNo).toBe("KDTV-VN-2026-0889");
+    expect(JSON.stringify(revokedTrace.body)).not.toContain("Đối Tác Ẩn Danh Thương Mại");
+  });
+
+  it("Mục 4 (4a, 4b, 4c, 4f): liên kết Lô - Thửa nguồn truy vết sự cố, token ngẫu nhiên chống giả đa quốc gia, trạng thái PUC/PHC thời gian thực và ẩn bản nháp", async () => {
+    const admin = await loggedIn(USERS.admin);
+    const htx = await loggedIn(USERS.htx);
+    const inspector = await loggedIn(USERS.inspector);
+
+    // Tạo cơ sở đóng gói (PHC) để kiểm thử trạng thái thời gian thực (4c)
+    const entCreated = await htx.post("/api/enterprises").send({
+      code: "DN-PHC-LIVE01",
+      name: "CSĐG Xuất Khẩu Cư Né 01",
+      packhouseCode: "VN-DLPH-9901",
+      address: "Xã Cư Né, Krông Búk, Đắk Lắk",
+      status: "active",
+    });
+    expect(entCreated.status).toBe(201);
+
+    // Tạo lô hàng mới -> tự sinh qrToken ngẫu nhiên 14 ký tự Base62 (4b)
+    const lotRes = await htx.post("/api/harvest").send({
+      code: "LH-HARDEN-2026",
+      enterpriseId: entCreated.body.id,
+      variety: "Monthong (Dona)",
+      harvestedOn: "2026-06-10",
+      packedOn: "2026-06-11",
+      weightTons: 6.0,
+      buyer: "CSĐG Xuất Khẩu Cư Né 01",
+      market: "Xuất khẩu Trung Quốc",
+      status: "exported",
+      packhouseCode: "VN-DLPH-9901",
+    });
+    expect(lotRes.status).toBe(201);
+    expect(lotRes.body.qrToken).toMatch(/^[0-9A-Za-z]{14}$/);
+    const lotId = lotRes.body.id;
+    const lotToken = lotRes.body.qrToken as string;
+
+    // (4a) Kiểm tra danh sách thửa của hộ & ghi nhận đóng góp chi tiết tới từng thửa nguồn (lot <-> plot_code)
+    const hhPlots = await htx.get("/api/harvest-plan/household-plots?householdId=1");
+    expect(hhPlots.status).toBe(200);
+    expect(Array.isArray(hhPlots.body.data)).toBe(true);
+
+    // Thử gắn thửa không thuộc Hộ 1 -> bị từ chối 400
+    const badContrib = await htx.post(`/api/harvest/${lotId}/contributions`).send({
+      householdId: 1,
+      plotCode: "TH2-001",
+      weightKg: 1000,
+    });
+    expect(badContrib.status).toBe(400);
+
+    // Gắn đúng thửa nguồn của Hộ 1 (TH1-001) và Hộ 2 (TH2-001)
+    expect(
+      (
+        await htx.post(`/api/harvest/${lotId}/contributions`).send({
+          householdId: 1,
+          plotCode: "TH1-001",
+          weightKg: 3200,
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await htx.post(`/api/harvest/${lotId}/contributions`).send({
+          householdId: 2,
+          plotCode: "TH2-001",
+          weightKg: 2800,
+        })
+      ).status,
+    ).toBe(201);
+
+    // Truy vết xuôi từ thửa nguồn TH1-001 -> phát hiện ngay lô LH-HARDEN-2026 bị ảnh hưởng
+    const forwardTrace = await inspector.get("/api/harvest/incident-trace?plotCode=TH1-001");
+    expect(forwardTrace.status).toBe(200);
+    expect(
+      (forwardTrace.body.affectedLots as Array<{ lotCode: string }>).some((l) => l.lotCode === "LH-HARDEN-2026"),
+    ).toBe(true);
+
+    // Truy vết ngược từ lô LH-HARDEN-2026 -> ra đúng 2 thửa nguồn TH1-001 và TH2-001
+    const backwardTrace = await inspector.get("/api/harvest/incident-trace?lotCode=LH-HARDEN-2026");
+    expect(backwardTrace.status).toBe(200);
+    const parcelCodes = (backwardTrace.body.sourceParcels as Array<{ plotCode: string }>).map((p) => p.plotCode);
+    expect(parcelCodes).toEqual(expect.arrayContaining(["TH1-001", "TH2-001"]));
+
+    // Phân quyền: tài khoản doanh nghiệp (enterprise) KHÔNG được gọi incident-trace để dò danh sách hộ/thửa cá nhân (403)
+    const entUserRes = await admin.post("/api/accounts").send({
+      fullName: "Doanh Nghiệp Kiểm Thử 4a",
+      username: "0988776644",
+      password: "EnterprisePassword123",
+      role: "enterprise",
+    });
+    expect(entUserRes.status).toBe(201);
+    const entAgent = await loggedIn("0988776644", "EnterprisePassword123");
+    expect((await entAgent.get("/api/harvest/incident-trace?lotCode=LH-HARDEN-2026")).status).toBe(403);
+
+    // (4b) Sinh tem thùng (box) -> mỗi thùng có qrToken ngẫu nhiên 14 ký tự; quét từ VN rồi CN -> bật cảnh báo multi_country
+    const genBoxes = await htx.post(`/api/harvest/${lotId}/generate-items`).send({
+      itemType: "box",
+      count: 2,
+      weightKg: 18,
+      grade: "A",
+    });
+    expect(genBoxes.status).toBe(201);
+    expect(genBoxes.body.data).toHaveLength(2);
+    const boxToken = genBoxes.body.data[0].qrToken as string;
+    expect(boxToken).toMatch(/^[0-9A-Za-z]{14}$/);
+    expect(genBoxes.body.data[0].pucCode).toBeTruthy();
+
+    const scanVn = await request(app)
+      .get(`/api/public/trace/${boxToken}`)
+      .set("CF-IPCountry", "VN")
+      .set("User-Agent", "Scanner-VN/1.0");
+    expect(scanVn.status).toBe(200);
+    expect(scanVn.body.publicData.lotIdentity.lotCode).toBe("LH-HARDEN-2026");
+    expect(scanVn.body.publicData.verification.warningReason).toBeNull();
+
+    const scanCn = await request(app)
+      .get(`/api/public/trace/${boxToken}`)
+      .set("CF-IPCountry", "CN")
+      .set("User-Agent", "WeChat-CN/8.0");
+    expect(scanCn.status).toBe(200);
+    expect(scanCn.body.publicData.verification.isAbnormal).toBe(true);
+    expect(scanCn.body.publicData.verification.warningReason).toBe("multi_country");
+    expect(scanCn.body.publicData.verification.countries24h).toEqual(expect.arrayContaining(["VN", "CN"]));
+
+    // (4c) Tạm dừng cơ sở đóng gói (PHC) trên máy chủ -> quét lại token lô thấy ngay cảnh báo thời gian thực
+    expect(
+      (await htx.patch(`/api/enterprises/${entCreated.body.id}`).send({ status: "suspended" })).status,
+    ).toBe(200);
+    const scanPhcSuspended = await request(app).get(`/api/public/trace/${lotToken}`);
+    expect(scanPhcSuspended.status).toBe(200);
+    expect(scanPhcSuspended.body.publicData.realtimeStatus.hasSuspensionAlert).toBe(true);
+    expect(scanPhcSuspended.body.publicData.packhouse.status).toBe("suspended");
+    expect(scanPhcSuspended.body.publicData.verification.warningReason).toBe("realtime_suspended");
+
+    // Khôi phục PHC -> tạm dừng Mã vùng trồng (PUC) -> quét lại thấy ngay cảnh báo PUC tạm dừng
+    expect((await htx.patch(`/api/enterprises/${entCreated.body.id}`).send({ status: "active" })).status).toBe(200);
+    const activePucCode = scanPhcSuspended.body.publicData.growingZone.pucCode as string;
+    expect(
+      (
+        await htx.patch(`/api/growing-zones/${encodeURIComponent(activePucCode)}`).send({
+          status: "suspended",
+          statusNote: "Tạm dừng để kiểm tra bổ sung mẫu đất",
+        })
+      ).status,
+    ).toBe(200);
+
+    const scanPucSuspended = await request(app).get(`/api/public/trace/${lotToken}`);
+    expect(scanPucSuspended.status).toBe(200);
+    expect(scanPucSuspended.body.publicData.realtimeStatus.hasSuspensionAlert).toBe(true);
+    expect(scanPucSuspended.body.publicData.growingZone.status).toBe("suspended");
+
+    // Khôi phục lại PUC về active
+    expect(
+      (
+        await htx.patch(`/api/growing-zones/${encodeURIComponent(activePucCode)}`).send({
+          status: "active",
+          statusNote: null,
+        })
+      ).status,
+    ).toBe(200);
+
+    // (4f) Phiếu kiểm nghiệm trạng thái 'draft' KHÔNG hiển thị trên QR công khai & bị ẩn khỏi doanh nghiệp, chỉ hiện khi 'verified'
+    const draftLab = await inspector.post("/api/testing").send({
+      code: "MK-DRAFT-2026",
+      householdId: 1,
+      plotCode: "TH1-001",
+      sampledOn: "2026-06-09",
+      cdMgKg: 0.011,
+      yellowOPositive: false,
+      residueMgKg: 0.01,
+      result: "pass",
+      lab: "Phòng Thử Nghiệm Nội Bộ",
+      recordStatus: "draft",
+    });
+    expect(draftLab.status).toBe(201);
+    expect(draftLab.body.recordStatus).toBe("draft");
+
+    const entLabList = await entAgent.get("/api/testing?q=MK-DRAFT-2026");
+    expect(entLabList.status).toBe(200);
+    expect(entLabList.body.data).toHaveLength(0);
+
+    const pubWithDraft = await request(app).get(`/api/public/trace/${lotToken}`);
+    expect(pubWithDraft.status).toBe(200);
+    expect(
+      (pubWithDraft.body.publicData.labTests as Array<{ code: string }>).some((t) => t.code === "MK-DRAFT-2026"),
+    ).toBe(false);
+
+    // Duyệt sang 'verified' -> xuất hiện ngay trên QR công khai
+    expect(
+      (await inspector.patch(`/api/testing/${draftLab.body.id}`).send({ recordStatus: "verified" })).status,
+    ).toBe(200);
+    const pubWithVerified = await request(app).get(`/api/public/trace/${lotToken}`);
+    expect(
+      (pubWithVerified.body.publicData.labTests as Array<{ code: string }>).some((t) => t.code === "MK-DRAFT-2026"),
+    ).toBe(true);
+
+    // Tem nông hộ mới cấp phát (chưa kích hoạt - allocated) -> quét qua qrToken báo 'unverified'
+    const stampAlloc = await htx.post("/api/stamp-allocations").send({
+      householdId: 1,
+      plotCode: "TH1-001",
+      quantity: 1,
+    });
+    expect(stampAlloc.status).toBe(201);
+    const stampRows = await htx.get(`/api/stamp-allocations/${stampAlloc.body.id}/stamps`);
+    const unactivatedToken = stampRows.body.data[0].qrToken as string;
+    expect(unactivatedToken).toMatch(/^[0-9A-Za-z]{14}$/);
+
+    const unactivatedScan = await request(app).get(`/api/public/trace/${unactivatedToken}`);
+    expect(unactivatedScan.status).toBe(200);
+    expect(unactivatedScan.body.publicData.lotIdentity.status).toBe("unverified");
+
+    // Thu hồi dải tem kiểm thử để không làm lệch thống kê tem còn lại của Hộ 1 ở các bộ test kế tiếp
+    expect((await htx.post(`/api/stamp-allocations/${stampAlloc.body.id}/revoke`)).status).toBe(200);
+  });
+
+  it("Một mã QR duy nhất với phân quyền theo phạm vi máy chủ (RBAC kèm Scope), API PWA /api/trace/:code, 2FA OTP, đăng xuất từ xa và nhật ký minh bạch", async () => {
+    const admin = await loggedIn(USERS.admin);
+
+    // 1. API quét trong PWA (/api/trace/:code) bắt buộc phải đăng nhập; khách quét chưa đăng nhập dùng /api/public/trace/:code
+    expect((await request(app).get("/api/trace/LH-2024-038")).status).toBe(401);
+    const spoofAttempt = await request(app)
+      .get("/api/public/trace/LH-2024-038?view=authority")
+      .set("X-Forwarded-For", "127.0.0.1")
+      .set("User-Agent", "PUC-Authority-Internal-Scanner/9.0")
+      .set("CF-IPCountry", "VN");
+    expect(spoofAttempt.status).toBe(200);
+    expect(spoofAttempt.body.accessControl.viewerTier).toBe("public");
+    expect(spoofAttempt.body).not.toHaveProperty("enterpriseData");
+    expect(spoofAttempt.body).not.toHaveProperty("authorityData");
+
+    const lotQrToken = spoofAttempt.body.publicData.lotIdentity.qrToken as string;
+    expect(lotQrToken).toBeTruthy();
+
+    // 2. Cô lập phạm vi Doanh nghiệp: Doanh nghiệp A (DN-VINHPHAT) xem được chi tiết lô LH-2024-038, Doanh nghiệp B (DN-RONGDO) bị từ chối chi tiết trên cùng mã QR
+    const allEnts = await admin.get("/api/enterprises");
+    const entRows = allEnts.body.data as Array<{ id: number; code: string }>;
+    const vinhPhat = entRows.find((e) => e.code === "DN-VINHPHAT")!;
+    const rongDo = entRows.find((e) => e.code === "DN-RONGDO")!;
+    expect(vinhPhat).toBeDefined();
+    expect(rongDo).toBeDefined();
+
+    expect(
+      (
+        await admin.post("/api/accounts").send({
+          fullName: "Đối Tác Vĩnh Phát Scope",
+          username: "ent_vinhphat_scope",
+          password: "EnterprisePassword123",
+          role: "enterprise",
+          enterpriseId: vinhPhat.id,
+        })
+      ).status,
+    ).toBe(201);
+
+    expect(
+      (
+        await admin.post("/api/accounts").send({
+          fullName: "Đối Tác Rồng Đỏ Scope",
+          username: "ent_rongdo_scope",
+          password: "EnterprisePassword123",
+          role: "enterprise",
+          enterpriseId: rongDo.id,
+        })
+      ).status,
+    ).toBe(201);
+
+    const entAAgent = await loggedIn("ent_vinhphat_scope", "EnterprisePassword123");
+    const entBAgent = await loggedIn("ent_rongdo_scope", "EnterprisePassword123");
+
+    // Doanh nghiệp A quét token lô của mình qua API PWA có xác thực -> nhận Cấp 2
+    const entAScan = await entAAgent.get(`/api/trace/${lotQrToken}`);
+    expect(entAScan.status).toBe(200);
+    expect(entAScan.body.accessControl.viewerTier).toBe("enterprise");
+    expect(entAScan.body.accessControl.scopeDenied).toBe(false);
+    expect(entAScan.body.enterpriseData).toBeDefined();
+    expect(entAScan.body).not.toHaveProperty("authorityData");
+
+    // Doanh nghiệp B quét CÙNG token lô của Doanh nghiệp A -> chỉ thấy bản công khai kèm cảnh báo không có quyền xem chi tiết
+    const entBScanForeign = await entBAgent.get(`/api/trace/${lotQrToken}`);
+    expect(entBScanForeign.status).toBe(200);
+    expect(entBScanForeign.body.accessControl.viewerTier).toBe("public");
+    expect(entBScanForeign.body.accessControl.scopeDenied).toBe(true);
+    expect(entBScanForeign.body.accessControl.scopeDeniedMessage).toBe("Bạn không có quyền xem chi tiết lô này");
+    expect(entBScanForeign.body).not.toHaveProperty("enterpriseData");
+    expect(entBScanForeign.body).not.toHaveProperty("authorityData");
+
+    // Doanh nghiệp B quét lô thuộc sở hữu của Rồng Đỏ (LH-2024-037) -> được cấp Cấp 2 hợp lệ
+    const entBScanOwn = await entBAgent.get("/api/trace/LH-2024-037");
+    expect(entBScanOwn.status).toBe(200);
+    expect(entBScanOwn.body.accessControl.viewerTier).toBe("enterprise");
+    expect(entBScanOwn.body.accessControl.scopeDenied).toBe(false);
+    expect(entBScanOwn.body.enterpriseData).toBeDefined();
+
+    // Danh sách /api/harvest của Doanh nghiệp B chỉ trả về lô của Rồng Đỏ, không rò rỉ lô LH-2024-038 của Vĩnh Phát
+    const entBHarvestList = await entBAgent.get("/api/harvest");
+    expect(entBHarvestList.status).toBe(200);
+    const entBLotCodes = (entBHarvestList.body.data as Array<{ code: string }>).map((l) => l.code);
+    expect(entBLotCodes).toContain("LH-2024-037");
+    expect(entBLotCodes).not.toContain("LH-2024-038");
+
+    // 3. Cô lập phạm vi Cán bộ xã, Thanh tra địa bàn và Quản trị HTX khác
+    expect(
+      (
+        await admin.post("/api/accounts").send({
+          fullName: "Cán Bộ Xã Ea Khăl",
+          username: "cb_xa_eakhal",
+          password: "OfficerPassword123",
+          role: "village_officer",
+          assignedCommune: "Xã Ea Khăl",
+        })
+      ).status,
+    ).toBe(201);
+
+    expect(
+      (
+        await admin.post("/api/accounts").send({
+          fullName: "Thanh Tra Lâm Đồng",
+          username: "tt_lamdong",
+          password: "OfficerPassword123",
+          role: "inspector",
+          assignedRegion: "Tỉnh Lâm Đồng",
+        })
+      ).status,
+    ).toBe(201);
+
+    expect(
+      (
+        await admin.post("/api/accounts").send({
+          fullName: "Quản Trị HTX Khác",
+          username: "cb_htx_khac",
+          password: "OfficerPassword123",
+          role: "htx_officer",
+          coopCode: "HTX-KRONGPAC",
+        })
+      ).status,
+    ).toBe(201);
+
+    for (const uname of ["cb_xa_eakhal", "tt_lamdong", "cb_htx_khac"]) {
+      const outScopeAgent = await loggedIn(uname, "OfficerPassword123");
+      const outRes = await outScopeAgent.get(`/api/trace/${lotQrToken}`);
+      expect(outRes.status).toBe(200);
+      expect(outRes.body.accessControl.viewerTier).toBe("public");
+      expect(outRes.body.accessControl.scopeDenied).toBe(true);
+      expect(outRes.body.accessControl.scopeDeniedMessage).toBe("Bạn không có quyền xem chi tiết lô này");
+      expect(outRes.body).not.toHaveProperty("enterpriseData");
+      expect(outRes.body).not.toHaveProperty("authorityData");
+    }
+
+    // 4. Vòng đời Xác thực 2 lớp (2FA TOTP + Backup Codes)
+    expect(
+      (
+        await admin.post("/api/accounts").send({
+          fullName: "Thanh Tra Có Bảo Mật 2FA",
+          username: "tt_daklak_2fa",
+          password: "SecurePassword123",
+          role: "inspector",
+          assignedRegion: "Tỉnh Đắk Lắk",
+        })
+      ).status,
+    ).toBe(201);
+
+    const mfaSetupAgent = await loggedIn("tt_daklak_2fa", "SecurePassword123");
+    const setupRes = await mfaSetupAgent.post("/api/auth/2fa/setup");
+    expect(setupRes.status).toBe(200);
+    expect(setupRes.body.secret).toMatch(/^[A-Z2-7]{16,}$/);
+    expect(setupRes.body.otpauthUrl).toContain("otpauth://totp/");
+
+    const validTotp = generateTotpCode(setupRes.body.secret);
+    const enableRes = await mfaSetupAgent.post("/api/auth/2fa/enable").send({ code: validTotp });
+    expect(enableRes.status).toBe(200);
+    expect(enableRes.body.enabled).toBe(true);
+    expect(enableRes.body.backupCodes).toHaveLength(8);
+    const firstBackupCode = enableRes.body.backupCodes[0] as string;
+
+    // Đăng nhập mới trên thiết bị khác -> yêu cầu OTP bước 2, chưa cấp cookie phiên
+    const step1Agent = request.agent(app);
+    const step1Res = await step1Agent.post("/api/auth/login").send({
+      username: "tt_daklak_2fa",
+      password: "SecurePassword123",
+    });
+    expect(step1Res.status).toBe(200);
+    expect(step1Res.body.mfaRequired).toBe(true);
+    expect(step1Res.body.challengeToken).toBeTruthy();
+    expect((await step1Agent.get("/api/auth/me")).status).toBe(401);
+
+    // Nhập sai OTP -> 401
+    const wrongOtp = validTotp === "000000" ? "111111" : "000000";
+    const badOtpRes = await step1Agent.post("/api/auth/verify-otp").send({
+      challengeToken: step1Res.body.challengeToken,
+      code: wrongOtp,
+    });
+    expect(badOtpRes.status).toBe(401);
+
+    // Nhập đúng TOTP -> cấp phiên hợp lệ & xem được Cấp 3 đúng địa bàn Đắk Lắk
+    const goodOtpRes = await step1Agent.post("/api/auth/verify-otp").send({
+      challengeToken: step1Res.body.challengeToken,
+      code: generateTotpCode(setupRes.body.secret),
+    });
+    expect(goodOtpRes.status).toBe(200);
+    expect(goodOtpRes.body.user.twoFactorEnabled).toBe(true);
+
+    const daklakScan = await step1Agent.get(`/api/trace/${lotQrToken}`);
+    expect(daklakScan.status).toBe(200);
+    expect(daklakScan.body.accessControl.viewerTier).toBe("authority");
+    expect(daklakScan.body.authorityData).toBeDefined();
+
+    // Dùng thử 1 mã dự phòng (backup code) trên thiết bị thứ 2 -> thành công 1 lần duy nhất
+    const backupAgent = request.agent(app);
+    const challenge2 = await backupAgent.post("/api/auth/login").send({
+      username: "tt_daklak_2fa",
+      password: "SecurePassword123",
+    });
+    expect(challenge2.body.mfaRequired).toBe(true);
+    const backupVerify = await backupAgent.post("/api/auth/verify-otp").send({
+      challengeToken: challenge2.body.challengeToken,
+      code: firstBackupCode,
+    });
+    expect(backupVerify.status).toBe(200);
+
+    // Dùng lại đúng mã dự phòng vừa tiêu thụ -> bị từ chối 401
+    const challenge3 = await request(app).post("/api/auth/login").send({
+      username: "tt_daklak_2fa",
+      password: "SecurePassword123",
+    });
+    const reusedBackup = await request(app).post("/api/auth/verify-otp").send({
+      challengeToken: challenge3.body.challengeToken,
+      code: firstBackupCode,
+    });
+    expect(reusedBackup.status).toBe(401);
+
+    // 5. Đăng xuất từ xa theo từng thiết bị (Remote Session Revocation): vô hiệu hóa ngay tức thì access token của thiết bị B
+    const sessionsRes = await step1Agent.get("/api/auth/sessions");
+    expect(sessionsRes.status).toBe(200);
+    const sessionRows = sessionsRes.body.data as Array<{ id: number; isCurrent: boolean }>;
+    expect(sessionRows.length).toBeGreaterThanOrEqual(2);
+    const otherSession = sessionRows.find((s) => !s.isCurrent)!;
+    expect(otherSession).toBeDefined();
+
+    const revokeRes = await step1Agent.delete(`/api/auth/sessions/${otherSession.id}`);
+    expect(revokeRes.status).toBe(200);
+
+    // Thiết bị B (backupAgent) bị thu hồi ngay lập tức dù JWT chưa hết hạn thời gian; thiết bị A vẫn hoạt động bình thường
+    expect((await backupAgent.get("/api/auth/me")).status).toBe(401);
+    expect((await backupAgent.get(`/api/trace/${lotQrToken}`)).status).toBe(401);
+    expect((await step1Agent.get("/api/auth/me")).status).toBe(200);
+
+    // 6. Nhật ký minh bạch lượt xem chi tiết QR (/api/harvest/trace-access-logs) lưu đủ cả lượt hợp lệ lẫn lượt bị chặn ngoài phạm vi
+    const accessLogsRes = await admin.get("/api/harvest/trace-access-logs?lotCode=LH-2024-038&limit=50");
+    expect(accessLogsRes.status).toBe(200);
+    const logItems = accessLogsRes.body.data as Array<{
+      username: string;
+      scopeGranted: boolean;
+      viewerTier: string;
+    }>;
+    expect(logItems.some((l) => l.username === "ent_vinhphat_scope" && l.scopeGranted === true && l.viewerTier === "enterprise")).toBe(
+      true,
+    );
+    expect(logItems.some((l) => l.username === "ent_rongdo_scope" && l.scopeGranted === false && l.viewerTier === "public")).toBe(
+      true,
+    );
+    expect(logItems.some((l) => l.username === "tt_lamdong" && l.scopeGranted === false)).toBe(true);
+    expect(logItems.some((l) => l.username === "tt_daklak_2fa" && l.scopeGranted === true && l.viewerTier === "authority")).toBe(
+      true,
+    );
   });
 });

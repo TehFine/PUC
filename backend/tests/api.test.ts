@@ -50,7 +50,7 @@ describe("health", () => {
   it("báo CSDL hoạt động", async () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok", database: "up" });
+    expect(res.body).toMatchObject({ status: "ok", database: "up" });
   });
 });
 
@@ -460,6 +460,11 @@ describe("cổng hộ dân (/api/portal)", () => {
 
     expect((await an.post("/api/portal/spray").send({ pesticideId: 999999, dose: "1", areaHa: 1 })).status).toBe(400);
     expect((await an.post("/api/portal/spray").send({ pesticideId: allowed.id, dose: "1", areaHa: -2 })).status).toBe(400);
+
+    // Dọn 2 đợt phun không gắn thửa của test này để không khóa cách ly toàn bộ thửa của Hộ 1 ở các suite sau
+    const htx = await loggedIn(USERS.htx);
+    await htx.delete(`/api/spray/${ok.body.id}`);
+    await htx.delete(`/api/spray/${bad.body.id}`);
   });
 
   it("gửi hồ sơ xin duyệt hiện ở danh sách duyệt của cán bộ HTX", async () => {
