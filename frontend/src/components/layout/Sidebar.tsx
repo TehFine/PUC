@@ -175,8 +175,8 @@ export default function Sidebar({ active, onNavigate }: Props) {
   );
 
   const go = (id: SectionId) => {
-    onNavigate(id);
     if (isOpen) handleClose();
+    onNavigate(id);
   };
 
   const handleSelectItem = (id: SectionId) => {
@@ -192,18 +192,18 @@ export default function Sidebar({ active, onNavigate }: Props) {
 
     if (selectTimerRef.current) clearTimeout(selectTimerRef.current);
     selectTimerRef.current = setTimeout(() => {
+      handleClose();
       if (id !== active) {
         onNavigate(id);
       }
-      handleClose();
     }, 110);
   };
 
   const handleDone = () => {
+    handleClose();
     if (selectedTab !== active) {
       onNavigate(selectedTab);
     }
-    handleClose();
   };
 
   useSheetSwipe({ sheetRef, handleRef: headRef, onDismiss: handleClose, enabled: isOpen });

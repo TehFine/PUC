@@ -91,8 +91,19 @@ export function Modal({
           'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
         ) ?? [],
       );
-    (focusable().find((el) => el.tagName !== "BUTTON") ?? focusable()[0] ?? panel)?.focus({
-      preventScroll: true,
+
+    // Trì hoãn focus sang frame kế tiếp để không chặn frame đầu tiên của hoạt ảnh mở;
+    // trên thiết bị cảm ứng không tự focus ô input để tránh bật bàn phím ảo gây giật khung hình khi đang trượt lên.
+    const focusRaf = window.requestAnimationFrame(() => {
+      if (isClosingRef.current) return;
+      const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+      if (isCoarsePointer) {
+        panel?.focus({ preventScroll: true });
+        return;
+      }
+      const items = focusable();
+      const initial = items.find((el) => el.tagName !== "BUTTON") ?? items[0] ?? panel;
+      initial?.focus({ preventScroll: true });
     });
 
     const onKey = (event: KeyboardEvent) => {
@@ -116,6 +127,7 @@ export function Modal({
     };
     document.addEventListener("keydown", onKey);
     return () => {
+      window.cancelAnimationFrame(focusRaf);
       document.removeEventListener("keydown", onKey);
       unlockScroll();
       previousFocus?.focus?.({ preventScroll: true });
@@ -128,7 +140,6 @@ export function Modal({
       if (panelRef.current) {
         panelRef.current.style.animation = "none";
         panelRef.current.style.transform = "translate3d(0, 0, 0)";
-        panelRef.current.style.willChange = "auto";
       }
       if (backdropRef.current) {
         backdropRef.current.style.animation = "none";
@@ -150,7 +161,7 @@ export function Modal({
       <div
         ref={backdropRef}
         className={`modal-overlay pt-sheet-backdrop ${variant === "drawer" ? "is-drawer" : ""}`.trim()}
-        onMouseDown={(event) => {
+        onClick={(event) => {
           if (closeOnBackdrop && event.target === event.currentTarget) handleClose();
         }}
       >

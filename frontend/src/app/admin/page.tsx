@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -67,10 +67,12 @@ export default function Home() {
     else if (status === "authenticated" && isFarmer) router.replace("/portal");
   }, [status, isFarmer, router]);
 
-  const navigate = (id: SectionId) => {
-    setActive(id);
+  const navigate = useCallback((id: SectionId) => {
+    startTransition(() => {
+      setActive(id);
+    });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  };
+  }, []);
 
   const renderSection = () => {
     switch (active) {

@@ -162,7 +162,7 @@ function attachRootScrollLock(): () => void {
       return;
     }
     if (window.scrollX !== lockedScrollX || window.scrollY !== lockedScrollY) {
-      window.scrollTo(lockedScrollX, lockedScrollY);
+      window.scrollTo({ left: lockedScrollX, top: lockedScrollY, behavior: "instant" });
     }
   };
 

@@ -75,7 +75,31 @@ body {
   --font-mono: var(--font-num-stack);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tắt độ trễ chạm kép trên di động để phản hồi bấm tức thì ở mọi nút/thẻ điều hướng */
+a,
+button,
+summary,
+label,
+input,
+select,
+textarea,
+[role="button"],
+[role="tab"],
+[role="radio"],
+[role="option"],
+[role="menuitem"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
 
 /* Cuộn ở tầng root document (window) để trình duyệt di động tự động thu gọn thanh địa chỉ & công cụ cạnh dưới khi lướt lên */
 html {
@@ -409,7 +433,7 @@ body {
 }
 
 .nav-item:not(.active):active {
-  background-color: rgba(15, 23, 42, 0.085);
+  opacity: 0.72;
 }
 
 .nav-item.active {
@@ -546,7 +570,7 @@ body {
   letter-spacing: 0.01em;
   white-space: nowrap;
   user-select: none;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
 }
 
 .dash-date-badge svg {
@@ -581,7 +605,9 @@ body {
   line-height: 1.2;
 }
 
-.btn:hover { transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover { transform: translateY(-1px); }
+}
 .btn:active { transform: scale(0.97); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .btn:focus-visible { outline: 2px solid #0084ff; outline-offset: 2px; }
@@ -701,7 +727,9 @@ body {
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut) * 1.5) 100%, 0 100%);
 }
 
-.kpi-card:hover { transform: translateY(-3px); filter: drop-shadow(0 12px 26px rgba(20, 55, 47, 0.14)); }
+@media (hover: hover) and (pointer: fine) {
+  .kpi-card:hover { transform: translateY(-3px); filter: drop-shadow(0 12px 26px rgba(20, 55, 47, 0.14)); }
+}
 
 .kpi-grid .kpi-card:nth-child(2),
 .kpi-grid-4 .kpi-card:nth-child(2) { --fill: var(--yellow); }
@@ -886,12 +914,14 @@ body {
   cursor: pointer;
   background: transparent;
   color: var(--text-secondary);
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.dash-tab-btn:hover {
-  background: rgba(20, 55, 47, 0.08);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .dash-tab-btn:hover {
+    background: rgba(20, 55, 47, 0.08);
+    color: var(--ink);
+  }
 }
 
 .dash-tab-btn.is-active {
@@ -1139,7 +1169,9 @@ input[type="date"].filter-select {
 
 .table-wrap tbody tr:last-child td { border-bottom: none; }
 .table-wrap tbody tr td { transition: background 0.15s ease; }
-.table-wrap tbody tr:hover td { background: rgba(20, 55, 47, 0.04); }
+@media (hover: hover) and (pointer: fine) {
+  .table-wrap tbody tr:hover td { background: rgba(20, 55, 47, 0.04); }
+}
 
 .table-footer {
   display: flex;
@@ -1264,7 +1296,7 @@ input[type="date"].filter-select {
 }
 
 .tab-btn:not(.active):active {
-  background-color: rgba(15, 23, 42, 0.085);
+  opacity: 0.72;
 }
 
 .tab-btn.active {
@@ -2525,7 +2557,9 @@ input[type="date"].filter-select {
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
-.training-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+@media (hover: hover) and (pointer: fine) {
+  .training-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+}
 
 .training-card-top {
   padding: 18px 20px;
@@ -2585,9 +2619,11 @@ input[type="date"].filter-select {
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
-.report-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 26px rgba(20, 55, 47, 0.14);
+@media (hover: hover) and (pointer: fine) {
+  .report-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 26px rgba(20, 55, 47, 0.14);
+  }
 }
 
 .report-icon { display: none; }
@@ -2810,11 +2846,13 @@ input[type="date"].filter-select {
   padding: 0;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.modal-header button:not(.pt-drawer-back-btn):hover {
-  background: transparent;
-  color: var(--ink);
-  opacity: 0.72;
-  transform: rotate(90deg);
+@media (hover: hover) and (pointer: fine) {
+  .modal-header button:not(.pt-drawer-back-btn):hover {
+    background: transparent;
+    color: var(--ink);
+    opacity: 0.72;
+    transform: rotate(90deg);
+  }
 }
 
 .modal-body {
@@ -4152,7 +4190,7 @@ code {
     border: none;
     background: transparent;
     color: var(--text-secondary);
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -5457,7 +5495,13 @@ html[data-net="slow"] .kpi-card svg rect {
   }
 }
 
-
-
-
+/* Tối ưu GPU cho Bottom Sheet / Drawer trên thiết bị di động: giảm bán kính bóng mờ nặng khi trượt để giữ 60fps */
+@media (max-width: 759px) {
+  .modal,
+  .modal.pt-sheet {
+    box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.14);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+}
 

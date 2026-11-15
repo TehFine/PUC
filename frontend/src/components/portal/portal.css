@@ -261,7 +261,9 @@ body.pt-body {
   transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 .pt-tab svg { width: 21px; height: 21px; stroke-width: 1.8; transition: transform 0.2s ease, color 0.2s ease; }
-.pt-tab:hover { background: rgba(20, 55, 47, 0.06); }
+@media (hover: hover) and (pointer: fine) {
+  .pt-tab:hover { background: rgba(20, 55, 47, 0.06); }
+}
 .pt-tab:active { transform: scale(0.95); }
 .pt-tab:focus-visible { outline: 2px solid var(--green-600); outline-offset: 1px; }
 .pt-tab.active { background: var(--ink); color: #fff; box-shadow: none; }
@@ -317,11 +319,13 @@ body.pt-body {
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.pt-asset-card:hover {
-  border-color: rgba(15, 23, 42, 0.16);
-  box-shadow: 
-    0 8px 24px -4px rgba(15, 23, 42, 0.08),
-    0 2px 6px -1px rgba(15, 23, 42, 0.04);
+@media (hover: hover) and (pointer: fine) {
+  .pt-asset-card:hover {
+    border-color: rgba(15, 23, 42, 0.16);
+    box-shadow: 
+      0 8px 24px -4px rgba(15, 23, 42, 0.08),
+      0 2px 6px -1px rgba(15, 23, 42, 0.04);
+  }
 }
 
 /* ── DẤU MỘC WATERMARK KIỂM SOÁT XUẤT HÀNG (VÒNG TRÒN ĐỒNG TÂM + DẢI BĂNG ÂM BẢN) ── */
@@ -1872,7 +1876,7 @@ body.pt-body {
     transform: none;
   }
   .pt-tab:not(.active):active {
-    background-color: rgba(15, 23, 42, 0.085);
+    opacity: 0.72;
   }
   .pt-tab.active {
     background-color: transparent;
@@ -3002,12 +3006,14 @@ body.pt-body {
   border-radius: 16px;
   cursor: pointer;
   text-align: center;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
-.pt-photo-dropzone:hover {
-  background: #f1f5f9;
-  border-color: #059669;
+@media (hover: hover) and (pointer: fine) {
+  .pt-photo-dropzone:hover {
+    background: #f1f5f9;
+    border-color: #059669;
+  }
 }
 
 .pt-photo-dropzone input[type="file"] {
@@ -4441,12 +4447,14 @@ body.pt-body {
   height: 112px;
 }
 
-.pt-pest-card:hover {
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.09);
+@media (hover: hover) and (pointer: fine) {
+  .pt-pest-card:hover {
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.09);
+  }
 }
 
 .pt-pest-card:active {
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  transform: scale(0.99);
 }
 
 .pt-pest-card.pt-pest-card-allowed {
@@ -4499,8 +4507,10 @@ body.pt-body {
   transition: transform 0.2s ease;
 }
 
-.pt-pest-card:hover .pt-pest-card-img {
-  transform: scale(1.06);
+@media (hover: hover) and (pointer: fine) {
+  .pt-pest-card:hover .pt-pest-card-img {
+    transform: scale(1.06);
+  }
 }
 
 /* Phần bên phải: Tên thuốc và thông số */
@@ -5517,9 +5527,11 @@ body.pt-body {
   gap: 10px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.pt-variety-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+@media (hover: hover) and (pointer: fine) {
+  .pt-variety-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+  }
 }
 .pt-variety-head {
   display: flex;
@@ -5880,10 +5892,12 @@ body.pt-body {
   flex-direction: column;
   border-radius: 28px 28px 0 0;
   background: #ffffff;
-  box-shadow: 0 -12px 48px rgba(15, 23, 42, 0.24), 0 -2px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.14);
   animation: pt-sheet-slide-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   transform: translate3d(0, 0, 0);
   will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   overflow: hidden;
 }
 
@@ -6726,7 +6740,7 @@ body.pt-body {
     0 8px 24px -4px rgba(15, 23, 42, 0.12),
     0 2px 6px -1px rgba(15, 23, 42, 0.06),
     inset 0 1px 1px #ffffff;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, border-color 0.2s ease;
   position: relative;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -6806,10 +6820,12 @@ body.pt-body {
   background: #ffffff;
   border-radius: 36px 36px 0 0;
   padding: 26px 20px calc(22px + env(safe-area-inset-bottom));
-  box-shadow: 0 -12px 48px rgba(15, 23, 42, 0.22), 0 -2px 10px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.14);
   animation: pt-sheet-slide-up 0.34s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transform: translate3d(0, 0, 0);
   will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -6868,8 +6884,10 @@ body.pt-body {
   -webkit-tap-highlight-color: transparent;
 }
 
-.pt-radial-option-card:hover {
-  background: #ececf3;
+@media (hover: hover) and (pointer: fine) {
+  .pt-radial-option-card:hover {
+    background: #ececf3;
+  }
 }
 
 .pt-radial-option-card:active {
@@ -7430,17 +7448,19 @@ body.pt-body {
   padding: 13px 16px;
   box-shadow: 0 2px 10px rgba(20, 55, 47, 0.035);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, border-color 0.2s ease;
   box-sizing: border-box;
   width: 100%;
   text-align: left;
 }
 
-.pt-plot-reminder-card:hover {
-  background: #fafdfc;
-  border-color: rgba(5, 150, 105, 0.35);
-  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.09);
-  transform: translateY(-2px);
+@media (hover: hover) and (pointer: fine) {
+  .pt-plot-reminder-card:hover {
+    background: #fafdfc;
+    border-color: rgba(5, 150, 105, 0.35);
+    box-shadow: 0 8px 24px rgba(5, 150, 105, 0.09);
+    transform: translateY(-2px);
+  }
 }
 
 .pt-plot-reminder-card:focus-visible {
@@ -7987,7 +8007,7 @@ body.pt-body {
   cursor: pointer;
   border: none;
   outline: none;
-  transition: all 0.18s ease;
+  transition: transform 0.18s ease, background-color 0.18s ease, opacity 0.18s ease;
   white-space: nowrap;
 }
 
@@ -8427,9 +8447,11 @@ body.pt-body {
   box-sizing: border-box;
 }
 
-.pt-training-clean-card:hover {
-  background-color: #f8fafc;
-  box-shadow: 0 3px 12px rgba(20, 55, 47, 0.04);
+@media (hover: hover) and (pointer: fine) {
+  .pt-training-clean-card:hover {
+    background-color: #f8fafc;
+    box-shadow: 0 3px 12px rgba(20, 55, 47, 0.04);
+  }
 }
 
 .pt-training-clean-card:focus-visible {

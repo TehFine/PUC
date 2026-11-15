@@ -253,7 +253,7 @@ export function Sheet({
       <div
         ref={backdropRef}
         className={`pt-sheet-backdrop ${variant === "drawer" ? "is-drawer" : ""}`.trim()}
-        onMouseDown={(event) => event.target === event.currentTarget && handleClose()}
+        onClick={(event) => event.target === event.currentTarget && handleClose()}
       >
         <div
           ref={sheetRef}
@@ -261,6 +261,7 @@ export function Sheet({
           role="dialog"
           aria-modal="true"
           aria-label={title}
+          tabIndex={-1}
         >
           {/* Vùng tiêu đề (hỗ trợ kéo xuống để đóng) */}
           <div ref={dragZoneRef} className="pt-sheet-topbar">
@@ -349,21 +350,24 @@ function useCameraDialFade(
     const el = trackRef.current;
     if (!el) return;
 
-    syncOverflow();
-    const rafId = requestAnimationFrame(syncOverflow);
+    let rafId = requestAnimationFrame(syncOverflow);
+    const scheduleSync = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(syncOverflow);
+    };
 
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(syncOverflow);
+      ro = new ResizeObserver(scheduleSync);
       ro.observe(el);
     } else {
-      window.addEventListener("resize", syncOverflow);
+      window.addEventListener("resize", scheduleSync, { passive: true });
     }
 
     return () => {
-      cancelAnimationFrame(rafId);
+      if (rafId) cancelAnimationFrame(rafId);
       if (ro) ro.disconnect();
-      else window.removeEventListener("resize", syncOverflow);
+      else window.removeEventListener("resize", scheduleSync);
     };
   }, [trackRef, syncOverflow]);
 
@@ -373,23 +377,40 @@ function useCameraDialFade(
     const isFirst = !hasMountedRef.current;
     hasMountedRef.current = true;
 
-    syncOverflow();
-    const overflow = el.scrollWidth - el.clientWidth;
-    if (overflow > 2) {
-      const activeBtn = el.querySelector<HTMLElement>(
-        '[aria-selected="true"], button.active, button.is-active',
-      );
-      if (activeBtn) {
-        const target =
-          activeBtn.offsetLeft + activeBtn.offsetWidth / 2 - el.clientWidth / 2;
-        const clamped = Math.max(0, Math.min(overflow, target));
-        el.scrollTo({
-          left: clamped,
+    // Gom toàn bộ thao tác đọc kích thước DOM vào 1 frame trước khi ghi class / cuộn thanh tab
+    const rafId = requestAnimationFrame(() => {
+      const track = trackRef.current;
+      if (!track) return;
+      const host = containerRef?.current ?? track;
+      const scrollW = track.scrollWidth;
+      const clientW = track.clientWidth;
+      const style = window.getComputedStyle(track);
+      const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+      const overflow = scrollW - clientW;
+      const isOverflowing = scrollW - padX - clientW > 2;
+
+      let scrollTarget: number | null = null;
+      if (overflow > 2) {
+        const activeBtn = track.querySelector<HTMLElement>(
+          '[aria-selected="true"], button.active, button.is-active',
+        );
+        if (activeBtn) {
+          const raw = activeBtn.offsetLeft + activeBtn.offsetWidth / 2 - clientW / 2;
+          scrollTarget = Math.max(0, Math.min(overflow, raw));
+        }
+      }
+
+      host.classList.toggle("has-edge-fade", isOverflowing);
+      if (scrollTarget !== null && Math.abs(track.scrollLeft - scrollTarget) > 1) {
+        track.scrollTo({
+          left: scrollTarget,
           behavior: isFirst ? "auto" : "smooth",
         });
       }
-    }
-  }, [activeKey, trackRef, syncOverflow]);
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [activeKey, trackRef, containerRef]);
 }
 
 /** Thanh chứa các nút tab con với hiệu ứng mờ dần cố định ở 2 cạnh dock. */
