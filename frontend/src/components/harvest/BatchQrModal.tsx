@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
-import { Printer, Download, Sparkles, Tag, Package, RefreshCw } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useIsDesktopViewport } from "@/components/portal/ui";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
-import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import type { HarvestItem } from "@/types/entities";
 import { api, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import { lockRootScroll } from "@/lib/scroll-lock";
@@ -63,6 +62,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
   const { can } = useAuth();
   const canGenerate = can("harvest", "update");
   const titleId = useId();
+  const isDesktop = useIsDesktopViewport(760);
   const [itemType, setItemType] = useState<"fruit" | "box">("box");
   const [eccLevel, setEccLevel] = useState<"Q" | "M">("Q");
   const [count, setCount] = useState<number>(12);
@@ -90,14 +90,15 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     isClosingRef.current = true;
     const sheet = sheetRef.current;
     const backdrop = backdropRef.current;
-    const isDesktop = typeof window !== "undefined" && window.innerWidth >= 760;
+    const desktopNow = typeof window !== "undefined" && window.innerWidth >= 760;
+    const closeDuration = desktopNow ? 240 : 220;
+
     if (sheet) {
       sheet.style.animation = "none";
       sheet.style.pointerEvents = "none";
-      if (isDesktop) {
-        sheet.style.transition = "transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out";
-        sheet.style.transform = "translate3d(0, 12px, 0) scale(0.97)";
-        sheet.style.opacity = "0";
+      if (desktopNow) {
+        sheet.style.transition = "transform 240ms cubic-bezier(0.32, 0.72, 0, 1)";
+        sheet.style.transform = "translate3d(100%, 0, 0)";
       } else {
         sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
         sheet.style.transform = "translate3d(0, 105%, 0)";
@@ -106,15 +107,14 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     if (backdrop) {
       backdrop.style.animation = "none";
       backdrop.style.pointerEvents = "none";
-      backdrop.style.transition = "opacity 200ms ease-out";
+      backdrop.style.transition = "opacity 210ms ease-out";
       backdrop.style.opacity = "0";
     }
     setTimeout(() => {
       onClose();
-    }, 220);
+    }, closeDuration);
   }, [onClose]);
 
-  // Đóng bằng phím Escape & khóa cuộn tầng root
   useEffect(() => {
     const unlockScroll = lockRootScroll();
     const handleKey = (event: KeyboardEvent) => {
@@ -145,15 +145,18 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     return () => clearTimeout(timer);
   }, []);
 
-  useSheetSwipe({ sheetRef, handleRef: dragZoneRef, onDismiss: handleClose });
+  useSheetSwipe({
+    sheetRef,
+    handleRef: dragZoneRef,
+    onDismiss: handleClose,
+    enabled: !isDesktop,
+  });
 
-  // Cập nhật trọng lượng mặc định khi đổi loại tem
   const handleTypeChange = (type: "fruit" | "box") => {
     setItemType(type);
     setWeightKg(type === "fruit" ? 3.5 : 18.0);
   };
 
-  // Tải danh sách tem đã có của lô (mã hóa đường dẫn token ngẫu nhiên /t/:token, tương phản cao #000/#fff, ECC mức M hoặc Q)
   const fetchItemsWithQr = useCallback(async (lotId: number, level: "Q" | "M"): Promise<ItemWithQr[]> => {
     const res = await api.get<{ data: HarvestItem[] }>(`/harvest/${lotId}/items`);
     const rawItems = res.data;
@@ -219,7 +222,6 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     };
   }, [lot.id, eccLevel, fetchItemsWithQr]);
 
-  // Sinh thêm dải tem mới
   const handleGenerate = () => {
     const lotId = lot.id;
     if (!lotId) return;
@@ -240,10 +242,10 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     });
   };
 
-  // Lọc theo loại tem đang xem
+  const boxCount = items.filter((it) => it.itemType === "box").length;
+  const fruitCount = items.filter((it) => it.itemType === "fruit").length;
   const filteredItems = items.filter((it) => it.itemType === itemType);
 
-  // Xuất file CSV
   const handleExportCsv = () => {
     if (filteredItems.length === 0) return;
     const baseUrl = getPublicBaseUrl();
@@ -280,7 +282,6 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     triggerBlobDownload(blob, `Danh_sach_tem_${lot.code}_${itemType}.csv`);
   };
 
-  // In tem bằng window.print (gán tạm title để trình duyệt Lưu PDF ra tên file chuẩn)
   const handlePrint = () => {
     const previousTitle = document.title;
     document.title = `Tem-dinh-danh-${lot.code}-${itemType}`;
@@ -299,7 +300,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const displayDate = lot.date ?? (lot.harvestedOn ? lot.harvestedOn.slice(0, 10) : "—");
+  const displayDate = lot.date ?? (lot.harvestedOn ? lot.harvestedOn.slice(0, 10) : "Chưa rõ");
 
   const modalNode = (
     <div
@@ -311,23 +312,24 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     >
       <div
         ref={sheetRef}
-        className="batch-qr-modal pt-sheet"
+        className="batch-qr-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
-        {/* Header Modal */}
-        <div ref={dragZoneRef} className="pt-sheet-topbar no-print">
+        {/* Thanh tiêu đề cố định */}
+        <div ref={dragZoneRef} className="batch-qr-topbar no-print">
+          <div className="bqr-mobile-grabber" aria-hidden="true" />
           <div className="batch-qr-header">
-            <div>
-              <div className="batch-qr-subtitle">Định danh theo Lô / Thùng - Kết nối Cổng Truy xuất Quốc gia</div>
+            <div className="batch-qr-head-copy">
+              <div className="batch-qr-subtitle">ĐỊNH DANH VÀ TRUY XUẤT NGUỒN GỐC</div>
               <h2 id={titleId} className="batch-qr-title">
-                Bộ sinh &amp; In tem định danh - Lô {lot.code}
+                Cấp và in tem lô {lot.code}
               </h2>
             </div>
             <button
               type="button"
-              className="batch-qr-close pt-icon-btn"
+              className="batch-qr-close"
               onClick={(e) => {
                 e.stopPropagation();
                 handleClose();
@@ -335,544 +337,870 @@ export default function BatchQrModal({ lot, onClose }: Props) {
               onPointerDown={(e) => e.stopPropagation()}
               aria-label="Đóng"
             >
-              <CloseCircleIcon size={28} />
+              <span aria-hidden="true">&times;</span>
             </button>
           </div>
         </div>
 
-        {/* Cấu hình sinh tem */}
-        <div className="batch-qr-toolbar no-print">
-          <div className="batch-qr-type-switch">
-            <button
-              type="button"
-              className={`type-btn ${itemType === "box" ? "active" : ""}`}
-              onClick={() => handleTypeChange("box")}
-            >
-              <Package size={16} />
-              <span>Tem thùng / lô tiêu chuẩn ({items.filter((i) => i.itemType === "box").length})</span>
-            </button>
-            <button
-              type="button"
-              className={`type-btn ${itemType === "fruit" ? "active" : ""}`}
-              onClick={() => handleTypeChange("fruit")}
-            >
-              <Tag size={16} />
-              <span>Tem từng quả - Hàng cao cấp ({items.filter((i) => i.itemType === "fruit").length})</span>
-            </button>
-          </div>
-
-          <div className="batch-qr-actions">
-            <select
-              className="filter-select"
-              style={{ height: 32, fontSize: 12.5, padding: "0 10px" }}
-              value={eccLevel}
-              onChange={(e) => setEccLevel(e.target.value as "Q" | "M")}
-              title="Mức sửa lỗi QR theo quy chuẩn in ấn kho lạnh"
-            >
-              <option value="Q">Sửa lỗi mức Q (25% - Container lạnh)</option>
-              <option value="M">Sửa lỗi mức M (15% - Tiêu chuẩn)</option>
-            </select>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={handleExportCsv}
-              disabled={filteredItems.length === 0}
-            >
-              <Download size={14} />
-              <span>Xuất CSV</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={handlePrint}
-              disabled={filteredItems.length === 0}
-            >
-              <Printer size={15} />
-              <span>In trang tem</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Khung tạo mới tem con */}
-        {canGenerate && (
-        <div className="batch-qr-gen-panel no-print">
-          <div className="gen-panel-title">
-            <Sparkles size={16} color="#1b4d3e" />
-            <span>
-              {itemType === "box"
-                ? `Cấp dải mã QR thùng / lô cho lô ${lot.code} (Khuyến nghị chuẩn toàn quốc từ 01/07/2026)`
-                : `Cấp dải tem từng quả cho lô ${lot.code} (Chỉ khuyến nghị cho dòng hàng cao cấp / thương hiệu riêng)`}
-            </span>
-          </div>
-
-          <div className="gen-panel-form">
-            <div className="gen-form-group">
-              <label>Số lượng tem</label>
-              <select
-                className="filter-select"
-                value={count}
-                onChange={(e) => setCount(Number(e.target.value))}
+        {/* Thân ngăn kéo cuộn mượt trên cả laptop và di động */}
+        <div className="batch-qr-body">
+          {/* Chuyển loại tem và xuất bản */}
+          <div className="batch-qr-toolbar no-print">
+            <div className="batch-qr-type-switch" role="tablist" aria-label="Loại tem định danh">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={itemType === "box"}
+                className={`type-btn ${itemType === "box" ? "active" : ""}`}
+                onClick={() => handleTypeChange("box")}
               >
-                <option value={6}>6 tem</option>
-                <option value={12}>12 tem</option>
-                <option value={24}>24 tem</option>
-                <option value={48}>48 tem</option>
-                <option value={100}>100 tem</option>
-              </select>
-            </div>
-
-            <div className="gen-form-group">
-              <label>Phân hạng</label>
-              <select
-                className="filter-select"
-                value={grade}
-                onChange={(e) => setGrade(e.target.value as "A" | "B" | "C")}
+                Tem thùng ({boxCount})
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={itemType === "fruit"}
+                className={`type-btn ${itemType === "fruit" ? "active" : ""}`}
+                onClick={() => handleTypeChange("fruit")}
               >
-                <option value="A">Hạng A (VIP Xuất khẩu)</option>
-                <option value="B">Hạng B (Loại 2)</option>
-                <option value="C">Hạng C (Nội địa)</option>
+                Tem từng quả ({fruitCount})
+              </button>
+            </div>
+
+            <div className="batch-qr-actions">
+              <select
+                className="bqr-select bqr-ecc-select"
+                value={eccLevel}
+                onChange={(e) => setEccLevel(e.target.value as "Q" | "M")}
+                aria-label="Mức sửa lỗi mã QR"
+              >
+                <option value="Q">Sửa lỗi mức Q (25%, kho lạnh)</option>
+                <option value="M">Sửa lỗi mức M (15%, tiêu chuẩn)</option>
               </select>
+              <button
+                type="button"
+                className="bqr-btn bqr-btn-secondary"
+                onClick={handleExportCsv}
+                disabled={filteredItems.length === 0}
+              >
+                Xuất CSV
+              </button>
+              <button
+                type="button"
+                className="bqr-btn bqr-btn-primary"
+                onClick={handlePrint}
+                disabled={filteredItems.length === 0}
+              >
+                In trang tem
+              </button>
             </div>
-
-            <div className="gen-form-group">
-              <label>{itemType === "fruit" ? "Cân nặng quả (kg)" : "Quy cách thùng (kg)"}</label>
-              <input
-                type="number"
-                step="0.1"
-                min="0.5"
-                className="filter-input"
-                style={{ width: 100 }}
-                value={weightKg}
-                onChange={(e) => setWeightKg(Number(e.target.value))}
-              />
-            </div>
-
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ marginTop: 20 }}
-              onClick={handleGenerate}
-              disabled={generating}
-            >
-              {generating ? <RefreshCw size={15} className="spin" /> : <Tag size={15} />}
-              <span>{generating ? "Đang cấp mã..." : `Sinh ${count} tem ${itemType === "fruit" ? "quả" : "thùng"}`}</span>
-            </button>
-          </div>
-          {error && <div className="batch-qr-error">{error}</div>}
-        </div>
-        )}
-
-        {/* Khung xem trước & In tem nhãn */}
-        <div className="batch-qr-preview-area">
-          <div className="preview-header no-print">
-            <div className="preview-note">
-              <strong>Bản xem trước nhãn in ({filteredItems.length} tem {itemType === "fruit" ? "dán quả ≥ 2,2×2,2 cm" : "dán thùng ≥ 2,8×2,8 cm"})</strong>
-              <span>Đường dẫn QR dùng token ngẫu nhiên chống giả (/t/token), in kèm mã lô, PUC và PHC dạng chữ dự phòng</span>
-            </div>
-            {filteredItems.length > 0 && (
-              <span className="badge badge-green">Tương phản Đen/Trắng - Sửa lỗi mức {eccLevel}</span>
-            )}
           </div>
 
-          <div
-            className="no-print"
-            style={{
-              marginBottom: 16,
-              padding: "10px 14px",
-              borderRadius: 10,
-              background: "#ffffff",
-              border: "1px solid #d4dfd9",
-              fontSize: 12,
-              color: "#334155",
-              lineHeight: 1.55,
-            }}
-          >
-            <strong style={{ color: "#14372f" }}>Quy chuẩn vật liệu &amp; kiểm thử trước khi in số lượng lớn:</strong>{" "}
-            Sử dụng decal nhựa chịu ẩm, chịu lạnh (vận chuyển container lạnh 12–15 °C), đế keo chống bóc ra dán lại. Không in cứng kết quả kiểm nghiệm lên tem để trạng thái hiệu lực PUC/PHC được đối chiếu thời gian thực khi quét. Bắt buộc quét thử bằng nhiều điện thoại ở các điều kiện ánh sáng khác nhau và xác nhận quy cách nhãn hiện hành với cơ quan chuyên môn (Chi cục TT&amp;BVTV).
-          </div>
+          {/* Khung tạo mới dải tem */}
+          {canGenerate && (
+            <div className="batch-qr-gen-panel no-print">
+              <div className="gen-panel-title">
+                {itemType === "box"
+                  ? `Cấp dải mã QR thùng cho lô ${lot.code}`
+                  : `Cấp dải mã QR từng quả cho lô ${lot.code}`}
+              </div>
 
-          {loading ? (
-            <div className="batch-qr-loading no-print">Đang nạp dải mã tem...</div>
-          ) : filteredItems.length === 0 ? (
-            <div className="batch-qr-empty no-print">
-              Chưa có tem {itemType === "fruit" ? "dán quả" : "dán thùng"} nào được cấp cho lô này.
-              <br />
-              Vui lòng bấm nút <strong>Sinh tem</strong> ở trên để tạo dải mã định danh.
-            </div>
-          ) : (
-            <div className={`print-sheet print-sheet-${itemType}`}>
-              {filteredItems.map((item) => {
-                const itemPucCode = item.pucCode || "VN-DLOR-0086";
-                const itemPhcCode = lot.packhouseCode || "VN-DLPH-0089";
-                return (
-                <div key={item.id} className={`stamp-card stamp-${itemType}`}>
-                  {itemType === "fruit" ? (
-                    /* ─── Tem dán từng quả (Fruit Decal - QR in thực tế 22x22mm >= 2x2cm) ─── */
-                    <div className="fruit-stamp-inner">
-                      <div className="fruit-stamp-header">
-                        <div className="fruit-stamp-brand">HTX CƯ NÉ</div>
-                        <span className="fruit-stamp-grade">HẠNG {item.grade ?? "A"}</span>
-                      </div>
-                      <div className="fruit-stamp-body">
-                        {item.qrDataUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={item.qrDataUrl} alt={item.serialCode} className="fruit-qr-img" />
-                        ) : (
-                          <div className="qr-placeholder" />
-                        )}
-                        <div className="fruit-stamp-details">
-                          <div className="stamp-puc">Lô: {lot.code}</div>
-                          <div className="stamp-puc">PUC: {itemPucCode}</div>
-                          <div className="stamp-puc">PHC: {itemPhcCode}</div>
-                          <div className="stamp-weight">{item.weightKg ? `${item.weightKg} kg` : "3.5 kg"}</div>
-                        </div>
-                      </div>
-                      <div className="fruit-stamp-footer">
-                        <span
-                          className="fruit-serial-code"
-                          title="Mã dự phòng nhập tay khi quét lỗi - Bấm để sao chép"
-                          onClick={() => copyCode(item.serialCode)}
-                        >
-                          Mã: {item.serialCode}
-                        </span>
-                        {copiedCode === item.serialCode && <span className="copied-tag">Đã chép</span>}
-                      </div>
-                    </div>
-                  ) : (
-                    /* ─── Tem dán thùng carton (Carton Box Label - QR in thực tế 28x28mm >= 2x2cm) ─── */
-                    <div className="box-stamp-inner">
-                      <div className="box-stamp-head">
-                        <div className="box-brand">
-                          <strong>HTX SẦU RIÊNG CƯ NÉ - ĐẮK LẮK</strong>
-                          <small>NHÃN ĐỊNH DANH LÔ HÀNG &amp; TRUY XUẤT NGUỒN GỐC</small>
-                        </div>
-                        <div className="box-stamp-grade-box">
-                          HẠNG {item.grade ?? "A"}
-                        </div>
-                      </div>
-
-                      <div className="box-stamp-grid">
-                        <div className="box-qr-col">
-                          {item.qrDataUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={item.qrDataUrl} alt={item.serialCode} className="box-qr-img" />
-                          ) : (
-                            <div className="qr-placeholder" />
-                          )}
-                          <span className="box-qr-caption">QUÉT MÃ KIỂM TRA</span>
-                        </div>
-
-                        <div className="box-info-col">
-                          <div className="box-field">
-                            <span className="lbl">Mã lô hàng:</span>
-                            <strong
-                              className="val serial-highlight"
-                              onClick={() => copyCode(lot.code)}
-                              title="Mã lô dạng chữ đối chiếu khi quét lỗi"
-                            >
-                              {lot.code}
-                            </strong>
-                          </div>
-                          <div className="box-field">
-                            <span className="lbl">Mã số vùng trồng (PUC):</span>
-                            <strong className="val">{itemPucCode}</strong>
-                          </div>
-                          <div className="box-field">
-                            <span className="lbl">Mã cơ sở đóng gói (PHC):</span>
-                            <strong className="val">{itemPhcCode}</strong>
-                          </div>
-                          <div className="box-field">
-                            <span className="lbl">Mã thùng dự phòng:</span>
-                            <strong
-                              className="val"
-                              style={{ cursor: "pointer" }}
-                              onClick={() => copyCode(item.serialCode)}
-                              title="Bấm để sao chép mã thùng"
-                            >
-                              {item.serialCode}
-                            </strong>
-                          </div>
-                          <div className="box-field">
-                            <span className="lbl">Quy cách tịnh:</span>
-                            <strong className="val">{item.weightKg ? `${item.weightKg} kg / Thùng` : "18.0 kg / Thùng"}</strong>
-                          </div>
-                          <div className="box-field">
-                            <span className="lbl">Đơn vị sản xuất:</span>
-                            <span className="val">HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="box-stamp-foot">
-                        <span>Ngày đóng gói: {displayDate}</span>
-                        <span>Thị trường: {lot.market}</span>
-                        <span className="safe-mark">Quét QR để kiểm tra hiệu lực PUC/PHC &amp; phiếu kiểm nghiệm thời gian thực</span>
-                      </div>
-                    </div>
-                  )}
+              <div className="gen-panel-form">
+                <div className="gen-form-group gen-col-count">
+                  <label htmlFor={`${titleId}-count`}>Số lượng tem</label>
+                  <select
+                    id={`${titleId}-count`}
+                    className="bqr-select"
+                    value={count}
+                    onChange={(e) => setCount(Number(e.target.value))}
+                  >
+                    <option value={6}>6 tem</option>
+                    <option value={12}>12 tem</option>
+                    <option value={24}>24 tem</option>
+                    <option value={48}>48 tem</option>
+                    <option value={100}>100 tem</option>
+                  </select>
                 </div>
-                );
-              })}
+
+                <div className="gen-form-group gen-col-grade">
+                  <label htmlFor={`${titleId}-grade`}>Phân hạng</label>
+                  <select
+                    id={`${titleId}-grade`}
+                    className="bqr-select"
+                    value={grade}
+                    onChange={(e) => setGrade(e.target.value as "A" | "B" | "C")}
+                  >
+                    <option value="A">Hạng A (Xuất khẩu)</option>
+                    <option value="B">Hạng B (Loại 2)</option>
+                    <option value="C">Hạng C (Nội địa)</option>
+                  </select>
+                </div>
+
+                <div className="gen-form-group gen-col-weight">
+                  <label htmlFor={`${titleId}-weight`}>
+                    {itemType === "fruit" ? "Khối lượng quả (kg)" : "Quy cách thùng (kg)"}
+                  </label>
+                  <input
+                    id={`${titleId}-weight`}
+                    type="number"
+                    step="0.1"
+                    min="0.5"
+                    className="bqr-input"
+                    value={weightKg}
+                    onChange={(e) => setWeightKg(Number(e.target.value))}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="bqr-btn bqr-btn-primary gen-col-submit"
+                  onClick={handleGenerate}
+                  disabled={generating}
+                >
+                  {generating
+                    ? "Đang cấp mã..."
+                    : `Sinh ${count} tem ${itemType === "fruit" ? "quả" : "thùng"}`}
+                </button>
+              </div>
+              {error && <div className="batch-qr-error">{error}</div>}
             </div>
           )}
+
+          {/* Khung xem trước và bản in tem */}
+          <div className="batch-qr-preview-area">
+            <div className="preview-header no-print">
+              <div className="preview-note">
+                <strong>Xem trước nhãn in ({filteredItems.length} tem)</strong>
+                <span>
+                  Kích thước QR tối thiểu {itemType === "fruit" ? "2,2 x 2,2 cm" : "2,8 x 2,8 cm"}, kèm mã chữ dự phòng
+                </span>
+              </div>
+              {filteredItems.length > 0 && (
+                <span className="bqr-ecc-tag">Tương phản cao, mức {eccLevel}</span>
+              )}
+            </div>
+
+            <div className="bqr-material-note no-print">
+              <strong>Quy chuẩn in tem:</strong> Dùng decal nhựa chịu ẩm kho lạnh 12 đến 15 °C, keo chống bóc dán lại và quét thử trên thiết bị di động trước khi in hàng loạt.
+            </div>
+
+            {loading ? (
+              <div className="batch-qr-loading no-print">Đang tải dải mã tem...</div>
+            ) : filteredItems.length === 0 ? (
+              <div className="batch-qr-empty no-print">
+                Chưa có tem {itemType === "fruit" ? "từng quả" : "thùng"} nào được cấp cho lô này. Chọn thông số phía trên và bấm <strong>Sinh tem</strong> để tạo mới.
+              </div>
+            ) : (
+              <div className={`print-sheet print-sheet-${itemType}`}>
+                {filteredItems.map((item) => {
+                  const itemPucCode = item.pucCode || "VN-DLOR-0086";
+                  const itemPhcCode = lot.packhouseCode || "VN-DLPH-0089";
+                  return (
+                    <div key={item.id} className={`stamp-card stamp-${itemType}`}>
+                      {itemType === "fruit" ? (
+                        <div className="fruit-stamp-inner">
+                          <div className="fruit-stamp-header">
+                            <div className="fruit-stamp-brand">HTX CƯ NÉ</div>
+                            <span className="fruit-stamp-grade">HẠNG {item.grade ?? "A"}</span>
+                          </div>
+                          <div className="fruit-stamp-body">
+                            {item.qrDataUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={item.qrDataUrl} alt={item.serialCode} className="fruit-qr-img" />
+                            ) : (
+                              <div className="qr-placeholder qr-placeholder-fruit" />
+                            )}
+                            <div className="fruit-stamp-details">
+                              <div className="fruit-field">
+                                <span className="fruit-lbl">Lô:</span>
+                                <strong className="fruit-val">{lot.code}</strong>
+                              </div>
+                              <div className="fruit-field">
+                                <span className="fruit-lbl">PUC:</span>
+                                <strong className="fruit-val">{itemPucCode}</strong>
+                              </div>
+                              <div className="fruit-field">
+                                <span className="fruit-lbl">PHC:</span>
+                                <strong className="fruit-val">{itemPhcCode}</strong>
+                              </div>
+                              <div className="fruit-field">
+                                <span className="fruit-lbl">KL:</span>
+                                <strong className="fruit-val">{item.weightKg ? `${item.weightKg} kg` : "3.5 kg"}</strong>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="fruit-stamp-footer">
+                            <span
+                              className="fruit-serial-code"
+                              title="Bấm để sao chép mã dự phòng"
+                              onClick={() => copyCode(item.serialCode)}
+                            >
+                              Mã: {item.serialCode}
+                            </span>
+                            {copiedCode === item.serialCode && (
+                              <span className="copied-tag no-print">Đã chép</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="box-stamp-inner">
+                          <div className="box-stamp-head">
+                            <div className="box-brand">
+                              <strong>HTX SẦU RIÊNG CƯ NÉ - ĐẮK LẮK</strong>
+                              <small>NHÃN ĐỊNH DANH LÔ HÀNG VÀ TRUY XUẤT NGUỒN GỐC</small>
+                            </div>
+                            <div className="box-stamp-grade-box">HẠNG {item.grade ?? "A"}</div>
+                          </div>
+
+                          <div className="box-stamp-grid">
+                            <div className="box-qr-col">
+                              {item.qrDataUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={item.qrDataUrl} alt={item.serialCode} className="box-qr-img" />
+                              ) : (
+                                <div className="qr-placeholder qr-placeholder-box" />
+                              )}
+                              <div className="box-qr-meta">
+                                <span className="box-qr-caption">QUÉT MÃ KIỂM TRA</span>
+                                <span className="box-qr-mobile-hint no-print">
+                                  Chạm vào mã lô hoặc mã thùng bên dưới để sao chép nhanh
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="box-info-col">
+                              <div className="box-field">
+                                <span className="lbl">Mã lô hàng:</span>
+                                <span className="val-wrap">
+                                  <strong
+                                    className="val serial-highlight"
+                                    onClick={() => copyCode(lot.code)}
+                                    title="Bấm để sao chép mã lô"
+                                  >
+                                    {lot.code}
+                                  </strong>
+                                  {copiedCode === lot.code && (
+                                    <span className="copied-tag no-print">Đã chép</span>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="box-field">
+                                <span className="lbl">Mã vùng trồng (PUC):</span>
+                                <strong className="val">{itemPucCode}</strong>
+                              </div>
+                              <div className="box-field">
+                                <span className="lbl">Mã đóng gói (PHC):</span>
+                                <strong className="val">{itemPhcCode}</strong>
+                              </div>
+                              <div className="box-field">
+                                <span className="lbl">Mã thùng dự phòng:</span>
+                                <span className="val-wrap">
+                                  <strong
+                                    className="val val-copyable"
+                                    onClick={() => copyCode(item.serialCode)}
+                                    title="Bấm để sao chép mã thùng"
+                                  >
+                                    {item.serialCode}
+                                  </strong>
+                                  {copiedCode === item.serialCode && (
+                                    <span className="copied-tag no-print">Đã chép</span>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="box-field">
+                                <span className="lbl">Quy cách tịnh:</span>
+                                <strong className="val">
+                                  {item.weightKg ? `${item.weightKg} kg / Thùng` : "18.0 kg / Thùng"}
+                                </strong>
+                              </div>
+                              <div className="box-field">
+                                <span className="lbl">Đơn vị sản xuất:</span>
+                                <span className="val">HTX Kinh doanh và Dịch vụ Tổng hợp Cư Né</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="box-stamp-foot">
+                            <div className="box-stamp-foot-meta">
+                              <span>
+                                Ngày đóng gói: <strong>{displayDate}</strong>
+                              </span>
+                              <span>
+                                Thị trường: <strong>{lot.market}</strong>
+                              </span>
+                            </div>
+                            <div className="box-stamp-foot-note">
+                              Quét mã QR để kiểm tra hiệu lực PUC, PHC và phiếu kiểm nghiệm theo thời gian thực
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       <style jsx global>{`
-        /* Overlay & Modal */
-        .batch-qr-overlay {
+        @keyframes bqr-drawer-slide-in {
+          from {
+            transform: translate3d(100%, 0, 0);
+          }
+          to {
+            transform: translate3d(0, 0, 0);
+          }
+        }
+
+        @keyframes bqr-sheet-slide-up {
+          from {
+            transform: translate3d(0, 100%, 0);
+          }
+          to {
+            transform: translate3d(0, 0, 0);
+          }
+        }
+
+        /* ─── Lớp phủ và khung ngăn kéo (Mobile: Bottom Sheet, Desktop: Right Drawer) ─── */
+        .batch-qr-overlay.pt-sheet-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(15, 23, 42, 0.52);
-          z-index: 1000;
+          z-index: 1050;
           display: flex;
           align-items: flex-end;
           justify-content: center;
           padding: 0;
+          background: rgba(15, 23, 42, 0.48);
+          touch-action: auto;
           overflow: hidden;
         }
 
         .batch-qr-modal {
           background: #ffffff;
-          border-radius: 28px 28px 0 0;
-          max-width: 960px !important;
           width: 100%;
-          height: min(92dvh, calc(100dvh - 28px));
-          max-height: 92vh;
-          max-height: min(92dvh, calc(100dvh - 28px));
+          max-width: 100%;
+          height: auto;
+          max-height: min(92dvh, calc(100dvh - 16px));
           display: flex;
           flex-direction: column;
-          box-shadow: 0 -12px 48px rgba(15, 23, 42, 0.24), 0 -2px 12px rgba(0, 0, 0, 0.06);
-          border: none;
+          border-radius: 8px 8px 0 0;
+          border-top: 1px solid rgba(20, 55, 47, 0.14);
+          box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.16);
           overflow: hidden;
+          animation: bqr-sheet-slide-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
 
-        @media (min-width: 760px) {
-          .batch-qr-overlay {
-            align-items: center;
-            padding: 20px;
+        @media screen and (min-width: 760px) {
+          .batch-qr-overlay.pt-sheet-backdrop {
+            justify-content: flex-end;
+            align-items: stretch;
+            padding: 0;
+            background: rgba(15, 23, 42, 0.44);
           }
+
           .batch-qr-modal {
-            border-radius: 24px;
-            height: auto;
-            max-height: 90vh;
-            max-height: 90dvh;
+            width: min(640px, 92vw);
+            max-width: min(640px, 92vw);
+            height: 100dvh;
+            min-height: 100dvh;
+            max-height: 100dvh;
+            margin: 0;
+            border-radius: 0;
+            border: none;
+            border-left: 1px solid rgba(20, 55, 47, 0.14);
+            box-shadow: -16px 0 40px rgba(15, 23, 42, 0.14);
+            animation: bqr-drawer-slide-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
           }
         }
 
-        @media (min-width: 760px) and (max-height: 760px) {
-          .batch-qr-overlay {
-            padding: 10px 16px;
-          }
-          .batch-qr-modal {
-            max-height: calc(100vh - 20px);
-            max-height: calc(100dvh - 20px);
-            border-radius: 20px;
-          }
-          .batch-qr-header {
-            padding: 12px 20px 10px !important;
-          }
-          .batch-qr-title {
-            font-size: 16px;
-          }
-          .batch-qr-toolbar {
-            padding: 8px 20px;
-            gap: 10px;
-          }
-          .batch-qr-gen-panel {
-            padding: 10px 20px;
-          }
-          .gen-panel-title {
-            margin-bottom: 6px;
-            font-size: 12.5px;
-          }
-          .batch-qr-preview-area {
-            padding: 14px 20px;
-            min-height: 180px;
+        /* ─── Thanh tiêu đề ─── */
+        .batch-qr-topbar {
+          flex-shrink: 0;
+          background: #ffffff;
+          border-bottom: 1px solid #e2e5e3;
+          touch-action: none;
+        }
+
+        .bqr-mobile-grabber {
+          width: 36px;
+          height: 4px;
+          border-radius: 2px;
+          background: #d4d4d2;
+          margin: 8px auto 0;
+        }
+
+        @media screen and (min-width: 760px) {
+          .bqr-mobile-grabber {
+            display: none;
           }
         }
 
         .batch-qr-header {
-          padding: 18px 22px 14px;
-          border-bottom: 1px solid rgba(20, 55, 47, 0.07);
+          padding: 12px 16px 14px;
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 12px;
           background: #ffffff;
         }
 
-        @media (min-width: 760px) {
+        @media screen and (min-width: 760px) {
           .batch-qr-header {
-            padding: 20px 24px 14px;
+            padding: 18px 24px 16px;
           }
         }
 
+        .batch-qr-head-copy {
+          min-width: 0;
+          flex: 1;
+        }
+
         .batch-qr-subtitle {
-          font-size: 11.5px;
+          font-size: 11px;
           text-transform: uppercase;
-          letter-spacing: 0.6px;
-          color: #2e7d32;
-          font-weight: 700;
+          letter-spacing: 0.07em;
+          color: #5f6d66;
+          font-weight: 600;
+          line-height: 1.3;
         }
 
         .batch-qr-title {
-          font-size: 18px;
+          font-size: 16.5px;
           font-weight: 700;
           color: #14372f;
-          margin: 2px 0 0 0;
+          margin: 3px 0 0 0;
+          line-height: 1.25;
+          font-variant-numeric: tabular-nums;
+        }
+
+        @media screen and (min-width: 760px) {
+          .batch-qr-title {
+            font-size: 18px;
+          }
         }
 
         .batch-qr-close {
-          width: 32px;
-          height: 32px;
+          width: 34px;
+          height: 34px;
           padding: 0;
-          border-radius: 50%;
-          border: none;
-          background: transparent;
-          display: flex;
+          border-radius: 6px;
+          border: 1px solid #d4d4d2;
+          background: #ffffff;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           color: #14372f;
-          transition: opacity 0.15s ease, transform 0.15s ease;
-        }
-        .batch-qr-close:hover {
-          background: transparent;
-          color: #14372f;
-          opacity: 0.72;
-          transform: rotate(90deg);
+          font-size: 20px;
+          line-height: 1;
+          flex-shrink: 0;
+          transition: background-color 160ms ease, border-color 160ms ease;
         }
 
-        .batch-qr-toolbar {
-          padding: 12px 24px;
-          border-bottom: 1px solid #edf1ef;
+        .batch-qr-close:hover {
+          background: #f7f7f5;
+          border-color: #14372f;
+        }
+
+        /* ─── Thân cuộn dọc ─── */
+        .batch-qr-body {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+          touch-action: pan-y;
           display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
+          flex-direction: column;
+          background: #f7f7f5;
+        }
+
+        /* ─── Thanh chuyển chế độ và nút thao tác ─── */
+        .batch-qr-toolbar {
+          padding: 12px 16px;
+          border-bottom: 1px solid #e2e5e3;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
           background: #ffffff;
-          flex-wrap: wrap;
+          flex-shrink: 0;
+        }
+
+        @media screen and (min-width: 760px) {
+          .batch-qr-toolbar {
+            padding: 14px 24px;
+          }
         }
 
         .batch-qr-type-switch {
-          display: flex;
-          gap: 8px;
-          background: #f4f7f5;
-          padding: 4px;
-          border-radius: 10px;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 4px;
+          background: #f3f5f4;
+          border: 1px solid #e2e5e3;
+          padding: 3px;
+          border-radius: 6px;
         }
 
         .type-btn {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          padding: 7px 14px;
+          height: 34px;
+          padding: 0 10px;
           font-size: 13px;
           font-weight: 600;
-          border: none;
+          border: 1px solid transparent;
           background: transparent;
-          color: #4a6358;
-          border-radius: 8px;
+          color: #5f6d66;
+          border-radius: 4px;
           cursor: pointer;
-          transition: all 0.15s ease;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+          transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
         }
+
+        .type-btn:hover:not(.active) {
+          color: #14372f;
+        }
+
         .type-btn.active {
           background: #ffffff;
-          color: #166534;
-          box-shadow: none;
+          color: #14372f;
+          border-color: #d4d4d2;
         }
 
         .batch-qr-actions {
-          display: flex;
-          gap: 10px;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          align-items: center;
         }
 
+        .bqr-ecc-select {
+          grid-column: 1 / -1;
+        }
+
+        @media screen and (min-width: 560px) {
+          .batch-qr-actions {
+            grid-template-columns: minmax(0, 1fr) auto auto;
+          }
+
+          .bqr-ecc-select {
+            grid-column: auto;
+          }
+        }
+
+        /* ─── Ô chọn, ô nhập số và nút chuẩn 38px đồng bộ ─── */
+        .bqr-select,
+        .bqr-input {
+          width: 100%;
+          height: 38px;
+          min-height: 38px;
+          background-color: #ffffff;
+          border: 1px solid #d4d4d2;
+          border-radius: 6px;
+          padding: 0 12px;
+          color: #121212;
+          font-size: 13px;
+          font-weight: 500;
+          font-family: inherit;
+          outline: none;
+          box-sizing: border-box;
+          font-variant-numeric: tabular-nums;
+          transition: border-color 160ms ease;
+        }
+
+        .bqr-select {
+          appearance: none;
+          -webkit-appearance: none;
+          padding-right: 36px;
+          cursor: pointer;
+          text-overflow: ellipsis;
+          background-image: url("/icons/chevron-down-forest.svg");
+          background-repeat: no-repeat;
+          background-position: right 11px center;
+          background-size: 14px;
+        }
+
+        .bqr-select:hover,
+        .bqr-input:hover {
+          border-color: #9ca3af;
+        }
+
+        .bqr-select:focus,
+        .bqr-input:focus {
+          border-color: #14372f;
+        }
+
+        .bqr-btn {
+          height: 38px;
+          min-height: 38px;
+          padding: 0 14px;
+          border-radius: 6px;
+          font-size: 13px;
+          font-weight: 600;
+          font-family: inherit;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          white-space: nowrap;
+          box-sizing: border-box;
+          font-variant-numeric: tabular-nums;
+          transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
+        }
+
+        .bqr-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+
+        .bqr-btn-secondary {
+          background: #ffffff;
+          color: #14372f;
+          border: 1px solid #d4d4d2;
+        }
+
+        .bqr-btn-secondary:hover:not(:disabled) {
+          background: #f7f7f5;
+          border-color: #14372f;
+        }
+
+        .bqr-btn-primary {
+          background: #14372f;
+          color: #ffffff;
+          border: 1px solid #14372f;
+        }
+
+        .bqr-btn-primary:hover:not(:disabled) {
+          background: #0f2922;
+          border-color: #0f2922;
+        }
+
+        /* ─── Khung cấp mới dải tem ─── */
         .batch-qr-gen-panel {
-          padding: 16px 24px;
-          background: #f7faf8;
-          border-bottom: 1px solid #edf1ef;
+          padding: 14px 16px;
+          background: #ffffff;
+          border-bottom: 1px solid #e2e5e3;
+          flex-shrink: 0;
+        }
+
+        @media screen and (min-width: 760px) {
+          .batch-qr-gen-panel {
+            padding: 14px 24px 16px;
+          }
         }
 
         .gen-panel-title {
-          display: flex;
-          align-items: center;
-          gap: 8px;
           font-size: 13px;
           font-weight: 700;
-          color: #1b4d3e;
-          margin-bottom: 12px;
+          color: #14372f;
+          margin: 0 0 10px 0;
+          line-height: 1.35;
+          font-variant-numeric: tabular-nums;
         }
 
         .gen-panel-form {
-          display: flex;
-          align-items: flex-end;
-          gap: 14px;
-          flex-wrap: wrap;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          align-items: end;
+        }
+
+        .gen-col-count {
+          order: 1;
+        }
+
+        .gen-col-weight {
+          order: 2;
+        }
+
+        .gen-col-grade {
+          grid-column: 1 / -1;
+          order: 3;
+        }
+
+        .gen-col-submit {
+          grid-column: 1 / -1;
+          order: 4;
+          width: 100%;
+        }
+
+        @media screen and (min-width: 580px) {
+          .gen-panel-form {
+            grid-template-columns: 108px minmax(0, 1fr) 142px auto;
+          }
+
+          .gen-col-count,
+          .gen-col-grade,
+          .gen-col-weight,
+          .gen-col-submit {
+            grid-column: auto;
+            order: 0;
+            width: auto;
+          }
         }
 
         .gen-form-group {
           display: flex;
           flex-direction: column;
           gap: 5px;
+          min-width: 0;
         }
+
         .gen-form-group label {
           font-size: 11.5px;
           font-weight: 600;
-          color: #556b63;
+          color: #5f6d66;
+          line-height: 1.3;
+          white-space: nowrap;
         }
 
         .batch-qr-error {
           margin-top: 10px;
-          color: #c92a2a;
+          padding: 8px 10px;
+          border-radius: 6px;
+          border: 1px solid #e2e5e3;
+          background: #fdf2f2;
+          color: #b91c1c;
           font-size: 12.5px;
           font-weight: 500;
         }
 
+        /* ─── Vùng xem trước nhãn in ─── */
         .batch-qr-preview-area {
-          padding: 20px 24px;
-          overflow-y: auto;
-          overscroll-behavior: contain;
+          padding: 16px 16px calc(24px + env(safe-area-inset-bottom, 0px));
           flex: 1;
-          background: #eef2ef;
+          background: #f7f7f5;
+        }
+
+        @media screen and (min-width: 760px) {
+          .batch-qr-preview-area {
+            padding: 18px 24px 28px;
+          }
         }
 
         .preview-header {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: space-between;
-          margin-bottom: 16px;
+          gap: 10px;
+          margin-bottom: 12px;
+          flex-wrap: wrap;
         }
+
+        .preview-note {
+          min-width: 0;
+          flex: 1 1 240px;
+        }
+
         .preview-note strong {
           display: block;
-          font-size: 13.5px;
+          font-size: 14px;
+          font-weight: 700;
           color: #14372f;
+          line-height: 1.35;
+          font-variant-numeric: tabular-nums;
         }
+
         .preview-note span {
+          display: block;
+          margin-top: 2px;
+          font-size: 12px;
+          color: #5f6d66;
+          line-height: 1.4;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .bqr-ecc-tag {
+          display: inline-flex;
+          align-items: center;
+          height: 26px;
+          padding: 0 8px;
+          border-radius: 4px;
+          border: 1px solid #bbf7d0;
+          background: #f0fdf4;
+          color: #15803d;
           font-size: 11.5px;
-          color: #64746d;
+          font-weight: 600;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        .bqr-material-note {
+          margin-bottom: 14px;
+          padding: 10px 12px;
+          border-radius: 6px;
+          background: #ffffff;
+          border: 1px solid #e2e5e3;
+          font-size: 12px;
+          color: #5f6d66;
+          line-height: 1.5;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .bqr-material-note strong {
+          color: #14372f;
+          font-weight: 600;
         }
 
         .batch-qr-loading,
         .batch-qr-empty {
           text-align: center;
-          padding: 50px 20px;
-          color: #607d72;
-          font-size: 13.5px;
+          padding: 36px 16px;
+          background: #ffffff;
+          border: 1px solid #e2e5e3;
+          border-radius: 6px;
+          color: #5f6d66;
+          font-size: 13px;
+          line-height: 1.55;
         }
 
-        /* ─── Bản in tem Quả (Fruit) ─── */
+        .batch-qr-empty strong {
+          color: #14372f;
+        }
+
+        .qr-placeholder {
+          border: 1px solid #d4d4d2;
+          border-radius: 4px;
+          background: #f7f7f5;
+          flex-shrink: 0;
+        }
+
+        .qr-placeholder-fruit {
+          width: 76px;
+          height: 76px;
+        }
+
+        .qr-placeholder-box {
+          width: 104px;
+          height: 104px;
+        }
+
+        /* ─── Bản in tem từng quả (Fruit) ─── */
         .print-sheet-fruit {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-          gap: 14px;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 10px;
+        }
+
+        @media screen and (min-width: 480px) {
+          .print-sheet-fruit {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+          }
         }
 
         .stamp-fruit {
           background: #ffffff;
-          border-radius: 10px;
-          border: 1.5px solid #d4dfd9;
-          box-shadow: 0 3px 8px rgba(0, 0, 0, 0.04);
-          padding: 10px;
+          border-radius: 6px;
+          border: 1px solid #14372f;
+          padding: 10px 12px;
           display: flex;
           flex-direction: column;
         }
@@ -881,32 +1209,35 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          border-bottom: 1px dashed #d5ded9;
-          padding-bottom: 5px;
-          margin-bottom: 6px;
+          gap: 8px;
+          border-bottom: 1px solid #e2e5e3;
+          padding-bottom: 6px;
+          margin-bottom: 8px;
         }
 
         .fruit-stamp-brand {
           font-size: 11px;
-          font-weight: 800;
-          color: #1b4d3e;
-          letter-spacing: 0.3px;
+          font-weight: 700;
+          color: #14372f;
+          letter-spacing: 0.04em;
         }
 
         .fruit-stamp-grade {
-          background: #e8f5e9;
-          color: #1b5e20;
-          border: 1px solid #c8e6c9;
+          background: #f0fdf4;
+          color: #15803d;
+          border: 1px solid #bbf7d0;
           border-radius: 4px;
-          font-size: 9.5px;
-          font-weight: 800;
-          padding: 1px 5px;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 1px 6px;
+          white-space: nowrap;
         }
 
         .fruit-stamp-body {
-          display: flex;
+          display: grid;
+          grid-template-columns: 76px minmax(0, 1fr);
+          gap: 10px;
           align-items: center;
-          gap: 8px;
         }
 
         .fruit-qr-img {
@@ -914,111 +1245,131 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           height: 76px;
           display: block;
           border-radius: 4px;
-          border: 1px solid #e0eae4;
+          border: 1px solid #d4d4d2;
         }
 
         .fruit-stamp-details {
-          font-size: 10px;
-          color: #3b5047;
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 3px;
+          min-width: 0;
         }
 
-        .stamp-puc {
-          font-weight: 700;
-          color: #0f372a;
-          font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
+        .fruit-field {
+          display: grid;
+          grid-template-columns: 32px minmax(0, 1fr);
+          column-gap: 6px;
+          align-items: baseline;
+          font-size: 10.5px;
+          line-height: 1.35;
           font-variant-numeric: tabular-nums;
-          font-size: 9.5px;
         }
-        .stamp-crop {
-          font-weight: 600;
-          color: #166534;
+
+        .fruit-lbl {
+          color: #5f6d66;
+          font-weight: 500;
         }
-        .stamp-weight {
+
+        .fruit-val {
+          color: #14372f;
           font-weight: 700;
-          color: #222;
+          min-width: 0;
+          word-break: break-word;
+          font-variant-numeric: tabular-nums;
         }
 
         .fruit-stamp-footer {
-          margin-top: 6px;
-          padding-top: 5px;
-          border-top: 1px dashed #d5ded9;
+          margin-top: 8px;
+          padding-top: 6px;
+          border-top: 1px solid #e2e5e3;
           display: flex;
           justify-content: space-between;
           align-items: center;
+          gap: 8px;
         }
 
         .fruit-serial-code {
           font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
           font-variant-numeric: tabular-nums;
-          font-size: 10.5px;
+          font-size: 11px;
           font-weight: 700;
-          color: #1b4d3e;
+          color: #14372f;
           cursor: pointer;
         }
+
         .fruit-serial-code:hover {
           text-decoration: underline;
         }
 
         .copied-tag {
-          font-size: 9.5px;
-          color: #2e7d32;
-          font-weight: 700;
+          font-size: 10px;
+          color: #15803d;
+          font-weight: 600;
+          white-space: nowrap;
         }
 
-        /* ─── Bản in tem Thùng (Box) ─── */
+        /* ─── Bản in tem thùng (Box) ─── */
         .print-sheet-box {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-          gap: 18px;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 14px;
         }
 
         .stamp-box {
           background: #ffffff;
-          border: 2px solid #0f372a;
-          border-radius: 8px;
-          padding: 14px;
-          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+          border: 1.5px solid #14372f;
+          border-radius: 6px;
+          padding: 14px 16px;
         }
 
         .box-stamp-head {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          border-bottom: 2px solid #0f372a;
+          gap: 10px;
+          border-bottom: 1.5px solid #14372f;
           padding-bottom: 8px;
-          margin-bottom: 10px;
+          margin-bottom: 12px;
+        }
+
+        .box-brand {
+          min-width: 0;
+          flex: 1;
         }
 
         .box-brand strong {
           display: block;
-          font-size: 12.5px;
-          font-weight: 800;
-          color: #0f372a;
+          font-size: 13px;
+          font-weight: 700;
+          color: #14372f;
+          line-height: 1.3;
         }
+
         .box-brand small {
           display: block;
-          font-size: 9.5px;
-          color: #465f54;
+          margin-top: 2px;
+          font-size: 10px;
+          color: #5f6d66;
           font-weight: 600;
+          letter-spacing: 0.03em;
+          line-height: 1.35;
         }
 
         .box-stamp-grade-box {
-          background: #0f372a;
+          background: #14372f;
           color: #ffffff;
           padding: 3px 8px;
           border-radius: 4px;
           font-size: 11px;
-          font-weight: 807;
+          font-weight: 700;
           white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .box-stamp-grid {
           display: grid;
-          grid-template-columns: 110px 1fr;
-          gap: 12px;
+          grid-template-columns: 112px minmax(0, 1fr);
+          gap: 16px;
           align-items: center;
         }
 
@@ -1032,62 +1383,172 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         .box-qr-img {
           width: 104px;
           height: 104px;
-          border: 1px solid #ccc;
+          border: 1px solid #d4d4d2;
           border-radius: 4px;
+          display: block;
+          background: #ffffff;
+          flex-shrink: 0;
+        }
+
+        .box-qr-meta {
+          margin-top: 5px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
         }
 
         .box-qr-caption {
-          font-size: 8px;
+          font-size: 8.5px;
           font-weight: 700;
-          color: #0f372a;
-          margin-top: 4px;
+          color: #14372f;
+          letter-spacing: 0.04em;
           text-transform: uppercase;
+        }
+
+        .box-qr-mobile-hint {
+          display: none;
         }
 
         .box-info-col {
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 5px;
+          min-width: 0;
         }
 
         .box-field {
-          font-size: 10.5px;
-          display: flex;
-          gap: 6px;
+          display: grid;
+          grid-template-columns: 146px minmax(0, 1fr);
+          column-gap: 10px;
+          align-items: baseline;
+          font-size: 11.5px;
+          line-height: 1.4;
         }
+
         .box-field .lbl {
-          color: #555;
-          min-width: 125px;
-        }
-        .box-field .val {
-          color: #111;
+          color: #5f6d66;
           font-weight: 500;
         }
+
+        .val-wrap {
+          display: inline-flex;
+          align-items: baseline;
+          gap: 6px;
+          flex-wrap: wrap;
+          min-width: 0;
+        }
+
+        .box-field .val {
+          color: #121212;
+          font-weight: 500;
+          min-width: 0;
+          word-break: break-word;
+          font-variant-numeric: tabular-nums;
+        }
+
         .box-field strong.val {
           font-weight: 700;
-          color: #0f372a;
+          color: #14372f;
         }
+
+        .val-copyable {
+          cursor: pointer;
+        }
+
+        .val-copyable:hover,
+        .serial-highlight:hover {
+          text-decoration: underline;
+        }
+
         .serial-highlight {
           font-family: var(--font-num-stack, -apple-system, "Segoe UI", Arial, sans-serif);
           font-variant-numeric: tabular-nums;
-          color: #b45309 !important;
+          color: #9a6712 !important;
           cursor: pointer;
         }
 
         .box-stamp-foot {
           margin-top: 10px;
-          padding-top: 6px;
-          border-top: 1px solid #d5ded9;
+          padding-top: 8px;
+          border-top: 1px solid #d4d4d2;
           display: flex;
-          justify-content: space-between;
-          font-size: 9.5px;
-          color: #4a6358;
-          font-weight: 600;
-          flex-wrap: wrap;
-          gap: 6px;
+          flex-direction: column;
+          gap: 4px;
         }
-        .safe-mark {
+
+        .box-stamp-foot-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+          font-size: 11px;
+          color: #5f6d66;
+          font-weight: 500;
+          font-variant-numeric: tabular-nums;
+        }
+
+        .box-stamp-foot-meta strong {
+          color: #14372f;
+          font-weight: 600;
+        }
+
+        .box-stamp-foot-note {
+          font-size: 10.5px;
           color: #15803d;
+          font-weight: 600;
+          line-height: 1.35;
+        }
+
+        /* ─── Giao diện di động cho thẻ nhãn thùng ─── */
+        @media screen and (max-width: 500px) {
+          .stamp-box {
+            padding: 12px;
+          }
+
+          .box-stamp-grid {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 12px;
+          }
+
+          .box-qr-col {
+            flex-direction: row;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 12px;
+            padding: 8px 10px;
+            background: #f7f7f5;
+            border: 1px solid #e2e5e3;
+            border-radius: 6px;
+            text-align: left;
+          }
+
+          .box-qr-img,
+          .qr-placeholder-box {
+            width: 80px;
+            height: 80px;
+          }
+
+          .box-qr-meta {
+            margin-top: 0;
+            min-width: 0;
+          }
+
+          .box-qr-caption {
+            font-size: 10px;
+          }
+
+          .box-qr-mobile-hint {
+            display: block;
+            font-size: 11px;
+            color: #5f6d66;
+            line-height: 1.35;
+          }
+
+          .box-field {
+            grid-template-columns: 128px minmax(0, 1fr);
+            column-gap: 8px;
+          }
         }
 
         /* ─── CSS KHI IN ẤN (WINDOW.PRINT) ─── */
@@ -1113,44 +1574,29 @@ export default function BatchQrModal({ lot, onClose }: Props) {
             display: none !important;
           }
 
-          .batch-qr-overlay {
+          .batch-qr-overlay,
+          .batch-qr-overlay.pt-sheet-backdrop,
+          .batch-qr-modal,
+          .batch-qr-body,
+          .batch-qr-preview-area {
             position: static !important;
             inset: auto !important;
             display: block !important;
             width: 100% !important;
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-            background: #ffffff !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            opacity: 1 !important;
-            animation: none !important;
-          }
-
-          .batch-qr-modal {
-            position: static !important;
-            display: block !important;
-            box-shadow: none !important;
-            border: none !important;
-            border-radius: 0 !important;
-            width: 100% !important;
             max-width: 100% !important;
             height: auto !important;
+            min-height: 0 !important;
             max-height: none !important;
             overflow: visible !important;
-            transform: none !important;
-            animation: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-
-          .batch-qr-preview-area {
             background: #ffffff !important;
             padding: 0 !important;
-            overflow: visible !important;
-            height: auto !important;
-            max-height: none !important;
+            margin: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+            animation: none !important;
           }
 
           .print-sheet,
@@ -1197,6 +1643,16 @@ export default function BatchQrModal({ lot, onClose }: Props) {
             box-shadow: none !important;
             break-inside: avoid;
             page-break-inside: avoid;
+          }
+
+          .box-stamp-grid {
+            grid-template-columns: 30mm minmax(0, 1fr) !important;
+            gap: 3.5mm !important;
+          }
+
+          .box-field {
+            grid-template-columns: 36mm minmax(0, 1fr) !important;
+            font-size: 9.5px !important;
           }
 
           .box-qr-img {
