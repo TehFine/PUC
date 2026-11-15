@@ -22,8 +22,11 @@ type ReportBackendType =
 
 interface ReportSpec {
   id: string;
+  index: string;
+  category: string;
   type: ReportBackendType;
   title: string;
+  docTitle: string;
   desc: string;
   formats: string[];
 }
@@ -39,52 +42,73 @@ interface ReportDataPayload {
 const REPORTS: ReportSpec[] = [
   {
     id: "households",
+    index: "01",
+    category: "Vùng trồng",
     type: "households",
-    title: "Báo cáo danh sách hộ vùng trồng (VietGAP / GACC)",
-    desc: "Tổng hợp thông tin chủ hộ, thôn/tổ, số thửa, diện tích và trạng thái tuân thủ tiêu chuẩn",
-    formats: ["CSV (Excel)", "In / PDF"],
+    title: "Hộ vùng trồng",
+    docTitle: "Báo cáo danh sách hộ vùng trồng (VietGAP / GACC)",
+    desc: "Chủ hộ, thôn tổ, số thửa, diện tích và trạng thái chuẩn VietGAP, GACC.",
+    formats: ["Xuất CSV", "In / PDF"],
   },
   {
     id: "journal",
+    index: "02",
+    category: "Canh tác",
     type: "journal",
-    title: "Nhật ký canh tác điện tử",
-    desc: "Tổng hợp các hoạt động chăm sóc, bón phân, tỉa cành theo hộ và khoảng thời gian",
-    formats: ["CSV (Excel)", "In / PDF"],
+    title: "Nhật ký canh tác",
+    docTitle: "Báo cáo nhật ký canh tác điện tử",
+    desc: "Hoạt động chăm sóc, bón phân, tưới nước và tỉa cành theo hộ.",
+    formats: ["Xuất CSV", "In / PDF"],
   },
   {
     id: "spray",
+    index: "03",
+    category: "Bảo vệ thực vật",
     type: "spray",
-    title: "Nhật ký phun thuốc BVTV",
-    desc: "Tổng hợp lịch sử phun thuốc, hoạt chất, liều lượng, ngày cách ly và trạng thái MRL",
-    formats: ["CSV (Excel)", "In / PDF"],
+    title: "Nhật ký phun thuốc",
+    docTitle: "Báo cáo nhật ký phun thuốc BVTV",
+    desc: "Hoạt chất sử dụng, liều pha, thời gian cách ly và ngưỡng MRL.",
+    formats: ["Xuất CSV", "In / PDF"],
   },
   {
     id: "lab-tests",
+    index: "04",
+    category: "An toàn mẫu",
     type: "lab-tests",
-    title: "Kết quả kiểm nghiệm an toàn thực phẩm",
-    desc: "Dư lượng thuốc BVTV, Cadimi (Cd), Vàng O tổng hợp theo các đợt lấy mẫu",
-    formats: ["CSV (Excel)", "In / PDF"],
+    title: "Kiểm nghiệm mẫu",
+    docTitle: "Báo cáo kết quả kiểm nghiệm an toàn thực phẩm",
+    desc: "Chỉ tiêu tồn dư thuốc BVTV, Cadimi và Vàng O theo đợt lấy mẫu.",
+    formats: ["Xuất CSV", "In / PDF"],
   },
   {
     id: "violations",
+    index: "05",
+    category: "Giám sát",
     type: "violations",
-    title: "Báo cáo vi phạm & Khắc phục",
-    desc: "Danh sách cảnh báo vi phạm, phản hồi từ nông hộ và kết quả xử lý của HTX",
-    formats: ["CSV (Excel)", "In / PDF"],
+    title: "Vi phạm quy trình",
+    docTitle: "Báo cáo vi phạm và kết quả khắc phục",
+    desc: "Cảnh báo sai phạm, phản hồi từ nông hộ và kết quả xử lý của HTX.",
+    formats: ["Xuất CSV", "In / PDF"],
   },
   {
     id: "harvest",
+    index: "06",
+    category: "Truy xuất",
     type: "harvest",
-    title: "Thống kê lô thu hoạch & Xuất khẩu",
-    desc: "Sản lượng, thị trường tiêu thụ, đơn vị thu mua và trạng thái vận chuyển từng lô",
-    formats: ["CSV (Excel)", "In / PDF"],
+    title: "Lô hàng xuất khẩu",
+    docTitle: "Báo cáo thống kê lô thu hoạch và xuất khẩu",
+    desc: "Sản lượng thu mua, đơn vị đóng gói, thị trường và trạng thái vận chuyển.",
+    formats: ["Xuất CSV", "In / PDF"],
   },
   {
     id: "training-registrations",
+    index: "07",
+    category: "Đào tạo",
     type: "training-registrations",
-    title: "Báo cáo đăng ký & Điểm danh tập huấn",
-    desc: "Danh sách hộ nông dân đăng ký tham gia các lớp tập huấn kỹ thuật và trạng thái điểm danh",
-    formats: ["CSV (Excel)", "In / PDF"],
+    title: "Điểm danh tập huấn",
+    docTitle: "Báo cáo đăng ký và điểm danh lớp tập huấn",
+    desc: "Danh sách nông hộ đăng ký tham dự lớp kỹ thuật và kết quả điểm danh.",
+    formats: ["Xuất CSV", "In / PDF"],
   },
 ];
 
@@ -139,7 +163,7 @@ function buildPrintableReportHtml(
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(report.title)} - HTX Cư Né</title>
+  <title>${escapeHtml(report.docTitle)} - HTX Cư Né</title>
   <style>
     @page { size: A4 landscape; margin: 14mm; }
     * {
@@ -303,7 +327,7 @@ function buildPrintableReportHtml(
     </div>
   </div>
   <div class="doc-title-wrap">
-    <h1 class="doc-title">${escapeHtml(report.title)}</h1>
+    <h1 class="doc-title">${escapeHtml(report.docTitle)}</h1>
     <div class="doc-meta"><strong>Phạm vi khu vực:</strong> ${escapeHtml(meta.villageName)} &nbsp;|&nbsp; <strong>Kỳ báo cáo:</strong> ${escapeHtml(dateRangeLabel)}</div>
     <div class="doc-meta">${escapeHtml(report.desc)}</div>
   </div>
@@ -524,12 +548,12 @@ export default function Reports() {
     <>
       <div className="page-header">
         <div>
-          <h1>Báo Cáo</h1>
+          <h1>Báo cáo</h1>
         </div>
       </div>
 
       {/* Bộ lọc nhanh trên trang */}
-      <div className="filter-bar report-filter-bar" style={{ marginBottom: 18 }}>
+      <div className="filter-bar report-filter-bar">
         <label className="report-filter-field">
           <span className="report-filter-label">Từ ngày</span>
           <input type="date" className="filter-select" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -549,6 +573,22 @@ export default function Reports() {
             ))}
           </select>
         </label>
+        <div className="report-filter-meta">
+          {(from || villageId) && (
+            <button
+              type="button"
+              className="report-reset-btn"
+              onClick={() => {
+                setFrom("");
+                setTo(todayIso());
+                setVillageId("");
+              }}
+            >
+              Đặt lại
+            </button>
+          )}
+          <span className="report-filter-count">{String(REPORTS.length).padStart(2, "0")} biểu mẫu</span>
+        </div>
       </div>
 
       <div className="report-grid">
@@ -558,7 +598,6 @@ export default function Reports() {
             role="button"
             tabIndex={0}
             className="report-card"
-            style={{ textAlign: "left", width: "100%", cursor: "pointer" }}
             onClick={() => {
               setError(null);
               setFormat("CSV");
@@ -573,6 +612,10 @@ export default function Reports() {
               }
             }}
           >
+            <div className="report-card-eyebrow">
+              <span className="report-card-index">{r.index}</span>
+              <span className="report-card-cat">{r.category}</span>
+            </div>
             <div className="report-title">{r.title}</div>
             <div className="report-desc">{r.desc}</div>
             <div className="report-formats">
@@ -582,7 +625,7 @@ export default function Reports() {
                   <button
                     key={f}
                     type="button"
-                    className="report-format-btn"
+                    className={`report-format-btn${isPdf ? " is-pdf" : ""}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setError(null);
