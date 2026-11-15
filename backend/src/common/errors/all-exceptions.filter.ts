@@ -11,7 +11,11 @@ const PG_MESSAGES: Record<string, { status: number; message: string }> = {
   "23502": { status: 400, message: "Thiếu dữ liệu bắt buộc." },
   "22P02": { status: 400, message: "Giá trị không đúng định dạng." },
   "22007": { status: 400, message: "Ngày giờ không hợp lệ." },
+  "22008": { status: 400, message: "Ngày giờ nằm ngoài phạm vi hợp lệ." },
   "22003": { status: 400, message: "Giá trị số nằm ngoài phạm vi cho phép." },
+  "22001": { status: 400, message: "Chuỗi dữ liệu vượt quá độ dài cho phép." },
+  "22021": { status: 400, message: "Chuỗi ký tự chứa mã hóa không hợp lệ." },
+  "54000": { status: 400, message: "Dữ liệu vượt quá giới hạn xử lý của truy vấn." },
 };
 
 const STATUS_CODES: Record<number, string> = {

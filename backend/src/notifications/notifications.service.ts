@@ -1,5 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
+import { can, type Role } from "../auth/permissions";
+import { villageScope } from "../common/crud/village-scope";
 import { camelRows } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
 
@@ -52,22 +54,40 @@ export class NotificationsService {
 
   /**
    * Gửi cảnh báo tuân thủ quy trình tới Quản trị viên, Cán bộ HTX, Kiểm tra viên
-   * và Cán bộ thôn phụ trách đúng thôn của hộ dân.
+   * và Cán bộ thôn phụ trách đúng thôn của hộ dân (chỉ gửi cho vai trò có quyền đọc phân hệ tương ứng).
    */
   async notifyOversightForHousehold(householdId: number, input: NotificationInput): Promise<void> {
+    const globalCandidateRoles: Role[] = ["admin", "htx_officer", "inspector"];
+    const requiredResource =
+      input.kind === "approval" ? "approvals" : input.kind === "violation" ? "violations" : null;
+    const allowedGlobalRoles = requiredResource
+      ? globalCandidateRoles.filter((r) => can(r, requiredResource, "read"))
+      : globalCandidateRoles;
+    const allowVillageOfficer = requiredResource ? can("village_officer", requiredResource, "read") : true;
+    if (allowedGlobalRoles.length === 0 && !allowVillageOfficer) return;
+
     await this.insert(
       `SELECT u.id
        FROM users u
        WHERE u.status = 'active'
          AND (
-           u.role IN ('admin', 'htx_officer', 'inspector')
+           u.role = ANY($6::text[])
            OR (
-             u.role = 'village_officer'
+             $7::boolean
+             AND u.role = 'village_officer'
              AND u.village_id IS NOT NULL
              AND u.village_id = (SELECT h.village_id FROM households h WHERE h.id = $5)
            )
          )`,
-      [input.kind, input.title, input.body ?? null, input.link ?? null, householdId],
+      [
+        input.kind,
+        input.title,
+        input.body ?? null,
+        input.link ?? null,
+        householdId,
+        allowedGlobalRoles,
+        allowVillageOfficer,
+      ],
     );
   }
 
@@ -96,11 +116,25 @@ export class NotificationsService {
 
   async list(userOrId: AuthUser | number, limit = 50) {
     const userId = typeof userOrId === "number" ? userOrId : userOrId.id;
+    let rbacFilterSql = "";
     if (typeof userOrId !== "number") {
       if (userOrId.role === "farmer") {
         await this.syncFarmerNotifications(userOrId);
       } else {
         await this.syncStaffNotifications(userOrId);
+        const clauses: string[] = [];
+        if (!can(userOrId.role, "approvals", "read")) {
+          clauses.push(`kind <> 'approval' AND COALESCE(link, '') NOT LIKE '/admin?section=approval%'`);
+        }
+        if (!can(userOrId.role, "violations", "read")) {
+          clauses.push(`kind <> 'violation' AND COALESCE(link, '') NOT LIKE '%violationId=%'`);
+        }
+        if (!can(userOrId.role, "registrations", "read")) {
+          clauses.push(`COALESCE(link, '') NOT LIKE '/admin?section=registrations%'`);
+        }
+        if (clauses.length > 0) {
+          rbacFilterSql = ` AND ${clauses.join(" AND ")}`;
+        }
       }
     }
 
@@ -108,11 +142,11 @@ export class NotificationsService {
     const [listRes, unreadRes] = await Promise.all([
       this.db.query(
         `SELECT id, kind, title, body, link, read_at, created_at FROM notifications
-         WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`,
+         WHERE user_id = $1${rbacFilterSql} ORDER BY created_at DESC, id DESC LIMIT $2`,
         [userId, limit],
       ),
       this.db.query<{ n: number }>(
-        "SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL",
+        `SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL${rbacFilterSql}`,
         [userId],
       ),
     ]);
@@ -204,6 +238,10 @@ export class NotificationsService {
    * vào bảng notifications của cán bộ quản trị, đồng thời tự động đánh dấu đã đọc khi hồ sơ/vi phạm đã xử lý xong.
    */
   private async syncStaffNotifications(user: AuthUser): Promise<void> {
+    const canReadApprovals = can(user.role, "approvals", "read");
+    const canReadViolations = can(user.role, "violations", "read");
+    if (!canReadApprovals && !canReadViolations) return;
+
     const now = Date.now();
     const lastSync = this.lastSyncedAt.get(user.id) ?? 0;
     if (now - lastSync < NotificationsService.SYNC_THROTTLE_MS) return;
@@ -211,17 +249,14 @@ export class NotificationsService {
     this.lastSyncedAt.set(user.id, now);
 
     try {
-      const isVillageScoped = user.role === "village_officer";
-      const villageId = isVillageScoped ? (user.villageId ?? -1) : null;
-      const params: unknown[] = villageId !== null ? [user.id, villageId] : [user.id];
-      const apprScope =
-        villageId !== null
-          ? "AND a.household_id IN (SELECT id FROM households WHERE village_id = $2)"
-          : "";
-      const violScope =
-        villageId !== null
-          ? "AND v.household_id IN (SELECT id FROM households WHERE village_id = $2)"
-          : "";
+      const params: unknown[] = [user.id, canReadApprovals, canReadViolations];
+      const hhScopeCond = villageScope("h.village_id")(user, params);
+      const apprScope = hhScopeCond
+        ? `AND a.household_id IN (SELECT h.id FROM households h WHERE ${hhScopeCond})`
+        : "";
+      const violScope = hhScopeCond
+        ? `AND v.household_id IN (SELECT h.id FROM households h WHERE ${hhScopeCond})`
+        : "";
 
       // Gộp 3 bước đồng bộ thông báo quản trị vào 1 câu lệnh CTE trên 1 kết nối CSDL duy nhất
       await this.db.query(
@@ -235,7 +270,8 @@ export class NotificationsService {
              '/admin?section=approval&id=' || a.id,
              COALESCE(a.created_at, a.submitted_on::timestamptz, now())
            FROM approvals a
-           WHERE a.status = 'pending' ${apprScope}
+           WHERE $2::boolean
+             AND a.status = 'pending' ${apprScope}
              AND NOT EXISTS (
                SELECT 1 FROM notifications n
                WHERE n.user_id = $1 AND n.link = '/admin?section=approval&id=' || a.id
@@ -252,7 +288,8 @@ export class NotificationsService {
              '/admin?section=journal&violationId=' || v.id,
              COALESCE(v.detected_on::timestamptz, now())
            FROM violations v
-           WHERE v.status = 'open' ${violScope}
+           WHERE $3::boolean
+             AND v.status = 'open' ${violScope}
              AND NOT EXISTS (
                SELECT 1 FROM notifications n
                WHERE n.user_id = $1 AND n.link = '/admin?section=journal&violationId=' || v.id

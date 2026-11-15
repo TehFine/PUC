@@ -52,6 +52,29 @@ export const strictPipe = (expectedType?: Type<unknown>) =>
 export const lenientPipe = (expectedType?: Type<unknown>) =>
   new ValidationPipe({ whitelist: true, transform: true, expectedType, exceptionFactory });
 
+const UNSAFE_TEXT_CTRL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g;
+
+/** Chuẩn hóa Unicode NFC và loại bỏ ký tự NUL / điều khiển độc hại đệ quy trên mọi dữ liệu vào. */
+function sanitizeIncomingValue(value: unknown, depth = 0): unknown {
+  if (depth > 12 || value === null || value === undefined) return value;
+  if (typeof value === "string") {
+    return value.normalize("NFC").replace(UNSAFE_TEXT_CTRL_RE, "");
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeIncomingValue(item, depth + 1));
+  }
+  if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+      const cleanKey = key.normalize("NFC").replace(UNSAFE_TEXT_CTRL_RE, "");
+      out[cleanKey] = sanitizeIncomingValue(entry, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
+
 /**
  * Pipe toàn cục: body/param kiểm tra chặt; query giữ nguyên tham số lạ
  * (bộ lọc theo từng tài nguyên được đọc từ query thô).
@@ -61,14 +84,17 @@ export class AppValidationPipe implements PipeTransform {
   private readonly loose = new ValidationPipe({ transform: true, exceptionFactory });
 
   transform(value: unknown, metadata: ArgumentMetadata) {
-    return (metadata.type === "query" ? this.loose : this.strict).transform(value, metadata);
+    const cleaned = sanitizeIncomingValue(value);
+    return (metadata.type === "query" ? this.loose : this.strict).transform(cleaned, metadata);
   }
 }
 
-/** Id bản ghi: chuỗi số hợp lệ, ngược lại coi như không tìm thấy. */
+/** Id bản ghi: chuỗi số nguyên dương hợp lệ (>= 1), ngược lại coi như không tìm thấy. */
 export class ParseRecordIdPipe implements PipeTransform<string, number> {
   transform(value: string): number {
-    if (!/^\d{1,15}$/.test(value)) throw notFound();
-    return Number(value);
+    if (!/^[1-9]\d{0,14}$/.test(value)) throw notFound();
+    const num = Number(value);
+    if (!Number.isSafeInteger(num) || num < 1) throw notFound();
+    return num;
   }
 }

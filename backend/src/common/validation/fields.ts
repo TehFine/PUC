@@ -15,7 +15,14 @@ import {
   ValidateIf,
 } from "class-validator";
 
-const trim = () => Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value));
+const DANGEROUS_CTRL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g;
+
+export function cleanTextString(value: string): string {
+  return value.normalize("NFC").replace(DANGEROUS_CTRL_RE, "").trim();
+}
+
+const trim = () =>
+  Transform(({ value }: { value: unknown }) => (typeof value === "string" ? cleanTextString(value) : value));
 
 /** Chuỗi bắt buộc, đã cắt khoảng trắng đầu/cuối, không rỗng. */
 export const Text = (max = 200) => applyDecorators(trim(), IsString(), IsNotEmpty(), MaxLength(max));

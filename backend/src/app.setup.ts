@@ -32,14 +32,23 @@ export function configureApp(app: NestExpressApplication): void {
     origin: config.get("corsOrigins", { infer: true }),
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With", "X-Audit-Pass"],
     maxAge: 600,
   });
 
-  // Nhập GeoJSON địa chính có thể lớn (giới hạn 10 MB); các route khác giới hạn 1 MB.
-  app.use("/api/plots/import", json({ limit: "10mb" }));
-  app.use(json({ limit: "1mb" }));
   app.use(cookieParser());
+
+  // Nhập GeoJSON địa chính có thể lớn (giới hạn 10 MB) nhưng chỉ mở bộ đệm 10 MB khi đã có cookie phiên; các route khác giới hạn 1 MB.
+  const plotsImportJson = json({ limit: "10mb" });
+  app.use("/api/plots/import", (req: { cookies?: Record<string, unknown> }, res: unknown, next: () => void) => {
+    const hasAccessCookie = typeof req.cookies?.htx_access === "string" && req.cookies.htx_access.length > 16;
+    if (!hasAccessCookie) {
+      next();
+      return;
+    }
+    plotsImportJson(req as never, res as never, next);
+  });
+  app.use(json({ limit: "1mb" }));
   app.use(apiCompressionMiddleware);
 
   // Mặc định không lưu bộ nhớ đệm cho các API có xác thực (các route tệp sẽ ghi đè khi cần).

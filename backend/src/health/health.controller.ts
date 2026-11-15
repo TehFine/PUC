@@ -1,6 +1,7 @@
 import { Controller, Get, Optional, Res } from "@nestjs/common";
 import type { Response } from "express";
-import { Public } from "../auth/auth.decorators";
+import type { AuthUser } from "../auth/auth-user";
+import { CurrentUser, OptionalAuth } from "../auth/auth.decorators";
 import { DatabaseService } from "../database/database.service";
 import { SystemAlertsService } from "../notifications/system-alerts.service";
 
@@ -11,12 +12,33 @@ export class HealthController {
     @Optional() private readonly systemAlerts?: SystemAlertsService,
   ) {}
 
-  @Public()
+  @OptionalAuth()
   @Get()
-  async check(@Res({ passthrough: true }) res: Response) {
+  async check(@CurrentUser() user: AuthUser | undefined, @Res({ passthrough: true }) res: Response) {
     try {
       await this.db.query("SELECT 1");
-      const alert = (await this.systemAlerts?.getActive()) ?? null;
+      const rawAlert = (await this.systemAlerts?.getActive()) ?? null;
+      const visible =
+        rawAlert &&
+        (rawAlert.audience === "all" ||
+          (rawAlert.audience === "farmer" && user?.role === "farmer") ||
+          (rawAlert.audience === "staff" && Boolean(user && user.role !== "farmer")));
+
+      const alert = visible
+        ? {
+            id: rawAlert.id,
+            severity: rawAlert.severity,
+            title: rawAlert.title,
+            message: rawAlert.message,
+            audience: rawAlert.audience,
+            active: rawAlert.active,
+            createdBy: null,
+            createdByName: null,
+            resolvedBy: null,
+            resolvedAt: null,
+            createdAt: rawAlert.createdAt,
+          }
+        : null;
       return { status: "ok", database: "up", alert };
     } catch {
       res.status(503);

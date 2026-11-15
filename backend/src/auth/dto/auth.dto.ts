@@ -1,17 +1,46 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
+import {
+  buildMessage,
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+  ValidateBy,
+} from "class-validator";
 import { Transform } from "class-transformer";
 import { OptionalText, RecordId, Text } from "../../common/validation/fields";
 
+const MAX_PASSWORD_UTF8_BYTES = 72;
+
+const NormalizePassword = () =>
+  Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.normalize("NFC") : value));
+
+function MaxPasswordUtf8Bytes(maxBytes = MAX_PASSWORD_UTF8_BYTES) {
+  return ValidateBy({
+    name: "maxPasswordUtf8Bytes",
+    constraints: [maxBytes],
+    validator: {
+      validate(value: unknown): boolean {
+        return typeof value === "string" && Buffer.byteLength(value, "utf8") <= maxBytes;
+      },
+      defaultMessage: buildMessage(() => `Mật khẩu tối đa ${maxBytes} byte UTF-8.`),
+    },
+  });
+}
+
 export class LoginDto {
-  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value))
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.normalize("NFC").trim() : value))
   @IsString()
   @IsNotEmpty()
   @MaxLength(64)
   username!: string;
 
+  @NormalizePassword()
   @IsString()
   @IsNotEmpty()
-  @MaxLength(200)
+  @MaxPasswordUtf8Bytes()
   password!: string;
 }
 
@@ -30,14 +59,16 @@ export class GoogleLoginDto {
 }
 
 export class ChangePasswordDto {
+  @NormalizePassword()
   @IsString()
   @IsNotEmpty()
-  @MaxLength(200)
+  @MaxPasswordUtf8Bytes()
   currentPassword!: string;
 
+  @NormalizePassword()
   @IsString()
   @MinLength(8, { message: "Mật khẩu mới cần tối thiểu 8 ký tự." })
-  @MaxLength(200)
+  @MaxPasswordUtf8Bytes()
   @Matches(/[A-Za-z]/, { message: "Mật khẩu mới cần có chữ cái." })
   @Matches(/[0-9]/, { message: "Mật khẩu mới cần có chữ số." })
   newPassword!: string;
@@ -61,11 +92,12 @@ export class UpdateProfileDto {
 
   /** Bắt buộc khi thay đổi hoặc gỡ địa chỉ email liên kết OAuth. */
   @IsOptional()
+  @NormalizePassword()
   @IsString()
-  @MaxLength(200)
+  @MaxPasswordUtf8Bytes()
   currentPassword?: string;
 
-  /** Tùy chọn: Google ID Token để xác minh quyền sở hữu hộp thư mới khi liên kết. */
+  /** Google ID Token bắt buộc để xác minh quyền sở hữu hộp thư mới khi liên kết. */
   @IsOptional()
   @IsString()
   @MaxLength(4096)
@@ -83,9 +115,10 @@ export class RegisterDto {
   @Matches(/^0[0-9]{9}$/, { message: "Số điện thoại gồm 10 chữ số, bắt đầu bằng 0." })
   phone!: string;
 
+  @NormalizePassword()
   @IsString()
   @MinLength(8, { message: "Mật khẩu cần tối thiểu 8 ký tự." })
-  @MaxLength(200)
+  @MaxPasswordUtf8Bytes()
   @Matches(/[A-Za-z]/, { message: "Mật khẩu cần có chữ cái." })
   @Matches(/[0-9]/, { message: "Mật khẩu cần có chữ số." })
   password!: string;
@@ -110,10 +143,14 @@ export class RegisterDto {
   note?: string | null;
 }
 
+export { RegisterDto as RegisterFarmerDto };
+
 /** Khôi phục mật khẩu tức thì bằng đối chiếu SĐT / tên đăng nhập + số CCCD 12 chữ số của chủ hộ. */
 export class ForgotPasswordCccdDto {
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === "string" ? value.trim().replace(/^0[0-9\s.-]+$/, (s) => s.replace(/[\s.-]/g, "")) : value,
+    typeof value === "string"
+      ? value.normalize("NFC").trim().replace(/^0[0-9\s.-]+$/, (s) => s.replace(/[\s.-]/g, ""))
+      : value,
   )
   @IsString()
   @IsNotEmpty({ message: "Vui lòng nhập số điện thoại hoặc tên đăng nhập." })
@@ -125,18 +162,29 @@ export class ForgotPasswordCccdDto {
   @Matches(/^[0-9]{12}$/, { message: "Số Căn cước công dân (CCCD) gồm đúng 12 chữ số." })
   cccd!: string;
 
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.normalize("NFC").trim() : value))
+  @IsString()
+  @MaxLength(120)
+  fullName?: string;
+
+  @NormalizePassword()
   @IsString()
   @MinLength(8, { message: "Mật khẩu mới cần tối thiểu 8 ký tự." })
-  @MaxLength(200)
+  @MaxPasswordUtf8Bytes()
   @Matches(/[A-Za-z]/, { message: "Mật khẩu mới cần có chữ cái." })
   @Matches(/[0-9]/, { message: "Mật khẩu mới cần có chữ số." })
   newPassword!: string;
 }
 
+export { ForgotPasswordCccdDto as ForgotPasswordVerifyCccdDto };
+
 /** Gửi yêu cầu cấp lại mật khẩu chờ cán bộ HTX / quản trị viên phê duyệt. */
 export class ForgotPasswordRequestDto {
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === "string" ? value.trim().replace(/^0[0-9\s.-]+$/, (s) => s.replace(/[\s.-]/g, "")) : value,
+    typeof value === "string"
+      ? value.normalize("NFC").trim().replace(/^0[0-9\s.-]+$/, (s) => s.replace(/[\s.-]/g, ""))
+      : value,
   )
   @IsString()
   @IsNotEmpty({ message: "Vui lòng nhập số điện thoại hoặc tên đăng nhập." })
@@ -146,12 +194,12 @@ export class ForgotPasswordRequestDto {
   @Text(100)
   fullName!: string;
 
+  /** Giữ tùy chọn để tương thích ngược với client cũ; backend tuyệt đối không lưu hoặc áp dụng giá trị này. */
+  @IsOptional()
+  @NormalizePassword()
   @IsString()
-  @MinLength(8, { message: "Mật khẩu mới cần tối thiểu 8 ký tự." })
-  @MaxLength(200)
-  @Matches(/[A-Za-z]/, { message: "Mật khẩu mới cần có chữ cái." })
-  @Matches(/[0-9]/, { message: "Mật khẩu mới cần có chữ số." })
-  newPassword!: string;
+  @MaxPasswordUtf8Bytes()
+  newPassword?: string;
 
   @OptionalText(300)
   note?: string | null;
@@ -184,8 +232,9 @@ export class EnableTwoFactorDto {
 /** Tắt xác thực 2 lớp (yêu cầu mật khẩu hiện tại hoặc mã OTP 6 chữ số đang hiệu lực). */
 export class DisableTwoFactorDto {
   @IsOptional()
+  @NormalizePassword()
   @IsString()
-  @MaxLength(200)
+  @MaxPasswordUtf8Bytes()
   currentPassword?: string;
 
   @IsOptional()
