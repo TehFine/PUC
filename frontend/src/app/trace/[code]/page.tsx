@@ -8,11 +8,11 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
   const { code } = await params;
   const decoded = safeDecodeURIComponent(code);
   return {
-    title: `Truy xuất nguồn gốc Lô hàng ${decoded} | HTX Sầu Riêng Cư Né`,
-    description: `Hồ sơ kiểm định minh bạch, mã số vùng trồng PUC, kết quả kiểm nghiệm Cadimi, Vàng O và nhật ký canh tác cho lô sầu riêng ${decoded}.`,
+    title: `Truy xuất nguồn gốc ${decoded} | HTX Sầu Riêng Cư Né`,
+    description: `Hồ sơ truy xuất nguồn gốc ${decoded}: mã số vùng trồng PUC, cơ sở đóng gói, dòng thời gian 5 bước và kết quả kiểm nghiệm Cadimi, Vàng O.`,
     openGraph: {
-      title: `Chứng nhận xuất xứ Lô sầu riêng ${decoded} – HTX Cư Né`,
-      description: "Quét mã QR truy xuất nguồn gốc nông sản chính ngạch theo chuẩn GACC và VietGAP.",
+      title: `Chứng thực nguồn gốc sầu riêng ${decoded} - HTX Cư Né`,
+      description: "Quét mã QR truy xuất nguồn gốc theo lô/thùng chuẩn VietGAP, GACC và Cổng Truy xuất Quốc gia.",
     },
   };
 }

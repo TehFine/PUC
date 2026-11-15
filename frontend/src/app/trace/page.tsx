@@ -14,23 +14,48 @@ import "@/components/landing/swiss-landing.css";
 import "./swiss-trace.css";
 
 interface SampleLot {
-  sampleType?: "lot" | "plot";
+  sampleType?: "lot";
   code: string;
+  qrToken?: string | null;
+  variety?: string | null;
   harvestedOn: string | null;
   weightKg: number | null;
-  areaHa?: number | null;
-  buyer: string | null;
+  packhouseCode?: string | null;
+  producerLabel?: string | null;
   market: string | null;
   status: string | null;
 }
 
 interface SampleStamp {
+  unitType?: "box" | "fruit";
   code: string;
-  issuedAt: string | null;
-  lotCode: string | null;
+  qrToken?: string | null;
   weightKg: number | null;
   grade: string | null;
-  householdName: string;
+  issuedAt: string | null;
+  lotCode: string | null;
+  producerLabel: string;
+}
+
+function resolveTraceInputHref(rawInput: string): string | null {
+  const trimmed = rawInput.trim();
+  if (!trimmed) return null;
+
+  const tokenPathMatch = /(?:^|\/)t\/([A-Za-z0-9_-]{6,64})(?:[/?#]|$)/.exec(trimmed);
+  if (tokenPathMatch?.[1]) {
+    return `/t/${encodeURIComponent(tokenPathMatch[1])}`;
+  }
+
+  const tracePathMatch = /(?:^|\/)trace\/([^/?#\s]+)(?:[/?#]|$)/.exec(trimmed);
+  if (tracePathMatch?.[1]) {
+    return `/trace/${encodeURIComponent(decodeURIComponent(tracePathMatch[1]))}`;
+  }
+
+  if (/^[A-Za-z0-9]{12,24}$/.test(trimmed) && /[a-z]/.test(trimmed) && /[A-Z0-9]/.test(trimmed)) {
+    return `/t/${encodeURIComponent(trimmed)}`;
+  }
+
+  return `/trace/${encodeURIComponent(trimmed)}`;
 }
 
 interface TraceSamplesResponse {
@@ -106,9 +131,6 @@ function formatLotScaleLine(lot: SampleLot): string | null {
   if (lot.weightKg !== null && lot.weightKg !== undefined && Number(lot.weightKg) > 0) {
     return `Sản lượng: ${Number(lot.weightKg).toLocaleString("vi-VN")} kg`;
   }
-  if (lot.areaHa !== null && lot.areaHa !== undefined && Number(lot.areaHa) > 0) {
-    return `Diện tích: ${Number(lot.areaHa).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha`;
-  }
   return null;
 }
 
@@ -143,21 +165,38 @@ export default function TraceLookupPage() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const trimmed = code.trim();
-    if (!trimmed) return;
-    router.push(`/trace/${encodeURIComponent(trimmed)}`);
+    const targetHref = resolveTraceInputHref(code);
+    if (!targetHref) return;
+    router.push(targetHref);
   };
 
   const lots = useMemo(() => samples?.lots ?? [], [samples]);
   const stamps = useMemo(() => samples?.stamps ?? [], [samples]);
 
-  const quickCodes = useMemo(() => {
-    const picked: string[] = [];
+  const quickSamples = useMemo(() => {
+    const picked: Array<{ label: string; href: string }> = [];
+    const seen = new Set<string>();
     for (const lot of lots.slice(0, 2)) {
-      if (lot.code && !picked.includes(lot.code)) picked.push(lot.code);
+      if (lot.code && !seen.has(lot.code)) {
+        seen.add(lot.code);
+        picked.push({
+          label: lot.code,
+          href: lot.qrToken
+            ? `/t/${encodeURIComponent(lot.qrToken)}`
+            : `/trace/${encodeURIComponent(lot.code)}`,
+        });
+      }
     }
     for (const st of stamps.slice(0, 2)) {
-      if (st.code && !picked.includes(st.code)) picked.push(st.code);
+      if (st.code && !seen.has(st.code)) {
+        seen.add(st.code);
+        picked.push({
+          label: st.code,
+          href: st.qrToken
+            ? `/t/${encodeURIComponent(st.qrToken)}`
+            : `/trace/${encodeURIComponent(st.code)}`,
+        });
+      }
     }
     return picked.slice(0, 4);
   }, [lots, stamps]);
@@ -180,8 +219,8 @@ export default function TraceLookupPage() {
 
           <nav className="sw-trace-nav" aria-label="Điều hướng cổng truy xuất">
             <a href="#tra-cuu-ma">Tra cứu mã</a>
-            <a href="#ho-so-mau">Hồ sơ gần đây</a>
-            <a href="#tieu-chuan">Ba lớp đối chiếu</a>
+            <a href="#ho-so-mau">Lô &amp; thùng mẫu</a>
+            <a href="#tieu-chuan">Ba cấp truy xuất</a>
           </nav>
 
           <div className="sw-trace-top-actions">
@@ -203,20 +242,20 @@ export default function TraceLookupPage() {
       </header>
 
       <main>
-        {/* ─── KHU VỰC MỞ ĐẦU: LƯỚI 4 CỘT (2 CỘT TRA CỨU · 2 CỘT NHIẾP ẢNH SẦU RIÊNG QR) ─── */}
+        {/* ─── KHU VỰC MỞ ĐẦU: LƯỚI 4 CỘT (2 CỘT TRA CỨU - 2 CỘT NHIẾP ẢNH SẦU RIÊNG QR) ─── */}
         <section id="tra-cuu-ma" className="sw-section sw-trace-hero-sec" aria-labelledby="trace-hero-title">
           <div className="sw-grid sw-trace-hero-row">
             <div className="sw-cell sw-col-1-2 sw-trace-hero-panel">
               <div className="sw-trace-hero-head">
-                <span className="sw-trace-kicker">Truy xuất nguồn gốc - HTX Cư Né</span>
+                <span className="sw-trace-kicker">Truy xuất nguồn gốc theo lô - HTX Cư Né</span>
               </div>
 
               <div className="sw-trace-hero-body">
                 <h1 id="trace-hero-title" className="sw-trace-title">
-                  Tra cứu mã lô &amp; tem QR
+                  Tra cứu mã lô &amp; thùng QR
                 </h1>
                 <p className="sw-trace-lead">
-                  Nhập mã trên tem hoặc lô hàng để xem vùng trồng và kết quả kiểm nghiệm.
+                  Nhập mã lô hàng, mã thùng đóng gói hoặc mã QR để xem vùng trồng, dòng thời gian 5 bước và phiếu kiểm nghiệm.
                 </p>
 
                 <form onSubmit={handleSubmit} className="sw-trace-form" role="search">
@@ -240,8 +279,8 @@ export default function TraceLookupPage() {
                       type="text"
                       value={code}
                       onChange={(e) => setCode(e.target.value)}
-                      placeholder="Nhập mã lô, mã thửa hoặc tem QR..."
-                      aria-label="Mã lô, mã thửa vườn hoặc mã tem truy xuất"
+                      placeholder="Nhập token /t/..., mã lô chữ hoặc mã thùng..."
+                      aria-label="Token QR chống giả, mã lô hàng hoặc mã thùng đóng gói"
                       className="sw-trace-input"
                       autoComplete="off"
                       spellCheck={false}
@@ -262,16 +301,16 @@ export default function TraceLookupPage() {
                   </button>
                 </form>
 
-                {quickCodes.length > 0 && (
+                {quickSamples.length > 0 && (
                   <div className="sw-trace-quick" aria-label="Mã mẫu tra cứu nhanh">
                     <span className="sw-trace-quick-label">Mã mẫu:</span>
-                    {quickCodes.slice(0, 3).map((sampleCode) => (
+                    {quickSamples.slice(0, 3).map((sample) => (
                       <Link
-                        key={sampleCode}
-                        href={`/trace/${encodeURIComponent(sampleCode)}`}
+                        key={sample.label}
+                        href={sample.href}
                         className="sw-trace-chip"
                       >
-                        {sampleCode}
+                        {sample.label}
                       </Link>
                     ))}
                   </div>
@@ -279,8 +318,8 @@ export default function TraceLookupPage() {
               </div>
 
               <div className="sw-trace-hero-foot">
-                <span className="sw-micro">HTX Nông nghiệp Cư Né - Krông Búk, Đắk Lắk</span>
-                <span className="sw-micro">Đối chiếu trực tuyến</span>
+                <span className="sw-micro">HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né</span>
+                <span className="sw-micro">Chuẩn liên thông Cổng Truy xuất Quốc gia</span>
               </div>
             </div>
 
@@ -301,7 +340,7 @@ export default function TraceLookupPage() {
             <div className="sw-cell sw-col-2-3 sw-head-main">
               <span className="sw-sec-index">01 / Hồ sơ xác thực</span>
               <h2 id="hosomau-title" className="sw-sec-title">
-                Lô thu hoạch &amp; Tem QR gần đây
+                Lô xuất xưởng &amp; Thùng đóng gói gần đây
               </h2>
             </div>
             <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
@@ -325,7 +364,7 @@ export default function TraceLookupPage() {
                 className={`sw-tab-pill ${tab === "lots" ? "is-active" : ""}`}
                 onClick={() => setTab("lots")}
               >
-                Lô &amp; Thửa vườn {!loading && lots.length > 0 ? `(${lots.length})` : ""}
+                Lô xuất xưởng {!loading && lots.length > 0 ? `(${lots.length})` : ""}
               </button>
               <button
                 type="button"
@@ -334,62 +373,63 @@ export default function TraceLookupPage() {
                 className={`sw-tab-pill ${tab === "stamps" ? "is-active" : ""}`}
                 onClick={() => setTab("stamps")}
               >
-                Tem QR {!loading && stamps.length > 0 ? `(${stamps.length})` : ""}
+                Thùng &amp; Tem mẫu {!loading && stamps.length > 0 ? `(${stamps.length})` : ""}
               </button>
             </div>
           </div>
 
           <div className="sw-trace-dossier-grid">
             {loading ? (
-              <div className="sw-trace-state">Đang tải danh sách hồ sơ xác thực gần đây…</div>
+              <div className="sw-trace-state">Đang tải danh sách lô hàng và thùng đóng gói gần đây…</div>
             ) : (showLots ? visibleLots.length : 0) + (showStamps ? visibleStamps.length : 0) === 0 ? (
               <div className="sw-trace-state">
-                Chưa có hồ sơ mẫu trong mục này. Quý khách có thể nhập trực tiếp mã lô hoặc mã tem ở khung tra cứu phía trên.
+                Chưa có hồ sơ mẫu trong mục này. Quý khách có thể nhập trực tiếp mã lô hoặc mã thùng ở khung tra cứu phía trên.
               </div>
             ) : (
               <>
                 {showLots &&
                   visibleLots.map((lot) => {
                     const scaleLine = formatLotScaleLine(lot);
-                    const isPlot = lot.sampleType === "plot";
+                    const isRevoked = lot.status === "revoked";
                     const dateLabel = formatViDate(lot.harvestedOn);
-                    const footLabel = dateLabel
-                      ? `Ngày ${dateLabel}`
-                      : isPlot
-                        ? ""
-                        : "Hồ sơ lô hàng";
+                    const footLabel = dateLabel ? `Thu hoạch ${dateLabel}` : "Hồ sơ lô hàng";
+                    const cardHref = lot.qrToken
+                      ? `/t/${encodeURIComponent(lot.qrToken)}`
+                      : `/trace/${encodeURIComponent(lot.code)}`;
                     return (
                       <Link
                         key={`lot-${lot.code}`}
-                        href={`/trace/${encodeURIComponent(lot.code)}`}
+                        href={cardHref}
                         className="sw-trace-card"
                       >
                         <div className="sw-trace-card-top">
                           <span className="sw-trace-card-kind">
-                            {isPlot ? "Thửa vườn PUC" : "Lô thu hoạch"}
+                            {isRevoked ? "Lô đã thu hồi" : "Lô hàng xuất xưởng"}
                           </span>
                         </div>
 
                         <div className="sw-trace-card-main">
                           <h3 className="sw-trace-card-code">{lot.code}</h3>
                           <span className="sw-trace-card-owner">
-                            {lot.buyer || "HTX Nông nghiệp Cư Né"}
+                            {lot.producerLabel || "HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né"}
                           </span>
                           <div className="sw-trace-card-meta">
-                            {scaleLine && <span>{scaleLine}</span>}
                             <span>
-                              {isPlot
-                                ? `Mã vùng: ${lot.market || "66-PUC-SR0001-00728"}`
-                                : `Thị trường: ${lot.market || "Xuất khẩu chính ngạch"}`}
+                              Giống: {lot.variety || "Ri6 & Monthong"}
+                              {scaleLine ? ` - ${scaleLine}` : ""}
                             </span>
+                            <span>
+                              Mã CSĐG: {lot.packhouseCode || "VN-DLPH-0089"} ({lot.market || "Xuất khẩu"})
+                            </span>
+                            {lot.qrToken && (
+                              <span>Đường dẫn QR chống giả: /t/{lot.qrToken}</span>
+                            )}
                           </div>
                         </div>
 
                         <div className="sw-trace-card-foot">
-                          {footLabel && (
-                            <span className="sw-trace-card-date">{footLabel}</span>
-                          )}
-                          <span className="sw-trace-card-cta">Xem hồ sơ</span>
+                          <span className="sw-trace-card-date">{footLabel}</span>
+                          <span className="sw-trace-card-cta">Xem hồ sơ lô</span>
                         </div>
                       </Link>
                     );
@@ -398,38 +438,49 @@ export default function TraceLookupPage() {
                 {showStamps &&
                   visibleStamps.map((stamp) => {
                     const dateLabel = formatViDate(stamp.issuedAt);
+                    const isBox = stamp.unitType === "box";
                     const stampScaleLine =
                       stamp.weightKg !== null && stamp.weightKg !== undefined
-                        ? `Khối lượng: ${Number(stamp.weightKg).toLocaleString("vi-VN")} kg`
+                        ? `Khối lượng: ${Number(stamp.weightKg).toLocaleString("vi-VN")} kg${isBox ? " / Thùng" : " / Quả"}`
                         : `Phân hạng: Hạng ${stamp.grade || "A"}`;
+                    const cardHref = stamp.qrToken
+                      ? `/t/${encodeURIComponent(stamp.qrToken)}`
+                      : `/trace/${encodeURIComponent(stamp.code)}`;
                     return (
                       <Link
                         key={`stamp-${stamp.code}`}
-                        href={`/trace/${encodeURIComponent(stamp.code)}`}
+                        href={cardHref}
                         className="sw-trace-card"
                       >
                         <div className="sw-trace-card-top">
-                          <span className="sw-trace-card-kind">Tem QR nông hộ</span>
+                          <span className="sw-trace-card-kind">
+                            {isBox ? "Thùng đóng gói định danh lô" : "Tem quả - Dòng cao cấp"}
+                          </span>
                         </div>
 
                         <div className="sw-trace-card-main">
                           <h3 className="sw-trace-card-code">{stamp.code}</h3>
-                          <span className="sw-trace-card-owner">Hộ {stamp.householdName}</span>
+                          <span className="sw-trace-card-owner">
+                            {stamp.producerLabel || "HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né"}
+                          </span>
                           <div className="sw-trace-card-meta">
                             <span>{stampScaleLine}</span>
                             <span>
                               {stamp.lotCode
-                                ? `Gắn thửa vườn: ${stamp.lotCode}`
-                                : "Định danh quả sầu riêng tại vườn"}
+                                ? `Thuộc lô: ${stamp.lotCode}`
+                                : "Thương hiệu riêng HTX Cư Né"}
                             </span>
+                            {stamp.qrToken && (
+                              <span>Đường dẫn QR chống giả: /t/{stamp.qrToken}</span>
+                            )}
                           </div>
                         </div>
 
                         <div className="sw-trace-card-foot">
                           <span className="sw-trace-card-date">
-                            {dateLabel ? `Cấp ${dateLabel}` : "Tem điện tử"}
+                            {dateLabel ? `Ngày ${dateLabel}` : "Định danh điện tử"}
                           </span>
-                          <span className="sw-trace-card-cta">Kiểm tra tem</span>
+                          <span className="sw-trace-card-cta">Kiểm tra mã</span>
                         </div>
                       </Link>
                     );
@@ -439,14 +490,14 @@ export default function TraceLookupPage() {
           </div>
         </section>
 
-        {/* ─── 02. BA LỚP ĐỐI CHIẾU MINH BẠCH ─── */}
+        {/* ─── 02. BA CẤP ĐỘ PHÂN QUYỀN TRUY XUẤT TRÊN CÙNG MÃ QR ─── */}
         <section id="tieu-chuan" className="sw-section" aria-labelledby="tieuchuan-title">
           <header className="sw-grid sw-sec-head">
             <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
             <div className="sw-cell sw-col-2-3 sw-head-main">
-              <span className="sw-sec-index">02 / Minh bạch</span>
+              <span className="sw-sec-index">02 / Phân quyền bảo mật</span>
               <h2 id="tieuchuan-title" className="sw-sec-title">
-                Ba lớp đối chiếu nguồn gốc
+                Ba cấp độ khi quét cùng một mã QR
               </h2>
             </div>
             <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
@@ -454,34 +505,34 @@ export default function TraceLookupPage() {
 
           <div className="sw-grid sw-checker-row sw-trace-pillars">
             <div className="sw-cell sw-col-1 sw-between">
-              <span className="sw-micro">01 - Định danh địa lý</span>
+              <span className="sw-micro">01 - Công khai</span>
               <div className="sw-caption-block">
-                <h3 className="sw-caption-title">Mã số vùng trồng</h3>
+                <h3 className="sw-caption-title">Người tiêu dùng &amp; Nhà nhập khẩu</h3>
                 <p className="sw-caption-meta">
-                  <span>Đo đạc tọa độ ranh giới GPS</span>
-                  <span>Định danh đúng hộ thành viên</span>
+                  <span>Nhận diện lô, mã vùng PUC, cơ sở đóng gói</span>
+                  <span>Dòng thời gian 5 bước &amp; bản scan kiểm nghiệm</span>
                 </p>
               </div>
             </div>
 
             <div className="sw-cell sw-col-2 sw-between">
-              <span className="sw-micro">02 - Giám sát thực địa</span>
+              <span className="sw-micro">02 - Doanh nghiệp</span>
               <div className="sw-caption-block">
-                <h3 className="sw-caption-title">Nhật ký canh tác</h3>
+                <h3 className="sw-caption-title">Cơ sở đóng gói &amp; Nhà phân phối</h3>
                 <p className="sw-caption-meta">
-                  <span>Lưu vết phân bón &amp; thuốc BVTV</span>
-                  <span>Kiểm soát ngày cách ly an toàn</span>
+                  <span>Các vùng nguồn tham gia lô &amp; sản lượng từng vùng</span>
+                  <span>Trạng thái kiểm nghiệm chi tiết &amp; chuỗi lạnh</span>
                 </p>
               </div>
             </div>
 
             <div className="sw-cell sw-col-3 sw-between">
-              <span className="sw-micro">03 - An toàn thực phẩm</span>
+              <span className="sw-micro">03 - Cơ quan quản lý</span>
               <div className="sw-caption-block">
-                <h3 className="sw-caption-title">Kiểm nghiệm độc lập</h3>
+                <h3 className="sw-caption-title">Chi cục, Cán bộ xã &amp; Thanh tra</h3>
                 <p className="sw-caption-meta">
-                  <span>Xét nghiệm Cadimi &amp; Vàng O</span>
-                  <span>Đạt chuẩn dư lượng trước cắt trái</span>
+                  <span>Danh sách hộ, ranh giới thửa GIS &amp; nhật ký phun</span>
+                  <span>Biên bản kiểm tra - Ghi nhật ký mọi lượt xem</span>
                 </p>
               </div>
             </div>

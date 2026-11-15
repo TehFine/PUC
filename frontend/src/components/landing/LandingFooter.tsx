@@ -18,6 +18,15 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
     e.preventDefault();
     const trimmed = query.trim();
     if (trimmed) {
+      const tokenPathMatch = /(?:^|\/)t\/([A-Za-z0-9_-]{6,64})(?:[/?#]|$)/.exec(trimmed);
+      if (tokenPathMatch?.[1]) {
+        router.push(`/t/${encodeURIComponent(tokenPathMatch[1])}`);
+        return;
+      }
+      if (/^[A-Za-z0-9]{12,24}$/.test(trimmed) && /[a-z]/.test(trimmed) && /[A-Z0-9]/.test(trimmed)) {
+        router.push(`/t/${encodeURIComponent(trimmed)}`);
+        return;
+      }
       router.push(`/trace/${encodeURIComponent(trimmed)}`);
       return;
     }
