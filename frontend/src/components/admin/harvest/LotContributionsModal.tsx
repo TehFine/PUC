@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { formatVn, toNumber } from "@/components/admin/catalog/form-utils";
 import { FormGrid, NumberField, SelectField, TextField } from "@/components/ui/form/fields";
-import { FormError, Modal } from "@/components/ui/Modal";
+import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { useApi, useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
@@ -102,9 +102,12 @@ export default function LotContributionsModal({
     }
   };
 
+  const [deletingItem, setDeletingItem] = useState<HarvestContributionRecord | null>(null);
+
   const handleDelete = async (cid: number) => {
     if (await removeMutation.run(cid)) {
       toast.success("Đã xóa đóng góp khỏi lô.");
+      setDeletingItem(null);
       await contribState.refresh();
       onChanged();
     }
@@ -279,7 +282,7 @@ export default function LotContributionsModal({
                         type="button"
                         className="btn btn-danger btn-sm"
                         disabled={removeMutation.pending}
-                        onClick={() => void handleDelete(item.id)}
+                        onClick={() => setDeletingItem(item)}
                       >
                         Xóa
                       </button>
@@ -291,6 +294,27 @@ export default function LotContributionsModal({
           </tbody>
         </table>
       </div>
+      {deletingItem && (
+        <ConfirmDialog
+          title="Xóa đóng góp sản lượng"
+          message={
+            <>
+              Xác nhận xóa khoản đóng góp{" "}
+              <strong>{formatVn(Number(deletingItem.weightKg), 1)} kg</strong> của hộ{" "}
+              <strong>{deletingItem.householdName || deletingItem.householdCode || `#${deletingItem.householdId}`}</strong> khỏi lô{" "}
+              <strong>{lot.code}</strong>?
+            </>
+          }
+          confirmLabel="Xóa"
+          danger
+          pending={removeMutation.pending}
+          error={removeMutation.error}
+          onConfirm={() => void handleDelete(deletingItem.id)}
+          onClose={() => {
+            if (!removeMutation.pending) setDeletingItem(null);
+          }}
+        />
+      )}
     </Modal>
   );
 }

@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { ConfirmDialog } from "@/components/ui/Modal";
 import { formatHa } from "@/utils/plot-utils";
 import type { Mode, PreviewState } from "./map-types";
 
@@ -24,6 +26,8 @@ export default function DrawHint({
   onClearVertices,
   onResetOriginal,
 }: DrawHintProps) {
+  const [confirmKind, setConfirmKind] = useState<"undo" | "clear" | null>(null);
+
   const title =
     mode === "draw"
       ? "Vẽ thửa mới"
@@ -79,8 +83,8 @@ export default function DrawHint({
           {onUndoVertex && (
             <button
               type="button"
-              className="btn btn-outline btn-sm"
-              onClick={onUndoVertex}
+              className="btn btn-danger btn-sm"
+              onClick={() => setConfirmKind("undo")}
               disabled={preview.points <= 3 || saving}
               title="Xóa đỉnh cuối cùng"
             >
@@ -90,8 +94,8 @@ export default function DrawHint({
           {onClearVertices && (
             <button
               type="button"
-              className="btn btn-outline btn-sm"
-              onClick={onClearVertices}
+              className="btn btn-danger btn-sm"
+              onClick={() => setConfirmKind("clear")}
               disabled={saving}
               title="Xóa toàn bộ đỉnh hiện tại để bấm vẽ lại từ đầu trên bản đồ"
             >
@@ -126,6 +130,33 @@ export default function DrawHint({
                 : "Hoàn tất"}
         </button>
       </div>
+
+      {confirmKind === "undo" && onUndoVertex && (
+        <ConfirmDialog
+          title="Xóa đỉnh thửa đất"
+          message="Xác nhận xóa đỉnh cuối cùng trên hình đa giác đang chỉnh sửa?"
+          confirmLabel="Xóa đỉnh"
+          danger
+          onConfirm={() => {
+            onUndoVertex();
+            setConfirmKind(null);
+          }}
+          onClose={() => setConfirmKind(null)}
+        />
+      )}
+      {confirmKind === "clear" && onClearVertices && (
+        <ConfirmDialog
+          title="Xóa toàn bộ đỉnh đang vẽ"
+          message="Xác nhận xóa toàn bộ đỉnh hiện tại để chấm vẽ lại ranh thửa từ đầu?"
+          confirmLabel="Xóa và vẽ lại"
+          danger
+          onConfirm={() => {
+            onClearVertices();
+            setConfirmKind(null);
+          }}
+          onClose={() => setConfirmKind(null)}
+        />
+      )}
     </div>
   );
 }

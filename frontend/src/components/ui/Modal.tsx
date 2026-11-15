@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight } from "@/components/ui/PublicIcon";
 import { SheetCloseContext, useIsDesktopViewport } from "@/components/portal/ui";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
@@ -51,18 +51,19 @@ export function Modal({
     const sheet = panelRef.current;
     const backdrop = backdropRef.current;
     const desktopNow = typeof window !== "undefined" && window.innerWidth >= 760;
-    const closeDuration = desktopNow && variant === "drawer" ? 240 : 220;
+    const isCenteredModal = variant === "modal";
+    const closeDuration = isCenteredModal ? 170 : desktopNow && variant === "drawer" ? 240 : 220;
 
     if (sheet) {
       sheet.style.animation = "none";
       sheet.style.pointerEvents = "none";
-      if (desktopNow && variant === "drawer") {
+      if (isCenteredModal || (desktopNow && variant !== "drawer")) {
+        sheet.style.transition = "transform 170ms cubic-bezier(0.25, 1, 0.5, 1), opacity 170ms ease-out";
+        sheet.style.transform = "translate3d(0, 8px, 0) scale(0.98)";
+        sheet.style.opacity = "0";
+      } else if (desktopNow && variant === "drawer") {
         sheet.style.transition = "transform 240ms cubic-bezier(0.32, 0.72, 0, 1)";
         sheet.style.transform = "translate3d(100%, 0, 0)";
-      } else if (desktopNow) {
-        sheet.style.transition = "transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out";
-        sheet.style.transform = "translate3d(0, 12px, 0) scale(0.97)";
-        sheet.style.opacity = "0";
       } else {
         sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
         sheet.style.transform = "translate3d(0, 105%, 0)";
@@ -107,6 +108,8 @@ export function Modal({
     });
 
     const onKey = (event: KeyboardEvent) => {
+      const overlays = document.querySelectorAll(".pt-sheet-backdrop, .modal-overlay");
+      if (overlays.length > 0 && overlays[overlays.length - 1] !== backdropRef.current) return;
       if (event.key === "Escape") {
         event.stopPropagation();
         handleClose();
@@ -153,14 +156,14 @@ export function Modal({
     sheetRef: panelRef,
     handleRef: dragZoneRef,
     onDismiss: handleClose,
-    enabled: !isDesktopDrawer,
+    enabled: variant === "drawer" && !isDesktopDrawer,
   });
 
   const modalNode = (
     <SheetCloseContext.Provider value={handleClose}>
       <div
         ref={backdropRef}
-        className={`modal-overlay pt-sheet-backdrop ${variant === "drawer" ? "is-drawer" : ""}`.trim()}
+        className={`modal-overlay pt-sheet-backdrop ${variant === "drawer" ? "is-drawer" : "is-confirm-overlay"}`.trim()}
         onClick={(event) => {
           if (closeOnBackdrop && event.target === event.currentTarget) handleClose();
         }}
@@ -251,21 +254,26 @@ export function ConfirmDialog({
     <Modal
       title={title}
       onClose={pending ? () => undefined : onClose}
-      width={460}
+      width={420}
       variant="modal"
       className="modal-confirm-sheet"
       footer={
         <>
-          <button type="button" className="btn btn-outline" onClick={onClose} disabled={pending}>
+          <button type="button" className="btn btn-confirm-cancel" onClick={onClose} disabled={pending}>
             Hủy
           </button>
-          <button type="button" className={`btn ${danger ? "btn-danger" : "btn-primary"}`} onClick={onConfirm} disabled={pending}>
+          <button
+            type="button"
+            className={`btn ${danger ? "btn-danger" : "btn-confirm-primary"}`}
+            onClick={onConfirm}
+            disabled={pending}
+          >
             {pending ? "Đang xử lý…" : confirmLabel}
           </button>
         </>
       }
     >
-      <div style={{ fontSize: 14.5, lineHeight: 1.6, color: "var(--ink)" }}>{message}</div>
+      <div className="modal-confirm-message">{message}</div>
       {children}
       <FormError message={error} />
     </Modal>

@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { uploadOptimizedFile, validatePickedFile } from "@/components/portal/shared/media";
+import { ConfirmDialog } from "@/components/ui/Modal";
 import { errorMessage, type UploadPurpose } from "@/lib/api-client";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 
@@ -32,6 +33,7 @@ export default function ImageUploadField({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
@@ -97,11 +99,24 @@ export default function ImageUploadField({
               {uploading ? "Đang tải ảnh…" : value ? "Đổi ảnh" : "Tải ảnh lên"}
             </button>
             {value && (
-              <button type="button" className="btn btn-outline btn-sm" disabled={uploading} onClick={() => onChange(null)}>
-                Bỏ ảnh
+              <button type="button" className="btn btn-danger btn-sm" disabled={uploading} onClick={() => setConfirmRemove(true)}>
+                Xóa ảnh
               </button>
             )}
           </div>
+          {confirmRemove && (
+            <ConfirmDialog
+              title="Xóa ảnh đã chọn"
+              message="Xác nhận xóa ảnh hiện tại khỏi mục này?"
+              confirmLabel="Xóa ảnh"
+              danger
+              onConfirm={() => {
+                onChange(null);
+                setConfirmRemove(false);
+              }}
+              onClose={() => setConfirmRemove(false)}
+            />
+          )}
           {presets && presets.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {presets.map((preset) => (

@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { RadialPngIcon } from "./RadialIcons";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
@@ -732,14 +731,11 @@ function JournalDetailModal({
       <div className="pt-detail-footer" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {allowDelete && (
           <ConfirmButton
-            label={
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <RadialPngIcon src="/trash.png" size={15} />
-                <span>Xóa bản ghi này (trong 24h)</span>
-              </span>
-            }
-            question="Xác nhận xóa bản ghi nhật ký này?"
+            label="Xóa bản ghi này (trong 24h)"
+            title="Xóa nhật ký canh tác"
+            question="Xác nhận xóa bản ghi nhật ký canh tác này? Thao tác không thể hoàn tác."
             confirmLabel="Xóa nhật ký"
+            className="pt-btn pt-btn-danger pt-btn-block"
             busy={deleting}
             onConfirm={handleDelete}
           />
@@ -898,14 +894,11 @@ function SprayDetailModal({
       <div className="pt-detail-footer" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {allowDelete && (
           <ConfirmButton
-            label={
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <RadialPngIcon src="/trash.png" size={15} />
-                <span>Xóa bản ghi này (trong 24h)</span>
-              </span>
-            }
-            question="Xác nhận xóa bản ghi phun thuốc nhập nhầm này?"
+            label="Xóa bản ghi này (trong 24h)"
+            title="Xóa nhật ký phun thuốc"
+            question="Xác nhận xóa bản ghi phun thuốc nhập nhầm này? Thao tác không thể hoàn tác."
             confirmLabel="Xóa bản ghi"
+            className="pt-btn pt-btn-danger pt-btn-block"
             busy={deleting}
             onConfirm={handleDelete}
           />

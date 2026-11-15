@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
 import { hasErrors, requireFields } from "@/components/admin/shared/form-utils";
-import { Modal, FormError } from "@/components/ui/Modal";
+import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { FormGrid, NumberField, SelectField, TextField, type Option } from "@/components/ui/form/fields";
 import { useApi, useMutation } from "@/hooks/use-api";
@@ -91,16 +91,23 @@ export default function FieldAuditPassesModal({
     void passesApi.refresh();
   };
 
+  const [revokingPass, setRevokingPass] = useState<FieldAuditPassDto | null>(null);
+  const [revokingBusy, setRevokingBusy] = useState(false);
+
   const handleRevokePass = async (pass: FieldAuditPassDto) => {
+    setRevokingBusy(true);
     try {
       await api.patch(`/field-audit-passes/${pass.id}/revoke`, {});
       if (createdSecret?.id === pass.id) {
         setCreatedSecret(null);
       }
       toast.success(`Đã thu hồi thẻ ${pass.code}.`);
+      setRevokingPass(null);
       void passesApi.refresh();
     } catch (err) {
       toast.error(errorMessage(err, "Không thể thu hồi thẻ thẩm định."));
+    } finally {
+      setRevokingBusy(false);
     }
   };
 
@@ -451,7 +458,7 @@ export default function FieldAuditPassesModal({
                           <button
                             type="button"
                             className="btn btn-danger btn-sm"
-                            onClick={() => void handleRevokePass(p)}
+                            onClick={() => setRevokingPass(p)}
                           >
                             Thu hồi
                           </button>
@@ -463,6 +470,24 @@ export default function FieldAuditPassesModal({
               </tbody>
             </table>
           </div>
+          {revokingPass && (
+            <ConfirmDialog
+              title="Thu hồi thẻ thẩm định"
+              message={
+                <>
+                  Xác nhận thu hồi mã thẻ <strong>{revokingPass.code}</strong> của đoàn{" "}
+                  <strong>{revokingPass.delegationName}</strong>? Liên kết tra cứu thực địa của thẻ này sẽ ngừng hiệu lực ngay.
+                </>
+              }
+              confirmLabel="Thu hồi thẻ"
+              danger
+              pending={revokingBusy}
+              onConfirm={() => void handleRevokePass(revokingPass)}
+              onClose={() => {
+                if (!revokingBusy) setRevokingPass(null);
+              }}
+            />
+          )}
         </>
       ) : (
         <form onSubmit={(e) => void handleSaveEndorsement(e)}>

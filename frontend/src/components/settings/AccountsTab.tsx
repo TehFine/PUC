@@ -55,6 +55,8 @@ export default function AccountsTab({
 
   const [editing, setEditing] = useState<AccountRecord | "new" | null>(null);
   const [deleting, setDeleting] = useState<AccountRecord | null>(null);
+  const [revokingAccount, setRevokingAccount] = useState<AccountRecord | null>(null);
+  const [resetting2faAccount, setResetting2faAccount] = useState<AccountRecord | null>(null);
   const [lastTrigger, setLastTrigger] = useState(createTrigger);
 
   if (createTrigger !== lastTrigger) {
@@ -75,34 +77,6 @@ export default function AccountsTab({
       void list.refresh();
     } else if (toggleStatus.error) {
       toast.error(toggleStatus.error);
-    }
-  };
-
-  const revokeRemoteSessions = useMutation(async (account: AccountRecord) => {
-    return api.post<{ revokedCount: number }>(`/accounts/${account.id}/revoke-sessions`);
-  });
-
-  const handleRevokeRemote = async (account: AccountRecord) => {
-    const res = await revokeRemoteSessions.run(account);
-    if (res !== undefined) {
-      toast.success(`Đã đăng xuất từ xa các phiên của tài khoản ${account.username}.`);
-      void list.refresh();
-    } else if (revokeRemoteSessions.error) {
-      toast.error(revokeRemoteSessions.error);
-    }
-  };
-
-  const resetUser2fa = useMutation(async (account: AccountRecord) => {
-    return api.post(`/accounts/${account.id}/reset-2fa`);
-  });
-
-  const handleReset2fa = async (account: AccountRecord) => {
-    const res = await resetUser2fa.run(account);
-    if (res !== undefined) {
-      toast.success(`Đã đặt lại xác thực 2 lớp cho tài khoản ${account.username}.`);
-      void list.refresh();
-    } else if (resetUser2fa.error) {
-      toast.error(resetUser2fa.error);
     }
   };
 
@@ -256,9 +230,8 @@ export default function AccountsTab({
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
-                          disabled={revokeRemoteSessions.pending}
                           title="Đăng xuất từ xa tất cả thiết bị của tài khoản này"
-                          onClick={() => void handleRevokeRemote(a)}
+                          onClick={() => setRevokingAccount(a)}
                         >
                           Đăng xuất từ xa
                         </button>
@@ -267,9 +240,8 @@ export default function AccountsTab({
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
-                          disabled={resetUser2fa.pending}
                           title="Đặt lại xác thực 2 lớp nếu người dùng mất thiết bị OTP"
-                          onClick={() => void handleReset2fa(a)}
+                          onClick={() => setResetting2faAccount(a)}
                         >
                           Đặt lại 2FA
                         </button>
@@ -325,6 +297,50 @@ export default function AccountsTab({
           onClose={() => setDeleting(null)}
           onDone={() => {
             setDeleting(null);
+            void list.refresh();
+          }}
+        />
+      )}
+
+      {revokingAccount && (
+        <ConfirmAction
+          title="Đăng xuất từ xa các phiên"
+          message={
+            <>
+              Xác nhận thu hồi toàn bộ phiên đăng nhập của tài khoản <strong>{revokingAccount.fullName}</strong> (
+              <code>{revokingAccount.username}</code>)?
+            </>
+          }
+          path={`/accounts/${revokingAccount.id}/revoke-sessions`}
+          method="post"
+          confirmLabel="Thu hồi phiên"
+          danger
+          successMessage={`Đã đăng xuất từ xa các phiên của tài khoản ${revokingAccount.username}.`}
+          onClose={() => setRevokingAccount(null)}
+          onDone={() => {
+            setRevokingAccount(null);
+            void list.refresh();
+          }}
+        />
+      )}
+
+      {resetting2faAccount && (
+        <ConfirmAction
+          title="Đặt lại xác thực 2 lớp"
+          message={
+            <>
+              Xác nhận xóa cấu hình xác thực 2 lớp hiện tại của tài khoản <strong>{resetting2faAccount.fullName}</strong> (
+              <code>{resetting2faAccount.username}</code>)?
+            </>
+          }
+          path={`/accounts/${resetting2faAccount.id}/reset-2fa`}
+          method="post"
+          confirmLabel="Xóa 2FA"
+          danger
+          successMessage={`Đã đặt lại xác thực 2 lớp cho tài khoản ${resetting2faAccount.username}.`}
+          onClose={() => setResetting2faAccount(null)}
+          onDone={() => {
+            setResetting2faAccount(null);
             void list.refresh();
           }}
         />

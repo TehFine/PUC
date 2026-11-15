@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useState } from "react";
-import { Modal, FormError } from "@/components/ui/Modal";
+import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { CheckboxField, FormGrid, NumberField, SelectField, TextField, type Option } from "@/components/ui/form/fields";
 import { useMutation } from "@/hooks/use-api";
@@ -53,6 +53,7 @@ export default function LabTestFormModal({
   const [scanUrl, setScanUrl] = useState<string | null>(initial?.scanUrl ?? null);
   const [uploadingScan, setUploadingScan] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [confirmRemoveScan, setConfirmRemoveScan] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
 
   const save = useMutation(async (payload: Record<string, unknown>) => {
@@ -330,16 +331,27 @@ export default function LabTestFormModal({
                 <button
                   type="button"
                   className="btn btn-danger btn-sm"
-                  onClick={() => {
-                    setScanAttachmentId(null);
-                    setScanUrl(null);
-                  }}
+                  onClick={() => setConfirmRemoveScan(true)}
                 >
-                  Gỡ tệp
+                  Xóa tệp
                 </button>
               </>
             )}
           </div>
+          {confirmRemoveScan && (
+            <ConfirmDialog
+              title="Xóa tệp scan phiếu kiểm nghiệm"
+              message="Xác nhận xóa tệp scan đã đính kèm khỏi phiếu kiểm nghiệm này?"
+              confirmLabel="Xóa tệp"
+              danger
+              onConfirm={() => {
+                setScanAttachmentId(null);
+                setScanUrl(null);
+                setConfirmRemoveScan(false);
+              }}
+              onClose={() => setConfirmRemoveScan(false)}
+            />
+          )}
           {uploadError && (
             <small role="alert" style={{ display: "block", marginTop: 5, color: "#b73c20", fontSize: 12 }}>
               {uploadError}

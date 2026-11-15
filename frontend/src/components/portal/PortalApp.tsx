@@ -13,13 +13,13 @@ import {
   Mail,
   NotebookPen,
   Scale,
-  Trash2,
   TreePine,
   type LucideIcon,
-} from "lucide-react";
+} from "@/components/ui/PublicIcon";
 import { type ChangeEvent, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
+import { ConfirmDialog } from "@/components/ui/Modal";
 import { invalidateQueries, NOTIFICATIONS_PATH, portalPath, usePortal, useSharedQuery } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { api, errorMessage } from "@/lib/api-client";
@@ -444,6 +444,8 @@ function PortalAppContent() {
     }
   };
 
+  const [confirmRemoveAvatar, setConfirmRemoveAvatar] = useState(false);
+
   const handleRemoveAvatar = async () => {
     if (uploadingAvatar || !avatarUrl) return;
     setUploadingAvatar(true);
@@ -451,6 +453,7 @@ function PortalAppContent() {
     try {
       await api.patch<{ avatarUrl: string | null }>("/portal/profile/avatar", { avatarId: null });
       setLocalAvatarOverride(null);
+      setConfirmRemoveAvatar(false);
       invalidateQueries(portalPath("profile"));
       invalidateQueries(portalPath("overview"));
     } catch (err) {
@@ -769,18 +772,31 @@ function PortalAppContent() {
                     <button
                       type="button"
                       className="pt-profile-photo-remove-btn"
-                      onClick={() => void handleRemoveAvatar()}
+                      onClick={() => setConfirmRemoveAvatar(true)}
                       disabled={uploadingAvatar}
                       title={t("Gỡ ảnh đại diện hiện tại")}
                       aria-label={t("Gỡ ảnh đại diện hiện tại")}
                     >
-                      <Trash2 size={14} strokeWidth={2.1} aria-hidden="true" />
-                      <span>{t("Gỡ")}</span>
+                      <span>{t("Xóa ảnh")}</span>
                     </button>
                   )}
                 </div>
               </div>
               {avatarError && <InlineError message={avatarError} />}
+              {confirmRemoveAvatar && (
+                <ConfirmDialog
+                  title={t("Xóa ảnh đại diện")}
+                  message={t("Xác nhận xóa ảnh đại diện hiện tại của hộ nông dân?")}
+                  confirmLabel={t("Xóa ảnh")}
+                  danger
+                  pending={uploadingAvatar}
+                  error={avatarError}
+                  onConfirm={() => void handleRemoveAvatar()}
+                  onClose={() => {
+                    if (!uploadingAvatar) setConfirmRemoveAvatar(false);
+                  }}
+                />
+              )}
             </div>
 
             <div className="pt-profile-photo-card" style={{ marginTop: 10 }}>

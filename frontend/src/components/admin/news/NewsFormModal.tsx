@@ -4,6 +4,7 @@ import { useState } from "react";
 import FormModal from "@/components/admin/catalog/FormModal";
 import ImageUploadField from "@/components/admin/catalog/ImageUploadField";
 import { CheckboxField, FormGrid, SelectField, TextAreaField, TextField } from "@/components/ui/form/fields";
+import { ConfirmDialog } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
@@ -78,6 +79,8 @@ export default function NewsFormModal({
     }
   };
 
+  const [removingSectionIdx, setRemovingSectionIdx] = useState<number | null>(null);
+
   const handleAddSection = () => {
     setSections((prev) => [...prev, { heading: "", contentText: "", bulletsText: "" }]);
   };
@@ -85,6 +88,7 @@ export default function NewsFormModal({
   const handleRemoveSection = (idx: number) => {
     if (sections.length <= 1) return;
     setSections((prev) => prev.filter((_, i) => i !== idx));
+    setRemovingSectionIdx(null);
   };
 
   const { run, pending, error } = useMutation(async () => {
@@ -240,18 +244,18 @@ export default function NewsFormModal({
             style={{
               background: "var(--bg-input, #f7f9f6)",
               border: "1px solid var(--border)",
-              borderRadius: 12,
+              borderRadius: 6,
               padding: "12px 14px",
               marginBottom: 10,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: "var(--green-700)" }}>Phần {idx + 1}</span>
               {sections.length > 1 && (
                 <button
                   type="button"
-                  onClick={() => handleRemoveSection(idx)}
-                  style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: 12 }}
+                  className="btn btn-danger btn-sm"
+                  onClick={() => setRemovingSectionIdx(idx)}
                 >
                   Xóa phần này
                 </button>
@@ -286,6 +290,21 @@ export default function NewsFormModal({
         rows={2}
         maxLength={600}
       />
+
+      {removingSectionIdx !== null && (
+        <ConfirmDialog
+          title="Xóa phần nội dung"
+          message={
+            <>
+              Xác nhận xóa <strong>Phần {removingSectionIdx + 1}</strong> khỏi bài viết này?
+            </>
+          }
+          confirmLabel="Xóa phần này"
+          danger
+          onConfirm={() => handleRemoveSection(removingSectionIdx)}
+          onClose={() => setRemovingSectionIdx(null)}
+        />
+      )}
     </FormModal>
   );
 }

@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock, MapPin, Pencil, Search, Users } from "lucide-react";
-import { RadialPngIcon } from "@/components/portal/RadialIcons";
+import { Clock, MapPin, Pencil, Search, Users } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import FertilizerFormModal from "@/components/admin/catalog/FertilizerFormModal";
@@ -477,8 +476,7 @@ export default function Catalog() {
                           className="btn btn-danger btn-sm"
                           onClick={() => setDeletingPesticide(p)}
                         >
-                          <RadialPngIcon src="/trash.png" size={12} />
-                          <span>Xóa</span>
+                          Xóa
                         </button>
                       </div>
                     </div>
@@ -657,8 +655,7 @@ export default function Catalog() {
                           className="btn btn-danger btn-sm"
                           onClick={() => setDeletingFertilizer(f)}
                         >
-                          <RadialPngIcon src="/trash.png" size={12} />
-                          <span>Xóa</span>
+                          Xóa
                         </button>
                       </div>
                     </div>
@@ -822,8 +819,7 @@ export default function Catalog() {
                           className="btn btn-danger btn-sm"
                           onClick={() => setDeletingVariety(v)}
                         >
-                          <RadialPngIcon src="/trash.png" size={12} />
-                          <span>Xóa</span>
+                          Xóa
                         </button>
                       </div>
                     </div>
@@ -950,8 +946,7 @@ export default function Catalog() {
                         className="btn btn-danger btn-sm"
                         onClick={() => setDeletingVillage(v)}
                       >
-                        <RadialPngIcon src="/trash.png" size={12} />
-                        <span>Xóa</span>
+                        Xóa
                       </button>
                     </div>
                   </div>

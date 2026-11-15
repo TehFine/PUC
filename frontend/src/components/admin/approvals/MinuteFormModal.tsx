@@ -1,8 +1,8 @@
 "use client";
 
 import { type ChangeEvent, useState } from "react";
-import { MapPin, ShieldCheck } from "lucide-react";
-import { Modal, FormError } from "@/components/ui/Modal";
+import { MapPin, ShieldCheck } from "@/components/ui/PublicIcon";
+import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
 import { useMutation } from "@/hooks/use-api";
@@ -189,6 +189,7 @@ export default function MinuteFormModal({
   const [photoUrl, setPhotoUrl] = useState<string | null>(initial?.photoUrl ?? null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [confirmRemovePhoto, setConfirmRemovePhoto] = useState(false);
   const [latitude, setLatitude] = useState<number | null>(initial?.latitude ?? null);
   const [longitude, setLongitude] = useState<number | null>(initial?.longitude ?? null);
   const [locating, setLocating] = useState(false);
@@ -435,16 +436,27 @@ export default function MinuteFormModal({
                 <button
                   type="button"
                   className="btn btn-danger btn-sm"
-                  onClick={() => {
-                    setPhotoId(null);
-                    setPhotoUrl(null);
-                  }}
+                  onClick={() => setConfirmRemovePhoto(true)}
                 >
-                  Gỡ ảnh
+                  Xóa ảnh
                 </button>
               </>
             )}
           </div>
+          {confirmRemovePhoto && (
+            <ConfirmDialog
+              title="Xóa ảnh hiện trường"
+              message="Xác nhận xóa ảnh hiện trường đã đính kèm khỏi biên bản kiểm tra này?"
+              confirmLabel="Xóa ảnh"
+              danger
+              onConfirm={() => {
+                setPhotoId(null);
+                setPhotoUrl(null);
+                setConfirmRemovePhoto(false);
+              }}
+              onClose={() => setConfirmRemovePhoto(false)}
+            />
+          )}
           {uploadError && (
             <small role="alert" style={{ display: "block", marginTop: 5, color: "#b73c20", fontSize: 12 }}>
               {uploadError}

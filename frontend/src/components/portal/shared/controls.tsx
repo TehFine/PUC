@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { FileText, Paperclip } from "lucide-react";
-import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { FileText, Paperclip } from "@/components/ui/PublicIcon";
+import { ConfirmDialog } from "@/components/ui/Modal";
 import { AppleSpinner } from "@/components/ui/Skeleton";
 import type { UploadPurpose } from "@/lib/api-client";
 import { isSafeMediaUrl } from "@/utils/url-safety";
@@ -46,46 +46,57 @@ export function InlineError({ message }: { message: string | null | undefined })
 }
 
 /**
- * Nút thao tác nguy hiểm (xóa, hủy…) xác nhận 2 bước ngay tại chỗ:
- * bấm lần 1 hiện câu hỏi + nút “Đồng ý”, bấm “Đồng ý” mới chạy `onConfirm`.
+ * Nút thao tác xóa / hủy mở hộp thoại xác nhận cân đối trước khi thực thi `onConfirm`.
  */
 export function ConfirmButton({
   label,
+  title = "Xác nhận xóa",
   question,
-  confirmLabel = "Đồng ý",
+  confirmLabel = "Xóa",
   busy = false,
   onConfirm,
-  className = "pt-btn pt-btn-ghost pt-btn-danger",
+  className = "pt-btn pt-btn-danger",
   disabled,
 }: {
   label: ReactNode;
-  question: string;
+  title?: string;
+  question: ReactNode;
   confirmLabel?: string;
   busy?: boolean;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   className?: string;
   disabled?: boolean;
 }) {
   const [asking, setAsking] = useState(false);
-  if (!asking) {
-    return (
+
+  const handleConfirm = async () => {
+    try {
+      await onConfirm();
+      setAsking(false);
+    } catch {
+      // Giữ hộp thoại hoặc hiển thị lỗi từ component cha
+    }
+  };
+
+  return (
+    <>
       <button type="button" className={className} onClick={() => setAsking(true)} disabled={disabled || busy}>
         {label}
       </button>
-    );
-  }
-  return (
-    <div className="pt-confirm-inline" role="group" aria-label={question}>
-      <span className="pt-confirm-question">{question}</span>
-      <div className="pt-confirm-actions">
-        <button type="button" className="pt-btn pt-btn-ghost pt-btn-sm" onClick={() => setAsking(false)} disabled={busy}>
-          Không
-        </button>
-        <BusyButton className="pt-btn pt-btn-sm pt-btn-danger-solid" busy={busy} busyLabel="Đang xử lý…" onClick={onConfirm}>
-          {confirmLabel}
-        </BusyButton>
-      </div>
-    </div>
+      {asking && (
+        <ConfirmDialog
+          title={title}
+          message={question}
+          confirmLabel={confirmLabel}
+          danger
+          pending={busy}
+          onConfirm={() => void handleConfirm()}
+          onClose={() => {
+            if (!busy) setAsking(false);
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -166,6 +177,8 @@ export function PhotoField({
   description?: string;
   disabled?: boolean;
 }) {
+  const [confirmClear, setConfirmClear] = useState(false);
+
   return (
     <div className="pt-journal-photo-field">
       <div className="pt-journal-photo-header">
@@ -196,12 +209,12 @@ export function PhotoField({
           <button
             type="button"
             className="pt-photo-remove-btn"
-            onClick={picker.clear}
+            onClick={() => setConfirmClear(true)}
             disabled={disabled}
-            title="Bỏ tệp này để chọn tệp khác"
-            aria-label="Bỏ tệp đã chọn"
+            title="Xóa tệp đã chọn"
+            aria-label="Xóa tệp đã chọn"
           >
-            <CloseCircleIcon size={24} />
+            Xóa tệp
           </button>
         </div>
       ) : (
@@ -225,6 +238,23 @@ export function PhotoField({
         </label>
       )}
       <InlineError message={picker.error} />
+      {confirmClear && (
+        <ConfirmDialog
+          title="Xóa tệp đã chọn"
+          message={
+            <>
+              Xác nhận xóa tệp <strong>{picker.file?.name || "đang chọn"}</strong> khỏi biểu mẫu này?
+            </>
+          }
+          confirmLabel="Xóa tệp"
+          danger
+          onConfirm={() => {
+            picker.clear();
+            setConfirmClear(false);
+          }}
+          onClose={() => setConfirmClear(false)}
+        />
+      )}
     </div>
   );
 }
@@ -253,6 +283,7 @@ export function AttachmentsField({
   disabled?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [removingItem, setRemovingItem] = useState<PickedAttachment | null>(null);
 
   const add = (list: FileList | null) => {
     if (!list) return;
@@ -293,11 +324,11 @@ export function AttachmentsField({
               <button
                 type="button"
                 className="pt-attach-remove"
-                onClick={() => onChange(files.filter((f) => f.key !== item.key))}
+                onClick={() => setRemovingItem(item)}
                 disabled={disabled}
-                aria-label={`Bỏ tệp ${item.file.name}`}
+                aria-label={`Xóa tệp ${item.file.name}`}
               >
-                <CloseCircleIcon size={20} />
+                Xóa
               </button>
             </li>
           ))}
@@ -321,6 +352,23 @@ export function AttachmentsField({
         </label>
       )}
       <InlineError message={error} />
+      {removingItem && (
+        <ConfirmDialog
+          title="Xóa tệp đính kèm"
+          message={
+            <>
+              Xác nhận xóa tệp <strong>{removingItem.file.name}</strong> khỏi danh sách đính kèm?
+            </>
+          }
+          confirmLabel="Xóa tệp"
+          danger
+          onConfirm={() => {
+            onChange(files.filter((f) => f.key !== removingItem.key));
+            setRemovingItem(null);
+          }}
+          onClose={() => setRemovingItem(null)}
+        />
+      )}
     </div>
   );
 }

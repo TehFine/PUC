@@ -1488,10 +1488,10 @@ body.pt-body {
   justify-content: center;
   gap: 5px;
   padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #b91c1c;
+  border-radius: 6px;
+  border: 1px solid #b91c1c;
+  background: #c81e1e;
+  color: #ffffff;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -1499,8 +1499,9 @@ body.pt-body {
 }
 
 .pt-profile-photo-remove-btn:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #fecaca;
+  background: #991b1b;
+  border-color: #991b1b;
+  color: #ffffff;
 }
 
 .pt-profile-head-info {
@@ -3119,24 +3120,26 @@ body.pt-body {
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 36px;
-  height: 36px;
-  padding: 0;
+  height: 30px;
+  padding: 0 10px;
   border-radius: 6px;
-  background: rgba(15, 23, 42, 0.56);
+  background: #c81e1e;
   color: #ffffff;
-  border: none;
+  border: 1px solid #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.16s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
 }
 
-.pt-photo-remove-btn:hover {
-  background: transparent;
-  color: #ef4444;
-  transform: rotate(90deg);
+.pt-photo-remove-btn:hover:not(:disabled) {
+  background: #991b1b;
+  border-color: #991b1b;
+  color: #ffffff;
 }
 
 /* ── Ảnh chụp hiện trường trong Popup chi tiết ── */
@@ -8672,19 +8675,21 @@ body.pt-body {
   }
 }
 
-.pt-btn-danger {
-  color: #dc2626 !important;
-}
-.pt-btn-danger:hover {
-  background: #fef2f2 !important;
-}
+.pt-btn-danger,
+.pt-btn.pt-btn-ghost.pt-btn-danger,
 .pt-btn-danger-solid {
-  background: #dc2626 !important;
+  background: #c81e1e !important;
   color: #ffffff !important;
-  border: none !important;
+  border: 1px solid #b91c1c !important;
+  border-radius: 6px;
+  box-shadow: none !important;
 }
-.pt-btn-danger-solid:hover {
-  background: #b91c1c !important;
+.pt-btn-danger:hover:not(:disabled),
+.pt-btn.pt-btn-ghost.pt-btn-danger:hover:not(:disabled),
+.pt-btn-danger-solid:hover:not(:disabled) {
+  background: #991b1b !important;
+  border-color: #991b1b !important;
+  color: #ffffff !important;
 }
 
 .pt-confirm-inline {
@@ -8752,20 +8757,25 @@ body.pt-body {
   color: var(--text-secondary);
 }
 .pt-attach-remove {
-  border: 0;
-  background: transparent;
-  color: var(--ink);
+  border: 1px solid #b91c1c;
+  background: #c81e1e;
+  color: #ffffff;
   cursor: pointer;
-  padding: 2px;
-  border-radius: 50%;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
-.pt-attach-remove:hover {
-  background: transparent;
-  color: #dc2626;
+.pt-attach-remove:hover:not(:disabled) {
+  background: #991b1b;
+  border-color: #991b1b;
+  color: #ffffff;
 }
 .pt-attach-add {
   display: inline-flex;
@@ -8773,7 +8783,7 @@ body.pt-body {
   justify-content: center;
   gap: 8px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1.5px dashed #cbd5e1;
   background: #f8fafc;
   color: var(--ink);

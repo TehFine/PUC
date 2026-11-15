@@ -2,9 +2,10 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { Check, Copy, Laptop, LogOut, ShieldCheck, Smartphone } from "lucide-react";
+import { Check, Copy, Laptop, ShieldCheck, Smartphone } from "@/components/ui/PublicIcon";
 import { BusyButton, InlineError } from "@/components/portal/shared/controls";
 import { Field, Sheet } from "@/components/portal/ui";
+import { ConfirmDialog } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { api, errorMessage } from "@/lib/api-client";
 import type { TwoFactorSetupResponse, UserSessionItem } from "@/types/api";
@@ -358,6 +359,7 @@ export function ActiveSessionsSheet({
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | "others" | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [confirmRevoke, setConfirmRevoke] = useState<UserSessionItem | "others" | null>(null);
 
   const loadSessions = useCallback(async () => {
     setLoading(true);
@@ -381,11 +383,12 @@ export function ActiveSessionsSheet({
     setErr(null);
     try {
       const res = await api.delete<{ revokedCurrent?: boolean }>(`/auth/sessions/${session.id}`);
+      setConfirmRevoke(null);
       if (res?.revokedCurrent || session.isCurrent) {
         await onRevokedCurrent();
         return;
       }
-      toast.success("Đã đăng xuất thiết bị từ xa.");
+      toast.success("Đã xóa phiên đăng nhập từ xa.");
       await loadSessions();
     } catch (e) {
       setErr(errorMessage(e, "Không thể thu hồi phiên đăng nhập này."));
@@ -399,7 +402,8 @@ export function ActiveSessionsSheet({
     setErr(null);
     try {
       const res = await api.post<{ revokedCount: number }>("/auth/sessions/revoke-others");
-      toast.success(`Đã đăng xuất từ xa ${res.revokedCount ?? 0} thiết bị khác.`);
+      setConfirmRevoke(null);
+      toast.success(`Đã xóa phiên đăng nhập trên ${res.revokedCount ?? 0} thiết bị khác.`);
       await loadSessions();
     } catch (e) {
       setErr(errorMessage(e, "Không thể đăng xuất các thiết bị khác."));
@@ -425,12 +429,12 @@ export function ActiveSessionsSheet({
         {otherCount > 0 && (
           <BusyButton
             type="button"
-            className="pt-btn pt-btn-primary"
+            className="pt-btn pt-btn-danger"
             busy={busyId === "others"}
             busyLabel="Đang thu hồi…"
-            onClick={() => void handleRevokeOthers()}
+            onClick={() => setConfirmRevoke("others")}
           >
-            Đăng xuất từ xa tất cả thiết bị khác ({otherCount})
+            Xóa phiên tất cả thiết bị khác ({otherCount})
           </BusyButton>
         )}
 
@@ -475,7 +479,7 @@ export function ActiveSessionsSheet({
                             style={{
                               marginLeft: 6,
                               padding: "1px 7px",
-                              borderRadius: 99,
+                              borderRadius: 4,
                               background: "#166534",
                               color: "#ffffff",
                               fontSize: 11,
@@ -498,12 +502,11 @@ export function ActiveSessionsSheet({
                   {!s.isCurrent && (
                     <button
                       type="button"
-                      className="btn btn-outline btn-sm"
+                      className="btn btn-danger btn-sm"
                       disabled={busyId !== null}
-                      onClick={() => void handleRevokeOne(s)}
+                      onClick={() => setConfirmRevoke(s)}
                     >
-                      <LogOut size={13} />
-                      <span>{busyId === s.id ? "Đang gỡ…" : "Đăng xuất từ xa"}</span>
+                      {busyId === s.id ? "Đang xóa…" : "Xóa phiên"}
                     </button>
                   )}
                 </div>
@@ -512,6 +515,33 @@ export function ActiveSessionsSheet({
           </div>
         )}
       </div>
+
+      {confirmRevoke && (
+        <ConfirmDialog
+          title={confirmRevoke === "others" ? "Xóa phiên tất cả thiết bị khác" : "Xóa phiên đăng nhập"}
+          message={
+            confirmRevoke === "others" ? (
+              <>
+                Xác nhận xóa phiên đăng nhập trên <strong>{otherCount} thiết bị khác</strong>? Thiết bị hiện tại của bạn vẫn giữ nguyên.
+              </>
+            ) : (
+              <>
+                Xác nhận xóa phiên đăng nhập trên <strong>{summarizeUserAgent(confirmRevoke.userAgent)}</strong> (IP:{" "}
+                <code>{confirmRevoke.ip || "Không rõ"}</code>)?
+              </>
+            )
+          }
+          confirmLabel={confirmRevoke === "others" ? "Xóa tất cả" : "Xóa phiên"}
+          danger
+          pending={busyId !== null}
+          onConfirm={() =>
+            void (confirmRevoke === "others" ? handleRevokeOthers() : handleRevokeOne(confirmRevoke))
+          }
+          onClose={() => {
+            if (busyId === null) setConfirmRevoke(null);
+          }}
+        />
+      )}
     </Sheet>
   );
 }

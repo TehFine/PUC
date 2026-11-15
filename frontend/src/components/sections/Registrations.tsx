@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import TableState from "@/components/admin/shared/TableState";
 import { ROLE_LABELS } from "@/components/settings/settings-data";
-import { FormError, Modal } from "@/components/ui/Modal";
+import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { api } from "@/lib/api-client";
 import type { Role } from "@/types/api";
@@ -183,30 +183,34 @@ export default function Registrations({
     }
   };
 
+  const [rejectingRow, setRejectingRow] = useState<Registration | null>(null);
+  const [rejectingBusy, setRejectingBusy] = useState(false);
+  const [confirmResetAction, setConfirmResetAction] = useState<{
+    kind: "approve" | "reject";
+    row: PasswordResetRequest;
+  } | null>(null);
+
   const reject = async (row: Registration) => {
-    if (!window.confirm(`Từ chối đăng ký của ${row.fullName} (${row.phone})? Tài khoản chờ duyệt sẽ bị xóa.`)) return;
+    setRejectingBusy(true);
     try {
       await api.post(`/registrations/${row.id}/reject`);
-      toast.success(`Đã từ chối đăng ký của ${row.fullName}.`);
+      toast.success(`Đã từ chối và xóa đăng ký của ${row.fullName}.`);
+      setRejectingRow(null);
       notifyCountsChanged();
       await load();
     } catch (err) {
       toast.error(messageOf(err));
+    } finally {
+      setRejectingBusy(false);
     }
   };
 
   const approvePasswordReset = async (row: PasswordResetRequest) => {
-    if (
-      !window.confirm(
-        `Xác nhận duyệt cấp lại mật khẩu cho tài khoản ${row.username} (${row.accountName})? Mật khẩu mới người dùng đã đặt sẽ có hiệu lực ngay.`,
-      )
-    ) {
-      return;
-    }
     setResetBusyId(row.id);
     try {
       await api.post(`/registrations/password-resets/${row.id}/approve`);
       toast.success(`Đã duyệt cấp lại mật khẩu cho tài khoản ${row.username}.`);
+      setConfirmResetAction(null);
       notifyCountsChanged();
       await load();
     } catch (err) {
@@ -217,11 +221,11 @@ export default function Registrations({
   };
 
   const rejectPasswordReset = async (row: PasswordResetRequest) => {
-    if (!window.confirm(`Từ chối yêu cầu cấp lại mật khẩu của ${row.fullName} (${row.username})?`)) return;
     setResetBusyId(row.id);
     try {
       await api.post(`/registrations/password-resets/${row.id}/reject`);
       toast.success(`Đã từ chối yêu cầu cấp lại mật khẩu của ${row.username}.`);
+      setConfirmResetAction(null);
       notifyCountsChanged();
       await load();
     } catch (err) {
@@ -316,7 +320,7 @@ export default function Registrations({
                           type="button"
                           className="btn btn-primary btn-sm"
                           disabled={isRowBusy}
-                          onClick={() => void approvePasswordReset(row)}
+                          onClick={() => setConfirmResetAction({ kind: "approve", row })}
                         >
                           {isRowBusy ? "Đang xử lý…" : "Duyệt mật khẩu"}
                         </button>
@@ -324,7 +328,7 @@ export default function Registrations({
                           type="button"
                           className="btn btn-danger btn-sm"
                           disabled={isRowBusy}
-                          onClick={() => void rejectPasswordReset(row)}
+                          onClick={() => setConfirmResetAction({ kind: "reject", row })}
                         >
                           Từ chối
                         </button>
@@ -388,7 +392,7 @@ export default function Registrations({
                         <button type="button" className="btn btn-primary btn-sm" onClick={() => open(row)}>
                           Duyệt
                         </button>
-                        <button type="button" className="btn btn-danger btn-sm" onClick={() => void reject(row)}>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => setRejectingRow(row)}>
                           Từ chối
                         </button>
                       </div>
@@ -447,6 +451,59 @@ export default function Registrations({
           </div>
           <FormError message={dialogError} />
         </Modal>
+      )}
+
+      {rejectingRow && (
+        <ConfirmDialog
+          title="Từ chối và xóa đăng ký"
+          message={
+            <>
+              Xác nhận từ chối đăng ký của <strong>{rejectingRow.fullName}</strong> (
+              <code>{rejectingRow.phone}</code>)? Hồ sơ tài khoản chờ duyệt này sẽ bị xóa.
+            </>
+          }
+          confirmLabel="Từ chối và xóa"
+          danger
+          pending={rejectingBusy}
+          onConfirm={() => void reject(rejectingRow)}
+          onClose={() => {
+            if (!rejectingBusy) setRejectingRow(null);
+          }}
+        />
+      )}
+
+      {confirmResetAction && (
+        <ConfirmDialog
+          title={
+            confirmResetAction.kind === "approve"
+              ? "Duyệt cấp lại mật khẩu"
+              : "Từ chối yêu cầu mật khẩu"
+          }
+          message={
+            confirmResetAction.kind === "approve" ? (
+              <>
+                Xác nhận duyệt cấp lại mật khẩu cho tài khoản{" "}
+                <strong>{confirmResetAction.row.username}</strong> ({confirmResetAction.row.accountName})? Mật khẩu mới sẽ có hiệu lực ngay.
+              </>
+            ) : (
+              <>
+                Xác nhận từ chối và hủy yêu cầu cấp lại mật khẩu của{" "}
+                <strong>{confirmResetAction.row.fullName}</strong> (<code>{confirmResetAction.row.username}</code>)?
+              </>
+            )
+          }
+          confirmLabel={confirmResetAction.kind === "approve" ? "Duyệt mật khẩu" : "Từ chối"}
+          danger={confirmResetAction.kind === "reject"}
+          pending={resetBusyId === confirmResetAction.row.id}
+          onConfirm={() =>
+            void (confirmResetAction.kind === "approve"
+              ? approvePasswordReset(confirmResetAction.row)
+              : rejectPasswordReset(confirmResetAction.row))
+          }
+          onClose={() => {
+            if (resetBusyId === null) setConfirmResetAction(null);
+          }}
+        />
       )}
     </>
   );
