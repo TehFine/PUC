@@ -157,3 +157,42 @@ export class ForgotPasswordRequestDto {
   note?: string | null;
 }
 
+/** Xác minh mã OTP bước 2 (6 chữ số TOTP hoặc mã dự phòng 8 ký tự) sau khi qua bước mật khẩu / Google. */
+export class VerifyOtpChallengeDto {
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: "Thiếu mã phiên xác thực bước 2." })
+  @MaxLength(200)
+  challengeToken!: string;
+
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.replace(/[\s-]/g, "").toUpperCase() : value))
+  @IsString()
+  @Matches(/^(?:[0-9]{6}|[0-9A-Z]{8})$/, {
+    message: "Vui lòng nhập mã OTP 6 chữ số từ ứng dụng xác thực hoặc mã dự phòng 8 ký tự.",
+  })
+  code!: string;
+}
+
+/** Kích hoạt xác thực 2 lớp bằng mã OTP 6 chữ số đầu tiên từ ứng dụng xác thực. */
+export class EnableTwoFactorDto {
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.replace(/\s+/g, "") : value))
+  @IsString()
+  @Matches(/^[0-9]{6}$/, { message: "Mã OTP xác nhận gồm đúng 6 chữ số." })
+  code!: string;
+}
+
+/** Tắt xác thực 2 lớp (yêu cầu mật khẩu hiện tại hoặc mã OTP 6 chữ số đang hiệu lực). */
+export class DisableTwoFactorDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  currentPassword?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.replace(/\s+/g, "") : value))
+  @IsString()
+  @Matches(/^[0-9]{6}$/, { message: "Mã OTP gồm đúng 6 chữ số." })
+  code?: string;
+}
+
+

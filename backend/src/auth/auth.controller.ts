@@ -1,23 +1,28 @@
-import { Body, Controller, Get, HttpCode, Ip, Patch, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Ip, Param, Patch, Post, Req, Res } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
+import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
 import type { AuthUser } from "./auth-user";
 import { CurrentUser, Public } from "./auth.decorators";
 import { AuthService, RefreshRejected } from "./auth.service";
 import {
   ChangePasswordDto,
+  DisableTwoFactorDto,
+  EnableTwoFactorDto,
   ForgotPasswordCccdDto,
   ForgotPasswordRequestDto,
   GoogleLoginDto,
   LoginDto,
   RegisterDto,
   UpdateProfileDto,
+  VerifyOtpChallengeDto,
 } from "./dto/auth.dto";
 import { ACCESS_COOKIE, REFRESH_COOKIE, TokensService } from "./tokens.service";
 
 // Giới hạn chặt hơn cho đăng nhập (nới ra khi chạy test).
 const LOGIN_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 20;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const OTP_VERIFY_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 12;
 // Đăng ký: tối đa 5 lần/giờ cho mỗi IP để chống tạo tài khoản rác hàng loạt.
 const REGISTER_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 5;
 const REGISTER_WINDOW_MS = 60 * 60 * 1000;
@@ -41,7 +46,26 @@ export class AuthController {
   @Post("login")
   @HttpCode(200)
   async login(@Body() dto: LoginDto, @Req() req: Request, @Ip() ip: string, @Res({ passthrough: true }) res: Response) {
-    const { tokens, ...session } = await this.auth.login(dto, { ip, userAgent: req.get("user-agent") });
+    const result = await this.auth.login(dto, { ip, userAgent: req.get("user-agent") });
+    if ("mfaRequired" in result) {
+      return result;
+    }
+    const { tokens, ...session } = result;
+    this.tokens.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+    return session;
+  }
+
+  @Public()
+  @Throttle({ default: { limit: OTP_VERIFY_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Post("verify-otp")
+  @HttpCode(200)
+  async verifyOtp(
+    @Body() dto: VerifyOtpChallengeDto,
+    @Req() req: Request,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { tokens, ...session } = await this.auth.verifyOtpLogin(dto, { ip, userAgent: req.get("user-agent") });
     this.tokens.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     return session;
   }
@@ -62,7 +86,11 @@ export class AuthController {
     @Ip() ip: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { tokens, ...session } = await this.auth.loginWithGoogle(dto, { ip, userAgent: req.get("user-agent") });
+    const result = await this.auth.loginWithGoogle(dto, { ip, userAgent: req.get("user-agent") });
+    if ("mfaRequired" in result) {
+      return result;
+    }
+    const { tokens, ...session } = result;
     this.tokens.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     return session;
   }
@@ -142,5 +170,50 @@ export class AuthController {
   @HttpCode(200)
   async requestPasswordReset(@Body() dto: ForgotPasswordRequestDto, @Req() req: Request, @Ip() ip: string) {
     return this.auth.requestPasswordReset(dto, { ip, userAgent: req.get("user-agent") });
+  }
+
+  @Post("2fa/setup")
+  @HttpCode(200)
+  setupTwoFactor(@CurrentUser() user: AuthUser) {
+    return this.auth.setupTwoFactor(user);
+  }
+
+  @Throttle({ default: { limit: OTP_VERIFY_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Post("2fa/enable")
+  @HttpCode(200)
+  enableTwoFactor(@CurrentUser() user: AuthUser, @Body() dto: EnableTwoFactorDto, @Ip() ip: string) {
+    return this.auth.enableTwoFactor(user, dto, ip);
+  }
+
+  @Throttle({ default: { limit: CHANGE_PASSWORD_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Post("2fa/disable")
+  @HttpCode(200)
+  disableTwoFactor(@CurrentUser() user: AuthUser, @Body() dto: DisableTwoFactorDto, @Ip() ip: string) {
+    return this.auth.disableTwoFactor(user, dto, ip);
+  }
+
+  @Get("sessions")
+  listSessions(@CurrentUser() user: AuthUser) {
+    return this.auth.listSessions(user);
+  }
+
+  @Delete("sessions/:id")
+  async revokeSession(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseRecordIdPipe) id: number,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.auth.revokeSession(user, id, ip);
+    if (result.revokedCurrent) {
+      this.tokens.clearAuthCookies(res);
+    }
+    return result;
+  }
+
+  @Post("sessions/revoke-others")
+  @HttpCode(200)
+  revokeOtherSessions(@CurrentUser() user: AuthUser, @Ip() ip: string) {
+    return this.auth.revokeOtherSessions(user, ip);
   }
 }

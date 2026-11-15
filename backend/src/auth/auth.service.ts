@@ -1,20 +1,31 @@
+import { randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import bcrypt from "bcryptjs";
-import { AppException, badRequest, unauthorized } from "../common/errors/app.exception";
 import { AuditService } from "../audit/audit.service";
+import {
+  buildOtpAuthUrl,
+  generateBackupCodes,
+  generateTotpSecret,
+  hashBackupCode,
+  verifyTotpCode,
+} from "../common/crypto/totp";
+import { AppException, badRequest, notFound, unauthorized } from "../common/errors/app.exception";
 import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import type { AuthUser } from "./auth-user";
 import type {
   ChangePasswordDto,
+  DisableTwoFactorDto,
+  EnableTwoFactorDto,
   ForgotPasswordCccdDto,
   ForgotPasswordRequestDto,
   GoogleLoginDto,
   LoginDto,
   RegisterDto,
   UpdateProfileDto,
+  VerifyOtpChallengeDto,
 } from "./dto/auth.dto";
 import { permissionsFor, type Action, type Role } from "./permissions";
 import { TokensService } from "./tokens.service";
@@ -22,6 +33,8 @@ import { TokensService } from "./tokens.service";
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
 const REUSE_GRACE_MS = 10_000;
+const OTP_CHALLENGE_TTL_MIN = 5;
+const MAX_OTP_CHALLENGE_ATTEMPTS = 5;
 // Băm giả để thời gian phản hồi không lộ việc tài khoản có tồn tại hay không.
 const DUMMY_HASH = bcrypt.hashSync("không-phải-mật-khẩu-thật", 10);
 
@@ -35,6 +48,13 @@ interface UserRow {
   status: string;
   village_id: number | null;
   household_id: number | null;
+  enterprise_id: number | null;
+  assigned_commune: string | null;
+  assigned_region: string | null;
+  coop_code: string;
+  two_factor_enabled: boolean;
+  two_factor_secret: string | null;
+  two_factor_backup_codes: unknown;
   failed_login_count: number;
   locked_until: Date | null;
   token_version: number;
@@ -52,10 +72,20 @@ export interface SessionResult {
   permissions: Record<string, Action[]>;
 }
 
+export interface MfaChallengeResult {
+  mfaRequired: true;
+  challengeToken: string;
+  username: string;
+  fullName: string;
+}
+
 export interface IssuedTokens {
   accessToken: string;
   refreshToken: string;
+  sessionId?: number;
 }
+
+export type LoginOutcome = (SessionResult & { tokens: IssuedTokens }) | MfaChallengeResult;
 
 @Injectable()
 export class AuthService {
@@ -77,6 +107,31 @@ export class AuthService {
     this.allowDevDemoLogin = config.get("allowDevDemoLogin", { infer: true });
   }
 
+  private static readonly USER_AUTH_COLUMNS = `
+    u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
+    u.village_id, u.household_id, u.enterprise_id, u.assigned_commune, u.assigned_region,
+    u.coop_code, u.two_factor_enabled, u.two_factor_secret, u.two_factor_backup_codes,
+    u.failed_login_count, u.locked_until, u.token_version
+  `;
+
+  private rowToAuthUser(user: UserRow, sessionId?: number | null): AuthUser {
+    return {
+      id: Number(user.id),
+      fullName: user.full_name,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      villageId: user.village_id !== null && user.village_id !== undefined ? Number(user.village_id) : null,
+      householdId: user.household_id !== null && user.household_id !== undefined ? Number(user.household_id) : null,
+      enterpriseId: user.enterprise_id !== null && user.enterprise_id !== undefined ? Number(user.enterprise_id) : null,
+      assignedCommune: user.assigned_commune ?? null,
+      assignedRegion: user.assigned_region ?? null,
+      coopCode: user.coop_code || "HTX-CUNE",
+      twoFactorEnabled: Boolean(user.two_factor_enabled),
+      sessionId: sessionId ?? null,
+    };
+  }
+
   sessionOf(user: AuthUser): SessionResult {
     return {
       user: {
@@ -87,17 +142,52 @@ export class AuthService {
         role: user.role,
         villageId: user.villageId,
         householdId: user.householdId,
+        enterpriseId: user.enterpriseId ?? null,
+        assignedCommune: user.assignedCommune ?? null,
+        assignedRegion: user.assignedRegion ?? null,
+        coopCode: user.coopCode || "HTX-CUNE",
+        twoFactorEnabled: Boolean(user.twoFactorEnabled),
+        sessionId: user.sessionId ?? null,
       },
       permissions: permissionsFor(user.role),
     };
   }
 
-  async login(dto: LoginDto, meta: ClientMeta): Promise<SessionResult & { tokens: IssuedTokens }> {
+  private async createOtpChallenge(
+    user: UserRow,
+    authMethod: "password" | "google",
+    meta: ClientMeta,
+  ): Promise<MfaChallengeResult> {
+    const rawToken = randomBytes(32).toString("base64url");
+    const tokenHash = this.tokens.hashToken(rawToken);
+    await this.db.query(
+      `DELETE FROM auth_otp_challenges
+       WHERE user_id = $1 AND (expires_at < now() OR consumed_at IS NOT NULL)`,
+      [user.id],
+    );
+    await this.db.query(
+      `INSERT INTO auth_otp_challenges (challenge_token_hash, user_id, auth_method, expires_at, ip, user_agent)
+       VALUES ($1, $2, $3, now() + make_interval(mins => $4), $5, $6)`,
+      [tokenHash, user.id, authMethod, OTP_CHALLENGE_TTL_MIN, meta.ip ?? null, meta.userAgent?.slice(0, 300) ?? null],
+    );
+    await this.audit.write(
+      { ip: meta.ip },
+      { action: "Yêu cầu xác thực 2 lớp (OTP)", object: user.username, detail: `Phương thức bước 1: ${authMethod}` },
+      { id: user.id, name: user.full_name },
+    );
+    return {
+      mfaRequired: true,
+      challengeToken: rawToken,
+      username: user.username,
+      fullName: user.full_name,
+    };
+  }
+
+  async login(dto: LoginDto, meta: ClientMeta): Promise<LoginOutcome> {
     const cleanUsername = dto.username.trim();
     // Chỉ khớp đúng tên đăng nhập: không có bí danh theo vai trò, không đăng nhập bằng số điện thoại của hộ.
     const { rows } = await this.db.query<UserRow>(
-      `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
-              u.village_id, u.household_id, u.failed_login_count, u.locked_until, u.token_version
+      `SELECT ${AuthService.USER_AUTH_COLUMNS}
        FROM users u
        WHERE u.username = $1`,
       [cleanUsername],
@@ -137,13 +227,18 @@ export class AuthService {
 
     const unlocked = await this.db.query(
       `UPDATE users
-       SET failed_login_count = 0, locked_until = NULL, last_login_at = now()
+       SET failed_login_count = 0, locked_until = NULL, last_login_at = CASE WHEN two_factor_enabled THEN last_login_at ELSE now() END
        WHERE id = $1 AND (locked_until IS NULL OR locked_until <= now())`,
       [user.id],
     );
     if (unlocked.rowCount === 0) {
       throw new AppException(429, "Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
     }
+
+    if (user.two_factor_enabled && user.two_factor_secret) {
+      return this.createOtpChallenge(user, "password", meta);
+    }
+
     const tokens = await this.issueSession(user.id, meta, user.token_version);
     await this.audit.write(
       { ip: meta.ip },
@@ -151,15 +246,7 @@ export class AuthService {
       { id: user.id, name: user.full_name },
     );
 
-    const authUser: AuthUser = {
-      id: user.id,
-      fullName: user.full_name,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      villageId: user.village_id,
-      householdId: user.household_id,
-    };
+    const authUser = this.rowToAuthUser(user, tokens.sessionId);
     return { ...this.sessionOf(authUser), tokens };
   }
 
@@ -251,7 +338,7 @@ export class AuthService {
     };
   }
 
-  async loginWithGoogle(dto: GoogleLoginDto, meta: ClientMeta): Promise<SessionResult & { tokens: IssuedTokens }> {
+  async loginWithGoogle(dto: GoogleLoginDto, meta: ClientMeta): Promise<LoginOutcome> {
     let user: UserRow | undefined;
 
     if (dto.credential) {
@@ -260,8 +347,7 @@ export class AuthService {
         throw unauthorized("Địa chỉ email giả định tự sinh không được phép dùng để đăng nhập OAuth.");
       }
       const { rows } = await this.db.query<UserRow>(
-        `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
-                u.village_id, u.household_id, u.failed_login_count, u.locked_until, u.token_version
+        `SELECT ${AuthService.USER_AUTH_COLUMNS}
          FROM users u
          WHERE LOWER(u.email) = $1
            AND u.email IS NOT NULL
@@ -276,8 +362,7 @@ export class AuthService {
       if (dto.email) {
         const cleanEmail = dto.email.trim().toLowerCase();
         const { rows } = await this.db.query<UserRow>(
-          `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
-                  u.village_id, u.household_id, u.failed_login_count, u.locked_until, u.token_version
+          `SELECT ${AuthService.USER_AUTH_COLUMNS}
            FROM users u
            WHERE u.role = 'farmer' AND (LOWER(u.email) = $1 OR LOWER(u.username) = $1)
            LIMIT 1`,
@@ -286,8 +371,7 @@ export class AuthService {
         user = rows[0];
       } else {
         const { rows } = await this.db.query<UserRow>(
-          `SELECT u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
-                  u.village_id, u.household_id, u.failed_login_count, u.locked_until, u.token_version
+          `SELECT ${AuthService.USER_AUTH_COLUMNS}
            FROM users u
            WHERE u.role = 'farmer' AND u.status = 'active' AND u.household_id IS NOT NULL
            ORDER BY u.id ASC
@@ -314,9 +398,14 @@ export class AuthService {
     }
 
     await this.db.query(
-      "UPDATE users SET failed_login_count = 0, locked_until = NULL, last_login_at = now() WHERE id = $1",
+      "UPDATE users SET failed_login_count = 0, locked_until = NULL, last_login_at = CASE WHEN two_factor_enabled THEN last_login_at ELSE now() END WHERE id = $1",
       [user.id],
     );
+
+    if (user.two_factor_enabled && user.two_factor_secret) {
+      return this.createOtpChallenge(user, "google", meta);
+    }
+
     const tokens = await this.issueSession(user.id, meta, user.token_version);
     await this.audit.write(
       { ip: meta.ip },
@@ -324,15 +413,7 @@ export class AuthService {
       { id: user.id, name: user.full_name },
     );
 
-    const authUser: AuthUser = {
-      id: user.id,
-      fullName: user.full_name,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      villageId: user.village_id,
-      householdId: user.household_id,
-    };
+    const authUser = this.rowToAuthUser(user, tokens.sessionId);
     return { ...this.sessionOf(authUser), tokens };
   }
 
@@ -416,20 +497,32 @@ export class AuthService {
   }
 
   async logout(refreshToken: string | undefined, accessToken?: string): Promise<void> {
-    let userId: number | null = null;
+    let revokedBySession = false;
+    let legacyUserId: number | null = null;
+
     if (refreshToken) {
-      const res = await this.db.query<{ user_id: number }>(
-        "UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL RETURNING user_id",
+      const res = await this.db.query<{ id: number }>(
+        "UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL RETURNING id",
         [this.tokens.hashToken(refreshToken)],
       );
-      userId = res.rows[0]?.user_id ?? null;
+      if ((res.rowCount ?? 0) > 0) revokedBySession = true;
     }
-    if (!userId && accessToken) {
+
+    if (accessToken) {
       const verified = await this.tokens.verifyAccessToken(accessToken);
-      userId = verified?.userId ?? null;
+      if (verified?.sessionId) {
+        await this.db.query(
+          "UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
+          [verified.sessionId, verified.userId],
+        );
+        revokedBySession = true;
+      } else if (verified?.userId) {
+        legacyUserId = verified.userId;
+      }
     }
-    if (userId) {
-      await this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]);
+
+    if (!revokedBySession && legacyUserId) {
+      await this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [legacyUserId]);
     }
   }
 
@@ -698,6 +791,266 @@ export class AuthService {
     return { ok: true, mode: "request" };
   }
 
+  /** Xác minh mã OTP bước 2 (TOTP 6 chữ số hoặc mã dự phòng một lần) và cấp phiên đăng nhập. */
+  async verifyOtpLogin(
+    dto: VerifyOtpChallengeDto,
+    meta: ClientMeta,
+  ): Promise<SessionResult & { tokens: IssuedTokens }> {
+    const tokenHash = this.tokens.hashToken(dto.challengeToken.trim());
+    const { rows } = await this.db.query<{
+      challenge_id: number;
+      expires_at: Date;
+      attempts: number;
+      consumed_at: Date | null;
+      auth_method: string;
+    } & UserRow>(
+      `SELECT c.id AS challenge_id, c.expires_at, c.attempts, c.consumed_at, c.auth_method,
+              ${AuthService.USER_AUTH_COLUMNS}
+       FROM auth_otp_challenges c
+       JOIN users u ON u.id = c.user_id
+       WHERE c.challenge_token_hash = $1
+       LIMIT 1`,
+      [tokenHash],
+    );
+    const row = rows[0];
+    if (
+      !row ||
+      row.consumed_at !== null ||
+      row.expires_at.getTime() <= Date.now() ||
+      row.attempts >= MAX_OTP_CHALLENGE_ATTEMPTS
+    ) {
+      throw unauthorized("Phiên xác thực OTP đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.");
+    }
+    if (row.status !== "active" || !row.two_factor_enabled || !row.two_factor_secret) {
+      throw unauthorized("Tài khoản không khả dụng cho xác thực 2 lớp.");
+    }
+
+    const cleanCode = dto.code.replace(/[\s-]/g, "").toUpperCase();
+    let verified = false;
+    let usedBackupCode = false;
+    let remainingBackupHashes: string[] | null = null;
+
+    if (/^[0-9]{6}$/.test(cleanCode)) {
+      verified = verifyTotpCode(row.two_factor_secret, cleanCode, 1);
+    } else if (/^[0-9A-Z]{8}$/.test(cleanCode)) {
+      const candidateHash = hashBackupCode(cleanCode);
+      const storedHashes = Array.isArray(row.two_factor_backup_codes)
+        ? row.two_factor_backup_codes.filter((x): x is string => typeof x === "string")
+        : [];
+      const idx = storedHashes.indexOf(candidateHash);
+      if (idx !== -1) {
+        verified = true;
+        usedBackupCode = true;
+        remainingBackupHashes = storedHashes.filter((_, i) => i !== idx);
+      }
+    }
+
+    if (!verified) {
+      await this.db.query(
+        `UPDATE auth_otp_challenges
+         SET attempts = attempts + 1,
+             consumed_at = CASE WHEN attempts + 1 >= $2 THEN now() ELSE consumed_at END
+         WHERE id = $1`,
+        [row.challenge_id, MAX_OTP_CHALLENGE_ATTEMPTS],
+      );
+      await this.audit.write(
+        { ip: meta.ip },
+        { action: "Xác thực OTP bước 2 thất bại", object: row.username },
+        { id: row.id, name: row.full_name },
+      );
+      throw unauthorized("Mã xác thực OTP không đúng. Vui lòng kiểm tra lại ứng dụng xác thực.");
+    }
+
+    const consumed = await this.db.query(
+      `UPDATE auth_otp_challenges SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL`,
+      [row.challenge_id],
+    );
+    if (consumed.rowCount === 0) {
+      throw unauthorized("Phiên xác thực OTP đã được sử dụng. Vui lòng đăng nhập lại.");
+    }
+
+    if (usedBackupCode && remainingBackupHashes !== null) {
+      await this.db.query(
+        `UPDATE users SET last_login_at = now(), two_factor_backup_codes = $2::jsonb WHERE id = $1`,
+        [row.id, JSON.stringify(remainingBackupHashes)],
+      );
+    } else {
+      await this.db.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [row.id]);
+    }
+
+    const tokens = await this.issueSession(row.id, meta, row.token_version);
+    await this.audit.write(
+      { ip: meta.ip },
+      {
+        action: usedBackupCode ? "Đăng nhập 2 lớp (mã dự phòng)" : "Đăng nhập 2 lớp (OTP)",
+        object: row.username,
+      },
+      { id: row.id, name: row.full_name },
+    );
+
+    const authUser = this.rowToAuthUser(row, tokens.sessionId);
+    return { ...this.sessionOf(authUser), tokens };
+  }
+
+  /** Khởi tạo khóa bí mật TOTP mới để người dùng quét mã QR trên ứng dụng xác thực trước khi kích hoạt. */
+  async setupTwoFactor(user: AuthUser) {
+    const secret = generateTotpSecret();
+    await this.db.query(`UPDATE users SET two_factor_pending_secret = $2 WHERE id = $1`, [user.id, secret]);
+    const otpauthUrl = buildOtpAuthUrl({
+      secret,
+      accountName: user.username,
+      issuer: "HTX Cu Ne",
+    });
+    return {
+      secret,
+      otpauthUrl,
+      issuer: "HTX Cu Ne",
+      accountName: user.username,
+    };
+  }
+
+  /** Xác nhận mã TOTP 6 chữ số đầu tiên và bật xác thực 2 lớp kèm bộ 8 mã dự phòng. */
+  async enableTwoFactor(user: AuthUser, dto: EnableTwoFactorDto, ip?: string) {
+    const { rows } = await this.db.query<{ two_factor_pending_secret: string | null }>(
+      `SELECT two_factor_pending_secret FROM users WHERE id = $1`,
+      [user.id],
+    );
+    const pending = rows[0]?.two_factor_pending_secret;
+    if (!pending) {
+      throw badRequest("Chưa khởi tạo khóa xác thực 2 lớp. Vui lòng bấm tạo mã QR thiết lập trước.");
+    }
+    if (!verifyTotpCode(pending, dto.code, 1)) {
+      throw badRequest("Mã OTP 6 chữ số không khớp. Vui lòng kiểm tra thời gian trên thiết bị và nhập lại.");
+    }
+
+    const { plainCodes, hashedCodes } = generateBackupCodes(8);
+    await this.db.query(
+      `UPDATE users
+       SET two_factor_enabled = true,
+           two_factor_secret = $2,
+           two_factor_pending_secret = NULL,
+           two_factor_backup_codes = $3::jsonb
+       WHERE id = $1`,
+      [user.id, pending, JSON.stringify(hashedCodes)],
+    );
+    await this.audit.write({ ip, user }, { action: "Bật xác thực 2 lớp (OTP)", object: user.username });
+    return { ok: true as const, enabled: true as const, backupCodes: plainCodes };
+  }
+
+  /** Tắt xác thực 2 lớp sau khi đối chiếu mật khẩu hiện tại hoặc mã OTP 6 chữ số đang hiệu lực. */
+  async disableTwoFactor(user: AuthUser, dto: DisableTwoFactorDto, ip?: string) {
+    const { rows } = await this.db.query<{
+      password_hash: string;
+      two_factor_enabled: boolean;
+      two_factor_secret: string | null;
+    }>(`SELECT password_hash, two_factor_enabled, two_factor_secret FROM users WHERE id = $1`, [user.id]);
+    const row = rows[0];
+    if (!row) throw unauthorized();
+    if (!row.two_factor_enabled) {
+      return { ok: true as const };
+    }
+
+    let confirmed = false;
+    if (dto.code && row.two_factor_secret && verifyTotpCode(row.two_factor_secret, dto.code, 1)) {
+      confirmed = true;
+    } else if (dto.currentPassword && (await bcrypt.compare(dto.currentPassword, row.password_hash))) {
+      confirmed = true;
+    }
+    if (!confirmed) {
+      throw badRequest("Vui lòng nhập đúng mật khẩu hiện tại hoặc mã OTP 6 chữ số để tắt xác thực 2 lớp.");
+    }
+
+    await this.db.query(
+      `UPDATE users
+       SET two_factor_enabled = false,
+           two_factor_secret = NULL,
+           two_factor_pending_secret = NULL,
+           two_factor_backup_codes = '[]'::jsonb
+       WHERE id = $1`,
+      [user.id],
+    );
+    await this.audit.write({ ip, user }, { action: "Tắt xác thực 2 lớp (OTP)", object: user.username });
+    return { ok: true as const };
+  }
+
+  /** Danh sách các phiên đăng nhập còn hiệu lực của tài khoản để quản lý & đăng xuất từ xa. */
+  async listSessions(user: AuthUser) {
+    const { rows } = await this.db.query<{
+      id: number;
+      ip: string | null;
+      user_agent: string | null;
+      created_at: Date;
+      last_used_at: Date;
+      expires_at: Date;
+    }>(
+      `SELECT id, ip, user_agent, created_at, last_used_at, expires_at
+       FROM refresh_tokens
+       WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+       ORDER BY (id = COALESCE($2::bigint, -1)) DESC, last_used_at DESC, id DESC
+       LIMIT 30`,
+      [user.id, user.sessionId ?? null],
+    );
+    return {
+      data: rows.map((r) => ({
+        id: Number(r.id),
+        ip: r.ip,
+        userAgent: r.user_agent,
+        createdAt: r.created_at,
+        lastUsedAt: r.last_used_at,
+        expiresAt: r.expires_at,
+        isCurrent: user.sessionId !== undefined && user.sessionId !== null && Number(r.id) === Number(user.sessionId),
+      })),
+    };
+  }
+
+  /** Đăng xuất từ xa một phiên cụ thể theo id (hủy tức thì cả refresh token và access token gắn sid). */
+  async revokeSession(user: AuthUser, sessionId: number, ip?: string) {
+    const res = await this.db.query<{ ip: string | null; user_agent: string | null }>(
+      `UPDATE refresh_tokens
+       SET revoked_at = now()
+       WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+       RETURNING ip, user_agent`,
+      [sessionId, user.id],
+    );
+    if ((res.rowCount ?? 0) === 0) {
+      throw notFound("Phiên đăng nhập không tồn tại hoặc đã kết thúc.");
+    }
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Đăng xuất từ xa thiết bị",
+        object: `Phiên #${sessionId}`,
+        detail: res.rows[0]?.ip ? `IP thiết bị: ${res.rows[0].ip}` : undefined,
+      },
+    );
+    return {
+      ok: true as const,
+      revokedCurrent: user.sessionId !== undefined && user.sessionId !== null && Number(sessionId) === Number(user.sessionId),
+    };
+  }
+
+  /** Đăng xuất từ xa toàn bộ các thiết bị khác (giữ lại phiên hiện tại). */
+  async revokeOtherSessions(user: AuthUser, ip?: string) {
+    if (!user.sessionId) {
+      const res = await this.db.query(
+        `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
+        [user.id],
+      );
+      return { ok: true as const, revokedCount: res.rowCount ?? 0 };
+    }
+    const res = await this.db.query(
+      `UPDATE refresh_tokens
+       SET revoked_at = now()
+       WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL`,
+      [user.id, user.sessionId],
+    );
+    await this.audit.write(
+      { ip, user },
+      { action: "Đăng xuất từ xa các thiết bị khác", object: user.username, detail: `${res.rowCount ?? 0} phiên` },
+    );
+    return { ok: true as const, revokedCount: res.rowCount ?? 0 };
+  }
+
   private async revokeAllSessions(userId: number) {
     await Promise.all([
       this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]),
@@ -719,12 +1072,18 @@ export class AuthService {
        WHERE user_id = $1 AND (expires_at < now() OR revoked_at < now() - interval '1 day')`,
       [userId],
     );
-    await this.db.query(
-      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent, ip)
-       VALUES ($1, $2, now() + make_interval(days => $3), $4, $5)`,
+    const ins = await this.db.query<{ id: number }>(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent, ip, last_used_at)
+       VALUES ($1, $2, now() + make_interval(days => $3), $4, $5, now())
+       RETURNING id`,
       [userId, refresh.hash, this.refreshTtlDays, meta.userAgent?.slice(0, 300) ?? null, meta.ip ?? null],
     );
-    return { accessToken: await this.tokens.signAccessToken(userId, tokenVersion), refreshToken: refresh.token };
+    const sessionId = Number(ins.rows[0].id);
+    return {
+      accessToken: await this.tokens.signAccessToken(userId, tokenVersion, sessionId),
+      refreshToken: refresh.token,
+      sessionId,
+    };
   }
 }
 

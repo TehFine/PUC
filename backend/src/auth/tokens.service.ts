@@ -23,17 +23,25 @@ export class TokensService {
     this.cookieSecure = config.get("cookieSecure", { infer: true });
   }
 
-  signAccessToken(userId: number, tokenVersion = 0): Promise<string> {
-    return this.jwt.signAsync(
-      { ver: tokenVersion },
-      { subject: String(userId), algorithm: "HS256", issuer: JWT_ISSUER, audience: JWT_AUDIENCE },
-    );
+  signAccessToken(userId: number, tokenVersion = 0, sessionId?: number): Promise<string> {
+    const claims: { ver: number; sid?: number } = { ver: tokenVersion };
+    if (sessionId !== undefined && Number.isInteger(sessionId) && sessionId > 0) {
+      claims.sid = sessionId;
+    }
+    return this.jwt.signAsync(claims, {
+      subject: String(userId),
+      algorithm: "HS256",
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    });
   }
 
-  /** Trả về id người dùng và phiên bản token nếu token hợp lệ, ngược lại null. */
-  async verifyAccessToken(token: string): Promise<{ userId: number; tokenVersion: number } | null> {
+  /** Trả về id người dùng, phiên bản token và mã phiên (nếu có) khi token hợp lệ, ngược lại null. */
+  async verifyAccessToken(
+    token: string,
+  ): Promise<{ userId: number; tokenVersion: number; sessionId?: number } | null> {
     try {
-      const payload = await this.jwt.verifyAsync<{ sub?: string; ver?: number }>(token, {
+      const payload = await this.jwt.verifyAsync<{ sub?: string; ver?: number; sid?: number }>(token, {
         algorithms: ["HS256"],
         issuer: JWT_ISSUER,
         audience: JWT_AUDIENCE,
@@ -42,6 +50,11 @@ export class TokensService {
       const tokenVersion = payload.ver === undefined ? 0 : Number(payload.ver);
       if (!Number.isInteger(userId) || userId <= 0 || !Number.isInteger(tokenVersion) || tokenVersion < 0) {
         return null;
+      }
+      if (payload.sid !== undefined) {
+        const sid = Number(payload.sid);
+        if (!Number.isInteger(sid) || sid <= 0) return null;
+        return { userId, tokenVersion, sessionId: sid };
       }
       return { userId, tokenVersion };
     } catch {

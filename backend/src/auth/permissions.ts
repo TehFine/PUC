@@ -1,4 +1,4 @@
-export const ROLES = ["admin", "htx_officer", "inspector", "village_officer", "farmer"] as const;
+export const ROLES = ["admin", "htx_officer", "inspector", "village_officer", "enterprise", "farmer"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const ACTIONS = ["read", "create", "update", "delete"] as const;
@@ -38,7 +38,9 @@ export type ResourceKey = (typeof RESOURCES)[number];
 
 const ALL: Role[] = [...ROLES];
 const STAFF: Role[] = ["admin", "htx_officer", "inspector", "village_officer"];
+const DASHBOARD_READERS: Role[] = [...STAFF, "enterprise"];
 const OVERSIGHT: Role[] = ["admin", "htx_officer", "inspector"];
+const SUPPLY_CHAIN_READERS: Role[] = ["admin", "htx_officer", "inspector", "enterprise"];
 const ADMIN: Role[] = ["admin"];
 const HTX: Role[] = ["admin", "htx_officer"];
 const INSPECTOR: Role[] = ["admin", "inspector"];
@@ -53,6 +55,7 @@ const FARMER: Role[] = ["farmer"];
  *  - Cán bộ HTX: duyệt hồ sơ, quản lý dữ liệu nghiệp vụ, không quản lý tài khoản/audit.
  *  - Kiểm tra viên: tạo biên bản, kiểm nghiệm, vi phạm; xem nhật ký canh tác.
  *  - Cán bộ Thôn: xem hộ trong thôn của mình, ghi nhật ký canh tác.
+ *  - Doanh nghiệp / CSĐG: xem lô hàng, kiểm nghiệm, hợp đồng và quét QR mở rộng cấp Doanh nghiệp.
  *  - Nông dân: chỉ xem danh mục (thuốc BVTV, giống, thôn) và đào tạo.
  * Thiếu một hành động nghĩa là không vai trò nào được phép (kể cả admin).
  */
@@ -64,8 +67,8 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   journal: { read: STAFF, create: FIELD_WRITERS, update: FIELD_WRITERS, delete: ADMIN },
   violations: { read: OVERSIGHT, create: INSPECTOR, update: INSPECTOR, delete: ADMIN },
   spray: { read: STAFF, create: FIELD_WRITERS, update: FIELD_WRITERS, delete: ADMIN },
-  testing: { read: OVERSIGHT, create: INSPECTOR, update: INSPECTOR, delete: ADMIN },
-  harvest: { read: OVERSIGHT, create: HTX, update: HTX, delete: ADMIN },
+  testing: { read: SUPPLY_CHAIN_READERS, create: INSPECTOR, update: INSPECTOR, delete: ADMIN },
+  harvest: { read: SUPPLY_CHAIN_READERS, create: HTX, update: HTX, delete: ADMIN },
   training: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   pesticides: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   varieties: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
@@ -78,7 +81,7 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   portal: { read: FARMER, create: FARMER },
   // Duyệt tài khoản hộ dân tự đăng ký (xem, duyệt = update, từ chối = delete).
   registrations: { read: HTX, update: HTX, delete: HTX },
-  contracts: { read: OVERSIGHT, create: HTX, update: HTX, delete: ADMIN },
+  contracts: { read: SUPPLY_CHAIN_READERS, create: HTX, update: HTX, delete: ADMIN },
   enterprises: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   fertilizers: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   // Bản tin: cán bộ HTX soạn/đăng; người xem công khai đọc qua /api/public/news.
@@ -89,7 +92,7 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   "harvest-declarations": { read: OVERSIGHT, update: HTX },
   // Danh sách hộ đăng ký tập huấn, điểm danh (= update).
   "training-registrations": { read: STAFF, update: HTX },
-  dashboard: { read: STAFF },
+  dashboard: { read: DASHBOARD_READERS },
   reports: { read: OVERSIGHT },
 };
 

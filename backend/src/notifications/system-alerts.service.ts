@@ -21,7 +21,7 @@ export interface SystemAlertRecord {
   createdAt: string;
 }
 
-const STAFF_ROLES = ["admin", "htx_officer", "inspector", "village_officer"];
+const STAFF_ROLES = ["admin", "htx_officer", "inspector", "village_officer", "enterprise"];
 
 @Injectable()
 export class SystemAlertsService implements OnModuleInit {

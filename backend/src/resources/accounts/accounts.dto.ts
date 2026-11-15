@@ -2,7 +2,7 @@ import { PartialType } from "@nestjs/mapped-types";
 import { Transform } from "class-transformer";
 import { IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 import type { Role } from "../../auth/permissions";
-import { OptionalField, RecordId, Text } from "../../common/validation/fields";
+import { OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateAccountDto {
   @Text(100)
@@ -30,7 +30,7 @@ export class CreateAccountDto {
   @Matches(/[0-9]/, { message: "Mật khẩu cần có chữ số." })
   password!: string;
 
-  @IsIn(["admin", "htx_officer", "inspector", "village_officer", "farmer"])
+  @IsIn(["admin", "htx_officer", "inspector", "village_officer", "enterprise", "farmer"])
   role!: Role;
 
   @OptionalField()
@@ -45,6 +45,23 @@ export class CreateAccountDto {
   @IsOptional()
   @RecordId()
   householdId?: number | null;
+
+  /** Doanh nghiệp / cơ sở đóng gói gắn với tài khoản vai trò enterprise. */
+  @IsOptional()
+  @RecordId()
+  enterpriseId?: number | null;
+
+  /** Xã được phân công quản lý (cho cán bộ xã, ví dụ: Xã Cư Né). */
+  @OptionalText(120)
+  assignedCommune?: string | null;
+
+  /** Địa bàn hành chính được giao (cho Chi cục / Thanh tra, ví dụ: Tỉnh Đắk Lắk, Huyện Krông Búk). */
+  @OptionalText(120)
+  assignedRegion?: string | null;
+
+  /** Mã HTX quản lý (mặc định HTX-CUNE). */
+  @OptionalText(40)
+  coopCode?: string;
 }
 
 export class UpdateAccountDto extends PartialType(CreateAccountDto) {}
