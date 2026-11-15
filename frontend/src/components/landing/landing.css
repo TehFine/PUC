@@ -848,22 +848,32 @@ html:has(.lp) body {
 }
 
 .eh-drawer-item {
-  padding: 0 28px;
+  padding: 0;
   border-bottom: 1px solid var(--eh-line);
   display: flex;
-  align-items: center;
+  align-items: stretch;
 }
 
 .eh-drawer-link {
-  padding: 15px 24px 15px 0;
-  display: inline-flex;
+  padding: 15px 28px;
+  display: flex;
   align-items: center;
-  width: auto;
-  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
   font-size: 15px;
   font-weight: 500;
   color: var(--eh-ink);
+  cursor: pointer;
   transition: opacity 0.16s ease;
+}
+
+.eh-drawer-link:active {
+  opacity: 0.65;
+}
+
+.lp .eh-drawer-link:focus-visible {
+  outline-offset: -2px;
+  border-radius: 0;
 }
 
 .eh-drawer-link:hover span,
@@ -1442,11 +1452,11 @@ html[data-perf="lite"] .eh-drawer {
   }
 
   .eh-drawer-item {
-    padding: 0 14px;
+    padding: 0;
   }
 
   .eh-drawer-link {
-    padding: 16px 24px 16px 0;
+    padding: 16px 14px;
   }
 
   .eh-drawer-foot {
