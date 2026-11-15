@@ -42,10 +42,140 @@ export class DashboardService {
 
     const hasPlots = await this.hasPlotsTable();
 
-    const plotsCountExpr =
-      hasPlots && villageId === null
-        ? `GREATEST((SELECT count(*)::int FROM plots), (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh))`
-        : `(SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh)`;
+    const householdsCountExpr =
+      villageId === null
+        ? `(
+             (SELECT count(*)::int FROM hh) +
+             (
+               SELECT coalesce(sum(v.household_count), 0)::int
+               FROM villages v
+               WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+             )
+           )`
+        : `(
+             CASE
+               WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT count(*)::int FROM hh)
+               ELSE COALESCE((SELECT v.household_count FROM villages v WHERE v.id = $1), 0)
+             END
+           )`;
+
+    const plotsCountExpr = hasPlots
+      ? villageId === null
+        ? `(
+             (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
+             (SELECT count(*)::int FROM plots WHERE household_id IS NULL) +
+             (
+               SELECT COALESCE(sum(v.plot_count), 0)::int
+               FROM villages v
+               WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+                 AND NOT EXISTS (
+                   SELECT 1 FROM plots p0
+                   WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v.name))
+                 )
+             )
+           )`
+        : `(
+             (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
+             (
+               SELECT count(*)::int
+               FROM plots p0
+               JOIN villages v0 ON v0.id = $1
+               WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
+             ) +
+             COALESCE(
+               (
+                 SELECT v0.plot_count
+                 FROM villages v0
+                 WHERE v0.id = $1
+                   AND NOT EXISTS (SELECT 1 FROM hh)
+                   AND NOT EXISTS (
+                     SELECT 1 FROM plots p0
+                     WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
+                   )
+               ),
+               0
+             )
+           )`
+      : villageId === null
+        ? `(
+             (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
+             (
+               SELECT COALESCE(sum(v.plot_count), 0)::int
+               FROM villages v
+               WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+             )
+           )`
+        : `(
+             CASE
+               WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh)
+               ELSE COALESCE((SELECT v.plot_count FROM villages v WHERE v.id = $1), 0)
+             END
+           )`;
+
+    const areaHaExpr = hasPlots
+      ? villageId === null
+        ? `ROUND(
+             (
+               (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+               (SELECT COALESCE(sum(area_ha), 0)::numeric FROM plots WHERE household_id IS NULL) +
+               (
+                 SELECT COALESCE(sum(v.area_ha), 0)::numeric
+                 FROM villages v
+                 WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+                   AND NOT EXISTS (
+                     SELECT 1 FROM plots p0
+                     WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v.name))
+                   )
+               )
+             )::numeric,
+             2
+           )::float8`
+        : `ROUND(
+             (
+               (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+               (
+                 SELECT COALESCE(sum(p0.area_ha), 0)::numeric
+                 FROM plots p0
+                 JOIN villages v0 ON v0.id = $1
+                 WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
+               ) +
+               COALESCE(
+                 (
+                   SELECT v0.area_ha::numeric
+                   FROM villages v0
+                   WHERE v0.id = $1
+                     AND NOT EXISTS (SELECT 1 FROM hh)
+                     AND NOT EXISTS (
+                       SELECT 1 FROM plots p0
+                       WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
+                     )
+                 ),
+                 0
+               )
+             )::numeric,
+             2
+           )::float8`
+      : villageId === null
+        ? `ROUND(
+             (
+               (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+               (
+                 SELECT COALESCE(sum(v.area_ha), 0)::numeric
+                 FROM villages v
+                 WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+               )
+             )::numeric,
+             2
+           )::float8`
+        : `ROUND(
+             (
+               CASE
+                 WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh)
+                 ELSE COALESCE((SELECT v.area_ha::numeric FROM villages v WHERE v.id = $1), 0)
+               END
+             )::numeric,
+             2
+           )::float8`;
 
     const countsQuery = this.db.query(
       `WITH hh AS (
@@ -54,9 +184,9 @@ export class DashboardService {
          ${hhWhere}
        )
        SELECT
-         (SELECT count(*)::int FROM hh) AS households,
+         ${householdsCountExpr} AS households,
          ${plotsCountExpr} AS plots,
-         (SELECT COALESCE(sum(hh.area_ha), 0)::float8 FROM hh) AS area_ha,
+         ${areaHaExpr} AS area_ha,
          (SELECT count(*)::int FROM hh WHERE hh.status = 'qualified') AS qualified_households,
          (SELECT count(*)::int FROM violations v WHERE v.status = 'open' ${violWhere}) AS open_violations,
          (SELECT count(*)::int FROM approvals a WHERE a.status = 'pending' ${apprWhere}) AS pending_approvals,
@@ -84,16 +214,44 @@ export class DashboardService {
     const [countsRes, villagesRes, trendRes, listsRes] = await Promise.all([
       countsQuery,
       this.db.query(
-        `SELECT v.id, v.name,
-                count(h.id)::int AS households,
-                count(h.id) FILTER (WHERE h.status = 'qualified')::int AS qualified,
-                COALESCE(sum(h.plot_count), 0)::int AS plots,
-                COALESCE(sum(h.area_ha), 0)::float8 AS area_ha
-         FROM villages v
-         LEFT JOIN households h ON h.village_id = v.id
-         ${villageId !== null ? "WHERE v.id = $1" : ""}
-         GROUP BY v.id, v.name
-         ORDER BY v.id`,
+        hasPlots
+          ? `WITH up AS (
+               SELECT v0.id AS village_id,
+                      COUNT(p.id)::int AS p_cnt,
+                      COALESCE(SUM(p.area_ha), 0)::numeric AS p_area
+               FROM villages v0
+               JOIN plots p ON p.household_id IS NULL AND lower(btrim(p.village)) = lower(btrim(v0.name))
+               GROUP BY v0.id
+             )
+             SELECT v.id, v.name,
+                    CASE WHEN count(h.id) > 0 THEN count(h.id)::int ELSE v.household_count END AS households,
+                    count(h.id) FILTER (WHERE h.status = 'qualified')::int AS qualified,
+                    CASE
+                      WHEN count(h.id) > 0 OR COALESCE(MAX(up.p_cnt), 0) > 0
+                        THEN (COALESCE(sum(h.plot_count), 0) + COALESCE(MAX(up.p_cnt), 0))::int
+                      ELSE v.plot_count
+                    END AS plots,
+                    CASE
+                      WHEN count(h.id) > 0 OR COALESCE(MAX(up.p_cnt), 0) > 0
+                        THEN ROUND((COALESCE(sum(h.area_ha), 0) + COALESCE(MAX(up.p_area), 0))::numeric, 2)::float8
+                      ELSE v.area_ha::float8
+                    END AS area_ha
+             FROM villages v
+             LEFT JOIN households h ON h.village_id = v.id
+             LEFT JOIN up ON up.village_id = v.id
+             ${villageId !== null ? "WHERE v.id = $1" : ""}
+             GROUP BY v.id, v.name, v.household_count, v.plot_count, v.area_ha
+             ORDER BY v.id`
+          : `SELECT v.id, v.name,
+                    CASE WHEN count(h.id) > 0 THEN count(h.id)::int ELSE v.household_count END AS households,
+                    count(h.id) FILTER (WHERE h.status = 'qualified')::int AS qualified,
+                    CASE WHEN count(h.id) > 0 THEN COALESCE(sum(h.plot_count), 0)::int ELSE v.plot_count END AS plots,
+                    CASE WHEN count(h.id) > 0 THEN COALESCE(sum(h.area_ha), 0)::float8 ELSE v.area_ha::float8 END AS area_ha
+             FROM villages v
+             LEFT JOIN households h ON h.village_id = v.id
+             ${villageId !== null ? "WHERE v.id = $1" : ""}
+             GROUP BY v.id, v.name, v.household_count, v.plot_count, v.area_ha
+             ORDER BY v.id`,
         params,
       ),
       this.db.query(

@@ -17,6 +17,11 @@ export class CreatePlotDto {
   @IsNumber()
   year?: number;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  householdId?: number;
+
   @IsOptional() @IsString() source?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() sourceRef?: string;

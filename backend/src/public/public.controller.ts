@@ -3,6 +3,7 @@ import { Throttle } from "@nestjs/throttler";
 import { Public } from "../auth/auth.decorators";
 import { notFound } from "../common/errors/app.exception";
 import { camelRow, camelRows, publicAttachmentUrlSql } from "../common/sql/rows";
+import { querySystemScaleOverview } from "../common/sql/stats-sync";
 import { DatabaseService } from "../database/database.service";
 
 /**
@@ -14,24 +15,15 @@ export class PublicController {
 
   @Public()
   @Get("overview")
-  @Header("Cache-Control", "public, max-age=300")
+  @Header("Cache-Control", "no-cache")
   async overview() {
-    const row = (
-      await this.db.query(
-        `SELECT
-           (SELECT count(*)::int FROM households) AS households,
-           (SELECT count(*)::int FROM households WHERE status = 'qualified') AS qualified_households,
-           (SELECT count(*)::int FROM villages) AS villages,
-           (SELECT coalesce(sum(plot_count), 0)::int FROM households) AS plots,
-           (SELECT coalesce(sum(area_ha), 0)::float8 FROM households) AS area_ha`,
-      )
-    ).rows[0];
+    const row = await querySystemScaleOverview(this.db);
     return camelRow(row);
   }
 
   @Public()
   @Get("catalog")
-  @Header("Cache-Control", "public, max-age=300")
+  @Header("Cache-Control", "no-cache")
   async catalog() {
     const [pesticides, varieties, fertilizers, training] = await Promise.all([
       this.db.query(
@@ -68,7 +60,7 @@ export class PublicController {
 
   @Public()
   @Get("news")
-  @Header("Cache-Control", "public, max-age=120")
+  @Header("Cache-Control", "no-cache")
   async news() {
     const { rows } = await this.db.query(
       `SELECT slug, category, title, excerpt, content, author, image_url, image_alt,
@@ -83,7 +75,7 @@ export class PublicController {
 
   @Public()
   @Get("news/:slug")
-  @Header("Cache-Control", "public, max-age=120")
+  @Header("Cache-Control", "no-cache")
   async newsDetail(@Param("slug") slug: string) {
     const cleanSlug = slug.trim();
     if (!cleanSlug || cleanSlug.length > 120 || !/^[a-z0-9-]+$/i.test(cleanSlug)) {
@@ -104,7 +96,7 @@ export class PublicController {
   /** Danh sách thôn (chỉ id và tên) cho biểu mẫu đăng ký. */
   @Public()
   @Get("villages")
-  @Header("Cache-Control", "public, max-age=300")
+  @Header("Cache-Control", "no-cache")
   async villages() {
     return (await this.db.query<{ id: number; name: string }>("SELECT id, name FROM villages ORDER BY name")).rows;
   }
@@ -112,7 +104,7 @@ export class PublicController {
   /** Danh sách mã lô thu hoạch & mã tem mẫu để hiển thị trên trang cổng tra cứu công khai `/trace`. */
   @Public()
   @Get("trace-samples")
-  @Header("Cache-Control", "public, max-age=120")
+  @Header("Cache-Control", "no-cache")
   async traceSamples() {
     const [lotsRes, stampsRes, plotsRes] = await Promise.all([
       this.db.query(
@@ -165,7 +157,7 @@ export class PublicController {
   @Public()
   @Throttle({ default: { limit: process.env.NODE_ENV === "test" ? 1000 : 60, ttl: 60_000 } })
   @Get("trace/:code")
-  @Header("Cache-Control", "public, max-age=60")
+  @Header("Cache-Control", "no-cache")
   async trace(@Param("code") code: string) {
     const cleanCode = code.trim();
     if (!cleanCode || cleanCode.length > 80 || !/^[A-Za-z0-9._/-]+$/.test(cleanCode)) {

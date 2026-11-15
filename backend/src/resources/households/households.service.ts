@@ -10,6 +10,7 @@ import type { ListQueryDto } from "../../common/crud/list-query.dto";
 import { villageScope } from "../../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { publicAttachmentUrlSql } from "../../common/sql/rows";
+import { hasPlotsTable, syncHouseholdAndVillageStats } from "../../common/sql/stats-sync";
 import { DatabaseService } from "../../database/database.service";
 import { CreateHouseholdDto, IssueHouseholdAccountDto } from "./households.dto";
 
@@ -79,11 +80,47 @@ export class HouseholdsService extends BaseCrudService {
   }
 
   override async create(dto: object, user: AuthUser, ip?: string) {
-    return redact(await super.create(dto, user, ip), user);
+    const created = await super.create(dto, user, ip);
+    await syncHouseholdAndVillageStats(this.db);
+    return redact(created, user);
   }
 
   override async update(id: number, dto: object, user: AuthUser, ip?: string) {
-    return redact(await super.update(id, dto, user, ip), user);
+    const prev = await this.db.query<{ village_id: number | string }>(
+      "SELECT village_id FROM households WHERE id = $1 LIMIT 1",
+      [id],
+    );
+    const oldVillageId = prev.rows[0]?.village_id ? Number(prev.rows[0].village_id) : undefined;
+    const updated = await super.update(id, dto, user, ip);
+    await syncHouseholdAndVillageStats(this.db, {
+      forceZeroVillageIds: oldVillageId ? [oldVillageId] : [],
+    });
+    return redact(updated, user);
+  }
+
+  override async remove(id: number, user: AuthUser, ip?: string) {
+    const prev = await this.db.query<{ village_id: number | string }>(
+      "SELECT village_id FROM households WHERE id = $1 LIMIT 1",
+      [id],
+    );
+    const oldVillageId = prev.rows[0]?.village_id ? Number(prev.rows[0].village_id) : undefined;
+    const hasPlots = await hasPlotsTable(this.db);
+    const linkedPlotIds = hasPlots
+      ? (
+          await this.db.query<{ id: number | string }>("SELECT id FROM plots WHERE household_id = $1", [id])
+        ).rows.map((r) => Number(r.id))
+      : [];
+
+    const result = await super.remove(id, user, ip);
+
+    if (hasPlots && linkedPlotIds.length > 0) {
+      await this.db.query("DELETE FROM plots WHERE id = ANY($1::bigint[]) AND household_id IS NULL", [linkedPlotIds]);
+    }
+    await syncHouseholdAndVillageStats(this.db, {
+      forceZeroVillageIds: oldVillageId ? [oldVillageId] : [],
+      hasPlots,
+    });
+    return result;
   }
 
   /**
@@ -135,6 +172,10 @@ export class HouseholdsService extends BaseCrudService {
         const code = (error as { code?: string }).code ?? "";
         result.errors.push({ row: rowNo, message: IMPORT_DB_ERRORS[code] ?? "Không lưu được dòng này." });
       }
+    }
+
+    if (result.created > 0 || result.updated > 0) {
+      await syncHouseholdAndVillageStats(this.db);
     }
 
     await this.audit.write(

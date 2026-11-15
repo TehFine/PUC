@@ -2,6 +2,7 @@ import type { FeatureCollection, Polygon } from "geojson";
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
 import { AppException, forbidden } from "../common/errors/app.exception";
+import { resolvePlotHouseholdId, syncHouseholdAndVillageStats } from "../common/sql/stats-sync";
 import { DatabaseService } from "../database/database.service";
 import type {
   CreatedPlot,
@@ -54,6 +55,7 @@ export interface CreatePlotInput {
   zone?: string;
   variety?: string;
   year?: number;
+  householdId?: number;
   /** Giá trị lạ được chuẩn hóa về mặc định (declared / pending). */
   source?: string;
   status?: string;
@@ -251,18 +253,23 @@ export class PlotsService {
       properties.status = "pending";
     }
     const pool = this.db.pool;
+    const linkedHouseholdId = await resolvePlotHouseholdId(pool, {
+      householdId: input.householdId,
+      ownerName: properties.owner,
+      villageName: properties.village,
+    });
 
     try {
       const { rows } = await pool.query<PlotRow>(
         `
           INSERT INTO plots (
             code, sheet_no, parcel_no, owner_name, village, zone_code, variety,
-            planted_year, area_ha, source, status, source_ref, geom
+            planted_year, area_ha, source, status, source_ref, household_id, geom
           )
           VALUES (
             $1, $2, $3, $4, $5, $6, $7,
-            $8, $9, $10, $11, $12,
-            ST_SetSRID(ST_GeomFromGeoJSON($13), 4326)
+            $8, $9, $10, $11, $12, $13,
+            ST_SetSRID(ST_GeomFromGeoJSON($14), 4326)
           )
           RETURNING id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
                     village, zone_code AS zone, variety, planted_year AS year, area_ha,
@@ -283,9 +290,16 @@ export class PlotsService {
           properties.source,
           properties.status,
           properties.sourceRef ?? null,
+          linkedHouseholdId,
           JSON.stringify(geometry),
         ],
       );
+
+      await syncHouseholdAndVillageStats(pool, {
+        householdIds: linkedHouseholdId ? [linkedHouseholdId] : [],
+        hasPlots: true,
+      });
+
       return { feature: rowToFeature(rows[0]), persisted: true };
     } catch (error) {
       const code = (error as { code?: string }).code;
@@ -333,17 +347,12 @@ export class PlotsService {
       [code, JSON.stringify(geometry), Boolean(updateArea), computedAreaHa],
     );
 
-    if (updateArea && existing.rows[0].household_id != null) {
-      const hhId = Number(existing.rows[0].household_id);
-      await pool.query(
-        `
-          UPDATE households
-          SET area_ha = COALESCE((SELECT ROUND(SUM(area_ha)::numeric, 4) FROM plots WHERE household_id = $1), area_ha),
-              updated_at = now()
-          WHERE id = $1
-        `,
-        [hhId],
-      );
+    if (updateArea) {
+      const hhId = existing.rows[0].household_id != null ? Number(existing.rows[0].household_id) : null;
+      await syncHouseholdAndVillageStats(pool, {
+        householdIds: hhId ? [hhId] : [],
+        hasPlots: true,
+      });
     }
 
     return { feature: rowToFeature(rows[0]), persisted: true };
@@ -451,6 +460,56 @@ export class PlotsService {
           ],
         );
       }
+
+      const importedCodes = uniqueFeatures.map((f) => f.properties.code);
+      if (importedCodes.length > 0) {
+        // Tự gắn household_id khi tên chủ thửa trùng duy nhất trong cùng thôn hoặc trên toàn HTX.
+        await client.query(
+          `UPDATE plots p
+           SET household_id = m.household_id
+           FROM (
+             SELECT DISTINCT ON (p0.id) p0.id AS plot_id, h.id AS household_id
+             FROM plots p0
+             JOIN households h ON lower(btrim(h.name)) = lower(btrim(p0.owner_name))
+             JOIN villages v ON v.id = h.village_id
+             WHERE p0.code = ANY($1::text[])
+               AND p0.household_id IS NULL
+               AND btrim(COALESCE(p0.owner_name, '')) <> ''
+               AND (
+                 (
+                   lower(btrim(v.name)) = lower(btrim(COALESCE(p0.village, '')))
+                   AND (
+                     SELECT count(*)
+                     FROM households h2
+                     JOIN villages v2 ON v2.id = h2.village_id
+                     WHERE lower(btrim(h2.name)) = lower(btrim(p0.owner_name))
+                       AND lower(btrim(v2.name)) = lower(btrim(COALESCE(p0.village, '')))
+                   ) = 1
+                 )
+                 OR (
+                   SELECT count(*)
+                   FROM households h3
+                   WHERE lower(btrim(h3.name)) = lower(btrim(p0.owner_name))
+                 ) = 1
+               )
+             ORDER BY p0.id, (lower(btrim(v.name)) = lower(btrim(COALESCE(p0.village, '')))) DESC
+           ) m
+           WHERE p.id = m.plot_id`,
+          [importedCodes],
+        );
+
+        const affectedHh = await client.query<{ household_id: number | string }>(
+          `SELECT DISTINCT household_id
+           FROM plots
+           WHERE code = ANY($1::text[]) AND household_id IS NOT NULL`,
+          [importedCodes],
+        );
+        await syncHouseholdAndVillageStats(client, {
+          householdIds: affectedHh.rows.map((r) => Number(r.household_id)),
+          hasPlots: true,
+        });
+      }
+
       await client.query("COMMIT");
       return { imported: features.length, persisted: true };
     } catch (error) {
