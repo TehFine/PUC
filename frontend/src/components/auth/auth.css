@@ -626,12 +626,10 @@ select.auth-input {
 
 .auth-mode-tab {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  min-height: 46px;
-  padding: 8px 12px;
+  min-height: 44px;
+  padding: 10px 12px;
   border: 0;
   border-right: 1px solid var(--au-border);
   border-radius: 0;
@@ -656,12 +654,6 @@ select.auth-input {
   font-weight: 500;
 }
 
-.auth-mode-tab span {
-  font-size: 11.5px;
-  font-weight: 400;
-  opacity: 0.8;
-}
-
 .auth-mode-tab:hover:not(.is-active):not(:disabled) {
   background: #ffffff;
   color: var(--au-ink);
@@ -674,11 +666,6 @@ select.auth-input {
 
 .auth-mode-tab.is-active strong {
   font-weight: 600;
-}
-
-.auth-mode-tab.is-active span {
-  color: rgba(255, 255, 255, 0.82);
-  opacity: 1;
 }
 
 .auth-mode-tab:disabled {

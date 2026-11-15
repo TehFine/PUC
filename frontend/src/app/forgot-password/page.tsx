@@ -204,7 +204,6 @@ function ForgotPasswordContent() {
           onClick={() => switchMode("cccd")}
         >
           <strong>Xác minh CCCD</strong>
-          <span>Đổi ngay lập tức</span>
         </button>
         <button
           type="button"
@@ -215,7 +214,6 @@ function ForgotPasswordContent() {
           onClick={() => switchMode("request")}
         >
           <strong>Nhờ cán bộ HTX</strong>
-          <span>Đối chiếu &amp; phê duyệt</span>
         </button>
       </div>
 
