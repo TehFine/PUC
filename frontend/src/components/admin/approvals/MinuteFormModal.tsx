@@ -10,7 +10,9 @@ import { api, errorMessage } from "@/lib/api-client";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, todayIso } from "@/components/admin/shared/form-utils";
 import { badgeOf, MINUTE_RESULT, optionsOf } from "@/components/admin/shared/labels";
+import { ALLOWED_IMAGE_MIMES } from "@/components/portal/shared/media";
 import { formatDate } from "@/utils/format";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { MinuteResult, MinuteRow } from "@/types/approvals";
 
 const RESULT_OPTIONS = optionsOf(MINUTE_RESULT);
@@ -109,7 +111,7 @@ export function MinuteDetailModal({
         </div>
 
         {hasCoords && (
-          <div style={{ padding: "8px 10px", background: "#ffffff", border: "1px solid #d1fae5" }}>
+          <div style={{ padding: "8px 10px", background: "#ffffff", border: "1px solid #d4d4d2", borderRadius: 6 }}>
             <div style={{ fontSize: 11.5, color: "#14532d", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
               <MapPin size={13} />
               <span>
@@ -129,7 +131,7 @@ export function MinuteDetailModal({
           </div>
         )}
 
-        {minute.photoUrl && (
+        {isSafeMediaUrl(minute.photoUrl) && (
           <div>
             <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 4 }}>Ảnh hiện trường kiểm tra</div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -228,6 +230,10 @@ export default function MinuteFormModal({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || uploadingPhoto) return;
+    if (!ALLOWED_IMAGE_MIMES.has(file.type)) {
+      setUploadError("Chỉ nhận ảnh hiện trường định dạng JPG, PNG hoặc WEBP.");
+      return;
+    }
     if (file.size > 10 * 1024 * 1024) {
       setUploadError("Ảnh biên bản kiểm tra không được vượt quá 10 MB.");
       return;
@@ -237,7 +243,7 @@ export default function MinuteFormModal({
     try {
       const uploaded = await api.upload(file, "inspection");
       setPhotoId(uploaded.id);
-      setPhotoUrl(`/api/public/files/${uploaded.id}`);
+      setPhotoUrl(uploaded.url);
       toast.success("Đã tải ảnh minh chứng kiểm tra thực địa.");
     } catch (err) {
       setUploadError(errorMessage(err, "Không thể tải ảnh hiện trường lên máy chủ."));
@@ -366,7 +372,8 @@ export default function MinuteFormModal({
 
         <div
           style={{
-            border: "1px solid #d1fae5",
+            border: "1px solid #d4d4d2",
+            borderRadius: 6,
             background: "#f0fdf4",
             padding: "10px 12px",
             marginBottom: 14,
@@ -414,15 +421,17 @@ export default function MinuteFormModal({
             </label>
             {photoUrl && (
               <>
-                <a
-                  href={photoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-outline btn-sm"
-                  style={{ textDecoration: "none" }}
-                >
-                  Xem ảnh đã gắn
-                </a>
+                {isSafeMediaUrl(photoUrl) && (
+                  <a
+                    href={photoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-outline btn-sm"
+                    style={{ textDecoration: "none" }}
+                  >
+                    Xem ảnh đã gắn
+                  </a>
+                )}
                 <button
                   type="button"
                   className="btn btn-danger btn-sm"

@@ -165,7 +165,7 @@ export default function SystemAlertsTab() {
           className="card"
           style={{
             padding: "18px 20px",
-            border: activeAlert.severity === "critical" ? "1.5px solid #fca5a5" : "1.5px solid #fdba74",
+            border: "1px solid #d4d4d2",
             background: activeAlert.severity === "critical" ? "#fef2f2" : "#fff7ed",
             display: "flex",
             flexWrap: "wrap",

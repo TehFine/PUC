@@ -148,9 +148,9 @@ export default function HouseholdAccountModal({
         <div
           style={{
             padding: 16,
-            borderRadius: 12,
+            borderRadius: 8,
             background: "#f2f8f4",
-            border: "1px solid #cce3d4",
+            border: "1px solid #d4d4d2",
             display: "grid",
             gap: 10,
             fontSize: 13.5,

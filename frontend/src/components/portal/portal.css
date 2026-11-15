@@ -3216,9 +3216,9 @@ body.pt-body {
   align-items: flex-start;
   gap: 10px;
   padding: 12px 14px;
-  background: rgba(56, 132, 255, 0.06);
-  border: 1px solid rgba(56, 132, 255, 0.18);
-  border-radius: 14px;
+  background: #f7f7f5;
+  border: 1px solid #d4d4d2;
+  border-radius: 8px;
 }
 
 .pt-detail-gps-icon {
@@ -3286,18 +3286,16 @@ body.pt-body {
   flex-direction: column;
   gap: 4px;
   padding: 13px 16px;
-  border-radius: 14px;
-  border: 1px solid transparent;
+  border-radius: 8px;
+  border: 1px solid #d4d4d2;
 }
 
 .pt-detail-compliance-box.is-safe {
-  background: rgba(39, 122, 72, 0.08);
-  border-color: rgba(39, 122, 72, 0.18);
+  background: rgba(39, 122, 72, 0.06);
 }
 
 .pt-detail-compliance-box.is-warning {
-  background: rgba(220, 38, 38, 0.08);
-  border-color: rgba(220, 38, 38, 0.18);
+  background: rgba(220, 38, 38, 0.06);
 }
 
 .pt-detail-compliance-icon {
@@ -3363,22 +3361,22 @@ body.pt-body {
   gap: 10px;
   width: 100%;
   padding: 13px 16px;
-  border: 0;
-  border-radius: 18px;
+  border: 1px solid #d4d4d2;
+  border-radius: 8px;
   font: inherit;
   font-size: 13.5px;
   line-height: 1.45;
   text-align: left;
   cursor: pointer;
-  transition: transform 0.2s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
 }
 .pt-reminder svg { flex: none; }
-.pt-reminder:hover { transform: translateX(3px); }
+.pt-reminder:hover { border-color: #14372f; }
 .pt-reminder:focus-visible { outline: 2px solid var(--green-600); outline-offset: 2px; }
-.pt-reminder-red { background: #fdf1ee; color: #7d281f; border: 1px solid rgba(217, 87, 58, 0.16); }
-.pt-reminder-gold { background: #fdf6e1; color: #6d4a10; border: 1px solid rgba(216, 162, 28, 0.18); }
-.pt-reminder-blue { background: var(--sky-soft); color: #1f4f86; border: 1px solid rgba(90, 169, 214, 0.2); }
-.pt-reminder-green { background: #eef8e3; color: var(--ink); border: 1px solid rgba(46, 125, 86, 0.16); }
+.pt-reminder-red { background: #fdf1ee; color: #7d281f; }
+.pt-reminder-gold { background: #fdf6e1; color: #6d4a10; }
+.pt-reminder-blue { background: var(--sky-soft); color: #1f4f86; }
+.pt-reminder-green { background: #eef8e3; color: var(--ink); }
 
 /* ── Lịch kiểm tra nằm trực tiếp dưới nền giao diện (Không dùng thẻ bọc) ── */
 .pt-schedule-section {
@@ -4504,25 +4502,25 @@ body.pt-body {
 }
 
 .pt-pest-card.pt-pest-card-restricted {
-  border-color: #ead19c;
+  border-color: rgba(20, 55, 47, 0.11);
   outline: none;
   background: #fffdf8;
 }
 
 .pt-pest-card.pt-pest-card-banned {
-  border-color: #efc2b8;
+  border-color: rgba(20, 55, 47, 0.11);
   outline: none;
   background: #fffafa;
 }
 
 .pt-pest-card.pt-pest-card-encouraged {
-  border-color: #c5ddd0;
+  border-color: rgba(20, 55, 47, 0.11);
   outline: none;
   background: #f8fcf9;
 }
 
 .pt-pest-card.pt-pest-card-warning {
-  border-color: #efc2b8;
+  border-color: rgba(20, 55, 47, 0.11);
   outline: none;
   background: #fffafa;
 }
@@ -5483,8 +5481,8 @@ body.pt-body {
 
 .pt-training-alert-box {
   background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 14px;
+  border: 1px solid #d4d4d2;
+  border-radius: 6px;
   padding: 11px 14px;
   font-size: 12.5px;
   color: #92400e;
@@ -6622,7 +6620,7 @@ body.pt-body {
   margin-top: auto;
   padding-top: 14px;
 }
-.pt-form-error { padding: 12px 14px; border-radius: 6px; border: 1px solid #efc2b8; background: #fdf1ee; color: #b73c20; font-size: 13.5px; line-height: 1.45; }
+.pt-form-error { padding: 12px 14px; border-radius: 6px; border: 1px solid #d4d4d2; background: #fdf1ee; color: #b73c20; font-size: 13.5px; line-height: 1.45; }
 .pt-hint { margin: 2px 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
 
 .pt-sheet.pt-password-sheet:not(.is-drawer) {
@@ -8685,9 +8683,9 @@ body.pt-body {
   flex-wrap: wrap;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: #fef2f2;
-  border: 1px solid #fecaca;
+  border: 1px solid #d4d4d2;
 }
 .pt-confirm-question {
   font-size: 13px;
@@ -8808,20 +8806,17 @@ body.pt-body {
 .pt-stamp-stat-card {
   background: #ffffff;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  box-shadow: 0 2px 10px rgba(20, 55, 47, 0.03);
 }
 .pt-stamp-stat-card.is-green {
-  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
-  border-color: #bbf7d0;
+  background: #ffffff;
 }
 .pt-stamp-stat-card.is-blue {
-  background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
-  border-color: #bfdbfe;
+  background: #ffffff;
 }
 .pt-stamp-stat-label {
   font-size: 12px;
@@ -9885,7 +9880,7 @@ html[data-perf="lite"] .pt-protocol-guarantee-card {
 .cp-banner {
   padding: 13px 16px;
   border-radius: 6px;
-  border: 1px solid #c9d7d0;
+  border: 1px solid #d4d4d2;
   background: #ffffff;
   display: flex;
   flex-direction: column;
@@ -9893,12 +9888,10 @@ html[data-perf="lite"] .pt-protocol-guarantee-card {
 }
 
 .cp-banner.is-warn {
-  border-color: #ead19c;
   background: #fffdf8;
 }
 
 .cp-banner.is-danger {
-  border-color: #efc2b8;
   background: #fffaf9;
 }
 
@@ -10027,19 +10020,17 @@ html[data-perf="lite"] .pt-protocol-guarantee-card {
   padding: 16px;
   border-radius: 8px;
   background: #ffffff;
-  border: 1px solid #c9d7d0;
+  border: 1px solid #d4d4d2;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
 .cp-current-card.is-warn {
-  border-color: #ead19c;
   background: #fffdf8;
 }
 
 .cp-current-card.is-danger {
-  border-color: #efc2b8;
   background: #fffaf9;
 }
 
@@ -10163,10 +10154,6 @@ html[data-perf="lite"] .pt-protocol-guarantee-card {
   border-color: #14372f;
 }
 
-.cp-stage.is-overdue {
-  border-color: #d69c3e;
-}
-
 .cp-stage-btn {
   width: 100%;
   padding: 12px 15px;
@@ -10240,12 +10227,10 @@ html[data-perf="lite"] .pt-protocol-guarantee-card {
 
 .cp-milestone-card.is-overdue {
   background: #fffdf7;
-  border-color: #ead19c;
 }
 
 .cp-milestone-card.is-critical {
   background: #fff9f8;
-  border-color: #efc2b8;
 }
 
 .cp-milestone-head {
@@ -10412,7 +10397,7 @@ html[data-perf="lite"] .pt-protocol-guarantee-card {
   padding: 11px 13px;
   border-radius: 6px;
   background: #fff6f4;
-  border: 1px solid #efc2b8;
+  border: 1px solid #d4d4d2;
   color: #992b15;
   font-size: 12.5px;
   line-height: 1.5;
@@ -10420,7 +10405,6 @@ html[data-perf="lite"] .pt-protocol-guarantee-card {
 
 .cp-alert-box.is-warn {
   background: #fdf9ef;
-  border-color: #ead19c;
   color: #855209;
 }
 

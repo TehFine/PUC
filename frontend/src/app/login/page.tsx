@@ -308,9 +308,15 @@ export default function LoginPage() {
       }
     }
 
+    const isDevMode = process.env.NODE_ENV === "development";
     const clientId = cfg?.clientId || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || null;
 
-    if (clientId) {
+    if (!isDevMode && cfg?.mode !== "oauth") {
+      setError("Đăng nhập bằng Google chưa được cấu hình trên hệ thống này. Vui lòng đăng nhập bằng mật khẩu.");
+      return;
+    }
+
+    if (clientId && cfg?.mode === "oauth") {
       setGoogleSubmitting(true);
       try {
         await loadGoogleIdentityScript();
@@ -345,7 +351,7 @@ export default function LoginPage() {
       return;
     }
 
-    if (cfg?.mode === "demo") {
+    if (isDevMode && cfg?.mode === "demo") {
       setChooserError(null);
       setCustomEmailMode(false);
       setCustomEmail("");
@@ -353,7 +359,7 @@ export default function LoginPage() {
       return;
     }
 
-    await executeGoogleLogin({});
+    setError("Đăng nhập bằng Google chưa được cấu hình trên hệ thống này. Vui lòng đăng nhập bằng mật khẩu.");
   };
 
   const onCustomEmailSubmit = async (event: FormEvent) => {
@@ -375,8 +381,8 @@ export default function LoginPage() {
             marginBottom: 16,
             padding: "12px 16px",
             borderRadius: 0,
-            background: "rgba(22, 101, 52, 0.08)",
-            border: "1px solid rgba(22, 101, 52, 0.25)",
+            background: "#f7f7f5",
+            border: "1px solid #d4d4d2",
             fontSize: 13,
             lineHeight: 1.5,
             color: "#14532d",
@@ -397,8 +403,8 @@ export default function LoginPage() {
             style={{
               padding: "12px 16px",
               borderRadius: 0,
-              background: "#f8faf8",
-              border: "1px solid #dce5dc",
+              background: "#f7f7f5",
+              border: "1px solid #d4d4d2",
               fontSize: 13,
               lineHeight: 1.5,
               color: "#1f2937",
@@ -533,27 +539,44 @@ export default function LoginPage() {
           <span>hoặc</span>
         </div>
 
-        <button
-          id="login-google"
-          type="button"
-          className={`auth-google-btn${googleSubmitting ? " is-busy" : ""}`}
-          disabled={isBusy}
-          onClick={() => void onGoogleSignIn()}
-        >
-          {googleSubmitting ? (
-            <>
-              <AuthBusyBorderRing />
-              <span>
-                {isRedirectingAuth ? "Đang mở hệ thống…" : "Đang đăng nhập bằng Google…"}
-              </span>
-            </>
-          ) : (
-            <>
-              <GoogleLogoIcon />
-              <span>Đăng nhập bằng Google</span>
-            </>
-          )}
-        </button>
+        {process.env.NODE_ENV !== "development" && googleConfig && googleConfig.mode !== "oauth" ? (
+          <div
+            style={{
+              padding: "10px 14px",
+              borderRadius: 4,
+              background: "#f7f7f5",
+              border: "1px solid #d4d4d2",
+              fontSize: 12.5,
+              lineHeight: 1.5,
+              color: "#5f5f5c",
+              textAlign: "center",
+            }}
+          >
+            Đăng nhập bằng Google chưa được cấu hình. Vui lòng đăng nhập bằng tên đăng nhập và mật khẩu.
+          </div>
+        ) : (
+          <button
+            id="login-google"
+            type="button"
+            className={`auth-google-btn${googleSubmitting ? " is-busy" : ""}`}
+            disabled={isBusy}
+            onClick={() => void onGoogleSignIn()}
+          >
+            {googleSubmitting ? (
+              <>
+                <AuthBusyBorderRing />
+                <span>
+                  {isRedirectingAuth ? "Đang mở hệ thống…" : "Đang đăng nhập bằng Google…"}
+                </span>
+              </>
+            ) : (
+              <>
+                <GoogleLogoIcon />
+                <span>Đăng nhập bằng Google</span>
+              </>
+            )}
+          </button>
+        )}
       </form>
       )}
 
@@ -564,7 +587,7 @@ export default function LoginPage() {
         </Link>
       </p>
 
-      {chooserOpen && (
+      {process.env.NODE_ENV === "development" && chooserOpen && (
         <div
           className="auth-google-backdrop"
           role="dialog"

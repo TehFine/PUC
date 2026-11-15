@@ -890,7 +890,7 @@ html[data-perf="lite"] .sw-trace-form {
   .sw-field-audit-callout {
     margin: 12px var(--sw-pad-x) 0;
     padding: 16px;
-    border: 1px solid #d5dfd7;
+    border: 1px solid var(--sw-line);
   }
 
   .sw-field-audit-actions,

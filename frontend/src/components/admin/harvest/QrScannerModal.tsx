@@ -16,6 +16,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { formatVn } from "@/components/admin/catalog/form-utils";
+import { ALLOWED_IMAGE_MIMES } from "@/components/portal/shared/media";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { ROLE_LABELS } from "@/constants/roles";
 import { api, errorMessage } from "@/lib/api-client";
@@ -300,6 +301,15 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
     e.target.value = "";
     if (!file) return;
 
+    if (!ALLOWED_IMAGE_MIMES.has(file.type)) {
+      setLookupError("Chỉ hỗ trợ ảnh chụp mã QR định dạng JPG, PNG hoặc WEBP.");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setLookupError("Ảnh chụp mã QR không được vượt quá 15 MB.");
+      return;
+    }
+
     setLookupError(null);
     const objectUrl = URL.createObjectURL(file);
     const img = new window.Image();
@@ -404,7 +414,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
           padding: "10px 13px",
           borderRadius: 8,
           background: "#f2f8f4",
-          border: "1px solid #cfe4d8",
+          border: "1px solid #d4d4d2",
           fontSize: 12.5,
           lineHeight: 1.5,
           color: "#1c4e30",
@@ -418,7 +428,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp"
         capture="environment"
         style={{ display: "none" }}
         onChange={handleImageFile}
@@ -575,7 +585,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 padding: "12px 14px",
                 borderRadius: 8,
                 background: "#fffbeb",
-                border: "1px solid #f59e0b",
+                border: "1px solid #d4d4d2",
                 color: "#78350f",
                 fontSize: 13,
                 lineHeight: 1.5,
@@ -597,7 +607,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 padding: "11px 14px",
                 borderRadius: 8,
                 background: "#f0fdf4",
-                border: "1px solid #86efac",
+                border: "1px solid #d4d4d2",
                 color: "#14532d",
                 fontSize: 13,
                 display: "flex",
@@ -713,7 +723,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
               style={{
                 padding: "13px 15px",
                 borderRadius: 8,
-                border: "1px solid #cfe4d8",
+                border: "1px solid #d4d4d2",
                 background: "#f7fbf8",
               }}
             >

@@ -219,10 +219,8 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
                         width: "100%",
                         textAlign: "left",
                         padding: "12px 14px",
-                        borderRadius: 12,
-                        border: item.readAt
-                          ? "1px solid rgba(20, 55, 47, 0.1)"
-                          : "1.5px solid rgba(31, 106, 67, 0.4)",
+                        borderRadius: 8,
+                        border: "1px solid #d4d4d2",
                         background: item.readAt ? "#ffffff" : "#f3f9f5",
                         cursor: "pointer",
                         display: "flex",

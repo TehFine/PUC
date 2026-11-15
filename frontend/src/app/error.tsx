@@ -73,7 +73,7 @@ export default function GlobalErrorPage({
         alignItems: "center",
         justifyContent: "center",
         padding: "32px 20px",
-        background: "linear-gradient(180deg, #fef2f2 0%, #ffffff 100%)",
+        background: "#f7f7f5",
         color: "#14372f",
         fontFamily: "var(--font-sans), system-ui, sans-serif",
       }}
@@ -83,10 +83,10 @@ export default function GlobalErrorPage({
           maxWidth: 500,
           width: "100%",
           background: "#ffffff",
-          borderRadius: 20,
-          border: "1px solid #fecaca",
-          boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
-          padding: "36px 28px",
+          borderRadius: 8,
+          border: "1px solid #d4d4d2",
+          boxShadow: "0 14px 36px rgba(15, 23, 42, 0.08)",
+          padding: "32px 28px",
           textAlign: "center",
         }}
       >
@@ -95,10 +95,11 @@ export default function GlobalErrorPage({
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            width: 64,
-            height: 64,
-            borderRadius: 18,
-            background: "#fef2f2",
+            width: 56,
+            height: 56,
+            borderRadius: 6,
+            background: "#f7f7f5",
+            border: "1px solid #e5e7eb",
             marginBottom: 16,
           }}
         >

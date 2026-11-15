@@ -9,7 +9,9 @@ import { api, errorMessage } from "@/lib/api-client";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, numberText, parseNumber, requireFields, todayIso } from "@/components/admin/shared/form-utils";
 import { LAB_RESULT, optionsOf } from "@/components/admin/shared/labels";
+import { ALLOWED_IMAGE_MIMES } from "@/components/portal/shared/media";
 import type { LabRecordStatus, LabResult, LabTestRecord } from "@/types/testing";
+import { isSafeExternalHttpsUrl, isSafeMediaUrl } from "@/utils/url-safety";
 
 const RESULT_OPTIONS = optionsOf(LAB_RESULT);
 const RECORD_STATUS_OPTIONS: Option[] = [
@@ -62,6 +64,10 @@ export default function LabTestFormModal({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || uploadingScan) return;
+    if (file.type !== "application/pdf" && !ALLOWED_IMAGE_MIMES.has(file.type)) {
+      setUploadError("Chỉ nhận tệp PDF hoặc ảnh JPG, PNG, WEBP.");
+      return;
+    }
     if (file.size > 10 * 1024 * 1024) {
       setUploadError("Tệp scan phiếu kiểm nghiệm không được vượt quá 10 MB.");
       return;
@@ -71,7 +77,7 @@ export default function LabTestFormModal({
     try {
       const uploaded = await api.upload(file, "lab");
       setScanAttachmentId(uploaded.id);
-      setScanUrl(`/api/public/files/${uploaded.id}`);
+      setScanUrl(uploaded.url);
       toast.success("Đã tải lên bản scan giấy kiểm nghiệm.");
     } catch (err) {
       setUploadError(errorMessage(err, "Không thể tải tệp scan lên máy chủ."));
@@ -108,8 +114,8 @@ export default function LabTestFormModal({
       errs.chlorpyrifosMgKg = "Giá trị Chlorpyrifos phải là số không âm (hoặc để trống = KPH).";
     }
     const cleanVerifyUrl = externalVerifyUrl.trim();
-    if (cleanVerifyUrl && !/^https:\/\/[^\s]+$/i.test(cleanVerifyUrl)) {
-      errs.externalVerifyUrl = "Đường dẫn tra cứu chéo độc lập phải bắt đầu bằng https://.";
+    if (cleanVerifyUrl && !isSafeExternalHttpsUrl(cleanVerifyUrl)) {
+      errs.externalVerifyUrl = "Đường dẫn tra cứu chéo độc lập phải là URL https:// hợp lệ.";
     }
 
     setFieldErrors(errs);
@@ -258,7 +264,8 @@ export default function LabTestFormModal({
 
         <div
           style={{
-            border: "1px solid #d1fae5",
+            border: "1px solid #d4d4d2",
+            borderRadius: 6,
             background: "#f0fdf4",
             padding: "12px 14px",
             marginBottom: 14,
@@ -309,15 +316,17 @@ export default function LabTestFormModal({
             </label>
             {scanUrl && (
               <>
-                <a
-                  href={scanUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-outline btn-sm"
-                  style={{ textDecoration: "none" }}
-                >
-                  Xem bản scan đã gắn
-                </a>
+                {isSafeMediaUrl(scanUrl) && (
+                  <a
+                    href={scanUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-outline btn-sm"
+                    style={{ textDecoration: "none" }}
+                  >
+                    Xem bản scan đã gắn
+                  </a>
+                )}
                 <button
                   type="button"
                   className="btn btn-danger btn-sm"

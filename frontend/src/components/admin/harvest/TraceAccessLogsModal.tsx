@@ -45,7 +45,7 @@ export default function TraceAccessLogsModal({
           padding: "10px 13px",
           borderRadius: 8,
           background: "#f8faf8",
-          border: "1px solid #d7e2d7",
+          border: "1px solid #d4d4d2",
           fontSize: 12.5,
           lineHeight: 1.5,
           color: "#1f2937",

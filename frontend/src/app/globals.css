@@ -5386,7 +5386,6 @@ html[data-net="slow"] .kpi-card svg rect {
   width: min(440px, calc(100vw - 24px));
   border-radius: 6px;
   border: 1px solid #d4d4d2;
-  border-top: 2px solid #121212;
   padding: 22px 26px 20px;
   background: #ffffff;
   color: #121212;
@@ -5397,20 +5396,11 @@ html[data-net="slow"] .kpi-card svg rect {
   animation: sys-alert-slide-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.sys-alert-banner.is-critical {
-  border-top-color: #b91c1c;
-}
-
-.sys-alert-banner.is-warning {
-  border-top-color: #9a6712;
-}
-
 .sys-alert-banner.is-recovered {
   width: max-content;
   max-width: calc(100vw - 24px);
   border-radius: 6px;
-  border: 1px solid #c5ddd0;
-  border-top: 2px solid #15803d;
+  border: 1px solid #d4d4d2;
   padding: 10px 20px;
   background: #ffffff;
   box-shadow:

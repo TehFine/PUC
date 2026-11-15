@@ -148,7 +148,7 @@ export function TwoFactorSecuritySheet({
             padding: "12px 14px",
             borderRadius: 8,
             background: enabled ? "#f0fdf4" : "#f8fafc",
-            border: `1px solid ${enabled ? "#86efac" : "#e2e8f0"}`,
+            border: "1px solid #d4d4d2",
             fontSize: 13,
             lineHeight: 1.5,
           }}
@@ -170,7 +170,7 @@ export function TwoFactorSecuritySheet({
               padding: "14px",
               borderRadius: 8,
               background: "#fffbeb",
-              border: "1px solid #f59e0b",
+              border: "1px solid #d4d4d2",
             }}
           >
             <strong style={{ display: "block", fontSize: 13.5, color: "#78350f", marginBottom: 6 }}>
@@ -193,7 +193,7 @@ export function TwoFactorSecuritySheet({
                   style={{
                     padding: "6px 8px",
                     background: "#ffffff",
-                    border: "1px solid #fcd34d",
+                    border: "1px solid #d4d4d2",
                     borderRadius: 5,
                     textAlign: "center",
                     fontWeight: 700,
@@ -454,7 +454,7 @@ export function ActiveSessionsSheet({
                   style={{
                     padding: "12px 14px",
                     borderRadius: 8,
-                    border: `1px solid ${s.isCurrent ? "#86efac" : "#e2e8f0"}`,
+                    border: "1px solid #d4d4d2",
                     background: s.isCurrent ? "#f0fdf4" : "#ffffff",
                     display: "flex",
                     alignItems: "center",

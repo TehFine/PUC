@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, ShieldCheck } from "lucide-react";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
 import { hasErrors, requireFields } from "@/components/admin/shared/form-utils";
 import { Modal, FormError } from "@/components/ui/Modal";
@@ -10,6 +9,7 @@ import { FormGrid, NumberField, SelectField, TextField, type Option } from "@/co
 import { useApi, useMutation } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
 import type { EndorsementConfigDto, FieldAuditPassDto } from "@/types/api";
+import { isSafeExternalHttpsUrl } from "@/utils/url-safety";
 
 const LANG_OPTIONS: Option[] = [
   { value: "zh", label: "Tiếng Trung Giản thể (简体中文 - Đoàn thu mua TQ)" },
@@ -28,6 +28,9 @@ export default function FieldAuditPassesModal({
 }) {
   const [activeTab, setActiveTab] = useState<"passes" | "endorsement">("passes");
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [createdSecret, setCreatedSecret] = useState<
+    (FieldAuditPassDto & { passToken: string }) | null
+  >(null);
 
   // ─── Tab 1: Thẻ Đoàn Thẩm định Thực địa ───
   const passesApi = useApi<{ data?: FieldAuditPassDto[] }>("/field-audit-passes");
@@ -45,11 +48,21 @@ export default function FieldAuditPassesModal({
     return api.post<FieldAuditPassDto>("/field-audit-passes", payload);
   });
 
+  const extractValidPassToken = (raw?: string | null): string | null => {
+    const trimmed = typeof raw === "string" ? raw.trim() : "";
+    return /^[A-Za-z0-9_-]{12,80}$/.test(trimmed) ? trimmed : null;
+  };
+
+  const buildInviteUrl = (passToken: string, lang?: string) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    return `${origin}/trace?auditPass=${encodeURIComponent(passToken)}&lang=${encodeURIComponent(lang || "zh")}`;
+  };
+
   const handleCreatePass = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs: Record<string, string | undefined> = requireFields(
       { delegationName },
-      { delegationName: "tên đoàn công tác / đối tác thu mua" },
+      { delegationName: "tên đoàn công tác hoặc đối tác thu mua" },
     );
     const hrs = Number(durationHours);
     if (!Number.isFinite(hrs) || hrs < 1 || hrs > 336) {
@@ -67,6 +80,10 @@ export default function FieldAuditPassesModal({
       note: passNote.trim() || undefined,
     });
     if (!created) return;
+    const secretToken = extractValidPassToken(created.passToken);
+    if (secretToken) {
+      setCreatedSecret({ ...created, passToken: secretToken });
+    }
     toast.success(`Đã cấp mã thẻ thẩm định thực địa ${created.code}.`);
     setDelegationName("");
     setOrganization("");
@@ -77,6 +94,9 @@ export default function FieldAuditPassesModal({
   const handleRevokePass = async (pass: FieldAuditPassDto) => {
     try {
       await api.patch(`/field-audit-passes/${pass.id}/revoke`, {});
+      if (createdSecret?.id === pass.id) {
+        setCreatedSecret(null);
+      }
       toast.success(`Đã thu hồi thẻ ${pass.code}.`);
       void passesApi.refresh();
     } catch (err) {
@@ -86,13 +106,23 @@ export default function FieldAuditPassesModal({
 
   const handleCopyInvite = async (pass: FieldAuditPassDto) => {
     if (typeof window === "undefined") return;
-    const url = `${window.location.origin}/trace?auditPass=${encodeURIComponent(pass.code)}&lang=${pass.defaultLang || "zh"}`;
+    const secretToken =
+      createdSecret?.id === pass.id
+        ? createdSecret.passToken
+        : extractValidPassToken(pass.passToken);
+
+    const textToCopy = secretToken
+      ? `Mã thẻ đoàn thẩm định thực địa: ${pass.code}\nĐường dẫn tra cứu và đối chứng GPS tại vườn: ${buildInviteUrl(secretToken, pass.defaultLang)}`
+      : `Mã thẻ đoàn thẩm định thực địa: ${pass.code} (${pass.delegationName})`;
+
     try {
-      await navigator.clipboard.writeText(
-        `Mã Thẻ Đoàn Thẩm định Thực địa: ${pass.code}\nĐường dẫn tra cứu & đối chứng GPS tại vườn: ${url}`,
-      );
+      await navigator.clipboard.writeText(textToCopy);
       setCopiedId(pass.id);
-      toast.success(`Đã sao chép thông tin thẻ ${pass.code}.`);
+      toast.success(
+        secretToken
+          ? `Đã sao chép đường dẫn mời một lần của thẻ ${pass.code}.`
+          : `Đã sao chép mã định danh thẻ ${pass.code}.`,
+      );
       setTimeout(() => setCopiedId(null), 2200);
     } catch {
       toast.error("Không thể sao chép tự động trên trình duyệt này.");
@@ -149,7 +179,7 @@ export default function FieldAuditPassesModal({
         inspectionUnit: "đơn vị giám sát",
       },
     );
-    if (officialPortalUrl.trim() && !/^https:\/\/[^\s]+$/i.test(officialPortalUrl.trim())) {
+    if (officialPortalUrl.trim() && !isSafeExternalHttpsUrl(officialPortalUrl.trim())) {
       errs.officialPortalUrl = "Đường dẫn cổng thông tin phải bắt đầu bằng https:// hợp lệ.";
     }
     setEndorseErrors(errs);
@@ -202,17 +232,78 @@ export default function FieldAuditPassesModal({
           <div
             style={{
               padding: "10px 14px",
-              borderRadius: 8,
+              borderRadius: 6,
               background: "#f4f9f5",
-              border: "1px solid #cce0d1",
+              border: "1px solid #d4d4d2",
               fontSize: 12.5,
               lineHeight: 1.5,
               color: "#1e293b",
               marginBottom: 14,
             }}
           >
-            Khi đón đoàn đối tác Trung Quốc hoặc đoàn kiểm tra của Tỉnh đi thực tế vườn, cán bộ xã / HTX cấp 1 mã thẻ có thời hạn (24h - 168h). Khách quét Bảng QR đầu thửa vườn sẽ mở được ranh giới đa giác GIS, bấm đối chứng vị trí GPS ngay tại vườn và xem sổ cái SHA-256 mà vẫn bảo mật tuyệt đối CCCD &amp; SĐT cá nhân của nông hộ.
+            Khi đón đoàn đối tác Trung Quốc hoặc đoàn kiểm tra của Tỉnh đi thực tế vườn, cán bộ xã và HTX cấp một mã thẻ có thời hạn (24h - 168h). Khách mở đường dẫn mời rồi quét Bảng QR đầu thửa vườn sẽ mở được ranh giới đa giác GIS, bấm đối chứng vị trí GPS ngay tại vườn và xem sổ cái SHA-256 mà vẫn bảo mật tuyệt đối CCCD cùng SĐT cá nhân của nông hộ.
           </div>
+
+          {createdSecret && (
+            <div
+              style={{
+                padding: "12px 14px",
+                marginBottom: 14,
+                borderRadius: 6,
+                border: "1px solid #d4d4d2",
+                background: "#ffffff",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  marginBottom: 8,
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 13, color: "#14372f" }}>
+                  Đường dẫn mời một lần cho thẻ {createdSecret.code} ({createdSecret.delegationName})
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => void handleCopyInvite(createdSecret)}
+                  >
+                    {copiedId === createdSecret.id ? "Đã sao chép" : "Sao chép đường dẫn mời"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => setCreatedSecret(null)}
+                  >
+                    Đóng thông báo
+                  </button>
+                </div>
+              </div>
+              <div
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: 12,
+                  padding: "8px 10px",
+                  borderRadius: 4,
+                  background: "#f7f7f5",
+                  border: "1px solid #d4d4d2",
+                  wordBreak: "break-all",
+                  color: "#121212",
+                }}
+              >
+                {buildInviteUrl(createdSecret.passToken, createdSecret.defaultLang)}
+              </div>
+              <div style={{ fontSize: 11.5, color: "#5f6d66", marginTop: 6 }}>
+                Khóa bí mật chỉ hiển thị một lần ngay sau khi cấp và sẽ được ẩn trên danh sách sau khi đóng hộp thoại.
+              </div>
+            </div>
+          )}
 
           {canEdit && (
             <form
@@ -220,7 +311,7 @@ export default function FieldAuditPassesModal({
               style={{
                 padding: 14,
                 marginBottom: 14,
-                borderRadius: 10,
+                borderRadius: 6,
                 border: "1px solid #cbd5e1",
                 background: "#f8fafc",
               }}
@@ -230,7 +321,7 @@ export default function FieldAuditPassesModal({
               </div>
               <FormGrid>
                 <TextField
-                  label="Tên đoàn công tác / Đoàn đối tác thu mua"
+                  label="Tên đoàn công tác hoặc đối tác thu mua"
                   required
                   value={delegationName}
                   onChange={setDelegationName}
@@ -239,7 +330,7 @@ export default function FieldAuditPassesModal({
                   error={passErrors.delegationName}
                 />
                 <TextField
-                  label="Tổ chức / Doanh nghiệp"
+                  label="Tổ chức hoặc doanh nghiệp"
                   value={organization}
                   onChange={setOrganization}
                   placeholder="VD: Guangxi Fresh Fruit Import Co., Ltd"
@@ -283,7 +374,6 @@ export default function FieldAuditPassesModal({
               <FormError message={createPass.error} />
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
                 <button type="submit" className="btn btn-primary btn-sm" disabled={createPass.pending}>
-                  <ShieldCheck size={14} style={{ marginRight: 5 }} />
                   {createPass.pending ? "Đang cấp thẻ…" : "Cấp Thẻ Đoàn Thẩm định"}
                 </button>
               </div>
@@ -349,11 +439,13 @@ export default function FieldAuditPassesModal({
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
-                          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                           onClick={() => void handleCopyInvite(p)}
                         >
-                          {copiedId === p.id ? <Check size={13} /> : <Copy size={13} />}
-                          <span>Sao chép</span>
+                          {copiedId === p.id
+                            ? "Đã chép"
+                            : createdSecret?.id === p.id || extractValidPassToken(p.passToken)
+                              ? "Sao chép liên kết"
+                              : "Sao chép mã"}
                         </button>
                         {canEdit && p.status === "active" && (
                           <button

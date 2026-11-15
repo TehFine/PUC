@@ -1,8 +1,9 @@
 "use client";
 
 import { Modal } from "@/components/ui/Modal";
-import { formatVnDate, NEWS_CATEGORY_META } from "@/lib/news-store";
+import { formatVnDate, NEWS_CATEGORY_META, sanitizeNewsContent } from "@/lib/news-store";
 import type { NewsRecord } from "@/types/news";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 
 export default function NewsPreviewModal({
   article,
@@ -14,8 +15,8 @@ export default function NewsPreviewModal({
   onEdit: (article: NewsRecord) => void;
 }) {
   const catMeta = NEWS_CATEGORY_META[article.category] ?? NEWS_CATEGORY_META.visit;
-  const imgSrc = article.imageUrl || "/landing/news-field-visit.jpg";
-  const content = article.content ?? { lead: article.excerpt, sections: [] };
+  const imgSrc = isSafeMediaUrl(article.imageUrl) ? article.imageUrl : "/landing/news-field-visit.jpg";
+  const content = sanitizeNewsContent(article.content, article.excerpt);
 
   return (
     <Modal
@@ -57,7 +58,7 @@ export default function NewsPreviewModal({
         Tác giả: <strong>{article.author}</strong> - Slug: <code>{article.slug}</code>
       </div>
 
-      <div style={{ width: "100%", height: 220, borderRadius: 12, overflow: "hidden", marginBottom: 16, border: "1px solid var(--border)" }}>
+      <div style={{ width: "100%", height: 220, borderRadius: 6, overflow: "hidden", marginBottom: 16, border: "1px solid var(--border)" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={imgSrc} alt={article.imageAlt || article.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </div>
@@ -65,10 +66,10 @@ export default function NewsPreviewModal({
       <div style={{ fontSize: 14.5, lineHeight: 1.65, color: "var(--ink)" }}>
         <p style={{ fontWeight: 600, fontSize: 15.5, marginBottom: 14 }}>{content.lead || article.excerpt}</p>
 
-        {(content.sections ?? []).map((sec, i) => (
+        {content.sections.map((sec, i) => (
           <div key={i} style={{ marginBottom: 16 }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, color: "var(--green-700)", margin: "14px 0 6px" }}>{sec.heading}</h3>
-            {(sec.paragraphs ?? []).map((p, pIdx) => (
+            {sec.paragraphs.map((p, pIdx) => (
               <p key={pIdx} style={{ margin: "0 0 8px" }}>
                 {p}
               </p>
@@ -89,9 +90,9 @@ export default function NewsPreviewModal({
           <div
             style={{
               padding: "12px 16px",
-              borderRadius: 12,
-              background: "rgba(234, 179, 8, 0.12)",
-              borderLeft: "4px solid #eab308",
+              borderRadius: 6,
+              background: "#fefce8",
+              border: "1px solid #d4d4d2",
               marginTop: 14,
             }}
           >

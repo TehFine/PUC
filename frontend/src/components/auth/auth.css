@@ -746,7 +746,7 @@ select.auth-input {
   display: block;
   margin: 0;
   padding: 12px 16px;
-  border: 1px solid var(--au-bad-border);
+  border: 1px solid var(--au-border);
   border-radius: 0;
   background: var(--au-bad-bg);
   color: #962317;

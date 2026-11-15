@@ -1334,7 +1334,6 @@
 
 .tr-puc-banner.is-violation {
   background: #fdf9f8;
-  border-bottom-color: #eccbc6;
 }
 
 .tr-puc-banner-inner {
@@ -1796,13 +1795,13 @@
 .tr-puc-alert-card.is-warn {
   background: #fcf9f1;
   color: #785513;
-  border: 1px solid #eadbbf;
+  border: 1px solid var(--tr-line);
 }
 
 .tr-puc-alert-card.is-danger {
   background: #fdf5f4;
   color: #962d1a;
-  border: 1px solid #eccbc6;
+  border: 1px solid var(--tr-line);
 }
 
 .tr-puc-alert-head {
@@ -2506,13 +2505,11 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-alert-banner.is-danger {
   background: #fdf5f4;
-  border-color: #dfaba2;
   color: #7f1d1d;
 }
 
 .tr-alert-banner.is-warn {
   background: #fcf9f1;
-  border-color: #e4cfa3;
   color: #714b0c;
 }
 
@@ -2537,10 +2534,6 @@ html[data-perf="lite"] .tr-search-btn {
   border: 1px solid var(--tr-line);
   border-radius: 0;
   overflow: hidden;
-}
-
-.tr-hero-dossier[data-status="revoked"] {
-  border-color: #dfaba2;
 }
 
 .tr-hero-dossier-main {
@@ -3248,7 +3241,6 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-minute-item.is-violation-item {
   background: #fdf9f8;
-  border-color: #eccbc6;
 }
 
 .tr-minute-head {
@@ -3545,7 +3537,7 @@ html[data-perf="lite"] .tr-search-btn {
   flex-wrap: wrap;
   padding: 12px 16px;
   background: #f3f8f4;
-  border: 1px solid #b8d6c1;
+  border: 1px solid var(--tr-line);
   border-radius: 0;
   box-shadow: none;
 }
@@ -3611,7 +3603,6 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-pass-prompt-card.is-featured {
   background: #f6f8f5;
-  border-color: #b7cebd;
 }
 
 .tr-pass-prompt-copy {
@@ -3964,7 +3955,7 @@ html[data-perf="lite"] .tr-search-btn {
   margin-bottom: 8px;
   padding: 6px 9px;
   background: #f6f8f5;
-  border: 1px solid #d5e2d8;
+  border: 1px solid var(--tr-line);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -4150,13 +4141,11 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-gps-verdict.is-pass {
   background: #f2f9f4;
-  border-color: #b7d7c1;
   color: #154628;
 }
 
 .tr-gps-verdict.is-warn {
   background: #fdf8ee;
-  border-color: #e6d1a7;
   color: #784c0c;
 }
 

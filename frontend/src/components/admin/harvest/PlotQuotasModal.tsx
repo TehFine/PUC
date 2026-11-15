@@ -156,7 +156,7 @@ export default function PlotQuotasModal({
             padding: "10px 14px",
             borderRadius: 8,
             background: "#f4f9f5",
-            border: "1px solid #cce0d1",
+            border: "1px solid #d4d4d2",
             fontSize: 12.5,
             lineHeight: 1.5,
             color: "#1e293b",

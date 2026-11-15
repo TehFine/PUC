@@ -230,8 +230,8 @@ function JournalForm({
           className="pt-notice"
           style={{
             background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
-            borderRadius: 12,
+            border: "1px solid #d4d4d2",
+            borderRadius: 6,
             padding: "10px 12px",
             display: "flex",
             flexDirection: "column",
@@ -476,9 +476,9 @@ function SprayForm({
           role="status"
           style={{
             background: "#fffbeb",
-            border: "1px solid #fde68a",
+            border: "1px solid #d4d4d2",
             color: "#92400e",
-            borderRadius: 10,
+            borderRadius: 6,
             padding: "8px 10px",
           }}
         >
@@ -958,7 +958,7 @@ function ViolationResponseForm({
 
   return (
     <form className="pt-form" onSubmit={submit}>
-      <div className="pt-notice" style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: 12 }}>
+      <div className="pt-notice" style={{ background: "#fffbeb", border: "1px solid #d4d4d2", borderRadius: 6, padding: 12 }}>
         <strong style={{ display: "block", color: "#92400e", marginBottom: 4 }}>{violation.title}</strong>
         {violation.description && (
           <p style={{ margin: 0, fontSize: 13, color: "#78350f" }}>{violation.description}</p>

@@ -1209,7 +1209,7 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
             </div>
           </div>
         ) : (
-          <div className="cp-next-box" style={{ background: "#f2f8f4", borderColor: "#bcd9c7", color: "#14532d" }}>
+          <div className="cp-next-box" style={{ background: "#f2f8f4", borderColor: "#d4d4d2", color: "#14532d" }}>
             <strong>Đã hoàn tất trọn vẹn 8 giai đoạn chăm sóc vụ 2026-2027.</strong> Vui lòng tuân thủ thời gian cách ly
             trước thu hoạch và theo dõi lịch lấy mẫu tại mục Kiểm nghiệm.
           </div>

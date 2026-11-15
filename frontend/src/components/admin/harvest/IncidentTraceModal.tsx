@@ -215,9 +215,9 @@ export default function IncidentTraceModal({
           <div
             style={{
               padding: "10px 14px",
-              borderRadius: 10,
+              borderRadius: 8,
               background: plotResult.affectedLots.length > 0 ? "#fef2f2" : "#f0fdf4",
-              border: `1px solid ${plotResult.affectedLots.length > 0 ? "#fecaca" : "#bbf7d0"}`,
+              border: "1px solid #d4d4d2",
               marginBottom: 14,
               fontSize: 13,
             }}
@@ -312,9 +312,9 @@ export default function IncidentTraceModal({
           <div
             style={{
               padding: "10px 14px",
-              borderRadius: 10,
+              borderRadius: 8,
               background: "#f0fdf4",
-              border: "1px solid #bbf7d0",
+              border: "1px solid #d4d4d2",
               marginBottom: 14,
               fontSize: 13,
             }}

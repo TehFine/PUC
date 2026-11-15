@@ -107,7 +107,7 @@ export function ViolationDetailModal({
           Phản hồi giải trình từ hộ nông dân
         </div>
         {violation.farmerResponse ? (
-          <div style={{ padding: "12px 14px", borderRadius: 12, background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+          <div style={{ padding: "12px 14px", borderRadius: 8, background: "#f0fdf4", border: "1px solid #d4d4d2" }}>
             <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{violation.farmerResponse}</div>
             {violation.farmerResponseAt && (
               <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>
