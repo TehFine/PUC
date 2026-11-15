@@ -373,8 +373,8 @@ export default function LoginPage() {
         <div
           style={{
             marginBottom: 16,
-            padding: "10px 12px",
-            borderRadius: 6,
+            padding: "12px 16px",
+            borderRadius: 0,
             background: "rgba(22, 101, 52, 0.08)",
             border: "1px solid rgba(22, 101, 52, 0.25)",
             fontSize: 13,
@@ -395,8 +395,8 @@ export default function LoginPage() {
         >
           <div
             style={{
-              padding: "10px 12px",
-              borderRadius: 6,
+              padding: "12px 16px",
+              borderRadius: 0,
               background: "#f8faf8",
               border: "1px solid #dce5dc",
               fontSize: 13,

@@ -175,7 +175,7 @@ export function Modal({
           style={
             {
               "--modal-max-w": `${width}px`,
-              ...(width > 580 ? { "--drawer-w": `${width}px` } : {}),
+              ...(width ? { "--drawer-w": `${width}px` } : {}),
             } as CSSProperties
           }
         >

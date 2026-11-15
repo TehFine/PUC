@@ -81,6 +81,7 @@
 .auth-brand {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   padding: 4px 0;
   font-size: 16px;
   font-weight: 600;
@@ -103,6 +104,9 @@
 }
 
 .auth-brand-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 13px;
   font-weight: 450;
   letter-spacing: -0.008em;
@@ -168,7 +172,7 @@
   align-items: center;
   justify-content: center;
   height: 36px;
-  padding: 0 15px;
+  padding: 0 16px;
   border: 1px solid #d4d4d0;
   border-radius: 0;
   background: #ffffff;
@@ -213,7 +217,7 @@
   grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr);
   margin: 0 var(--au-edge-x);
   border-bottom: 1px solid var(--au-line);
-  min-height: calc(100dvh - var(--au-header-h) - 62px);
+  min-height: calc(100dvh - var(--au-header-h) - 60px);
 }
 
 /* ─── Cột trái: Nhiếp ảnh biên tập + Bản thông số vùng trồng nền đá ấm ─── */
@@ -298,7 +302,7 @@
   height: 2px;
   padding: 0;
   border: none;
-  border-radius: 1px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.46);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
   cursor: pointer;
@@ -468,7 +472,7 @@
 .auth-field {
   display: grid;
   align-content: start;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -487,7 +491,7 @@
 .auth-input {
   width: 100%;
   height: 48px;
-  padding: 0 14px;
+  padding: 0 16px;
   border: 1px solid var(--au-border);
   border-radius: 0;
   outline: none;
@@ -528,7 +532,7 @@ select.auth-input {
   padding-right: 40px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23121212' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 13px center;
+  background-position: right 16px center;
   background-size: 16px;
 }
 
@@ -598,8 +602,8 @@ select.auth-input {
 .auth-forgot-link {
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 2px 0;
+  min-height: 38px;
+  padding: 0;
   font-size: 13.5px;
   font-weight: 500;
   color: var(--au-ink);
@@ -681,7 +685,7 @@ select.auth-input {
   justify-content: center;
   gap: 4px 8px;
   margin: 14px 0 0;
-  padding: 13px 16px;
+  padding: 12px 16px;
   border: 1px solid var(--au-line);
   border-radius: 0;
   background: var(--au-stone);
@@ -741,9 +745,8 @@ select.auth-input {
 .auth-error {
   display: block;
   margin: 0;
-  padding: 12px 15px;
+  padding: 12px 16px;
   border: 1px solid var(--au-bad-border);
-  border-left: 3px solid var(--au-bad);
   border-radius: 0;
   background: var(--au-bad-bg);
   color: #962317;
@@ -762,8 +765,9 @@ select.auth-input {
   justify-content: center;
   gap: 10px;
   width: 100%;
-  min-height: 46px;
-  padding: 12px 22px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 20px;
   margin: 0;
   border: 1px solid #1d1e20;
   border-radius: 0;
@@ -888,10 +892,11 @@ select.auth-input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 11px;
+  gap: 12px;
   width: 100%;
+  height: 48px;
   min-height: 48px;
-  padding: 11px 20px;
+  padding: 0 20px;
   border: 1px solid var(--au-border);
   border-radius: 0;
   background: #ffffff;
@@ -949,7 +954,7 @@ select.auth-input {
   z-index: 1200;
   display: grid;
   place-items: center;
-  padding: 18px;
+  padding: 24px;
   background: rgba(18, 18, 18, 0.52);
   backdrop-filter: blur(2px);
   animation: auth-status-fade-in 0.18s ease-out both;
@@ -958,15 +963,15 @@ select.auth-input {
 .auth-google-dialog {
   width: 100%;
   max-width: 430px;
-  max-height: calc(100vh - 36px);
-  max-height: calc(100dvh - 36px);
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   overflow-y: auto;
   border: 1px solid var(--au-ink);
   border-radius: 0;
   background: #ffffff;
   color: var(--au-ink);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
-  padding: 26px 24px 22px;
+  padding: 24px;
 }
 
 .auth-google-dialog-head {
@@ -1191,7 +1196,7 @@ select.auth-input {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 16px;
+  padding: 12px 16px;
   margin-bottom: 14px;
   border: 1px solid var(--au-stone-line);
   background: var(--au-stone);
@@ -1201,12 +1206,17 @@ select.auth-input {
   color: #383834;
 }
 
+.auth-contact-line > span {
+  min-width: 0;
+}
+
 .auth-contact-line a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 34px;
-  padding: 0 13px;
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 14px;
   border: 1px solid var(--au-ink);
   border-radius: 0;
   background: #ffffff;
@@ -1244,7 +1254,7 @@ select.auth-input {
 
 .auth-steps {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   margin: 0 0 22px;
   padding: 0;
   list-style: none;
@@ -1252,7 +1262,7 @@ select.auth-input {
 
 .auth-steps li {
   display: flex;
-  gap: 13px;
+  gap: 12px;
   align-items: flex-start;
   padding: 14px 16px;
   border: 1px solid var(--au-line);
@@ -1261,6 +1271,11 @@ select.auth-input {
   font-size: 14px;
   line-height: 1.58;
   color: #2b2b29;
+}
+
+.auth-steps li > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .auth-steps b {
@@ -1281,9 +1296,10 @@ select.auth-input {
 /* ─── Chân trang tối giản màu nền đá #f3f2ee đồng bộ Landing Page ─── */
 .auth-foot {
   width: 100%;
+  min-height: 60px;
   background: var(--au-stone);
   border-top: 1px solid #d8d7d0;
-  padding: 22px var(--au-edge-x);
+  padding: 20px var(--au-edge-x);
 }
 
 .auth-foot-inner {
@@ -1531,8 +1547,8 @@ select.auth-input {
 
 @media (max-width: 640px) {
   .auth-top-cta {
-    height: 34px;
-    padding: 0 13px;
+    height: 36px;
+    padding: 0 14px;
     font-size: 13px;
   }
 
@@ -1554,14 +1570,25 @@ select.auth-input {
   }
 
   .auth-input {
-    height: 50px;
+    height: 48px;
     font-size: 16px; /* Tránh tự phóng to khung nhìn trên iOS Safari */
   }
 
-  .auth-submit,
+  .auth-root .auth-submit,
   .auth-google-btn {
-    min-height: 50px;
+    height: 48px;
+    min-height: 48px;
     font-size: 15px;
+  }
+
+  .auth-google-backdrop {
+    padding: 16px;
+  }
+
+  .auth-google-dialog {
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    padding: 20px 16px;
   }
 
   .auth-contact-line {

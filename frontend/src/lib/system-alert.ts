@@ -78,14 +78,20 @@ export function reportServerFailure(
     kind === "unreachable" || status === 502 || status === 503 || status === 504;
 
   const title = isGatewayOrDown
-    ? "Mất kết nối tới máy chủ hệ thống HTX"
-    : "Hệ thống đang gặp sự cố xử lý tạm thời";
+    ? "Chưa kết nối được hệ thống"
+    : "Chưa thực hiện được thao tác";
+
+  const cleanDetail =
+    detail &&
+    detail !== "Không xử lý được yêu cầu. Vui lòng thử lại." &&
+    detail.length <= 80 &&
+    !/\b50\d\b|internal|exception|sql|postgres/i.test(detail)
+      ? detail
+      : null;
 
   const message = isGatewayOrDown
-    ? "Máy chủ hoặc cơ sở dữ liệu đang gián đoạn tạm thời. Hệ thống đang tự động kết nối lại — vui lòng chờ ít phút hoặc liên hệ kỹ thuật HTX nếu cần gấp."
-    : detail && detail !== "Không xử lý được yêu cầu. Vui lòng thử lại."
-      ? detail
-      : "Yêu cầu vừa thực hiện gặp lỗi máy chủ nội bộ (500). Vui lòng thử lại sau ít giây hoặc báo kỹ thuật HTX.";
+    ? "Đường truyền đang bận. Vui lòng thử lại sau ít giây."
+    : cleanDetail ?? "Hệ thống đang bận. Vui lòng thử lại sau ít giây.";
 
   setState({
     recoveredAt: null,
@@ -138,12 +144,8 @@ export async function checkSystemHealth(): Promise<HealthCheckResponse | null> {
             id: `rt-health-${res.status}`,
             kind: res.status === 503 ? "server_error" : "unreachable",
             status: res.status,
-            title:
-              data?.database === "down"
-                ? "Cơ sở dữ liệu hệ thống đang gián đoạn"
-                : "Máy chủ hệ thống đang bảo trì hoặc quá tải",
-            message:
-              "Hệ thống đang tự động khôi phục kết nối. Dữ liệu của bạn vẫn an toàn — vui lòng thử lại sau ít phút.",
+            title: "Hệ thống đang bảo trì ngắn",
+            message: "Dữ liệu vẫn an toàn. Vui lòng thử lại sau ít phút.",
             occurredAt: Date.now(),
           },
         });
@@ -240,8 +242,8 @@ function startMonitorIfNeeded() {
         runtimeIncident: {
           id: "rt-chunk-error",
           kind: "chunk_error",
-          title: "Hệ thống vừa cập nhật phiên bản mới",
-          message: "Vui lòng bấm “Tải lại trang” để đồng bộ bản cập nhật mới nhất và tiếp tục thao tác.",
+          title: "Đã có phiên bản mới",
+          message: "Bấm tải lại trang để tiếp tục sử dụng.",
           occurredAt: Date.now(),
         },
       });
@@ -253,8 +255,8 @@ function startMonitorIfNeeded() {
         runtimeIncident: {
           id: "rt-chunk-error",
           kind: "chunk_error",
-          title: "Hệ thống vừa cập nhật phiên bản mới",
-          message: "Vui lòng bấm “Tải lại trang” để đồng bộ bản cập nhật mới nhất và tiếp tục thao tác.",
+          title: "Đã có phiên bản mới",
+          message: "Bấm tải lại trang để tiếp tục sử dụng.",
           occurredAt: Date.now(),
         },
       });
@@ -308,5 +310,15 @@ export function useSystemAlertSnapshot(): SystemAlertSnapshot {
 export function clearRuntimeIncident(): void {
   if (state.runtimeIncident) {
     setState({ runtimeIncident: null });
+  }
+}
+
+export function clearRecoveredBanner(): void {
+  if (recoveredTimer) {
+    clearTimeout(recoveredTimer);
+    recoveredTimer = undefined;
+  }
+  if (state.recoveredAt !== null) {
+    setState({ recoveredAt: null });
   }
 }

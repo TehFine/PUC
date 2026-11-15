@@ -1078,10 +1078,18 @@ export default function Catalog() {
         {tab === "advisory" && (
           <div className="sw-cat-protocol-banner" role="note" aria-label="Cam kết thu mua theo quy trình chuẩn">
             <span className="sw-micro">{HTX_PRICE_GUARANTEE_POLICY.badge}</span>
-            <p className="sw-cat-protocol-note">
-              <span className="sw-hide-mobile">{HTX_PRICE_GUARANTEE_POLICY.desktopNote}</span>
-              <span className="sw-only-mobile">{HTX_PRICE_GUARANTEE_POLICY.mobileNote}</span>
-            </p>
+            <ol className="sw-cat-protocol-points">
+              {HTX_PRICE_GUARANTEE_POLICY.keyPoints.map((item) => (
+                <li key={item.order} className="sw-cat-protocol-point">
+                  <span className="sw-cat-protocol-idx" aria-hidden="true">
+                    {item.order}
+                  </span>
+                  <span className="sw-cat-protocol-text">
+                    <strong>{item.label}:</strong> {item.text}
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
 

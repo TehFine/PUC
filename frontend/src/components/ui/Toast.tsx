@@ -55,7 +55,7 @@ export function Toaster() {
         left: "50%",
         bottom: "calc(20px + env(safe-area-inset-bottom))",
         transform: "translateX(-50%)",
-        zIndex: 1000,
+        zIndex: 1200,
         display: "flex",
         flexDirection: "column",
         gap: 8,
@@ -69,9 +69,9 @@ export function Toaster() {
           role={item.tone === "error" ? "alert" : "status"}
           style={{
             ...TONE_STYLE[item.tone],
-            padding: "12px 16px",
-            borderRadius: 14,
-            fontSize: 14,
+            padding: "11px 16px",
+            borderRadius: 6,
+            fontSize: 13.5,
             fontWeight: 500,
             boxShadow: "0 10px 30px rgba(20,55,47,.25)",
             pointerEvents: "auto",

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
   checkSystemHealth,
+  clearRecoveredBanner,
   clearRuntimeIncident,
   useSystemAlertSnapshot,
 } from "@/lib/system-alert";
@@ -59,24 +60,21 @@ function SystemAlertBannerInner() {
           role="alert"
           aria-live="assertive"
         >
+          <button
+            type="button"
+            className="sys-alert-close"
+            aria-label="Đóng thông báo"
+            onClick={() => {
+              setDismissedKey(incidentKey);
+              clearRuntimeIncident();
+            }}
+          >
+            ×
+          </button>
           <div className="sys-alert-main">
-            <div className="sys-alert-top">
-              <span className="sys-alert-badge">
-                <span className="sys-alert-dot" aria-hidden="true" />
-                {isChunk ? "CẬP NHẬT PHIÊN BẢN" : "KHẨN CẤP - SỰ CỐ HỆ THỐNG"}
-              </span>
-              <button
-                type="button"
-                className="sys-alert-close"
-                aria-label="Đóng thông báo khẩn"
-                onClick={() => {
-                  setDismissedKey(incidentKey);
-                  clearRuntimeIncident();
-                }}
-              >
-                ×
-              </button>
-            </div>
+            <span className="sys-alert-badge">
+              {isChunk ? "CẬP NHẬT MỚI" : "TẠM GIÁN ĐOẠN"}
+            </span>
             <strong className="sys-alert-title">{runtimeIncident.title}</strong>
             <p className="sys-alert-desc">{runtimeIncident.message}</p>
             <div className="sys-alert-actions">
@@ -86,7 +84,7 @@ function SystemAlertBannerInner() {
                   className="sys-alert-btn is-solid"
                   onClick={() => window.location.reload()}
                 >
-                  Tải lại trang ngay
+                  Tải lại trang
                 </button>
               ) : (
                 <>
@@ -96,10 +94,10 @@ function SystemAlertBannerInner() {
                     disabled={checking}
                     onClick={() => void checkSystemHealth()}
                   >
-                    {checking ? "Đang kiểm tra…" : "Thử kết nối lại"}
+                    {checking ? "Đang thử lại…" : "Thử lại"}
                   </button>
                   <a href="tel:0366663778" className="sys-alert-btn is-ghost">
-                    Hotline kỹ thuật: 0366 663 778
+                    Gọi hỗ trợ: 0366 663 778
                   </a>
                 </>
               )}
@@ -121,30 +119,27 @@ function SystemAlertBannerInner() {
           role="alert"
           aria-live={isCritical ? "assertive" : "polite"}
         >
+          <button
+            type="button"
+            className="sys-alert-close"
+            aria-label="Đóng thông báo"
+            onClick={() => {
+              setDismissedKey(alertKey);
+              saveDismissedId(alertKey);
+            }}
+          >
+            ×
+          </button>
           <div className="sys-alert-main">
-            <div className="sys-alert-top">
-              <span className="sys-alert-badge">
-                <span className="sys-alert-dot" aria-hidden="true" />
-                {isCritical ? "THÔNG BÁO KHẨN TỪ HTX" : "THÔNG BÁO BẢO TRÌ / KỸ THUẬT"}
-              </span>
-              <button
-                type="button"
-                className="sys-alert-close"
-                aria-label="Ẩn thông báo này"
-                onClick={() => {
-                  setDismissedKey(alertKey);
-                  saveDismissedId(alertKey);
-                }}
-              >
-                ×
-              </button>
-            </div>
+            <span className="sys-alert-badge">
+              {isCritical ? "THÔNG BÁO TỪ HTX" : "BẢO TRÌ HỆ THỐNG"}
+            </span>
             <strong className="sys-alert-title">{broadcastAlert.title}</strong>
             <p className="sys-alert-desc">{broadcastAlert.message}</p>
             {isCritical && (
               <div className="sys-alert-actions">
                 <a href="tel:0366663778" className="sys-alert-btn is-ghost">
-                  Hotline hỗ trợ HTX: 0366 663 778
+                  Gọi hỗ trợ: 0366 663 778
                 </a>
               </div>
             )}
@@ -157,10 +152,15 @@ function SystemAlertBannerInner() {
   // Ưu tiên 3: Báo ngắn gọn khi hệ thống vừa tự khôi phục sau sự cố.
   if (recoveredAt) {
     return (
-      <div className="sys-alert-banner is-recovered" role="status" aria-live="polite">
+      <div
+        className="sys-alert-banner is-recovered"
+        role="status"
+        aria-live="polite"
+        onClick={() => clearRecoveredBanner()}
+        title="Bấm để ẩn thông báo"
+      >
         <div className="sys-alert-recovered-row">
-          <span className="sys-alert-dot" aria-hidden="true" />
-          <span>Hệ thống đã khôi phục kết nối ổn định.</span>
+          <span>Đã khôi phục kết nối ổn định</span>
         </div>
       </div>
     );

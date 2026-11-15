@@ -63,8 +63,8 @@ export default function RegisterPage() {
           style={{
             marginTop: 16,
             marginBottom: 16,
-            padding: "12px 14px",
-            borderRadius: 6,
+            padding: "12px 16px",
+            borderRadius: 0,
             background: "#f8faf8",
             border: "1px solid #d7e2d7",
             fontSize: 13,

@@ -28,8 +28,8 @@ html:has(.lp) body {
   --lp-ok: #3f9b63;
   --lp-bad: #d9573a;
   --lp-warn: #b98a1c;
-  --lp-radius: 22px;
-  --lp-card-radius: 22px;
+  --lp-radius: 0px;
+  --lp-card-radius: 0px;
   --lp-shadow: 0 14px 40px rgba(20, 55, 47, 0.08);
   --lp-font-display: var(--font-hero-sans), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --lp-font-hero-sans: var(--font-hero-sans), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -101,11 +101,11 @@ html:has(.lp) body {
 }
 .lp :focus-visible {
   outline: 2px solid var(--lp-green-deep);
-  outline-offset: 3px;
-  border-radius: 8px;
+  outline-offset: 2px;
+  border-radius: 0;
 }
 .lp section[id] {
-  scroll-margin-top: 72px;
+  scroll-margin-top: 58px;
 }
 
 .lp-entering {
@@ -131,6 +131,7 @@ html:has(.lp) body {
   --eh-muted: #767676;
   --eh-subtle: #a0a0a0;
   --eh-pad-x: clamp(20px, 2.2vw, 34px);
+  --eh-cell-pad-x: clamp(24px, 2.5vw, 40px);
   --eh-header-h: 58px;
   font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -194,7 +195,7 @@ html:has(.lp) body {
 .eh-cell-headline {
   grid-column: 1 / -1;
   grid-row: 1;
-  padding: 22px var(--eh-pad-x);
+  padding: 22px var(--eh-cell-pad-x);
   border-bottom: 1px solid var(--eh-line);
   display: flex;
   align-items: center;
@@ -215,8 +216,8 @@ html:has(.lp) body {
 
 .eh-menu-btn {
   position: relative;
-  width: 38px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: none;
   background: transparent;
@@ -232,10 +233,10 @@ html:has(.lp) body {
 
 .eh-menu-btn span {
   display: block;
-  width: 26px;
+  width: 24px;
   height: 2px;
   background: currentColor;
-  border-radius: 1px;
+  border-radius: 0;
   transition: transform 0.2s ease;
 }
 
@@ -297,24 +298,24 @@ html:has(.lp) body {
 .eh-cell-feature {
   grid-column: 3;
   grid-row: 2;
-  padding: clamp(22px, 3.2svh, 34px) var(--eh-pad-x);
+  padding: clamp(24px, 3vw, 40px) var(--eh-cell-pad-x);
   border-right: 1px solid var(--eh-line);
   border-bottom: 1px solid var(--eh-line);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 18px;
+  gap: 20px;
 }
 
 .eh-cell-story {
   grid-column: 2;
   grid-row: 3;
-  padding: clamp(22px, 3.2svh, 34px) var(--eh-pad-x);
+  padding: clamp(24px, 3vw, 40px) var(--eh-cell-pad-x);
   border-right: 1px solid var(--eh-line);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 18px;
+  gap: 20px;
 }
 
 .eh-cell-tag {
@@ -364,14 +365,16 @@ html:has(.lp) body {
   align-items: center;
   justify-content: center;
   width: fit-content;
+  min-height: 36px;
   margin-top: 16px;
-  padding: 9px 16px;
+  padding: 0 16px;
   border: 1px solid #d4d4d2;
+  border-radius: 0;
   background: #ffffff;
   font-family: inherit;
   font-size: 13.5px;
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 1;
   color: var(--eh-ink);
   transition:
     background-color 0.16s ease,
@@ -386,17 +389,20 @@ html:has(.lp) body {
 }
 
 .lp .eh-step-btn {
-  padding: 9px 16px;
+  min-height: 36px;
+  padding: 0 16px;
   border: 1px solid #d4d4d2;
+  border-radius: 0;
   background: #ffffff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  flex-shrink: 0;
   font-family: inherit;
   font-size: 13.5px;
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 1;
   color: var(--eh-ink);
   cursor: pointer;
   transition:
@@ -607,7 +613,7 @@ html:has(.lp) body {
 }
 
 .lp .eh-sticky-bar .eh-init-brand {
-  height: 38px;
+  height: 36px;
   justify-content: center;
   font-size: 17.5px;
   font-weight: 600;
@@ -624,13 +630,13 @@ html:has(.lp) body {
 .lp .eh-sticky-links a {
   --eh-link-px: clamp(8px, 0.95vw, 13px);
   position: relative;
-  height: 38px;
+  height: 36px;
   padding: 0 var(--eh-link-px);
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  border-radius: 0;
   font-size: 15px;
   font-weight: 500;
   line-height: 1;
@@ -656,9 +662,9 @@ html:has(.lp) body {
   position: absolute;
   left: var(--eh-link-px);
   right: var(--eh-link-px);
-  bottom: -3px;
-  height: 1.75px;
-  border-radius: 999px;
+  bottom: 4px;
+  height: 1.5px;
+  border-radius: 0;
   background-color: var(--eh-ink);
   transform: scaleX(0);
   transform-origin: center;
@@ -694,7 +700,7 @@ html:has(.lp) body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  border-radius: 0;
   font-size: 13.5px;
   font-weight: 500;
   line-height: 1;
@@ -804,22 +810,26 @@ html:has(.lp) body {
 }
 
 .eh-drawer-head {
-  padding: 24px 28px;
+  min-height: var(--eh-header-h);
+  padding: 11px 28px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--eh-line);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 
 .eh-close-btn {
   position: relative;
-  width: 34px;
-  height: 34px;
-  margin-right: -6px;
+  width: 36px;
+  height: 36px;
+  margin-right: -8px;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--eh-ink);
+  flex-shrink: 0;
 }
 
 .eh-close-btn span {
@@ -829,7 +839,7 @@ html:has(.lp) body {
   width: 18px;
   height: 1.5px;
   background: currentColor;
-  border-radius: 1px;
+  border-radius: 0;
 }
 
 .eh-close-btn span:first-child {
@@ -884,21 +894,22 @@ html:has(.lp) body {
 }
 
 .eh-drawer-foot {
-  padding: 22px 28px;
+  padding: 16px 28px;
   border-top: 1px solid var(--eh-line);
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 
 .lp .eh-drawer .eh-drawer-btn {
-  height: 42px;
+  height: 40px;
   padding: 0 14px;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid #d4d4d2;
+  border-radius: 0;
   background: #ffffff;
   font-family: inherit;
   color: var(--eh-ink);
@@ -923,8 +934,15 @@ html:has(.lp) body {
   background: #2b2b2b;
 }
 
-/* Đáp ứng trên Laptop vừa & nhỏ (1024px–1240px, màn 1366×768 / 1280×720 / phóng 125%) */
-@media (min-width: 961px) and (max-width: 1240px) {
+/* Đáp ứng trên Laptop vừa & nhỏ (1024px–1260px, màn 1366×768 / 1280×720 / phóng 125%) */
+@media (min-width: 961px) and (max-width: 1260px) {
+  .eh-hero,
+  .eh-sticky-bar,
+  .eh-header-spacer,
+  .eh-drawer-backdrop {
+    --eh-cell-pad-x: clamp(18px, 2vw, 28px);
+  }
+
   .eh-initial-inner {
     grid-template-columns: minmax(0, 1.08fr) minmax(150px, 0.84fr) minmax(0, 1.08fr);
   }
@@ -989,7 +1007,7 @@ html:has(.lp) body {
   }
 
   .eh-cell-headline {
-    padding: 16px var(--eh-pad-x);
+    padding: 16px var(--eh-cell-pad-x);
   }
 
   .lp .eh-headline {
@@ -998,7 +1016,7 @@ html:has(.lp) body {
 
   .eh-cell-feature,
   .eh-cell-story {
-    padding: clamp(16px, 2.4svh, 24px) var(--eh-pad-x);
+    padding: clamp(16px, 2.4svh, 24px) var(--eh-cell-pad-x);
     gap: 10px;
   }
 
@@ -1448,7 +1466,8 @@ html[data-perf="lite"] .eh-drawer {
   }
 
   .eh-drawer-head {
-    padding: 18px 14px;
+    min-height: 54px;
+    padding: 9px var(--eh-pad-x);
   }
 
   .eh-drawer-item {
@@ -1456,19 +1475,22 @@ html[data-perf="lite"] .eh-drawer {
   }
 
   .eh-drawer-link {
-    padding: 16px 14px;
+    min-height: 48px;
+    padding: 14px var(--eh-pad-x);
   }
 
   .eh-drawer-foot {
-    padding: 18px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+    padding: 14px var(--eh-pad-x) calc(14px + env(safe-area-inset-bottom, 0px));
     grid-template-columns: 1fr;
+    gap: 10px;
   }
 }
 
 @media (max-width: 355px) {
   .eh-hero,
   .eh-sticky-bar,
-  .eh-header-spacer {
+  .eh-header-spacer,
+  .eh-drawer-backdrop {
     --eh-pad-x: 10px;
   }
 
