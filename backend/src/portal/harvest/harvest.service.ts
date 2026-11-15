@@ -79,7 +79,23 @@ export class HarvestService {
       throw badRequest("Tổng khối lượng phân loại (A + B) không được vượt quá tổng sản lượng thu hái.");
     }
 
+    const hhRes = await this.db.query<{ status: string }>("SELECT status FROM households WHERE id = $1", [householdId]);
+    if (hhRes.rows[0]?.status === "violation") {
+      throw badRequest("Hộ đang có vi phạm chưa khắc phục, không thể khai báo thu hái.");
+    }
+
     const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
+    const hasPlots =
+      (await this.db.query<{ t: string | null }>("SELECT to_regclass('public.plots') AS t")).rows[0]?.t !== null;
+    if (hasPlots) {
+      const plotRes = await this.db.query<{ status: string }>(
+        "SELECT status FROM plots WHERE household_id = $1 AND upper(code) = upper($2) LIMIT 1",
+        [householdId, plotCode],
+      );
+      if (plotRes.rows[0]?.status === "violation") {
+        throw badRequest("Thửa đất đang có vi phạm chưa khắc phục, không thể khai báo thu hái.");
+      }
+    }
     await assertPlotNotInIsolation(this.db, householdId, plotCode, harvestedOn);
     const [photoId] = await this.uploads.assertUsable(dto.photoId ? [dto.photoId] : [], user, "harvest");
 

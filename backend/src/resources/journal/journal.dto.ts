@@ -18,8 +18,8 @@ export class CreateJournalDto {
   @OptionalText(500)
   detail?: string | null;
 
-  @Text(100)
-  recorder!: string;
+  @OptionalText(100)
+  recorder?: string | null;
 
   @OptionalField()
   @IsBoolean()

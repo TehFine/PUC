@@ -1,4 +1,6 @@
 import { Body, Controller, Get, HttpCode, Ip, Param, Post, Query } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
+import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { Authorize, CurrentUser } from "../auth/auth.decorators";
 import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
@@ -37,7 +39,10 @@ export class PortalCareProtocolController {
 /** `/api/care-protocol`: Giám sát tiến độ, thiết lập hộ và quét cảnh báo quy trình 2026-2027 dành cho cán bộ quản trị. */
 @Controller("care-protocol")
 export class AdminCareProtocolController {
-  constructor(private readonly service: CareProtocolService) {}
+  constructor(
+    private readonly service: CareProtocolService,
+    private readonly audit: AuditService,
+  ) {}
 
   @Get("catalog")
   @Authorize("journal", "read")
@@ -73,9 +78,19 @@ export class AdminCareProtocolController {
 
   @Post("scan")
   @HttpCode(200)
-  @Authorize("journal", "create")
-  scanNow() {
-    return this.service.scanAndNotifyAllPlans();
+  @Throttle({ default: { limit: 4, ttl: 60_000 } })
+  @Authorize("violations", "create")
+  async scanNow(@CurrentUser() user: AuthUser, @Ip() ip: string) {
+    const result = await this.service.scanAndNotifyAllPlans(user);
+    await this.audit.write(
+      { ip, user },
+      {
+        action: "Quét tiến độ lộ trình chăm sóc",
+        object: "Quy trình 2026-2027",
+        detail: `Đã quét ${result.scanned} lộ trình, phát sinh ${result.criticalViolations} vi phạm quá hạn và ${result.overdueWarnings} cảnh báo trễ`,
+      },
+    );
+    return result;
   }
 
   @Get("plans/:id")

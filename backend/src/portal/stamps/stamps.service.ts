@@ -71,9 +71,45 @@ export class StampsService {
   async activate(dto: ActivatePortalStampDto, user: AuthUser, context: ClientContext) {
     const householdId = householdIdOf(user);
     const cleanSerial = dto.serialCode.trim();
-    const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
+
+    const hhRes = await this.db.query<{ status: string }>("SELECT status FROM households WHERE id = $1", [householdId]);
+    if (hhRes.rows[0]?.status === "violation") {
+      throw badRequest("Hộ đang có vi phạm chưa khắc phục, tạm khóa kích hoạt tem truy xuất.");
+    }
+
+    const cleanPlotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
+    const hasPlots =
+      (await this.db.query<{ t: string | null }>("SELECT to_regclass('public.plots') AS t")).rows[0]?.t !== null;
+    if (hasPlots) {
+      const plotRes = await this.db.query<{ status: string }>(
+        "SELECT status FROM plots WHERE household_id = $1 AND upper(code) = upper($2) LIMIT 1",
+        [householdId, cleanPlotCode],
+      );
+      if (plotRes.rows[0]?.status === "violation") {
+        throw badRequest("Thửa đất đang có vi phạm chưa khắc phục, không thể kích hoạt tem truy xuất.");
+      }
+    }
+
+    const own = await this.db.query<{ status: string; plot_code: string | null }>(
+      "SELECT status, plot_code FROM farmer_stamps WHERE upper(serial_code) = upper($1) AND household_id = $2 LIMIT 1",
+      [cleanSerial, householdId],
+    );
+    if (own.rowCount === 0) {
+      throw notFound("Không tìm thấy mã tem hợp lệ.");
+    }
+    const stamp = own.rows[0];
+    if (stamp.status === "activated") {
+      throw badRequest(`Tem "${cleanSerial}" đã được kích hoạt trước đó.`);
+    }
+    if (stamp.status !== "allocated") {
+      throw badRequest(`Tem "${cleanSerial}" đã bị thu hồi, không thể kích hoạt.`);
+    }
+    if (stamp.plot_code && stamp.plot_code.trim() !== "" && stamp.plot_code.trim().toUpperCase() !== cleanPlotCode.toUpperCase()) {
+      throw badRequest("Tem này đã được cấp cố định cho thửa " + stamp.plot_code.trim() + ", không thể kích hoạt sang thửa khác.");
+    }
+
     const today = todayVn();
-    await assertPlotNotInIsolation(this.db, householdId, plotCode, today);
+    await assertPlotNotInIsolation(this.db, householdId, cleanPlotCode, today);
     const [photoId] = await this.uploads.assertUsable(dto.photoId ? [dto.photoId] : [], user, "stamp");
 
     const updated = await this.db.query(
@@ -89,22 +125,13 @@ export class StampsService {
        WHERE upper(serial_code) = upper($1)
          AND household_id = $2
          AND status = 'allocated'
+         AND (plot_code IS NULL OR btrim(plot_code) = '' OR upper(plot_code) = upper($3))
        RETURNING ${STAMP_COLUMNS}`,
-      [cleanSerial, householdId, plotCode, dto.fruitWeightKg, dto.grade, photoId ?? null, today],
+      [cleanSerial, householdId, cleanPlotCode, dto.fruitWeightKg, dto.grade, photoId ?? null, today],
     );
 
     if (updated.rowCount === 0) {
-      const own = await this.db.query<{ status: string }>(
-        "SELECT status FROM farmer_stamps WHERE upper(serial_code) = upper($1) AND household_id = $2 LIMIT 1",
-        [cleanSerial, householdId],
-      );
-      if (own.rowCount === 0) {
-        throw notFound("Không tìm thấy mã tem hợp lệ.");
-      }
-      if (own.rows[0].status === "activated") {
-        throw badRequest(`Tem "${cleanSerial}" đã được kích hoạt trước đó.`);
-      }
-      throw badRequest(`Tem "${cleanSerial}" đã bị thu hồi, không thể kích hoạt.`);
+      throw badRequest(`Tem "${cleanSerial}" đã được kích hoạt hoặc bị thu hồi, không thể thao tác.`);
     }
 
     const row = updated.rows[0];
@@ -113,7 +140,7 @@ export class StampsService {
       {
         action: "Nông hộ kích hoạt tem quả",
         object: String(row.serial_code),
-        detail: `Thửa ${plotCode}, khối lượng ${dto.fruitWeightKg} kg, hạng ${dto.grade}`,
+        detail: `Thửa ${cleanPlotCode}, khối lượng ${dto.fruitWeightKg} kg, hạng ${dto.grade}`,
       },
     );
 

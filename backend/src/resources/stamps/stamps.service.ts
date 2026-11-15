@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService } from "../../common/crud/base-crud.service";
+import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
@@ -38,17 +39,40 @@ export class StampsService extends BaseCrudService {
       orderBy: "t.allocated_on DESC, t.id DESC",
       search: ["t.allocation_code", "h.name", "h.code", "t.from_serial", "t.to_serial"],
       filters: { status: "t.status", householdId: "t.household_id" },
+      scope: villageScope("h.village_id"),
     });
   }
 
   async allocate(dto: CreateStampAllocationDto, user: AuthUser, ip?: string) {
-    const hhRes = await this.db.query<{ id: number; code: string; name: string; area_ha: string }>(
-      "SELECT id, code, name, area_ha FROM households WHERE id = $1",
-      [dto.householdId],
-    );
+    await assertHouseholdInScope(this.db, { householdId: dto.householdId }, user);
+    const hhRes = await this.db.query<{
+      id: number;
+      code: string;
+      name: string;
+      area_ha: string;
+      status: string;
+    }>("SELECT id, code, name, area_ha, status FROM households WHERE id = $1", [dto.householdId]);
     if (hhRes.rowCount === 0) throw badRequest("Hộ nông dân không tồn tại.");
     const household = hhRes.rows[0];
+    if (household.status === "violation" || household.status === "pending") {
+      throw badRequest("Hộ đang chờ duyệt hoặc đang có vi phạm chưa khắc phục, không thể cấp phát tem.");
+    }
+
     const plotCode = dto.plotCode ? await assertPlotOwned(this.db, household.id, dto.plotCode) : null;
+    const hasPlots =
+      (await this.db.query<{ t: string | null }>("SELECT to_regclass('public.plots') AS t")).rows[0]?.t !== null;
+    let plotRow: { id: number; status: string; area_ha: number } | undefined;
+    if (plotCode && hasPlots) {
+      const plotRes = await this.db.query<{ id: number; status: string; area_ha: number }>(
+        "SELECT id, status, area_ha::float8 AS area_ha FROM plots WHERE household_id = $1 AND upper(code) = upper($2) LIMIT 1",
+        [household.id, plotCode],
+      );
+      plotRow = plotRes.rows[0];
+      if (plotRow && plotRow.status !== "approved") {
+        throw badRequest("Thửa đất chưa được phê duyệt hoặc đang có vi phạm, không thể cấp phát tem.");
+      }
+    }
+
     const shortCode = extractShortHouseholdCode(household.code, household.id);
     const serialPrefix = `KB-${shortCode}-`;
 
@@ -58,8 +82,80 @@ export class StampsService extends BaseCrudService {
     let toSerial: string;
     try {
       await client.query("BEGIN");
-      // Khóa dòng hộ nông dân để hai yêu cầu cấp phát đồng thời cho cùng hộ không sinh trùng số thứ tự.
-      await client.query("SELECT id FROM households WHERE id = $1 FOR UPDATE", [household.id]);
+      const lockedHh = await client.query<{ status: string; area_ha: number }>(
+        "SELECT status, area_ha::float8 AS area_ha FROM households WHERE id = $1 FOR UPDATE",
+        [household.id],
+      );
+      const liveHh = lockedHh.rows[0];
+      if (!liveHh || liveHh.status === "violation" || liveHh.status === "pending") {
+        throw badRequest("Hộ đang chờ duyệt hoặc đang có vi phạm chưa khắc phục, không thể cấp phát tem.");
+      }
+
+      if (plotRow) {
+        const livePlot = await client.query<{ status: string; area_ha: number }>(
+          "SELECT status, area_ha::float8 AS area_ha FROM plots WHERE id = $1 FOR UPDATE",
+          [plotRow.id],
+        );
+        if (!livePlot.rows[0] || livePlot.rows[0].status !== "approved") {
+          throw badRequest("Thửa đất chưa được phê duyệt hoặc đang có vi phạm, không thể cấp phát tem.");
+        }
+        plotRow.area_ha = Number(livePlot.rows[0].area_ha ?? plotRow.area_ha);
+      }
+
+      const year = new Date().getFullYear();
+      const season = dto.season?.trim() || `Vụ ${year}`;
+
+      const hhAreaHa = Number(liveHh.area_ha ?? 0) > 0 ? Number(liveHh.area_ha) : Number(plotRow?.area_ha ?? 0);
+      if (hhAreaHa <= 0) {
+        throw badRequest("Diện tích canh tác của hộ phải lớn hơn 0 ha để tính hạn mức cấp phát tem.");
+      }
+      const maxHouseholdQuota = Math.floor(hhAreaHa * 2800);
+      const plotAreaQuota =
+        plotRow && Number(plotRow.area_ha) > 0 ? Math.floor(Number(plotRow.area_ha) * 2800) : maxHouseholdQuota;
+      const areaCeiling = Math.min(maxHouseholdQuota, plotAreaQuota);
+      const maxQuota =
+        dto.maxQuotaStamps !== undefined && dto.maxQuotaStamps > 0
+          ? Math.min(dto.maxQuotaStamps, areaCeiling)
+          : areaCeiling;
+
+      const existingHhRes = await client.query<{ allocated_sum: number }>(
+        `SELECT COALESCE(SUM(quantity_allocated), 0)::int AS allocated_sum
+         FROM farmer_stamp_allocations
+         WHERE household_id = $1 AND season = $2 AND status <> 'revoked'`,
+        [household.id, season],
+      );
+      const existingHhAllocated = Number(existingHhRes.rows[0]?.allocated_sum ?? 0);
+      if (existingHhAllocated + dto.quantity > maxHouseholdQuota) {
+        throw badRequest(
+          `Tổng số lượng tem cấp phát trong ${season} (${existingHhAllocated + dto.quantity}) vượt hạn mức diện tích của hộ (${maxHouseholdQuota} tem).`,
+        );
+      }
+
+      let existingTargetAllocated = existingHhAllocated;
+      if (plotRow && plotCode) {
+        const existingPlotRes = await client.query<{ allocated_sum: number }>(
+          `SELECT COALESCE(SUM(fsa.quantity_allocated), 0)::int AS allocated_sum
+           FROM farmer_stamp_allocations fsa
+           WHERE fsa.household_id = $1
+             AND fsa.season = $2
+             AND fsa.status <> 'revoked'
+             AND (
+               fsa.plot_id = $3
+               OR (fsa.plot_id IS NULL AND EXISTS (
+                 SELECT 1 FROM farmer_stamps fs
+                 WHERE fs.allocation_id = fsa.id AND upper(fs.plot_code) = upper($4)
+               ))
+             )`,
+          [household.id, season, plotRow.id, plotCode],
+        );
+        existingTargetAllocated = Number(existingPlotRes.rows[0]?.allocated_sum ?? 0);
+      }
+
+      if (existingTargetAllocated + dto.quantity > maxQuota) {
+        throw badRequest(
+          `Số lượng tem cấp phát vượt hạn mức cho phép trong ${season} (đã cấp ${existingTargetAllocated}/${maxQuota} tem).`,
+        );
+      }
 
       const seqRes = await client.query<{ max_seq: number }>(
         `SELECT GREATEST(
@@ -78,20 +174,17 @@ export class StampsService extends BaseCrudService {
         [household.id],
       );
       const batchNo = String((countRes.rows[0]?.n ?? 0) + 1).padStart(2, "0");
-      const year = new Date().getFullYear();
       const allocationCode = `CPT-${year}-${shortCode}-${batchNo}`;
-      const season = dto.season?.trim() || `Vụ ${year}`;
-      const maxQuota =
-        dto.maxQuotaStamps ?? Math.max(dto.quantity, Math.round(Number(household.area_ha || 1) * 2800));
 
       const insAlloc = await client.query<{ id: number }>(
         `INSERT INTO farmer_stamp_allocations
-           (allocation_code, household_id, season, max_quota_stamps, quantity_allocated, from_serial, to_serial, status, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8)
+           (allocation_code, household_id, plot_id, season, max_quota_stamps, quantity_allocated, from_serial, to_serial, status, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9)
          RETURNING id`,
         [
           allocationCode,
           household.id,
+          plotRow?.id ?? null,
           season,
           maxQuota,
           dto.quantity,
@@ -122,13 +215,13 @@ export class StampsService extends BaseCrudService {
       {
         action: "Cấp phát tem nông hộ",
         object: `${this.config.label} #${allocId}`,
-        detail: `${household.name}: ${dto.quantity} tem (${fromSerial} → ${toSerial})`,
+        detail: `${household.name}: ${dto.quantity} tem (${fromSerial} đến ${toSerial})`,
       },
     );
     await this.notifications.notifyHousehold(household.id, {
       kind: "harvest",
       title: `HTX đã cấp ${dto.quantity} tem truy xuất mới`,
-      body: `Dải tem: ${fromSerial} → ${toSerial}`,
+      body: `Dải tem từ ${fromSerial} đến ${toSerial}`,
       link: "/portal?tab=harvest",
     });
 
@@ -136,6 +229,14 @@ export class StampsService extends BaseCrudService {
   }
 
   async revoke(id: number, user: AuthUser, ip?: string) {
+    const existing = await this.db.query<{ household_id: number }>(
+      "SELECT household_id FROM farmer_stamp_allocations WHERE id = $1",
+      [id],
+    );
+    if (existing.rows[0]) {
+      await assertHouseholdInScope(this.db, { householdId: existing.rows[0].household_id }, user);
+    }
+
     const { rows } = await this.db.query<{ id: number; allocation_code: string }>(
       `WITH revoked_alloc AS (
          UPDATE farmer_stamp_allocations
@@ -146,7 +247,7 @@ export class StampsService extends BaseCrudService {
        revoked_stamps AS (
          UPDATE farmer_stamps
          SET status = 'revoked'
-         WHERE allocation_id IN (SELECT id FROM revoked_alloc) AND status = 'allocated'
+         WHERE allocation_id IN (SELECT id FROM revoked_alloc) AND status IN ('allocated', 'activated')
        )
        SELECT id, allocation_code FROM revoked_alloc`,
       [id],

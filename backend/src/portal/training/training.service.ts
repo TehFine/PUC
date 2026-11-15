@@ -101,14 +101,29 @@ export class TrainingService {
     const householdId = householdIdOf(user);
 
     const course = await withTransaction(this.db, async (client) => {
-      const courseRes = await client.query<{ id: number; title: string; completed: boolean }>(
-        "SELECT id, title, completed FROM training_courses WHERE id = $1 FOR UPDATE",
+      const courseRes = await client.query<{ id: number; title: string; completed: boolean; is_past: boolean }>(
+        `SELECT id, title, completed,
+                (held_on IS NOT NULL AND held_on < ${TODAY_VN_SQL}) AS is_past
+         FROM training_courses
+         WHERE id = $1
+         FOR UPDATE`,
         [id],
       );
       if (courseRes.rowCount === 0) {
         throw notFound("Không tìm thấy lớp tập huấn.");
       }
       const row = courseRes.rows[0];
+      if (row.completed === true || row.is_past) {
+        throw badRequest("Lớp tập huấn đã diễn ra hoặc đã điểm danh, không thể hủy đăng ký.");
+      }
+
+      const regRes = await client.query<{ status: string }>(
+        "SELECT status FROM training_registrations WHERE course_id = $1 AND household_id = $2 FOR UPDATE",
+        [id, householdId],
+      );
+      if (regRes.rows[0]?.status === "attended") {
+        throw badRequest("Lớp tập huấn đã diễn ra hoặc đã điểm danh, không thể hủy đăng ký.");
+      }
 
       const updated = await client.query(
         `UPDATE training_registrations

@@ -18,14 +18,14 @@ import { CreateHouseholdDto, IssueHouseholdAccountDto } from "./households.dto";
 const CCCD_FULL_ACCESS: Role[] = ["admin", "htx_officer"];
 export const canSeeCccd = (user: AuthUser) => CCCD_FULL_ACCESS.includes(user.role);
 
-/** Che số CCCD, chỉ giữ 4 số cuối: 260123456789 → ********6789. */
+/** Che số CCCD, chỉ giữ 2 số cuối: 260123456789 -> **********89. */
 export const maskCccd = (value: unknown) => {
-  const text = typeof value === "string" ? value : "";
-  return text.length > 4 ? `${"*".repeat(text.length - 4)}${text.slice(-4)}` : "****";
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > 2 ? `${"*".repeat(Math.max(0, text.length - 2))}${text.slice(-2)}` : "**";
 };
 
-const redact = <T extends Record<string, unknown> | null>(row: T, user: AuthUser): T =>
-  !row || canSeeCccd(user) || !("cccd" in row) ? row : { ...row, cccd: maskCccd(row.cccd) };
+const redact = <T extends Record<string, unknown> | null>(row: T, user: AuthUser, forceMask = false): T =>
+  !row || (!forceMask && canSeeCccd(user)) || !("cccd" in row) ? row : { ...row, cccd: maskCccd(row.cccd) };
 
 export interface ImportResult {
   created: number;
@@ -72,7 +72,8 @@ export class HouseholdsService extends BaseCrudService {
 
   override async list(user: AuthUser, query: ListQueryDto & Record<string, unknown>) {
     const result = await super.list(user, query);
-    return { ...result, data: result.data.map((row) => redact(row, user)) };
+    const forceMask = query?.full === "0" || query?.full === false;
+    return { ...result, data: result.data.map((row) => redact(row, user, forceMask)) };
   }
 
   override async findOne(id: number, user: AuthUser) {
@@ -92,10 +93,44 @@ export class HouseholdsService extends BaseCrudService {
     );
     const oldVillageId = prev.rows[0]?.village_id ? Number(prev.rows[0].village_id) : undefined;
     const updated = await super.update(id, dto, user, ip);
+    const nextVillageId =
+      (dto as { villageId?: number }).villageId !== undefined
+        ? Number((dto as { villageId?: number }).villageId)
+        : updated && "villageId" in updated && updated.villageId !== null && updated.villageId !== undefined
+          ? Number(updated.villageId)
+          : oldVillageId;
+    if (nextVillageId !== undefined && nextVillageId !== oldVillageId) {
+      await this.db.query("UPDATE users SET village_id = $2 WHERE household_id = $1", [id, nextVillageId]);
+    }
     await syncHouseholdAndVillageStats(this.db, {
       forceZeroVillageIds: oldVillageId ? [oldVillageId] : [],
     });
     return redact(updated, user);
+  }
+
+  protected override async guardDelete(id: number, _user: AuthUser) {
+    const existing = await this.db.query("SELECT id FROM households WHERE id = $1", [id]);
+    if ((existing.rowCount ?? 0) === 0) {
+      return;
+    }
+    const hasPlots = await hasPlotsTable(this.db);
+    const plotsCheckSql = hasPlots ? "OR EXISTS (SELECT 1 FROM plots WHERE household_id = $1)" : "";
+    const historyCheck = await this.db.query<{ has_history: boolean }>(
+      `SELECT (
+         EXISTS (SELECT 1 FROM lab_tests WHERE household_id = $1)
+         OR EXISTS (SELECT 1 FROM spray_records WHERE household_id = $1)
+         OR EXISTS (SELECT 1 FROM journal_entries WHERE household_id = $1)
+         OR EXISTS (SELECT 1 FROM farmer_stamps WHERE household_id = $1)
+         OR EXISTS (SELECT 1 FROM farmer_stamp_allocations WHERE household_id = $1)
+         OR EXISTS (SELECT 1 FROM harvest_contributions WHERE household_id = $1)
+         OR EXISTS (SELECT 1 FROM violations WHERE household_id = $1)
+         ${plotsCheckSql}
+       ) AS has_history`,
+      [id],
+    );
+    if (historyCheck.rows[0]?.has_history) {
+      throw badRequest("Hộ dân đã có lịch sử canh tác, kiểm nghiệm hoặc tem truy xuất nên không thể xóa.");
+    }
   }
 
   override async remove(id: number, user: AuthUser, ip?: string) {
@@ -105,16 +140,23 @@ export class HouseholdsService extends BaseCrudService {
     );
     const oldVillageId = prev.rows[0]?.village_id ? Number(prev.rows[0].village_id) : undefined;
     const hasPlots = await hasPlotsTable(this.db);
-    const linkedPlotIds = hasPlots
-      ? (
-          await this.db.query<{ id: number | string }>("SELECT id FROM plots WHERE household_id = $1", [id])
-        ).rows.map((r) => Number(r.id))
-      : [];
+    const linkedUsersRes = await this.db.query<{ id: number | string }>(
+      "SELECT id FROM users WHERE household_id = $1",
+      [id],
+    );
+    const linkedUserIds = linkedUsersRes.rows.map((r) => Number(r.id));
 
     const result = await super.remove(id, user, ip);
 
-    if (hasPlots && linkedPlotIds.length > 0) {
-      await this.db.query("DELETE FROM plots WHERE id = ANY($1::bigint[]) AND household_id IS NULL", [linkedPlotIds]);
+    if (linkedUserIds.length > 0) {
+      await this.db.query(
+        "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ANY($1::bigint[]) AND revoked_at IS NULL",
+        [linkedUserIds],
+      );
+      await this.db.query(
+        "UPDATE users SET status = 'locked', token_version = token_version + 1, household_id = NULL WHERE id = ANY($1::bigint[])",
+        [linkedUserIds],
+      );
     }
     await syncHouseholdAndVillageStats(this.db, {
       forceZeroVillageIds: oldVillageId ? [oldVillageId] : [],
@@ -142,8 +184,14 @@ export class HouseholdsService extends BaseCrudService {
         continue;
       }
 
+      if (user.role === "village_officer" && Number(dto.villageId) !== Number(user.villageId)) {
+        result.errors.push({ row: rowNo, message: "Cán bộ thôn chỉ được nhập hộ thuộc thôn mình phụ trách." });
+        continue;
+      }
+
       try {
-        const { rows: saved } = await this.db.query<{ inserted: boolean }>(
+        const scopedVillageId = user.role === "village_officer" ? (user.villageId ?? -1) : null;
+        const { rows: saved } = await this.db.query<{ id: number; village_id: number; inserted: boolean }>(
           `INSERT INTO households (code, name, cccd, phone, village_id, plot_count, area_ha, status)
            VALUES ($1, $2, $3, $4, $5, COALESCE($6::int, 0), COALESCE($7::numeric, 0), COALESCE($8::text, 'pending'))
            ON CONFLICT (code) DO UPDATE SET
@@ -153,8 +201,12 @@ export class HouseholdsService extends BaseCrudService {
              village_id = EXCLUDED.village_id,
              plot_count = COALESCE($6::int, households.plot_count),
              area_ha = COALESCE($7::numeric, households.area_ha),
-             status = COALESCE($8::text, households.status)
-           RETURNING (xmax = 0) AS inserted`,
+             status = CASE
+               WHEN households.status = 'violation' THEN 'violation'
+               ELSE COALESCE($8::text, households.status)
+             END
+           WHERE ($9::bigint IS NULL OR households.village_id = $9::bigint)
+           RETURNING id, village_id, (xmax = 0) AS inserted`,
           [
             dto.code,
             dto.name,
@@ -164,10 +216,22 @@ export class HouseholdsService extends BaseCrudService {
             dto.plotCount ?? null,
             dto.areaHa ?? null,
             dto.status ?? null,
+            scopedVillageId,
           ],
         );
-        if (saved[0].inserted) result.created += 1;
-        else result.updated += 1;
+        if (!saved[0]) {
+          result.errors.push({ row: rowNo, message: "Mã hộ đang thuộc thôn khác, không được phép ghi đè." });
+          continue;
+        }
+        if (saved[0].inserted) {
+          result.created += 1;
+        } else {
+          result.updated += 1;
+          await this.db.query(
+            "UPDATE users SET village_id = $2 WHERE household_id = $1 AND village_id IS DISTINCT FROM $2",
+            [saved[0].id, saved[0].village_id],
+          );
+        }
       } catch (error) {
         const code = (error as { code?: string }).code ?? "";
         result.errors.push({ row: rowNo, message: IMPORT_DB_ERRORS[code] ?? "Không lưu được dòng này." });
@@ -202,10 +266,13 @@ export class HouseholdsService extends BaseCrudService {
     }>("SELECT id, code, name, phone, village_id FROM households WHERE id = $1", [householdId]);
     const hh = hhRows[0];
     if (!hh) throw notFound("Không tìm thấy hồ sơ hộ nông dân này.");
+    if (user.role === "village_officer" && Number(hh.village_id) !== Number(user.villageId)) {
+      throw forbidden("Cán bộ thôn chỉ được thao tác với hộ thuộc thôn mình phụ trách.");
+    }
 
     const cleanUsername = (dto.username?.trim() || hh.phone.trim()).replace(/\s+/g, "");
     if (!/^[0-9A-Za-z._-]{3,64}$/.test(cleanUsername)) {
-      throw badRequest("Tên đăng nhập gồm 3–64 ký tự chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.");
+      throw badRequest("Tên đăng nhập gồm 3-64 ký tự chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.");
     }
     // Không tự sinh địa chỉ @gmail.com giả định chưa xác minh chủ sở hữu (chống Google OAuth Pre-Takeover).
     const cleanEmail = dto.email ? dto.email.trim().toLowerCase() : null;
@@ -226,7 +293,7 @@ export class HouseholdsService extends BaseCrudService {
       id: number;
       role: string;
       household_id: number | null;
-    }>("SELECT id, role, household_id FROM users WHERE username = $1 LIMIT 1", [cleanUsername]);
+    }>("SELECT id, role, household_id FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1", [cleanUsername]);
     if (
       existingByUsername[0] &&
       existingByUsername[0].id !== existingByHh[0]?.id &&

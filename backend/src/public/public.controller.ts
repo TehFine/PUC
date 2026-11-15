@@ -13,7 +13,7 @@ import { TraceabilityService } from "./traceability.service";
 
 const PUBLIC_TRACE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 30;
 const AUTH_TRACE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 60;
-const GPS_VERIFY_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 12;
+const GPS_VERIFY_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 10;
 const TRACE_WINDOW_MS = 60_000;
 
 export class VerifyFieldGpsDto {
@@ -55,11 +55,10 @@ function extractAuditPass(req: Request, queryPass?: string): string | undefined 
 }
 
 function extractCountryCode(req: Request): string | undefined {
-  const rawCountry =
-    req.headers["cf-ipcountry"] ??
-    req.headers["x-vercel-ip-country"] ??
-    req.headers["x-country-code"] ??
-    req.headers["x-geo-country"];
+  if (process.env.NODE_ENV !== "test" && process.env.TRUST_GEO_HEADERS !== "true") {
+    return undefined;
+  }
+  const rawCountry = req.headers["cf-ipcountry"];
   const countryStr = Array.isArray(rawCountry) ? rawCountry[0] : rawCountry;
   const normCountry =
     typeof countryStr === "string" && /^[A-Za-z]{2}$/.test(countryStr.trim())

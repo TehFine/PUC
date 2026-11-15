@@ -1,6 +1,8 @@
 import { Controller, Get, Injectable, Module } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
+import { can } from "../../auth/permissions";
+import { villageScope } from "../../common/crud/village-scope";
 import { camelRow, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { TODAY_VN_SQL } from "../shared/state";
@@ -26,24 +28,34 @@ export class DashboardService {
   }
 
   async summary(user: AuthUser) {
-    const isVillageScoped = user.role === "village_officer";
-    const villageId = isVillageScoped ? (user.villageId ?? -1) : null;
-    const params = villageId !== null ? [villageId] : [];
-    const hhWhere = villageId !== null ? "WHERE h.village_id = $1" : "";
-    const violWhere =
-      villageId !== null
-        ? "AND v.household_id IN (SELECT id FROM households WHERE village_id = $1)"
-        : "";
-    const apprWhere =
-      villageId !== null
-        ? "AND a.household_id IN (SELECT id FROM households WHERE village_id = $1)"
-        : "";
-    const regWhere = villageId !== null ? "AND u.village_id = $1" : "";
+    const canReadHouseholds = can(user.role, "households", "read");
+    const canReadApprovals = can(user.role, "approvals", "read");
+    const canReadViolations = can(user.role, "violations", "read");
+    const canReadRegistrations = can(user.role, "registrations", "read");
+    const canReadHarvest = can(user.role, "harvest", "read");
+    const canReadJournal = can(user.role, "journal", "read");
+    const canReadLabTests = can(user.role, "testing", "read");
+    const canReadTraining = can(user.role, "training", "read");
+    const canReadSchedule = can(user.role, "schedule", "read");
+
+    const countsParams: unknown[] = [];
+    const hhScope = villageScope("h.village_id")(user, countsParams);
+    const isVillageScoped = hhScope !== null;
+    const hhWhere = hhScope ? `WHERE ${hhScope}` : "";
+    const bindVillage = (col: string) => villageScope(col)(user, countsParams) ?? "true";
+
+    const violWhere = isVillageScoped ? "AND v.household_id IN (SELECT id FROM hh)" : "";
+    const apprWhere = isVillageScoped ? "AND a.household_id IN (SELECT id FROM hh)" : "";
+    const harvestLotScope = isVillageScoped
+      ? `WHERE EXISTS (SELECT 1 FROM harvest_contributions hc JOIN hh ON hh.id = hc.household_id WHERE hc.lot_id = hl.id)`
+      : "";
+    const isAdmin = user.role === "admin";
 
     const hasPlots = await this.hasPlotsTable();
 
-    const householdsCountExpr =
-      villageId === null
+    const householdsCountExpr = !canReadHouseholds
+      ? "0"
+      : !isVillageScoped
         ? `(
              (SELECT count(*)::int FROM hh) +
              (
@@ -55,71 +67,19 @@ export class DashboardService {
         : `(
              CASE
                WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT count(*)::int FROM hh)
-               ELSE COALESCE((SELECT v.household_count FROM villages v WHERE v.id = $1), 0)
+               ELSE COALESCE((SELECT v.household_count FROM villages v WHERE ${bindVillage("v.id")}), 0)
              END
            )`;
 
-    const plotsCountExpr = hasPlots
-      ? villageId === null
-        ? `(
-             (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
-             (SELECT count(*)::int FROM plots WHERE household_id IS NULL) +
-             (
-               SELECT COALESCE(sum(v.plot_count), 0)::int
-               FROM villages v
-               WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
-                 AND NOT EXISTS (
-                   SELECT 1 FROM plots p0
-                   WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v.name))
-                 )
-             )
-           )`
-        : `(
-             (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
-             (
-               SELECT count(*)::int
-               FROM plots p0
-               JOIN villages v0 ON v0.id = $1
-               WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
-             ) +
-             COALESCE(
+    const plotsCountExpr = !canReadHouseholds
+      ? "0"
+      : hasPlots
+        ? !isVillageScoped
+          ? `(
+               (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
+               (SELECT count(*)::int FROM plots WHERE household_id IS NULL) +
                (
-                 SELECT v0.plot_count
-                 FROM villages v0
-                 WHERE v0.id = $1
-                   AND NOT EXISTS (SELECT 1 FROM hh)
-                   AND NOT EXISTS (
-                     SELECT 1 FROM plots p0
-                     WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
-                   )
-               ),
-               0
-             )
-           )`
-      : villageId === null
-        ? `(
-             (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
-             (
-               SELECT COALESCE(sum(v.plot_count), 0)::int
-               FROM villages v
-               WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
-             )
-           )`
-        : `(
-             CASE
-               WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh)
-               ELSE COALESCE((SELECT v.plot_count FROM villages v WHERE v.id = $1), 0)
-             END
-           )`;
-
-    const areaHaExpr = hasPlots
-      ? villageId === null
-        ? `ROUND(
-             (
-               (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
-               (SELECT COALESCE(sum(area_ha), 0)::numeric FROM plots WHERE household_id IS NULL) +
-               (
-                 SELECT COALESCE(sum(v.area_ha), 0)::numeric
+                 SELECT COALESCE(sum(v.plot_count), 0)::int
                  FROM villages v
                  WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
                    AND NOT EXISTS (
@@ -127,23 +87,22 @@ export class DashboardService {
                      WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v.name))
                    )
                )
-             )::numeric,
-             2
-           )::float8`
-        : `ROUND(
-             (
-               (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+             )`
+          : (() => {
+              const v0Cond = bindVillage("v0.id");
+              return `(
+               (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
                (
-                 SELECT COALESCE(sum(p0.area_ha), 0)::numeric
+                 SELECT count(*)::int
                  FROM plots p0
-                 JOIN villages v0 ON v0.id = $1
+                 JOIN villages v0 ON ${v0Cond}
                  WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
                ) +
                COALESCE(
                  (
-                   SELECT v0.area_ha::numeric
+                   SELECT v0.plot_count
                    FROM villages v0
-                   WHERE v0.id = $1
+                   WHERE ${v0Cond}
                      AND NOT EXISTS (SELECT 1 FROM hh)
                      AND NOT EXISTS (
                        SELECT 1 FROM plots p0
@@ -152,30 +111,132 @@ export class DashboardService {
                  ),
                  0
                )
-             )::numeric,
-             2
-           )::float8`
-      : villageId === null
-        ? `ROUND(
-             (
-               (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+             )`;
+            })()
+        : !isVillageScoped
+          ? `(
+               (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
                (
-                 SELECT COALESCE(sum(v.area_ha), 0)::numeric
+                 SELECT COALESCE(sum(v.plot_count), 0)::int
                  FROM villages v
                  WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
                )
-             )::numeric,
-             2
-           )::float8`
-        : `ROUND(
-             (
+             )`
+          : `(
                CASE
-                 WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh)
-                 ELSE COALESCE((SELECT v.area_ha::numeric FROM villages v WHERE v.id = $1), 0)
+                 WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh)
+                 ELSE COALESCE((SELECT v.plot_count FROM villages v WHERE ${bindVillage("v.id")}), 0)
                END
-             )::numeric,
-             2
-           )::float8`;
+             )`;
+
+    const areaHaExpr = !canReadHouseholds
+      ? "0::float8"
+      : hasPlots
+        ? !isVillageScoped
+          ? `ROUND(
+               (
+                 (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+                 (SELECT COALESCE(sum(area_ha), 0)::numeric FROM plots WHERE household_id IS NULL) +
+                 (
+                   SELECT COALESCE(sum(v.area_ha), 0)::numeric
+                   FROM villages v
+                   WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+                     AND NOT EXISTS (
+                       SELECT 1 FROM plots p0
+                       WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v.name))
+                     )
+                 )
+               )::numeric,
+               2
+             )::float8`
+          : (() => {
+              const v0Cond = bindVillage("v0.id");
+              return `ROUND(
+               (
+                 (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+                 (
+                   SELECT COALESCE(sum(p0.area_ha), 0)::numeric
+                   FROM plots p0
+                   JOIN villages v0 ON ${v0Cond}
+                   WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
+                 ) +
+                 COALESCE(
+                   (
+                     SELECT v0.area_ha::numeric
+                     FROM villages v0
+                     WHERE ${v0Cond}
+                       AND NOT EXISTS (SELECT 1 FROM hh)
+                       AND NOT EXISTS (
+                         SELECT 1 FROM plots p0
+                         WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
+                       )
+                   ),
+                   0
+                 )
+               )::numeric,
+               2
+             )::float8`;
+            })()
+        : !isVillageScoped
+          ? `ROUND(
+               (
+                 (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+                 (
+                   SELECT COALESCE(sum(v.area_ha), 0)::numeric
+                   FROM villages v
+                   WHERE NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+                 )
+               )::numeric,
+               2
+             )::float8`
+          : `ROUND(
+               (
+                 CASE
+                   WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh)
+                   ELSE COALESCE((SELECT v.area_ha::numeric FROM villages v WHERE ${bindVillage("v.id")}), 0)
+                 END
+               )::numeric,
+               2
+             )::float8`;
+
+    const openViolationsExpr = canReadViolations
+      ? `(SELECT count(*)::int FROM violations v WHERE v.status = 'open' ${violWhere})`
+      : "0";
+    const pendingApprovalsExpr = canReadApprovals
+      ? `(SELECT count(*)::int FROM approvals a WHERE a.status = 'pending' ${apprWhere})`
+      : "0";
+    const pendingRegistrationsExpr = canReadRegistrations
+      ? (() => {
+          const regUserScope = isVillageScoped ? `AND ${bindVillage("u.village_id")}` : "";
+          return `(
+           (SELECT count(*)::int FROM users u WHERE u.status = 'pending' AND u.role = 'farmer' ${regUserScope}) +
+           (
+             SELECT count(*)::int
+             FROM password_reset_requests r
+             JOIN users u ON u.id = r.user_id
+             WHERE r.status = 'pending'
+               AND r.expires_at > now()
+               AND (${isAdmin ? "true" : "(u.role = 'farmer' AND u.status = 'active')"})
+               ${regUserScope}
+           )
+         )`;
+        })()
+      : "0";
+    const labTestsExpr = canReadLabTests
+      ? `(SELECT count(*)::int FROM lab_tests lt JOIN hh ON hh.id = lt.household_id)`
+      : "0";
+    const labTestsPassedExpr = canReadLabTests
+      ? `(SELECT count(*)::int FROM lab_tests lt JOIN hh ON hh.id = lt.household_id WHERE lt.result = 'pass')`
+      : "0";
+    const harvestTonsExpr = canReadHarvest
+      ? `(SELECT COALESCE(sum(hl.weight_tons), 0)::float8 FROM harvest_lots hl ${harvestLotScope})`
+      : "0::float8";
+    const harvestLotsExpr = canReadHarvest
+      ? `(SELECT count(*)::int FROM harvest_lots hl ${harvestLotScope})`
+      : "0";
+    const journalLast30Expr = canReadJournal
+      ? `(SELECT count(*)::int FROM journal_entries je JOIN hh ON hh.id = je.household_id WHERE je.entry_on >= ${TODAY_VN_SQL} - 30)`
+      : "0";
 
     const countsQuery = this.db.query(
       `WITH hh AS (
@@ -187,29 +248,44 @@ export class DashboardService {
          ${householdsCountExpr} AS households,
          ${plotsCountExpr} AS plots,
          ${areaHaExpr} AS area_ha,
-         (SELECT count(*)::int FROM hh WHERE hh.status = 'qualified') AS qualified_households,
-         (SELECT count(*)::int FROM violations v WHERE v.status = 'open' ${violWhere}) AS open_violations,
-         (SELECT count(*)::int FROM approvals a WHERE a.status = 'pending' ${apprWhere}) AS pending_approvals,
-         (
-           (SELECT count(*)::int FROM users u WHERE u.status = 'pending' AND u.role = 'farmer' ${regWhere}) +
-           (SELECT count(*)::int FROM password_reset_requests r JOIN users u ON u.id = r.user_id WHERE r.status = 'pending' ${regWhere})
-         ) AS pending_registrations,
-         (SELECT count(*)::int FROM harvest_declarations hd JOIN hh ON hh.id = hd.household_id WHERE hd.status = 'submitted') AS pending_declarations,
-         (SELECT count(*)::int FROM lab_tests lt JOIN hh ON hh.id = lt.household_id) AS lab_tests,
-         (SELECT count(*)::int FROM lab_tests lt JOIN hh ON hh.id = lt.household_id WHERE lt.result = 'pass') AS lab_tests_passed,
-         (SELECT COALESCE(sum(weight_tons), 0)::float8 FROM harvest_lots) AS harvest_tons,
-         (SELECT count(*)::int FROM harvest_lots) AS harvest_lots,
-         (SELECT count(*)::int FROM training_courses) AS training_courses,
-         (SELECT count(*)::int FROM journal_entries je JOIN hh ON hh.id = je.household_id WHERE je.entry_on >= ${TODAY_VN_SQL} - 30) AS journal_last_30_days,
-         COALESCE(
-           (
-             SELECT json_agg(json_build_object('status', s.status, 'count', s.count) ORDER BY s.status)
-             FROM (SELECT hh.status, count(*)::int AS count FROM hh GROUP BY hh.status) s
-           ),
-           '[]'::json
-         ) AS household_status`,
-      params,
+         ${canReadHouseholds ? "(SELECT count(*)::int FROM hh WHERE hh.status = 'qualified')" : "0"} AS qualified_households,
+         ${openViolationsExpr} AS open_violations,
+         ${pendingApprovalsExpr} AS pending_approvals,
+         ${pendingRegistrationsExpr} AS pending_registrations,
+         ${canReadHarvest ? "(SELECT count(*)::int FROM harvest_declarations hd JOIN hh ON hh.id = hd.household_id WHERE hd.status = 'submitted')" : "0"} AS pending_declarations,
+         ${labTestsExpr} AS lab_tests,
+         ${labTestsPassedExpr} AS lab_tests_passed,
+         ${harvestTonsExpr} AS harvest_tons,
+         ${harvestLotsExpr} AS harvest_lots,
+         ${canReadTraining ? "(SELECT count(*)::int FROM training_courses)" : "0"} AS training_courses,
+         ${journalLast30Expr} AS journal_last_30_days,
+         ${
+           canReadHouseholds
+             ? `COALESCE(
+                  (
+                    SELECT json_agg(json_build_object('status', s.status, 'count', s.count) ORDER BY s.status)
+                    FROM (SELECT hh.status, count(*)::int AS count FROM hh GROUP BY hh.status) s
+                  ),
+                  '[]'::json
+                )`
+             : "'[]'::json"
+         } AS household_status`,
+      countsParams,
     );
+
+    const villagesParams: unknown[] = [];
+    const villagesWhereCond = villageScope("v.id")(user, villagesParams);
+    const villagesWhere = villagesWhereCond ? `WHERE ${villagesWhereCond}` : "";
+
+    const trendParams: unknown[] = [];
+    const trendHhCond = canReadJournal ? villageScope("h.village_id")(user, trendParams) : null;
+    const trendHhWhere = trendHhCond ? `WHERE ${trendHhCond}` : "";
+
+    const listsParams: unknown[] = [];
+    const listsHhCond =
+      canReadViolations || canReadApprovals ? villageScope("h.village_id")(user, listsParams) : null;
+    const listsViolWhere = listsHhCond ? `AND v.household_id IN (SELECT h.id FROM households h WHERE ${listsHhCond})` : "";
+    const listsApprWhere = listsHhCond ? `AND a.household_id IN (SELECT h.id FROM households h WHERE ${listsHhCond})` : "";
 
     const [countsRes, villagesRes, trendRes, listsRes] = await Promise.all([
       countsQuery,
@@ -239,7 +315,7 @@ export class DashboardService {
              FROM villages v
              LEFT JOIN households h ON h.village_id = v.id
              LEFT JOIN up ON up.village_id = v.id
-             ${villageId !== null ? "WHERE v.id = $1" : ""}
+             ${villagesWhere}
              GROUP BY v.id, v.name, v.household_count, v.plot_count, v.area_ha
              ORDER BY v.id`
           : `SELECT v.id, v.name,
@@ -249,28 +325,37 @@ export class DashboardService {
                     CASE WHEN count(h.id) > 0 THEN COALESCE(sum(h.area_ha), 0)::float8 ELSE v.area_ha::float8 END AS area_ha
              FROM villages v
              LEFT JOIN households h ON h.village_id = v.id
-             ${villageId !== null ? "WHERE v.id = $1" : ""}
+             ${villagesWhere}
              GROUP BY v.id, v.name, v.household_count, v.plot_count, v.area_ha
              ORDER BY v.id`,
-        params,
+        villagesParams,
       ),
       this.db.query(
-        `SELECT to_char(m.month_start, 'YYYY-MM') AS month,
-                count(j.id)::int AS count
-         FROM generate_series(
-           date_trunc('month', ${TODAY_VN_SQL}) - interval '5 months',
-           date_trunc('month', ${TODAY_VN_SQL}),
-           interval '1 month'
-         ) AS m(month_start)
-         LEFT JOIN (
-           SELECT je.id, je.entry_on
-           FROM journal_entries je
-           JOIN households h ON h.id = je.household_id
-           ${hhWhere}
-         ) j ON date_trunc('month', j.entry_on) = m.month_start
-         GROUP BY m.month_start
-         ORDER BY m.month_start ASC`,
-        params,
+        canReadJournal
+          ? `SELECT to_char(m.month_start, 'YYYY-MM') AS month,
+                    count(j.id)::int AS count
+             FROM generate_series(
+               date_trunc('month', ${TODAY_VN_SQL}) - interval '5 months',
+               date_trunc('month', ${TODAY_VN_SQL}),
+               interval '1 month'
+             ) AS m(month_start)
+             LEFT JOIN (
+               SELECT je.id, je.entry_on
+               FROM journal_entries je
+               JOIN households h ON h.id = je.household_id
+               ${trendHhWhere}
+             ) j ON date_trunc('month', j.entry_on) = m.month_start
+             GROUP BY m.month_start
+             ORDER BY m.month_start ASC`
+          : `SELECT to_char(m.month_start, 'YYYY-MM') AS month,
+                    0 AS count
+             FROM generate_series(
+               date_trunc('month', ${TODAY_VN_SQL}) - interval '5 months',
+               date_trunc('month', ${TODAY_VN_SQL}),
+               interval '1 month'
+             ) AS m(month_start)
+             ORDER BY m.month_start ASC`,
+        trendParams,
       ),
       this.db.query<{
         recent_violations: Record<string, unknown>[];
@@ -278,73 +363,85 @@ export class DashboardService {
         upcoming_schedule: Record<string, unknown>[];
       }>(
         `SELECT
-           COALESCE(
-             (
-               SELECT json_agg(
-                 json_build_object(
-                   'id', v.id,
-                   'severity', v.severity,
-                   'title', v.title,
-                   'householdLabel', v.household_label,
-                   'detectedOn', to_char(v.detected_on, 'YYYY-MM-DD'),
-                   'status', v.status
-                 )
-               )
-               FROM (
-                 SELECT v.id, v.severity, v.title, v.household_label, v.detected_on, v.status
-                 FROM violations v
-                 WHERE 1=1 ${violWhere}
-                 ORDER BY v.detected_on DESC, v.id DESC
-                 LIMIT 5
-               ) v
-             ),
-             '[]'::json
-           ) AS recent_violations,
-           COALESCE(
-             (
-               SELECT json_agg(
-                 json_build_object(
-                   'id', a.id,
-                   'code', a.code,
-                   'applicantName', a.applicant_name,
-                   'requestType', a.request_type,
-                   'submittedOn', to_char(a.submitted_on, 'YYYY-MM-DD'),
-                   'priority', a.priority
-                 )
-               )
-               FROM (
-                 SELECT a.id, a.code, a.applicant_name, a.request_type, a.submitted_on, a.priority
-                 FROM approvals a
-                 WHERE a.status = 'pending' ${apprWhere}
-                 ORDER BY a.submitted_on DESC, a.id DESC
-                 LIMIT 5
-               ) a
-             ),
-             '[]'::json
-           ) AS pending_approvals,
-           COALESCE(
-             (
-               SELECT json_agg(
-                 json_build_object(
-                   'id', s.id,
-                   'scheduledOn', to_char(s.scheduled_on, 'YYYY-MM-DD'),
-                   'title', s.title,
-                   'officer', s.officer,
-                   'kind', s.kind,
-                   'plotCount', s.plot_count
-                 )
-               )
-               FROM (
-                 SELECT id, scheduled_on, title, officer, kind, plot_count
-                 FROM inspection_schedule
-                 WHERE scheduled_on >= ${TODAY_VN_SQL}
-                 ORDER BY scheduled_on ASC, id ASC
-                 LIMIT 5
-               ) s
-             ),
-             '[]'::json
-           ) AS upcoming_schedule`,
-        params,
+           ${
+             canReadViolations
+               ? `COALESCE(
+                    (
+                      SELECT json_agg(
+                        json_build_object(
+                          'id', v.id,
+                          'severity', v.severity,
+                          'title', v.title,
+                          'householdLabel', v.household_label,
+                          'detectedOn', to_char(v.detected_on, 'YYYY-MM-DD'),
+                          'status', v.status
+                        )
+                      )
+                      FROM (
+                        SELECT v.id, v.severity, v.title, v.household_label, v.detected_on, v.status
+                        FROM violations v
+                        WHERE 1=1 ${listsViolWhere}
+                        ORDER BY v.detected_on DESC, v.id DESC
+                        LIMIT 5
+                      ) v
+                    ),
+                    '[]'::json
+                  )`
+               : "'[]'::json"
+           } AS recent_violations,
+           ${
+             canReadApprovals
+               ? `COALESCE(
+                    (
+                      SELECT json_agg(
+                        json_build_object(
+                          'id', a.id,
+                          'code', a.code,
+                          'applicantName', a.applicant_name,
+                          'requestType', a.request_type,
+                          'submittedOn', to_char(a.submitted_on, 'YYYY-MM-DD'),
+                          'priority', a.priority
+                        )
+                      )
+                      FROM (
+                        SELECT a.id, a.code, a.applicant_name, a.request_type, a.submitted_on, a.priority
+                        FROM approvals a
+                        WHERE a.status = 'pending' ${listsApprWhere}
+                        ORDER BY a.submitted_on DESC, a.id DESC
+                        LIMIT 5
+                      ) a
+                    ),
+                    '[]'::json
+                  )`
+               : "'[]'::json"
+           } AS pending_approvals,
+           ${
+             canReadSchedule
+               ? `COALESCE(
+                    (
+                      SELECT json_agg(
+                        json_build_object(
+                          'id', s.id,
+                          'scheduledOn', to_char(s.scheduled_on, 'YYYY-MM-DD'),
+                          'title', s.title,
+                          'officer', s.officer,
+                          'kind', s.kind,
+                          'plotCount', s.plot_count
+                        )
+                      )
+                      FROM (
+                        SELECT id, scheduled_on, title, officer, kind, plot_count
+                        FROM inspection_schedule
+                        WHERE scheduled_on >= ${TODAY_VN_SQL}
+                        ORDER BY scheduled_on ASC, id ASC
+                        LIMIT 5
+                      ) s
+                    ),
+                    '[]'::json
+                  )`
+               : "'[]'::json"
+           } AS upcoming_schedule`,
+        listsParams,
       ),
     ]);
 

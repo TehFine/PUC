@@ -4,9 +4,15 @@ import type { Response } from "express";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { AuditService } from "../../audit/audit.service";
-import { badRequest } from "../../common/errors/app.exception";
+import { badRequest, forbidden } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
-import { canSeeCccd, maskCccd } from "../households/households.service";
+
+function maskReportCccd(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const clean = String(value).trim();
+  if (!clean) return "";
+  return `**********${clean.slice(-2)}`;
+}
 
 export const REPORT_TYPES = [
   "households",
@@ -135,10 +141,24 @@ export class ReportsService {
     if (!REPORT_TYPES.includes(type as ReportType)) {
       throw badRequest("Loại báo cáo không hợp lệ.");
     }
-    const filter = this.parseFilter(rawQuery, user);
-    const { headers, rows } = await this.buildReportTable(type as ReportType, filter, user, recordAudit);
+    const wantUnmaskedAudit = rawQuery.audit === "1";
+    if (wantUnmaskedAudit && user.role !== "admin" && user.role !== "htx_officer") {
+      throw forbidden("Chỉ Quản trị viên hoặc Cán bộ HTX mới có quyền xuất báo cáo kiểm toán đầy đủ CCCD.");
+    }
 
-    if (recordAudit) {
+    const filter = this.parseFilter(rawQuery, user);
+    const { headers, rows } = await this.buildReportTable(type as ReportType, filter, user, wantUnmaskedAudit);
+
+    if (wantUnmaskedAudit) {
+      await this.audit.write(
+        { ip, user },
+        {
+          action: "Xuất báo cáo kiểm toán (đầy đủ CCCD)",
+          object: `Báo cáo ${type}`,
+          detail: `Xuất dữ liệu PII/CCCD không che - bộ lọc: ${JSON.stringify(filter)}`,
+        },
+      );
+    } else if (recordAudit) {
       await this.audit.write(
         { ip, user },
         { action: "Xuất báo cáo", object: `Báo cáo ${type}`, detail: JSON.stringify(filter) },
@@ -146,7 +166,7 @@ export class ReportsService {
     }
 
     const total = rows.length;
-    const exposedRows = recordAudit ? rows : rows.slice(0, 50);
+    const exposedRows = recordAudit || wantUnmaskedAudit ? rows : rows.slice(0, 50);
     const stringRows = exposedRows.map((row) =>
       row.map((cell) => (cell === null || cell === undefined ? "" : String(cell))),
     );
@@ -212,8 +232,12 @@ export class ReportsService {
           conds.push(`h.village_id = $${params.length}`);
         }
         const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+        const fullCccd = allowUnmaskedCccd && (user.role === "admin" || user.role === "htx_officer");
+        const cccdSelectExpr = fullCccd
+          ? "h.cccd AS cccd"
+          : "CASE WHEN h.cccd IS NULL OR btrim(h.cccd) = '' THEN '' ELSE '**********' || right(btrim(h.cccd), 2) END AS cccd";
         const { rows } = await this.db.query(
-          `SELECT h.code, h.name, h.cccd, h.phone, v.name AS village_name,
+          `SELECT h.code, h.name, ${cccdSelectExpr}, h.phone, v.name AS village_name,
                   h.plot_count, h.area_ha, h.status
            FROM households h
            JOIN villages v ON v.id = h.village_id
@@ -222,14 +246,12 @@ export class ReportsService {
            LIMIT ${MAX_EXPORT_ROWS}`,
           params,
         );
-        // Chỉ trả CCCD đầy đủ khi người dùng có quyền VÀ yêu cầu được ghi vào audit_logs (xuất thật).
-        const fullCccd = allowUnmaskedCccd && canSeeCccd(user);
         return {
           headers: ["Mã hộ", "Tên chủ hộ", "CCCD", "Điện thoại", "Thôn / Tổ", "Số thửa", "Diện tích (ha)", "Trạng thái"],
           rows: rows.map((r) => [
             r.code,
             r.name,
-            fullCccd ? r.cccd : maskCccd(r.cccd),
+            fullCccd ? r.cccd : maskReportCccd(r.cccd),
             r.phone,
             r.village_name,
             r.plot_count,

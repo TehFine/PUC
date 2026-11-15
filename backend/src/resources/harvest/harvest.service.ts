@@ -44,6 +44,114 @@ function resolveMilestoneOffsetDays(stage: string | null, variety: string | null
   return 30;
 }
 
+const CUNE_ADMIN_LOCATION = "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+const EAKHAL_ADMIN_LOCATION = "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
+
+function normGeoText(val: string): string {
+  return val
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const ADMIN_LEVEL_PREFIX_RE = /^(?:xa|phuong|thi tran|huyen|quan|thi xa|thanh pho|tp\.?|tinh)\s+/;
+
+function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boolean {
+  const target = normGeoText(assignedRaw);
+  if (!target) return false;
+  if (target === "*" || target === "toan quoc") return true;
+
+  const targetHasPrefix = ADMIN_LEVEL_PREFIX_RE.test(target);
+  const targetStripped = target.replace(ADMIN_LEVEL_PREFIX_RE, "").trim();
+
+  for (const loc of adminLocations) {
+    const segments = loc
+      .split(",")
+      .map((s) => normGeoText(s))
+      .filter(Boolean);
+    for (const seg of segments) {
+      if (seg === target) return true;
+      if (!targetHasPrefix) {
+        const segStripped = seg.replace(ADMIN_LEVEL_PREFIX_RE, "").trim();
+        if (segStripped === targetStripped) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function resolveParcelAdminLocation(villageName?: string | null, zoneOrPlotCode?: string | null): string {
+  const v = (villageName || "").trim();
+  const z = (zoneOrPlotCode || "").trim();
+  if (/ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(v) || /^66-PUC-SR0001-/i.test(z)) {
+    return EAKHAL_ADMIN_LOCATION;
+  }
+  return CUNE_ADMIN_LOCATION;
+}
+
+function isStaffInParcelScope(
+  user: AuthUser | undefined,
+  row: {
+    villageId?: number | null;
+    villageName?: string | null;
+    zoneCode?: string | null;
+    plotCode?: string | null;
+  },
+): boolean {
+  if (!user) return true;
+  if (user.role === "enterprise") return false;
+  if (user.role === "htx_officer" || user.role === "admin") {
+    const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
+    if (userCoop !== "HTX-CUNE") return false;
+  }
+  const locations = [resolveParcelAdminLocation(row.villageName, row.zoneCode || row.plotCode)];
+  if (user.role === "village_officer") {
+    const hasVillage = user.villageId !== null && user.villageId !== undefined;
+    const hasCommune = Boolean(user.assignedCommune && user.assignedCommune.trim());
+    if (!hasVillage && !hasCommune) return false;
+    if (hasVillage && row.villageId !== null && row.villageId !== undefined && Number(row.villageId) !== Number(user.villageId)) {
+      return false;
+    }
+    if (hasCommune && !matchesJurisdiction(user.assignedCommune!, locations)) return false;
+    return true;
+  }
+  if (user.role === "inspector") {
+    const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
+    if (!matchesJurisdiction(region, locations)) return false;
+  }
+  if (user.assignedCommune && user.assignedCommune.trim()) {
+    if (!matchesJurisdiction(user.assignedCommune, locations)) return false;
+  }
+  return true;
+}
+
+function isStaffInCuneCoopScope(user: AuthUser | undefined, allowEaKhal = false): boolean {
+  if (!user) return true;
+  if (user.role === "enterprise") return false;
+  if (user.role === "htx_officer" || user.role === "admin") {
+    const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
+    if (userCoop !== "HTX-CUNE") return false;
+  }
+  const allowedLocations = allowEaKhal ? [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION] : [CUNE_ADMIN_LOCATION];
+  if (user.role === "inspector") {
+    const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
+    if (!matchesJurisdiction(region, allowedLocations)) return false;
+  }
+  if (user.role === "village_officer") {
+    const hasVillage = user.villageId !== null && user.villageId !== undefined;
+    const hasCommune = Boolean(user.assignedCommune && user.assignedCommune.trim());
+    if (!hasVillage && !hasCommune) return false;
+  }
+  if (user.assignedCommune && user.assignedCommune.trim()) {
+    if (!matchesJurisdiction(user.assignedCommune, allowedLocations)) return false;
+  }
+  return true;
+}
+
 @Injectable()
 export class HarvestService extends BaseCrudService {
   constructor(
@@ -75,7 +183,23 @@ export class HarvestService extends BaseCrudService {
           params.push(user.enterpriseId);
           return `t.enterprise_id = $${params.length}`;
         }
+        if (user.role === "inspector") {
+          const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
+          if (!matchesJurisdiction(region, [CUNE_ADMIN_LOCATION])) return "1 = 0";
+          if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) return "1 = 0";
+          return null;
+        }
+        if (user.role === "village_officer") {
+          const hasVillage = user.villageId !== null && user.villageId !== undefined;
+          const hasCommune = Boolean(user.assignedCommune && user.assignedCommune.trim());
+          if (!hasVillage && !hasCommune) return "1 = 0";
+          if (hasCommune && !matchesJurisdiction(user.assignedCommune!, [CUNE_ADMIN_LOCATION])) return "1 = 0";
+          return null;
+        }
         if (user.role === "htx_officer" || user.role === "admin") {
+          if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
+            return "1 = 0";
+          }
           params.push((user.coopCode || "HTX-CUNE").trim().toUpperCase());
           return `upper(COALESCE(t.coop_code, 'HTX-CUNE')) = $${params.length}`;
         }
@@ -84,12 +208,157 @@ export class HarvestService extends BaseCrudService {
     });
   }
 
+  private assertLotRowInScope(
+    row: { coop_code?: string | null; enterprise_id?: number | null },
+    user?: AuthUser,
+    notFoundMsg = "Không tìm thấy lô hàng.",
+  ) {
+    if (!user) return;
+    if (user.role === "enterprise") {
+      if (!user.enterpriseId || Number(row.enterprise_id) !== Number(user.enterpriseId)) {
+        throw notFound(notFoundMsg);
+      }
+      return;
+    }
+    if (user.role === "inspector") {
+      const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
+      if (!matchesJurisdiction(region, [CUNE_ADMIN_LOCATION])) {
+        throw notFound(notFoundMsg);
+      }
+      if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
+        throw notFound(notFoundMsg);
+      }
+      return;
+    }
+    if (user.role === "village_officer") {
+      const hasVillage = user.villageId !== null && user.villageId !== undefined;
+      const hasCommune = Boolean(user.assignedCommune && user.assignedCommune.trim());
+      if (!hasVillage && !hasCommune) {
+        throw notFound(notFoundMsg);
+      }
+      if (hasCommune && !matchesJurisdiction(user.assignedCommune!, [CUNE_ADMIN_LOCATION])) {
+        throw notFound(notFoundMsg);
+      }
+      return;
+    }
+    if (user.role === "htx_officer" || user.role === "admin") {
+      if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
+        throw notFound(notFoundMsg);
+      }
+      const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
+      const lotCoop = (row.coop_code || "HTX-CUNE").trim().toUpperCase();
+      if (userCoop !== lotCoop) {
+        throw notFound(notFoundMsg);
+      }
+    }
+  }
+
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
-    const a = typeof input.gradeAPct === "number" ? input.gradeAPct : 0;
-    const b = typeof input.gradeBPct === "number" ? input.gradeBPct : 0;
-    const c = typeof input.gradeCPct === "number" ? input.gradeCPct : 0;
-    if (a + b + c > 100.0001) {
-      throw badRequest("Tổng tỷ lệ phân hạng (A + B + C) không được vượt quá 100%.");
+    let existing:
+      | {
+          id: number;
+          code: string;
+          status: string;
+          weight_tons: number;
+          harvested_on: string;
+          enterprise_id: number | null;
+          contract_id: number | null;
+          grade_a_pct: number | null;
+          grade_b_pct: number | null;
+          grade_c_pct: number | null;
+          coop_code: string | null;
+        }
+      | undefined;
+
+    if (context.method === "PATCH" && context.id !== undefined) {
+      const curRes = await this.db.query<{
+        id: number;
+        code: string;
+        status: string;
+        weight_tons: number;
+        harvested_on: string;
+        enterprise_id: number | null;
+        contract_id: number | null;
+        grade_a_pct: number | null;
+        grade_b_pct: number | null;
+        grade_c_pct: number | null;
+        coop_code: string | null;
+      }>(
+        `SELECT id, code, status, weight_tons::float8 AS weight_tons, harvested_on::text AS harvested_on,
+                enterprise_id, contract_id,
+                grade_a_pct::float8 AS grade_a_pct,
+                grade_b_pct::float8 AS grade_b_pct,
+                grade_c_pct::float8 AS grade_c_pct,
+                coop_code
+         FROM harvest_lots
+         WHERE id = $1`,
+        [context.id],
+      );
+      existing = curRes.rows[0];
+      if (existing) {
+        this.assertLotRowInScope(existing, context.user, `Không tìm thấy lô hàng với ID ${context.id}`);
+        if (existing.status === "exported" || existing.status === "delivered") {
+          if (input.code !== undefined && String(input.code).trim() !== String(existing.code).trim()) {
+            throw badRequest("Lô hàng đã giao hoặc đã xuất khẩu, không được thay đổi mã lô.");
+          }
+          if (
+            input.weightTons !== undefined &&
+            Math.abs(Number(input.weightTons) - Number(existing.weight_tons ?? 0)) > 1e-6
+          ) {
+            throw badRequest("Lô hàng đã giao hoặc đã xuất khẩu, không được thay đổi khối lượng lô.");
+          }
+          if (
+            input.harvestedOn !== undefined &&
+            String(input.harvestedOn).slice(0, 10) !== String(existing.harvested_on).slice(0, 10)
+          ) {
+            throw badRequest("Lô hàng đã giao hoặc đã xuất khẩu, không được thay đổi ngày thu hoạch.");
+          }
+          const curEnt = existing.enterprise_id !== null ? Number(existing.enterprise_id) : null;
+          const nextEnt =
+            input.enterpriseId !== undefined
+              ? input.enterpriseId !== null
+                ? Number(input.enterpriseId)
+                : null
+              : curEnt;
+          if (input.enterpriseId !== undefined && nextEnt !== curEnt) {
+            throw badRequest("Lô hàng đã giao hoặc đã xuất khẩu, không được thay đổi doanh nghiệp liên kết.");
+          }
+          const curCon = existing.contract_id !== null ? Number(existing.contract_id) : null;
+          const nextCon =
+            input.contractId !== undefined
+              ? input.contractId !== null
+                ? Number(input.contractId)
+                : null
+              : curCon;
+          if (input.contractId !== undefined && nextCon !== curCon) {
+            throw badRequest("Lô hàng đã giao hoặc đã xuất khẩu, không được thay đổi hợp đồng liên kết.");
+          }
+          if (
+            input.status !== undefined &&
+            (input.status === "sampling" ||
+              input.status === "in_transit" ||
+              (existing.status === "exported" && input.status === "delivered"))
+          ) {
+            throw badRequest("Lô hàng đã giao hoặc đã xuất khẩu, không được hạ trạng thái quay lại khâu trước.");
+          }
+        }
+      }
+    }
+
+    const effA =
+      input.gradeAPct !== undefined && input.gradeAPct !== null
+        ? Number(input.gradeAPct)
+        : Number(existing?.grade_a_pct ?? 0);
+    const effB =
+      input.gradeBPct !== undefined && input.gradeBPct !== null
+        ? Number(input.gradeBPct)
+        : Number(existing?.grade_b_pct ?? 0);
+    const effC =
+      input.gradeCPct !== undefined && input.gradeCPct !== null
+        ? Number(input.gradeCPct)
+        : Number(existing?.grade_c_pct ?? 0);
+    if (effA + effB + effC > 100.0001) {
+      throw badRequest("Tổng tỷ lệ phân hạng (A, B, C) không được vượt quá 100%.");
     }
     if (input.enterpriseId !== undefined && input.enterpriseId !== null) {
       const ent = await this.db.query("SELECT 1 FROM enterprises WHERE id = $1", [input.enterpriseId]);
@@ -101,8 +370,31 @@ export class HarvestService extends BaseCrudService {
     }
     if (context.method === "POST") {
       input.qrToken = generateQrToken(14);
+      input.coopCode = (context.user.coopCode || "HTX-CUNE").trim().toUpperCase();
     }
     return input;
+  }
+
+  protected override async guardDelete(id: number, user: AuthUser) {
+    const curRes = await this.db.query<{
+      id: number;
+      status: string;
+      coop_code: string | null;
+      enterprise_id: number | null;
+      items_count: number;
+    }>(
+      `SELECT id, status, coop_code, enterprise_id,
+              (SELECT COUNT(*)::int FROM harvest_items WHERE lot_id = harvest_lots.id) AS items_count
+       FROM harvest_lots
+       WHERE id = $1`,
+      [id],
+    );
+    const existing = curRes.rows[0];
+    if (!existing) return;
+    this.assertLotRowInScope(existing, user, `Không tìm thấy lô hàng với ID ${id}`);
+    if (existing.status !== "sampling" || Number(existing.items_count) > 0) {
+      throw badRequest("Lô hàng đã phát hành tem hoặc đã xuất kho, không thể xóa.");
+    }
   }
 
   private async resolveLotPrimaryPucCode(lotId: number): Promise<string> {
@@ -130,17 +422,7 @@ export class HarvestService extends BaseCrudService {
     if (lot.rowCount === 0 || !lot.rows[0]) {
       throw notFound(`Không tìm thấy lô hàng với ID ${lotId}`);
     }
-    const row = lot.rows[0];
-    if (user?.role === "enterprise") {
-      if (!user.enterpriseId || Number(row.enterprise_id) !== Number(user.enterpriseId)) {
-        throw notFound(`Không tìm thấy lô hàng với ID ${lotId}`);
-      }
-    } else if (user && (user.role === "htx_officer" || user.role === "admin")) {
-      const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
-      if ((row.coop_code || "HTX-CUNE").trim().toUpperCase() !== userCoop) {
-        throw notFound(`Không tìm thấy lô hàng với ID ${lotId}`);
-      }
-    }
+    this.assertLotRowInScope(lot.rows[0], user, `Không tìm thấy lô hàng với ID ${lotId}`);
 
     const [pucCode, res] = await Promise.all([
       this.resolveLotPrimaryPucCode(lotId),
@@ -157,39 +439,49 @@ export class HarvestService extends BaseCrudService {
 
   /** Tự động sinh hàng loạt dải tem truy xuất nguồn gốc con (quả hoặc thùng) kèm qr_token ngẫu nhiên */
   async generateItems(lotId: number, dto: GenerateItemsDto, user: AuthUser, ip?: string) {
-    const lotRes = await this.db.query<{ id: number; code: string }>(
-      "SELECT id, code FROM harvest_lots WHERE id = $1",
-      [lotId],
-    );
-    if (lotRes.rowCount === 0) {
-      throw notFound(`Không tìm thấy lô hàng với ID ${lotId}`);
-    }
-    const lot = lotRes.rows[0];
-    const pucCode = await this.resolveLotPrimaryPucCode(lotId);
-
     const prefix = dto.itemType === "fruit" ? "Q" : "T";
     const padLen = dto.itemType === "fruit" ? 4 : 3;
-
-    const maxRes = await this.db.query<{ serial_code: string }>(
-      `SELECT serial_code FROM harvest_items
-       WHERE lot_id = $1 AND item_type = $2
-       ORDER BY id DESC LIMIT 1`,
-      [lotId, dto.itemType],
-    );
-
-    let startIdx = 1;
-    if (maxRes.rowCount && maxRes.rows[0]) {
-      const parts = maxRes.rows[0].serial_code.split(`-${prefix}`);
-      if (parts.length > 1) {
-        const lastNum = parseInt(parts[1], 10);
-        if (!isNaN(lastNum)) startIdx = lastNum + 1;
-      }
-    }
+    const pucCode = await this.resolveLotPrimaryPucCode(lotId);
 
     const createdItems: unknown[] = [];
     const client = await this.db.pool.connect();
     try {
       await client.query("BEGIN");
+      const lotRes = await client.query<{
+        id: number;
+        code: string;
+        status: string;
+        coop_code: string | null;
+        enterprise_id: number | null;
+      }>(
+        "SELECT id, code, status, coop_code, enterprise_id FROM harvest_lots WHERE id = $1 FOR UPDATE",
+        [lotId],
+      );
+      if (lotRes.rowCount === 0 || !lotRes.rows[0]) {
+        throw notFound(`Không tìm thấy lô hàng với ID ${lotId}`);
+      }
+      const lot = lotRes.rows[0];
+      this.assertLotRowInScope(lot, user, `Không tìm thấy lô hàng với ID ${lotId}`);
+      if (lot.status === "revoked") {
+        throw badRequest("Lô hàng đã bị thu hồi, không thể phát hành thêm tem truy xuất.");
+      }
+
+      const maxRes = await client.query<{ serial_code: string }>(
+        `SELECT serial_code FROM harvest_items
+         WHERE lot_id = $1 AND item_type = $2
+         ORDER BY id DESC LIMIT 1`,
+        [lotId, dto.itemType],
+      );
+
+      let startIdx = 1;
+      if (maxRes.rowCount && maxRes.rows[0]) {
+        const parts = maxRes.rows[0].serial_code.split(`-${prefix}`);
+        if (parts.length > 1) {
+          const lastNum = parseInt(parts[1], 10);
+          if (!isNaN(lastNum)) startIdx = lastNum + 1;
+        }
+      }
+
       for (let i = 0; i < dto.count; i++) {
         const num = (startIdx + i).toString().padStart(padLen, "0");
         const serialCode = `${lot.code}-${prefix}${num}`;
@@ -228,11 +520,22 @@ export class HarvestService extends BaseCrudService {
     return createdItems;
   }
 
-  async listContributions(lotId: number) {
-    const lot = await this.db.query("SELECT 1 FROM harvest_lots WHERE id = $1", [lotId]);
-    if (lot.rowCount === 0) throw notFound("Không tìm thấy lô hàng.");
+  async listContributions(lotId: number, user?: AuthUser) {
+    const lot = await this.db.query<{ id: number; coop_code: string | null; enterprise_id: number | null }>(
+      "SELECT id, coop_code, enterprise_id FROM harvest_lots WHERE id = $1",
+      [lotId],
+    );
+    if (lot.rowCount === 0 || !lot.rows[0]) throw notFound("Không tìm thấy lô hàng.");
+    this.assertLotRowInScope(lot.rows[0], user, "Không tìm thấy lô hàng.");
 
     const hasPlots = await plotsTableExists(this.db);
+    const params: unknown[] = [lotId];
+    let villageWhere = "";
+    if (user?.role === "village_officer") {
+      params.push(user.villageId ?? -1);
+      villageWhere = `AND h.village_id = $${params.length}`;
+    }
+
     const sql = hasPlots
       ? `SELECT hc.id, hc.lot_id, hc.household_id, NULLIF(hc.plot_code, '') AS plot_code,
                 p.zone_code, p.variety, p.status AS plot_status,
@@ -241,8 +544,8 @@ export class HarvestService extends BaseCrudService {
          FROM harvest_contributions hc
          JOIN households h ON h.id = hc.household_id
          JOIN villages v ON v.id = h.village_id
-         LEFT JOIN plots p ON hc.plot_code <> '' AND upper(p.code) = upper(hc.plot_code)
-         WHERE hc.lot_id = $1
+         LEFT JOIN plots p ON hc.plot_code <> '' AND upper(p.code) = upper(hc.plot_code) AND p.household_id = hc.household_id
+         WHERE hc.lot_id = $1 ${villageWhere}
          ORDER BY hc.weight_kg DESC, hc.id ASC`
       : `SELECT hc.id, hc.lot_id, hc.household_id, NULLIF(hc.plot_code, '') AS plot_code,
                 NULL::text AS zone_code, NULL::text AS variety, NULL::text AS plot_status,
@@ -251,121 +554,237 @@ export class HarvestService extends BaseCrudService {
          FROM harvest_contributions hc
          JOIN households h ON h.id = hc.household_id
          JOIN villages v ON v.id = h.village_id
-         WHERE hc.lot_id = $1
+         WHERE hc.lot_id = $1 ${villageWhere}
          ORDER BY hc.weight_kg DESC, hc.id ASC`;
 
-    const { rows } = await this.db.query(sql, [lotId]);
+    const { rows } = await this.db.query(sql, params);
     return { data: camelRows(rows) };
   }
 
   async upsertContribution(lotId: number, dto: UpsertContributionDto, user: AuthUser, ip?: string) {
-    const lot = await this.db.query<{ harvested_on: string }>(
-      "SELECT harvested_on::text AS harvested_on FROM harvest_lots WHERE id = $1",
-      [lotId],
-    );
-    if (lot.rowCount === 0) throw notFound("Không tìm thấy lô hàng.");
-    const lotHarvestedOn = String(lot.rows[0].harvested_on).slice(0, 10);
-
-    const household = await this.db.query("SELECT 1 FROM households WHERE id = $1", [dto.householdId]);
-    if (household.rowCount === 0) throw badRequest("Hộ nông dân không tồn tại.");
-
     const hasPlots = await plotsTableExists(this.db);
-    let resolvedPlotCode = "";
+    let preCheckedPlotCode = "";
     if (dto.plotCode && dto.plotCode.trim()) {
-      resolvedPlotCode = await assertPlotOwned(this.db, dto.householdId, dto.plotCode);
-    } else if (hasPlots) {
-      const autoPlot = await this.db.query<{ code: string }>(
-        `SELECT code FROM plots
-         WHERE household_id = $1 AND code IS NOT NULL AND btrim(code) <> ''
-         ORDER BY (status = 'approved') DESC, id ASC
-         LIMIT 1`,
-        [dto.householdId],
-      );
-      resolvedPlotCode = autoPlot.rows[0]?.code?.trim() || "";
+      preCheckedPlotCode = (await assertPlotOwned(this.db, dto.householdId, dto.plotCode)).trim().toUpperCase();
     }
 
-    if (resolvedPlotCode) {
-      // 1. Khóa cứng tự động theo thời gian cách ly thuốc BVTV (PHI Lock) trên thửa nguồn
-      const phiConflict = await this.db.query<{
-        pesticide_name: string;
-        safe_from: string;
-        pesticide_status: string;
+    let savedId = 0;
+    let resolvedPlotCode = preCheckedPlotCode;
+    const client = await this.db.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const lot = await client.query<{
+        id: number;
+        harvested_on: string;
+        status: string;
+        coop_code: string | null;
+        enterprise_id: number | null;
+        created_at: Date | string;
       }>(
-        `SELECT p.name AS pesticide_name,
-                to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') AS safe_from,
-                p.status AS pesticide_status
-         FROM spray_records s
-         JOIN pesticides p ON p.id = s.pesticide_id
-         WHERE s.household_id = $1
-           AND s.plot_code IS NOT NULL AND upper(s.plot_code) = upper($2)
-           AND s.sprayed_on <= $3::date
-           AND (
-             (s.isolation_days > 0 AND (s.sprayed_on + s.isolation_days) > $3::date)
-             OR (p.status = 'banned' AND s.sprayed_on >= ($3::date - 60))
-           )
-         ORDER BY (s.sprayed_on + s.isolation_days) DESC, s.id DESC
-         LIMIT 1`,
-        [dto.householdId, resolvedPlotCode, lotHarvestedOn],
+        `SELECT id, harvested_on::text AS harvested_on, status, coop_code, enterprise_id, created_at
+         FROM harvest_lots
+         WHERE id = $1
+         FOR UPDATE`,
+        [lotId],
       );
-      if (phiConflict.rows[0]) {
-        const hit = phiConflict.rows[0];
-        if (hit.pesticide_status === "banned") {
+      if (lot.rowCount === 0 || !lot.rows[0]) throw notFound("Không tìm thấy lô hàng.");
+      const lotRow = lot.rows[0];
+      this.assertLotRowInScope(lotRow, user, "Không tìm thấy lô hàng.");
+      if (lotRow.status === "revoked") {
+        throw badRequest("Lô hàng đã thu hồi, không thể thay đổi danh sách đóng góp.");
+      }
+      const lotHarvestedOn = String(lotRow.harvested_on).slice(0, 10);
+
+      const household = await client.query<{ id: number; status: string; village_id: number }>(
+        "SELECT id, status, village_id FROM households WHERE id = $1",
+        [dto.householdId],
+      );
+      if (household.rowCount === 0 || !household.rows[0]) throw badRequest("Hộ nông dân không tồn tại.");
+      const hhRow = household.rows[0];
+      if (user.role === "village_officer" && Number(hhRow.village_id) !== Number(user.villageId ?? -1)) {
+        throw forbidden("Hộ nông dân không thuộc thôn hoặc buôn quản lý của bạn.");
+      }
+      if (hhRow.status === "violation" || hhRow.status === "pending") {
+        throw badRequest("Hộ nông dân đang chờ duyệt hoặc đang có vi phạm chưa khắc phục, không được đưa vào lô thu hoạch.");
+      }
+
+      if (resolvedPlotCode) {
+        if (hasPlots) {
+          const pRow = await client.query<{ status: string }>(
+            "SELECT status FROM plots WHERE household_id = $1 AND upper(code) = upper($2) LIMIT 1",
+            [dto.householdId, resolvedPlotCode],
+          );
+          if (pRow.rows[0] && (pRow.rows[0].status === "violation" || pRow.rows[0].status === "pending")) {
+            throw badRequest(
+              `Thửa "${resolvedPlotCode}" đang chờ duyệt hoặc đang có vi phạm, không được đưa vào lô thu hoạch.`,
+            );
+          }
+        }
+      } else if (hasPlots) {
+        const autoPlot = await client.query<{ code: string; status: string }>(
+          `SELECT code, status FROM plots
+           WHERE household_id = $1 AND code IS NOT NULL AND btrim(code) <> ''
+           ORDER BY (status = 'approved') DESC, id ASC
+           LIMIT 1`,
+          [dto.householdId],
+        );
+        if (autoPlot.rows[0]) {
+          if (autoPlot.rows[0].status === "violation" || autoPlot.rows[0].status === "pending") {
+            throw badRequest(
+              `Thửa "${autoPlot.rows[0].code}" của hộ đang chờ duyệt hoặc đang có vi phạm, không được đưa vào lô thu hoạch.`,
+            );
+          }
+          resolvedPlotCode = autoPlot.rows[0].code.trim().toUpperCase();
+        }
+      }
+
+      if (resolvedPlotCode) {
+        // Kiểm tra phiếu kiểm nghiệm đã xác thực gần nhất của hộ / thửa nguồn
+        const labFail = await client.query<{
+          code: string;
+          result: string;
+          yellow_o_positive: boolean;
+          cd_mg_kg: number;
+        }>(
+          `SELECT code, result, yellow_o_positive, cd_mg_kg::float8 AS cd_mg_kg
+           FROM lab_tests
+           WHERE household_id = $1
+             AND record_status = 'verified'
+             AND (
+               plot_code IS NULL
+               OR btrim(plot_code) = ''
+               OR upper(plot_code) = upper($2)
+             )
+           ORDER BY sampled_on DESC, id DESC
+           LIMIT 1`,
+          [dto.householdId, resolvedPlotCode],
+        );
+        if (
+          labFail.rows[0] &&
+          (labFail.rows[0].result === "fail" ||
+            labFail.rows[0].yellow_o_positive === true ||
+            Number(labFail.rows[0].cd_mg_kg ?? 0) > 0.05)
+        ) {
           throw badRequest(
-            `Khóa an toàn PHI: Thửa "${resolvedPlotCode}" có ghi nhận sử dụng hoạt chất cấm (${hit.pesticide_name}), hệ thống tự động chặn đưa vào lô thu hoạch xuất khẩu.`,
+            `Mẫu kiểm nghiệm gần nhất (${labFail.rows[0].code}) không đạt chuẩn an toàn (Cadimi hoặc Vàng O), hệ thống chặn đưa vào lô thu hoạch.`,
           );
         }
-        throw badRequest(
-          `Khóa an toàn PHI: Thửa "${resolvedPlotCode}" đang trong thời gian cách ly thuốc BVTV (${hit.pesticide_name}), chỉ được phép thu hoạch từ ngày ${hit.safe_from}.`,
+
+        // 1. Khóa cứng tự động theo thời gian cách ly thuốc BVTV (PHI Lock) trên hộ & thửa nguồn (kể cả spray_records chưa gán plot_code)
+        const phiConflict = await client.query<{
+          pesticide_name: string;
+          safe_from: string;
+          pesticide_status: string;
+        }>(
+          `SELECT p.name AS pesticide_name,
+                  to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') AS safe_from,
+                  p.status AS pesticide_status
+           FROM spray_records s
+           JOIN pesticides p ON p.id = s.pesticide_id
+           WHERE s.household_id = $1
+             AND (
+               s.plot_code IS NULL
+               OR btrim(s.plot_code) = ''
+               OR upper(s.plot_code) = upper($2)
+             )
+             AND s.sprayed_on <= $3::date
+             AND (
+               (s.isolation_days > 0 AND (s.sprayed_on + s.isolation_days) > $3::date)
+               OR (p.status = 'banned' AND s.sprayed_on >= ($3::date - 60))
+             )
+           ORDER BY (s.sprayed_on + s.isolation_days) DESC, s.id DESC
+           LIMIT 1`,
+          [dto.householdId, resolvedPlotCode, lotHarvestedOn],
         );
+        if (phiConflict.rows[0]) {
+          const hit = phiConflict.rows[0];
+          const parcelLabel = `Thửa "${resolvedPlotCode}"`;
+          if (hit.pesticide_status === "banned") {
+            throw badRequest(
+              `Khóa an toàn PHI: ${parcelLabel} có ghi nhận sử dụng hoạt chất cấm (${hit.pesticide_name}), hệ thống tự động chặn đưa vào lô thu hoạch xuất khẩu.`,
+            );
+          }
+          throw badRequest(
+            `Khóa an toàn PHI: ${parcelLabel} đang trong thời gian cách ly thuốc BVTV (${hit.pesticide_name}), chỉ được phép thu hoạch từ ngày ${hit.safe_from}.`,
+          );
+        }
       }
 
       // 2. Khóa cứng cân đối hạn ngạch sản lượng đầu vụ (Mass-Balance Quota Lock) chống trộn hàng ngoài vùng
-      const seasonYear = Number(lotHarvestedOn.slice(0, 4)) || new Date().getFullYear();
-      const quotaRes = await this.db.query<{ max_quota_kg: number }>(
-        `SELECT max_quota_kg::float8 AS max_quota_kg
-         FROM plot_season_quotas
-         WHERE season_year = $1 AND upper(plot_code) = upper($2)
-         LIMIT 1`,
-        [seasonYear, resolvedPlotCode],
-      );
-      if (quotaRes.rows[0]) {
-        const maxQuotaKg = Number(quotaRes.rows[0].max_quota_kg);
-        const usedRes = await this.db.query<{ used_kg: number }>(
-          `SELECT COALESCE(SUM(hc.weight_kg), 0)::float8 AS used_kg
-           FROM harvest_contributions hc
-           JOIN harvest_lots hl ON hl.id = hc.lot_id
-           WHERE EXTRACT(YEAR FROM hl.harvested_on)::int = $1
-             AND hl.status <> 'revoked'
-             AND upper(hc.plot_code) = upper($2)
-             AND hc.lot_id <> $3`,
-          [seasonYear, resolvedPlotCode, lotId],
+      if (resolvedPlotCode) {
+        const seasonYear = Number(lotHarvestedOn.slice(0, 4)) || new Date().getFullYear();
+        const quotaRes = await client.query<{ max_quota_kg: number }>(
+          `SELECT max_quota_kg::float8 AS max_quota_kg
+           FROM plot_season_quotas
+           WHERE season_year = $1 AND upper(plot_code) = upper($2)
+           ORDER BY id ASC
+           LIMIT 1
+           FOR UPDATE`,
+          [seasonYear, resolvedPlotCode],
         );
-        const usedOtherLotsKg = Number(usedRes.rows[0]?.used_kg ?? 0);
-        if (usedOtherLotsKg + dto.weightKg - maxQuotaKg > 1e-6) {
-          const remainingKg = Math.max(0, Number((maxQuotaKg - usedOtherLotsKg).toFixed(1)));
-          throw badRequest(
-            `Vượt hạn ngạch sản lượng thẩm định đầu vụ của thửa "${resolvedPlotCode}" năm ${seasonYear} ` +
-              `(Trần tối đa: ${maxQuotaKg.toLocaleString("vi-VN")} kg, đã xuất các lô khác: ${usedOtherLotsKg.toLocaleString("vi-VN")} kg, ` +
-              `còn lại: ${remainingKg.toLocaleString("vi-VN")} kg). Hệ thống khóa tự động chống trộn hàng ngoài vùng!`,
+        if (quotaRes.rows[0]) {
+          const maxQuotaKg = Number(quotaRes.rows[0].max_quota_kg);
+          const usedRes = await client.query<{ used_kg: number }>(
+            `SELECT COALESCE(SUM(hc.weight_kg), 0)::float8 AS used_kg
+             FROM harvest_contributions hc
+             JOIN harvest_lots hl ON hl.id = hc.lot_id
+             WHERE EXTRACT(YEAR FROM hl.harvested_on)::int = $1
+               AND hl.status <> 'revoked'
+               AND upper(hc.plot_code) = upper($2)
+               AND NOT (hc.lot_id = $3 AND hc.household_id = $4)`,
+            [seasonYear, resolvedPlotCode, lotId, dto.householdId],
           );
+          const usedOtherLotsKg = Number(usedRes.rows[0]?.used_kg ?? 0);
+          if (usedOtherLotsKg + dto.weightKg - maxQuotaKg > 1e-6) {
+            const remainingKg = Math.max(0, Number((maxQuotaKg - usedOtherLotsKg).toFixed(1)));
+            throw badRequest(
+              `Vượt hạn ngạch sản lượng thẩm định đầu vụ của thửa "${resolvedPlotCode}" năm ${seasonYear} ` +
+                `(Trần tối đa: ${maxQuotaKg.toLocaleString("vi-VN")} kg, đã xuất các lô khác: ${usedOtherLotsKg.toLocaleString("vi-VN")} kg, ` +
+                `còn lại: ${remainingKg.toLocaleString("vi-VN")} kg). Hệ thống khóa tự động chống trộn hàng ngoài vùng!`,
+            );
+          }
         }
       }
+
+      if (lotRow.status === "delivered" || lotRow.status === "exported") {
+        const sealedContribution = await client.query<{ id: number }>(
+          `SELECT id FROM harvest_contributions
+           WHERE lot_id = $1
+             AND household_id = $2
+             AND upper(plot_code) = upper($3)
+             AND (created_at <= now() - interval '24 hours' OR created_at <= $4::timestamptz + interval '1 second')
+           LIMIT 1`,
+          [lotId, dto.householdId, resolvedPlotCode, new Date(lotRow.created_at).toISOString()],
+        );
+        if ((sealedContribution.rowCount ?? 0) > 0) {
+          throw badRequest("Lô hàng đã giao hoặc đã xuất khẩu, không thể sửa đổi đóng góp đã niêm phong.");
+        }
+      }
+
+      const { rows } = await client.query<{ id: number }>(
+        `INSERT INTO harvest_contributions (lot_id, household_id, plot_code, weight_kg)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (lot_id, household_id, plot_code) DO UPDATE SET weight_kg = EXCLUDED.weight_kg
+         RETURNING id`,
+        [lotId, dto.householdId, resolvedPlotCode, dto.weightKg],
+      );
+      savedId = rows[0].id;
+
+      await client.query(
+        `UPDATE harvest_lots
+         SET household_count = (SELECT count(DISTINCT household_id)::int FROM harvest_contributions WHERE lot_id = $1)
+         WHERE id = $1`,
+        [lotId],
+      );
+
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
     }
-
-    const { rows } = await this.db.query<{ id: number }>(
-      `INSERT INTO harvest_contributions (lot_id, household_id, plot_code, weight_kg)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (lot_id, household_id, plot_code) DO UPDATE SET weight_kg = EXCLUDED.weight_kg
-       RETURNING id`,
-      [lotId, dto.householdId, resolvedPlotCode, dto.weightKg],
-    );
-
-    await this.db.query(
-      `UPDATE harvest_lots
-       SET household_count = (SELECT count(DISTINCT household_id)::int FROM harvest_contributions WHERE lot_id = $1)
-       WHERE id = $1`,
-      [lotId],
-    );
 
     await this.audit.write(
       { ip, user },
@@ -384,12 +803,36 @@ export class HarvestService extends BaseCrudService {
        JOIN households h ON h.id = hc.household_id
        JOIN villages v ON v.id = h.village_id
        WHERE hc.id = $1`,
-      [rows[0].id],
+      [savedId],
     );
     return camelRow(saved.rows[0]);
   }
 
   async removeContribution(lotId: number, contributionId: number, user: AuthUser, ip?: string) {
+    const lotRes = await this.db.query<{
+      id: number;
+      status: string;
+      coop_code: string | null;
+      enterprise_id: number | null;
+      created_at: Date | string;
+    }>("SELECT id, status, coop_code, enterprise_id, created_at FROM harvest_lots WHERE id = $1", [lotId]);
+    if (lotRes.rowCount === 0 || !lotRes.rows[0]) throw notFound("Không tìm thấy lô hàng.");
+    this.assertLotRowInScope(lotRes.rows[0], user, "Không tìm thấy lô hàng.");
+    if (lotRes.rows[0].status === "revoked") {
+      throw badRequest("Lô hàng đã thu hồi, không thể xóa đóng góp.");
+    }
+    if (lotRes.rows[0].status === "delivered" || lotRes.rows[0].status === "exported") {
+      const sealedCheck = await this.db.query<{ sealed: boolean }>(
+        `SELECT (created_at <= now() - interval '24 hours' OR created_at <= $3::timestamptz + interval '1 second') AS sealed
+         FROM harvest_contributions
+         WHERE id = $1 AND lot_id = $2`,
+        [contributionId, lotId, new Date(lotRes.rows[0].created_at).toISOString()],
+      );
+      if (sealedCheck.rows[0]?.sealed) {
+        throw badRequest("Lô hàng đã giao hoặc đã xuất khẩu, không thể xóa đóng góp đã niêm phong.");
+      }
+    }
+
     const deleted = await this.db.query(
       "DELETE FROM harvest_contributions WHERE id = $1 AND lot_id = $2 RETURNING id",
       [contributionId, lotId],
@@ -414,14 +857,31 @@ export class HarvestService extends BaseCrudService {
     return { ok: true };
   }
 
-  /** Lấy danh sách thửa đất nhẹ của một hộ để chọn khi gom lô (4a: Lô ↔ Thửa nguồn). */
+  /** Lấy danh sách thửa đất nhẹ của một hộ để chọn khi gom lô (4a: Lô và Thửa nguồn). */
   async listHouseholdPlots(householdId: number, user: AuthUser) {
-    const hhRes = await this.db.query<{ id: number; code: string; village_id: number; area_ha: number }>(
-      "SELECT id, code, village_id, area_ha::float8 AS area_ha FROM households WHERE id = $1",
+    if (!isStaffInCuneCoopScope(user, true)) {
+      return { data: [] };
+    }
+    const hhRes = await this.db.query<{
+      id: number;
+      code: string;
+      village_id: number;
+      village_name: string | null;
+      area_ha: number;
+    }>(
+      `SELECT h.id, h.code, h.village_id, v.name AS village_name, h.area_ha::float8 AS area_ha
+       FROM households h
+       LEFT JOIN villages v ON v.id = h.village_id
+       WHERE h.id = $1`,
       [householdId],
     );
-    if (hhRes.rowCount === 0) throw notFound("Không tìm thấy hộ nông dân.");
-    if (user.role === "village_officer" && hhRes.rows[0].village_id !== user.villageId) {
+    if (hhRes.rowCount === 0 || !hhRes.rows[0]) throw notFound("Không tìm thấy hộ nông dân.");
+    if (
+      !isStaffInParcelScope(user, {
+        villageId: hhRes.rows[0].village_id,
+        villageName: hhRes.rows[0].village_name,
+      })
+    ) {
       return { data: [] };
     }
 
@@ -452,9 +912,9 @@ export class HarvestService extends BaseCrudService {
   }
 
   /**
-   * (4a) Truy vết sự cố hai chiều Lô ↔ Thửa nguồn:
+   * (4a) Truy vết sự cố hai chiều Lô và Thửa nguồn:
    * - Truyền `plotCode`: biết ngay thửa đất (ví dụ mẫu Cd không đạt) đã đóng góp vào những lô thu hoạch nào.
-   * - Truyền `lotCode`: truy ngược từ một lô hàng (hoặc mã thùng/token QR) về toàn bộ các thửa nguồn & hộ nông dân.
+   * - Truyền `lotCode`: truy ngược từ một lô hàng (hoặc mã thùng/token QR) về toàn bộ các thửa nguồn và hộ nông dân.
    */
   async traceIncident(query: { plotCode?: string; lotCode?: string }, user: AuthUser) {
     const cleanPlot = (query.plotCode || "").trim();
@@ -464,6 +924,9 @@ export class HarvestService extends BaseCrudService {
     }
     if ((cleanPlot && cleanPlot.length > 80) || (cleanLot && cleanLot.length > 80)) {
       throw badRequest("Mã tra cứu vượt quá độ dài cho phép.");
+    }
+    if (user.role !== "enterprise" && !isStaffInCuneCoopScope(user, true)) {
+      throw notFound("Không tìm thấy dữ liệu truy vết trong phạm vi quản lý.");
     }
 
     const hasPlots = await plotsTableExists(this.db);
@@ -486,7 +949,15 @@ export class HarvestService extends BaseCrudService {
           [cleanPlot],
         );
         if (pRes.rows[0]) {
-          if (villageFilter !== null && Number(pRes.rows[0].village_id) !== villageFilter) {
+          if (
+            user.role !== "enterprise" &&
+            !isStaffInParcelScope(user, {
+              villageId: pRes.rows[0].village_id ? Number(pRes.rows[0].village_id) : null,
+              villageName: pRes.rows[0].village_name,
+              zoneCode: pRes.rows[0].zone_code,
+              plotCode: pRes.rows[0].plot_code,
+            })
+          ) {
             throw notFound(`Không tìm thấy thửa "${cleanPlot}" trong phạm vi quản lý.`);
           }
           ownerHouseholdId = pRes.rows[0].household_id ? Number(pRes.rows[0].household_id) : null;
@@ -504,7 +975,8 @@ export class HarvestService extends BaseCrudService {
         `SELECT lt.code, lt.plot_code, lt.sampled_on, lt.cd_mg_kg::float8 AS cd_mg_kg,
                 lt.yellow_o_positive, lt.residue_mg_kg::float8 AS residue_mg_kg,
                 lt.chlorpyrifos_mg_kg::float8 AS chlorpyrifos_mg_kg, lt.result, lt.lab, lt.record_status,
-                h.id AS household_id, h.code AS household_code, h.name AS household_name, v.name AS village_name
+                h.id AS household_id, h.code AS household_code, h.name AS household_name,
+                v.id AS village_id, v.name AS village_name
          FROM lab_tests lt
          JOIN households h ON h.id = lt.household_id
          JOIN villages v ON v.id = h.village_id
@@ -515,6 +987,16 @@ export class HarvestService extends BaseCrudService {
       );
 
       if (!plotInfo && labsRes.rows[0]) {
+        if (
+          user.role !== "enterprise" &&
+          !isStaffInParcelScope(user, {
+            villageId: Number(labsRes.rows[0].village_id),
+            villageName: labsRes.rows[0].village_name,
+            plotCode: labsRes.rows[0].plot_code,
+          })
+        ) {
+          throw notFound(`Không tìm thấy thửa "${cleanPlot}" trong phạm vi quản lý.`);
+        }
         ownerHouseholdId = Number(labsRes.rows[0].household_id);
         plotInfo = {
           plotCode: labsRes.rows[0].plot_code,
@@ -530,10 +1012,17 @@ export class HarvestService extends BaseCrudService {
       }
 
       const lotParams: unknown[] = [cleanPlot, ownerHouseholdId];
-      let lotVillageSql = "";
+      let lotScopeSql = "";
       if (villageFilter !== null) {
         lotParams.push(villageFilter);
-        lotVillageSql = `AND h.village_id = $${lotParams.length}`;
+        lotScopeSql += ` AND h.village_id = $${lotParams.length}`;
+      }
+      if (user.role === "enterprise") {
+        lotParams.push(user.enterpriseId ?? -1);
+        lotScopeSql += ` AND hl.enterprise_id = $${lotParams.length}`;
+      } else if (user.role === "htx_officer" || user.role === "admin") {
+        lotParams.push((user.coopCode || "HTX-CUNE").trim().toUpperCase());
+        lotScopeSql += ` AND upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = $${lotParams.length}`;
       }
 
       const affectedRes = await this.db.query(
@@ -555,7 +1044,7 @@ export class HarvestService extends BaseCrudService {
          WHERE (
            upper(hc.plot_code) = upper($1)
            OR (hc.plot_code = '' AND $2::bigint IS NOT NULL AND hc.household_id = $2)
-         ) ${lotVillageSql}
+         ) ${lotScopeSql}
          ORDER BY hl.harvested_on DESC, hl.id DESC`,
         lotParams,
       );
@@ -584,6 +1073,7 @@ export class HarvestService extends BaseCrudService {
     const lotLookup = await this.db.query(
       `SELECT hl.id, hl.code, hl.qr_token, hl.variety, hl.harvested_on, hl.packed_on, hl.exported_on,
               hl.weight_tons::float8 AS weight_tons, hl.household_count, hl.market, hl.status, hl.revoked_reason,
+              hl.coop_code, hl.enterprise_id,
               COALESCE(hl.packhouse_code, 'VN-DLPH-0089') AS packhouse_code,
               COALESCE(hl.packhouse_name, e.name) AS packhouse_name
        FROM harvest_lots hl
@@ -597,6 +1087,7 @@ export class HarvestService extends BaseCrudService {
       throw notFound(`Không tìm thấy lô hàng hoặc mã thùng "${cleanLot}".`);
     }
     const lotRow = lotLookup.rows[0];
+    this.assertLotRowInScope(lotRow, user, `Không tìm thấy lô hàng hoặc mã thùng "${cleanLot}".`);
     const resolvedLotId = Number(lotRow.id);
 
     const srcParams: unknown[] = [resolvedLotId];
@@ -622,7 +1113,7 @@ export class HarvestService extends BaseCrudService {
          FROM harvest_contributions hc
          JOIN households h ON h.id = hc.household_id
          JOIN villages v ON v.id = h.village_id
-         LEFT JOIN plots p_exact ON hc.plot_code <> '' AND upper(p_exact.code) = upper(hc.plot_code)
+         LEFT JOIN plots p_exact ON hc.plot_code <> '' AND upper(p_exact.code) = upper(hc.plot_code) AND p_exact.household_id = hc.household_id
          LEFT JOIN LATERAL (
            SELECT code, zone_code, variety, area_ha, status
            FROM plots p2
@@ -677,18 +1168,60 @@ export class HarvestService extends BaseCrudService {
   }
 
   /** Danh sách và cập nhật trạng thái thời gian thực của Mã số vùng trồng (PUC - 4c). */
-  async listGrowingZones() {
-    const { rows } = await this.db.query(
+  async listGrowingZones(user?: AuthUser) {
+    if (user && user.role !== "enterprise" && !isStaffInCuneCoopScope(user, true)) {
+      return { data: [] };
+    }
+    const { rows } = await this.db.query<{
+      code: string;
+      name: string;
+      commune: string;
+      district: string;
+      province: string;
+      status: string;
+      status_note: string | null;
+      valid_until: string | null;
+      updated_at: string;
+    }>(
       `SELECT code, name, commune, district, province, status, status_note, valid_until, updated_at
        FROM growing_zones
        ORDER BY code ASC`,
     );
-    return { data: camelRows(rows) };
+    const filtered = rows.filter((r) => {
+      if (!user || user.role === "enterprise") return true;
+      const loc = `${r.commune || ""}, ${r.district || ""}, ${r.province || ""}`;
+      if (user.role === "inspector") {
+        const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
+        if (!matchesJurisdiction(region, [loc])) return false;
+      }
+      if (user.assignedCommune && user.assignedCommune.trim()) {
+        if (!matchesJurisdiction(user.assignedCommune, [loc])) return false;
+      }
+      return true;
+    });
+    return { data: camelRows(filtered) };
   }
 
   async updateGrowingZoneStatus(code: string, dto: UpdateGrowingZoneStatusDto, user: AuthUser, ip?: string) {
     const cleanCode = code.trim();
     if (!cleanCode || cleanCode.length > 60) throw badRequest("Mã số vùng trồng không hợp lệ.");
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền cập nhật trạng thái mã số vùng trồng ngoài phạm vi đơn vị.");
+    }
+
+    const existingZone = await this.db.query<{ commune: string; district: string; province: string }>(
+      "SELECT commune, district, province FROM growing_zones WHERE upper(code) = upper($1) LIMIT 1",
+      [cleanCode],
+    );
+    const zoneLoc = existingZone.rows[0]
+      ? `${existingZone.rows[0].commune}, ${existingZone.rows[0].district}, ${existingZone.rows[0].province}`
+      : resolveParcelAdminLocation(null, cleanCode);
+    if (user.role === "inspector" && !matchesJurisdiction((user.assignedRegion || "Tỉnh Đắk Lắk").trim(), [zoneLoc])) {
+      throw forbidden("Mã số vùng trồng không thuộc địa bàn quản lý của bạn.");
+    }
+    if (user.assignedCommune && user.assignedCommune.trim() && !matchesJurisdiction(user.assignedCommune, [zoneLoc])) {
+      throw forbidden("Mã số vùng trồng không thuộc xã quản lý của bạn.");
+    }
 
     const updated = await this.db.query(
       `INSERT INTO growing_zones (code, name, status, status_note)
@@ -718,10 +1251,16 @@ export class HarvestService extends BaseCrudService {
    * tỉa quả, bao trái…) kết hợp kiểm tra thời gian cách ly thuốc BVTV (PHI) và trạng thái gửi thông báo.
    */
   async listHarvestPlan(user: AuthUser, query: { q?: string; status?: string } = {}) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      return { data: [], total: 0, page: 1, pageSize: 500 };
+    }
     const hasPlots =
       (await this.db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")).rows[0]?.reg !== null;
 
-    const villageFilter = user.role === "village_officer" ? (user.villageId ?? -1) : null;
+    const villageFilter =
+      user.role === "village_officer" && user.villageId !== null && user.villageId !== undefined
+        ? Number(user.villageId)
+        : null;
     const params: unknown[] = villageFilter !== null ? [villageFilter] : [];
     const whereScope = villageFilter !== null ? "WHERE h.village_id = $1" : "";
 
@@ -729,8 +1268,10 @@ export class HarvestService extends BaseCrudService {
       ? `SELECT h.id AS household_id,
                 h.name AS household_name,
                 h.code AS household_code,
+                h.village_id,
                 v.name AS village_name,
                 COALESCE(p.code, h.code) AS plot_code,
+                p.zone_code,
                 COALESCE(p.variety, 'Đô Na') AS variety,
                 COALESCE(p.area_ha, h.area_ha, 0)::float8 AS area_ha
          FROM households h
@@ -740,8 +1281,10 @@ export class HarvestService extends BaseCrudService {
       : `SELECT h.id AS household_id,
                 h.name AS household_name,
                 h.code AS household_code,
+                h.village_id,
                 v.name AS village_name,
                 h.code AS plot_code,
+                NULL::text AS zone_code,
                 'Đô Na'::text AS variety,
                 COALESCE(h.area_ha, 0)::float8 AS area_ha
          FROM households h
@@ -752,8 +1295,10 @@ export class HarvestService extends BaseCrudService {
       household_id: number;
       household_name: string;
       household_code: string;
+      village_id: number | null;
       village_name: string | null;
       plot_code: string;
+      zone_code: string | null;
       variety: string | null;
       area_ha: number;
       has_account: boolean;
@@ -772,8 +1317,10 @@ export class HarvestService extends BaseCrudService {
        SELECT u.household_id,
               u.household_name,
               u.household_code,
+              u.village_id,
               u.village_name,
               u.plot_code,
+              u.zone_code,
               u.variety,
               u.area_ha,
               EXISTS (
@@ -847,12 +1394,24 @@ export class HarvestService extends BaseCrudService {
          JOIN users usr ON usr.id = n.user_id
          WHERE usr.household_id = u.household_id
            AND n.kind = 'harvest'
-           AND (n.link LIKE '%plot=' || u.plot_code || '%' OR n.title LIKE '%' || u.plot_code || '%')
+           AND (
+             strpos(COALESCE(n.link, ''), 'plot=' || u.plot_code) > 0
+             OR strpos(COALESCE(n.title, ''), u.plot_code) > 0
+           )
          ORDER BY n.created_at DESC, n.id DESC
          LIMIT 1
        ) n_last ON true
        ORDER BY (j_stats.journal_count > 0) DESC, u.household_name ASC, u.plot_code ASC`,
       params,
+    );
+
+    const scopedRows = rows.filter((r) =>
+      isStaffInParcelScope(user, {
+        villageId: r.village_id,
+        villageName: r.village_name,
+        zoneCode: r.zone_code,
+        plotCode: r.plot_code,
+      }),
     );
 
     const today = new Intl.DateTimeFormat("en-CA", {
@@ -862,7 +1421,7 @@ export class HarvestService extends BaseCrudService {
       day: "2-digit",
     }).format(new Date());
 
-    const computed = rows.map((r) => {
+    const computed = scopedRows.map((r) => {
       let computedHarvestOn: string | null = null;
       let calculationBasis = "Chưa có nhật ký chăm sóc";
       let phiAdjusted = false;
@@ -939,15 +1498,41 @@ export class HarvestService extends BaseCrudService {
 
   /** Gửi thông báo lịch thu hoạch dự kiến từ HTX đến tài khoản hộ dân. */
   async notifyHarvestPlan(dto: NotifyHarvestPlanDto, user: AuthUser, ip?: string) {
-    const plotCode = dto.plotCode.trim();
-    const hhRes = await this.db.query<{ id: number; name: string; code: string }>(
-      "SELECT id, name, code FROM households WHERE id = $1",
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền gửi thông báo lịch thu hoạch ngoài phạm vi đơn vị.");
+    }
+    const hhRes = await this.db.query<{
+      id: number;
+      name: string;
+      code: string;
+      village_id: number;
+      village_name: string | null;
+    }>(
+      `SELECT h.id, h.name, h.code, h.village_id, v.name AS village_name
+       FROM households h
+       LEFT JOIN villages v ON v.id = h.village_id
+       WHERE h.id = $1`,
       [dto.householdId],
     );
-    if (hhRes.rowCount === 0) {
+    if (hhRes.rowCount === 0 || !hhRes.rows[0]) {
       throw notFound("Không tìm thấy hộ nông dân.");
     }
     const hh = hhRes.rows[0];
+
+    let plotCode = dto.plotCode.trim();
+    if (plotCode.toUpperCase() !== hh.code.trim().toUpperCase()) {
+      const owned = await assertPlotOwned(this.db, dto.householdId, plotCode);
+      plotCode = (owned || plotCode).trim();
+    }
+    if (
+      !isStaffInParcelScope(user, {
+        villageId: hh.village_id,
+        villageName: hh.village_name,
+        plotCode,
+      })
+    ) {
+      throw forbidden("Hộ nông dân hoặc thửa đất không thuộc địa bàn quản lý của bạn.");
+    }
 
     // Kiểm tra an toàn thời gian cách ly thuốc BVTV (PHI) trước ngày dự kiến thu hoạch
     const phiRes = await this.db.query<{ pesticide_name: string; safe_on: string }>(
@@ -977,8 +1562,8 @@ export class HarvestService extends BaseCrudService {
         : "";
     const notePart = dto.note && dto.note.trim() ? ` - Ghi chú: ${dto.note.trim()}` : "";
 
-    const title = `Thông báo lịch thu hoạch dự kiến – Thửa ${plotCode}`;
-    const body = `HTX dự kiến thu hoạch thửa ${plotCode} vào ngày ${formattedDate} (tính toán từ nhật ký chăm sóc & thời gian cách ly PHI)${yieldPart}${notePart}.`;
+    const title = `Thông báo lịch thu hoạch dự kiến - Thửa ${plotCode}`;
+    const body = `HTX dự kiến thu hoạch thửa ${plotCode} vào ngày ${formattedDate} (tính toán từ nhật ký chăm sóc và thời gian cách ly PHI)${yieldPart}${notePart}.`;
     const link = `/portal?tab=stamps&plot=${encodeURIComponent(plotCode)}`;
 
     await this.notifications.notifyHousehold(dto.householdId, {
@@ -1008,9 +1593,68 @@ export class HarvestService extends BaseCrudService {
   }
 
   /** Nhật ký minh bạch mọi lượt truy cập dữ liệu chi tiết QR (ai xem, vai trò, lô nào, thời điểm, kết quả phạm vi). */
-  async listTraceAccessLogs(params: { lotCode?: string; q?: string; scopeGranted?: string; limit?: number }) {
+  async listTraceAccessLogs(
+    params: { lotCode?: string; q?: string; scopeGranted?: string; limit?: number },
+    user?: AuthUser,
+  ) {
     const conditions: string[] = [];
     const values: unknown[] = [];
+
+    if (user) {
+      if (user.role === "enterprise") {
+        if (!user.enterpriseId) return { data: [] };
+        values.push(user.enterpriseId);
+        conditions.push(
+          `EXISTS (
+             SELECT 1 FROM harvest_lots hl
+             WHERE upper(hl.code) = upper(COALESCE(trace_detail_access_logs.lot_code, ''))
+               AND hl.enterprise_id = $${values.length}
+           )`,
+        );
+      } else {
+        if (!isStaffInCuneCoopScope(user, true)) {
+          return { data: [] };
+        }
+        if (user.role === "village_officer") {
+          if (user.villageId !== null && user.villageId !== undefined) {
+            values.push(Number(user.villageId));
+            conditions.push(
+              `EXISTS (
+                 SELECT 1
+                 FROM harvest_lots hl
+                 JOIN harvest_contributions hc ON hc.lot_id = hl.id
+                 JOIN households h ON h.id = hc.household_id
+                 WHERE upper(hl.code) = upper(COALESCE(trace_detail_access_logs.lot_code, ''))
+                   AND h.village_id = $${values.length}
+               )`,
+            );
+          }
+          if (
+            user.assignedCommune &&
+            user.assignedCommune.trim() &&
+            !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])
+          ) {
+            conditions.push(
+              `EXISTS (
+                 SELECT 1
+                 FROM harvest_lots hl
+                 JOIN harvest_contributions hc ON hc.lot_id = hl.id
+                 JOIN households h ON h.id = hc.household_id
+                 JOIN villages v ON v.id = h.village_id
+                 WHERE upper(hl.code) = upper(COALESCE(trace_detail_access_logs.lot_code, ''))
+                   AND (v.name ~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]' OR hc.plot_code ~* '^66-PUC-SR0001-')
+               )`,
+            );
+          }
+        } else if (
+          user.assignedCommune &&
+          user.assignedCommune.trim() &&
+          !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])
+        ) {
+          return { data: [] };
+        }
+      }
+    }
 
     if (params.lotCode && params.lotCode.trim()) {
       values.push(params.lotCode.trim().toUpperCase());
@@ -1042,24 +1686,63 @@ export class HarvestService extends BaseCrudService {
     return { data: camelRows(rows) };
   }
 
-  /** Danh sách hạn ngạch sản lượng đầu vụ từng thửa & mức sử dụng thực tế (Mass-Balance). */
-  async listPlotQuotas(params: { seasonYear?: number; q?: string }, _user: AuthUser) {
+  /** Danh sách hạn ngạch sản lượng đầu vụ từng thửa và mức sử dụng thực tế (Mass-Balance). */
+  async listPlotQuotas(params: { seasonYear?: number; q?: string }, user: AuthUser) {
     const seasonYear =
       params.seasonYear && Number.isFinite(params.seasonYear) ? Number(params.seasonYear) : new Date().getFullYear();
+    if (!isStaffInCuneCoopScope(user, true)) {
+      return {
+        seasonYear,
+        summary: {
+          plotCount: 0,
+          totalMaxQuotaKg: 0,
+          totalUsedKg: 0,
+          totalRemainingKg: 0,
+          utilizationPct: 0,
+        },
+        data: [],
+      };
+    }
+
     const values: unknown[] = [seasonYear];
-    let searchSql = "";
+    const extraWhere: string[] = [];
+    if (user.role === "village_officer" && user.villageId !== null && user.villageId !== undefined) {
+      values.push(Number(user.villageId));
+      extraWhere.push(`AND h.village_id = $${values.length}`);
+    }
     if (params.q && params.q.trim()) {
       values.push(`%${params.q.trim().replace(/[\\%_]/g, "\\$&")}%`);
       const ref = `$${values.length}`;
-      searchSql = `AND (psq.plot_code ILIKE ${ref} OR psq.zone_code ILIKE ${ref} OR h.name ILIKE ${ref} OR h.code ILIKE ${ref})`;
+      extraWhere.push(`AND (psq.plot_code ILIKE ${ref} OR psq.zone_code ILIKE ${ref} OR h.name ILIKE ${ref} OR h.code ILIKE ${ref})`);
     }
 
-    const { rows } = await this.db.query(
+    const { rows } = await this.db.query<{
+      id: number;
+      season_year: number;
+      household_id: number;
+      household_code: string;
+      household_name: string;
+      village_id: number | null;
+      village_name: string | null;
+      plot_code: string;
+      zone_code: string | null;
+      area_ha: number;
+      tree_count: number;
+      max_quota_kg: number;
+      used_kg: number;
+      remaining_kg: number;
+      utilization_pct: number;
+      assessed_by: string | null;
+      assessed_on: string | null;
+      note: string | null;
+      plot_qr_token: string | null;
+    }>(
       `SELECT psq.id,
               psq.season_year,
               psq.household_id,
               h.code AS household_code,
               h.name AS household_name,
+              h.village_id,
               v.name AS village_name,
               psq.plot_code,
               psq.zone_code,
@@ -1080,7 +1763,9 @@ export class HarvestService extends BaseCrudService {
        FROM plot_season_quotas psq
        JOIN households h ON h.id = psq.household_id
        LEFT JOIN villages v ON v.id = h.village_id
-       LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(psq.plot_code)
+       LEFT JOIN plot_signboard_tokens pst
+         ON upper(pst.plot_code) = upper(psq.plot_code)
+        AND (pst.household_id IS NULL OR pst.household_id = psq.household_id)
        LEFT JOIN (
          SELECT upper(hc.plot_code) AS plot_upper,
                 SUM(hc.weight_kg) AS used_kg
@@ -1092,16 +1777,25 @@ export class HarvestService extends BaseCrudService {
          GROUP BY upper(hc.plot_code)
        ) used ON used.plot_upper = upper(psq.plot_code)
        WHERE psq.season_year = $1
-       ${searchSql}
+       ${extraWhere.join("\n       ")}
        ORDER BY psq.zone_code ASC, psq.plot_code ASC`,
       values,
+    );
+
+    const scopedRows = rows.filter((r) =>
+      isStaffInParcelScope(user, {
+        villageId: r.village_id,
+        villageName: r.village_name,
+        zoneCode: r.zone_code,
+        plotCode: r.plot_code,
+      }),
     );
 
     const mapped = camelRows<{
       maxQuotaKg: number;
       usedKg: number;
       remainingKg: number;
-    }>(rows);
+    }>(scopedRows);
     const totalMaxQuotaKg = Number(mapped.reduce((s, r) => s + Number(r.maxQuotaKg || 0), 0).toFixed(1));
     const totalUsedKg = Number(mapped.reduce((s, r) => s + Number(r.usedKg || 0), 0).toFixed(1));
     const totalRemainingKg = Number(Math.max(0, totalMaxQuotaKg - totalUsedKg).toFixed(1));
@@ -1121,13 +1815,54 @@ export class HarvestService extends BaseCrudService {
 
   /** Cập nhật hoặc thêm mới hạn ngạch sản lượng thẩm định đầu vụ cho một thửa đất. */
   async upsertPlotQuota(dto: UpsertPlotQuotaDto, user: AuthUser, ip?: string) {
-    const hhRes = await this.db.query<{ id: number; name: string }>(
-      "SELECT id, name FROM households WHERE id = $1",
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền thẩm định hạn ngạch sản lượng ngoài phạm vi đơn vị.");
+    }
+    const hhRes = await this.db.query<{
+      id: number;
+      name: string;
+      village_id: number;
+      village_name: string | null;
+    }>(
+      `SELECT h.id, h.name, h.village_id, v.name AS village_name
+       FROM households h
+       LEFT JOIN villages v ON v.id = h.village_id
+       WHERE h.id = $1`,
       [dto.householdId],
     );
     if (!hhRes.rows[0]) throw badRequest("Hộ nông dân không tồn tại.");
-    const cleanPlotCode = dto.plotCode.trim().toUpperCase();
+
+    const ownedPlot = await assertPlotOwned(this.db, dto.householdId, dto.plotCode);
+    const cleanPlotCode = (ownedPlot || dto.plotCode).trim().toUpperCase();
     const zoneCode = dto.zoneCode && dto.zoneCode.trim() ? dto.zoneCode.trim().toUpperCase() : "VN-DLOR-0086";
+
+    if (
+      !isStaffInParcelScope(user, {
+        villageId: hhRes.rows[0].village_id,
+        villageName: hhRes.rows[0].village_name,
+        zoneCode,
+        plotCode: cleanPlotCode,
+      })
+    ) {
+      throw forbidden("Thửa đất không thuộc địa bàn quản lý của bạn.");
+    }
+
+    const [conflictQuota, conflictSignboard] = await Promise.all([
+      this.db.query(
+        "SELECT 1 FROM plot_season_quotas WHERE upper(plot_code) = upper($1) AND household_id <> $2 LIMIT 1",
+        [cleanPlotCode, dto.householdId],
+      ),
+      this.db.query(
+        "SELECT 1 FROM plot_signboard_tokens WHERE upper(plot_code) = upper($1) AND household_id IS NOT NULL AND household_id <> $2 LIMIT 1",
+        [cleanPlotCode, dto.householdId],
+      ),
+    ]);
+    if (conflictQuota.rowCount || conflictSignboard.rowCount) {
+      throw badRequest(
+        `Mã thửa "${cleanPlotCode}" đã gắn với hộ nông dân khác, không thể ghi đè hạn ngạch hoặc bảng định danh.`,
+      );
+    }
+
     const assessedBy =
       dto.assessedBy && dto.assessedBy.trim() ? dto.assessedBy.trim() : `Tổ Giám sát Kỹ thuật UBND Xã (${user.fullName})`;
     const assessedOn = dto.assessedOn && dto.assessedOn.trim() ? dto.assessedOn.trim() : todayVn();
@@ -1137,8 +1872,7 @@ export class HarvestService extends BaseCrudService {
          (season_year, household_id, plot_code, zone_code, area_ha, tree_count, max_quota_kg, assessed_by, assessed_on, note)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10)
        ON CONFLICT (season_year, plot_code) DO UPDATE
-         SET household_id = EXCLUDED.household_id,
-             zone_code = EXCLUDED.zone_code,
+         SET zone_code = EXCLUDED.zone_code,
              area_ha = EXCLUDED.area_ha,
              tree_count = EXCLUDED.tree_count,
              max_quota_kg = EXCLUDED.max_quota_kg,
@@ -1146,6 +1880,7 @@ export class HarvestService extends BaseCrudService {
              assessed_on = EXCLUDED.assessed_on,
              note = EXCLUDED.note,
              updated_at = now()
+         WHERE plot_season_quotas.household_id = EXCLUDED.household_id
        RETURNING id, season_year, household_id, plot_code, zone_code, area_ha::float8 AS area_ha,
                  tree_count, max_quota_kg::float8 AS max_quota_kg, assessed_by, assessed_on::text AS assessed_on, note`,
       [
@@ -1161,6 +1896,11 @@ export class HarvestService extends BaseCrudService {
         dto.note ?? null,
       ],
     );
+    if (!rows[0]) {
+      throw badRequest(
+        `Mã thửa "${cleanPlotCode}" đã gắn với hộ nông dân khác, không thể ghi đè hạn ngạch.`,
+      );
+    }
 
     // Đảm bảo thửa này cũng có token QR định danh bảng đầu vườn trong `plot_signboard_tokens`
     await this.db.query(
@@ -1170,7 +1910,9 @@ export class HarvestService extends BaseCrudService {
          SET household_id = EXCLUDED.household_id,
              zone_code = EXCLUDED.zone_code,
              area_ha = EXCLUDED.area_ha,
-             tree_count = EXCLUDED.tree_count`,
+             tree_count = EXCLUDED.tree_count
+         WHERE plot_signboard_tokens.household_id IS NULL
+            OR plot_signboard_tokens.household_id = EXCLUDED.household_id`,
       [cleanPlotCode, dto.householdId, zoneCode, dto.areaHa, dto.treeCount],
     );
 
@@ -1187,20 +1929,46 @@ export class HarvestService extends BaseCrudService {
   }
 
   /** Danh sách Bảng QR Định Danh Thửa Đất phục vụ in bảng gắn đầu vườn cho xã / HTX. */
-  async listPlotSignboards(params: { q?: string }, _user: AuthUser) {
+  async listPlotSignboards(params: { q?: string }, user: AuthUser) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      return { data: [] };
+    }
     const values: unknown[] = [];
-    let searchSql = "";
+    const conditions: string[] = [];
+    if (user.role === "village_officer" && user.villageId !== null && user.villageId !== undefined) {
+      values.push(Number(user.villageId));
+      conditions.push(`h.village_id = $${values.length}`);
+    }
     if (params.q && params.q.trim()) {
       values.push(`%${params.q.trim().replace(/[\\%_]/g, "\\$&")}%`);
       const ref = `$${values.length}`;
-      searchSql = `WHERE (pst.plot_code ILIKE ${ref} OR pst.zone_code ILIKE ${ref} OR COALESCE(h.name, '') ILIKE ${ref})`;
+      conditions.push(`(pst.plot_code ILIKE ${ref} OR pst.zone_code ILIKE ${ref} OR COALESCE(h.name, '') ILIKE ${ref})`);
     }
-    const { rows } = await this.db.query(
+    const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const { rows } = await this.db.query<{
+      plot_code: string;
+      qr_token: string;
+      household_id: number | null;
+      household_code: string | null;
+      household_name: string;
+      village_id: number | null;
+      village_name: string;
+      zone_code: string | null;
+      variety: string | null;
+      planted_year: number | null;
+      area_ha: number | null;
+      tree_count: number | null;
+      max_quota_kg: number | null;
+      center_lat: number | null;
+      center_lng: number | null;
+      geometry_json: string | null;
+    }>(
       `SELECT pst.plot_code,
               pst.qr_token,
               pst.household_id,
               h.code AS household_code,
               COALESCE(h.name, 'Hộ thành viên HTX Cư Né') AS household_name,
+              h.village_id,
               COALESCE(pst.village_name, v.name, 'Xã Cư Né') AS village_name,
               pst.zone_code,
               pst.variety,
@@ -1215,17 +1983,47 @@ export class HarvestService extends BaseCrudService {
        LEFT JOIN households h ON h.id = pst.household_id
        LEFT JOIN villages v ON v.id = h.village_id
        LEFT JOIN plot_season_quotas psq
-         ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(pst.plot_code)
-       ${searchSql}
+         ON psq.season_year = EXTRACT(YEAR FROM now())::int
+        AND upper(psq.plot_code) = upper(pst.plot_code)
+        AND (pst.household_id IS NULL OR psq.household_id = pst.household_id)
+       ${whereSql}
        ORDER BY pst.zone_code ASC, pst.plot_code ASC`,
       values,
     );
-    return { data: camelRows(rows) };
+
+    const scoped = rows.filter((r) =>
+      isStaffInParcelScope(user, {
+        villageId: r.village_id,
+        villageName: r.village_name,
+        zoneCode: r.zone_code,
+        plotCode: r.plot_code,
+      }),
+    );
+    return { data: camelRows(scoped) };
   }
 
-  /** Danh sách Thẻ Đoàn Thẩm định Thực địa (Field Audit Passes). */
-  async listFieldAuditPasses() {
-    const { rows } = await this.db.query(
+  /** Danh sách Thẻ Đoàn Thẩm định Thực địa (Field Audit Passes) - ẩn mã bí mật pass_token. */
+  async listFieldAuditPasses(user?: AuthUser) {
+    if (user && !isStaffInCuneCoopScope(user, true)) {
+      return { data: [] };
+    }
+    const { rows } = await this.db.query<{
+      id: number;
+      code: string;
+      pass_token: string | null;
+      delegation_name: string;
+      organization: string | null;
+      allowed_zone_code: string | null;
+      default_lang: string;
+      expires_at: string;
+      status: string;
+      issued_by_name: string | null;
+      access_count: number;
+      last_accessed_at: string | null;
+      note: string | null;
+      created_at: string;
+      is_valid_now: boolean;
+    }>(
       `SELECT id, code, pass_token, delegation_name, organization, allowed_zone_code,
               default_lang, expires_at, status, issued_by_name, access_count, last_accessed_at, note, created_at,
               (status = 'active' AND expires_at > now()) AS is_valid_now
@@ -1233,18 +2031,59 @@ export class HarvestService extends BaseCrudService {
        ORDER BY created_at DESC, id DESC
        LIMIT 100`,
     );
-    return { data: camelRows(rows) };
+
+    const scoped = rows.filter((r) => {
+      if (!user) return true;
+      if (
+        user.assignedCommune &&
+        user.assignedCommune.trim() &&
+        !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])
+      ) {
+        if (!r.allowed_zone_code) return false;
+        const zoneLoc = resolveParcelAdminLocation(null, r.allowed_zone_code);
+        return matchesJurisdiction(user.assignedCommune, [zoneLoc]);
+      }
+      return true;
+    });
+
+    const maskedData = scoped.map((r) => {
+      const rawToken = typeof r.pass_token === "string" ? r.pass_token : "";
+      const passTokenMasked =
+        rawToken.length >= 8 ? `${rawToken.slice(0, 4)}********${rawToken.slice(-3)}` : rawToken ? "********" : null;
+      const { pass_token: _secret, ...safeRow } = r;
+      return {
+        ...camelRow(safeRow),
+        passTokenMasked,
+      };
+    });
+
+    return { data: maskedData };
   }
 
   /** Cấp mới Thẻ Đoàn Thẩm định Thực địa có thời hạn (24h - 336h) cho đoàn đối tác / đoàn tỉnh. */
   async createFieldAuditPass(dto: CreateFieldAuditPassDto, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền cấp thẻ đoàn thẩm định ngoài phạm vi đơn vị.");
+    }
     const durationHours = dto.durationHours && dto.durationHours > 0 ? dto.durationHours : 48;
-    const passToken = generateQrToken(18);
+    const passToken = generateQrToken(24);
     const year = new Date().getFullYear();
     const randSuffix = generateQrToken(4).toUpperCase();
     const code = `AUDIT-${year}-${randSuffix}`;
     const zoneCode = dto.allowedZoneCode && dto.allowedZoneCode.trim() ? dto.allowedZoneCode.trim().toUpperCase() : null;
     const defaultLang = dto.defaultLang ?? "zh";
+
+    if (user.assignedCommune && user.assignedCommune.trim()) {
+      if (!zoneCode && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
+        throw forbidden("Tài khoản cấp xã chỉ được cấp thẻ giới hạn trong mã vùng trồng thuộc xã quản lý.");
+      }
+      if (zoneCode) {
+        const zoneLoc = resolveParcelAdminLocation(null, zoneCode);
+        if (!matchesJurisdiction(user.assignedCommune, [zoneLoc])) {
+          throw forbidden("Mã vùng trồng không thuộc xã quản lý của bạn.");
+        }
+      }
+    }
 
     const { rows } = await this.db.query(
       `INSERT INTO field_audit_passes
@@ -1281,6 +2120,25 @@ export class HarvestService extends BaseCrudService {
 
   /** Thu hồi từ xa Thẻ Đoàn Thẩm định Thực địa. */
   async revokeFieldAuditPass(id: number, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền thu hồi thẻ đoàn thẩm định ngoài phạm vi đơn vị.");
+    }
+    if (
+      user.assignedCommune &&
+      user.assignedCommune.trim() &&
+      !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])
+    ) {
+      const checkRes = await this.db.query<{ allowed_zone_code: string | null }>(
+        "SELECT allowed_zone_code FROM field_audit_passes WHERE id = $1",
+        [id],
+      );
+      if (!checkRes.rows[0]) throw notFound("Không tìm thấy thẻ thẩm định thực địa.");
+      const zoneCode = checkRes.rows[0].allowed_zone_code;
+      if (!zoneCode || !matchesJurisdiction(user.assignedCommune, [resolveParcelAdminLocation(null, zoneCode)])) {
+        throw forbidden("Bạn không có quyền thu hồi thẻ thẩm định thuộc địa bàn khác.");
+      }
+    }
+
     const { rows } = await this.db.query<{ id: number; code: string; delegation_name: string }>(
       `UPDATE field_audit_passes
        SET status = 'revoked'
@@ -1302,8 +2160,11 @@ export class HarvestService extends BaseCrudService {
     return { ok: true, id: rows[0].id, code: rows[0].code, status: "revoked" };
   }
 
-  /** Đọc cấu hình Bảo chứng Chính quyền Tỉnh & UBND Xã cho mô hình điểm cấp xã. */
-  async getEndorsementConfig() {
+  /** Đọc cấu hình Bảo chứng Chính quyền Tỉnh và UBND Xã cho mô hình điểm cấp xã. */
+  async getEndorsementConfig(user?: AuthUser) {
+    if (user && user.role !== "enterprise" && !isStaffInCuneCoopScope(user, false)) {
+      throw forbidden("Bạn không có quyền truy cập cấu hình bảo chứng ngoài phạm vi đơn vị.");
+    }
     const { rows } = await this.db.query(
       `SELECT program_title, directive_no, commune_authority, provincial_authority,
               official_portal_url, official_domain, inspection_unit, updated_at
@@ -1324,10 +2185,10 @@ export class HarvestService extends BaseCrudService {
     return camelRow(rows[0]);
   }
 
-  /** Cập nhật cấu hình Bảo chứng Chính quyền Tỉnh & UBND Xã (chỉ Quản trị viên / Cán bộ HTX). */
+  /** Cập nhật cấu hình Bảo chứng Chính quyền Tỉnh và UBND Xã (chỉ Quản trị viên / Cán bộ HTX trong phạm vi). */
   async updateEndorsementConfig(dto: UpdateEndorsementConfigDto, user: AuthUser, ip?: string) {
-    if (user.role !== "admin" && user.role !== "htx_officer") {
-      throw forbidden("Chỉ Quản trị viên hoặc Ban quản trị mới được phép cập nhật thông tin bảo chứng chính thức.");
+    if ((user.role !== "admin" && user.role !== "htx_officer") || !isStaffInCuneCoopScope(user, false)) {
+      throw forbidden("Chỉ Quản trị viên hoặc Ban quản trị thuộc đơn vị mới được phép cập nhật thông tin bảo chứng chính thức.");
     }
     if (!/^https:\/\/[^\s<>"'`]+$/i.test(dto.officialPortalUrl.trim())) {
       throw badRequest("Đường dẫn Cổng thông tin chính thức của Tỉnh/Xã phải bắt đầu bằng https:// hợp lệ.");

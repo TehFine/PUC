@@ -3,12 +3,21 @@ import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { badRequest } from "../../common/errors/app.exception";
-import { attachmentUrlSql } from "../../common/sql/rows";
+import { attachmentUrlSql, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
+import { assertPlotOwned } from "../../portal/common/portal-context";
 import { assertExists, TODAY_VN_SQL } from "../shared/state";
 import { isJournalViolationSql, lastJournalOnSql } from "../shared/violation-evidence";
 import type { ResolveViolationDto } from "./violations.dto";
+
+interface ExistingViolationRow {
+  id: number;
+  status: string;
+  household_id: number | null;
+  plot_code: string | null;
+  title: string;
+}
 
 @Injectable()
 export class ViolationsService extends BaseCrudService {
@@ -31,21 +40,36 @@ export class ViolationsService extends BaseCrudService {
       orderBy: "t.detected_on DESC, t.id DESC",
       search: ["t.title", "t.household_label", "t.plot_code"],
       filters: { severity: "t.severity", status: "t.status", householdId: "t.household_id" },
-      virtual: ["_method"],
+      virtual: ["_method", "_notifyResolved"],
     });
   }
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     const out: Record<string, unknown> = { ...input, _method: context.method };
-    if (context.method === "PATCH" && context.id !== undefined && out.status !== undefined) {
-      const curRes = await this.db.query<{ status: string }>("SELECT status FROM violations WHERE id = $1", [
-        context.id,
-      ]);
-      const currentStatus = curRes.rows[0]?.status;
-      if (currentStatus === "open" && out.status === "resolved") {
-        throw badRequest("Vui lòng dùng chức năng Xác nhận khắc phục để đóng vi phạm kèm biên bản xử lý.");
+
+    let current: ExistingViolationRow | undefined;
+    if (context.method === "PATCH" && context.id !== undefined) {
+      const curRes = await this.db.query<ExistingViolationRow>(
+        "SELECT id, status, household_id, plot_code, title FROM violations WHERE id = $1",
+        [context.id],
+      );
+      current = curRes.rows[0];
+      if (!current) {
+        return out;
+      }
+      if (current.status === "resolved") {
+        throw badRequest("Vi phạm đã đóng hồ sơ xử lý, không thể chỉnh sửa hoặc xóa.");
+      }
+      if (
+        input.householdId === null ||
+        (current.household_id !== null &&
+          input.householdId !== undefined &&
+          Number(input.householdId) !== Number(current.household_id))
+      ) {
+        throw badRequest("Không được gỡ hoặc đổi hộ gắn với biên bản vi phạm.");
       }
     }
+
     if (out.householdId) {
       const { rows } = await this.db.query<{ name: string; village_name: string }>(
         `SELECT h.name, v.name AS village_name
@@ -54,10 +78,48 @@ export class ViolationsService extends BaseCrudService {
         [out.householdId],
       );
       if (rows.length === 0) throw badRequest("Hộ nông dân không tồn tại.");
-      if (!out.householdLabel) {
-        out.householdLabel = `${rows[0].name} – ${rows[0].village_name}`;
+      if (!out.householdLabel && context.method === "POST") {
+        out.householdLabel = `${rows[0].name} - ${rows[0].village_name}`;
       }
     }
+
+    const effHouseholdId =
+      out.householdId !== undefined
+        ? out.householdId
+          ? Number(out.householdId)
+          : null
+        : current?.household_id !== null && current?.household_id !== undefined
+          ? Number(current.household_id)
+          : null;
+
+    if (out.plotCode !== undefined) {
+      const cleanPlot = typeof out.plotCode === "string" ? out.plotCode.trim() : "";
+      if (cleanPlot && effHouseholdId) {
+        out.plotCode = await assertPlotOwned(this.db, effHouseholdId, cleanPlot);
+      } else if (!cleanPlot) {
+        out.plotCode = null;
+      }
+    } else if (context.method === "PATCH" && out.householdId !== undefined && effHouseholdId && current?.plot_code) {
+      await assertPlotOwned(this.db, effHouseholdId, current.plot_code);
+    }
+
+    if (out.status === "resolved") {
+      const notes = typeof out.resolutionNotes === "string" ? out.resolutionNotes.trim() : "";
+      if (!notes) {
+        throw badRequest("Vui lòng dùng chức năng Xác nhận khắc phục để đóng vi phạm kèm biên bản xử lý.");
+      }
+      out.resolutionNotes = notes;
+      out.resolvedOn = todayVn();
+      out.resolvedBy = context.user.id;
+      if (context.method === "PATCH" && effHouseholdId) {
+        out._notifyResolved = {
+          householdId: effHouseholdId,
+          title: String(out.title ?? current?.title ?? ""),
+          notes,
+        };
+      }
+    }
+
     if (context.method === "POST" && !out.householdLabel) {
       throw badRequest("Phải chọn hộ nông dân hoặc nhập nhãn hộ.");
     }
@@ -73,6 +135,23 @@ export class ViolationsService extends BaseCrudService {
         link: "/portal?tab=diary",
       });
     }
+    const resolved = input._notifyResolved as { householdId: number; title: string; notes: string } | undefined;
+    if (resolved?.householdId) {
+      await this.notifications.notifyHousehold(resolved.householdId, {
+        kind: "violation",
+        title: `Vi phạm đã được xác nhận khắc phục: ${resolved.title}`,
+        body: resolved.notes,
+        link: "/portal?tab=diary",
+      });
+    }
+  }
+
+  protected override async guardDelete(id: number, _user: AuthUser) {
+    const existing = await this.db.query("SELECT id FROM violations WHERE id = $1", [id]);
+    if ((existing.rowCount ?? 0) === 0) {
+      return;
+    }
+    throw badRequest("Hồ sơ vi phạm phải được lưu vết kiểm toán, không được xóa.");
   }
 
   async resolve(id: number, dto: ResolveViolationDto, user: AuthUser, ip?: string) {
@@ -84,7 +163,7 @@ export class ViolationsService extends BaseCrudService {
       [id, dto.resolutionNotes, user.id],
     );
     if (rows.length === 0) {
-      await assertExists(this.db, "violations", id, "Vi phạm này đã được đóng trước đó.");
+      await assertExists(this.db, "violations", id, "Vi phạm đã đóng hồ sơ xử lý, không thể chỉnh sửa hoặc xóa.");
     }
     const row = rows[0];
     await this.audit.write(

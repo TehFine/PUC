@@ -1,9 +1,10 @@
-import { Injectable, OnModuleInit } from "@nestjs/common";
+import { Injectable, OnModuleInit, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { mkdir, stat, unlink, writeFile } from "node:fs/promises";
+import { constants as fsConstants, type ReadStream } from "node:fs";
+import { type FileHandle, mkdir, open as fsOpen, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
+import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { can, type ResourceKey } from "../auth/permissions";
 import { badRequest, forbidden, notFound } from "../common/errors/app.exception";
@@ -33,8 +34,10 @@ const FARMER_PURPOSES: ReadonlySet<UploadPurpose> = new Set([
   "violation",
   "avatar",
 ]);
-/** Tệp dùng trên trang công khai / thẩm định thực địa (ảnh bản tin, danh mục, ảnh đại diện hộ đã đồng ý, bản scan kiểm nghiệm, ảnh kiểm tra vườn). */
+/** Mục đích trả về URL công khai mặc định qua `/api/public/files/<public_token>` khi mới tải lên. */
 export const PUBLIC_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["news", "catalog", "avatar", "lab", "inspection"]);
+/** Mục đích tuyệt đối không bao giờ phục vụ qua `/api/public/files/:token` dù có token. */
+const STRICT_INTERNAL_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["approval", "violation"]);
 
 const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
   journal: "journal",
@@ -100,6 +103,7 @@ function detectType(buffer: Buffer): DetectedType | null {
 
 export interface AttachmentRow {
   id: number;
+  public_token: string;
   owner_user_id: number | null;
   household_id: number | null;
   purpose: UploadPurpose;
@@ -107,6 +111,12 @@ export interface AttachmentRow {
   original_name: string | null;
   mime_type: string;
   size_bytes: number;
+}
+
+export interface OpenedAttachmentFile {
+  totalBytes: number;
+  close: () => Promise<void>;
+  createStream: (range?: { start: number; end: number }) => ReadStream;
 }
 
 export interface UploadedFileInput {
@@ -127,6 +137,7 @@ export class UploadsService implements OnModuleInit {
   constructor(
     private readonly db: DatabaseService,
     config: ConfigService<AppConfig, true>,
+    @Optional() private readonly audit?: AuditService,
   ) {
     const uploads = config.get("uploads", { infer: true });
     this.root = resolve(uploads.dir);
@@ -177,22 +188,39 @@ export class UploadsService implements OnModuleInit {
     await writeFile(path, file.buffer, { flag: "wx" });
 
     try {
-      const { rows } = await this.db.query<{ id: number }>(
+      const safeOriginalName = file.originalname
+        ? file.originalname
+            .normalize("NFC")
+            .replace(/[\u0000-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g, "")
+            .slice(0, 200)
+        : null;
+      const { rows } = await this.db.query<{ id: number; public_token: string }>(
         `INSERT INTO attachments (owner_user_id, household_id, purpose, storage_key, original_name, mime_type, size_bytes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-        [user.id, user.role === "farmer" ? user.householdId : null, purpose, key, file.originalname?.slice(0, 200) ?? null, type.mime, file.size],
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, public_token`,
+        [user.id, user.role === "farmer" ? user.householdId : null, purpose, key, safeOriginalName, type.mime, file.size],
       );
       const id = rows[0].id;
-      return { id, url: this.urlOf(id, purpose), mimeType: type.mime, sizeBytes: file.size };
+      const publicToken = rows[0].public_token;
+      if (this.audit) {
+        await this.audit.write(
+          { user },
+          {
+            action: "Tải tệp",
+            object: `Tệp #${id} (${purpose})`,
+            detail: `${type.mime} (${file.size} bytes)`,
+          },
+        );
+      }
+      return { id, url: this.urlOf(id, purpose, publicToken), mimeType: type.mime, sizeBytes: file.size };
     } catch (error) {
       await unlink(path).catch(() => undefined);
       throw error;
     }
   }
 
-  /** URL tải tệp: tệp công khai đi qua /api/public/files, còn lại qua /api/uploads (cần đăng nhập). */
-  urlOf(id: number, purpose: UploadPurpose) {
-    return PUBLIC_PURPOSES.has(purpose) ? `/api/public/files/${id}` : `/api/uploads/${id}`;
+  /** URL tải tệp: tệp công khai đi qua `/api/public/files/<public_token>`, còn lại qua `/api/uploads/<id>` (cần đăng nhập). */
+  urlOf(id: number, purpose: UploadPurpose, publicToken?: string) {
+    return PUBLIC_PURPOSES.has(purpose) && publicToken ? `/api/public/files/${publicToken}` : `/api/uploads/${id}`;
   }
 
   /**
@@ -204,18 +232,22 @@ export class UploadsService implements OnModuleInit {
     user: AuthUser,
     purpose: UploadPurpose,
     householdId?: number | null,
+    options?: { imagesOnly?: boolean },
   ): Promise<number[]> {
     const unique = [...new Set((ids ?? []).filter((id) => id !== null && id !== undefined))];
     if (unique.length === 0) return [];
     const targetHouseholdId = householdId ?? user.householdId ?? null;
-    const { rows } = await this.db.query<{ id: number }>(
+    const { rows } = await this.db.query<{ id: number; mime_type: string }>(
       `UPDATE attachments
        SET household_id = COALESCE(household_id, $4)
        WHERE id = ANY($1::bigint[]) AND owner_user_id = $2 AND purpose = $3
-       RETURNING id`,
+       RETURNING id, mime_type`,
       [unique, user.id, purpose, targetHouseholdId],
     );
     if (rows.length !== unique.length) throw badRequest("Tệp đính kèm không hợp lệ hoặc không thuộc về bạn.");
+    if (options?.imagesOnly && rows.some((r) => !r.mime_type.startsWith("image/"))) {
+      throw badRequest("Mục này chỉ chấp nhận tệp hình ảnh chụp thực tế (JPG, PNG, WEBP).");
+    }
     return unique;
   }
 
@@ -224,9 +256,40 @@ export class UploadsService implements OnModuleInit {
     return rows[0] ?? null;
   }
 
-  /** Quyền xem tệp: tệp công khai; hộ dân cùng hộ; cán bộ đúng phân quyền hiện tại (thôn: chỉ hộ trong thôn mình phụ trách). */
+  /**
+   * Tra cứu tệp phục vụ qua `/api/public/files/:token`:
+   * - Bắt buộc khớp chính xác `public_token` ngẫu nhiên (không bao giờ cho phép dò theo ID số tuần tự).
+   * - Chặn hoàn toàn tệp hồ sơ phê duyệt / khiếu nại vi phạm nội bộ (`approval`, `violation`).
+   * - Chặn bản scan phiếu kiểm nghiệm đang ở trạng thái nháp (`lab_tests.record_status = 'draft'`).
+   */
+  async findPublicByToken(token: string): Promise<AttachmentRow | null> {
+    if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
+    const { rows } = await this.db.query<AttachmentRow>("SELECT * FROM attachments WHERE public_token = $1 LIMIT 1", [
+      token,
+    ]);
+    const attachment = rows[0];
+    if (!attachment) return null;
+    if (STRICT_INTERNAL_PURPOSES.has(attachment.purpose)) return null;
+
+    if (attachment.purpose === "lab") {
+      const labCheck = await this.db.query<{ has_any: boolean; has_verified: boolean }>(
+        `SELECT
+           EXISTS (SELECT 1 FROM lab_tests WHERE scan_attachment_id = $1) AS has_any,
+           EXISTS (SELECT 1 FROM lab_tests WHERE scan_attachment_id = $1 AND record_status = 'verified') AS has_verified`,
+        [attachment.id],
+      );
+      const status = labCheck.rows[0];
+      if (status?.has_any && !status.has_verified) {
+        return null;
+      }
+    }
+
+    return attachment;
+  }
+
+  /** Quyền xem tệp trên `/api/uploads/:id`: hộ dân cùng hộ; cán bộ đúng phân quyền & phạm vi địa bàn. */
   async assertReadable(attachment: AttachmentRow, user: AuthUser | undefined) {
-    if (PUBLIC_PURPOSES.has(attachment.purpose)) return;
+    if (attachment.purpose === "news" || attachment.purpose === "catalog") return;
     if (!user) throw notFound();
     if (user.role === "farmer") {
       if (
@@ -254,12 +317,48 @@ export class UploadsService implements OnModuleInit {
     }
   }
 
-  async open(attachment: AttachmentRow, range?: { start: number; end: number }) {
+  /**
+   * Mở tệp nguyên tử với cờ `O_NOFOLLOW` chống tấn công symlink/TOCTOU và lấy kích thước thật từ file descriptor.
+   */
+  async openFile(attachment: AttachmentRow): Promise<OpenedAttachmentFile> {
     const path = this.pathOf(attachment.storage_key);
-    await stat(path).catch(() => {
+    const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0);
+    let handle: FileHandle;
+    try {
+      handle = await fsOpen(path, flags);
+    } catch {
       throw notFound();
-    });
-    return createReadStream(path, range);
+    }
+
+    try {
+      const st = await handle.stat();
+      if (!st.isFile() || st.size <= 0) {
+        await handle.close().catch(() => undefined);
+        throw notFound();
+      }
+      let streamCreated = false;
+      return {
+        totalBytes: st.size,
+        close: async () => {
+          if (!streamCreated) {
+            await handle.close().catch(() => undefined);
+          }
+        },
+        createStream: (range?: { start: number; end: number }) => {
+          streamCreated = true;
+          const stream = handle.createReadStream(
+            range ? { start: range.start, end: range.end, autoClose: true } : { autoClose: true },
+          );
+          stream.on("error", () => {
+            void handle.close().catch(() => undefined);
+          });
+          return stream;
+        },
+      };
+    } catch (err) {
+      await handle.close().catch(() => undefined);
+      throw err;
+    }
   }
 
   private pathOf(key: string) {

@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import { createHash } from "node:crypto";
+import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { verifyOrderedChain, type VerifiableChainEntry } from "../common/crypto/integrity-chain";
@@ -7,6 +7,11 @@ import { forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
 import { camelRow, camelRows, publicAttachmentUrlSql } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
+
+const UNIFORM_AUDIT_PASS_ERR =
+  "Thẻ đoàn thẩm định không hợp lệ, đã hết hạn hoặc không thuộc phạm vi vùng trồng này.";
+const AUDIT_PASS_WINDOW_MS = 60_000;
+const AUDIT_PASS_MAX_FAILS = process.env.NODE_ENV === "test" ? 25 : 10;
 
 export type ViewerTier = "public" | "enterprise" | "authority";
 
@@ -135,10 +140,43 @@ function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boo
 
 @Injectable()
 export class TraceabilityService {
+  private readonly failedAuditPassByIp = new Map<string, number[]>();
+  private minutesColsCache: { hasHouseholdId: boolean; hasPlotCode: boolean } | null = null;
+
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
   ) {}
+
+  private checkAuditPassRateLimit(ip?: string) {
+    const key = (ip || "local").trim() || "local";
+    const now = Date.now();
+    const prev = this.failedAuditPassByIp.get(key);
+    if (!prev) return;
+    const recent = prev.filter((ts) => now - ts < AUDIT_PASS_WINDOW_MS);
+    if (recent.length === 0) {
+      this.failedAuditPassByIp.delete(key);
+      return;
+    }
+    this.failedAuditPassByIp.set(key, recent);
+    if (recent.length >= AUDIT_PASS_MAX_FAILS) {
+      throw new HttpException(
+        { message: "Quá nhiều lần thử thẻ đoàn thẩm định không hợp lệ, vui lòng thử lại sau ít phút." },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  private recordFailedAuditPassAttempt(ip?: string) {
+    const key = (ip || "local").trim() || "local";
+    const now = Date.now();
+    const recent = (this.failedAuditPassByIp.get(key) ?? []).filter((ts) => now - ts < AUDIT_PASS_WINDOW_MS);
+    recent.push(now);
+    if (this.failedAuditPassByIp.size > 5000) {
+      this.failedAuditPassByIp.clear();
+    }
+    this.failedAuditPassByIp.set(key, recent);
+  }
 
   resolveRoleBaseTier(user?: AuthUser): ViewerTier {
     if (!user) return "public";
@@ -251,9 +289,117 @@ export class TraceabilityService {
     return "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
   }
 
+  private async resolveAdminLocationFromDb(village?: unknown, zoneCode?: unknown): Promise<string> {
+    const z = typeof zoneCode === "string" ? zoneCode.trim() : "";
+    if (z && (await this.hasTable("growing_zones"))) {
+      const gzRes = await this.db.query<{
+        commune: string | null;
+        district: string | null;
+        province: string | null;
+      }>(
+        `SELECT commune, district, province
+         FROM growing_zones
+         WHERE upper(code) = upper($1)
+         LIMIT 1`,
+        [z],
+      );
+      const gz = gzRes.rows[0];
+      if (gz?.commune && gz?.province) {
+        return [gz.commune.trim(), gz.district?.trim(), gz.province.trim()].filter(Boolean).join(", ");
+      }
+    }
+    return this.resolveAdminLocation(village, zoneCode);
+  }
+
   private async hasTable(tableName: string): Promise<boolean> {
     const res = await this.db.query<{ reg: string | null }>("SELECT to_regclass($1) AS reg", [`public.${tableName}`]);
     return res.rows[0]?.reg !== null;
+  }
+
+  private async getMinutesScopeCols(): Promise<{ hasHouseholdId: boolean; hasPlotCode: boolean }> {
+    if (this.minutesColsCache) return this.minutesColsCache;
+    const res = await this.db.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'inspection_minutes'
+         AND column_name IN ('household_id', 'plot_code')`,
+    );
+    const cols = new Set(res.rows.map((r) => r.column_name));
+    this.minutesColsCache = {
+      hasHouseholdId: cols.has("household_id"),
+      hasPlotCode: cols.has("plot_code"),
+    };
+    return this.minutesColsCache;
+  }
+
+  private async resolveEffectivePlotCodesForMinutes(householdIds: number[], plotCodes: string[]): Promise<string[]> {
+    const cleanPlots = [...new Set(plotCodes.map((c) => c.trim().toUpperCase()).filter(Boolean))];
+    if (cleanPlots.length > 0 || householdIds.length === 0) return cleanPlots;
+    if (!(await this.hasTable("plots"))) return cleanPlots;
+    const pRes = await this.db.query<{ code: string }>(
+      `SELECT DISTINCT upper(btrim(code)) AS code
+       FROM plots
+       WHERE household_id = ANY($1::bigint[])
+         AND code IS NOT NULL AND btrim(code) <> ''`,
+      [householdIds],
+    );
+    return pRes.rows.map((r) => r.code).filter(Boolean);
+  }
+
+  private async queryScopedInspectionMinutes<T extends Record<string, unknown> = Record<string, unknown>>(
+    selectColumnsSql: string,
+    householdIds: number[],
+    plotCodes: string[],
+    limit: number,
+    orderBySql = "im.held_on DESC, im.id DESC",
+  ): Promise<T[]> {
+    const cleanHhIds = [...new Set(householdIds.filter((id) => Number.isFinite(id) && id > 0))];
+    const effectivePlotCodes = await this.resolveEffectivePlotCodesForMinutes(cleanHhIds, plotCodes);
+    if (cleanHhIds.length === 0 && effectivePlotCodes.length === 0) {
+      return [];
+    }
+    const cols = await this.getMinutesScopeCols();
+    if (cols.hasHouseholdId && cols.hasPlotCode) {
+      const res = await this.db.query<T>(
+        `SELECT ${selectColumnsSql}
+         FROM inspection_minutes im
+         WHERE (
+           (cardinality($1::bigint[]) > 0 AND im.household_id = ANY($1::bigint[])
+            AND (cardinality($2::text[]) = 0 OR im.plot_code IS NULL OR btrim(im.plot_code) = '' OR upper(im.plot_code) = ANY($2::text[])))
+           OR (im.household_id IS NULL AND cardinality($2::text[]) > 0 AND upper(COALESCE(im.plot_code, '')) = ANY($2::text[]))
+         )
+         ORDER BY ${orderBySql}
+         LIMIT $3`,
+        [cleanHhIds, effectivePlotCodes, limit],
+      );
+      return res.rows;
+    }
+    if (cols.hasHouseholdId) {
+      if (cleanHhIds.length === 0) return [];
+      const res = await this.db.query<T>(
+        `SELECT ${selectColumnsSql}
+         FROM inspection_minutes im
+         WHERE im.household_id = ANY($1::bigint[])
+         ORDER BY ${orderBySql}
+         LIMIT $2`,
+        [cleanHhIds, limit],
+      );
+      return res.rows;
+    }
+    if (cols.hasPlotCode) {
+      if (effectivePlotCodes.length === 0) return [];
+      const res = await this.db.query<T>(
+        `SELECT ${selectColumnsSql}
+         FROM inspection_minutes im
+         WHERE upper(COALESCE(im.plot_code, '')) = ANY($1::text[])
+         ORDER BY ${orderBySql}
+         LIMIT $2`,
+        [effectivePlotCodes, limit],
+      );
+      return res.rows;
+    }
+    return [];
   }
 
   /** Lấy tọa độ khái quát cấp vùng trồng (làm tròn 2 chữ số thập phân ~1.1km, tuyệt đối không lộ tọa độ từng thửa). */
@@ -589,9 +735,8 @@ export class TraceabilityService {
   async traceSamples() {
     const hasSignboards = await this.hasTable("plot_signboard_tokens");
     const hasQuotas = await this.hasTable("plot_season_quotas");
-    const hasPasses = await this.hasTable("field_audit_passes");
 
-    const [lotsRes, boxesRes, stampsRes, plotsRes, demoPassRes] = await Promise.all([
+    const [lotsRes, boxesRes, stampsRes, plotsRes] = await Promise.all([
       this.db.query(
         `SELECT 'lot'::text AS sample_type,
                 hl.code,
@@ -629,7 +774,7 @@ export class TraceabilityService {
         `SELECT 'fruit'::text AS unit_type,
                 fs.serial_code AS code,
                 fs.qr_token,
-                fs.fruit_weight_kg::float8 AS weight_kg,
+                fs.fruit_weight_kg::float8 AS fruit_weight_kg,
                 fs.grade,
                 COALESCE(fs.harvest_date::text, fs.activated_at::date::text) AS issued_at,
                 NULL::text AS lot_code,
@@ -657,6 +802,7 @@ export class TraceabilityService {
                       hasQuotas
                         ? `(SELECT q.max_quota_kg::float8 FROM plot_season_quotas q
                             WHERE upper(q.plot_code) = upper(pst.plot_code)
+                              AND (pst.household_id IS NULL OR q.household_id = pst.household_id)
                             ORDER BY q.season_year DESC LIMIT 1)`
                         : "NULL::float8"
                     } AS max_quota_kg,
@@ -672,43 +818,20 @@ export class TraceabilityService {
             [DEFAULT_COOP_NAME],
           )
         : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
-      hasPasses
-        ? this.db.query<{
-            code: string;
-            pass_token: string;
-            delegation_name: string;
-            default_lang: string;
-            expires_at: Date | string;
-          }>(
-            `SELECT code, pass_token, delegation_name, default_lang, expires_at
-             FROM field_audit_passes
-             WHERE status = 'active' AND expires_at > now() AND code = 'AUDIT-2026-CN01'
-             LIMIT 1`,
-          )
-        : Promise.resolve({ rows: [] as Array<Record<string, unknown>> }),
     ]);
 
     const combinedUnits = [...camelRows(boxesRes.rows), ...camelRows(stampsRes.rows)].slice(0, 6);
-    const demoPassRow = demoPassRes.rows[0] ? camelRow<Record<string, unknown>>(demoPassRes.rows[0]) : null;
 
     return {
       lots: camelRows(lotsRes.rows),
       stamps: combinedUnits,
       plots: camelRows(plotsRes.rows),
-      demoAuditPass: demoPassRow
-        ? {
-            code: String(demoPassRow.code),
-            passToken: String(demoPassRow.passToken),
-            delegationName: String(demoPassRow.delegationName),
-            defaultLang: String(demoPassRow.defaultLang || "zh"),
-            expiresAt: demoPassRow.expiresAt,
-          }
-        : null,
+      demoAuditPass: null,
     };
   }
 
   /**
-   * Kiểm chứng Thẻ Đoàn Thẩm định Thực địa (Field Audit Pass) có thời hạn cho đối tác / đoàn khách mời.
+   * Kiểm chứng Thẻ Đoàn Thẩm định Thực địa (Field Audit Pass) có thời hạn cho đối tác và đoàn khách mời.
    */
   private async resolveFieldAuditPass(
     ctx: TraceRequestContext,
@@ -716,12 +839,20 @@ export class TraceabilityService {
     scannedCode: string,
     resolvedLotCode: string | null,
     recordAccess = true,
+    distinctZoneCodes?: string[],
   ): Promise<ResolvedFieldAuditPass | null> {
     const rawPass = ctx.auditPass?.trim();
     if (!rawPass) return null;
 
+    this.checkAuditPassRateLimit(ctx.ip);
+
+    if (rawPass.length < 12 || rawPass.length > 80) {
+      this.recordFailedAuditPassAttempt(ctx.ip);
+      return { active: false, invalidReason: UNIFORM_AUDIT_PASS_ERR };
+    }
+
     if (!(await this.hasTable("field_audit_passes"))) {
-      return { active: false, invalidReason: "Phân hệ Thẻ Đoàn Thẩm định chưa sẵn sàng." };
+      return { active: false, invalidReason: UNIFORM_AUDIT_PASS_ERR };
     }
 
     const res = await this.db.query<{
@@ -739,42 +870,48 @@ export class TraceabilityService {
       `SELECT id, code, pass_token, delegation_name, organization, allowed_zone_code,
               default_lang, expires_at, status, issued_by_name
        FROM field_audit_passes
-       WHERE pass_token = $1 OR upper(code) = upper($1)
-       ORDER BY (pass_token = $1) DESC, id DESC
+       WHERE pass_token = $1
        LIMIT 1`,
       [rawPass],
     );
 
     const row = res.rows[0];
     if (!row) {
-      return { active: false, invalidReason: "Mã Thẻ Đoàn Thẩm định không tồn tại hoặc không hợp lệ." };
+      this.recordFailedAuditPassAttempt(ctx.ip);
+      return { active: false, invalidReason: UNIFORM_AUDIT_PASS_ERR };
     }
+
+    const storedBuf = Buffer.from(row.pass_token, "utf8");
+    const inputBuf = Buffer.from(rawPass, "utf8");
+    if (storedBuf.length !== inputBuf.length || !timingSafeEqual(storedBuf, inputBuf)) {
+      this.recordFailedAuditPassAttempt(ctx.ip);
+      return { active: false, invalidReason: UNIFORM_AUDIT_PASS_ERR };
+    }
+
     if (row.status !== "active") {
-      return {
-        active: false,
-        code: row.code,
-        invalidReason: "Thẻ Đoàn Thẩm định đã bị thu hồi hiệu lực trên máy chủ.",
-      };
+      this.recordFailedAuditPassAttempt(ctx.ip);
+      return { active: false, invalidReason: UNIFORM_AUDIT_PASS_ERR };
     }
     const expMs = new Date(row.expires_at).getTime();
     if (Number.isNaN(expMs) || expMs <= Date.now()) {
-      return {
-        active: false,
-        code: row.code,
-        invalidReason: "Thẻ Đoàn Thẩm định đã hết thời hạn hiệu lực.",
-      };
+      this.recordFailedAuditPassAttempt(ctx.ip);
+      return { active: false, invalidReason: UNIFORM_AUDIT_PASS_ERR };
     }
-    if (
-      row.allowed_zone_code &&
-      row.allowed_zone_code.trim() &&
-      pucCode &&
-      row.allowed_zone_code.trim().toUpperCase() !== pucCode.trim().toUpperCase()
-    ) {
-      return {
-        active: false,
-        code: row.code,
-        invalidReason: `Thẻ này chỉ áp dụng cho vùng trồng ${row.allowed_zone_code.trim()}.`,
-      };
+    if (row.allowed_zone_code && row.allowed_zone_code.trim()) {
+      const allowedZone = row.allowed_zone_code.trim().toUpperCase();
+      const zonesToCheck = (
+        distinctZoneCodes && distinctZoneCodes.length > 0
+          ? distinctZoneCodes
+          : pucCode
+            ? [pucCode]
+            : []
+      )
+        .map((z) => z.trim().toUpperCase())
+        .filter(Boolean);
+      if (zonesToCheck.length > 0 && !zonesToCheck.every((z) => z === allowedZone)) {
+        this.recordFailedAuditPassAttempt(ctx.ip);
+        return { active: false, invalidReason: UNIFORM_AUDIT_PASS_ERR };
+      }
     }
 
     if (recordAccess) {
@@ -808,7 +945,6 @@ export class TraceabilityService {
       active: true,
       id: Number(row.id),
       code: row.code,
-      passToken: row.pass_token,
       delegationName: row.delegation_name,
       organization: row.organization,
       allowedZoneCode: row.allowed_zone_code,
@@ -820,7 +956,7 @@ export class TraceabilityService {
   }
 
   /**
-   * Trụ cột 1: Kiểm chứng độc lập toàn bộ chuỗi băm SHA-256 (append-only hash chain) & thống kê tuân thủ thời gian ghi nhật ký.
+   * Trụ cột 1: Kiểm chứng độc lập toàn bộ chuỗi băm SHA-256 (append-only hash chain) và thống kê tuân thủ thời gian ghi nhật ký.
    */
   private async computeLedgerIntegritySummary(householdIds: number[], plotCodes: string[]) {
     let effectiveHouseholdIds = [...new Set(householdIds.filter((id) => Number.isFinite(id) && id > 0))];
@@ -838,7 +974,7 @@ export class TraceabilityService {
       effectiveHouseholdIds = hhRes.rows.map((r) => Number(r.household_id)).filter((id) => id > 0);
     }
 
-    const [journalRes, sprayRes, minuteRes] = await Promise.all([
+    const [journalRes, sprayRes, matchedMinutes] = await Promise.all([
       effectiveHouseholdIds.length > 0
         ? this.db.query<{
             household_id: number;
@@ -903,7 +1039,8 @@ export class TraceabilityService {
             [effectiveHouseholdIds],
           )
         : Promise.resolve({ rows: [] }),
-      this.db.query<{
+      this.queryScopedInspectionMinutes<{
+        id: number;
         code: string;
         held_on_iso: string;
         officer: string;
@@ -915,18 +1052,21 @@ export class TraceabilityService {
         record_hash: string | null;
         gps_verified: boolean;
       }>(
-        `SELECT code,
-                to_char(held_on, 'YYYY-MM-DD') AS held_on_iso,
-                officer,
-                result,
-                is_late_entry,
-                entry_delay_hours::float8 AS entry_delay_hours,
-                server_recorded_at,
-                prev_hash,
-                record_hash,
-                gps_verified
-         FROM inspection_minutes
-         ORDER BY id ASC`,
+        `im.id,
+         im.code,
+         to_char(im.held_on, 'YYYY-MM-DD') AS held_on_iso,
+         im.officer,
+         im.result,
+         im.is_late_entry,
+         im.entry_delay_hours::float8 AS entry_delay_hours,
+         im.server_recorded_at,
+         im.prev_hash,
+         im.record_hash,
+         im.gps_verified`,
+        effectiveHouseholdIds,
+        cleanPlots,
+        500,
+        "im.id ASC",
       ),
     ]);
 
@@ -994,39 +1134,86 @@ export class TraceabilityService {
       sprayByHh.set(hid, arr);
     }
 
-    const minuteChain: Array<VerifiableChainEntry & { entryDelayHours?: number }> = [];
-    for (const r of minuteRes.rows) {
-      if (r.gps_verified) gpsVerifiedRecords += 1;
-      trackLatest(r.server_recorded_at, r.record_hash);
-      minuteChain.push({
-        input: {
-          kind: "minute",
-          prevHash: r.prev_hash,
-          code: r.code,
-          heldOn: r.held_on_iso,
-          officer: r.officer,
-          result: r.result,
-          isLateEntry: Boolean(r.is_late_entry),
-          serverRecordedAt: r.server_recorded_at,
-        },
-        storedPrevHash: r.prev_hash,
-        storedRecordHash: r.record_hash,
-        entryDelayHours: Number(r.entry_delay_hours || 0),
-      });
+    let minuteSealedCount = 0;
+    let minuteOnTimeCount = 0;
+    let minuteLateCount = 0;
+    let minuteDelaySum = 0;
+    let minuteTamperedCount = 0;
+
+    if (matchedMinutes.length > 0) {
+      for (const r of matchedMinutes) {
+        if (r.gps_verified) gpsVerifiedRecords += 1;
+        trackLatest(r.server_recorded_at, r.record_hash);
+        if (r.record_hash) {
+          minuteSealedCount += 1;
+          if (r.is_late_entry) {
+            minuteLateCount += 1;
+          } else {
+            minuteOnTimeCount += 1;
+          }
+          minuteDelaySum += Number(r.entry_delay_hours || 0);
+        }
+      }
+
+      const maxMinuteId = Math.max(...matchedMinutes.map((m) => Number(m.id)));
+      const prefixMinutesRes = await this.db.query<{
+        code: string;
+        held_on_iso: string;
+        officer: string;
+        result: string;
+        is_late_entry: boolean;
+        entry_delay_hours: number;
+        server_recorded_at: Date | string;
+        prev_hash: string | null;
+        record_hash: string | null;
+      }>(
+        `SELECT code,
+                to_char(held_on, 'YYYY-MM-DD') AS held_on_iso,
+                officer,
+                result,
+                is_late_entry,
+                entry_delay_hours::float8 AS entry_delay_hours,
+                server_recorded_at,
+                prev_hash,
+                record_hash
+         FROM inspection_minutes
+         WHERE id <= $1
+         ORDER BY id ASC`,
+        [maxMinuteId],
+      );
+
+      const minutePrefixChain: Array<VerifiableChainEntry & { entryDelayHours?: number }> = prefixMinutesRes.rows.map(
+        (r) => ({
+          input: {
+            kind: "minute",
+            prevHash: r.prev_hash,
+            code: r.code,
+            heldOn: r.held_on_iso,
+            officer: r.officer,
+            result: r.result,
+            isLateEntry: Boolean(r.is_late_entry),
+            serverRecordedAt: r.server_recorded_at,
+          },
+          storedPrevHash: r.prev_hash,
+          storedRecordHash: r.record_hash,
+          entryDelayHours: Number(r.entry_delay_hours || 0),
+        }),
+      );
+      const prefixCheck = verifyOrderedChain(minutePrefixChain);
+      minuteTamperedCount = prefixCheck.tamperedCount;
     }
 
     const chainResults = [
       ...[...journalByHh.values()].map((c) => verifyOrderedChain(c)),
       ...[...sprayByHh.values()].map((c) => verifyOrderedChain(c)),
-      verifyOrderedChain(minuteChain),
     ];
 
-    let totalSealedRecords = 0;
-    let verifiedRecords = 0;
-    let tamperedRecords = 0;
-    let onTimeRecords = 0;
-    let lateRecordCount = 0;
-    let weightedDelaySum = 0;
+    let totalSealedRecords = minuteSealedCount;
+    let verifiedRecords = minuteTamperedCount === 0 ? minuteSealedCount : Math.max(0, minuteSealedCount - minuteTamperedCount);
+    let tamperedRecords = minuteTamperedCount;
+    let onTimeRecords = minuteOnTimeCount;
+    let lateRecordCount = minuteLateCount;
+    let weightedDelaySum = minuteDelaySum;
 
     for (const cr of chainResults) {
       totalSealedRecords += cr.totalSealedRecords;
@@ -1048,7 +1235,7 @@ export class TraceabilityService {
       totalSealedRecords,
       journalCount: journalRes.rows.length,
       sprayCount: sprayRes.rows.length,
-      minuteCount: minuteRes.rows.length,
+      minuteCount: matchedMinutes.length,
       verifiedRecords,
       tamperedRecords,
       onTimeRecords,
@@ -1650,9 +1837,36 @@ export class TraceabilityService {
       false,
     );
 
+    let linkedEnterpriseId: number | null = null;
+    let linkedCoopCode = "HTX-CUNE";
+    const lotScopeRes = await this.db.query<{ enterprise_id: number | null; coop_code: string | null }>(
+      `SELECT hl.enterprise_id, hl.coop_code
+       FROM harvest_contributions hc
+       JOIN harvest_lots hl ON hl.id = hc.lot_id
+       WHERE hl.status <> 'revoked'
+         AND (
+           upper(COALESCE(hc.plot_code, '')) = upper($1)
+           OR ($2::bigint IS NOT NULL AND hc.household_id = $2 AND COALESCE(hc.plot_code, '') = '')
+         )
+       ORDER BY (CASE WHEN hl.enterprise_id = $3 THEN 0 ELSE 1 END), hl.harvested_on DESC, hc.id DESC
+       LIMIT 1`,
+      [
+        resolvedPlot.plotCode,
+        resolvedPlot.householdId,
+        ctx.user?.enterpriseId !== null && ctx.user?.enterpriseId !== undefined ? Number(ctx.user.enterpriseId) : -1,
+      ],
+    );
+    if (lotScopeRes.rows[0]) {
+      linkedEnterpriseId =
+        lotScopeRes.rows[0].enterprise_id !== null ? Number(lotScopeRes.rows[0].enterprise_id) : null;
+      if (lotScopeRes.rows[0].coop_code) {
+        linkedCoopCode = lotScopeRes.rows[0].coop_code;
+      }
+    }
+
     const roleAccess = this.evaluateAccessAndScope(ctx, {
-      enterpriseId: ctx.user?.enterpriseId !== null && ctx.user?.enterpriseId !== undefined ? Number(ctx.user.enterpriseId) : null,
-      coopCode: "HTX-CUNE",
+      enterpriseId: linkedEnterpriseId,
+      coopCode: linkedCoopCode,
       villageIds: resolvedPlot.villageId ? [resolvedPlot.villageId] : [],
       adminLocations: [adminLocation],
     });

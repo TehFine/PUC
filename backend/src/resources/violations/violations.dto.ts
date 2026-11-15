@@ -30,7 +30,10 @@ export class CreateViolationDto {
   status?: "open" | "resolved";
 }
 
-export class UpdateViolationDto extends PartialType(CreateViolationDto) {}
+export class UpdateViolationDto extends PartialType(CreateViolationDto) {
+  @OptionalText(2000)
+  resolutionNotes?: string | null;
+}
 
 export class ResolveViolationDto {
   @Text(2000)

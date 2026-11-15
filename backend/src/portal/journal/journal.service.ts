@@ -121,6 +121,45 @@ export class JournalService {
   /** Chỉ xóa được bản ghi do chính hộ tạo trên cổng (người ghi "Chủ hộ", ảnh của hộ) trong vòng 24 giờ. */
   async remove(id: number, user: AuthUser, context: ClientContext) {
     const householdId = householdIdOf(user);
+    const existingRes = await this.db.query<{
+      plot_code: string | null;
+      server_recorded_at: Date | string | null;
+      can_delete: boolean;
+    }>(
+      `SELECT j.plot_code,
+              j.server_recorded_at,
+              (j.recorder = $3
+               AND j.created_at > now() - interval '24 hours'
+               AND EXISTS (SELECT 1 FROM attachments a WHERE a.id = j.photo_id AND a.household_id = j.household_id)) AS can_delete
+       FROM journal_entries j
+       WHERE j.id = $1 AND j.household_id = $2`,
+      [id, householdId, FARMER_RECORDER],
+    );
+    if (existingRes.rowCount === 0) {
+      throw notFound("Không tìm thấy bản ghi nhật ký.");
+    }
+    const existingRow = existingRes.rows[0];
+    if (!existingRow.can_delete) {
+      throw forbidden("Chỉ xóa được nhật ký do hộ tự ghi trong vòng 24 giờ.");
+    }
+
+    const existingPlot = (existingRow.plot_code ?? "").trim();
+    const recIso = existingRow.server_recorded_at ? new Date(existingRow.server_recorded_at).toISOString() : null;
+    const exportLocked = await this.db.query(
+      `SELECT 1
+       FROM harvest_contributions hc
+       JOIN harvest_lots hl ON hl.id = hc.lot_id
+       WHERE hc.household_id = $1
+         AND hl.status IN ('in_transit', 'delivered', 'exported')
+         AND ($2 = '' OR hc.plot_code IS NULL OR btrim(hc.plot_code) = '' OR upper(hc.plot_code) = upper($2))
+         AND ($3::timestamptz IS NULL OR hl.created_at >= $3::timestamptz)
+       LIMIT 1`,
+      [householdId, existingPlot, recIso],
+    );
+    if ((exportLocked.rowCount ?? 0) > 0) {
+      throw badRequest("Bản ghi sổ cái đã gắn với lô xuất khẩu, không thể chỉnh sửa/xóa.");
+    }
+
     const deleted = await this.db.query<{ id: number; activity: string; plot_code: string }>(
       `DELETE FROM journal_entries j
        WHERE j.id = $1 AND j.household_id = $2 AND j.recorder = $3 AND j.created_at > now() - interval '24 hours'
@@ -129,14 +168,31 @@ export class JournalService {
       [id, householdId, FARMER_RECORDER],
     );
     if (deleted.rowCount === 0) {
-      const exists = await this.db.query("SELECT 1 FROM journal_entries WHERE id = $1 AND household_id = $2", [id, householdId]);
-      if (exists.rowCount === 0) throw notFound("Không tìm thấy bản ghi nhật ký.");
       throw forbidden("Chỉ xóa được nhật ký do hộ tự ghi trong vòng 24 giờ.");
     }
     const row = deleted.rows[0];
+
+    await this.db.query(
+      `UPDATE violations v
+       SET farmer_response = NULL,
+           farmer_response_at = NULL,
+           farmer_response_photo_id = NULL
+       WHERE v.household_id = $1
+         AND v.status = 'open'
+         AND v.farmer_response IS NOT NULL
+         AND ${isJournalViolationSql("v")}
+         AND NOT EXISTS (
+           SELECT 1 FROM journal_entries je
+           WHERE je.household_id = v.household_id
+             AND je.entry_on >= v.detected_on
+             AND (v.plot_code IS NULL OR upper(je.plot_code) = upper(v.plot_code))
+         )`,
+      [householdId],
+    );
+
     await this.audit.write(
       { ip: context.ip, user },
-      { action: "Hộ xóa nhật ký", object: `Nhật ký canh tác #${row.id}`, detail: `${row.activity} – ${row.plot_code}` },
+      { action: "Hộ xóa nhật ký", object: `Nhật ký canh tác #${row.id}`, detail: `${row.activity} - ${row.plot_code}` },
     );
     return { ok: true };
   }

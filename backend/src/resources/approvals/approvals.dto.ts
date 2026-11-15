@@ -39,7 +39,10 @@ export class CreateApprovalDto {
   plotCode?: string | null;
 }
 
-export class UpdateApprovalDto extends PartialType(CreateApprovalDto) {}
+export class UpdateApprovalDto extends PartialType(CreateApprovalDto) {
+  @OptionalText(1000)
+  reviewNote?: string | null;
+}
 
 export class ApproveDto {
   @OptionalText(1000)

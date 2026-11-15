@@ -61,8 +61,8 @@ export class EndorsementConfigController {
 
   @Get()
   @Authorize("harvest", "read")
-  getConfig() {
-    return this.harvestService.getEndorsementConfig();
+  getConfig(@CurrentUser() user: AuthUser) {
+    return this.harvestService.getEndorsementConfig(user);
   }
 
   @Put()
@@ -82,8 +82,8 @@ export class FieldAuditPassesController {
 
   @Get()
   @Authorize("approvals", "read")
-  listPasses() {
-    return this.harvestService.listFieldAuditPasses();
+  listPasses(@CurrentUser() user: AuthUser) {
+    return this.harvestService.listFieldAuditPasses(user);
   }
 
   @Post()
@@ -129,17 +129,21 @@ export class HarvestTraceAccessLogsController {
   @Get()
   @Authorize("approvals", "read")
   listLogs(
+    @CurrentUser() user: AuthUser,
     @Query("lotCode") lotCode?: string,
     @Query("q") q?: string,
     @Query("scopeGranted") scopeGranted?: string,
     @Query("limit") limit?: string,
   ) {
-    return this.harvestService.listTraceAccessLogs({
-      lotCode,
-      q,
-      scopeGranted,
-      limit: limit ? Number(limit) : undefined,
-    });
+    return this.harvestService.listTraceAccessLogs(
+      {
+        lotCode,
+        q,
+        scopeGranted,
+        limit: limit ? Number(limit) : undefined,
+      },
+      user,
+    );
   }
 }
 
@@ -149,8 +153,8 @@ export class GrowingZonesController {
 
   @Get()
   @Authorize("harvest", "read")
-  listZones() {
-    return this.harvestService.listGrowingZones();
+  listZones(@CurrentUser() user: AuthUser) {
+    return this.harvestService.listGrowingZones(user);
   }
 
   @Patch(":code")
@@ -228,8 +232,8 @@ export class HarvestController extends CrudController(
 
   @Get(":id/contributions")
   @Authorize("households", "read")
-  listContributions(@Param("id", ParseRecordIdPipe) id: number) {
-    return this.harvestService.listContributions(id);
+  listContributions(@Param("id", ParseRecordIdPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.harvestService.listContributions(id, user);
   }
 
   @Post(":id/contributions")

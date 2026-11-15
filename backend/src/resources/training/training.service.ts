@@ -32,7 +32,13 @@ export class TrainingService extends BaseCrudService {
   }
 
   protected override prepare(input: Record<string, unknown>, context: WriteContext) {
-    return { ...input, _method: context.method };
+    const out: Record<string, unknown> = { ...input, _method: context.method };
+    if (!context.id || context.method === "POST") {
+      out.enrolled = 0;
+    } else {
+      delete out.enrolled;
+    }
+    return out;
   }
 
   protected override async afterWrite(_id: number, input: Record<string, unknown>) {

@@ -6,7 +6,7 @@ import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
 import { attachmentUrlSql, camelRows, todayVn } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { ADMIN_LINKS } from "../portal/common/admin-links";
+import { ADMIN_LINKS, INSPECTION_ROLES } from "../portal/common/admin-links";
 import {
   assertPlotOwned,
   type ClientContext,
@@ -40,6 +40,79 @@ import type {
 const PROTOCOL_SEASON = "2026-2027";
 const PORTAL_PROTOCOL_LINK = "/portal?tab=diary&view=protocol";
 const ADMIN_PROTOCOL_LINK = "/admin?section=journal&tab=protocol";
+
+function normGeoText(val: string): string {
+  return val
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const ADMIN_LEVEL_PREFIX_RE = /^(?:xa|phuong|thi tran|huyen|quan|thi xa|thanh pho|tp\.?|tinh)\s+/;
+
+function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boolean {
+  const target = normGeoText(assignedRaw);
+  if (!target) return false;
+  if (target === "*" || target === "toan quoc") return true;
+
+  const targetHasPrefix = ADMIN_LEVEL_PREFIX_RE.test(target);
+  const targetStripped = target.replace(ADMIN_LEVEL_PREFIX_RE, "").trim();
+
+  for (const loc of adminLocations) {
+    const segments = loc
+      .split(",")
+      .map((s) => normGeoText(s))
+      .filter(Boolean);
+    for (const seg of segments) {
+      if (seg === target) return true;
+      if (!targetHasPrefix) {
+        const segStripped = seg.replace(ADMIN_LEVEL_PREFIX_RE, "").trim();
+        if (segStripped === targetStripped) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function resolveHouseholdAdminLocation(villageName?: string | null, plotCode?: string | null): string {
+  const v = (villageName || "").trim();
+  const p = (plotCode || "").trim();
+  if (/ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(v) || /^66-PUC-SR0001-/i.test(p)) {
+    return "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
+  }
+  return "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+}
+
+function isStaffInPlanScope(
+  user: AuthUser,
+  row: { village_id: number; village_name?: string | null; plot_code?: string | null },
+): boolean {
+  if (user.role === "htx_officer" || user.role === "admin") {
+    const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
+    if (userCoop !== "HTX-CUNE") return false;
+  }
+  const locations = [resolveHouseholdAdminLocation(row.village_name, row.plot_code)];
+  if (user.role === "village_officer") {
+    const hasVillage = user.villageId !== null && user.villageId !== undefined;
+    const hasCommune = Boolean(user.assignedCommune && user.assignedCommune.trim());
+    if (!hasVillage && !hasCommune) return false;
+    if (hasVillage && Number(row.village_id) !== Number(user.villageId)) return false;
+    if (hasCommune && !matchesJurisdiction(user.assignedCommune!, locations)) return false;
+    return true;
+  }
+  if (user.role === "inspector") {
+    const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
+    if (!matchesJurisdiction(region, locations)) return false;
+  }
+  if (user.assignedCommune && user.assignedCommune.trim()) {
+    if (!matchesJurisdiction(user.assignedCommune, locations)) return false;
+  }
+  return true;
+}
 
 interface PlanRow {
   id: number;
@@ -136,7 +209,7 @@ export class CareProtocolService {
         [householdId],
       );
       for (const r of pRes.rows) {
-        if (r.code?.trim()) plotCodes.add(r.code.trim());
+        if (r.code?.trim()) plotCodes.add(r.code.trim().toUpperCase());
       }
     }
 
@@ -150,7 +223,7 @@ export class CareProtocolService {
           [householdId],
         );
         for (const r of sRes.rows) {
-          if (r.plot_code?.trim()) plotCodes.add(r.plot_code.trim());
+          if (r.plot_code?.trim()) plotCodes.add(r.plot_code.trim().toUpperCase());
         }
       }
     }
@@ -161,13 +234,13 @@ export class CareProtocolService {
         [householdId],
       );
       for (const r of jRes.rows) {
-        if (r.plot_code?.trim()) plotCodes.add(r.plot_code.trim());
+        if (r.plot_code?.trim()) plotCodes.add(r.plot_code.trim().toUpperCase());
       }
     }
 
     if (plotCodes.size === 0) {
       const hRes = await this.db.query<{ code: string }>("SELECT code FROM households WHERE id = $1", [householdId]);
-      const hCode = hRes.rows[0]?.code;
+      const hCode = hRes.rows[0]?.code?.trim().toUpperCase();
       if (hCode) plotCodes.add(`${hCode}-T01`);
     }
 
@@ -177,7 +250,14 @@ export class CareProtocolService {
     const codesArr = [...plotCodes];
     await this.db.query(
       `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
-       SELECT $1, unnest($2::text[]), $3, $4::date, 1, 'cb-rua-vuon'
+       SELECT $1, u.code, $3, $4::date, 1, 'cb-rua-vuon'
+       FROM unnest($2::text[]) AS u(code)
+       WHERE NOT EXISTS (
+         SELECT 1 FROM plot_care_plans pcp
+         WHERE pcp.household_id = $1
+           AND upper(pcp.plot_code) = upper(u.code)
+           AND pcp.season = $3
+       )
        ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
       [householdId, codesArr, PROTOCOL_SEASON, today],
     );
@@ -206,7 +286,45 @@ export class CareProtocolService {
   /** Hộ dân tự thiết lập / đồng bộ giai đoạn hiện tại của thửa vườn. */
   async portalConfigurePlan(dto: ConfigurePlotCarePlanDto, user: AuthUser, context: ClientContext) {
     const householdId = householdIdOf(user);
-    const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
+    const ownedPlot = await assertPlotOwned(this.db, householdId, dto.plotCode);
+    const plotCode = ownedPlot.trim().toUpperCase();
+
+    const existingPlanRes = await this.db.query<{ id: number }>(
+      `SELECT id FROM plot_care_plans
+       WHERE household_id = $1 AND upper(plot_code) = upper($2) AND season = $3
+       LIMIT 1`,
+      [householdId, plotCode, PROTOCOL_SEASON],
+    );
+    const existingPlanId = existingPlanRes.rows[0]?.id ?? null;
+    if (existingPlanId) {
+      const critLog = await this.db.query(
+        `SELECT 1 FROM care_protocol_alert_logs
+         WHERE plan_id = $1 AND alert_type = 'overdue_critical'
+         LIMIT 1`,
+        [existingPlanId],
+      );
+      if ((critLog.rowCount ?? 0) > 0) {
+        throw badRequest(
+          "Lộ trình đang có cảnh báo quá hạn nghiêm trọng, vui lòng khai báo mốc thực tế hoặc liên hệ cán bộ HTX để điều chỉnh.",
+        );
+      }
+    }
+
+    const openOverdueViol = await this.db.query(
+      `SELECT 1 FROM violations v
+       WHERE v.household_id = $1
+         AND v.status = 'open'
+         AND (v.plot_code IS NULL OR upper(v.plot_code) = upper($2))
+         AND (v.title ILIKE '%quá hạn%' OR v.title ILIKE '%trễ hạn%')
+       LIMIT 1`,
+      [householdId, plotCode],
+    );
+    if ((openOverdueViol.rowCount ?? 0) > 0) {
+      throw badRequest(
+        "Lộ trình đang có cảnh báo quá hạn nghiêm trọng, vui lòng khai báo mốc thực tế hoặc liên hệ cán bộ HTX để điều chỉnh.",
+      );
+    }
+
     return this.applyPlanConfiguration({
       householdId,
       plotCode,
@@ -223,12 +341,14 @@ export class CareProtocolService {
       throw badRequest("Vui lòng chọn hộ nông dân cần thiết lập lộ trình.");
     }
     await this.assertStaffCanAccessHousehold(user, dto.householdId);
-    const plotCode = dto.plotCode.trim();
-    if (!plotCode) throw badRequest("Vui lòng nhập hoặc chọn mã thửa đất.");
+    if (!dto.plotCode || !dto.plotCode.trim()) {
+      throw badRequest("Vui lòng nhập hoặc chọn mã thửa đất.");
+    }
+    const cleanPlotCode = (await assertPlotOwned(this.db, dto.householdId, dto.plotCode)).trim().toUpperCase();
 
     return this.applyPlanConfiguration({
       householdId: dto.householdId,
-      plotCode,
+      plotCode: cleanPlotCode,
       dto,
       actor: user,
       ip: context.ip,
@@ -244,7 +364,8 @@ export class CareProtocolService {
     ip?: string;
     notifyFarmerByAdmin: boolean;
   }) {
-    const { householdId, plotCode, dto, actor, ip, notifyFarmerByAdmin } = params;
+    const { householdId, dto, actor, ip, notifyFarmerByAdmin } = params;
+    const plotCode = params.plotCode.trim().toUpperCase();
 
     let targetSpec: SequentialMilestoneSpec = SEQUENTIAL_MILESTONES_2026_2027[0];
     let cycleStartOn = dto.anchorDate;
@@ -258,38 +379,78 @@ export class CareProtocolService {
       cycleStartOn = addIsoDays(dto.anchorDate, -targetSpec.cycleDayStart);
     }
 
-    const upserted = await this.db.query<{ id: number }>(
-      `INSERT INTO plot_care_plans
-         (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code, status, note, created_by)
-       VALUES ($1, $2, $3, $4::date, $5, $6, 'active', $7, $8)
-       ON CONFLICT (household_id, plot_code, season)
-       DO UPDATE SET
-         cycle_start_on = EXCLUDED.cycle_start_on,
-         start_milestone_seq = EXCLUDED.start_milestone_seq,
-         current_milestone_code = EXCLUDED.current_milestone_code,
-         status = 'active',
-         note = COALESCE(EXCLUDED.note, plot_care_plans.note),
-         updated_at = now()
-       RETURNING id`,
-      [
-        householdId,
-        plotCode,
-        PROTOCOL_SEASON,
-        cycleStartOn,
-        targetSpec.seq,
-        targetSpec.code,
-        dto.note?.trim() || null,
-        actor.id,
-      ],
+    const existingCaseVariant = await this.db.query<{ id: number }>(
+      `SELECT id FROM plot_care_plans
+       WHERE household_id = $1 AND upper(plot_code) = upper($2) AND season = $3
+       LIMIT 1`,
+      [householdId, plotCode, PROTOCOL_SEASON],
     );
-    const planId = upserted.rows[0].id;
 
-    // Xóa nhật ký cảnh báo cũ của các mốc từ mốc hiện tại trở đi để chu kỳ nhắc lịch mới chạy chuẩn xác
-    await this.db.query(
-      `DELETE FROM care_protocol_alert_logs
-       WHERE plan_id = $1 AND milestone_code = $2`,
-      [planId, targetSpec.code],
-    );
+    let planId: number;
+    if (existingCaseVariant.rows[0]) {
+      const updated = await this.db.query<{ id: number }>(
+        `UPDATE plot_care_plans
+         SET plot_code = $2,
+             cycle_start_on = $3::date,
+             start_milestone_seq = $4,
+             current_milestone_code = $5,
+             status = 'active',
+             note = COALESCE($6, note),
+             updated_at = now()
+         WHERE id = $1
+         RETURNING id`,
+        [
+          existingCaseVariant.rows[0].id,
+          plotCode,
+          cycleStartOn,
+          targetSpec.seq,
+          targetSpec.code,
+          dto.note?.trim() || null,
+        ],
+      );
+      planId = updated.rows[0].id;
+    } else {
+      const upserted = await this.db.query<{ id: number }>(
+        `INSERT INTO plot_care_plans
+           (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code, status, note, created_by)
+         VALUES ($1, $2, $3, $4::date, $5, $6, 'active', $7, $8)
+         ON CONFLICT (household_id, plot_code, season)
+         DO UPDATE SET
+           cycle_start_on = EXCLUDED.cycle_start_on,
+           start_milestone_seq = EXCLUDED.start_milestone_seq,
+           current_milestone_code = EXCLUDED.current_milestone_code,
+           status = 'active',
+           note = COALESCE(EXCLUDED.note, plot_care_plans.note),
+           updated_at = now()
+         RETURNING id`,
+        [
+          householdId,
+          plotCode,
+          PROTOCOL_SEASON,
+          cycleStartOn,
+          targetSpec.seq,
+          targetSpec.code,
+          dto.note?.trim() || null,
+          actor.id,
+        ],
+      );
+      planId = upserted.rows[0].id;
+    }
+
+    // Xóa nhật ký cảnh báo cũ của mốc hiện tại; hộ tự cấu hình không được xóa dấu vết overdue_critical.
+    if (notifyFarmerByAdmin) {
+      await this.db.query(
+        `DELETE FROM care_protocol_alert_logs
+         WHERE plan_id = $1 AND milestone_code = $2`,
+        [planId, targetSpec.code],
+      );
+    } else {
+      await this.db.query(
+        `DELETE FROM care_protocol_alert_logs
+         WHERE plan_id = $1 AND milestone_code = $2 AND alert_type <> 'overdue_critical'`,
+        [planId, targetSpec.code],
+      );
+    }
 
     const scheduledOn = addIsoDays(cycleStartOn, targetSpec.cycleDayStart);
     const dueOn = addIsoDays(cycleStartOn, targetSpec.cycleDayEnd);
@@ -341,7 +502,14 @@ export class CareProtocolService {
       );
     }
 
-    const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
+    const hhStatusRes = await this.db.query<{ status: string }>("SELECT status FROM households WHERE id = $1", [
+      householdId,
+    ]);
+    if (hhStatusRes.rows[0]?.status === "violation") {
+      throw badRequest("Hộ đang ở trạng thái vi phạm chưa khắc phục, tạm khóa khai báo mốc chăm sóc.");
+    }
+
+    const plotCode = (await assertPlotOwned(this.db, householdId, dto.plotCode)).trim().toUpperCase();
     const milestoneSpec = getSequentialMilestone(dto.milestoneCode);
     const senProSpec = !milestoneSpec ? getSenProRule(dto.milestoneCode) : undefined;
 
@@ -349,23 +517,45 @@ export class CareProtocolService {
       throw badRequest("Mã mốc quy trình không hợp lệ theo tài liệu 2026-2027.");
     }
 
+    if (dto.invoicePhotoId !== undefined && dto.invoicePhotoId !== null && Number(dto.invoicePhotoId) === Number(dto.fieldPhotoId)) {
+      throw badRequest("Ảnh hóa đơn vật tư phải là ảnh chụp riêng biệt với ảnh hiện trường vườn.");
+    }
+
     const requiresInvoice = milestoneSpec ? milestoneSpec.requiresInvoicePhoto : true;
     if (requiresInvoice && !dto.invoicePhotoId) {
       throw badRequest(
-        "Mốc chăm sóc này có sử dụng phân bón / chế phẩm, vui lòng chụp ảnh hóa đơn mua hàng hoặc nhãn bao bì vật tư để hoàn tất khai báo.",
+        "Mốc chăm sóc này có sử dụng phân bón hoặc chế phẩm, vui lòng chụp ảnh hóa đơn mua hàng hoặc nhãn bao bì vật tư để hoàn tất khai báo.",
       );
     }
 
-    const attachmentIdsToVerify = [
-      dto.fieldPhotoId,
-      ...(dto.invoicePhotoId ? [dto.invoicePhotoId] : []),
-    ];
-    await this.uploads.assertUsable(attachmentIdsToVerify, user, "journal", householdId);
+    await this.uploads.assertUsable([dto.fieldPhotoId], user, "journal", householdId, { imagesOnly: true });
+    if (dto.invoicePhotoId) {
+      await this.uploads.assertUsable([dto.invoicePhotoId], user, "journal", householdId, { imagesOnly: true });
+    }
 
-    // Đảm bảo kế hoạch tồn tại cho thửa đất này
+    // Kiểm tra diện tích và trạng thái thửa để chặn thửa vi phạm và điền vào sổ phun thuốc (nếu có)
+    let plotAreaHa = 1.0;
+    if (await plotsTableExists(this.db)) {
+      const aRes = await this.db.query<{ area_ha: number; status: string }>(
+        "SELECT area_ha::float8 AS area_ha, status FROM plots WHERE household_id = $1 AND upper(code) = upper($2) LIMIT 1",
+        [householdId, plotCode],
+      );
+      if (aRes.rows[0]?.status === "violation") {
+        throw badRequest("Thửa đất đang bị khóa do vi phạm, vui lòng liên hệ cán bộ HTX xử lý trước khi khai báo.");
+      }
+      if (aRes.rows[0]?.area_ha && aRes.rows[0].area_ha > 0) {
+        plotAreaHa = aRes.rows[0].area_ha;
+      }
+    }
+
+    // Đảm bảo kế hoạch tồn tại cho thửa đất này (không tạo bản trùng khác hoa/thường)
     await this.db.query(
       `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
-       VALUES ($1, $2, $3, $4::date, 1, 'cb-rua-vuon')
+       SELECT $1, $2::text, $3, $4::date, 1, 'cb-rua-vuon'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM plot_care_plans pcp
+         WHERE pcp.household_id = $1 AND upper(pcp.plot_code) = upper($2::text) AND pcp.season = $3
+       )
        ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
       [householdId, plotCode, PROTOCOL_SEASON, today],
     );
@@ -394,18 +584,6 @@ export class CareProtocolService {
         status: pRow.status,
         isolation_days: pRow.isolation_days ?? 0,
       };
-    }
-
-    // Kiểm tra diện tích thửa để điền vào sổ phun thuốc (nếu có)
-    let plotAreaHa = 1.0;
-    if (await plotsTableExists(this.db)) {
-      const aRes = await this.db.query<{ area_ha: number }>(
-        "SELECT area_ha::float8 AS area_ha FROM plots WHERE household_id = $1 AND upper(code) = upper($2) LIMIT 1",
-        [householdId, plotCode],
-      );
-      if (aRes.rows[0]?.area_ha && aRes.rows[0].area_ha > 0) {
-        plotAreaHa = aRes.rows[0].area_ha;
-      }
     }
 
     const scheduledOn = milestoneSpec ? addIsoDays(plan.cycle_start_on, milestoneSpec.cycleDayStart) : performedOn;
@@ -485,7 +663,8 @@ export class CareProtocolService {
       // 2. Nếu có kết hợp phun thuốc BVTV -> ghi đồng thời vào spray_records để khóa ngày cách ly PHI
       let sprayRecordId: number | null = null;
       if (pesticideInfo) {
-        const mrlStatus = pesticideInfo.status === "banned" ? "exceeded" : "pass";
+        const mrlStatus =
+          pesticideInfo.status === "banned" || pesticideInfo.status === "restricted" ? "exceeded" : "pass";
         const sIns = await client.query<{ id: number }>(
           `INSERT INTO spray_records
              (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, late_reason)
@@ -557,20 +736,23 @@ export class CareProtocolService {
         ],
       );
 
-      // 4. Tự động ghi nhận phản hồi khắc phục nếu hộ đang có cảnh báo trễ nhật ký hoặc trễ tiến độ trên thửa này
-      const autoResponseNote = `Đã khai báo hoàn thành mốc ${stageLabel} tại Thửa ${plotCode} ngày ${formatIsoVn(performedOn)}.`;
-      await client.query(
-        `UPDATE violations v
-         SET farmer_response = $2,
-             farmer_response_at = now(),
-             farmer_response_photo_id = COALESCE(farmer_response_photo_id, $3)
-         WHERE v.household_id = $1
-           AND v.status = 'open'
-           AND v.farmer_response IS NULL
-           AND (${isJournalViolationSql("v")} OR v.title ILIKE '%quy trình%')
-           AND (v.plot_code IS NULL OR upper(v.plot_code) = upper($4))`,
-        [householdId, autoResponseNote, dto.fieldPhotoId, plotCode],
-      );
+      // 4. Chỉ tự động ghi nhận phản hồi cho vi phạm trễ nhật ký hoặc quá hạn lộ trình khi bản khai báo đạt chuẩn
+      if (compliance.complianceStatus === "compliant") {
+        const autoResponseNote = `Đã khai báo hoàn thành mốc ${stageLabel} tại Thửa ${plotCode} ngày ${formatIsoVn(performedOn)}.`;
+        await client.query(
+          `UPDATE violations v
+           SET farmer_response = $2,
+               farmer_response_at = now(),
+               farmer_response_photo_id = COALESCE(farmer_response_photo_id, $3)
+           WHERE v.household_id = $1
+             AND v.status = 'open'
+             AND v.farmer_response IS NULL
+             AND v.detected_on <= $5::date
+             AND (${isJournalViolationSql("v")} OR v.title ILIKE '%trễ hạn%' OR v.title ILIKE '%quá hạn%')
+             AND (v.plot_code IS NULL OR upper(v.plot_code) = upper($4))`,
+          [householdId, autoResponseNote, dto.fieldPhotoId, plotCode, performedOn],
+        );
+      }
 
       // 5. Nếu khai báo sai quy trình nghiêm trọng (violation) -> mở bản ghi vi phạm để cán bộ HTX theo dõi sát
       let createdViolationId: number | null = null;
@@ -657,6 +839,16 @@ export class CareProtocolService {
     });
 
     // 7. Gửi cảnh báo tức thời tới CẢ Hộ nông dân VÀ Quản trị viên HTX nếu phát hiện sai lệch hoặc trễ hạn
+    if (pesticideInfo && (pesticideInfo.status === "banned" || pesticideInfo.status === "restricted")) {
+      const pestLabel = pesticideInfo.status === "banned" ? "cấm sử dụng" : "hạn chế sử dụng";
+      await this.notifications.notifyRoles(INSPECTION_ROLES, {
+        kind: "violation",
+        title: `Cảnh báo thuốc BVTV ${pestLabel}: ${pesticideInfo.name}`,
+        body: `Hộ ${plan.household_name} khai báo mốc ${stageLabel} tại Thửa ${plotCode} có sử dụng ${pesticideInfo.name}.`,
+        link: "/admin?section=spray",
+      });
+    }
+
     if (compliance.complianceStatus !== "compliant") {
       const issueText = compliance.issues.map((i) => i.message).join(" ");
       const isSevere = compliance.complianceStatus === "violation";
@@ -749,13 +941,25 @@ export class CareProtocolService {
     };
   }
 
-  /** Quản trị viên / Cán bộ HTX: danh sách tiến độ toàn xã (có lọc theo phạm vi thôn cho Cán bộ thôn). */
+  /** Quản trị viên / Cán bộ HTX: danh sách tiến độ toàn xã (có lọc theo phạm vi thôn/xã/địa bàn/HTX). */
   async adminListPlans(query: CareProtocolListQueryDto, user: AuthUser) {
+    if (
+      (user.role === "htx_officer" || user.role === "admin") &&
+      (user.coopCode || "HTX-CUNE").trim().toUpperCase() !== "HTX-CUNE"
+    ) {
+      return {
+        season: PROTOCOL_SEASON,
+        today: todayVn(),
+        kpi: { totalPlans: 0, onTrack: 0, dueNow: 0, overdue: 0, deviated: 0, completed: 0 },
+        data: [],
+      };
+    }
+
     const conditions: string[] = [];
     const params: unknown[] = [];
 
-    if (user.role === "village_officer") {
-      params.push(user.villageId ?? -1);
+    if (user.role === "village_officer" && user.villageId !== null && user.villageId !== undefined) {
+      params.push(user.villageId);
       conditions.push(`h.village_id = $${params.length}`);
     }
     if (query.householdId) {
@@ -763,15 +967,17 @@ export class CareProtocolService {
       conditions.push(`pcp.household_id = $${params.length}`);
     }
     if (query.q?.trim()) {
-      params.push(`%${query.q.trim()}%`);
+      const escaped = query.q.trim().replace(/[\\%_]/g, "\\$&");
+      params.push(`%${escaped}%`);
       const idx = params.length;
       conditions.push(
-        `(pcp.plot_code ILIKE $${idx} OR h.name ILIKE $${idx} OR h.code ILIKE $${idx} OR v.name ILIKE $${idx})`,
+        `(pcp.plot_code ILIKE $${idx} ESCAPE '\\' OR h.name ILIKE $${idx} ESCAPE '\\' OR h.code ILIKE $${idx} ESCAPE '\\' OR v.name ILIKE $${idx} ESCAPE '\\')`,
       );
     }
 
     const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const plans = await this.loadPlanRows(whereSql, params);
+    const allPlans = await this.loadPlanRows(whereSql, params);
+    const plans = allPlans.filter((p) => isStaffInPlanScope(user, p));
     const declarations = await this.loadDeclarationsByPlanIds(plans.map((p) => p.id));
     const today = todayVn();
 
@@ -811,21 +1017,31 @@ export class CareProtocolService {
   async adminGetPlanDetail(id: number, user: AuthUser) {
     const [plan] = await this.loadPlanRows("WHERE pcp.id = $1", [id]);
     if (!plan) throw notFound("Không tìm thấy kế hoạch chăm sóc của thửa đất này.");
-    await this.assertStaffCanAccessHousehold(user, plan.household_id);
+    if (!isStaffInPlanScope(user, plan)) {
+      throw forbidden("Kế hoạch chăm sóc này không thuộc phạm vi quản lý của tài khoản.");
+    }
 
     const declarations = await this.loadDeclarationsByPlanIds([plan.id]);
     return this.buildDetailedPlanTimeline(plan, declarations.get(plan.id) ?? [], todayVn());
   }
 
-  /** Quét tự động toàn bộ lộ trình đang hoạt động trên toàn xã để phát nhắc lịch & cảnh báo quá hạn. */
-  async scanAndNotifyAllPlans(): Promise<{
+  /** Quét tự động toàn bộ lộ trình đang hoạt động trong phạm vi quản lý để phát nhắc lịch & cảnh báo quá hạn. */
+  async scanAndNotifyAllPlans(user?: AuthUser): Promise<{
     scanned: number;
     dueNotifications: number;
     overdueWarnings: number;
     criticalViolations: number;
   }> {
-    const plans = await this.loadPlanRows("WHERE pcp.status = 'active'", []);
-    return this.evaluateAndDispatchAlerts(plans);
+    if (
+      user &&
+      (user.role === "htx_officer" || user.role === "admin") &&
+      (user.coopCode || "HTX-CUNE").trim().toUpperCase() !== "HTX-CUNE"
+    ) {
+      return { scanned: 0, dueNotifications: 0, overdueWarnings: 0, criticalViolations: 0 };
+    }
+    const allPlans = await this.loadPlanRows("WHERE pcp.status = 'active'", []);
+    const scopedPlans = user ? allPlans.filter((p) => isStaffInPlanScope(user, p)) : allPlans;
+    return this.evaluateAndDispatchAlerts(scopedPlans);
   }
 
   async scanAndNotifyPlansForHousehold(householdId: number) {
@@ -1015,13 +1231,22 @@ export class CareProtocolService {
   }
 
   private async assertStaffCanAccessHousehold(user: AuthUser, householdId: number): Promise<void> {
-    if (user.role !== "village_officer") return;
-    const { rows } = await this.db.query<{ ok: number }>(
-      "SELECT 1 AS ok FROM households WHERE id = $1 AND village_id = $2",
-      [householdId, user.villageId ?? -1],
+    const { rows } = await this.db.query<{
+      id: number;
+      village_id: number;
+      village_name: string;
+    }>(
+      `SELECT h.id, h.village_id, v.name AS village_name
+       FROM households h
+       JOIN villages v ON v.id = h.village_id
+       WHERE h.id = $1`,
+      [householdId],
     );
     if (rows.length === 0) {
-      throw forbidden("Hộ nông dân này không thuộc địa bàn thôn bạn phụ trách.");
+      throw badRequest("Hộ nông dân không tồn tại.");
+    }
+    if (!isStaffInPlanScope(user, rows[0])) {
+      throw forbidden("Hộ nông dân này không thuộc địa bàn hoặc phạm vi quản lý của tài khoản.");
     }
   }
 

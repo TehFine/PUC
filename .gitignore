@@ -32,8 +32,8 @@ next-env.d.ts
 
 # Dữ liệu PostgreSQL và tệp tải lên chạy cục bộ
 .local-db/
-uploads/
-**/uploads/
+/uploads/
+/backend/uploads/
 
 # Nhật ký và tệp hệ thống
 *.log

@@ -1,7 +1,7 @@
 import type { FeatureCollection, Polygon } from "geojson";
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
-import { AppException, forbidden } from "../common/errors/app.exception";
+import { AppException, badRequest, forbidden } from "../common/errors/app.exception";
 import { resolvePlotHouseholdId, syncHouseholdAndVillageStats } from "../common/sql/stats-sync";
 import { DatabaseService } from "../database/database.service";
 import type {
@@ -95,10 +95,25 @@ function asNumber(value: string | number | null | undefined): number {
   return 0;
 }
 
+function safeParsePolygon(raw: string | null | undefined): Polygon {
+  if (!raw || typeof raw !== "string") {
+    return { type: "Polygon", coordinates: [] };
+  }
+  try {
+    const parsed = JSON.parse(raw) as Polygon;
+    if (parsed && parsed.type === "Polygon" && Array.isArray(parsed.coordinates)) {
+      return parsed;
+    }
+  } catch {
+    // Bỏ qua dữ liệu GeoJSON hỏng để không làm gãy tiến trình đọc danh sách.
+  }
+  return { type: "Polygon", coordinates: [] };
+}
+
 function rowToFeature(row: PlotRow): PlotFeature {
   return {
     type: "Feature",
-    geometry: JSON.parse(row.geometry_json) as Polygon,
+    geometry: safeParsePolygon(row.geometry_json),
     properties: {
       id: String(row.id),
       code: row.code,
@@ -126,6 +141,10 @@ function rowToFeature(row: PlotRow): PlotFeature {
 
 const MAX_RINGS_PER_POLYGON = 32;
 const MAX_POINTS_PER_RING = 2000;
+const VN_MIN_LNG = 102.0;
+const VN_MAX_LNG = 110.5;
+const VN_MIN_LAT = 8.0;
+const VN_MAX_LAT = 24.0;
 
 function normalizeGeometry(geometry: unknown): Polygon {
   if (!geometry || typeof geometry !== "object") {
@@ -139,6 +158,7 @@ function normalizeGeometry(geometry: unknown): Polygon {
     throw new PlotInputError(`Polygon không được vượt quá ${MAX_RINGS_PER_POLYGON} vòng tọa độ.`);
   }
 
+  let totalVertices = 0;
   const rings = candidate.coordinates.map((ring) => {
     if (!Array.isArray(ring) || ring.length < 3) {
       throw new PlotInputError("Polygon cần ít nhất 3 điểm.");
@@ -152,8 +172,11 @@ function normalizeGeometry(geometry: unknown): Polygon {
       }
       const lng = Number(position[0]);
       const lat = Number(position[1]);
-      if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
         throw new PlotInputError("Tọa độ polygon không hợp lệ.");
+      }
+      if (lng < VN_MIN_LNG || lng > VN_MAX_LNG || lat < VN_MIN_LAT || lat > VN_MAX_LAT) {
+        throw new PlotInputError("Tọa độ ranh giới thửa đất phải nằm trong phạm vi lãnh thổ Việt Nam.");
       }
       return [lng, lat];
     });
@@ -164,6 +187,10 @@ function normalizeGeometry(geometry: unknown): Polygon {
     }
     if (positions.length < 4) {
       throw new PlotInputError("Polygon cần ít nhất 3 điểm và phải khép kín.");
+    }
+    totalVertices += positions.length;
+    if (totalVertices > MAX_POINTS_PER_RING) {
+      throw new PlotInputError(`Polygon không được vượt quá ${MAX_POINTS_PER_RING} điểm tọa độ.`);
     }
     return positions;
   });
@@ -288,10 +315,46 @@ export class PlotsService {
     return { type: "FeatureCollection", features: rows.map(rowToFeature) };
   }
 
+  /** Kiểm định hình học PostGIS: ST_IsValid, ST_NPoints <= 2000 và ST_Area(geom::geography)/10000 trong [0.005, 500] ha. */
+  private async validatePostgisGeometry(
+    queryable: { query: typeof DatabaseService.prototype.query },
+    geometry: Polygon,
+  ): Promise<number> {
+    let row: { is_valid: boolean; n_points: number; area_ha: number } | undefined;
+    try {
+      const res = await queryable.query<{ is_valid: boolean; n_points: number; area_ha: number }>(
+        `WITH g AS (
+           SELECT ST_SetSRID(ST_GeomFromGeoJSON($1), 4326) AS geom
+         )
+         SELECT ST_IsValid(geom) AS is_valid,
+                ST_NPoints(geom)::int AS n_points,
+                (ST_Area(geom::geography) / 10000.0)::float8 AS area_ha
+         FROM g`,
+        [JSON.stringify(geometry)],
+      );
+      row = res.rows[0];
+    } catch {
+      throw badRequest("Hình học ranh giới thửa đất không hợp lệ (tự cắt hoặc đảo chiều vòng).");
+    }
+    if (!row || !row.is_valid) {
+      throw badRequest("Hình học ranh giới thửa đất không hợp lệ (tự cắt hoặc đảo chiều vòng).");
+    }
+    if (Number(row.n_points) > MAX_POINTS_PER_RING) {
+      throw badRequest(`Hình học thửa đất không được vượt quá ${MAX_POINTS_PER_RING} điểm tọa độ.`);
+    }
+    const areaHa = Number(row.area_ha);
+    if (!Number.isFinite(areaHa) || areaHa < 0.005 || areaHa > 500) {
+      throw badRequest("Diện tích thửa đất tính theo ranh giới thực địa phải nằm trong khoảng 0.005 đến 500 ha.");
+    }
+    return Number(areaHa.toFixed(4));
+  }
+
   async createPlot(input: CreatePlotInput, user?: AuthUser): Promise<CreatedPlot> {
     if (!input || typeof input !== "object") throw new PlotInputError("Thiếu dữ liệu thửa đất.");
     const geometry = normalizeGeometry(input.geometry);
+    const pgAreaHa = await this.validatePostgisGeometry(this.db, geometry);
     const properties = toProperties(input, geometry);
+    properties.areaHa = pgAreaHa;
     const scopedVillage = await this.resolveScopedVillageName(user);
     if (scopedVillage !== null) {
       if (!scopedVillage) throw forbidden("Tài khoản cán bộ thôn chưa được gắn thôn phụ trách.");
@@ -355,7 +418,10 @@ export class PlotsService {
                  area_ha = EXCLUDED.area_ha,
                  center_lat = EXCLUDED.center_lat,
                  center_lng = EXCLUDED.center_lng,
-                 geometry_json = EXCLUDED.geometry_json`,
+                 geometry_json = EXCLUDED.geometry_json
+           WHERE plot_signboard_tokens.household_id IS NULL
+              OR EXCLUDED.household_id IS NULL
+              OR plot_signboard_tokens.household_id = EXCLUDED.household_id`,
           [
             rows[0].code,
             rows[0].qr_token ?? null,
@@ -393,46 +459,58 @@ export class PlotsService {
   ): Promise<CreatedPlot> {
     const code = normalizeCode(codeInput);
     const geometry = normalizeGeometry(geometryInput);
-    const computedAreaHa = polygonAreaHa(geometry);
     const scopedVillage = await this.resolveScopedVillageName(user);
     const pool = this.db.pool;
+    const client = await pool.connect();
 
-    const existing = await pool.query<{ id: string | number; village: string | null; household_id: string | number | null }>(
-      "SELECT id, village, household_id FROM plots WHERE code = $1",
-      [code],
-    );
-    if (existing.rows.length === 0) {
-      throw new PlotInputError(`Không tìm thấy thửa đất có mã ${code}.`);
+    try {
+      await client.query("BEGIN");
+      const computedAreaHa = await this.validatePostgisGeometry(client, geometry);
+
+      const existing = await client.query<{
+        id: string | number;
+        village: string | null;
+        household_id: string | number | null;
+      }>("SELECT id, village, household_id FROM plots WHERE code = $1 FOR UPDATE", [code]);
+      if (existing.rows.length === 0) {
+        throw new PlotInputError(`Không tìm thấy thửa đất có mã ${code}.`);
+      }
+      if (scopedVillage !== null && existing.rows[0].village !== scopedVillage) {
+        throw forbidden("Bạn không có quyền chỉnh sửa thửa đất ngoài thôn phụ trách.");
+      }
+
+      const { rows } = await client.query<PlotRow>(
+        `
+          UPDATE plots
+          SET geom = ST_SetSRID(ST_GeomFromGeoJSON($2), 4326),
+              area_ha = CASE WHEN $3::boolean THEN $4::numeric ELSE area_ha END,
+              updated_at = now()
+          WHERE code = $1
+          RETURNING id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
+                    village, zone_code AS zone, variety, planted_year AS year, area_ha,
+                    source, status, source_ref, household_id,
+                    ST_Y(ST_Centroid(geom)) AS lat, ST_X(ST_Centroid(geom)) AS lng,
+                    ST_AsGeoJSON(geom) AS geometry_json
+        `,
+        [code, JSON.stringify(geometry), Boolean(updateArea), computedAreaHa],
+      );
+
+      if (updateArea) {
+        const hhId = existing.rows[0].household_id != null ? Number(existing.rows[0].household_id) : null;
+        await syncHouseholdAndVillageStats(client, {
+          householdIds: hhId ? [hhId] : [],
+          hasPlots: true,
+        });
+      }
+
+      await client.query("COMMIT");
+      return { feature: rowToFeature(rows[0]), persisted: true };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
-    if (scopedVillage !== null && existing.rows[0].village !== scopedVillage) {
-      throw forbidden("Bạn không có quyền chỉnh sửa thửa đất ngoài thôn phụ trách.");
-    }
-
-    const { rows } = await pool.query<PlotRow>(
-      `
-        UPDATE plots
-        SET geom = ST_SetSRID(ST_GeomFromGeoJSON($2), 4326),
-            area_ha = CASE WHEN $3::boolean THEN $4::numeric ELSE area_ha END,
-            updated_at = now()
-        WHERE code = $1
-        RETURNING id, code, sheet_no AS sheet, parcel_no AS parcel, owner_name AS owner,
-                  village, zone_code AS zone, variety, planted_year AS year, area_ha,
-                  source, status, source_ref, household_id,
-                  ST_Y(ST_Centroid(geom)) AS lat, ST_X(ST_Centroid(geom)) AS lng,
-                  ST_AsGeoJSON(geom) AS geometry_json
-      `,
-      [code, JSON.stringify(geometry), Boolean(updateArea), computedAreaHa],
-    );
-
-    if (updateArea) {
-      const hhId = existing.rows[0].household_id != null ? Number(existing.rows[0].household_id) : null;
-      await syncHouseholdAndVillageStats(pool, {
-        householdIds: hhId ? [hhId] : [],
-        hasPlots: true,
-      });
-    }
-
-    return { feature: rowToFeature(rows[0]), persisted: true };
   }
 
   async importCadastral(
@@ -450,32 +528,31 @@ export class PlotsService {
     if (collection.features.length === 0) throw new PlotInputError("Tệp GeoJSON không có thửa đất nào.");
     if (collection.features.length > 2000) throw new PlotInputError("Mỗi lần chỉ nhập tối đa 2.000 thửa.");
 
-    const features = collection.features
-      .map((feature, index) => {
-        const geometry = normalizeGeometry(feature.geometry);
-        const raw = (feature.properties ?? {}) as Record<string, unknown>;
-        const props = toProperties(
-          {
-            code: String(raw.code ?? raw.ma_thua ?? raw.MA_THUA ?? `CAD-${Date.now()}-${index + 1}`),
-            sheet: String(raw.sheet ?? raw.so_to ?? raw.SO_TO ?? ""),
-            parcel: String(raw.parcel ?? raw.so_thua ?? raw.SO_THUA ?? ""),
-            owner: String(raw.owner ?? raw.chu_ho ?? raw.CHU_HO ?? ""),
-            village: String(raw.village ?? raw.thon ?? raw.THON ?? ""),
-            zone: String(raw.zone ?? raw.ma_vung ?? raw.MA_VUNG ?? ""),
-            variety: String(raw.variety ?? raw.giong ?? raw.GIONG ?? ""),
-            year: Number(raw.year ?? raw.nam_trong ?? raw.NAM_TRONG) || undefined,
-            source: "cadastral",
-            status: "pending",
-            geometry,
-          },
+    const features = collection.features.map((feature, index) => {
+      const geometry = normalizeGeometry(feature.geometry);
+      const raw = (feature.properties ?? {}) as Record<string, unknown>;
+      const props = toProperties(
+        {
+          code: String(raw.code ?? raw.ma_thua ?? raw.MA_THUA ?? `CAD-${Date.now()}-${index + 1}`),
+          sheet: String(raw.sheet ?? raw.so_to ?? raw.SO_TO ?? ""),
+          parcel: String(raw.parcel ?? raw.so_thua ?? raw.SO_THUA ?? ""),
+          owner: String(raw.owner ?? raw.chu_ho ?? raw.CHU_HO ?? ""),
+          village: String(raw.village ?? raw.thon ?? raw.THON ?? ""),
+          zone: String(raw.zone ?? raw.ma_vung ?? raw.MA_VUNG ?? ""),
+          variety: String(raw.variety ?? raw.giong ?? raw.GIONG ?? ""),
+          year: Number(raw.year ?? raw.nam_trong ?? raw.NAM_TRONG) || undefined,
+          source: "cadastral",
+          status: "pending",
           geometry,
-        );
-        return {
-          type: "Feature" as const,
-          geometry,
-          properties: { ...props, source: "cadastral" as const, sourceRef: importSource },
-        };
-      });
+        },
+        geometry,
+      );
+      return {
+        type: "Feature" as const,
+        geometry,
+        properties: { ...props, source: "cadastral" as const, sourceRef: importSource },
+      };
+    });
 
     const byCode = new Map<string, (typeof features)[number]>();
     for (const feature of features) {
@@ -488,9 +565,42 @@ export class PlotsService {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      const savedCodes: string[] = [];
+
       for (let offset = 0; offset < uniqueFeatures.length; offset += BATCH_SIZE) {
         const chunk = uniqueFeatures.slice(offset, offset + BATCH_SIZE);
-        await client.query(
+
+        let valRes: { rows: Array<{ is_valid: boolean; n_points: number; area_ha: number }> };
+        try {
+          valRes = await client.query<{ is_valid: boolean; n_points: number; area_ha: number }>(
+            `SELECT ST_IsValid(g.geom) AS is_valid,
+                    ST_NPoints(g.geom)::int AS n_points,
+                    (ST_Area(g.geom::geography) / 10000.0)::float8 AS area_ha
+             FROM UNNEST($1::text[]) WITH ORDINALITY AS u(geom_json, ord)
+             CROSS JOIN LATERAL (SELECT ST_SetSRID(ST_GeomFromGeoJSON(u.geom_json), 4326) AS geom) g
+             ORDER BY u.ord`,
+            [chunk.map((f) => JSON.stringify(f.geometry))],
+          );
+        } catch {
+          throw badRequest("Hình học ranh giới thửa đất không hợp lệ (tự cắt hoặc đảo chiều vòng).");
+        }
+
+        for (let i = 0; i < valRes.rows.length; i++) {
+          const vr = valRes.rows[i];
+          if (!vr || !vr.is_valid) {
+            throw badRequest("Hình học ranh giới thửa đất không hợp lệ (tự cắt hoặc đảo chiều vòng).");
+          }
+          if (Number(vr.n_points) > MAX_POINTS_PER_RING) {
+            throw badRequest(`Hình học thửa đất không được vượt quá ${MAX_POINTS_PER_RING} điểm tọa độ.`);
+          }
+          const aHa = Number(vr.area_ha);
+          if (!Number.isFinite(aHa) || aHa < 0.005 || aHa > 500) {
+            throw badRequest("Diện tích thửa đất tính theo ranh giới thực địa phải nằm trong khoảng 0.005 đến 500 ha.");
+          }
+          chunk[i].properties.areaHa = Number(aHa.toFixed(4));
+        }
+
+        const upserted = await client.query<{ code: string }>(
           `
             INSERT INTO plots (
               code, sheet_no, parcel_no, owner_name, village, zone_code, variety,
@@ -520,6 +630,9 @@ export class PlotsService {
               source_ref = EXCLUDED.source_ref,
               geom = EXCLUDED.geom,
               updated_at = now()
+            WHERE plots.source NOT IN ('measured')
+              AND plots.status NOT IN ('approved', 'violation')
+            RETURNING code
           `,
           [
             chunk.map((f) => f.properties.code),
@@ -536,10 +649,12 @@ export class PlotsService {
             chunk.map((f) => JSON.stringify(f.geometry)),
           ],
         );
+        for (const r of upserted.rows) {
+          savedCodes.push(r.code);
+        }
       }
 
-      const importedCodes = uniqueFeatures.map((f) => f.properties.code);
-      if (importedCodes.length > 0) {
+      if (savedCodes.length > 0) {
         // Tự gắn household_id khi tên chủ thửa trùng duy nhất trong cùng thôn hoặc trên toàn HTX.
         await client.query(
           `UPDATE plots p
@@ -572,14 +687,14 @@ export class PlotsService {
              ORDER BY p0.id, (lower(btrim(v.name)) = lower(btrim(COALESCE(p0.village, '')))) DESC
            ) m
            WHERE p.id = m.plot_id`,
-          [importedCodes],
+          [savedCodes],
         );
 
         const affectedHh = await client.query<{ household_id: number | string }>(
           `SELECT DISTINCT household_id
            FROM plots
            WHERE code = ANY($1::text[]) AND household_id IS NOT NULL`,
-          [importedCodes],
+          [savedCodes],
         );
         await syncHouseholdAndVillageStats(client, {
           householdIds: affectedHh.rows.map((r) => Number(r.household_id)),
@@ -588,7 +703,7 @@ export class PlotsService {
       }
 
       await client.query("COMMIT");
-      return { imported: features.length, persisted: true };
+      return { imported: savedCodes.length, persisted: true };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -600,8 +715,8 @@ export class PlotsService {
   async addMeasurement(input: MeasurementInput, user?: AuthUser): Promise<MeasurementResult> {
     if (!input || typeof input !== "object") throw new PlotInputError("Thiếu dữ liệu kết quả đo.");
     const geometry = normalizeGeometry(input.geometry);
-    const areaHa = polygonAreaHa(geometry);
-    const plotCode = cleanText(input.plotCode, 64);
+    const areaHa = await this.validatePostgisGeometry(this.db, geometry);
+    let plotCode = cleanText(input.plotCode, 64);
     if (!plotCode) throw new PlotInputError("Thiếu mã thửa cần đối chiếu.");
 
     const scopedVillage = await this.resolveScopedVillageName(user);
@@ -609,22 +724,31 @@ export class PlotsService {
 
     let plotId: number | null = null;
     let plotVillage: string | null = null;
-    if (input.plotId && /^\d+$/.test(input.plotId)) {
-      const found = await pool.query<{ id: string | number; village: string | null }>(
-        "SELECT id, village FROM plots WHERE id = $1",
-        [Number(input.plotId)],
+    const rawPlotId = input.plotId !== undefined && input.plotId !== null ? String(input.plotId).trim() : "";
+    if (rawPlotId !== "") {
+      if (!/^\d+$/.test(rawPlotId)) {
+        throw badRequest("Định danh thửa đất (plotId) không hợp lệ.");
+      }
+      const found = await pool.query<{ id: string | number; code: string; village: string | null }>(
+        "SELECT id, code, village FROM plots WHERE id = $1",
+        [Number(rawPlotId)],
       );
       if (found.rows.length > 0) {
+        if (String(found.rows[0].code).trim().toUpperCase() !== plotCode.toUpperCase()) {
+          throw badRequest("Mã thửa (plotCode) không khớp với thửa đất được chọn (plotId).");
+        }
         plotId = Number(found.rows[0].id);
+        plotCode = found.rows[0].code;
         plotVillage = found.rows[0].village;
       }
     } else {
-      const found = await pool.query<{ id: string | number; village: string | null }>(
-        "SELECT id, village FROM plots WHERE code = $1",
+      const found = await pool.query<{ id: string | number; code: string; village: string | null }>(
+        "SELECT id, code, village FROM plots WHERE upper(code) = upper($1)",
         [plotCode],
       );
       if (found.rows.length > 0) {
         plotId = Number(found.rows[0].id);
+        plotCode = found.rows[0].code;
         plotVillage = found.rows[0].village;
       }
     }
@@ -659,7 +783,7 @@ export class PlotsService {
         areaHa: asNumber(row.area_ha),
         note: row.note ?? undefined,
         createdAt: row.created_at,
-        geometry: JSON.parse(row.geometry_json) as Polygon,
+        geometry: safeParsePolygon(row.geometry_json),
         persisted: true,
       },
       persisted: true,
@@ -696,7 +820,7 @@ export class PlotsService {
       areaHa: asNumber(row.area_ha),
       note: row.note ?? undefined,
       createdAt: row.created_at,
-      geometry: JSON.parse(row.geometry_json) as Polygon,
+      geometry: safeParsePolygon(row.geometry_json),
       persisted: true,
     }));
   }

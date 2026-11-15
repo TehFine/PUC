@@ -27,6 +27,10 @@ export class CreateMinuteDto {
 
   @IsOptional()
   @RecordId()
+  villageId?: number | null;
+
+  @IsOptional()
+  @RecordId()
   photoId?: number | null;
 
   @IsOptional()

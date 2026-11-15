@@ -22,9 +22,20 @@ export function slugifyVietnamese(text: string): string {
 
 const MAX_NEWS_CONTENT_BYTES = 50_000;
 const MAX_NEWS_SECTIONS = 30;
+const MAX_SECTION_HEADING_LEN = 300;
+const MAX_SECTION_ITEMS = 30;
+const MAX_PARAGRAPH_LEN = 4000;
+const MAX_BULLET_LEN = 1000;
+const ALLOWED_SECTION_KEYS = new Set(["heading", "paragraphs", "bulletPoints"]);
+
+function isPlainRecord(val: unknown): val is Record<string, unknown> {
+  if (!val || typeof val !== "object" || Array.isArray(val)) return false;
+  const proto = Object.getPrototypeOf(val);
+  return proto === Object.prototype || proto === null;
+}
 
 function validateNewsContent(content: unknown): string {
-  if (!content || typeof content !== "object" || Array.isArray(content)) {
+  if (!isPlainRecord(content)) {
     throw badRequest("Nội dung bản tin phải là một đối tượng.");
   }
   const obj = content as { lead?: unknown; sections?: unknown };
@@ -34,7 +45,68 @@ function validateNewsContent(content: unknown): string {
   if (!Array.isArray(obj.sections) || obj.sections.length > MAX_NEWS_SECTIONS) {
     throw badRequest("Nội dung bản tin phải có danh sách các mục (sections) hợp lệ.");
   }
-  const serialized = JSON.stringify(content);
+
+  const sanitizedSections: Array<{
+    heading?: string;
+    paragraphs: string[];
+    bulletPoints?: string[];
+  }> = [];
+
+  for (const rawSection of obj.sections) {
+    if (!isPlainRecord(rawSection)) {
+      throw badRequest("Mỗi mục trong sections phải là một đối tượng hợp lệ.");
+    }
+    for (const key of Object.keys(rawSection)) {
+      if (!ALLOWED_SECTION_KEYS.has(key)) {
+        throw badRequest(`Trường "${key}" trong mục nội dung bản tin không được hỗ trợ.`);
+      }
+    }
+
+    let cleanHeading: string | undefined;
+    if (rawSection.heading !== undefined && rawSection.heading !== null) {
+      if (typeof rawSection.heading !== "string" || rawSection.heading.length > MAX_SECTION_HEADING_LEN) {
+        throw badRequest(`Tiêu đề mục (heading) phải là chuỗi tối đa ${MAX_SECTION_HEADING_LEN} ký tự.`);
+      }
+      cleanHeading = rawSection.heading;
+    }
+
+    if (!Array.isArray(rawSection.paragraphs) || rawSection.paragraphs.length > MAX_SECTION_ITEMS) {
+      throw badRequest(`Mỗi mục phải có mảng đoạn văn (paragraphs) tối đa ${MAX_SECTION_ITEMS} phần tử.`);
+    }
+    const cleanParagraphs: string[] = [];
+    for (const para of rawSection.paragraphs) {
+      if (typeof para !== "string" || para.length > MAX_PARAGRAPH_LEN) {
+        throw badRequest(`Mỗi đoạn văn (paragraphs) phải là chuỗi tối đa ${MAX_PARAGRAPH_LEN} ký tự.`);
+      }
+      cleanParagraphs.push(para);
+    }
+
+    let cleanBullets: string[] | undefined;
+    if (rawSection.bulletPoints !== undefined && rawSection.bulletPoints !== null) {
+      if (!Array.isArray(rawSection.bulletPoints) || rawSection.bulletPoints.length > MAX_SECTION_ITEMS) {
+        throw badRequest(`Danh sách ý chính (bulletPoints) tối đa ${MAX_SECTION_ITEMS} phần tử.`);
+      }
+      cleanBullets = [];
+      for (const bullet of rawSection.bulletPoints) {
+        if (typeof bullet !== "string" || bullet.length > MAX_BULLET_LEN) {
+          throw badRequest(`Mỗi ý chính (bulletPoints) phải là chuỗi tối đa ${MAX_BULLET_LEN} ký tự.`);
+        }
+        cleanBullets.push(bullet);
+      }
+    }
+
+    sanitizedSections.push({
+      ...(cleanHeading !== undefined ? { heading: cleanHeading } : {}),
+      paragraphs: cleanParagraphs,
+      ...(cleanBullets !== undefined ? { bulletPoints: cleanBullets } : {}),
+    });
+  }
+
+  const normalizedContent = {
+    lead: obj.lead,
+    sections: sanitizedSections,
+  };
+  const serialized = JSON.stringify(normalizedContent);
   if (serialized.length > MAX_NEWS_CONTENT_BYTES) {
     throw badRequest("Nội dung bản tin vượt quá dung lượng cho phép.");
   }
