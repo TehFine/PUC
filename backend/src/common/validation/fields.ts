@@ -27,6 +27,14 @@ export const OptionalText = (max = 500) => applyDecorators(IsOptional(), trim(),
 export const IsoDate = () =>
   applyDecorators(Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "Ngày phải có dạng YYYY-MM-DD." }), IsISO8601({ strict: true }));
 
+/** Ngày tùy chọn (cho phép null/rỗng). */
+export const OptionalIsoDate = () =>
+  applyDecorators(
+    Transform(({ value }: { value: unknown }) => (typeof value === "string" && !value.trim() ? null : value)),
+    IsOptional(),
+    IsoDate(),
+  );
+
 export const NonNegative = () => applyDecorators(IsNumber({ allowNaN: false, allowInfinity: false }), Min(0));
 export const Count = () => applyDecorators(IsInt(), Min(0));
 export const RecordId = () => applyDecorators(IsInt(), IsPositive());

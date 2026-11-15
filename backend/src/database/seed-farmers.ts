@@ -33,13 +33,30 @@ export async function seedDemoFarmers(
     );
     if (inserted.rowCount) created.push(phone);
 
-    // Sản lượng đóng góp vào hai lô thu hoạch đầu tiên.
+    // Sản lượng đóng góp vào hai lô thu hoạch đầu tiên (gắn kèm thửa nguồn của hộ nếu có).
+    const hasPlotsRes = await pool.query<{ ok: boolean }>("SELECT to_regclass('public.plots') IS NOT NULL AS ok");
+    let seedPlotCode = "";
+    if (hasPlotsRes.rows[0]?.ok) {
+      const pRes = await pool.query<{ code: string }>(
+        "SELECT code FROM plots WHERE household_id = $1 ORDER BY id ASC LIMIT 1",
+        [household.id],
+      );
+      seedPlotCode = pRes.rows[0]?.code ?? "";
+    }
+    if (!seedPlotCode) {
+      const ltRes = await pool.query<{ plot_code: string }>(
+        "SELECT plot_code FROM lab_tests WHERE household_id = $1 AND plot_code <> '' ORDER BY id ASC LIMIT 1",
+        [household.id],
+      );
+      seedPlotCode = ltRes.rows[0]?.plot_code ?? "";
+    }
+
     await pool.query(
-      `INSERT INTO harvest_contributions (lot_id, household_id, weight_kg)
-       SELECT l.id, $1, round((300 + (l.id * 137 % 500))::numeric, 1)
+      `INSERT INTO harvest_contributions (lot_id, household_id, plot_code, weight_kg)
+       SELECT l.id, $1, $2, round((300 + (l.id * 137 % 500))::numeric, 1)
        FROM harvest_lots l ORDER BY l.id LIMIT 2
-       ON CONFLICT (lot_id, household_id) DO NOTHING`,
-      [household.id],
+       ON CONFLICT (lot_id, household_id, plot_code) DO NOTHING`,
+      [household.id, seedPlotCode],
     );
   }
 
