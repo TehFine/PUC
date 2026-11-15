@@ -66,9 +66,6 @@ export default function RegisterPage() {
 
         <Link href="/login" className="auth-submit is-link">
           <span>Đã có tài khoản? Đăng nhập</span>
-          <span className="auth-arrow" aria-hidden="true">
-            →
-          </span>
         </Link>
 
         <p className="auth-switch-hint">

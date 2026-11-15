@@ -377,12 +377,7 @@ export default function LoginPage() {
               </span>
             </>
           ) : (
-            <>
-              <span>Đăng nhập</span>
-              <span className="auth-arrow" aria-hidden="true">
-                →
-              </span>
-            </>
+            <span>Đăng nhập</span>
           )}
         </button>
 

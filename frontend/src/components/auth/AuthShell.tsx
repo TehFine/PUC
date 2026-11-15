@@ -22,7 +22,7 @@ interface AsideSpec {
 const ASIDE: Record<Variant, AsideSpec> = {
   login: {
     indexLabel: "01 / Cổng thành viên",
-    subLabel: "Nhật ký số + Mã vùng PUC",
+    subLabel: "Nhật ký số - Mã vùng PUC",
     kicker: "Cổng thành viên",
     slides: [
       {
@@ -63,7 +63,7 @@ const ASIDE: Record<Variant, AsideSpec> = {
   },
   register: {
     indexLabel: "02 / Hồ sơ vùng trồng",
-    subLabel: "Thẩm định + Cấp mã thửa",
+    subLabel: "Thẩm định - Cấp mã thửa",
     kicker: "Đăng ký thành viên",
     slides: [
       {
@@ -104,7 +104,7 @@ const ASIDE: Record<Variant, AsideSpec> = {
   },
   forgot: {
     indexLabel: "03 / Bảo mật tài khoản",
-    subLabel: "Xác minh CCCD + Phê duyệt",
+    subLabel: "Xác minh CCCD - Phê duyệt",
     kicker: "Khôi phục tài khoản",
     slides: [
       {
@@ -185,7 +185,7 @@ export default function AuthShell({
               HTX Cư Né
             </Link>
             <span className="auth-brand-sep" aria-hidden="true" />
-            <span className="auth-brand-meta">Cổng thành viên · Đắk Lắk</span>
+            <span className="auth-brand-meta">Cổng thành viên - Đắk Lắk</span>
           </div>
 
           <nav className="auth-topbar-actions" aria-label="Điều hướng nhanh">
@@ -217,8 +217,8 @@ export default function AuthShell({
             <div className="auth-media">
               <DwellSlideshow
                 slides={aside.slides}
-                sizes="(max-width: 960px) 50vw, 52vw"
-                priorityFirst
+                sizes="(max-width: 960px) 1px, 52vw"
+                mobileCollage={false}
               />
             </div>
 
@@ -285,7 +285,7 @@ export default function AuthShell({
       <footer className="auth-foot">
         <div className="auth-foot-inner">
           <p className="auth-foot-copy">
-            © 2026 HTX Nông nghiệp Cư Né · Krông Búk, Đắk Lắk
+            © 2026 HTX Nông nghiệp Cư Né - Krông Búk, Đắk Lắk
           </p>
           <nav className="auth-foot-links" aria-label="Liên kết chân trang">
             <Link href="/" className="auth-foot-link">
