@@ -143,7 +143,8 @@ export type UploadPurpose =
   | "violation"
   | "news"
   | "catalog"
-  | "avatar";
+  | "avatar"
+  | "lab";
 
 export interface UploadedFile {
   id: number;

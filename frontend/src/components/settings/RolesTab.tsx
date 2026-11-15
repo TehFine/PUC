@@ -15,6 +15,7 @@ export default function RolesTab() {
       htx_officer: 0,
       inspector: 0,
       village_officer: 0,
+      enterprise: 0,
       farmer: 0,
     };
     for (const acc of accounts.rows) {

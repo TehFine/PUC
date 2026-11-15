@@ -59,6 +59,25 @@ export default function RegisterPage() {
           </li>
         </ol>
 
+        <div
+          style={{
+            marginTop: 16,
+            marginBottom: 16,
+            padding: "12px 14px",
+            borderRadius: 6,
+            background: "#f8faf8",
+            border: "1px solid #d7e2d7",
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "#1f2937",
+          }}
+        >
+          <strong style={{ display: "block", marginBottom: 4, color: "#14532d" }}>
+            Quy định tài khoản Đối tác thu mua và Cơ quan quản lý
+          </strong>
+          Hệ thống không mở tự đăng ký cho tài khoản Doanh nghiệp, Cơ sở đóng gói và Cơ quan quản lý nhà nước. Tài khoản xem dữ liệu chi tiết được Ban quản trị HTX Cư Né cấp trực tiếp theo đúng phạm vi quản lý (mã doanh nghiệp, xã phụ trách hoặc địa bàn được giao) kèm bảo mật xác thực 2 lớp (OTP).
+        </div>
+
         <div className="auth-contact-line">
           <span>Liên hệ Văn phòng HTX Cư Né</span>
           <a href="tel:0366663778">0366 663 778</a>

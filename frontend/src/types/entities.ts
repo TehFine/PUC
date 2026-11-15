@@ -116,7 +116,7 @@ export interface Enterprise {
   phone?: string;
   address?: string;
   packhouseCode?: string;
-  status: "active" | "inactive";
+  status: "active" | "suspended" | "revoked" | "inactive";
 }
 
 export interface Contract {
@@ -140,6 +140,8 @@ export interface HarvestItem {
   lotId: number;
   itemType: "fruit" | "box";
   serialCode: string;
+  qrToken?: string | null;
+  pucCode?: string | null;
   weightKg?: number;
   grade?: "A" | "B" | "C";
   printedAt?: string;

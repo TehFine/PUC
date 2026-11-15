@@ -1,11 +1,12 @@
-// Kiểu dữ liệu khu quản trị – kết quả kiểm nghiệm.
+// Kiểu dữ liệu khu quản trị - kết quả kiểm nghiệm.
 
 export type LabResult = "pass" | "fail";
+export type LabRecordStatus = "draft" | "verified";
 
 export interface LabTestRow {
   id: number;
   code: string;
-  householdId: number;
+  householdId?: number;
   householdName: string;
   plotCode: string;
   sampledOn: string;
@@ -15,6 +16,9 @@ export interface LabTestRow {
   chlorpyrifosMgKg: number | null;
   result: LabResult;
   lab: string;
+  recordStatus?: LabRecordStatus;
+  scanAttachmentId?: number | null;
+  scanUrl?: string | null;
 }
 
 export type LabTestRecord = LabTestRow;
@@ -30,4 +34,6 @@ export interface LabTestInput {
   yellowOPositive: boolean;
   result: LabResult;
   lab: string;
+  recordStatus?: LabRecordStatus;
+  scanAttachmentId?: number | null;
 }

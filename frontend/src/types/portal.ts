@@ -51,6 +51,7 @@ export interface PortalProfile {
     areaHa: number;
     status: HouseholdStatus;
     avatarUrl?: string | null;
+    publicTraceConsent?: boolean;
   };
 }
 
@@ -175,11 +176,13 @@ export interface PortalHarvest {
   id: number;
   lotCode: string;
   qrCode?: string | null;
+  qrToken?: string | null;
+  plotCode?: string | null;
   harvestedOn: string;
   weightKg: number;
   buyer: string;
   market: string;
-  status: "exported" | "delivered" | "in_transit" | "sampling";
+  status: "exported" | "delivered" | "in_transit" | "sampling" | "revoked";
 }
 
 export interface PortalHarvestNotice {

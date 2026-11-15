@@ -24,6 +24,7 @@ export interface HouseholdInput {
   plotCount?: number;
   areaHa?: number;
   status?: HouseholdStatus;
+  publicTraceConsent?: boolean;
 }
 
 /** Kết quả `POST /households/import { rows }`. */

@@ -5,5 +5,6 @@ export const ROLE_LABELS: Record<Role, string> = {
   htx_officer: "Cán bộ HTX",
   inspector: "Kiểm tra viên",
   village_officer: "Cán bộ Thôn",
+  enterprise: "Doanh nghiệp / CSĐG",
   farmer: "Nông dân",
 };

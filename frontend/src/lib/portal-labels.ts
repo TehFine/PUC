@@ -27,6 +27,7 @@ export const HARVEST_STATUS: Record<PortalHarvest["status"], { label: string; to
   delivered: { label: "Đã giao", tone: "green" },
   in_transit: { label: "Đang vận chuyển", tone: "blue" },
   sampling: { label: "Đang lấy mẫu", tone: "gold" },
+  revoked: { label: "Đã thu hồi", tone: "red" },
 };
 
 export const APPROVAL_STATUS = {

@@ -9,6 +9,15 @@ import { AuthBusyBorderRing, AuthError, AuthField, PasswordInput, ShowPasswordCh
 import { api, ApiError, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
 import { lockRootScroll } from "@/lib/scroll-lock";
+import type { MfaChallengeResponse } from "@/types/api";
+
+function resolveSafeNextPath(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return null;
+  if (trimmed.startsWith("/login") || trimmed.startsWith("/register")) return null;
+  return trimmed;
+}
 
 interface DemoGoogleAccount {
   id: number;
@@ -97,7 +106,7 @@ function GoogleLogoIcon({ size = 19 }: { size?: number }) {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { status, session, login, loginWithGoogle } = useAuth();
+  const { status, session, login, loginWithGoogle, verifyOtp } = useAuth();
   const formRef = useRef<HTMLFormElement>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -105,7 +114,11 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const [nextPath, setNextPath] = useState<string | null>(null);
+  const [mfaChallenge, setMfaChallenge] = useState<MfaChallengeResponse | null>(null);
+  const [otpCode, setOtpCode] = useState("");
 
   const [googleConfig, setGoogleConfig] = useState<GoogleAuthConfig | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
@@ -120,7 +133,10 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(false);
     setGoogleSubmitting(false);
+    setOtpSubmitting(false);
     setRedirecting(false);
+    setMfaChallenge(null);
+    setOtpCode("");
     setChooserOpen(false);
     setCustomEmailMode(false);
     setCustomEmail("");
@@ -130,12 +146,22 @@ export default function LoginPage() {
     }
   }, []);
 
-  // Điều hướng nếu đã có phiên đăng nhập hợp lệ
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const rawNext = new URLSearchParams(window.location.search).get("next");
+    setNextPath(resolveSafeNextPath(rawNext));
+  }, []);
+
+  // Điều hướng nếu đã có phiên đăng nhập hợp lệ (ưu tiên quay lại trang quét QR nếu có ?next=)
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace(homePathFor(session?.user.role));
+      const fromQuery =
+        typeof window !== "undefined"
+          ? resolveSafeNextPath(new URLSearchParams(window.location.search).get("next"))
+          : null;
+      router.replace(fromQuery ?? nextPath ?? homePathFor(session?.user.role));
     }
-  }, [status, session, router]);
+  }, [status, session, router, nextPath]);
 
   // Tải cấu hình Google Sign-In từ backend
   useEffect(() => {
@@ -195,8 +221,10 @@ export default function LoginPage() {
     };
   }, [chooserOpen, googleSubmitting]);
 
-  const isRedirectingAuth = status === "authenticated" || (redirecting && (submitting || googleSubmitting));
-  const isBusy = submitting || googleSubmitting || isRedirectingAuth;
+  const isRedirectingAuth =
+    status === "authenticated" || (redirecting && (submitting || googleSubmitting || otpSubmitting));
+  const isBusy = submitting || googleSubmitting || otpSubmitting || isRedirectingAuth;
+  const isFromTraceScan = Boolean(nextPath && (nextPath.startsWith("/t/") || nextPath.startsWith("/trace/")));
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -207,11 +235,35 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(cleanUser, password);
+      const challenge = await login(cleanUser, password);
+      if (challenge) {
+        setMfaChallenge(challenge);
+        setOtpCode("");
+        setSubmitting(false);
+        return;
+      }
       setRedirecting(true);
     } catch (err) {
       setError(err instanceof ApiError || err instanceof Error ? err.message : "Không đăng nhập được.");
       setSubmitting(false);
+      setRedirecting(false);
+    }
+  };
+
+  const onVerifyOtpSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (isBusy || !mfaChallenge) return;
+    const cleanCode = otpCode.trim();
+    if (!cleanCode) return;
+
+    setError(null);
+    setOtpSubmitting(true);
+    try {
+      await verifyOtp(mfaChallenge.challengeToken, cleanCode);
+      setRedirecting(true);
+    } catch (err) {
+      setError(err instanceof ApiError || err instanceof Error ? err.message : "Mã xác thực OTP không hợp lệ.");
+      setOtpSubmitting(false);
       setRedirecting(false);
     }
   };
@@ -221,8 +273,14 @@ export default function LoginPage() {
     setChooserError(null);
     setGoogleSubmitting(true);
     try {
-      await loginWithGoogle(payload);
+      const challenge = await loginWithGoogle(payload);
       setChooserOpen(false);
+      if (challenge) {
+        setMfaChallenge(challenge);
+        setOtpCode("");
+        setGoogleSubmitting(false);
+        return;
+      }
       setRedirecting(true);
     } catch (err) {
       const msg = err instanceof ApiError || err instanceof Error ? err.message : "Không đăng nhập bằng Google được.";
@@ -310,7 +368,97 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthShell variant="login" title="Đăng nhập">
+    <AuthShell variant="login" title={mfaChallenge ? "Xác thực 2 lớp (OTP)" : "Đăng nhập"}>
+      {isFromTraceScan && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "10px 12px",
+            borderRadius: 6,
+            background: "rgba(22, 101, 52, 0.08)",
+            border: "1px solid rgba(22, 101, 52, 0.25)",
+            fontSize: 13,
+            lineHeight: 1.5,
+            color: "#14532d",
+          }}
+        >
+          <strong>Dành cho đối tác và cơ quan quản lý:</strong> Sau khi xác thực thành công, hệ thống sẽ quay lại đúng lô vừa quét để hiển thị dữ liệu theo phạm vi được cấp quyền.
+        </div>
+      )}
+
+      {mfaChallenge ? (
+        <form
+          className={`auth-form${isBusy ? " is-processing" : ""}`}
+          onSubmit={onVerifyOtpSubmit}
+          noValidate
+          aria-busy={isBusy}
+        >
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: 6,
+              background: "#f8faf8",
+              border: "1px solid #dce5dc",
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: "#1f2937",
+            }}
+          >
+            Tài khoản <strong>{mfaChallenge.fullName}</strong> (<code>{mfaChallenge.username}</code>) đang bật bảo vệ xác thực 2 lớp. Vui lòng nhập mã OTP 6 chữ số từ ứng dụng xác thực hoặc mã khôi phục dự phòng.
+          </div>
+
+          <AuthField id="login-otp" label="Mã OTP 6 chữ số hoặc mã dự phòng">
+            <input
+              id="login-otp"
+              name="otp"
+              className={`auth-input${error ? " is-error" : ""}`}
+              inputMode="text"
+              autoComplete="one-time-code"
+              autoFocus
+              maxLength={12}
+              placeholder="Ví dụ: 123456 hoặc A1B2C3D4"
+              value={otpCode}
+              disabled={isBusy}
+              style={{ letterSpacing: "0.14em", fontWeight: 600 }}
+              onChange={(event) => {
+                setOtpCode(event.target.value);
+                if (error) setError(null);
+              }}
+            />
+          </AuthField>
+
+          {error && <AuthError>{error}</AuthError>}
+
+          <button
+            id="login-verify-otp"
+            type="submit"
+            className={`auth-submit${otpSubmitting || isRedirectingAuth ? " is-busy" : ""}`}
+            disabled={isBusy || otpCode.trim().length < 6}
+          >
+            {otpSubmitting || isRedirectingAuth ? (
+              <>
+                <AuthBusyBorderRing />
+                <span>{isRedirectingAuth ? "Đang mở hồ sơ…" : "Đang kiểm tra mã OTP…"}</span>
+              </>
+            ) : (
+              <span>Xác nhận mã OTP</span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            className="auth-google-btn"
+            disabled={isBusy}
+            onClick={() => {
+              setMfaChallenge(null);
+              setOtpCode("");
+              setError(null);
+            }}
+          >
+            <span>Đăng nhập bằng tài khoản khác</span>
+          </button>
+        </form>
+      ) : (
       <form
         ref={formRef}
         className={`auth-form${isBusy ? " is-processing" : ""}`}
@@ -407,6 +555,7 @@ export default function LoginPage() {
           )}
         </button>
       </form>
+      )}
 
       <p className="auth-switch-hint">
         <span>Chưa có tài khoản thành viên?</span>

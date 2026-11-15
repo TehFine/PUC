@@ -10,7 +10,7 @@ import { api } from "@/lib/api-client";
 import type { AccountRecord, AccountStatus } from "@/types/accounts";
 import type { Role } from "@/types/api";
 import type { VillageRecord } from "@/types/catalog";
-import type { HouseholdOption } from "@/types/harvest";
+import type { EnterpriseRecord, HouseholdOption } from "@/types/harvest";
 import { ROLE_LABELS } from "./settings-data";
 
 export default function AccountFormModal({
@@ -24,6 +24,7 @@ export default function AccountFormModal({
 }) {
   const villages = useApiList<VillageRecord>("villages");
   const households = useApiList<HouseholdOption>("households");
+  const enterprises = useApiList<EnterpriseRecord>("enterprises");
 
   const [fullName, setFullName] = useState(initial?.fullName ?? "");
   const [username, setUsername] = useState(initial?.username ?? "");
@@ -33,6 +34,10 @@ export default function AccountFormModal({
   const [status, setStatus] = useState<AccountStatus>(initial?.status ?? "active");
   const [villageId, setVillageId] = useState(str(initial?.villageId));
   const [householdId, setHouseholdId] = useState(str(initial?.householdId));
+  const [enterpriseId, setEnterpriseId] = useState(str(initial?.enterpriseId));
+  const [assignedCommune, setAssignedCommune] = useState(initial?.assignedCommune ?? "Xã Cư Né");
+  const [assignedRegion, setAssignedRegion] = useState(initial?.assignedRegion ?? "Tỉnh Đắk Lắk");
+  const [coopCode, setCoopCode] = useState(initial?.coopCode ?? "HTX-CUNE");
   const [localError, setLocalError] = useState<string | null>(null);
 
   const { run, pending, error } = useMutation(async () => {
@@ -43,7 +48,13 @@ export default function AccountFormModal({
       role,
       status,
       villageId: villageId ? Number(villageId) : null,
-      householdId: householdId ? Number(householdId) : null,
+      householdId: role === "farmer" && householdId ? Number(householdId) : null,
+      enterpriseId: role === "enterprise" && enterpriseId ? Number(enterpriseId) : null,
+      assignedCommune:
+        role === "village_officer" && assignedCommune.trim() ? assignedCommune.trim() : null,
+      assignedRegion:
+        role === "inspector" && assignedRegion.trim() ? assignedRegion.trim() : null,
+      coopCode: coopCode.trim() ? coopCode.trim().toUpperCase() : "HTX-CUNE",
     };
     if (password.trim()) {
       body.password = password.trim();
@@ -65,6 +76,11 @@ export default function AccountFormModal({
       if (password.trim().length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
         return setLocalError("Mật khẩu cần tối thiểu 8 ký tự, bao gồm cả chữ cái và chữ số.");
       }
+    }
+    if (role === "enterprise" && !enterpriseId) {
+      return setLocalError(
+        "Vui lòng chọn Doanh nghiệp hoặc Cơ sở đóng gói để gắn phạm vi xem chi tiết lô hàng.",
+      );
     }
     setLocalError(null);
     if ((await run()) !== undefined) {
@@ -126,23 +142,67 @@ export default function AccountFormModal({
             { value: "locked", label: "Khóa" },
           ]}
         />
-        <SelectField
-          label="Thôn phụ trách (tùy chọn)"
-          value={villageId}
-          onChange={setVillageId}
-          placeholder="— Không gắn thôn —"
-          options={villages.rows.map((v) => ({ value: String(v.id), label: v.name }))}
-        />
-        <SelectField
-          label="Gắn với hộ nông dân (cho vai trò Nông dân)"
-          value={householdId}
-          onChange={setHouseholdId}
-          placeholder="— Không gắn hộ —"
-          options={households.rows.map((h) => ({
-            value: String(h.id),
-            label: `${h.code} – ${h.name}${h.villageName ? ` (${h.villageName})` : ""}`,
-          }))}
-        />
+        {role === "enterprise" && (
+          <SelectField
+            label="Doanh nghiệp / Cơ sở đóng gói thuộc quyền"
+            required
+            value={enterpriseId}
+            onChange={setEnterpriseId}
+            placeholder="— Chọn doanh nghiệp liên kết —"
+            options={enterprises.rows.map((ent) => ({
+              value: String(ent.id),
+              label: `${ent.code} – ${ent.name}${ent.packhouseCode ? ` (PHC: ${ent.packhouseCode})` : ""}`,
+            }))}
+          />
+        )}
+        {role === "village_officer" && (
+          <TextField
+            label="Xã phụ trách (phạm vi truy xuất thửa nguồn)"
+            value={assignedCommune}
+            onChange={setAssignedCommune}
+            maxLength={120}
+            placeholder="VD: Xã Cư Né"
+          />
+        )}
+        {role === "inspector" && (
+          <TextField
+            label="Địa bàn quản lý được giao"
+            value={assignedRegion}
+            onChange={setAssignedRegion}
+            maxLength={120}
+            placeholder="VD: Tỉnh Đắk Lắk hoặc Huyện Krông Búk"
+          />
+        )}
+        {(role === "admin" || role === "htx_officer") && (
+          <TextField
+            label="Mã HTX quản lý"
+            value={coopCode}
+            onChange={setCoopCode}
+            maxLength={40}
+            placeholder="VD: HTX-CUNE"
+          />
+        )}
+        {(role === "village_officer" || role === "farmer") && (
+          <SelectField
+            label="Thôn phụ trách (tùy chọn)"
+            value={villageId}
+            onChange={setVillageId}
+            placeholder="— Tất cả thôn trong xã —"
+            options={villages.rows.map((v) => ({ value: String(v.id), label: v.name }))}
+          />
+        )}
+        {role === "farmer" && (
+          <SelectField
+            label="Gắn với hộ nông dân (cho vai trò Nông dân)"
+            value={householdId}
+            onChange={setHouseholdId}
+            placeholder="— Không gắn hộ —"
+            options={households.rows.map((h) => ({
+              value: String(h.id),
+              label: `${h.code} – ${h.name}${h.villageName ? ` (${h.villageName})` : ""}`,
+            }))}
+          />
+        )}
       </FormGrid>
     </FormModal>
   );

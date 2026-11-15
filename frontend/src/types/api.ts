@@ -1,7 +1,7 @@
 // Kiểu dữ liệu "chuẩn" do backend trả về (camelCase, enum, ngày ISO, số là number).
 // Các mapper trong lib/mappers.ts chuyển sang kiểu hiển thị ở types/entities.ts.
 
-export type Role = "admin" | "htx_officer" | "inspector" | "village_officer" | "farmer";
+export type Role = "admin" | "htx_officer" | "inspector" | "village_officer" | "enterprise" | "farmer";
 export type Action = "read" | "create" | "update" | "delete";
 
 export interface AuthUser {
@@ -12,11 +12,56 @@ export interface AuthUser {
   role: Role;
   villageId: number | null;
   householdId: number | null;
+  enterpriseId?: number | null;
+  assignedCommune?: string | null;
+  assignedRegion?: string | null;
+  coopCode?: string;
+  twoFactorEnabled?: boolean;
+  sessionId?: number | null;
 }
 
 export interface AuthSession {
   user: AuthUser;
   permissions: Record<string, Action[]>;
+}
+
+export interface MfaChallengeResponse {
+  mfaRequired: true;
+  challengeToken: string;
+  username: string;
+  fullName: string;
+}
+
+export interface UserSessionItem {
+  id: number;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string;
+  isCurrent: boolean;
+}
+
+export interface TwoFactorSetupResponse {
+  secret: string;
+  otpauthUrl: string;
+  issuer: string;
+  accountName: string;
+}
+
+export interface TraceAccessLogDto {
+  id: number;
+  viewedAt: string;
+  userId: number;
+  username: string;
+  fullName: string;
+  userRole: Role;
+  viewerTier: "public" | "enterprise" | "authority";
+  scannedCode: string;
+  lotCode: string | null;
+  scopeGranted: boolean;
+  scopeReason: string | null;
+  ip: string | null;
 }
 
 export interface ListResponse<T> {
@@ -37,6 +82,7 @@ export interface HouseholdDto {
   plotCount: number;
   areaHa: number;
   status: "qualified" | "improve" | "pending" | "violation";
+  publicTraceConsent?: boolean;
 }
 
 export interface ApprovalDto {
@@ -113,23 +159,33 @@ export interface LabTestDto {
   chlorpyrifosMgKg: number | null;
   result: "pass" | "fail";
   lab: string;
+  scanAttachmentId?: number | null;
+  scanUrl?: string | null;
 }
 
 export interface HarvestDto {
   id: number;
   code: string;
+  variety?: string | null;
   harvestedOn: string;
+  packedOn?: string | null;
+  exportedOn?: string | null;
   weightTons: number;
   householdCount: number;
   buyer: string;
   market: string;
   qrCode: string | null;
-  status: "exported" | "delivered" | "in_transit" | "sampling";
+  status: "exported" | "delivered" | "in_transit" | "sampling" | "revoked";
+  revokedReason?: string | null;
   enterpriseId?: number;
   enterpriseName?: string;
   contractId?: number;
   contractCode?: string;
   packhouseCode?: string;
+  packhouseName?: string | null;
+  packhouseAddress?: string | null;
+  phytosanitaryCertNo?: string | null;
+  phytosanitaryIssuedOn?: string | null;
   gradeAPct?: number;
   gradeBPct?: number;
   gradeCPct?: number;
@@ -151,7 +207,7 @@ export interface EnterpriseDto {
   phone: string | null;
   address: string | null;
   packhouseCode: string | null;
-  status: "active" | "inactive";
+  status: "active" | "suspended" | "revoked" | "inactive";
   createdAt: string;
 }
 

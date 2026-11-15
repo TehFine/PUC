@@ -143,7 +143,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
 
   const topItems = useMemo<NavItem[]>(
     () => [
-      { id: "dashboard", label: "Tổng quan", desc: "Số liệu thống kê và tình hình vùng trồng." },
+      { id: "dashboard", label: "Tổng quan", desc: "Số liệu thống kê và tình hình vùng trồng.", resource: "dashboard" },
       { id: "households", label: "Nông hộ", desc: "Danh sách hộ thành viên và chuẩn xuất khẩu.", resource: "households" },
       { id: "zones", label: "Vùng trồng", desc: "Bản đồ ranh giới thửa đất và chỉ số canh tác.", resource: "plots" },
       {
@@ -160,8 +160,8 @@ export default function Sidebar({ active, onNavigate }: Props) {
       },
       { id: "testing", label: "Kiểm nghiệm", desc: "Kết quả phân tích mẫu và tồn dư thuốc BVTV.", resource: "testing" },
       { id: "harvest", label: "Lô hàng", desc: "Quản lý lô thu hoạch, tem truy xuất và hợp đồng.", resource: "harvest" },
-      { id: "news", label: "Bản tin", desc: "Đăng tải thông báo và tin tức nông nghiệp." },
-      { id: "reports", label: "Báo cáo", desc: "Tổng hợp số liệu định kỳ và xuất báo cáo." },
+      { id: "news", label: "Bản tin", desc: "Đăng tải thông báo và tin tức nông nghiệp.", resource: "news" },
+      { id: "reports", label: "Báo cáo", desc: "Tổng hợp số liệu định kỳ và xuất báo cáo.", resource: "reports" },
       { id: "catalog", label: "Danh mục", desc: "Quản lý thuốc BVTV, phân bón, giống và thôn tổ.", resource: "pesticides" },
     ],
     [],

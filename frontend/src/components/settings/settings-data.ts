@@ -5,6 +5,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   htx_officer: "Cán bộ HTX",
   inspector: "Kiểm tra viên",
   village_officer: "Cán bộ Thôn",
+  enterprise: "Doanh nghiệp / CSĐG",
   farmer: "Nông dân",
 };
 
@@ -58,6 +59,17 @@ export const ROLES: {
     ],
   },
   {
+    role: "enterprise",
+    name: "Doanh nghiệp / Cơ sở đóng gói",
+    perms: [
+      { label: "Quét QR mở rộng cấp Doanh nghiệp (vùng nguồn & sản lượng)", ok: true },
+      { label: "Xem lô hàng xuất khẩu & Hợp đồng liên kết", ok: true },
+      { label: "Xem trạng thái kiểm nghiệm chi tiết", ok: true },
+      { label: "Xem CCCD, SĐT & ranh giới từng thửa cá nhân", ok: false },
+      { label: "Quản lý tài khoản & Nhật ký hệ thống", ok: false },
+    ],
+  },
+  {
     role: "farmer",
     name: "Nông dân (Cổng hộ dân)",
     perms: [
@@ -77,6 +89,7 @@ export const ACTION_COLORS: Record<string, string> = {
   "Xóa": "badge-red",
   "Ghi nhật ký": "badge-gold",
   "Xuất báo cáo": "badge-gray",
+  "Tra cứu QR mở rộng": "badge-blue",
   "Cảnh báo": "badge-red",
 };
 

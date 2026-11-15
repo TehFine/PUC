@@ -13,6 +13,14 @@ export interface AccountRecord {
   villageId: number | null;
   villageName: string | null;
   householdId: number | null;
+  enterpriseId: number | null;
+  enterpriseName: string | null;
+  enterprisePackhouseCode: string | null;
+  assignedCommune: string | null;
+  assignedRegion: string | null;
+  coopCode: string;
+  twoFactorEnabled: boolean;
+  activeSessionCount: number;
   lastLoginAt: string | null;
   createdAt: string;
 }
@@ -27,6 +35,10 @@ export interface AccountInput {
   status: AccountStatus;
   villageId: number | null;
   householdId: number | null;
+  enterpriseId?: number | null;
+  assignedCommune?: string | null;
+  assignedRegion?: string | null;
+  coopCode?: string | null;
 }
 
 export interface AuditLogRecord {

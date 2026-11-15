@@ -1,23 +1,32 @@
 // Kiểu dữ liệu thô (DTO) cho khu quản trị "Chuỗi cung ứng & Lô hàng".
 // Khớp backend: resources/harvest, enterprises, contracts, harvest-declarations, stamps.
 
-export type HarvestLotStatus = "exported" | "delivered" | "in_transit" | "sampling";
+export type HarvestLotStatus = "exported" | "delivered" | "in_transit" | "sampling" | "revoked";
 
 export interface HarvestLotRecord {
   id: number;
   code: string;
+  qrToken?: string | null;
+  variety?: string | null;
   harvestedOn: string;
+  packedOn?: string | null;
+  exportedOn?: string | null;
   weightTons: number;
   householdCount: number;
   buyer: string;
   market: string;
   qrCode: string | null;
   status: HarvestLotStatus;
+  revokedReason?: string | null;
   enterpriseId: number | null;
   enterpriseName: string | null;
   contractId: number | null;
   contractCode: string | null;
   packhouseCode: string | null;
+  packhouseName?: string | null;
+  packhouseAddress?: string | null;
+  phytosanitaryCertNo?: string | null;
+  phytosanitaryIssuedOn?: string | null;
   gradeAPct: number | null;
   gradeBPct: number | null;
   gradeCPct: number | null;
@@ -33,15 +42,23 @@ export interface HarvestLotRecord {
 /** Thân yêu cầu POST/PATCH /harvest (CreateHarvestLotDto). */
 export interface HarvestLotInput {
   code: string;
+  variety?: string;
   harvestedOn: string;
+  packedOn?: string;
+  exportedOn?: string;
   weightTons: number;
   buyer: string;
   market: string;
   status: HarvestLotStatus;
+  revokedReason?: string;
   qrCode?: string | null;
   enterpriseId?: number;
   contractId?: number;
   packhouseCode?: string;
+  packhouseName?: string;
+  packhouseAddress?: string;
+  phytosanitaryCertNo?: string;
+  phytosanitaryIssuedOn?: string;
   gradeAPct?: number;
   gradeBPct?: number;
   gradeCPct?: number;
@@ -58,11 +75,23 @@ export interface HarvestContributionRecord {
   id: number;
   lotId: number;
   householdId: number;
+  plotCode?: string | null;
+  zoneCode?: string | null;
+  variety?: string | null;
+  plotStatus?: string | null;
   householdCode?: string | null;
   householdName?: string | null;
   villageName?: string | null;
   weightKg: number;
   createdAt?: string;
+}
+
+export interface HouseholdPlotOption {
+  plotCode: string;
+  zoneCode?: string | null;
+  variety?: string | null;
+  areaHa?: number | null;
+  status?: string | null;
 }
 
 export type HarvestDeclarationStatus = "submitted" | "confirmed" | "rejected";
@@ -147,6 +176,7 @@ export interface StampAllocationInput {
 export interface FarmerStampRecord {
   id: number;
   serialCode: string;
+  qrToken?: string | null;
   plotCode: string | null;
   status: "allocated" | "activated" | "revoked";
   activatedAt: string | null;
@@ -155,6 +185,8 @@ export interface FarmerStampRecord {
   photoUrl: string | null;
   harvestDate: string | null;
 }
+
+export type EnterpriseStatus = "active" | "suspended" | "revoked" | "inactive";
 
 export interface EnterpriseRecord {
   id: number;
@@ -165,7 +197,7 @@ export interface EnterpriseRecord {
   phone: string | null;
   address: string | null;
   packhouseCode: string | null;
-  status: "active" | "inactive";
+  status: EnterpriseStatus;
   createdAt?: string;
 }
 

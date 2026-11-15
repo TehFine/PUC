@@ -14,6 +14,26 @@ import { ROLE_LABELS } from "./settings-data";
 
 const PAGE_SIZE = 20;
 
+function formatAccountScope(a: AccountRecord): string {
+  if (a.role === "enterprise") {
+    if (a.enterpriseName) {
+      return `${a.enterpriseName}${a.enterprisePackhouseCode ? ` (${a.enterprisePackhouseCode})` : ""}`;
+    }
+    return "Chưa gắn doanh nghiệp";
+  }
+  if (a.role === "village_officer") {
+    if (a.villageName && a.assignedCommune) return `${a.villageName}, ${a.assignedCommune}`;
+    return a.villageName || a.assignedCommune || "Xã Cư Né";
+  }
+  if (a.role === "inspector") {
+    return a.assignedRegion || "Tỉnh Đắk Lắk";
+  }
+  if (a.role === "admin" || a.role === "htx_officer") {
+    return a.coopCode || "HTX-CUNE";
+  }
+  return a.villageName || "—";
+}
+
 export default function AccountsTab({
   createTrigger = 0,
 }: {
@@ -55,6 +75,34 @@ export default function AccountsTab({
       void list.refresh();
     } else if (toggleStatus.error) {
       toast.error(toggleStatus.error);
+    }
+  };
+
+  const revokeRemoteSessions = useMutation(async (account: AccountRecord) => {
+    return api.post<{ revokedCount: number }>(`/accounts/${account.id}/revoke-sessions`);
+  });
+
+  const handleRevokeRemote = async (account: AccountRecord) => {
+    const res = await revokeRemoteSessions.run(account);
+    if (res !== undefined) {
+      toast.success(`Đã đăng xuất từ xa các phiên của tài khoản ${account.username}.`);
+      void list.refresh();
+    } else if (revokeRemoteSessions.error) {
+      toast.error(revokeRemoteSessions.error);
+    }
+  };
+
+  const resetUser2fa = useMutation(async (account: AccountRecord) => {
+    return api.post(`/accounts/${account.id}/reset-2fa`);
+  });
+
+  const handleReset2fa = async (account: AccountRecord) => {
+    const res = await resetUser2fa.run(account);
+    if (res !== undefined) {
+      toast.success(`Đã đặt lại xác thực 2 lớp cho tài khoản ${account.username}.`);
+      void list.refresh();
+    } else if (resetUser2fa.error) {
+      toast.error(resetUser2fa.error);
     }
   };
 
@@ -112,7 +160,8 @@ export default function AccountsTab({
               <th>Họ &amp; Tên</th>
               <th>SĐT / Username</th>
               <th>Vai trò</th>
-              <th>Thôn / Địa bàn</th>
+              <th>Phạm vi truy xuất</th>
+              <th>Bảo mật &amp; Phiên</th>
               <th>Trạng thái</th>
               <th>Đăng nhập cuối</th>
               <th>Thao tác</th>
@@ -120,7 +169,7 @@ export default function AccountsTab({
           </thead>
           <tbody>
             <ListStatusRow
-              colSpan={7}
+              colSpan={8}
               loading={list.loading}
               error={list.error}
               empty={list.rows.length === 0}
@@ -177,7 +226,19 @@ export default function AccountsTab({
                       {ROLE_LABELS[a.role] ?? a.role}
                     </span>
                   </td>
-                  <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{a.villageName || "—"}</td>
+                  <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    {formatAccountScope(a)}
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11.5 }}>
+                      <span className={`badge ${a.twoFactorEnabled ? "badge-green" : "badge-gray"}`}>
+                        {a.twoFactorEnabled ? "2FA OTP: Bật" : "2FA: Chưa bật"}
+                      </span>
+                      <span style={{ color: "var(--text-secondary)" }}>
+                        {a.activeSessionCount ?? 0} phiên đang mở
+                      </span>
+                    </div>
+                  </td>
                   <td>
                     <span className={`badge ${isActive ? "badge-green" : "badge-red"}`}>
                       {isActive ? "Hoạt động" : "Đã khóa"}
@@ -187,10 +248,32 @@ export default function AccountsTab({
                     {a.lastLoginAt ? new Date(a.lastLoginAt).toLocaleString("vi-VN") : "Chưa đăng nhập"}
                   </td>
                   <td>
-                    <div style={{ display: "flex", gap: 5 }}>
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                       <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(a)}>
                         Sửa
                       </button>
+                      {(a.activeSessionCount ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          disabled={revokeRemoteSessions.pending}
+                          title="Đăng xuất từ xa tất cả thiết bị của tài khoản này"
+                          onClick={() => void handleRevokeRemote(a)}
+                        >
+                          Đăng xuất từ xa
+                        </button>
+                      )}
+                      {a.twoFactorEnabled && (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          disabled={resetUser2fa.pending}
+                          title="Đặt lại xác thực 2 lớp nếu người dùng mất thiết bị OTP"
+                          onClick={() => void handleReset2fa(a)}
+                        >
+                          Đặt lại 2FA
+                        </button>
+                      )}
                       <button
                         type="button"
                         className={`btn btn-sm ${isActive ? "btn-gold" : "btn-outline"}`}
