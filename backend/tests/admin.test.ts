@@ -1040,7 +1040,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
       .send({ mrlStatus: "pass", dose: "0.3 lít/ha" });
     expect(sprayPatched.status).toBe(200);
     expect(sprayPatched.body.mrlStatus).toBe("exceeded");
-    await htx.delete(`/api/spray/${sprayCreated.body.id}`);
+    await admin.delete(`/api/spray/${sprayCreated.body.id}`);
   });
 
   it("Truy xuất QR 3 cấp độ: bảo mật dữ liệu cá nhân công khai, phân quyền Doanh nghiệp - Cơ quan quản lý và ghi nhật ký kiểm toán", async () => {
@@ -1633,5 +1633,350 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     expect(logItems.some((l) => l.username === "tt_daklak_2fa" && l.scopeGranted === true && l.viewerTier === "authority")).toBe(
       true,
     );
+  });
+
+  it("5 trụ cột minh bạch mô hình điểm cấp xã: Sổ cái băm SHA-256 chống lùi ngày, Khóa hạn ngạch Mass-Balance & PHI, Biển QR Vườn & Thẻ Đoàn Thẩm định GPS thực địa, Xác thực chéo ISO/IEC 17025 và Bảo chứng Tỉnh - Xã", async () => {
+    const admin = await loggedIn(USERS.admin);
+    const htx = await loggedIn(USERS.htx);
+    const inspector = await loggedIn(USERS.inspector);
+    const farmerAn = await loggedIn(USERS.farmerAn);
+    const entCheck = await loggedIn("ent_vinhphat_scope", "EnterprisePassword123");
+
+    const tinyJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const isoDaysOffset = (offsetDays: number) => {
+      const vnNow = new Date(Date.now() + 7 * 3600 * 1000 + offsetDays * 86400 * 1000);
+      return vnNow.toISOString().slice(0, 10);
+    };
+    const todayVnIso = isoDaysOffset(0);
+
+    // Lấy thông tin bảng QR thửa đất TH1-001 đã khởi tạo (qrToken, tâm đa giác GIS)
+    const signboardsRes = await htx.get("/api/harvest/plot-signboards?q=TH1-001");
+    expect(signboardsRes.status).toBe(200);
+    const plotSignboard = (
+      signboardsRes.body.data as Array<{
+        plotCode: string;
+        qrToken: string;
+        zoneCode: string;
+        centerLat: number;
+        centerLng: number;
+      }>
+    ).find((p) => p.plotCode === "TH1-001");
+    expect(plotSignboard).toBeDefined();
+    const plotQrToken = plotSignboard!.qrToken;
+    const centerLat = Number(plotSignboard!.centerLat);
+    const centerLng = Number(plotSignboard!.centerLng);
+
+    // ─── TRỤ CỘT 1: Chống sửa lùi ngày (>7 ngày bị từ chối), đánh dấu >48h, niêm phong SHA-256 & khóa cách ly PHI ───
+    const journalPhotoRes = await farmerAn
+      .post("/api/uploads")
+      .field("purpose", "journal")
+      .attach("file", tinyJpeg, "garden.jpg");
+    expect(journalPhotoRes.status).toBe(201);
+
+    const tooOldJournal = await farmerAn.post("/api/portal/journal").send({
+      entryOn: isoDaysOffset(-10),
+      plotCode: "TH1-001",
+      activity: "Tỉa cành tạo tán",
+      detail: "Thử ghi lùi quá 7 ngày",
+      photoId: journalPhotoRes.body.id,
+    });
+    expect(tooOldJournal.status).toBe(400);
+
+    const lateJournalPhotoRes = await farmerAn
+      .post("/api/uploads")
+      .field("purpose", "journal")
+      .attach("file", tinyJpeg, "garden-late.jpg");
+    expect(lateJournalPhotoRes.status).toBe(201);
+
+    const validLateJournal = await farmerAn.post("/api/portal/journal").send({
+      entryOn: isoDaysOffset(-4),
+      plotCode: "TH1-001",
+      activity: "Bón phân hữu cơ",
+      detail: "Bón phân vi sinh quanh tán",
+      photoId: lateJournalPhotoRes.body.id,
+      latitude: centerLat,
+      longitude: centerLng,
+      lateReason: "Vườn xa mất sóng di động nên cập nhật bổ sung",
+    });
+    expect(validLateJournal.status).toBe(201);
+    expect(validLateJournal.body.isLateEntry).toBe(true);
+    expect(validLateJournal.body.gpsVerified).toBe(true);
+    expect(validLateJournal.body.recordHash).toMatch(/^[0-9a-f]{64}$/);
+
+    // Kiểm tra niêm phong chuỗi băm SHA-256 trên trang QR công khai
+    const traceIntegrityRes = await request(app).get("/api/public/trace/LH-2024-038");
+    expect(traceIntegrityRes.status).toBe(200);
+    expect(traceIntegrityRes.body.publicData.integritySeal.hashAlgorithm).toBe("SHA-256");
+    expect(traceIntegrityRes.body.publicData.integritySeal.chainVerified).toBe(true);
+    expect(traceIntegrityRes.body.publicData.integritySeal.totalSealedRecords).toBeGreaterThan(0);
+
+    // Khóa tự động cách ly PHI khi gom lô thu hoạch
+    const pestRes = await htx.get("/api/pesticides?pageSize=50");
+    const phiPesticide = (
+      pestRes.body.data as Array<{ id: number; status: string; isolationDays: number }>
+    ).find((p) => p.status === "allowed" && Number(p.isolationDays) >= 7);
+    expect(phiPesticide).toBeDefined();
+
+    const activeSpray = await farmerAn.post("/api/portal/spray").send({
+      sprayedOn: todayVnIso,
+      pesticideId: phiPesticide!.id,
+      dose: "20ml / bình 16L",
+      areaHa: 0.8,
+      plotCode: "TH1-001",
+    });
+    expect(activeSpray.status).toBe(201);
+    expect(activeSpray.body.recordHash).toMatch(/^[0-9a-f]{64}$/);
+
+    const phiLot = await htx.post("/api/harvest").send({
+      code: "LH-PHI-LOCK-2026",
+      variety: "Monthong (Dona)",
+      harvestedOn: todayVnIso,
+      packedOn: todayVnIso,
+      weightTons: 2.0,
+      buyer: "Công ty Kiểm Thử PHI",
+      market: "Trung Quốc",
+      status: "sampling",
+    });
+    expect(phiLot.status).toBe(201);
+
+    const blockedByPhi = await htx.post(`/api/harvest/${phiLot.body.id}/contributions`).send({
+      householdId: 1,
+      plotCode: "TH1-001",
+      weightKg: 500,
+    });
+    expect(blockedByPhi.status).toBe(400);
+
+    // Dọn bản ghi phun vừa thử để tiếp tục kiểm thử hạn ngạch sản lượng
+    expect((await admin.delete(`/api/spray/${activeSpray.body.id}`)).status).toBe(200);
+    expect((await admin.delete(`/api/harvest/${phiLot.body.id}`)).status).toBe(200);
+
+    // ─── TRỤ CỘT 2: Khóa trần sản lượng đầu vụ Mass-Balance chống trà trộn hàng ngoài vùng ───
+    // Doanh nghiệp không được xem danh sách hạn ngạch hộ dân nội bộ hay thẻ đoàn thẩm định (403)
+    expect((await entCheck.get("/api/harvest/plot-quotas")).status).toBe(403);
+    expect((await entCheck.get("/api/harvest/plot-signboards")).status).toBe(403);
+    expect((await entCheck.get("/api/field-audit-passes")).status).toBe(403);
+
+    // Ở bài test trước, thửa TH1-001 đã đóng góp 3200 kg trong năm 2026 (lô LH-HARDEN-2026).
+    // Đặt trần thẩm định năm 2026 của TH1-001 = 5000 kg -> chỉ còn dư 1800 kg.
+    const upsertQuotaRes = await htx.put("/api/harvest/plot-quotas").send({
+      seasonYear: 2026,
+      householdId: 1,
+      plotCode: "TH1-001",
+      zoneCode: plotSignboard!.zoneCode || "VN-DLOR-0086",
+      areaHa: 1.2,
+      treeCount: 160,
+      maxQuotaKg: 5000,
+      assessedBy: "Tổ Giám sát Kỹ thuật UBND Xã Cư Né",
+      assessedOn: "2026-03-15",
+    });
+    expect(upsertQuotaRes.status).toBe(200);
+
+    const quotaLot = await htx.post("/api/harvest").send({
+      code: "LH-QUOTA-LOCK-2026",
+      variety: "Monthong (Dona)",
+      harvestedOn: "2026-07-15",
+      packedOn: "2026-07-16",
+      weightTons: 2.0,
+      buyer: "Công ty Kiểm Thử Mass-Balance",
+      market: "Trung Quốc",
+      status: "exported",
+    });
+    expect(quotaLot.status).toBe(201);
+
+    // Góp thêm 2500 kg (3200 + 2500 = 5700 > 5000 kg) -> máy chủ chặn cứng 400
+    const overQuotaRes = await htx.post(`/api/harvest/${quotaLot.body.id}/contributions`).send({
+      householdId: 1,
+      plotCode: "TH1-001",
+      weightKg: 2500,
+    });
+    expect(overQuotaRes.status).toBe(400);
+
+    // Góp đúng 1500 kg trong hạn mức (3200 + 1500 = 4700 <= 5000 kg) -> thành công 201
+    const withinQuotaRes = await htx.post(`/api/harvest/${quotaLot.body.id}/contributions`).send({
+      householdId: 1,
+      plotCode: "TH1-001",
+      weightKg: 1500,
+    });
+    expect(withinQuotaRes.status).toBe(201);
+
+    const checkQuotaList = await htx.get("/api/harvest/plot-quotas?seasonYear=2026&q=TH1-001");
+    expect(checkQuotaList.status).toBe(200);
+    expect(checkQuotaList.body.data[0].usedKg).toBe(4700);
+    expect(checkQuotaList.body.data[0].remainingKg).toBe(300);
+
+    // ─── TRỤ CỘT 3: Biển QR Thửa vườn, Thẻ Đoàn Thẩm định Thực địa & Đối chiếu GPS sống tại vườn ───
+    const anonPlotScan = await request(app).get(`/api/public/trace/${plotQrToken}`);
+    expect(anonPlotScan.status).toBe(200);
+    expect(anonPlotScan.body.isPlotSignboard).toBe(true);
+    expect(anonPlotScan.body.accessControl.viewerTier).toBe("public");
+    expect(anonPlotScan.body).not.toHaveProperty("fieldAuditData");
+
+    // Khách vãng lai không có Thẻ Đoàn gọi verify-gps -> 403
+    expect(
+      (
+        await request(app)
+          .post(`/api/public/trace/${plotQrToken}/verify-gps`)
+          .send({ latitude: centerLat, longitude: centerLng })
+      ).status,
+    ).toBe(403);
+
+    // HTX cấp Thẻ Đoàn Thẩm định Thực địa cho Đoàn thu mua Trung Quốc
+    const passCreated = await htx.post("/api/field-audit-passes").send({
+      delegationName: "Đoàn Thương nhân Nhập khẩu Quảng Tây",
+      organization: "Guangxi Fruit Import Group",
+      allowedZoneCode: plotSignboard!.zoneCode,
+      defaultLang: "zh",
+      durationHours: 48,
+      note: "Thẩm định thực địa vùng trồng mẫu xã Cư Né",
+    });
+    expect(passCreated.status).toBe(201);
+    const passToken = passCreated.body.passToken as string;
+    const passId = passCreated.body.id as number;
+    expect(passToken.length).toBeGreaterThanOrEqual(16);
+
+    // Đoàn quét mã Biển QR Vườn kèm Thẻ Đoàn -> mở khóa fieldAuditData nhưng tuyệt đối KHÔNG rò rỉ SĐT/CCCD hộ dân
+    const auditPlotScan = await request(app).get(
+      `/api/public/trace/${plotQrToken}?auditPass=${encodeURIComponent(passToken)}`,
+    );
+    expect(auditPlotScan.status).toBe(200);
+    expect(auditPlotScan.body.accessControl.fieldAuditPass?.active).toBe(true);
+    expect(auditPlotScan.body.accessControl.auditLogged).toBe(true);
+    expect(auditPlotScan.body.fieldAuditData).toBeDefined();
+    expect(auditPlotScan.body.fieldAuditData.plotProfile.plotCode).toBe("TH1-001");
+    const serializedAudit = JSON.stringify(auditPlotScan.body);
+    expect(serializedAudit).not.toContain("0905123456");
+    expect(serializedAudit).not.toContain("cccd");
+
+    // Đoàn bấm đối chiếu GPS ngay tại tâm thửa đất -> verified: true, insidePolygon: true
+    const gpsInside = await request(app)
+      .post(`/api/public/trace/${plotQrToken}/verify-gps`)
+      .send({
+        latitude: centerLat,
+        longitude: centerLng,
+        accuracyMeters: 6,
+        auditPass: passToken,
+      });
+    expect(gpsInside.status).toBe(200);
+    expect(gpsInside.body.verified).toBe(true);
+    expect(gpsInside.body.insidePolygon).toBe(true);
+    expect(gpsInside.body.distanceMeters).toBe(0);
+
+    // Đoàn đứng cách xa 15 km bấm đối chiếu GPS -> verified: false, insidePolygon: false
+    const gpsOutside = await request(app)
+      .post(`/api/public/trace/${plotQrToken}/verify-gps`)
+      .send({
+        latitude: centerLat + 0.15,
+        longitude: centerLng + 0.15,
+        accuracyMeters: 8,
+        auditPass: passToken,
+      });
+    expect(gpsOutside.status).toBe(200);
+    expect(gpsOutside.body.verified).toBe(false);
+    expect(gpsOutside.body.insidePolygon).toBe(false);
+    expect(gpsOutside.body.distanceMeters).toBeGreaterThan(1000);
+
+    // Thu hồi Thẻ Đoàn từ xa -> quét lại hạ về public ngay lập tức và khóa verify-gps (403)
+    expect((await htx.patch(`/api/field-audit-passes/${passId}/revoke`)).status).toBe(200);
+    const revokedPassScan = await request(app).get(
+      `/api/public/trace/${plotQrToken}?auditPass=${encodeURIComponent(passToken)}`,
+    );
+    expect(revokedPassScan.status).toBe(200);
+    expect(revokedPassScan.body.accessControl.fieldAuditPass?.active).toBe(false);
+    expect(revokedPassScan.body).not.toHaveProperty("fieldAuditData");
+    expect(
+      (
+        await request(app)
+          .post(`/api/public/trace/${plotQrToken}/verify-gps`)
+          .send({ latitude: centerLat, longitude: centerLng, auditPass: passToken })
+      ).status,
+    ).toBe(403);
+
+    // ─── TRỤ CỘT 4: Xác thực chéo độc lập ISO/IEC 17025 (chặn http://, nhận https://) & Biên bản gắn GPS + ảnh ───
+    const badHttpLab = await inspector.post("/api/testing").send({
+      code: "MK-BAD-URL-2026",
+      householdId: 1,
+      plotCode: "TH1-001",
+      sampledOn: "2026-07-10",
+      cdMgKg: 0.014,
+      residueMgKg: 0.018,
+      result: "pass",
+      lab: "Quatest 3",
+      externalVerifyUrl: "http://insecure-lab.example.com/verify",
+    });
+    expect(badHttpLab.status).toBe(400);
+
+    const isoLab = await inspector.post("/api/testing").send({
+      code: "MK-ISO17025-2026",
+      householdId: 1,
+      plotCode: "TH1-001",
+      sampledOn: "2026-07-10",
+      cdMgKg: 0.014,
+      yellowOPositive: false,
+      residueMgKg: 0.018,
+      result: "pass",
+      recordStatus: "verified",
+      lab: "Trung tâm Kỹ thuật Tiêu chuẩn Đo lường Chất lượng 3 (QUATEST 3)",
+      labAccreditationCode: "ISO/IEC 17025:2017 - VILAS 004",
+      externalVerifyCode: "QT3-2026-88991",
+      externalVerifyUrl: "https://quatest3.com.vn/tra-cuu/QT3-2026-88991",
+    });
+    expect(isoLab.status).toBe(201);
+    expect(isoLab.body.externalVerifyUrl).toBe("https://quatest3.com.vn/tra-cuu/QT3-2026-88991");
+
+    const inspPhoto = await inspector
+      .post("/api/uploads")
+      .field("purpose", "inspection")
+      .attach("file", tinyJpeg, "inspection.jpg");
+    expect(inspPhoto.status).toBe(201);
+
+    const geoMinute = await inspector.post("/api/minutes").send({
+      code: "BB-GEO-2026-01",
+      heldOn: todayVnIso,
+      location: "Thôn 1 - Xã Cư Né",
+      plotCode: "TH1-001",
+      officer: "KS. Trần Quốc Bảo",
+      result: "pass",
+      photoId: inspPhoto.body.id,
+      latitude: centerLat,
+      longitude: centerLng,
+    });
+    expect(geoMinute.status).toBe(201);
+    expect(geoMinute.body.gpsVerified).toBe(true);
+    expect(geoMinute.body.recordHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(geoMinute.body.photoUrl).toBe(`/api/public/files/${inspPhoto.body.id}`);
+
+    // ─── TRỤ CỘT 5: Bảo chứng Chính quyền Tỉnh - Xã & Ma trận đối chứng độc lập 3 bên ───
+    expect(
+      (
+        await htx.put("/api/harvest/endorsement-config").send({
+          programTitle: "Mô hình điểm Truy xuất nguồn gốc Sầu riêng xuất khẩu cấp Xã",
+          communeAuthority: "UBND Xã Cư Né - Huyện Krông Búk",
+          provincialAuthority: "UBND Tỉnh Đắk Lắk - Sở Nông nghiệp & Môi trường",
+          officialPortalUrl: "http://daklak.gov.vn/khong-https",
+        })
+      ).status,
+    ).toBe(400);
+
+    const endorseUpdated = await htx.put("/api/harvest/endorsement-config").send({
+      programTitle: "Mô hình điểm Truy xuất nguồn gốc Sầu riêng xuất khẩu cấp Xã",
+      directiveNo: "Kế hoạch thí điểm chuyển đổi số nông nghiệp Tỉnh Đắk Lắk 2026",
+      communeAuthority: "UBND Xã Cư Né - Huyện Krông Búk",
+      provincialAuthority: "UBND Tỉnh Đắk Lắk - Sở Nông nghiệp & Môi trường",
+      officialPortalUrl: "https://daklak.gov.vn/chuyen-doi-so-sau-rieng-cu-ne",
+      officialDomain: "daklak.gov.vn",
+      inspectionUnit: "Tổ Giám sát Kỹ thuật Cộng đồng Xã Cư Né",
+    });
+    expect(endorseUpdated.status).toBe(200);
+
+    const finalLotTrace = await request(app).get(`/api/public/trace/${quotaLot.body.qrToken}`);
+    expect(finalLotTrace.status).toBe(200);
+    expect(finalLotTrace.body.publicData.governance.governmentEndorsement.officialPortalUrl).toBe(
+      "https://daklak.gov.vn/chuyen-doi-so-sau-rieng-cu-ne",
+    );
+    expect(finalLotTrace.body.publicData.governance.threePartyAttestation).toHaveLength(3);
+    const verifiedIsoTest = (
+      finalLotTrace.body.publicData.labTests as Array<{ code: string; externalVerifyUrl: string | null }>
+    ).find((t) => t.code === "MK-ISO17025-2026");
+    expect(verifiedIsoTest?.externalVerifyUrl).toBe("https://quatest3.com.vn/tra-cuu/QT3-2026-88991");
   });
 });

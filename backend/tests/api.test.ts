@@ -462,9 +462,9 @@ describe("cổng hộ dân (/api/portal)", () => {
     expect((await an.post("/api/portal/spray").send({ pesticideId: allowed.id, dose: "1", areaHa: -2 })).status).toBe(400);
 
     // Dọn 2 đợt phun không gắn thửa của test này để không khóa cách ly toàn bộ thửa của Hộ 1 ở các suite sau
-    const htx = await loggedIn(USERS.htx);
-    await htx.delete(`/api/spray/${ok.body.id}`);
-    await htx.delete(`/api/spray/${bad.body.id}`);
+    const admin = await loggedIn(USERS.admin);
+    expect((await admin.delete(`/api/spray/${ok.body.id}`)).status).toBe(200);
+    expect((await admin.delete(`/api/spray/${bad.body.id}`)).status).toBe(200);
   });
 
   it("gửi hồ sơ xin duyệt hiện ở danh sách duyệt của cán bộ HTX", async () => {

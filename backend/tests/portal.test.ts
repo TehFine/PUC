@@ -587,4 +587,150 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
       expect(fullRes.status).toBe(400);
     });
   });
+
+  describe("timeline quy trình chăm sóc 2026-2027 & cảnh báo kép (hộ dân + quản trị)", () => {
+    it("tự khởi tạo đủ 27 mốc + 3 quy tắc SenPro, bắt buộc ảnh hóa đơn, tự ghi nhật ký SHA-256 và báo giai đoạn tiếp theo", async () => {
+      const an = await loggedIn(USERS.farmerAn);
+      const admin = await loggedIn(USERS.admin);
+
+      const initRes = await an.get("/api/portal/care-protocol");
+      expect(initRes.status).toBe(200);
+      expect(initRes.body.season).toBe("2026-2027");
+      expect(initRes.body.senProRules).toHaveLength(3);
+      expect(initRes.body.plans.length).toBeGreaterThan(0);
+
+      const firstPlan = initRes.body.plans[0];
+      expect(firstPlan.milestones).toHaveLength(27);
+      const plotCode: string = firstPlan.plotCode;
+
+      // Đồng bộ thửa vườn sang mốc Nuôi trái Ngày 37 tuổi trái (bắt buộc ảnh hóa đơn vật tư)
+      const todayRes = await db.query<{ d: string }>(
+        "SELECT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::text AS d",
+      );
+      const todayStr = todayRes.rows[0].d;
+
+      const cfgRes = await an.post("/api/portal/care-protocol/configure").send({
+        plotCode,
+        mode: "current_milestone",
+        milestoneCode: "nt-ngay-37",
+        anchorDate: todayStr,
+        note: "Đồng bộ giai đoạn nuôi trái trứng gà",
+      });
+      expect(cfgRes.status).toBe(200);
+      expect(cfgRes.body.currentMilestoneCode).toBe("nt-ngay-37");
+
+      const fieldPhotoId = await uploadFile(an, "journal");
+
+      // Thiếu ảnh hóa đơn vật tư ở mốc có sử dụng phân thuốc -> 400
+      const missingInvoice = await an.post("/api/portal/care-protocol/declare").send({
+        plotCode,
+        milestoneCode: "nt-ngay-37",
+        performedOn: todayStr,
+        actualTreeState: "Trái to hơn trứng gà",
+        followedStandard: true,
+        selectedProducts: ["Bloom", "Amino Ca+"],
+        actualDosage: "Phun tỷ lệ 1:400",
+        fieldPhotoId,
+      });
+      expect(missingInvoice.status).toBe(400);
+
+      // Khai báo chuẩn có đủ ảnh hiện trường + ảnh hóa đơn -> thành công, tự lưu journal SHA-256 & báo mốc kế tiếp
+      const invoicePhotoId = await uploadFile(an, "journal");
+      const okDecl = await an.post("/api/portal/care-protocol/declare").send({
+        plotCode,
+        milestoneCode: "nt-ngay-37",
+        performedOn: todayStr,
+        actualTreeState: "Trái to hơn trứng gà",
+        followedStandard: true,
+        selectedProducts: ["Bloom", "Amino Ca+"],
+        actualDosage: "Phun tỷ lệ 1:400",
+        supplierName: "VTNN HTX Cư Né",
+        fieldPhotoId,
+        invoicePhotoId,
+      });
+      expect(okDecl.status).toBe(201);
+      expect(okDecl.body.complianceStatus).toBe("compliant");
+      expect(okDecl.body.nextMilestone).toMatchObject({
+        code: "nt-ngay-45",
+        stageOrder: "06",
+      });
+      expect(okDecl.body.plan.currentMilestoneCode).toBe("nt-ngay-45");
+
+      const completedItem = okDecl.body.plan.milestones.find((m: { code: string }) => m.code === "nt-ngay-37");
+      expect(completedItem?.declaration?.journalRecordHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(completedItem?.declaration?.fieldPhotoUrl).toContain("/api/uploads/");
+      expect(completedItem?.declaration?.invoicePhotoUrl).toContain("/api/uploads/");
+
+      // Kiểm tra thông báo mốc tiếp theo đã được gửi tới hộ dân
+      const farmerNotifs = await an.get("/api/notifications");
+      expect(farmerNotifs.status).toBe(200);
+      expect(
+        farmerNotifs.body.data.some(
+          (n: { kind: string; title: string }) =>
+            n.kind === "protocol" && n.title.includes("Ngày 45 tuổi trái"),
+        ),
+      ).toBe(true);
+
+      // Khai báo SAI QUY TRÌNH (dùng Kali đỏ KCl trong giai đoạn nuôi trái) -> Cảnh báo tới cả Hộ dân & Quản trị viên
+      const fPhoto2 = await uploadFile(an, "journal");
+      const iPhoto2 = await uploadFile(an, "journal");
+      const wrongDecl = await an.post("/api/portal/care-protocol/declare").send({
+        plotCode,
+        milestoneCode: "nt-ngay-45",
+        performedOn: todayStr,
+        actualTreeState: "Trái bằng nắm tay",
+        followedStandard: true,
+        selectedProducts: ["Brixup", "Kali Bo", "Magic One", "K2SO4 (Kali Sunfat)", "MgSO4 (Magie Sunfat)"],
+        actualDosage: "500 ml Brixup / 200L",
+        extraInputs: "Bón thêm Kali đỏ KCl 1kg/gốc",
+        fieldPhotoId: fPhoto2,
+        invoicePhotoId: iPhoto2,
+      });
+      expect(wrongDecl.status).toBe(201);
+      expect(wrongDecl.body.complianceStatus).toBe("violation");
+      expect(wrongDecl.body.complianceIssues.length).toBeGreaterThan(0);
+
+      const farmerNotifsAfterWrong = await an.get("/api/notifications");
+      expect(
+        farmerNotifsAfterWrong.body.data.some(
+          (n: { kind: string; title: string }) =>
+            n.kind === "violation" && n.title.includes("Cảnh báo sai quy trình"),
+        ),
+      ).toBe(true);
+
+      const adminNotifsAfterWrong = await admin.get("/api/notifications");
+      expect(adminNotifsAfterWrong.status).toBe(200);
+      expect(
+        adminNotifsAfterWrong.body.data.some(
+          (n: { kind: string; title: string }) =>
+            n.kind === "violation" && n.title.includes("thực hiện sai phác đồ"),
+        ),
+      ).toBe(true);
+
+      // Rà soát quá hạn kéo dài (>= 5 ngày chưa thực hiện) -> cảnh báo kép & chống trùng lặp
+      await db.query(
+        `UPDATE plot_care_plans
+         SET cycle_start_on = ((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - 300)
+         WHERE id = $1`,
+        [firstPlan.id],
+      );
+
+      const scan1 = await admin.post("/api/care-protocol/scan").send({});
+      expect(scan1.status).toBe(200);
+      expect(scan1.body.criticalViolations).toBeGreaterThanOrEqual(1);
+
+      const scan2 = await admin.post("/api/care-protocol/scan").send({});
+      expect(scan2.status).toBe(200);
+      expect(scan2.body.criticalViolations).toBe(0);
+
+      // Admin xem danh sách & chi tiết minh chứng lộ trình
+      const adminList = await admin.get("/api/care-protocol?state=deviated");
+      expect(adminList.status).toBe(200);
+      expect(adminList.body.data.some((p: { id: number }) => p.id === firstPlan.id)).toBe(true);
+
+      const adminDetail = await admin.get(`/api/care-protocol/${firstPlan.id}`);
+      expect(adminDetail.status).toBe(200);
+      expect(adminDetail.body.milestones).toHaveLength(27);
+    });
+  });
 });
