@@ -255,7 +255,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Bản đồ vùng trồng</h3>
                 <p className="sw-caption-meta">
-                  <span>Bản đồ số + Định vị GPS</span>
+                  <span>Bản đồ số - Định vị GPS</span>
                   <span>Krông Búk, Đắk Lắk</span>
                 </p>
               </div>
@@ -272,7 +272,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Chăm sóc & ra hoa</h3>
                 <p className="sw-caption-meta">
-                  <span>Lịch chăm bón · Ngày cách ly</span>
+                  <span>Lịch chăm bón - Ngày cách ly</span>
                   <span>Cảnh báo an toàn tự động</span>
                 </p>
               </div>
@@ -286,8 +286,8 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
             </div>
           </div>
 
-          {/* Hàng 3: Ảnh 2 cột trái | 1 ô nội dung Cột 3 | Khoảng thở trắng Cột 4 (Di động: Tạp chí chia đôi dọc ├) */}
-          <div className="sw-grid sw-checker-row is-mob-spread">
+          {/* Hàng 3: Ảnh 2 cột trái | 1 ô nội dung Cột 3 | Khoảng thở trắng Cột 4 (Di động: Tạp chí chia đôi dọc đảo chiều ┤) */}
+          <div className="sw-grid sw-checker-row is-mob-spread is-mob-flip">
             <div className="sw-media sw-col-1-2 is-pos-harvest">
               <DwellSlideshow
                 slides={HARVEST_STANDARD_SLIDES}
@@ -301,7 +301,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Thu hoạch đúng chuẩn</h3>
                 <p className="sw-caption-meta">
-                  <span>Độ chín + Ngày cách ly</span>
+                  <span>Độ chín - Ngày cách ly</span>
                   <span>Ngay trên điện thoại nhà vườn</span>
                 </p>
               </div>
@@ -326,7 +326,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Kiểm nghiệm mẫu trái</h3>
                 <p className="sw-caption-meta">
-                  <span>Kiểm soát Cadimi · Không Vàng O</span>
+                  <span>Kiểm soát Cadimi - Không Vàng O</span>
                   <span>Đạt chuẩn an toàn xuất khẩu</span>
                 </p>
               </div>
@@ -346,7 +346,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Tuyển chọn xuất khẩu</h3>
                 <p className="sw-caption-meta">
-                  <span>Đóng gói + Kiểm định lô</span>
+                  <span>Đóng gói - Kiểm định lô</span>
                   <span>Xuất khẩu chính ngạch GACC</span>
                 </p>
               </div>
@@ -390,7 +390,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Mã số vùng trồng</h3>
                 <p className="sw-caption-meta">
-                  <span>Hồ sơ vùng + Thửa vườn</span>
+                  <span>Hồ sơ vùng - Thửa vườn</span>
                   <span>Xã Cư Né, Krông Búk, Đắk Lắk</span>
                   <span>Định danh riêng từng nông hộ</span>
                 </p>
@@ -415,7 +415,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Cấp mã tại vườn</h3>
                 <p className="sw-caption-meta">
-                  <span>Đo đạc GPS · Hồ sơ thửa</span>
+                  <span>Đo đạc GPS - Hồ sơ thửa</span>
                   <span>Thẩm định giống & nhật ký</span>
                 </p>
               </div>
@@ -426,7 +426,7 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Tem QR xuất kho</h3>
                 <p className="sw-caption-meta">
-                  <span>Kiểm định mẫu · Dán tem lô</span>
+                  <span>Kiểm định mẫu - Dán tem lô</span>
                   <span>Truy xuất rõ từng nông hộ</span>
                 </p>
               </div>

@@ -37,20 +37,23 @@ export default function Faq() {
                 </span>
               </button>
 
-              {isOpen && (
-                <div
-                  id={`faq-panel-${index}`}
-                  role="region"
-                  aria-labelledby={`faq-btn-${index}`}
-                  className="sw-faq-ans eh-fade-block"
-                >
-                  <span className="sw-faq-ans-label">Trả lời</span>
-                  <p>
-                    <span className="sw-hide-mobile">{item.a}</span>
-                    <span className="sw-only-mobile">{item.shortA}</span>
-                  </p>
+              <div
+                id={`faq-panel-${index}`}
+                role="region"
+                aria-labelledby={`faq-btn-${index}`}
+                aria-hidden={!isOpen}
+                className="sw-faq-collapse"
+              >
+                <div className="sw-faq-collapse-inner">
+                  <div className="sw-faq-ans">
+                    <span className="sw-faq-ans-label">Trả lời</span>
+                    <p>
+                      <span className="sw-hide-mobile">{item.a}</span>
+                      <span className="sw-only-mobile">{item.shortA}</span>
+                    </p>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         );

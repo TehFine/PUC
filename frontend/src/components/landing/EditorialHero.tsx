@@ -166,6 +166,7 @@ export default function EditorialHero() {
       }
     };
 
+    let roTimer = 0;
     const scheduleMeasure = () => {
       if (measureRafId === 0) {
         measureRafId = window.requestAnimationFrame(() => {
@@ -173,6 +174,12 @@ export default function EditorialHero() {
           updateScroll();
         });
       }
+    };
+
+    const onBodyResize = () => {
+      if (window.innerWidth <= 960) return;
+      if (roTimer) window.clearTimeout(roTimer);
+      roTimer = window.setTimeout(scheduleMeasure, 160);
     };
 
     const onHashChange = () => {
@@ -186,7 +193,7 @@ export default function EditorialHero() {
     scheduleMeasure();
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(scheduleMeasure);
+      ro = new ResizeObserver(onBodyResize);
       ro.observe(document.body);
     }
 
@@ -196,6 +203,7 @@ export default function EditorialHero() {
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId);
       if (measureRafId) window.cancelAnimationFrame(measureRafId);
+      if (roTimer) window.clearTimeout(roTimer);
       ro?.disconnect();
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", scheduleMeasure);
@@ -489,12 +497,12 @@ export default function EditorialHero() {
         {/* Hàng 2 – Cột 3: Nội dung chính đi kèm ảnh Hàng 2 (trên di động hiển thị bảng số liệu 2×2 tinh gọn) */}
         <div className="eh-cell eh-cell-feature">
           <span className="eh-cell-tag eh-feature-desktop-tag">
-            Đạt chuẩn xuất khẩu · {qualifiedStr}/{householdsStr} hộ
+            Đạt chuẩn xuất khẩu - {qualifiedStr}/{householdsStr} hộ
           </span>
           <div>
             <h2 className="eh-feature-title">Vùng trồng Cư Né</h2>
             <p className="eh-feature-sub eh-feature-desktop-sub">
-              {areaStr} ha · {plotsStr} thửa · {villagesStr} thôn · Krông Búk, Đắk Lắk
+              {areaStr} ha - {plotsStr} thửa - {villagesStr} thôn - Krông Búk, Đắk Lắk
             </p>
             <p className="eh-feature-mobile-lead">
               Liên kết canh tác chuẩn VietGAP &amp; xuất khẩu chính ngạch tại Krông Búk, Đắk Lắk.
@@ -534,7 +542,7 @@ export default function EditorialHero() {
           <span className="eh-cell-tag">Truy xuất nguồn gốc</span>
           <div className="eh-story-upper">
             <h2 className="eh-feature-title">Từ vườn đến xuất khẩu</h2>
-            <p className="eh-story-sub-mob">Truy xuất + Nhật ký số</p>
+            <p className="eh-story-sub-mob">Truy xuất - Nhật ký số</p>
             <p className="eh-story-text">
               <span className="eh-story-desktop">
                 Bà con ghi nhật ký mùa vụ, theo dõi mã vùng và kiểm nghiệm ngay trên điện thoại để minh bạch từng lô hàng.
@@ -573,10 +581,16 @@ export default function EditorialHero() {
           role="dialog"
           aria-modal="true"
           aria-label="Danh mục trang giới thiệu"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            const target = e.target as HTMLElement | null;
+            if (!target?.closest("a, button, [data-drawer-keep]")) {
+              setMenuOpen(false);
+            }
+          }}
         >
           <div className="eh-drawer-head">
-            <span className="eh-brand">
+            <span className="eh-brand" data-drawer-keep="">
               <span>HTX Cư Né</span>
             </span>
             <button
@@ -601,8 +615,17 @@ export default function EditorialHero() {
                   className={`eh-drawer-link ${activeHref === link.href ? "is-active" : ""}`}
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     handleSelectNav(link.href);
                     setMenuOpen(false);
+                    const id = link.href.startsWith("#") ? link.href.slice(1) : "";
+                    window.requestAnimationFrame(() => {
+                      const el = id ? document.getElementById(id) : null;
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        window.history.replaceState(null, "", link.href);
+                      }
+                    });
                   }}
                 >
                   <span>{link.label}</span>
@@ -670,7 +693,7 @@ export default function EditorialHero() {
                     setMenuOpen(false);
                   }}
                 >
-                  Đăng ký thành viên
+                  Đăng ký
                 </Link>
               </>
             )}
