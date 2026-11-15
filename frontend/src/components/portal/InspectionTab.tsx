@@ -54,7 +54,7 @@ export default function InspectionTab() {
                 title="Bấm để xem chi tiết kết quả kiểm nghiệm"
               >
                 <div className="pt-lab-test-title">
-                  <span className="pt-lab-test-code">{test.code} · Thửa {test.plotCode}</span>
+                  <span className="pt-lab-test-code">{test.code} - Thửa {test.plotCode}</span>
                 </div>
                 <div className="pt-lab-test-right">
                   <div className="pt-lab-test-time">{formatDate(test.sampledOn)}</div>

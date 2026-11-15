@@ -71,7 +71,7 @@ export class SprayService {
           pesticide.status === "banned"
             ? `CẢNH BÁO: Hộ ${user.fullName} khai báo dùng thuốc CẤM (${pesticide.name})`
             : `Lưu ý giám sát: Hộ ${user.fullName} phun hoạt chất hạn chế (${pesticide.name})`,
-        body: `${plotCode ? `Thửa ${plotCode} · ` : ""}Liều lượng ${dto.dose}, ngày ${sprayedOn}.`,
+        body: `${plotCode ? `Thửa ${plotCode} - ` : ""}Liều lượng ${dto.dose}, ngày ${sprayedOn}.`,
         link: ADMIN_LINKS.journal,
       });
     }

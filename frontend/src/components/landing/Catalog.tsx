@@ -240,7 +240,7 @@ const FALLBACK_FERTILIZERS: PublicFertilizer[] = [
   {
     name: "NPK 12-12-17+TE Gốc Sunfat",
     category: "npk",
-    formula: "Đạm 12% · Lân 12% · Kali Sunfat (K₂SO₄) 17% · Vi lượng Bo, Mg, Zn",
+    formula: "Đạm 12% - Lân 12% - Kali Sunfat (K₂SO₄) 17% - Vi lượng Bo, Mg, Zn",
     manufacturer: "Bio-Agri Systems",
     dosage: "0.8 – 1.5 kg/cây/đợt nuôi trái",
     applicationMethod: "Rải đều quanh hình chiếu tán và tưới đẫm nước",
@@ -253,7 +253,7 @@ const FALLBACK_FERTILIZERS: PublicFertilizer[] = [
   {
     name: "Phân bón lá Canxi Bo Amino Kẽm",
     category: "foliar",
-    formula: "Canxi (CaO) 12% · Bo hữu hiệu 35.000 ppm · Kẽm 15.000 ppm · Amino 10%",
+    formula: "Canxi (CaO) 12% - Bo hữu hiệu 35.000 ppm - Kẽm 15.000 ppm - Amino 10%",
     manufacturer: "Agri-Green Nutrition",
     dosage: "Pha 750 ml cho 400 – 600 lít nước",
     applicationMethod: "Phun ướt đều 2 mặt lá và chùm hoa / trái non",
@@ -266,7 +266,7 @@ const FALLBACK_FERTILIZERS: PublicFertilizer[] = [
   {
     name: "Axit Humic Đậm Đặc & Trichoderma",
     category: "microbial",
-    formula: "Axit Humic 85% · Axit Fulvic 10% · Kali 10% · Trichoderma 2×10⁹ CFU/g",
+    formula: "Axit Humic 85% - Axit Fulvic 10% - Kali 10% - Trichoderma 2×10⁹ CFU/g",
     manufacturer: "Duri-Root Bio Sciences",
     dosage: "1 kg pha 500 – 800 lít nước tưới gốc",
     applicationMethod: "Tưới vùng rễ tơ hoặc hòa qua hệ thống tưới nhỏ giọt",
@@ -279,7 +279,7 @@ const FALLBACK_FERTILIZERS: PublicFertilizer[] = [
   {
     name: "Hữu cơ Vi sinh Đất Mẹ 70% OM",
     category: "organic",
-    formula: "Chất hữu cơ 70% · Axit Humic 12% · Trichoderma 1×10⁶ CFU/g",
+    formula: "Chất hữu cơ 70% - Axit Humic 12% - Trichoderma 1×10⁶ CFU/g",
     manufacturer: "Nông Nghiệp Xanh Đất Mẹ",
     dosage: "5 – 10 kg/gốc/lần tùy tuổi cây",
     applicationMethod: "Bón gốc theo rãnh chiếu mép tán lá",
@@ -503,12 +503,12 @@ export default function Catalog() {
         allowedList.push({
           id: `allow-${p.name}-${idx}`,
           title: shortenTitle(p.name),
-          subtitle: `${isoText} · ${p.activeIngredient}`,
+          subtitle: `${isoText} - ${p.activeIngredient}`,
           imageSrc: vis.src,
           imageFit: vis.fit,
           categoryLabel: "Thuốc BVTV được phép",
           eyebrow: isRestricted
-            ? "Danh mục kiểm soát hạn chế · Bắt buộc hỏi kỹ thuật viên trước khi phun"
+            ? "Danh mục kiểm soát hạn chế - Bắt buộc hỏi kỹ thuật viên trước khi phun"
             : "Danh mục được phép sử dụng trên sầu riêng xuất khẩu",
           fullTitle: p.name,
           lead: `Hoạt chất chính: ${p.activeIngredient}. Chỉ sử dụng đúng liều khuyến cáo khi dịch hại tới ngưỡng phòng trừ và ghi đầy đủ vào nhật ký điện tử của thửa vườn.`,
@@ -532,7 +532,7 @@ export default function Catalog() {
             },
             {
               label: "Hàm lượng / Đơn vị",
-              value: [p.concentration, p.manufacturer].filter(Boolean).join(" · ") || "Chuẩn đăng ký BVTV",
+              value: [p.concentration, p.manufacturer].filter(Boolean).join(" - ") || "Chuẩn đăng ký BVTV",
             },
           ],
           guidelinesTitle: "Nguyên tắc 4 đúng khi phun tại vườn",
@@ -555,7 +555,7 @@ export default function Catalog() {
       {
         id: "ban-auramine-o",
         title: "Vàng O (Auramine O)",
-        subtitle: "Cấm tuyệt đối · Thuốc nhuộm công nghiệp",
+        subtitle: "Cấm tuyệt đối - Thuốc nhuộm công nghiệp",
         imageSrc: "/pesticides/cat-banned-auramine.jpg",
         imageFit: "studio-jpg",
         categoryLabel: "Chất cấm tuyệt đối",
@@ -582,7 +582,7 @@ export default function Catalog() {
       {
         id: "ban-cadmium",
         title: "Cadimi (Cd)",
-        subtitle: "MRL ≤ 0.05 mg/kg · Kim loại nặng đất & phân",
+        subtitle: "MRL ≤ 0.05 mg/kg - Kim loại nặng đất & phân",
         imageSrc: "/pesticides/cat-banned-cadmium.jpg",
         imageFit: "studio-jpg",
         categoryLabel: "Kim loại nặng kiểm soát",
@@ -609,7 +609,7 @@ export default function Catalog() {
       {
         id: "ban-kcl",
         title: "Phân Kali Clorua (KCl)",
-        subtitle: "Cấm trên sầu riêng · Hàm lượng Clo > 45%",
+        subtitle: "Cấm trên sầu riêng - Hàm lượng Clo > 45%",
         imageSrc: "/fertilizers/npk.png",
         imageFit: "studio-png",
         categoryLabel: "Vật tư cấm dùng trên sầu riêng",
@@ -665,7 +665,7 @@ export default function Catalog() {
       bannedList.push({
         id: `ban-db-${p.name}-${idx}`,
         title: shortenTitle(p.name),
-        subtitle: `Cấm sử dụng · Hoạt chất ${p.activeIngredient}`,
+        subtitle: `Cấm sử dụng - Hoạt chất ${p.activeIngredient}`,
         imageSrc: idx % 2 === 0 ? "/pesticides/red.png" : "/pesticides/cat-systemic-od.jpg",
         imageFit: idx % 2 === 0 ? "studio-png" : "studio-jpg",
         categoryLabel: "Hoạt chất BVTV bị cấm",
@@ -690,7 +690,7 @@ export default function Catalog() {
       bannedList.push({
         id: `ban-extra-${idx}`,
         title: item.name,
-        subtitle: `Cấm sử dụng · ${item.active}`,
+        subtitle: `Cấm sử dụng - ${item.active}`,
         imageSrc: item.img,
         imageFit: item.fit,
         categoryLabel: "Hoạt chất BVTV bị cấm",
@@ -732,14 +732,14 @@ export default function Catalog() {
         return {
           id: `fert-${f.name}-${idx}`,
           title: shortenTitle(f.name),
-          subtitle: `${f.timing || "Quanh năm"} · ${f.status === "encouraged" ? "Khuyến khích" : "Được phép"}`,
+          subtitle: `${f.timing || "Quanh năm"} - ${f.status === "encouraged" ? "Khuyến khích" : "Được phép"}`,
           imageSrc: imgSrc,
           imageFit: isJpg ? "studio-jpg" : "studio-png",
           categoryLabel: "Phân bón & Vi sinh",
           eyebrow:
             f.status === "encouraged"
               ? "Khuyến khích ưu tiên theo quy trình canh tác bền vững"
-              : "Được phép sử dụng · Không chứa Clo & kiểm soát Cadimi",
+              : "Được phép sử dụng - Không chứa Clo & kiểm soát Cadimi",
           fullTitle: f.name,
           lead:
             f.description ||
@@ -771,9 +771,9 @@ export default function Catalog() {
         drawerObjectPosition: stage.drawerObjectPosition,
         imageFit: "photo",
         categoryLabel: isSenPro
-          ? "Phụ lục điều tiết đọt · Quy trình 2026–2027"
-          : `Giai đoạn ${stage.order} / 08 · Quy trình 2026–2027`,
-        eyebrow: `${HTX_PRICE_GUARANTEE_POLICY.badge} · Thời gian: ${stage.duration}`,
+          ? "Phụ lục điều tiết đọt - Quy trình 2026–2027"
+          : `Giai đoạn ${stage.order} / 08 - Quy trình 2026–2027`,
+        eyebrow: `${HTX_PRICE_GUARANTEE_POLICY.badge} - Thời gian: ${stage.duration}`,
         fullTitle: `${stage.order}. ${stage.name} (${stage.duration})`,
         lead: stage.summary,
         specs: [
@@ -787,7 +787,7 @@ export default function Catalog() {
         ],
         milestonesTitle: isSenPro
           ? "Bảng tỷ lệ pha SenPro theo trạng thái đọt non"
-          : "Lịch thực hành chi tiết (Trạng thái · Ngày dự kiến · Sản phẩm & Hành động)",
+          : "Lịch thực hành chi tiết (Trạng thái - Ngày dự kiến - Sản phẩm & Hành động)",
         milestones: stage.milestones,
         guidelinesTitle: "Nguyên tắc tuân thủ bắt buộc tại vườn",
         guidelines: stage.keyRules,
@@ -818,7 +818,7 @@ export default function Catalog() {
       return {
         id: `var-${v.name}-${idx}`,
         title: `Sầu riêng ${v.name}`,
-        subtitle: [v.origin, v.weightRange].filter(Boolean).join(" · ") || "Giống khuyến khích canh tác",
+        subtitle: [v.origin, v.weightRange].filter(Boolean).join(" - ") || "Giống khuyến khích canh tác",
         imageSrc: imgSrc,
         imageFit: "studio-png",
         categoryLabel: "Giống sầu riêng",
@@ -833,7 +833,7 @@ export default function Catalog() {
           { label: "Thời gian thu hoạch", value: v.harvestYears || "100 – 120 ngày sau xả nhụy" },
           {
             label: "Màu cơm & Độ ngọt Brix",
-            value: [v.fleshColor, v.brix ? `Brix ${v.brix}` : null].filter(Boolean).join(" · ") || "Cơm vàng ráo, hạt lép cao",
+            value: [v.fleshColor, v.brix ? `Brix ${v.brix}` : null].filter(Boolean).join(" - ") || "Cơm vàng ráo, hạt lép cao",
           },
         ],
         guidelinesTitle: "Yêu cầu quản lý giống tại mã vùng trồng",
@@ -1181,7 +1181,7 @@ export default function Catalog() {
             <header className="sw-side-head">
               <div className="sw-modal-meta">
                 <span>{activeDrawerItem.categoryLabel}</span>
-                <span>·</span>
+                <span>-</span>
                 <span>
                   {String((drawerIndex ?? 0) + 1).padStart(2, "0")} /{" "}
                   {String(currentItems.length).padStart(2, "0")}
@@ -1252,7 +1252,7 @@ export default function Catalog() {
                           <div className="sw-protocol-step-meta">
                             <span className="sw-protocol-day">{m.targetDay}</span>
                             <span className="sw-protocol-sep" aria-hidden="true">
-                              ·
+                              -
                             </span>
                             <span className="sw-protocol-state">{m.treeState}</span>
                           </div>

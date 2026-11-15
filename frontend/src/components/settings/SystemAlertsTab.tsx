@@ -185,7 +185,7 @@ export default function SystemAlertsTab() {
                 marginBottom: 4,
               }}
             >
-              ĐANG PHÁT TRÊN MÀN HÌNH NGƯỜI DÙNG · {AUDIENCE_LABELS[activeAlert.audience]}
+              ĐANG PHÁT TRÊN MÀN HÌNH NGƯỜI DÙNG - {AUDIENCE_LABELS[activeAlert.audience]}
             </div>
             <div style={{ fontSize: 15.5, fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>
               {activeAlert.title}

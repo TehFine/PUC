@@ -53,7 +53,7 @@ export default function NotFoundPage() {
             marginBottom: 8,
           }}
         >
-          Mã lỗi 404 · Không tìm thấy trang
+          Mã lỗi 404 - Không tìm thấy trang
         </span>
 
         <h1

@@ -125,7 +125,7 @@ export default function ZonesOverviewCard({
                 {zone.code}
               </span>
               <span className="zg-meta">
-                {zone.village} · {zone.count} thửa · {formatHa(zone.area)}
+                {zone.village} - {zone.count} thửa - {formatHa(zone.area)}
               </span>
               <span className={`badge ${zone.cls}`}>
                 {zone.status}

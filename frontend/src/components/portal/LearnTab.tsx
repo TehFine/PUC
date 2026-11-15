@@ -418,7 +418,7 @@ export function TrainingList() {
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                           <span className="pt-timeline-kicker">{kicker}</span>
                           <span style={{ fontSize: 11.5, color: "var(--text-secondary)", fontWeight: 600 }}>
-                            · {item.enrolled}/{item.capacity} chỗ
+                            - {item.enrolled}/{item.capacity} chỗ
                           </span>
                           {myStatusInfo && <Pill tone={myStatusInfo.tone}>{myStatusInfo.label}</Pill>}
                         </div>
@@ -427,7 +427,7 @@ export function TrainingList() {
                       <div className="pt-timeline-meta">
                         <span className="pt-timeline-date">
                           {formattedDate}
-                          {clockRange ? ` · ${clockRange}` : ""}
+                          {clockRange ? ` - ${clockRange}` : ""}
                         </span>
                         {rel && <span className="pt-timeline-rel">{rel.startsWith("(") ? rel : `(${rel})`}</span>}
                       </div>
@@ -465,9 +465,9 @@ export function TrainingList() {
                   <div className="pt-row-main">
                     <strong>{item.title}</strong>
                     <span>
-                      {item.heldOn ? `${formatDate(item.heldOn)} · ` : ""}
-                      {item.location ? `${item.location} · ` : ""}
-                      Giảng viên: {item.trainer ?? "—"} · {item.enrolled}/{item.capacity} học viên
+                      {item.heldOn ? `${formatDate(item.heldOn)} - ` : ""}
+                      {item.location ? `${item.location} - ` : ""}
+                      Giảng viên: {item.trainer ?? "—"} - {item.enrolled}/{item.capacity} học viên
                     </span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
@@ -595,7 +595,7 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
         "Bệnh đốm lá (Phomopsis durionis) & Thán thư (Colletotrichum siamense)",
       ],
       stage: "Phun lá cuối mùa mưa (tháng 11) phòng héo ngọn; ủ phân chuồng bón gốc trước mùa mưa (tháng 4 – đầu tháng 5)",
-      dosage: "Phun lá: Pha tỷ lệ 1:1000 với nước sạch · Ủ phân chuồng: 3 kg chế phẩm / 1 tấn phân chuồng hoai mục",
+      dosage: "Phun lá: Pha tỷ lệ 1:1000 với nước sạch - Ủ phân chuồng: 3 kg chế phẩm / 1 tấn phân chuồng hoai mục",
       instructions: [
         "Phòng bệnh héo ngọn: Pha chế phẩm với nước sạch tỷ lệ 1:1000 sao cho tan đều, phun ướt đều mặt lá vào chiều mát khi trời khô ráo vào cuối mùa mưa (tháng 11).",
         "Phòng bệnh xì mủ & thối rễ: Ủ trộn 3 kg chế phẩm/tấn phân chuồng hoai mục trước khi bón 7–10 ngày ở độ ẩm 50–60% (bóp chặt tay thấy nước rỉ qua kẽ tay), phủ kín bạt tới khi bón vào vùng rễ theo hình chiếu tán cây.",
@@ -612,8 +612,8 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
         "Bệnh xì mủ thân, cành (Phytophthora palmivora)",
         "Bệnh tàn rụi lá & Bệnh thối nâu quả (Phytophthora palmivora)",
       ],
-      stage: "Bệnh héo ngọn: Tháng 11 – tháng 2 (khi tỷ lệ bệnh ≥ 5%) · Bệnh xì mủ: Mùa mưa (tháng 5 – tháng 11)",
-      dosage: "Phun lá: Pha theo khuyến cáo nhà sản xuất tùy tuổi cây · Quét thân: Pha đậm đặc quét lên vết bệnh đã cạo",
+      stage: "Bệnh héo ngọn: Tháng 11 – tháng 2 (khi tỷ lệ bệnh ≥ 5%) - Bệnh xì mủ: Mùa mưa (tháng 5 – tháng 11)",
+      dosage: "Phun lá: Pha theo khuyến cáo nhà sản xuất tùy tuổi cây - Quét thân: Pha đậm đặc quét lên vết bệnh đã cạo",
       instructions: [
         "Đối với bệnh héo ngọn: Khi thấy rụng lá và khô đầu cành từ đỉnh ngọn xuống với tỷ lệ bệnh ≥ 5%, cắt bỏ cành bệnh nặng và phun ướt đều mặt lá vào sáng sớm hoặc chiều mát 2 lần cách nhau 7 – 10 ngày.",
         "Đối với bệnh xì mủ: Cạo sạch lớp vỏ ngoài ở vị trí xì mủ (loại bỏ toàn bộ mô bệnh chết, thối mục), sau đó quét thuốc lên phần mặt đã cạo kết hợp tiêm thân Agri-Fos 400SL.",
@@ -649,7 +649,7 @@ export function getPesticideEfficacy(item: PesticideDto): PesticideEfficacy {
         "Bệnh tàn rụi lá & Bệnh thối nâu quả",
       ],
       stage: "Quét thân mùa mưa (tháng 5–11) hoặc phun luân phiên lần 1, lần 2 khi cây ra lá non phòng đốm lá, thán thư",
-      dosage: "Phun tán lá: 400 – 500 g / phuy 200 lít nước · Quét vết bệnh: Pha 25 – 30 g / 1 lít nước quét lên vết cạo",
+      dosage: "Phun tán lá: 400 – 500 g / phuy 200 lít nước - Quét vết bệnh: Pha 25 – 30 g / 1 lít nước quét lên vết cạo",
       instructions: [
         "Khi xử lý xì mủ: Cạo sạch vỏ bệnh thối mục, quét dung dịch thuốc lên mặt vết cạo vào ngày tạnh ráo.",
         "Khi phòng trừ đốm lá, thán thư: Phun luân phiên trong phác đồ 3 lần (cách nhau 7–10 ngày) cùng với Propineb, Metiram complex và Trifloxystrobin + Tebuconazole.",
@@ -1513,7 +1513,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     id: 3,
     name: "Hữu cơ Vi sinh Đất Mẹ 70% OM",
     category: "organic",
-    formula: "Chất hữu cơ: 70% · Axit Humic: 12% · Nấm Trichoderma: 1×10⁶ CFU/g",
+    formula: "Chất hữu cơ: 70% - Axit Humic: 12% - Nấm Trichoderma: 1×10⁶ CFU/g",
     manufacturer: "Công ty CP Nông Nghiệp Xanh Đất Mẹ",
     dosage: "5 – 10 kg/gốc/lần (Tùy tuổi cây)",
     applicationMethod: "Bón gốc theo mép tán lá",
@@ -1526,7 +1526,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     id: 4,
     name: "NPK 12-12-17+TE Gốc Sunfat (Bio-Agri)",
     category: "npk",
-    formula: "Đạm (N): 12% · Lân (P₂O₅): 12% · Kali Sunfat (K₂SO₄): 17% · TE (Bo, Mg, Zn)",
+    formula: "Đạm (N): 12% - Lân (P₂O₅): 12% - Kali Sunfat (K₂SO₄): 17% - TE (Bo, Mg, Zn)",
     manufacturer: "Bio-Agri Systems International",
     dosage: "0.8 – 1.5 kg/cây/đợt nuôi trái",
     applicationMethod: "Rải đều quanh tán & tưới đẫm nước",
@@ -1539,7 +1539,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     id: 5,
     name: "Phân bón lá Canxi Bo Sữa Bo Amino Kẽm",
     category: "foliar",
-    formula: "Canxi (CaO): 12% · Bo hữu hiệu: 35.000 ppm · Kẽm (Zn): 15.000 ppm · Amino Acid: 10%",
+    formula: "Canxi (CaO): 12% - Bo hữu hiệu: 35.000 ppm - Kẽm (Zn): 15.000 ppm - Amino Acid: 10%",
     manufacturer: "Agri-Green Nutrition Ltd.",
     dosage: "Pha 750ml cho 400 – 600 lít nước",
     applicationMethod: "Phun ướt đều 2 mặt lá & chùm hoa/trái",
@@ -1552,7 +1552,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     id: 6,
     name: "Gói Axit Humic Đậm Đặc & Trichoderma (Duri-Root)",
     category: "microbial",
-    formula: "Axit Humic: 85% · Axit Fulvic: 10% · Kali hữu hiệu: 10% · Trichoderma: 2×10⁹ CFU/g",
+    formula: "Axit Humic: 85% - Axit Fulvic: 10% - Kali hữu hiệu: 10% - Trichoderma: 2×10⁹ CFU/g",
     manufacturer: "Duri-Root Bio Sciences",
     dosage: "1 kg pha 500 – 800 lít nước tưới gốc",
     applicationMethod: "Tưới vùng rễ tơ hoặc hòa qua hệ thống nhỏ giọt",
@@ -1565,7 +1565,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     id: 7,
     name: "NPK 20-20-15+TE Đầu Trâu Chuyên Đọt",
     category: "npk",
-    formula: "Đạm (N): 20% · Lân (P₂O₅): 20% · Kali (K₂O): 15% · Vi lượng Bo, Kẽm, Đồng",
+    formula: "Đạm (N): 20% - Lân (P₂O₅): 20% - Kali (K₂O): 15% - Vi lượng Bo, Kẽm, Đồng",
     manufacturer: "Công ty CP Phân bón Bình Điền",
     dosage: "0.5 – 1.0 kg/cây/đợt cơi đọt",
     applicationMethod: "Bón gốc khi đất ẩm sau cơn mưa",
@@ -1578,7 +1578,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     id: 8,
     name: "Kali Clorua (KCl / Muối Ớt Đỏ) — Cảnh báo cấm",
     category: "restricted",
-    formula: "Kali (K₂O): 60% · Hàm lượng Clo (Cl⁻): > 45%",
+    formula: "Kali (K₂O): 60% - Hàm lượng Clo (Cl⁻): > 45%",
     manufacturer: "Nhập khẩu Belarus / Canada",
     dosage: "0 kg/cây (Tuyệt đối không dùng cho sầu riêng)",
     applicationMethod: "CẤM SỬ DỤNG CHO CÂY SẦU RIÊNG",
@@ -2200,7 +2200,7 @@ export function VarietyDetailModal({
         </div>
         <h3 className="pt-pesticide-modal-title">{item.name}</h3>
         <p className="pt-pesticide-modal-mfg">
-          Xuất xứ: <strong>{item.origin || "Việt Nam"}</strong> · Mã giống: <strong>VAR-0{item.id}</strong>
+          Xuất xứ: <strong>{item.origin || "Việt Nam"}</strong> - Mã giống: <strong>VAR-0{item.id}</strong>
         </p>
       </div>
 
@@ -2232,7 +2232,7 @@ export function VarietyDetailModal({
         <div className="pt-efficacy-timing">
           <span>Tỷ lệ hạt lép & Độ ngọt Brix:</span>
           <strong style={{ color: "#2563eb" }}>
-            {item.seedRate || "Hạt lép > 80%"} · Brix: {item.brix || "32 – 36%"}
+            {item.seedRate || "Hạt lép > 80%"} - Brix: {item.brix || "32 – 36%"}
           </strong>
         </div>
       </div>
@@ -2811,7 +2811,7 @@ export function DiseaseAndIpmList() {
                   <div className="pt-pest-card-content">
                     <h3 className="pt-pest-card-name">{item.name}</h3>
                     <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-                      {item.affectedParts} · Mức độ {item.prevalenceCode}
+                      {item.affectedParts} - Mức độ {item.prevalenceCode}
                     </div>
                   </div>
                   <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
@@ -2868,7 +2868,7 @@ export function CareProtocolDetailModal({
       <div className="pt-pesticide-modal-header">
         <div className="pt-training-modal-badges" style={{ justifyContent: "center" }}>
           <Pill tone="green">
-            {isSenPro ? "Phụ lục kỹ thuật · 2026–2027" : `Giai đoạn ${stage.order} / 08 · ${stage.duration}`}
+            {isSenPro ? "Phụ lục kỹ thuật - 2026–2027" : `Giai đoạn ${stage.order} / 08 - ${stage.duration}`}
           </Pill>
           <span className="pt-training-code-pill">Bảo chứng thu mua giá cao</span>
         </div>
@@ -2890,7 +2890,7 @@ export function CareProtocolDetailModal({
           <span className="pt-efficacy-label" style={{ color: "#15803d" }}>
             {isSenPro
               ? "Tỷ lệ pha SenPro theo từng trạng thái đọt non"
-              : "Lịch trình thực hành trên vườn (Ngày dự kiến · Trạng thái · Sản phẩm)"}
+              : "Lịch trình thực hành trên vườn (Ngày dự kiến - Trạng thái - Sản phẩm)"}
           </span>
           <div className="pt-protocol-milestone-list">
             {stage.milestones.map((m, idx) => (
@@ -3096,7 +3096,7 @@ export function CareProtocol2026List() {
                     {stage.order}. {stage.name}
                   </h3>
                   <p className="pt-pest-card-sub">
-                    <strong>{stage.duration}</strong> · {stage.milestones.length} mốc định lượng chi tiết
+                    <strong>{stage.duration}</strong> - {stage.milestones.length} mốc định lượng chi tiết
                   </p>
                   {matchedMilestone ? (
                     <div className="pt-protocol-match-hint">

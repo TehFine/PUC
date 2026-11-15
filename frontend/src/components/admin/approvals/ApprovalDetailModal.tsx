@@ -72,7 +72,7 @@ export function ApprovalDecisionModal({
     >
       <form id="approval-decision-form" onSubmit={(e) => void submit(e)} noValidate>
         <p style={{ fontSize: 13.5, color: "var(--text-secondary)", marginBottom: 14, lineHeight: 1.5 }}>
-          Hộ nộp: <strong>{approval.applicantName}</strong> · Loại yêu cầu: <strong>{approval.requestType}</strong>
+          Hộ nộp: <strong>{approval.applicantName}</strong> - Loại yêu cầu: <strong>{approval.requestType}</strong>
         </p>
         <TextAreaField
           label={mode === "approve" ? "Ghi chú phản hồi (không bắt buộc)" : "Lý do từ chối"}
@@ -267,7 +267,7 @@ export default function ApprovalDetailModal({
                         </div>
                         <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
                           {att.mimeType || "Tệp"}
-                          {att.sizeBytes ? ` · ${Math.round(att.sizeBytes / 1024)} KB` : ""}
+                          {att.sizeBytes ? ` - ${Math.round(att.sizeBytes / 1024)} KB` : ""}
                         </div>
                       </div>
                     </div>

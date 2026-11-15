@@ -410,13 +410,13 @@ export class HarvestService extends BaseCrudService {
       } else if (r.journal_count > 0 && r.last_journal_on) {
         const candidate = addDaysIso(r.last_journal_on, 30);
         computedHarvestOn = candidate < today ? addDaysIso(today, 14) : candidate;
-        calculationBasis = `${r.last_activity || "Nhật ký chăm sóc"} (${formatVnDate(r.last_journal_on)}) · ${r.journal_count} lượt ghi`;
+        calculationBasis = `${r.last_activity || "Nhật ký chăm sóc"} (${formatVnDate(r.last_journal_on)}) - ${r.journal_count} lượt ghi`;
       }
 
       if (computedHarvestOn && r.phi_safe_on && r.phi_safe_on > computedHarvestOn) {
         computedHarvestOn = r.phi_safe_on;
         phiAdjusted = true;
-        calculationBasis += ` · Lùi sau cách ly PHI (${formatVnDate(r.phi_safe_on)})`;
+        calculationBasis += ` - Lùi sau cách ly PHI (${formatVnDate(r.phi_safe_on)})`;
       }
 
       const inIsolation = Boolean(r.phi_safe_on && r.phi_safe_on > today);
@@ -509,9 +509,9 @@ export class HarvestService extends BaseCrudService {
     const formattedDate = formatVnDate(dto.harvestDate);
     const yieldPart =
       dto.estimatedYieldKg && dto.estimatedYieldKg > 0
-        ? ` · Sản lượng dự kiến ~${Math.round(dto.estimatedYieldKg).toLocaleString("vi-VN")} kg`
+        ? ` - Sản lượng dự kiến ~${Math.round(dto.estimatedYieldKg).toLocaleString("vi-VN")} kg`
         : "";
-    const notePart = dto.note && dto.note.trim() ? ` · Ghi chú: ${dto.note.trim()}` : "";
+    const notePart = dto.note && dto.note.trim() ? ` - Ghi chú: ${dto.note.trim()}` : "";
 
     const title = `Thông báo lịch thu hoạch dự kiến – Thửa ${plotCode}`;
     const body = `HTX dự kiến thu hoạch thửa ${plotCode} vào ngày ${formattedDate} (tính toán từ nhật ký chăm sóc & thời gian cách ly PHI)${yieldPart}${notePart}.`;

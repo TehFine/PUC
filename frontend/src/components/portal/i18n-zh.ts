@@ -148,9 +148,11 @@ const EXACT_MAP: Record<string, string> = {
   "Trưởng thôn (": "村长（",
   "Quy mô vườn": "果园规模",
   "thửa": "块",
-  "thửa ·": "个地块 ·",
+  "thửa -": "个地块 -",
+  "thửa ·": "个地块 -",
   "Thửa": "地块",
-  "· Thửa": "· 地块",
+  "- Thửa": "- 地块",
+  "· Thửa": "- 地块",
   "(Thửa": "（地块",
   "Ngôn ngữ": "界面语言",
   "Trang giới thiệu HTX": "合作社介绍主页",
@@ -402,8 +404,10 @@ const EXACT_MAP: Record<string, string> = {
   "Quy chuẩn áp dụng:": "执行标准：",
   "VietGAP & Nghị định thư GACC": "VietGAP 标准与海关总署 (GACC) 议定书",
   "QUÉT QR XEM HỒ SƠ LÔ VƯỜN": "扫码查看果园地块档案",
+  "Hệ thống truy xuất nguồn gốc nông sản CheckVN - Cục Bảo vệ Thực vật":
+    "CheckVN 农产品溯源系统 - 植物保护局认证",
   "Hệ thống truy xuất nguồn gốc nông sản CheckVN · Cục Bảo vệ Thực vật":
-    "CheckVN 农产品溯源系统 · 植物保护局认证",
+    "CheckVN 农产品溯源系统 - 植物保护局认证",
   "NGHIÊM CẤM TỰ Ý THAY ĐỔI BIỂN CẮM RANH GIỚI VÙNG TRỒNG": "严禁擅自移动或更改种植区边界标识牌",
   "Hộ nông dân Krông Búk": "居内合作社社员农户",
   "Hộ nông dân HTX Cư Né": "居内合作社社员农户",
@@ -420,7 +424,8 @@ const EXACT_MAP: Record<string, string> = {
   "Chuyển chế độ xem ảnh vệ tinh": "切换至卫星影像视图",
   "Chuyển chế độ xem bản đồ giao thông": "切换至道路地图视图",
   "Số thửa / Tờ bản đồ": "地块号 / 图幅号",
-  "· Tờ #": "· 图幅 #",
+  "- Tờ #": "- 图幅 #",
+  "· Tờ #": "- 图幅 #",
   "Tọa độ tâm WGS84": "WGS84 中心坐标",
   "Tọa độ tâm thửa": "地块中心坐标",
   "Định vị vệ tinh GPS": "GPS 卫星定位",
@@ -484,11 +489,14 @@ const EXACT_MAP: Record<string, string> = {
   "Đang gửi báo cáo…": "正在提交报告…",
   "Gửi báo cáo khắc phục": "提交整改报告",
   "Ảnh minh chứng khắc phục của hộ": "农户提交的整改证明照片",
-  "QUY TẮC 1 · ĐỊNH KỲ": "规则 1 · 定期记录",
+  "QUY TẮC 1 - ĐỊNH KỲ": "规则 1 - 定期记录",
+  "QUY TẮC 1 · ĐỊNH KỲ": "规则 1 - 定期记录",
   "Ghi nhật ký 7 ngày/lần": "每7天至少记录一次",
-  "QUY TẮC 2 · CÁCH LY": "规则 2 · 安全间隔",
+  "QUY TẮC 2 - CÁCH LY": "规则 2 - 安全间隔",
+  "QUY TẮC 2 · CÁCH LY": "规则 2 - 安全间隔",
   "Cách ly trước thu hoạch": "严格遵守采前安全间隔期",
-  "QUY TẮC 3 · AN TOÀN": "规则 3 · 用药安全",
+  "QUY TẮC 3 - AN TOÀN": "规则 3 - 用药安全",
+  "QUY TẮC 3 · AN TOÀN": "规则 3 - 用药安全",
   "Cấm thuốc ngoài danh mục": "严禁使用名录外禁用农药",
   "Loại nhật ký": "日志类型",
   "Nhật ký canh tác": "农事作业日志",
@@ -585,7 +593,8 @@ const EXACT_MAP: Record<string, string> = {
   // ─── Tab Thu hoạch & Tem (StampsTab, FruitStampsView & HarvestLotTicket) ───
   "Lịch thu hoạch dự kiến từ HTX": "合作社预计采收计划",
   "Quy chuẩn thu hoạch": "采收与品控标准",
-  "QUY CHUẨN 1 · LỊCH THU HOẠCH TỰ ĐỘNG": "标准 1 · 自动排定采收期",
+  "QUY CHUẨN 1 - LỊCH THU HOẠCH TỰ ĐỘNG": "标准 1 - 自动排定采收期",
+  "QUY CHUẨN 1 · LỊCH THU HOẠCH TỰ ĐỘNG": "标准 1 - 自动排定采收期",
   "HTX tính toán ngày thu hoạch & gửi thông báo": "合作社核算采收日期并推送通知",
   "Khi đến mùa thu hoạch, HTX trực tiếp tính toán ngày cắt dự kiến dựa trên nhật ký chăm sóc và thời gian cách ly thuốc của hộ dân, sau đó gửi thông báo lịch thu hoạch qua hệ thống.":
     "进入采收季时，合作社直接根据社员农户填报的农事管护日志与农药安全间隔期核算预计采果日期，并通过系统推送采收通知。",
@@ -597,11 +606,14 @@ const EXACT_MAP: Record<string, string> = {
     "合作社技术员与 KCS 品控员直接到果园核查农药安全间隔期 (PHI) 并称重分级。",
   "HTX nghiệm thu xuất khẩu chính ngạch và kích hoạt tem niêm phong điện tử truy xuất nguồn gốc khi đóng gói xuất xưởng.":
     "合作社完成正贸出口验收，并在包装出厂时激活防伪二维码电子溯源封签。",
-  "QUY CHUẨN 1 · KHAI BÁO VƯỜN": "标准 1 · 采收申报",
+  "QUY CHUẨN 1 - KHAI BÁO VƯỜN": "标准 1 - 采收申报",
+  "QUY CHUẨN 1 · KHAI BÁO VƯỜN": "标准 1 - 采收申报",
   "Đăng ký ngày cắt & sản lượng dự kiến": "登记预计采果日期与预估产量",
-  "QUY CHUẨN 2 · KIỂM ĐỊNH KCS": "标准 2 · KCS 品控检验",
+  "QUY CHUẨN 2 - KIỂM ĐỊNH KCS": "标准 2 - KCS 品控检验",
+  "QUY CHUẨN 2 · KIỂM ĐỊNH KCS": "标准 2 - KCS 品控检验",
   "Thẩm định tồn dư BVTV & Phân loại quả": "农残安全核验与榴莲果品分级",
-  "QUY CHUẨN 3 · CẤP TEM NIÊM PHONG": "标准 3 · 签发溯源封签",
+  "QUY CHUẨN 3 - CẤP TEM NIÊM PHONG": "标准 3 - 签发溯源封签",
+  "QUY CHUẨN 3 · CẤP TEM NIÊM PHONG": "标准 3 - 签发溯源封签",
   "Kích hoạt tem niêm phong điện tử": "激活出口防伪二维码溯源标签",
   "Chế độ thu hoạch": "采收管理模式",
   "Khai báo thu hái (": "采收产量申报 (",
@@ -627,7 +639,8 @@ const EXACT_MAP: Record<string, string> = {
   "Tổng sản lượng:": "总产量：",
   "Loại 1 / VIP (kg)": "一等果 / VIP (kg)",
   "Loại 2 (kg)": "二等果 (kg)",
-  "kg · Loại 2:": "kg · 二等果：",
+  "kg - Loại 2:": "kg - 二等果：",
+  "kg · Loại 2:": "kg - 二等果：",
   "Đánh giá chất lượng dự kiến": "预计果品品质等级",
   "Ghi chú gửi Cán bộ HTX": "给合作社干部的备注",
   "Ví dụ: Trái già đủ ngày, cơm vàng, nhờ HTX kiểm định...": "例如：果实成熟度达标、果肉金黄，请合作社安排品控核验...",
@@ -678,10 +691,14 @@ const EXACT_MAP: Record<string, string> = {
   "BẢN CHỨNG THỰC": "官方认证正本",
   "KHÔNG ĐẠT CHUẨN": "检测不合格",
   "CHUẨN ISO/IEC 17025": "ISO/IEC 17025 标准",
-  "HTX CƯ NÉ · ĐÃ KIỂM TRA": "居内合作社 · 已核验",
-  "HTX CƯ NÉ · GIÁM SÁT": "居内合作社 · 全程监管",
-  "HTX KRÔNG BÚK · ĐÃ KIỂM TRA": "居内合作社 · 已核验",
-  "HTX KRÔNG BÚK · GIÁM SÁT": "居内合作社 · 全程监管",
+  "HTX CƯ NÉ - ĐÃ KIỂM TRA": "居内合作社 - 已核验",
+  "HTX CƯ NÉ · ĐÃ KIỂM TRA": "居内合作社 - 已核验",
+  "HTX CƯ NÉ - GIÁM SÁT": "居内合作社 - 全程监管",
+  "HTX CƯ NÉ · GIÁM SÁT": "居内合作社 - 全程监管",
+  "HTX KRÔNG BÚK - ĐÃ KIỂM TRA": "居内合作社 - 已核验",
+  "HTX KRÔNG BÚK · ĐÃ KIỂM TRA": "居内合作社 - 已核验",
+  "HTX KRÔNG BÚK - GIÁM SÁT": "居内合作社 - 全程监管",
+  "HTX KRÔNG BÚK · GIÁM SÁT": "居内合作社 - 全程监管",
   "Xuất khẩu TQ": "出口中国",
   "Bấm để mở tem vé chi tiết hoặc dùng máy ảnh quét trực tiếp": "点击打开溯源标签详情或直接扫码核验",
   "Tem điện tử lô hàng": "批次电子溯源标签",
@@ -694,7 +711,8 @@ const EXACT_MAP: Record<string, string> = {
   "THỊ TRƯỜNG": "目标市场",
   "Trung Quốc": "中国市场",
   "Nội địa": "越南内销",
-  "Vùng trồng PUC-KRB-001 · VietGAP": "种植区 PUC-KRB-001 · VietGAP 认证",
+  "Vùng trồng PUC-KRB-001 - VietGAP": "种植区 PUC-KRB-001 - VietGAP 认证",
+  "Vùng trồng PUC-KRB-001 · VietGAP": "种植区 PUC-KRB-001 - VietGAP 认证",
   "Quét mã QR để kiểm tra nguồn gốc & nhật ký canh tác": "扫描二维码核验原产地与农事作业日志",
   "Tải mã QR": "下载二维码",
   "Xem toàn bộ hồ sơ truy xuất": "查看完整溯源档案",
@@ -717,7 +735,8 @@ const EXACT_MAP: Record<string, string> = {
   "Phiếu trả kết quả kiểm nghiệm": "实验室检测结果报告单",
   "Đã ký số & chứng thực": "已数字签名与官方认证",
   "Mã QR xác thực phiếu": "证书防伪验证二维码",
-  "PUC · BẢN GỐC CHỨNG THỰC": "PUC · 官方认证正本",
+  "PUC - BẢN GỐC CHỨNG THỰC": "PUC - 官方认证正本",
+  "PUC · BẢN GỐC CHỨNG THỰC": "PUC - 官方认证正本",
   "SỞ NÔNG NGHIỆP & PHÁT TRIỂN NÔNG THÔN TỈNH ĐẮK LẮK": "多乐省农业与农村发展厅",
   "SỞ NN & PTNT TỈNH ĐẮK LẮK": "多乐省农业与农村发展厅",
   "TRUNG TÂM KIỂM ĐỊNH & KHẢO NGHIỆM CHẤT LƯỢNG NÔNG LÂM THỦY SẢN": "农林水产品质量检验与测试中心",
@@ -726,7 +745,8 @@ const EXACT_MAP: Record<string, string> = {
     "化学分析与农残检测实验室 (ISO/IEC 17025:2017 - VILAS 238)",
   "Số:": "报告编号：",
   "Mã PUC:": "PUC 代码：",
-  "· Mã PUC:": "· PUC 代码：",
+  "- Mã PUC:": "- PUC 代码：",
+  "· Mã PUC:": "- PUC 代码：",
   "Quét tra cứu gốc": "扫码查验正本",
   "PHIẾU TRẢ KẾT QUẢ KIỂM NGHIỆM": "实验室检测分析报告证书",
   "CHẤT LƯỢNG NÔNG SẢN VÀ DƯ LƯỢNG THUỐC BVTV": "农产品安全质量与植保农药残留检测",
@@ -736,7 +756,8 @@ const EXACT_MAP: Record<string, string> = {
   "Tên chủ hộ / Cơ sở SX:": "种植户主 / 生产单位：",
   "Mã số vùng trồng (PUC) / Thửa:": "注册果园代码 (PUC) / 地块：",
   "Mã vùng trồng / Thửa:": "注册果园代码 / 地块：",
-  "VN-DLK-0028 · Thửa": "VN-DLK-0028 · 地块",
+  "VN-DLK-0028 - Thửa": "VN-DLK-0028 - 地块",
+  "VN-DLK-0028 · Thửa": "VN-DLK-0028 - 地块",
   "Địa chỉ canh tác:": "种植地址：",
   "Xã Ea Tar, Huyện Cư M'gar, Tỉnh Đắk Lắk": "多乐省克容布 / 居姆加尔种植区 (Đắk Lắk)",
   "Xã Ea Tar, H. Cư M'gar, Đắk Lắk": "多乐省克容布 / 居姆加尔种植区",
@@ -1120,8 +1141,10 @@ const EXACT_MAP: Record<string, string> = {
   "Sau khi bón phân hạt cần tưới nước nhẹ để phân tan dần, tránh bón vào lúc trời nắng gắt làm bốc hơi đạm.":
     "施用颗粒肥后应适量浇水促溶，避免在烈日高温时施肥导致氮素挥发流失。",
   "Hữu cơ Vi sinh Đất Mẹ 70% OM": "大地之母 70% OM 有机微生物肥",
+  "Chất hữu cơ: 70% - Axit Humic: 12% - Nấm Trichoderma: 1×10⁶ CFU/g":
+    "有机质: 70% - 腐殖酸: 12% - 木霉菌 (Trichoderma): 1×10⁶ CFU/g",
   "Chất hữu cơ: 70% · Axit Humic: 12% · Nấm Trichoderma: 1×10⁶ CFU/g":
-    "有机质: 70% · 腐殖酸: 12% · 木霉菌 (Trichoderma): 1×10⁶ CFU/g",
+    "有机质: 70% - 腐殖酸: 12% - 木霉菌 (Trichoderma): 1×10⁶ CFU/g",
   "Công ty CP Nông Nghiệp Xanh Đất Mẹ": "大地之母绿色农业股份公司",
   "5 – 10 kg/gốc/lần (Tùy tuổi cây)": "5 – 10 公斤/株/次（视树龄而定）",
   "Bón gốc theo mép tán lá": "沿树冠滴水线环状沟施",
@@ -1138,8 +1161,10 @@ const EXACT_MAP: Record<string, string> = {
   "5 – 10 kg/gốc rải đều theo mép tán lá, xới nhẹ lấp đất và tưới đủ ẩm.":
     "每株 5 – 10 公斤沿树冠滴水线撒施，浅翻覆土并浇透水。",
   "NPK 12-12-17+TE Gốc Sunfat (Bio-Agri)": "硫酸钾型 NPK 12-12-17+TE 复合肥 (Bio-Agri)",
+  "Đạm (N): 12% - Lân (P₂O₅): 12% - Kali Sunfat (K₂SO₄): 17% - TE (Bo, Mg, Zn)":
+    "氮 (N): 12% - 磷 (P₂O₅): 12% - 硫酸钾 (K₂SO₄): 17% - 微量元素 (硼、镁、锌)",
   "Đạm (N): 12% · Lân (P₂O₅): 12% · Kali Sunfat (K₂SO₄): 17% · TE (Bo, Mg, Zn)":
-    "氮 (N): 12% · 磷 (P₂O₅): 12% · 硫酸钾 (K₂SO₄): 17% · 微量元素 (硼、镁、锌)",
+    "氮 (N): 12% - 磷 (P₂O₅): 12% - 硫酸钾 (K₂SO₄): 17% - 微量元素 (硼、镁、锌)",
   "0.8 – 1.5 kg/cây/đợt nuôi trái": "0.8 – 1.5 公斤/株/壮果期",
   "Rải đều quanh tán & tưới đẫm nước": "沿树冠外围均匀撒施并浇透水",
   "Giai đoạn nuôi trái non & thúc trái lớn": "幼果发育期与果实膨大期",
@@ -1156,8 +1181,10 @@ const EXACT_MAP: Record<string, string> = {
   "0.8 – 1.5 kg/cây chia làm 2-3 lần bón rải đều quanh tán, tưới ẩm ngay sau bón.":
     "每株 0.8 – 1.5 公斤，分 2–3 次沿树冠滴水线撒施，施后立即浇水保湿。",
   "Phân bón lá Canxi Bo Sữa Bo Amino Kẽm": "钙硼氨基酸锌乳态叶面肥",
+  "Canxi (CaO): 12% - Bo hữu hiệu: 35.000 ppm - Kẽm (Zn): 15.000 ppm - Amino Acid: 10%":
+    "钙 (CaO): 12% - 有效硼: 35,000 ppm - 锌 (Zn): 15,000 ppm - 氨基酸: 10%",
   "Canxi (CaO): 12% · Bo hữu hiệu: 35.000 ppm · Kẽm (Zn): 15.000 ppm · Amino Acid: 10%":
-    "钙 (CaO): 12% · 有效硼: 35,000 ppm · 锌 (Zn): 15,000 ppm · 氨基酸: 10%",
+    "钙 (CaO): 12% - 有效硼: 35,000 ppm - 锌 (Zn): 15,000 ppm - 氨基酸: 10%",
   "Pha 750ml cho 400 – 600 lít nước": "750 毫升兑水 400 – 600 升",
   "Phun ướt đều 2 mặt lá & chùm hoa/trái": "均匀喷施叶片正反面及花穗/幼果簇",
   "Nhú mắt cua, trước xả nhụy & trái non 3-7 tuần": "花芽露白期、谢花前及谢花后 3–7 周幼果期",
@@ -1175,8 +1202,10 @@ const EXACT_MAP: Record<string, string> = {
   "Pha 750ml với 400 – 600 lít nước, phun sương ướt đều tán lá và chùm bông/trái.":
     "750 毫升兑水 400 – 600 升，细雾均匀喷湿树冠叶片与花穗/幼果。",
   "Gói Axit Humic Đậm Đặc & Trichoderma (Duri-Root)": "高浓缩腐殖酸与木霉菌护根剂 (Duri-Root)",
+  "Axit Humic: 85% - Axit Fulvic: 10% - Kali hữu hiệu: 10% - Trichoderma: 2×10⁹ CFU/g":
+    "腐殖酸: 85% - 黄腐酸: 10% - 有效钾: 10% - 木霉菌: 2×10⁹ CFU/g",
   "Axit Humic: 85% · Axit Fulvic: 10% · Kali hữu hiệu: 10% · Trichoderma: 2×10⁹ CFU/g":
-    "腐殖酸: 85% · 黄腐酸: 10% · 有效钾: 10% · 木霉菌: 2×10⁹ CFU/g",
+    "腐殖酸: 85% - 黄腐酸: 10% - 有效钾: 10% - 木霉菌: 2×10⁹ CFU/g",
   "1 kg pha 500 – 800 lít nước tưới gốc": "1 公斤兑水 500 – 800 升灌根",
   "Tưới vùng rễ tơ hoặc hòa qua hệ thống nhỏ giọt": "浇灌须根区或通过滴灌系统施用",
   "Kích rễ đầu vụ & phục hồi sau đợt bệnh": "季初促根萌发与病后树势恢复",
@@ -1193,8 +1222,10 @@ const EXACT_MAP: Record<string, string> = {
   "Hòa 1 kg vào 500 – 800 lít nước, tưới 10 – 15 lít dung dịch quanh gốc vùng rễ tơ.":
     "1 公斤兑水 500 – 800 升，每株围绕须根区浇灌 10 – 15 升水溶肥液。",
   "NPK 20-20-15+TE Đầu Trâu Chuyên Đọt": "牛头牌 NPK 20-20-15+TE 促梢专用肥",
+  "Đạm (N): 20% - Lân (P₂O₅): 20% - Kali (K₂O): 15% - Vi lượng Bo, Kẽm, Đồng":
+    "氮 (N): 20% - 磷 (P₂O₅): 20% - 钾 (K₂O): 15% - 微量元素硼、锌、铜",
   "Đạm (N): 20% · Lân (P₂O₅): 20% · Kali (K₂O): 15% · Vi lượng Bo, Kẽm, Đồng":
-    "氮 (N): 20% · 磷 (P₂O₅): 20% · 钾 (K₂O): 15% · 微量元素硼、锌、铜",
+    "氮 (N): 20% - 磷 (P₂O₅): 20% - 钾 (K₂O): 15% - 微量元素硼、锌、铜",
   "Công ty CP Phân bón Bình Điền": "平田肥料股份公司 (Bình Điền)",
   "0.5 – 1.0 kg/cây/đợt cơi đọt": "0.5 – 1.0 公斤/株/每次抽梢期",
   "Bón gốc khi đất ẩm sau cơn mưa": "雨后土壤湿润时环施于根部",
@@ -1211,7 +1242,8 @@ const EXACT_MAP: Record<string, string> = {
   "Bón 0.5 – 1.0 kg/cây khi đất có độ ẩm tốt, bón theo mép tán lá.":
     "在土壤湿润时沿树冠滴水线每株施用 0.5 – 1.0 公斤。",
   "Kali Clorua (KCl / Muối Ớt Đỏ) — Cảnh báo cấm": "氯化钾 (KCl / 红钾肥) — 严禁使用警告",
-  "Kali (K₂O): 60% · Hàm lượng Clo (Cl⁻): > 45%": "氧化钾 (K₂O): 60% · 氯离子 (Cl⁻) 含量: > 45%",
+  "Kali (K₂O): 60% - Hàm lượng Clo (Cl⁻): > 45%": "氧化钾 (K₂O): 60% - 氯离子 (Cl⁻) 含量: > 45%",
+  "Kali (K₂O): 60% · Hàm lượng Clo (Cl⁻): > 45%": "氧化钾 (K₂O): 60% - 氯离子 (Cl⁻) 含量: > 45%",
   "Nhập khẩu Belarus / Canada": "白俄罗斯 / 加拿大进口",
   "0 kg/cây (Tuyệt đối không dùng cho sầu riêng)": "0 公斤/株（榴莲绝对禁止使用）",
   "CẤM SỬ DỤNG CHO CÂY SẦU RIÊNG": "严禁用于榴莲树",
@@ -1255,7 +1287,8 @@ const EXACT_MAP: Record<string, string> = {
   "Không tìm thấy giống sầu riêng phù hợp với tiêu chí lọc.": "未找到符合筛选条件的榴莲品种。",
   "Chi tiết giống sầu riêng": "榴莲品种详情",
   "Xuất xứ:": "原产地：",
-  "· Mã giống:": "· 品种代码：",
+  "- Mã giống:": "- 品种代码：",
+  "· Mã giống:": "- 品种代码：",
   "Thái Lan": "泰国",
   "Thái Lan (Thuần hóa tại Tây Nguyên & Nam Bộ)": "泰国（已在越南西原及南部驯化栽培）",
   "Malaysia": "马来西亚",
@@ -1406,22 +1439,29 @@ const EXACT_MAP: Record<string, string> = {
   "Giờ hỗ trợ": "服务时间",
   "7:30 – 17:00 (Thứ 2 – Thứ 7)": "7:30 – 17:00（周一至周六）",
   "Thắc mắc thường gặp": "常见问题解答",
-  "HỖ TRỢ 1 · NGOẠI TUYẾN": "支持 1 · 离线记录",
+  "HỖ TRỢ 1 - NGOẠI TUYẾN": "支持 1 - 离线记录",
+  "HỖ TRỢ 1 · NGOẠI TUYẾN": "支持 1 - 离线记录",
   "Ghi nhật ký khi mất kết nối mạng": "无网络信号时记录农事日志",
   "Hệ thống tự động lưu trên điện thoại và đồng bộ ngay khi có lại kết nối mạng 4G/Wifi.":
     "系统会自动保存在手机本地，并在恢复 4G/Wi-Fi 网络连接后立即同步。",
-  "HỖ TRỢ 2 · THÔNG TIN THỬA": "支持 2 · 地块信息",
+  "HỖ TRỢ 2 - THÔNG TIN THỬA": "支持 2 - 地块信息",
+  "HỖ TRỢ 2 · THÔNG TIN THỬA": "支持 2 - 地块信息",
   "Cần điều chỉnh diện tích, mã số thửa đất": "需要调整地块面积或地块编码",
   "Vui lòng liên hệ trực tiếp cán bộ HTX hoặc Trưởng thôn để được hỗ trợ cập nhật thông tin thửa đất.":
     "请直接联系合作社管理员或村长协助核实并更新果园地块档案。",
-  "HỖ TRỢ 3 · TÀI KHOẢN": "支持 3 · 账户安全",
+  "HỖ TRỢ 3 - TÀI KHOẢN": "支持 3 - 账户安全",
+  "HỖ TRỢ 3 · TÀI KHOẢN": "支持 3 - 账户安全",
   "Quên mật khẩu hoặc đổi số điện thoại": "忘记密码或更换手机号码",
   "Liên hệ Ban quản trị HTX hoặc Trưởng thôn để được kiểm tra và cấp lại mật khẩu đăng nhập.":
     "请联系合作社管理委员会或村长核实身份并重置登录密码。",
+  "Hệ thống Quản lý Vùng trồng & Nhật ký số PUC Krông Búk - Phiên bản 2.4.0":
+    "居内合作社 (HTX Cư Né) PUC 种植区管理与数字化农事日志系统 - 版本 2.4.0",
   "Hệ thống Quản lý Vùng trồng & Nhật ký số PUC Krông Búk · Phiên bản 2.4.0":
-    "居内合作社 (HTX Cư Né) PUC 种植区管理与数字化农事日志系统 · 版本 2.4.0",
+    "居内合作社 (HTX Cư Né) PUC 种植区管理与数字化农事日志系统 - 版本 2.4.0",
+  "Hệ thống Quản lý Vùng trồng & Nhật ký số PUC HTX Cư Né - Phiên bản 2.4.0":
+    "居内合作社 (HTX Cư Né) PUC 种植区管理与数字化农事日志系统 - 版本 2.4.0",
   "Hệ thống Quản lý Vùng trồng & Nhật ký số PUC HTX Cư Né · Phiên bản 2.4.0":
-    "居内合作社 (HTX Cư Né) PUC 种植区管理与数字化农事日志系统 · 版本 2.4.0",
+    "居内合作社 (HTX Cư Né) PUC 种植区管理与数字化农事日志系统 - 版本 2.4.0",
 
   // ─── Tiện ích upload / dùng chung ───
   "Chụp ảnh hoặc tải ảnh lên": "拍照或上传图片",
@@ -1473,10 +1513,10 @@ const PATTERN_RULES: Array<[RegExp, (...args: string[]) => string]> = [
   [/^Liều lượng:\s*(.+)$/i, (_, text) => `剂量：${translateViToZh(text.trim())}`],
   [/^Trưởng thôn\s*\((.+)\)$/i, (_, village) => `村长（${translateViToZh(village)}）`],
   [/^MÃ:\s*(.+)$/i, (_, code) => `编号: ${code}`],
-  [/^(.+),\s*Xã Krông Búk$/i, (_, village) => `克容布乡 · ${translateViToZh(village.trim())}`],
+  [/^(.+),\s*Xã Krông Búk$/i, (_, village) => `克容布乡 - ${translateViToZh(village.trim())}`],
   [/^Thửa\s+([A-Za-z0-9_-]+)\s*[—–-]\s*(.+)$/i, (_, code, desc) => `地块 ${code} — ${translateViToZh(desc.trim())}`],
   [/^(\d+)\s*thửa$/i, (_, n) => `${n} 块`],
-  [/^(\d+)\s*thửa\s*·\s*(.+)\s*ha$/i, (_, plots, area) => `${plots} 个地块 · ${area} 公顷 (ha)`],
+  [/^(\d+)\s*thửa\s*(?:·|-)\s*(.+)\s*ha$/i, (_, plots, area) => `${plots} 个地块 - ${area} 公顷 (ha)`],
   [/^Thông báo\s*\((\d+)\s*chưa đọc\)$/i, (_, n) => `通知（${n} 条未读）`],
   [/^Hồ sơ:\s*(.+)$/i, (_, name) => `账户档案：${name}`],
   [/^Khai báo thu hái\s*\((\d+)\)$/i, (_, n) => `采收产量申报 (${n})`],
@@ -1495,10 +1535,10 @@ const PATTERN_RULES: Array<[RegExp, (...args: string[]) => string]> = [
   [/^Ngưng thu hái đến\s*(.+)$/i, (_, date) => `暂停采收至 ${date.trim()}`],
   [/^Cách ly thuốc:\s*(.+)$/i, (_, name) => `安全间隔期 (PHI)：${name.trim()}`],
   [/^CB\s+(.+)$/i, (_, officer) => `干部 ${officer.trim()}`],
-  [/^Phát hiện:\s*([^·]+?)(?:\s*·\s*Thửa\s+(.+))?$/i, (_, date, plot) =>
-    plot ? `发现日期：${date.trim()} · 地块 ${plot.trim()}` : `发现日期：${date.trim()}`],
-  [/^Phản hồi của hộ(?:\s*·\s*(.+))?$/i, (_, date) =>
-    date ? `农户整改反馈 · ${date.trim()}` : `农户整改反馈`],
+  [/^Phát hiện:\s*(.+?)(?:\s+(?:·|-)\s+Thửa\s+(.+))?$/i, (_, date, plot) =>
+    plot ? `发现日期：${date.trim()} - 地块 ${plot.trim()}` : `发现日期：${date.trim()}`],
+  [/^Phản hồi của hộ(?:\s+(?:·|-)\s+(.+))?$/i, (_, date) =>
+    date ? `农户整改反馈 - ${date.trim()}` : `农户整改反馈`],
   [/^Đã xác nhận khắc phục(?:\s+ngày\s+(.+))?$/i, (_, date) =>
     date ? `已确认整改（${date.trim()}）` : `已确认完成整改`],
   [/^Đã gửi khai báo thu hái cho Thửa\s+(.+?)\s+thành công!\s*HTX đã tiếp nhận thông tin\.$/i, (_, code) =>
@@ -1524,7 +1564,7 @@ const PATTERN_RULES: Array<[RegExp, (...args: string[]) => string]> = [
   [/^(\d+)%\s*lấp đầy\s*\((.+)\)$/i, (_, pct, rest) => `已报满 ${pct}%（${translateViToZh(rest)}）`],
   [/^Còn\s+(\d+)\s+chỗ$/i, (_, n) => `剩余 ${n} 个名额`],
   [/^Ngày:\s*(.+)$/i, (_, d) => `日期：${d}`],
-  [/^·\s*Ngày\s+(.+)$/i, (_, d) => `· 日期 ${d}`],
+  [/^(?:·|-)\s*Ngày\s+(.+)$/i, (_, d) => `- 日期 ${d}`],
   [/^Bắt đầu\s+(.+)$/i, (_, t) => `${t} 开始`],
   [/^([\d.,]+)\s*lít\/ha$/i, (_, n) => `${n} 升/公顷`],
   [/^([\d.,]+)\s*kg\/ha$/i, (_, n) => `${n} 公斤/公顷`],
@@ -1995,7 +2035,7 @@ function translateSingleSegment(trimmed: string): string {
   return trimmed;
 }
 
-/** Dịch một chuỗi Tiếng Việt sang Tiếng Trung (giữ nguyên khoảng trắng hai đầu và hỗ trợ chuỗi ghép có " · ", " – ", " — "). */
+/** Dịch một chuỗi Tiếng Việt sang Tiếng Trung (giữ nguyên khoảng trắng hai đầu và hỗ trợ chuỗi ghép có " - ", " · ", " – ", " — "). */
 export function translateViToZh(raw: string): string {
   if (!raw) return raw;
   const trimmed = raw.trim();
@@ -2009,10 +2049,16 @@ export function translateViToZh(raw: string): string {
     return `${lead}${exactFull}${tail}`;
   }
 
-  // Hỗ trợ chuỗi nhiều vế ngăn cách bởi " · ", " – ", " — "
-  for (const sep of [" · ", " – ", " — "]) {
+  // Hỗ trợ chuỗi nhiều vế ngăn cách bởi " - ", " · ", " – ", " — "
+  const multiPartSeps: Array<[string, RegExp, string]> = [
+    [" - ", /\s+-\s+/, " - "],
+    [" · ", /\s*·\s*/, " - "],
+    [" – ", /\s*–\s*/, " – "],
+    [" — ", /\s*—\s*/, " — "],
+  ];
+  for (const [sep, splitRe, joinSep] of multiPartSeps) {
     if (trimmed.includes(sep)) {
-      const parts = trimmed.split(new RegExp(`\\s*${sep.trim()}\\s*`));
+      const parts = trimmed.split(splitRe);
       let changed = false;
       const translatedParts = parts.map((part) => {
         const tp = translateSingleSegment(part);
@@ -2020,7 +2066,7 @@ export function translateViToZh(raw: string): string {
         return tp;
       });
       if (changed) {
-        const joined = translatedParts.join(sep);
+        const joined = translatedParts.join(joinSep);
         const lead = raw.slice(0, raw.indexOf(trimmed));
         const tail = raw.slice(raw.indexOf(trimmed) + trimmed.length);
         return `${lead}${joined}${tail}`;

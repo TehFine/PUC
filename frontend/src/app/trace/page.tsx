@@ -208,7 +208,7 @@ export default function TraceLookupPage() {
           <div className="sw-grid sw-trace-hero-row">
             <div className="sw-cell sw-col-1-2 sw-trace-hero-panel">
               <div className="sw-trace-hero-head">
-                <span className="sw-trace-kicker">Truy xuất nguồn gốc · HTX Cư Né</span>
+                <span className="sw-trace-kicker">Truy xuất nguồn gốc - HTX Cư Né</span>
               </div>
 
               <div className="sw-trace-hero-body">
@@ -279,7 +279,7 @@ export default function TraceLookupPage() {
               </div>
 
               <div className="sw-trace-hero-foot">
-                <span className="sw-micro">HTX Nông nghiệp Cư Né · Krông Búk, Đắk Lắk</span>
+                <span className="sw-micro">HTX Nông nghiệp Cư Né - Krông Búk, Đắk Lắk</span>
                 <span className="sw-micro">Đối chiếu trực tuyến</span>
               </div>
             </div>
@@ -454,7 +454,7 @@ export default function TraceLookupPage() {
 
           <div className="sw-grid sw-checker-row sw-trace-pillars">
             <div className="sw-cell sw-col-1 sw-between">
-              <span className="sw-micro">01 · Định danh địa lý</span>
+              <span className="sw-micro">01 - Định danh địa lý</span>
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Mã số vùng trồng</h3>
                 <p className="sw-caption-meta">
@@ -465,7 +465,7 @@ export default function TraceLookupPage() {
             </div>
 
             <div className="sw-cell sw-col-2 sw-between">
-              <span className="sw-micro">02 · Giám sát thực địa</span>
+              <span className="sw-micro">02 - Giám sát thực địa</span>
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Nhật ký canh tác</h3>
                 <p className="sw-caption-meta">
@@ -476,7 +476,7 @@ export default function TraceLookupPage() {
             </div>
 
             <div className="sw-cell sw-col-3 sw-between">
-              <span className="sw-micro">03 · An toàn thực phẩm</span>
+              <span className="sw-micro">03 - An toàn thực phẩm</span>
               <div className="sw-caption-block">
                 <h3 className="sw-caption-title">Kiểm nghiệm độc lập</h3>
                 <p className="sw-caption-meta">

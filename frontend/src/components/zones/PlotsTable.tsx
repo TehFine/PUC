@@ -158,7 +158,7 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
       </div>
       <div className="table-footer">
         <span>
-          {features.length} thửa · {formatHa(summary.totalArea)}
+          {features.length} thửa - {formatHa(summary.totalArea)}
         </span>
         <span>Nguồn: PostGIS khi có DATABASE_URL, ngược lại dùng dữ liệu mẫu</span>
       </div>

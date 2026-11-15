@@ -39,7 +39,7 @@ export default function ModeNote({
           : mode === "gps"
             ? "Di chuyển dọc ranh thửa để ghi điểm GPS. Có thể bấm thêm điểm thủ công."
             : mode === "edit"
-              ? "• Kéo thả các chấm tròn trắng ở góc để dịch chuyển đỉnh thửa đất.\n• Kéo chấm nhỏ ở giữa cạnh (hoặc bấm lên bản đồ) để thêm đỉnh mới.\n• Bấm chuột phải vào một đỉnh để xóa đỉnh đó, hoặc chọn “Vẽ lại từ đầu”."
+              ? "- Kéo thả các chấm tròn trắng ở góc để dịch chuyển đỉnh thửa đất.\n- Kéo chấm nhỏ ở giữa cạnh (hoặc bấm lên bản đồ) để thêm đỉnh mới.\n- Bấm chuột phải vào một đỉnh để xóa đỉnh đó, hoặc chọn “Vẽ lại từ đầu”."
               : "Vẽ polygon đo lại thực địa để so khớp với thửa khai báo đang chọn."}
       </p>
       {mode === "edit" && preview && (

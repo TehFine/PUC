@@ -208,7 +208,7 @@ export default function HouseholdAccountModal({
     >
       <p style={{ fontSize: 13.5, color: "var(--text-secondary)", marginBottom: 14, lineHeight: 1.5 }}>
         Thiết lập tài khoản đăng nhập Cổng hộ dân cho hộ <strong>{household.name}</strong> (Mã hộ:{" "}
-        <code>{household.code}</code> · {household.villageName || `Thôn #${household.villageId}`}).
+        <code>{household.code}</code> - {household.villageName || `Thôn #${household.villageId}`}).
       </p>
 
       <div className="form-group">

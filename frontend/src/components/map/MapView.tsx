@@ -263,7 +263,7 @@ export default function MapView({
       points.forEach((point, idx) => {
         const vertexIcon = L.divIcon({
           className: "plot-edit-vertex-icon",
-          html: `<span style="display:block;width:14px;height:14px;border-radius:50%;background:#ffffff;border:3px solid #d97706;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:grab;" title="Đỉnh #${idx + 1}: Kéo để di chuyển · Chuột phải để xóa"></span>`,
+          html: `<span style="display:block;width:14px;height:14px;border-radius:50%;background:#ffffff;border:3px solid #d97706;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:grab;" title="Đỉnh #${idx + 1}: Kéo để di chuyển - Chuột phải để xóa"></span>`,
           iconSize: [14, 14],
           iconAnchor: [7, 7],
         });

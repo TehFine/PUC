@@ -86,8 +86,8 @@ export default function HarvestPlanNotifyModal({
         }}
       >
         <div>
-          Hộ canh tác: <strong style={{ color: "#14372f" }}>{plan.householdName}</strong> ({plan.householdCode}) · Thửa{" "}
-          <strong>{plan.plotCode}</strong> ({plan.variety} · {plan.areaHa} ha)
+          Hộ canh tác: <strong style={{ color: "#14372f" }}>{plan.householdName}</strong> ({plan.householdCode}) - Thửa{" "}
+          <strong>{plan.plotCode}</strong> ({plan.variety} - {plan.areaHa} ha)
         </div>
         <div style={{ marginTop: 4 }}>
           Căn cứ tính toán: <strong>{plan.calculationBasis}</strong>

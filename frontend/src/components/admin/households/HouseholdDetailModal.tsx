@@ -135,7 +135,7 @@ export default function HouseholdDetailModal({
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Quy mô canh tác</div>
           <div style={{ fontWeight: 600 }}>
-            {household.plotCount} thửa · {formatVn(household.areaHa, 2)} ha
+            {household.plotCount} thửa - {formatVn(household.areaHa, 2)} ha
           </div>
         </div>
         <div>

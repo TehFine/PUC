@@ -277,8 +277,8 @@ export default function HouseholdImportModal({
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: 6 }}>
-            Kết quả nhập: Tạo mới <span style={{ color: "#277a48" }}>{result.created}</span> · Cập nhật{" "}
-            <span style={{ color: "#235f92" }}>{result.updated}</span> · Lỗi{" "}
+            Kết quả nhập: Tạo mới <span style={{ color: "#277a48" }}>{result.created}</span> - Cập nhật{" "}
+            <span style={{ color: "#235f92" }}>{result.updated}</span> - Lỗi{" "}
             <span style={{ color: result.errors.length > 0 ? "#b73c20" : "inherit" }}>{result.errors.length}</span>
           </div>
           {result.errors.length > 0 && (

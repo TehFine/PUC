@@ -491,7 +491,7 @@ export default function Harvest() {
                           {p.plotCode}
                         </div>
                         <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-                          {p.variety} · {formatVn(p.areaHa, 2)} ha
+                          {p.variety} - {formatVn(p.areaHa, 2)} ha
                         </div>
                       </td>
                       <td style={{ fontSize: 12, maxWidth: 260 }}>

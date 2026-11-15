@@ -122,15 +122,15 @@ export function HarvestAssetTagCard({
       <div className="pt-asset-left">
         <div className="pt-asset-sub-title">
           <span>SẦU RIÊNG TƯƠI</span>
-          <span className="pt-asset-dot">·</span>
+          <span className="pt-asset-dot">-</span>
           <span className="pt-asset-hide-mobile">HTX CƯ NÉ</span>
-          <span className="pt-asset-dot pt-asset-hide-mobile">·</span>
+          <span className="pt-asset-dot pt-asset-hide-mobile">-</span>
           <span>{pucCode}</span>
         </div>
 
         <div className="pt-asset-code-line">
           <span className="pt-asset-code-val">LÔ {lot.lotCode}</span>
-          <span className="pt-asset-code-divider">·</span>
+          <span className="pt-asset-code-divider">-</span>
           <span className="pt-asset-weight-val">KLT: {formatKg(lot.weightKg)}</span>
         </div>
 
@@ -141,7 +141,7 @@ export function HarvestAssetTagCard({
 
         <div className="pt-asset-meta">
           <span>Ngày thu: {formatDate(lot.harvestedOn)}</span>
-          <span className="pt-asset-meta-dot">·</span>
+          <span className="pt-asset-meta-dot">-</span>
           <span>{lot.buyer} ({lot.market === "Trung Quốc" ? "Xuất khẩu TQ" : lot.market})</span>
         </div>
       </div>
@@ -280,7 +280,7 @@ export function HarvestLotQrModal({
                 </div>
                 <div className="pt-ticket-entity-info">
                   <div className="pt-ticket-entity-name">{lot.buyer}</div>
-                  <div className="pt-ticket-entity-meta">Vùng trồng {pucCode} · VietGAP</div>
+                  <div className="pt-ticket-entity-meta">Vùng trồng {pucCode} - VietGAP</div>
                 </div>
               </div>
             </div>

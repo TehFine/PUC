@@ -27,7 +27,7 @@ interface HarvestRule {
 const HARVEST_RULES: HarvestRule[] = [
   {
     id: "schedule-calc",
-    kicker: "QUY CHUẨN 1 · LỊCH THU HOẠCH TỰ ĐỘNG",
+    kicker: "QUY CHUẨN 1 - LỊCH THU HOẠCH TỰ ĐỘNG",
     title: "HTX tính toán ngày thu hoạch & gửi thông báo",
     desc: "Khi đến mùa thu hoạch, HTX trực tiếp tính toán ngày cắt dự kiến dựa trên nhật ký chăm sóc và thời gian cách ly thuốc của hộ dân, sau đó gửi thông báo lịch thu hoạch qua hệ thống.",
     nodeType: "active",
@@ -35,7 +35,7 @@ const HARVEST_RULES: HarvestRule[] = [
   },
   {
     id: "kcs",
-    kicker: "QUY CHUẨN 2 · KIỂM ĐỊNH KCS",
+    kicker: "QUY CHUẨN 2 - KIỂM ĐỊNH KCS",
     title: "Thẩm định tồn dư BVTV & Phân loại quả",
     desc: "Cán bộ kỹ thuật HTX cùng Kiểm tra viên KCS trực tiếp về vườn kiểm tra cách ly thuốc BVTV (thời gian PHI) và cân đo phân loại.",
     nodeType: "warn",
@@ -43,7 +43,7 @@ const HARVEST_RULES: HarvestRule[] = [
   },
   {
     id: "stamping",
-    kicker: "QUY CHUẨN 3 · CẤP TEM NIÊM PHONG",
+    kicker: "QUY CHUẨN 3 - CẤP TEM NIÊM PHONG",
     title: "Kích hoạt tem niêm phong điện tử",
     desc: "HTX nghiệm thu xuất khẩu chính ngạch và kích hoạt tem niêm phong điện tử truy xuất nguồn gốc khi đóng gói xuất xưởng.",
     nodeType: "danger",

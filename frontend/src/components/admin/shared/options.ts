@@ -10,7 +10,7 @@ import type { HouseholdRow } from "@/types/households";
 export function useHouseholdOptions(enabled = true) {
   const { rows, loading, error } = useApiList<HouseholdRow>(enabled ? "households" : null, { pageSize: 500 });
   const options = useMemo<Option[]>(
-    () => rows.map((h) => ({ value: String(h.id), label: `${h.name} · ${h.code}${h.villageName ? ` · ${h.villageName}` : ""}` })),
+    () => rows.map((h) => ({ value: String(h.id), label: `${h.name} - ${h.code}${h.villageName ? ` - ${h.villageName}` : ""}` })),
     [rows],
   );
   return { households: rows, options, loading, error };

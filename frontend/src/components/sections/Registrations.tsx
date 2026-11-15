@@ -305,7 +305,7 @@ export default function Registrations({
                     </td>
                     <td>
                       {row.householdCode
-                        ? `${row.householdCode} · ${row.householdName}${row.villageName ? ` (${row.villageName})` : ""}`
+                        ? `${row.householdCode} - ${row.householdName}${row.villageName ? ` (${row.villageName})` : ""}`
                         : (row.villageName ?? "—")}
                     </td>
                     <td>{row.note ?? "—"}</td>
@@ -382,7 +382,7 @@ export default function Registrations({
                     <td>{row.villageName ?? "—"}</td>
                     <td>{row.note ?? "—"}</td>
                     <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(row.createdAt)}</td>
-                    <td>{row.suggestedHouseholdId ? `${row.suggestedHouseholdCode} · ${row.suggestedHouseholdName}` : "—"}</td>
+                    <td>{row.suggestedHouseholdId ? `${row.suggestedHouseholdCode} - ${row.suggestedHouseholdName}` : "—"}</td>
                     <td>
                       <div style={{ display: "flex", gap: 5 }}>
                         <button type="button" className="btn btn-primary btn-sm" onClick={() => open(row)}>
@@ -435,12 +435,12 @@ export default function Registrations({
               <option value="">Chọn hộ</option>
               {households.map((household) => (
                 <option key={household.id} value={household.id}>
-                  {household.code} · {household.name} · {household.villageName} · {household.phone}
+                  {household.code} - {household.name} - {household.villageName} - {household.phone}
                 </option>
               ))}
               {target.suggestedHouseholdId && !households.some((item) => item.id === target.suggestedHouseholdId) && (
                 <option value={target.suggestedHouseholdId}>
-                  {target.suggestedHouseholdCode} · {target.suggestedHouseholdName} (gợi ý)
+                  {target.suggestedHouseholdCode} - {target.suggestedHouseholdName} (gợi ý)
                 </option>
               )}
             </select>

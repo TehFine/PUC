@@ -129,7 +129,7 @@ async function renderSignboardPngBlob(
     ctx.textAlign = "left";
     ctx.fillStyle = "#64748b";
     ctx.font = "600 18px Arial, sans-serif";
-    ctx.fillText("Hệ thống truy xuất nguồn gốc nông sản CheckVN · Cục Bảo vệ Thực vật", 64, 778);
+    ctx.fillText("Hệ thống truy xuất nguồn gốc nông sản CheckVN - Cục Bảo vệ Thực vật", 64, 778);
 
     ctx.textAlign = "right";
     ctx.fillStyle = "#b91c1c";
@@ -292,7 +292,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
             </div>
 
             <div className="plate-bottom">
-              <span>Hệ thống truy xuất nguồn gốc nông sản CheckVN · Cục Bảo vệ Thực vật</span>
+              <span>Hệ thống truy xuất nguồn gốc nông sản CheckVN - Cục Bảo vệ Thực vật</span>
               <span className="protect-warning">NGHIÊM CẤM TỰ Ý THAY ĐỔI BIỂN CẮM RANH GIỚI VÙNG TRỒNG</span>
             </div>
           </div>

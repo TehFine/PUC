@@ -254,7 +254,7 @@ const FERTILIZERS: FertilizerSeed[] = [
   {
     name: "Hữu cơ Vi sinh Đất Mẹ 70% OM",
     category: "organic",
-    formula: "Chất hữu cơ: 70% · Axit Humic: 12% · Nấm Trichoderma: 1×10⁶ CFU/g",
+    formula: "Chất hữu cơ: 70% - Axit Humic: 12% - Nấm Trichoderma: 1×10⁶ CFU/g",
     manufacturer: "Công ty CP Nông Nghiệp Xanh Đất Mẹ",
     dosage: "5 – 10 kg/gốc/lần (Tùy tuổi cây)",
     applicationMethod: "Bón gốc theo mép tán lá",
@@ -267,7 +267,7 @@ const FERTILIZERS: FertilizerSeed[] = [
   {
     name: "NPK 12-12-17+TE Gốc Sunfat (Bio-Agri)",
     category: "npk",
-    formula: "Đạm (N): 12% · Lân (P₂O₅): 12% · Kali Sunfat (K₂SO₄): 17% · TE (Bo, Mg, Zn)",
+    formula: "Đạm (N): 12% - Lân (P₂O₅): 12% - Kali Sunfat (K₂SO₄): 17% - TE (Bo, Mg, Zn)",
     manufacturer: "Bio-Agri Systems International",
     dosage: "0.8 – 1.5 kg/cây/đợt nuôi trái",
     applicationMethod: "Rải đều quanh tán & tưới đẫm nước",
@@ -280,7 +280,7 @@ const FERTILIZERS: FertilizerSeed[] = [
   {
     name: "Phân bón lá Canxi Bo Sữa Bo Amino Kẽm",
     category: "foliar",
-    formula: "Canxi (CaO): 12% · Bo hữu hiệu: 35.000 ppm · Kẽm (Zn): 15.000 ppm · Amino Acid: 10%",
+    formula: "Canxi (CaO): 12% - Bo hữu hiệu: 35.000 ppm - Kẽm (Zn): 15.000 ppm - Amino Acid: 10%",
     manufacturer: "Agri-Green Nutrition Ltd.",
     dosage: "Pha 750ml cho 400 – 600 lít nước",
     applicationMethod: "Phun ướt đều 2 mặt lá & chùm hoa/trái",
@@ -293,7 +293,7 @@ const FERTILIZERS: FertilizerSeed[] = [
   {
     name: "Gói Axit Humic Đậm Đặc & Trichoderma (Duri-Root)",
     category: "microbial",
-    formula: "Axit Humic: 85% · Axit Fulvic: 10% · Kali hữu hiệu: 10% · Trichoderma: 2×10⁹ CFU/g",
+    formula: "Axit Humic: 85% - Axit Fulvic: 10% - Kali hữu hiệu: 10% - Trichoderma: 2×10⁹ CFU/g",
     manufacturer: "Duri-Root Bio Sciences",
     dosage: "1 kg pha 500 – 800 lít nước tưới gốc",
     applicationMethod: "Tưới vùng rễ tơ hoặc hòa qua hệ thống nhỏ giọt",
@@ -306,7 +306,7 @@ const FERTILIZERS: FertilizerSeed[] = [
   {
     name: "NPK 20-20-15+TE Đầu Trâu Chuyên Đọt",
     category: "npk",
-    formula: "Đạm (N): 20% · Lân (P₂O₅): 20% · Kali (K₂O): 15% · Vi lượng Bo, Kẽm, Đồng",
+    formula: "Đạm (N): 20% - Lân (P₂O₅): 20% - Kali (K₂O): 15% - Vi lượng Bo, Kẽm, Đồng",
     manufacturer: "Công ty CP Phân bón Bình Điền",
     dosage: "0.5 – 1.0 kg/cây/đợt cơi đọt",
     applicationMethod: "Bón gốc khi đất ẩm sau cơn mưa",
@@ -319,7 +319,7 @@ const FERTILIZERS: FertilizerSeed[] = [
   {
     name: "Kali Clorua (KCl / Muối Ớt Đỏ) — Cảnh báo cấm",
     category: "restricted",
-    formula: "Kali (K₂O): 60% · Hàm lượng Clo (Cl⁻): > 45%",
+    formula: "Kali (K₂O): 60% - Hàm lượng Clo (Cl⁻): > 45%",
     manufacturer: "Nhập khẩu Belarus / Canada",
     dosage: "0 kg/cây (Tuyệt đối không dùng cho sầu riêng)",
     applicationMethod: "CẤM SỬ DỤNG CHO CÂY SẦU RIÊNG",

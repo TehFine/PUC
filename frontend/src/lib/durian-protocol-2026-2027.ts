@@ -39,7 +39,7 @@ export interface SenProRule {
 }
 
 export const HTX_PRICE_GUARANTEE_POLICY = {
-  badge: "Tiêu chuẩn bắt buộc HTX Cư Né · Niên vụ 2026–2027",
+  badge: "Tiêu chuẩn bắt buộc HTX Cư Né - Niên vụ 2026–2027",
   headline: "Tuân thủ quy trình chuẩn 2026–2027 — Bảo chứng thu mua đúng giá, giá cao",
   desktopNote:
     "Quy trình chăm sóc sầu riêng 2026–2027 là tài liệu kỹ thuật chuẩn dành cho người dân học tập và áp dụng khi tham gia Hợp tác xã Nông nghiệp Cư Né. Chỉ khi nhà vườn tuân thủ đúng phác đồ dinh dưỡng, điều tiết cơi đọt, thời gian cách ly và ghi chép nhật ký đầy đủ theo quy trình này, HTX mới đảm bảo chất lượng trái đạt chuẩn xuất khẩu để cam kết thu mua sản phẩm đúng giá, giá cao.",
@@ -89,7 +89,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
     group: "recovery",
     name: "Chuẩn bị vườn",
     duration: "30 ngày",
-    cardSubtitle: "30 ngày · Rửa vườn, vôi, hữu cơ & vi sinh",
+    cardSubtitle: "30 ngày - Rửa vườn, vôi, hữu cơ & vi sinh",
     imageSrc: "/stages/stage-01-dat.jpg",
     imageAlt:
       "Vệ sinh vườn sầu riêng sau thu hoạch, kiểm tra độ pH đất đỏ bazan và xử lý vôi, hữu cơ vi sinh phục hồi nền đất",
@@ -121,18 +121,18 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
     group: "recovery",
     name: "Cơi đọt 1",
     duration: "45 ngày",
-    cardSubtitle: "45 ngày · Kích rễ tơ & kéo cơi lá đầu vụ",
+    cardSubtitle: "45 ngày - Kích rễ tơ & kéo cơi lá đầu vụ",
     imageSrc: "/stages/stage-02-giong.jpg",
     imageAlt:
       "Cơi đọt non sầu riêng phóng đồng đều trên nền đất đỏ bazan được tưới dưỡng rễ và giữ ẩm tiêu chuẩn",
     drawerObjectPosition: "center 56%",
     summary:
-      "Tái thiết bộ rễ tơ khỏe mạnh bằng nhóm Amino sinh học kết hợp NPK cân đối (2:2:1) và dưỡng lá Grapo + Amino Ca+ giúp cơi đọt 1 ra đồng loạt, bản lá dày khỏe.",
+      "Tái thiết bộ rễ tơ khỏe mạnh bằng nhóm Amino sinh học kết hợp NPK cân đối (2:2:1) và dưỡng lá Grapo - Amino Ca+ giúp cơi đọt 1 ra đồng loạt, bản lá dày khỏe.",
     milestones: [
       {
         treeState: "Lá già",
         targetDay: "Ngày 0",
-        action: "Đổ gốc 25–30 lít/gốc hỗn hợp Amino X (1:1000) + Magic One (1:1000).",
+        action: "Đổ gốc 25–30 lít/gốc hỗn hợp Amino X (1:1000) - Magic One (1:1000).",
       },
       {
         treeState: "Nứt hạt gạo",
@@ -143,7 +143,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
         treeState: "Lá đuôi tôm",
         targetDay: "Ngày 20",
         action:
-          "Đổ gốc 25–30 lít/gốc Amino X (1:1000) + Magic One (1:1000). Trên tán phun Grapo + Amino Ca+ (1:800).",
+          "Đổ gốc 25–30 lít/gốc Amino X (1:1000) - Magic One (1:1000). Trên tán phun Grapo - Amino Ca+ (1:800).",
       },
     ],
     keyRules: [
@@ -151,7 +151,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
       "Tưới đủ ẩm sau khi rải NPK 2:2:1 để hạt phân tan đều, tránh cháy đầu rễ tơ mới nhú.",
     ],
     diaryRequirement:
-      "Ghi ngày đổ gốc Amino X + Magic One, lượng NPK 2:2:1 từng thửa và các đợt phun dưỡng lá / quản lý rầy nhảy.",
+      "Ghi ngày đổ gốc Amino X - Magic One, lượng NPK 2:2:1 từng thửa và các đợt phun dưỡng lá / quản lý rầy nhảy.",
   },
   {
     id: "coi-dot-2",
@@ -159,19 +159,19 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
     group: "recovery",
     name: "Cơi đọt 2",
     duration: "60 ngày",
-    cardSubtitle: "60 ngày · Mở khóa Lân & tích lũy lá lụa",
+    cardSubtitle: "60 ngày - Mở khóa Lân & tích lũy lá lụa",
     imageSrc: "/stages/stage-03-phan.jpg",
     imageAlt:
       "Nhà vườn bón bổ sung hữu cơ và lân nung chảy Văn Điển quanh rãnh chiếu mép tán chuẩn bị trước giai đoạn làm bông",
     drawerObjectPosition: "center 68%",
     summary:
-      "Hoàn thiện bộ khung lá sung sức trước khi làm bông: cải tạo pH mở khóa Lân trong đất, dự trữ Lân nung chảy Văn Điển và già hóa đồng bộ lá lụa bằng Brixup + MKP.",
+      "Hoàn thiện bộ khung lá sung sức trước khi làm bông: cải tạo pH mở khóa Lân trong đất, dự trữ Lân nung chảy Văn Điển và già hóa đồng bộ lá lụa bằng Brixup - MKP.",
     milestones: [
       {
         treeState: "Lá già (Lá lụa cơi 1 nếu đi cơi chuyền)",
         targetDay: "Ngày 0",
         action:
-          "Đổ gốc 25–30 lít/gốc Amino X (1:1000) + Magic One (1:1000). Cải tạo pH, bổ sung hữu cơ – Mở khóa Lân.",
+          "Đổ gốc 25–30 lít/gốc Amino X (1:1000) - Magic One (1:1000). Cải tạo pH, bổ sung hữu cơ – Mở khóa Lân.",
       },
       {
         treeState: "Nứt hạt gạo",
@@ -182,12 +182,12 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
         treeState: "Lá đuôi tôm",
         targetDay: "Ngày 20",
         action:
-          "Trên tán phun Grapo + Amino Ca+ (1:800). Tăng cường Lân dự trữ: Bón lân nung chảy (3–5 kg lân Văn Điển cho cây năm thứ 8) giai đoạn 40–45 ngày trước xiết nước.",
+          "Trên tán phun Grapo - Amino Ca+ (1:800). Tăng cường Lân dự trữ: Bón lân nung chảy (3–5 kg lân Văn Điển cho cây năm thứ 8) giai đoạn 40–45 ngày trước xiết nước.",
       },
       {
         treeState: "Lá lụa",
         targetDay: "Ngày 45–60",
-        action: "Phun Brixup (1:400) + MKP (bổ sung Bo + Mg) giúp lá nhanh thuần thục, dày xanh.",
+        action: "Phun Brixup (1:400) - MKP (bổ sung Bo, Mg) giúp lá nhanh thuần thục, dày xanh.",
       },
     ],
     keyRules: [
@@ -195,7 +195,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
       "Sử dụng lân nung chảy Văn Điển có nguồn gốc hợp quy để an toàn tuyệt đối chỉ tiêu Cadimi trong đất.",
     ],
     diaryRequirement:
-      "Ghi rõ khối lượng lân Văn Điển (3–5 kg/gốc), hóa đơn vật tư và ngày phun Brixup + MKP chuyển già lá.",
+      "Ghi rõ khối lượng lân Văn Điển (3–5 kg/gốc), hóa đơn vật tư và ngày phun Brixup - MKP chuyển già lá.",
   },
   {
     id: "tao-mam",
@@ -203,7 +203,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
     group: "flowering",
     name: "Tạo mầm hoa",
     duration: "15–30 ngày",
-    cardSubtitle: "15–30 ngày · Xiết nước & phân hóa mầm hoa",
+    cardSubtitle: "15–30 ngày - Xiết nước & phân hóa mầm hoa",
     imageSrc: "/landing/real-seasonal-care-orchard.jpg",
     imageAlt:
       "Cán bộ kỹ thuật HTX và nhà vườn kiểm tra mầm mắt cua dưới dạ cành lớn trong giai đoạn xiết nước ủ hoa",
@@ -215,7 +215,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
         treeState: "Già lá hoàn toàn",
         targetDay: "Ngày 0–15",
         action:
-          "Phun Tạo mầm (10:60:10 hoặc MKP) từ 2 đến 3 lần; lần cuối cộng thêm Combi (phun Magic hoặc Brixup nếu cần). Tiến hành xiết nước. Tăng dòng Lân hữu hiệu (200–500g MKP, MAP nếu cần) và bổ sung Lân qua lá, thân, cành trong giai đoạn đang xiết nước ủ hoa.",
+          "Phun Tạo mầm (10:60:10 hoặc MKP) từ 2 đến 3 lần; lần cuối kết hợp Combi (phun Magic hoặc Brixup nếu cần). Tiến hành xiết nước. Tăng dòng Lân hữu hiệu (200–500g MKP, MAP nếu cần) và bổ sung Lân qua lá, thân, cành trong giai đoạn đang xiết nước ủ hoa.",
       },
     ],
     keyRules: [
@@ -223,7 +223,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
       "Phun kỹ mặt dưới các cành mang quả cấp 1, cấp 2 nơi tập trung mầm mắt cua.",
     ],
     diaryRequirement:
-      "Ghi ngày bắt đầu xiết nước, số lần phun tạo mầm (10:60:10 / MKP + Combi) và ngày nhú mắt cua đầu tiên.",
+      "Ghi ngày bắt đầu xiết nước, số lần phun tạo mầm (10:60:10 / MKP - Combi) và ngày nhú mắt cua đầu tiên.",
   },
   {
     id: "nuoi-bong",
@@ -231,7 +231,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
     group: "flowering",
     name: "Nuôi bông",
     duration: "50–60 ngày",
-    cardSubtitle: "50–60 ngày · Mắt cua 1 cm đến trước xả nhụy",
+    cardSubtitle: "50–60 ngày - Mắt cua 1 cm đến trước xả nhụy",
     imageSrc: "/stages/stage-04-nuoc.jpg",
     imageAlt:
       "Chùm nụ mắt cua và bông sầu riêng phát triển mập khỏe dưới cành gỗ lớn cùng hệ thống tưới nhấp nước giữ ẩm",
@@ -242,29 +242,29 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
       {
         treeState: "Mắt cua 1 cm",
         targetDay: "Ngày 0–7",
-        action: "Nhấp nước giữ ẩm nhẹ lại từ từ. Phun Bloom (1:400) + 500g KNO₃.",
+        action: "Nhấp nước giữ ẩm nhẹ lại từ từ. Phun Bloom (1:400) - 500g KNO₃.",
       },
       {
         treeState: "Bông 3 cm (Đọt nứt hạt gạo)",
         targetDay: "Ngày 7–15",
         action:
-          "Đổ gốc Magic One + Amino X (1:1000). Ngày 10: Bón gốc NPK 2:1:1 (1 kg/gốc). Trên tán phun Grapo + Amino Ca+ (1:800).",
+          "Đổ gốc Magic One - Amino X (1:1000). Ngày 10: Bón gốc NPK 2:1:1 (1 kg/gốc). Trên tán phun Grapo - Amino Ca+ (1:800).",
       },
       {
         treeState: "Bông 7 cm",
         targetDay: "Ngày 15",
-        action: "Phun dưỡng bông Bloom + Amino Ca+ (1:400).",
+        action: "Phun dưỡng bông Bloom - Amino Ca+ (1:400).",
       },
       {
         treeState: "Bông 12 cm",
         targetDay: "Ngày 30",
-        action: "Phun Bloom + Amino Ca+ (1:400) (chú ý bổ sung Kali Bo dưỡng cuống và hạt phấn).",
+        action: "Phun Bloom - Amino Ca+ (1:400) (chú ý bổ sung Kali Bo dưỡng cuống và hạt phấn).",
       },
       {
         treeState: "Bông 15–20 cm (Lá lụa, già)",
         targetDay: "Ngày 40–60",
         action:
-          "Ngày 40: Đổ gốc Magic One (1:400) + 1 kg K₂SO₄. Phun 500 ml Brixup + 500g Kali Bo cho 200 lít nước.",
+          "Ngày 40: Đổ gốc Magic One (1:400) - 1 kg K₂SO₄. Phun 500 ml Brixup - 500g Kali Bo cho 200 lít nước.",
       },
     ],
     keyRules: [
@@ -280,7 +280,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
     group: "fruiting",
     name: "Nuôi trái",
     duration: "60 ngày",
-    cardSubtitle: "60 ngày · Từ đuôi chuột đến trái bằng cái chén",
+    cardSubtitle: "60 ngày - Từ đuôi chuột đến trái bằng cái chén",
     imageSrc: "/landing/cune-diary-phi-check.jpg",
     imageAlt:
       "Nhà vườn Cư Né kiểm tra trái non sầu riêng và cập nhật nhật ký chăm bón trên điện thoại theo đúng mốc tuổi trái",
@@ -292,38 +292,38 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
         treeState: "Đuôi chuột",
         targetDay: "Ngày 0–7",
         action:
-          "Phun Bloom + Amino Ca+ (1:400). Đổ gốc Magic One (1:400) + 1 kg K₂SO₄ + 500g MgSO₄.",
+          "Phun Bloom - Amino Ca+ (1:400). Đổ gốc Magic One (1:400) - 1 kg K₂SO₄ - 500g MgSO₄.",
       },
       {
         treeState: "Trái trứng cút",
         targetDay: "Ngày 7–15",
-        action: "Phun 500 ml Brixup + 500g Kali Bo.",
+        action: "Phun 500 ml Brixup - 500g Kali Bo.",
       },
       {
         treeState: "Trái trứng gà (Đợt 1)",
         targetDay: "Ngày 15–21",
-        action: "Phun Bloom + Amino Ca+ (1:400). Đổ gốc Magic One (1:400) + 1 kg Ca(NO₃)₂.",
+        action: "Phun Bloom - Amino Ca+ (1:400). Đổ gốc Magic One (1:400) - 1 kg Ca(NO₃)₂.",
       },
       {
         treeState: "Trái trứng gà (Đợt 2)",
         targetDay: "Ngày 21–28",
-        action: "Phun 500 ml Brixup + 500g Kali Bo. Đổ gốc Magic One (1:400) + 1 kg Ca(NO₃)₂.",
+        action: "Phun 500 ml Brixup - 500g Kali Bo. Đổ gốc Magic One (1:400) - 1 kg Ca(NO₃)₂.",
       },
       {
         treeState: "Trái to hơn trứng gà",
         targetDay: "Ngày 37",
-        action: "Phun Bloom + Amino Ca+ (1:400).",
+        action: "Phun Bloom - Amino Ca+ (1:400).",
       },
       {
         treeState: "Trái bằng nắm tay",
         targetDay: "Ngày 45",
         action:
-          "Phun 500 ml Brixup + 500g Kali Bo. Đổ gốc Magic One (1:400) + 1 kg K₂SO₄ + 500g MgSO₄.",
+          "Phun 500 ml Brixup - 500g Kali Bo. Đổ gốc Magic One (1:400) - 1 kg K₂SO₄ - 500g MgSO₄.",
       },
       {
         treeState: "Trái bằng cái chén",
         targetDay: "Ngày 60",
-        action: "Phun 500 ml Brixup + 500g Kali Bo. Đổ gốc Magic One (1:400) + 1 kg Ca(NO₃)₂.",
+        action: "Phun 500 ml Brixup - 500g Kali Bo. Đổ gốc Magic One (1:400) - 1 kg Ca(NO₃)₂.",
       },
     ],
     keyRules: [
@@ -339,7 +339,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
     group: "fruiting",
     name: "Nuôi trái – Kéo cơi theo bông",
     duration: "30 ngày",
-    cardSubtitle: "Ngày 65–90 · Thúc trọng lượng trái 2–3,5 kg",
+    cardSubtitle: "Ngày 65–90 - Thúc trọng lượng trái 2–3,5 kg",
     imageSrc: "/landing/cune-orchard-village.jpg",
     imageAlt:
       "Chùm trái sầu riêng 2 đến 3,5 kg phát triển đồng đều dưới tán lá xanh khỏe tại vùng trồng HTX Cư Né",
@@ -355,12 +355,12 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
       {
         treeState: "Trái khoảng 2–3 kg",
         targetDay: "Ngày 80",
-        action: "Phun Brixup (1:400) + 500g Kali Bo. Bón gốc NPK 12:11:18 (500g/gốc).",
+        action: "Phun Brixup (1:400) - 500g Kali Bo. Bón gốc NPK 12:11:18 (500g/gốc).",
       },
       {
         treeState: "Trái 2,5–3,5 kg",
         targetDay: "Ngày 90",
-        action: "Đổ gốc Magic One (1:400) + 1 kg K₂SO₄ + 500g MgSO₄.",
+        action: "Đổ gốc Magic One (1:400) - 1 kg K₂SO₄ - 500g MgSO₄.",
       },
     ],
     keyRules: [
@@ -376,7 +376,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
     group: "fruiting",
     name: "Làm cơm",
     duration: "45 ngày",
-    cardSubtitle: "Ngày 105–120 · Cơm vàng ráo, ngọt đậm 3–4 kg",
+    cardSubtitle: "Ngày 105–120 - Cơm vàng ráo, ngọt đậm 3–4 kg",
     imageSrc: "/stages/stage-06-thu-hoach.jpg",
     imageAlt:
       "Trái sầu riêng 3–4 kg đạt độ chín chuẩn, cơm vàng ráo dẻo béo sẵn sàng kiểm nghiệm và thu hoạch xuất khẩu giá cao",
@@ -387,12 +387,12 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
       {
         treeState: "Trái 3–4 kg",
         targetDay: "Ngày 105",
-        action: "Phun 500 ml Brixup + 500g Kali Bo. Đổ gốc Magic One (1:400) + 1 kg K₂SO₄.",
+        action: "Phun 500 ml Brixup - 500g Kali Bo. Đổ gốc Magic One (1:400) - 1 kg K₂SO₄.",
       },
       {
         treeState: "Trái 3–4 kg",
         targetDay: "Ngày 120",
-        action: "Phun 500 ml Brixup + 500g Kali Bo. Đổ gốc Magic One (1:400) + 1 kg K₂SO₄.",
+        action: "Phun 500 ml Brixup - 500g Kali Bo. Đổ gốc Magic One (1:400) - 1 kg K₂SO₄.",
       },
     ],
     keyRules: [
@@ -408,7 +408,7 @@ export const DURIAN_PROTOCOL_2026_2027: readonly DurianProtocolStage[] = [
     group: "senpro",
     name: "Quản lý đọt SenPro",
     duration: "Theo trạng thái đọt",
-    cardSubtitle: "Mũi giáo 1/400 · Hạt gạo 1/800 · Đuôi tôm 1/300",
+    cardSubtitle: "Mũi giáo 1/400 - Hạt gạo 1/800 - Đuôi tôm 1/300",
     imageSrc: "/stages/stage-05-sau-benh.jpg",
     imageAlt:
       "Kỹ thuật viên và nhà vườn kiểm tra trạng thái mầm đọt mũi giáo, hạt gạo và đuôi tôm để điều tiết đọt non đúng tỷ lệ",

@@ -31,7 +31,7 @@ export const TRAINING_ITEMS: TrainingItem[] = [
     shortNote: "Hội trường huyện Krông Búk\nGắn mã vùng trồng xuất khẩu",
     speaker: "Sở Nông nghiệp & Môi trường phối hợp UBND huyện & HTX Cư Né",
     location: "Hội trường huyện Krông Búk",
-    date: "Đợt 1 · Vụ mùa xuất khẩu",
+    date: "Đợt 1 - Vụ mùa xuất khẩu",
     description:
       "Triển khai mô hình quản lý số hóa, giám sát chuỗi giá trị và gắn mã số vùng trồng phục vụ kiểm dịch xuất khẩu chính ngạch cho các hộ trồng sầu riêng.",
     highlights: [
@@ -308,7 +308,7 @@ export default function TrainingGallery() {
               <div className="sw-training-caption">
                 <h3 className="sw-training-slide-title">{item.title}</h3>
                 <p className="sw-training-slide-sub">
-                  {item.categoryLabel} · {item.location}
+                  {item.categoryLabel} - {item.location}
                 </p>
               </div>
             </article>
@@ -375,7 +375,7 @@ export default function TrainingGallery() {
             <header className="sw-side-head">
               <div className="sw-modal-meta">
                 <span>{activeItem.categoryLabel}</span>
-                <span>·</span>
+                <span>-</span>
                 <span>
                   {String((drawerIndex ?? 0) + 1).padStart(2, "0")} /{" "}
                   {String(TRAINING_ITEMS.length).padStart(2, "0")}

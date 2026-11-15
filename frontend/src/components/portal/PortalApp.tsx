@@ -807,7 +807,7 @@ function PortalAppContent() {
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Quy mô vườn</span>
                   <strong className="pt-profile-val">
-                    {profHousehold?.plotCount ?? 0} thửa ·{" "}
+                    {profHousehold?.plotCount ?? 0} thửa -{" "}
                     {(profHousehold?.areaHa ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
                   </strong>
                 </div>

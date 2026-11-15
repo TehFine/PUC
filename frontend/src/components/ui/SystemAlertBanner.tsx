@@ -63,7 +63,7 @@ function SystemAlertBannerInner() {
             <div className="sys-alert-top">
               <span className="sys-alert-badge">
                 <span className="sys-alert-dot" aria-hidden="true" />
-                {isChunk ? "CẬP NHẬT PHIÊN BẢN" : "KHẨN CẤP · SỰ CỐ HỆ THỐNG"}
+                {isChunk ? "CẬP NHẬT PHIÊN BẢN" : "KHẨN CẤP - SỰ CỐ HỆ THỐNG"}
               </span>
               <button
                 type="button"

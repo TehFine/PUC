@@ -698,7 +698,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               </div>
               <div className="pt-mapmodal-popup-owner">
                 <span>Chủ hộ: <strong>{householdName}</strong></span>
-                <span className="pt-mapmodal-popup-dot">·</span>
+                <span className="pt-mapmodal-popup-dot">-</span>
                 <span>{plot.village || "Xã Ea Khăl"}, Xã Ea Khăl, Đắk Lắk</span>
               </div>
             </div>
@@ -738,7 +738,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Số thửa / Tờ bản đồ</span>
                   <strong className="pt-mapmodal-stat-val">
-                    Thửa #{plot.parcel || "—"} · Tờ #{plot.sheet || "—"}
+                    Thửa #{plot.parcel || "—"} - Tờ #{plot.sheet || "—"}
                   </strong>
                   <span className="pt-mapmodal-stat-sub">
                     Nguồn: {SOURCE_LABEL[plot.source] ?? "Khảo sát thực địa"}

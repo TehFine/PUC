@@ -139,7 +139,7 @@ export class NotificationsService {
              $1,
              'schedule',
              'Lịch kiểm tra: ' || i.title,
-             'Ngày ' || to_char(i.scheduled_on, 'DD/MM/YYYY') || ' · Cán bộ phụ trách: ' || i.officer,
+             'Ngày ' || to_char(i.scheduled_on, 'DD/MM/YYYY') || ' - Cán bộ phụ trách: ' || i.officer,
              '/portal?tab=inspection&scheduleId=' || i.id,
              now()
            FROM inspection_schedule i
@@ -202,7 +202,7 @@ export class NotificationsService {
              $1,
              'approval',
              'Hồ sơ chờ duyệt: ' || a.code || ' – ' || a.applicant_name,
-             a.request_type || ' · Nộp ngày ' || to_char(a.submitted_on, 'DD/MM/YYYY'),
+             a.request_type || ' - Nộp ngày ' || to_char(a.submitted_on, 'DD/MM/YYYY'),
              '/admin?section=approval&id=' || a.id,
              COALESCE(a.created_at, a.submitted_on::timestamptz, now())
            FROM approvals a
@@ -219,7 +219,7 @@ export class NotificationsService {
              $1,
              'violation',
              'Cảnh báo vi phạm: ' || v.title,
-             v.household_label || COALESCE(' · Thửa ' || v.plot_code, '') || COALESCE(' – ' || v.description, ''),
+             v.household_label || COALESCE(' - Thửa ' || v.plot_code, '') || COALESCE(' – ' || v.description, ''),
              '/admin?section=journal&violationId=' || v.id,
              COALESCE(v.detected_on::timestamptz, now())
            FROM violations v

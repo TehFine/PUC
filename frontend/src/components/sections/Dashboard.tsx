@@ -357,7 +357,7 @@ export default function Dashboard() {
                     <div className="alert-item-body">
                       <strong>{v.title}</strong>
                       <small>
-                        {v.householdLabel || "Hộ thành viên"} · {formatDate(v.detectedOn)}
+                        {v.householdLabel || "Hộ thành viên"} - {formatDate(v.detectedOn)}
                       </small>
                     </div>
                   </div>
@@ -381,7 +381,7 @@ export default function Dashboard() {
                   <div>
                     <div className="pending-item-name">{p.applicantName}</div>
                     <div className="pending-item-sub">
-                      {p.code} · {p.requestType} · {formatDate(p.submittedOn)}
+                      {p.code} - {p.requestType} - {formatDate(p.submittedOn)}
                     </div>
                   </div>
                   <button
@@ -412,8 +412,8 @@ export default function Dashboard() {
                         <div className="pending-item-name">{s.title}</div>
                         <div className="pending-item-sub">
                           {formatDate(s.scheduledOn)}
-                          {s.officer ? ` · ${s.officer}` : ""}
-                          {s.plotCount ? ` · ${s.plotCount} thửa` : ""}
+                          {s.officer ? ` - ${s.officer}` : ""}
+                          {s.plotCount ? ` - ${s.plotCount} thửa` : ""}
                         </div>
                       </div>
                       <span className={`badge ${kind.badge}`}>{kind.label}</span>

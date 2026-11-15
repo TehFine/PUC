@@ -87,10 +87,10 @@ export class OverviewService {
          SELECT 1 AS priority, 'journal' AS kind, 'Chưa ghi nhật ký 7 ngày' AS title,
                 CASE
                   WHEN j.last_on IS NULL THEN
-                    'Chưa có bản ghi' || coalesce(' · Thửa ' || dv.plot_code, '')
+                    'Chưa có bản ghi' || coalesce(' - Thửa ' || dv.plot_code, '')
                   ELSE
                     'Gần nhất: ' || to_char(j.last_on, 'DD/MM/YYYY') ||
-                    coalesce(' · Thửa ' || dv.plot_code, '')
+                    coalesce(' - Thửa ' || dv.plot_code, '')
                 END AS detail,
                 '${PORTAL_TABS.diary}' AS tab, coalesce(j.last_on, dv.detected_on) AS date
          FROM (
@@ -115,7 +115,7 @@ export class OverviewService {
 
          UNION ALL
          SELECT 0, 'violation', v.title,
-                coalesce('Thửa ' || v.plot_code || ' · ', '') ||
+                coalesce('Thửa ' || v.plot_code || ' - ', '') ||
                   CASE WHEN v.farmer_response_at IS NULL THEN 'Cần khắc phục' ELSE 'Chờ xác nhận' END,
                 '${PORTAL_TABS.diary}', v.detected_on
          FROM violations v
@@ -126,7 +126,7 @@ export class OverviewService {
          UNION ALL
          SELECT 2, 'isolation', 'Cách ly thuốc: ' || p.name,
                 'Ngưng thu hái đến ' || to_char(s.sprayed_on + s.isolation_days, 'DD/MM/YYYY') ||
-                  coalesce(' · Thửa ' || s.plot_code, ''),
+                  coalesce(' - Thửa ' || s.plot_code, ''),
                 '${PORTAL_TABS.diary}', s.sprayed_on + s.isolation_days
          FROM spray_records s JOIN pesticides p ON p.id = s.pesticide_id, today
          WHERE s.household_id = $1 AND s.isolation_days > 0 AND s.sprayed_on <= today.d
@@ -134,7 +134,7 @@ export class OverviewService {
 
          UNION ALL
          SELECT 3, 'schedule', i.title,
-                to_char(i.scheduled_on, 'DD/MM/YYYY') || ' · CB ' || i.officer,
+                to_char(i.scheduled_on, 'DD/MM/YYYY') || ' - CB ' || i.officer,
                 '${PORTAL_TABS.inspection}', i.scheduled_on
          FROM inspection_schedule i, today
          WHERE i.scheduled_on BETWEEN today.d AND today.d + 7
@@ -142,7 +142,7 @@ export class OverviewService {
          UNION ALL
          SELECT 4, 'training', c.title,
                 to_char(c.held_on, 'DD/MM/YYYY') ||
-                  coalesce(' · ' || to_char(c.starts_at, 'HH24:MI'), '') || coalesce(' · ' || c.location, ''),
+                  coalesce(' - ' || to_char(c.starts_at, 'HH24:MI'), '') || coalesce(' - ' || c.location, ''),
                 '${PORTAL_TABS.learn}', c.held_on
          FROM training_registrations r JOIN training_courses c ON c.id = r.course_id, today
          WHERE r.household_id = $1 AND r.status = 'registered' AND NOT c.completed

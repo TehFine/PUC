@@ -495,7 +495,7 @@ interface VietgapRule {
 const VIETGAP_RULES: VietgapRule[] = [
   {
     id: "frequency",
-    kicker: "QUY TẮC 1 · ĐỊNH KỲ",
+    kicker: "QUY TẮC 1 - ĐỊNH KỲ",
     title: "Ghi nhật ký 7 ngày/lần",
     desc: "Cập nhật đều đặn các việc tưới tiêu, bón phân, tỉa cành, bao trái phục vụ kiểm tra vùng trồng.",
     nodeType: "active",
@@ -503,7 +503,7 @@ const VIETGAP_RULES: VietgapRule[] = [
   },
   {
     id: "phi",
-    kicker: "QUY TẮC 2 · CÁCH LY",
+    kicker: "QUY TẮC 2 - CÁCH LY",
     title: "Cách ly trước thu hoạch",
     desc: "Ngưng dùng phân thuốc trước ngày thu hoạch đúng thời hạn (PHI) để không vượt tồn dư cho phép.",
     nodeType: "warn",
@@ -511,7 +511,7 @@ const VIETGAP_RULES: VietgapRule[] = [
   },
   {
     id: "banned",
-    kicker: "QUY TẮC 3 · AN TOÀN",
+    kicker: "QUY TẮC 3 - AN TOÀN",
     title: "Cấm thuốc ngoài danh mục",
     desc: "Tuyệt đối không dùng chất nhuộm màu (Vàng O), hoạt chất cấm Chlorpyrifos hoặc thuốc chưa cấp phép.",
     nodeType: "danger",
@@ -616,7 +616,7 @@ function JournalDetailModal({
           <StoredPhoto
             url={entry.photoUrl}
             alt={`Hiện trường ${entry.activity}`}
-            caption={`Thửa ${entry.plotCode} · Ngày ${formatDate(entry.entryOn)}`}
+            caption={`Thửa ${entry.plotCode} - Ngày ${formatDate(entry.entryOn)}`}
           />
         ) : (
           <div className="pt-detail-no-photo">
@@ -726,7 +726,7 @@ function SprayDetailModal({
         <div className="pt-detail-cell">
           <span className="pt-detail-cell-label">Diện tích phun</span>
           <span className="pt-detail-cell-value">
-            {record.areaHa} ha{record.plotCode ? ` · Thửa ${record.plotCode}` : " · Toàn vườn"}
+            {record.areaHa} ha{record.plotCode ? ` - Thửa ${record.plotCode}` : " - Toàn vườn"}
           </span>
         </div>
         <div className="pt-detail-cell">
@@ -935,7 +935,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                       {v.description && <p className="pt-viol-desc">{v.description}</p>}
                       <p className="pt-notice-meta pt-viol-meta">
                         Phát hiện: {formatDate(v.detectedOn)}
-                        {v.plotCode ? ` · Thửa ${v.plotCode}` : ""}
+                        {v.plotCode ? ` - Thửa ${v.plotCode}` : ""}
                       </p>
                     </div>
                   </div>
@@ -943,7 +943,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                   {v.farmerResponse && (
                     <div className="pt-viol-box pt-viol-box-response">
                       <span className="pt-viol-box-label">
-                        Phản hồi của hộ{v.farmerResponseAt ? ` · ${formatDate(v.farmerResponseAt)}` : ""}
+                        Phản hồi của hộ{v.farmerResponseAt ? ` - ${formatDate(v.farmerResponseAt)}` : ""}
                       </span>
                       <p>{v.farmerResponse}</p>
                       {v.farmerResponsePhotoUrl && (
@@ -1059,7 +1059,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                       />
                       <span className="pt-widget-item-text">
                         {entry.activity}
-                        {entry.plotCode ? ` · ${entry.plotCode}` : ""}
+                        {entry.plotCode ? ` - ${entry.plotCode}` : ""}
                       </span>
                       <span className="pt-diary-item-date">{formatDate(entry.entryOn)}</span>
                       <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
@@ -1101,7 +1101,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                       />
                       <span className="pt-widget-item-text">
                         {record.pesticide}
-                        {record.plotCode ? ` · ${record.plotCode}` : ""}
+                        {record.plotCode ? ` - ${record.plotCode}` : ""}
                       </span>
                       <span className="pt-diary-item-date">{formatDate(record.sprayedOn)}</span>
                       <DetailArrowIcon className="pt-widget-item-arrow" size={22} />

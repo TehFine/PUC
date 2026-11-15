@@ -46,7 +46,7 @@ export default function NewsPreviewModal({
           {article.status === "published" ? "Đã xuất bản" : "Bản nháp"}
         </span>
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-          {formatVnDate(article.publishedOn)} · {article.readTime || "4 phút đọc"}
+          {formatVnDate(article.publishedOn)} - {article.readTime || "4 phút đọc"}
         </span>
       </div>
 
@@ -54,7 +54,7 @@ export default function NewsPreviewModal({
         {article.title}
       </h2>
       <div style={{ fontSize: 12.5, color: "var(--text-muted)", paddingBottom: 10, borderBottom: "1px solid var(--border)", marginBottom: 14 }}>
-        Tác giả: <strong>{article.author}</strong> · Slug: <code>{article.slug}</code>
+        Tác giả: <strong>{article.author}</strong> - Slug: <code>{article.slug}</code>
       </div>
 
       <div style={{ width: "100%", height: 220, borderRadius: 12, overflow: "hidden", marginBottom: 16, border: "1px solid var(--border)" }}>

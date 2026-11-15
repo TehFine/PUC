@@ -461,7 +461,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             </button>
             <span className="cert-status-badge">
               <span className="cert-status-main">Phiếu kiểm nghiệm điện tử</span>
-              <span className="cert-status-sep" aria-hidden="true">·</span>
+              <span className="cert-status-sep" aria-hidden="true">-</span>
               <span className="cert-status-sub">Đã ký số &amp; chứng thực</span>
             </span>
           </div>
@@ -583,7 +583,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                 </div>
                 <div className="cert-info-row">
                   <span className="cert-lbl">Mã số vùng trồng (PUC) / Thửa:</span>
-                  <span className="cert-val cert-bold">VN-DLK-0028 · Thửa {plotCode}</span>
+                  <span className="cert-val cert-bold">VN-DLK-0028 - Thửa {plotCode}</span>
                 </div>
 
                 <div className="cert-info-row">
@@ -1001,7 +1001,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                 </div>
                 <div className="cert-m-info-item">
                   <span className="cert-m-lbl">Mã vùng trồng / Thửa:</span>
-                  <strong className="cert-m-val">VN-DLK-0028 · Thửa {plotCode}</strong>
+                  <strong className="cert-m-val">VN-DLK-0028 - Thửa {plotCode}</strong>
                 </div>
 
                 <div className="cert-m-info-item">
@@ -1132,7 +1132,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
               {/* Chân trang Tờ 1 */}
               <div className="cert-m-sheet-footer">
-                <span>Hồ sơ kiểm nghiệm gốc: LAB-{test.code}/PKN-2024 · Xem tiếp kết luận &amp; chữ ký tại Trang 02</span>
+                <span>Hồ sơ kiểm nghiệm gốc: LAB-{test.code}/PKN-2024 - Xem tiếp kết luận &amp; chữ ký tại Trang 02</span>
                 <strong>Trang 01 / 02</strong>
               </div>
             </div>
@@ -1155,7 +1155,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                   PHIẾU TRẢ KẾT QUẢ KIỂM NGHIỆM <em>(Tiếp theo Trang 01)</em>
                 </span>
                 <span className="cert-m-running-code">
-                  Số: <strong>LAB-{test.code}/PKN-2024</strong> · Mã PUC: <strong>VN-DLK-0028</strong>
+                  Số: <strong>LAB-{test.code}/PKN-2024</strong> - Mã PUC: <strong>VN-DLK-0028</strong>
                 </span>
               </div>
 
@@ -1222,7 +1222,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
                 <div className="cert-m-dispatch">
                   <span>Thời điểm trả kết quả: </span>
-                  <strong>{formatDate(test.sampledOn)} — 17h30 · Chủ hộ: {householdName} (Thửa {plotCode})</strong>
+                  <strong>{formatDate(test.sampledOn)} — 17h30 - Chủ hộ: {householdName} (Thửa {plotCode})</strong>
                 </div>
               </div>
 

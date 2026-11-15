@@ -289,7 +289,7 @@ export default function Testing() {
                   <tr key={t.id}>
                     <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 600 }}>{t.code}</td>
                     <td style={{ fontSize: 12.5 }}>
-                      <strong>{t.householdName}</strong> · <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{t.plotCode}</span>
+                      <strong>{t.householdName}</strong> - <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{t.plotCode}</span>
                     </td>
                     <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(t.sampledOn)}</td>
                     <td

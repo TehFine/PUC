@@ -624,7 +624,7 @@ function ProvenDiarySection({
                   {(d.recorder || d.plotCode) && (
                     <div className="tr-proof-meta">
                       {d.recorder && <span>Người ghi: {d.recorder}</span>}
-                      {d.recorder && d.plotCode && <span aria-hidden="true">·</span>}
+                      {d.recorder && d.plotCode && <span aria-hidden="true">-</span>}
                       {d.plotCode && <span>Lô: {d.plotCode}</span>}
                     </div>
                   )}
@@ -1005,7 +1005,7 @@ export default function TraceView() {
                 : "Chưa cập nhật";
 
             const varietyMeta = plot.variety
-              ? `${plot.variety}${plot.plantedYear ? ` · trồng ${plot.plantedYear}` : ""}`
+              ? `${plot.variety}${plot.plantedYear ? ` - trồng ${plot.plantedYear}` : ""}`
               : plot.plantedYear
                 ? `Trồng năm ${plot.plantedYear}`
                 : null;
@@ -1028,7 +1028,7 @@ export default function TraceView() {
             const rawStandard = (data.puc.standard || "").trim();
             const conciseStandard =
               rawStandard.includes("VietGAP") && rawStandard.includes("GACC")
-                ? "VietGAP · Nghị định thư GACC"
+                ? "VietGAP - Nghị định thư GACC"
                 : rawStandard || "VietGAP";
 
             const householdsList = data.households ?? [];
@@ -1148,7 +1148,7 @@ export default function TraceView() {
                                 <dt className="tr-puc-spec-lbl">Diện tích</dt>
                                 <dd className="tr-puc-spec-val is-num">
                                   <span>{areaDisplay}</span>
-                                  {varietyMeta && <span className="tr-puc-spec-note"> · {varietyMeta}</span>}
+                                  {varietyMeta && <span className="tr-puc-spec-note"> - {varietyMeta}</span>}
                                 </dd>
                               </div>
 
@@ -1276,7 +1276,7 @@ export default function TraceView() {
                           )}
                           {openViolations.map((v, idx) => (
                             <p key={idx} className="tr-puc-alert-desc">
-                              • <strong>{formatDate(v.detectedOn)}:</strong> {v.title}
+                              - <strong>{formatDate(v.detectedOn)}:</strong> {v.title}
                               {v.description ? ` — ${v.description}` : ""}
                             </p>
                           ))}
@@ -1516,15 +1516,15 @@ export default function TraceView() {
                 <div className="tr-asset-left">
                   <div className="tr-asset-sub-title">
                     <span>SẦU RIÊNG TƯƠI</span>
-                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-dot">-</span>
                     <span className="tr-asset-hide-mobile">HTX CƯ NÉ</span>
-                    <span className="tr-asset-dot tr-asset-hide-mobile">·</span>
+                    <span className="tr-asset-dot tr-asset-hide-mobile">-</span>
                     <span>{data.puc.code}</span>
                   </div>
 
                   <div className="tr-asset-code-line">
                     <span className="tr-asset-code-val">TEM {data.farmerStamp.serialCode}</span>
-                    <span className="tr-asset-code-divider">·</span>
+                    <span className="tr-asset-code-divider">-</span>
                     <span className="tr-asset-weight-val">
                       {data.farmerStamp.fruitWeightKg
                         ? `KLT: ${data.farmerStamp.fruitWeightKg} kg`
@@ -1535,14 +1535,14 @@ export default function TraceView() {
                   <div className="tr-asset-id-group">
                     <span className="tr-asset-id-label">CHỦ HỘ</span>
                     <strong className="tr-asset-id-val">{data.farmerStamp.householdName}</strong>
-                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-dot">-</span>
                     <span className="tr-asset-id-label">MÃ HỘ</span>
                     <strong className="tr-asset-id-val">{data.farmerStamp.householdCode}</strong>
                   </div>
 
                   <div className="tr-asset-meta">
                     <span>Lô đất: {data.farmerStamp.plotCode || "Chưa gắn lô"}</span>
-                    <span className="tr-asset-meta-dot">·</span>
+                    <span className="tr-asset-meta-dot">-</span>
                     <span>Thôn: {data.farmerStamp.villageName} (VietGAP &amp; GACC)</span>
                   </div>
                 </div>
@@ -1586,15 +1586,15 @@ export default function TraceView() {
                 <div className="tr-asset-left">
                   <div className="tr-asset-sub-title">
                     <span>SẦU RIÊNG TƯƠI</span>
-                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-dot">-</span>
                     <span className="tr-asset-hide-mobile">HTX CƯ NÉ</span>
-                    <span className="tr-asset-dot tr-asset-hide-mobile">·</span>
+                    <span className="tr-asset-dot tr-asset-hide-mobile">-</span>
                     <span>{data.puc.code}</span>
                   </div>
 
                   <div className="tr-asset-code-line">
                     <span className="tr-asset-code-val">LÔ {data.lot?.code ?? code}</span>
-                    <span className="tr-asset-code-divider">·</span>
+                    <span className="tr-asset-code-divider">-</span>
                     <span className="tr-asset-weight-val">
                       KLT: {((data.lot?.weightTons ?? 0) * 1000).toLocaleString("vi-VN")} kg (
                       {data.lot?.weightTons ?? 0} Tấn)
@@ -1604,7 +1604,7 @@ export default function TraceView() {
                   <div className="tr-asset-id-group">
                     <span className="tr-asset-id-label">MÃ TRUY XUẤT</span>
                     <strong className="tr-asset-id-val">{data.lot?.qrCode ?? code}</strong>
-                    <span className="tr-asset-dot">·</span>
+                    <span className="tr-asset-dot">-</span>
                     <span className="tr-asset-id-label">MÃ PHC</span>
                     <strong className="tr-asset-id-val">
                       {data.supplyChain?.packhouse.code || data.lot?.packhouseCode || "VN-DLPH-0089"}
@@ -1613,7 +1613,7 @@ export default function TraceView() {
 
                   <div className="tr-asset-meta">
                     <span>Ngày thu: {formatDate(data.lot?.harvestedOn ?? "")}</span>
-                    <span className="tr-asset-meta-dot">·</span>
+                    <span className="tr-asset-meta-dot">-</span>
                     <span>
                       {data.lot?.buyer || "HTX Nông Nghiệp Cư Né"} (
                       {data.lot?.market === "Trung Quốc"
@@ -1711,19 +1711,19 @@ export default function TraceView() {
                               <strong>{data.supplyChain.packhouse.code || "VN-DLPH-0089"}</strong>).
                               {data.supplyChain.packhouse.treatmentMethod && (
                                 <>
-                                  <br />• <strong>Phương pháp sơ chế:</strong> {data.supplyChain.packhouse.treatmentMethod}
+                                  <br />- <strong>Phương pháp sơ chế:</strong> {data.supplyChain.packhouse.treatmentMethod}
                                 </>
                               )}
                               {(data.supplyChain.packhouse.gradeAPct !== null ||
                                 data.supplyChain.packhouse.avgBrix !== null) && (
                                 <>
-                                  <br />• <strong>Phân loại chất lượng:</strong>{" "}
+                                  <br />- <strong>Phân loại chất lượng:</strong>{" "}
                                   {data.supplyChain.packhouse.gradeAPct !== null
                                     ? `Hạng A (${data.supplyChain.packhouse.gradeAPct}%)`
                                     : ""}
                                   {data.supplyChain.packhouse.gradeAPct !== null &&
                                   data.supplyChain.packhouse.avgBrix !== null
-                                    ? " · "
+                                    ? " - "
                                     : ""}
                                   {data.supplyChain.packhouse.avgBrix !== null ? (
                                     <>
@@ -1768,13 +1768,13 @@ export default function TraceView() {
                                   {data.supplyChain.transport.vehiclePlate ? (
                                     <>
                                       {" "}
-                                      · Biển số <strong>{data.supplyChain.transport.vehiclePlate}</strong>
+                                      - Biển số <strong>{data.supplyChain.transport.vehiclePlate}</strong>
                                     </>
                                   ) : null}
                                   {data.supplyChain.transport.temperatureC !== null ? (
                                     <>
                                       {" "}
-                                      · Bảo quản ở <strong>{data.supplyChain.transport.temperatureC}°C</strong>
+                                      - Bảo quản ở <strong>{data.supplyChain.transport.temperatureC}°C</strong>
                                     </>
                                   ) : null}
                                   .
@@ -1884,7 +1884,7 @@ export default function TraceView() {
                                   <div className="tr-farmer-main">
                                     <strong className="tr-farmer-name">{h.householdName}</strong>
                                     <span className="tr-farmer-sub">
-                                      Thôn: {h.village} · Mã hộ: {h.householdCode}
+                                      Thôn: {h.village} - Mã hộ: {h.householdCode}
                                     </span>
                                   </div>
                                 </div>

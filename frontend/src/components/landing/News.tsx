@@ -169,7 +169,7 @@ export default function News() {
                 <div className="sw-training-caption">
                   <h3 className="sw-training-slide-title is-news">{article.title}</h3>
                   <p className="sw-training-slide-sub">
-                    {article.categoryLabel} · {article.date}
+                    {article.categoryLabel} - {article.date}
                   </p>
                 </div>
               </article>
@@ -237,9 +237,9 @@ export default function News() {
             <header className="sw-side-head">
               <div className="sw-modal-meta">
                 <span>{readingArticle.categoryLabel}</span>
-                <span>·</span>
+                <span>-</span>
                 <span>{readingArticle.date}</span>
-                <span>·</span>
+                <span>-</span>
                 <span>{readingArticle.readTime}</span>
               </div>
               <button

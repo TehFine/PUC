@@ -69,7 +69,7 @@ export function populatePlotTooltip(
 
   if (tier === 1) {
     container.className = "plot-tooltip-inner is-mid";
-    container.textContent = `${shortLabel} · ${areaStr}`;
+    container.textContent = `${shortLabel} - ${areaStr}`;
     return;
   }
 
@@ -84,7 +84,7 @@ export function populatePlotTooltip(
   const parts = [areaStr];
   if (props.variety) parts.push(props.variety);
   if (props.zone) parts.push(props.zone);
-  metaEl.textContent = parts.join(" · ");
+  metaEl.textContent = parts.join(" - ");
 
   container.appendChild(titleEl);
   container.appendChild(metaEl);

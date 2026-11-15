@@ -95,7 +95,7 @@ export default function PlotsTab() {
                         fontWeight: 500,
                       }}
                     >
-                      {plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha{plot.variety ? ` · ${plot.variety}` : ""}
+                      {plot.areaHa.toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha{plot.variety ? ` - ${plot.variety}` : ""}
                     </span>
                   </div>
 

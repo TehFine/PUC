@@ -426,7 +426,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
               <span>Khổ in tối ưu cho decal bóc dán nhiệt hoặc in A4 văn phòng</span>
             </div>
             {filteredItems.length > 0 && (
-              <span className="badge badge-green">Mã QR hợp lệ 100% · Quét trực tiếp bằng camera</span>
+              <span className="badge badge-green">Mã QR hợp lệ 100% - Quét trực tiếp bằng camera</span>
             )}
           </div>
 
@@ -534,7 +534,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                       <div className="box-stamp-foot">
                         <span>Lô hàng: {lot.code}</span>
                         <span>Ngày đóng gói: {displayDate}</span>
-                        <span className="safe-mark">✔ Kiểm nghiệm Cadimi an toàn · Âm tính Vàng O</span>
+                        <span className="safe-mark">✔ Kiểm nghiệm Cadimi an toàn - Âm tính Vàng O</span>
                       </div>
                     </div>
                   )}

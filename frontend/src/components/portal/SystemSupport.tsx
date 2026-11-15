@@ -13,7 +13,7 @@ interface FaqItem {
 const FAQ_ITEMS: FaqItem[] = [
   {
     id: "frequency",
-    kicker: "HỖ TRỢ 1 · NGOẠI TUYẾN",
+    kicker: "HỖ TRỢ 1 - NGOẠI TUYẾN",
     title: "Ghi nhật ký khi mất kết nối mạng",
     desc: "Hệ thống tự động lưu trên điện thoại và đồng bộ ngay khi có lại kết nối mạng 4G/Wifi.",
     nodeType: "active",
@@ -21,7 +21,7 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     id: "phi",
-    kicker: "HỖ TRỢ 2 · THÔNG TIN THỬA",
+    kicker: "HỖ TRỢ 2 - THÔNG TIN THỬA",
     title: "Cần điều chỉnh diện tích, mã số thửa đất",
     desc: "Vui lòng liên hệ trực tiếp cán bộ HTX hoặc Trưởng thôn để được hỗ trợ cập nhật thông tin thửa đất.",
     nodeType: "warn",
@@ -29,7 +29,7 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     id: "banned",
-    kicker: "HỖ TRỢ 3 · TÀI KHOẢN",
+    kicker: "HỖ TRỢ 3 - TÀI KHOẢN",
     title: "Quên mật khẩu hoặc đổi số điện thoại",
     desc: "Chọn 'Quên mật khẩu?' tại màn hình đăng nhập để đặt lại ngay bằng số CCCD 12 số hoặc gửi yêu cầu nhờ cán bộ HTX phê duyệt.",
     nodeType: "danger",
@@ -109,7 +109,7 @@ export function SystemSupportModal({
         </section>
 
         <div className="pt-support-system-info">
-          Hệ thống Quản lý Vùng trồng & Nhật ký số PUC HTX Cư Né · Phiên bản 2.4.0
+          Hệ thống Quản lý Vùng trồng & Nhật ký số PUC HTX Cư Né - Phiên bản 2.4.0
         </div>
       </div>
     </Sheet>

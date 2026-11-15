@@ -107,7 +107,7 @@ export default function PlotPopup({
         <header className="pp-head">
           <div>
             <div className="pp-kicker" style={{ color: zc.text }}>
-              Thửa đất · {props.code}
+              Thửa đất - {props.code}
             </div>
             <h3 className="pp-title">Tờ/thửa {featureLabel(feature)}</h3>
           </div>
@@ -174,7 +174,7 @@ export default function PlotPopup({
       {overlaps.length > 0 ? (
         <div className="pp-overlap danger">
           <strong>Chồng lấn với {overlaps.length} thửa</strong>
-          <p>{overlaps.map((overlap) => `${overlap.code} (${formatHa(overlap.areaHa)})`).join(" · ")}</p>
+          <p>{overlaps.map((overlap) => `${overlap.code} (${formatHa(overlap.areaHa)})`).join(" - ")}</p>
         </div>
       ) : (
         <div className="pp-overlap ok">
