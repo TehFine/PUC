@@ -73,6 +73,7 @@ export async function seedDatabase(pool: Pool, options: SeedOptions): Promise<bo
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query("SET LOCAL puc.seeding = 'on'");
 
     const villageIds = new Map<string, number>();
     for (const v of data.villages) {

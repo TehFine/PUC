@@ -162,6 +162,161 @@ export async function seedSupplyChain(pool: Pool, options?: { log?: (msg: string
       }
     }
 
+    // 6. Bổ sung mã đối chiếu chéo Phòng kiểm nghiệm độc lập ISO/IEC 17025 cho các phiếu kiểm nghiệm mẫu
+    const hasLabVerifyCol = (
+      await client.query<{ ok: number }>(
+        `SELECT 1 AS ok FROM information_schema.columns WHERE table_name = 'lab_tests' AND column_name = 'external_verify_code'`,
+      )
+    ).rowCount;
+    if (hasLabVerifyCol) {
+      await client.query(`
+        UPDATE lab_tests
+        SET external_verify_code = 'ISO17025-' || upper(regexp_replace(code, '[^A-Za-z0-9-]', '', 'g')),
+            external_verify_url = 'https://kiemnghiem.quatest3.com.vn/tra-cuu?code=' || upper(regexp_replace(code, '[^A-Za-z0-9-]', '', 'g'))
+        WHERE external_verify_code IS NULL
+      `);
+    }
+
+    // 7. Khởi tạo Bảng QR Thửa Đất (plot_signboard_tokens), Hạn ngạch sản lượng đầu vụ (plot_season_quotas) & Thẻ Đoàn Thẩm định
+    const hasSignboardTable = (
+      await client.query<{ reg: string | null }>(`SELECT to_regclass('public.plot_signboard_tokens') AS reg`)
+    ).rows[0]?.reg;
+
+    if (hasSignboardTable) {
+      const hasPlots = (
+        await client.query<{ reg: string | null }>(`SELECT to_regclass('public.plots') AS reg`)
+      ).rows[0]?.reg;
+
+      if (hasPlots) {
+        await client.query(`
+          INSERT INTO plot_signboard_tokens
+            (plot_code, qr_token, household_id, zone_code, village_name, variety, planted_year, area_ha, tree_count, center_lat, center_lng, geometry_json)
+          SELECT
+            p.code,
+            COALESCE(p.qr_token, puc_random_qr_token(14)),
+            p.household_id,
+            COALESCE(NULLIF(btrim(p.zone_code), ''), 'VN-DLOR-0086'),
+            p.village,
+            COALESCE(NULLIF(btrim(p.variety), ''), 'Ri6 & Monthong (Dona)'),
+            COALESCE(p.planted_year, 2018),
+            GREATEST(0.2, COALESCE(p.area_ha, 1.0)),
+            GREATEST(30, ROUND(GREATEST(0.2, COALESCE(p.area_ha, 1.0)) * 150)::int),
+            ROUND(ST_Y(ST_Centroid(p.geom))::numeric, 6),
+            ROUND(ST_X(ST_Centroid(p.geom))::numeric, 6),
+            ST_AsGeoJSON(p.geom)
+          FROM plots p
+          WHERE p.code IS NOT NULL AND btrim(p.code) <> ''
+          ON CONFLICT (plot_code) DO UPDATE
+            SET household_id = COALESCE(EXCLUDED.household_id, plot_signboard_tokens.household_id),
+                center_lat = COALESCE(EXCLUDED.center_lat, plot_signboard_tokens.center_lat),
+                center_lng = COALESCE(EXCLUDED.center_lng, plot_signboard_tokens.center_lng),
+                geometry_json = COALESCE(EXCLUDED.geometry_json, plot_signboard_tokens.geometry_json)
+        `);
+      }
+
+      // Dự phòng các mã thửa xuất hiện trong nhật ký / kiểm nghiệm / thu hoạch khi môi trường không bật PostGIS
+      const discoveredPlots = (
+        await client.query<{
+          plot_code: string;
+          household_id: number;
+          village_name: string | null;
+          area_ha: number;
+        }>(`
+          SELECT DISTINCT ON (upper(src.plot_code))
+            btrim(src.plot_code) AS plot_code,
+            src.household_id,
+            v.name AS village_name,
+            GREATEST(0.8, ROUND((COALESCE(h.area_ha, 1.5) / GREATEST(1, COALESCE(h.plot_count, 1)))::numeric, 2))::float8 AS area_ha
+          FROM (
+            SELECT plot_code, household_id FROM journal_entries WHERE plot_code IS NOT NULL AND btrim(plot_code) <> ''
+            UNION ALL
+            SELECT plot_code, household_id FROM lab_tests WHERE plot_code IS NOT NULL AND btrim(plot_code) <> ''
+            UNION ALL
+            SELECT plot_code, household_id FROM harvest_contributions WHERE plot_code IS NOT NULL AND btrim(plot_code) <> ''
+            UNION ALL
+            SELECT plot_code, household_id FROM farmer_stamps WHERE plot_code IS NOT NULL AND btrim(plot_code) <> ''
+          ) src
+          JOIN households h ON h.id = src.household_id
+          LEFT JOIN villages v ON v.id = h.village_id
+          ORDER BY upper(src.plot_code), src.household_id ASC
+        `)
+      ).rows;
+
+      let idx = 0;
+      for (const dp of discoveredPlots) {
+        const baseLat = Number((13.126 + (idx % 6) * 0.0022).toFixed(6));
+        const baseLng = Number((108.184 + Math.floor(idx / 6) * 0.0025 + (idx % 3) * 0.0012).toFixed(6));
+        const halfLat = 0.00055;
+        const halfLng = 0.00065;
+        const poly = JSON.stringify({
+          type: "Polygon",
+          coordinates: [
+            [
+              [Number((baseLng - halfLng).toFixed(6)), Number((baseLat - halfLat).toFixed(6))],
+              [Number((baseLng + halfLng).toFixed(6)), Number((baseLat - halfLat).toFixed(6))],
+              [Number((baseLng + halfLng).toFixed(6)), Number((baseLat + halfLat).toFixed(6))],
+              [Number((baseLng - halfLng).toFixed(6)), Number((baseLat + halfLat).toFixed(6))],
+              [Number((baseLng - halfLng).toFixed(6)), Number((baseLat - halfLat).toFixed(6))],
+            ],
+          ],
+        });
+        const treeCount = Math.max(80, Math.round(dp.area_ha * 150));
+        await client.query(
+          `INSERT INTO plot_signboard_tokens
+             (plot_code, household_id, zone_code, village_name, variety, planted_year, area_ha, tree_count, center_lat, center_lng, geometry_json)
+           VALUES ($1, $2, 'VN-DLOR-0086', $3, 'Monthong (Dona) & Ri6', 2018, $4, $5, $6, $7, $8)
+           ON CONFLICT (plot_code) DO NOTHING`,
+          [dp.plot_code, dp.household_id, dp.village_name || "Thôn 1", dp.area_ha, treeCount, baseLat, baseLng, poly],
+        );
+        idx += 1;
+      }
+
+      // Khởi tạo hạn ngạch sản lượng trần đầu vụ (Mass-Balance) cho các thửa đã định danh
+      await client.query(`
+        INSERT INTO plot_season_quotas
+          (season_year, household_id, plot_code, zone_code, area_ha, tree_count, max_quota_kg, assessed_by, assessed_on, note)
+        SELECT
+          yr.season_year,
+          pst.household_id,
+          pst.plot_code,
+          COALESCE(pst.zone_code, 'VN-DLOR-0086'),
+          GREATEST(0.4, COALESCE(pst.area_ha, 1.2)),
+          GREATEST(50, COALESCE(pst.tree_count, 160)),
+          GREATEST(14000, ROUND(GREATEST(0.4, COALESCE(pst.area_ha, 1.2)) * 16500, 1)),
+          'Tổ Giám sát Kỹ thuật UBND Xã Cư Né',
+          make_date(yr.season_year, 5, 10),
+          'Thẩm định sản lượng trần đầu vụ theo diện tích GIS & đếm trái thực địa'
+        FROM plot_signboard_tokens pst
+        CROSS JOIN (SELECT DISTINCT s_yr FROM (VALUES (2024), (2025), (2026), (EXTRACT(YEAR FROM now())::int)) AS raw_yr(s_yr)) AS yr(season_year)
+        WHERE pst.household_id IS NOT NULL
+        ON CONFLICT (season_year, plot_code) DO NOTHING
+      `);
+
+      // Khởi tạo 1 Thẻ Đoàn Thẩm định Thực địa mẫu đang hiệu lực để đối tác / tỉnh trải nghiệm ngay
+      const passCount = (
+        await client.query<{ count: string }>(`SELECT COUNT(*) AS count FROM field_audit_passes`)
+      ).rows[0]?.count;
+      if (Number(passCount) === 0) {
+        await client.query(`
+          INSERT INTO field_audit_passes
+            (code, delegation_name, organization, allowed_zone_code, default_lang, expires_at, status, issued_by_name, note)
+          VALUES
+            (
+              'AUDIT-2026-CN01',
+              'Đoàn Đối tác Thu mua Nông sản Xuất khẩu & Thẩm định Thực địa',
+              'Đoàn công tác Tỉnh & Đối tác Nhập khẩu Chính ngạch',
+              NULL,
+              'zh',
+              now() + interval '72 hours',
+              'active',
+              'UBND Xã Cư Né & Ban Quản trị HTX',
+              'Thẻ khách mời kiểm tra thực địa ngẫu nhiên tại vườn (ẩn CCCD & SĐT cá nhân nông hộ)'
+            )
+          ON CONFLICT (code) DO NOTHING
+        `);
+      }
+    }
+
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
