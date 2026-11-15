@@ -12,7 +12,8 @@ import { AppValidationPipe } from "./common/pipes/validation.pipes";
 import { type AppConfig, configuration } from "./config/configuration";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
-import { PublicController } from "./public/public.controller";
+import { AuthenticatedTraceController, PublicController } from "./public/public.controller";
+import { TraceabilityService } from "./public/traceability.service";
 import { PlotsModule } from "./plots/plots.module";
 import { PortalModule } from "./portal/portal.module";
 import { RegistrationsModule } from "./registrations/registrations.module";
@@ -39,8 +40,9 @@ import { UploadsModule } from "./uploads/uploads.module";
     RegistrationsModule,
     ResourcesModule,
   ],
-  controllers: [HealthController, PublicController],
+  controllers: [HealthController, PublicController, AuthenticatedTraceController],
   providers: [
+    TraceabilityService,
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_PIPE, useClass: AppValidationPipe },
     // Thứ tự guard: giới hạn tần suất -> chống CSRF -> đăng nhập -> phân quyền.
