@@ -1134,9 +1134,7 @@ export default function TraceView() {
 
                               <div className="tr-puc-spec-row">
                                 <dt className="tr-puc-spec-lbl">Mã lô vườn</dt>
-                                <dd className="tr-puc-spec-val tr-puc-plot-inline">
-                                  <span className="tr-puc-plot-chip">{plot.code}</span>
-                                </dd>
+                                <dd className="tr-puc-spec-val is-num">{plot.code}</dd>
                               </div>
 
                               <div className="tr-puc-spec-row">
