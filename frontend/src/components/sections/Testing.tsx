@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText } from "@/components/ui/PublicIcon";
 import {
   BarChart,
   Bar,

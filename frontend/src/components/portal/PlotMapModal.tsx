@@ -10,7 +10,7 @@ import {
   QrCode,
   ChevronDown,
   ChevronUp,
-} from "lucide-react";
+} from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { renderCadastralDimensions } from "@/components/map/map-helpers";
 import {
@@ -446,9 +446,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           html: `
             <div class="pt-mapmodal-radar"></div>
             <div class="pt-mapmodal-pin-core">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="#059669" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-              </svg>
+              <img src="/icons/map-pin-nav.svg" width="22" height="22" alt="" />
             </div>
           `,
           iconSize: [36, 36],

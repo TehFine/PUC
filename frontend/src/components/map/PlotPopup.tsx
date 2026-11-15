@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { Lock } from "lucide-react";
+import { Lock } from "@/components/ui/PublicIcon";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";

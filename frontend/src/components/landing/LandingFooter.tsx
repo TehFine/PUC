@@ -4,6 +4,7 @@ import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { ArrowRight } from "@/components/ui/PublicIcon";
 import { homePathFor } from "@/lib/routes";
 
 export default function LandingFooter({ fromTrace = false }: { fromTrace?: boolean }) {
@@ -62,20 +63,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
               className="sw-ft-submit"
               aria-label="Tra cứu nguồn gốc"
             >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.65"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M5 12h14" />
-                <path d="m12 5 7 7-7 7" />
-              </svg>
+              <ArrowRight size={15} aria-hidden="true" />
             </button>
           </form>
 

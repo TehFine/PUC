@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import DwellSlideshow, { type DwellSlide } from "@/components/landing/DwellSlideshow";
 import LandingFooter from "@/components/landing/LandingFooter";
+import { Search } from "@/components/ui/PublicIcon";
 import { api } from "@/lib/api-client";
 import { homePathFor } from "@/lib/routes";
 import { safeDecodeURIComponent } from "@/utils/url-safety";
@@ -331,21 +332,7 @@ export default function TraceLookupPage() {
 
                 <form onSubmit={handleSubmit} className="sw-trace-form" role="search">
                   <div className="sw-trace-input-wrap">
-                    <svg
-                      width="17"
-                      height="17"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="sw-trace-search-icon"
-                      aria-hidden="true"
-                    >
-                      <circle cx="11" cy="11" r="8" />
-                      <path d="m21 21-4.3-4.3" />
-                    </svg>
+                    <Search size={17} className="sw-trace-search-icon" aria-hidden="true" />
                     <input
                       type="text"
                       value={code}

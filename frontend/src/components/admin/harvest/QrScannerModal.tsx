@@ -14,7 +14,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
-} from "lucide-react";
+} from "@/components/ui/PublicIcon";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import { ALLOWED_IMAGE_MIMES } from "@/components/portal/shared/media";
 import { FormError, Modal } from "@/components/ui/Modal";

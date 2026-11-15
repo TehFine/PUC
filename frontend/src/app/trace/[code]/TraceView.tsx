@@ -35,7 +35,7 @@ import {
   ShieldCheck,
   MapPin,
   Globe,
-} from "lucide-react";
+} from "@/components/ui/PublicIcon";
 import CoarseZoneOverviewMap from "./CoarseZoneOverviewMap";
 import FieldAuditGpsCheckCard, { type FieldAuditDataPayload } from "./FieldAuditGpsCheckCard";
 import {
@@ -485,82 +485,34 @@ function classifyDiaryVisual(entry: TraceDiaryEntry): {
   if (entry.kind === "spray" || /phun|thuốc|bvtv|trừ sâu|trừ nấm|phòng bệnh|diệt khuẩn/.test(act)) {
     return {
       tone: "spray",
-      icon: (
-        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-          <path
-            d="M9 6h4v2.2l2.3 2.3c.45.45.7 1.06.7 1.7V19a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-6.8c0-.64.25-1.25.7-1.7L9 8.2V6Z"
-            fill="#ffffff"
-          />
-          <path
-            d="M8 4h6M11 4v2M14 5h3.2M18.5 3.6l1.3-.7M19 5.2h1.6M18.5 6.8l1.3.7"
-            stroke="#ffffff"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          />
-          <path d="M9.2 14.2h3.6M11 12.4v3.6" stroke="#1f8a4c" strokeWidth="1.7" strokeLinecap="round" />
-        </svg>
-      ),
+      icon: <img src="/icons/diary-spray.svg" width={21} height={21} alt="" aria-hidden="true" />,
     };
   }
 
   if (/bón|phân|hữu cơ|npk|vi sinh|humic|vôi|dinh dưỡng/.test(act)) {
     return {
       tone: "fertilizer",
-      icon: (
-        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
-          <path
-            d="M8.4 4.5h7.2l-1.1 2.4c2.1 1.3 3 3.4 3 6.3v5.1a2.2 2.2 0 0 1-2.2 2.2H8.7a2.2 2.2 0 0 1-2.2-2.2v-5.1c0-2.9.9-5 3-6.3L8.4 4.5Z"
-            fill="#ffffff"
-          />
-          <path
-            d="M12 16.6c2.2-.3 3.3-1.8 3.2-4-2.2.1-3.4 1.3-3.2 4Zm0 0c-.2-2.1-1.3-3.1-2.9-3.2.1 1.9 1.1 3 2.9 3.2Z"
-            fill="#7c4d25"
-          />
-        </svg>
-      ),
+      icon: <img src="/icons/diary-fertilizer.svg" width={21} height={21} alt="" aria-hidden="true" />,
     };
   }
 
   if (/cắt cỏ|làm cỏ|dọn vườn|vệ sinh|tỉa|cành|tạo tán|rong cành/.test(act)) {
     return {
       tone: "prune",
-      icon: (
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
-          <circle cx="6.5" cy="7" r="2.6" stroke="#ffffff" strokeWidth="2" />
-          <circle cx="6.5" cy="17" r="2.6" stroke="#ffffff" strokeWidth="2" />
-          <path
-            d="M8.8 8.6L19 17.8M8.8 15.4L19 6.2"
-            stroke="#ffffff"
-            strokeWidth="2.1"
-            strokeLinecap="round"
-          />
-        </svg>
-      ),
+      icon: <img src="/icons/diary-prune.svg" width={20} height={20} alt="" aria-hidden="true" />,
     };
   }
 
   if (/tưới|nước|giữ ẩm/.test(act)) {
     return {
       tone: "water",
-      icon: (
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
-          <path
-            d="M12 3.8C12 3.8 6.5 10.1 6.5 14.3a5.5 5.5 0 0 0 11 0C17.5 10.1 12 3.8 12 3.8Z"
-            fill="#ffffff"
-          />
-        </svg>
-      ),
+      icon: <img src="/icons/diary-water.svg" width={20} height={20} alt="" aria-hidden="true" />,
     };
   }
 
   return {
     tone: "care",
-    icon: (
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
-        <path d="M18.5 5.5C11.5 5.5 6.5 9.6 6.5 16.5c6.9 0 11-4.8 12-11Z" fill="#ffffff" />
-        <path d="M6.5 17.5L13.5 10.5" stroke="#15803d" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    ),
+    icon: <img src="/icons/diary-care.svg" width={20} height={20} alt="" aria-hidden="true" />,
   };
 }
 

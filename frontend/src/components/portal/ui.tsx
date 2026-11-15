@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine } from "lucide-react";
+import { ArrowRight, CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
@@ -212,9 +212,14 @@ export function Sheet({
     }, closeDuration);
   }, [onClose, variant]);
 
-  // Khóa cuộn ở tầng root (<html>) & lắng nghe phím ESC
+  // Khóa cuộn ở tầng root (<html>) & lắng nghe phím ESC (chỉ đóng lớp hộp thoại trên cùng)
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && handleClose();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const overlays = document.querySelectorAll(".pt-sheet-backdrop, .modal-overlay");
+      if (overlays.length > 0 && overlays[overlays.length - 1] !== backdropRef.current) return;
+      handleClose();
+    };
     document.addEventListener("keydown", onKey);
     const unlockScroll = lockRootScroll();
     return () => {

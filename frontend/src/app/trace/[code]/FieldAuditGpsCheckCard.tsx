@@ -12,7 +12,7 @@ import {
   Navigation,
   ShieldAlert,
   ShieldCheck,
-} from "lucide-react";
+} from "@/components/ui/PublicIcon";
 import { TRACE_UI_COPY, type TraceLang } from "./trace-i18n";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 

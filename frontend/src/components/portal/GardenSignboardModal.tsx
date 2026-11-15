@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { Download, Printer } from "lucide-react";
+import { Download, Printer } from "@/components/ui/PublicIcon";
 import type { PortalPlot } from "@/types/portal";
 import { triggerBlobDownload } from "@/utils/download";
 import { Sheet } from "./ui";

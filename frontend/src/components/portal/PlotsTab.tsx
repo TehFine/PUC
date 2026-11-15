@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import { QrCode } from "lucide-react";
+import { QrCode } from "@/components/ui/PublicIcon";
 import { usePortal } from "@/hooks/use-portal";
 import type { PortalOverview, PortalPlot, PortalPlots } from "@/types/portal";
 import { EmptyState, StateBlock } from "./ui";

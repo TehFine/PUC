@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ArrowLeftRight, QrCode, Search } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, QrCode, Search } from "@/components/ui/PublicIcon";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { api, errorMessage } from "@/lib/api-client";

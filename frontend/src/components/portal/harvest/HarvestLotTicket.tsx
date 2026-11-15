@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Download, QrCode } from "lucide-react";
+import { ArrowUpRight, Download, QrCode } from "@/components/ui/PublicIcon";
 import QRCode from "qrcode";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { formatKg, HARVEST_STATUS } from "@/lib/portal-labels";

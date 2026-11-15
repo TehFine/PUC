@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarCheck2 } from "lucide-react";
+import { CalendarCheck2 } from "@/components/ui/PublicIcon";
 import { usePortal } from "@/hooks/use-portal";
 import { formatDate } from "@/utils/format";
 import type {

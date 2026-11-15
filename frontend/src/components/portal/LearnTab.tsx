@@ -10,7 +10,7 @@ import type { FertilizerDto, ListResponse, PesticideDto, VarietyDto } from "@/ty
 import {
   Check,
   Search,
-} from "lucide-react";
+} from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import {
@@ -335,10 +335,11 @@ export function TrainingDetailModal({
         {!item.completed && myStatus === "registered" && (
           <ConfirmButton
             label="Hủy đăng ký"
+            title="Hủy đăng ký tập huấn"
             question="Xác nhận hủy đăng ký tham gia lớp tập huấn này?"
             confirmLabel="Đồng ý hủy"
             busy={busy}
-            onConfirm={() => void handleCancel()}
+            onConfirm={() => handleCancel()}
           />
         )}
         {!item.completed && !isRegistered && (

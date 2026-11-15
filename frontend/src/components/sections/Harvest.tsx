@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
-import { AlertTriangle, BellRing, CheckCircle2, FileText, Printer, QrCode, Scale, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, BellRing, CheckCircle2, FileText, Printer, QrCode, Scale, ShieldCheck, Users } from "@/components/ui/PublicIcon";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import { formatVn } from "@/components/admin/catalog/form-utils";

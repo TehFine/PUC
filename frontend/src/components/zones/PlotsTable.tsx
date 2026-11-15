@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
-import { QrCode } from "lucide-react";
+import { QrCode } from "@/components/ui/PublicIcon";
 import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { PlotFeature } from "@/types/geo";

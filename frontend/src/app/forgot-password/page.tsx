@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
+import { Check } from "@/components/ui/PublicIcon";
 import {
   AuthBusyBorderRing,
   AuthError,
@@ -134,9 +135,7 @@ function ForgotPasswordContent() {
       >
         <div aria-live="polite">
           <span className="auth-done-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m5 12.5 4.5 4.5L19 7.5" />
-            </svg>
+            <Check />
           </span>
           <ol className="auth-steps">
             <li>
@@ -168,9 +167,7 @@ function ForgotPasswordContent() {
       >
         <div aria-live="polite">
           <span className="auth-done-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m5 12.5 4.5 4.5L19 7.5" />
-            </svg>
+            <Check />
           </span>
           <ol className="auth-steps">
             <li>
