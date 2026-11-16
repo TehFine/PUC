@@ -19,6 +19,9 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  console.error("Không khởi động được server:", error instanceof Error ? error.message : error);
-  process.exit(1);
+  const detail = error instanceof Error ? error.stack || error.message : String(error);
+  process.exitCode = 1;
+  process.stderr.write(`[Bootstrap] Không khởi động được server: ${detail}\n`, () => {
+    process.exit(1);
+  });
 });

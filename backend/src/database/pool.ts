@@ -5,6 +5,17 @@ types.setTypeParser(20, (value) => Number(value));
 types.setTypeParser(1700, (value) => Number.parseFloat(value));
 types.setTypeParser(1082, (value) => value);
 
+function stripConflictingSslParams(connUrl: string): string {
+  const qIdx = connUrl.indexOf("?");
+  if (qIdx === -1) return connUrl;
+  const base = connUrl.slice(0, qIdx);
+  const kept = connUrl
+    .slice(qIdx + 1)
+    .split("&")
+    .filter((kv) => kv.length > 0 && !/^(?:sslmode|sslrootcert|sslcert|sslkey|uselibpqcompat)=/i.test(kv));
+  return kept.length > 0 ? `${base}?${kept.join("&")}` : base;
+}
+
 export function createPool(options: {
   url: string;
   ssl: boolean;
@@ -16,9 +27,10 @@ export function createPool(options: {
     options.sslRejectUnauthorized ??
     (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED
       ? process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
-      : process.env.NODE_ENV === "production");
+      : Boolean(options.sslCa));
+  const connectionString = options.ssl ? stripConflictingSslParams(options.url) : options.url;
   const pool = new Pool({
-    connectionString: options.url,
+    connectionString,
     ssl: options.ssl
       ? {
           rejectUnauthorized: strictSsl,

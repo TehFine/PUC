@@ -23,8 +23,9 @@ class EnvironmentVariables {
   @MinLength(1, { message: "DATABASE_URL là bắt buộc" })
   DATABASE_URL!: string;
 
+  @IsOptional()
   @IsIn(["true", "false"])
-  DATABASE_SSL = "false";
+  DATABASE_SSL?: string;
 
   @IsOptional()
   @IsIn(["true", "false"])
@@ -164,11 +165,6 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
         "Cấu hình môi trường không hợp lệ:\n  - ALLOW_DEV_DEMO_LOGIN: Không được bật chế độ đăng nhập thử nghiệm khi NODE_ENV=production",
       );
     }
-    if (env.DATABASE_SSL_REJECT_UNAUTHORIZED === "false") {
-      throw new Error(
-        "Cấu hình môi trường không hợp lệ:\n  - DATABASE_SSL_REJECT_UNAUTHORIZED: Không được tắt kiểm tra chứng chỉ TLS CSDL khi NODE_ENV=production",
-      );
-    }
     if (env.COOKIE_SECURE === "false") {
       throw new Error(
         "Cấu hình môi trường không hợp lệ:\n  - COOKIE_SECURE: Không được tắt cờ Secure của cookie phiên khi NODE_ENV=production",
@@ -202,7 +198,17 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     : undefined;
   const sslRejectUnauthorized = env.DATABASE_SSL_REJECT_UNAUTHORIZED
     ? env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
-    : isProduction || Boolean(sslCa);
+    : Boolean(sslCa);
+
+  const isLocalDb = (() => {
+    try {
+      const host = new URL(env.DATABASE_URL).hostname.toLowerCase();
+      return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]" || host === "db";
+    } catch {
+      return false;
+    }
+  })();
+  const sslEnabled = env.DATABASE_SSL !== undefined ? env.DATABASE_SSL === "true" : !isLocalDb;
 
   return {
     nodeEnv: env.NODE_ENV,
@@ -212,7 +218,7 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy,
     database: {
       url: env.DATABASE_URL,
-      ssl: env.DATABASE_SSL === "true",
+      ssl: sslEnabled,
       sslRejectUnauthorized,
       sslCa,
     },

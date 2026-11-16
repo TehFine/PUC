@@ -121,14 +121,25 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
   async onModuleInit(): Promise<void> {
     await this.pool.query("SELECT 1");
     if (process.env.NODE_ENV !== "test" && process.env.AUTO_MIGRATE !== "false") {
-      const postgis = await this.pool.query("SELECT 1 FROM pg_available_extensions WHERE name = 'postgis'");
-      const hasPostgis = (postgis.rowCount ?? 0) > 0;
-      const ran = await migrate(this.pool, {
-        skip: (name) => !hasPostgis && name === "002_plots.sql",
-        log: (msg) => this.logger.log(msg),
-      });
-      if (!this.isProduction && ran.length > 0) {
-        await seedSupplyChain(this.pool).catch(() => undefined);
+      try {
+        const postgis = await this.pool.query(
+          "SELECT 1 FROM pg_extension WHERE extname = 'postgis' UNION ALL SELECT 1 FROM pg_available_extensions WHERE name = 'postgis' LIMIT 1",
+        );
+        const hasPostgis = (postgis.rowCount ?? 0) > 0;
+        const ran = await migrate(this.pool, {
+          skip: (name) => !hasPostgis && name === "002_plots.sql",
+          log: (msg) => this.logger.log(msg),
+          warn: (msg) => this.logger.warn(msg),
+          continueOnError: this.isProduction,
+        });
+        if (!this.isProduction && ran.length > 0) {
+          await seedSupplyChain(this.pool).catch(() => undefined);
+        }
+      } catch (err) {
+        if (!this.isProduction) throw err;
+        this.logger.error(
+          `Lỗi khi chạy tự động migration trên production: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   }

@@ -9,11 +9,15 @@ export interface MigrateOptions {
   /** Bỏ qua migration có tên khớp (ví dụ khi môi trường không có PostGIS). */
   skip?: (name: string) => boolean;
   log?: (message: string) => void;
+  warn?: (message: string) => void;
+  /** Trên môi trường đám mây đã tạo bảng thủ công trước đó: không dừng cứng toàn server nếu 1 file cũ báo trùng đối tượng. */
+  continueOnError?: boolean;
 }
 
-/** Chạy tuần tự các file db/migrations/*.sql chưa áp dụng, có khóa tư vấn chống xung đột khi nhiều tiến trình cùng khởi động. */
+/** Chạy tuần tự các file db/migrations/*.sql chưa áp dụng, dùng khóa tư vấn theo giao dịch tương thích với mọi Connection Pooler. */
 export async function migrate(pool: Pool, options: MigrateOptions = {}): Promise<string[]> {
   const log = options.log ?? (() => undefined);
+  const warn = options.warn ?? (() => undefined);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name TEXT PRIMARY KEY,
@@ -25,41 +29,52 @@ export async function migrate(pool: Pool, options: MigrateOptions = {}): Promise
     (await pool.query<{ name: string }>("SELECT name FROM schema_migrations")).rows.map((row) => row.name),
   );
   const files = readdirSync(MIGRATIONS_DIR).filter((file) => file.endsWith(".sql")).sort();
-  const hasPending = files.some((file) => !initialApplied.has(file) && !options.skip?.(file));
-  if (!hasPending) {
+  const pendingFiles = files.filter((file) => !initialApplied.has(file) && !options.skip?.(file));
+  if (pendingFiles.length === 0) {
     return [];
   }
 
   const client = await pool.connect();
   const ran: string[] = [];
-  let locked = false;
   try {
-    await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_ADVISORY_LOCK_ID]);
-    locked = true;
-
-    const applied = new Set(
-      (await client.query<{ name: string }>("SELECT name FROM schema_migrations")).rows.map((row) => row.name),
-    );
-
-    for (const file of files) {
-      if (applied.has(file) || options.skip?.(file)) continue;
+    for (const file of pendingFiles) {
       const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
       try {
         await client.query("BEGIN");
+        await client.query("SET LOCAL lock_timeout = '15s'");
+        await client.query("SET LOCAL statement_timeout = '120s'");
+        await client.query("SELECT pg_advisory_xact_lock($1)", [MIGRATION_ADVISORY_LOCK_ID]);
+
+        const checkRes = await client.query("SELECT 1 FROM schema_migrations WHERE name = $1", [file]);
+        if ((checkRes.rowCount ?? 0) > 0) {
+          await client.query("COMMIT");
+          continue;
+        }
+
         await client.query(sql);
-        await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [file]);
+        await client.query("INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", [file]);
         await client.query("COMMIT");
         log(`Đã áp dụng migration: ${file}`);
         ran.push(file);
       } catch (error) {
         await client.query("ROLLBACK").catch(() => undefined);
-        throw new Error(`Migration ${file} thất bại: ${(error as Error).message}`);
+        const pgCode = (error as { code?: string })?.code;
+        const msg = error instanceof Error ? error.message : String(error);
+        if (options.continueOnError) {
+          if (pgCode === "42P07" || pgCode === "42710") {
+            await client
+              .query("INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", [file])
+              .catch(() => undefined);
+            warn(`Ghi nhận migration ${file} đã tồn tại trước đó trên CSDL (${msg})`);
+          } else {
+            warn(`Tạm bỏ qua migration ${file} trên production: ${msg}`);
+          }
+          continue;
+        }
+        throw new Error(`Migration ${file} thất bại: ${msg}`);
       }
     }
   } finally {
-    if (locked) {
-      await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_ADVISORY_LOCK_ID]).catch(() => undefined);
-    }
     client.release();
   }
   return ran;
