@@ -1,18 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CHART_COLORS } from "@/components/ui/chart-theme";
-import {
-  AreaTrend,
-  CapsuleDonutChart,
-  KpiChartView,
-  renderKpiValue,
-  type ChartPoint,
-  type DonutItem,
-  type KpiChartSpec,
-} from "@/components/ui/charts/KpiCharts";
-import { StandardBenchmarkMeter } from "@/components/ui/charts/StandardBenchmarkMeter";
-import { CalendarDays } from "@/components/ui/PublicIcon";
 import { AppleLoadingPill, SkeletonCards, SkeletonStats } from "@/components/ui/Skeleton";
 import { useApi } from "@/hooks/use-api";
 import BlockState from "@/components/admin/shared/BlockState";
@@ -22,15 +10,6 @@ import { badgeOf, SCHEDULE_KIND } from "@/components/admin/shared/labels";
 import { formatDate } from "@/utils/format";
 import type { DashboardSummary } from "@/types/dashboard";
 import type { HouseholdStatus } from "@/types/households";
-
-function ensureTwoPoints(points: ChartPoint[], fallbackLabel = "Hiện tại"): ChartPoint[] {
-  if (points.length >= 2) return points;
-  if (points.length === 1) return [points[0], { label: `${points[0].label} (2)`, value: points[0].value }];
-  return [
-    { label: "T-1", value: 0 },
-    { label: fallbackLabel, value: 0 },
-  ];
-}
 
 function readStatusCounts(
   raw: DashboardSummary["householdStatus"],
@@ -55,6 +34,15 @@ function readStatusCounts(
   }
   return counts;
 }
+
+interface ActionQueueItem {
+  key: string;
+  title: string;
+  subtitle: string;
+  tone?: "danger" | "warn" | "default";
+}
+
+const RULER_TICKS = 32;
 
 export default function Dashboard() {
   const [dateStr, setDateStr] = useState("");
@@ -92,183 +80,105 @@ export default function Dashboard() {
   const qualifiedHouseholds = counts.qualifiedHouseholds ?? 0;
   const openViolations = counts.openViolations ?? 0;
   const pendingApprovalsCount = counts.pendingApprovals ?? summary?.pendingApprovals?.length ?? 0;
+  const pendingRegistrations = counts.pendingRegistrations ?? 0;
   const harvestTons = counts.harvestTons ?? summary?.harvest?.tons ?? 0;
   const harvestLots = summary?.harvest?.lots ?? 0;
   const labTotal = counts.labTests ?? summary?.labTests?.total ?? 0;
   const labPassed = counts.labTestsPassed ?? summary?.labTests?.pass ?? 0;
-  const journalLast30 = counts.journalLast30Days ?? 0;
 
-  const qualifiedPct = Math.round(percent(qualifiedHouseholds, Math.max(totalHouseholds, 1)));
-  const labPassPct = Math.round(percent(labPassed, Math.max(labTotal, 1)));
+  const qualifiedPct = totalHouseholds > 0 ? Math.round(percent(qualifiedHouseholds, totalHouseholds)) : 0;
+  const labPassPct = labTotal > 0 ? Math.round(percent(labPassed, labTotal)) : 100;
 
-  const trendPoints = useMemo<ChartPoint[]>(() => {
-    const raw = summary?.journalTrend ?? [];
-    return ensureTwoPoints(
-      raw.map((pt) => ({
-        label: pt.month,
-        value: Number(pt.count) || 0,
-      })),
-    );
-  }, [summary?.journalTrend]);
+  const statusCounts = useMemo(
+    () => readStatusCounts(summary?.householdStatus, qualifiedHouseholds),
+    [summary?.householdStatus, qualifiedHouseholds],
+  );
 
-  const villageBars = useMemo<ChartPoint[]>(() => {
-    const villages = summary?.villages ?? [];
-    if (villages.length === 0) {
-      return [
-        { label: "T1", value: totalHouseholds },
-        { label: "T2", value: qualifiedHouseholds },
-      ];
-    }
-    return villages.map((v) => ({
-      label: v.name.replace(/^Thôn\s+/i, "T"),
-      value: Number(v.households) || 0,
-    }));
-  }, [summary?.villages, totalHouseholds, qualifiedHouseholds]);
-
-  const villagePlotBars = useMemo<ChartPoint[]>(() => {
-    const villages = summary?.villages ?? [];
-    if (villages.length === 0) {
-      return [
-        { label: "T1", value: totalPlots },
-        { label: "T2", value: Math.max(Math.round(totalPlots * 0.6), 1) },
-      ];
-    }
-    return villages.map((v) => ({
-      label: v.name.replace(/^Thôn\s+/i, "T"),
-      value: Number(v.plots ?? v.households) || 0,
-    }));
-  }, [summary?.villages, totalPlots]);
-
-  const statusData = useMemo<DonutItem[]>(() => {
-    const st = readStatusCounts(summary?.householdStatus, qualifiedHouseholds);
-    return [
-      { name: "Đủ chuẩn XK", value: st.qualified, color: "#3b82f6" },
-      { name: "Cần cải thiện", value: st.improve, color: "#f59e0b" },
-      { name: "Chờ duyệt", value: st.pending, color: "#10b981" },
-      { name: "Vi phạm", value: st.violation, color: "#ef4444" },
+  const statusColumns = useMemo(() => {
+    const raw = [
+      { key: "qualified", label: "Đủ chuẩn", shortLabel: "Đủ chuẩn", count: statusCounts.qualified, tone: "ok" as const },
+      { key: "pending", label: "Chờ duyệt", shortLabel: "Chờ duyệt", count: statusCounts.pending, tone: "neutral" as const },
+      { key: "improve", label: "Khắc phục", shortLabel: "Khắc phục", count: statusCounts.improve, tone: "warn" as const },
+      { key: "violation", label: "Vi phạm", shortLabel: "Vi phạm", count: statusCounts.violation, tone: "danger" as const },
     ];
-  }, [summary?.householdStatus, qualifiedHouseholds]);
+    const maxCount = Math.max(1, ...raw.map((r) => r.count));
+    return raw.map((item) => ({
+      ...item,
+      ratio: Math.max(0.08, item.count / maxCount),
+    }));
+  }, [statusCounts]);
 
-  const standards = useMemo(() => {
-    const st = readStatusCounts(summary?.householdStatus, qualifiedHouseholds);
-    const nonViolationPct = Math.round(
-      percent(Math.max(totalHouseholds - st.violation, 0), Math.max(totalHouseholds, 1)),
-    );
-    return [
-      { label: "Đủ chuẩn XK", pct: qualifiedPct, color: CHART_COLORS.ok },
-      { label: "Mẫu Lab đạt", pct: labPassPct, color: CHART_COLORS.ok },
-      { label: "Không vi phạm", pct: nonViolationPct, color: CHART_COLORS.warn },
-      {
-        label: "Nhật ký 30 ngày",
-        pct: Math.min(100, Math.round(percent(journalLast30, Math.max(totalHouseholds, 1)))),
-        color: CHART_COLORS.ok,
-      },
-    ];
-  }, [summary?.householdStatus, qualifiedHouseholds, totalHouseholds, qualifiedPct, labPassPct, journalLast30]);
+  const topVillages = useMemo(() => {
+    const list = [...(summary?.villages ?? [])];
+    list.sort((a, b) => (Number(b.plots ?? b.households) || 0) - (Number(a.plots ?? a.households) || 0));
+    const top = list.slice(0, 4);
+    const maxVal = Math.max(1, ...top.map((v) => Number(v.plots ?? v.households) || 0));
+    return top.map((v) => {
+      const plots = Number(v.plots ?? 0);
+      const households = Number(v.households ?? 0);
+      const metric = plots > 0 ? plots : households;
+      return {
+        id: v.id,
+        name: v.name,
+        metricLabel: plots > 0 ? `${formatVn(plots)} thửa` : `${formatVn(households)} hộ`,
+        pct: Math.max(6, Math.round((metric / maxVal) * 100)),
+      };
+    });
+  }, [summary?.villages]);
 
-  const kpis: { val: string; label: string; trend: string; trendType: string; chart: KpiChartSpec }[] = [
-    {
-      val: formatVn(totalHouseholds),
-      label: "Tổng số hộ đăng ký",
-      trend: `${formatVn(totalAreaHa, 1)} ha canh tác`,
-      trendType: "up",
-      chart: {
-        kind: "bars",
-        tone: "lime",
-        unit: " hộ",
-        highlight: "max",
-        data: villageBars,
-      },
-    },
-    {
-      val: formatVn(totalPlots),
-      label: "Thửa được cấp mã",
-      trend: `${(summary?.villages ?? []).length || 6} thôn quản lý`,
-      trendType: "up",
-      chart: {
-        kind: "bars",
-        tone: "ink",
-        unit: " thửa",
-        highlight: "max",
-        data: villagePlotBars,
-      },
-    },
-    {
-      val: formatVn(qualifiedHouseholds),
-      label: "Hộ đủ điều kiện XK",
-      trend: `${qualifiedPct}% đạt chuẩn`,
-      trendType: "up",
-      chart: {
-        kind: "gauge",
-        tone: "lime",
-        value: qualifiedPct,
-        target: 80,
-        caption: `${qualifiedHouseholds}/${totalHouseholds} hộ`,
-      },
-    },
-    {
-      val: formatVn(openViolations),
-      label: "Cảnh báo vi phạm mở",
-      trend: openViolations > 0 ? "Cần theo dõi xử lý" : "Không có vi phạm mở",
-      trendType: openViolations > 0 ? "down" : "up",
-      chart: {
-        kind: "area",
-        tone: "ink",
-        unit: " nhật ký",
-        highlight: "last",
-        caption: `${formatVn(journalLast30)} bản ghi nhật ký 30 ngày qua`,
-        data: trendPoints,
-      },
-    },
-    {
-      val: `${formatVn(harvestTons, 1)} tấn`,
-      label: "Sản lượng thu hoạch",
-      trend: `${harvestLots} lô xuất khẩu`,
-      trendType: "up",
-      chart: {
-        kind: "area",
-        tone: "lime",
-        unit: " bản ghi",
-        highlight: "max",
-        caption: `Kiểm nghiệm đạt ${labPassed}/${labTotal} mẫu (${labPassPct}%)`,
-        data: trendPoints,
-      },
-    },
-    {
-      val: formatVn(pendingApprovalsCount),
-      label: "Hồ sơ chờ duyệt",
-      trend:
-        (counts.pendingRegistrations ?? 0) > 0
-          ? `${counts.pendingRegistrations} tài khoản chờ duyệt`
-          : "Cần xử lý sớm",
-      trendType: "warn",
-      chart: {
-        kind: "gauge",
-        tone: "amber",
-        value: labPassPct,
-        caption: `Mẫu đạt chuẩn ${labPassPct}%`,
-      },
-    },
-  ];
-
-  const recentViolations = summary?.recentViolations ?? [];
-  const pendingApprovals = summary?.pendingApprovals ?? [];
   const upcomingSchedule = summary?.upcomingSchedule ?? [];
+
+  const actionQueue = useMemo<ActionQueueItem[]>(() => {
+    const recentViolations = summary?.recentViolations ?? [];
+    const pendingApprovals = summary?.pendingApprovals ?? [];
+    const items: ActionQueueItem[] = [];
+    if (pendingRegistrations > 0) {
+      items.push({
+        key: "reg",
+        title: "Tài khoản nông dân chờ kích hoạt",
+        subtitle: `${formatVn(pendingRegistrations)} đăng ký mới cần xác nhận`,
+        tone: "warn",
+      });
+    }
+    for (const p of pendingApprovals.slice(0, 3)) {
+      items.push({
+        key: `app-${p.id}`,
+        title: p.applicantName,
+        subtitle: `${p.requestType}, nộp ngày ${formatDate(p.submittedOn)}`,
+        tone: "default",
+      });
+    }
+    for (const v of recentViolations.slice(0, 2)) {
+      items.push({
+        key: `vio-${v.id}`,
+        title: v.title,
+        subtitle: `${v.householdLabel || "Hộ thành viên"}, ${formatDate(v.detectedOn)}`,
+        tone: v.severity === "critical" ? "danger" : "warn",
+      });
+    }
+    return items.slice(0, 4);
+  }, [pendingRegistrations, summary?.pendingApprovals, summary?.recentViolations]);
+
+  const totalActionCount = pendingApprovalsCount + pendingRegistrations + openViolations;
+  const activeTickIndex = Math.min(
+    RULER_TICKS - 1,
+    Math.max(0, Math.round((labPassPct / 100) * (RULER_TICKS - 1))),
+  );
 
   return (
     <>
-      <div className="page-header dash-header">
-        <h1>Tổng quan</h1>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-          {loading && summary && <AppleLoadingPill label="Đang cập nhật…" />}
-          {dateStr && (
-            <div className="dash-date-badge" title={fullDateStr || dateStr} suppressHydrationWarning>
-              <CalendarDays size={14} aria-hidden="true" />
-              <span>{dateStr}</span>
-            </div>
-          )}
+      {((loading && summary) || dateStr) && (
+        <div className="page-header dash-header">
+          <div className="dash-header-meta" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            {loading && summary && <AppleLoadingPill label="Đang cập nhật…" />}
+            {dateStr && (
+              <div className="dash-date-badge" title={fullDateStr || dateStr} suppressHydrationWarning>
+                <span>{dateStr}</span>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <BlockState loading={loading} error={error} empty={false} onRetry={() => void refresh()} />
@@ -276,143 +186,291 @@ export default function Dashboard() {
 
       {loading && !summary ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <SkeletonStats count={6} label="Đang tải số liệu tổng quan…" />
+          <SkeletonStats count={3} label="Đang tải số liệu tổng quan…" />
           <SkeletonCards count={2} showSpinner={false} />
         </div>
       ) : (
-      <>
-      <div className="kpi-grid">
-        {kpis.map(({ val, label, trend, trendType, chart }, i) => (
-          <div key={i} className="kpi-card has-chart">
-            <div className="kpi-head">
-              <div className="kpi-val">{renderKpiValue(val)}</div>
-              <div className="kpi-meta">
-                <div className="kpi-label">{label}</div>
-                <div className={`kpi-trend ${trendType}`}>{trend}</div>
-              </div>
-            </div>
-            <KpiChartView chart={chart} label={label} />
-          </div>
-        ))}
-      </div>
+        <div className="dash-bento">
+          {/* HÀNG 1: 3 THẺ TRỌNG TÂM (HÀNH ĐỘNG CẦN XỬ LÝ - QUY MÔ VÙNG TRỒNG - CHUẨN XUẤT KHẨU) */}
+          <div className="dash-bento-top">
+            {/* 1. Hạng mục cần xử lý ngay */}
+            <section className="dash-bento-card">
+              <div className="dash-bento-body">
+                <header className="dash-bento-head">
+                  <h2 className="dash-bento-title">Cần xử lý</h2>
+                  <span className="dash-bento-count">{formatVn(totalActionCount)}</span>
+                </header>
 
-      <div className="charts-row">
-        <div className="chart-card">
-          <div className="dash-chart-head">
-            <div className="chart-title">Xu hướng ghi chép nhật ký canh tác (6 tháng)</div>
-          </div>
-          <AreaTrend
-            data={trendPoints}
-            unit=" lượt"
-            highlight="last"
-            height={180}
-            caption="Số bản ghi nhật ký canh tác theo từng tháng trong niên vụ"
-            ariaLabel="Xu hướng nhật ký canh tác 6 tháng"
-          />
-        </div>
-
-        <div className="chart-card">
-          <div className="chart-title">Phân bổ trạng thái hộ</div>
-          <CapsuleDonutChart
-            data={statusData}
-            unit=" hộ"
-            ariaLabel={`Phân bổ trạng thái ${totalHouseholds} hộ nông dân`}
-          />
-        </div>
-      </div>
-
-      <div className="dash-bottom">
-        <div className="card">
-          <div className="card-header">
-            <div className="card-header-left">Vi phạm gần đây</div>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={() => requestAdminNavigate("journal")}
-            >
-              Xem tất cả
-            </button>
-          </div>
-          <div className="card-body">
-            {recentViolations.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Không có cảnh báo vi phạm gần đây.</div>
-            ) : (
-              <div className="alert-list">
-                {recentViolations.map((v) => (
-                  <div key={v.id} className={`alert-item ${v.severity === "critical" ? "red" : "orange"}`}>
-                    <div className="alert-item-body">
-                      <strong>{v.title}</strong>
-                      <small>
-                        {v.householdLabel || "Hộ thành viên"} - {formatDate(v.detectedOn)}
-                      </small>
+                {actionQueue.length === 0 ? (
+                  <div className="dash-bento-clean-list">
+                    <div className="dash-bento-clean-row">
+                      <span>Hồ sơ chờ xét duyệt</span>
+                      <strong>0</strong>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-header">
-            <div className="card-header-left">Hồ sơ chờ duyệt</div>
-            <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{pendingApprovalsCount} hồ sơ</span>
-          </div>
-          <div className="card-body">
-            {pendingApprovals.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Không có hồ sơ nào đang chờ duyệt.</div>
-            ) : (
-              pendingApprovals.map((p) => (
-                <div key={p.id} className="pending-item">
-                  <div>
-                    <div className="pending-item-name">{p.applicantName}</div>
-                    <div className="pending-item-sub">
-                      {p.code} - {p.requestType} - {formatDate(p.submittedOn)}
+                    <div className="dash-bento-clean-row">
+                      <span>Tài khoản chờ kích hoạt</span>
+                      <strong>0</strong>
                     </div>
+                    <div className="dash-bento-clean-row">
+                      <span>Cảnh báo vi phạm mở</span>
+                      <strong>0</strong>
+                    </div>
+                    <p className="dash-bento-footnote">Toàn bộ hồ sơ và nhật ký đang ở trạng thái ổn định.</p>
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => requestAdminNavigate("approval")}
-                  >
-                    Duyệt
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-header">
-            <div className="card-header-left">Lịch kiểm tra sắp tới &amp; Chỉ số</div>
-          </div>
-          <div className="card-body">
-            {upcomingSchedule.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                {upcomingSchedule.map((s) => {
-                  const kind = badgeOf(SCHEDULE_KIND, s.kind);
-                  return (
-                    <div key={s.id} className="pending-item">
-                      <div>
-                        <div className="pending-item-name">{s.title}</div>
-                        <div className="pending-item-sub">
-                          {formatDate(s.scheduledOn)}
-                          {s.officer ? ` - ${s.officer}` : ""}
-                          {s.plotCount ? ` - ${s.plotCount} thửa` : ""}
+                ) : (
+                  <div className="dash-bento-alert-list">
+                    {actionQueue.map((item) => (
+                      <div key={item.key} className="dash-bento-alert-row">
+                        <div className="dash-bento-alert-copy">
+                          <strong className={item.tone === "danger" ? "is-danger" : item.tone === "warn" ? "is-warn" : ""}>
+                            {item.title}
+                          </strong>
+                          <span>{item.subtitle}</span>
                         </div>
                       </div>
-                      <span className={`badge ${kind.badge}`}>{kind.label}</span>
-                    </div>
-                  );
-                })}
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-            <StandardBenchmarkMeter standards={standards} />
+
+              <footer className="dash-bento-footer">
+                <button
+                  type="button"
+                  className="dash-bento-footer-btn"
+                  onClick={() => requestAdminNavigate("approval")}
+                >
+                  Hồ sơ
+                </button>
+                {openViolations > 0 && (
+                  <button
+                    type="button"
+                    className="dash-bento-footer-btn"
+                    onClick={() => requestAdminNavigate("journal")}
+                  >
+                    Vi phạm
+                  </button>
+                )}
+              </footer>
+            </section>
+
+            {/* 2. Quy mô vùng trồng & phân bổ thôn */}
+            <section className="dash-bento-card">
+              <div className="dash-bento-body">
+                <header className="dash-bento-head">
+                  <h2 className="dash-bento-title">Quy mô vùng trồng</h2>
+                </header>
+
+                <div className="dash-bento-hero">
+                  <div className="dash-bento-figure">
+                    <span className="dash-bento-num">{formatVn(totalAreaHa, 1)}</span>
+                    <span className="dash-bento-unit">ha</span>
+                  </div>
+                </div>
+
+                <div className="dash-bento-inline-specs">
+                  <span>Hộ <strong>{formatVn(totalHouseholds)}</strong></span>
+                  <span>Thửa <strong>{formatVn(totalPlots)}</strong></span>
+                  <span>Thôn <strong>{formatVn((summary?.villages ?? []).length)}</strong></span>
+                </div>
+
+                <div className="dash-bento-bars">
+                  {topVillages.length === 0 ? (
+                    <p className="dash-bento-footnote">Chưa có dữ liệu phân bổ theo thôn.</p>
+                  ) : (
+                    topVillages.map((v) => (
+                      <div key={v.id} className="dash-bento-bar-row">
+                        <span className="dash-bento-bar-name">{v.name}</span>
+                        <div className="dash-bento-bar-track" aria-hidden="true">
+                          <div className="dash-bento-bar-fill" style={{ width: `${v.pct}%` }} />
+                        </div>
+                        <span className="dash-bento-bar-val">{v.metricLabel}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <footer className="dash-bento-footer">
+                <button
+                  type="button"
+                  className="dash-bento-footer-btn"
+                  onClick={() => requestAdminNavigate("zones")}
+                >
+                  Bản đồ vùng trồng
+                </button>
+              </footer>
+            </section>
+
+            {/* 3. Hồ sơ đủ điều kiện xuất khẩu */}
+            <section className="dash-bento-card">
+              <div className="dash-bento-body">
+                <header className="dash-bento-head">
+                  <h2 className="dash-bento-title">Chuẩn xuất khẩu</h2>
+                  <span className={`dash-bento-tag ${qualifiedPct >= 75 ? "is-ok" : "is-warn"}`}>
+                    {formatVn(qualifiedHouseholds)}/{formatVn(totalHouseholds)} hộ
+                  </span>
+                </header>
+
+                <div className="dash-bento-hero">
+                  <div className="dash-bento-figure">
+                    <span className="dash-bento-num">{qualifiedPct}</span>
+                    <span className="dash-bento-unit">%</span>
+                  </div>
+                </div>
+
+                <div className="dash-bento-stems" role="list" aria-label="Phân bổ trạng thái nông hộ">
+                  {statusColumns.map((col) => (
+                    <div key={col.key} className="dash-bento-stem-col" role="listitem">
+                      <span className="dash-bento-stem-val">{formatVn(col.count)}</span>
+                      <div className="dash-bento-stem-track" aria-hidden="true">
+                        <div
+                          className={`dash-bento-stem-fill is-${col.tone}`}
+                          style={{ height: `${Math.round(col.ratio * 100)}%` }}
+                        />
+                      </div>
+                      <span className="dash-bento-stem-label">{col.shortLabel}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <footer className="dash-bento-footer">
+                <button
+                  type="button"
+                  className="dash-bento-footer-btn"
+                  onClick={() => requestAdminNavigate("households")}
+                >
+                  Danh sách nông hộ
+                </button>
+              </footer>
+            </section>
+          </div>
+
+          {/* HÀNG 2: 2 THẺ BẤT ĐỐI XỨNG (SẢN LƯỢNG & KIỂM NGHIỆM - LỊCH KIỂM TRA THỰC ĐỊA) */}
+          <div className="dash-bento-bottom">
+            {/* 4. Sản lượng thu hoạch & an toàn tồn dư MRL */}
+            <section className="dash-bento-card">
+              <div className="dash-bento-body">
+                <header className="dash-bento-head">
+                  <h2 className="dash-bento-title">Sản lượng và kiểm nghiệm</h2>
+                </header>
+
+                <div className="dash-bento-wide-mid">
+                  <div className="dash-bento-wide-main">
+                    <div className="dash-bento-figure">
+                      <span className="dash-bento-num">{formatVn(harvestTons, 1)}</span>
+                      <span className="dash-bento-unit">tấn</span>
+                    </div>
+                    <div className="dash-bento-wide-sub">
+                      <span>Tổng hợp {formatVn(harvestLots)} lô thu hoạch</span>
+                      <span>Tỷ lệ mẫu đạt ngưỡng MRL: {labPassPct}%</span>
+                    </div>
+                  </div>
+
+                  <div className="dash-bento-kv-pair">
+                    <div className="dash-bento-kv">
+                      <span>Mẫu đạt</span>
+                      <strong>{formatVn(labPassed)}/{formatVn(labTotal)}</strong>
+                    </div>
+                    <div className="dash-bento-kv">
+                      <span>Vi phạm mở</span>
+                      <strong className={openViolations > 0 ? "is-danger" : ""}>{formatVn(openViolations)}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="dash-bento-ruler-wrap">
+                  <div className="dash-bento-ruler-caption">
+                    <span>Thước kiểm soát an toàn mẫu kiểm nghiệm</span>
+                    <strong>{labPassPct}% đạt</strong>
+                  </div>
+                  <div className="dash-bento-ruler" aria-hidden="true">
+                    {Array.from({ length: RULER_TICKS }, (_, idx) => {
+                      const isPassedZone = idx <= activeTickIndex;
+                      const isMarker = idx === activeTickIndex;
+                      return (
+                        <span
+                          key={idx}
+                          className={`dash-bento-tick${isPassedZone ? " is-filled" : ""}${isMarker ? " is-marker" : ""}`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <footer className="dash-bento-footer">
+                <button
+                  type="button"
+                  className="dash-bento-footer-btn"
+                  onClick={() => requestAdminNavigate("testing")}
+                >
+                  Kiểm nghiệm
+                </button>
+                <button
+                  type="button"
+                  className="dash-bento-footer-btn is-primary"
+                  onClick={() => requestAdminNavigate("harvest")}
+                >
+                  Lô hàng
+                </button>
+              </footer>
+            </section>
+
+            {/* 5. Lịch kiểm tra sắp tới */}
+            <section className="dash-bento-card">
+              <div className="dash-bento-body">
+                <header className="dash-bento-head">
+                  <h2 className="dash-bento-title">Lịch kiểm tra thực địa</h2>
+                  <span className={`dash-bento-tag ${openViolations === 0 ? "is-ok" : "is-danger"}`}>
+                    {openViolations === 0 ? "Không vi phạm mở" : `${formatVn(openViolations)} vi phạm mở`}
+                  </span>
+                </header>
+
+                <div className="dash-bento-hero">
+                  <div className="dash-bento-figure">
+                    <span className="dash-bento-num">{formatVn(upcomingSchedule.length)}</span>
+                    <span className="dash-bento-unit">đợt</span>
+                  </div>
+                </div>
+
+                {upcomingSchedule.length === 0 ? (
+                  <div className="dash-bento-empty">
+                    Chưa có đợt kiểm tra thực địa mới trong danh sách sắp tới.
+                  </div>
+                ) : (
+                  <div className="dash-bento-schedule-list">
+                    {upcomingSchedule.slice(0, 4).map((s) => {
+                      const kind = badgeOf(SCHEDULE_KIND, s.kind);
+                      return (
+                        <div key={s.id} className="dash-bento-schedule-row">
+                          <div className="dash-bento-schedule-main">
+                            <strong>{s.title}</strong>
+                            <span>
+                              {s.officer ? `${s.officer}, ` : ""}
+                              {s.plotCount ? `${formatVn(s.plotCount)} thửa` : kind.label}
+                            </span>
+                          </div>
+                          <span className="dash-bento-schedule-date">{formatDate(s.scheduledOn)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <footer className="dash-bento-footer">
+                <button
+                  type="button"
+                  className="dash-bento-footer-btn"
+                  onClick={() => requestAdminNavigate("approval")}
+                >
+                  Xem lịch kiểm tra
+                </button>
+              </footer>
+            </section>
           </div>
         </div>
-      </div>
-      </>
       )}
     </>
   );
