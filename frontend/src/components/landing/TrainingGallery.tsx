@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { useStripPagination } from "./use-strip-pagination";
 
@@ -221,6 +222,7 @@ export default function TrainingGallery() {
   };
 
   const closeDrawer = useCallback(() => setDrawerIndex(null), []);
+  useBackLayer(drawerIndex !== null, closeDrawer);
   const nextDrawer = useCallback(() => {
     setDrawerIndex((prev) => (prev === null ? null : (prev + 1) % TRAINING_ITEMS.length));
   }, []);

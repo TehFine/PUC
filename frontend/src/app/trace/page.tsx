@@ -9,6 +9,7 @@ import DwellSlideshow, { type DwellSlide } from "@/components/landing/DwellSlide
 import LandingFooter from "@/components/landing/LandingFooter";
 import { Search } from "@/components/ui/PublicIcon";
 import { api } from "@/lib/api-client";
+import { replaceUrlPreservingState } from "@/lib/back-navigation";
 import { homePathFor } from "@/lib/routes";
 import { safeDecodeURIComponent } from "@/utils/url-safety";
 import { persistTraceLang } from "./[code]/trace-i18n";
@@ -194,7 +195,7 @@ export default function TraceLookupPage() {
         params.delete("auditPass");
         const qs = params.toString();
         const cleanUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
-        window.history.replaceState(null, "", cleanUrl);
+        replaceUrlPreservingState(cleanUrl);
       }
     } catch {
       // Bỏ qua nếu trình duyệt chặn sessionStorage hoặc History API

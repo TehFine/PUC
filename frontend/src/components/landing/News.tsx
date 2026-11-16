@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNewsArticles } from "@/lib/news-store";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 import { useStripPagination } from "./use-strip-pagination";
@@ -77,6 +78,7 @@ export default function News() {
   };
 
   const closeDrawer = useCallback(() => setActiveIndex(null), []);
+  useBackLayer(activeIndex !== null, closeDrawer);
   const nextArticle = useCallback(() => {
     setActiveIndex((prev) =>
       prev === null || articles.length === 0 ? null : (prev + 1) % articles.length,

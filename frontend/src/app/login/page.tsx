@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
 import { AuthBusyBorderRing, AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
 import { api, ApiError, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
+import { useBackLayer } from "@/lib/back-navigation";
 import { homePathFor } from "@/lib/routes";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import type { MfaChallengeResponse } from "@/types/api";
@@ -141,6 +142,22 @@ export default function LoginPage() {
     const rawNext = new URLSearchParams(window.location.search).get("next");
     setNextPath(resolveSafeNextPath(rawNext));
   }, []);
+
+  useBackLayer(Boolean(mfaChallenge), () => {
+    if (!otpSubmitting) {
+      setMfaChallenge(null);
+      setOtpCode("");
+      setError(null);
+    }
+  });
+
+  useBackLayer(chooserOpen, () => {
+    if (!googleSubmitting) {
+      setChooserOpen(false);
+      setCustomEmailMode(false);
+      setChooserError(null);
+    }
+  });
 
   // Điều hướng nếu đã có phiên đăng nhập hợp lệ (ưu tiên quay lại trang quét QR nếu có ?next=)
   useEffect(() => {

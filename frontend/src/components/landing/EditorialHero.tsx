@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { replaceUrlPreservingState, useBackLayer } from "@/lib/back-navigation";
 import { homePathFor } from "@/lib/routes";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { NAV_LINKS } from "./data";
@@ -80,6 +81,8 @@ export default function EditorialHero() {
   const { data } = usePublic<PublicOverview>("overview");
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  useBackLayer(menuOpen, closeMenu);
   const [showStickyHeader, setShowStickyHeader] = useState(false);
   const [activeHref, setActiveHref] = useState("");
   const clickLockUntilRef = useRef(0);
@@ -623,7 +626,7 @@ export default function EditorialHero() {
                       const el = id ? document.getElementById(id) : null;
                       if (el) {
                         el.scrollIntoView({ behavior: "smooth", block: "start" });
-                        window.history.replaceState(null, "", link.href);
+                        replaceUrlPreservingState(link.href);
                       }
                     });
                   }}

@@ -9,6 +9,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import {
   DURIAN_PROTOCOL_2026_2027,
@@ -998,6 +999,7 @@ export default function Catalog() {
 
   /* ─── Điều khiển ngăn chi tiết trượt phải ─── */
   const closeDrawer = useCallback(() => setDrawerIndex(null), []);
+  useBackLayer(drawerIndex !== null, closeDrawer);
   const prevDrawer = useCallback(() => {
     setDrawerIndex((cur) => {
       if (cur === null || currentItems.length === 0) return null;

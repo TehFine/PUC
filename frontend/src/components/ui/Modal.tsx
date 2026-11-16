@@ -6,6 +6,7 @@ import { ArrowRight } from "@/components/ui/PublicIcon";
 import { SheetCloseContext, useIsDesktopViewport } from "@/components/portal/ui";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 
 /**
@@ -151,6 +152,8 @@ export function Modal({
     }, 350);
     return () => clearTimeout(timer);
   }, []);
+
+  useBackLayer(true, handleClose);
 
   useSheetSwipe({
     sheetRef: panelRef,

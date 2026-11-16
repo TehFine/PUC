@@ -6,6 +6,7 @@ import { SectionId } from "@/app/admin/page";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { onAdminNavigate } from "@/components/admin/shared/counts-events";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 
 interface NavItem {
@@ -81,6 +82,8 @@ export default function Sidebar({ active, onNavigate }: Props) {
       isClosingRef.current = false;
     }, CLOSE_DURATION_MS);
   }, []);
+
+  useBackLayer(isOpen, handleClose);
 
   useEffect(
     () =>

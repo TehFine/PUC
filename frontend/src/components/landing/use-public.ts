@@ -70,14 +70,15 @@ type State<T> = { data: T | null; error: boolean; loading: boolean };
 interface StoreEntry {
   state: State<unknown>;
   updatedAt: number;
+  etag: string | null;
   inflight: Promise<unknown> | null;
 }
 
 const OVERVIEW_STORAGE_KEY = "puc:public-overview:v1";
 const REQUEST_TIMEOUT_MS = 20_000;
 const RETRY_DELAY_MS = 1500;
-const MOUNT_FRESH_MS = 2_000;
-const FOCUS_REVALIDATE_MS = 3_000;
+const MOUNT_FRESH_MS = 15_000;
+const FOCUS_REVALIDATE_MS = 20_000;
 
 const SERVER_SNAPSHOT: State<never> = Object.freeze({
   data: null,
@@ -140,6 +141,7 @@ function ensureEntry(path: string): StoreEntry {
     entry = {
       state: persisted !== null ? { data: persisted, error: false, loading: false } : SERVER_SNAPSHOT,
       updatedAt: 0,
+      etag: null,
       inflight: null,
     };
     entries.set(path, entry);
@@ -147,16 +149,23 @@ function ensureEntry(path: string): StoreEntry {
   return entry;
 }
 
-/** Một lần gọi không lưu đệm cứng trên trình duyệt; thời gian phản hồi được báo cho bộ theo dõi chất lượng mạng. */
-async function fetchJson<T>(path: string): Promise<T> {
+/** Đối chiếu qua If-None-Match (304 Not Modified) để tránh tải lại JSON lớn trên trang giới thiệu khi dữ liệu chưa đổi. */
+async function fetchJson<T>(path: string, entry: StoreEntry): Promise<{ status: 304 } | { status: 200; data: T; etag: string | null }> {
   const startedAt = performance.now();
   try {
+    const headers: Record<string, string> | undefined =
+      entry.etag && entry.state.data !== null ? { "If-None-Match": entry.etag } : undefined;
     const response = await fetch(`/api/public/${path}`, {
       cache: "no-store",
+      headers,
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
+    if (response.status === 304 && entry.state.data !== null) {
+      return { status: 304 };
+    }
     if (!response.ok) throw new Error(String(response.status));
-    return (await response.json()) as T;
+    const etag = response.headers.get("ETag");
+    return { status: 200, data: (await response.json()) as T, etag };
   } finally {
     reportRequestTime(performance.now() - startedAt);
   }
@@ -169,14 +178,23 @@ function revalidate(path: string, force = false): Promise<unknown> {
     return Promise.resolve(entry.state.data);
   }
 
-  const request = fetchJson<unknown>(path)
+  const request = fetchJson<unknown>(path, entry)
     .catch(async () => {
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-      return fetchJson<unknown>(path);
+      return fetchJson<unknown>(path, entry);
     })
-    .then((data) => {
-      persistData(path, data);
+    .then((result) => {
       entry.updatedAt = Date.now();
+      if (result.status === 304) {
+        if (entry.state.loading || entry.state.error) {
+          entry.state = { data: entry.state.data, error: false, loading: false };
+          emitChange();
+        }
+        return entry.state.data;
+      }
+      const { data, etag } = result;
+      if (etag) entry.etag = etag;
+      persistData(path, data);
       const prevJson = entry.state.data !== null ? JSON.stringify(entry.state.data) : null;
       const nextJson = JSON.stringify(data);
       if (prevJson !== nextJson || entry.state.loading || entry.state.error) {

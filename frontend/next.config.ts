@@ -80,8 +80,15 @@ const nextConfig: NextConfig = {
       { source: "/trace/:path*", headers: [noStoreHeader, noReferrerHeader] },
       { source: "/t/:path*", headers: [noStoreHeader, noReferrerHeader] },
       {
-        source: "/:folder(diseases|pesticides|fertilizers|varieties|training|landing|stages|fonts)/:path*",
+        source: "/:folder(diseases|pesticides|fertilizers|varieties|training|landing|stages|fonts|icons)/:path*",
         headers: immutableAssetHeaders,
+      },
+      {
+        source: "/:asset([^/]+\\.(?:png|svg|webp|ico))",
+        headers: [
+          ...securityHeaders,
+          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
+        ],
       },
     ];
   },
@@ -89,8 +96,10 @@ const nextConfig: NextConfig = {
     return [{ source: "/landing", destination: "/", permanent: true }];
   },
   async rewrites() {
-    const apiUrl = process.env.API_URL ?? "http://localhost:4000";
-    return [{ source: "/api/:path*", destination: `${apiUrl}/api/:path*` }];
+    const rawApiUrl =
+      process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const normalizedApiUrl = rawApiUrl.trim().replace(/\/+$/, "").replace(/\/api$/i, "");
+    return [{ source: "/api/:path*", destination: `${normalizedApiUrl}/api/:path*` }];
   },
   turbopack: {
     rules: {

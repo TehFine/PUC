@@ -1,18 +1,34 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { homePathFor } from "@/lib/routes";
 
+export const WORKSPACE_ACTIVE_SESSION_KEY = "puc_in_workspace";
+
 /**
- * Chỉ gắn ở trang chủ `/`: người đã đăng nhập từ trước được đưa thẳng vào khu vực làm việc của mình.
- * Muốn xem lại trang giới thiệu thì bấm biểu tượng hệ thống (dẫn tới `/gioi-thieu`, không chuyển hướng).
+ * Chỉ gắn ở trang chủ `/`: người đã đăng nhập từ trước khi mở mới tab được đưa vào khu làm việc.
+ * Nếu người dùng vừa bấm nút Back lùi từ `/admin` hoặc `/portal` ra `/`, giữ nguyên trang chủ `/`
+ * để họ xem trang giới thiệu hoặc bấm Back thêm một lần nữa để thoát ra ngoài trình duyệt.
  */
 export default function AutoEnter() {
   const router = useRouter();
   const { status, session } = useAuth();
-  const target = status === "authenticated" ? homePathFor(session?.user.role) : null;
+  const [backedOut] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      if (window.sessionStorage.getItem(WORKSPACE_ACTIVE_SESSION_KEY) === "1") {
+        window.sessionStorage.removeItem(WORKSPACE_ACTIVE_SESSION_KEY);
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  });
+
+  const target = !backedOut && status === "authenticated" ? homePathFor(session?.user.role) : null;
 
   useEffect(() => {
     if (target) router.replace(target);

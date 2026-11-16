@@ -10,6 +10,11 @@ import { SkeletonCards } from "@/components/ui/Skeleton";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { ROLE_LABELS } from "@/constants/roles";
 import { api, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
+import {
+  PUC_URL_SYNC_EVENT,
+  pushUrlNavigation,
+  replaceUrlPreservingState,
+} from "@/lib/back-navigation";
 import { reportRequestTime } from "@/lib/network";
 import {
   isSafeExternalHttpsUrl,
@@ -656,11 +661,18 @@ export default function TraceView() {
       const nextUrl = new URL(window.location.href);
       if (nextUrl.searchParams.has("auditPass")) {
         nextUrl.searchParams.delete("auditPass");
-        window.history.replaceState(null, "", nextUrl.pathname + nextUrl.search + nextUrl.hash);
+        replaceUrlPreservingState(nextUrl.pathname + nextUrl.search + nextUrl.hash);
       }
     } catch {
       // Bỏ qua nếu trình duyệt chặn History API
     }
+
+    const onUrlSync = () => {
+      const nextView = readInitialViewParam();
+      setSelectedView((prev) => (prev === nextView ? prev : nextView));
+    };
+    window.addEventListener(PUC_URL_SYNC_EVENT, onUrlSync);
+    return () => window.removeEventListener(PUC_URL_SYNC_EVENT, onUrlSync);
   }, []);
 
   const handleChangeLang = (nextLang: TraceLang) => {
@@ -693,7 +705,7 @@ export default function TraceView() {
         const nextUrl = new URL(window.location.href);
         if (nextUrl.searchParams.has("auditPass")) {
           nextUrl.searchParams.delete("auditPass");
-          window.history.replaceState(null, "", nextUrl.pathname + nextUrl.search + nextUrl.hash);
+          replaceUrlPreservingState(nextUrl.pathname + nextUrl.search + nextUrl.hash);
         }
       }
     } catch {
@@ -839,6 +851,11 @@ export default function TraceView() {
     if (tier === data.accessControl.viewerTier && selectedView === tier) return;
     setSwitchingTier(true);
     setSelectedView(tier);
+    if (typeof window !== "undefined") {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set("view", tier);
+      pushUrlNavigation(nextUrl.pathname + nextUrl.search + nextUrl.hash);
+    }
   };
 
   const handleSearch = (e: React.FormEvent) => {
