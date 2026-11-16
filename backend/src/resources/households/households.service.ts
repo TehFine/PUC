@@ -87,11 +87,13 @@ export class HouseholdsService extends BaseCrudService {
   }
 
   override async update(id: number, dto: object, user: AuthUser, ip?: string) {
-    const prev = await this.db.query<{ village_id: number | string }>(
-      "SELECT village_id FROM households WHERE id = $1 LIMIT 1",
+    const prev = await this.db.query<{ village_id: number | string; phone: string | null; name: string | null }>(
+      "SELECT village_id, phone, name FROM households WHERE id = $1 LIMIT 1",
       [id],
     );
-    const oldVillageId = prev.rows[0]?.village_id ? Number(prev.rows[0].village_id) : undefined;
+    const oldRow = prev.rows[0];
+    const oldVillageId = oldRow?.village_id ? Number(oldRow.village_id) : undefined;
+    const oldPhone = oldRow?.phone?.trim() ?? "";
     const updated = await super.update(id, dto, user, ip);
     const nextVillageId =
       (dto as { villageId?: number }).villageId !== undefined
@@ -102,6 +104,35 @@ export class HouseholdsService extends BaseCrudService {
     if (nextVillageId !== undefined && nextVillageId !== oldVillageId) {
       await this.db.query("UPDATE users SET village_id = $2 WHERE household_id = $1", [id, nextVillageId]);
     }
+
+    const nextName =
+      typeof (dto as { name?: string }).name === "string" ? (dto as { name: string }).name.trim() : undefined;
+    if (nextName) {
+      await this.db.query("UPDATE users SET full_name = $2 WHERE household_id = $1 AND role = 'farmer'", [
+        id,
+        nextName,
+      ]);
+    }
+
+    const rawNextPhone =
+      typeof (dto as { phone?: string }).phone === "string"
+        ? (dto as { phone: string }).phone.trim().replace(/\s+/g, "")
+        : undefined;
+    if (rawNextPhone && /^[0-9A-Za-z._-]{3,64}$/.test(rawNextPhone) && rawNextPhone.toLowerCase() !== oldPhone.toLowerCase()) {
+      await this.db.query(
+        `UPDATE users u
+         SET username = $2
+         WHERE u.household_id = $1
+           AND u.role = 'farmer'
+           AND lower(u.username) = lower($3)
+           AND NOT EXISTS (
+             SELECT 1 FROM users other
+             WHERE lower(other.username) = lower($2) AND other.id <> u.id
+           )`,
+        [id, rawNextPhone, oldPhone],
+      );
+    }
+
     await syncHouseholdAndVillageStats(this.db, {
       forceZeroVillageIds: oldVillageId ? [oldVillageId] : [],
     });
