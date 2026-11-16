@@ -36,6 +36,7 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const dragZoneRef = useRef<HTMLDivElement>(null);
+  const backdropDownRef = useRef(false);
   const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
   const isDesktop = useIsDesktopViewport(760);
@@ -167,8 +168,15 @@ export function Modal({
       <div
         ref={backdropRef}
         className={`modal-overlay pt-sheet-backdrop ${variant === "drawer" ? "is-drawer" : "is-confirm-overlay"}`.trim()}
+        onPointerDown={(event) => {
+          backdropDownRef.current = event.target === event.currentTarget;
+        }}
         onClick={(event) => {
-          if (closeOnBackdrop && event.target === event.currentTarget) handleClose();
+          const startedOnBackdrop = backdropDownRef.current;
+          backdropDownRef.current = false;
+          if (closeOnBackdrop && startedOnBackdrop && event.target === event.currentTarget) {
+            handleClose();
+          }
         }}
       >
         <div

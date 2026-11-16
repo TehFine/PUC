@@ -16,11 +16,11 @@ function Wrap({ id, label, required, hint, error, children }: BaseProps & { id: 
     <div className="form-group">
       <label htmlFor={id}>
         {label}
-        {required && <span aria-hidden="true" style={{ color: "#c0392b" }}> *</span>}
+        {required && <span aria-hidden="true" className="form-required-mark"> *</span>}
       </label>
       {children}
-      {hint && !error && <small style={{ display: "block", marginTop: 5, color: "var(--text-muted)", fontSize: 12 }}>{hint}</small>}
-      {error && <small role="alert" style={{ display: "block", marginTop: 5, color: "#b73c20", fontSize: 12 }}>{error}</small>}
+      {hint && !error && <small className="form-field-hint">{hint}</small>}
+      {error && <small role="alert" className="form-field-error">{error}</small>}
     </div>
   );
 }
@@ -175,16 +175,14 @@ export function TextAreaField({
 export function CheckboxField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   const id = useId();
   return (
-    <div className="form-group" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <div className="form-group form-checkbox-group">
       <input id={id} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <label htmlFor={id} style={{ margin: 0 }}>
-        {label}
-      </label>
+      <label htmlFor={id}>{label}</label>
     </div>
   );
 }
 
 /** Lưới 2 cột cho biểu mẫu (tự xuống 1 cột trên màn hình hẹp). */
 export function FormGrid({ children }: { children: ReactNode }) {
-  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", columnGap: 14 }}>{children}</div>;
+  return <div className="admin-form-grid">{children}</div>;
 }

@@ -104,6 +104,7 @@ export default function HouseholdFormModal({
     <Modal
       title={isEdit ? `Sửa hộ: ${initial?.name}` : "Thêm hộ nông dân mới"}
       onClose={save.pending ? () => undefined : onClose}
+      closeOnBackdrop={!save.pending}
       width={580}
       footer={
         <>

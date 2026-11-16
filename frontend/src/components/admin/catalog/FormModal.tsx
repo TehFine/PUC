@@ -39,7 +39,7 @@ export default function FormModal({
       title={title}
       onClose={pending ? () => undefined : onClose}
       width={width}
-      closeOnBackdrop={false}
+      closeOnBackdrop={!pending}
       footer={
         <>
           <button type="button" className="btn btn-outline" onClick={onClose} disabled={pending}>
