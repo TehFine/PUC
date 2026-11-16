@@ -287,12 +287,6 @@ export default function Catalog() {
 
   return (
     <div id="section-catalog" className="admin-catalog-section">
-      <div className="page-header">
-        <div>
-          <h1>Danh Mục Hệ Thống</h1>
-        </div>
-      </div>
-
       <div className="tab-bar" role="tablist" aria-label="Danh mục hệ thống">
         {[
           {

@@ -51,11 +51,8 @@ export default function Households() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Quản lý Hộ Nông Dân</h1>
-        </div>
-        {canCreate && (
+      {canCreate && (
+        <div className="page-header">
           <div className="header-actions">
             <button type="button" className="btn btn-outline" onClick={() => setImporting(true)}>
               Import CSV/Excel
@@ -64,8 +61,8 @@ export default function Households() {
               Thêm hộ mới
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="filter-bar">
         <div style={{ position: "relative", flex: 1, minWidth: 220 }}>

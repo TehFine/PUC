@@ -262,9 +262,6 @@ export default function Harvest() {
   return (
     <>
       <div className="page-header">
-        <div>
-          <h1>Chuỗi Cung Ứng &amp; Lô Hàng</h1>
-        </div>
         <div className="header-actions">
           <button type="button" className="btn btn-outline" onClick={() => setScanningQr(true)}>
             <span>Quét QR</span>

@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { Laptop, Mail, QrCode, ShieldCheck, UserCheck } from "@/components/ui/PublicIcon";
+import { ArrowLeft, Laptop, Mail, QrCode, ShieldCheck, UserCheck } from "@/components/ui/PublicIcon";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { AdminNotificationBell } from "@/components/admin/notifications/AdminNotificationsSheet";
 import ChangePasswordModal from "@/components/admin/notifications/ChangePasswordModal";
@@ -28,7 +28,15 @@ const initials = (name: string | null | undefined) =>
     .join("")
     .toUpperCase() || "HT";
 
-export default function UserMenu() {
+export default function UserMenu({
+  isZones = false,
+  onBackFromZones,
+  backTitle = "Quay lại trang trước",
+}: {
+  isZones?: boolean;
+  onBackFromZones?: () => void;
+  backTitle?: string;
+} = {}) {
   const { session, logout, updateProfile, refreshSession } = useAuth();
   const [open, setOpen] = useState(false);
   const [scanningQr, setScanningQr] = useState(false);
@@ -107,8 +115,8 @@ export default function UserMenu() {
 
   return (
     <div className="user-menu">
-      <AdminNotificationBell enabled={role !== "farmer"} />
-      {role !== "farmer" && (
+      {!isZones && <AdminNotificationBell enabled={role !== "farmer"} />}
+      {!isZones && role !== "farmer" && (
         <button
           type="button"
           className="admin-qr-btn"
@@ -120,17 +128,32 @@ export default function UserMenu() {
           <span className="admin-qr-label">Quét QR</span>
         </button>
       )}
-      <button
-        className={`header-avatar ${open ? "is-active" : ""}`}
-        type="button"
-        aria-label={title}
-        title={title}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className="user-avatar">{initials(fullName)}</span>
-      </button>
+      {isZones ? (
+        <button
+          className="header-avatar header-zones-back"
+          type="button"
+          aria-label={backTitle}
+          title={backTitle}
+          onClick={() => {
+            setOpen(false);
+            onBackFromZones?.();
+          }}
+        >
+          <ArrowLeft size={19} />
+        </button>
+      ) : (
+        <button
+          className={`header-avatar ${open ? "is-active" : ""}`}
+          type="button"
+          aria-label={title}
+          title={title}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span className="user-avatar">{initials(fullName)}</span>
+        </button>
+      )}
 
       {open && (
         <Sheet

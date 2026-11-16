@@ -162,28 +162,27 @@ export default function Approval() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Duyệt &amp; Kiểm Chứng Hồ Sơ</h1>
+      {(canCreateApproval || canCreateSchedule || canCreateMinute) && (
+        <div className="page-header">
+          <div className="header-actions">
+            {canCreateApproval && (
+              <button type="button" className="btn btn-outline" onClick={() => setEditingApproval("new")}>
+                Thêm hồ sơ
+              </button>
+            )}
+            {canCreateSchedule && (
+              <button type="button" className="btn btn-outline" onClick={() => setEditingSchedule("new")}>
+                Lên lịch kiểm tra
+              </button>
+            )}
+            {canCreateMinute && (
+              <button type="button" className="btn btn-primary" onClick={() => setEditingMinute("new")}>
+                Tạo biên bản
+              </button>
+            )}
+          </div>
         </div>
-        <div className="header-actions">
-          {canCreateApproval && (
-            <button type="button" className="btn btn-outline" onClick={() => setEditingApproval("new")}>
-              Thêm hồ sơ
-            </button>
-          )}
-          {canCreateSchedule && (
-            <button type="button" className="btn btn-outline" onClick={() => setEditingSchedule("new")}>
-              Lên lịch kiểm tra
-            </button>
-          )}
-          {canCreateMinute && (
-            <button type="button" className="btn btn-primary" onClick={() => setEditingMinute("new")}>
-              Tạo biên bản
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       <TabBar tabs={tabs} active={tab} onChange={selectTab} />
 
@@ -326,7 +325,7 @@ export default function Approval() {
         </>
       )}
 
-      {tab === "registrations" && canReadRegistrations && <Registrations embedded onCountChange={setRegCount} />}
+      {tab === "registrations" && canReadRegistrations && <Registrations onCountChange={setRegCount} />}
 
       {tab === "schedule" && (
         <>

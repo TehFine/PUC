@@ -104,18 +104,15 @@ export default function Testing() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Kiểm Nghiệm Chất Lượng</h1>
-        </div>
-        {canCreate && (
+      {canCreate && (
+        <div className="page-header">
           <div className="header-actions">
             <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
               Thêm phiếu kiểm nghiệm
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="charts-row-3">
         <div className="chart-card">

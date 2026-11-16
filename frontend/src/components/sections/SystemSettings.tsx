@@ -29,18 +29,15 @@ export default function SystemSettings() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Quản Trị Hệ Thống</h1>
-        </div>
-        <div className="header-actions">
-          {tab === "accounts" && (
+      {tab === "accounts" && (
+        <div className="page-header">
+          <div className="header-actions">
             <button type="button" className="btn btn-primary" onClick={() => setCreateTrigger((c) => c + 1)}>
               Thêm tài khoản
             </button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="tab-bar">
         {TABS.map((t) => (

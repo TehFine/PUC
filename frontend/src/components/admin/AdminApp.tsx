@@ -56,20 +56,47 @@ const SECTION_TITLES: Record<SectionId, string> = {
   news: "Bản tin",
 };
 
+const LAST_NON_ZONES_SECTION_KEY = "puc:admin-last-non-zones";
+
+function isSectionId(raw: string | null): raw is SectionId {
+  return Boolean(raw && Object.prototype.hasOwnProperty.call(SECTION_TITLES, raw));
+}
+
 export default function AdminApp({ initialSection }: { initialSection: SectionId }) {
   const router = useRouter();
   const { status, session } = useAuth();
   const [active, setActive] = useState<SectionId>(initialSection);
+  const [lastNonZones, setLastNonZones] = useState<SectionId>(() => {
+    if (initialSection !== "zones") return initialSection;
+    if (typeof window !== "undefined") {
+      try {
+        const saved = window.sessionStorage.getItem(LAST_NON_ZONES_SECTION_KEY);
+        if (isSectionId(saved) && saved !== "zones") return saved;
+      } catch {
+        // ignore
+      }
+    }
+    return "dashboard";
+  });
   const [invalidClientUrl, setInvalidClientUrl] = useState<boolean>(() =>
     typeof window !== "undefined"
       ? resolveValidAdminRoute(new URLSearchParams(window.location.search)) === null
       : false,
   );
   const activeRef = useRef<SectionId>(active);
+  const lastNonZonesRef = useRef<SectionId>(lastNonZones);
   const isFarmer = session?.user.role === "farmer";
 
   useEffect(() => {
     activeRef.current = active;
+    if (active !== "zones") {
+      lastNonZonesRef.current = active;
+      try {
+        window.sessionStorage.setItem(LAST_NON_ZONES_SECTION_KEY, active);
+      } catch {
+        // ignore
+      }
+    }
   }, [active]);
 
   useEffect(() => {
@@ -104,6 +131,9 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
       if (nextParsed.section !== activeRef.current) {
         startTransition(() => {
           setActive(nextParsed.section);
+          if (nextParsed.section !== "zones") {
+            setLastNonZones(nextParsed.section);
+          }
         });
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });
       }
@@ -119,9 +149,17 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
     }
     startTransition(() => {
       setActive(id);
+      if (id !== "zones") {
+        setLastNonZones(id);
+      }
     });
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
+
+  const handleBackFromZones = useCallback(() => {
+    const target = lastNonZonesRef.current !== "zones" ? lastNonZonesRef.current : "dashboard";
+    navigate(target);
+  }, [navigate]);
 
   const renderSection = () => {
     switch (active) {
@@ -178,7 +216,11 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
         <div className="mobile-header-title is-scrolled" aria-live="polite">
           <span>{SECTION_TITLES[active] ?? "Tổng quan"}</span>
         </div>
-        <UserMenu />
+        <UserMenu
+          isZones={active === "zones"}
+          onBackFromZones={handleBackFromZones}
+          backTitle={`Quay lại ${SECTION_TITLES[lastNonZones] ?? "trang trước"}`}
+        />
       </div>
       <div className="main-content">
         <div className="content-area">

@@ -546,12 +546,6 @@ export default function Reports() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Báo cáo</h1>
-        </div>
-      </div>
-
       {/* Bộ lọc nhanh trên trang */}
       <div className="filter-bar report-filter-bar">
         <label className="report-filter-field">

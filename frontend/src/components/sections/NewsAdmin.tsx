@@ -52,9 +52,6 @@ export default function NewsAdmin() {
   return (
     <>
       <div className="page-header">
-        <div>
-          <h1>Bản Tin &amp; Khuyến Nông</h1>
-        </div>
         <div className="header-actions">
           <button type="button" className="btn btn-primary" onClick={() => setEditingArticle("new")}>
             Đăng tin mới

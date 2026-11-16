@@ -49,10 +49,8 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 
 /** Duyệt tài khoản hộ dân tự đăng ký & duyệt yêu cầu cấp lại mật khẩu. */
 export default function Registrations({
-  embedded = false,
   onCountChange,
 }: {
-  embedded?: boolean;
   onCountChange?: (count: number) => void;
 }) {
   const [rows, setRows] = useState<Registration[]>([]);
@@ -237,14 +235,6 @@ export default function Registrations({
 
   return (
     <>
-      {!embedded && (
-        <div className="page-header">
-          <div>
-            <h1>Duyệt tài khoản &amp; Cấp lại mật khẩu</h1>
-          </div>
-        </div>
-      )}
-
       <div className="filter-bar">
         <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
           <input

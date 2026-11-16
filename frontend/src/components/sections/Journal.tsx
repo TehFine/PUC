@@ -171,28 +171,27 @@ export default function Journal() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Nhật Ký Canh Tác &amp; Tuân Thủ</h1>
+      {(canCreateJournal || (canReadViolations && canCreateViolation) || canCreateSpray) && (
+        <div className="page-header">
+          <div className="header-actions">
+            {canCreateJournal && (
+              <button type="button" className="btn btn-primary" onClick={() => setEditingJournal("new")}>
+                Ghi nhật ký
+              </button>
+            )}
+            {canReadViolations && canCreateViolation && (
+              <button type="button" className="btn btn-outline" onClick={() => setEditingViolation("new")}>
+                Ghi nhận vi phạm
+              </button>
+            )}
+            {canCreateSpray && (
+              <button type="button" className="btn btn-outline" onClick={() => setEditingSpray("new")}>
+                Ghi phun thuốc
+              </button>
+            )}
+          </div>
         </div>
-        <div className="header-actions">
-          {canCreateJournal && (
-            <button type="button" className="btn btn-primary" onClick={() => setEditingJournal("new")}>
-              Ghi nhật ký
-            </button>
-          )}
-          {canReadViolations && canCreateViolation && (
-            <button type="button" className="btn btn-outline" onClick={() => setEditingViolation("new")}>
-              Ghi nhận vi phạm
-            </button>
-          )}
-          {canCreateSpray && (
-            <button type="button" className="btn btn-outline" onClick={() => setEditingSpray("new")}>
-              Ghi phun thuốc
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       <div className="compliance-kpi">
         <div className="comp-kpi-item ok">
