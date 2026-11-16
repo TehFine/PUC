@@ -167,26 +167,6 @@ export function MinuteDetailModal({
             />
           </div>
         )}
-
-        {minute.recordHash && (
-          <div style={{ padding: "8px 10px", background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6 }}>
-            <div style={{ fontSize: 11, color: "#0f172a", fontWeight: 700 }}>
-              Dấu niêm phong chuỗi băm bất biến SHA-256
-            </div>
-            <code
-              style={{
-                display: "block",
-                marginTop: 3,
-                fontSize: 11,
-                color: "#334155",
-                wordBreak: "break-all",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {minute.recordHash}
-            </code>
-          </div>
-        )}
       </div>
     </Modal>
   );
@@ -427,7 +407,7 @@ export default function MinuteFormModal({
 
         {isBackdatedOver48h && (
           <TextField
-            label="Lý do nhập biên bản sau 48 giờ (hiển thị trên sổ cái kiểm toán)"
+            label="Lý do nhập biên bản sau 48 giờ"
             value={lateReason}
             onChange={setLateReason}
             placeholder="Ví dụ: Nhập lại từ biên bản giấy do vùng sâu mất sóng di động"

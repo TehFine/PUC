@@ -503,12 +503,12 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       partyStatusPending: "Đang rà soát",
     },
     integrity: {
-      title: "Chứng nhận Toàn vẹn Sổ cái SHA-256 & Hạn ngạch Vùng trồng",
-      badgeVerified: "Chuỗi băm nguyên vẹn",
-      badgeAlert: "Phát hiện sai lệch chuỗi",
-      sub: "Mỗi bản ghi canh tác, phun thuốc BVTV và biên bản kiểm tra đều bị khóa dấu thời gian máy chủ và nối chuỗi băm mật mã SHA-256 chống sửa lùi sau thu hoạch.",
-      chainAlgorithmLabel: "Thuật toán niêm phong",
-      sealedRecordsLabel: "Tổng bản ghi niêm phong",
+      title: "Đối chiếu Nhật ký Canh tác và Hạn ngạch Vùng trồng",
+      badgeVerified: "Hồ sơ hợp lệ",
+      badgeAlert: "Cần rà soát hồ sơ",
+      sub: "Toàn bộ nhật ký canh tác, phun thuốc BVTV và biên bản kiểm tra đều được hệ thống ghi nhận tự động thời điểm thực tế nhằm đảm bảo minh bạch trước thu hoạch.",
+      chainAlgorithmLabel: "Phương thức kiểm soát",
+      sealedRecordsLabel: "Tổng bản ghi nhật ký",
       sealedRecordsFmt: (total, journals, sprays, minutes) =>
         `${total} bản ghi (${journals} nhật ký, ${sprays} đợt phun, ${minutes} biên bản)`,
       onTimeRateLabel: "Tỷ lệ ghi đúng hạn (<= 48h)",
@@ -544,7 +544,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       cardTitleFmt: (plotCode) => `Thửa canh tác định danh ${plotCode}`,
       privacyBadge: "Bảo mật CCCD & SĐT hộ dân",
       privacySub:
-        "Hiển thị ranh giới đa giác GIS, định mức sản lượng đầu vụ và sổ cái SHA-256 của thửa đất để đối tác kiểm tra ngẫu nhiên ngoài thực địa.",
+        "Hiển thị ranh giới đa giác GIS, định mức sản lượng đầu vụ và nhật ký canh tác của thửa đất để đối tác kiểm tra ngẫu nhiên ngoài thực địa.",
       plotSpecsTitle: "Thông số định danh thửa vườn",
       farmerRepLabel: "Chủ hộ canh tác",
       pucZoneLabel: "Mã vùng trồng (PUC)",
@@ -570,7 +570,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       gpsAccuracyFmt: (accM) => (accM ? `Sai số vệ tinh khoảng ±${Math.round(accM)} m` : "Định vị trực tiếp trên thiết bị"),
       recentCheckinsTitle: "Nhật ký Đoàn thẩm định đối chứng GPS tại thửa",
       noCheckinsYet: "Chưa có lượt bấm đối chứng GPS nào được ghi nhận tại thửa này.",
-      sealedDiaryTitle: "Nhật ký canh tác niêm phong SHA-256 của thửa",
+      sealedDiaryTitle: "Nhật ký canh tác của thửa",
       sealedSprayTitle: "Nhật ký sử dụng thuốc BVTV & thời gian cách ly (PHI)",
       sealedMinutesTitle: "Biên bản kiểm tra thực địa của cán bộ xã / HTX",
       lateTag: "Ghi bổ sung muộn",
@@ -772,12 +772,12 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       partyStatusPending: "Under Review",
     },
     integrity: {
-      title: "SHA-256 Ledger Integrity Seal & Season Mass-Balance",
-      badgeVerified: "Hash Chain Intact",
-      badgeAlert: "Chain Mismatch Alert",
-      sub: "Every orchard log, pesticide application, and inspection minute is server-timestamped and cryptographically chained with SHA-256 to prevent post-harvest backdating.",
-      chainAlgorithmLabel: "Cryptographic Seal",
-      sealedRecordsLabel: "Total Sealed Entries",
+      title: "Orchard Cultivation Log & Season Mass-Balance",
+      badgeVerified: "Verified Records",
+      badgeAlert: "Review Required",
+      sub: "Every orchard log, pesticide application, and inspection minute is automatically server-timestamped to ensure pre-harvest transparency.",
+      chainAlgorithmLabel: "Verification Method",
+      sealedRecordsLabel: "Total Recorded Entries",
       sealedRecordsFmt: (total, journals, sprays, minutes) =>
         `${total} records (${journals} logs, ${sprays} sprays, ${minutes} inspections)`,
       onTimeRateLabel: "On-time Entry Rate (<= 48h)",
@@ -813,7 +813,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       cardTitleFmt: (plotCode) => `Registered Orchard Parcel ${plotCode}`,
       privacyBadge: "Farmer ID & Phone Redacted",
       privacySub:
-        "Displays registered GIS polygon boundaries, pre-season audited yield ceiling, and SHA-256 sealed cultivation logs for random on-site buyer inspections.",
+        "Displays registered GIS polygon boundaries, pre-season audited yield ceiling, and verified cultivation logs for random on-site buyer inspections.",
       plotSpecsTitle: "Registered Parcel Specifications",
       farmerRepLabel: "Member Grower",
       pucZoneLabel: "Production Unit Code (PUC)",
@@ -839,7 +839,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       gpsAccuracyFmt: (accM) => (accM ? `Satellite accuracy approx. ±${Math.round(accM)} m` : "Live device GPS fix"),
       recentCheckinsTitle: "On-Site GPS Audit Check-In Log",
       noCheckinsYet: "No on-site GPS check-ins recorded for this parcel yet.",
-      sealedDiaryTitle: "SHA-256 Sealed Orchard Cultivation Log",
+      sealedDiaryTitle: "Orchard Cultivation Log",
       sealedSprayTitle: "Pesticide Application & PHI Compliance Log",
       sealedMinutesTitle: "Commune / Cooperative Field Inspection Minutes",
       lateTag: "Late Entry",
@@ -1036,12 +1036,12 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       partyStatusPending: "复核中",
     },
     integrity: {
-      title: "SHA-256 防篡改农事账本封签与产区总产量配额管控",
-      badgeVerified: "哈希链完整无篡改",
-      badgeAlert: "账本校验预警",
-      sub: "每一笔农事记录、用药记录及现场检查纪要均由服务器锁定时间戳并生成 SHA-256 密码学哈希链，杜绝采后补录或事后篡改。",
-      chainAlgorithmLabel: "防篡改算法",
-      sealedRecordsLabel: "已封存记录总数",
+      title: "果园农事记录核验与产区总产量配额管控",
+      badgeVerified: "记录核验合规",
+      badgeAlert: "记录待复核",
+      sub: "每一笔农事记录、用药记录及现场检查纪要均由系统自动记录服务器时间，确保采前全程可追溯。",
+      chainAlgorithmLabel: "核验方式",
+      sealedRecordsLabel: "农事与巡检记录总数",
       sealedRecordsFmt: (total, journals, sprays, minutes) =>
         `共 ${total} 条（农事 ${journals} 条，用药 ${sprays} 条，巡检 ${minutes} 条）`,
       onTimeRateLabel: "48小时内及时录入率",
@@ -1077,7 +1077,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       cardTitleFmt: (plotCode) => `注册果园地块编号 ${plotCode}`,
       privacyBadge: "已脱敏保护农户隐私",
       privacySub:
-        "展示注册果园 GIS 矢量边界、产季评估产量上限及 SHA-256 哈希封存农事台账，支持采购商在果园现场随机抽检。",
+        "展示注册果园 GIS 矢量边界、产季评估产量上限及农事作业台账，支持采购商在果园现场随机抽检。",
       plotSpecsTitle: "地块注册核定参数",
       farmerRepLabel: "种植成员户",
       pucZoneLabel: "注册果园编码 (PUC)",
@@ -1103,7 +1103,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       gpsAccuracyFmt: (accM) => (accM ? `卫星定位精度约 ±${Math.round(accM)} 米` : "手机实时卫星定位"),
       recentCheckinsTitle: "考察团现场 GPS 打卡核验记录",
       noCheckinsYet: "该地块暂无现场 GPS 打卡核验记录。",
-      sealedDiaryTitle: "地块 SHA-256 封存农事作业台账",
+      sealedDiaryTitle: "地块农事作业台账",
       sealedSprayTitle: "植保用药与安全间隔期 (PHI) 台账",
       sealedMinutesTitle: "乡政府 / 合作社现场巡检纪要",
       lateTag: "事后补录",
@@ -1484,12 +1484,12 @@ export function localizeAttestationParty(
       ? {
           roleLabel: "第一方：注册农户与生产合作社",
           actorName: localizeCoopName(party.actorName, "zh"),
-          summary: "全程记录电子农事与植保台账，服务器自动锁定时间戳并生成 SHA-256 哈希链",
+          summary: "全程记录电子农事与植保台账，系统自动锁定录入时间",
         }
       : {
           roleLabel: "Party 1: Member Growers & Producer Coop",
           actorName: localizeCoopName(party.actorName, "en"),
-          summary: "Electronic orchard & spray logs sealed with server timestamps and SHA-256 hash chain",
+          summary: "Electronic orchard and spray logs automatically recorded with server timestamps",
         };
   }
 

@@ -15,42 +15,6 @@ import type {
 import { HarvestAssetTagCard, HarvestLotQrModal } from "./harvest/HarvestLotTicket";
 import { EmptyState, SectionDivider, StateBlock } from "./ui";
 
-interface HarvestRule {
-  id: string;
-  kicker: string;
-  title: string;
-  desc: string;
-  nodeType: "active" | "warn" | "danger";
-  cardClass: string;
-}
-
-const HARVEST_RULES: HarvestRule[] = [
-  {
-    id: "schedule-calc",
-    kicker: "QUY CHUẨN 1 - LỊCH THU HOẠCH TỰ ĐỘNG",
-    title: "HTX tính toán ngày thu hoạch & gửi thông báo",
-    desc: "Khi đến mùa thu hoạch, HTX trực tiếp tính toán ngày cắt dự kiến dựa trên nhật ký chăm sóc và thời gian cách ly thuốc của hộ dân, sau đó gửi thông báo lịch thu hoạch qua hệ thống.",
-    nodeType: "active",
-    cardClass: "pt-vietgap-card-frequency",
-  },
-  {
-    id: "kcs",
-    kicker: "QUY CHUẨN 2 - KIỂM ĐỊNH KCS",
-    title: "Thẩm định tồn dư BVTV & Phân loại quả",
-    desc: "Cán bộ kỹ thuật HTX cùng Kiểm tra viên KCS trực tiếp về vườn kiểm tra cách ly thuốc BVTV (thời gian PHI) và cân đo phân loại.",
-    nodeType: "warn",
-    cardClass: "pt-vietgap-card-phi",
-  },
-  {
-    id: "stamping",
-    kicker: "QUY CHUẨN 3 - CẤP TEM NIÊM PHONG",
-    title: "Kích hoạt tem niêm phong điện tử",
-    desc: "HTX nghiệm thu xuất khẩu chính ngạch và kích hoạt tem niêm phong điện tử truy xuất nguồn gốc khi đóng gói xuất xưởng.",
-    nodeType: "danger",
-    cardClass: "pt-vietgap-card-banned",
-  },
-];
-
 interface Props {
   overview?: PortalOverview | null;
   plots?: PortalPlot[];
@@ -105,31 +69,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         </>
       )}
 
-      {/* ─── 1. QUY CHUẨN THU HOẠCH ─── */}
-      <section className="pt-schedule-section pt-vietgap-section pt-harvest-rules-section" aria-labelledby="harvest-rules-heading">
-        <div className="pt-schedule-header">
-          <h2 id="harvest-rules-heading" className="pt-schedule-title">
-            Quy chuẩn thu hoạch
-          </h2>
-        </div>
-        <div className="pt-vietgap-timeline" role="list">
-          {HARVEST_RULES.map((rule) => (
-            <div key={rule.id} className="pt-vietgap-step" role="listitem">
-              <div className="pt-vietgap-segment">
-                <div className={`pt-vietgap-content pt-vietgap-card ${rule.cardClass}`}>
-                  <span className="pt-timeline-kicker">{rule.kicker}</span>
-                  <h3 className="pt-timeline-title">{rule.title}</h3>
-                  <p className="pt-timeline-desc">{rule.desc}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <SectionDivider />
-
-      {/* ─── 2. LÔ HÀNG ĐÃ XUẤT KHO & TEM QR ─── */}
+      {/* ─── LÔ HÀNG ĐÃ XUẤT KHO & TEM QR ─── */}
       <section className="pt-harvest-lots-section" aria-labelledby="harvest-lots-heading">
         <div className="pt-schedule-header pt-harvest-lots-header">
           <h2 id="harvest-lots-heading" className="pt-schedule-title">

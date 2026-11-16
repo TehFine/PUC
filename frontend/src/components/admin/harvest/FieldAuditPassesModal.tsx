@@ -248,7 +248,7 @@ export default function FieldAuditPassesModal({
               marginBottom: 14,
             }}
           >
-            Khi đón đoàn đối tác Trung Quốc hoặc đoàn kiểm tra của Tỉnh đi thực tế vườn, cán bộ xã và HTX cấp một mã thẻ có thời hạn (24h - 168h). Khách mở đường dẫn mời rồi quét Bảng QR đầu thửa vườn sẽ mở được ranh giới đa giác GIS, bấm đối chứng vị trí GPS ngay tại vườn và xem sổ cái SHA-256 mà vẫn bảo mật tuyệt đối CCCD cùng SĐT cá nhân của nông hộ.
+            Khi đón đoàn đối tác Trung Quốc hoặc đoàn kiểm tra của Tỉnh đi thực tế vườn, cán bộ xã và HTX cấp một mã thẻ có thời hạn (24h - 168h). Khách mở đường dẫn mời rồi quét Bảng QR đầu thửa vườn sẽ mở được ranh giới đa giác GIS, bấm đối chứng vị trí GPS ngay tại vườn và xem nhật ký canh tác mà vẫn bảo mật tuyệt đối CCCD cùng SĐT cá nhân của nông hộ.
           </div>
 
           {createdSecret && (

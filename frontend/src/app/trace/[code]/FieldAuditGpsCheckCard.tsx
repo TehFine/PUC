@@ -11,7 +11,6 @@ import {
   MapPin,
   Navigation,
   ShieldAlert,
-  ShieldCheck,
 } from "@/components/ui/PublicIcon";
 import { TRACE_UI_COPY, type TraceLang } from "./trace-i18n";
 import { isSafeMediaUrl } from "@/utils/url-safety";
@@ -803,12 +802,6 @@ export default function FieldAuditGpsCheckCard({
                     {entry.gpsVerified && (
                       <span className="tr-seal-tag is-ok">{f.gpsVerifiedTag}</span>
                     )}
-                    {entry.recordHash && (
-                      <span className="tr-seal-hash" title={`SHA-256: ${entry.recordHash}`}>
-                        <ShieldCheck size={12} strokeWidth={2.2} aria-hidden="true" />
-                        SHA-256 #{entry.recordHash.slice(0, 10)}
-                      </span>
-                    )}
                     {isSafeMediaUrl(entry.photoUrl) && (
                       <a
                         href={entry.photoUrl}
@@ -857,11 +850,6 @@ export default function FieldAuditGpsCheckCard({
                         : m.result}
                     </span>
                     {m.gpsVerified && <span className="tr-seal-tag is-ok">{f.gpsVerifiedTag}</span>}
-                    {m.recordHash && (
-                      <span className="tr-seal-hash" title={`SHA-256: ${m.recordHash}`}>
-                        SHA-256 #{m.recordHash.slice(0, 10)}
-                      </span>
-                    )}
                     {isSafeMediaUrl(m.photoUrl) && (
                       <a
                         href={m.photoUrl}

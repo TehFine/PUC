@@ -568,11 +568,6 @@ function AuthorityDiarySection({ diaries }: { diaries: TraceDiaryEntry[] }) {
                       <span className="tr-proof-safe-tag">Ghi đúng hạn</span>
                     )}
                     {d.gpsVerified && <span className="tr-proof-safe-tag">Khớp GPS thửa</span>}
-                    {d.recordHash && (
-                      <span className="tr-seal-hash" title={`SHA-256: ${d.recordHash}`}>
-                        SHA-256 #{d.recordHash.slice(0, 10)}
-                      </span>
-                    )}
                     {isSafeMediaUrl(d.photoUrl) && (
                       <a
                         href={d.photoUrl}
@@ -1675,13 +1670,6 @@ export default function TraceView() {
 
                     <div className="tr-data-list">
                       <div className="tr-data-row">
-                        <span className="tr-data-label">{t.integrity.chainAlgorithmLabel}</span>
-                        <strong className="tr-data-val is-mono">
-                          {pub.integritySeal.hashAlgorithm} (Append-only)
-                        </strong>
-                      </div>
-
-                      <div className="tr-data-row">
                         <span className="tr-data-label">{t.integrity.sealedRecordsLabel}</span>
                         <strong className="tr-data-val is-tabular">
                           {t.integrity.sealedRecordsFmt(
@@ -1709,18 +1697,6 @@ export default function TraceView() {
                           {t.integrity.gpsEvidenceFmt(pub.integritySeal.gpsVerifiedRecords)}
                         </strong>
                       </div>
-
-                      {pub.integritySeal.latestLedgerHash && (
-                        <div className="tr-data-row">
-                          <span className="tr-data-label">{t.integrity.latestSealLabel}</span>
-                          <strong
-                            className="tr-data-val is-mono"
-                            title={pub.integritySeal.latestLedgerHash}
-                          >
-                            #{pub.integritySeal.latestLedgerHash.slice(0, 16)}...
-                          </strong>
-                        </div>
-                      )}
                     </div>
                   </section>
                 )}
@@ -2641,15 +2617,10 @@ export default function TraceView() {
                               {m.plotCode ? ` - Mã lô vườn: ${m.plotCode}` : ""}
                             </div>
                             <div className="tr-minute-result">Kết luận: {m.result}</div>
-                            {(m.gpsVerified || m.recordHash || isSafeMediaUrl(m.photoUrl)) && (
+                            {(m.gpsVerified || isSafeMediaUrl(m.photoUrl)) && (
                               <div className="tr-proof-meta tr-minute-seals">
                                 {m.gpsVerified && (
                                   <span className="tr-proof-safe-tag">Khớp GPS tại thửa</span>
-                                )}
-                                {m.recordHash && (
-                                  <span className="tr-seal-hash" title={`SHA-256: ${m.recordHash}`}>
-                                    SHA-256 #{m.recordHash.slice(0, 10)}
-                                  </span>
                                 )}
                                 {isSafeMediaUrl(m.photoUrl) && (
                                   <a

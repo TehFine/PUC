@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
-import { ArrowRight, Download, Printer } from "@/components/ui/PublicIcon";
+import { Download, Printer } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { isLowEndDevice } from "@/lib/network";
@@ -11,7 +11,7 @@ import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { triggerBlobDownload } from "@/utils/download";
 import { formatDate } from "@/utils/format";
-import { isSafeExternalHttpsUrl, isSafeMediaUrl } from "@/utils/url-safety";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import { useIsDesktopViewport } from "./ui";
 import { useSheetSwipe } from "./use-sheet-swipe";
 
@@ -303,14 +303,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
   const isPass = test.result === "pass" || test.result === "Đạt";
   const householdName = test.householdName || "Chưa cập nhật";
   const plotCode = test.plotCode || test.code || "-";
-  const safeExternalUrl = isSafeExternalHttpsUrl(test.externalVerifyUrl)
-    ? test.externalVerifyUrl.trim()
-    : null;
   const safeScanUrl = isSafeMediaUrl(test.scanUrl) ? test.scanUrl : null;
-  const safeReportHash =
-    typeof test.reportHash === "string" && /^[a-fA-F0-9]{16,128}$/.test(test.reportHash.trim())
-      ? test.reportHash.trim()
-      : null;
 
   // Tạo URL QR Code truy xuất hồ sơ kiểm nghiệm gốc
   useEffect(() => {
@@ -436,53 +429,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
       <div ref={containerRef} className="cert-modal-container">
         {/* THANH ĐIỀU KHIỂN THAO TÁC NGOÀI TỜ GIẤY (NO-PRINT) */}
         <div ref={toolbarRef} className="cert-toolbar no-print">
-          <div className="cert-toolbar-left">
-            <button
-              type="button"
-              className="cert-drawer-back-btn"
-              onClick={handleClose}
-              title="Thu gọn phiếu (Esc)"
-              aria-label="Thu gọn phiếu kiểm nghiệm"
-            >
-              <ArrowRight size={19} strokeWidth={2.2} aria-hidden="true" />
-            </button>
-            <span className="cert-status-badge">
-              <span className="cert-status-main">Phiếu kiểm nghiệm</span>
-            </span>
-          </div>
-
           <div className="cert-toolbar-right">
-            {safeScanUrl && (
-              <a
-                href={safeScanUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="cert-btn-action"
-                style={{ textDecoration: "none" }}
-                title="Mở tệp scan PDF gốc do phòng thử nghiệm phát hành"
-              >
-                <span className="cert-btn-text-desktop">Bản scan gốc</span>
-                <span className="cert-btn-text-mobile">Scan gốc</span>
-              </a>
-            )}
-            {safeExternalUrl && (
-              <a
-                href={safeExternalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                referrerPolicy="no-referrer"
-                className="cert-btn-action"
-                style={{ textDecoration: "none" }}
-                title={
-                  test.externalVerifyCode
-                    ? `Đối chiếu mã ${test.externalVerifyCode} trên cổng phòng kiểm nghiệm độc lập`
-                    : "Mở cổng tra cứu chéo của phòng kiểm nghiệm độc lập"
-                }
-              >
-                <span className="cert-btn-text-desktop">Cổng Lab độc lập</span>
-                <span className="cert-btn-text-mobile">Cổng Lab</span>
-              </a>
-            )}
             <button
               type="button"
               className="cert-btn-action"
@@ -491,8 +438,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
               title="Tải file PDF phiếu kiểm nghiệm khổ A4 về máy"
             >
               <Download size={15} />
-              <span className="cert-btn-text-desktop">{downloading ? "Đang tạo PDF…" : "Tải file PDF"}</span>
-              <span className="cert-btn-text-mobile">{downloading ? "Đang tải…" : "Tải PDF"}</span>
+              <span>{downloading ? "Đang tải…" : "Tải PDF"}</span>
             </button>
             <button
               type="button"
@@ -504,16 +450,17 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
               <Printer size={15} />
               <span className="cert-btn-print-label">In</span>
             </button>
-            <button
-              type="button"
-              className="cert-btn-close"
-              onClick={handleClose}
-              title="Đóng (Esc)"
-              aria-label="Đóng"
-            >
-              <CloseCircleIcon size={26} />
-            </button>
           </div>
+
+          <button
+            type="button"
+            className="cert-btn-close"
+            onClick={handleClose}
+            title="Đóng (Esc)"
+            aria-label="Đóng"
+          >
+            <CloseCircleIcon size={26} />
+          </button>
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════════
@@ -766,12 +713,6 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                 <div className="cert-verify-summary-item">
                   <span className="cert-verify-lbl">Ngày lấy mẫu kiểm định:</span>
                   <strong className="cert-verify-val">{formatDate(test.sampledOn)}</strong>
-                </div>
-                <div className="cert-verify-summary-item">
-                  <span className="cert-verify-lbl">Mã băm tệp gốc (SHA-256):</span>
-                  <code className="cert-verify-code">
-                    {safeReportHash || "Chưa đính kèm mã băm"}
-                  </code>
                 </div>
                 <div className="cert-verify-summary-item">
                   <span className="cert-verify-lbl">Mã đối chiếu phòng Lab:</span>
@@ -1119,12 +1060,6 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                   <div className="cert-verify-summary-item">
                     <span className="cert-verify-lbl">Ngày lấy mẫu kiểm định:</span>
                     <strong className="cert-verify-val">{formatDate(test.sampledOn)}</strong>
-                  </div>
-                  <div className="cert-verify-summary-item">
-                    <span className="cert-verify-lbl">Mã băm tệp gốc (SHA-256):</span>
-                    <code className="cert-verify-code">
-                      {safeReportHash || "Chưa đính kèm mã băm"}
-                    </code>
                   </div>
                   <div className="cert-verify-summary-item">
                     <span className="cert-verify-lbl">Mã đối chiếu phòng Lab:</span>
@@ -1929,7 +1864,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           }
 
           .cert-btn-close {
-            display: none;
+            display: inline-flex;
+            color: #475569;
           }
 
           .cert-paper-shadow-wrap.cert-desktop-only {
@@ -1992,12 +1928,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           }
 
           .cert-btn-print {
-            padding: 7px 9px;
+            padding: 7px 11px;
             font-size: 11.5px;
-          }
-
-          .cert-btn-print-label {
-            display: none;
           }
 
           .cert-btn-close {

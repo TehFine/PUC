@@ -90,7 +90,7 @@ async function renderSignboardPngBlob(
       ["Trần sản lượng / 核定配额:", quotaText, true],
       ["Giống / 榴莲品种:", plot.variety || "Monthong (Dona) & Ri6", false],
       ["Địa chính / 地籍档案:", parcelInfo, false],
-      ["Quy chuẩn / 执行标准:", "VietGAP & Nghị định thư GACC (Sổ cái SHA-256)", false],
+      ["Quy chuẩn / 执行标准:", "VietGAP & Nghị định thư GACC", false],
     ];
 
     let y = 350;
@@ -105,17 +105,7 @@ async function renderSignboardPngBlob(
       y += 56;
     }
 
-    // Khung QR chống giả mức Q bên phải
-    const qrBoxX = 906;
-    const qrBoxY = 246;
-    const qrBoxW = 382;
-    const qrBoxH = 448;
-    ctx.fillStyle = "#f8fafc";
-    ctx.fillRect(qrBoxX, qrBoxY, qrBoxW, qrBoxH);
-    ctx.strokeStyle = "#14532d";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(qrBoxX, qrBoxY, qrBoxW, qrBoxH);
-
+    // Mã QR truy xuất nguồn gốc bên phải
     if (qrDataUrl) {
       const qrImg = await new Promise<HTMLImageElement>((resolve, reject) => {
         const image = new Image();
@@ -123,23 +113,8 @@ async function renderSignboardPngBlob(
         image.onerror = reject;
         image.src = qrDataUrl;
       });
-      ctx.drawImage(qrImg, qrBoxX + 31, qrBoxY + 22, 320, 320);
+      ctx.drawImage(qrImg, 916, 286, 360, 360);
     }
-
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#14532d";
-    ctx.font = "800 18px Arial, sans-serif";
-    ctx.fillText("QUÉT ĐỐI CHỨNG GPS TẠI VƯỜN", qrBoxX + qrBoxW / 2, qrBoxY + 372);
-    ctx.fillStyle = "#334155";
-    ctx.font = "700 16px Arial, sans-serif";
-    ctx.fillText("扫码核验果园边界与GPS定位", qrBoxX + qrBoxW / 2, qrBoxY + 398);
-    ctx.fillStyle = "#64748b";
-    ctx.font = "600 15px monospace";
-    ctx.fillText(
-      resolvedToken ? `/t/${resolvedToken}` : `/trace/${plot.code}`,
-      qrBoxX + qrBoxW / 2,
-      qrBoxY + 426,
-    );
 
     // Chân biển
     ctx.strokeStyle = "#cbd5e1";
@@ -290,9 +265,6 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
     >
       <div className="signboard-sheet-content">
         <div className="signboard-toolbar no-print">
-          <p className="signboard-note">
-            Biển 3 ngôn ngữ (Việt - Trung - Anh) tích hợp mã QR chống giả mức Q phục vụ đoàn công tác Tỉnh và đối tác thu mua quét đối chứng ranh giới GPS trực tiếp tại đầu thửa vườn.
-          </p>
           <div className="signboard-action-btns">
             <button
               type="button"
@@ -390,7 +362,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
                 <div className="plate-row">
                   <span className="plate-lbl">Quy chuẩn / 执行标准:</span>
-                  <span className="plate-val">VietGAP &amp; GACC (Sổ cái SHA-256)</span>
+                  <span className="plate-val">VietGAP và GACC</span>
                 </div>
               </div>
 
@@ -408,29 +380,6 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
                 ) : (
                   <div className="plate-qr-skeleton" />
                 )}
-                <span
-                  style={{
-                    marginTop: 7,
-                    fontSize: 10.5,
-                    fontWeight: 800,
-                    color: "#14532d",
-                    lineHeight: 1.3,
-                  }}
-                >
-                  QUÉT ĐỐI CHỨNG GPS TẠI VƯỜN
-                  <br />
-                  扫码核验果园边界与GPS定位
-                </span>
-                <span
-                  style={{
-                    marginTop: 3,
-                    fontSize: 9.5,
-                    fontFamily: "monospace",
-                    color: "#64748b",
-                  }}
-                >
-                  {resolvedToken ? `/t/${resolvedToken}` : `/trace/${plot.code}`}
-                </span>
               </a>
             </div>
 
@@ -448,8 +397,12 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
       <style jsx global>{`
         .pt-sheet.pt-signboard-sheet {
-          max-width: 740px;
           --drawer-w: 760px;
+        }
+        @media (min-width: 760px) {
+          .pt-sheet.pt-signboard-sheet {
+            max-width: 740px;
+          }
         }
 
         .signboard-sheet-content {
@@ -459,27 +412,20 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
         }
 
         .signboard-toolbar {
-          padding: 12px 16px;
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 14px;
+          padding: 0;
+          background: transparent;
+          border: none;
+          border-radius: 0;
           display: flex;
-          justify-content: space-between;
+          justify-content: center;
           align-items: center;
-          gap: 14px;
-        }
-
-        .signboard-note {
-          margin: 0;
-          font-size: 12.5px;
-          color: #475569;
-          line-height: 1.45;
         }
 
         .signboard-action-btns {
           display: flex;
           align-items: center;
-          gap: 8px;
+          justify-content: center;
+          gap: 10px;
           flex-shrink: 0;
         }
 
@@ -492,14 +438,14 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           background: #dfe9f8;
           color: #0084ff;
           border: none;
-          border-radius: 999px;
-          padding: 8px 16px;
-          font-size: 13px;
+          border-radius: 8px;
+          padding: 10px 18px;
+          font-size: 13.5px;
           font-weight: 700;
           cursor: pointer;
           white-space: nowrap;
           box-shadow: none;
-          transition: all 0.2s ease;
+          transition: background-color 0.16s ease, color 0.16s ease;
           flex-shrink: 0;
         }
 
@@ -511,13 +457,11 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
         .signboard-download-btn:hover:not(:disabled) {
           background: #d1fae5;
           color: #166534;
-          transform: translateY(-1px);
         }
 
         .signboard-print-btn:hover:not(:disabled) {
           background: #d0dff5;
           color: #006ee6;
-          transform: translateY(-1px);
           box-shadow: none;
         }
 
@@ -623,11 +567,12 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: center;
           text-align: center;
-          border: 2px dashed #cbd5e1;
-          padding: 10px;
-          border-radius: 8px;
-          background: #f8fafc;
+          border: none;
+          padding: 0;
+          border-radius: 6px;
+          background: transparent;
           box-sizing: border-box;
         }
 
@@ -636,14 +581,11 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           color: inherit;
           cursor: pointer;
           -webkit-tap-highlight-color: transparent;
-          transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+          transition: opacity 0.16s ease;
         }
 
         .plate-qr-link:hover {
-          border-color: #16a34a;
-          background: #f0fdf4;
-          box-shadow: 0 6px 18px rgba(21, 128, 61, 0.12);
-          transform: translateY(-2px);
+          opacity: 0.88;
         }
 
         .plate-qr-link:active {
@@ -657,8 +599,8 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
         .plate-qr-img,
         .plate-qr-skeleton {
-          width: 154px;
-          height: 154px;
+          width: 172px;
+          height: 172px;
           border-radius: 4px;
           display: block;
         }
@@ -688,10 +630,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
         /* ─── Responsive cho màn hình di động (≤ 640px) ─── */
         @media (max-width: 640px) {
           .signboard-toolbar {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 10px;
-            padding: 10px 14px;
+            padding: 0;
           }
 
           .signboard-action-btns {
@@ -704,7 +643,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           .signboard-download-btn,
           .signboard-print-btn {
             width: 100%;
-            padding: 9px 12px;
+            padding: 10px 12px;
           }
 
           .signboard-preview-wrap {
@@ -780,15 +719,13 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
           .plate-qr-box {
             margin: 6px auto 0;
-            width: 100%;
-            max-width: 220px;
-            padding: 10px;
+            padding: 0;
           }
 
           .plate-qr-img,
           .plate-qr-skeleton {
-            width: 144px;
-            height: 144px;
+            width: 156px;
+            height: 156px;
           }
 
           .plate-bottom {
@@ -810,11 +747,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
         /* ─── Tối ưu cho màn hình siêu nhỏ (≤ 380px như iPhone SE) ─── */
         @media (max-width: 380px) {
           .signboard-toolbar {
-            padding: 8px 10px;
-          }
-
-          .signboard-note {
-            font-size: 11.5px;
+            padding: 0;
           }
 
           .signboard-preview-wrap {
@@ -848,13 +781,12 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           }
 
           .plate-qr-box {
-            max-width: 190px;
-            padding: 8px;
+            padding: 0;
           }
 
           .plate-qr-img {
-            width: 125px;
-            height: 125px;
+            width: 136px;
+            height: 136px;
           }
 
           .plate-bottom {
