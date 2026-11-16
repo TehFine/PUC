@@ -5,6 +5,7 @@ import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { Authorize, CurrentUser } from "../auth/auth.decorators";
 import { lenientPipe } from "../common/pipes/validation.pipes";
+import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import { CreateMeasurementDto, CreatePlotDto, UpdatePlotGeometryDto } from "./dto/plot.dto";
 import { PlotInputError, PlotsService } from "./plots.service";
 import type { MeasurementInput } from "./plot.types";
@@ -56,7 +57,7 @@ export class PlotsController {
 
   /** Nhập GeoJSON địa chính: body là FeatureCollection tùy ý (có thể rất lớn) nên được kiểm tra trong service. */
   @Post("import")
-  @Throttle({ default: { limit: process.env.NODE_ENV === "test" ? 1000 : 10, ttl: 60_000 } })
+  @Throttle(RateLimitTier.BULK_MUTATION)
   @HttpCode(200)
   @Authorize("plots", "create")
   async importCadastral(@Body() body: ImportBody | FeatureCollection | null, @CurrentUser() user: AuthUser, @Ip() ip: string) {

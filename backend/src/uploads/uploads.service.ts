@@ -2,7 +2,7 @@ import { Injectable, OnModuleInit, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
 import { constants as fsConstants, type ReadStream } from "node:fs";
-import { type FileHandle, mkdir, open as fsOpen, unlink, writeFile } from "node:fs/promises";
+import { type FileHandle, mkdir, open as fsOpen, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
@@ -72,6 +72,8 @@ const VIDEO_PURPOSES: ReadonlySet<UploadPurpose> = new Set([
   "inspection",
 ]);
 const DEFAULT_MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+const ATTACHMENT_META_COLUMNS =
+  "id, public_token, owner_user_id, household_id, purpose, storage_key, original_name, mime_type, size_bytes";
 
 interface DetectedType {
   mime: string;
@@ -91,7 +93,9 @@ function detectType(buffer: Buffer): DetectedType | null {
   if (
     buffer.length >= 12 &&
     buffer.toString("ascii", 4, 8) === "ftyp" &&
-    /^(isom|iso2|mp41|mp42|avc1|M4V |qt  |mmp4|dash|MSNV|3gp)/i.test(buffer.toString("ascii", 8, 12))
+    /^(isom|iso[2-9]|mp41|mp42|avc1|hvc1|hevc|hev1|M4V |qt  |mmp4|dash|MSNV|3gp|f4v |NDSC)/i.test(
+      buffer.toString("ascii", 8, 12),
+    )
   ) {
     return { mime: "video/mp4", ext: "mp4" };
   }
@@ -146,6 +150,58 @@ export class UploadsService implements OnModuleInit {
 
   async onModuleInit() {
     await mkdir(this.root, { recursive: true });
+    await this.ensureMultiPhotoSchema().catch(() => undefined);
+    if (process.env.NODE_ENV !== "test") {
+      void this.backfillLocalFilesToDb().catch(() => undefined);
+    }
+  }
+
+  /**
+   * Đảm bảo cột lưu nhị phân bền vững (`attachments.file_data`) và các cột mảng lưu nhiều ảnh hiện trường
+   * luôn tồn tại ngay cả khi môi trường đám mây khởi chạy trước khi chạy lệnh `db:migrate`.
+   */
+  private async ensureMultiPhotoSchema() {
+    await this.db.query(`
+      DO $$
+      BEGIN
+        IF to_regclass('public.attachments') IS NOT NULL THEN
+          ALTER TABLE attachments
+            ADD COLUMN IF NOT EXISTS file_data BYTEA;
+        END IF;
+        IF to_regclass('public.care_milestone_declarations') IS NOT NULL THEN
+          ALTER TABLE care_milestone_declarations
+            ADD COLUMN IF NOT EXISTS field_photo_ids BIGINT[] NOT NULL DEFAULT '{}'::bigint[],
+            ADD COLUMN IF NOT EXISTS invoice_photo_ids BIGINT[] NOT NULL DEFAULT '{}'::bigint[],
+            ADD COLUMN IF NOT EXISTS declared_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            ADD COLUMN IF NOT EXISTS declared_on DATE NOT NULL DEFAULT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,
+            ADD COLUMN IF NOT EXISTS late_declaration_days INTEGER NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS late_reason TEXT;
+        END IF;
+        IF to_regclass('public.plot_care_plans') IS NOT NULL THEN
+          ALTER TABLE plot_care_plans
+            ADD COLUMN IF NOT EXISTS reminder_lead_days INTEGER NOT NULL DEFAULT 1,
+            ADD COLUMN IF NOT EXISTS last_late_declaration_days INTEGER NOT NULL DEFAULT 0;
+        END IF;
+        IF to_regclass('public.care_protocol_alert_logs') IS NOT NULL THEN
+          ALTER TABLE care_protocol_alert_logs DROP CONSTRAINT IF EXISTS care_protocol_alert_logs_alert_type_check;
+          ALTER TABLE care_protocol_alert_logs
+            ADD CONSTRAINT care_protocol_alert_logs_alert_type_check
+            CHECK (alert_type IN ('due_soon', 'due_day_prompt', 'overdue_warning', 'overdue_critical', 'next_stage'));
+        END IF;
+        IF to_regclass('public.journal_entries') IS NOT NULL THEN
+          ALTER TABLE journal_entries
+            ADD COLUMN IF NOT EXISTS photo_ids BIGINT[] NOT NULL DEFAULT '{}'::bigint[];
+        END IF;
+        IF to_regclass('public.violations') IS NOT NULL THEN
+          ALTER TABLE violations
+            ADD COLUMN IF NOT EXISTS farmer_response_photo_ids BIGINT[] NOT NULL DEFAULT '{}'::bigint[];
+        END IF;
+        IF to_regclass('public.inspection_minutes') IS NOT NULL THEN
+          ALTER TABLE inspection_minutes
+            ADD COLUMN IF NOT EXISTS photo_ids BIGINT[] NOT NULL DEFAULT '{}'::bigint[];
+        END IF;
+      END $$;
+    `);
   }
 
   get maxFileBytes() {
@@ -195,9 +251,18 @@ export class UploadsService implements OnModuleInit {
             .slice(0, 200)
         : null;
       const { rows } = await this.db.query<{ id: number; public_token: string }>(
-        `INSERT INTO attachments (owner_user_id, household_id, purpose, storage_key, original_name, mime_type, size_bytes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, public_token`,
-        [user.id, user.role === "farmer" ? user.householdId : null, purpose, key, safeOriginalName, type.mime, file.size],
+        `INSERT INTO attachments (owner_user_id, household_id, purpose, storage_key, original_name, mime_type, size_bytes, file_data)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, public_token`,
+        [
+          user.id,
+          user.role === "farmer" ? user.householdId : null,
+          purpose,
+          key,
+          safeOriginalName,
+          type.mime,
+          file.size,
+          file.buffer,
+        ],
       );
       const id = rows[0].id;
       const publicToken = rows[0].public_token;
@@ -234,10 +299,25 @@ export class UploadsService implements OnModuleInit {
     householdId?: number | null,
     options?: { imagesOnly?: boolean },
   ): Promise<number[]> {
-    const unique = [...new Set((ids ?? []).filter((id) => id !== null && id !== undefined))];
-    if (unique.length === 0) return [];
+    const detailed = await this.assertUsableDetailed(ids, user, purpose, householdId, options);
+    return detailed.ids;
+  }
+
+  /**
+   * Kiểm tra danh sách tệp đính kèm theo đúng thứ tự người dùng chọn và xác định tệp đại diện chính
+   * (ưu tiên ảnh chụp đầu tiên nếu danh sách có cả ảnh lẫn video ngắn).
+   */
+  async assertUsableDetailed(
+    ids: number[] | undefined | null,
+    user: AuthUser,
+    purpose: UploadPurpose,
+    householdId?: number | null,
+    options?: { imagesOnly?: boolean; requireAtLeastOneImage?: boolean },
+  ): Promise<{ ids: number[]; primaryId: number | null }> {
+    const unique = [...new Set((ids ?? []).filter((id): id is number => id !== null && id !== undefined && Number.isInteger(id) && id > 0))];
+    if (unique.length === 0) return { ids: [], primaryId: null };
     const targetHouseholdId = householdId ?? user.householdId ?? null;
-    const { rows } = await this.db.query<{ id: number; mime_type: string }>(
+    const { rows } = await this.db.query<{ id: string | number; mime_type: string }>(
       `UPDATE attachments
        SET household_id = COALESCE(household_id, $4)
        WHERE id = ANY($1::bigint[]) AND owner_user_id = $2 AND purpose = $3
@@ -245,15 +325,34 @@ export class UploadsService implements OnModuleInit {
       [unique, user.id, purpose, targetHouseholdId],
     );
     if (rows.length !== unique.length) throw badRequest("Tệp đính kèm không hợp lệ hoặc không thuộc về bạn.");
+    const mimeById = new Map<number, string>(rows.map((r) => [Number(r.id), r.mime_type]));
     if (options?.imagesOnly && rows.some((r) => !r.mime_type.startsWith("image/"))) {
       throw badRequest("Mục này chỉ chấp nhận tệp hình ảnh chụp thực tế (JPG, PNG, WEBP).");
     }
-    return unique;
+    if (options?.requireAtLeastOneImage && !rows.some((r) => r.mime_type.startsWith("image/"))) {
+      throw badRequest("Vui lòng đính kèm ít nhất 1 ảnh chụp hiện trường bên cạnh video.");
+    }
+    const firstImageId = unique.find((id) => (mimeById.get(id) ?? "").startsWith("image/"));
+    return {
+      ids: unique,
+      primaryId: firstImageId ?? unique[0] ?? null,
+    };
   }
 
   async find(id: number): Promise<AttachmentRow | null> {
-    const { rows } = await this.db.query<AttachmentRow>("SELECT * FROM attachments WHERE id = $1", [id]);
-    return rows[0] ?? null;
+    const queryOne = async () => {
+      const { rows } = await this.db.query<AttachmentRow>(
+        `SELECT ${ATTACHMENT_META_COLUMNS} FROM attachments WHERE id = $1`,
+        [id],
+      );
+      return rows[0] ?? null;
+    };
+    if (!this.db.cache) return queryOne();
+    return this.db.cache.getOrLoad(`uploads:id:${id}`, 60_000, ["uploads"], queryOne);
+  }
+
+  getVerifiedDiskSize(attachmentId: number): number | undefined {
+    return this.db.cache?.get<number>(`uploads:disk-size:${attachmentId}`);
   }
 
   /**
@@ -264,27 +363,33 @@ export class UploadsService implements OnModuleInit {
    */
   async findPublicByToken(token: string): Promise<AttachmentRow | null> {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
-    const { rows } = await this.db.query<AttachmentRow>("SELECT * FROM attachments WHERE public_token = $1 LIMIT 1", [
-      token,
-    ]);
-    const attachment = rows[0];
-    if (!attachment) return null;
-    if (STRICT_INTERNAL_PURPOSES.has(attachment.purpose)) return null;
-
-    if (attachment.purpose === "lab") {
-      const labCheck = await this.db.query<{ has_any: boolean; has_verified: boolean }>(
-        `SELECT
-           EXISTS (SELECT 1 FROM lab_tests WHERE scan_attachment_id = $1) AS has_any,
-           EXISTS (SELECT 1 FROM lab_tests WHERE scan_attachment_id = $1 AND record_status = 'verified') AS has_verified`,
-        [attachment.id],
+    const queryPublic = async (): Promise<AttachmentRow | null> => {
+      const { rows } = await this.db.query<AttachmentRow>(
+        `SELECT ${ATTACHMENT_META_COLUMNS} FROM attachments WHERE public_token = $1 LIMIT 1`,
+        [token],
       );
-      const status = labCheck.rows[0];
-      if (status?.has_any && !status.has_verified) {
-        return null;
-      }
-    }
+      const attachment = rows[0];
+      if (!attachment) return null;
+      if (STRICT_INTERNAL_PURPOSES.has(attachment.purpose)) return null;
 
-    return attachment;
+      if (attachment.purpose === "lab") {
+        const labCheck = await this.db.query<{ has_any: boolean; has_verified: boolean }>(
+          `SELECT
+             EXISTS (SELECT 1 FROM lab_tests WHERE scan_attachment_id = $1) AS has_any,
+             EXISTS (SELECT 1 FROM lab_tests WHERE scan_attachment_id = $1 AND record_status = 'verified') AS has_verified`,
+          [attachment.id],
+        );
+        const status = labCheck.rows[0];
+        if (status?.has_any && !status.has_verified) {
+          return null;
+        }
+      }
+
+      return attachment;
+    };
+
+    if (!this.db.cache) return queryPublic();
+    return this.db.cache.getOrLoad(`uploads:pub:${token}`, 60_000, ["uploads"], queryPublic);
   }
 
   /** Quyền xem tệp trên `/api/uploads/:id`: hộ dân cùng hộ; cán bộ đúng phân quyền & phạm vi địa bàn. */
@@ -309,16 +414,82 @@ export class UploadsService implements OnModuleInit {
         if (attachment.owner_user_id === user.id) return;
         throw notFound();
       }
-      const { rows } = await this.db.query("SELECT 1 FROM households WHERE id = $1 AND village_id = $2", [
-        attachment.household_id,
-        user.villageId ?? -1,
-      ]);
-      if (rows.length === 0) throw notFound();
+      const villageId = user.villageId ?? -1;
+      const checkScope = async () => {
+        const { rows } = await this.db.query("SELECT 1 FROM households WHERE id = $1 AND village_id = $2", [
+          attachment.household_id,
+          villageId,
+        ]);
+        return rows.length > 0;
+      };
+      const inVillage = this.db.cache
+        ? await this.db.cache.getOrLoad(
+            `uploads:hh-v:${attachment.household_id}:${villageId}`,
+            60_000,
+            ["uploads", "plots"],
+            checkScope,
+          )
+        : await checkScope();
+      if (!inVillage) throw notFound();
+    }
+  }
+
+  /**
+   * Sao lưu tự động các tệp cũ đang nằm trên đĩa cục bộ vào cột `attachments.file_data`
+   * để đảm bảo tính bền vững xuyên suốt giữa các lần triển khai lại.
+   */
+  private async backfillLocalFilesToDb(): Promise<void> {
+    const { rows } = await this.db.query<{ id: number; storage_key: string }>(
+      `SELECT id, storage_key
+       FROM attachments
+       WHERE file_data IS NULL
+       ORDER BY id DESC
+       LIMIT 200`,
+    );
+    for (const row of rows) {
+      try {
+        const diskPath = this.pathOf(row.storage_key);
+        const buf = await readFile(diskPath);
+        if (buf.length > 0 && buf.length <= DEFAULT_MAX_VIDEO_BYTES) {
+          await this.db.query(
+            "UPDATE attachments SET file_data = $2 WHERE id = $1 AND file_data IS NULL",
+            [row.id, buf],
+          );
+        }
+      } catch {
+        // Bỏ qua nếu tệp cũ không tồn tại trên máy hiện tại.
+      }
+    }
+  }
+
+  /**
+   * Khôi phục nguyên tử tệp từ PostgreSQL TOAST (`attachments.file_data`) xuống bộ đệm đĩa cục bộ
+   * khi container đám mây (Render Free Tier) bị xóa ổ đĩa tạm hoặc khi truy cập từ máy khác chung CSDL.
+   */
+  private async rehydrateFromDatabase(attachmentId: number, targetPath: string): Promise<boolean> {
+    const { rows } = await this.db.query<{ file_data: Buffer | null }>(
+      "SELECT file_data FROM attachments WHERE id = $1 AND file_data IS NOT NULL LIMIT 1",
+      [attachmentId],
+    );
+    const blob = rows[0]?.file_data;
+    if (!blob || !Buffer.isBuffer(blob) || blob.length === 0) {
+      return false;
+    }
+    await mkdir(dirname(targetPath), { recursive: true });
+    const tmpPath = `${targetPath}.tmp-${randomUUID()}`;
+    try {
+      await writeFile(tmpPath, blob, { flag: "wx" });
+      await rename(tmpPath, targetPath);
+      return true;
+    } catch {
+      await unlink(tmpPath).catch(() => undefined);
+      return false;
     }
   }
 
   /**
    * Mở tệp nguyên tử với cờ `O_NOFOLLOW` chống tấn công symlink/TOCTOU và lấy kích thước thật từ file descriptor.
+   * Nếu tệp chưa có trên đĩa cục bộ, tự động khôi phục từ `attachments.file_data` trong PostgreSQL.
    */
   async openFile(attachment: AttachmentRow): Promise<OpenedAttachmentFile> {
     const path = this.pathOf(attachment.storage_key);
@@ -327,7 +498,15 @@ export class UploadsService implements OnModuleInit {
     try {
       handle = await fsOpen(path, flags);
     } catch {
-      throw notFound();
+      const restored = await this.rehydrateFromDatabase(attachment.id, path).catch(() => false);
+      if (!restored) {
+        throw notFound();
+      }
+      try {
+        handle = await fsOpen(path, flags);
+      } catch {
+        throw notFound();
+      }
     }
 
     try {
@@ -336,6 +515,7 @@ export class UploadsService implements OnModuleInit {
         await handle.close().catch(() => undefined);
         throw notFound();
       }
+      this.db.cache?.set(`uploads:disk-size:${attachment.id}`, st.size, 60_000, ["uploads"]);
       let streamCreated = false;
       return {
         totalBytes: st.size,

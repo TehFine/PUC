@@ -3,7 +3,7 @@ import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../../common/geo/plot-proximity";
-import { attachmentUrlSql, camelRow, camelRows, todayVn } from "../../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql, camelRow, camelRows, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
@@ -22,14 +22,21 @@ function diffCalendarDays(laterIso: string, earlierIso: string): number {
 }
 
 const JOURNAL_COLUMNS = `j.id, j.entry_on, j.plot_code, j.activity, j.detail, j.recorder, j.has_photo,
-  ${attachmentUrlSql("j.photo_id")} AS photo_url, j.latitude, j.longitude, j.created_at,
-  j.server_recorded_at, j.entry_delay_hours::float8 AS entry_delay_hours, j.is_late_entry, j.late_reason,
+  ${attachmentUrlSql("j.photo_id")} AS photo_url,
+  ${attachmentUrlsSql("j.photo_ids", "j.photo_id")} AS photo_urls,
+  j.latitude, j.longitude, j.created_at,
+  j.server_recorded_at,
+  to_char(j.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
+  GREATEST(0, ((j.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - j.entry_on))::int AS late_declaration_days,
+  j.entry_delay_hours::float8 AS entry_delay_hours, j.is_late_entry, j.late_reason,
   j.record_hash, j.gps_verified, j.gps_distance_m::float8 AS gps_distance_m, j.capture_source,
   (j.recorder = '${FARMER_RECORDER}' AND j.created_at > now() - interval '24 hours'
      AND EXISTS (SELECT 1 FROM attachments a WHERE a.id = j.photo_id AND a.household_id = j.household_id)) AS can_delete`;
 
 const VIOLATION_COLUMNS = `v.id, v.severity, v.title, v.detected_on, v.plot_code, v.description, v.status,
-  v.farmer_response, v.farmer_response_at, ${attachmentUrlSql("v.farmer_response_photo_id")} AS farmer_response_photo_url,
+  v.farmer_response, v.farmer_response_at,
+  ${attachmentUrlSql("v.farmer_response_photo_id")} AS farmer_response_photo_url,
+  ${attachmentUrlsSql("v.farmer_response_photo_ids", "v.farmer_response_photo_id")} AS farmer_response_photo_urls,
   v.resolved_on, v.resolution_notes,
   ${isJournalViolationSql("v")} AS is_journal_violation, ${lastJournalOnSql("v")} AS last_journal_on`;
 
@@ -41,7 +48,7 @@ export class JournalService {
     private readonly audit: AuditService,
     private readonly uploads: UploadsService,
     private readonly notifications: NotificationsService,
-  ) {}
+  ) { }
 
   async list(user: AuthUser) {
     const { rows } = await this.db.query(
@@ -64,7 +71,13 @@ export class JournalService {
       );
     }
     const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
-    const [photoId] = await this.uploads.assertUsable([dto.photoId], user, "journal");
+    const rawPhotoIds = [
+      ...(dto.photoIds ?? []),
+      ...(dto.photoId ? [dto.photoId] : []),
+    ];
+    if (rawPhotoIds.length === 0) throw badRequest("Vui lòng chụp hoặc chọn ảnh thực địa.");
+    const media = await this.uploads.assertUsableDetailed(rawPhotoIds, user, "journal", householdId);
+    const photoId = media.primaryId;
     if (!photoId) throw badRequest("Vui lòng chụp hoặc chọn ảnh thực địa.");
 
     const gpsCheck = await verifyPlotGpsProximity(this.db, plotCode, dto.latitude, dto.longitude);
@@ -72,8 +85,8 @@ export class JournalService {
 
     const inserted = await this.db.query<{ id: number }>(
       `INSERT INTO journal_entries
-         (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, latitude, longitude, gps_verified, gps_distance_m, capture_source, late_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+         (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, photo_ids, latitude, longitude, gps_verified, gps_distance_m, capture_source, late_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8::bigint[], $9, $10, $11, $12, $13, $14) RETURNING id`,
       [
         entryOn,
         householdId,
@@ -82,6 +95,7 @@ export class JournalService {
         dto.detail ?? null,
         FARMER_RECORDER,
         photoId,
+        media.ids,
         dto.latitude ?? null,
         dto.longitude ?? null,
         gpsCheck.verified,
@@ -100,19 +114,38 @@ export class JournalService {
       `UPDATE violations v
        SET farmer_response = $2,
            farmer_response_at = now(),
-           farmer_response_photo_id = COALESCE(farmer_response_photo_id, $3)
+           farmer_response_photo_id = COALESCE(farmer_response_photo_id, $3),
+           farmer_response_photo_ids = CASE
+             WHEN cardinality(v.farmer_response_photo_ids) > 0 THEN v.farmer_response_photo_ids
+             ELSE $4::bigint[]
+           END
        WHERE v.household_id = $1
          AND v.status = 'open'
          AND v.farmer_response IS NULL
          AND ${isJournalViolationSql("v")}
-         AND (v.plot_code IS NULL OR v.plot_code = $4)
-         AND v.detected_on <= $5::date`,
-      [householdId, autoNote, photoId, plotCode, entryOn],
+         AND (v.plot_code IS NULL OR v.plot_code = $5)
+         AND v.detected_on <= $6::date`,
+      [householdId, autoNote, photoId, media.ids, plotCode, entryOn],
     );
+
+    if (backdatedDays >= 1) {
+      const [ey, em, ed] = entryOn.split("-");
+      const [ty, tm, td] = today.split("-");
+      await this.notifications.notifyHousehold(householdId, {
+        kind: "schedule",
+        title: `Ghi nhận nhật ký khai báo chậm ${backdatedDays} ngày (Thửa ${plotCode})`,
+        body: `Hệ thống đã lưu đồng thời ngày làm thực tế ${ed}/${em}/${ey} và thời điểm khai báo ${td}/${tm}/${ty}. Lần sau bạn vui lòng chụp ảnh và ghi nhật ký ngay trong ngày làm vườn.`,
+        link: "/portal?tab=diary&sub=journal",
+      });
+    }
 
     await this.audit.write(
       { ip: context.ip, user },
-      { action: "Hộ ghi nhật ký", object: `Nhật ký canh tác #${id}`, detail: `${dto.activity} – ${plotCode}` },
+      {
+        action: "Hộ ghi nhật ký",
+        object: `Nhật ký canh tác #${id}`,
+        detail: `${dto.activity} - ${plotCode} (làm ${entryOn}, khai báo ${today}, chậm ${Math.max(0, backdatedDays)} ngày)`,
+      },
     );
     const { rows } = await this.db.query(`SELECT ${JOURNAL_COLUMNS} FROM journal_entries j WHERE j.id = $1`, [id]);
     return camelRow(rows[0]);
@@ -176,7 +209,8 @@ export class JournalService {
       `UPDATE violations v
        SET farmer_response = NULL,
            farmer_response_at = NULL,
-           farmer_response_photo_id = NULL
+           farmer_response_photo_id = NULL,
+           farmer_response_photo_ids = '{}'::bigint[]
        WHERE v.household_id = $1
          AND v.status = 'open'
          AND v.farmer_response IS NOT NULL
@@ -234,17 +268,25 @@ export class JournalService {
       const plot = violationRow.plot_code ? ` cho thửa ${violationRow.plot_code}` : "";
       throw conflict(
         `Chưa có nhật ký mới${plot} kể từ ngày phát hiện vi phạm (${d}/${m}/${y}). ` +
-          "Vui lòng ghi nhật ký kèm ảnh thực địa trước khi báo đã khắc phục.",
+        "Vui lòng ghi nhật ký kèm ảnh thực địa trước khi báo đã khắc phục.",
       );
     }
 
-    const [photoId] = await this.uploads.assertUsable(dto.photoId ? [dto.photoId] : [], user, "violation");
+    const rawRespIds = [
+      ...(dto.photoIds ?? []),
+      ...(dto.photoId ? [dto.photoId] : []),
+    ];
+    const respMedia = await this.uploads.assertUsableDetailed(rawRespIds, user, "violation", householdId);
 
     const updated = await this.db.query<{ id: number; title: string }>(
-      `UPDATE violations SET farmer_response = $3, farmer_response_at = now(), farmer_response_photo_id = $4
+      `UPDATE violations
+       SET farmer_response = $3,
+           farmer_response_at = now(),
+           farmer_response_photo_id = $4,
+           farmer_response_photo_ids = $5::bigint[]
        WHERE id = $1 AND household_id = $2 AND status = 'open'
        RETURNING id, title`,
-      [id, householdId, dto.note, photoId ?? null],
+      [id, householdId, dto.note, respMedia.primaryId, respMedia.ids],
     );
     if (updated.rowCount === 0) {
       const exists = await this.db.query("SELECT 1 FROM violations WHERE id = $1 AND household_id = $2", [id, householdId]);

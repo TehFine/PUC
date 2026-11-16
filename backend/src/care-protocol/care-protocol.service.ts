@@ -3,7 +3,7 @@ import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { badRequest, forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
-import { attachmentUrlSql, camelRows, todayVn } from "../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql, camelRows, todayVn } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ADMIN_LINKS, INSPECTION_ROLES } from "../portal/common/admin-links";
@@ -127,6 +127,8 @@ interface PlanRow {
   cycle_start_on: string;
   start_milestone_seq: number;
   current_milestone_code: string;
+  reminder_lead_days: number;
+  last_late_declaration_days: number;
   status: "active" | "completed" | "paused";
   note: string | null;
   updated_at: string;
@@ -143,6 +145,10 @@ interface DeclarationRow {
   scheduled_on: string | null;
   due_on: string | null;
   performed_on: string;
+  declared_at: string;
+  declared_on: string;
+  late_declaration_days: number;
+  late_reason: string | null;
   expected_tree_state: string;
   actual_tree_state: string;
   followed_standard: boolean;
@@ -154,7 +160,9 @@ interface DeclarationRow {
   pesticide_name: string | null;
   pesticide_dose: string | null;
   field_photo_url: string | null;
+  field_photo_urls: string[];
   invoice_photo_url: string | null;
+  invoice_photo_urls: string[];
   latitude: number | null;
   longitude: number | null;
   gps_verified: boolean;
@@ -260,6 +268,83 @@ export class CareProtocolService {
        )
        ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
       [householdId, codesArr, PROTOCOL_SEASON, today],
+    );
+  }
+
+  /**
+   * Đồng bộ tự động kế hoạch 2026-2027 cho toàn bộ thửa đất & hộ nông dân trong HTX
+   * để trang Quản trị (Nhật ký -> Tiến độ Quy trình 2026-2027) luôn có dữ liệu ngay cả khi
+   * nông hộ chưa từng mở Cổng hộ dân.
+   */
+  async ensureAllHouseholdPlans(): Promise<void> {
+    const today = todayVn();
+
+    if (await plotsTableExists(this.db)) {
+      await this.db.query(
+        `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
+         SELECT p.household_id, upper(btrim(p.code)), $1, $2::date, 1, 'cb-rua-vuon'
+         FROM plots p
+         WHERE p.household_id IS NOT NULL
+           AND btrim(p.code) <> ''
+           AND NOT EXISTS (
+             SELECT 1 FROM plot_care_plans pcp
+             WHERE pcp.household_id = p.household_id
+               AND upper(pcp.plot_code) = upper(btrim(p.code))
+               AND pcp.season = $1
+           )
+         ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
+        [PROTOCOL_SEASON, today],
+      );
+    }
+
+    const regSign = await this.db.query<{ reg: string | null }>(
+      "SELECT to_regclass('public.plot_signboard_tokens')::text AS reg",
+    );
+    if (regSign.rows[0]?.reg) {
+      await this.db.query(
+        `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
+         SELECT pst.household_id, upper(btrim(pst.plot_code)), $1, $2::date, 1, 'cb-rua-vuon'
+         FROM plot_signboard_tokens pst
+         WHERE pst.household_id IS NOT NULL
+           AND btrim(pst.plot_code) <> ''
+           AND NOT EXISTS (
+             SELECT 1 FROM plot_care_plans pcp
+             WHERE pcp.household_id = pst.household_id
+               AND pcp.season = $1
+           )
+         ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
+        [PROTOCOL_SEASON, today],
+      );
+    }
+
+    await this.db.query(
+      `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
+       SELECT h.id,
+              COALESCE(
+                (
+                  SELECT upper(btrim(je.plot_code))
+                  FROM journal_entries je
+                  WHERE je.household_id = h.id
+                    AND je.plot_code IS NOT NULL
+                    AND btrim(je.plot_code) <> ''
+                  ORDER BY je.id ASC
+                  LIMIT 1
+                ),
+                upper(btrim(h.code)) || '-T01'
+              ),
+              $1,
+              $2::date,
+              1,
+              'cb-rua-vuon'
+       FROM households h
+       WHERE btrim(h.code) <> ''
+         AND NOT EXISTS (
+           SELECT 1 FROM plot_care_plans pcp
+           WHERE pcp.household_id = h.id
+             AND pcp.season = $1
+         )
+       ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
+      [PROTOCOL_SEASON, today],
     );
   }
 
@@ -517,21 +602,38 @@ export class CareProtocolService {
       throw badRequest("Mã mốc quy trình không hợp lệ theo tài liệu 2026-2027.");
     }
 
-    if (dto.invoicePhotoId !== undefined && dto.invoicePhotoId !== null && Number(dto.invoicePhotoId) === Number(dto.fieldPhotoId)) {
+    const rawFieldIds = [
+      ...(dto.fieldPhotoIds ?? []),
+      ...(dto.fieldPhotoId ? [dto.fieldPhotoId] : []),
+    ];
+    if (rawFieldIds.length === 0) {
+      throw badRequest("Vui lòng chụp ảnh hoặc quay video hiện trường vườn trước khi gửi khai báo.");
+    }
+
+    const rawInvoiceIds = [
+      ...(dto.invoicePhotoIds ?? []),
+      ...(dto.invoicePhotoId ? [dto.invoicePhotoId] : []),
+    ];
+
+    const fieldIdSet = new Set(rawFieldIds.map((id) => Number(id)));
+    if (rawInvoiceIds.some((id) => fieldIdSet.has(Number(id)))) {
       throw badRequest("Ảnh hóa đơn vật tư phải là ảnh chụp riêng biệt với ảnh hiện trường vườn.");
     }
 
     const requiresInvoice = milestoneSpec ? milestoneSpec.requiresInvoicePhoto : true;
-    if (requiresInvoice && !dto.invoicePhotoId) {
+    if (requiresInvoice && rawInvoiceIds.length === 0) {
       throw badRequest(
         "Mốc chăm sóc này có sử dụng phân bón hoặc chế phẩm, vui lòng chụp ảnh hóa đơn mua hàng hoặc nhãn bao bì vật tư để hoàn tất khai báo.",
       );
     }
 
-    await this.uploads.assertUsable([dto.fieldPhotoId], user, "journal", householdId, { imagesOnly: true });
-    if (dto.invoicePhotoId) {
-      await this.uploads.assertUsable([dto.invoicePhotoId], user, "journal", householdId, { imagesOnly: true });
-    }
+    const fieldMedia = await this.uploads.assertUsableDetailed(rawFieldIds, user, "journal", householdId);
+    const primaryFieldPhotoId = fieldMedia.primaryId!;
+    const invoiceMedia =
+      rawInvoiceIds.length > 0
+        ? await this.uploads.assertUsableDetailed(rawInvoiceIds, user, "journal", householdId, { imagesOnly: true })
+        : { ids: [] as number[], primaryId: null };
+    const primaryInvoicePhotoId = invoiceMedia.primaryId;
 
     // Kiểm tra diện tích và trạng thái thửa để chặn thửa vi phạm và điền vào sổ phun thuốc (nếu có)
     let plotAreaHa = 1.0;
@@ -633,15 +735,28 @@ export class CareProtocolService {
     ].filter(Boolean);
     const journalDetail = detailParts.join(" | ").slice(0, 950);
 
-    const isLateOver48h = backdatedDays > 2;
-    const lateReason = isLateOver48h ? "Khai báo bổ sung theo mốc quy trình chăm sóc" : null;
+    const lateDeclarationDays = Math.max(0, backdatedDays);
+    const isLateOver48h = lateDeclarationDays > 2;
+    const lateReason =
+      lateDeclarationDays >= 1
+        ? (dto.lateReason?.trim() ||
+            (isLateOver48h ? "Khai báo bổ sung theo mốc quy trình chăm sóc" : null))
+        : null;
+
+    const currentReminderLead = Math.max(1, Number(plan.reminder_lead_days ?? 1));
+    const nextReminderLeadDays =
+      lateDeclarationDays >= 2
+        ? Math.min(4, Math.max(2, lateDeclarationDays))
+        : lateDeclarationDays === 1
+          ? Math.max(2, currentReminderLead)
+          : Math.max(1, currentReminderLead - 1);
 
     const txResult = await withTransaction(this.db, async (client) => {
       // 1. Ghi tự động vào sổ cái Nhật ký canh tác (niêm phong SHA-256)
       const jIns = await client.query<{ id: number }>(
         `INSERT INTO journal_entries
-           (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, latitude, longitude, gps_verified, gps_distance_m, capture_source, late_reason)
-         VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, 'camera', $12)
+           (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, photo_ids, latitude, longitude, gps_verified, gps_distance_m, capture_source, late_reason)
+         VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8::bigint[], $9, $10, $11, $12, 'camera', $13)
          RETURNING id`,
         [
           performedOn,
@@ -650,7 +765,8 @@ export class CareProtocolService {
           journalActivity,
           journalDetail,
           FARMER_RECORDER,
-          dto.fieldPhotoId,
+          primaryFieldPhotoId,
+          fieldMedia.ids,
           dto.latitude ?? null,
           dto.longitude ?? null,
           gpsCheck.verified,
@@ -686,23 +802,25 @@ export class CareProtocolService {
         sprayRecordId = sIns.rows[0].id;
       }
 
-      // 3. Lưu bản khai báo mốc quy trình chăm sóc
-      const declIns = await client.query<{ id: number }>(
+      // 3. Lưu bản khai báo mốc quy trình chăm sóc kèm đồng thời ngày thực làm + thời điểm khai báo thực tế + số ngày khai báo chậm
+      const declIns = await client.query<{ id: number; declared_at: string }>(
         `INSERT INTO care_milestone_declarations
            (plan_id, household_id, plot_code, stage_code, milestone_code, is_senpro,
-            scheduled_on, due_on, performed_on, expected_tree_state, actual_tree_state,
+            scheduled_on, due_on, performed_on, declared_at, declared_on, late_declaration_days, late_reason,
+            expected_tree_state, actual_tree_state,
             followed_standard, selected_products, actual_dosage, extra_inputs, supplier_name,
-            pesticide_id, pesticide_dose, field_photo_id, invoice_photo_id,
+            pesticide_id, pesticide_dose, field_photo_id, field_photo_ids, invoice_photo_id, invoice_photo_ids,
             latitude, longitude, gps_verified, gps_distance_m,
             journal_entry_id, spray_record_id, compliance_status, compliance_issues, farmer_note)
          VALUES
            ($1, $2, $3, $4, $5, $6,
-            $7, $8, $9, $10, $11,
-            $12, $13::jsonb, $14, $15, $16,
-            $17, $18, $19, $20,
-            $21, $22, $23, $24,
-            $25, $26, $27, $28::jsonb, $29)
-         RETURNING id`,
+            $7, $8, $9, date_trunc('second', clock_timestamp()), $10::date, $11, $12,
+            $13, $14,
+            $15, $16::jsonb, $17, $18, $19,
+            $20, $21, $22, $23::bigint[], $24, $25::bigint[],
+            $26, $27, $28, $29,
+            $30, $31, $32, $33::jsonb, $34)
+         RETURNING id, declared_at::text AS declared_at`,
         [
           plan.id,
           householdId,
@@ -713,6 +831,9 @@ export class CareProtocolService {
           milestoneSpec ? scheduledOn : null,
           milestoneSpec ? dueOn : null,
           performedOn,
+          today,
+          lateDeclarationDays,
+          lateReason,
           expectedTreeState,
           dto.actualTreeState.trim(),
           dto.followedStandard,
@@ -722,8 +843,10 @@ export class CareProtocolService {
           dto.supplierName?.trim() || null,
           pesticideInfo?.id ?? null,
           dto.pesticideDose?.trim() || null,
-          dto.fieldPhotoId,
-          dto.invoicePhotoId ?? null,
+          primaryFieldPhotoId,
+          fieldMedia.ids,
+          primaryInvoicePhotoId,
+          invoiceMedia.ids,
           dto.latitude ?? null,
           dto.longitude ?? null,
           gpsCheck.verified,
@@ -743,14 +866,18 @@ export class CareProtocolService {
           `UPDATE violations v
            SET farmer_response = $2,
                farmer_response_at = now(),
-               farmer_response_photo_id = COALESCE(farmer_response_photo_id, $3)
+               farmer_response_photo_id = COALESCE(farmer_response_photo_id, $3),
+               farmer_response_photo_ids = CASE
+                 WHEN cardinality(v.farmer_response_photo_ids) > 0 THEN v.farmer_response_photo_ids
+                 ELSE $4::bigint[]
+               END
            WHERE v.household_id = $1
              AND v.status = 'open'
              AND v.farmer_response IS NULL
-             AND v.detected_on <= $5::date
+             AND v.detected_on <= $6::date
              AND (${isJournalViolationSql("v")} OR v.title ILIKE '%trễ hạn%' OR v.title ILIKE '%quá hạn%')
-             AND (v.plot_code IS NULL OR upper(v.plot_code) = upper($4))`,
-          [householdId, autoResponseNote, dto.fieldPhotoId, plotCode, performedOn],
+             AND (v.plot_code IS NULL OR upper(v.plot_code) = upper($5))`,
+          [householdId, autoResponseNote, primaryFieldPhotoId, fieldMedia.ids, plotCode, performedOn],
         );
       }
 
@@ -778,14 +905,14 @@ export class CareProtocolService {
         createdViolationId = vIns.rows[0].id;
       }
 
-      // 6. Chuyển con trỏ sang mốc tuần tự tiếp theo (với các mốc chính 01 -> 27)
+      // 6. Chuyển con trỏ sang mốc tuần tự tiếp theo và tự động căn chỉnh lịch theo ngày thực làm (performedOn)
       let nextMilestone: SequentialMilestoneSpec | null = null;
       let effectiveCycleStart = plan.cycle_start_on;
       let nextPlanStatus: "active" | "completed" = plan.status === "completed" ? "completed" : "active";
 
       if (milestoneSpec) {
-        // Nếu thực hiện muộn hơn ngày mở mốc, tự động dịch nhịp sinh học tiếp theo tính từ ngày thực tế vừa làm
-        if (performedOn > scheduledOn) {
+        // Căn chỉnh nhịp sinh học tiếp theo tính đúng từ ngày thực làm tại vườn (dù hộ khai báo muộn vài ngày sau đó)
+        if (performedOn !== scheduledOn) {
           effectiveCycleStart = addIsoDays(performedOn, -milestoneSpec.cycleDayStart);
         }
 
@@ -808,10 +935,17 @@ export class CareProtocolService {
             `UPDATE plot_care_plans
              SET current_milestone_code = $2,
                  cycle_start_on = $3::date,
+                 reminder_lead_days = $4,
+                 last_late_declaration_days = $5,
                  status = 'active',
                  updated_at = now()
              WHERE id = $1`,
-            [plan.id, nextMilestone.code, effectiveCycleStart],
+            [plan.id, nextMilestone.code, effectiveCycleStart, nextReminderLeadDays, lateDeclarationDays],
+          );
+          await client.query(
+            `DELETE FROM care_protocol_alert_logs
+             WHERE plan_id = $1 AND milestone_code = $2 AND alert_type IN ('due_soon', 'due_day_prompt')`,
+            [plan.id, nextMilestone.code],
           );
         } else {
           nextPlanStatus = "completed";
@@ -819,21 +953,34 @@ export class CareProtocolService {
             `UPDATE plot_care_plans
              SET current_milestone_code = 'completed',
                  cycle_start_on = $2::date,
+                 reminder_lead_days = $3,
+                 last_late_declaration_days = $4,
                  status = 'completed',
                  updated_at = now()
              WHERE id = $1`,
-            [plan.id, effectiveCycleStart],
+            [plan.id, effectiveCycleStart, nextReminderLeadDays, lateDeclarationDays],
           );
         }
+      } else {
+        await client.query(
+          `UPDATE plot_care_plans
+           SET reminder_lead_days = $2,
+               last_late_declaration_days = $3,
+               updated_at = now()
+           WHERE id = $1`,
+          [plan.id, nextReminderLeadDays, lateDeclarationDays],
+        );
       }
 
       return {
         declarationId: declIns.rows[0].id,
+        declaredAt: declIns.rows[0].declared_at,
         journalEntryId,
         sprayRecordId,
         createdViolationId,
         nextMilestone,
         effectiveCycleStart,
+        scheduleAdjustedDays: diffIsoDays(effectiveCycleStart, plan.cycle_start_on),
         nextPlanStatus,
       };
     });
@@ -875,7 +1022,12 @@ export class CareProtocolService {
       ]);
     }
 
-    // 8. Thông báo giai đoạn / mốc tiếp theo trong quy trình 2026-2027
+    // 8. Thông báo giai đoạn / mốc tiếp theo & nhắc nhở khai báo đúng hạn nếu hộ vừa khai báo bù muộn
+    const lateReminderSentence =
+      lateDeclarationDays >= 1
+        ? ` Hệ thống ghi nhận bạn khai báo chậm ${lateDeclarationDays} ngày (làm ngày ${formatIsoVn(performedOn)}, khai báo ngày ${formatIsoVn(today)}), đã tự động căn chỉnh lịch từ ngày làm thực tế và sẽ nhắc sớm trước ${nextReminderLeadDays} ngày ở mốc tới để bạn khai báo ngay trong ngày.`
+        : "";
+
     if (milestoneSpec) {
       if (txResult.nextMilestone) {
         const nextM = txResult.nextMilestone;
@@ -884,7 +1036,7 @@ export class CareProtocolService {
         const nextTitle = stageChanged
           ? `Chuyển sang Giai đoạn ${nextM.stageOrder}: ${nextM.stageName} (Thửa ${plotCode})`
           : `Mốc chăm sóc tiếp theo tại Thửa ${plotCode}: ${nextM.dayLabel}`;
-        const nextBody = `Dự kiến ngày ${formatIsoVn(nextScheduled)} khi cây đạt trạng thái "${nextM.treeState}": ${nextM.actionSummary}`;
+        const nextBody = `Dự kiến ngày ${formatIsoVn(nextScheduled)} khi cây đạt trạng thái "${nextM.treeState}": ${nextM.actionSummary}${lateReminderSentence}`;
 
         await this.notifications.notifyHousehold(householdId, {
           kind: "protocol",
@@ -897,7 +1049,7 @@ export class CareProtocolService {
           this.notifications.notifyHousehold(householdId, {
             kind: "protocol",
             title: `Hoàn tất quy trình chăm sóc 2026-2027 tại Thửa ${plotCode}`,
-            body: "Đã hoàn thành đủ 8 giai đoạn đến mốc Làm cơm Ngày 120. Vui lòng giữ thời gian cách ly PHI và chờ cán bộ HTX lấy mẫu kiểm nghiệm trước thu hoạch.",
+            body: `Đã hoàn thành đủ 8 giai đoạn đến mốc Làm cơm Ngày 120. Vui lòng giữ thời gian cách ly PHI và chờ cán bộ HTX lấy mẫu kiểm nghiệm trước thu hoạch.${lateReminderSentence}`,
             link: "/portal?tab=inspection",
           }),
           this.notifications.notifyOversightForHousehold(householdId, {
@@ -908,6 +1060,13 @@ export class CareProtocolService {
           }),
         ]);
       }
+    } else if (lateDeclarationDays >= 1) {
+      await this.notifications.notifyHousehold(householdId, {
+        kind: "protocol",
+        title: `Ghi nhận khai báo bù chậm ${lateDeclarationDays} ngày tại Thửa ${plotCode}`,
+        body: `Đã lưu đồng thời ngày xử lý đọt ${formatIsoVn(performedOn)} và ngày khai báo ${formatIsoVn(today)}. Lần tới vui lòng chụp ảnh và gửi khai báo ngay trong ngày làm vườn.`,
+        link: `${PORTAL_PROTOCOL_LINK}&plotCode=${encodeURIComponent(plotCode)}`,
+      });
     }
 
     await this.audit.write(
@@ -915,7 +1074,7 @@ export class CareProtocolService {
       {
         action: "Khai báo mốc quy trình chăm sóc",
         object: `Thửa ${plotCode} (#${txResult.declarationId})`,
-        detail: `${stageLabel} - ${compliance.complianceStatus === "compliant" ? "Đúng chuẩn" : "Có cảnh báo"}`,
+        detail: `${stageLabel} - Thực làm ${performedOn}, khai báo ${today} (chậm ${lateDeclarationDays} ngày) - ${compliance.complianceStatus === "compliant" ? "Đúng chuẩn" : "Có cảnh báo"}`,
       },
     );
 
@@ -925,6 +1084,14 @@ export class CareProtocolService {
       declarationId: txResult.declarationId,
       complianceStatus: compliance.complianceStatus,
       complianceIssues: compliance.issues,
+      declarationTiming: {
+        performedOn,
+        declaredAt: txResult.declaredAt,
+        declaredOn: today,
+        lateDeclarationDays,
+        scheduleAdjustedDays: txResult.scheduleAdjustedDays,
+        nextReminderLeadDays,
+      },
       nextMilestone: txResult.nextMilestone
         ? {
             code: txResult.nextMilestone.code,
@@ -954,6 +1121,8 @@ export class CareProtocolService {
         data: [],
       };
     }
+
+    await this.ensureAllHouseholdPlans();
 
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -1039,6 +1208,7 @@ export class CareProtocolService {
     ) {
       return { scanned: 0, dueNotifications: 0, overdueWarnings: 0, criticalViolations: 0 };
     }
+    await this.ensureAllHouseholdPlans();
     const allPlans = await this.loadPlanRows("WHERE pcp.status = 'active'", []);
     const scopedPlans = user ? allPlans.filter((p) => isStaffInPlanScope(user, p)) : allPlans;
     return this.evaluateAndDispatchAlerts(scopedPlans);
@@ -1082,6 +1252,7 @@ export class CareProtocolService {
 
       const scheduledOn = addIsoDays(plan.cycle_start_on, spec.cycleDayStart);
       const dueOn = addIsoDays(plan.cycle_start_on, spec.cycleDayEnd);
+      const leadDays = Math.max(1, Number(plan.reminder_lead_days ?? 1));
 
       if (today > dueOn) {
         const daysLate = diffIsoDays(today, dueOn);
@@ -1092,11 +1263,13 @@ export class CareProtocolService {
           tab: "diary",
           date: dueOn,
         });
-      } else if (today >= addIsoDays(scheduledOn, -1)) {
+      } else if (today >= addIsoDays(scheduledOn, -leadDays)) {
+        const earlyNote =
+          leadDays > 1 ? ` - Nhắc sớm trước ${leadDays} ngày để khai báo đúng hạn` : "";
         out.push({
           kind: "protocol",
           title: `Mốc chăm sóc: ${spec.stageName} (${spec.dayLabel})`,
-          detail: `Thửa ${plan.plot_code} - Hạn ${formatIsoVn(dueOn)}`,
+          detail: `Thửa ${plan.plot_code} - Hạn ${formatIsoVn(dueOn)}${earlyNote}`,
           tab: "diary",
           date: scheduledOn,
         });
@@ -1192,17 +1365,35 @@ export class CareProtocolService {
         continue;
       }
 
-      // Trường hợp 3: Đến cửa sổ thực hiện (từ trước 1 ngày đến ngày hạn) -> Gửi thông báo nhắc hộ dân vào làm & khai báo
-      if (today >= addIsoDays(scheduledOn, -1) && today <= dueOn) {
+      // Trường hợp 3: Đến cửa sổ thực hiện (tự động mở rộng trước leadDays ngày nếu lần trước hộ khai báo muộn)
+      const leadDays = Math.max(1, Number(plan.reminder_lead_days ?? 1));
+      if (today >= addIsoDays(scheduledOn, -leadDays) && today <= dueOn) {
         const logged = await this.tryRecordAlertLog(plan.id, spec.code, "due_soon");
         if (logged) {
+          const earlyPrompt =
+            (plan.last_late_declaration_days ?? 0) > 0
+              ? ` Đợt trước hộ khai báo chậm ${plan.last_late_declaration_days} ngày, hệ thống chủ động nhắc sớm trước ${leadDays} ngày để bạn chụp ảnh và khai báo ngay trong ngày làm vườn.`
+              : " Thực hiện xong bạn chỉ cần bấm vào để khai báo và chụp ảnh.";
           await this.notifications.notifyHousehold(plan.household_id, {
             kind: "protocol",
             title: `Đến lịch chăm sóc Thửa ${plan.plot_code}: ${spec.stageName} (${spec.dayLabel})`,
-            body: `Trạng thái cây chuẩn "${spec.treeState}" (hạn ${formatIsoVn(dueOn)}): ${spec.actionSummary} Thực hiện xong bạn chỉ cần bấm vào để khai báo và chụp ảnh.`,
+            body: `Trạng thái cây chuẩn "${spec.treeState}" (hạn ${formatIsoVn(dueOn)}): ${spec.actionSummary}${earlyPrompt}`,
             link: portalLink,
           });
           dueNotifications += 1;
+        }
+        // Nhắc bổ sung ngay trong ngày hạn chót nếu hộ có tiền sử khai báo muộn mà vẫn chưa gửi
+        if ((plan.last_late_declaration_days ?? 0) > 0 && today === dueOn) {
+          const promptLogged = await this.tryRecordAlertLog(plan.id, spec.code, "due_day_prompt");
+          if (promptLogged) {
+            await this.notifications.notifyHousehold(plan.household_id, {
+              kind: "protocol",
+              title: `Nhắc khai báo đúng hạn hôm nay cho Thửa ${plan.plot_code}`,
+              body: `Hôm nay (${formatIsoVn(dueOn)}) là ngày chốt mốc ${stageLabel}. Vui lòng chụp ảnh hiện trường và gửi khai báo ngay trong ngày làm vườn.`,
+              link: portalLink,
+            });
+            dueNotifications += 1;
+          }
         }
       }
     }
@@ -1218,7 +1409,7 @@ export class CareProtocolService {
   private async tryRecordAlertLog(
     planId: number,
     milestoneCode: string,
-    alertType: "due_soon" | "overdue_warning" | "overdue_critical" | "next_stage",
+    alertType: "due_soon" | "due_day_prompt" | "overdue_warning" | "overdue_critical" | "next_stage",
   ): Promise<number | null> {
     const res = await this.db.query<{ id: number }>(
       `INSERT INTO care_protocol_alert_logs (plan_id, milestone_code, alert_type)
@@ -1255,7 +1446,10 @@ export class CareProtocolService {
       `SELECT pcp.id, pcp.household_id, h.code AS household_code, h.name AS household_name, h.phone AS household_phone,
               h.village_id, v.name AS village_name,
               pcp.plot_code, pcp.season, pcp.cycle_start_on, pcp.start_milestone_seq,
-              pcp.current_milestone_code, pcp.status, pcp.note, pcp.updated_at
+              pcp.current_milestone_code,
+              COALESCE(pcp.reminder_lead_days, 1)::int AS reminder_lead_days,
+              COALESCE(pcp.last_late_declaration_days, 0)::int AS last_late_declaration_days,
+              pcp.status, pcp.note, pcp.updated_at
        FROM plot_care_plans pcp
        JOIN households h ON h.id = pcp.household_id
        JOIN villages v ON v.id = h.village_id
@@ -1272,11 +1466,21 @@ export class CareProtocolService {
 
     const { rows } = await this.db.query<DeclarationRow>(
       `SELECT d.id, d.plan_id, d.household_id, d.plot_code, d.stage_code, d.milestone_code, d.is_senpro,
-              d.scheduled_on, d.due_on, d.performed_on, d.expected_tree_state, d.actual_tree_state,
+              d.scheduled_on, d.due_on, d.performed_on,
+              COALESCE(d.declared_at, d.created_at) AS declared_at,
+              COALESCE(d.declared_on, (d.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date) AS declared_on,
+              GREATEST(
+                COALESCE(d.late_declaration_days, 0),
+                ((COALESCE(d.declared_at, d.created_at) AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - d.performed_on)
+              )::int AS late_declaration_days,
+              COALESCE(d.late_reason, j.late_reason) AS late_reason,
+              d.expected_tree_state, d.actual_tree_state,
               d.followed_standard, d.selected_products, d.actual_dosage, d.extra_inputs, d.supplier_name,
               d.pesticide_id, p.name AS pesticide_name, d.pesticide_dose,
               ${attachmentUrlSql("d.field_photo_id")} AS field_photo_url,
+              ${attachmentUrlsSql("d.field_photo_ids", "d.field_photo_id")} AS field_photo_urls,
               ${attachmentUrlSql("d.invoice_photo_id")} AS invoice_photo_url,
+              ${attachmentUrlsSql("d.invoice_photo_ids", "d.invoice_photo_id")} AS invoice_photo_urls,
               d.latitude::float8 AS latitude, d.longitude::float8 AS longitude,
               d.gps_verified, d.gps_distance_m::float8 AS gps_distance_m,
               d.journal_entry_id, j.record_hash AS journal_record_hash,
@@ -1375,6 +1579,7 @@ export class CareProtocolService {
     const nextItem = milestones.find((m) => m.state === "upcoming_next") ?? null;
 
     const deviationCount = declarations.filter((d) => d.compliance_status !== "compliant").length;
+    const lateDeclarationCount = declarations.filter((d) => Number(d.late_declaration_days ?? 0) > 0).length;
     const overallHealth: "completed" | "overdue_critical" | "overdue" | "due_now" | "on_track" =
       plan.status === "completed" || !activeItem
         ? "completed"
@@ -1398,6 +1603,8 @@ export class CareProtocolService {
       cycleStartOn: plan.cycle_start_on,
       startMilestoneSeq: plan.start_milestone_seq,
       currentMilestoneCode: plan.current_milestone_code,
+      reminderLeadDays: Math.max(1, Number(plan.reminder_lead_days ?? 1)),
+      lastLateDeclarationDays: Math.max(0, Number(plan.last_late_declaration_days ?? 0)),
       status: plan.status,
       note: plan.note,
       updatedAt: plan.updated_at,
@@ -1406,6 +1613,7 @@ export class CareProtocolService {
       totalApplicableCount: applicableMilestones.length,
       progressPct,
       deviationCount,
+      lateDeclarationCount,
       activeMilestone: activeItem,
       nextMilestone: nextItem,
       milestones,
@@ -1435,6 +1643,9 @@ export class CareProtocolService {
       totalApplicableCount: full.totalApplicableCount,
       progressPct: full.progressPct,
       deviationCount: full.deviationCount,
+      lateDeclarationCount: full.lateDeclarationCount,
+      reminderLeadDays: full.reminderLeadDays,
+      lastLateDeclarationDays: full.lastLateDeclarationDays,
       totalDeclarations: declarations.length,
       activeMilestone: full.activeMilestone
         ? {

@@ -4,6 +4,7 @@ import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { Authorize, CurrentUser } from "../auth/auth.decorators";
 import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
+import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import {
   CareProtocolListQueryDto,
   ConfigurePlotCarePlanDto,
@@ -78,7 +79,7 @@ export class AdminCareProtocolController {
 
   @Post("scan")
   @HttpCode(200)
-  @Throttle({ default: { limit: 4, ttl: 60_000 } })
+  @Throttle(RateLimitTier.PROTOCOL_SCAN)
   @Authorize("violations", "create")
   async scanNow(@CurrentUser() user: AuthUser, @Ip() ip: string) {
     const result = await this.service.scanAndNotifyAllPlans(user);

@@ -4,9 +4,10 @@ import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest } from "../../common/errors/app.exception";
-import { attachmentUrlSql } from "../../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { assertPlotOwned } from "../../portal/common/portal-context";
+import { UploadsService } from "../../uploads/uploads.service";
 
 const SEALED_LEDGER_ERR =
   "Bản ghi sổ cái đã quá thời hạn 24 giờ niêm phong hoặc đã gắn với lô xuất khẩu, không thể chỉnh sửa/xóa.";
@@ -19,16 +20,24 @@ interface ExistingJournalRow {
 
 @Injectable()
 export class JournalService extends BaseCrudService {
-  constructor(db: DatabaseService, audit: AuditService) {
+  constructor(
+    db: DatabaseService,
+    audit: AuditService,
+    private readonly uploads: UploadsService,
+  ) {
     super(db, audit, {
       resource: "journal",
       label: "Nhật ký canh tác",
       table: "journal_entries",
       fields: `t.id, t.entry_on, t.household_id, h.name AS household_name, t.plot_code,
-      t.activity, t.detail, t.recorder, t.has_photo,
+      t.activity, t.detail, t.recorder, t.has_photo, t.photo_id, t.photo_ids,
       ${attachmentUrlSql("t.photo_id")} AS photo_url,
+      ${attachmentUrlsSql("t.photo_ids", "t.photo_id")} AS photo_urls,
       t.latitude, t.longitude,
-      t.server_recorded_at, t.entry_delay_hours::float8 AS entry_delay_hours,
+      t.server_recorded_at,
+      to_char(t.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
+      GREATEST(0, ((t.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - t.entry_on))::int AS late_declaration_days,
+      t.entry_delay_hours::float8 AS entry_delay_hours,
       t.is_late_entry, t.late_reason, t.record_hash, t.gps_verified, t.gps_distance_m::float8 AS gps_distance_m`,
       from: `journal_entries t JOIN households h ON h.id = t.household_id`,
       orderBy: "t.entry_on DESC, t.id DESC",
@@ -98,6 +107,22 @@ export class JournalService extends BaseCrudService {
       out.plotCode !== undefined ? (typeof out.plotCode === "string" ? out.plotCode : null) : (existing?.plot_code ?? null);
     if (effectiveHouseholdId > 0 && effectivePlotCode) {
       out.plotCode = await assertPlotOwned(this.db, effectiveHouseholdId, effectivePlotCode);
+    }
+
+    const rawPhotoIds = [
+      ...(Array.isArray(out.photoIds) ? (out.photoIds as number[]) : []),
+      ...(typeof out.photoId === "number" && out.photoId > 0 ? [out.photoId] : []),
+    ];
+    if (rawPhotoIds.length > 0) {
+      const media = await this.uploads.assertUsableDetailed(
+        rawPhotoIds,
+        context.user,
+        "journal",
+        effectiveHouseholdId > 0 ? effectiveHouseholdId : null,
+      );
+      out.photoId = media.primaryId;
+      out.photoIds = media.ids;
+      out.hasPhoto = true;
     }
 
     if (

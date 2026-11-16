@@ -19,7 +19,9 @@ import type { CreateHarvestDeclarationDto } from "./harvest.dto";
 const DECLARATION_COLUMNS = `d.id, d.plot_code, d.harvested_on, d.weight_kg, d.grade_a_kg, d.grade_b_kg,
   d.quality_rating, d.status, d.review_note, d.reviewed_at,
   coalesce(${attachmentUrlSql("d.photo_id")}, d.photo_url) AS photo_url,
-  d.note, d.created_at`;
+  d.note, d.created_at,
+  to_char(d.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
+  GREATEST(0, ((d.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - d.harvested_on))::int AS late_declaration_days`;
 
 /** Sản lượng đóng góp theo lô và khai báo thu hái tại vườn của hộ. */
 @Injectable()

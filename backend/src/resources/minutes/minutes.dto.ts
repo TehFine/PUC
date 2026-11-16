@@ -1,5 +1,6 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsIn, IsNumber, IsOptional, Max, Min } from "class-validator";
+import { Type } from "class-transformer";
+import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsOptional, Max, Min } from "class-validator";
 import { IsoDate, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateMinuteDto {
@@ -32,6 +33,14 @@ export class CreateMinuteDto {
   @IsOptional()
   @RecordId()
   photoId?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8, { message: "Tối đa 8 ảnh hoặc video hiện trường kiểm tra." })
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  photoIds?: number[];
 
   @IsOptional()
   @IsNumber({ allowNaN: false, allowInfinity: false })

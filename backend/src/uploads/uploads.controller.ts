@@ -16,7 +16,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { Throttle } from "@nestjs/throttler";
+import { SkipThrottle, Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
 import { memoryStorage } from "multer";
 import { finalize, type Observable } from "rxjs";
@@ -24,6 +24,7 @@ import type { AuthUser } from "../auth/auth-user";
 import { CurrentUser, Public } from "../auth/auth.decorators";
 import { AppException, notFound } from "../common/errors/app.exception";
 import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
+import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import { UploadDto } from "./upload.dto";
 import { type AttachmentRow, UploadsService } from "./uploads.service";
 
@@ -109,6 +110,16 @@ async function streamAttachment(
   req: Request,
   res: Response,
 ): Promise<StreamableFile> {
+  const cachedDiskSize = uploads.getVerifiedDiskSize(attachment.id);
+  if (cachedDiskSize !== undefined) {
+    const cachedEtag = `"att-${attachment.public_token}-${cachedDiskSize}"`;
+    if (req.headers["if-none-match"] === cachedEtag) {
+      applySafeFileHeaders(res, attachment, cachedDiskSize);
+      res.status(304);
+      return new StreamableFile(Buffer.alloc(0));
+    }
+  }
+
   const opened = await uploads.openFile(attachment);
   const total = opened.totalBytes;
   applySafeFileHeaders(res, attachment, total);
@@ -145,7 +156,7 @@ export class UploadsController {
 
   /** Tải một tệp lên (multipart/form-data: `file`, `purpose`). Trả về `{ id, url }` để gắn vào bản ghi nghiệp vụ. */
   @Post("uploads")
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Throttle(RateLimitTier.UPLOAD_WRITE)
   @UseInterceptors(
     UploadConcurrencyInterceptor,
     FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: MULTER_LIMIT_BYTES, files: 1 } }),
@@ -158,34 +169,51 @@ export class UploadsController {
     return this.uploads.save(file, dto.purpose, user);
   }
 
-  /** Xem tệp nội bộ (bắt buộc đăng nhập, đúng phạm vi hộ/thôn, không lưu bộ đệm trình duyệt dùng chung). */
-  @Get("uploads/:id")
+  /**
+   * Xem tệp nội bộ (bắt buộc đăng nhập, đúng phạm vi hộ/thôn).
+   * Cho phép trình duyệt lưu bản đệm riêng tư (`private, no-cache`) nhưng bắt buộc xác thực lại qua ETag (`304 Not Modified`)
+   * ở mỗi lần mở trang để tiết kiệm băng thông 3G/4G mà vẫn đảm bảo phân quyền chặt chẽ trên máy dùng chung.
+   */
+  @SkipThrottle({ burst: true })
+  @Throttle(RateLimitTier.MEDIA_READ)
+  @Get(["uploads/:id", "uploads/:id/:mediaHint"])
   async download(
     @Param("id", ParseRecordIdPipe) id: number,
+    @Param("mediaHint") mediaHint: string | undefined,
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    if (mediaHint !== undefined && !/^[A-Za-z0-9._-]{1,40}$/.test(mediaHint)) {
+      throw notFound();
+    }
     const attachment = await findOr404(this.uploads, id);
     await this.uploads.assertReadable(attachment, user);
-    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Cache-Control", "private, no-cache");
+    res.setHeader("Vary", "Cookie");
     return streamAttachment(this.uploads, attachment, req, res);
   }
 
   /** Tệp công khai truy cập bằng token ngẫu nhiên 20 ký tự (chống dò quét ID tuần tự và chặn bản nháp). */
   @Public()
-  @Get("public/files/:token")
+  @SkipThrottle({ burst: true })
+  @Throttle(RateLimitTier.PUBLIC_MEDIA_READ)
+  @Get(["public/files/:token", "public/files/:token/:mediaHint"])
   async publicFile(
     @Param("token") token: string,
+    @Param("mediaHint") mediaHint: string | undefined,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    if (mediaHint !== undefined && !/^[A-Za-z0-9._-]{1,40}$/.test(mediaHint)) {
+      throw notFound();
+    }
     const attachment = await this.uploads.findPublicByToken(token);
     if (!attachment) throw notFound();
-    if (attachment.purpose === "news" || attachment.purpose === "catalog") {
-      res.setHeader("Cache-Control", "public, max-age=86400");
+    if (attachment.purpose === "lab") {
+      res.setHeader("Cache-Control", "private, no-cache");
     } else {
-      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Cache-Control", "public, max-age=604800, immutable");
     }
     return streamAttachment(this.uploads, attachment, req, res);
   }

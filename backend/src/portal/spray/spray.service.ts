@@ -17,7 +17,10 @@ function diffCalendarDays(laterIso: string, earlierIso: string): number {
 
 const SPRAY_COLUMNS = `s.id, s.sprayed_on, s.plot_code, s.pesticide_id, p.name AS pesticide, p.status AS pesticide_status, s.source,
   s.dose, s.area_ha, s.isolation_days, (s.sprayed_on + s.isolation_days) AS isolation_ends_on, s.mrl_status, s.created_at,
-  s.server_recorded_at, s.entry_delay_hours::float8 AS entry_delay_hours, s.is_late_entry, s.late_reason, s.record_hash,
+  s.server_recorded_at,
+  to_char(s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
+  GREATEST(0, ((s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - s.sprayed_on))::int AS late_declaration_days,
+  s.entry_delay_hours::float8 AS entry_delay_hours, s.is_late_entry, s.late_reason, s.record_hash,
   (s.created_at > now() - interval '24 hours' AND p.status <> 'banned') AS can_delete`;
 
 /** Nhật ký phun thuốc của hộ. */
@@ -80,12 +83,23 @@ export class SprayService {
     );
 
     const id = rows[0].id;
+    if (backdatedDays >= 1) {
+      const [sy, sm, sd] = sprayedOn.split("-");
+      const [ty, tm, td] = today.split("-");
+      await this.notifications.notifyHousehold(householdId, {
+        kind: "schedule",
+        title: `Ghi nhận khai báo phun thuốc chậm ${backdatedDays} ngày`,
+        body: `${plotCode ? `Thửa ${plotCode}: ` : ""}Đã lưu đồng thời ngày phun ${sd}/${sm}/${sy} và ngày khai báo ${td}/${tm}/${ty}. Thời gian cách ly PHI vẫn tính chính xác từ ngày phun ${sd}/${sm}/${sy}. Lần tới vui lòng cập nhật ngay trong ngày phun.`,
+        link: "/portal?tab=diary&sub=spray",
+      });
+    }
+
     await this.audit.write(
       { ip: context.ip, user },
       {
         action: "Hộ ghi nhật ký phun thuốc",
         object: `Nhật ký phun thuốc #${id}`,
-        detail: `${pesticide.name}${plotCode ? ` – ${plotCode}` : ""}`,
+        detail: `${pesticide.name}${plotCode ? ` - ${plotCode}` : ""} (phun ${sprayedOn}, khai báo ${today}, chậm ${Math.max(0, backdatedDays)} ngày)`,
       },
     );
 

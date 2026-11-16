@@ -4,7 +4,7 @@ import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.
 import { villageScope } from "../../common/crud/village-scope";
 import { badRequest, forbidden } from "../../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../../common/geo/plot-proximity";
-import { publicAttachmentUrlSql } from "../../common/sql/rows";
+import { publicAttachmentUrlSql, publicAttachmentUrlsSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { UploadsService } from "../../uploads/uploads.service";
 
@@ -20,7 +20,9 @@ export class MinutesService extends BaseCrudService {
       label: "Biên bản kiểm tra",
       table: "inspection_minutes",
       fields: `t.id, t.code, t.held_on, t.location, t.officer, t.result,
-        t.plot_code, t.household_id, t.village_id, t.photo_id, ${publicAttachmentUrlSql("t.photo_id")} AS photo_url,
+        t.plot_code, t.household_id, t.village_id, t.photo_id, t.photo_ids,
+        ${publicAttachmentUrlSql("t.photo_id")} AS photo_url,
+        ${publicAttachmentUrlsSql("t.photo_ids", "t.photo_id")} AS photo_urls,
         t.latitude::float8 AS latitude, t.longitude::float8 AS longitude,
         t.gps_verified, t.gps_distance_m::float8 AS gps_distance_m,
         t.server_recorded_at, t.entry_delay_hours::float8 AS entry_delay_hours,
@@ -179,17 +181,22 @@ export class MinutesService extends BaseCrudService {
       out.villageId = await this.matchExactVillageInLocation(effLocation);
     }
 
-    if (out.photoId !== undefined) {
-      if (out.photoId === null) {
+    if (out.photoIds !== undefined || out.photoId !== undefined) {
+      const explicitArray = Array.isArray(out.photoIds) ? (out.photoIds as number[]) : undefined;
+      const single = out.photoId !== undefined && out.photoId !== null ? Number(out.photoId) : null;
+      const rawIds = explicitArray !== undefined ? explicitArray : single !== null ? [single] : [];
+      if (rawIds.length === 0) {
         out.photoId = null;
+        out.photoIds = [];
       } else {
-        const [validId] = await this.uploads.assertUsable(
-          [Number(out.photoId)],
+        const media = await this.uploads.assertUsableDetailed(
+          rawIds,
           context.user,
           "inspection",
           effHouseholdId,
         );
-        out.photoId = validId ?? null;
+        out.photoId = media.primaryId;
+        out.photoIds = media.ids;
       }
     }
 

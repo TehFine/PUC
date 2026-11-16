@@ -140,7 +140,7 @@ function rowToFeature(row: PlotRow): PlotFeature {
 }
 
 const MAX_RINGS_PER_POLYGON = 32;
-const MAX_POINTS_PER_RING = 2000;
+const MAX_POINTS_PER_RING = 5000;
 const VN_MIN_LNG = 102.0;
 const VN_MAX_LNG = 110.5;
 const VN_MIN_LAT = 8.0;
@@ -166,7 +166,7 @@ function normalizeGeometry(geometry: unknown): Polygon {
     if (ring.length > MAX_POINTS_PER_RING) {
       throw new PlotInputError(`Mỗi vòng polygon không được vượt quá ${MAX_POINTS_PER_RING} điểm.`);
     }
-    const positions = ring.map((position) => {
+    const rawPositions = ring.map((position) => {
       if (!Array.isArray(position) || position.length < 2) {
         throw new PlotInputError("Tọa độ polygon không hợp lệ.");
       }
@@ -180,13 +180,25 @@ function normalizeGeometry(geometry: unknown): Polygon {
       }
       return [lng, lat];
     });
-    const first = positions[0];
-    const last = positions[positions.length - 1];
-    if (first[0] !== last[0] || first[1] !== last[1]) {
-      positions.push([first[0], first[1]]);
+    // Loại bỏ các điểm bấm đúp trùng nhau liên tiếp (khoảng cách < ~1mm) để tránh gãy ST_IsValid
+    const positions: number[][] = [];
+    for (const pt of rawPositions) {
+      const prev = positions[positions.length - 1];
+      if (!prev || Math.abs(prev[0] - pt[0]) > 1e-8 || Math.abs(prev[1] - pt[1]) > 1e-8) {
+        positions.push(pt);
+      }
+    }
+    if (positions.length > 1) {
+      const first = positions[0];
+      const last = positions[positions.length - 1];
+      if (Math.abs(first[0] - last[0]) <= 1e-8 && Math.abs(first[1] - last[1]) <= 1e-8) {
+        positions[positions.length - 1] = [first[0], first[1]];
+      } else {
+        positions.push([first[0], first[1]]);
+      }
     }
     if (positions.length < 4) {
-      throw new PlotInputError("Polygon cần ít nhất 3 điểm và phải khép kín.");
+      throw new PlotInputError("Polygon cần ít nhất 3 điểm phân biệt và phải khép kín.");
     }
     totalVertices += positions.length;
     if (totalVertices > MAX_POINTS_PER_RING) {
@@ -239,7 +251,36 @@ function toProperties(input: CreatePlotInput, geometry: Polygon): PlotProperties
 
 @Injectable()
 export class PlotsService {
+  private plotsTableExists: Promise<boolean> | null = null;
+  private signboardTableExists: Promise<boolean> | null = null;
+
   constructor(private readonly db: DatabaseService) {}
+
+  private hasPlotsTable(): Promise<boolean> {
+    if (!this.plotsTableExists) {
+      this.plotsTableExists = this.db
+        .query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")
+        .then((res) => res.rows[0]?.reg !== null)
+        .catch((err: unknown) => {
+          this.plotsTableExists = null;
+          throw err;
+        });
+    }
+    return this.plotsTableExists;
+  }
+
+  private hasSignboardTable(): Promise<boolean> {
+    if (!this.signboardTableExists) {
+      this.signboardTableExists = this.db
+        .query<{ reg: string | null }>("SELECT to_regclass('public.plot_signboard_tokens') AS reg")
+        .then((res) => res.rows[0]?.reg !== null)
+        .catch((err: unknown) => {
+          this.signboardTableExists = null;
+          throw err;
+        });
+    }
+    return this.signboardTableExists;
+  }
 
   /** Nếu là cán bộ thôn thì trả về tên thôn được phân công; các vai trò khác trả về null (không giới hạn thôn). */
   private async resolveScopedVillageName(user?: AuthUser): Promise<string | null> {
@@ -250,69 +291,74 @@ export class PlotsService {
   }
 
   async listPlots(user?: AuthUser): Promise<PlotCollection> {
-    const scopedVillage = await this.resolveScopedVillageName(user);
-    if (scopedVillage === "") {
-      return { type: "FeatureCollection", features: [] };
-    }
-    const hasPlots = (await this.db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")).rows[0]?.reg;
-    if (!hasPlots) {
-      const hasSign = (
-        await this.db.query<{ reg: string | null }>("SELECT to_regclass('public.plot_signboard_tokens') AS reg")
-      ).rows[0]?.reg;
-      if (!hasSign) return { type: "FeatureCollection", features: [] };
-      const paramsFb: unknown[] = [];
-      const whereFb = scopedVillage !== null ? (paramsFb.push(scopedVillage), "AND pst.village_name = $1") : "";
-      const { rows: fbRows } = await this.db.query<PlotRow>(
-        `SELECT ROW_NUMBER() OVER (ORDER BY pst.plot_code)::int AS id,
-                pst.plot_code AS code,
-                ''::text AS sheet,
-                ''::text AS parcel,
-                COALESCE(h.name, '') AS owner,
-                COALESCE(pst.village_name, '') AS village,
-                COALESCE(pst.zone_code, 'VN-DLOR-0086') AS zone,
-                COALESCE(pst.variety, 'Ri6 & Monthong (Dona)') AS variety,
-                pst.planted_year AS year,
-                pst.area_ha,
-                'declared'::text AS source,
-                'approved'::text AS status,
-                NULL::text AS source_ref,
-                pst.household_id,
-                pst.qr_token,
-                COALESCE(psq.tree_count, pst.tree_count) AS tree_count,
-                psq.max_quota_kg AS season_quota_kg,
-                pst.center_lat AS lat,
-                pst.center_lng AS lng,
-                pst.geometry_json
-         FROM plot_signboard_tokens pst
-         LEFT JOIN households h ON h.id = pst.household_id
-         LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(pst.plot_code)
-         WHERE pst.geometry_json IS NOT NULL ${whereFb}
-         ORDER BY pst.zone_code, pst.plot_code`,
-        paramsFb,
+    const scopeKey =
+      user?.role === "village_officer" ? `v:${user.villageId ?? "none"}` : "all";
+    const loadCollection = async (): Promise<PlotCollection> => {
+      const scopedVillage = await this.resolveScopedVillageName(user);
+      if (scopedVillage === "") {
+        return { type: "FeatureCollection", features: [] };
+      }
+      const hasPlots = await this.hasPlotsTable();
+      if (!hasPlots) {
+        const hasSign = await this.hasSignboardTable();
+        if (!hasSign) return { type: "FeatureCollection", features: [] };
+        const paramsFb: unknown[] = [];
+        const whereFb = scopedVillage !== null ? (paramsFb.push(scopedVillage), "AND pst.village_name = $1") : "";
+        const { rows: fbRows } = await this.db.query<PlotRow>(
+          `SELECT ROW_NUMBER() OVER (ORDER BY pst.plot_code)::int AS id,
+                  pst.plot_code AS code,
+                  ''::text AS sheet,
+                  ''::text AS parcel,
+                  COALESCE(h.name, '') AS owner,
+                  COALESCE(pst.village_name, '') AS village,
+                  COALESCE(pst.zone_code, 'VN-DLOR-0086') AS zone,
+                  COALESCE(pst.variety, 'Ri6 & Monthong (Dona)') AS variety,
+                  pst.planted_year AS year,
+                  pst.area_ha,
+                  'declared'::text AS source,
+                  'approved'::text AS status,
+                  NULL::text AS source_ref,
+                  pst.household_id,
+                  pst.qr_token,
+                  COALESCE(psq.tree_count, pst.tree_count) AS tree_count,
+                  psq.max_quota_kg AS season_quota_kg,
+                  pst.center_lat AS lat,
+                  pst.center_lng AS lng,
+                  pst.geometry_json
+           FROM plot_signboard_tokens pst
+           LEFT JOIN households h ON h.id = pst.household_id
+           LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(pst.plot_code)
+           WHERE pst.geometry_json IS NOT NULL ${whereFb}
+           ORDER BY pst.zone_code, pst.plot_code`,
+          paramsFb,
+        );
+        return { type: "FeatureCollection", features: fbRows.map(rowToFeature) };
+      }
+      const params: unknown[] = [];
+      const where = scopedVillage !== null ? (params.push(scopedVillage), "WHERE p.village = $1") : "";
+      const { rows } = await this.db.query<PlotRow>(
+        `
+          SELECT p.id, p.code, p.sheet_no AS sheet, p.parcel_no AS parcel, p.owner_name AS owner,
+                 p.village, p.zone_code AS zone, p.variety, p.planted_year AS year, p.area_ha,
+                 p.source, p.status, p.source_ref, p.household_id,
+                 COALESCE(p.qr_token, pst.qr_token) AS qr_token,
+                 COALESCE(psq.tree_count, p.tree_count, pst.tree_count) AS tree_count,
+                 COALESCE(psq.max_quota_kg, p.season_quota_kg) AS season_quota_kg,
+                 ST_Y(ST_Centroid(p.geom)) AS lat, ST_X(ST_Centroid(p.geom)) AS lng,
+                 ST_AsGeoJSON(p.geom) AS geometry_json
+          FROM plots p
+          LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
+          LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(p.code)
+          ${where}
+          ORDER BY p.zone_code, p.code
+        `,
+        params,
       );
-      return { type: "FeatureCollection", features: fbRows.map(rowToFeature) };
-    }
-    const params: unknown[] = [];
-    const where = scopedVillage !== null ? (params.push(scopedVillage), "WHERE p.village = $1") : "";
-    const { rows } = await this.db.query<PlotRow>(
-      `
-        SELECT p.id, p.code, p.sheet_no AS sheet, p.parcel_no AS parcel, p.owner_name AS owner,
-               p.village, p.zone_code AS zone, p.variety, p.planted_year AS year, p.area_ha,
-               p.source, p.status, p.source_ref, p.household_id,
-               COALESCE(p.qr_token, pst.qr_token) AS qr_token,
-               COALESCE(psq.tree_count, p.tree_count, pst.tree_count) AS tree_count,
-               COALESCE(psq.max_quota_kg, p.season_quota_kg) AS season_quota_kg,
-               ST_Y(ST_Centroid(p.geom)) AS lat, ST_X(ST_Centroid(p.geom)) AS lng,
-               ST_AsGeoJSON(p.geom) AS geometry_json
-        FROM plots p
-        LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
-        LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(p.code)
-        ${where}
-        ORDER BY p.zone_code, p.code
-      `,
-      params,
-    );
-    return { type: "FeatureCollection", features: rows.map(rowToFeature) };
+      return { type: "FeatureCollection", features: rows.map(rowToFeature) };
+    };
+
+    if (!this.db.cache) return loadCollection();
+    return this.db.cache.getOrLoad(`plots:list:${scopeKey}`, 30_000, ["plots"], loadCollection);
   }
 
   /** Kiểm định hình học PostGIS: ST_IsValid, ST_NPoints <= 2000 và ST_Area(geom::geography)/10000 trong [0.005, 500] ha. */
@@ -494,6 +540,29 @@ export class PlotsService {
         `,
         [code, JSON.stringify(geometry), Boolean(updateArea), computedAreaHa],
       );
+
+      await client.query("SAVEPOINT sp_sync_signboard");
+      try {
+        await client.query(
+          `UPDATE plot_signboard_tokens
+           SET geometry_json = $2,
+               center_lat = $3,
+               center_lng = $4,
+               area_ha = CASE WHEN $5::boolean THEN $6::numeric ELSE area_ha END
+           WHERE upper(plot_code) = upper($1)`,
+          [
+            code,
+            rows[0].geometry_json,
+            rows[0].lat ?? null,
+            rows[0].lng ?? null,
+            Boolean(updateArea),
+            computedAreaHa,
+          ],
+        );
+        await client.query("RELEASE SAVEPOINT sp_sync_signboard");
+      } catch {
+        await client.query("ROLLBACK TO SAVEPOINT sp_sync_signboard");
+      }
 
       if (updateArea) {
         const hhId = existing.rows[0].household_id != null ? Number(existing.rows[0].household_id) : null;

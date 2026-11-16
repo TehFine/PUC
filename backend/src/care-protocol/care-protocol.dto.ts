@@ -105,16 +105,33 @@ export class DeclareCareMilestoneDto {
   @MaxLength(120)
   pesticideDose?: string;
 
+  @IsOptional()
   @Type(() => Number)
-  @IsInt({ message: "Vui lòng chụp ảnh hiện trường vườn." })
+  @IsInt({ message: "Mã ảnh hiện trường không hợp lệ." })
   @Min(1)
-  fieldPhotoId!: number;
+  fieldPhotoId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8, { message: "Tối đa 8 ảnh hoặc video hiện trường cho mỗi lần khai báo." })
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  fieldPhotoIds?: number[];
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   invoicePhotoId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(6, { message: "Tối đa 6 ảnh hóa đơn hoặc bao bì vật tư." })
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  invoicePhotoIds?: number[];
 
   @IsOptional()
   @Type(() => Number)
@@ -132,8 +149,13 @@ export class DeclareCareMilestoneDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(600)
   farmerNote?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(250)
+  lateReason?: string;
 }
 
 export class CareProtocolListQueryDto {

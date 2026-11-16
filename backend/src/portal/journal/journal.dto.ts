@@ -1,4 +1,5 @@
-import { IsIn } from "class-validator";
+import { Type } from "class-transformer";
+import { ArrayMaxSize, IsArray, IsIn, IsInt, Min } from "class-validator";
 import { RecordId, IsoDate, OptionalField, OptionalText, Text } from "../../common/validation/fields";
 import { OptionalAttachmentId, OptionalNumberIn } from "../common/portal-fields";
 
@@ -17,9 +18,19 @@ export class CreatePortalJournalDto {
   @OptionalText(500)
   detail?: string | null;
 
-  /** Id tệp ảnh đã tải lên qua `POST /api/uploads` với `purpose = journal`. */
+  /** Id tệp ảnh đại diện đã tải lên qua `POST /api/uploads` với `purpose = journal`. */
+  @OptionalField()
   @RecordId()
-  photoId!: number;
+  photoId?: number;
+
+  /** Danh sách nhiều ảnh hoặc video hiện trường đã tải lên (tối đa 8 tệp). */
+  @OptionalField()
+  @IsArray()
+  @ArrayMaxSize(8, { message: "Tối đa 8 ảnh hoặc video hiện trường cho mỗi bản ghi nhật ký." })
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  photoIds?: number[];
 
   @OptionalNumberIn(-90, 90)
   latitude?: number | null;
@@ -35,11 +46,19 @@ export class CreatePortalJournalDto {
   lateReason?: string | null;
 }
 
-/** Hộ báo đã khắc phục cảnh báo / vi phạm nhật ký canh tác (kèm ảnh tùy chọn, tải lên với `purpose = violation`). */
+/** Hộ báo đã khắc phục cảnh báo / vi phạm nhật ký canh tác (kèm một hoặc nhiều ảnh/video, tải lên với `purpose = violation`). */
 export class ViolationResponseDto {
   @Text(1000)
   note!: string;
 
   @OptionalAttachmentId()
   photoId?: number | null;
+
+  @OptionalField()
+  @IsArray()
+  @ArrayMaxSize(6, { message: "Tối đa 6 ảnh hoặc video minh chứng khắc phục." })
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  photoIds?: number[];
 }
