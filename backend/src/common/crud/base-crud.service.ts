@@ -41,6 +41,8 @@ const mapRow = (row: Record<string, unknown>) =>
 
 // Tên trường đi vào câu SQL chỉ được là chữ cái (DTO đã loại trường lạ; đây là lớp chặn thứ hai).
 const SAFE_FIELD = /^[a-zA-Z]+$/;
+const GLOBAL_CATALOG_TABLES = new Set(["pesticides", "fertilizers", "varieties", "villages"]);
+const CATALOG_LIST_CACHE_TTL_MS = 60_000;
 
 /**
  * Dịch vụ CRUD dùng chung cho các nhóm dữ liệu: phân trang, tìm kiếm, lọc, phạm vi theo người dùng,
@@ -100,28 +102,42 @@ export abstract class BaseCrudService {
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const { rows } = await this.db.query<Record<string, unknown> & { __total_count?: number }>(
-      `SELECT ${config.fields}, count(*) OVER()::int AS __total_count
-       FROM ${config.from} ${where}
-       ORDER BY ${config.orderBy}
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, pageSize, (page - 1) * pageSize],
-    );
+    const runListQuery = async () => {
+      const { rows } = await this.db.query<Record<string, unknown> & { __total_count?: number }>(
+        `SELECT ${config.fields}, count(*) OVER()::int AS __total_count
+         FROM ${config.from} ${where}
+         ORDER BY ${config.orderBy}
+         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, pageSize, (page - 1) * pageSize],
+      );
 
-    let total = 0;
-    if (rows.length > 0) {
-      total = Number(rows[0].__total_count ?? 0);
-    } else if (page > 1) {
-      total = (
-        await this.db.query<{ total: number }>(`SELECT count(*)::int AS total FROM ${config.from} ${where}`, params)
-      ).rows[0].total;
+      let total = 0;
+      if (rows.length > 0) {
+        total = Number(rows[0].__total_count ?? 0);
+      } else if (page > 1) {
+        total = (
+          await this.db.query<{ total: number }>(`SELECT count(*)::int AS total FROM ${config.from} ${where}`, params)
+        ).rows[0].total;
+      }
+
+      const data = rows.map((row) => {
+        const { __total_count: _ignored, ...rest } = row;
+        return mapRow(rest);
+      });
+      return { data, total, page, pageSize };
+    };
+
+    if (
+      this.db.cache &&
+      !config.scope &&
+      !config.searchFor &&
+      GLOBAL_CATALOG_TABLES.has(config.table)
+    ) {
+      const cacheKey = `crud:${config.table}:p=${page}:ps=${pageSize}:w=${where}:v=${JSON.stringify(params)}`;
+      return this.db.cache.getOrLoad(cacheKey, CATALOG_LIST_CACHE_TTL_MS, ["catalog"], runListQuery);
     }
 
-    const data = rows.map((row) => {
-      const { __total_count: _ignored, ...rest } = row;
-      return mapRow(rest);
-    });
-    return { data, total, page, pageSize };
+    return runListQuery();
   }
 
   async findOne(id: number, user: AuthUser) {

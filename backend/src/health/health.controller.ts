@@ -1,7 +1,9 @@
 import { Controller, Get, Optional, Res } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
 import type { AuthUser } from "../auth/auth-user";
-import { CurrentUser, OptionalAuth } from "../auth/auth.decorators";
+import { CurrentUser, OptionalAuth, Public } from "../auth/auth.decorators";
+import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../database/database.service";
 import { SystemAlertsService } from "../notifications/system-alerts.service";
 
@@ -12,7 +14,9 @@ export class HealthController {
     @Optional() private readonly systemAlerts?: SystemAlertsService,
   ) {}
 
+  @Public()
   @OptionalAuth()
+  @Throttle(RateLimitTier.PUBLIC_READ)
   @Get()
   async check(@CurrentUser() user: AuthUser | undefined, @Res({ passthrough: true }) res: Response) {
     try {

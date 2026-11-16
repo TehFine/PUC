@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Ip, Param, Patch, Post, Req, R
 import { Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
 import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
+import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import type { AuthUser } from "./auth-user";
 import { CurrentUser, Public } from "./auth.decorators";
 import { AuthService, RefreshRejected } from "./auth.service";
@@ -19,21 +20,6 @@ import {
 } from "./dto/auth.dto";
 import { ACCESS_COOKIE, REFRESH_COOKIE, TokensService } from "./tokens.service";
 
-// Giới hạn chặt hơn cho đăng nhập (nới ra khi chạy test).
-const LOGIN_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 20;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const OTP_VERIFY_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 12;
-// Đăng ký: tối đa 5 lần/giờ cho mỗi IP để chống tạo tài khoản rác hàng loạt.
-const REGISTER_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 5;
-const REGISTER_WINDOW_MS = 60 * 60 * 1000;
-// Làm mới phiên: giới hạn 30 lần/phút mỗi IP.
-const REFRESH_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 30;
-const REFRESH_WINDOW_MS = 60 * 1000;
-// Đổi mật khẩu: giới hạn 10 lần/15 phút để chống dò mật khẩu hiện tại.
-const CHANGE_PASSWORD_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 10;
-// Quên mật khẩu: giới hạn 8 lần/15 phút mỗi IP để chống dò số CCCD hoặc gửi yêu cầu rác.
-const FORGOT_PASSWORD_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 8;
-
 @Controller("auth")
 export class AuthController {
   constructor(
@@ -42,7 +28,7 @@ export class AuthController {
   ) {}
 
   @Public()
-  @Throttle({ default: { limit: LOGIN_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_LOGIN)
   @Post("login")
   @HttpCode(200)
   async login(@Body() dto: LoginDto, @Req() req: Request, @Ip() ip: string, @Res({ passthrough: true }) res: Response) {
@@ -56,7 +42,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: OTP_VERIFY_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_OTP)
   @Post("verify-otp")
   @HttpCode(200)
   async verifyOtp(
@@ -71,13 +57,14 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(RateLimitTier.PUBLIC_READ)
   @Get("google/config")
   googleConfig() {
     return this.auth.googleConfig();
   }
 
   @Public()
-  @Throttle({ default: { limit: LOGIN_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_LOGIN)
   @Post("google")
   @HttpCode(200)
   async loginWithGoogle(
@@ -96,14 +83,14 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: REGISTER_LIMIT, ttl: REGISTER_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_REGISTER)
   @Post("register")
   async register(@Body() dto: RegisterDto, @Req() req: Request, @Ip() ip: string) {
     return this.auth.register(dto, { ip, userAgent: req.get("user-agent") });
   }
 
   @Public()
-  @Throttle({ default: { limit: REFRESH_LIMIT, ttl: REFRESH_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_SESSION)
   @Post("refresh")
   @HttpCode(200)
   async refresh(@Req() req: Request, @Ip() ip: string, @Res({ passthrough: true }) res: Response) {
@@ -121,6 +108,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(RateLimitTier.AUTH_SESSION)
   @Post("logout")
   @HttpCode(200)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -142,7 +130,7 @@ export class AuthController {
     return this.auth.updateProfile(user, dto, ip);
   }
 
-  @Throttle({ default: { limit: CHANGE_PASSWORD_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_SENSITIVE_ACCOUNT)
   @Post("change-password")
   @HttpCode(200)
   async changePassword(
@@ -157,7 +145,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: FORGOT_PASSWORD_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_FORGOT_PASSWORD)
   @Post("forgot-password/verify-cccd")
   @HttpCode(200)
   async resetPasswordWithCccd(@Body() dto: ForgotPasswordCccdDto, @Req() req: Request, @Ip() ip: string) {
@@ -165,27 +153,28 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: FORGOT_PASSWORD_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_FORGOT_PASSWORD)
   @Post("forgot-password/request")
   @HttpCode(200)
   async requestPasswordReset(@Body() dto: ForgotPasswordRequestDto, @Req() req: Request, @Ip() ip: string) {
     return this.auth.requestPasswordReset(dto, { ip, userAgent: req.get("user-agent") });
   }
 
+  @Throttle(RateLimitTier.AUTH_SENSITIVE_ACCOUNT)
   @Post("2fa/setup")
   @HttpCode(200)
   setupTwoFactor(@CurrentUser() user: AuthUser) {
     return this.auth.setupTwoFactor(user);
   }
 
-  @Throttle({ default: { limit: OTP_VERIFY_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_OTP)
   @Post("2fa/enable")
   @HttpCode(200)
   enableTwoFactor(@CurrentUser() user: AuthUser, @Body() dto: EnableTwoFactorDto, @Ip() ip: string) {
     return this.auth.enableTwoFactor(user, dto, ip);
   }
 
-  @Throttle({ default: { limit: CHANGE_PASSWORD_LIMIT, ttl: LOGIN_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_SENSITIVE_ACCOUNT)
   @Post("2fa/disable")
   @HttpCode(200)
   disableTwoFactor(@CurrentUser() user: AuthUser, @Body() dto: DisableTwoFactorDto, @Ip() ip: string) {

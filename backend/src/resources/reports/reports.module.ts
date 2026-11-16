@@ -5,6 +5,7 @@ import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { AuditService } from "../../audit/audit.service";
 import { badRequest, forbidden } from "../../common/errors/app.exception";
+import { RateLimitTier } from "../../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../../database/database.service";
 
 function maskReportCccd(value: unknown): string {
@@ -27,7 +28,6 @@ export type ReportType = (typeof REPORT_TYPES)[number];
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_EXPORT_ROWS = 10_000;
-const EXPORT_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 30;
 
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -539,7 +539,7 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   @Get(":type")
-  @Throttle({ default: { limit: EXPORT_LIMIT, ttl: 60_000 } })
+  @Throttle(RateLimitTier.REPORT_EXPORT)
   @Authorize("reports", "read")
   async exportReport(
     @Param("type") type: string,

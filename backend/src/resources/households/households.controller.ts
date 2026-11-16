@@ -4,6 +4,7 @@ import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { CrudController } from "../../common/crud/crud-controller.factory";
 import { ParseRecordIdPipe } from "../../common/pipes/validation.pipes";
+import { RateLimitTier } from "../../common/throttler/rate-limit.policy";
 import { CreateHouseholdDto, ImportHouseholdsDto, IssueHouseholdAccountDto, UpdateHouseholdDto } from "./households.dto";
 import { HouseholdsService } from "./households.service";
 
@@ -15,7 +16,7 @@ export class HouseholdsController extends CrudController("households", CreateHou
 
   /** Nhập danh sách hộ (cập nhật theo `code`): `{ created, updated, errors: [{ row, message }] }`. */
   @Post("import")
-  @Throttle({ default: { limit: process.env.NODE_ENV === "test" ? 1000 : 10, ttl: 60_000 } })
+  @Throttle(RateLimitTier.BULK_MUTATION)
   @HttpCode(200)
   @Authorize("households", "create")
   import(@Body() dto: ImportHouseholdsDto, @CurrentUser() user: AuthUser, @Ip() ip: string) {
@@ -24,6 +25,7 @@ export class HouseholdsController extends CrudController("households", CreateHou
 
   /** Ban hành hoặc cấp lại tài khoản đăng nhập cho hộ nông dân sau khi đã thiết lập hồ sơ hộ. */
   @Post(":id/issue-account")
+  @Throttle(RateLimitTier.ACCOUNT_ISSUE)
   @HttpCode(200)
   @Authorize("households", "update")
   issueAccount(

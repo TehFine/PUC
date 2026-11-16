@@ -1,8 +1,26 @@
+import { createHash } from "node:crypto";
 import { constants as zlibConstants, gzip as zlibGzip } from "node:zlib";
 import type { NextFunction, Request, Response } from "express";
 
 const MIN_COMPRESS_BYTES = 1024;
 const COMPRESSIBLE_CONTENT_TYPE = /^(?:application\/(?:json|geo\+json|problem\+json)|text\/|image\/svg\+xml)\b/i;
+
+function computeWeakEtag(buf: Buffer): string {
+  const digest = createHash("sha1").update(buf).digest("base64url").slice(0, 20);
+  return `W/"${buf.byteLength.toString(16)}-${digest}"`;
+}
+
+function matchesIfNoneMatch(header: string | string[] | undefined, etag: string): boolean {
+  if (!header) return false;
+  const raw = Array.isArray(header) ? header.join(",") : header;
+  if (raw.trim() === "*") return true;
+  const normalizeWeak = (token: string) => token.trim().replace(/^W\//i, "");
+  const target = normalizeWeak(etag);
+  for (const part of raw.split(",")) {
+    if (normalizeWeak(part) === target) return true;
+  }
+  return false;
+}
 
 function acceptsGzip(header: string | string[] | undefined): boolean {
   if (!header) return false;
@@ -40,6 +58,28 @@ export function apiCompressionMiddleware(req: Request, res: Response, next: Next
       this.vary("Accept-Encoding");
     }
 
+    let preparedBuf: Buffer | null = null;
+    const isGetOrHead = req.method === "GET" || req.method === "HEAD";
+    if (
+      !this.headersSent &&
+      isGetOrHead &&
+      this.statusCode === 200 &&
+      !req.headers.range &&
+      !this.getHeader("ETag") &&
+      (typeof body === "string" || Buffer.isBuffer(body))
+    ) {
+      preparedBuf = Buffer.isBuffer(body) ? body : Buffer.from(body, "utf8");
+      const etag = computeWeakEtag(preparedBuf);
+      this.setHeader("ETag", etag);
+      if (matchesIfNoneMatch(req.headers["if-none-match"], etag)) {
+        this.status(304);
+        this.removeHeader("Content-Type");
+        this.removeHeader("Content-Length");
+        this.removeHeader("Content-Encoding");
+        return originalSend.call(this, "");
+      }
+    }
+
     if (
       req.method === "HEAD" ||
       req.headers.range ||
@@ -54,7 +94,7 @@ export function apiCompressionMiddleware(req: Request, res: Response, next: Next
       return originalSend.call(this, body);
     }
 
-    const rawBuffer = Buffer.isBuffer(body) ? body : Buffer.from(body, "utf8");
+    const rawBuffer = preparedBuf ?? (Buffer.isBuffer(body) ? body : Buffer.from(body, "utf8"));
     if (rawBuffer.byteLength < MIN_COMPRESS_BYTES) {
       return originalSend.call(this, body);
     }

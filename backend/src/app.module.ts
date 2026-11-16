@@ -1,15 +1,19 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule, ConfigService } from "@nestjs/config";
-import { APP_FILTER, APP_GUARD, APP_PIPE } from "@nestjs/core";
-import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { ConfigModule } from "@nestjs/config";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
 import { OriginGuard } from "./auth/guards/origin.guard";
 import { PermissionsGuard } from "./auth/guards/permissions.guard";
 import { AllExceptionsFilter } from "./common/errors/all-exceptions.filter";
+import { CacheModule } from "./common/cache/cache.module";
+import { IdempotencyInterceptor } from "./common/idempotency/idempotency.interceptor";
+import { IdempotencyModule } from "./common/idempotency/idempotency.module";
 import { AppValidationPipe } from "./common/pipes/validation.pipes";
-import { type AppConfig, configuration } from "./config/configuration";
+import { AppThrottlerGuard } from "./common/throttler/app-throttler.guard";
+import { RateLimitModule } from "./common/throttler/rate-limit.module";
+import { configuration } from "./config/configuration";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
 import { AuthenticatedTraceController, PublicController } from "./public/public.controller";
@@ -25,13 +29,10 @@ import { CareProtocolModule } from "./care-protocol/care-protocol.module";
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration], cache: true }),
-    ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService<AppConfig, true>) => [
-        { ttl: 60_000, limit: config.get("nodeEnv", { infer: true }) === "test" ? 10_000 : 600 },
-      ],
-    }),
+    CacheModule,
+    RateLimitModule,
     DatabaseModule,
+    IdempotencyModule,
     AuditModule,
     UploadsModule,
     NotificationsModule,
@@ -47,11 +48,12 @@ import { CareProtocolModule } from "./care-protocol/care-protocol.module";
     TraceabilityService,
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_PIPE, useClass: AppValidationPipe },
-    // Thứ tự guard: giới hạn tần suất -> chống CSRF -> đăng nhập -> phân quyền.
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Thứ tự guard: giới hạn tần suất đa tầng -> chống CSRF -> đăng nhập -> phân quyền.
+    { provide: APP_GUARD, useClass: AppThrottlerGuard },
     { provide: APP_GUARD, useClass: OriginGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
   ],
 })
 export class AppModule {}

@@ -76,6 +76,36 @@ class EnvironmentVariables {
   @IsInt()
   @Min(1)
   UPLOAD_MAX_MB = 8;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  RATE_LIMIT_BURST_MAX?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  RATE_LIMIT_DEFAULT_MAX?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  RATE_LIMIT_WRITE_MAX?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(100)
+  RATE_LIMIT_MAX_KEYS?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(100)
+  CACHE_MAX_KEYS?: number;
 }
 
 export interface AppConfig {
@@ -91,6 +121,15 @@ export interface AppConfig {
   googleClientId?: string;
   allowDevDemoLogin: boolean;
   uploads: { dir: string; maxBytes: number };
+  rateLimit: {
+    burstMax: number;
+    defaultMax: number;
+    writeMax: number;
+    maxKeys: number;
+  };
+  cache: {
+    maxKeys: number;
+  };
 }
 
 /** Đọc và kiểm tra biến môi trường; ném lỗi liệt kê mọi biến sai để dừng khởi động sớm. */
@@ -187,6 +226,15 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     googleClientId: env.GOOGLE_CLIENT_ID?.trim() || undefined,
     allowDevDemoLogin: !isProduction && env.ALLOW_DEV_DEMO_LOGIN === "true",
     uploads: { dir: env.UPLOAD_DIR, maxBytes: env.UPLOAD_MAX_MB * 1024 * 1024 },
+    rateLimit: {
+      burstMax: env.RATE_LIMIT_BURST_MAX ?? 120,
+      defaultMax: env.RATE_LIMIT_DEFAULT_MAX ?? 240,
+      writeMax: env.RATE_LIMIT_WRITE_MAX ?? 60,
+      maxKeys: env.RATE_LIMIT_MAX_KEYS ?? 25_000,
+    },
+    cache: {
+      maxKeys: env.CACHE_MAX_KEYS ?? 4_000,
+    },
   };
 }
 

@@ -10,6 +10,12 @@ export const REFRESH_COOKIE = "htx_refresh";
 export const JWT_ISSUER = "puc-krongbuk-api";
 export const JWT_AUDIENCE = "puc-krongbuk-client";
 
+export interface VerifiedAccessToken {
+  userId: number;
+  tokenVersion: number;
+  sessionId?: number;
+}
+
 @Injectable()
 export class TokensService {
   private readonly jwtConfig: AppConfig["jwt"];
@@ -37,9 +43,7 @@ export class TokensService {
   }
 
   /** Trả về id người dùng, phiên bản token và mã phiên (nếu có) khi token hợp lệ, ngược lại null. */
-  async verifyAccessToken(
-    token: string,
-  ): Promise<{ userId: number; tokenVersion: number; sessionId?: number } | null> {
+  async verifyAccessToken(token: string): Promise<VerifiedAccessToken | null> {
     try {
       const payload = await this.jwt.verifyAsync<{ sub?: string; ver?: number; sid?: number }>(token, {
         algorithms: ["HS256"],

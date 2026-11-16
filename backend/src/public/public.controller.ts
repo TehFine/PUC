@@ -8,13 +8,9 @@ import { CurrentUser, OptionalAuth, OptionalCurrentUser, Public } from "../auth/
 import { notFound } from "../common/errors/app.exception";
 import { camelRow, camelRows } from "../common/sql/rows";
 import { querySystemScaleOverview } from "../common/sql/stats-sync";
+import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../database/database.service";
 import { TraceabilityService } from "./traceability.service";
-
-const PUBLIC_TRACE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 30;
-const AUTH_TRACE_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 60;
-const GPS_VERIFY_LIMIT = process.env.NODE_ENV === "test" ? 1000 : 10;
-const TRACE_WINDOW_MS = 60_000;
 
 export class VerifyFieldGpsDto {
   @Type(() => Number)
@@ -78,66 +74,79 @@ export class PublicController {
   ) {}
 
   @Public()
+  @Throttle(RateLimitTier.PUBLIC_READ)
   @Get("overview")
   @Header("Cache-Control", "no-cache")
   async overview() {
-    const row = await querySystemScaleOverview(this.db);
-    return camelRow(row);
+    const loadOverview = async () => camelRow(await querySystemScaleOverview(this.db));
+    if (!this.db.cache) return loadOverview();
+    return this.db.cache.getOrLoad("public:overview", 30_000, ["public-overview"], loadOverview);
   }
 
   @Public()
+  @Throttle(RateLimitTier.PUBLIC_READ)
   @Get("catalog")
   @Header("Cache-Control", "no-cache")
   async catalog() {
-    const [pesticides, varieties, fertilizers, training] = await Promise.all([
-      this.db.query(
-        `SELECT name, active_ingredient, concentration, manufacturer, mrl_mg_kg, isolation_days, status
-         FROM pesticides ORDER BY CASE status WHEN 'banned' THEN 0 WHEN 'restricted' THEN 1 ELSE 2 END, name`,
-      ),
-      this.db.query(
-        `SELECT name, origin, weight_range, harvest_years, description, category, status,
-                flesh_color, seed_rate, brix, yield_per_ha, image_url, market_potential,
-                morphology, farming_techniques
-         FROM varieties ORDER BY name`,
-      ),
-      this.db.query(
-        `SELECT name, category, formula, manufacturer, dosage, application_method, timing,
-                status, image_url, description
-         FROM fertilizers ORDER BY id`,
-      ),
-      this.db.query(
-        `SELECT title, held_on, to_char(starts_at, 'HH24:MI') AS starts_at,
-                to_char(ends_at, 'HH24:MI') AS ends_at, location, trainer, description, capacity, enrolled
-         FROM training_courses
-         WHERE completed = false AND held_on IS NOT NULL ORDER BY held_on ASC LIMIT 6`,
-      ),
-    ]);
-    const upcomingTraining = camelRows(training.rows);
-    return {
-      pesticides: camelRows(pesticides.rows),
-      varieties: camelRows(varieties.rows),
-      fertilizers: camelRows(fertilizers.rows),
-      training: upcomingTraining,
-      upcomingTraining,
+    const loadCatalog = async () => {
+      const [pesticides, varieties, fertilizers, training] = await Promise.all([
+        this.db.query(
+          `SELECT name, active_ingredient, concentration, manufacturer, mrl_mg_kg, isolation_days, status
+           FROM pesticides ORDER BY CASE status WHEN 'banned' THEN 0 WHEN 'restricted' THEN 1 ELSE 2 END, name`,
+        ),
+        this.db.query(
+          `SELECT name, origin, weight_range, harvest_years, description, category, status,
+                  flesh_color, seed_rate, brix, yield_per_ha, image_url, market_potential,
+                  morphology, farming_techniques
+           FROM varieties ORDER BY name`,
+        ),
+        this.db.query(
+          `SELECT name, category, formula, manufacturer, dosage, application_method, timing,
+                  status, image_url, description
+           FROM fertilizers ORDER BY id`,
+        ),
+        this.db.query(
+          `SELECT title, held_on, to_char(starts_at, 'HH24:MI') AS starts_at,
+                  to_char(ends_at, 'HH24:MI') AS ends_at, location, trainer, description, capacity, enrolled
+           FROM training_courses
+           WHERE completed = false AND held_on IS NOT NULL ORDER BY held_on ASC LIMIT 6`,
+        ),
+      ]);
+      const upcomingTraining = camelRows(training.rows);
+      return {
+        pesticides: camelRows(pesticides.rows),
+        varieties: camelRows(varieties.rows),
+        fertilizers: camelRows(fertilizers.rows),
+        training: upcomingTraining,
+        upcomingTraining,
+      };
     };
+    if (!this.db.cache) return loadCatalog();
+    return this.db.cache.getOrLoad("public:catalog", 60_000, ["catalog"], loadCatalog);
   }
 
   @Public()
+  @Throttle(RateLimitTier.PUBLIC_READ)
   @Get("news")
   @Header("Cache-Control", "no-cache")
   async news() {
-    const { rows } = await this.db.query(
-      `SELECT slug, category, title, excerpt, content, author, image_url, image_alt,
-              read_time, featured, published_on
-       FROM news_articles
-       WHERE status = 'published'
-       ORDER BY published_on DESC NULLS LAST, id DESC
-       LIMIT 100`,
-    );
-    return { data: camelRows(rows) };
+    const loadNews = async () => {
+      const { rows } = await this.db.query(
+        `SELECT slug, category, title, excerpt, content, author, image_url, image_alt,
+                read_time, featured, published_on
+         FROM news_articles
+         WHERE status = 'published'
+         ORDER BY published_on DESC NULLS LAST, id DESC
+         LIMIT 100`,
+      );
+      return { data: camelRows(rows) };
+    };
+    if (!this.db.cache) return loadNews();
+    return this.db.cache.getOrLoad("public:news:list", 45_000, ["news"], loadNews);
   }
 
   @Public()
+  @Throttle(RateLimitTier.PUBLIC_ARTICLE)
   @Get("news/:slug")
   @Header("Cache-Control", "no-cache")
   async newsDetail(@Param("slug") slug: string) {
@@ -145,39 +154,51 @@ export class PublicController {
     if (!cleanSlug || cleanSlug.length > 120 || !/^[a-z0-9-]+$/i.test(cleanSlug)) {
       throw notFound("Không tìm thấy bản tin.");
     }
-    const { rows } = await this.db.query(
-      `SELECT slug, category, title, excerpt, content, author, image_url, image_alt,
-              read_time, featured, published_on
-       FROM news_articles
-       WHERE slug = $1 AND status = 'published'
-       LIMIT 1`,
-      [cleanSlug],
-    );
-    if (rows.length === 0) throw notFound("Không tìm thấy bản tin.");
-    return camelRow(rows[0]);
+    const cleanKey = cleanSlug.toLowerCase();
+    const loadArticle = async () => {
+      const { rows } = await this.db.query(
+        `SELECT slug, category, title, excerpt, content, author, image_url, image_alt,
+                read_time, featured, published_on
+         FROM news_articles
+         WHERE slug = $1 AND status = 'published'
+         LIMIT 1`,
+        [cleanSlug],
+      );
+      if (rows.length === 0) throw notFound("Không tìm thấy bản tin.");
+      return camelRow(rows[0]);
+    };
+    if (!this.db.cache) return loadArticle();
+    return this.db.cache.getOrLoad(`public:news:slug:${cleanKey}`, 60_000, ["news"], loadArticle);
   }
 
   /** Danh sách thôn (chỉ id và tên) cho biểu mẫu đăng ký. */
   @Public()
+  @Throttle(RateLimitTier.PUBLIC_READ)
   @Get("villages")
   @Header("Cache-Control", "no-cache")
   async villages() {
-    return (await this.db.query<{ id: number; name: string }>("SELECT id, name FROM villages ORDER BY name")).rows;
+    const loadVillages = async () =>
+      (await this.db.query<{ id: number; name: string }>("SELECT id, name FROM villages ORDER BY name")).rows;
+    if (!this.db.cache) return loadVillages();
+    return this.db.cache.getOrLoad("public:villages", 60_000, ["catalog"], loadVillages);
   }
 
   /** Danh sách mã lô thu hoạch - thùng đóng gói mẫu trên trang tra cứu công khai `/trace`. */
   @Public()
-  @Throttle({ default: { limit: PUBLIC_TRACE_LIMIT, ttl: TRACE_WINDOW_MS } })
+  @Throttle(RateLimitTier.PUBLIC_TRACE)
   @Get("trace-samples")
   @Header("Cache-Control", "no-cache")
   async traceSamples() {
-    return this.traceability.traceSamples();
+    if (!this.db.cache) return this.traceability.traceSamples();
+    return this.db.cache.getOrLoad("public:trace-samples", 45_000, ["trace"], () =>
+      this.traceability.traceSamples(),
+    );
   }
 
   /** API 1 (Công khai + tùy chọn phiên / Thẻ Đoàn Thẩm định): Tra cứu hồ sơ QR bằng token ngẫu nhiên (/t/:token), giới hạn tốc độ chống quét dò token. */
   @Public()
   @OptionalAuth()
-  @Throttle({ default: { limit: PUBLIC_TRACE_LIMIT, ttl: TRACE_WINDOW_MS } })
+  @Throttle(RateLimitTier.PUBLIC_TRACE)
   @Get("trace/:code")
   @Header("Cache-Control", "no-store")
   async trace(
@@ -202,7 +223,7 @@ export class PublicController {
   /** Đối chứng tọa độ GPS thực địa tại vườn khi quét Bảng QR Thửa Đất (yêu cầu Thẻ Đoàn Thẩm định hoặc tài khoản có phạm vi). */
   @Public()
   @OptionalAuth()
-  @Throttle({ default: { limit: GPS_VERIFY_LIMIT, ttl: TRACE_WINDOW_MS } })
+  @Throttle(RateLimitTier.GPS_VERIFY)
   @Post("trace/:code/verify-gps")
   @HttpCode(200)
   @Header("Cache-Control", "no-store")
@@ -233,7 +254,7 @@ export class PublicController {
 export class AuthenticatedTraceController {
   constructor(private readonly traceability: TraceabilityService) {}
 
-  @Throttle({ default: { limit: AUTH_TRACE_LIMIT, ttl: TRACE_WINDOW_MS } })
+  @Throttle(RateLimitTier.AUTH_TRACE)
   @Get(":code")
   @Header("Cache-Control", "no-store")
   async traceAuthenticated(
@@ -255,7 +276,7 @@ export class AuthenticatedTraceController {
     });
   }
 
-  @Throttle({ default: { limit: GPS_VERIFY_LIMIT, ttl: TRACE_WINDOW_MS } })
+  @Throttle(RateLimitTier.GPS_VERIFY)
   @Post(":code/verify-gps")
   @HttpCode(200)
   @Header("Cache-Control", "no-store")

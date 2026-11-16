@@ -2,6 +2,7 @@ import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger, Optional 
 import { ThrottlerException } from "@nestjs/throttler";
 import type { Response } from "express";
 import { NotificationsService } from "../../notifications/notifications.service";
+import { RateLimitException } from "../throttler/rate-limit.policy";
 import { AppException, ValidationException } from "./app.exception";
 
 const PG_MESSAGES: Record<string, { status: number; message: string }> = {
@@ -32,6 +33,7 @@ interface ErrorBody {
   error: string;
   code?: string;
   details?: unknown;
+  retryAfterSeconds?: number;
 }
 
 /** Chuẩn hóa mọi lỗi về dạng `{ error, code, details? }` mà frontend đang dùng. */
@@ -48,6 +50,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const { status, body } = this.toResponse(exception);
     if (status >= 500) {
       this.recordInternalError();
+    }
+    if (status === 429 && body.retryAfterSeconds && !response.getHeader("Retry-After")) {
+      response.setHeader("Retry-After", String(body.retryAfterSeconds));
     }
     response.status(status).json(body);
   }
@@ -79,8 +84,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof AppException) {
       return { status: exception.getStatus(), body: { error: exception.message, code: exception.code } };
     }
+    if (exception instanceof RateLimitException) {
+      return {
+        status: 429,
+        body: {
+          error: exception.message,
+          code: "RATE_LIMITED",
+          retryAfterSeconds: exception.retryAfterSeconds,
+        },
+      };
+    }
     if (exception instanceof ThrottlerException) {
-      return { status: 429, body: { error: "Quá nhiều yêu cầu. Vui lòng thử lại sau.", code: "RATE_LIMITED" } };
+      return {
+        status: 429,
+        body: {
+          error: "Thao tác quá nhanh. Vui lòng thử lại sau.",
+          code: "RATE_LIMITED",
+        },
+      };
     }
     if (exception instanceof HttpException) {
       const status = exception.getStatus();

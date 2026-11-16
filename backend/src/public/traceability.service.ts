@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
@@ -6,6 +6,7 @@ import { verifyOrderedChain, type VerifiableChainEntry } from "../common/crypto/
 import { forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
 import { camelRow, camelRows, publicAttachmentUrlSql } from "../common/sql/rows";
+import { RateLimitException } from "../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../database/database.service";
 
 const UNIFORM_AUDIT_PASS_ERR =
@@ -160,9 +161,11 @@ export class TraceabilityService {
     }
     this.failedAuditPassByIp.set(key, recent);
     if (recent.length >= AUDIT_PASS_MAX_FAILS) {
-      throw new HttpException(
-        { message: "Quá nhiều lần thử thẻ đoàn thẩm định không hợp lệ, vui lòng thử lại sau ít phút." },
-        HttpStatus.TOO_MANY_REQUESTS,
+      const oldestRecent = recent[0] ?? now;
+      const retryAfterSeconds = Math.max(1, Math.ceil((oldestRecent + AUDIT_PASS_WINDOW_MS - now) / 1000));
+      throw new RateLimitException(
+        retryAfterSeconds,
+        "Quá nhiều lần thử thẻ đoàn thẩm định không hợp lệ. Vui lòng thử lại sau ít phút.",
       );
     }
   }
@@ -172,9 +175,32 @@ export class TraceabilityService {
     const now = Date.now();
     const recent = (this.failedAuditPassByIp.get(key) ?? []).filter((ts) => now - ts < AUDIT_PASS_WINDOW_MS);
     recent.push(now);
-    if (this.failedAuditPassByIp.size > 5000) {
-      this.failedAuditPassByIp.clear();
+
+    if (!this.failedAuditPassByIp.has(key) && this.failedAuditPassByIp.size >= 5000) {
+      for (const [candidateIp, timestamps] of this.failedAuditPassByIp) {
+        if (timestamps.every((ts) => now - ts >= AUDIT_PASS_WINDOW_MS)) {
+          this.failedAuditPassByIp.delete(candidateIp);
+        }
+      }
+      if (this.failedAuditPassByIp.size >= 5000) {
+        let evicted = false;
+        for (const [candidateIp, timestamps] of this.failedAuditPassByIp) {
+          if (timestamps.length < AUDIT_PASS_MAX_FAILS) {
+            this.failedAuditPassByIp.delete(candidateIp);
+            evicted = true;
+            break;
+          }
+        }
+        if (!evicted) {
+          const oldestIp = this.failedAuditPassByIp.keys().next().value;
+          if (oldestIp !== undefined) {
+            this.failedAuditPassByIp.delete(oldestIp);
+          }
+        }
+      }
     }
+
+    this.failedAuditPassByIp.delete(key);
     this.failedAuditPassByIp.set(key, recent);
   }
 

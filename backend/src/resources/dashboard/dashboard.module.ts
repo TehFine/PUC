@@ -28,6 +28,14 @@ export class DashboardService {
   }
 
   async summary(user: AuthUser) {
+    const scopeKey = `dashboard:summary:${user.role}:${user.villageId ?? "all"}`;
+    if (this.db.cache) {
+      return this.db.cache.getOrLoad(scopeKey, 15_000, ["dashboard"], () => this.computeSummary(user));
+    }
+    return this.computeSummary(user);
+  }
+
+  private async computeSummary(user: AuthUser) {
     const canReadHouseholds = can(user.role, "households", "read");
     const canReadApprovals = can(user.role, "approvals", "read");
     const canReadViolations = can(user.role, "violations", "read");

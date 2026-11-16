@@ -26,63 +26,68 @@ export class OverviewService {
 
   async overview(user: AuthUser) {
     const id = householdIdOf(user);
-    await Promise.all([
-      this.notifications.syncFarmerNotifications(user),
-      this.careProtocol
-        .ensureHouseholdPlans(id)
-        .then(() => this.careProtocol.scanAndNotifyPlansForHousehold(id))
-        .catch(() => undefined),
-    ]);
-    const household = (
-      await this.db.query(
-        `SELECT h.id, h.code, h.name, h.phone, h.plot_count, h.area_ha, h.status,
-                v.name AS village_name, v.leader AS village_leader,
-                ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url
-         FROM households h JOIN villages v ON v.id = h.village_id WHERE h.id = $1`,
-        [id],
-      )
-    ).rows[0];
-    if (!household) throw notFound("Không tìm thấy hộ của tài khoản này.");
+    const loadOverview = async () => {
+      await Promise.all([
+        this.notifications.syncFarmerNotifications(user),
+        this.careProtocol
+          .ensureHouseholdPlans(id)
+          .then(() => this.careProtocol.scanAndNotifyPlansForHousehold(id))
+          .catch(() => undefined),
+      ]);
+      const household = (
+        await this.db.query(
+          `SELECT h.id, h.code, h.name, h.phone, h.plot_count, h.area_ha, h.status,
+                  v.name AS village_name, v.leader AS village_leader,
+                  ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url
+           FROM households h JOIN villages v ON v.id = h.village_id WHERE h.id = $1`,
+          [id],
+        )
+      ).rows[0];
+      if (!household) throw notFound("Không tìm thấy hộ của tài khoản này.");
 
-    const [statsRes, lastTestRes, sqlReminders, protocolReminders] = await Promise.all([
-      this.db.query(
-        `SELECT
-           (SELECT count(*)::int FROM violations WHERE household_id = $1 AND status = 'open') AS open_violations,
-           (SELECT count(*)::int FROM approvals WHERE household_id = $1 AND status = 'pending') AS pending_approvals,
-           GREATEST(
-             (SELECT max(entry_on) FROM journal_entries WHERE household_id = $1),
-             (SELECT max(sprayed_on) FROM spray_records WHERE household_id = $1)
-           ) AS last_journal_on,
-           (
-             (SELECT count(*)::int FROM journal_entries
-                WHERE household_id = $1 AND entry_on >= (${TODAY_VN_SQL} - 30))
-             +
-             (SELECT count(*)::int FROM spray_records
-                WHERE household_id = $1 AND sprayed_on >= (${TODAY_VN_SQL} - 30))
-           ) AS "journalLast30Days",
-           (SELECT coalesce(sum(weight_kg), 0)::float8 FROM harvest_contributions WHERE household_id = $1) AS harvest_total_kg,
-           (SELECT count(*)::int FROM notifications WHERE user_id = $2 AND read_at IS NULL) AS unread_notifications`,
-        [id, user.id],
-      ),
-      this.db.query(
-        `SELECT code, plot_code, sampled_on, result FROM lab_tests
-         WHERE household_id = $1 ORDER BY sampled_on DESC, id DESC LIMIT 1`,
-        [id],
-      ),
-      this.reminders(id),
-      this.careProtocol.getHouseholdActiveReminders(id).catch(() => []),
-    ]);
+      const [statsRes, lastTestRes, sqlReminders, protocolReminders] = await Promise.all([
+        this.db.query(
+          `SELECT
+             (SELECT count(*)::int FROM violations WHERE household_id = $1 AND status = 'open') AS open_violations,
+             (SELECT count(*)::int FROM approvals WHERE household_id = $1 AND status = 'pending') AS pending_approvals,
+             GREATEST(
+               (SELECT max(entry_on) FROM journal_entries WHERE household_id = $1),
+               (SELECT max(sprayed_on) FROM spray_records WHERE household_id = $1)
+             ) AS last_journal_on,
+             (
+               (SELECT count(*)::int FROM journal_entries
+                  WHERE household_id = $1 AND entry_on >= (${TODAY_VN_SQL} - 30))
+               +
+               (SELECT count(*)::int FROM spray_records
+                  WHERE household_id = $1 AND sprayed_on >= (${TODAY_VN_SQL} - 30))
+             ) AS "journalLast30Days",
+             (SELECT coalesce(sum(weight_kg), 0)::float8 FROM harvest_contributions WHERE household_id = $1) AS harvest_total_kg,
+             (SELECT count(*)::int FROM notifications WHERE user_id = $2 AND read_at IS NULL) AS unread_notifications`,
+          [id, user.id],
+        ),
+        this.db.query(
+          `SELECT code, plot_code, sampled_on, result FROM lab_tests
+           WHERE household_id = $1 ORDER BY sampled_on DESC, id DESC LIMIT 1`,
+          [id],
+        ),
+        this.reminders(id),
+        this.careProtocol.getHouseholdActiveReminders(id).catch(() => []),
+      ]);
 
-    const stats = statsRes.rows[0];
-    const lastTest = lastTestRes.rows[0];
-    const reminders = [...protocolReminders, ...sqlReminders];
+      const stats = statsRes.rows[0];
+      const lastTest = lastTestRes.rows[0];
+      const reminders = [...protocolReminders, ...sqlReminders];
 
-    return {
-      household: camelRow(household),
-      stats: camelRow(stats),
-      lastTest: lastTest ? camelRow(lastTest) : null,
-      reminders,
+      return {
+        household: camelRow(household),
+        stats: camelRow(stats),
+        lastTest: lastTest ? camelRow(lastTest) : null,
+        reminders,
+      };
     };
+
+    if (!this.db.cache) return loadOverview();
+    return this.db.cache.getOrLoad(`portal:overview:u:${user.id}:h:${id}`, 12_000, ["portal"], loadOverview);
   }
 
   /**
