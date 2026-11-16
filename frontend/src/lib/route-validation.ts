@@ -45,6 +45,19 @@ const ADMIN_SUBTABS_BY_SECTION: Partial<Record<SectionId, ReadonlySet<string>>> 
   system: new Set(["accounts", "roles", "alerts", "audit"]),
 };
 
+const PASSIVE_SYSTEM_QUERY_KEYS: ReadonlySet<string> = new Set([
+  "perf",
+  "net",
+  "fbclid",
+  "gclid",
+  "zarsrc",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+]);
+
 const ALLOWED_ADMIN_KEYS: ReadonlySet<string> = new Set([
   "section",
   "sub",
@@ -53,6 +66,7 @@ const ALLOWED_ADMIN_KEYS: ReadonlySet<string> = new Set([
   "violationId",
   "plotCode",
   "householdId",
+  ...PASSIVE_SYSTEM_QUERY_KEYS,
 ]);
 
 const VALID_PORTAL_TABS: ReadonlySet<PortalTabRouteId> = new Set([
@@ -81,6 +95,7 @@ const ALLOWED_PORTAL_KEYS: ReadonlySet<string> = new Set([
   "plotCode",
   "violationId",
   "scheduleId",
+  ...PASSIVE_SYSTEM_QUERY_KEYS,
 ]);
 
 const POSITIVE_INT_RE = /^[1-9]\d{0,14}$/;

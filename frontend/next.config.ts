@@ -45,8 +45,6 @@ const nextConfig: NextConfig = {
   distDir: process.env.NODE_ENV === "development" ? ".next-dev" : ".next",
   devIndicators: false,
   poweredByHeader: false,
-  cacheComponents: true,
-  partialPrefetching: true,
   experimental: {
     optimizePackageImports: ["lucide-react", "recharts"],
   },
