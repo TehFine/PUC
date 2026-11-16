@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, api, errorMessage } from "@/lib/api-client";
+import {
+  isTransientNetworkError,
+  loadOfflineReadSnapshot,
+  registerOfflinePortalInvalidator,
+  saveOfflineReadSnapshot,
+} from "@/lib/offline-sync";
 import type { ListResponse } from "@/types/api";
 
 /*
@@ -54,8 +60,19 @@ function fetchShared<T>(key: string): Promise<T> {
     .then((result) => {
       if (requestEpoch === portalAuthEpoch) {
         setCacheEntry(key, result);
+        void saveOfflineReadSnapshot(key, result);
       }
       return result;
+    })
+    .catch(async (err) => {
+      if (isTransientNetworkError(err)) {
+        const snapshot = await loadOfflineReadSnapshot<T>(key);
+        if (snapshot !== null && requestEpoch === portalAuthEpoch) {
+          setCacheEntry(key, snapshot, 0);
+          return snapshot;
+        }
+      }
+      throw err;
     })
     .finally(() => {
       if (inflight.get(key) === request) {
@@ -118,6 +135,10 @@ export function refreshPortal(...keys: PortalKey[]) {
 }
 
 export const invalidatePortal = refreshPortal;
+
+registerOfflinePortalInvalidator((keys) => {
+  refreshPortal(...(keys as PortalKey[]));
+});
 
 // Đăng xuất / hết phiên: tăng thế hệ phiên và xóa toàn bộ dữ liệu của hộ khỏi bộ nhớ để tài khoản khác không thấy.
 if (typeof window !== "undefined") {

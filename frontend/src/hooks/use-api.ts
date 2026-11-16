@@ -9,6 +9,11 @@ import {
   api,
   errorMessage,
 } from "@/lib/api-client";
+import {
+  isTransientNetworkError,
+  loadOfflineReadSnapshot,
+  saveOfflineReadSnapshot,
+} from "@/lib/offline-sync";
 import type { ListResponse } from "@/types/api";
 
 interface CacheEntry {
@@ -17,7 +22,7 @@ interface CacheEntry {
 }
 
 const CACHE_FRESH_MS = 25_000;
-const MAX_CACHE_ENTRIES = 80;
+const MAX_CACHE_ENTRIES = 120;
 const apiCache = new Map<string, CacheEntry>();
 const inflightRequests = new Map<string, Promise<unknown>>();
 let authEpoch = 0;
@@ -32,6 +37,12 @@ function setApiCacheEntry(path: string, data: unknown) {
   apiCache.set(path, { data, timestamp: Date.now() });
 }
 
+function markAllApiCacheStale() {
+  for (const entry of apiCache.values()) {
+    entry.timestamp = 0;
+  }
+}
+
 if (typeof window !== "undefined") {
   const clearAll = () => {
     authEpoch += 1;
@@ -40,11 +51,13 @@ if (typeof window !== "undefined") {
   };
   window.addEventListener(AUTH_LOGOUT_EVENT, clearAll);
   window.addEventListener(AUTH_EXPIRED_EVENT, clearAll);
-  window.addEventListener(DATA_MUTATED_EVENT, () => apiCache.clear());
+  // Khi dữ liệu thay đổi: đánh dấu stale (timestamp = 0) thay vì xóa trắng để chuyển tab không nháy skeleton,
+  // đồng thời tự động đối chiếu lại ngay qua If-None-Match (304 Not Modified 0-byte nếu tab đó không đổi).
+  window.addEventListener(DATA_MUTATED_EVENT, markAllApiCacheStale);
   if (typeof BroadcastChannel !== "undefined") {
     try {
       const bc = new BroadcastChannel(DATA_SYNC_CHANNEL);
-      bc.addEventListener("message", () => apiCache.clear());
+      bc.addEventListener("message", markAllApiCacheStale);
     } catch {
       // ignore
     }
@@ -77,8 +90,21 @@ function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
     .then((result) => {
       if (requestEpoch === authEpoch) {
         setApiCacheEntry(path, result);
+        void saveOfflineReadSnapshot(path, result);
       }
       return result;
+    })
+    .catch(async (err) => {
+      if (isTransientNetworkError(err)) {
+        const snapshot = await loadOfflineReadSnapshot<T>(path);
+        if (snapshot !== null && requestEpoch === authEpoch) {
+          setApiCacheEntry(path, snapshot);
+          const entry = apiCache.get(path);
+          if (entry) entry.timestamp = 0;
+          return snapshot;
+        }
+      }
+      throw err;
     })
     .finally(() => {
       if (inflightRequests.get(path) === request) {

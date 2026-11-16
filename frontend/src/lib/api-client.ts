@@ -7,6 +7,7 @@ export class ApiError extends Error {
     public status: number,
     public code?: string,
     public details?: { path: string; message: string }[],
+    public retryAfterSeconds?: number,
   ) {
     super(message);
   }
@@ -74,6 +75,36 @@ const NO_REFRESH_PATHS = [
 ];
 const isAuthPath = (path: string) => NO_REFRESH_PATHS.some((prefix) => path.startsWith(prefix));
 
+interface EtagMemoryEntry {
+  etag: string;
+  data: unknown;
+}
+
+const MAX_ETAG_ENTRIES = 120;
+const MAX_ETAG_PAYLOAD_CHARS = 1_500_000;
+const memoryEtagCache = new Map<string, EtagMemoryEntry>();
+let etagSessionEpoch = 0;
+
+export function clearMemoryEtagCache(): void {
+  etagSessionEpoch += 1;
+  memoryEtagCache.clear();
+}
+
+function setMemoryEtagEntry(path: string, etag: string, data: unknown): void {
+  if (memoryEtagCache.has(path)) {
+    memoryEtagCache.delete(path);
+  } else if (memoryEtagCache.size >= MAX_ETAG_ENTRIES) {
+    const oldest = memoryEtagCache.keys().next().value;
+    if (oldest !== undefined) memoryEtagCache.delete(oldest);
+  }
+  memoryEtagCache.set(path, { etag, data });
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener(AUTH_LOGOUT_EVENT, clearMemoryEtagCache);
+  window.addEventListener(AUTH_EXPIRED_EVENT, clearMemoryEtagCache);
+}
+
 export interface RequestOptions {
   keepalive?: boolean;
   signal?: AbortSignal;
@@ -83,12 +114,19 @@ export interface RequestOptions {
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const isMutating = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+  const canUseEtag = method === "GET" && !path.startsWith("/auth");
+  const requestEpoch = etagSessionEpoch;
+  const cachedEtag = canUseEtag ? memoryEtagCache.get(path) : undefined;
 
   const send = async () => {
     const startedAt = performance.now();
-    const headers = isMutating
-      ? { "X-Requested-With": "XMLHttpRequest", ...(init?.headers as Record<string, string> | undefined) }
-      : init?.headers;
+    const rawHeaders = init?.headers as Record<string, string> | undefined;
+    let headers: Record<string, string> | undefined = rawHeaders;
+    if (isMutating) {
+      headers = { "X-Requested-With": "XMLHttpRequest", ...rawHeaders };
+    } else if (cachedEtag && !rawHeaders?.["If-None-Match"]) {
+      headers = { "If-None-Match": cachedEtag.etag, ...rawHeaders };
+    }
     try {
       return await fetch(`/api${path}`, {
         cache: "no-store",
@@ -109,6 +147,18 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   };
 
   let response = await send();
+  // Trên gói miễn phí Render + Vercel, lần truy cập đầu sau khi máy chủ ngủ đông (cold start)
+  // có thể trả 502 / 503 / 504 tạm thời trong vài giây đầu: tự động thử lại êm cho truy vấn GET.
+  if (
+    !isMutating &&
+    (response.status === 502 || response.status === 503 || response.status === 504) &&
+    !init?.signal?.aborted
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+    if (!init?.signal?.aborted) {
+      response = await send();
+    }
+  }
   if (response.status === 401 && !isAuthPath(path)) {
     if (await refreshSession()) {
       response = await send();
@@ -118,18 +168,37 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     }
   }
 
+  if (canUseEtag && response.status === 304 && cachedEtag !== undefined) {
+    reportServerHealthy();
+    return cachedEtag.data as T;
+  }
+
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
       error?: string;
       code?: string;
       details?: { path: string; message: string }[];
+      retryAfterSeconds?: number;
     } | null;
     if (response.status >= 500) {
       reportServerFailure("server_error", response.status, body?.error);
     } else {
       reportServerHealthy();
     }
-    throw new ApiError(body?.error ?? "Không xử lý được yêu cầu.", response.status, body?.code, body?.details);
+    const headerRetry = Number(response.headers.get("Retry-After") ?? "");
+    const retryAfterSeconds =
+      typeof body?.retryAfterSeconds === "number" && body.retryAfterSeconds > 0
+        ? body.retryAfterSeconds
+        : Number.isFinite(headerRetry) && headerRetry > 0
+        ? Math.ceil(headerRetry)
+        : undefined;
+    const fallbackError =
+      response.status === 429
+        ? retryAfterSeconds
+          ? `Thao tác quá nhanh. Vui lòng thử lại sau ${retryAfterSeconds} giây.`
+          : "Thao tác quá nhanh. Vui lòng thử lại sau."
+        : "Không xử lý được yêu cầu.";
+    throw new ApiError(body?.error ?? fallbackError, response.status, body?.code, body?.details, retryAfterSeconds);
   }
   reportServerHealthy();
   if (isMutating && !isAuthPath(path)) {
@@ -139,7 +208,14 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   const text = await response.text();
   if (!text) return undefined as T;
   try {
-    return JSON.parse(text) as T;
+    const parsed = JSON.parse(text) as T;
+    if (canUseEtag && requestEpoch === etagSessionEpoch && text.length <= MAX_ETAG_PAYLOAD_CHARS) {
+      const responseEtag = response.headers.get("ETag");
+      if (responseEtag) {
+        setMemoryEtagEntry(path, responseEtag, parsed);
+      }
+    }
+    return parsed;
   } catch {
     throw new ApiError("Phản hồi từ máy chủ không đúng định dạng dữ liệu.", response.status, "INVALID_JSON");
   }

@@ -79,18 +79,21 @@ export function mapApiArticle(record: PublicNewsRecord & { id?: number | string 
 export const mapPublicNewsToArticle = mapApiArticle;
 
 let cachedNewsArticles: NewsArticle[] | null = null;
+let cachedNewsEtag: string | null = null;
+let cachedNewsFreshUntil = 0;
 let inflightNewsPromise: Promise<NewsArticle[]> | null = null;
 const NEWS_TIMEOUT_MS = 18_000;
+const NEWS_FRESH_MS = 30_000;
 
 if (typeof window !== "undefined") {
-  const clearNewsCache = () => {
-    cachedNewsArticles = null;
+  const markNewsStale = () => {
+    cachedNewsFreshUntil = 0;
   };
-  window.addEventListener(DATA_MUTATED_EVENT, clearNewsCache);
+  window.addEventListener(DATA_MUTATED_EVENT, markNewsStale);
   if (typeof BroadcastChannel !== "undefined") {
     try {
       const bc = new BroadcastChannel(DATA_SYNC_CHANNEL);
-      bc.addEventListener("message", clearNewsCache);
+      bc.addEventListener("message", markNewsStale);
     } catch {
       // ignore
     }
@@ -98,7 +101,7 @@ if (typeof window !== "undefined") {
 }
 
 async function fetchPublicArticles(force = false): Promise<NewsArticle[]> {
-  if (!force && cachedNewsArticles) return cachedNewsArticles;
+  if (!force && cachedNewsArticles && Date.now() < cachedNewsFreshUntil) return cachedNewsArticles;
   if (!force && inflightNewsPromise) return inflightNewsPromise;
 
   const request = (async () => {
@@ -106,15 +109,28 @@ async function fetchPublicArticles(force = false): Promise<NewsArticle[]> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), NEWS_TIMEOUT_MS);
     try {
-      const response = await fetch("/api/public/news", { cache: "no-store", signal: controller.signal });
+      const headers: Record<string, string> | undefined =
+        cachedNewsEtag && cachedNewsArticles ? { "If-None-Match": cachedNewsEtag } : undefined;
+      const response = await fetch("/api/public/news", {
+        cache: "no-store",
+        headers,
+        signal: controller.signal,
+      });
       reportRequestTime(performance.now() - start);
+      if (response.status === 304 && cachedNewsArticles) {
+        cachedNewsFreshUntil = Date.now() + NEWS_FRESH_MS;
+        return cachedNewsArticles;
+      }
       if (!response.ok) return cachedNewsArticles ?? NEWS_ARTICLES;
+      const nextEtag = response.headers.get("ETag");
       const body = (await response.json()) as
         | { data?: (PublicNewsRecord & { id?: number })[] }
         | (PublicNewsRecord & { id?: number })[];
       const rawList = Array.isArray(body) ? body : (body.data ?? []);
       const resolved = rawList.length > 0 ? rawList.map(mapPublicNewsToArticle) : NEWS_ARTICLES;
       cachedNewsArticles = resolved;
+      cachedNewsEtag = nextEtag;
+      cachedNewsFreshUntil = Date.now() + NEWS_FRESH_MS;
       return resolved;
     } finally {
       clearTimeout(timer);
@@ -148,7 +164,7 @@ export function useNewsArticles() {
   }, []);
 
   useEffect(() => {
-    if (cachedNewsArticles) return;
+    if (cachedNewsArticles && Date.now() < cachedNewsFreshUntil) return;
     let active = true;
     fetchPublicArticles(false)
       .then((next) => {
