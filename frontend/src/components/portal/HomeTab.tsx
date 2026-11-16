@@ -39,7 +39,7 @@ interface ActionItem {
   title: string;
   detail?: string | null;
   to: PortalTabId;
-  action?: "protocol-timeline";
+  action?: PortalAction;
 }
 
 function getConciseViolationTitle(v?: PortalViolation | null, count = 1, isDiaryIdle = false): string {
@@ -111,6 +111,7 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
     let hasDiaryReminder = false;
     return overview.reminders
       .filter((rem) => {
+        if (rem.kind === "protocol") return false;
         const clean = (rem.tab || "").trim().toLowerCase();
         if (clean === "requests" || clean === "approvals" || clean === "training" || rem.kind === "training") return false;
         const isDiaryReminder =
@@ -127,10 +128,9 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
         title: getConciseReminderTitle(rem),
         detail: rem.detail,
         to:
-          rem.kind === "protocol" || rem.kind === "violation" || rem.kind === "journal" || rem.kind === "isolation"
+          rem.kind === "violation" || rem.kind === "journal" || rem.kind === "isolation"
             ? "diary"
             : normalizeReminderTab(rem.tab),
-        action: rem.kind === "protocol" ? ("protocol-timeline" as const) : undefined,
       }));
   }
 

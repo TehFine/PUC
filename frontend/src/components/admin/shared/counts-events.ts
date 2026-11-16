@@ -87,7 +87,7 @@ export function consumePendingApprovalTab(): "pending" | "registrations" | "sche
   return null;
 }
 
-export type AdminJournalTabId = "protocol" | "journal" | "violations" | "spray";
+export type AdminJournalTabId = "journal" | "violations" | "spray";
 const JOURNAL_TAB_STORAGE_KEY = "puc:pending-journal-tab";
 export const ADMIN_JOURNAL_TAB_EVENT = "admin:journal-tab";
 
@@ -106,7 +106,7 @@ export function consumePendingJournalTab(): AdminJournalTabId | null {
   if (typeof window === "undefined") return null;
   try {
     const tab = window.sessionStorage.getItem(JOURNAL_TAB_STORAGE_KEY);
-    if (tab === "protocol" || tab === "journal" || tab === "violations" || tab === "spray") {
+    if (tab === "journal" || tab === "violations" || tab === "spray") {
       window.sessionStorage.removeItem(JOURNAL_TAB_STORAGE_KEY);
       return tab;
     }

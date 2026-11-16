@@ -263,8 +263,8 @@ export function usePortal<T>(path: PortalKey) {
 }
 
 /** Danh mục dùng chung (`/api/pesticides`, `/api/varieties`, `/api/fertilizers`), trả mảng bản ghi. */
-export function useCatalog<T>(resource: "pesticides" | "varieties" | "fertilizers") {
-  const state = useSharedQuery<ListResponse<T> | T[]>(`/${resource}?pageSize=500`);
+export function useCatalog<T>(resource: "pesticides" | "varieties" | "fertilizers", enabled = true) {
+  const state = useSharedQuery<ListResponse<T> | T[]>(enabled ? `/${resource}?pageSize=500` : null);
   const rows = Array.isArray(state.data) ? state.data : (state.data?.data ?? (EMPTY_ARRAY as T[]));
   return { rows, loaded: state.data !== null, loading: state.loading, error: state.error, refresh: state.refresh };
 }

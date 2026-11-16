@@ -132,6 +132,9 @@ export interface PortalSprayRecord {
   isolationEndsOn?: string | null;
   mrlStatus: "pass" | "exceeded";
   plotCode?: string | null;
+  note?: string | null;
+  photoUrl?: string | null;
+  photoUrls?: string[];
   serverRecordedAt?: string | null;
   declaredOn?: string | null;
   lateDeclarationDays?: number;
@@ -150,6 +153,9 @@ export interface CreateSprayBody {
   areaHa: number;
   source?: string;
   plotCode?: string;
+  note?: string;
+  photoId?: number;
+  photoIds?: number[];
   lateReason?: string;
 }
 

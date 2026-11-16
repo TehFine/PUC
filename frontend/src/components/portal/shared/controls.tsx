@@ -69,21 +69,12 @@ export function LateDeclarationNotice({
   selectedDate,
   todayDate,
   delayDays,
-  mode = "diary",
 }: {
   selectedDate: string;
   todayDate: string;
   delayDays: number;
-  mode?: "protocol" | "diary" | "spray";
 }) {
   if (delayDays <= 0) return null;
-
-  const guidance =
-    mode === "protocol"
-      ? `Hệ thống sẽ lưu đồng thời hai mốc thời gian, tự căn chỉnh lịch mốc kế tiếp tính từ ngày ${formatShortVnDate(selectedDate)} và nhắc lịch sớm hơn ở đợt sau.`
-      : mode === "spray"
-        ? `Hệ thống lưu đồng thời ngày phun ${formatShortVnDate(selectedDate)} và thời điểm khai báo hôm nay, tính cách ly PHI đúng từ ngày phun và nhắc bạn cập nhật đúng hạn lần tới.`
-        : `Hệ thống lưu đồng thời ngày làm thực tế và thời điểm khai báo hôm nay để làm căn cứ đối chiếu và nhắc nhở lần sau khai báo ngay trong ngày.`;
 
   return (
     <div className="pt-late-decl-box" role="status">
@@ -101,7 +92,6 @@ export function LateDeclarationNotice({
           <strong>Chậm {delayDays} ngày</strong>
         </div>
       </div>
-      <p className="pt-late-decl-note">{guidance}</p>
     </div>
   );
 }
@@ -608,8 +598,8 @@ export function MultiPhotoField({
           {picker.count > 0
             ? `${picker.count}/${picker.maxFiles} tệp`
             : required
-              ? `Bắt buộc, tối đa ${picker.maxFiles} tệp`
-              : `Tùy chọn, tối đa ${picker.maxFiles} tệp`}
+              ? "Bắt buộc"
+              : "Không bắt buộc"}
         </span>
       </div>
 
@@ -688,7 +678,7 @@ export function MultiPhotoField({
             <span>{picker.count > 0 ? "Chụp thêm ảnh" : cameraLabel}</span>
           </label>
 
-          <label className={`pt-multi-media-btn ${disabled ? "is-disabled" : ""}`.trim()} htmlFor={`${id}-gallery`}>
+          <label className={`pt-multi-media-btn is-tinted ${disabled ? "is-disabled" : ""}`.trim()} htmlFor={`${id}-gallery`}>
             <input
               id={`${id}-gallery`}
               type="file"
@@ -704,7 +694,7 @@ export function MultiPhotoField({
           </label>
 
           {picker.allowVideo && (
-            <label className={`pt-multi-media-btn ${disabled ? "is-disabled" : ""}`.trim()} htmlFor={`${id}-video`}>
+            <label className={`pt-multi-media-btn is-gray ${disabled ? "is-disabled" : ""}`.trim()} htmlFor={`${id}-video`}>
               <input
                 id={`${id}-video`}
                 type="file"

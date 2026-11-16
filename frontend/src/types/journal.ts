@@ -63,10 +63,14 @@ export interface SprayRow {
   isolationDays: number | null;
   mrlStatus: MrlStatus;
   plotCode?: string | null;
+  note?: string | null;
+  photoUrl?: string | null;
+  photoUrls?: string[];
   serverRecordedAt?: string | null;
   declaredOn?: string | null;
   lateDeclarationDays?: number;
   entryDelayHours?: number;
   isLateEntry?: boolean;
   lateReason?: string | null;
+  recordHash?: string | null;
 }

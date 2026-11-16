@@ -3,16 +3,149 @@
 import { useState } from "react";
 import { Modal, FormError } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
-import { FormGrid, NumberField, SelectField, TextField, type Option } from "@/components/ui/form/fields";
+import { FormGrid, NumberField, SelectField, TextAreaField, TextField, type Option } from "@/components/ui/form/fields";
 import { useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
+import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, numberText, parseNumber, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
-import { MRL_STATUS, optionsOf } from "@/components/admin/shared/labels";
+import { badgeOf, MRL_STATUS, optionsOf } from "@/components/admin/shared/labels";
+import { MultiPhotoField, StoredMediaGallery, useMultiPhotoPicker } from "@/components/portal/shared/controls";
+import { formatDate, formatDateTime } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type { MrlStatus, SprayRow } from "@/types/journal";
 
 const MRL_OPTIONS = optionsOf(MRL_STATUS);
+
+export function SprayDetailModal({
+  record,
+  onClose,
+  onEdit,
+}: {
+  record: SprayRow;
+  onClose: () => void;
+  onEdit?: () => void;
+}) {
+  const mrl = badgeOf(MRL_STATUS, record.mrlStatus);
+  const hasMedia = Boolean(record.photoUrls?.length || record.photoUrl);
+
+  return (
+    <Modal
+      title={`Nhật ký phun thuốc: ${record.householdName}`}
+      onClose={onClose}
+      width={580}
+      footer={
+        <>
+          {onEdit && (
+            <button type="button" className="btn btn-outline" onClick={onEdit}>
+              Sửa bản ghi
+            </button>
+          )}
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Đóng
+          </button>
+        </>
+      }
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+          gap: 12,
+          padding: 14,
+          borderRadius: 6,
+          border: "1px solid #d4d4d2",
+          background: "var(--mist)",
+          marginBottom: 14,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày phun tại vườn</div>
+          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatDate(record.sprayedOn)}</div>
+        </div>
+        {record.serverRecordedAt && (
+          <div>
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Thời điểm khai báo thực tế</div>
+            <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+              {formatDateTime(record.serverRecordedAt)}
+            </div>
+          </div>
+        )}
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Độ trễ khai báo</div>
+          <div
+            style={{
+              fontWeight: 600,
+              fontVariantNumeric: "tabular-nums",
+              color: (record.lateDeclarationDays ?? 0) > 0 ? "#9a6712" : "#15803d",
+            }}
+          >
+            {(record.lateDeclarationDays ?? 0) > 0
+              ? `Khai báo chậm ${record.lateDeclarationDays} ngày`
+              : "Đúng trong ngày"}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Hộ nông dân</div>
+          <div style={{ fontWeight: 600 }}>{record.householdName}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã thửa</div>
+          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>
+            {record.plotCode || "Toàn vườn"}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Loại thuốc BVTV</div>
+          <div style={{ fontWeight: 600 }}>{record.pesticideName}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Liều lượng pha phun</div>
+          <div style={{ fontWeight: 600 }}>{record.dose}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Diện tích phun</div>
+          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{record.areaHa} ha</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Thời gian cách ly (PHI)</div>
+          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums", color: "#9a6712" }}>
+            {record.isolationDays ?? 0} ngày
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Trạng thái dư lượng</div>
+          <div>
+            <span className={`badge ${mrl.badge}`}>{mrl.label}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
+          Nguồn gốc vật tư và ghi chú
+        </div>
+        <div style={{ padding: "10px 12px", borderRadius: 6, border: "1px solid #e5e7eb", background: "var(--bg-input)", fontSize: 13.5 }}>
+          <div>{record.source ? `Đại lý cung cấp: ${record.source}` : "Chưa ghi nhận đại lý cung cấp."}</div>
+          {record.note && <div style={{ marginTop: 6 }}>Ghi chú: {record.note}</div>}
+        </div>
+      </div>
+
+      {hasMedia && (
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>
+            Minh chứng hiện trường
+          </div>
+          <StoredMediaGallery
+            urls={record.photoUrls}
+            fallbackUrl={record.photoUrl}
+            altPrefix={`Hiện trường phun thuốc ${record.pesticideName}`}
+          />
+        </div>
+      )}
+    </Modal>
+  );
+}
 
 export default function SprayFormModal({
   initial,
@@ -43,11 +176,45 @@ export default function SprayFormModal({
   const [areaHa, setAreaHa] = useState(numberText(initial?.areaHa ?? 0.5));
   const [isolationDays, setIsolationDays] = useState(numberText(initial?.isolationDays ?? 14));
   const [mrlStatus, setMrlStatus] = useState<MrlStatus>(initial?.mrlStatus ?? "pass");
+  const [note, setNote] = useState(initial?.note ?? "");
+  const media = useMultiPhotoPicker("journal", { maxFiles: 8, allowVideo: true });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
+  const existingHasMedia = Boolean(initial?.photoUrls?.length || initial?.photoUrl);
 
   const save = useMutation(async (payload: Record<string, unknown>) => {
-    if (initial) return api.patch<SprayRow>(`/spray/${initial.id}`, payload);
-    return api.post<SprayRow>("/spray", payload);
+    if (initial) {
+      let nextPayload = payload;
+      if (media.hasFiles) {
+        const uploadedIds = await media.ensureUploadedAll();
+        if (uploadedIds.length > 0) {
+          nextPayload = {
+            ...payload,
+            photoIds: uploadedIds,
+            photoId: uploadedIds[0],
+          };
+        }
+      }
+      const updated = await api.patch<SprayRow>(`/spray/${initial.id}`, nextPayload);
+      return { mode: "synced" as const, data: updated };
+    }
+    return submitFieldRecordWithOfflineQueue<SprayRow>({
+      kind: "admin-journal",
+      label: `Nhật ký phun thuốc${plotCode.trim() ? ` - Thửa ${plotCode.trim()}` : ""}`,
+      plotCode: plotCode.trim() || undefined,
+      endpoint: "/spray",
+      payload,
+      mediaGroups: media.hasFiles
+        ? [
+            {
+              slotKey: "photos",
+              purpose: "journal",
+              items: media.items,
+              binding: { arrayField: "photoIds", primaryField: "photoId" },
+            },
+          ]
+        : [],
+      onProgress: media.setUploadProgress,
+    });
   });
 
   const handlePesticideChange = (val: string) => {
@@ -90,10 +257,16 @@ export default function SprayFormModal({
       areaHa: parsedArea ?? 0,
       isolationDays: parseNumber(isolationDays) ?? 0,
       mrlStatus,
+      note: textOrNull(note),
     };
 
     const res = await save.run(payload);
     if (!res) return;
+    if (res.mode === "queued") {
+      toast.success("Mạng yếu: đã lưu bản ghi phun thuốc vào hàng đợi đồng bộ tự động.");
+      onClose();
+      return;
+    }
     toast.success(isEdit ? "Đã cập nhật nhật ký phun thuốc." : "Đã thêm nhật ký phun thuốc.");
     notifyCountsChanged();
     onSaved();
@@ -199,6 +372,42 @@ export default function SprayFormModal({
             options={MRL_OPTIONS}
           />
         </FormGrid>
+
+        <TextAreaField
+          label="Ghi chú tình trạng sâu bệnh"
+          value={note}
+          onChange={setNote}
+          rows={2}
+          maxLength={500}
+          placeholder="Ghi chú thêm về đối tượng sâu bệnh hoặc điều kiện thời tiết khi phun…"
+        />
+
+        {isEdit && existingHasMedia && !media.hasFiles && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>
+              Minh chứng hiện trường đang gắn với bản ghi
+            </div>
+            <StoredMediaGallery
+              urls={initial?.photoUrls}
+              fallbackUrl={initial?.photoUrl}
+              altPrefix={`Hiện trường phun thuốc ${initial?.pesticideName ?? ""}`}
+              compact
+            />
+          </div>
+        )}
+
+        <div style={{ marginBottom: 12 }}>
+          <MultiPhotoField
+            id="admin-spray-photos"
+            label={isEdit && existingHasMedia ? "Cập nhật ảnh hoặc video hiện trường mới" : "Ảnh hiện trường phun thuốc hoặc nhãn bao bì"}
+            picker={media}
+            description="Ảnh được tự động nén nhẹ và lưu trữ bền vững trong cơ sở dữ liệu."
+            cameraLabel="Chụp ảnh hiện trường"
+            galleryLabel="Chọn nhiều ảnh"
+            videoLabel="Thêm video ngắn"
+            disabled={save.pending}
+          />
+        </div>
 
         <FormError message={save.error} />
       </form>
