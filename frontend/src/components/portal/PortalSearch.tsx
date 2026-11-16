@@ -87,14 +87,6 @@ const ENTRIES: SearchEntry[] = [
     target: { kind: "tab", tab: "diary", action: "spray-list" },
   },
   {
-    id: "violations",
-    title: "Vi phạm & báo đã khắc phục",
-    where: "Nhật ký",
-    keywords: "vi pham canh bao khac phuc nhac nho loi phan hoi",
-    target: { kind: "tab", tab: "diary" },
-    popular: true,
-  },
-  {
     id: "harvest-lots",
     title: "Lô hàng, tem & mã QR",
     where: "Thu hoạch",

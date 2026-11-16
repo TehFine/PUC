@@ -18,7 +18,6 @@ import type {
   PortalPlot,
   PortalPlots,
   PortalSprayRecord,
-  PortalViolation,
 } from "@/types/portal";
 import {
   BusyButton,
@@ -31,7 +30,7 @@ import {
 } from "./shared/controls";
 import CareProtocolTimeline from "./CareProtocolTimeline";
 import type { PortalAction } from "./PortalSearch";
-import { Card, EmptyState, Field, Pill, SectionDivider, SegmentedTabs, Sheet, StateBlock, useSheetClose } from "./ui";
+import { EmptyState, Field, Pill, SegmentedTabs, Sheet, StateBlock, useSheetClose } from "./ui";
 
 function canDeleteEntry(entry: PortalJournalEntry): boolean {
   if (typeof entry.canDelete === "boolean") return entry.canDelete;
@@ -1023,112 +1022,6 @@ function SprayDetailModal({
   );
 }
 
-function ViolationResponseForm({
-  violation,
-  onDone,
-  onClose,
-}: {
-  violation: PortalViolation;
-  onDone: () => void;
-  onClose: () => void;
-}) {
-  const sheetClose = useSheetClose();
-  const [note, setNote] = useState(violation.farmerResponse ?? "");
-  const media = useMultiPhotoPicker("violation", { maxFiles: 6, allowVideo: true });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const cleanNote = note.trim();
-    if (!cleanNote) {
-      setError("Vui lòng mô tả biện pháp đã khắc phục.");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      const outcome = await submitFieldRecordWithOfflineQueue({
-        kind: "portal-violation-response",
-        label: `Báo cáo khắc phục: ${violation.title}`,
-        plotCode: violation.plotCode ?? undefined,
-        endpoint: `/portal/violations/${violation.id}/response`,
-        payload: { note: cleanNote },
-        mediaGroups: media.hasFiles
-          ? [
-              {
-                slotKey: "photos",
-                purpose: "violation",
-                items: media.items,
-                binding: { arrayField: "photoIds", primaryField: "photoId" },
-              },
-            ]
-          : [],
-        portalKeysToInvalidate: ["violations", "journal", "spray", "overview"],
-        onProgress: media.setUploadProgress,
-      });
-      if (outcome.mode === "synced") {
-        invalidatePortal("violations", "journal", "spray", "overview");
-      }
-      onDone();
-    } catch (err) {
-      setError(errorMessage(err, "Không gửi được phản hồi khắc phục."));
-      setSaving(false);
-    }
-  };
-
-  return (
-    <form className="pt-form" onSubmit={submit}>
-      <div className="pt-notice" style={{ background: "#fffbeb", border: "1px solid #d4d4d2", borderRadius: 6, padding: 12 }}>
-        <strong style={{ display: "block", color: "#92400e", marginBottom: 4 }}>{violation.title}</strong>
-        {violation.description && (
-          <p style={{ margin: 0, fontSize: 13, color: "#78350f" }}>{violation.description}</p>
-        )}
-      </div>
-
-      <Field label="Nội dung báo cáo đã khắc phục" htmlFor="vr-note">
-        <textarea
-          id="vr-note"
-          rows={4}
-          maxLength={1000}
-          placeholder="Mô tả rõ công việc gia đình đã thực hiện để khắc phục (ví dụ: Đã cập nhật nhật ký canh tác, đã thu gom vỏ bao bì thuốc BVTV về kho chứa...)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          required
-        />
-      </Field>
-
-      <MultiPhotoField
-        id="vr-photo"
-        label="Ảnh và video minh chứng sau khắc phục (tùy chọn)"
-        picker={media}
-        description="Có thể đính kèm nhiều ảnh thực tế hoặc đoạn video ngắn giúp cán bộ kiểm tra đóng cảnh báo nhanh hơn."
-        cameraLabel="Chụp ảnh khắc phục"
-        galleryLabel="Chọn nhiều ảnh"
-        videoLabel="Thêm video ngắn"
-        disabled={saving}
-      />
-
-      <InlineError message={error} />
-
-      <div className="pt-form-actions">
-        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose} disabled={saving}>
-          Hủy
-        </button>
-        <BusyButton
-          type="submit"
-          className="pt-btn pt-btn-primary"
-          busy={saving}
-          busyLabel="Đang gửi báo cáo…"
-          disabled={!note.trim()}
-        >
-          Gửi báo cáo khắc phục
-        </BusyButton>
-      </div>
-    </form>
-  );
-}
-
 export default function DiaryTab({ initialAction }: { initialAction?: PortalAction } = {}) {
   // Mở sẵn đúng màn hình khi bà con chọn gợi ý từ ô tìm kiếm hoặc thông báo nhắc lịch
   const [view, setView] = useState<View>(() => {
@@ -1148,14 +1041,11 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
   );
   const [selectedJournal, setSelectedJournal] = useState<PortalJournalEntry | null>(null);
   const [selectedSpray, setSelectedSpray] = useState<PortalSprayRecord | null>(null);
-  const [respondingViolation, setRespondingViolation] = useState<PortalViolation | null>(null);
   const journal = usePortal<PortalList<PortalJournalEntry>>("journal");
   const spray = usePortal<PortalList<PortalSprayRecord>>("spray");
-  const violations = usePortal<PortalList<PortalViolation>>("violations");
   const plots = usePortal<PortalPlots>("plots");
   const plotsList = plots.data?.available ? plots.data.data : [];
   const plotCodes = plotsList.map((plot) => plot.code);
-  const violationsList = violations.data?.data ?? [];
 
   const done = () => {
     setForm(null);
@@ -1165,93 +1055,6 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
 
   return (
     <div className="pt-stack">
-      {/* KHỐI CẢNH BÁO & VI PHẠM NHẬT KÝ CANH TÁC */}
-      <Card
-        title="Vi phạm"
-        action={<span className="pt-viol-count">{violationsList.length}</span>}
-      >
-        <StateBlock loading={violations.loading} error={violations.error} />
-        {!violations.loading && violationsList.length === 0 && (
-          <EmptyState icon="recyclebin">Hộ của bạn không có cảnh báo hay vi phạm nhật ký nào. Hãy tiếp tục duy trì ghi chép đúng quy chuẩn VietGAP.</EmptyState>
-        )}
-        {violationsList.length > 0 && (
-          <ul className="pt-list">
-            {violationsList.map((v) => {
-              const isOpen = v.status === "open";
-              // Vi phạm "chưa cập nhật nhật ký" mà chưa có nhật ký mới từ ngày phát hiện: hướng hộ đi ghi nhật ký
-              // (ghi xong hệ thống tự ghi nhận phản hồi khắc phục), không cho bấm "đã khắc phục" suông.
-              const needsJournal =
-                isOpen && !!v.isJournalViolation && !(v.lastJournalOn && v.lastJournalOn >= v.detectedOn);
-
-              return (
-                <li key={v.id} className="pt-notice pt-viol-item">
-                  <div className="pt-viol-main">
-                    <strong className="pt-viol-title">{v.title}</strong>
-                    <div className="pt-viol-details">
-                      {v.description && <p className="pt-viol-desc">{v.description}</p>}
-                      <p className="pt-notice-meta pt-viol-meta">
-                        Phát hiện: {formatDate(v.detectedOn)}
-                        {v.plotCode ? ` - Thửa ${v.plotCode}` : ""}
-                      </p>
-                    </div>
-                  </div>
-
-                  {v.farmerResponse && (
-                    <div className="pt-viol-box pt-viol-box-response">
-                      <span className="pt-viol-box-label">
-                        Phản hồi của hộ{v.farmerResponseAt ? ` - ${formatDate(v.farmerResponseAt)}` : ""}
-                      </span>
-                      <p>{v.farmerResponse}</p>
-                      {(v.farmerResponsePhotoUrls?.length || v.farmerResponsePhotoUrl) && (
-                        <div style={{ marginTop: 8 }}>
-                          <StoredMediaGallery
-                            urls={v.farmerResponsePhotoUrls}
-                            fallbackUrl={v.farmerResponsePhotoUrl}
-                            altPrefix={`Minh chứng khắc phục ${v.title}`}
-                            caption="Minh chứng khắc phục của hộ"
-                            compact
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {(v.resolvedOn || v.resolutionNotes) && (
-                    <div className="pt-viol-box pt-viol-box-resolved">
-                      <strong>
-                        Đã xác nhận khắc phục{v.resolvedOn ? ` ngày ${formatDate(v.resolvedOn)}` : ""}
-                      </strong>
-                      {v.resolutionNotes ? `: ${v.resolutionNotes}` : ""}
-                    </div>
-                  )}
-
-                  {isOpen && (
-                    <div className="pt-viol-foot">
-                      <button
-                        type="button"
-                        className="pt-btn pt-btn-primary pt-btn-sm pt-viol-action"
-                        onClick={() => {
-                          if (needsJournal) {
-                            setView("journal");
-                            setForm("journal");
-                          } else {
-                            setRespondingViolation(v);
-                          }
-                        }}
-                      >
-                        {needsJournal ? "Ghi nhật ký" : v.farmerResponse ? "Cập nhật khắc phục" : "Báo đã khắc phục"}
-                      </button>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
-
-      <SectionDivider />
-
       <SegmentedTabs ariaLabel="Loại nhật ký" activeKey={view} className="pt-diary-segmented">
         <button
           type="button"
@@ -1470,19 +1273,6 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
             record={selectedSpray}
             onClose={() => setSelectedSpray(null)}
             onDeleted={() => setSelectedSpray(null)}
-          />
-        </Sheet>
-      )}
-
-      {respondingViolation && (
-        <Sheet
-          title="Báo đã khắc phục vi phạm"
-          onClose={() => setRespondingViolation(null)}
-        >
-          <ViolationResponseForm
-            violation={respondingViolation}
-            onDone={() => setRespondingViolation(null)}
-            onClose={() => setRespondingViolation(null)}
           />
         </Sheet>
       )}
