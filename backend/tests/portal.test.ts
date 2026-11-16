@@ -781,6 +781,29 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
       const videoReval = await binh.get(`/api/uploads/${jVid}/video.mp4`).set("If-None-Match", videoEtag);
       expect(videoReval.status).toBe(304);
 
+      // Ghi nhận phun thuốc BVTV kèm nhiều ảnh hiện trường / nhãn bao bì và ghi chú trong luồng gộp
+      const pestList = await binh.get("/api/pesticides?pageSize=20");
+      const allowedPest = (pestList.body.data as Array<{ id: number; status: string }>).find((p) => p.status === "allowed");
+      expect(allowedPest).toBeDefined();
+      const sImg1 = await uploadFile(binh, "journal", tinyWebp, "phun-thuoc-1.webp");
+      const sImg2 = await uploadFile(binh, "journal", tinyWebp, "nhan-thuoc-2.webp");
+      const createdSpray = await binh.post("/api/portal/spray").send({
+        sprayedOn: todayStr,
+        plotCode,
+        pesticideId: allowedPest!.id,
+        dose: "25 ml / bình 20L",
+        areaHa: 0.6,
+        note: "Phun phòng rầy xanh lúc sáng sớm",
+        photoIds: [sImg1, sImg2],
+      });
+      expect(createdSpray.status).toBe(201);
+      expect(createdSpray.body.note).toBe("Phun phòng rầy xanh lúc sáng sớm");
+      expect(createdSpray.body.photoUrl).toBe(`/api/uploads/${sImg1}`);
+      expect(createdSpray.body.photoUrls).toEqual([
+        `/api/uploads/${sImg1}`,
+        `/api/uploads/${sImg2}`,
+      ]);
+
       // Khai báo phụ lục đọt SenPro kèm nhiều ảnh hiện trường + video + nhiều ảnh hóa đơn
       const pField1 = await uploadFile(binh, "journal", tinyWebp, "dot-senpro-1.webp");
       const pField2 = await uploadFile(binh, "journal", tinyWebp, "dot-senpro-2.webp");

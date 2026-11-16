@@ -19,7 +19,9 @@ export class CareProtocolMonitorService implements OnModuleInit, OnApplicationSh
   constructor(private readonly service: CareProtocolService) {}
 
   onModuleInit(): void {
-    if (process.env.NODE_ENV === "test") return;
+    if (process.env.NODE_ENV === "test" || process.env.ENABLE_CARE_PROTOCOL_MONITOR !== "true") {
+      return;
+    }
 
     this.initialTimer = setTimeout(() => {
       void this.runSafeScan();

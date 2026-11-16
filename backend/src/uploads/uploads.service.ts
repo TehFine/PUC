@@ -192,6 +192,12 @@ export class UploadsService implements OnModuleInit {
           ALTER TABLE journal_entries
             ADD COLUMN IF NOT EXISTS photo_ids BIGINT[] NOT NULL DEFAULT '{}'::bigint[];
         END IF;
+        IF to_regclass('public.spray_records') IS NOT NULL THEN
+          ALTER TABLE spray_records
+            ADD COLUMN IF NOT EXISTS photo_id BIGINT REFERENCES attachments(id) ON DELETE SET NULL,
+            ADD COLUMN IF NOT EXISTS photo_ids BIGINT[] NOT NULL DEFAULT '{}'::bigint[],
+            ADD COLUMN IF NOT EXISTS note TEXT;
+        END IF;
         IF to_regclass('public.violations') IS NOT NULL THEN
           ALTER TABLE violations
             ADD COLUMN IF NOT EXISTS farmer_response_photo_ids BIGINT[] NOT NULL DEFAULT '{}'::bigint[];

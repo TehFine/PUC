@@ -2,9 +2,10 @@ import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
-import { camelRow, camelRows, todayVn } from "../../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql, camelRow, camelRows, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
+import { UploadsService } from "../../uploads/uploads.service";
 import { ADMIN_LINKS, INSPECTION_ROLES } from "../common/admin-links";
 import { assertPlotOwned, type ClientContext, householdIdOf } from "../common/portal-context";
 import type { CreatePortalSprayDto } from "./spray.dto";
@@ -16,7 +17,10 @@ function diffCalendarDays(laterIso: string, earlierIso: string): number {
 }
 
 const SPRAY_COLUMNS = `s.id, s.sprayed_on, s.plot_code, s.pesticide_id, p.name AS pesticide, p.status AS pesticide_status, s.source,
-  s.dose, s.area_ha, s.isolation_days, (s.sprayed_on + s.isolation_days) AS isolation_ends_on, s.mrl_status, s.created_at,
+  s.dose, s.area_ha, s.isolation_days, (s.sprayed_on + s.isolation_days) AS isolation_ends_on, s.mrl_status, s.note,
+  ${attachmentUrlSql("s.photo_id")} AS photo_url,
+  ${attachmentUrlsSql("s.photo_ids", "s.photo_id")} AS photo_urls,
+  s.created_at,
   s.server_recorded_at,
   to_char(s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
   GREATEST(0, ((s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - s.sprayed_on))::int AS late_declaration_days,
@@ -30,6 +34,7 @@ export class SprayService {
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly uploads: UploadsService,
   ) {}
 
   async list(user: AuthUser) {
@@ -65,9 +70,19 @@ export class SprayService {
 
     // Thuốc bị cấm luôn bị ghi nhận là không đạt để cán bộ kiểm tra theo dõi và cảnh báo ngay.
     const mrlStatus = pesticide.status === "banned" ? "exceeded" : "pass";
+    const rawPhotoIds = [
+      ...(dto.photoIds ?? []),
+      ...(dto.photoId ? [dto.photoId] : []),
+    ];
+    const media =
+      rawPhotoIds.length > 0
+        ? await this.uploads.assertUsableDetailed(rawPhotoIds, user, "journal", householdId)
+        : { ids: [] as number[], primaryId: null };
+
     const { rows } = await this.db.query<{ id: number }>(
-      `INSERT INTO spray_records (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, late_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+      `INSERT INTO spray_records
+         (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, note, photo_id, photo_ids, late_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::bigint[], $13) RETURNING id`,
       [
         sprayedOn,
         householdId,
@@ -78,6 +93,9 @@ export class SprayService {
         pesticide.isolation_days ?? 0,
         mrlStatus,
         plotCode,
+        dto.note?.trim() || null,
+        media.primaryId,
+        media.ids,
         dto.lateReason ?? null,
       ],
     );
@@ -90,7 +108,7 @@ export class SprayService {
         kind: "schedule",
         title: `Ghi nhận khai báo phun thuốc chậm ${backdatedDays} ngày`,
         body: `${plotCode ? `Thửa ${plotCode}: ` : ""}Đã lưu đồng thời ngày phun ${sd}/${sm}/${sy} và ngày khai báo ${td}/${tm}/${ty}. Thời gian cách ly PHI vẫn tính chính xác từ ngày phun ${sd}/${sm}/${sy}. Lần tới vui lòng cập nhật ngay trong ngày phun.`,
-        link: "/portal?tab=diary&sub=spray",
+        link: "/portal?tab=diary",
       });
     }
 

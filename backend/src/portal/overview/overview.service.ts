@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
-import { CareProtocolService } from "../../care-protocol/care-protocol.service";
 import { notFound } from "../../common/errors/app.exception";
 import { camelRow, camelRows, publicAttachmentUrlSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
@@ -21,19 +20,12 @@ export class OverviewService {
   constructor(
     private readonly db: DatabaseService,
     private readonly notifications: NotificationsService,
-    private readonly careProtocol: CareProtocolService,
   ) {}
 
   async overview(user: AuthUser) {
     const id = householdIdOf(user);
     const loadOverview = async () => {
-      await Promise.all([
-        this.notifications.syncFarmerNotifications(user),
-        this.careProtocol
-          .ensureHouseholdPlans(id)
-          .then(() => this.careProtocol.scanAndNotifyPlansForHousehold(id))
-          .catch(() => undefined),
-      ]);
+      await this.notifications.syncFarmerNotifications(user);
       const household = (
         await this.db.query(
           `SELECT h.id, h.code, h.name, h.phone, h.plot_count, h.area_ha, h.status,
@@ -45,7 +37,7 @@ export class OverviewService {
       ).rows[0];
       if (!household) throw notFound("Không tìm thấy hộ của tài khoản này.");
 
-      const [statsRes, lastTestRes, sqlReminders, protocolReminders] = await Promise.all([
+      const [statsRes, lastTestRes, reminders] = await Promise.all([
         this.db.query(
           `SELECT
              (SELECT count(*)::int FROM violations WHERE household_id = $1 AND status = 'open') AS open_violations,
@@ -71,12 +63,10 @@ export class OverviewService {
           [id],
         ),
         this.reminders(id),
-        this.careProtocol.getHouseholdActiveReminders(id).catch(() => []),
       ]);
 
       const stats = statsRes.rows[0];
       const lastTest = lastTestRes.rows[0];
-      const reminders = [...protocolReminders, ...sqlReminders];
 
       return {
         household: camelRow(household),

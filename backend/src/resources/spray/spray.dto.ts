@@ -1,5 +1,6 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsIn } from "class-validator";
+import { Type } from "class-transformer";
+import { ArrayMaxSize, IsArray, IsIn, IsInt, IsOptional, Min } from "class-validator";
 import { Count, IsoDate, NonNegative, OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateSprayDto {
@@ -31,6 +32,21 @@ export class CreateSprayDto {
   @OptionalField()
   @IsIn(["pass", "exceeded"])
   mrlStatus?: "pass" | "exceeded";
+
+  @OptionalText(500)
+  note?: string | null;
+
+  @IsOptional()
+  @RecordId()
+  photoId?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8, { message: "Tối đa 8 ảnh hoặc video hiện trường cho mỗi lần phun thuốc." })
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  photoIds?: number[];
 
   @OptionalText(250)
   lateReason?: string | null;
