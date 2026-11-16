@@ -90,9 +90,12 @@ export interface PortalJournalEntry {
   recorder: string;
   hasPhoto: boolean;
   photoUrl?: string | null;
+  photoUrls?: string[];
   latitude?: number | string | null;
   longitude?: number | string | null;
   serverRecordedAt?: string | null;
+  declaredOn?: string | null;
+  lateDeclarationDays?: number;
   entryDelayHours?: number;
   isLateEntry?: boolean;
   lateReason?: string | null;
@@ -110,7 +113,8 @@ export interface CreateJournalBody {
   plotCode: string;
   activity: string;
   detail?: string;
-  photoId: number;
+  photoId?: number;
+  photoIds?: number[];
   latitude?: number;
   longitude?: number;
   lateReason?: string;
@@ -129,6 +133,8 @@ export interface PortalSprayRecord {
   mrlStatus: "pass" | "exceeded";
   plotCode?: string | null;
   serverRecordedAt?: string | null;
+  declaredOn?: string | null;
+  lateDeclarationDays?: number;
   entryDelayHours?: number;
   isLateEntry?: boolean;
   lateReason?: string | null;
@@ -186,6 +192,7 @@ export interface PortalViolation {
   farmerResponse?: string | null;
   farmerResponseAt?: string | null;
   farmerResponsePhotoUrl?: string | null;
+  farmerResponsePhotoUrls?: string[];
   resolvedOn?: string | null;
   resolutionNotes?: string | null;
   /** Vi phạm loại "chưa cập nhật nhật ký": phải ghi nhật ký mới mới được báo đã khắc phục. */
@@ -228,6 +235,8 @@ export interface PortalHarvestDeclaration {
   qualityRating: string | null;
   note: string | null;
   createdAt: string;
+  declaredOn?: string | null;
+  lateDeclarationDays?: number;
   status: HarvestDeclarationStatus;
   reviewNote?: string | null;
   reviewedAt?: string | null;

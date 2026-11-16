@@ -6,6 +6,7 @@ import { ArrowRight, CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { RadialPngIcon } from "./RadialIcons";
 import { useSheetSwipe } from "./use-sheet-swipe";
@@ -244,6 +245,8 @@ export function Sheet({
     }, 350);
     return () => clearTimeout(timer);
   }, []);
+
+  useBackLayer(true, handleClose);
 
   // Vuốt kiểu khung bình luận TikTok / Facebook trên mobile; tắt trên ngăn kéo dọc desktop
   useSheetSwipe({

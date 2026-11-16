@@ -9,7 +9,7 @@ import { api, errorMessage } from "@/lib/api-client";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, numberText, parseNumber, requireFields, todayIso } from "@/components/admin/shared/form-utils";
 import { LAB_RESULT, optionsOf } from "@/components/admin/shared/labels";
-import { ALLOWED_IMAGE_MIMES } from "@/components/portal/shared/media";
+import { ALLOWED_IMAGE_MIMES, uploadOptimizedFile } from "@/components/portal/shared/media";
 import type { LabRecordStatus, LabResult, LabTestRecord } from "@/types/testing";
 import { isSafeExternalHttpsUrl, isSafeMediaUrl } from "@/utils/url-safety";
 
@@ -76,7 +76,7 @@ export default function LabTestFormModal({
     setUploadingScan(true);
     setUploadError(null);
     try {
-      const uploaded = await api.upload(file, "lab");
+      const uploaded = await uploadOptimizedFile(file, "lab");
       setScanAttachmentId(uploaded.id);
       setScanUrl(uploaded.url);
       toast.success("Đã tải lên bản scan giấy kiểm nghiệm.");

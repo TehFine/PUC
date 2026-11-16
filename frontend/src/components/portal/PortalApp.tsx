@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import {
   ArrowRight,
   BookOpen,
@@ -18,11 +18,19 @@ import {
 } from "@/components/ui/PublicIcon";
 import { type ChangeEvent, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { WORKSPACE_ACTIVE_SESSION_KEY } from "@/components/landing/AutoEnter";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { ConfirmDialog } from "@/components/ui/Modal";
+import OfflineSyncBar from "@/components/ui/OfflineSyncBar";
 import { invalidateQueries, NOTIFICATIONS_PATH, portalPath, usePortal, useSharedQuery } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { api, errorMessage } from "@/lib/api-client";
+import {
+  ensureRootEntryBeforeSubPage,
+  PUC_URL_SYNC_EVENT,
+  pushUrlNavigation,
+} from "@/lib/back-navigation";
+import { resolveValidPortalRoute } from "@/lib/route-validation";
 import { isLowEndDevice } from "@/lib/network";
 import { HOUSEHOLD_STATUS } from "@/lib/portal-labels";
 import { INTRO_PATH } from "@/lib/routes";
@@ -186,15 +194,15 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
 }
 
 /** Cổng dành cho hộ dân (tài khoản vai trò Nông dân). Cán bộ được chuyển về trang quản trị. */
-export default function PortalApp() {
+export default function PortalApp({ initialTab = "home" }: { initialTab?: PortalTabId } = {}) {
   return (
     <PortalLangProvider>
-      <PortalAppContent />
+      <PortalAppContent initialTab={initialTab} />
     </PortalLangProvider>
   );
 }
 
-function PortalAppContent() {
+function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const router = useRouter();
   const { lang, setLang, t } = usePortalLang();
   const { status, session, logout, updateProfile } = useAuth();
@@ -204,14 +212,12 @@ function PortalAppContent() {
     status === "authenticated" && session?.user.role === "farmer" ? NOTIFICATIONS_PATH : null,
   );
 
-  const [tab, setTab] = useState<PortalTabId>(() => {
-    if (typeof window === "undefined") return "home";
-    const tabParam = new URLSearchParams(window.location.search).get("tab");
-    if (tabParam && TABS.some((t) => t.id === tabParam)) {
-      return tabParam as PortalTabId;
-    }
-    return "home";
-  });
+  const [tab, setTab] = useState<PortalTabId>(initialTab);
+  const [invalidClientUrl, setInvalidClientUrl] = useState<boolean>(() =>
+    typeof window !== "undefined"
+      ? resolveValidPortalRoute(new URLSearchParams(window.location.search)) === null
+      : false,
+  );
   const [profileOpen, setProfileOpen] = useState(false);
   const isDesktopDrawer = useIsDesktopViewport(760);
   const [supportOpen, setSupportOpen] = useState(false);
@@ -230,6 +236,7 @@ function PortalAppContent() {
   const [savingConsent, setSavingConsent] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
   const [localConsentOverride, setLocalConsentOverride] = useState<boolean | undefined>(undefined);
+  const [confirmRemoveAvatar, setConfirmRemoveAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [notifFilter, setNotifFilter] = useState<"all" | "unread">("all");
@@ -243,33 +250,98 @@ function PortalAppContent() {
   // Thao tác được yêu cầu từ ô tìm kiếm (ví dụ mở sẵn biểu mẫu ghi nhật ký). `nonce` tăng mỗi lần chọn
   // để tab được dựng lại và nhận thao tác mới, kể cả khi đang ở đúng tab đó.
   const [intent, setIntent] = useState<{ action?: PortalAction; nonce: number }>({ nonce: 0 });
+  const tabRef = useRef<PortalTabId>(tab);
 
-  const navigate = useCallback((next: PortalTabId, action?: PortalAction) => {
-    setNavWheelOpen(false);
-    setIntent((prev) =>
-      action ? { action, nonce: prev.nonce + 1 } : prev.action ? { nonce: prev.nonce } : prev,
-    );
-    startTransition(() => {
-      setTab(next);
-    });
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
+
+  const buildPortalTabUrl = useCallback((nextTab: PortalTabId, action?: PortalAction) => {
+    const sp = new URLSearchParams();
+    if (nextTab !== "home") {
+      sp.set("tab", nextTab);
+    }
+    if (action === "spray-add" || action === "spray-list") sp.set("sub", "spray");
+    else if (action === "journal-add" || action === "journal-list") sp.set("sub", "journal");
+    else if (action === "learn-pesticides") sp.set("sub", "pesticides");
+    else if (action === "learn-fertilizers") sp.set("sub", "fertilizers");
+    else if (action === "learn-varieties") sp.set("sub", "varieties");
+    else if (action === "learn-diseases") sp.set("sub", "diseases");
+    const qs = sp.toString();
+    return qs ? `/portal?${qs}` : "/portal";
   }, []);
 
-  const handleSearchPick = useCallback((target: PortalSearchTarget) => {
-    if (target.kind === "global") {
-      if (target.action === "notifications") setNotifOpen(true);
-      else if (target.action === "profile") setProfileOpen(true);
-      else if (target.action === "password") setPasswordOpen(true);
-      else setSupportOpen(true);
+  useEffect(() => {
+    if (status !== "authenticated" || session?.user.role !== "farmer" || typeof window === "undefined") {
       return;
     }
-    setNavWheelOpen(false);
-    setIntent((prev) => ({ action: target.action, nonce: prev.nonce + 1 }));
-    startTransition(() => {
-      setTab(target.tab);
-    });
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, []);
+    try {
+      window.sessionStorage.setItem(WORKSPACE_ACTIVE_SESSION_KEY, "1");
+    } catch {
+      // ignore
+    }
+    const initialParsed = resolveValidPortalRoute(new URLSearchParams(window.location.search));
+    if (!initialParsed) {
+      return;
+    }
+    if (initialParsed.tab !== "home") {
+      const fullUrl = window.location.pathname + window.location.search + window.location.hash;
+      ensureRootEntryBeforeSubPage("/portal", fullUrl);
+    }
+
+    const onSync = () => {
+      const parsed = resolveValidPortalRoute(new URLSearchParams(window.location.search));
+      if (!parsed) {
+        setInvalidClientUrl(true);
+        return;
+      }
+      const resolved: PortalTabId = parsed.tab;
+      if (resolved !== tabRef.current) {
+        startTransition(() => {
+          setTab(resolved);
+        });
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      }
+    };
+
+    window.addEventListener(PUC_URL_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(PUC_URL_SYNC_EVENT, onSync);
+  }, [status, session?.user.role]);
+
+  const navigate = useCallback(
+    (next: PortalTabId, action?: PortalAction) => {
+      setNavWheelOpen(false);
+      pushUrlNavigation(buildPortalTabUrl(next, action));
+      setIntent((prev) =>
+        action ? { action, nonce: prev.nonce + 1 } : prev.action ? { nonce: prev.nonce } : prev,
+      );
+      startTransition(() => {
+        setTab(next);
+      });
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    },
+    [buildPortalTabUrl],
+  );
+
+  const handleSearchPick = useCallback(
+    (target: PortalSearchTarget) => {
+      if (target.kind === "global") {
+        if (target.action === "notifications") setNotifOpen(true);
+        else if (target.action === "profile") setProfileOpen(true);
+        else if (target.action === "password") setPasswordOpen(true);
+        else setSupportOpen(true);
+        return;
+      }
+      setNavWheelOpen(false);
+      pushUrlNavigation(buildPortalTabUrl(target.tab, target.action));
+      setIntent((prev) => ({ action: target.action, nonce: prev.nonce + 1 }));
+      startTransition(() => {
+        setTab(target.tab);
+      });
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    },
+    [buildPortalTabUrl],
+  );
 
   const closeProfile = useCallback(() => {
     setProfileOpen(false);
@@ -393,6 +465,10 @@ function PortalAppContent() {
       });
   }, [apiNotifItems.length, overview?.reminders, localReadIds]);
 
+  if (invalidClientUrl) {
+    notFound();
+  }
+
   if (status !== "authenticated" || session?.user.role !== "farmer") {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
   }
@@ -443,8 +519,6 @@ function PortalAppContent() {
       setUploadingAvatar(false);
     }
   };
-
-  const [confirmRemoveAvatar, setConfirmRemoveAvatar] = useState(false);
 
   const handleRemoveAvatar = async () => {
     if (uploadingAvatar || !avatarUrl) return;
@@ -673,6 +747,7 @@ function PortalAppContent() {
       </header>
 
       <main className="pt-main">
+        <OfflineSyncBar />
         <div key={`${tab}-${intent.nonce}-${lang}`} className="pt-tab-pane is-active">
           {tab === "home" && <HomeTab onNavigate={navigate} />}
           {tab === "plots" && <PlotsTab />}

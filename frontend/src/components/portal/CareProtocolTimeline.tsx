@@ -1,9 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FormEvent, useMemo, useState, type ReactNode } from "react";
+import { OfflinePendingDiaryCards } from "@/components/ui/OfflineSyncBar";
 import { ChevronDown, ChevronUp } from "@/components/ui/PublicIcon";
 import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
+import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { todayIso } from "@/lib/portal-labels";
 import type { PesticideDto } from "@/types/api";
 import type {
@@ -19,8 +21,15 @@ import type {
   PlotCarePlanTimeline,
   SenProRuleSpec,
 } from "@/types/care-protocol";
-import { formatDate } from "@/utils/format";
-import { BusyButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
+import { formatDate, formatDateTime } from "@/utils/format";
+import {
+  BusyButton,
+  InlineError,
+  LateDeclarationNotice,
+  MultiPhotoField,
+  StoredMediaGallery,
+  useMultiPhotoPicker,
+} from "./shared/controls";
 import { Field, Sheet, StateBlock, useSheetClose } from "./ui";
 
 type TagTone = "green" | "gold" | "red" | "blue" | "gray";
@@ -36,6 +45,45 @@ function addIsoDays(isoDate: string, days: number): string | undefined {
   const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days));
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+}
+
+/** Tách đoạn hướng dẫn gộp nhiều câu thành từng bước rõ ràng theo từng hàng. */
+function splitProtocolSteps(summary?: string | null): string[] {
+  if (!summary) return [];
+  return summary
+    .split(/(?<![0-9])\.\s+|;\s+/)
+    .map((part) => part.trim().replace(/\.+$/, "").trim())
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1));
+}
+
+/** Lược bỏ tên giai đoạn bị lặp trong nhãn ngày khi đã nằm trong khung giai đoạn tương ứng. */
+function cleanDayLabelForStage(dayLabel: string, stageName: string): string {
+  const escaped = stageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const cleaned = dayLabel.replace(new RegExp(`\\s*\\(${escaped}\\)`, "i"), "").trim();
+  return cleaned || dayLabel;
+}
+
+function ProtocolStepLines({ text, boldSingle = false }: { text?: string | null; boldSingle?: boolean }) {
+  const steps = splitProtocolSteps(text);
+  if (steps.length === 0) return null;
+  if (steps.length === 1) {
+    return (
+      <div className={boldSingle ? "cp-task-action" : "cp-step-single"}>
+        {steps[0]}
+      </div>
+    );
+  }
+  return (
+    <div className="cp-step-list">
+      {steps.map((step, idx) => (
+        <div key={idx} className="cp-step-item">
+          <span className="cp-step-num">{idx + 1}.</span>
+          <span>{step}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function diffDaysFromToday(isoDate: string): number {
@@ -382,9 +430,16 @@ function CareMilestoneDeclareForm({
     return milestone?.treeStateOptions?.length ? milestone.treeStateOptions : [expectedTreeState];
   }, [isSenPro, senProRules, expectedTreeState, milestone]);
 
+  const defaultTreeChoice = useMemo(() => {
+    if (isSenPro) return expectedTreeState;
+    return treeStateChoices[0] || expectedTreeState;
+  }, [isSenPro, treeStateChoices, expectedTreeState]);
+
   const [performedOn, setPerformedOn] = useState<string>(todayIso());
-  const [actualTreeState, setActualTreeState] = useState<string>(expectedTreeState);
+  const [actualTreeState, setActualTreeState] = useState<string>(defaultTreeChoice);
+  const [customTreeMode, setCustomTreeMode] = useState<boolean>(false);
   const [followedStandard, setFollowedStandard] = useState<boolean>(true);
+  const [editingDosage, setEditingDosage] = useState<boolean>(false);
   const [selectedProducts, setSelectedProducts] = useState<string[]>(standardProducts);
   const [actualDosage, setActualDosage] = useState<string>(standardDosage);
   const [extraInputs, setExtraInputs] = useState<string>("");
@@ -393,14 +448,15 @@ function CareMilestoneDeclareForm({
   const [pesticideId, setPesticideId] = useState<string>("");
   const [pesticideDose, setPesticideDose] = useState<string>("");
   const [farmerNote, setFarmerNote] = useState<string>("");
+  const [showOptionalExtra, setShowOptionalExtra] = useState<boolean>(false);
   const [lateReason, setLateReason] = useState<string>("");
 
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
 
-  const fieldPhoto = usePhotoPicker("journal");
-  const invoicePhoto = usePhotoPicker("journal");
+  const fieldMedia = useMultiPhotoPicker("journal", { maxFiles: 8, allowVideo: true });
+  const invoiceMedia = useMultiPhotoPicker("journal", { maxFiles: 6, allowVideo: false });
   const pesticidesCatalog = useCatalog<PesticideDto>("pesticides");
   const allowedPesticides = useMemo(
     () => (pesticidesCatalog.rows ?? []).filter((p) => p.status !== "banned"),
@@ -414,16 +470,17 @@ function CareMilestoneDeclareForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isSenPro && activeSenPro) {
-      setActualTreeState(activeSenPro.shootState);
-      setSelectedProducts(["SenPro"]);
-      setActualDosage(`Pha SenPro tỷ lệ ${activeSenPro.requiredRatio}`);
-    }
-  }, [isSenPro, activeSenPro]);
+  const handlePickSenPro = (rule: SenProRuleSpec) => {
+    setSenProCode(rule.code);
+    setCustomTreeMode(false);
+    setActualTreeState(rule.shootState);
+    setSelectedProducts(["SenPro"]);
+    setActualDosage(`Pha SenPro tỷ lệ ${rule.requiredRatio}`);
+  };
 
   const minBackdateIso = addIsoDays(todayIso(), -7);
-  const isLateOver48h = diffDaysFromToday(performedOn) > 2;
+  const selectedDelayDays = Math.max(0, diffDaysFromToday(performedOn));
+  const isLateOver48h = selectedDelayDays > 2;
 
   const localWarnings = useMemo(
     () =>
@@ -477,11 +534,11 @@ function CareMilestoneDeclareForm({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!fieldPhoto.file) {
-      setError("Vui lòng chụp ảnh hiện trường thực tế tại vườn trước khi gửi khai báo.");
+    if (!fieldMedia.hasFiles) {
+      setError("Vui lòng chụp hoặc chọn ít nhất 1 ảnh hiện trường thực tế tại vườn trước khi gửi khai báo.");
       return;
     }
-    if (requiresInvoicePhoto && !invoicePhoto.file) {
+    if (requiresInvoicePhoto && !invoiceMedia.hasFiles) {
       setError("Vui lòng chụp ảnh hóa đơn mua vật tư hoặc nhãn bao bì đã sử dụng.");
       return;
     }
@@ -493,20 +550,10 @@ function CareMilestoneDeclareForm({
     setSaving(true);
     setError(null);
     try {
-      const fieldPhotoId = await fieldPhoto.ensureUploaded();
-      if (!fieldPhotoId) {
-        setError("Không tải lên được ảnh hiện trường vườn.");
-        setSaving(false);
-        return;
-      }
-      const invoicePhotoId = invoicePhoto.file ? await invoicePhoto.ensureUploaded() : undefined;
-      if (requiresInvoicePhoto && !invoicePhotoId) {
-        setError("Không tải lên được ảnh hóa đơn hoặc bao bì vật tư.");
-        setSaving(false);
-        return;
-      }
-
-      const body: DeclareCareMilestoneBody = {
+      const baseBody: Omit<
+        DeclareCareMilestoneBody,
+        "fieldPhotoId" | "fieldPhotoIds" | "invoicePhotoId" | "invoicePhotoIds"
+      > = {
         plotCode,
         milestoneCode: targetCode,
         performedOn,
@@ -518,17 +565,44 @@ function CareMilestoneDeclareForm({
         supplierName: supplierName.trim() || undefined,
         pesticideId: includeBvtv && pesticideId ? Number(pesticideId) : undefined,
         pesticideDose: includeBvtv && pesticideId ? (pesticideDose.trim() || actualDosage.trim()) : undefined,
-        fieldPhotoId,
-        invoicePhotoId,
         latitude: coords?.latitude,
         longitude: coords?.longitude,
         farmerNote: farmerNote.trim() || undefined,
-        lateReason: isLateOver48h && lateReason.trim() ? lateReason.trim() : undefined,
+        lateReason: selectedDelayDays >= 1 && lateReason.trim() ? lateReason.trim() : undefined,
       };
 
-      const res = await api.post<DeclareCareMilestoneResponse>("/portal/care-protocol/declare", body);
-      invalidatePortal("care-protocol", "journal", "spray", "violations", "overview");
-      onSuccess(res);
+      const outcome = await submitFieldRecordWithOfflineQueue<DeclareCareMilestoneResponse>({
+        kind: "portal-care-milestone",
+        label: `Khai báo mốc lộ trình - Thửa ${plotCode} (${actualTreeState.trim() || expectedTreeState})`,
+        plotCode,
+        endpoint: "/portal/care-protocol/declare",
+        payload: baseBody as Record<string, unknown>,
+        mediaGroups: [
+          {
+            slotKey: "fieldPhotos",
+            purpose: "journal",
+            items: fieldMedia.items,
+            binding: { arrayField: "fieldPhotoIds", primaryField: "fieldPhotoId" },
+          },
+          ...(invoiceMedia.hasFiles
+            ? [
+                {
+                  slotKey: "invoicePhotos",
+                  purpose: "journal" as const,
+                  items: invoiceMedia.items,
+                  binding: { arrayField: "invoicePhotoIds", primaryField: "invoicePhotoId" },
+                },
+              ]
+            : []),
+        ],
+        portalKeysToInvalidate: ["care-protocol", "journal", "spray", "violations", "overview"],
+        onProgress: fieldMedia.setUploadProgress,
+      });
+
+      if (outcome.mode === "synced") {
+        invalidatePortal("care-protocol", "journal", "spray", "violations", "overview");
+        onSuccess(outcome.data);
+      }
       (sheetClose ?? onClose)();
     } catch (err) {
       setError(errorMessage(err, "Không thể lưu khai báo mốc chăm sóc. Vui lòng thử lại."));
@@ -536,58 +610,82 @@ function CareMilestoneDeclareForm({
     }
   };
 
+  const handleSelectStandardMode = (nextStandard: boolean) => {
+    setFollowedStandard(nextStandard);
+    if (nextStandard) {
+      setSelectedProducts(standardProducts);
+      setActualDosage(standardDosage);
+      setExtraInputs("");
+      setEditingDosage(false);
+    } else {
+      setEditingDosage(true);
+    }
+  };
+
   return (
-    <form className="pt-form" onSubmit={submit}>
-      <div className="cp-form-summary">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+    <form className="pt-form cp-declare-form" onSubmit={submit}>
+      {/* Tóm tắt việc cần làm tách từng hàng rõ ràng */}
+      <div className="cp-task-card">
+        <div className="cp-task-meta">
           <span className="cp-eyebrow">
             {isSenPro
-              ? `Thửa ${plotCode} - Phác đồ chặn đọt SenPro`
-              : `Thửa ${plotCode} - Giai đoạn ${milestone?.stageOrder}: ${milestone?.stageName}`}
+              ? `Thửa ${plotCode} - Phác đồ SenPro`
+              : `Thửa ${plotCode} - Giai đoạn ${milestone?.stageOrder}`}
           </span>
           {!isSenPro && milestone && (
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#4a5d56", fontVariantNumeric: "tabular-nums" }}>
-              {milestone.dayLabel} (Hạn {formatDate(milestone.dueOn)})
+            <span className="cp-task-due">
+              {cleanDayLabelForStage(milestone.dayLabel, milestone.stageName)} - Hạn {formatDate(milestone.dueOn)}
             </span>
           )}
         </div>
-        <strong style={{ fontSize: 14.5, color: "#14372f", lineHeight: 1.4, fontVariantNumeric: "tabular-nums" }}>
-          {isSenPro ? activeSenPro?.actionSummary : milestone?.actionSummary}
-        </strong>
+        <ProtocolStepLines
+          text={isSenPro ? activeSenPro?.actionSummary : milestone?.actionSummary}
+          boldSingle
+        />
         {!isSenPro && milestone?.notes && (
-          <p style={{ margin: 0, fontSize: 12.5, color: "#435951", lineHeight: 1.5 }}>{milestone.notes}</p>
+          <div className="cp-task-note">
+            <strong>Lưu ý:</strong> {milestone.notes}
+          </div>
         )}
       </div>
 
-      {isSenPro && senProRules && (
-        <Field label="Chọn trạng thái mũi đọt thực tế (Tự động điền đúng tỷ lệ SenPro)" htmlFor="cp-senpro-stage">
-          <div className="cp-senpro-picker">
-            {senProRules.map((rule) => {
-              const selected = rule.code === senProCode;
-              return (
-                <button
-                  key={rule.code}
-                  type="button"
-                  className={`cp-senpro-pick-btn ${selected ? "is-selected" : ""}`.trim()}
-                  onClick={() => setSenProCode(rule.code)}
-                >
-                  <strong style={{ display: "block", fontSize: 13.5, color: "#14372f" }}>{rule.shootState}</strong>
-                  <span style={{ fontSize: 12, color: "#15803d", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                    Tỷ lệ {rule.requiredRatio} ({rule.effectLabel})
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </Field>
-      )}
+      {/* ─── KHU 01: THỜI GIAN VÀ TÌNH TRẠNG CÂY ─── */}
+      <section className="cp-zone-card" aria-labelledby="cp-zone-1">
+        <div className="cp-zone-head">
+          <span className="cp-zone-idx">01</span>
+          <h3 id="cp-zone-1" className="cp-zone-title">
+            Ngày làm và tình trạng cây
+          </h3>
+        </div>
 
-      <div className="pt-field-row">
-        <Field label="Ngày thực hiện tại vườn" htmlFor="cp-performed-on">
+        {isSenPro && senProRules && (
+          <Field label="Chọn tuổi đọt hiện tại" htmlFor="cp-senpro-stage">
+            <div id="cp-senpro-stage" className="cp-senpro-picker">
+              {senProRules.map((rule) => {
+                const selected = rule.code === senProCode;
+                return (
+                  <button
+                    key={rule.code}
+                    type="button"
+                    className={`cp-senpro-pick-btn ${selected ? "is-selected" : ""}`.trim()}
+                    onClick={() => handlePickSenPro(rule)}
+                  >
+                    <strong style={{ display: "block", fontSize: 14, color: "#14372f" }}>Đọt {rule.shootState}</strong>
+                    <span style={{ fontSize: 12.5, color: "#15803d", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                      Pha {rule.requiredRatio} ({rule.effectLabel})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+        )}
+
+        <Field label="Ngày làm tại vườn" htmlFor="cp-performed-on">
           <input
             id="cp-performed-on"
             type="date"
-            className="pt-input-date"
+            className="pt-input-date cp-large-input"
             min={minBackdateIso}
             max={todayIso()}
             value={performedOn}
@@ -596,218 +694,331 @@ function CareMilestoneDeclareForm({
           />
         </Field>
 
-        <Field label="Mức độ tuân thủ phác đồ" htmlFor="cp-followed">
-          <select
-            id="cp-followed"
-            value={followedStandard ? "yes" : "no"}
-            onChange={(e) => setFollowedStandard(e.target.value === "yes")}
-          >
-            <option value="yes">Thực hiện đúng vật tư và liều chuẩn</option>
-            <option value="no">Có điều chỉnh vật tư hoặc liều lượng</option>
-          </select>
-        </Field>
-      </div>
-
-      {isLateOver48h && (
-        <Field label="Lý do khai báo muộn quá 48 giờ" htmlFor="cp-late-reason">
-          <input
-            id="cp-late-reason"
-            maxLength={300}
-            placeholder="Ví dụ: Mưa lớn tại vườn mất sóng điện thoại, nay bổ sung kèm ảnh..."
-            value={lateReason}
-            onChange={(e) => setLateReason(e.target.value)}
-            required
-          />
-        </Field>
-      )}
-
-      <Field label="Xác nhận trạng thái cây thực tế tại vườn (chạm để chọn)" htmlFor="cp-tree-state">
-        <div className="cp-choice-wrap">
-          {treeStateChoices.map((opt) => {
-            const active = actualTreeState === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                className={`cp-choice-btn ${active ? "is-active" : ""}`.trim()}
-                onClick={() => setActualTreeState(opt)}
-              >
-                {opt}
-              </button>
-            );
-          })}
-        </div>
-        <input
-          id="cp-tree-state"
-          maxLength={200}
-          value={actualTreeState}
-          onChange={(e) => setActualTreeState(e.target.value)}
-          placeholder="Nhập hoặc chọn trạng thái cây thực tế"
-          required
+        <LateDeclarationNotice
+          selectedDate={performedOn}
+          todayDate={todayIso()}
+          delayDays={selectedDelayDays}
+          mode="protocol"
         />
-      </Field>
 
-      {standardProducts.length > 0 && (
-        <Field label="Vật tư sử dụng theo tài liệu 2026-2027 (chạm để bật hoặc tắt)" htmlFor="cp-products">
-          <div id="cp-products" className="cp-choice-wrap" style={{ marginBottom: 0 }}>
-            {standardProducts.map((prod) => {
-              const checked = selectedProducts.includes(prod);
+        {selectedDelayDays >= 1 && (
+          <Field
+            label={
+              isLateOver48h
+                ? `Lý do khai báo chậm ${selectedDelayDays} ngày (bắt buộc)`
+                : `Ghi chú lý do khai báo chậm ${selectedDelayDays} ngày (không bắt buộc)`
+            }
+            htmlFor="cp-late-reason"
+          >
+            <input
+              id="cp-late-reason"
+              className="cp-large-input"
+              maxLength={250}
+              placeholder="Ví dụ: Hôm làm tại vườn bận tưới hoặc mất sóng điện thoại..."
+              value={lateReason}
+              onChange={(e) => setLateReason(e.target.value)}
+              required={isLateOver48h}
+            />
+          </Field>
+        )}
+
+        <div className="cp-field-block">
+          <span className="cp-field-heading">Tình trạng cây tại vườn</span>
+          <div className="cp-radio-list" role="radiogroup" aria-label="Tình trạng cây tại vườn">
+            {treeStateChoices.map((opt) => {
+              const active = !customTreeMode && actualTreeState === opt;
               return (
-                <button
-                  key={prod}
-                  type="button"
-                  aria-pressed={checked}
-                  className={`cp-choice-btn ${checked ? "is-active" : ""}`.trim()}
-                  onClick={() => toggleProduct(prod)}
-                >
-                  {prod}
-                </button>
+                <label key={opt} className={`cp-radio-option ${active ? "is-selected" : ""}`.trim()}>
+                  <input
+                    type="radio"
+                    name="cp-tree-state-choice"
+                    checked={active}
+                    onChange={() => {
+                      setCustomTreeMode(false);
+                      setActualTreeState(opt);
+                    }}
+                  />
+                  <span>{opt}</span>
+                </label>
               );
             })}
-          </div>
-        </Field>
-      )}
-
-      <div className="pt-field-row">
-        <Field label="Liều lượng thực tế đã pha hoặc bón" htmlFor="cp-dosage">
-          <input
-            id="cp-dosage"
-            maxLength={300}
-            style={{ fontVariantNumeric: "tabular-nums" }}
-            value={actualDosage}
-            onChange={(e) => setActualDosage(e.target.value)}
-            required
-          />
-        </Field>
-        <Field label="Đại lý cung cấp vật tư (theo hóa đơn)" htmlFor="cp-supplier">
-          <input
-            id="cp-supplier"
-            maxLength={200}
-            placeholder="Ví dụ: Cửa hàng VTNN HTX Cư Né..."
-            value={supplierName}
-            onChange={(e) => setSupplierName(e.target.value)}
-          />
-        </Field>
-      </div>
-
-      <Field label="Vật tư bổ sung ngoài danh mục chuẩn (nếu có)" htmlFor="cp-extra-inputs">
-        <input
-          id="cp-extra-inputs"
-          maxLength={400}
-          placeholder="Bỏ trống nếu chỉ dùng đúng vật tư chuẩn ở trên"
-          value={extraInputs}
-          onChange={(e) => setExtraInputs(e.target.value)}
-        />
-      </Field>
-
-      <div className="cp-form-summary" style={{ background: "#fafcfb" }}>
-        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, fontWeight: 600, color: "#14372f", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            style={{ marginTop: 3 }}
-            checked={includeBvtv}
-            onChange={(e) => setIncludeBvtv(e.target.checked)}
-          />
-          <span>Đợt này có kết hợp phun thuốc BVTV phòng sâu bệnh (tự động tính ngày cách ly PHI)</span>
-        </label>
-
-        {includeBvtv && (
-          <div className="pt-field-row" style={{ marginTop: 8 }}>
-            <Field label="Thuốc BVTV sử dụng" htmlFor="cp-bvtv-id">
-              <select
-                id="cp-bvtv-id"
-                value={pesticideId}
-                onChange={(e) => setPesticideId(e.target.value)}
-                required={includeBvtv}
-              >
-                <option value="">Chọn thuốc trong danh mục cho phép</option>
-                {allowedPesticides.map((p) => (
-                  <option key={p.id} value={String(p.id)}>
-                    {p.name} (Cách ly {p.isolationDays ?? 0} ngày)
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Liều phun BVTV" htmlFor="cp-bvtv-dose">
+            <label className={`cp-radio-option ${customTreeMode ? "is-selected" : ""}`.trim()}>
               <input
-                id="cp-bvtv-dose"
-                maxLength={120}
-                style={{ fontVariantNumeric: "tabular-nums" }}
-                placeholder={selectedPesticide?.concentration || "Ví dụ: 200ml trên phuy 200 lít"}
-                value={pesticideDose}
-                onChange={(e) => setPesticideDose(e.target.value)}
+                type="radio"
+                name="cp-tree-state-choice"
+                checked={customTreeMode}
+                onChange={() => {
+                  setCustomTreeMode(true);
+                  if (treeStateChoices.includes(actualTreeState)) {
+                    setActualTreeState("");
+                  }
+                }}
+              />
+              <span>Tình trạng khác (tự ghi)</span>
+            </label>
+          </div>
+
+          {customTreeMode && (
+            <input
+              id="cp-tree-state"
+              className="cp-large-input"
+              style={{ marginTop: 8 }}
+              maxLength={200}
+              value={actualTreeState}
+              onChange={(e) => setActualTreeState(e.target.value)}
+              placeholder="Ghi ngắn gọn tình trạng cây tại vườn..."
+              required
+            />
+          )}
+        </div>
+      </section>
+
+      {/* ─── KHU 02: VẬT TƯ VÀ LIỀU LƯỢNG ─── */}
+      <section className="cp-zone-card" aria-labelledby="cp-zone-2">
+        <div className="cp-zone-head">
+          <span className="cp-zone-idx">02</span>
+          <h3 id="cp-zone-2" className="cp-zone-title">
+            Vật tư và liều lượng
+          </h3>
+        </div>
+
+        <div className="cp-field-block">
+          <span className="cp-field-heading">Cách thực hiện so với hướng dẫn</span>
+          <div className="cp-mode-switch" role="radiogroup" aria-label="Mức độ tuân thủ hướng dẫn">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={followedStandard}
+              className={`cp-mode-btn ${followedStandard ? "is-active-ok" : ""}`.trim()}
+              onClick={() => handleSelectStandardMode(true)}
+            >
+              Làm đúng hướng dẫn
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!followedStandard}
+              className={`cp-mode-btn ${!followedStandard ? "is-active- adjust" : ""}`.replace("is-active- adjust", "is-active-adjust")}
+              onClick={() => handleSelectStandardMode(false)}
+            >
+              Có thay đổi khác
+            </button>
+          </div>
+        </div>
+
+        {standardProducts.length > 0 && (
+          <div className="cp-field-block">
+            <span className="cp-field-heading">Các loại vật tư đã dùng</span>
+            <div id="cp-products" className="cp-check-grid">
+              {standardProducts.map((prod) => {
+                const checked = selectedProducts.includes(prod);
+                return (
+                  <label key={prod} className={`cp-check-chip ${checked ? "is-checked" : ""}`.trim()}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleProduct(prod)}
+                    />
+                    <span>{prod}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {followedStandard && !editingDosage ? (
+          <div className="cp-dosage-summary">
+            <div className="cp-dosage-summary-text">
+              <span className="cp-dosage-lbl">Liều lượng đã dùng:</span>
+              <strong>{actualDosage}</strong>
+            </div>
+            <button
+              type="button"
+              className="cp-inline-edit-btn"
+              onClick={() => setEditingDosage(true)}
+            >
+              Sửa liều
+            </button>
+          </div>
+        ) : (
+          <Field label="Liều lượng thực tế đã pha hoặc bón" htmlFor="cp-dosage">
+            <input
+              id="cp-dosage"
+              className="cp-large-input"
+              maxLength={300}
+              style={{ fontVariantNumeric: "tabular-nums" }}
+              value={actualDosage}
+              onChange={(e) => setActualDosage(e.target.value)}
+              required
+            />
+          </Field>
+        )}
+
+        {!followedStandard && (
+          <Field label="Vật tư dùng thêm ngoài hướng dẫn (nếu có)" htmlFor="cp-extra-inputs">
+            <input
+              id="cp-extra-inputs"
+              className="cp-large-input"
+              maxLength={400}
+              placeholder="Ví dụ: Bổ sung thêm vi lượng..."
+              value={extraInputs}
+              onChange={(e) => setExtraInputs(e.target.value)}
+            />
+          </Field>
+        )}
+
+        <div className="cp-bvtv-box">
+          <label className="cp-bvtv-toggle">
+            <input
+              type="checkbox"
+              checked={includeBvtv}
+              onChange={(e) => setIncludeBvtv(e.target.checked)}
+            />
+            <span>Đợt này có pha kèm thuốc trừ sâu bệnh</span>
+          </label>
+
+          {includeBvtv && (
+            <div className="pt-field-row" style={{ marginTop: 10 }}>
+              <Field label="Tên thuốc sâu bệnh" htmlFor="cp-bvtv-id">
+                <select
+                  id="cp-bvtv-id"
+                  className="cp-large-input"
+                  value={pesticideId}
+                  onChange={(e) => setPesticideId(e.target.value)}
+                  required={includeBvtv}
+                >
+                  <option value="">Chọn thuốc trong danh mục cho phép</option>
+                  {allowedPesticides.map((p) => (
+                    <option key={p.id} value={String(p.id)}>
+                      {p.name} (Cách ly {p.isolationDays ?? 0} ngày)
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Liều pha thuốc" htmlFor="cp-bvtv-dose">
+                <input
+                  id="cp-bvtv-dose"
+                  className="cp-large-input"
+                  maxLength={120}
+                  style={{ fontVariantNumeric: "tabular-nums" }}
+                  placeholder={selectedPesticide?.concentration || "Ví dụ: 200ml trên phuy 200 lít"}
+                  value={pesticideDose}
+                  onChange={(e) => setPesticideDose(e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
+        </div>
+
+        {localWarnings.length > 0 && (
+          <div role="status" className="cp-alert-box">
+            <strong style={{ display: "block", marginBottom: 4 }}>Lưu ý kiểm tra quy trình</strong>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {localWarnings.map((w, idx) => (
+                <li key={idx}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      {/* ─── KHU 03: CHỤP ẢNH VÀ VIDEO HIỆN TRƯỜNG ─── */}
+      <section className="cp-zone-card" aria-labelledby="cp-zone-3">
+        <div className="cp-zone-head">
+          <span className="cp-zone-idx">03</span>
+          <h3 id="cp-zone-3" className="cp-zone-title">
+            Ảnh và video minh chứng tại vườn
+          </h3>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <MultiPhotoField
+            id="cp-field-photo"
+            label="Ảnh hoặc video hiện trường vườn"
+            picker={fieldMedia}
+            required
+            description="Có thể chụp liên tiếp nhiều góc cây, lá, bông, trái hoặc quay đoạn video ngắn dưới 90 giây. Ảnh tự động nén nhẹ."
+            cameraLabel="Chụp ảnh cây"
+            galleryLabel="Chọn nhiều ảnh"
+            videoLabel="Quay hoặc chọn video"
+            disabled={saving}
+          />
+
+          <MultiPhotoField
+            id="cp-invoice-photo"
+            label="Ảnh nhãn thuốc, bao phân, hóa đơn"
+            picker={invoiceMedia}
+            required={requiresInvoicePhoto}
+            description={
+              requiresInvoicePhoto
+                ? "Chụp hóa đơn mua hàng và nhãn các chai thuốc, bao phân đã dùng."
+                : "Không bắt buộc ở công việc này."
+            }
+            cameraLabel="Chụp nhãn, hóa đơn"
+            galleryLabel="Chọn ảnh từ máy"
+            disabled={saving}
+          />
+        </div>
+
+        <div className="cp-gps-box">
+          <div className="cp-gps-copy">
+            <strong>Vị trí vườn (không bắt buộc)</strong>
+            <span>{gpsStatus || "Bấm nút bên cạnh nếu đang đứng tại vườn"}</span>
+          </div>
+          <button
+            type="button"
+            className="cp-btn cp-btn-outline cp-btn-sm"
+            onClick={getGps}
+            disabled={locating || saving}
+          >
+            {locating ? "Đang định vị..." : coords ? "Cập nhật vị trí" : "Lấy vị trí GPS"}
+          </button>
+        </div>
+      </section>
+
+      {/* ─── THÔNG TIN THÊM (TÙY CHỌN THU GỌN ĐỂ ĐỠ RỐI MẮT) ─── */}
+      <div className="cp-optional-wrap">
+        <button
+          type="button"
+          className="cp-optional-toggle"
+          aria-expanded={showOptionalExtra}
+          onClick={() => setShowOptionalExtra((prev) => !prev)}
+        >
+          <span>Ghi thêm cửa hàng mua vật tư hoặc lời nhắn (không bắt buộc)</span>
+          <strong>{showOptionalExtra ? "Thu gọn" : "Mở thêm"}</strong>
+        </button>
+
+        {showOptionalExtra && (
+          <div className="cp-optional-body">
+            <Field label="Cửa hàng cung cấp vật tư" htmlFor="cp-supplier">
+              <input
+                id="cp-supplier"
+                className="cp-large-input"
+                maxLength={200}
+                placeholder="Ví dụ: Cửa hàng vật tư nông nghiệp HTX Cư Né..."
+                value={supplierName}
+                onChange={(e) => setSupplierName(e.target.value)}
+              />
+            </Field>
+
+            <Field label="Lời nhắn hoặc ghi chú thêm của chủ hộ" htmlFor="cp-farmer-note">
+              <textarea
+                id="cp-farmer-note"
+                rows={2}
+                maxLength={600}
+                placeholder="Ghi chú thời tiết hoặc cần cán bộ kỹ thuật hỗ trợ..."
+                value={farmerNote}
+                onChange={(e) => setFarmerNote(e.target.value)}
               />
             </Field>
           </div>
         )}
       </div>
 
-      {localWarnings.length > 0 && (
-        <div role="status" className="cp-alert-box">
-          <strong style={{ display: "block", marginBottom: 4 }}>Cảnh báo kiểm tra quy trình tự động</strong>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {localWarnings.map((w, idx) => (
-              <li key={idx}>{w}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="cp-photo-grid">
-        <PhotoField
-          id="cp-field-photo"
-          label="01. Ảnh hiện trường cây và vườn"
-          picker={fieldPhoto}
-          required
-          title="Chụp ảnh hiện trường vườn"
-          description="Chụp tán lá, mắt cua, bông hoặc trái thực tế tại vườn"
-          disabled={saving}
-        />
-
-        <PhotoField
-          id="cp-invoice-photo"
-          label="02. Ảnh hóa đơn hoặc nhãn vật tư"
-          picker={invoicePhoto}
-          required={requiresInvoicePhoto}
-          title="Chụp hóa đơn hoặc bao bì vật tư"
-          description={
-            requiresInvoicePhoto
-              ? "Bắt buộc chụp hóa đơn mua hàng hoặc nhãn chai, bao phân bón"
-              : "Không bắt buộc với công việc phát cỏ cơ giới"
-          }
-          disabled={saving}
-        />
-      </div>
-
-      <div className="cp-gps-box">
-        <div style={{ fontSize: 12.5, color: "#3b5249", fontVariantNumeric: "tabular-nums" }}>
-          <strong style={{ display: "block", color: "#14372f" }}>Xác thực vị trí GPS tại thửa vườn</strong>
-          <span>{gpsStatus || "Bấm định vị để ghi nhận tọa độ chụp ảnh thực tế tại vườn"}</span>
-        </div>
-        <button
-          type="button"
-          className="cp-btn cp-btn-outline cp-btn-sm"
-          onClick={getGps}
-          disabled={locating || saving}
-        >
-          {locating ? "Đang lấy GPS..." : coords ? "Cập nhật GPS" : "Lấy vị trí GPS"}
-        </button>
-      </div>
-
-      <Field label="Ghi chú thêm của chủ hộ (tùy chọn)" htmlFor="cp-farmer-note">
-        <textarea
-          id="cp-farmer-note"
-          rows={2}
-          maxLength={600}
-          placeholder="Ghi chú thời tiết, sinh trưởng của cây hoặc đề xuất hỗ trợ kỹ thuật..."
-          value={farmerNote}
-          onChange={(e) => setFarmerNote(e.target.value)}
-        />
-      </Field>
-
       <InlineError message={error} />
 
-      <div className="pt-form-actions">
+      <div className="pt-form-actions cp-declare-actions">
         <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose} disabled={saving}>
           Hủy
         </button>
@@ -815,10 +1026,10 @@ function CareMilestoneDeclareForm({
           type="submit"
           className="pt-btn pt-btn-primary"
           busy={saving}
-          busyLabel="Đang lưu nhật ký..."
-          disabled={!fieldPhoto.file || (requiresInvoicePhoto && !invoicePhoto.file)}
+          busyLabel="Đang nén và lưu..."
+          disabled={!fieldMedia.hasFiles || (requiresInvoicePhoto && !invoiceMedia.hasFiles)}
         >
-          Hoàn tất khai báo
+          Gửi khai báo
         </BusyButton>
       </div>
     </form>
@@ -860,8 +1071,25 @@ function MilestoneDeclarationDetail({
 
       <div className="cp-detail-grid">
         <div className="cp-spec-cell">
-          <span className="cp-spec-label">Ngày thực hiện</span>
+          <span className="cp-spec-label">Ngày thực hiện tại vườn</span>
           <strong className="cp-spec-val">{formatDate(declaration.performedOn)}</strong>
+        </div>
+        <div className="cp-spec-cell">
+          <span className="cp-spec-label">Thời điểm khai báo thực tế</span>
+          <strong className="cp-spec-val">
+            {formatDateTime(declaration.declaredAt || declaration.createdAt)}
+          </strong>
+        </div>
+        <div className="cp-spec-cell">
+          <span className="cp-spec-label">Độ trễ khai báo</span>
+          <strong
+            className="cp-spec-val"
+            style={{ color: (declaration.lateDeclarationDays ?? 0) > 0 ? "#9a6712" : "#15803d" }}
+          >
+            {(declaration.lateDeclarationDays ?? 0) > 0
+              ? `Khai báo chậm ${declaration.lateDeclarationDays} ngày`
+              : "Khai báo đúng trong ngày"}
+          </strong>
         </div>
         <div className="cp-spec-cell">
           <span className="cp-spec-label">Trạng thái cây thực tế</span>
@@ -882,6 +1110,12 @@ function MilestoneDeclarationDetail({
           </strong>
         </div>
       </div>
+
+      {declaration.lateReason && (
+        <div style={{ fontSize: 12.5, color: "#78350f", background: "#fdf8ed", border: "1px solid #d4d4d2", borderRadius: 6, padding: "8px 10px" }}>
+          <strong>Lý do khai báo bù:</strong> {declaration.lateReason}
+        </div>
+      )}
 
       {declaration.selectedProducts?.length > 0 && (
         <div>
@@ -924,20 +1158,30 @@ function MilestoneDeclarationDetail({
         </div>
       )}
 
-      <div className="cp-photo-grid">
-        {declaration.fieldPhotoUrl && (
-          <StoredPhoto
-            url={declaration.fieldPhotoUrl}
-            alt={`Ảnh hiện trường ${title}`}
-            caption="Ảnh hiện trường vườn"
-          />
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {(declaration.fieldPhotoUrls?.length || declaration.fieldPhotoUrl) && (
+          <div>
+            <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#4c6159", marginBottom: 6 }}>
+              Minh chứng hiện trường vườn
+            </span>
+            <StoredMediaGallery
+              urls={declaration.fieldPhotoUrls}
+              fallbackUrl={declaration.fieldPhotoUrl}
+              altPrefix={`Hiện trường ${title}`}
+            />
+          </div>
         )}
-        {declaration.invoicePhotoUrl && (
-          <StoredPhoto
-            url={declaration.invoicePhotoUrl}
-            alt={`Ảnh hóa đơn vật tư ${title}`}
-            caption="Ảnh hóa đơn và nhãn vật tư"
-          />
+        {(declaration.invoicePhotoUrls?.length || declaration.invoicePhotoUrl) && (
+          <div>
+            <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#4c6159", marginBottom: 6 }}>
+              Hóa đơn và nhãn bao bì vật tư
+            </span>
+            <StoredMediaGallery
+              urls={declaration.invoicePhotoUrls}
+              fallbackUrl={declaration.invoicePhotoUrl}
+              altPrefix={`Hóa đơn vật tư ${title}`}
+            />
+          </div>
         )}
       </div>
 
@@ -965,7 +1209,7 @@ function MilestoneDeclarationDetail({
 
 export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotCode?: string }) {
   const protocol = usePortal<CareProtocolPortalResponse>("care-protocol");
-  const plans = protocol.data?.plans ?? [];
+  const plans = useMemo(() => protocol.data?.plans ?? [], [protocol.data?.plans]);
   const senProRules = protocol.data?.senProRules ?? [];
 
   const [selectedPlotCode, setSelectedPlotCode] = useState<string>(() => {
@@ -998,16 +1242,29 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
   } | null>(null);
   const [lastResult, setLastResult] = useState<DeclareCareMilestoneResponse | null>(null);
 
-  useEffect(() => {
-    if (!activePlan) return;
-    const activeStageCode = activePlan.activeMilestone?.stageCode ?? stages[0]?.stageCode;
-    if (activeStageCode) {
-      setOpenStages((prev) => (Object.keys(prev).length === 0 ? { [activeStageCode]: true } : prev));
-    }
-  }, [activePlan, stages]);
+  const defaultOpenStage = activePlan?.activeMilestone?.stageCode ?? stages[0]?.stageCode ?? "";
 
   if (protocol.loading || protocol.error || !protocol.data) {
-    return <StateBlock loading={protocol.loading} error={protocol.error} />;
+    return (
+      <section className="cp-section">
+        <div className="cp-section-head">
+          <div>
+            <div className="cp-eyebrow">QUY TRÌNH KỸ THUẬT NIÊN VỤ 2026-2027</div>
+            <h2 className="cp-section-title">Lộ trình chăm sóc sầu riêng 2026-2027</h2>
+          </div>
+          {protocol.error && (
+            <button
+              type="button"
+              className="cp-btn cp-btn-outline cp-btn-sm"
+              onClick={() => void protocol.refresh()}
+            >
+              Tải lại lộ trình
+            </button>
+          )}
+        </div>
+        <StateBlock loading={protocol.loading} error={protocol.error} />
+      </section>
+    );
   }
 
   if (!activePlan) {
@@ -1027,8 +1284,14 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
   const currentMilestone = activePlan.activeMilestone;
   const nextMilestone = activePlan.nextMilestone;
 
+  const isStageExpanded = (stageCode: string) =>
+    stageCode in openStages ? Boolean(openStages[stageCode]) : stageCode === defaultOpenStage;
+
   const toggleStage = (stageCode: string) => {
-    setOpenStages((prev) => ({ ...prev, [stageCode]: !prev[stageCode] }));
+    setOpenStages((prev) => {
+      const current = stageCode in prev ? Boolean(prev[stageCode]) : stageCode === defaultOpenStage;
+      return { ...prev, [stageCode]: !current };
+    });
   };
 
   const bannerVariant =
@@ -1070,6 +1333,15 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
               Đóng
             </button>
           </div>
+          {lastResult.declarationTiming && lastResult.declarationTiming.lateDeclarationDays > 0 && (
+            <p style={{ margin: "0 0 6px", fontSize: 13, color: "#78350f", lineHeight: 1.5, fontVariantNumeric: "tabular-nums" }}>
+              <strong>Đối chiếu thời gian:</strong> Đã ghi nhận ngày làm thực tế{" "}
+              <strong>{formatDate(lastResult.declarationTiming.performedOn)}</strong> và ngày khai báo{" "}
+              <strong>{formatDate(lastResult.declarationTiming.declaredOn)}</strong> (khai báo chậm{" "}
+              <strong>{lastResult.declarationTiming.lateDeclarationDays} ngày</strong>). Hệ thống đã căn chỉnh lịch theo ngày thực làm và bật nhắc sớm trước{" "}
+              <strong>{lastResult.declarationTiming.nextReminderLeadDays} ngày</strong> cho đợt tới để bạn khai báo đúng hạn hơn.
+            </p>
+          )}
           {lastResult.nextMilestone ? (
             <p style={{ margin: 0, fontSize: 13, color: "#29463c", lineHeight: 1.5, fontVariantNumeric: "tabular-nums" }}>
               <strong>Mốc tiếp theo:</strong> GĐ {lastResult.nextMilestone.stageOrder}{" "}
@@ -1124,13 +1396,18 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
           </div>
         )}
 
-        <div className="cp-progress-box">
+      <OfflinePendingDiaryCards kinds={["portal-care-milestone"]} />
+
+      <div className="cp-progress-box">
           <div className="cp-progress-head">
             <div className="cp-progress-meta">
               <strong style={{ fontSize: 15, color: "#14372f" }}>Thửa {activePlan.plotCode}</strong>
               <StatusTag tone={badge.tone}>{badge.label}</StatusTag>
               {activePlan.deviationCount > 0 && (
                 <StatusTag tone="gold">{activePlan.deviationCount} mốc có lưu ý</StatusTag>
+              )}
+              {(activePlan.reminderLeadDays ?? 1) > 1 && (
+                <StatusTag tone="blue">Nhắc sớm trước {activePlan.reminderLeadDays} ngày</StatusTag>
               )}
             </div>
             <span className="cp-progress-stat">
@@ -1149,47 +1426,51 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
         {currentMilestone ? (
           <div className={`cp-current-card ${currentCardVariant}`.trim()}>
             <div className="cp-current-top">
-              <span className="cp-eyebrow">
-                Mốc hiện tại - Giai đoạn {currentMilestone.stageOrder}: {currentMilestone.stageName}
-              </span>
+              <div>
+                <span className="cp-eyebrow">
+                  Mốc hiện tại - Giai đoạn {currentMilestone.stageOrder}: {currentMilestone.stageName}
+                </span>
+                <h3 className="cp-current-title" style={{ marginTop: 2 }}>
+                  {cleanDayLabelForStage(currentMilestone.dayLabel, currentMilestone.stageName)}
+                </h3>
+              </div>
               <StatusTag tone={milestoneStateBadge(currentMilestone).tone}>
                 {milestoneStateBadge(currentMilestone).label}
               </StatusTag>
             </div>
 
-            <div>
-              <h3 className="cp-current-title">
-                {currentMilestone.dayLabel}: {currentMilestone.actionSummary}
-              </h3>
-              {currentMilestone.notes && <p className="cp-current-notes">{currentMilestone.notes}</p>}
-            </div>
-
-            <div className="cp-spec-grid">
-              <div className="cp-spec-cell">
-                <span className="cp-spec-label">Khung ngày lộ trình</span>
-                <strong className="cp-spec-val">
-                  {formatDate(currentMilestone.scheduledOn)} - {formatDate(currentMilestone.dueOn)}
+            <div className="cp-ms-rows">
+              <div className="cp-ms-row">
+                <span className="cp-ms-label">Thời gian</span>
+                <strong className="cp-ms-val">
+                  {formatDate(currentMilestone.scheduledOn)} đến {formatDate(currentMilestone.dueOn)}
                 </strong>
               </div>
-              <div className="cp-spec-cell">
-                <span className="cp-spec-label">Trạng thái cây chuẩn</span>
-                <strong className="cp-spec-val">{currentMilestone.treeState}</strong>
+              <div className="cp-ms-row">
+                <span className="cp-ms-label">Cây tại vườn</span>
+                <strong className="cp-ms-val">{currentMilestone.treeState}</strong>
               </div>
-              <div className="cp-spec-cell">
-                <span className="cp-spec-label">Liều lượng chuẩn</span>
-                <strong className="cp-spec-val">{currentMilestone.standardDosageSummary}</strong>
+              <div className="cp-ms-row">
+                <span className="cp-ms-label">Việc cần làm</span>
+                <div className="cp-ms-val">
+                  <ProtocolStepLines text={currentMilestone.actionSummary} />
+                </div>
+              </div>
+              {currentMilestone.notes && (
+                <div className="cp-ms-row">
+                  <span className="cp-ms-label">Lưu ý</span>
+                  <span className="cp-ms-val cp-ms-note">{currentMilestone.notes}</span>
+                </div>
+              )}
+              <div className="cp-ms-row">
+                <span className="cp-ms-label">Cần chuẩn bị</span>
+                <span className="cp-ms-val">
+                  {currentMilestone.requiresInvoicePhoto
+                    ? "Ảnh chụp cây tại vườn và hóa đơn vật tư"
+                    : "Ảnh chụp cây tại vườn"}
+                </span>
               </div>
             </div>
-
-            {currentMilestone.products.length > 0 && (
-              <div className="cp-product-list">
-                {currentMilestone.products.map((prod) => (
-                  <span key={prod.id} className="cp-product-item">
-                    {prod.name} ({prod.dosage})
-                  </span>
-                ))}
-              </div>
-            )}
 
             <div className="cp-hero-actions">
               <button
@@ -1217,9 +1498,13 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
 
         {nextMilestone && (
           <div className="cp-next-box">
-            <strong>Chuẩn bị mốc kế tiếp (dự kiến {formatDate(nextMilestone.scheduledOn)}):</strong>{" "}
-            GĐ {nextMilestone.stageOrder} {nextMilestone.stageName} - {nextMilestone.dayLabel} ({nextMilestone.treeState}
-            ). {nextMilestone.actionSummary}
+            <div className="cp-next-head">
+              <strong>Mốc kế tiếp: {cleanDayLabelForStage(nextMilestone.dayLabel, nextMilestone.stageName)}</strong>
+              <span>Dự kiến {formatDate(nextMilestone.scheduledOn)} (Cây: {nextMilestone.treeState})</span>
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <ProtocolStepLines text={nextMilestone.actionSummary} />
+            </div>
           </div>
         )}
       </section>
@@ -1232,7 +1517,7 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
 
         <div className="cp-stage-list">
           {stages.map((stage) => {
-            const expanded = Boolean(openStages[stage.stageCode]);
+            const expanded = isStageExpanded(stage.stageCode);
             const stageMod = stage.hasOverdue ? "is-overdue" : stage.hasActive ? "is-active" : "";
             return (
               <div key={stage.stageCode} className={`cp-stage ${stageMod}`.trim()}>
@@ -1272,37 +1557,55 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
                               ? "is-overdue"
                               : "";
 
+                      const shortDayLabel = cleanDayLabelForStage(item.dayLabel, stage.stageName);
+
                       return (
                         <div key={item.code} className={`cp-milestone-card ${cardMod}`.trim()}>
                           <div className="cp-milestone-head">
                             <div className="cp-milestone-date">
-                              <strong style={{ fontSize: 13.5, color: "#14372f" }}>{item.dayLabel}</strong>
-                              <span style={{ fontSize: 12, color: "#51665e" }}>
-                                ({formatDate(item.scheduledOn)} - {formatDate(item.dueOn)})
+                              <strong className="cp-milestone-day">{shortDayLabel}</strong>
+                              <span className="cp-milestone-range">
+                                Lịch: {formatDate(item.scheduledOn)} đến {formatDate(item.dueOn)}
                               </span>
                             </div>
                             <StatusTag tone={itemBadge.tone}>{itemBadge.label}</StatusTag>
                           </div>
 
-                          <div style={{ fontSize: 13.5, color: "#1c3931", lineHeight: 1.45, fontVariantNumeric: "tabular-nums" }}>
-                            <strong>Trạng thái cây: {item.treeState}.</strong> {item.actionSummary}
-                          </div>
-
-                          <div style={{ fontSize: 12.2, color: "#526860", fontVariantNumeric: "tabular-nums" }}>
-                            Liều chuẩn: <strong>{item.standardDosageSummary}</strong>
-                            {item.requiresInvoicePhoto
-                              ? " - Cần ảnh hiện trường và hóa đơn vật tư"
-                              : " - Cần ảnh hiện trường"}
+                          <div className="cp-ms-rows">
+                            <div className="cp-ms-row">
+                              <span className="cp-ms-label">Cây tại vườn</span>
+                              <strong className="cp-ms-val">{item.treeState}</strong>
+                            </div>
+                            <div className="cp-ms-row">
+                              <span className="cp-ms-label">Việc cần làm</span>
+                              <div className="cp-ms-val">
+                                <ProtocolStepLines text={item.actionSummary} />
+                              </div>
+                            </div>
+                            {item.notes && (
+                              <div className="cp-ms-row">
+                                <span className="cp-ms-label">Lưu ý</span>
+                                <span className="cp-ms-val cp-ms-note">{item.notes}</span>
+                              </div>
+                            )}
+                            <div className="cp-ms-row">
+                              <span className="cp-ms-label">Cần chuẩn bị</span>
+                              <span className="cp-ms-val cp-ms-prep">
+                                {item.requiresInvoicePhoto
+                                  ? "Ảnh cây tại vườn và hóa đơn vật tư"
+                                  : "Ảnh cây tại vườn"}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="cp-milestone-foot">
                             {decl ? (
                               <>
                                 <span style={{ fontSize: 12, color: "#15803d", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                                  Đã khai báo ngày {formatDate(decl.performedOn)}
-                                  {decl.invoicePhotoUrl
-                                    ? " - Đủ ảnh hiện trường và hóa đơn"
-                                    : " - Đã lưu ảnh hiện trường"}
+                                  Làm ngày {formatDate(decl.performedOn)}
+                                  {(decl.lateDeclarationDays ?? 0) > 0
+                                    ? ` (khai báo ngày ${formatDate(decl.declaredOn || decl.createdAt)}, chậm ${decl.lateDeclarationDays} ngày)`
+                                    : " (khai báo đúng ngày)"}
                                 </span>
                                 <button
                                   type="button"
@@ -1424,7 +1727,7 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
 
       {declaringItem && (
         <Sheet
-          title={`Khai báo: ${declaringItem.stageName} (${declaringItem.dayLabel})`}
+          title={`Khai báo: ${declaringItem.stageName}`}
           onClose={() => setDeclaringItem(null)}
         >
           <CareMilestoneDeclareForm
@@ -1446,7 +1749,7 @@ export default function CareProtocolTimeline({ initialPlotCode }: { initialPlotC
       )}
 
       {declaringSenPro && (
-        <Sheet title={`Khai báo chặn đọt SenPro - Thửa ${activePlan.plotCode}`} onClose={() => setDeclaringSenPro(false)}>
+        <Sheet title="Khai báo phun SenPro" onClose={() => setDeclaringSenPro(false)}>
           <CareMilestoneDeclareForm
             plotCode={activePlan.plotCode}
             senProRules={senProRules}

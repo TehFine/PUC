@@ -7,6 +7,7 @@ import { ArrowRight, Download, Printer } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { isLowEndDevice } from "@/lib/network";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { triggerBlobDownload } from "@/utils/download";
 import { formatDate } from "@/utils/format";
@@ -98,17 +99,39 @@ function collectEmbeddedCssForSvg(): string {
   return chunks.join("\n");
 }
 
-/** Kết xuất tờ giấy A4 (.cert-paper 790x1117) sang file PDF độ phân giải cao và tải thẳng về máy. */
+/** Kết xuất tờ giấy A4 (.cert-paper) sang file PDF độ phân giải cao và tải thẳng về máy, không cắt ngang bảng hay khung nội dung. */
 async function exportCertPaperToPdf(paperEl: HTMLElement, fileName: string): Promise<void> {
   const width = 790;
-  const height = 1117;
+  const a4Height = 1117;
   const scale = isLowEndDevice() ? 1.5 : 2;
   const outW = Math.round(width * scale);
-  const outH = Math.round(height * scale);
+  const outH = Math.round(a4Height * scale);
 
   const clone = paperEl.cloneNode(true) as HTMLElement;
-  clone.querySelectorAll(".cert-paper-fold, .no-print").forEach((node) => node.remove());
+  clone.querySelectorAll(".no-print").forEach((node) => node.remove());
 
+  // Đo chiều cao thực tế của nội dung tờ phiếu ở đúng bề rộng chuẩn 790px (kể cả khi đang mở trên thiết bị di động)
+  let naturalHeight = a4Height;
+  if (typeof document !== "undefined") {
+    const measureHost = document.createElement("div");
+    measureHost.style.cssText =
+      `position:fixed;left:-99999px;top:0;width:${width}px;visibility:hidden;pointer-events:none;z-index:-1;background:#ffffff;`;
+    const measureClone = clone.cloneNode(true) as HTMLElement;
+    measureClone.style.width = `${width}px`;
+    measureClone.style.minHeight = "0";
+    measureClone.style.height = "auto";
+    measureClone.style.maxHeight = "none";
+    measureClone.style.overflow = "visible";
+    measureHost.appendChild(measureClone);
+    document.body.appendChild(measureHost);
+    const measured = Math.ceil(measureClone.scrollHeight);
+    document.body.removeChild(measureHost);
+    if (measured > 0) {
+      naturalHeight = Math.max(a4Height, measured);
+    }
+  }
+
+  const renderH = Math.round(naturalHeight * scale);
   const styles = collectEmbeddedCssForSvg();
 
   const svgNS = "http://www.w3.org/2000/svg";
@@ -116,21 +139,23 @@ async function exportCertPaperToPdf(paperEl: HTMLElement, fileName: string): Pro
   const svg = document.createElementNS(svgNS, "svg");
   svg.setAttribute("xmlns", svgNS);
   svg.setAttribute("width", String(outW));
-  svg.setAttribute("height", String(outH));
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("height", String(renderH));
+  svg.setAttribute("viewBox", `0 0 ${width} ${naturalHeight}`);
 
   const styleEl = document.createElementNS(svgNS, "style");
   styleEl.textContent = `${styles}
     .cert-paper {
       width: ${width}px !important;
-      min-height: ${height}px !important;
-      height: ${height}px !important;
+      min-height: ${naturalHeight}px !important;
+      height: ${naturalHeight}px !important;
       margin: 0 !important;
+      border: none !important;
       box-shadow: none !important;
       clip-path: none !important;
       border-radius: 0 !important;
       background: #ffffff !important;
       box-sizing: border-box !important;
+      overflow: visible !important;
     }
   `;
   svg.appendChild(styleEl);
@@ -139,13 +164,13 @@ async function exportCertPaperToPdf(paperEl: HTMLElement, fileName: string): Pro
   fo.setAttribute("x", "0");
   fo.setAttribute("y", "0");
   fo.setAttribute("width", String(width));
-  fo.setAttribute("height", String(height));
+  fo.setAttribute("height", String(naturalHeight));
 
   const wrapper = document.createElementNS(xhtmlNS, "div");
   wrapper.setAttribute("xmlns", xhtmlNS);
   wrapper.setAttribute(
     "style",
-    `width:${width}px;height:${height}px;background:#ffffff;overflow:hidden;margin:0;padding:0;`,
+    `width:${width}px;height:${naturalHeight}px;background:#ffffff;overflow:visible;margin:0;padding:0;`,
   );
 
   wrapper.appendChild(clone);
@@ -170,7 +195,11 @@ async function exportCertPaperToPdf(paperEl: HTMLElement, fileName: string): Pro
     if (!ctx) throw new Error("Canvas context unavailable");
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, outW, outH);
-    ctx.drawImage(img, 0, 0, outW, outH);
+    const fitRatio = naturalHeight > a4Height ? a4Height / naturalHeight : 1;
+    const drawW = Math.round(outW * fitRatio);
+    const drawH = Math.round(renderH * fitRatio);
+    const offsetX = Math.round((outW - drawW) / 2);
+    ctx.drawImage(img, offsetX, 0, drawW, drawH);
 
     const jpegBlob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
     if (!jpegBlob) throw new Error("JPEG encoding failed");
@@ -206,64 +235,6 @@ export interface LabTestCertificateItem {
 interface Props {
   test: LabTestCertificateItem;
   onClose: () => void;
-}
-
-/** Góc gấp giấy trắng 3D (Dog-Ear Fold) với ID riêng biệt tránh xung đột SVG defs giữa Desktop & Mobile */
-function PaperDogEarFold({ idPrefix }: { idPrefix: string }) {
-  const shadowId = `certFoldShadow-${idPrefix}`;
-  const surfaceId = `certFoldSurface-${idPrefix}`;
-  const rimId = `certFoldRim-${idPrefix}`;
-
-  return (
-    <div className="cert-paper-fold no-print" aria-hidden="true">
-      <svg width="100%" height="100%" viewBox="0 0 96 96" fill="none">
-        <defs>
-          <linearGradient id={shadowId} x1="46" y1="42" x2="18" y2="78" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#0f172a" stopOpacity="0.22" />
-            <stop offset="52%" stopColor="#0f172a" stopOpacity="0.09" />
-            <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-          </linearGradient>
-
-          <linearGradient id={surfaceId} x1="62" y1="34" x2="26" y2="70" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#d8dee6" />
-            <stop offset="22%" stopColor="#eef2f6" />
-            <stop offset="58%" stopColor="#fbfcfd" />
-            <stop offset="88%" stopColor="#ffffff" />
-            <stop offset="100%" stopColor="#e6ebf1" />
-          </linearGradient>
-
-          <linearGradient id={rimId} x1="28" y1="0" x2="64" y2="68" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-            <stop offset="55%" stopColor="#ffffff" stopOpacity="0.85" />
-            <stop offset="100%" stopColor="#cbd5e1" stopOpacity="0.7" />
-          </linearGradient>
-        </defs>
-
-        <path
-          d="M20 8 L20 58 Q20 75 38 75 L88 75 Z"
-          fill={`url(#${shadowId})`}
-        />
-        <path
-          d="M28 0 L28 51 Q28 68 45 68 L96 68 L28 0 Z"
-          fill={`url(#${surfaceId})`}
-        />
-        <path
-          d="M28.5 0.5 L28.5 51 Q28.5 67.5 45 67.5 L95.5 67.5"
-          stroke={`url(#${rimId})`}
-          strokeWidth="1.2"
-          fill="none"
-        />
-        <line
-          x1="28"
-          y1="0"
-          x2="96"
-          y2="68"
-          stroke="#cbd5e1"
-          strokeWidth="0.9"
-        />
-      </svg>
-    </div>
-  );
 }
 
 export default function LabTestCertificateModal({ test, onClose }: Props) {
@@ -393,6 +364,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
     };
   }, [isDesktop]);
 
+  useBackLayer(true, handleClose);
+
   // Phím ESC đóng modal
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -474,9 +447,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
               <ArrowRight size={19} strokeWidth={2.2} aria-hidden="true" />
             </button>
             <span className="cert-status-badge">
-              <span className="cert-status-main">Phiếu trích xuất kết quả kiểm nghiệm</span>
-              <span className="cert-status-sep" aria-hidden="true">-</span>
-              <span className="cert-status-sub">Đối chiếu hồ sơ hệ thống HTX Cư Né</span>
+              <span className="cert-status-main">Phiếu kiểm nghiệm</span>
             </span>
           </div>
 
@@ -546,12 +517,10 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════════
-            1. BẢN DESKTOP & PRINT: 1 TỜ GIẤY A4 CHUẨN (790 x 1117)
+            1. BẢN DESKTOP & PRINT: 1 TỜ GIẤY A4 CHUẨN PHẲNG (790 x 1117)
             ═══════════════════════════════════════════════════════════════════════ */}
         <div className="cert-paper-shadow-wrap cert-desktop-only">
           <div ref={paperRef} className="cert-paper">
-            <PaperDogEarFold idPrefix="desktop" />
-
             {/* WATERMARK CHÌM Ở TÂM TỜ GIẤY */}
             <div className="cert-watermark" aria-hidden="true">
               <WatermarkStamp
@@ -568,7 +537,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                   <div className="cert-ministry">HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC</div>
                   <div className="cert-center-name">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - HUYỆN KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
                   <div className="cert-lab-branch">
-                    Đơn vị thử nghiệm thực hiện: {test.lab} ({test.labAccreditationCode || "Chuẩn ISO/IEC 17025"})
+                    Đơn vị thử nghiệm thực hiện: {test.lab}, {test.labAccreditationCode || "Chuẩn ISO/IEC 17025"}
                   </div>
                 </div>
               </div>
@@ -791,7 +760,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                 <div className="cert-verify-summary-item">
                   <span className="cert-verify-lbl">Đơn vị thử nghiệm thực hiện:</span>
                   <strong className="cert-verify-val">
-                    {test.lab} ({test.labAccreditationCode || "ISO/IEC 17025"})
+                    {test.lab}, {test.labAccreditationCode || "ISO/IEC 17025"}
                   </strong>
                 </div>
                 <div className="cert-verify-summary-item">
@@ -859,8 +828,6 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           {/* ─── TỜ A4 SỐ 1 / 2: TIÊU ĐỀ, THÔNG TIN MẪU & BẢNG KẾT QUẢ 6 CỘT ─── */}
           <div className="cert-mobile-a4-frame">
             <div className="cert-mobile-a4-canvas">
-              <PaperDogEarFold idPrefix="m1" />
-
               <div className="cert-watermark" aria-hidden="true">
                 <WatermarkStamp
                   topText="HTX NÔNG NGHIỆP CƯ NÉ"
@@ -876,7 +843,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                       <div className="cert-m-ministry">HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC</div>
                       <div className="cert-m-center">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - HUYỆN KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
                       <div className="cert-m-branch">
-                        Đơn vị thử nghiệm thực hiện: {test.lab} ({test.labAccreditationCode || "Chuẩn ISO/IEC 17025"})
+                        Đơn vị thử nghiệm thực hiện: {test.lab}, {test.labAccreditationCode || "Chuẩn ISO/IEC 17025"}
                       </div>
                     </div>
                   </div>
@@ -1146,7 +1113,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                   <div className="cert-verify-summary-item">
                     <span className="cert-verify-lbl">Đơn vị thử nghiệm thực hiện:</span>
                     <strong className="cert-verify-val">
-                      {test.lab} ({test.labAccreditationCode || "ISO/IEC 17025"})
+                      {test.lab}, {test.labAccreditationCode || "ISO/IEC 17025"}
                     </strong>
                   </div>
                   <div className="cert-verify-summary-item">
@@ -1342,43 +1309,30 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         .cert-btn-close:hover {
           background: transparent;
           opacity: 0.78;
-          transform: rotate(90deg);
         }
 
-        /* ── TỜ GIẤY CHUẨN A4 VỚI GÓC GẤP TRẮNG 3D (DESKTOP) ── */
+        /* ── TỜ GIẤY CHUẨN A4 PHẲNG VUÔNG GÓC (DESKTOP) ── */
         .cert-paper-shadow-wrap {
-          --fold-size: 68px;
-          --fold-box: 96px;
           position: relative;
-          filter: drop-shadow(0 12px 26px rgba(15, 23, 42, 0.24));
         }
 
         .cert-paper {
           position: relative;
+          width: 100%;
+          max-width: 790px;
+          min-height: 1117px;
+          box-sizing: border-box;
+          display: flex;
+          flex-direction: column;
           background: #ffffff;
           color: #0f172a;
-          border-radius: 8px;
-          padding: 40px 44px 32px;
-          clip-path: polygon(
-            0 0,
-            calc(100% - var(--fold-size)) 0,
-            100% var(--fold-size),
-            100% 100%,
-            0 100%
-          );
+          border: 1px solid #d4d4d2;
+          border-radius: 0;
+          box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+          padding: 30px 38px 24px;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Times New Roman", serif;
-          line-height: 1.45;
+          line-height: 1.42;
           overflow: hidden;
-        }
-
-        :global(.cert-paper-fold) {
-          position: absolute;
-          top: 0;
-          right: 0;
-          width: var(--fold-box);
-          height: var(--fold-box);
-          pointer-events: none;
-          z-index: 10;
         }
 
         .cert-watermark {
@@ -1455,7 +1409,6 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           align-items: flex-end;
           gap: 2px;
           flex-shrink: 0;
-          padding-right: 42px;
         }
 
         .cert-doc-number,
@@ -1480,8 +1433,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         }
 
         .cert-qr-img {
-          width: 58px;
-          height: 58px;
+          width: 52px;
+          height: 52px;
           border: 1px solid #e2e8f0;
           padding: 2px;
           background: #ffffff;
@@ -1499,7 +1452,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           height: 3px;
           border-top: 1.5px solid #0f2942;
           border-bottom: 0.8px solid #0f2942;
-          margin: 14px 0 16px;
+          margin: 10px 0 12px;
         }
 
         /* 2. Tiêu đề phiếu */
@@ -1507,49 +1460,50 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           position: relative;
           z-index: 2;
           text-align: center;
-          margin-bottom: 20px;
+          margin-bottom: 14px;
         }
 
         .cert-main-title {
-          font-size: 21px;
+          font-size: 19.5px;
           font-weight: 900;
           color: #1e3a8a;
           margin: 0;
           text-transform: uppercase;
           letter-spacing: 0.04em;
-          line-height: 1.25;
+          line-height: 1.22;
         }
 
         .cert-sub-title {
-          font-size: 14.5px;
+          font-size: 13.5px;
           font-weight: 750;
           color: #0f2942;
-          margin: 4px 0 0;
+          margin: 3px 0 0;
           text-transform: uppercase;
           letter-spacing: 0.02em;
         }
 
         .cert-protocol-badge {
           display: inline-block;
-          font-size: 11px;
+          font-size: 10.5px;
           font-style: italic;
           color: #475569;
-          margin-top: 4px;
+          margin-top: 3px;
         }
 
         /* 3. Khối thông tin mẫu */
         .cert-info-block {
           position: relative;
           z-index: 2;
-          margin-bottom: 18px;
-          font-size: 12.5px;
+          margin-bottom: 14px;
+          font-size: 12px;
+          line-height: 1.4;
         }
 
         .cert-info-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          column-gap: 20px;
-          row-gap: 5px;
+          column-gap: 18px;
+          row-gap: 4px;
         }
 
         .cert-col-full {
@@ -1580,15 +1534,15 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         .cert-table-section {
           position: relative;
           z-index: 2;
-          margin-bottom: 18px;
+          margin-bottom: 14px;
         }
 
         .cert-table-heading {
-          font-size: 13.5px;
+          font-size: 13px;
           font-weight: 800;
           color: #0f2942;
           text-transform: uppercase;
-          margin-bottom: 6px;
+          margin-bottom: 5px;
         }
 
         .cert-table-wrapper {
@@ -1598,15 +1552,16 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         .cert-table {
           width: 100%;
           border-collapse: collapse;
-          font-size: 12px;
+          font-size: 11.5px;
           border: 1px solid #334155;
         }
 
         .cert-table th,
         .cert-table td {
           border: 1px solid #475569;
-          padding: 7px 8px;
+          padding: 5.5px 7px;
           vertical-align: middle;
+          line-height: 1.32;
         }
 
         .cert-table th {
@@ -1672,17 +1627,17 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           background: #f8fafc;
           border: 1px solid #cbd5e1;
           border-radius: 6px;
-          padding: 12px 14px;
-          margin-bottom: 20px;
-          font-size: 12px;
+          padding: 10px 12px;
+          margin-bottom: 12px;
+          font-size: 11.5px;
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 5px;
         }
 
         .cert-conclusion-line {
-          font-size: 12.5px;
-          line-height: 1.4;
+          font-size: 12px;
+          line-height: 1.38;
         }
 
         .cert-concl-title {
@@ -1748,9 +1703,9 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         .cert-verify-summary-box {
           position: relative;
           z-index: 2;
-          margin-top: 12px;
-          margin-bottom: 18px;
-          padding: 12px 14px;
+          margin-top: 0;
+          margin-bottom: 12px;
+          padding: 10px 12px;
           border: 1px solid #d4d4d2;
           border-radius: 6px;
           background: #f7f7f5;
@@ -1758,21 +1713,21 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         }
 
         .cert-verify-summary-head {
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 700;
           letter-spacing: 0.06em;
           text-transform: uppercase;
           color: #14372f;
-          margin-bottom: 8px;
-          padding-bottom: 6px;
+          margin-bottom: 6px;
+          padding-bottom: 5px;
           border-bottom: 1px solid #e2e5e3;
         }
 
         .cert-verify-summary-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 8px 16px;
-          margin-bottom: 8px;
+          gap: 6px 14px;
+          margin-bottom: 6px;
         }
 
         .cert-verify-summary-item {
@@ -1851,12 +1806,13 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         .cert-footer-row {
           position: relative;
           z-index: 2;
+          margin-top: auto;
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 12px;
           border-top: 1px solid #d4d4d2;
-          padding-top: 10px;
+          padding-top: 8px;
           font-size: 10.5px;
           color: #5f6d66;
           font-variant-numeric: tabular-nums;
@@ -1963,20 +1919,13 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           .cert-status-main {
             font-family: var(--font-display-stack, inherit);
             font-size: 16px;
-            font-weight: 800;
+            font-weight: 700;
             letter-spacing: 0.02em;
             text-transform: uppercase;
             color: #0f172a;
-          }
-
-          .cert-status-sep {
-            color: #cbd5e1;
-          }
-
-          .cert-status-sub {
-            font-size: 13px;
-            font-weight: 600;
-            color: #166534;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
 
           .cert-btn-close {
@@ -2010,28 +1959,17 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           }
 
           .cert-status-badge {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 2px;
-            line-height: 1.2;
+            min-width: 0;
+            line-height: 1.25;
           }
 
           .cert-status-main {
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 700;
-            color: #34d399;
+            color: #ffffff;
             white-space: nowrap;
-          }
-
-          .cert-status-sep {
-            display: none;
-          }
-
-          .cert-status-sub {
-            font-size: 10.5px;
-            font-weight: 500;
-            color: #94a3b8;
-            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
 
           .cert-toolbar-right {
@@ -2087,13 +2025,10 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             position: relative;
             width: 100%;
             aspect-ratio: 210 / 297;
-            filter: drop-shadow(0 10px 22px rgba(15, 23, 42, 0.24));
           }
 
-          /* Tờ giấy A4 gốc kích thước chuẩn 520 x 735.43 (210 : 297) được scale khớp 100% khung */
+          /* Tờ giấy A4 gốc kích thước chuẩn 520 x 735.43 (210 : 297) phẳng vuông góc */
           .cert-mobile-a4-canvas {
-            --fold-size: 46px;
-            --fold-box: 65px;
             position: absolute;
             top: 0;
             left: 0;
@@ -2103,24 +2038,16 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             transform-origin: top left;
             background: #ffffff;
             color: #0f172a;
-            border-radius: 8px;
+            border: 1px solid #d4d4d2;
+            border-radius: 0;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
             padding: 22px 24px 16px;
-            clip-path: polygon(
-              0 0,
-              calc(100% - var(--fold-size)) 0,
-              100% var(--fold-size),
-              100% 100%,
-              0 100%
-            );
+            box-sizing: border-box;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Times New Roman", serif;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             overflow: hidden;
-          }
-
-          .cert-mobile-a4-canvas.is-continuation {
-            clip-path: none;
           }
 
           .cert-m-running-header {
@@ -2212,7 +2139,6 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             align-items: flex-end;
             gap: 1.5px;
             flex-shrink: 0;
-            padding-right: 30px;
           }
 
           .cert-m-doc {
@@ -2594,10 +2520,6 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             gap: 6px;
           }
 
-          .cert-status-sub {
-            display: none;
-          }
-
           .cert-toolbar-right {
             gap: 5px;
           }
@@ -2624,10 +2546,10 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         }
 
         /* ── CHẾ ĐỘ IN ẤN CHUẨN A4 (PRINT MEDIA) ──
-           Chỉ in đúng 1 tờ phiếu bản desktop (thiết kế 790px ≈ khổ 210mm), ẩn toàn bộ phần còn lại của trang. */
+           Dàn trang chuẩn khổ A4 với lề thực tế, chống cắt ngang bảng và các khối xác thực. */
         @page {
           size: A4 portrait;
-          margin: 0;
+          margin: 10mm 12mm;
         }
 
         @media print {
@@ -2636,6 +2558,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             overflow: visible !important;
             height: auto !important;
             min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
             background: #ffffff !important;
           }
 
@@ -2650,6 +2574,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             display: block !important;
             overflow: visible !important;
             padding: 0 !important;
+            margin: 0 !important;
             background: none !important;
             -webkit-backdrop-filter: none !important;
             backdrop-filter: none !important;
@@ -2658,10 +2583,17 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
           .cert-modal-container {
             display: block !important;
-            width: 210mm !important;
+            width: 100% !important;
             max-width: none !important;
+            height: auto !important;
+            min-height: 0 !important;
             margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
             transform: none !important;
+            animation: none !important;
           }
 
           .no-print,
@@ -2669,24 +2601,61 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             display: none !important;
           }
 
-          .cert-desktop-only {
+          .cert-desktop-only,
+          .cert-paper-shadow-wrap.cert-desktop-only {
             display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: visible !important;
             filter: none !important;
           }
 
           .cert-paper {
             position: relative !important;
-            width: 210mm !important;
+            display: block !important;
+            width: 100% !important;
             max-width: none !important;
+            min-height: 0 !important;
+            height: auto !important;
+            padding: 0 !important;
             margin: 0 !important;
             box-sizing: border-box !important;
             border: none !important;
             border-radius: 0 !important;
             box-shadow: none !important;
             clip-path: none !important;
+            overflow: visible !important;
             background: #ffffff !important;
-            break-inside: avoid;
-            page-break-inside: avoid;
+          }
+
+          .cert-table-wrapper {
+            overflow: visible !important;
+          }
+
+          .cert-table thead {
+            display: table-header-group !important;
+          }
+
+          .cert-table-heading {
+            break-after: avoid !important;
+            page-break-after: avoid !important;
+          }
+
+          .cert-header-row,
+          .cert-title-section,
+          .cert-info-block,
+          .cert-table-section,
+          .cert-table,
+          .cert-table tr,
+          .cert-conclusion-block,
+          .cert-verify-summary-box,
+          .cert-footer-row {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          .cert-footer-row {
+            margin-top: 10px !important;
           }
 
           /* Giữ nguyên màu con dấu, bảng kết quả và nền khi in / lưu PDF */

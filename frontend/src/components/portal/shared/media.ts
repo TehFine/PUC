@@ -6,17 +6,68 @@ import { isLowEndDevice } from "@/lib/network";
 /** Tập định dạng ảnh raster an toàn được phép chọn và tải lên (chặn SVG, GIF, HTML giả mạo). */
 export const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-/** Giới hạn tệp gốc người dùng chọn (trước khi nén). */
-export const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
+/** Tập định dạng video hiện trường được phép chọn từ điện thoại Android/iOS và trình duyệt. */
+export const ALLOWED_VIDEO_MIMES = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "video/3gpp",
+]);
+
+/** Giới hạn tệp ảnh gốc người dùng chọn (trước khi nén tự động trên trình duyệt). */
+export const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
 /** Giới hạn tệp PDF gửi kèm hồ sơ. */
 export const MAX_PDF_BYTES = 10 * 1024 * 1024;
-/** Giới hạn tệp video hiện trường (MP4 / WebM). */
+/** Giới hạn tệp video hiện trường (MP4 / WebM / MOV). */
 export const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+/** Thời lượng tối đa khuyến nghị cho mỗi đoạn video hiện trường để tải mượt trên sóng 3G/4G tại vườn. */
+export const MAX_VIDEO_DURATION_SECONDS = 90;
 
-const FULL_MAX_DIMENSION = 1600;
-const LITE_MAX_DIMENSION = 1280;
-const FULL_JPEG_QUALITY = 0.8;
-const LITE_JPEG_QUALITY = 0.76;
+const FULL_MAX_DIMENSION = 1440;
+const LITE_MAX_DIMENSION = 1152;
+const FULL_PRIMARY_QUALITY = 0.78;
+const LITE_PRIMARY_QUALITY = 0.72;
+const FULL_SECOND_PASS_THRESHOLD = 320 * 1024;
+const LITE_SECOND_PASS_THRESHOLD = 240 * 1024;
+const FULL_SECOND_PASS_QUALITY = 0.64;
+const LITE_SECOND_PASS_QUALITY = 0.58;
+
+let cachedWebpSupport: boolean | null = null;
+
+/** Kiểm tra trình duyệt có hỗ trợ mã hóa WebP trên thẻ `<canvas>` hay không (nhẹ hơn JPEG ~30–40% cùng độ nét). */
+function supportsWebpEncode(): boolean {
+  if (cachedWebpSupport !== null) return cachedWebpSupport;
+  if (typeof document === "undefined") return false;
+  try {
+    const probe = document.createElement("canvas");
+    probe.width = 2;
+    probe.height = 2;
+    const dataUrl = probe.toDataURL("image/webp", 0.75);
+    probe.width = 0;
+    probe.height = 0;
+    cachedWebpSupport = dataUrl.startsWith("data:image/webp");
+    return cachedWebpSupport;
+  } catch {
+    cachedWebpSupport = false;
+    return false;
+  }
+}
+
+export function isSupportedImageFile(file: Pick<File, "type" | "name">): boolean {
+  if (ALLOWED_IMAGE_MIMES.has(file.type)) return true;
+  if (!file.type) {
+    return /\.(jpe?g|png|webp)$/i.test(file.name);
+  }
+  return false;
+}
+
+export function isSupportedVideoFile(file: Pick<File, "type" | "name">): boolean {
+  if (ALLOWED_VIDEO_MIMES.has(file.type)) return true;
+  if (!file.type) {
+    return /\.(mp4|webm|mov|m4v|3gp)$/i.test(file.name);
+  }
+  return false;
+}
 
 async function decode(
   file: Blob,
@@ -68,18 +119,27 @@ async function decode(
   }
 }
 
+function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality: number): Promise<Blob | null> {
+  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mime, quality));
+}
+
 /**
- * Thu nhỏ ảnh về cạnh dài tối đa 1600px (hoặc 1280px trên điện thoại ít RAM) và nén JPEG bằng canvas
- * trước khi tải lên (ảnh điện thoại 5–10MB còn vài trăm KB, tải nhanh trên mạng 3G/4G ở vườn).
- * Giải phóng tức thì bộ nhớ canvas/bitmap ngay sau khi nén để tránh tràn RAM trên máy cấu hình thấp.
+ * Thu nhỏ ảnh về cạnh dài tối đa 1440px (1152px trên điện thoại RAM yếu / tiết kiệm dữ liệu)
+ * và ưu tiên nén sang WebP 2 bước (tự động lùi về JPEG trên trình duyệt cũ):
+ * - Ảnh điện thoại 6–12 MB giảm còn khoảng 100–220 KB mà vẫn giữ sắc nét tán lá, trái và chữ trên hóa đơn.
+ * - Giải phóng tức thì bộ nhớ GPU/RAM ngay sau mỗi tấm ảnh để chọn 6–8 ảnh liền không đơ máy.
  */
 export async function compressImage(file: File): Promise<Blob> {
-  if (!ALLOWED_IMAGE_MIMES.has(file.type)) {
+  if (!isSupportedImageFile(file)) {
     throw new Error("Định dạng ảnh không được hỗ trợ. Chỉ nhận JPG, PNG hoặc WEBP.");
   }
   const lowEnd = isLowEndDevice();
   const maxDimension = lowEnd ? LITE_MAX_DIMENSION : FULL_MAX_DIMENSION;
-  const jpegQuality = lowEnd ? LITE_JPEG_QUALITY : FULL_JPEG_QUALITY;
+  const primaryQuality = lowEnd ? LITE_PRIMARY_QUALITY : FULL_PRIMARY_QUALITY;
+  const secondPassThreshold = lowEnd ? LITE_SECOND_PASS_THRESHOLD : FULL_SECOND_PASS_THRESHOLD;
+  const secondPassQuality = lowEnd ? LITE_SECOND_PASS_QUALITY : FULL_SECOND_PASS_QUALITY;
+  const targetMime = supportsWebpEncode() ? "image/webp" : "image/jpeg";
+
   let canvas: HTMLCanvasElement | null = null;
   try {
     const { source, width, height, release } = await decode(file, maxDimension);
@@ -95,10 +155,24 @@ export async function compressImage(file: File): Promise<Blob> {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, targetW, targetH);
       ctx.drawImage(source, 0, 0, targetW, targetH);
-      const blob = await new Promise<Blob | null>((resolve) => canvas!.toBlob(resolve, "image/jpeg", jpegQuality));
+
+      let blob = await canvasToBlob(canvas, targetMime, primaryQuality);
+      if (!blob || (targetMime === "image/webp" && blob.type !== "image/webp")) {
+        blob = await canvasToBlob(canvas, "image/jpeg", primaryQuality);
+      }
       if (!blob) return file;
-      // Ảnh JPEG vốn đã nhỏ: giữ bản gốc nếu bản nén không nhỏ hơn.
-      if (blob.size >= file.size && file.type === "image/jpeg") return file;
+
+      // Bước 2: nếu ảnh nhiều chi tiết lá cây vẫn nặng hơn ngưỡng mục tiêu, nén tinh chỉnh thêm 1 lượt trên cùng canvas
+      if (blob.size > secondPassThreshold) {
+        const tighter = await canvasToBlob(canvas, blob.type || "image/jpeg", secondPassQuality);
+        if (tighter && tighter.size < blob.size) {
+          blob = tighter;
+        }
+      }
+
+      if (blob.size >= file.size && ALLOWED_IMAGE_MIMES.has(file.type)) {
+        return file;
+      }
       return blob;
     } finally {
       release();
@@ -113,28 +187,136 @@ export async function compressImage(file: File): Promise<Blob> {
   }
 }
 
-/** Đổi đuôi tên tệp sang `.jpg` khi đã nén sang JPEG. */
+/** Đổi đuôi tên tệp khớp với định dạng nén thực tế (`.webp` hoặc `.jpg`). */
+export function encodedImageName(name: string, mimeType: string): string {
+  const base = name.replace(/\.[^./\\]+$/, "") || "anh-hien-truong";
+  const ext = mimeType === "image/webp" ? "webp" : mimeType === "image/png" ? "png" : "jpg";
+  return `${base}.${ext}`;
+}
+
+/** Giữ tương thích cho các chỗ gọi cũ. */
 export function jpegName(name: string): string {
-  const base = name.replace(/\.[^./\\]+$/, "") || "anh";
-  return `${base}.jpg`;
+  return encodedImageName(name, "image/jpeg");
+}
+
+/**
+ * Kiểm tra nhanh siêu dữ liệu video trên trình duyệt (thời lượng + chụp 1 khung hình đại diện siêu nhẹ ~12 KB)
+ * rồi giải phóng bộ giải mã video ngay lập tức để không giữ bộ đệm video trong RAM điện thoại.
+ */
+export async function inspectVideoFile(
+  file: File,
+): Promise<{ durationSec: number | null; posterUrl: string | null; error: string | null }> {
+  if (typeof document === "undefined") {
+    return { durationSec: null, posterUrl: null, error: null };
+  }
+  const objectUrl = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.preload = "metadata";
+  video.muted = true;
+  video.playsInline = true;
+
+  const cleanup = () => {
+    try {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    } catch {
+      // ignore
+    }
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  try {
+    const durationSec = await new Promise<number | null>((resolve) => {
+      const timer = window.setTimeout(() => resolve(null), 4000);
+      video.onloadedmetadata = () => {
+        window.clearTimeout(timer);
+        const d = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+        resolve(d);
+      };
+      video.onerror = () => {
+        window.clearTimeout(timer);
+        resolve(null);
+      };
+      video.src = objectUrl;
+    });
+
+    if (durationSec !== null && durationSec > MAX_VIDEO_DURATION_SECONDS + 1) {
+      return {
+        durationSec,
+        posterUrl: null,
+        error: `Video dài ${Math.round(durationSec)} giây (tối đa ${MAX_VIDEO_DURATION_SECONDS} giây). Vui lòng quay đoạn ngắn để tải nhanh trên mạng di động.`,
+      };
+    }
+
+    let posterUrl: string | null = null;
+    if (durationSec !== null && video.videoWidth > 0 && video.videoHeight > 0) {
+      posterUrl = await new Promise<string | null>((resolve) => {
+        const timer = window.setTimeout(() => resolve(null), 1800);
+        video.onseeked = () => {
+          window.clearTimeout(timer);
+          let thumbCanvas: HTMLCanvasElement | null = null;
+          try {
+            const scale = Math.min(1, 320 / Math.max(video.videoWidth, video.videoHeight));
+            const w = Math.max(1, Math.round(video.videoWidth * scale));
+            const h = Math.max(1, Math.round(video.videoHeight * scale));
+            thumbCanvas = document.createElement("canvas");
+            thumbCanvas.width = w;
+            thumbCanvas.height = h;
+            const ctx = thumbCanvas.getContext("2d", { alpha: false });
+            if (!ctx) {
+              resolve(null);
+              return;
+            }
+            ctx.drawImage(video, 0, 0, w, h);
+            const mime = supportsWebpEncode() ? "image/webp" : "image/jpeg";
+            resolve(thumbCanvas.toDataURL(mime, 0.62));
+          } catch {
+            resolve(null);
+          } finally {
+            if (thumbCanvas) {
+              thumbCanvas.width = 0;
+              thumbCanvas.height = 0;
+            }
+          }
+        };
+        try {
+          video.currentTime = Math.min(0.25, Math.max(0.05, durationSec * 0.1));
+        } catch {
+          window.clearTimeout(timer);
+          resolve(null);
+        }
+      });
+    }
+
+    return { durationSec, posterUrl, error: null };
+  } finally {
+    cleanup();
+  }
+}
+
+export function purposeAllowsVideo(purpose: UploadPurpose): boolean {
+  return (
+    purpose === "journal" ||
+    purpose === "harvest" ||
+    purpose === "approval" ||
+    purpose === "violation" ||
+    purpose === "news" ||
+    purpose === "inspection"
+  );
 }
 
 /** Nén (nếu là ảnh) rồi tải lên `/api/uploads`, trả về thông tin tệp đầy đủ (`{ id, url, mimeType, sizeBytes }`). */
 export async function uploadOptimizedFile(file: File, purpose: UploadPurpose): Promise<UploadedFile> {
   const allowPdf = purpose === "approval" || purpose === "lab";
-  const allowVideo =
-    purpose === "journal" ||
-    purpose === "harvest" ||
-    purpose === "approval" ||
-    purpose === "violation" ||
-    purpose === "news";
+  const allowVideo = purposeAllowsVideo(purpose);
   const validationError = validatePickedFile(file, { allowPdf, allowVideo });
   if (validationError) {
     throw new Error(validationError);
   }
-  const isImage = ALLOWED_IMAGE_MIMES.has(file.type);
+  const isImage = isSupportedImageFile(file);
   const blob = isImage ? await compressImage(file) : file;
-  const name = isImage && blob !== file ? jpegName(file.name) : file.name;
+  const name = isImage && blob !== file ? encodedImageName(file.name, blob.type || "image/jpeg") : file.name;
   return api.upload(blob, purpose, name);
 }
 
@@ -147,22 +329,65 @@ export async function uploadPortalFile(file: File, purpose: UploadPurpose): Prom
   return uploaded.id;
 }
 
+/**
+ * Tải hàng loạt ảnh/video theo hàng đợi giới hạn đồng thời (tối đa 2 luồng nén + tải cùng lúc)
+ * để tránh tràn bộ nhớ trên điện thoại phổ thông và không nghẽn băng thông 3G/4G tại vườn.
+ */
+export async function uploadOptimizedFilesBatch(
+  files: File[],
+  purpose: UploadPurpose,
+  options: {
+    concurrency?: number;
+    onProgress?: (completed: number, total: number) => void;
+  } = {},
+): Promise<UploadedFile[]> {
+  const total = files.length;
+  if (total === 0) return [];
+  const concurrency = Math.max(1, Math.min(options.concurrency ?? 2, 3));
+  const results = new Array<UploadedFile>(total);
+  let nextIndex = 0;
+  let completed = 0;
+
+  async function worker() {
+    while (true) {
+      const current = nextIndex;
+      nextIndex += 1;
+      if (current >= total) return;
+      results[current] = await uploadOptimizedFile(files[current], purpose);
+      completed += 1;
+      options.onProgress?.(completed, total);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, total) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+export function formatBytesCompact(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 /** Kiểm tra tệp người dùng chọn; trả về thông báo lỗi tiếng Việt hoặc null nếu hợp lệ. */
 export function validatePickedFile(
   file: File,
   options: { allowPdf?: boolean; allowVideo?: boolean } = {},
 ): string | null {
-  const isImage = ALLOWED_IMAGE_MIMES.has(file.type);
-  const isPdf = file.type === "application/pdf";
-  const isVideo = file.type === "video/mp4" || file.type === "video/webm";
+  const isImage = isSupportedImageFile(file);
+  const isPdf = file.type === "application/pdf" || (!file.type && /\.pdf$/i.test(file.name));
+  const isVideo = isSupportedVideoFile(file);
   if (!isImage && !(options.allowPdf && isPdf) && !(options.allowVideo && isVideo)) {
-    if (options.allowPdf && options.allowVideo) return "Chỉ nhận ảnh (JPG, PNG, WEBP), video (MP4, WebM) hoặc tệp PDF.";
+    if (options.allowPdf && options.allowVideo) return "Chỉ nhận ảnh (JPG, PNG, WEBP), video ngắn (MP4, WebM, MOV) hoặc tệp PDF.";
     if (options.allowPdf) return "Chỉ nhận ảnh (JPG, PNG, WEBP) hoặc tệp PDF.";
-    if (options.allowVideo) return "Chỉ nhận ảnh (JPG, PNG, WEBP) hoặc video hiện trường (MP4, WebM).";
+    if (options.allowVideo) return "Chỉ nhận ảnh (JPG, PNG, WEBP) hoặc video hiện trường (MP4, WebM, MOV).";
     return "Vui lòng chọn tệp ảnh (JPG, PNG, WEBP).";
   }
-  if (isPdf && file.size > MAX_PDF_BYTES) return "Tệp PDF không được vượt quá 10MB.";
-  if (isVideo && file.size > MAX_VIDEO_BYTES) return "Video không được vượt quá 20MB.";
-  if (isImage && file.size > MAX_SOURCE_BYTES) return "Ảnh quá lớn (tối đa 15MB).";
+  if (isPdf && file.size > MAX_PDF_BYTES) return "Tệp PDF không được vượt quá 10 MB.";
+  if (isVideo && file.size > MAX_VIDEO_BYTES) return "Video không được vượt quá 20 MB. Vui lòng quay đoạn ngắn dưới 90 giây.";
+  if (isImage && file.size > MAX_SOURCE_BYTES) return "Ảnh gốc vượt quá 20 MB.";
   return null;
 }

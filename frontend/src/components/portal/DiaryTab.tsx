@@ -2,10 +2,13 @@
 
 import { FormEvent, useState } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
+import { OfflinePendingDiaryCards } from "@/components/ui/OfflineSyncBar";
 import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
+import { useUrlSubTab } from "@/lib/back-navigation";
+import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { daysUntil, JOURNAL_ACTIVITIES, todayIso, toNumber } from "@/lib/portal-labels";
-import { formatDate } from "@/utils/format";
+import { formatDate, formatDateTime } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type {
   CreateJournalBody,
@@ -17,7 +20,15 @@ import type {
   PortalSprayRecord,
   PortalViolation,
 } from "@/types/portal";
-import { BusyButton, ConfirmButton, InlineError, PhotoField, StoredPhoto, usePhotoPicker } from "./shared/controls";
+import {
+  BusyButton,
+  ConfirmButton,
+  InlineError,
+  LateDeclarationNotice,
+  MultiPhotoField,
+  StoredMediaGallery,
+  useMultiPhotoPicker,
+} from "./shared/controls";
 import CareProtocolTimeline from "./CareProtocolTimeline";
 import type { PortalAction } from "./PortalSearch";
 import { Card, EmptyState, Field, Pill, SectionDivider, SegmentedTabs, Sheet, StateBlock, useSheetClose } from "./ui";
@@ -77,13 +88,14 @@ function JournalForm({
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
-  const photo = usePhotoPicker("journal");
+  const media = useMultiPhotoPicker("journal", { maxFiles: 8, allowVideo: true });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const effectivePlot = plotCode || plotCodes[0] || "";
   const minBackdateIso = addIsoDays(todayIso(), -7) ?? undefined;
-  const isLateOver48h = diffDaysFromToday(entryOn) > 2;
+  const selectedDelayDays = Math.max(0, diffDaysFromToday(entryOn));
+  const isLateOver48h = selectedDelayDays > 2;
 
   const getGps = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -121,31 +133,42 @@ function JournalForm({
       setError("Vui lòng chọn hoặc nhập mã thửa đất.");
       return;
     }
-    if (!photo.file) {
-      setError("Vui lòng chụp hoặc chọn ảnh hiện trường vườn trước khi lưu.");
+    if (!media.hasFiles) {
+      setError("Vui lòng chụp hoặc chọn ít nhất 1 ảnh hiện trường vườn trước khi lưu.");
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const photoId = await photo.ensureUploaded();
-      if (!photoId) {
-        setError("Vui lòng chụp hoặc chọn ảnh hiện trường vườn.");
-        setSaving(false);
-        return;
-      }
-      const body: CreateJournalBody = {
+      const baseBody: Omit<CreateJournalBody, "photoId" | "photoIds"> = {
         entryOn,
         plotCode: finalPlot,
         activity,
         detail: detail.trim() || undefined,
-        photoId,
         latitude: coords?.latitude,
         longitude: coords?.longitude,
-        lateReason: isLateOver48h && lateReason.trim() ? lateReason.trim() : undefined,
+        lateReason: selectedDelayDays >= 1 && lateReason.trim() ? lateReason.trim() : undefined,
       };
-      await api.post<PortalJournalEntry>("/portal/journal", body);
-      invalidatePortal("journal", "spray", "violations", "overview");
+      const outcome = await submitFieldRecordWithOfflineQueue<PortalJournalEntry>({
+        kind: "portal-journal",
+        label: `Nhật ký ${activity} - Thửa ${finalPlot}`,
+        plotCode: finalPlot,
+        endpoint: "/portal/journal",
+        payload: baseBody as Record<string, unknown>,
+        mediaGroups: [
+          {
+            slotKey: "photos",
+            purpose: "journal",
+            items: media.items,
+            binding: { arrayField: "photoIds", primaryField: "photoId" },
+          },
+        ],
+        portalKeysToInvalidate: ["journal", "spray", "violations", "overview"],
+        onProgress: media.setUploadProgress,
+      });
+      if (outcome.mode === "synced") {
+        invalidatePortal("journal", "spray", "violations", "overview");
+      }
       onDone();
     } catch (err) {
       setError(errorMessage(err, "Không lưu được nhật ký. Vui lòng thử lại."));
@@ -198,14 +221,29 @@ function JournalForm({
         Sổ cái chống sửa lùi ngày: chỉ cho phép ghi bổ sung tối đa 7 ngày gần nhất và tự động niêm phong mã băm SHA-256 trên máy chủ.
       </p>
 
-      {isLateOver48h && (
-        <Field label="Lý do ghi bổ sung sau 48 giờ" htmlFor="pj-late-reason">
+      <LateDeclarationNotice
+        selectedDate={entryOn}
+        todayDate={todayIso()}
+        delayDays={selectedDelayDays}
+        mode="diary"
+      />
+
+      {selectedDelayDays >= 1 && (
+        <Field
+          label={
+            isLateOver48h
+              ? `Lý do ghi bổ sung chậm ${selectedDelayDays} ngày (bắt buộc)`
+              : `Ghi chú lý do khai báo chậm ${selectedDelayDays} ngày (không bắt buộc)`
+          }
+          htmlFor="pj-late-reason"
+        >
           <input
             id="pj-late-reason"
             maxLength={250}
             placeholder="Ví dụ: Vườn xa mất sóng 4G nên về nhà mới tải ảnh lên..."
             value={lateReason}
             onChange={(e) => setLateReason(e.target.value)}
+            required={isLateOver48h}
           />
         </Field>
       )}
@@ -290,13 +328,15 @@ function JournalForm({
         </button>
       </div>
 
-      <PhotoField
+      <MultiPhotoField
         id="pj-photo-input"
-        label="Ảnh chụp hiện trường vườn"
-        picker={photo}
+        label="Ảnh và video hiện trường vườn"
+        picker={media}
         required
-        title="Chụp ảnh hoặc tải ảnh hiện trường"
-        description="Bấm để mở máy ảnh hoặc chọn ảnh thực tế tại vườn (tự động nén nhanh)"
+        description="Có thể chụp liên tiếp nhiều ảnh tại vườn hoặc quay video ngắn dưới 90 giây. Ảnh được tự động nén nhẹ."
+        cameraLabel="Chụp ảnh hiện trường"
+        galleryLabel="Chọn nhiều ảnh"
+        videoLabel="Quay hoặc chọn video"
         disabled={saving}
       />
 
@@ -309,9 +349,9 @@ function JournalForm({
           type="submit"
           className="pt-btn pt-btn-primary"
           busy={saving}
-          busyLabel="Đang tải ảnh & lưu…"
-          disabled={!effectivePlot.trim() || !photo.file}
-          title={!photo.file ? "Vui lòng chụp ảnh hiện trường trước khi lưu" : undefined}
+          busyLabel="Đang nén và lưu..."
+          disabled={!effectivePlot.trim() || !media.hasFiles}
+          title={!media.hasFiles ? "Vui lòng chụp ảnh hiện trường trước khi lưu" : undefined}
         >
           Lưu nhật ký
         </BusyButton>
@@ -349,7 +389,8 @@ function SprayForm({
   const effectivePlot = plotCode ?? defaultPlotCode;
   const chosen = pesticides.rows.find((item) => String(item.id) === pesticideId);
   const minBackdateIso = addIsoDays(todayIso(), -7) ?? undefined;
-  const isLateOver48h = diffDaysFromToday(sprayedOn) > 2;
+  const selectedDelayDays = Math.max(0, diffDaysFromToday(sprayedOn));
+  const isLateOver48h = selectedDelayDays > 2;
 
   const handlePlotChange = (nextCode: string) => {
     setPlotCode(nextCode);
@@ -381,10 +422,19 @@ function SprayForm({
         areaHa: Number(areaHa),
         source: source.trim() || undefined,
         plotCode: effectivePlot.trim() || undefined,
-        lateReason: isLateOver48h && lateReason.trim() ? lateReason.trim() : undefined,
+        lateReason: selectedDelayDays >= 1 && lateReason.trim() ? lateReason.trim() : undefined,
       };
-      await api.post("/portal/spray", body);
-      invalidatePortal("journal", "spray", "violations", "overview");
+      const outcome = await submitFieldRecordWithOfflineQueue({
+        kind: "portal-spray",
+        label: `Nhật ký phun thuốc${effectivePlot.trim() ? ` - Thửa ${effectivePlot.trim()}` : ""}`,
+        plotCode: effectivePlot.trim() || undefined,
+        endpoint: "/portal/spray",
+        payload: body as unknown as Record<string, unknown>,
+        portalKeysToInvalidate: ["journal", "spray", "violations", "overview"],
+      });
+      if (outcome.mode === "synced") {
+        invalidatePortal("journal", "spray", "violations", "overview");
+      }
       onDone();
     } catch (err) {
       setError(errorMessage(err, "Không lưu được nhật ký phun thuốc."));
@@ -435,14 +485,29 @@ function SprayForm({
         Sổ cái chống sửa lùi ngày: chỉ cho phép khai báo phun thuốc trong vòng 7 ngày gần nhất và tự động khóa thu hái theo thời gian cách ly PHI.
       </p>
 
-      {isLateOver48h && (
-        <Field label="Lý do khai báo phun thuốc sau 48 giờ" htmlFor="ps-late-reason">
+      <LateDeclarationNotice
+        selectedDate={sprayedOn}
+        todayDate={todayIso()}
+        delayDays={selectedDelayDays}
+        mode="spray"
+      />
+
+      {selectedDelayDays >= 1 && (
+        <Field
+          label={
+            isLateOver48h
+              ? `Lý do khai báo phun thuốc chậm ${selectedDelayDays} ngày (bắt buộc)`
+              : `Ghi chú lý do khai báo chậm ${selectedDelayDays} ngày (không bắt buộc)`
+          }
+          htmlFor="ps-late-reason"
+        >
           <input
             id="ps-late-reason"
             maxLength={250}
             placeholder="Ví dụ: Vườn trên đồi mất mạng di động nên cập nhật bù..."
             value={lateReason}
             onChange={(e) => setLateReason(e.target.value)}
+            required={isLateOver48h}
           />
         </Field>
       )}
@@ -627,8 +692,30 @@ function JournalDetailModal({
           <span className="pt-detail-cell-value">Thửa {entry.plotCode}</span>
         </div>
         <div className="pt-detail-cell">
-          <span className="pt-detail-cell-label">Ngày thực hiện</span>
-          <span className="pt-detail-cell-value">{formatDate(entry.entryOn)}</span>
+          <span className="pt-detail-cell-label">Ngày thực hiện tại vườn</span>
+          <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+            {formatDate(entry.entryOn)}
+          </span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Thời điểm khai báo thực tế</span>
+          <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+            {formatDateTime(entry.serverRecordedAt || entry.createdAt)}
+          </span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Độ trễ khai báo</span>
+          <span
+            className="pt-detail-cell-value"
+            style={{
+              fontVariantNumeric: "tabular-nums",
+              color: (entry.lateDeclarationDays ?? 0) > 0 ? "#9a6712" : "#15803d",
+            }}
+          >
+            {(entry.lateDeclarationDays ?? 0) > 0
+              ? `Khai báo chậm ${entry.lateDeclarationDays} ngày`
+              : "Khai báo đúng trong ngày"}
+          </span>
         </div>
         <div className="pt-detail-cell">
           <span className="pt-detail-cell-label">Người ghi chép</span>
@@ -636,7 +723,7 @@ function JournalDetailModal({
         </div>
         <div className="pt-detail-cell">
           <span className="pt-detail-cell-label">Mã ghi nhận</span>
-          <span className="pt-detail-cell-value">#NK-{entry.id}</span>
+          <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums" }}>#NK-{entry.id}</span>
         </div>
       </div>
 
@@ -696,16 +783,19 @@ function JournalDetailModal({
         </div>
       )}
 
-      {/* Ảnh chụp hiện trường minh chứng thực tế */}
+      {/* Ảnh và video chụp hiện trường minh chứng thực tế */}
       <div className="pt-detail-section">
         <div className="pt-detail-section-header">
-          <h4 className="pt-detail-section-title">Ảnh chụp hiện trường vườn</h4>
-          {entry.photoUrl && <span className="pt-detail-photo-tag">✓ Đã xác thực thực địa</span>}
+          <h4 className="pt-detail-section-title">Minh chứng hiện trường vườn</h4>
+          {(entry.photoUrls?.length || entry.photoUrl) && (
+            <span className="pt-detail-photo-tag">Đã xác thực thực địa</span>
+          )}
         </div>
-        {entry.photoUrl ? (
-          <StoredPhoto
-            url={entry.photoUrl}
-            alt={`Hiện trường ${entry.activity}`}
+        {entry.photoUrls?.length || entry.photoUrl ? (
+          <StoredMediaGallery
+            urls={entry.photoUrls}
+            fallbackUrl={entry.photoUrl}
+            altPrefix={`Hiện trường ${entry.activity}`}
             caption={`Thửa ${entry.plotCode} - Ngày ${formatDate(entry.entryOn)}`}
           />
         ) : (
@@ -808,6 +898,32 @@ function SprayDetailModal({
 
       <div className="pt-detail-grid">
         <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Ngày phun tại vườn</span>
+          <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+            {formatDate(record.sprayedOn)}
+          </span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Thời điểm khai báo thực tế</span>
+          <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+            {formatDateTime(record.serverRecordedAt || record.createdAt)}
+          </span>
+        </div>
+        <div className="pt-detail-cell">
+          <span className="pt-detail-cell-label">Độ trễ khai báo</span>
+          <span
+            className="pt-detail-cell-value"
+            style={{
+              fontVariantNumeric: "tabular-nums",
+              color: (record.lateDeclarationDays ?? 0) > 0 ? "#9a6712" : "#15803d",
+            }}
+          >
+            {(record.lateDeclarationDays ?? 0) > 0
+              ? `Khai báo chậm ${record.lateDeclarationDays} ngày`
+              : "Khai báo đúng trong ngày"}
+          </span>
+        </div>
+        <div className="pt-detail-cell">
           <span className="pt-detail-cell-label">Liều lượng sử dụng</span>
           <span className="pt-detail-cell-value">{record.dose}</span>
         </div>
@@ -819,12 +935,8 @@ function SprayDetailModal({
         </div>
         <div className="pt-detail-cell">
           <span className="pt-detail-cell-label">Cách ly trước thu hoạch (PHI)</span>
-          <span className="pt-detail-cell-value">{record.isolationDays} ngày</span>
-        </div>
-        <div className="pt-detail-cell">
-          <span className="pt-detail-cell-label">Được phép thu hái từ</span>
           <span className="pt-detail-cell-value">
-            {safeDateIso ? formatDate(safeDateIso) : formatDate(record.sprayedOn)}
+            {record.isolationDays} ngày (thu từ {safeDateIso ? formatDate(safeDateIso) : formatDate(record.sprayedOn)})
           </span>
         </div>
       </div>
@@ -922,7 +1034,7 @@ function ViolationResponseForm({
 }) {
   const sheetClose = useSheetClose();
   const [note, setNote] = useState(violation.farmerResponse ?? "");
-  const photo = usePhotoPicker("violation");
+  const media = useMultiPhotoPicker("violation", { maxFiles: 6, allowVideo: true });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -936,12 +1048,28 @@ function ViolationResponseForm({
     setSaving(true);
     setError(null);
     try {
-      const photoId = await photo.ensureUploaded();
-      await api.post(`/portal/violations/${violation.id}/response`, {
-        note: cleanNote,
-        photoId,
+      const outcome = await submitFieldRecordWithOfflineQueue({
+        kind: "portal-violation-response",
+        label: `Báo cáo khắc phục: ${violation.title}`,
+        plotCode: violation.plotCode ?? undefined,
+        endpoint: `/portal/violations/${violation.id}/response`,
+        payload: { note: cleanNote },
+        mediaGroups: media.hasFiles
+          ? [
+              {
+                slotKey: "photos",
+                purpose: "violation",
+                items: media.items,
+                binding: { arrayField: "photoIds", primaryField: "photoId" },
+              },
+            ]
+          : [],
+        portalKeysToInvalidate: ["violations", "journal", "spray", "overview"],
+        onProgress: media.setUploadProgress,
       });
-      invalidatePortal("violations", "journal", "spray", "overview");
+      if (outcome.mode === "synced") {
+        invalidatePortal("violations", "journal", "spray", "overview");
+      }
       onDone();
     } catch (err) {
       setError(errorMessage(err, "Không gửi được phản hồi khắc phục."));
@@ -970,12 +1098,14 @@ function ViolationResponseForm({
         />
       </Field>
 
-      <PhotoField
+      <MultiPhotoField
         id="vr-photo"
-        label="Ảnh minh chứng sau khắc phục (tùy chọn)"
-        picker={photo}
-        title="Chụp ảnh hoặc tải ảnh minh chứng"
-        description="Gửi kèm ảnh thực tế giúp cán bộ kiểm tra xác nhận đóng cảnh báo/vi phạm nhanh hơn"
+        label="Ảnh và video minh chứng sau khắc phục (tùy chọn)"
+        picker={media}
+        description="Có thể đính kèm nhiều ảnh thực tế hoặc đoạn video ngắn giúp cán bộ kiểm tra đóng cảnh báo nhanh hơn."
+        cameraLabel="Chụp ảnh khắc phục"
+        galleryLabel="Chọn nhiều ảnh"
+        videoLabel="Thêm video ngắn"
         disabled={saving}
       />
 
@@ -1006,6 +1136,13 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
     if (initialAction === "journal-add" || initialAction === "journal-list") return "journal";
     return "protocol";
   });
+  const selectView = useUrlSubTab<View>(
+    "sub",
+    view,
+    setView,
+    "protocol",
+    (raw): raw is View => raw === "protocol" || raw === "journal" || raw === "spray",
+  );
   const [form, setForm] = useState<FormKind | null>(() =>
     initialAction === "journal-add" ? "journal" : initialAction === "spray-add" ? "spray" : null,
   );
@@ -1065,12 +1202,14 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                         Phản hồi của hộ{v.farmerResponseAt ? ` - ${formatDate(v.farmerResponseAt)}` : ""}
                       </span>
                       <p>{v.farmerResponse}</p>
-                      {v.farmerResponsePhotoUrl && (
+                      {(v.farmerResponsePhotoUrls?.length || v.farmerResponsePhotoUrl) && (
                         <div style={{ marginTop: 8 }}>
-                          <StoredPhoto
-                            url={v.farmerResponsePhotoUrl}
-                            alt={`Ảnh khắc phục ${v.title}`}
-                            caption="Ảnh minh chứng khắc phục của hộ"
+                          <StoredMediaGallery
+                            urls={v.farmerResponsePhotoUrls}
+                            fallbackUrl={v.farmerResponsePhotoUrl}
+                            altPrefix={`Minh chứng khắc phục ${v.title}`}
+                            caption="Minh chứng khắc phục của hộ"
+                            compact
                           />
                         </div>
                       )}
@@ -1119,7 +1258,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
           role="tab"
           aria-selected={view === "protocol"}
           className={view === "protocol" ? "active" : ""}
-          onClick={() => setView("protocol")}
+          onClick={() => selectView("protocol")}
         >
           Lộ trình 2026-2027
         </button>
@@ -1128,7 +1267,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
           role="tab"
           aria-selected={view === "journal"}
           className={view === "journal" ? "active" : ""}
-          onClick={() => setView("journal")}
+          onClick={() => selectView("journal")}
         >
           Canh tác
         </button>
@@ -1137,7 +1276,7 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
           role="tab"
           aria-selected={view === "spray"}
           className={view === "spray" ? "active" : ""}
-          onClick={() => setView("spray")}
+          onClick={() => selectView("spray")}
         >
           Phun thuốc
         </button>
@@ -1168,6 +1307,13 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
             </div>
 
           <div className="pt-widget-sheet">
+            <OfflinePendingDiaryCards
+              kinds={
+                view === "journal"
+                  ? ["portal-journal", "portal-violation-response"]
+                  : ["portal-spray"]
+              }
+            />
             <StateBlock loading={active.loading} error={active.error} />
 
             {view === "journal" && journal.data && journal.data.data.length === 0 && (
@@ -1204,7 +1350,10 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                         {entry.activity}
                         {entry.plotCode ? ` - ${entry.plotCode}` : ""}
                       </span>
-                      <span className="pt-diary-item-date">{formatDate(entry.entryOn)}</span>
+                      <span className="pt-diary-item-date" style={{ fontVariantNumeric: "tabular-nums" }}>
+                        {formatDate(entry.entryOn)}
+                        {(entry.lateDeclarationDays ?? 0) > 0 ? ` (chậm ${entry.lateDeclarationDays}n)` : ""}
+                      </span>
                       <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
                     </div>
                   </li>
@@ -1246,7 +1395,10 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                         {record.pesticide}
                         {record.plotCode ? ` - ${record.plotCode}` : ""}
                       </span>
-                      <span className="pt-diary-item-date">{formatDate(record.sprayedOn)}</span>
+                      <span className="pt-diary-item-date" style={{ fontVariantNumeric: "tabular-nums" }}>
+                        {formatDate(record.sprayedOn)}
+                        {(record.lateDeclarationDays ?? 0) > 0 ? ` (chậm ${record.lateDeclarationDays}n)` : ""}
+                      </span>
                       <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
                     </div>
                   </li>

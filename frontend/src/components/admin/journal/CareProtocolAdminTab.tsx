@@ -22,8 +22,8 @@ import type {
   PlanOverallHealth,
   PlotCarePlanTimeline,
 } from "@/types/care-protocol";
-import { formatDate } from "@/utils/format";
-import { isSafeMediaUrl } from "@/utils/url-safety";
+import { StoredMediaGallery } from "@/components/portal/shared/controls";
+import { formatDate, formatDateTime } from "@/utils/format";
 
 function healthMeta(
   health: PlanOverallHealth,
@@ -226,32 +226,36 @@ function AdminConfigurePlanModal({
 }
 
 function DeclarationPhotosPreview({ decl }: { decl: CareMilestoneDeclaration }) {
+  const hasField = Boolean(decl.fieldPhotoUrls?.length || decl.fieldPhotoUrl);
+  const hasInvoice = Boolean(decl.invoicePhotoUrls?.length || decl.invoicePhotoUrl);
+  if (!hasField && !hasInvoice) return null;
+
   return (
-    <div className="cp-admin-photo-grid">
-      {decl.fieldPhotoUrl && isSafeMediaUrl(decl.fieldPhotoUrl) && (
-        <div className="cp-admin-photo-box">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={decl.fieldPhotoUrl}
-            alt="Ảnh hiện trường vườn"
-            style={{ width: "100%", height: 140, objectFit: "cover", display: "block" }}
-          />
-          <div style={{ padding: "6px 10px", fontSize: 11.5, fontWeight: 600, color: "var(--text-secondary)" }}>
-            Ảnh hiện trường vườn
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+      {hasField && (
+        <div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
+            Ảnh và video hiện trường vườn
           </div>
+          <StoredMediaGallery
+            urls={decl.fieldPhotoUrls}
+            fallbackUrl={decl.fieldPhotoUrl}
+            altPrefix={`Hiện trường thửa ${decl.plotCode}`}
+            compact
+          />
         </div>
       )}
-      {decl.invoicePhotoUrl && isSafeMediaUrl(decl.invoicePhotoUrl) && (
-        <div className="cp-admin-photo-box">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={decl.invoicePhotoUrl}
-            alt="Ảnh hóa đơn và bao bì vật tư"
-            style={{ width: "100%", height: 140, objectFit: "cover", display: "block" }}
-          />
-          <div style={{ padding: "6px 10px", fontSize: 11.5, fontWeight: 600, color: "var(--text-secondary)" }}>
+      {hasInvoice && (
+        <div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
             Ảnh hóa đơn và bao bì vật tư
           </div>
+          <StoredMediaGallery
+            urls={decl.invoicePhotoUrls}
+            fallbackUrl={decl.invoicePhotoUrl}
+            altPrefix={`Hóa đơn vật tư thửa ${decl.plotCode}`}
+            compact
+          />
         </div>
       )}
     </div>
@@ -325,44 +329,72 @@ function AdminCarePlanDetailModal({
                 : m.state === "overdue" || m.state === "overdue_critical"
                   ? "#fdf8ed"
                   : "#ffffff";
+              const actionSteps = (m.actionSummary || "")
+                .split(/(?<![0-9])\.\s+|;\s+/)
+                .map((part) => part.trim().replace(/\.+$/, "").trim())
+                .filter(Boolean)
+                .map((part) => part.charAt(0).toUpperCase() + part.slice(1));
+
               return (
                 <div key={m.code} className="cp-admin-milestone-card" style={{ background: bg }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                     <strong style={{ fontSize: 13.5 }}>
-                      GĐ {m.stageOrder} {m.stageName} - {m.dayLabel} ({m.treeState})
+                      GĐ {m.stageOrder} {m.stageName} - {m.dayLabel}
                     </strong>
-                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                      Lịch: {formatDate(m.scheduledOn)} - {formatDate(m.dueOn)}
+                    <span style={{ fontSize: 12, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+                      Lịch: {formatDate(m.scheduledOn)} đến {formatDate(m.dueOn)}
                     </span>
                   </div>
 
-                  <div style={{ fontSize: 12.8, color: "var(--text-secondary)", marginTop: 3 }}>{m.actionSummary}</div>
+                  <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4, fontSize: 12.8, color: "var(--text-primary)" }}>
+                    <div>
+                      <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>Cây tại vườn: </span>
+                      <strong>{m.treeState}</strong>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>Việc cần làm:</span>
+                      {actionSteps.map((st, idx) => (
+                        <div key={idx} style={{ paddingLeft: actionSteps.length > 1 ? 8 : 0 }}>
+                          {actionSteps.length > 1 ? `${idx + 1}. ${st}` : st}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-                  {decl ? (
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)", fontSize: 12.5 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
-                        <span>
-                          <strong>Đã khai báo:</strong> {formatDate(decl.performedOn)} - Cây thực tế:{" "}
-                          <strong>{decl.actualTreeState}</strong> - Liều: <strong>{decl.actualDosage}</strong>
-                        </span>
-                        <span
-                          style={{
-                            fontWeight: 600,
-                            color:
-                              decl.complianceStatus === "violation"
-                                ? "#b91c1c"
-                                : decl.complianceStatus === "warning"
-                                  ? "#9a6712"
-                                  : "#15803d",
-                          }}
-                        >
-                          {decl.complianceStatus === "violation"
-                            ? "Vi phạm phác đồ"
-                            : decl.complianceStatus === "warning"
-                              ? "Có điều chỉnh"
-                              : "Đúng phác đồ"}
-                        </span>
-                      </div>
+                    {decl ? (
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)", fontSize: 12.5 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, fontVariantNumeric: "tabular-nums" }}>
+                          <span>
+                            <strong>Ngày làm:</strong> {formatDate(decl.performedOn)} -{" "}
+                            <strong>Khai báo lúc:</strong> {formatDateTime(decl.declaredAt || decl.createdAt)}
+                            {(decl.lateDeclarationDays ?? 0) > 0 && (
+                              <strong style={{ color: "#9a6712", marginLeft: 6 }}>
+                                (Chậm {decl.lateDeclarationDays} ngày)
+                              </strong>
+                            )}
+                          </span>
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              color:
+                                decl.complianceStatus === "violation"
+                                  ? "#b91c1c"
+                                  : decl.complianceStatus === "warning"
+                                    ? "#9a6712"
+                                    : "#15803d",
+                            }}
+                          >
+                            {decl.complianceStatus === "violation"
+                              ? "Vi phạm phác đồ"
+                              : decl.complianceStatus === "warning"
+                                ? "Có điều chỉnh"
+                                : "Đúng phác đồ"}
+                          </span>
+                        </div>
+                        <div style={{ marginTop: 4, color: "var(--text-secondary)" }}>
+                          Cây thực tế: <strong>{decl.actualTreeState}</strong> - Liều: <strong>{decl.actualDosage}</strong>
+                          {decl.lateReason ? ` - Lý do báo muộn: ${decl.lateReason}` : ""}
+                        </div>
 
                       {decl.complianceIssues?.length > 0 && (
                         <ul style={{ margin: "4px 0 0", paddingLeft: 18, color: "#9a3412" }}>
@@ -640,9 +672,17 @@ export default function CareProtocolAdminTab({
                   <td data-label="Khai báo gần nhất" style={{ fontSize: 12.5, fontVariantNumeric: "tabular-nums" }}>
                     {row.latestDeclaration ? (
                       <div>
-                        <div>{formatDate(row.latestDeclaration.performedOn)}</div>
-                        <div style={{ color: "var(--text-muted)", fontSize: 11.5 }}>
-                          {row.latestDeclaration.invoicePhotoUrl ? "Đủ ảnh vườn và hóa đơn" : "Có ảnh hiện trường"}
+                        <div>Làm: {formatDate(row.latestDeclaration.performedOn)}</div>
+                        <div
+                          style={{
+                            color: (row.latestDeclaration.lateDeclarationDays ?? 0) > 0 ? "#9a6712" : "var(--text-muted)",
+                            fontSize: 11.5,
+                            fontWeight: (row.latestDeclaration.lateDeclarationDays ?? 0) > 0 ? 600 : 400,
+                          }}
+                        >
+                          {(row.latestDeclaration.lateDeclarationDays ?? 0) > 0
+                            ? `Báo chậm ${row.latestDeclaration.lateDeclarationDays} ngày (nhắc sớm ${row.reminderLeadDays ?? 2}n)`
+                            : "Khai báo đúng ngày"}
                         </div>
                       </div>
                     ) : (

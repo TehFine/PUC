@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { usePortalLang } from "./i18n";
 import type { PortalTabId } from "./PortalApp";
@@ -157,6 +158,8 @@ export default function RadialNavWheel({
       propOnClose?.();
     }, CLOSE_DURATION_MS);
   }, [propOnClose]);
+
+  useBackLayer(isOpen, handleClose);
 
   useEffect(() => {
     if (propOpen === undefined) return;

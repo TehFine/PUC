@@ -6,11 +6,12 @@ import { toast } from "@/components/ui/Toast";
 import { FormGrid, SelectField, TextAreaField, TextField, type Option } from "@/components/ui/form/fields";
 import { useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
+import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
 import { badgeOf, optionsOf, SEVERITY, VIOLATION_STATUS } from "@/components/admin/shared/labels";
+import { StoredMediaGallery } from "@/components/portal/shared/controls";
 import { formatDate, formatDateTime } from "@/utils/format";
-import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { HouseholdRow } from "@/types/households";
 import type { ViolationRow, ViolationSeverity, ViolationStatus } from "@/types/journal";
 
@@ -61,14 +62,15 @@ export function ViolationDetailModal({
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
           gap: 12,
-          padding: 16,
-          borderRadius: 16,
+          padding: 14,
+          borderRadius: 6,
+          border: "1px solid #d4d4d2",
           background: "var(--mist)",
-          marginBottom: 16,
+          marginBottom: 14,
         }}
       >
         <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mức độ &amp; Trạng thái</div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mức độ và trạng thái</div>
           <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
             <span className={`badge ${sev.badge}`}>{sev.label}</span>
             <span className={`badge ${st.badge}`}>{st.label}</span>
@@ -80,11 +82,11 @@ export function ViolationDetailModal({
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày phát hiện</div>
-          <div style={{ fontWeight: 600 }}>{formatDate(violation.detectedOn)}</div>
+          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatDate(violation.detectedOn)}</div>
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã thửa</div>
-          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>{violation.plotCode || "—"}</div>
+          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>{violation.plotCode || "Chưa gắn thửa"}</div>
         </div>
       </div>
 
@@ -92,7 +94,7 @@ export function ViolationDetailModal({
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
           Nội dung vi phạm
         </div>
-        <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--bg-input)", fontSize: 13.5 }}>
+        <div style={{ padding: "12px 14px", borderRadius: 6, border: "1px solid #e5e7eb", background: "var(--bg-input)", fontSize: 13.5 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>{violation.title}</div>
           <div style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
             {violation.description || "Không có mô tả chi tiết."}
@@ -107,20 +109,19 @@ export function ViolationDetailModal({
           Phản hồi giải trình từ hộ nông dân
         </div>
         {violation.farmerResponse ? (
-          <div style={{ padding: "12px 14px", borderRadius: 8, background: "#f0fdf4", border: "1px solid #d4d4d2" }}>
+          <div style={{ padding: "12px 14px", borderRadius: 6, background: "#f0fdf4", border: "1px solid #d4d4d2" }}>
             <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{violation.farmerResponse}</div>
             {violation.farmerResponseAt && (
-              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4 }}>
+              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
                 Gửi lúc: {formatDateTime(violation.farmerResponseAt)}
               </div>
             )}
-            {isSafeMediaUrl(violation.farmerResponsePhotoUrl) && (
-              <div style={{ marginTop: 10, borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={violation.farmerResponsePhotoUrl}
-                  alt="Ảnh giải trình của hộ nông dân"
-                  style={{ width: "100%", maxHeight: 280, objectFit: "cover", display: "block" }}
+            {(violation.farmerResponsePhotoUrls?.length || violation.farmerResponsePhotoUrl) && (
+              <div style={{ marginTop: 10 }}>
+                <StoredMediaGallery
+                  urls={violation.farmerResponsePhotoUrls}
+                  fallbackUrl={violation.farmerResponsePhotoUrl}
+                  altPrefix="Minh chứng giải trình của hộ"
                 />
               </div>
             )}
@@ -135,7 +136,7 @@ export function ViolationDetailModal({
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
             Kết quả xử lý ({formatDate(violation.resolvedOn)})
           </div>
-          <div style={{ padding: "12px 14px", borderRadius: 12, background: "#eef8e3", fontSize: 13.5 }}>
+          <div style={{ padding: "12px 14px", borderRadius: 6, border: "1px solid #d4d4d2", background: "#eef8e3", fontSize: 13.5 }}>
             {violation.resolutionNotes || "Đã đánh dấu hoàn tất xử lý."}
           </div>
         </div>
@@ -280,8 +281,17 @@ export function ViolationFormModal({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
 
   const save = useMutation(async (payload: Record<string, unknown>) => {
-    if (initial) return api.patch<ViolationRow>(`/violations/${initial.id}`, payload);
-    return api.post<ViolationRow>("/violations", payload);
+    if (initial) {
+      const updated = await api.patch<ViolationRow>(`/violations/${initial.id}`, payload);
+      return { mode: "synced" as const, data: updated };
+    }
+    return submitFieldRecordWithOfflineQueue<ViolationRow>({
+      kind: "admin-violation",
+      label: `Cảnh báo vi phạm: ${String(payload.title ?? "")}`,
+      plotCode: typeof payload.plotCode === "string" ? payload.plotCode : undefined,
+      endpoint: "/violations",
+      payload,
+    });
   });
 
   const handleHouseholdChange = (val: string) => {
@@ -322,6 +332,11 @@ export function ViolationFormModal({
 
     const res = await save.run(payload);
     if (!res) return;
+    if (res.mode === "queued") {
+      toast.success("Mạng hiện trường yếu: đã lưu cảnh báo vi phạm vào máy để tự động đồng bộ khi có sóng.");
+      onClose();
+      return;
+    }
     toast.success(isEdit ? "Đã cập nhật cảnh báo vi phạm." : "Đã ghi nhận cảnh báo vi phạm.");
     notifyCountsChanged();
     onSaved();

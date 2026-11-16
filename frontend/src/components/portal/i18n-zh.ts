@@ -734,6 +734,7 @@ const EXACT_MAP: Record<string, string> = {
   "In": "打印",
   "In phiếu": "打印报告",
   "In phiếu kiểm nghiệm khổ A4": "打印 A4 检测报告",
+  "Phiếu kiểm nghiệm": "检测报告单",
   "Phiếu kiểm nghiệm điện tử": "电子检测报告证书",
   "Phiếu trả kết quả kiểm nghiệm": "实验室检测结果报告单",
   "Đã ký số & chứng thực": "已数字签名与官方认证",

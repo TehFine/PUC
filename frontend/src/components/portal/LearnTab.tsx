@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { invalidatePortal, useSharedQuery } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
+import { useUrlSubTab } from "@/lib/back-navigation";
 import { formatClock, PESTICIDE_STATUS, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import { isSafeMediaUrl } from "@/utils/url-safety";
@@ -3191,6 +3192,18 @@ export default function LearnTab({
 } = {}) {
   // Mở sẵn Quy trình chăm sóc chuẩn 2026-2027 làm mặc định (hoặc mở đúng mục từ thanh tìm kiếm)
   const [view, setView] = useState<View>(() => (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) || "protocol");
+  const selectView = useUrlSubTab<View>(
+    "sub",
+    view,
+    setView,
+    "protocol",
+    (raw): raw is View =>
+      raw === "protocol" ||
+      raw === "pesticides" ||
+      raw === "fertilizers" ||
+      raw === "varieties" ||
+      raw === "diseases",
+  );
   const items: { id: View; label: string }[] = [
     { id: "protocol", label: "Quy trình chăm sóc" },
     { id: "pesticides", label: "Thuốc BVTV" },
@@ -3209,7 +3222,7 @@ export default function LearnTab({
             role="tab"
             aria-selected={view === item.id}
             className={view === item.id ? "active" : ""}
-            onClick={() => setView(item.id)}
+            onClick={() => selectView(item.id)}
           >
             {item.label}
           </button>

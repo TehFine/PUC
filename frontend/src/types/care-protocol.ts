@@ -72,6 +72,10 @@ export interface CareMilestoneDeclaration {
   scheduledOn: string | null;
   dueOn: string | null;
   performedOn: string;
+  declaredAt?: string | null;
+  declaredOn?: string | null;
+  lateDeclarationDays?: number;
+  lateReason?: string | null;
   expectedTreeState: string;
   actualTreeState: string;
   followedStandard: boolean;
@@ -83,7 +87,9 @@ export interface CareMilestoneDeclaration {
   pesticideName: string | null;
   pesticideDose: string | null;
   fieldPhotoUrl: string | null;
+  fieldPhotoUrls?: string[];
   invoicePhotoUrl: string | null;
+  invoicePhotoUrls?: string[];
   latitude: number | null;
   longitude: number | null;
   gpsVerified: boolean;
@@ -118,6 +124,8 @@ export interface PlotCarePlanTimeline {
   cycleStartOn: string;
   startMilestoneSeq: number;
   currentMilestoneCode: string;
+  reminderLeadDays?: number;
+  lastLateDeclarationDays?: number;
   status: "active" | "completed" | "paused";
   note: string | null;
   updatedAt: string;
@@ -126,6 +134,7 @@ export interface PlotCarePlanTimeline {
   totalApplicableCount: number;
   progressPct: number;
   deviationCount: number;
+  lateDeclarationCount?: number;
   activeMilestone: CareMilestoneItem | null;
   nextMilestone: CareMilestoneItem | null;
   milestones: CareMilestoneItem[];
@@ -160,8 +169,10 @@ export interface DeclareCareMilestoneBody {
   supplierName?: string;
   pesticideId?: number;
   pesticideDose?: string;
-  fieldPhotoId: number;
+  fieldPhotoId?: number;
+  fieldPhotoIds?: number[];
   invoicePhotoId?: number;
+  invoicePhotoIds?: number[];
   latitude?: number;
   longitude?: number;
   farmerNote?: string;
@@ -172,6 +183,14 @@ export interface DeclareCareMilestoneResponse {
   declarationId: number;
   complianceStatus: ComplianceStatus;
   complianceIssues: ComplianceIssue[];
+  declarationTiming?: {
+    performedOn: string;
+    declaredAt: string;
+    declaredOn: string;
+    lateDeclarationDays: number;
+    scheduleAdjustedDays: number;
+    nextReminderLeadDays: number;
+  };
   nextMilestone: {
     code: string;
     stageOrder: string;
@@ -201,6 +220,9 @@ export interface AdminCarePlanSummary {
   totalApplicableCount: number;
   progressPct: number;
   deviationCount: number;
+  lateDeclarationCount?: number;
+  reminderLeadDays?: number;
+  lastLateDeclarationDays?: number;
   totalDeclarations: number;
   activeMilestone: {
     code: string;

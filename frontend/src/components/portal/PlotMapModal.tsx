@@ -21,6 +21,7 @@ import {
 import { isLowEndDevice } from "@/lib/network";
 import type { PortalPlot } from "@/types/portal";
 import { PLOT_STATUS } from "@/lib/portal-labels";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { Pill } from "./ui";
 
@@ -305,6 +306,8 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     window.addEventListener("mouseup", onMouseUp);
   };
 
+  useBackLayer(true, handleRequestClose);
+
   useEffect(() => {
     const unlockScroll = lockRootScroll();
 
@@ -406,7 +409,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 <div class="pt-leaflet-card-head">Thửa đất ${escapeHtml(plot.code)}</div>
                 <div class="pt-leaflet-card-rows">
                   <div class="pt-leaflet-card-row"><span>Chủ hộ</span><strong>${escapeHtml(householdName)}</strong></div>
-                  <div class="pt-leaflet-card-row"><span>Diện tích</span><strong>${escapeHtml(Number(plot.areaHa).toLocaleString("vi-VN", { maximumFractionDigits: 2 }))} ha</strong></div>
+                  <div class="pt-leaflet-card-row"><span>Diện tích</span><strong>${escapeHtml(Number(plot.areaHa).toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 4 }))} ha</strong></div>
                   <div class="pt-leaflet-card-row"><span>Giống</span><strong>${escapeHtml(plot.variety || "Sầu riêng")}</strong></div>
                 </div>
               </div>
@@ -421,7 +424,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 weight: z >= 18 ? 3.8 : 3.2,
               });
               if (z >= 17) {
-                renderCadastralDimensions(L, dimensionGroup, geojson, lowEnd);
+                renderCadastralDimensions(L, dimensionGroup, geojson, lowEnd, map);
               } else {
                 dimensionGroup.clearLayers();
               }
@@ -726,7 +729,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Diện tích</span>
                   <strong className="pt-mapmodal-stat-val">
-                    {(plot.areaHa ?? 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })} ha
+                    {(plot.areaHa ?? 0).toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ha
                   </strong>
                   <span className="pt-mapmodal-stat-sub">
                     ({((plot.areaHa ?? 0) * 10000).toLocaleString("vi-VN")} m²)

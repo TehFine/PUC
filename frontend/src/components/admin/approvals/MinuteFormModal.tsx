@@ -1,18 +1,21 @@
 "use client";
 
-import { type ChangeEvent, useState } from "react";
-import { MapPin, ShieldCheck } from "@/components/ui/PublicIcon";
-import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
+import { useState } from "react";
+import { FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
 import { useMutation } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
+import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, todayIso } from "@/components/admin/shared/form-utils";
 import { badgeOf, MINUTE_RESULT, optionsOf } from "@/components/admin/shared/labels";
-import { ALLOWED_IMAGE_MIMES } from "@/components/portal/shared/media";
+import {
+  MultiPhotoField,
+  StoredMediaGallery,
+  useMultiPhotoPicker,
+} from "@/components/portal/shared/controls";
 import { formatDate } from "@/utils/format";
-import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { MinuteResult, MinuteRow } from "@/types/approvals";
 
 const RESULT_OPTIONS = optionsOf(MINUTE_RESULT);
@@ -28,6 +31,29 @@ function diffDaysFromToday(isoDate: string): number {
   return Math.round((nowUtc - targetUtc) / (24 * 60 * 60 * 1000));
 }
 
+function extractInitialMediaItems(initial?: MinuteRow | null): Array<{ id: number; url: string }> {
+  if (!initial) return [];
+  const ids =
+    initial.photoIds && initial.photoIds.length > 0
+      ? initial.photoIds
+      : initial.photoId
+        ? [initial.photoId]
+        : [];
+  const urls =
+    initial.photoUrls && initial.photoUrls.length > 0
+      ? initial.photoUrls
+      : initial.photoUrl
+        ? [initial.photoUrl]
+        : [];
+  const out: Array<{ id: number; url: string }> = [];
+  for (let i = 0; i < Math.min(ids.length, urls.length); i += 1) {
+    if (ids[i] && urls[i]) {
+      out.push({ id: Number(ids[i]), url: urls[i] });
+    }
+  }
+  return out;
+}
+
 export function MinuteDetailModal({
   minute,
   onClose,
@@ -39,12 +65,13 @@ export function MinuteDetailModal({
 }) {
   const resBadge = badgeOf(MINUTE_RESULT, minute.result);
   const hasCoords = typeof minute.latitude === "number" && typeof minute.longitude === "number";
+  const hasMedia = Boolean(minute.photoUrls?.length || minute.photoUrl);
 
   return (
     <Modal
       title={`Biên bản kiểm tra: ${minute.code}`}
       onClose={onClose}
-      width={560}
+      width={580}
       footer={
         <>
           {onEdit && (
@@ -58,7 +85,7 @@ export function MinuteDetailModal({
         </>
       }
     >
-      <div style={{ display: "grid", gap: 12, padding: 16, border: "1px solid var(--line)", background: "var(--mist)" }}>
+      <div style={{ display: "grid", gap: 12, padding: 14, borderRadius: 6, border: "1px solid #d4d4d2", background: "var(--mist)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
             <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Số biên bản</div>
@@ -81,7 +108,7 @@ export function MinuteDetailModal({
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Địa điểm / Phạm vi</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Địa điểm và phạm vi</div>
             <div style={{ fontWeight: 600 }}>{minute.location}</div>
           </div>
           <div>
@@ -112,13 +139,10 @@ export function MinuteDetailModal({
 
         {hasCoords && (
           <div style={{ padding: "8px 10px", background: "#ffffff", border: "1px solid #d4d4d2", borderRadius: 6 }}>
-            <div style={{ fontSize: 11.5, color: "#14532d", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
-              <MapPin size={13} />
-              <span>
-                Tọa độ GPS hiện trường:{" "}
-                <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>
-                  {Number(minute.latitude).toFixed(5)}, {Number(minute.longitude).toFixed(5)}
-                </span>
+            <div style={{ fontSize: 11.5, color: "#14532d", fontWeight: 700 }}>
+              Tọa độ GPS hiện trường:{" "}
+              <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>
+                {Number(minute.latitude).toFixed(5)}, {Number(minute.longitude).toFixed(5)}
               </span>
             </div>
             <div style={{ fontSize: 11.5, color: minute.gpsVerified ? "#166534" : "#64748b", marginTop: 2 }}>
@@ -131,23 +155,23 @@ export function MinuteDetailModal({
           </div>
         )}
 
-        {isSafeMediaUrl(minute.photoUrl) && (
+        {hasMedia && (
           <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 4 }}>Ảnh hiện trường kiểm tra</div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={minute.photoUrl}
-              alt={`Ảnh kiểm tra ${minute.code}`}
-              style={{ width: "100%", maxHeight: 240, objectFit: "cover", border: "1px solid var(--line)" }}
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 6 }}>
+              Minh chứng hiện trường kiểm tra
+            </div>
+            <StoredMediaGallery
+              urls={minute.photoUrls}
+              fallbackUrl={minute.photoUrl}
+              altPrefix={`Hiện trường kiểm tra ${minute.code}`}
             />
           </div>
         )}
 
         {minute.recordHash && (
-          <div style={{ padding: "8px 10px", background: "#ffffff", border: "1px solid #cbd5e1" }}>
-            <div style={{ fontSize: 11, color: "#0f172a", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
-              <ShieldCheck size={13} color="#15803d" />
-              <span>Dấu niêm phong chuỗi băm bất biến SHA-256</span>
+          <div style={{ padding: "8px 10px", background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6 }}>
+            <div style={{ fontSize: 11, color: "#0f172a", fontWeight: 700 }}>
+              Dấu niêm phong chuỗi băm bất biến SHA-256
             </div>
             <code
               style={{
@@ -185,11 +209,13 @@ export default function MinuteFormModal({
   const [officer, setOfficer] = useState(initial?.officer ?? "");
   const [result, setResult] = useState<MinuteResult>(initial?.result ?? "pass");
   const [lateReason, setLateReason] = useState(initial?.lateReason ?? "");
-  const [photoId, setPhotoId] = useState<number | null>(initial?.photoId ?? null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(initial?.photoUrl ?? null);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const media = useMultiPhotoPicker("inspection", {
+    maxFiles: 8,
+    allowVideo: true,
+    initialItems: extractInitialMediaItems(initial),
+  });
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [confirmRemovePhoto, setConfirmRemovePhoto] = useState(false);
   const [latitude, setLatitude] = useState<number | null>(initial?.latitude ?? null);
   const [longitude, setLongitude] = useState<number | null>(initial?.longitude ?? null);
   const [locating, setLocating] = useState(false);
@@ -197,6 +223,7 @@ export default function MinuteFormModal({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
 
   const isBackdatedOver48h = diffDaysFromToday(heldOn) > 2;
+  const busy = uploadingMedia;
 
   const save = useMutation(async (payload: Record<string, unknown>) => {
     if (initial) return api.patch<MinuteRow>(`/minutes/${initial.id}`, payload);
@@ -227,32 +254,6 @@ export default function MinuteFormModal({
     );
   };
 
-  const handlePhotoPick = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || uploadingPhoto) return;
-    if (!ALLOWED_IMAGE_MIMES.has(file.type)) {
-      setUploadError("Chỉ nhận ảnh hiện trường định dạng JPG, PNG hoặc WEBP.");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setUploadError("Ảnh biên bản kiểm tra không được vượt quá 10 MB.");
-      return;
-    }
-    setUploadingPhoto(true);
-    setUploadError(null);
-    try {
-      const uploaded = await api.upload(file, "inspection");
-      setPhotoId(uploaded.id);
-      setPhotoUrl(uploaded.url);
-      toast.success("Đã tải ảnh minh chứng kiểm tra thực địa.");
-    } catch (err) {
-      setUploadError(errorMessage(err, "Không thể tải ảnh hiện trường lên máy chủ."));
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
-
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const errs = requireFields(
@@ -260,12 +261,74 @@ export default function MinuteFormModal({
       {
         code: "số biên bản",
         heldOn: "ngày kiểm tra",
-        location: "địa điểm / phạm vi",
+        location: "địa điểm và phạm vi",
         officer: "cán bộ kiểm tra",
       },
     );
     setFieldErrors(errs);
     if (hasErrors(errs)) return;
+
+    setUploadError(null);
+    if (!isEdit) {
+      setUploadingMedia(true);
+      try {
+        const basePayload: Record<string, unknown> = {
+          code: code.trim(),
+          heldOn,
+          location: location.trim(),
+          plotCode: plotCode.trim() || null,
+          officer: officer.trim(),
+          result,
+          latitude,
+          longitude,
+          lateReason: lateReason.trim() || null,
+        };
+        const outcome = await submitFieldRecordWithOfflineQueue<MinuteRow>({
+          kind: "admin-minute",
+          label: `Biên bản kiểm tra ${code.trim()}`,
+          plotCode: plotCode.trim() || undefined,
+          endpoint: "/minutes",
+          payload: basePayload,
+          mediaGroups: media.hasFiles
+            ? [
+                {
+                  slotKey: "photos",
+                  purpose: "inspection",
+                  items: media.items,
+                  binding: { arrayField: "photoIds", primaryField: "photoId" },
+                },
+              ]
+            : [],
+          onProgress: media.setUploadProgress,
+        });
+        setUploadingMedia(false);
+        if (outcome.mode === "queued") {
+          toast.success("Mạng hiện trường yếu: đã lưu biên bản kèm ảnh vào máy để tự động đồng bộ khi có sóng.");
+          onClose();
+          return;
+        }
+        toast.success("Đã tạo biên bản kiểm tra mới.");
+        notifyCountsChanged();
+        onSaved();
+        onClose();
+        return;
+      } catch (err) {
+        setUploadingMedia(false);
+        setUploadError(errorMessage(err, "Không thể lưu biên bản kiểm tra hiện trường."));
+        return;
+      }
+    }
+
+    setUploadingMedia(true);
+    let photoIds: number[] = [];
+    try {
+      photoIds = media.hasFiles ? await media.ensureUploadedAll() : [];
+    } catch (err) {
+      setUploadError(errorMessage(err, "Không thể tải ảnh hoặc video hiện trường lên máy chủ."));
+      setUploadingMedia(false);
+      return;
+    }
+    setUploadingMedia(false);
 
     const payload: Record<string, unknown> = {
       code: code.trim(),
@@ -274,7 +337,8 @@ export default function MinuteFormModal({
       plotCode: plotCode.trim() || null,
       officer: officer.trim(),
       result,
-      photoId,
+      photoId: photoIds[0] ?? null,
+      photoIds,
       latitude,
       longitude,
       lateReason: lateReason.trim() || null,
@@ -291,15 +355,15 @@ export default function MinuteFormModal({
   return (
     <Modal
       title={isEdit ? `Sửa biên bản: ${initial?.code}` : "Tạo biên bản kiểm tra thực địa"}
-      onClose={save.pending || uploadingPhoto ? () => undefined : onClose}
-      width={580}
+      onClose={save.pending || busy ? () => undefined : onClose}
+      width={600}
       footer={
         <>
-          <button type="button" className="btn btn-outline" onClick={onClose} disabled={save.pending || uploadingPhoto}>
+          <button type="button" className="btn btn-outline" onClick={onClose} disabled={save.pending || busy}>
             Hủy
           </button>
-          <button type="submit" form="minute-form" className="btn btn-primary" disabled={save.pending || uploadingPhoto}>
-            {save.pending ? "Đang lưu…" : isEdit ? "Lưu thay đổi" : "Tạo biên bản"}
+          <button type="submit" form="minute-form" className="btn btn-primary" disabled={save.pending || busy}>
+            {busy ? "Đang nén và tải tệp..." : save.pending ? "Đang lưu..." : isEdit ? "Lưu thay đổi" : "Tạo biên bản"}
           </button>
         </>
       }
@@ -326,11 +390,11 @@ export default function MinuteFormModal({
 
         <FormGrid>
           <TextField
-            label="Địa điểm / Phạm vi"
+            label="Địa điểm và phạm vi"
             required
             value={location}
             onChange={setLocation}
-            placeholder="VD: Thôn 2 - 12 hộ vùng trồng XK"
+            placeholder="Ví dụ: Thôn 2, 12 hộ vùng trồng xuất khẩu"
             maxLength={200}
             error={fieldErrors.location}
           />
@@ -338,7 +402,7 @@ export default function MinuteFormModal({
             label="Mã thửa đối chiếu GIS (nếu kiểm tra tại vườn)"
             value={plotCode}
             onChange={setPlotCode}
-            placeholder="VD: CN-T1-01"
+            placeholder="Ví dụ: CN-T1-01"
             maxLength={40}
           />
         </FormGrid>
@@ -349,7 +413,7 @@ export default function MinuteFormModal({
             required
             value={officer}
             onChange={setOfficer}
-            placeholder="KS. Trần Quốc Bảo"
+            placeholder="Ví dụ: KS. Trần Quốc Bảo"
             maxLength={100}
             error={fieldErrors.officer}
           />
@@ -363,10 +427,10 @@ export default function MinuteFormModal({
 
         {isBackdatedOver48h && (
           <TextField
-            label="Lý do nhập biên bản sau 48 giờ (hiển thị minh bạch trên sổ cái kiểm toán)"
+            label="Lý do nhập biên bản sau 48 giờ (hiển thị trên sổ cái kiểm toán)"
             value={lateReason}
             onChange={setLateReason}
-            placeholder="VD: Nhập lại từ biên bản giấy do vùng sâu mất sóng di động"
+            placeholder="Ví dụ: Nhập lại từ biên bản giấy do vùng sâu mất sóng di động"
             maxLength={250}
           />
         )}
@@ -399,72 +463,26 @@ export default function MinuteFormModal({
             type="button"
             className="btn btn-outline btn-sm"
             onClick={handleCaptureGps}
-            disabled={locating || save.pending}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+            disabled={locating || save.pending || busy}
           >
-            <MapPin size={13} />
-            <span>{locating ? "Đang lấy GPS…" : latitude !== null ? "Cập nhật GPS" : "Lấy tọa độ GPS"}</span>
+            {locating ? "Đang lấy GPS..." : latitude !== null ? "Cập nhật GPS" : "Lấy tọa độ GPS"}
           </button>
         </div>
 
-        <div className="form-group">
-          <label>Ảnh chụp hiện trường kiểm tra tại vườn (JPG, PNG, WEBP)</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
-            <label className="btn btn-outline btn-sm" style={{ cursor: uploadingPhoto ? "wait" : "pointer", margin: 0 }}>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(e) => void handlePhotoPick(e)}
-                disabled={uploadingPhoto}
-                style={{ display: "none" }}
-              />
-              {uploadingPhoto ? "Đang tải ảnh…" : photoUrl ? "Đổi ảnh hiện trường" : "Chụp / Tải ảnh hiện trường"}
-            </label>
-            {photoUrl && (
-              <>
-                {isSafeMediaUrl(photoUrl) && (
-                  <a
-                    href={photoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-outline btn-sm"
-                    style={{ textDecoration: "none" }}
-                  >
-                    Xem ảnh đã gắn
-                  </a>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-danger btn-sm"
-                  onClick={() => setConfirmRemovePhoto(true)}
-                >
-                  Xóa ảnh
-                </button>
-              </>
-            )}
-          </div>
-          {confirmRemovePhoto && (
-            <ConfirmDialog
-              title="Xóa ảnh hiện trường"
-              message="Xác nhận xóa ảnh hiện trường đã đính kèm khỏi biên bản kiểm tra này?"
-              confirmLabel="Xóa ảnh"
-              danger
-              onConfirm={() => {
-                setPhotoId(null);
-                setPhotoUrl(null);
-                setConfirmRemovePhoto(false);
-              }}
-              onClose={() => setConfirmRemovePhoto(false)}
-            />
-          )}
-          {uploadError && (
-            <small role="alert" style={{ display: "block", marginTop: 5, color: "#b73c20", fontSize: 12 }}>
-              {uploadError}
-            </small>
-          )}
+        <div style={{ marginBottom: 12 }}>
+          <MultiPhotoField
+            id="minute-field-photos"
+            label="Ảnh và video hiện trường kiểm tra tại vườn"
+            picker={media}
+            description="Có thể đính kèm tối đa 8 ảnh thực địa hoặc video ngắn dưới 90 giây. Ảnh tự động nén nhẹ."
+            cameraLabel="Chụp ảnh kiểm tra"
+            galleryLabel="Chọn nhiều ảnh"
+            videoLabel="Thêm video ngắn"
+            disabled={save.pending || busy}
+          />
         </div>
 
-        <FormError message={save.error} />
+        <FormError message={uploadError || save.error} />
       </form>
     </Modal>
   );

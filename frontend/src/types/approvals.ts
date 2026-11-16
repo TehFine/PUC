@@ -65,7 +65,9 @@ export interface MinuteRow {
   result: MinuteResult;
   plotCode?: string | null;
   photoId?: number | null;
+  photoIds?: number[];
   photoUrl?: string | null;
+  photoUrls?: string[];
   latitude?: number | null;
   longitude?: number | null;
   gpsVerified?: boolean;

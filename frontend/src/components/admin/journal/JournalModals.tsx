@@ -7,10 +7,11 @@ import { toast } from "@/components/ui/Toast";
 import { CheckboxField, FormGrid, SelectField, TextAreaField, TextField, type Option } from "@/components/ui/form/fields";
 import { useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
+import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
-import { formatDate } from "@/utils/format";
-import { isSafeMediaUrl } from "@/utils/url-safety";
+import { MultiPhotoField, StoredMediaGallery, useMultiPhotoPicker } from "@/components/portal/shared/controls";
+import { formatDate, formatDateTime } from "@/utils/format";
 import type { JournalRow } from "@/types/journal";
 
 export function JournalDetailModal({
@@ -22,11 +23,13 @@ export function JournalDetailModal({
   onClose: () => void;
   onEdit?: () => void;
 }) {
+  const hasMedia = Boolean(entry.photoUrls?.length || entry.photoUrl);
+
   return (
     <Modal
-      title={`Nhật ký canh tác – ${entry.householdName}`}
+      title={`Nhật ký canh tác: ${entry.householdName}`}
       onClose={onClose}
-      width={560}
+      width={580}
       footer={
         <>
           {onEdit && (
@@ -45,15 +48,38 @@ export function JournalDetailModal({
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
           gap: 12,
-          padding: 16,
-          borderRadius: 16,
+          padding: 14,
+          borderRadius: 6,
+          border: "1px solid #d4d4d2",
           background: "var(--mist)",
-          marginBottom: 16,
+          marginBottom: 14,
         }}
       >
         <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày thực hiện</div>
-          <div style={{ fontWeight: 600 }}>{formatDate(entry.entryOn)}</div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày thực hiện tại vườn</div>
+          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatDate(entry.entryOn)}</div>
+        </div>
+        {entry.serverRecordedAt && (
+          <div>
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Thời điểm khai báo thực tế</div>
+            <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+              {formatDateTime(entry.serverRecordedAt)}
+            </div>
+          </div>
+        )}
+        <div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Độ trễ khai báo</div>
+          <div
+            style={{
+              fontWeight: 600,
+              fontVariantNumeric: "tabular-nums",
+              color: (entry.lateDeclarationDays ?? 0) > 0 ? "#9a6712" : "#15803d",
+            }}
+          >
+            {(entry.lateDeclarationDays ?? 0) > 0
+              ? `Khai báo chậm ${entry.lateDeclarationDays} ngày`
+              : "Đúng trong ngày"}
+          </div>
         </div>
         <div>
           <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Hộ nông dân</div>
@@ -85,25 +111,22 @@ export function JournalDetailModal({
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
           Chi tiết công việc
         </div>
-        <div style={{ padding: "10px 14px", borderRadius: 12, background: "var(--bg-input)", fontSize: 13.5 }}>
+        <div style={{ padding: "10px 12px", borderRadius: 6, border: "1px solid #e5e7eb", background: "var(--bg-input)", fontSize: 13.5 }}>
           {entry.detail || "Không có mô tả chi tiết."}
         </div>
       </div>
 
-      {(entry.photoUrl || entry.hasPhoto) && (
+      {(hasMedia || entry.hasPhoto) && (
         <div>
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>
-            Hình ảnh thực địa
+            Minh chứng hiện trường
           </div>
-          {isSafeMediaUrl(entry.photoUrl) ? (
-            <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid var(--border)" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={entry.photoUrl}
-                alt={`Ảnh nhật ký ${entry.plotCode}`}
-                style={{ width: "100%", maxHeight: 340, objectFit: "cover", display: "block" }}
-              />
-            </div>
+          {hasMedia ? (
+            <StoredMediaGallery
+              urls={entry.photoUrls}
+              fallbackUrl={entry.photoUrl}
+              altPrefix={`Hiện trường nhật ký ${entry.plotCode}`}
+            />
           ) : (
             <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
               Đã xác nhận có ảnh hiện trường lưu tại hồ sơ hộ.
@@ -136,12 +159,46 @@ export function JournalFormModal({
   const [activity, setActivity] = useState(initial?.activity ?? "Bón phân hữu cơ");
   const [detail, setDetail] = useState(initial?.detail ?? "");
   const [recorder, setRecorder] = useState(initial?.recorder ?? session?.user.fullName ?? "Cán bộ HTX");
-  const [hasPhoto, setHasPhoto] = useState(Boolean(initial?.hasPhoto || initial?.photoUrl));
+  const [hasPhoto, setHasPhoto] = useState(Boolean(initial?.hasPhoto || initial?.photoUrl || initial?.photoUrls?.length));
+  const media = useMultiPhotoPicker("journal", { maxFiles: 8, allowVideo: true });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
+  const existingHasMedia = Boolean(initial?.photoUrls?.length || initial?.photoUrl);
 
   const save = useMutation(async (payload: Record<string, unknown>) => {
-    if (initial) return api.patch<JournalRow>(`/journal/${initial.id}`, payload);
-    return api.post<JournalRow>("/journal", payload);
+    if (initial) {
+      let nextPayload = payload;
+      if (media.hasFiles) {
+        const uploadedIds = await media.ensureUploadedAll();
+        if (uploadedIds.length > 0) {
+          nextPayload = {
+            ...payload,
+            photoIds: uploadedIds,
+            photoId: uploadedIds[0],
+            hasPhoto: true,
+          };
+        }
+      }
+      const updated = await api.patch<JournalRow>(`/journal/${initial.id}`, nextPayload);
+      return { mode: "synced" as const, data: updated };
+    }
+    return submitFieldRecordWithOfflineQueue<JournalRow>({
+      kind: "admin-journal",
+      label: `Nhật ký ${String(payload.activity ?? "")} - Thửa ${String(payload.plotCode ?? "")}`,
+      plotCode: typeof payload.plotCode === "string" ? payload.plotCode : undefined,
+      endpoint: "/journal",
+      payload: media.hasFiles ? { ...payload, hasPhoto: true } : payload,
+      mediaGroups: media.hasFiles
+        ? [
+            {
+              slotKey: "photos",
+              purpose: "journal",
+              items: media.items,
+              binding: { arrayField: "photoIds", primaryField: "photoId" },
+            },
+          ]
+        : [],
+      onProgress: media.setUploadProgress,
+    });
   });
 
   const submit = async (event: React.FormEvent) => {
@@ -171,6 +228,11 @@ export function JournalFormModal({
 
     const res = await save.run(payload);
     if (!res) return;
+    if (res.mode === "queued") {
+      toast.success("Mạng hiện trường yếu: đã lưu nhật ký vào máy để tự động đồng bộ khi có sóng.");
+      onClose();
+      return;
+    }
     toast.success(isEdit ? "Đã cập nhật nhật ký canh tác." : "Đã ghi nhật ký canh tác mới.");
     notifyCountsChanged();
     onSaved();
@@ -253,7 +315,38 @@ export function JournalFormModal({
           placeholder="Liều lượng, quy cách thực hiện, tình trạng cây trồng…"
         />
 
-        <CheckboxField label="Có hình ảnh xác thực hiện trường" checked={hasPhoto} onChange={setHasPhoto} />
+        {isEdit && existingHasMedia && !media.hasFiles && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>
+              Minh chứng hiện trường đang gắn với bản ghi
+            </div>
+            <StoredMediaGallery
+              urls={initial?.photoUrls}
+              fallbackUrl={initial?.photoUrl}
+              altPrefix={`Hiện trường thửa ${plotCode}`}
+              compact
+            />
+          </div>
+        )}
+
+        <div style={{ marginBottom: 12 }}>
+          <MultiPhotoField
+            id="admin-journal-photos"
+            label={isEdit && existingHasMedia ? "Cập nhật ảnh hoặc video hiện trường mới" : "Ảnh và video hiện trường vườn"}
+            picker={media}
+            description="Ảnh được tự động nén nhẹ và lưu trữ bền vững trong cơ sở dữ liệu."
+            cameraLabel="Chụp ảnh hiện trường"
+            galleryLabel="Chọn nhiều ảnh"
+            videoLabel="Thêm video ngắn"
+            disabled={save.pending}
+          />
+        </div>
+
+        <CheckboxField
+          label="Có hình ảnh xác thực hiện trường"
+          checked={hasPhoto || media.hasFiles}
+          onChange={setHasPhoto}
+        />
 
         <FormError message={save.error} />
       </form>

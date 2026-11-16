@@ -191,7 +191,7 @@ export default function HomeTab({
     return buildActionItems(overview.data, openViolationsList[0]);
   }, [overview.data, openViolationsList]);
 
-  if (overview.loading || overview.error || !overview.data) {
+  if (overview.loading || overview.error || !overview.data || !overview.data.household || !overview.data.stats) {
     return <StateBlock loading={overview.loading} error={overview.error} />;
   }
 

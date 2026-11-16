@@ -11,8 +11,16 @@ export interface JournalRow {
   recorder: string;
   hasPhoto: boolean;
   photoUrl?: string | null;
+  photoUrls?: string[];
   latitude?: number | null;
   longitude?: number | null;
+  serverRecordedAt?: string | null;
+  declaredOn?: string | null;
+  lateDeclarationDays?: number;
+  entryDelayHours?: number;
+  isLateEntry?: boolean;
+  lateReason?: string | null;
+  recordHash?: string | null;
 }
 
 export type ViolationSeverity = "critical" | "warning";
@@ -31,6 +39,7 @@ export interface ViolationRow {
   farmerResponse?: string | null;
   farmerResponseAt?: string | null;
   farmerResponsePhotoUrl?: string | null;
+  farmerResponsePhotoUrls?: string[];
   resolvedOn?: string | null;
   resolutionNotes?: string | null;
   /** Vi phạm loại "chưa cập nhật nhật ký" (backend nhận diện theo tiêu đề). */
@@ -54,4 +63,10 @@ export interface SprayRow {
   isolationDays: number | null;
   mrlStatus: MrlStatus;
   plotCode?: string | null;
+  serverRecordedAt?: string | null;
+  declaredOn?: string | null;
+  lateDeclarationDays?: number;
+  entryDelayHours?: number;
+  isLateEntry?: boolean;
+  lateReason?: string | null;
 }
