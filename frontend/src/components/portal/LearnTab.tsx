@@ -16,7 +16,6 @@ import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import {
   DURIAN_PROTOCOL_2026_2027,
-  HTX_PRICE_GUARANTEE_POLICY,
   SENPRO_SHOOT_PROTOCOL,
   type DurianProtocolStage,
   type ProtocolGroup,
@@ -300,12 +299,11 @@ export function TrainingDetailModal({
       {/* 4. Nội dung bài giảng & thực hành chi tiết */}
       <div className="pt-training-detail-section">
         <h4 className="pt-training-section-title">
-          Chương trình đào tạo & nội dung thực hành
+          Chương trình đào tạo và nội dung thực hành
         </h4>
         <div className="pt-training-modules">
           {info.modules.map((mod, idx) => (
             <div key={idx} className="pt-training-module-item">
-              <span className="pt-training-module-idx">{idx + 1}</span>
               <div className="pt-training-module-text">
                 <strong>{mod.title}</strong>
                 <p>{mod.desc}</p>
@@ -488,6 +486,7 @@ export function TrainingList() {
       {selectedTraining && (
         <Sheet
           title="Thông tin lớp tập huấn"
+          className="pt-learn-sheet"
           onClose={() => setSelectedId(null)}
         >
           <TrainingDetailModal
@@ -1478,6 +1477,7 @@ function PesticideList() {
         {selectedPesticide && (
           <Sheet
             title="Chi tiết thuốc BVTV"
+            className="pt-learn-sheet"
             onClose={() => setSelectedPesticide(null)}
           >
             <PesticideDetailModal
@@ -2029,6 +2029,7 @@ function FertilizerList() {
         {selectedFertilizer && (
           <Sheet
             title="Chi tiết phân bón"
+            className="pt-learn-sheet"
             onClose={() => setSelectedFertilizer(null)}
           >
             <FertilizerDetailModal
@@ -2523,6 +2524,7 @@ function VarietyList() {
         {selectedVariety && (
           <Sheet
             title="Chi tiết giống sầu riêng"
+            className="pt-learn-sheet"
             onClose={() => setSelectedVariety(null)}
           >
             <VarietyDetailModal
@@ -2757,11 +2759,10 @@ export function DiseaseAndIpmList() {
         </FadeFilterBar>
 
         {(kindFilter === "all" || kindFilter === "care") && !query && (
-          <Card title="4 Nguyên tắc Quản lý dịch hại tổng hợp (IPM) – Viện BVTV 2026">
-            <div className="pt-training-modules" style={{ marginTop: 4 }}>
+          <Card title="4 Nguyên tắc Quản lý dịch hại tổng hợp (IPM) - Viện BVTV 2026">
+            <div className="pt-training-modules">
               {IPM_2026_PRINCIPLES.map((p) => (
                 <div key={p.no} className="pt-training-module-item">
-                  <span className="pt-training-module-idx">{p.no}</span>
                   <div className="pt-training-module-text">
                     <strong>{p.title}</strong>
                     <p>{p.desc}</p>
@@ -2773,11 +2774,10 @@ export function DiseaseAndIpmList() {
         )}
 
         {kindFilter === "care" && (
-          <Card title="Quy trình Chăm sóc, Cắt tỉa, Vệ sinh vườn & Ủ phân vi sinh theo mùa vụ">
-            <div className="pt-training-modules" style={{ marginTop: 4 }}>
-              {CARE_PROCESS_2026.map((step, idx) => (
+          <Card title="Quy trình Chăm sóc, Cắt tỉa, Vệ sinh vườn và Ủ phân vi sinh theo mùa vụ">
+            <div className="pt-training-modules">
+              {CARE_PROCESS_2026.map((step) => (
                 <div key={step.phase} className="pt-training-module-item">
-                  <span className="pt-training-module-idx">{idx + 1}</span>
                   <div className="pt-training-module-text">
                     <strong>
                       {step.title} ({step.timing})
@@ -2846,6 +2846,7 @@ export function DiseaseAndIpmList() {
         {selectedItem && (
           <Sheet
             title="Phác đồ Quản lý Dịch hại Tổng hợp (IPM 2026)"
+            className="pt-learn-sheet"
             onClose={() => setSelectedItem(null)}
           >
             <DiseaseDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
@@ -2869,7 +2870,7 @@ export function CareProtocolDetailModal({
 
   return (
     <div className="pt-pesticide-modal">
-      <div className="pt-pesticide-showcase-wrap" style={{ padding: "4px 0 8px" }}>
+      <div className="pt-pesticide-showcase-wrap" style={{ padding: 0 }}>
         <img
           src={stage.imageSrc}
           alt={stage.imageAlt}
@@ -2877,8 +2878,8 @@ export function CareProtocolDetailModal({
           style={{
             objectFit: "cover",
             width: "100%",
-            height: 205,
-            borderRadius: 18,
+            height: 230,
+            borderRadius: 8,
           }}
         />
       </div>
@@ -2886,7 +2887,7 @@ export function CareProtocolDetailModal({
       <div className="pt-pesticide-modal-header">
         <div className="pt-training-modal-badges" style={{ justifyContent: "center" }}>
           <Pill tone="green">
-            {isSenPro ? "Phụ lục kỹ thuật - 2026–2027" : `Giai đoạn ${stage.order} / 08 - ${stage.duration}`}
+            {isSenPro ? "Phụ lục kỹ thuật 2026-2027" : `Giai đoạn ${stage.order} / 08 - ${stage.duration}`}
           </Pill>
           <span className="pt-training-code-pill">Bảo chứng thu mua giá cao</span>
         </div>
@@ -2894,7 +2895,7 @@ export function CareProtocolDetailModal({
           {stage.order}. {stage.name}
         </h3>
         <p className="pt-pesticide-modal-mfg">
-          Quy trình chăm sóc sầu riêng chuẩn HTX Cư Né niên vụ 2026–2027
+          Quy trình chăm sóc sầu riêng chuẩn HTX Cư Né niên vụ 2026-2027
         </p>
       </div>
 
@@ -2904,7 +2905,7 @@ export function CareProtocolDetailModal({
           <p className="pt-efficacy-desc">{stage.summary}</p>
         </div>
 
-        <div className="pt-efficacy-row" style={{ marginTop: 8 }}>
+        <div className="pt-efficacy-row">
           <span className="pt-efficacy-label" style={{ color: "#15803d" }}>
             {isSenPro
               ? "Tỷ lệ pha SenPro theo từng trạng thái đọt non"
@@ -2926,7 +2927,7 @@ export function CareProtocolDetailModal({
 
       <div className="pt-pesticide-efficacy-card">
         <div className="pt-efficacy-row">
-          <span className="pt-efficacy-label" style={{ color: "#1d4ed8" }}>
+          <span className="pt-efficacy-label" style={{ color: "#14372f" }}>
             Nguyên tắc tuân thủ bắt buộc tại vườn
           </span>
           <ul className="pt-efficacy-bullet-list">
@@ -2941,10 +2942,10 @@ export function CareProtocolDetailModal({
 
       <div className="pt-pesticide-safety-tips">
         <h4 className="pt-pesticide-modal-section-title">
-          Yêu cầu ghi nhật ký & Cam kết thu mua đúng giá, giá cao
+          Yêu cầu ghi nhật ký và cam kết thu mua đúng giá, giá cao
         </h4>
-        <p style={{ margin: "4px 0 0", fontSize: 13, lineHeight: 1.55, color: "#334155" }}>
-          {stage.diaryRequirement} Chỉ khi hộ thành viên tuân thủ đúng quy trình chuẩn 2026–2027 và cập nhật nhật ký đầy đủ, HTX Cư Né mới đủ cơ sở bảo chứng chất lượng xuất khẩu và cam kết thu mua sản phẩm đúng giá, giá cao.
+        <p style={{ margin: "6px 0 0", fontSize: 13.5, lineHeight: 1.6, color: "#334155" }}>
+          {stage.diaryRequirement} Chỉ khi hộ thành viên tuân thủ đúng quy trình chuẩn 2026-2027 và cập nhật nhật ký đầy đủ, HTX Cư Né mới đủ cơ sở bảo chứng chất lượng xuất khẩu và cam kết thu mua sản phẩm đúng giá, giá cao.
         </p>
       </div>
 
@@ -2962,7 +2963,7 @@ export function CareProtocolDetailModal({
   );
 }
 
-export function CareProtocol2026List({ onOpenTimeline }: { onOpenTimeline?: () => void }) {
+export function CareProtocol2026List() {
   const [query, setQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState<"all" | ProtocolGroup>("all");
   const [selectedStage, setSelectedStage] = useState<DurianProtocolStage | null>(null);
@@ -2998,28 +2999,9 @@ export function CareProtocol2026List({ onOpenTimeline }: { onOpenTimeline?: () =
         <h2 id="protocol-2026-heading" className="pt-pest-title">
           Khuyến nghị quy trình chăm sóc sầu riêng chuẩn 2026-2027
         </h2>
-        {onOpenTimeline && (
-          <button type="button" className="pt-btn pt-btn-primary pt-btn-sm" onClick={onOpenTimeline}>
-            Mở lộ trình &amp; khai báo theo thửa vườn
-          </button>
-        )}
       </div>
 
       <div className="pt-pest-wrap">
-        <div className="pt-protocol-guarantee-card" role="note" aria-label="Chính sách thu mua giá cao khi tuân thủ quy trình chuẩn">
-          <span className="pt-protocol-guarantee-badge">{HTX_PRICE_GUARANTEE_POLICY.badge}</span>
-          <h3 className="pt-protocol-guarantee-title">{HTX_PRICE_GUARANTEE_POLICY.headline}</h3>
-          <p className="pt-protocol-guarantee-desc">{HTX_PRICE_GUARANTEE_POLICY.desktopNote}</p>
-          <div className="pt-protocol-pillars">
-            {HTX_PRICE_GUARANTEE_POLICY.pillars.map((pillar) => (
-              <div key={pillar.title} className="pt-protocol-pillar">
-                <strong>{pillar.title}</strong>
-                <span>{pillar.desc}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div className="pt-pest-search-box">
           <Search size={16} className="pt-pest-search-icon" aria-hidden="true" />
           <input
@@ -3161,7 +3143,8 @@ export function CareProtocol2026List({ onOpenTimeline }: { onOpenTimeline?: () =
 
         {selectedStage && (
           <Sheet
-            title="Quy trình chăm sóc chuẩn 2026–2027"
+            title="Quy trình chăm sóc chuẩn 2026-2027"
+            className="pt-learn-sheet"
             onClose={() => setSelectedStage(null)}
           >
             <CareProtocolDetailModal
@@ -3185,10 +3168,8 @@ const LEARN_VIEW_BY_ACTION: Partial<Record<PortalAction, View>> = {
 
 export default function LearnTab({
   initialAction,
-  onOpenTimeline,
 }: {
   initialAction?: PortalAction;
-  onOpenTimeline?: () => void;
 } = {}) {
   // Mở sẵn Quy trình chăm sóc chuẩn 2026-2027 làm mặc định (hoặc mở đúng mục từ thanh tìm kiếm)
   const [view, setView] = useState<View>(() => (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) || "protocol");
@@ -3228,7 +3209,7 @@ export default function LearnTab({
           </button>
         ))}
       </SegmentedTabs>
-      {view === "protocol" && <CareProtocol2026List onOpenTimeline={onOpenTimeline} />}
+      {view === "protocol" && <CareProtocol2026List />}
       {view === "pesticides" && <PesticideList />}
       {view === "fertilizers" && <FertilizerList />}
       {view === "varieties" && <VarietyList />}

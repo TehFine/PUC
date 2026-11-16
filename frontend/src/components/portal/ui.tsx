@@ -347,11 +347,18 @@ function useCameraDialFade(
     const el = trackRef.current;
     if (!el) return;
     const host = containerRef?.current ?? el;
-    const style = window.getComputedStyle(el);
-    const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
-    const intrinsicWidth = el.scrollWidth - padX;
-    const isOverflowing = intrinsicWidth - el.clientWidth > 2;
+    const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
+    const isOverflowing = maxScroll > 2;
     host.classList.toggle("has-edge-fade", isOverflowing);
+    if (isOverflowing) {
+      const leftRatio = Math.min(1, Math.max(0, el.scrollLeft) / 24);
+      const rightRatio = Math.min(1, Math.max(0, maxScroll - el.scrollLeft) / 24);
+      host.style.setProperty("--seg-fade-l", `calc(var(--seg-fade) * ${leftRatio.toFixed(3)})`);
+      host.style.setProperty("--seg-fade-r", `calc(var(--seg-fade) * ${rightRatio.toFixed(3)})`);
+    } else {
+      host.style.setProperty("--seg-fade-l", "0px");
+      host.style.setProperty("--seg-fade-r", "0px");
+    }
   }, [trackRef, containerRef]);
 
   useEffect(() => {
@@ -364,6 +371,7 @@ function useCameraDialFade(
       rafId = requestAnimationFrame(syncOverflow);
     };
 
+    el.addEventListener("scroll", scheduleSync, { passive: true });
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
       ro = new ResizeObserver(scheduleSync);
@@ -374,6 +382,7 @@ function useCameraDialFade(
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
+      el.removeEventListener("scroll", scheduleSync);
       if (ro) ro.disconnect();
       else window.removeEventListener("resize", scheduleSync);
     };
@@ -389,13 +398,9 @@ function useCameraDialFade(
     const rafId = requestAnimationFrame(() => {
       const track = trackRef.current;
       if (!track) return;
-      const host = containerRef?.current ?? track;
       const scrollW = track.scrollWidth;
       const clientW = track.clientWidth;
-      const style = window.getComputedStyle(track);
-      const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
       const overflow = scrollW - clientW;
-      const isOverflowing = scrollW - padX - clientW > 2;
 
       let scrollTarget: number | null = null;
       if (overflow > 2) {
@@ -408,17 +413,17 @@ function useCameraDialFade(
         }
       }
 
-      host.classList.toggle("has-edge-fade", isOverflowing);
       if (scrollTarget !== null && Math.abs(track.scrollLeft - scrollTarget) > 1) {
         track.scrollTo({
           left: scrollTarget,
           behavior: isFirst ? "auto" : "smooth",
         });
       }
+      syncOverflow();
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [activeKey, trackRef, containerRef]);
+  }, [activeKey, trackRef, syncOverflow]);
 }
 
 /** Thanh chứa các nút tab con với hiệu ứng mờ dần cố định ở 2 cạnh dock. */

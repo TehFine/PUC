@@ -449,11 +449,11 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           html: `
             <div class="pt-mapmodal-radar"></div>
             <div class="pt-mapmodal-pin-core">
-              <img src="/icons/map-pin-nav.svg" width="22" height="22" alt="" />
+              <span class="pt-mapmodal-pin-icon" aria-hidden="true"></span>
             </div>
           `,
-          iconSize: [36, 36],
-          iconAnchor: [18, 18],
+          iconSize: [38, 38],
+          iconAnchor: [19, 19],
         });
 
         L.marker([lat, lng], { icon: pinIcon }).addTo(map).bindPopup(
@@ -599,27 +599,6 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
         {/* Cụm công cụ điều khiển nổi góc phải */}
         <div className="pt-mapmodal-top-actions">
-          <div className="pt-mapmodal-layer-pill" aria-label="Phóng to hoặc thu nhỏ bản đồ">
-            <button
-              type="button"
-              className="pt-mapmodal-pill-btn"
-              onClick={() => mapRef.current?.zoomOut(1)}
-              title="Thu nhỏ"
-              aria-label="Thu nhỏ bản đồ"
-            >
-              −
-            </button>
-            <button
-              type="button"
-              className="pt-mapmodal-pill-btn"
-              onClick={() => mapRef.current?.zoomIn(1)}
-              title="Phóng to chi tiết (tối đa Z22)"
-              aria-label="Phóng to bản đồ"
-            >
-              +
-            </button>
-          </div>
-
           <div className="pt-mapmodal-layer-pill">
             <button
               type="button"
@@ -691,16 +670,14 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           <div className="pt-mapmodal-popup-header-row">
             <div className="pt-mapmodal-popup-header-main">
               <div className="pt-mapmodal-popup-title-line">
-                <span className="pt-mapmodal-popup-code">{plot.code}</span>
-                {plot.variety && (
-                  <span className="pt-mapmodal-popup-variety">{plot.variety}</span>
-                )}
-                <Pill tone={status.tone}>{status.label}</Pill>
+                <span className="pt-mapmodal-popup-code">{householdName}</span>
               </div>
               <div className="pt-mapmodal-popup-owner">
-                <span>Chủ hộ: <strong>{householdName}</strong></span>
-                <span className="pt-mapmodal-popup-dot">-</span>
-                <span>{plot.village || "Xã Ea Khăl"}, Xã Ea Khăl, Đắk Lắk</span>
+                <span>
+                  {plot.village && plot.village !== "Xã Ea Khăl"
+                    ? `${plot.village}, Xã Ea Khăl, Đắk Lắk`
+                    : "Xã Ea Khăl, Đắk Lắk"}
+                </span>
               </div>
             </div>
 
@@ -727,41 +704,65 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
             <div className="pt-mapmodal-popup-body">
               <div className="pt-mapmodal-popup-grid">
                 <div className="pt-mapmodal-popup-stat">
+                  <span className="pt-mapmodal-stat-label">Trạng thái</span>
+                  <div className="pt-mapmodal-stat-right">
+                    <Pill tone={status.tone}>{status.label}</Pill>
+                  </div>
+                </div>
+
+                {plot.variety && (
+                  <div className="pt-mapmodal-popup-stat">
+                    <span className="pt-mapmodal-stat-label">Giống cây</span>
+                    <div className="pt-mapmodal-stat-right">
+                      <span className="pt-mapmodal-popup-variety">{plot.variety}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Diện tích</span>
-                  <strong className="pt-mapmodal-stat-val">
-                    {(plot.areaHa ?? 0).toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ha
-                  </strong>
-                  <span className="pt-mapmodal-stat-sub">
-                    ({((plot.areaHa ?? 0) * 10000).toLocaleString("vi-VN")} m²)
-                  </span>
+                  <div className="pt-mapmodal-stat-right">
+                    <strong className="pt-mapmodal-stat-val">
+                      {(plot.areaHa ?? 0).toLocaleString("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ha
+                    </strong>
+                    <span className="pt-mapmodal-stat-sub">
+                      ({((plot.areaHa ?? 0) * 10000).toLocaleString("vi-VN")} m²)
+                    </span>
+                  </div>
                 </div>
 
                 <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Số thửa / Tờ bản đồ</span>
-                  <strong className="pt-mapmodal-stat-val">
-                    Thửa #{plot.parcel || "—"} - Tờ #{plot.sheet || "—"}
-                  </strong>
-                  <span className="pt-mapmodal-stat-sub">
-                    Nguồn: {SOURCE_LABEL[plot.source] ?? "Khảo sát thực địa"}
-                  </span>
+                  <div className="pt-mapmodal-stat-right">
+                    <strong className="pt-mapmodal-stat-val">
+                      Thửa #{plot.parcel || "-"} - Tờ #{plot.sheet || "-"}
+                    </strong>
+                    <span className="pt-mapmodal-stat-sub">
+                      Nguồn: {SOURCE_LABEL[plot.source] ?? "Khảo sát thực địa"}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Mã vùng trồng</span>
-                  <strong className="pt-mapmodal-stat-val">
-                    {plot.zoneCode || "—"}
-                  </strong>
-                  <span className="pt-mapmodal-stat-sub">
-                    {plot.plantedYear ? `Trồng năm ${plot.plantedYear}` : "Cây thuần thục"}
-                  </span>
+                  <div className="pt-mapmodal-stat-right">
+                    <strong className="pt-mapmodal-stat-val">
+                      {plot.zoneCode || "-"}
+                    </strong>
+                    <span className="pt-mapmodal-stat-sub">
+                      {plot.plantedYear ? `Trồng năm ${plot.plantedYear}` : "Cây thuần thục"}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Tọa độ tâm WGS84</span>
-                  <strong className="pt-mapmodal-stat-val pt-mapmodal-coords-text">
-                    {`${lat.toFixed(7).replace(/0+$/, "").replace(/\.(\d{0,4})$/, (_, d: string) => `.${d.padEnd(5, "0")}`)}, ${lng.toFixed(7).replace(/0+$/, "").replace(/\.(\d{0,4})$/, (_, d: string) => `.${d.padEnd(5, "0")}`)}`}
-                  </strong>
-                  <span className="pt-mapmodal-stat-sub">Định vị vệ tinh GPS</span>
+                  <div className="pt-mapmodal-stat-right">
+                    <strong className="pt-mapmodal-stat-val pt-mapmodal-coords-text">
+                      {`${lat.toFixed(7).replace(/0+$/, "").replace(/\.(\d{0,4})$/, (_, d: string) => `.${d.padEnd(5, "0")}`)}, ${lng.toFixed(7).replace(/0+$/, "").replace(/\.(\d{0,4})$/, (_, d: string) => `.${d.padEnd(5, "0")}`)}`}
+                    </strong>
+                    <span className="pt-mapmodal-stat-sub">Định vị vệ tinh GPS</span>
+                  </div>
                 </div>
               </div>
 
