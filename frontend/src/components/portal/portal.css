@@ -11913,5 +11913,78 @@ body.pt-body .pt-pesticide-modal-header .pt-training-code-pill {
   background: #15803d;
 }
 
+/* 7. Thanh nút Hủy | Lưu nhật ký ghim cố định ở cạnh đáy màn hình Ghi nhật ký canh tác */
+.pt-sheet.pt-diary-form-sheet > .pt-sheet-body {
+  padding-bottom: 24px !important;
+}
+
+.pt-sheet.pt-diary-form-sheet > .pt-sheet-footer {
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  gap: 1px !important;
+  padding: 0 !important;
+  border-top: 1px solid rgba(60, 60, 67, 0.16) !important;
+  background: rgba(60, 60, 67, 0.16) !important;
+  flex-shrink: 0;
+}
+
+.pt-sheet.pt-diary-form-sheet .pt-diary-footer-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: calc(50px + env(safe-area-inset-bottom, 0px));
+  min-height: calc(50px + env(safe-area-inset-bottom, 0px));
+  margin: 0;
+  padding: 0 16px env(safe-area-inset-bottom, 0px);
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none;
+  box-shadow: none !important;
+  background: #ffffff !important;
+  color: #007aff !important;
+  font-family: inherit;
+  font-size: 15.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.pt-sheet.pt-diary-form-sheet .pt-diary-footer-submit {
+  font-weight: 700;
+  color: #007aff !important;
+}
+
+.pt-sheet.pt-diary-form-sheet .pt-diary-footer-btn:hover:not(:disabled) {
+  background: #f5f7fa !important;
+  color: #0066d6 !important;
+}
+
+.pt-sheet.pt-diary-form-sheet .pt-diary-footer-btn:active:not(:disabled) {
+  background: #e8eef7 !important;
+}
+
+.pt-sheet.pt-diary-form-sheet .pt-diary-footer-btn:disabled {
+  opacity: 1 !important;
+  background: #ffffff !important;
+  color: rgba(60, 60, 67, 0.38) !important;
+  cursor: not-allowed;
+}
+
+@media screen and (min-width: 760px) {
+  .pt-sheet.pt-diary-form-sheet .pt-diary-footer-btn {
+    height: 50px;
+    min-height: 50px;
+    padding: 0 18px;
+  }
+}
+
+
 
 
