@@ -732,5 +732,175 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
       expect(adminDetail.status).toBe(200);
       expect(adminDetail.body.milestones).toHaveLength(27);
     });
+
+    it("hỗ trợ tải nhiều ảnh WebP + video hiện trường (MP4/MOV) cho nhật ký canh tác và khai báo mốc quy trình", async () => {
+      const binh = await loggedIn(USERS.farmerBinh);
+      const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+
+      const tinyWebp = Buffer.from([
+        0x52, 0x49, 0x46, 0x46, 0x18, 0x00, 0x00, 0x00,
+        0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x4c,
+        0x0b, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x00, 0x00,
+        0x10, 0x07, 0x10, 0x11, 0x11, 0x88, 0x88, 0x08,
+      ]);
+      const tinyQuicktimeMov = Buffer.from([
+        0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70,
+        0x71, 0x74, 0x20, 0x20, 0x00, 0x00, 0x02, 0x00,
+        0x71, 0x74, 0x20, 0x20, 0x69, 0x73, 0x6f, 0x6d,
+        0x6d, 0x70, 0x34, 0x31, 0x00, 0x00, 0x00, 0x00,
+      ]);
+
+      const plotsRes = await binh.get("/api/portal/plots");
+      const plotCode: string = plotsRes.body.data?.[0]?.code ?? "CN-T2-01";
+
+      const jImg1 = await uploadFile(binh, "journal", tinyWebp, "goc-cay-1.webp");
+      const jImg2 = await uploadFile(binh, "journal", tinyWebp, "tan-la-2.webp");
+      const jVid = await uploadFile(binh, "journal", tinyQuicktimeMov, "quay-vuon.mov");
+
+      const createdJournal = await binh.post("/api/portal/journal").send({
+        entryOn: todayStr,
+        plotCode,
+        activity: "Tỉa cành tạo tán",
+        detail: "Đính kèm 2 ảnh WebP và 1 video ngắn",
+        photoIds: [jVid, jImg1, jImg2],
+      });
+      expect(createdJournal.status).toBe(201);
+      // Ưu tiên ảnh chụp làm ảnh đại diện photoUrl, đồng thời giữ đủ 3 tệp trong photoUrls
+      expect(createdJournal.body.photoUrl).toBe(`/api/uploads/${jImg1}`);
+      expect(createdJournal.body.photoUrls).toEqual([
+        `/api/uploads/${jVid}/video.mp4`,
+        `/api/uploads/${jImg1}`,
+        `/api/uploads/${jImg2}`,
+      ]);
+
+      // Đường dẫn có hậu tố /video.mp4 hỗ trợ HTTP Range (206) và xác thực ETag (304)
+      const videoRange = await binh.get(`/api/uploads/${jVid}/video.mp4`).set("Range", "bytes=0-15");
+      expect(videoRange.status).toBe(206);
+      expect(videoRange.headers["cache-control"]).toBe("private, no-cache");
+      const videoEtag = videoRange.headers["etag"];
+      const videoReval = await binh.get(`/api/uploads/${jVid}/video.mp4`).set("If-None-Match", videoEtag);
+      expect(videoReval.status).toBe(304);
+
+      // Khai báo phụ lục đọt SenPro kèm nhiều ảnh hiện trường + video + nhiều ảnh hóa đơn
+      const pField1 = await uploadFile(binh, "journal", tinyWebp, "dot-senpro-1.webp");
+      const pField2 = await uploadFile(binh, "journal", tinyWebp, "dot-senpro-2.webp");
+      const pFieldVid = await uploadFile(binh, "journal", tinyQuicktimeMov, "dot-senpro.mov");
+      const pInv1 = await uploadFile(binh, "journal", tinyWebp, "hoa-don-1.webp");
+      const pInv2 = await uploadFile(binh, "journal", tinyWebp, "nhan-chai-2.webp");
+
+      const senProRes = await binh.post("/api/portal/care-protocol/declare").send({
+        plotCode,
+        milestoneCode: "senpro-duoi-tom",
+        performedOn: todayStr,
+        actualTreeState: "Đuôi tôm",
+        followedStandard: true,
+        selectedProducts: ["SenPro"],
+        actualDosage: "Pha SenPro tỷ lệ 1:300",
+        fieldPhotoIds: [pField1, pField2, pFieldVid],
+        invoicePhotoIds: [pInv1, pInv2],
+      });
+      expect(senProRes.status).toBe(201);
+      const latestSenPro = senProRes.body.plan.senProDeclarations[0];
+      expect(latestSenPro.fieldPhotoUrls).toEqual([
+        `/api/uploads/${pField1}`,
+        `/api/uploads/${pField2}`,
+        `/api/uploads/${pFieldVid}/video.mp4`,
+      ]);
+      expect(latestSenPro.invoicePhotoUrls).toEqual([
+        `/api/uploads/${pInv1}`,
+        `/api/uploads/${pInv2}`,
+      ]);
+    });
+
+    it("ghi nhận đồng thời ngày thực làm + thời điểm khai báo thực tế, tính số ngày chậm, tự căn chỉnh lịch và nhắc sớm đợt sau", async () => {
+      const binh = await loggedIn(USERS.farmerBinh);
+      const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+      const addDays = (iso: string, offset: number) => {
+        const [y, m, d] = iso.split("-").map(Number);
+        const dt = new Date(Date.UTC(y, m - 1, d + offset));
+        const pad = (n: number) => String(n).padStart(2, "0");
+        return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+      };
+
+      const threeDaysAgo = addDays(todayStr, -3);
+      const twoDaysAgo = addDays(todayStr, -2);
+
+      const plotsRes = await binh.get("/api/portal/plots");
+      const plotCode: string = plotsRes.body.data?.[0]?.code ?? "CN-T2-01";
+
+      // Đồng bộ vườn về mốc Ngày 0 (Cơi đọt 1) mở cách đây 4 ngày
+      const syncRes = await binh.post("/api/portal/care-protocol/configure").send({
+        plotCode,
+        mode: "current_milestone",
+        milestoneCode: "cd1-ngay-0",
+        anchorDate: addDays(todayStr, -4),
+      });
+      expect(syncRes.status).toBe(200);
+
+      const fPhoto = await uploadFile(binh, "journal");
+      const iPhoto = await uploadFile(binh, "journal");
+
+      // Hộ thực làm từ 3 ngày trước (threeDaysAgo), hôm nay (todayStr) mới vào khai báo bù
+      const lateDecl = await binh.post("/api/portal/care-protocol/declare").send({
+        plotCode,
+        milestoneCode: "cd1-ngay-0",
+        performedOn: threeDaysAgo,
+        actualTreeState: "Lá già sẵn sàng kích rễ",
+        followedStandard: true,
+        selectedProducts: ["Amino X", "Magic One"],
+        actualDosage: "25-30L/gốc tỷ lệ 1:1000",
+        fieldPhotoIds: [fPhoto],
+        invoicePhotoIds: [iPhoto],
+        lateReason: "Mưa lớn trên rẫy nên về nhà mới gửi khai báo",
+      });
+      expect(lateDecl.status).toBe(201);
+      expect(lateDecl.body.declarationTiming).toMatchObject({
+        performedOn: threeDaysAgo,
+        declaredOn: todayStr,
+        lateDeclarationDays: 3,
+        nextReminderLeadDays: 3,
+      });
+
+      // Mốc tiếp theo (cd1-ngay-7: +7 ngày từ cd1-ngay-0) phải tính đúng từ ngày thực làm threeDaysAgo -> threeDaysAgo + 7
+      expect(lateDecl.body.nextMilestone).toMatchObject({
+        code: "cd1-ngay-7",
+        scheduledOn: addDays(threeDaysAgo, 7),
+      });
+      expect(lateDecl.body.plan.reminderLeadDays).toBe(3);
+      expect(lateDecl.body.plan.lastLateDeclarationDays).toBe(3);
+
+      const savedMilestone = lateDecl.body.plan.milestones.find((m: { code: string }) => m.code === "cd1-ngay-0");
+      expect(savedMilestone?.declaration).toMatchObject({
+        performedOn: threeDaysAgo,
+        declaredOn: todayStr,
+        lateDeclarationDays: 3,
+        lateReason: "Mưa lớn trên rẫy nên về nhà mới gửi khai báo",
+      });
+
+      // Kiểm tra thông báo nhắc nhở lần sau khai báo đúng hạn hơn
+      const notifs = await binh.get("/api/notifications");
+      expect(notifs.status).toBe(200);
+      expect(
+        notifs.body.data.some(
+          (n: { body: string }) =>
+            typeof n.body === "string" &&
+            n.body.includes("khai báo chậm 3 ngày") &&
+            n.body.includes("nhắc sớm trước 3 ngày"),
+        ),
+      ).toBe(true);
+
+      // Kiểm tra nhật ký canh tác cũng tính chính xác lateDeclarationDays = 2 ngày
+      const jPhoto = await uploadFile(binh, "journal");
+      const lateJournal = await binh.post("/api/portal/journal").send({
+        entryOn: twoDaysAgo,
+        plotCode,
+        activity: "Làm cỏ quanh gốc",
+        photoIds: [jPhoto],
+      });
+      expect(lateJournal.status).toBe(201);
+      expect(lateJournal.body.entryOn).toBe(twoDaysAgo);
+      expect(lateJournal.body.declaredOn).toBe(todayStr);
+      expect(lateJournal.body.lateDeclarationDays).toBe(2);
+    });
   });
 });
