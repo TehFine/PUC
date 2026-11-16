@@ -1,9 +1,25 @@
 "use client";
 
-import { startTransition, useEffect, useRef } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { PageSkeleton } from "@/components/ui/Skeleton";
+import { isChunkLoadFailure } from "@/lib/lazy-chunk";
 import { INTRO_PATH } from "@/lib/routes";
+
+const CHUNK_RELOAD_KEY = "puc_chunk_reload_ts";
+const CHUNK_RELOAD_COOLDOWN_MS = 15_000;
+
+function isDeployOrChunkMismatchError(error: Error | null | undefined): boolean {
+  if (!error) return false;
+  const msg = error.message ?? "";
+  return (
+    isChunkLoadFailure(error) ||
+    msg.includes("is not defined") ||
+    msg.includes("Failed to construct") ||
+    msg.includes("Server Action")
+  );
+}
 
 export default function GlobalErrorPage({
   error,
@@ -15,16 +31,18 @@ export default function GlobalErrorPage({
   const router = useRouter();
   const autoRetriedRef = useRef(false);
 
+  const [canSilentReload] = useState(() => {
+    if (!isDeployOrChunkMismatchError(error) || typeof window === "undefined") return false;
+    try {
+      const prev = Number(window.sessionStorage.getItem(CHUNK_RELOAD_KEY) || "0");
+      return Date.now() - prev > CHUNK_RELOAD_COOLDOWN_MS;
+    } catch {
+      return false;
+    }
+  });
+
   const handleRecover = () => {
-    const msg = error?.message ?? "";
-    if (
-      typeof window !== "undefined" &&
-      (msg.includes("is not defined") ||
-        msg.includes("Failed to construct") ||
-        msg.includes("ChunkLoadError") ||
-        msg.includes("Loading chunk") ||
-        msg.includes("Failed to fetch dynamically imported module"))
-    ) {
+    if (typeof window !== "undefined" && isDeployOrChunkMismatchError(error)) {
       window.location.reload();
       return;
     }
@@ -36,37 +54,30 @@ export default function GlobalErrorPage({
 
   useEffect(() => {
     console.error("Application error:", error);
-    const msg = error?.message ?? "";
-    const isChunkOrDeployMismatch =
-      msg.includes("is not defined") ||
-      msg.includes("Failed to construct") ||
-      msg.includes("ChunkLoadError") ||
-      msg.includes("Loading chunk") ||
-      msg.includes("Failed to fetch dynamically imported module");
-
-    if (!autoRetriedRef.current && isChunkOrDeployMismatch) {
+    if (!autoRetriedRef.current && isDeployOrChunkMismatchError(error)) {
       autoRetriedRef.current = true;
-      const timer = window.setTimeout(() => {
-        try {
-          const key = "puc_chunk_reload_ts";
-          const prev = Number(window.sessionStorage.getItem(key) || "0");
-          const now = Date.now();
-          if (now - prev > 15_000) {
-            window.sessionStorage.setItem(key, String(now));
-            window.location.reload();
-            return;
-          }
-        } catch {
-          // Bỏ qua nếu trình duyệt chặn sessionStorage
+      try {
+        const prev = Number(window.sessionStorage.getItem(CHUNK_RELOAD_KEY) || "0");
+        const now = Date.now();
+        if (now - prev > CHUNK_RELOAD_COOLDOWN_MS) {
+          window.sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now));
+          window.location.reload();
+          return;
         }
-        startTransition(() => {
-          router.refresh();
-          reset();
-        });
-      }, 450);
-      return () => window.clearTimeout(timer);
+      } catch {
+        // Bỏ qua nếu trình duyệt chặn sessionStorage
+      }
+      startTransition(() => {
+        router.refresh();
+        reset();
+      });
     }
   }, [error, reset, router]);
+
+  // Khi đang tự đồng bộ bản triển khai mới, hiển thị khung chờ mượt thay vì chớp hình minh họa lỗi 1 giây.
+  if (canSilentReload) {
+    return <PageSkeleton label="Đang đồng bộ phiên bản hệ thống mới…" />;
+  }
 
   return (
     <main className="puc-err-screen">

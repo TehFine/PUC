@@ -17,6 +17,7 @@ import {
   PUC_URL_SYNC_EVENT,
   pushUrlNavigation,
 } from "@/lib/back-navigation";
+import { lazyChunk } from "@/lib/lazy-chunk";
 import { resolveValidAdminRoute, type SectionId } from "@/lib/route-validation";
 import { INTRO_PATH } from "@/lib/routes";
 import "@/components/portal/portal.css";
@@ -29,17 +30,17 @@ const TabLoading = () => (
   </div>
 );
 
-const Households = dynamic(() => import("@/components/sections/Households"), { loading: TabLoading });
-const Approval = dynamic(() => import("@/components/sections/Approval"), { loading: TabLoading });
-const Journal = dynamic(() => import("@/components/sections/Journal"), { loading: TabLoading });
-const Testing = dynamic(() => import("@/components/sections/Testing"), { loading: TabLoading });
-const Harvest = dynamic(() => import("@/components/sections/Harvest"), { loading: TabLoading });
-const Catalog = dynamic(() => import("@/components/sections/Catalog"), { loading: TabLoading });
-const SystemSettings = dynamic(() => import("@/components/sections/SystemSettings"), { loading: TabLoading });
+const Households = dynamic(() => lazyChunk(() => import("@/components/sections/Households")), { loading: TabLoading });
+const Approval = dynamic(() => lazyChunk(() => import("@/components/sections/Approval")), { loading: TabLoading });
+const Journal = dynamic(() => lazyChunk(() => import("@/components/sections/Journal")), { loading: TabLoading });
+const Testing = dynamic(() => lazyChunk(() => import("@/components/sections/Testing")), { loading: TabLoading });
+const Harvest = dynamic(() => lazyChunk(() => import("@/components/sections/Harvest")), { loading: TabLoading });
+const Catalog = dynamic(() => lazyChunk(() => import("@/components/sections/Catalog")), { loading: TabLoading });
+const SystemSettings = dynamic(() => lazyChunk(() => import("@/components/sections/SystemSettings")), { loading: TabLoading });
 
-const Zones = dynamic(() => import("@/components/sections/Zones"), { ssr: false, loading: TabLoading });
-const NewsAdmin = dynamic(() => import("@/components/sections/NewsAdmin"), { ssr: false, loading: TabLoading });
-const Reports = dynamic(() => import("@/components/sections/Reports"), { ssr: false, loading: TabLoading });
+const Zones = dynamic(() => lazyChunk(() => import("@/components/sections/Zones")), { ssr: false, loading: TabLoading });
+const NewsAdmin = dynamic(() => lazyChunk(() => import("@/components/sections/NewsAdmin")), { ssr: false, loading: TabLoading });
+const Reports = dynamic(() => lazyChunk(() => import("@/components/sections/Reports")), { ssr: false, loading: TabLoading });
 
 const SECTION_TITLES: Record<SectionId, string> = {
   dashboard: "Tổng quan",

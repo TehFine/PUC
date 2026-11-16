@@ -30,6 +30,7 @@ import {
   PUC_URL_SYNC_EVENT,
   pushUrlNavigation,
 } from "@/lib/back-navigation";
+import { lazyChunk } from "@/lib/lazy-chunk";
 import { resolveValidPortalRoute } from "@/lib/route-validation";
 import { isLowEndDevice } from "@/lib/network";
 import { HOUSEHOLD_STATUS } from "@/lib/portal-labels";
@@ -65,11 +66,11 @@ function DrawerCloseCta({ label }: { label: string }) {
   );
 }
 
-const DiaryTab = dynamic(() => import("./DiaryTab"), { loading: PortalTabLoading });
-const InspectionTab = dynamic(() => import("./InspectionTab"), { loading: PortalTabLoading });
-const LearnTab = dynamic(() => import("./LearnTab"), { loading: PortalTabLoading });
-const PlotsTab = dynamic(() => import("./PlotsTab"), { loading: PortalTabLoading });
-const StampsTab = dynamic(() => import("./StampsTab"), { loading: PortalTabLoading });
+const DiaryTab = dynamic(() => lazyChunk(() => import("./DiaryTab")), { loading: PortalTabLoading });
+const InspectionTab = dynamic(() => lazyChunk(() => import("./InspectionTab")), { loading: PortalTabLoading });
+const LearnTab = dynamic(() => lazyChunk(() => import("./LearnTab")), { loading: PortalTabLoading });
+const PlotsTab = dynamic(() => lazyChunk(() => import("./PlotsTab")), { loading: PortalTabLoading });
+const StampsTab = dynamic(() => lazyChunk(() => import("./StampsTab")), { loading: PortalTabLoading });
 
 export type PortalTabId = "home" | "plots" | "diary" | "stamps" | "inspection" | "learn";
 
