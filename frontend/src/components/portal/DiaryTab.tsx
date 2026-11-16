@@ -67,6 +67,43 @@ function diffDaysFromToday(isoDate: string): number {
 
 const SPRAY_ACTIVITY_NAME = "Phun thuốc BVTV";
 
+function DiarySheetActionFooter({
+  saving,
+  canSubmit,
+  hasFiles,
+  fallbackOnClose,
+}: {
+  saving: boolean;
+  canSubmit: boolean;
+  hasFiles: boolean;
+  fallbackOnClose: () => void;
+}) {
+  const sheetClose = useSheetClose();
+  return (
+    <>
+      <button
+        type="button"
+        className="pt-diary-footer-btn pt-diary-footer-cancel"
+        onClick={sheetClose ?? fallbackOnClose}
+        disabled={saving}
+      >
+        Hủy
+      </button>
+      <BusyButton
+        type="submit"
+        form="pt-unified-diary-form"
+        className="pt-diary-footer-btn pt-diary-footer-submit"
+        busy={saving}
+        busyLabel="Đang lưu…"
+        disabled={!canSubmit}
+        title={!hasFiles ? "Vui lòng chụp ảnh hiện trường trước khi lưu" : undefined}
+      >
+        Lưu nhật ký
+      </BusyButton>
+    </>
+  );
+}
+
 function UnifiedDiaryForm({
   plotsList,
   initialActivity,
@@ -78,7 +115,6 @@ function UnifiedDiaryForm({
   onDone: () => void;
   onClose: () => void;
 }) {
-  const sheetClose = useSheetClose();
   const plotCodes = plotsList.map((p) => p.code);
   const defaultPlotCode = plotCodes[0] ?? "";
   const defaultPlotArea = plotsList[0]?.areaHa ? String(plotsList[0].areaHa) : "0.5";
@@ -259,7 +295,20 @@ function UnifiedDiaryForm({
   };
 
   return (
-    <form className="pt-form" onSubmit={submit}>
+    <Sheet
+      title="Ghi nhật ký canh tác"
+      className="pt-diary-sheet pt-diary-form-sheet"
+      onClose={onClose}
+      footer={
+        <DiarySheetActionFooter
+          saving={saving}
+          canSubmit={canSubmit}
+          hasFiles={media.hasFiles}
+          fallbackOnClose={onClose}
+        />
+      }
+    >
+    <form id="pt-unified-diary-form" className="pt-form" onSubmit={submit}>
       <div className="pt-field-row">
         <Field label="Ngày thực hiện" htmlFor="pj-date">
           <input
@@ -492,22 +541,8 @@ function UnifiedDiaryForm({
       />
 
       <InlineError message={error} />
-      <div className="pt-form-actions">
-        <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose} disabled={saving}>
-          Hủy
-        </button>
-        <BusyButton
-          type="submit"
-          className="pt-btn pt-btn-primary"
-          busy={saving}
-          busyLabel="Đang nén và lưu..."
-          disabled={!canSubmit}
-          title={!media.hasFiles ? "Vui lòng chụp ảnh hiện trường trước khi lưu" : undefined}
-        >
-          Lưu nhật ký
-        </BusyButton>
-      </div>
     </form>
+    </Sheet>
   );
 }
 
@@ -1029,14 +1064,12 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
         </section>
 
       {formOpen && (
-        <Sheet title="Ghi nhật ký canh tác" className="pt-diary-sheet" onClose={() => setFormOpen(false)}>
-          <UnifiedDiaryForm
-            plotsList={plotsList}
-            initialActivity={formInitialActivity}
-            onDone={() => setFormOpen(false)}
-            onClose={() => setFormOpen(false)}
-          />
-        </Sheet>
+        <UnifiedDiaryForm
+          plotsList={plotsList}
+          initialActivity={formInitialActivity}
+          onDone={() => setFormOpen(false)}
+          onClose={() => setFormOpen(false)}
+        />
       )}
 
       {selectedJournal && (
