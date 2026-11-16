@@ -2759,7 +2759,7 @@ export function DiseaseAndIpmList() {
         </FadeFilterBar>
 
         {(kindFilter === "all" || kindFilter === "care") && !query && (
-          <Card title="4 Nguyên tắc Quản lý dịch hại tổng hợp (IPM) - Viện BVTV 2026">
+          <Card title="4 nguyên tắc phòng trừ dịch hại (IPM)">
             <div className="pt-training-modules">
               {IPM_2026_PRINCIPLES.map((p) => (
                 <div key={p.no} className="pt-training-module-item">
@@ -2774,7 +2774,7 @@ export function DiseaseAndIpmList() {
         )}
 
         {kindFilter === "care" && (
-          <Card title="Quy trình Chăm sóc, Cắt tỉa, Vệ sinh vườn và Ủ phân vi sinh theo mùa vụ">
+          <Card title="Quy trình chăm sóc và vệ sinh vườn">
             <div className="pt-training-modules">
               {CARE_PROCESS_2026.map((step) => (
                 <div key={step.phase} className="pt-training-module-item">

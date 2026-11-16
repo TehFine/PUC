@@ -1223,6 +1223,38 @@ body.pt-body {
     background: #f7f9f8;
   }
 
+  .pt-sheet.pt-profile-sheet .pt-profile-popup-head.is-split-card {
+    padding: 0;
+  }
+
+  .pt-sheet.pt-profile-sheet .pt-profile-popup-head.is-split-card .pt-profile-head-top {
+    padding: 14px 16px;
+  }
+
+  .pt-sheet.pt-profile-sheet .pt-profile-photo-info {
+    padding: 12px 16px;
+  }
+
+  .pt-sheet.pt-profile-sheet .pt-profile-photo-actions {
+    padding: 10px 16px;
+  }
+
+  .pt-sheet.pt-profile-sheet .pt-profile-popup-head.is-split-card {
+    padding: 0;
+  }
+
+  .pt-sheet.pt-profile-sheet .pt-profile-popup-head.is-split-card .pt-profile-head-top {
+    padding: 14px 16px;
+  }
+
+  .pt-sheet.pt-profile-sheet .pt-profile-photo-info {
+    padding: 12px 16px;
+  }
+
+  .pt-sheet.pt-profile-sheet .pt-profile-photo-actions {
+    padding: 10px 16px;
+  }
+
   .pt-sheet.pt-profile-sheet .pt-profile-badges {
     flex-direction: column;
     align-items: flex-start;
@@ -1344,6 +1376,42 @@ body.pt-body {
   border-radius: 20px;
 }
 
+.pt-profile-popup-head.is-split-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.pt-profile-head-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+}
+
+.pt-profile-head-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  border-top: 1px solid rgba(60, 60, 67, 0.12);
+  background: rgba(60, 60, 67, 0.12);
+}
+
+.pt-profile-head-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 10px 8px;
+  min-width: 0;
+  background: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
 .pt-profile-avatar-trigger {
   position: relative;
   border: none;
@@ -1417,18 +1485,19 @@ body.pt-body {
 .pt-profile-photo-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 13px 16px;
-  border-radius: 16px;
-  background: #f8fbf9;
-  border: 1px dashed #b9d7c4;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #ffffff;
+  border: none;
 }
 
 .pt-profile-photo-main {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
 }
 
 .pt-profile-photo-info {
@@ -1436,27 +1505,30 @@ body.pt-body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  padding: 13px 18px;
 }
 
 .pt-profile-photo-title {
   font-size: 14px;
   font-weight: 700;
   color: #14372f;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .pt-profile-photo-desc {
-  font-size: 12px;
-  line-height: 1.4;
-  color: #556c62;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #5f6d66;
 }
 
 .pt-profile-photo-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  justify-content: center;
+  gap: 10px;
+  padding: 11px 18px;
+  border-top: 1px solid rgba(60, 60, 67, 0.12);
 }
 
 .pt-profile-photo-upload-btn {
@@ -1464,24 +1536,24 @@ body.pt-body {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 9px 15px;
-  border-radius: 11px;
+  padding: 9px 16px;
+  border-radius: 6px;
   border: none;
-  background: #166534;
+  background: #14372f;
   color: #ffffff;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.16s ease, transform 0.16s ease;
+  transition: background-color 0.16s ease;
 }
 
 .pt-profile-photo-upload-btn:hover:not(:disabled) {
-  background: #14532d;
+  background: #1b483d;
 }
 
 .pt-profile-photo-upload-btn:active:not(:disabled) {
-  transform: scale(0.98);
+  background: #0f2a24;
 }
 
 .pt-profile-photo-upload-btn:disabled {
@@ -1540,18 +1612,19 @@ body.pt-body {
 }
 
 .pt-profile-kicker {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
   color: #166534;
   background: none;
   padding: 0;
   border: none;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.015em;
   text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 .pt-profile-status {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: #b45309;
   background: none;
@@ -5701,9 +5774,9 @@ body.pt-body {
   display: flex;
   width: fit-content;
   max-width: 100%;
-  height: 40px;
-  min-height: 40px;
-  padding: 0;
+  height: 44px;
+  min-height: 44px;
+  padding: 4px;
   border: 1px solid rgba(60, 60, 67, 0.14);
   border-radius: 8px;
   background: #ffffff;
@@ -5719,10 +5792,10 @@ body.pt-body {
   flex: 1 1 auto;
   height: 100%;
   min-width: 0;
-  border-radius: 7px;
+  border-radius: 5px;
   background: #ffffff;
   overflow: hidden;
-  clip-path: inset(0 round 7px);
+  clip-path: inset(0 round 5px);
 }
 .pt-segmented-track {
   position: relative;
@@ -5845,10 +5918,10 @@ body.pt-body {
   flex: 1 0 auto;
   min-width: max-content;
   height: 100%;
-  min-height: 38px;
-  padding: 6px 18px;
+  min-height: 34px;
+  padding: 0 16px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
@@ -5877,7 +5950,7 @@ body.pt-body {
     padding-inline: 0;
   }
   .pt-segmented button {
-    padding: 6px 16px;
+    padding: 0 15px;
   }
   .pt-diary-segmented {
     width: 100%;
@@ -11249,22 +11322,34 @@ html[data-perf="lite"] .pt-protocol-guarantee-card {
    PHỐI MÀU GROUPED SURFACE CỔNG HỘ DÂN (NỀN XÁM DỊU #EFEFF4, THẺ/Ô/NÚT TRẮNG SÁNG #FFFFFF)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* 1. Nền các bảng biểu mẫu & chi tiết (Sheet / Drawer) trong Cổng hộ dân */
+/* 1. Nền các bảng biểu mẫu & chi tiết (Sheet / Drawer) trong Cổng hộ dân & Khu quản trị */
 html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet),
+html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet),
 body.pt-body .pt-sheet:not(.modal-confirm-sheet),
 html:has(.pt-app) .pt-sheet.is-drawer:not(.modal-confirm-sheet),
+html:has(.app-shell) .pt-sheet.is-drawer:not(.modal-confirm-sheet),
 body.pt-body .pt-sheet.is-drawer:not(.modal-confirm-sheet) {
   background: #efeff4 !important;
   border: none !important;
 }
 
 html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-head,
+html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-head,
 body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-head {
   background: #efeff4;
   border-bottom: 1px solid rgba(60, 60, 67, 0.12);
 }
 
+html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-drawer-back-btn,
+html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-drawer-back-btn,
+body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-drawer-back-btn {
+  background: #ffffff;
+  border: none;
+  color: #1c1c1e;
+}
+
 html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body,
+html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body,
 body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body {
   background: #efeff4;
   padding: 22px 18px calc(28px + env(safe-area-inset-bottom, 0px));
@@ -11272,12 +11357,14 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body {
 
 @media (min-width: 760px) {
   html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body,
+  html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body,
   body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body {
     padding: 24px 24px 28px;
   }
 }
 
 html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer,
+html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer,
 body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
   background: #efeff4;
   border-top: 1px solid rgba(60, 60, 67, 0.12);
@@ -11404,6 +11491,9 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
 }
 
 /* 3. Ô nhập liệu, ô chọn, khung văn bản & thanh tìm kiếm: trắng sáng #ffffff, không viền thô */
+html:has(.app-shell) .pt-sheet .pt-field input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html:has(.app-shell) .pt-sheet .pt-field select,
+html:has(.app-shell) .pt-sheet .pt-field textarea,
 html:has(.pt-app) .pt-field input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 html:has(.pt-app) .pt-field select,
 html:has(.pt-app) .pt-field textarea,
@@ -11420,6 +11510,9 @@ body.pt-body .pt-input-date {
   box-shadow: none;
 }
 
+html:has(.app-shell) .pt-sheet .pt-field input:focus,
+html:has(.app-shell) .pt-sheet .pt-field select:focus,
+html:has(.app-shell) .pt-sheet .pt-field textarea:focus,
 html:has(.pt-app) .pt-field input:focus,
 html:has(.pt-app) .pt-field select:focus,
 html:has(.pt-app) .pt-field textarea:focus,
@@ -11476,6 +11569,12 @@ html:has(.pt-app) .pt-training-progress-box,
 html:has(.pt-app) .pt-training-cell,
 html:has(.pt-app) .pt-search-result,
 html:has(.pt-app) .pt-sheet.is-drawer.pt-search-sheet .pt-search-result,
+html:has(.app-shell) .pt-sheet.pt-profile-sheet .pt-profile-popup-head,
+html:has(.app-shell) .pt-sheet.pt-profile-sheet .pt-profile-details,
+html:has(.app-shell) .pt-sheet.pt-profile-sheet .pt-profile-intro-btn,
+html:has(.app-shell) .pt-sheet .pt-notif-item,
+html:has(.app-shell) .pt-sheet .pt-detail-cell,
+html:has(.app-shell) .pt-sheet .pt-support-box,
 html:has(.pt-app) .pt-sheet.pt-profile-sheet .pt-profile-popup-head,
 html:has(.pt-app) .pt-sheet.pt-profile-sheet .pt-profile-details,
 html:has(.pt-app) .pt-sheet.pt-profile-sheet .pt-profile-intro-btn,
@@ -11493,6 +11592,7 @@ html:has(.pt-app) .pt-list > li.pt-notif-item:first-child {
   box-shadow: none;
 }
 
+html:has(.app-shell) .pt-sheet.pt-profile-sheet .pt-profile-footer,
 html:has(.pt-app) .pt-sheet.pt-profile-sheet .pt-profile-footer,
 body.pt-body .pt-sheet.pt-profile-sheet .pt-profile-footer {
   background: transparent !important;
@@ -11501,11 +11601,13 @@ body.pt-body .pt-sheet.pt-profile-sheet .pt-profile-footer {
   gap: 10px;
 }
 
+html:has(.app-shell) .pt-sheet.pt-profile-sheet .pt-profile-intro-btn:hover,
 html:has(.pt-app) .pt-sheet.pt-profile-sheet .pt-profile-intro-btn:hover,
 body.pt-body .pt-sheet.pt-profile-sheet .pt-profile-intro-btn:hover {
   background: #f5f7fa !important;
 }
 
+html:has(.app-shell) .pt-sheet.pt-profile-sheet .pt-profile-logout-btn,
 html:has(.pt-app) .pt-sheet.pt-profile-sheet .pt-profile-logout-btn,
 body.pt-body .pt-sheet.pt-profile-sheet .pt-profile-logout-btn {
   border-radius: 8px;
@@ -11541,6 +11643,7 @@ html:has(.pt-app) .pt-attach-add {
 }
 
 /* Nút chính (.pt-btn-primary) & nút phụ (.pt-btn-ghost) trên nền xám #efeff4: nền trắng sáng #ffffff */
+html:has(.app-shell) .pt-sheet .pt-btn-primary,
 html:has(.pt-app) .pt-btn-primary,
 html:has(.pt-app) .pt-ticket-open-btn,
 body.pt-body .pt-btn-primary,
@@ -11550,6 +11653,7 @@ body.pt-body .pt-ticket-open-btn {
   border: none !important;
 }
 
+html:has(.app-shell) .pt-sheet .pt-btn-primary:hover:not(:disabled),
 html:has(.pt-app) .pt-btn-primary:hover:not(:disabled),
 html:has(.pt-app) .pt-ticket-open-btn:hover:not(:disabled),
 body.pt-body .pt-btn-primary:hover:not(:disabled),
@@ -11558,6 +11662,7 @@ body.pt-body .pt-ticket-open-btn:hover:not(:disabled) {
   color: #006ee6 !important;
 }
 
+html:has(.app-shell) .pt-sheet .pt-btn-ghost,
 html:has(.pt-app) .pt-btn-ghost,
 html:has(.pt-app) .pt-drawer-cta-ghost,
 body.pt-body .pt-btn-ghost,

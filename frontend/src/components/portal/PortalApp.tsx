@@ -811,34 +811,41 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               tabIndex={-1}
             />
 
-            <div className="pt-profile-popup-head">
-              <button
-                type="button"
-                className="pt-profile-avatar-trigger"
-                onClick={() => avatarInputRef.current?.click()}
-                disabled={uploadingAvatar}
-                title={t("Bấm để tải lên hoặc đổi ảnh đại diện hộ")}
-                aria-label={t("Tải lên hoặc đổi ảnh đại diện hộ")}
-              >
-                <div className="pt-profile-avatar-lg">
-                  {avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={avatarUrl} alt={displayName} className="pt-profile-avatar-img" />
-                  ) : (
-                    <span>{initials}</span>
-                  )}
-                </div>
-                <span className="pt-profile-avatar-cam" aria-hidden="true">
-                  <Camera size={13} strokeWidth={2.4} />
-                </span>
-              </button>
+            <div className="pt-profile-popup-head is-split-card">
+              <div className="pt-profile-head-top">
+                <button
+                  type="button"
+                  className="pt-profile-avatar-trigger"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  title={t("Bấm để tải lên hoặc đổi ảnh đại diện hộ")}
+                  aria-label={t("Tải lên hoặc đổi ảnh đại diện hộ")}
+                >
+                  <div className="pt-profile-avatar-lg">
+                    {avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={avatarUrl} alt={displayName} className="pt-profile-avatar-img" />
+                    ) : (
+                      <span>{initials}</span>
+                    )}
+                  </div>
+                  <span className="pt-profile-avatar-cam" aria-hidden="true">
+                    <Camera size={13} strokeWidth={2.4} />
+                  </span>
+                </button>
 
-              <div className="pt-profile-head-info">
-                <strong className="pt-profile-name" data-no-translate="true">{displayName}</strong>
-                <div className="pt-profile-badges">
+                <div className="pt-profile-head-info">
+                  <strong className="pt-profile-name" data-no-translate="true">{displayName}</strong>
+                </div>
+              </div>
+
+              <div className="pt-profile-head-split">
+                <div className="pt-profile-head-cell">
                   <span className="pt-profile-kicker" data-no-translate={profHousehold?.code ? "true" : undefined}>
                     {profHousehold?.code ? `MÃ: ${profHousehold.code}` : "HỘ THÀNH VIÊN"}
                   </span>
+                </div>
+                <div className="pt-profile-head-cell">
                   <span className={`pt-profile-status is-${householdStatus.tone}`}>
                     {householdStatus.label}
                   </span>
@@ -903,7 +910,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               )}
             </div>
 
-            <div className="pt-profile-photo-card" style={{ marginTop: 10 }}>
+            <div className="pt-profile-photo-card">
               <div className="pt-profile-photo-main">
                 <div className="pt-profile-photo-info">
                   <strong className="pt-profile-photo-title">
