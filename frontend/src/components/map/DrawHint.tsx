@@ -1,153 +1,375 @@
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/ui/Modal";
-import { formatHa } from "@/utils/plot-utils";
-import type { Mode, PreviewState } from "./map-types";
+import { formatAreaSqm, formatHa, formatPerimeterMeters } from "@/utils/plot-utils";
+import type { DrawStyle, MapMessage, Mode, PreviewState } from "./map-types";
 
 interface DrawHintProps {
   mode: Exclude<Mode, "idle">;
+  plotCode?: string;
+  drawStyle: DrawStyle;
+  onDrawStyleChange: (style: DrawStyle) => void;
   preview: PreviewState;
+  declaredAreaHa?: number;
+  updateArea?: boolean;
+  onUpdateAreaChange?: (next: boolean) => void;
   gpsAccuracy: number | null;
   saving?: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  selectedVertexIndex: number | null;
+  message?: MapMessage | null;
   onFinish: () => void;
   onCancel: () => void;
-  onUndoVertex?: () => void;
-  onClearVertices?: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onDeleteSelectedVertex?: () => void;
+  onClearVertices: () => void;
   onResetOriginal?: () => void;
+  onFlyToCoord?: (lat: number, lng: number, addPoint: boolean) => void;
 }
 
 export default function DrawHint({
   mode,
+  plotCode,
+  drawStyle,
+  onDrawStyleChange,
   preview,
+  declaredAreaHa,
+  updateArea = true,
+  onUpdateAreaChange,
   gpsAccuracy,
   saving = false,
+  canUndo,
+  canRedo,
+  selectedVertexIndex,
+  message,
   onFinish,
   onCancel,
-  onUndoVertex,
+  onUndo,
+  onRedo,
+  onDeleteSelectedVertex,
   onClearVertices,
   onResetOriginal,
+  onFlyToCoord,
 }: DrawHintProps) {
-  const [confirmKind, setConfirmKind] = useState<"undo" | "clear" | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const [confirmKind, setConfirmKind] = useState<"clear" | "deleteVertex" | null>(null);
+  const [showCoordBox, setShowCoordBox] = useState(false);
+  const [coordInput, setCoordInput] = useState("");
+  const [coordError, setCoordError] = useState<string | null>(null);
 
   const title =
     mode === "draw"
-      ? "Vẽ thửa mới"
+      ? "Vẽ ranh giới thửa mới"
       : mode === "gps"
         ? "Đo GPS thực địa"
         : mode === "edit"
-          ? "Chỉnh sửa hình dạng thửa"
-          : "Vẽ polygon đo lại";
+          ? plotCode
+            ? `Sửa ranh giới ${plotCode}`
+            : "Sửa ranh giới thửa"
+          : plotCode
+            ? `Đối chiếu ${plotCode}`
+            : "Vẽ ranh giới đối chiếu";
 
-  const subtitle =
+  const guideText =
     mode === "gps"
       ? gpsAccuracy !== null
-        ? "Di chuyển quanh ranh thửa để ghi tọa độ"
-        : "Đang chờ tín hiệu định vị vệ tinh…"
-      : mode === "edit"
-        ? "Kéo đỉnh để chỉnh, kéo giữa cạnh để thêm đỉnh"
-        : "Chạm lần lượt các góc thửa trên bản đồ";
+        ? "Di chuyển dọc bờ thửa để ghi tọa độ hoặc chạm bản đồ thêm đỉnh."
+        : "Đang định vị vệ tinh, có thể chạm bản đồ để đặt đỉnh thủ công."
+      : drawStyle === "freehand"
+        ? "Nhấn giữ chuột hoặc ngón tay rồi rê dọc bờ cong, suối, đường uốn lượn để lấy nét mượt."
+        : preview.points === 0
+          ? "Chạm lần lượt các góc thửa trên ảnh vệ tinh, không giới hạn số đỉnh."
+          : preview.points < 3
+            ? "Tiếp tục chấm thêm góc. Có thể kéo dời ngay bất kỳ đỉnh nào vừa đặt."
+            : mode === "edit"
+              ? "Kéo đỉnh trắng để dời góc, kéo chấm giữa cạnh để uốn cong và thêm đỉnh mới."
+              : "Kéo đỉnh để chỉnh góc, kéo giữa cạnh để thêm đỉnh, chạm đỉnh đầu #1 để khép kín.";
 
-  const hasEditTools = Boolean(
-    mode === "edit" && (onUndoVertex || onClearVertices || onResetOriginal),
-  );
+  const canDeleteSelected =
+    selectedVertexIndex !== null &&
+    Boolean(onDeleteSelectedVertex) &&
+    (mode === "edit" ? preview.points > 3 : preview.points >= 1);
+
+  const supportsStyleSwitch = mode === "draw" || mode === "edit" || mode === "compare";
+
+  const handleJumpCoord = (addPoint: boolean) => {
+    const parts = coordInput
+      .trim()
+      .split(/[\s,;]+/)
+      .map((item) => Number.parseFloat(item));
+    if (parts.length < 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1])) {
+      setCoordError("Nhập đúng định dạng: Vĩ độ, Kinh độ (ví dụ 13.12540, 108.18520).");
+      return;
+    }
+    const [lat, lng] = parts;
+    if (lat < 8 || lat > 24 || lng < 102 || lng > 110.5) {
+      setCoordError("Tọa độ nằm ngoài phạm vi Việt Nam (Vĩ độ 8-24, Kinh độ 102-110.5).");
+      return;
+    }
+    setCoordError(null);
+    onFlyToCoord?.(lat, lng, addPoint);
+    if (addPoint) setCoordInput("");
+  };
+
+  if (collapsed) {
+    return (
+      <div className="plotmap-hint is-collapsed" role="region" aria-label={title}>
+        <div className="plotmap-hint-collapsed-bar">
+          <div className="plotmap-hint-collapsed-info">
+            <strong>{title}</strong>
+            <span>
+              {preview.points} đỉnh, {formatHa(preview.areaHa)} ({formatAreaSqm(preview.areaHa)})
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => setCollapsed(false)}
+          >
+            Mở rộng
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="plotmap-hint" role="region" aria-label={title}>
-      <div className="plotmap-hint-head">
-        <strong>{title}</strong>
-        <span>{subtitle}</span>
+      <div className="plotmap-hint-toprow">
+        <div className="plotmap-hint-head">
+          <strong>{title}</strong>
+          <span>{guideText}</span>
+        </div>
+        <button
+          type="button"
+          className="plotmap-hint-collapse-btn"
+          onClick={() => setCollapsed(true)}
+          title="Thu gọn bảng điều khiển để nhìn rộng bản đồ"
+        >
+          Thu gọn
+        </button>
       </div>
+
+      {supportsStyleSwitch && (
+        <div className="plotmap-drawstyle-switch" role="group" aria-label="Phương thức vẽ ranh giới">
+          <button
+            type="button"
+            className={`plotmap-drawstyle-btn ${drawStyle === "point" ? "is-active" : ""}`}
+            onClick={() => onDrawStyleChange("point")}
+            disabled={saving}
+          >
+            Chấm từng đỉnh
+          </button>
+          <button
+            type="button"
+            className={`plotmap-drawstyle-btn ${drawStyle === "freehand" ? "is-active" : ""}`}
+            onClick={() => onDrawStyleChange("freehand")}
+            disabled={saving}
+          >
+            Vẽ nét cong
+          </button>
+        </div>
+      )}
 
       <div className="plotmap-hint-stats">
         <div className="plotmap-hint-stat">
-          <small>{mode === "edit" ? "Số đỉnh" : "Số điểm"}</small>
+          <small>Số đỉnh</small>
           <b>{preview.points}</b>
+          <span className="plotmap-hint-sub">
+            {selectedVertexIndex !== null ? `Chọn #${selectedVertexIndex + 1}` : "Tự do"}
+          </span>
         </div>
         <div className="plotmap-hint-stat">
-          <small>Diện tích</small>
+          <small>Diện tích thực</small>
           <b>{formatHa(preview.areaHa)}</b>
+          <span className="plotmap-hint-sub">{formatAreaSqm(preview.areaHa)}</span>
         </div>
         <div className="plotmap-hint-stat">
-          <small>{mode === "gps" ? "Sai số" : "Chu vi"}</small>
+          <small>{mode === "gps" ? "Sai số GPS" : "Chu vi"}</small>
           <b>
             {mode === "gps"
               ? gpsAccuracy !== null
-                ? `±${gpsAccuracy} m`
-                : "—"
-              : `${preview.perimeterKm.toFixed(2)} km`}
+                ? `${gpsAccuracy} m`
+                : "-"
+              : formatPerimeterMeters(preview.perimeterKm)}
           </b>
+          <span className="plotmap-hint-sub">
+            {mode === "edit" && declaredAreaHa != null
+              ? `Gốc: ${formatHa(declaredAreaHa)}`
+              : "Chuẩn WGS84"}
+          </span>
         </div>
       </div>
 
-      {hasEditTools && (
-        <div className="plotmap-hint-edit-tools">
-          {onUndoVertex && (
+      {preview.selfIntersections > 0 && (
+        <div className="plotmap-inline-alert is-error" role="alert">
+          Có {preview.selfIntersections} vị trí cạnh ranh giới cắt chéo nhau (đường đỏ). Hãy kéo đỉnh bị chéo ra đúng vị trí trước khi hoàn tất.
+        </div>
+      )}
+
+      {preview.selfIntersections === 0 && message && (
+        <div
+          className={`plotmap-inline-alert ${
+            message.tone === "error" ? "is-error" : message.tone === "ok" ? "is-ok" : ""
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      <div className="plotmap-hint-edit-tools">
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          onClick={onUndo}
+          disabled={!canUndo || saving}
+          title="Hoàn tác thao tác vừa thực hiện (Ctrl+Z)"
+        >
+          Hoàn tác
+        </button>
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          onClick={onRedo}
+          disabled={!canRedo || saving}
+          title="Làm lại thao tác vừa hoàn tác (Ctrl+Y)"
+        >
+          Làm lại
+        </button>
+        <button
+          type="button"
+          className="btn btn-danger btn-sm"
+          onClick={() => setConfirmKind("clear")}
+          disabled={preview.points === 0 || saving}
+          title="Xóa toàn bộ đỉnh đang vẽ để chấm lại từ đầu"
+        >
+          Xóa vẽ lại
+        </button>
+      </div>
+
+      {(canDeleteSelected || (mode === "edit" && onResetOriginal) || onFlyToCoord) && (
+        <div className="plotmap-hint-subtools">
+          {canDeleteSelected && selectedVertexIndex !== null && (
             <button
               type="button"
               className="btn btn-danger btn-sm"
-              onClick={() => setConfirmKind("undo")}
-              disabled={preview.points <= 3 || saving}
-              title="Xóa đỉnh cuối cùng"
-            >
-              Xóa đỉnh
-            </button>
-          )}
-          {onClearVertices && (
-            <button
-              type="button"
-              className="btn btn-danger btn-sm"
-              onClick={() => setConfirmKind("clear")}
+              onClick={() => setConfirmKind("deleteVertex")}
               disabled={saving}
-              title="Xóa toàn bộ đỉnh hiện tại để bấm vẽ lại từ đầu trên bản đồ"
             >
-              Vẽ lại
+              Xóa đỉnh #{selectedVertexIndex + 1}
             </button>
           )}
-          {onResetOriginal && (
+          {mode === "edit" && onResetOriginal && (
             <button
               type="button"
               className="btn btn-outline btn-sm"
               onClick={onResetOriginal}
               disabled={saving}
-              title="Khôi phục hình dạng ban đầu của thửa đất"
             >
-              Khôi phục
+              Khôi phục gốc
+            </button>
+          )}
+          {onFlyToCoord && (
+            <button
+              type="button"
+              className={`btn btn-outline btn-sm ${showCoordBox ? "is-toggled" : ""}`}
+              onClick={() => {
+                setShowCoordBox((prev) => !prev);
+                setCoordError(null);
+              }}
+              disabled={saving}
+            >
+              Nhập tọa độ
             </button>
           )}
         </div>
+      )}
+
+      {showCoordBox && onFlyToCoord && (
+        <div className="plotmap-coord-box">
+          <input
+            type="text"
+            value={coordInput}
+            onChange={(e) => setCoordInput(e.target.value)}
+            placeholder="Vĩ độ, Kinh độ (VD: 13.1254, 108.1852)"
+            className="plotmap-coord-input"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleJumpCoord(false);
+              }
+            }}
+          />
+          <div className="plotmap-coord-actions">
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => handleJumpCoord(false)}
+            >
+              Phóng tới
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => handleJumpCoord(true)}
+            >
+              Thêm đỉnh này
+            </button>
+          </div>
+          {coordError && <div className="plotmap-coord-err">{coordError}</div>}
+        </div>
+      )}
+
+      {mode === "edit" && onUpdateAreaChange && (
+        <label className="plotmap-area-sync-check">
+          <input
+            type="checkbox"
+            checked={updateArea}
+            onChange={(e) => onUpdateAreaChange(e.target.checked)}
+          />
+          <span>Cập nhật diện tích hồ sơ theo ranh giới thực tế mới</span>
+        </label>
       )}
 
       <div className="plotmap-hint-actions">
         <button type="button" className="btn btn-outline btn-sm" onClick={onCancel} disabled={saving}>
           Hủy
         </button>
-        <button type="button" className="btn btn-primary btn-sm" onClick={onFinish} disabled={saving}>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={onFinish}
+          disabled={saving || preview.points < 3 || preview.selfIntersections > 0}
+        >
           {saving
             ? "Đang lưu…"
             : mode === "compare"
               ? "Đối chiếu"
               : mode === "edit"
-                ? "Lưu hình"
+                ? "Lưu hình dạng"
                 : "Hoàn tất"}
         </button>
       </div>
 
-      {confirmKind === "undo" && onUndoVertex && (
+      {confirmKind === "deleteVertex" && onDeleteSelectedVertex && selectedVertexIndex !== null && (
         <ConfirmDialog
-          title="Xóa đỉnh thửa đất"
-          message="Xác nhận xóa đỉnh cuối cùng trên hình đa giác đang chỉnh sửa?"
+          title={`Xóa đỉnh #${selectedVertexIndex + 1}`}
+          message={`Xác nhận xóa đỉnh #${selectedVertexIndex + 1} khỏi ranh giới thửa đất đang chỉnh sửa?`}
           confirmLabel="Xóa đỉnh"
           danger
           onConfirm={() => {
-            onUndoVertex();
+            onDeleteSelectedVertex();
             setConfirmKind(null);
           }}
           onClose={() => setConfirmKind(null)}
         />
       )}
-      {confirmKind === "clear" && onClearVertices && (
+
+      {confirmKind === "clear" && (
         <ConfirmDialog
           title="Xóa toàn bộ đỉnh đang vẽ"
-          message="Xác nhận xóa toàn bộ đỉnh hiện tại để chấm vẽ lại ranh thửa từ đầu?"
+          message="Xác nhận xóa toàn bộ các đỉnh hiện tại để vẽ lại ranh giới thửa đất từ đầu?"
           confirmLabel="Xóa và vẽ lại"
           danger
           onConfirm={() => {

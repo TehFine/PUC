@@ -1,4 +1,4 @@
-import { formatHa } from "@/utils/plot-utils";
+import { formatAreaSqm, formatHa } from "@/utils/plot-utils";
 import type { Mode, PreviewState } from "./map-types";
 
 interface ModeNoteProps {
@@ -16,7 +16,7 @@ export default function ModeNote({
   mode,
   preview,
   declaredAreaHa,
-  updateArea = false,
+  updateArea = true,
   onUpdateAreaChange,
   saving = false,
   onFinish,
@@ -30,74 +30,67 @@ export default function ModeNote({
           : mode === "gps"
             ? "Chế độ GPS"
             : mode === "edit"
-              ? "Chế độ chỉnh sửa hình dạng thửa đất"
+              ? "Chế độ sửa ranh giới thửa đất"
               : "Chế độ đối chiếu"}
       </strong>
       <p>
         {mode === "draw"
-          ? "Bấm các đỉnh của thửa trên bản đồ. Cần ít nhất 3 điểm, sau đó chọn Hoàn tất."
+          ? "Chấm các góc thửa hoặc vẽ nét cong dọc ranh giới, không giới hạn số đỉnh."
           : mode === "gps"
-            ? "Di chuyển dọc ranh thửa để ghi điểm GPS. Có thể bấm thêm điểm thủ công."
+            ? "Di chuyển dọc ranh thửa để ghi tọa độ GPS hoặc chạm bản đồ thêm đỉnh."
             : mode === "edit"
-              ? "- Kéo thả các chấm tròn trắng ở góc để dịch chuyển đỉnh thửa đất.\n- Kéo chấm nhỏ ở giữa cạnh (hoặc bấm lên bản đồ) để thêm đỉnh mới.\n- Bấm chuột phải vào một đỉnh để xóa đỉnh đó, hoặc chọn “Vẽ lại từ đầu”."
-              : "Vẽ polygon đo lại thực địa để so khớp với thửa khai báo đang chọn."}
+              ? "Kéo thả các đỉnh ở góc, kéo chấm giữa cạnh để chèn thêm đỉnh mới, hoặc vẽ nét cong."
+              : "Vẽ đa giác thực địa để đối chiếu với ranh giới khai báo."}
       </p>
       {mode === "edit" && preview && (
         <div
           style={{
-            marginTop: 12,
+            marginTop: 10,
             padding: "10px 12px",
-            borderRadius: 10,
-            background: "#f8fafc",
-            fontSize: 12.5,
+            borderRadius: 6,
+            border: "1px solid #e2e5e3",
+            background: "#f7f7f5",
+            fontSize: 12,
+            fontVariantNumeric: "tabular-nums",
             display: "flex",
             flexDirection: "column",
             gap: 6,
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--text-secondary)" }}>Số đỉnh hiện tại:</span>
+            <span style={{ color: "var(--text-secondary)" }}>Số đỉnh hiện tại</span>
             <strong>{preview.points} đỉnh</strong>
           </div>
           {declaredAreaHa != null && (
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "var(--text-secondary)" }}>Diện tích hồ sơ:</span>
+              <span style={{ color: "var(--text-secondary)" }}>Diện tích hồ sơ</span>
               <strong>{formatHa(declaredAreaHa)}</strong>
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--text-secondary)" }}>Diện tích hình đang vẽ:</span>
-            <strong style={{ color: "#0f766e" }}>{formatHa(preview.areaHa)}</strong>
+            <span style={{ color: "var(--text-secondary)" }}>Diện tích thực tế</span>
+            <strong>
+              {formatHa(preview.areaHa)} ({formatAreaSqm(preview.areaHa)})
+            </strong>
           </div>
           {onUpdateAreaChange && (
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 4,
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 500,
-                color: "var(--ink)",
-              }}
-            >
+            <label className="plotmap-area-sync-check" style={{ marginTop: 2 }}>
               <input
                 type="checkbox"
                 checked={updateArea}
                 onChange={(e) => onUpdateAreaChange(e.target.checked)}
               />
-              <span>Cập nhật luôn diện tích hồ sơ theo hình vẽ mới</span>
+              <span>Cập nhật diện tích hồ sơ theo ranh giới mới</span>
             </label>
           )}
           {onFinish && onCancel && (
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
-                style={{ flex: 1 }}
+                style={{ flex: 1, justifyContent: "center" }}
                 onClick={onFinish}
-                disabled={saving || preview.points < 3}
+                disabled={saving || preview.points < 3 || preview.selfIntersections > 0}
               >
                 {saving ? "Đang lưu…" : "Lưu hình dạng"}
               </button>

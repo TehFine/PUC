@@ -5,6 +5,7 @@ import AccountsTab from "@/components/settings/AccountsTab";
 import AuditLogTab from "@/components/settings/AuditLogTab";
 import RolesTab from "@/components/settings/RolesTab";
 import SystemAlertsTab from "@/components/settings/SystemAlertsTab";
+import { useUrlSubTab } from "@/lib/back-navigation";
 
 type Tab = "accounts" | "roles" | "alerts" | "audit";
 
@@ -17,6 +18,13 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function SystemSettings() {
   const [tab, setTab] = useState<Tab>("accounts");
+  const selectTab = useUrlSubTab<Tab>(
+    "sub",
+    tab,
+    setTab,
+    "accounts",
+    (raw): raw is Tab => raw === "accounts" || raw === "roles" || raw === "alerts" || raw === "audit",
+  );
   const [createTrigger, setCreateTrigger] = useState(0);
 
   return (
@@ -40,7 +48,7 @@ export default function SystemSettings() {
             key={t.id}
             type="button"
             className={`tab-btn ${tab === t.id ? "active" : ""}`}
-            onClick={() => setTab(t.id)}
+            onClick={() => selectTab(t.id)}
           >
             {t.label}
           </button>

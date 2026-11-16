@@ -1,4 +1,4 @@
-import { formatHa, formatPercent } from "@/utils/plot-utils";
+import { formatAreaSqm, formatHa, formatPercent } from "@/utils/plot-utils";
 import type { ComparisonState } from "./map-types";
 
 interface ComparisonResultProps {
@@ -23,21 +23,43 @@ export default function ComparisonResult({
   onClose,
 }: ComparisonResultProps) {
   const { result } = comparison;
+  const diffAbs = Math.abs(result.differenceHa);
+  const diffLabel =
+    diffAbs < 0.0001
+      ? "Khớp 0,00 ha"
+      : result.differenceHa > 0
+        ? `Rộng hơn ${formatHa(diffAbs)}`
+        : `Hẹp hơn ${formatHa(diffAbs)}`;
+
   return (
     <>
       <div className="plotmap-source">
         <span className="badge badge-orange">Đối chiếu khai báo và đo lại</span>
       </div>
       <div className="plotmap-compare-grid">
-        <div><span>Khai báo</span><strong>{formatHa(result.declaredAreaHa)}</strong></div>
-        <div><span>Đo lại</span><strong>{formatHa(result.measuredAreaHa)}</strong></div>
-        <div><span>Trùng nhau</span><strong>{formatHa(result.overlapAreaHa)}</strong></div>
-        <div><span>Tỷ lệ trùng</span><strong>{formatPercent(result.overlapRatio * 100)}</strong></div>
         <div>
-          <span>Chênh lệch</span>
+          <span>Khai báo</span>
+          <strong>{formatHa(result.declaredAreaHa)}</strong>
+          <small className="plotmap-metric-sub">{formatAreaSqm(result.declaredAreaHa)}</small>
+        </div>
+        <div>
+          <span>Đo lại</span>
+          <strong>{formatHa(result.measuredAreaHa)}</strong>
+          <small className="plotmap-metric-sub">{formatAreaSqm(result.measuredAreaHa)}</small>
+        </div>
+        <div>
+          <span>Trùng nhau</span>
+          <strong>{formatHa(result.overlapAreaHa)}</strong>
+          <small className="plotmap-metric-sub">{formatAreaSqm(result.overlapAreaHa)}</small>
+        </div>
+        <div>
+          <span>Tỷ lệ trùng</span>
+          <strong>{formatPercent(result.overlapRatio * 100)}</strong>
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <span>Chênh lệch diện tích</span>
           <strong>
-            {result.differenceHa >= 0 ? "+" : ""}
-            {formatHa(result.differenceHa)}
+            {diffLabel} ({formatAreaSqm(diffAbs)})
           </strong>
         </div>
       </div>
@@ -48,7 +70,7 @@ export default function ComparisonResult({
         {result.needsReview ? (
           result.warnings.map((warning) => <p key={warning}>{warning}</p>)
         ) : (
-          <p>Polygon đo lại trùng khớp với dữ liệu khai báo.</p>
+          <p>Ranh giới đo lại trùng khớp tốt với dữ liệu khai báo.</p>
         )}
       </div>
       <label className="map-field full">

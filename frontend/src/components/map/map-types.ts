@@ -3,12 +3,14 @@ import type { PlotFeature, PlotSource } from "@/types/geo";
 import type { PlotComparison } from "@/utils/plot-utils";
 
 export type Mode = "idle" | "draw" | "gps" | "compare" | "edit";
+export type DrawStyle = "point" | "freehand";
 export type BaseLayer = "satellite" | "streets" | "map";
 export type MessageTone = "ok" | "error" | "info";
 
 export interface DraftState {
   geometry: Polygon;
   areaHa: number;
+  vertexCount: number;
 }
 
 export interface ComparisonState {
@@ -20,7 +22,9 @@ export interface ComparisonState {
 export interface PreviewState {
   points: number;
   areaHa: number;
+  areaSqm: number;
   perimeterKm: number;
+  selfIntersections: number;
 }
 
 export interface PlotForm {

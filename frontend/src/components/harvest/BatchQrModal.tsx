@@ -8,6 +8,7 @@ import { useIsDesktopViewport } from "@/components/portal/ui";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import type { HarvestItem } from "@/types/entities";
 import { api, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
+import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
 
@@ -114,6 +115,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
       onClose();
     }, closeDuration);
   }, [onClose]);
+
+  useBackLayer(true, handleClose);
 
   useEffect(() => {
     const unlockScroll = lockRootScroll();

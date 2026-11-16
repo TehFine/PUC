@@ -12,6 +12,7 @@ import ZoneSourceCard from "@/components/zones/ZoneSourceCard";
 import ZonesOverviewCard from "@/components/zones/ZonesOverviewCard";
 import { buildZoneRows, summarizePlots } from "@/components/zones/zone-data";
 import { usePlots } from "@/hooks/use-plots";
+import { useBackLayer, useUrlSubTab } from "@/lib/back-navigation";
 
 const MapView = dynamic(() => import("@/components/map/MapView"), {
   ssr: false,
@@ -48,6 +49,15 @@ export default function Zones() {
     }
     setSheet(null);
   }, [isMobile]);
+
+  const selectZoneView = useUrlSubTab<ZoneView>(
+    "sub",
+    view,
+    setView,
+    "map",
+    (raw): raw is ZoneView => raw === "map" || raw === "list",
+  );
+  useBackLayer(Boolean(isMobile && sheet), closeSheet);
 
   useEffect(() => {
     if (sheet && sheetRef.current) {
@@ -102,7 +112,7 @@ export default function Zones() {
             type="button"
             className={`zone-view-tab ${listActive ? "" : "active"}`}
             onClick={() => {
-              setView("map");
+              selectZoneView("map");
               setSheet(null);
             }}
           >
@@ -113,12 +123,12 @@ export default function Zones() {
             className={`zone-view-tab ${listActive ? "active" : ""}`}
             onClick={() => {
               if (isMobile) {
-                setView("map");
+                selectZoneView("map");
                 setSheet("list");
                 return;
               }
               setSheet(null);
-              setView("list");
+              selectZoneView("list");
             }}
           >
             Danh sách thửa
@@ -217,7 +227,7 @@ export default function Zones() {
           onEditPlot={(code) => {
             setPendingEditCode(code);
             setSheet(null);
-            setView("map");
+            selectZoneView("map");
           }}
         />
       )}

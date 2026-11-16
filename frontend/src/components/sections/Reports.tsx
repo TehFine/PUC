@@ -616,8 +616,10 @@ export default function Reports() {
               <span className="report-card-index">{r.index}</span>
               <span className="report-card-cat">{r.category}</span>
             </div>
-            <div className="report-title">{r.title}</div>
-            <div className="report-desc">{r.desc}</div>
+            <div className="report-card-body">
+              <div className="report-title">{r.title}</div>
+              <div className="report-desc">{r.desc}</div>
+            </div>
             <div className="report-formats">
               {r.formats.map((f) => {
                 const isPdf = f.toLowerCase().includes("pdf");

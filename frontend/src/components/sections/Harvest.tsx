@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
-import { AlertTriangle, BellRing, CheckCircle2, FileText, Printer, QrCode, Scale, ShieldCheck, Users } from "@/components/ui/PublicIcon";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import { formatVn } from "@/components/admin/catalog/form-utils";
@@ -16,6 +15,7 @@ import LotContributionsModal from "@/components/admin/harvest/LotContributionsMo
 import { StampAllocationModal, StampListModal } from "@/components/admin/harvest/StampModals";
 import { toast } from "@/components/ui/Toast";
 import { api, errorMessage } from "@/lib/api-client";
+import { useUrlSubTab } from "@/lib/back-navigation";
 
 const BatchQrModal = dynamic(() => import("@/components/harvest/BatchQrModal"), { ssr: false });
 const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
@@ -86,6 +86,18 @@ export default function Harvest() {
   const canUpdateStamps = can("stamps", "update");
 
   const [tab, setTab] = useState<HarvestTab>("lots");
+  const selectTab = useUrlSubTab<HarvestTab>(
+    "sub",
+    tab,
+    setTab,
+    "lots",
+    (raw): raw is HarvestTab =>
+      raw === "lots" ||
+      raw === "plans" ||
+      raw === "stamps" ||
+      raw === "contracts" ||
+      raw === "enterprises",
+  );
 
   // 1. Lô thu hoạch
   const [lotQ, setLotQ] = useState("");
@@ -255,36 +267,30 @@ export default function Harvest() {
         </div>
         <div className="header-actions">
           <button type="button" className="btn btn-outline" onClick={() => setScanningQr(true)}>
-            <QrCode size={15} />
             <span>Quét QR</span>
           </button>
           {canReadHouseholds && (
             <button type="button" className="btn btn-outline" onClick={() => setViewingPlotQuotas(true)}>
-              <Scale size={15} />
-              <span>Hạn ngạch &amp; Biển QR Vườn</span>
+              <span>Hạn ngạch và Biển QR Vườn</span>
             </button>
           )}
           {canReadApprovals && (
             <button type="button" className="btn btn-outline" onClick={() => setViewingFieldPasses(true)}>
-              <ShieldCheck size={15} />
-              <span>Thẻ Đoàn &amp; Bảo chứng Tỉnh</span>
+              <span>Thẻ Đoàn và Bảo chứng Tỉnh</span>
             </button>
           )}
           {canReadApprovals && (
             <button type="button" className="btn btn-outline" onClick={() => setViewingTraceLogs(true)}>
-              <FileText size={15} />
               <span>Nhật ký xem chi tiết</span>
             </button>
           )}
           {canReadHouseholds && (
             <button type="button" className="btn btn-outline" onClick={() => setIncidentLotCode("")}>
-              <AlertTriangle size={15} />
               <span>Truy vết sự cố Lô - Vườn</span>
             </button>
           )}
           {tab === "lots" && lots.rows[0] && (
             <button type="button" className="btn btn-outline" onClick={() => setPrintingLot(lots.rows[0])}>
-              <Printer size={15} />
               <span>In tem lô / thùng</span>
             </button>
           )}
@@ -322,25 +328,25 @@ export default function Harvest() {
 
       {/* Thanh chuyển tab quy trình chuỗi liên kết */}
       <div className="tab-bar" style={{ marginTop: 20, marginBottom: 16 }}>
-        <button type="button" className={`tab-btn ${tab === "lots" ? "active" : ""}`} onClick={() => setTab("lots")}>
+        <button type="button" className={`tab-btn ${tab === "lots" ? "active" : ""}`} onClick={() => selectTab("lots")}>
           Lô thu hoạch ({lots.total})
         </button>
         {canReadHouseholds && (
           <button
             type="button"
             className={`tab-btn ${tab === "plans" ? "active" : ""}`}
-            onClick={() => setTab("plans")}
+            onClick={() => selectTab("plans")}
           >
             Tính lịch thu hoạch ({harvestPlans.total})
           </button>
         )}
         {canReadStamps && (
-          <button type="button" className={`tab-btn ${tab === "stamps" ? "active" : ""}`} onClick={() => setTab("stamps")}>
+          <button type="button" className={`tab-btn ${tab === "stamps" ? "active" : ""}`} onClick={() => selectTab("stamps")}>
             Cấp phát tem ({stampAllocations.total})
           </button>
         )}
         {canReadContracts && (
-          <button type="button" className={`tab-btn ${tab === "contracts" ? "active" : ""}`} onClick={() => setTab("contracts")}>
+          <button type="button" className={`tab-btn ${tab === "contracts" ? "active" : ""}`} onClick={() => selectTab("contracts")}>
             Hợp đồng bao tiêu ({contracts.total})
           </button>
         )}
@@ -348,7 +354,7 @@ export default function Harvest() {
           <button
             type="button"
             className={`tab-btn ${tab === "enterprises" ? "active" : ""}`}
-            onClick={() => setTab("enterprises")}
+            onClick={() => selectTab("enterprises")}
           >
             Doanh nghiệp &amp; PHC ({enterprises.total})
           </button>
@@ -438,9 +444,7 @@ export default function Harvest() {
                             className="btn btn-outline btn-sm"
                             title="Quản lý danh sách hộ đóng góp trong lô"
                             onClick={() => setContribLot(h)}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                           >
-                            <Users size={13} />
                             <span>{h.householdCount ?? 0} hộ</span>
                           </button>
                         ) : (
@@ -494,12 +498,10 @@ export default function Harvest() {
                             textDecoration: "none",
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: 5,
                             fontWeight: 600,
                             color: "#166534",
                           }}
                         >
-                          <QrCode size={14} strokeWidth={2.2} />
                           <span>{h.qrCode || h.code}</span>
                         </a>
                       </td>
@@ -513,9 +515,7 @@ export default function Harvest() {
                             className="btn btn-primary btn-sm"
                             title="Xem và in tem định danh thùng carton hoặc tem lô"
                             onClick={() => setPrintingLot(h)}
-                            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                           >
-                            <Printer size={13} strokeWidth={2.2} />
                             <span>In dải tem</span>
                           </button>
                           {canReadHouseholds && (
@@ -648,10 +648,8 @@ export default function Harvest() {
                               type="button"
                               className={`btn ${p.planStatus === "notified" ? "btn-outline" : "btn-primary"} btn-sm`}
                               onClick={() => setNotifyingPlan(p)}
-                              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
                               title="Tính toán hoặc điều chỉnh ngày thu hoạch và gửi thông báo tới tài khoản hộ dân"
                             >
-                              <BellRing size={13} strokeWidth={2.2} />
                               <span>{p.planStatus === "notified" ? "Gửi lại lịch" : "Thông báo hộ dân"}</span>
                             </button>
                           </div>
@@ -1006,10 +1004,8 @@ export default function Harvest() {
                           fontVariantNumeric: "tabular-nums",
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: 4,
                         }}
                       >
-                        <CheckCircle2 size={13} color="#059669" />
                         <span>{e.packhouseCode || "VN-DLPH-0089"}</span>
                       </span>
                     </td>

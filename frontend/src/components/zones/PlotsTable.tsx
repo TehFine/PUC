@@ -103,9 +103,9 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                         fontWeight: 700,
                         color: zc.text,
                         background: zc.bg,
-                        border: "none",
-                        padding: "4px 10px",
-                        borderRadius: 8,
+                        border: "1px solid rgba(20, 55, 47, 0.12)",
+                        padding: "3px 8px",
+                        borderRadius: 6,
                         display: "inline-block",
                       }}
                     >
@@ -129,9 +129,9 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                         fontWeight: 600,
                         background: zc.bg,
                         color: zc.text,
-                        border: "none",
-                        padding: "4px 10px",
-                        borderRadius: 8,
+                        border: "1px solid rgba(20, 55, 47, 0.12)",
+                        padding: "3px 8px",
+                        borderRadius: 6,
                         display: "inline-block",
                       }}
                     >
@@ -171,7 +171,7 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                               zoneCode: props.zone || "VN-DLOR-0086",
                               variety: props.variety || "Ri6 / Dona",
                               plantedYear: props.year ?? null,
-                              areaHa: Number((areaNum || props.areaHa || 0).toFixed(2)),
+                              areaHa: Number((areaNum || props.areaHa || 0).toFixed(4)),
                               source: props.source,
                               status: props.status,
                               qrToken: props.qrToken ?? null,

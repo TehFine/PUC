@@ -69,7 +69,7 @@ export default function NewsAdmin() {
             <div className="kpi-val">{newsList.total}</div>
             <div className="kpi-meta">
               <div className="kpi-label">Tổng số bài viết</div>
-              <div className="kpi-trend up">Trong hệ thống</div>
+              <div className="kpi-trend">Trong hệ thống</div>
             </div>
           </div>
         </div>
@@ -78,7 +78,7 @@ export default function NewsAdmin() {
             <div className="kpi-val">{publishedCount}</div>
             <div className="kpi-meta">
               <div className="kpi-label">Đã xuất bản</div>
-              <div className="kpi-trend up">Hiển thị trang chủ</div>
+              <div className="kpi-trend">Hiển thị trang chủ</div>
             </div>
           </div>
         </div>
@@ -96,7 +96,7 @@ export default function NewsAdmin() {
             <div className="kpi-val">4</div>
             <div className="kpi-meta">
               <div className="kpi-label">Chuyên mục tin</div>
-              <div className="kpi-trend up">4 nhóm chủ đề</div>
+              <div className="kpi-trend">4 nhóm chủ đề</div>
             </div>
           </div>
         </div>

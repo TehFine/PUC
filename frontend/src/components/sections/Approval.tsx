@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApiList } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
+import { useUrlSubTab } from "@/lib/back-navigation";
 import BlockState from "@/components/admin/shared/BlockState";
 import { ADMIN_APPROVAL_TAB_EVENT, consumePendingApprovalTab } from "@/components/admin/shared/counts-events";
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
@@ -51,6 +52,14 @@ export default function Approval() {
   const canDeleteMinute = can("minutes", "delete");
 
   const [tab, setTab] = useState<Tab>(() => consumePendingApprovalTab() ?? "pending");
+  const selectTab = useUrlSubTab<Tab>(
+    "sub",
+    tab,
+    setTab,
+    "pending",
+    (raw): raw is Tab =>
+      raw === "pending" || raw === "registrations" || raw === "schedule" || raw === "minutes",
+  );
   const [regCount, setRegCount] = useState<number>(0);
 
   useEffect(() => {
@@ -176,7 +185,7 @@ export default function Approval() {
         </div>
       </div>
 
-      <TabBar tabs={tabs} active={tab} onChange={setTab} />
+      <TabBar tabs={tabs} active={tab} onChange={selectTab} />
 
       {tab === "pending" && (
         <>

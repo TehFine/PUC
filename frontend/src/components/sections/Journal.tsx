@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ShareBar } from "@/components/ui/charts/KpiCharts";
 import { useApi, useApiList } from "@/hooks/use-api";
+import { useUrlSubTab } from "@/lib/back-navigation";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
   ADMIN_JOURNAL_TAB_EVENT,
@@ -59,13 +60,23 @@ export default function Journal() {
     const pending = consumePendingJournalTab();
     if (pending) return pending;
     if (typeof window !== "undefined") {
-      const qTab = new URLSearchParams(window.location.search).get("tab");
+      const sp = new URLSearchParams(window.location.search);
+      const qTab = sp.get("sub") ?? sp.get("tab");
       if (qTab === "protocol" || qTab === "journal" || qTab === "violations" || qTab === "spray") {
         return qTab;
       }
     }
     return "protocol";
   });
+
+  const selectTab = useUrlSubTab<Tab>(
+    "sub",
+    tab,
+    setTab,
+    "protocol",
+    (raw): raw is Tab =>
+      raw === "protocol" || raw === "journal" || raw === "violations" || raw === "spray",
+  );
 
   useEffect(() => {
     const onTab = (event: Event) => {
@@ -230,7 +241,7 @@ export default function Journal() {
         </div>
       </div>
 
-      <TabBar tabs={tabs} active={activeTab} onChange={setTab} />
+      <TabBar tabs={tabs} active={activeTab} onChange={selectTab} />
 
       {activeTab === "protocol" && (
         <CareProtocolAdminTab

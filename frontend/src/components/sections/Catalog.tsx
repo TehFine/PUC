@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock, MapPin, Pencil, Search, Users } from "@/components/ui/PublicIcon";
+import { Search } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import FertilizerFormModal from "@/components/admin/catalog/FertilizerFormModal";
@@ -26,9 +26,10 @@ import {
 import { DISEASES_AND_PESTS_2026 } from "@/components/portal/ipm-2026-data";
 import { DURIAN_PROTOCOL_2026_2027 } from "@/lib/durian-protocol-2026-2027";
 import "@/components/portal/portal.css";
-import { EmptyState, Sheet } from "@/components/portal/ui";
+import { Sheet } from "@/components/portal/ui";
 import { Modal } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
+import { useUrlSubTab } from "@/lib/back-navigation";
 import type { FertilizerDto, PesticideDto, VarietyDto } from "@/types/api";
 import type { FertilizerRecord, PesticideRecord, VarietyRecord, VillageRecord } from "@/types/catalog";
 import { isSafeMediaUrl } from "@/utils/url-safety";
@@ -44,33 +45,33 @@ interface StandardDoc {
 
 const STANDARDS: StandardDoc[] = [
   {
-    title: "Quy trình Chăm sóc Sầu riêng chuẩn HTX Cư Né niên vụ 2026–2027",
+    title: "Quy trình Chăm sóc Sầu riêng chuẩn HTX Cư Né niên vụ 2026-2027",
     desc: "Tài liệu kỹ thuật chuẩn gồm 8 giai đoạn sinh trưởng (Chuẩn bị vườn, Cơi đọt 1, Cơi đọt 2, Tạo mầm, Nuôi bông, Nuôi trái, Kéo cơi theo bông, Làm cơm) và phác đồ điều tiết đọt SenPro. Chỉ khi nông hộ tuân thủ đúng quy trình này và ghi nhật ký đầy đủ, HTX mới đảm bảo sản phẩm được thu mua đúng giá, giá cao.",
-    tags: ["Bắt buộc", "Chuẩn 2026–2027", "Bảo chứng thu mua giá cao"],
+    tags: ["Bắt buộc", "Chuẩn 2026-2027", "Bảo chứng thu mua giá cao"],
     details: [
-      "Giai đoạn Chuẩn bị (30 ngày) & Cơi đọt 1–2 (45–60 ngày): Rửa vườn, bón vôi, hữu cơ, Trichoderma, Soil Harmony; đổ gốc 25–30L Amino X - Magic One (1:1000), bón NPK 2:2:1 (1 kg/gốc), phun Grapo - Amino Ca+; dự trữ 3–5 kg lân nung chảy Văn Điển và già hóa lá lụa bằng Brixup (1:400) - MKP (Bo, Mg).",
-      "Giai đoạn Tạo mầm (15–30 ngày) & Nuôi bông (50–60 ngày): Xiết nước kết hợp phun 10:60:10 / MKP - Combi; nhấp nước khi mắt cua 1 cm, phun Bloom (1:400) - 500g KNO₃; bông 3 cm bón NPK 2:1:1 (1 kg/gốc); bông 7–12 cm phun Bloom - Amino Ca+; bông 15–20 cm đổ gốc Magic One - 1 kg K₂SO₄ và phun 500 ml Brixup - 500g Kali Bo / 200L nước.",
-      "Giai đoạn Nuôi trái (Ngày 0–60) & Kéo cơi theo bông (Ngày 65–90): Luân phiên đổ gốc Magic One (1:400) - 1 kg K₂SO₄ - 500g MgSO₄ với Ca(NO₃)₂ (1 kg), kết hợp phun Bloom - Amino Ca+ và Brixup - Kali Bo theo các mốc đuôi chuột, trứng cút, trứng gà, nắm tay, cái chén; Ngày 65 & Ngày 80 bón NPK 12:11:18 gốc Sunfat (500g/gốc).",
-      "Giai đoạn Làm cơm (Ngày 105 & Ngày 120, trái 3–4 kg): Phun 500 ml Brixup - 500g Kali Bo và đổ gốc Magic One (1:400) - 1 kg K₂SO₄ giúp cơm vàng ráo tự nhiên, nặng ký.",
-      "Phác đồ điều tiết đọt non bằng SenPro: Đọt Mũi giáo pha 1/400 (già lá/chặn đọt 7–10 ngày); Đọt Hạt gạo pha 1/800 (già lá/chặn đọt 7–10 ngày); Đọt Đuôi tôm pha 1/300 (rụng đọt trong 3 ngày). Bắt buộc ghi nhật ký đầy đủ để HTX đối chiếu nghiệm thu giá cao.",
+      "Giai đoạn Chuẩn bị (30 ngày) và Cơi đọt 1-2 (45-60 ngày): Rửa vườn, bón vôi, hữu cơ, Trichoderma, Soil Harmony; đổ gốc 25-30L Amino X kết hợp Magic One (1:1000), bón NPK 2:2:1 (1 kg/gốc), phun Grapo kết hợp Amino Ca; dự trữ 3-5 kg lân nung chảy Văn Điển và già hóa lá lụa bằng Brixup (1:400) kết hợp MKP (Bo, Mg).",
+      "Giai đoạn Tạo mầm (15-30 ngày) và Nuôi bông (50-60 ngày): Xiết nước kết hợp phun 10:60:10 / MKP cùng Combi; nhấp nước khi mắt cua 1 cm, phun Bloom (1:400) cùng 500g KNO₃; bông 3 cm bón NPK 2:1:1 (1 kg/gốc); bông 7-12 cm phun Bloom kết hợp Amino Ca; bông 15-20 cm đổ gốc Magic One cùng 1 kg K₂SO₄ và phun 500 ml Brixup cùng 500g Kali Bo / 200L nước.",
+      "Giai đoạn Nuôi trái (Ngày 0-60) và Kéo cơi theo bông (Ngày 65-90): Luân phiên đổ gốc Magic One (1:400) cùng 1 kg K₂SO₄ và 500g MgSO₄ với Ca(NO₃)₂ (1 kg), kết hợp phun Bloom cùng Amino Ca và Brixup cùng Kali Bo theo các mốc đuôi chuột, trứng cút, trứng gà, nắm tay, cái chén; Ngày 65 và Ngày 80 bón NPK 12:11:18 gốc Sunfat (500g/gốc).",
+      "Giai đoạn Làm cơm (Ngày 105 và Ngày 120, trái 3-4 kg): Phun 500 ml Brixup cùng 500g Kali Bo và đổ gốc Magic One (1:400) cùng 1 kg K₂SO₄ giúp cơm vàng ráo tự nhiên, nặng ký.",
+      "Phác đồ điều tiết đọt non bằng SenPro: Đọt Mũi giáo pha 1/400 (già lá/chặn đọt 7-10 ngày); Đọt Hạt gạo pha 1/800 (già lá/chặn đọt 7-10 ngày); Đọt Đuôi tôm pha 1/300 (rụng đọt trong 3 ngày). Bắt buộc ghi nhật ký đầy đủ để HTX đối chiếu nghiệm thu giá cao.",
     ],
   },
   {
     title: "Quy trình Quản lý dịch hại tổng hợp (IPM) Cây Sầu riêng theo VietGAP 2026",
-    desc: "Tài liệu kỹ thuật của Viện Khoa học Nông nghiệp Việt Nam (VAAS) & Viện Bảo vệ Thực vật (PPRI) năm 2026 áp dụng cho vùng trồng sầu riêng Đắk Lắk, Đắk Nông gắn với liên kết tiêu thụ chuỗi.",
-    tags: ["Bắt buộc", "Viện BVTV 2026", "VietGAP & IPM"],
+    desc: "Tài liệu kỹ thuật của Viện Khoa học Nông nghiệp Việt Nam (VAAS) và Viện Bảo vệ Thực vật (PPRI) năm 2026 áp dụng cho vùng trồng sầu riêng Đắk Lắk, Đắk Nông gắn với liên kết tiêu thụ chuỗi.",
+    tags: ["Bắt buộc", "Viện BVTV 2026", "VietGAP và IPM"],
     details: [
-      "Thực hiện 4 nguyên tắc IPM: Trồng cây khỏe – Bảo vệ thiên địch (bọ mắt vàng, bọ rùa, nhện, ong ký sinh) – Thăm đồng thường xuyên – Nông dân trở thành chuyên gia.",
+      "Thực hiện 4 nguyên tắc IPM: Trồng cây khỏe, bảo vệ thiên địch (bọ mắt vàng, bọ rùa, nhện, ong ký sinh), thăm đồng thường xuyên và nông dân trở thành chuyên gia.",
       "Quản lý trọng điểm 10 bệnh hại (đặc biệt bệnh xì mủ Phytophthora palmivora và bệnh héo ngọn Diaporthe durionigena) và 21 loài sâu hại (đặc biệt rệp sáp bột hai tua dài Ferrisia virgata, rầy nhảy Allocaridara malayensis, sâu đục quả Conogethes punctiferalis).",
-      "Biện pháp sinh học: Ủ trộn 3 kg chế phẩm vi sinh đối kháng (Trichoderma spp., Bacillus spp., Streptomyces spp. ≥ 10⁸ bào tử/g) với 1 tấn phân chuồng hoai mục ở độ ẩm 50–60% trước khi bón 7–10 ngày vào tháng 4 – đầu tháng 5; phun phòng héo ngọn tỷ lệ 1:1000 vào cuối mùa mưa (tháng 11).",
-      "Biện pháp canh tác: Cắt tỉa tạo tán thông thoáng sau thu hoạch (tháng 9–10) vào ngày nắng ráo; tỉa chùm hoa dày và nhiễm rệp sáp (tháng 1–2); đào hố giao tán giữa 4 cây thu gom tàn dư trước mùa mưa.",
-      "Biện pháp hóa học 4 đúng: Tiêm thân Phosphorous acid (Agri-Fos 400SL) cho cây đường kính ≥ 15 cm kết hợp cạo quét Metalaxyl-M + Mancozeb / Acrobat MZ 90/600 WP trị xì mủ; phối hợp dầu khoáng và luân phiên chế phẩm sinh học (ABT 2WP, Trắng xanh WP, Bitadin WP) với thuốc hóa học (Movento 150OD, Penalty 40WP, Sida 20WP).",
+      "Biện pháp sinh học: Ủ trộn 3 kg chế phẩm vi sinh đối kháng (Trichoderma spp., Bacillus spp., Streptomyces spp. từ 10⁸ bào tử/g) với 1 tấn phân chuồng hoai mục ở độ ẩm 50-60% trước khi bón 7-10 ngày vào tháng 4 đến đầu tháng 5; phun phòng héo ngọn tỷ lệ 1:1000 vào cuối mùa mưa (tháng 11).",
+      "Biện pháp canh tác: Cắt tỉa tạo tán thông thoáng sau thu hoạch (tháng 9-10) vào ngày nắng ráo; tỉa chùm hoa dày và nhiễm rệp sáp (tháng 1-2); đào hố giao tán giữa 4 cây thu gom tàn dư trước mùa mưa.",
+      "Biện pháp hóa học 4 đúng: Tiêm thân Phosphorous acid (Agri-Fos 400SL) cho cây đường kính từ 15 cm kết hợp cạo quét Metalaxyl-M cùng Mancozeb hoặc Acrobat MZ 90/600 WP trị xì mủ; phối hợp dầu khoáng và luân phiên chế phẩm sinh học (ABT 2WP, Trắng xanh WP, Bitadin WP) với thuốc hóa học (Movento 150OD, Penalty 40WP, Sida 20WP).",
     ],
   },
   {
-    title: "VietGAP – Rau quả tươi",
-    desc: "TCVN 11892-1:2017 – Quy trình thực hành nông nghiệp tốt cho rau quả tươi tại Việt Nam. Áp dụng bắt buộc với tất cả hộ xuất khẩu.",
-    tags: ["Bắt buộc", "Bộ NN&PTNT", "Cập nhật 2023"],
+    title: "VietGAP - Rau quả tươi",
+    desc: "TCVN 11892-1:2017 - Quy trình thực hành nông nghiệp tốt cho rau quả tươi tại Việt Nam. Áp dụng bắt buộc với tất cả hộ xuất khẩu.",
+    tags: ["Bắt buộc", "Bộ NN và PTNT", "Cập nhật 2023"],
     details: [
       "Đánh giá điều kiện đất, nguồn nước tưới và vị trí vùng sản xuất không bị ô nhiễm kim loại nặng (Cd, Pb, As).",
       "Ghi chép nhật ký canh tác, sử dụng phân bón và thuốc BVTV đầy đủ theo từng thửa.",
@@ -78,17 +79,17 @@ const STANDARDS: StandardDoc[] = [
     ],
   },
   {
-    title: "GACC – General Administration of Customs China",
+    title: "GACC - Tổng cục Hải quan Trung Quốc",
     desc: "Yêu cầu của Tổng cục Hải quan Trung Quốc về kiểm dịch, truy xuất nguồn gốc, mã vùng trồng đăng ký GACC. Có hiệu lực từ 01/01/2024.",
     tags: ["Xuất khẩu TQ", "Bắt buộc", "Mã GACC"],
     details: [
       "Mỗi lô xuất khẩu phải gắn mã vùng trồng (PUC) và mã cơ sở đóng gói (PHC) đã được GACC phê duyệt.",
       "Giám sát sinh vật gây hại kiểm dịch thực vật (rệp sáp, ruồi đục quả) và lưu hồ sơ tối thiểu 2 năm.",
-      "Kiểm nghiệm 100% lô hàng về dư lượng Cadimi (≤ 0.05 mg/kg) và Vàng O (âm tính).",
+      "Kiểm nghiệm 100% lô hàng về dư lượng Cadimi (tối đa 0.05 mg/kg) và Vàng O (âm tính).",
     ],
   },
   {
-    title: "GlobalGAP – Tiêu chuẩn nông nghiệp toàn cầu",
+    title: "GlobalGAP - Tiêu chuẩn nông nghiệp toàn cầu",
     desc: "Tiêu chuẩn tư nhân quốc tế về an toàn thực phẩm, truy xuất nguồn gốc và bền vững. Ưu tiên cho thị trường EU, Nhật Bản.",
     tags: ["Tự nguyện", "EU/Nhật", "Đang triển khai"],
     details: [
@@ -97,7 +98,7 @@ const STANDARDS: StandardDoc[] = [
     ],
   },
   {
-    title: "Kiểm dịch thực vật – BVTV",
+    title: "Kiểm dịch thực vật - BVTV",
     desc: "Quy trình kiểm dịch theo Thông tư 34/2018/TT-BNNPTNT. Kiểm tra vùng trồng, mã cơ sở đóng gói trước khi xuất khẩu.",
     tags: ["Bắt buộc", "BVTV", "Tỉnh Đắk Lắk"],
     details: [
@@ -155,6 +156,20 @@ function toVarietyDto(v: VarietyRecord): VarietyDto {
 
 export default function Catalog() {
   const [tab, setTab] = useState<Tab>("pesticide");
+  const selectTab = useUrlSubTab<Tab>(
+    "sub",
+    tab,
+    setTab,
+    "pesticide",
+    (raw): raw is Tab =>
+      raw === "protocol" ||
+      raw === "pesticide" ||
+      raw === "fertilizer" ||
+      raw === "variety" ||
+      raw === "diseases" ||
+      raw === "village" ||
+      raw === "standards",
+  );
 
   // 1. Thuốc BVTV
   const [pestQ, setPestQ] = useState("");
@@ -271,18 +286,18 @@ export default function Catalog() {
   const [viewingStandard, setViewingStandard] = useState<StandardDoc | null>(null);
 
   return (
-    <>
+    <div id="section-catalog" className="admin-catalog-section">
       <div className="page-header">
         <div>
           <h1>Danh Mục Hệ Thống</h1>
         </div>
       </div>
 
-      <div className="tab-bar">
+      <div className="tab-bar" role="tablist" aria-label="Danh mục hệ thống">
         {[
           {
             id: "protocol",
-            label: `Quy trình 2026–2027 (${DURIAN_PROTOCOL_2026_2027.length})`,
+            label: `Quy trình 2026-2027 (${DURIAN_PROTOCOL_2026_2027.length})`,
           },
           {
             id: "pesticide",
@@ -305,7 +320,7 @@ export default function Catalog() {
                 ? "Giống cây"
                 : `Giống cây (${varieties.total})`,
           },
-          { id: "diseases", label: `Sâu bệnh & IPM (${DISEASES_AND_PESTS_2026.length})` },
+          { id: "diseases", label: `Sâu bệnh và IPM (${DISEASES_AND_PESTS_2026.length})` },
           {
             id: "village",
             label:
@@ -318,18 +333,20 @@ export default function Catalog() {
           <button
             key={id}
             type="button"
+            role="tab"
+            aria-selected={tab === id}
             className={`tab-btn ${tab === id ? "active" : ""}`}
-            onClick={() => setTab(id as Tab)}
+            onClick={() => selectTab(id as Tab)}
           >
             {label}
           </button>
         ))}
       </div>
 
-      {/* ─── 0. QUY TRÌNH CHĂM SÓC SẦU RIÊNG CHUẨN 2026–2027 ─── */}
+      {/* 0. QUY TRÌNH CHĂM SÓC SẦU RIÊNG CHUẨN 2026-2027 */}
       {tab === "protocol" && <CareProtocol2026List />}
 
-      {/* ─── 1. THUỐC BVTV (Thiết kế theo Cổng người dùng) ─── */}
+      {/* 1. THUỐC BVTV */}
       {tab === "pesticide" && (
         <div className="pt-pest-wrap">
           <div className="admin-catalog-top">
@@ -338,7 +355,7 @@ export default function Catalog() {
               <input
                 className="pt-pest-search-input"
                 type="search"
-                placeholder="Tìm theo tên thuốc, hoạt chất hoặc hãng…"
+                placeholder="Tìm theo tên thuốc, hoạt chất hoặc hãng..."
                 value={pestQ}
                 onChange={(e) => setPestQ(e.target.value)}
                 aria-label="Tìm kiếm thuốc bảo vệ thực vật"
@@ -398,101 +415,95 @@ export default function Catalog() {
           <BlockState
             loading={pesticides.loading}
             error={pesticides.error}
-            empty={false}
+            empty={shownPesticides.length === 0}
+            emptyText="Không tìm thấy thuốc BVTV phù hợp với tiêu chí lọc."
             onRetry={pesticides.refresh}
           />
 
-          <div className="pt-pest-list admin-catalog-grid">
-            {shownPesticides.map((p) => {
-              const imgSrc = getPesticideImage(p);
-              const st = PESTICIDE_STATUS[p.status] ?? PESTICIDE_STATUS.allowed;
-              const statusClass =
-                p.status === "allowed"
-                  ? "pt-pest-status-allowed"
-                  : p.status === "banned"
-                  ? "pt-pest-status-banned"
-                  : "pt-pest-status-restricted";
+          {shownPesticides.length > 0 && (
+            <div className="pt-pest-list admin-catalog-grid">
+              {shownPesticides.map((p) => {
+                const imgSrc = getPesticideImage(p);
+                const st = PESTICIDE_STATUS[p.status] ?? PESTICIDE_STATUS.allowed;
+                const statusClass =
+                  p.status === "allowed"
+                    ? "pt-pest-status-allowed"
+                    : p.status === "banned"
+                    ? "pt-pest-status-banned"
+                    : "pt-pest-status-restricted";
 
-              return (
-                <article
-                  key={p.id}
-                  className={`pt-pest-card pt-pest-card-${p.status}`}
-                  onClick={() => setSelectedPesticide(p)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedPesticide(p);
-                    }
-                  }}
-                  title="Bấm để xem chi tiết thuốc BVTV"
-                >
-                  <div className="pt-pest-card-img-wrap">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={imgSrc} alt={p.name} className="pt-pest-card-img" loading="lazy" />
-                  </div>
-
-                  <div className="pt-pest-card-content">
-                    <div className="pt-pest-card-top-row">
-                      <h3 className="pt-pest-card-name">{p.name}</h3>
-                      <span className={`pt-pest-mini-status ${statusClass}`}>{st.label}</span>
+                return (
+                  <article
+                    key={p.id}
+                    className={`pt-pest-card pt-pest-card-${p.status}`}
+                    onClick={() => setSelectedPesticide(p)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedPesticide(p);
+                      }
+                    }}
+                    title="Bấm để xem chi tiết thuốc BVTV"
+                  >
+                    <div className="pt-pest-card-img-wrap">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imgSrc} alt={p.name} className="pt-pest-card-img" loading="lazy" />
                     </div>
 
-                    <p className="pt-pest-card-sub">
-                      Hoạt chất: <strong>{p.activeIngredient}</strong>
-                      {p.concentration ? ` (${p.concentration})` : ""}
-                      {p.manufacturer ? ` - ${p.manufacturer}` : ""}
-                    </p>
+                    <div className="pt-pest-card-content">
+                      <div className="pt-pest-card-top-row">
+                        <h3 className="pt-pest-card-name">{p.name}</h3>
+                        <span className={`pt-pest-mini-status ${statusClass}`}>{st.label}</span>
+                      </div>
 
-                    <div className="admin-catalog-card-foot">
-                      <div className="pt-pest-card-metric">
-                        <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
-                        <span>
-                          Cách ly:{" "}
-                          <strong>{p.isolationDays != null ? `${p.isolationDays} ngày` : "Không áp dụng"}</strong>
-                        </span>
-                        {p.mrlMgKg !== null && (
-                          <>
-                            <span style={{ margin: "0 4px", color: "#cbd5e1" }}>-</span>
-                            <span>
+                      <p className="pt-pest-card-sub">
+                        Hoạt chất: <strong>{p.activeIngredient}</strong>
+                        {p.concentration ? ` (${p.concentration})` : ""}
+                        {p.manufacturer ? `, ${p.manufacturer}` : ""}
+                      </p>
+
+                      <div className="admin-catalog-card-foot">
+                        <div className="pt-pest-card-metric">
+                          <span className="admin-catalog-metric-item">
+                            Cách ly:{" "}
+                            <strong>{p.isolationDays != null ? `${p.isolationDays} ngày` : "Không áp dụng"}</strong>
+                          </span>
+                          {p.mrlMgKg !== null && (
+                            <span className="admin-catalog-metric-item">
                               MRL: <strong>{formatVn(p.mrlMgKg, 3)} mg/kg</strong>
                             </span>
-                          </>
-                        )}
-                      </div>
+                          )}
+                        </div>
 
-                      <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={() => setEditingPesticide(p)}
-                        >
-                          <Pencil size={12} />
-                          <span>Sửa</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          onClick={() => setDeletingPesticide(p)}
-                        >
-                          Xóa
-                        </button>
+                        <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            onClick={() => setEditingPesticide(p)}
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={() => setDeletingPesticide(p)}
+                          >
+                            Xóa
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-
-          {!pesticides.loading && !pesticides.error && shownPesticides.length === 0 && (
-            <EmptyState icon="search">Không tìm thấy thuốc BVTV phù hợp với tiêu chí lọc.</EmptyState>
+                  </article>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
 
-      {/* ─── 2. PHÂN BÓN (Thiết kế theo Cổng người dùng) ─── */}
+      {/* 2. PHÂN BÓN */}
       {tab === "fertilizer" && (
         <div className="pt-pest-wrap">
           <div className="admin-catalog-top">
@@ -501,7 +512,7 @@ export default function Catalog() {
               <input
                 className="pt-pest-search-input"
                 type="search"
-                placeholder="Tìm theo tên phân bón, thành phần dinh dưỡng hoặc hãng…"
+                placeholder="Tìm theo tên phân bón, thành phần dinh dưỡng hoặc hãng..."
                 value={fertQ}
                 onChange={(e) => setFertQ(e.target.value)}
                 aria-label="Tìm kiếm phân bón"
@@ -561,7 +572,7 @@ export default function Catalog() {
               className={`pt-pest-filter-chip is-organic ${fertCategory === "microbial" ? "is-active" : ""}`}
               onClick={() => setFertCategory("microbial")}
             >
-              Cải tạo đất &amp; Rễ <span className="pt-pest-filter-count">{fertCounts.microbial}</span>
+              Cải tạo đất và rễ <span className="pt-pest-filter-count">{fertCounts.microbial}</span>
             </button>
             <button
               type="button"
@@ -575,103 +586,99 @@ export default function Catalog() {
           <BlockState
             loading={fertilizers.loading}
             error={fertilizers.error}
-            empty={false}
+            empty={shownFertilizers.length === 0}
+            emptyText="Không tìm thấy phân bón phù hợp với tiêu chí lọc."
             onRetry={fertilizers.refresh}
           />
 
-          <div className="pt-pest-list admin-catalog-grid">
-            {shownFertilizers.map((f) => {
-              const dto = toFertilizerDto(f);
-              const imgSrc = getFertilizerImage(dto);
-              const isEncouraged = f.status === "encouraged";
-              const isWarning = f.status === "warning";
-              const catLabel = FERTILIZER_CATEGORY[f.category] ?? f.category;
-              const st = FERTILIZER_STATUS[f.status] ?? FERTILIZER_STATUS.allowed;
+          {shownFertilizers.length > 0 && (
+            <div className="pt-pest-list admin-catalog-grid">
+              {shownFertilizers.map((f) => {
+                const dto = toFertilizerDto(f);
+                const imgSrc = getFertilizerImage(dto);
+                const isEncouraged = f.status === "encouraged";
+                const isWarning = f.status === "warning";
+                const catLabel = FERTILIZER_CATEGORY[f.category] ?? f.category;
+                const st = FERTILIZER_STATUS[f.status] ?? FERTILIZER_STATUS.allowed;
 
-              return (
-                <article
-                  key={f.id}
-                  className={`pt-pest-card pt-pest-card-${f.status}`}
-                  onClick={() => setSelectedFertilizer(dto)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedFertilizer(dto);
-                    }
-                  }}
-                  title="Bấm để xem chi tiết phân bón"
-                >
-                  <div className="pt-pest-card-img-wrap">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={imgSrc} alt={f.name} className="pt-pest-card-img" loading="lazy" />
-                  </div>
-
-                  <div className="pt-pest-card-content">
-                    <div className="pt-pest-card-top-row">
-                      <h3 className="pt-pest-card-name">{f.name}</h3>
-                      <span
-                        className={`pt-pest-mini-status ${
-                          isEncouraged
-                            ? "pt-pest-status-allowed"
-                            : isWarning
-                            ? "pt-pest-status-banned"
-                            : "pt-pest-status-restricted"
-                        }`}
-                      >
-                        {st.label}
-                      </span>
+                return (
+                  <article
+                    key={f.id}
+                    className={`pt-pest-card pt-pest-card-${f.status}`}
+                    onClick={() => setSelectedFertilizer(dto)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedFertilizer(dto);
+                      }
+                    }}
+                    title="Bấm để xem chi tiết phân bón"
+                  >
+                    <div className="pt-pest-card-img-wrap">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imgSrc} alt={f.name} className="pt-pest-card-img" loading="lazy" />
                     </div>
 
-                    <p className="pt-pest-card-sub">
-                      <strong>{catLabel}</strong> - {f.formula}
-                      {f.manufacturer ? ` - ${f.manufacturer}` : ""}
-                    </p>
-
-                    <div className="admin-catalog-card-foot">
-                      <div className="pt-pest-card-metric">
-                        <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
-                        <span>
-                          Định mức: <strong>{f.dosage}</strong>
-                        </span>
-                        <span style={{ margin: "0 4px", color: "#cbd5e1" }}>-</span>
-                        <span>
-                          Cách bón: <strong>{f.applicationMethod}</strong>
+                    <div className="pt-pest-card-content">
+                      <div className="pt-pest-card-top-row">
+                        <h3 className="pt-pest-card-name">{f.name}</h3>
+                        <span
+                          className={`pt-pest-mini-status ${
+                            isEncouraged
+                              ? "pt-pest-status-allowed"
+                              : isWarning
+                              ? "pt-pest-status-banned"
+                              : "pt-pest-status-restricted"
+                          }`}
+                        >
+                          {st.label}
                         </span>
                       </div>
 
-                      <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={() => setEditingFertilizer(f)}
-                        >
-                          <Pencil size={12} />
-                          <span>Sửa</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          onClick={() => setDeletingFertilizer(f)}
-                        >
-                          Xóa
-                        </button>
+                      <p className="pt-pest-card-sub">
+                        <strong>{catLabel}</strong>, {f.formula}
+                        {f.manufacturer ? `, ${f.manufacturer}` : ""}
+                      </p>
+
+                      <div className="admin-catalog-card-foot">
+                        <div className="pt-pest-card-metric">
+                          <span className="admin-catalog-metric-item">
+                            Định mức: <strong>{f.dosage}</strong>
+                          </span>
+                          <span className="admin-catalog-metric-item">
+                            Cách bón: <strong>{f.applicationMethod}</strong>
+                          </span>
+                        </div>
+
+                        <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            onClick={() => setEditingFertilizer(f)}
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={() => setDeletingFertilizer(f)}
+                          >
+                            Xóa
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-
-          {!fertilizers.loading && !fertilizers.error && shownFertilizers.length === 0 && (
-            <EmptyState icon="search">Không tìm thấy phân bón phù hợp với tiêu chí lọc.</EmptyState>
+                  </article>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
 
-      {/* ─── 3. GIỐNG SẦU RIÊNG (Thiết kế theo Cổng người dùng) ─── */}
+      {/* 3. GIỐNG SẦU RIÊNG */}
       {tab === "variety" && (
         <div className="pt-pest-wrap">
           <div className="admin-catalog-top">
@@ -680,7 +687,7 @@ export default function Catalog() {
               <input
                 className="pt-pest-search-input"
                 type="search"
-                placeholder="Tìm theo tên giống sầu riêng, xuất xứ hoặc đặc tính cơm…"
+                placeholder="Tìm theo tên giống sầu riêng, xuất xứ hoặc đặc tính cơm..."
                 value={varQ}
                 onChange={(e) => setVarQ(e.target.value)}
                 aria-label="Tìm kiếm giống sầu riêng"
@@ -747,98 +754,92 @@ export default function Catalog() {
           <BlockState
             loading={varieties.loading}
             error={varieties.error}
-            empty={false}
+            empty={shownVarieties.length === 0}
+            emptyText="Không tìm thấy giống sầu riêng phù hợp với tiêu chí lọc."
             onRetry={varieties.refresh}
           />
 
-          <div className="pt-pest-list admin-catalog-grid">
-            {shownVarieties.map((v) => {
-              const dto = toVarietyDto(v);
-              const imgSrc = getVarietyImage(dto);
-              const catLabel = v.category ? VARIETY_CATEGORY[v.category] : "Xuất khẩu chủ lực";
-              const st = v.status ? VARIETY_STATUS[v.status] : VARIETY_STATUS.allowed;
+          {shownVarieties.length > 0 && (
+            <div className="pt-pest-list admin-catalog-grid">
+              {shownVarieties.map((v) => {
+                const dto = toVarietyDto(v);
+                const imgSrc = getVarietyImage(dto);
+                const catLabel = v.category ? VARIETY_CATEGORY[v.category] : "Xuất khẩu chủ lực";
+                const st = v.status ? VARIETY_STATUS[v.status] : VARIETY_STATUS.allowed;
 
-              return (
-                <article
-                  key={v.id}
-                  className="pt-pest-card pt-pest-card-allowed"
-                  onClick={() => setSelectedVariety(dto)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedVariety(dto);
-                    }
-                  }}
-                  title="Bấm để xem chi tiết giống sầu riêng"
-                >
-                  <div className="pt-pest-card-img-wrap">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={imgSrc} alt={v.name} className="pt-pest-card-img" loading="lazy" />
-                  </div>
-
-                  <div className="pt-pest-card-content">
-                    <div className="pt-pest-card-top-row">
-                      <h3 className="pt-pest-card-name">{v.name}</h3>
-                      <span className="pt-pest-mini-status pt-pest-status-allowed">{st.label}</span>
+                return (
+                  <article
+                    key={v.id}
+                    className="pt-pest-card pt-pest-card-allowed"
+                    onClick={() => setSelectedVariety(dto)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedVariety(dto);
+                      }
+                    }}
+                    title="Bấm để xem chi tiết giống sầu riêng"
+                  >
+                    <div className="pt-pest-card-img-wrap">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imgSrc} alt={v.name} className="pt-pest-card-img" loading="lazy" />
                     </div>
 
-                    <p className="pt-pest-card-sub">
-                      <strong>{catLabel}</strong> - Xuất xứ: <strong>{dto.origin || "Việt Nam"}</strong>
-                      {dto.weightRange ? ` - ${dto.weightRange}` : ""}
-                    </p>
+                    <div className="pt-pest-card-content">
+                      <div className="pt-pest-card-top-row">
+                        <h3 className="pt-pest-card-name">{v.name}</h3>
+                        <span className="pt-pest-mini-status pt-pest-status-allowed">{st.label}</span>
+                      </div>
 
-                    <div className="admin-catalog-card-foot">
-                      <div className="pt-pest-card-metric">
-                        <Clock size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
-                        <span>
-                          Thu hoạch: <strong>{dto.harvestYears || "105 – 120 ngày"}</strong>
-                        </span>
-                        {dto.yieldPerHa && (
-                          <>
-                            <span style={{ margin: "0 4px", color: "#cbd5e1" }}>-</span>
-                            <span>
+                      <p className="pt-pest-card-sub">
+                        <strong>{catLabel}</strong>, xuất xứ: <strong>{dto.origin || "Việt Nam"}</strong>
+                        {dto.weightRange ? `, ${dto.weightRange}` : ""}
+                      </p>
+
+                      <div className="admin-catalog-card-foot">
+                        <div className="pt-pest-card-metric">
+                          <span className="admin-catalog-metric-item">
+                            Thu hoạch: <strong>{dto.harvestYears || "105 - 120 ngày"}</strong>
+                          </span>
+                          {dto.yieldPerHa && (
+                            <span className="admin-catalog-metric-item">
                               Năng suất: <strong>{dto.yieldPerHa}</strong>
                             </span>
-                          </>
-                        )}
-                      </div>
+                          )}
+                        </div>
 
-                      <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={() => setEditingVariety(v)}
-                        >
-                          <Pencil size={12} />
-                          <span>Sửa</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          onClick={() => setDeletingVariety(v)}
-                        >
-                          Xóa
-                        </button>
+                        <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            onClick={() => setEditingVariety(v)}
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={() => setDeletingVariety(v)}
+                          >
+                            Xóa
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-
-          {!varieties.loading && !varieties.error && shownVarieties.length === 0 && (
-            <EmptyState icon="search">Không tìm thấy giống sầu riêng phù hợp với tiêu chí lọc.</EmptyState>
+                  </article>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
 
-      {/* ─── 3b. SÂU BỆNH HẠI & QUY TRÌNH IPM 2026 ─── */}
+      {/* 3b. SÂU BỆNH HẠI VÀ QUY TRÌNH IPM 2026 */}
       {tab === "diseases" && <DiseaseAndIpmList />}
 
-      {/* ─── 4. THÔN / TỔ (Thẻ trực quan đồng bộ) ─── */}
+      {/* 4. THÔN / TỔ */}
       {tab === "village" && (
         <div className="pt-pest-wrap">
           <div className="admin-catalog-top">
@@ -847,7 +848,7 @@ export default function Catalog() {
               <input
                 className="pt-pest-search-input"
                 type="search"
-                placeholder="Tìm theo tên thôn, trưởng thôn…"
+                placeholder="Tìm theo tên thôn, trưởng thôn..."
                 value={vilQ}
                 onChange={(e) => setVilQ(e.target.value)}
                 aria-label="Tìm kiếm thôn tổ"
@@ -876,97 +877,87 @@ export default function Catalog() {
           <BlockState
             loading={villages.loading}
             error={villages.error}
-            empty={false}
+            empty={shownVillages.length === 0}
+            emptyText="Không tìm thấy thôn / tổ phù hợp."
             onRetry={villages.refresh}
           />
 
-          <div className="pt-pest-list admin-catalog-grid">
-            {shownVillages.map((v) => (
-              <article
-                key={v.id}
-                className="pt-pest-card pt-pest-card-allowed"
-                onClick={() => setEditingVillage(v)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setEditingVillage(v);
-                  }
-                }}
-              >
-                <div
-                  className="pt-pest-card-img-wrap"
-                  style={{
-                    width: 64,
-                    height: 64,
-                    background: "#eef6f0",
-                    color: "#14532d",
-                    borderRadius: 16,
+          {shownVillages.length > 0 && (
+            <div className="pt-pest-list admin-catalog-grid">
+              {shownVillages.map((v, idx) => (
+                <article
+                  key={v.id}
+                  className="pt-pest-card pt-pest-card-allowed"
+                  onClick={() => setEditingVillage(v)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setEditingVillage(v);
+                    }
                   }}
                 >
-                  <MapPin size={26} strokeWidth={2.1} />
-                </div>
-
-                <div className="pt-pest-card-content">
-                  <div className="pt-pest-card-top-row">
-                    <h3 className="pt-pest-card-name">{v.name}</h3>
-                    <span className="pt-pest-mini-status pt-pest-status-allowed">
-                      {formatVn(Number(v.areaHa), 1)} ha
-                    </span>
+                  <div className="admin-catalog-index-box" aria-hidden="true">
+                    {String(idx + 1).padStart(2, "0")}
                   </div>
 
-                  <p className="pt-pest-card-sub">
-                    Trưởng thôn: <strong>{v.leader || "Chưa cập nhật"}</strong>
-                  </p>
-
-                  <div className="admin-catalog-card-foot">
-                    <div className="pt-pest-card-metric">
-                      <Users size={12} className="pt-pest-card-metric-icon" aria-hidden="true" />
-                      <span>
-                        <strong>{v.householdCount}</strong> hộ đăng ký
-                      </span>
-                      <span style={{ margin: "0 4px", color: "#cbd5e1" }}>-</span>
-                      <span>
-                        <strong>{v.plotCount}</strong> thửa đất
+                  <div className="pt-pest-card-content">
+                    <div className="pt-pest-card-top-row">
+                      <h3 className="pt-pest-card-name">{v.name}</h3>
+                      <span className="pt-pest-mini-status admin-catalog-neutral-tag">
+                        {formatVn(Number(v.areaHa), 1)} ha
                       </span>
                     </div>
 
-                    <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="btn btn-outline btn-sm"
-                        onClick={() => setEditingVillage(v)}
-                      >
-                        <Pencil size={12} />
-                        <span>Sửa</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        onClick={() => setDeletingVillage(v)}
-                      >
-                        Xóa
-                      </button>
+                    <p className="pt-pest-card-sub">
+                      Trưởng thôn: <strong>{v.leader || "Chưa cập nhật"}</strong>
+                    </p>
+
+                    <div className="admin-catalog-card-foot">
+                      <div className="pt-pest-card-metric">
+                        <span className="admin-catalog-metric-item">
+                          <strong>{v.householdCount}</strong> hộ đăng ký
+                        </span>
+                        <span className="admin-catalog-metric-item">
+                          <strong>{v.plotCount}</strong> thửa đất
+                        </span>
+                      </div>
+
+                      <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={() => setEditingVillage(v)}
+                        >
+                          Sửa
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          onClick={() => setDeletingVillage(v)}
+                        >
+                          Xóa
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          {!villages.loading && !villages.error && shownVillages.length === 0 && (
-            <EmptyState icon="search">Không tìm thấy thôn / tổ phù hợp.</EmptyState>
+                </article>
+              ))}
+            </div>
           )}
         </div>
       )}
 
-      {/* ─── 5. TIÊU CHUẨN ─── */}
+      {/* 5. TIÊU CHUẨN */}
       {tab === "standards" && (
         <div className="standards-list">
-          {STANDARDS.map((s) => (
+          {STANDARDS.map((s, idx) => (
             <div key={s.title} className="standard-item">
-              <div style={{ flex: 1 }}>
+              <div className="admin-catalog-index-box" aria-hidden="true">
+                {String(idx + 1).padStart(2, "0")}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="std-item-title">{s.title}</div>
                 <div className="std-item-desc">{s.desc}</div>
                 <div className="std-item-tags">
@@ -977,7 +968,12 @@ export default function Catalog() {
                   ))}
                 </div>
               </div>
-              <button type="button" className="btn btn-outline btn-sm" style={{ flexShrink: 0 }} onClick={() => setViewingStandard(s)}>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ flexShrink: 0 }}
+                onClick={() => setViewingStandard(s)}
+              >
                 Xem tài liệu
               </button>
             </div>
@@ -1148,6 +1144,6 @@ export default function Catalog() {
           </ul>
         </Modal>
       )}
-    </>
+    </div>
   );
 }

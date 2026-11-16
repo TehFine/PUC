@@ -1,5 +1,5 @@
 import type { PlotSource } from "@/types/geo";
-import { formatHa } from "@/utils/plot-utils";
+import { formatAreaSqm, formatHa, formatPerimeterMeters } from "@/utils/plot-utils";
 import type { DraftState, PlotForm, PreviewState } from "./map-types";
 
 interface DraftFormProps {
@@ -8,17 +8,50 @@ interface DraftFormProps {
   form: PlotForm;
   saving: boolean;
   onChange: (form: PlotForm) => void;
+  onResumeEdit?: () => void;
   onSave: () => void;
   onCancel: () => void;
 }
 
-export default function DraftForm({ draft, preview, form, saving, onChange, onSave, onCancel }: DraftFormProps) {
+export default function DraftForm({
+  draft,
+  preview,
+  form,
+  saving,
+  onChange,
+  onResumeEdit,
+  onSave,
+  onCancel,
+}: DraftFormProps) {
   return (
     <>
       <div className="plotmap-metrics">
-        <div><span>Diện tích vẽ</span><strong>{formatHa(draft.areaHa)}</strong></div>
-        <div><span>Chu vi</span><strong>{(preview.perimeterKm * 1000).toFixed(0)} m</strong></div>
+        <div>
+          <span>Diện tích thực</span>
+          <strong>{formatHa(draft.areaHa)}</strong>
+          <small className="plotmap-metric-sub">{formatAreaSqm(draft.areaHa)}</small>
+        </div>
+        <div>
+          <span>Ranh giới</span>
+          <strong>{draft.vertexCount} đỉnh</strong>
+          <small className="plotmap-metric-sub">Chu vi {formatPerimeterMeters(preview.perimeterKm)}</small>
+        </div>
       </div>
+
+      {onResumeEdit && (
+        <div style={{ marginBottom: 10 }}>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            style={{ width: "100%", justifyContent: "center" }}
+            onClick={onResumeEdit}
+            disabled={saving}
+          >
+            Sửa lại ranh giới trên bản đồ
+          </button>
+        </div>
+      )}
+
       <div className="plotmap-form">
         <label className="map-field full">
           <span>Mã thửa</span>
@@ -72,7 +105,7 @@ export default function DraftForm({ draft, preview, form, saving, onChange, onSa
         <button type="button" className="btn btn-primary btn-sm" onClick={onSave} disabled={saving}>
           {saving ? "Đang lưu…" : "Lưu thửa"}
         </button>
-        <button type="button" className="btn btn-outline btn-sm" onClick={onCancel}>
+        <button type="button" className="btn btn-outline btn-sm" onClick={onCancel} disabled={saving}>
           Hủy
         </button>
       </div>

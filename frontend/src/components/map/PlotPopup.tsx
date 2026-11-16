@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { Lock } from "@/components/ui/PublicIcon";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
@@ -10,6 +9,7 @@ import type { PlotFeature } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
 import {
   featureLabel,
+  formatAreaSqm,
   formatCoords,
   formatHa,
   plotCenterCoords,
@@ -28,7 +28,6 @@ interface PlotPopupProps {
 
 /**
  * Bảng thông tin thửa đất nằm bên cạnh phải bản đồ (không làm mờ nền bản đồ phía sau).
- * Chỉ hiển thị thông tin quy hoạch của thửa; thông tin cá nhân (họ tên đầy đủ, nguồn nhập, chủ hộ của thửa chồng lấn…) được ẩn.
  */
 export default function PlotPopup({
   feature,
@@ -85,13 +84,23 @@ export default function PlotPopup({
 
   const center = plotCenterCoords(feature);
   const zc = getZoneColor(props.zone || props.code);
+  const mapAreaHa = polygonAreaHa(feature.geometry);
+  const rawRing = feature.geometry?.coordinates?.[0] ?? [];
+  const vertexCount =
+    rawRing.length > 1 &&
+    rawRing[0][0] === rawRing[rawRing.length - 1][0] &&
+    rawRing[0][1] === rawRing[rawRing.length - 1][1]
+      ? rawRing.length - 1
+      : rawRing.length;
+
   const facts: Array<{ label: string; value: string; wide?: boolean; isZone?: boolean }> = [
-    { label: "Số thửa / tờ bản đồ", value: `${props.parcel || "—"} / ${props.sheet || "—"}` },
-    { label: "Thôn / Tổ", value: props.village || "—" },
-    { label: "Mã vùng trồng", value: props.zone || "—", isZone: true },
-    { label: "Giống", value: props.variety || "—" },
+    { label: "Số thửa / tờ bản đồ", value: `${props.parcel || "-"} / ${props.sheet || "-"}` },
+    { label: "Số đỉnh ranh giới", value: `${vertexCount} đỉnh` },
+    { label: "Mã vùng trồng", value: props.zone || "-", isZone: true },
+    { label: "Thôn / Tổ", value: props.village || "-" },
+    { label: "Giống cây", value: props.variety || "-", wide: true },
     { label: "Định vị GPS", value: formatCoords(center?.lat, center?.lng), wide: true },
-    { label: "Chủ hộ", value: props.owner || "—", wide: true },
+    { label: "Chủ hộ", value: props.owner || "-", wide: true },
   ];
 
   return (
@@ -107,7 +116,7 @@ export default function PlotPopup({
         <header className="pp-head">
           <div>
             <div className="pp-kicker" style={{ color: zc.text }}>
-              Thửa đất - {props.code}
+              Thửa đất {props.code}
             </div>
             <h3 className="pp-title">Tờ/thửa {featureLabel(feature)}</h3>
           </div>
@@ -123,8 +132,8 @@ export default function PlotPopup({
           style={{
             background: zc.bg,
             color: zc.text,
-            border: "none",
-            borderRadius: 8,
+            border: "1px solid rgba(20, 55, 47, 0.12)",
+            borderRadius: 6,
             padding: "4px 9px",
             fontFamily: "var(--font-num-stack)",
             fontVariantNumeric: "tabular-nums",
@@ -139,12 +148,14 @@ export default function PlotPopup({
 
       <div className="pp-areas">
         <div>
-          <span>Diện tích khai báo</span>
+          <span>Diện tích hồ sơ</span>
           <strong>{formatHa(props.areaHa)}</strong>
+          <small className="pp-area-sub">{formatAreaSqm(props.areaHa)}</small>
         </div>
         <div>
-          <span>Diện tích trên bản đồ</span>
-          <strong>{formatHa(polygonAreaHa(feature.geometry))}</strong>
+          <span>Diện tích bản đồ</span>
+          <strong>{formatHa(mapAreaHa)}</strong>
+          <small className="pp-area-sub">{formatAreaSqm(mapAreaHa)}</small>
         </div>
       </div>
 
@@ -174,40 +185,39 @@ export default function PlotPopup({
       {overlaps.length > 0 ? (
         <div className="pp-overlap danger">
           <strong>Chồng lấn với {overlaps.length} thửa</strong>
-          <p>{overlaps.map((overlap) => `${overlap.code} (${formatHa(overlap.areaHa)})`).join(" - ")}</p>
+          <p>{overlaps.map((overlap) => `${overlap.code} (${formatHa(overlap.areaHa)})`).join(", ")}</p>
         </div>
       ) : (
         <div className="pp-overlap ok">
           <strong>Không phát hiện chồng lấn</strong>
-          <p>Thửa không giao với thửa nào khác trong dữ liệu hiện có.</p>
+          <p>Ranh giới thửa không giao cắt với các thửa đất khác trong hệ thống.</p>
         </div>
       )}
 
       <p className="pp-privacy">
-        <Lock size={12} strokeWidth={2.2} />
-        Họ tên đầy đủ, số điện thoại, CCCD và nguồn nhập dữ liệu được ẩn khỏi cửa sổ này.
+        Số điện thoại, CCCD và tài liệu định danh cá nhân được bảo mật khỏi cửa sổ tra cứu nhanh.
       </p>
 
-      <div className="pp-actions" style={{ flexWrap: "wrap" }}>
+      <div className="pp-actions">
         {onFocusPlot && (
           <button
             type="button"
-            className="btn btn-outline btn-sm"
+            className="pp-btn pp-btn-secondary"
             onClick={onFocusPlot}
-            title="Phóng to sát thửa đất (Z18.5) để xem ranh giới chi tiết và số đo từng cạnh"
+            title="Phóng sát thửa đất để xem ranh giới chi tiết và số đo từng cạnh"
           >
             Phóng sát thửa
           </button>
         )}
         {onEditShape && (
-          <button type="button" className="btn btn-primary btn-sm" onClick={onEditShape}>
+          <button type="button" className="pp-btn pp-btn-primary" onClick={onEditShape}>
             Sửa hình dạng thửa
           </button>
         )}
-        <button type="button" className="btn btn-outline btn-sm" onClick={onCompare}>
+        <button type="button" className="pp-btn pp-btn-secondary" onClick={onCompare}>
           Đối chiếu thửa này
         </button>
-        <button type="button" className="btn btn-outline btn-sm" onClick={handleClose}>
+        <button type="button" className="pp-btn pp-btn-ghost" onClick={handleClose}>
           Đóng
         </button>
       </div>
