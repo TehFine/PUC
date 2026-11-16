@@ -116,6 +116,8 @@ const EXACT_MAP: Record<string, string> = {
   "Đánh dấu đọc hết": "全部标为已读",
   "Đã nắm thông tin": "已知悉并关闭",
   "Bạn đã đọc hết tất cả thông báo.": "您已阅读所有通知。",
+  "Chưa có thông báo nào đã đọc.": "暂无已读通知。",
+  "Đã đọc": "已读",
 
   // ─── Hồ sơ tài khoản & Đổi mật khẩu & Thông báo ───
   "Thông tin tài khoản": "账户信息",

@@ -27,7 +27,7 @@ function kindMeta(kind: string): { label: string; tone: Tone } {
 function navigateAdminNotification(item: NotificationItem) {
   const link = (item.link || "").toLowerCase();
   if (item.kind === "protocol" || link.includes("tab=protocol")) {
-    requestJournalTab("protocol");
+    requestJournalTab("journal");
     return;
   }
   if (item.kind === "violation" || link.includes("violation")) {
@@ -56,13 +56,15 @@ function navigateAdminNotification(item: NotificationItem) {
 
 export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [filter, setFilter] = useState<"unread" | "read">("unread");
   const [markingAll, setMarkingAll] = useState(false);
 
   const notifications = useSharedQuery<NotificationList>(enabled ? NOTIFICATIONS_PATH : null);
   const items = notifications.data?.data ?? [];
-  const unread = notifications.data?.unread ?? items.filter((n) => !n.readAt).length;
-  const visibleItems = filter === "unread" ? items.filter((n) => !n.readAt) : items;
+  const unreadItems = items.filter((n) => !n.readAt);
+  const readItems = items.filter((n) => Boolean(n.readAt));
+  const unread = unreadItems.length;
+  const visibleItems = filter === "unread" ? unreadItems : readItems;
 
   useEffect(() => {
     if (!enabled) return;
@@ -138,25 +140,27 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
           onClose={() => setOpen(false)}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ display: "inline-flex", gap: 6 }}>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${filter === "all" ? "btn-primary" : "btn-outline"}`}
-                  onClick={() => setFilter("all")}
-                >
-                  Tất cả ({items.length})
-                </button>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(2, minmax(132px, 1fr))", gap: 8, fontVariantNumeric: "tabular-nums" }}>
                 <button
                   type="button"
                   className={`btn btn-sm ${filter === "unread" ? "btn-primary" : "btn-outline"}`}
                   onClick={() => setFilter("unread")}
+                  style={{ justifyContent: "center" }}
                 >
                   Chưa đọc ({unread})
                 </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${filter === "read" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => setFilter("read")}
+                  style={{ justifyContent: "center" }}
+                >
+                  Đã đọc ({readItems.length})
+                </button>
               </div>
 
-              {unread > 0 && (
+              {filter === "unread" && unread > 0 && (
                 <button
                   type="button"
                   className="btn btn-outline btn-sm"
@@ -172,9 +176,11 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
 
             {visibleItems.length === 0 ? (
               <EmptyState icon="ok">
-                {filter === "unread"
-                  ? "Không còn cảnh báo hay thông báo nào chưa đọc."
-                  : "Chưa có thông báo nào."}
+                {items.length === 0
+                  ? "Chưa có thông báo nào."
+                  : filter === "unread"
+                    ? "Không còn cảnh báo hay thông báo nào chưa đọc."
+                    : "Chưa có thông báo nào đã đọc."}
               </EmptyState>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

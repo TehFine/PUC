@@ -17,7 +17,6 @@ import { DrawerSummaryFooter, Sheet, useSheetClose } from "./ui";
 
 /** Thao tác cụ thể bên trong một tab (tab tự mở đúng màn hình / biểu mẫu khi nhận được). */
 export type PortalAction =
-  | "protocol-timeline"
   | "journal-add"
   | "journal-list"
   | "spray-add"
@@ -49,42 +48,27 @@ interface SearchEntry {
 
 const ENTRIES: SearchEntry[] = [
   {
-    id: "protocol-timeline",
-    title: "Lộ trình chăm sóc 2026-2027 & khai báo giai đoạn",
-    where: "Nhật ký › Lộ trình 2026-2027",
-    keywords: "lo trinh timeline quy trinh cham soc giai doan khai bao anh hoa don thuoc phan bon senpro 2026 2027",
-    target: { kind: "tab", tab: "diary", action: "protocol-timeline" },
-    popular: true,
-  },
-  {
     id: "journal-add",
     title: "Ghi nhật ký canh tác",
-    where: "Nhật ký › Canh tác",
+    where: "Nhật ký",
     keywords: "ghi nhat ky canh tac cong viec bon phan tuoi nuoc lam co cat tia cham soc vuon chup anh them moi",
     target: { kind: "tab", tab: "diary", action: "journal-add" },
     popular: true,
   },
   {
     id: "spray-add",
-    title: "Ghi phun thuốc",
-    where: "Nhật ký › Phun thuốc",
+    title: "Ghi phun thuốc bảo vệ thực vật",
+    where: "Nhật ký",
     keywords: "phun thuoc xit sau benh bvtv bao ve thuc vat tru sau nam benh ghi them moi",
     target: { kind: "tab", tab: "diary", action: "spray-add" },
     popular: true,
   },
   {
     id: "journal-list",
-    title: "Xem nhật ký đã ghi",
-    where: "Nhật ký › Canh tác",
-    keywords: "xem lich su nhat ky da ghi danh sach xoa sua",
+    title: "Xem nhật ký đã ghi & thời gian cách ly",
+    where: "Nhật ký",
+    keywords: "xem lich su nhat ky da ghi danh sach xoa sua phun thuoc cach ly ngay thu hoach an toan",
     target: { kind: "tab", tab: "diary", action: "journal-list" },
-  },
-  {
-    id: "spray-list",
-    title: "Lịch sử phun thuốc & thời gian cách ly",
-    where: "Nhật ký › Phun thuốc",
-    keywords: "lich su phun thuoc cach ly ngay thu hoach an toan",
-    target: { kind: "tab", tab: "diary", action: "spray-list" },
   },
   {
     id: "harvest-lots",

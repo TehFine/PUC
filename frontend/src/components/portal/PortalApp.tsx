@@ -76,18 +76,18 @@ export type PortalTabId = "home" | "plots" | "diary" | "stamps" | "inspection" |
 
 const TABS: { id: PortalTabId; label: string; icon: LucideIcon }[] = [
   { id: "home", label: "Trang chủ", icon: House },
-  { id: "plots", label: "Thửa đất", icon: TreePine },
   { id: "diary", label: "Nhật ký", icon: NotebookPen },
-  { id: "stamps", label: "Thu hoạch", icon: Scale },
-  { id: "inspection", label: "Kiểm nghiệm", icon: ClipboardCheck },
+  { id: "plots", label: "Thửa đất", icon: TreePine },
   { id: "learn", label: "Kiến thức", icon: BookOpen },
+  { id: "inspection", label: "Kiểm nghiệm", icon: ClipboardCheck },
+  { id: "stamps", label: "Thu hoạch", icon: Scale },
 ];
 
 function resolveNotificationTarget(item: AppNotification): { tab: PortalTabId; action?: PortalAction } {
   const kind = (item.kind || "").toLowerCase();
   const link = (item.link || "").toLowerCase();
   if (kind === "protocol" || link.includes("view=protocol") || link.includes("care-protocol")) {
-    return { tab: "diary", action: "protocol-timeline" };
+    return { tab: "diary" };
   }
   if (kind === "violation" || kind === "journal" || kind === "spray") return { tab: "diary" };
   if (kind === "harvest") return { tab: "stamps" };
@@ -240,8 +240,30 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const [confirmRemoveAvatar, setConfirmRemoveAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
-  const [notifFilter, setNotifFilter] = useState<"all" | "unread">("all");
-  const [localReadIds, setLocalReadIds] = useState<number[]>([]);
+  const [notifFilter, setNotifFilter] = useState<"unread" | "read">("unread");
+  const [localReadKeys, setLocalReadKeys] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("puc_portal_read_notifs");
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const rememberLocalReadKeys = useCallback((keysToAdd: string[]) => {
+    if (keysToAdd.length === 0) return;
+    setLocalReadKeys((prev) => {
+      const merged = Array.from(new Set([...prev, ...keysToAdd])).slice(-200);
+      try {
+        window.localStorage.setItem("puc_portal_read_notifs", JSON.stringify(merged));
+      } catch {
+        // ignore storage quota errors
+      }
+      return merged;
+    });
+  }, []);
 
   const openSupport = useCallback(() => setSupportOpen(true), []);
   const closeSupport = useCallback(() => setSupportOpen(false), []);
@@ -262,9 +284,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     if (nextTab !== "home") {
       sp.set("tab", nextTab);
     }
-    if (action === "spray-add" || action === "spray-list") sp.set("sub", "spray");
-    else if (action === "journal-add" || action === "journal-list") sp.set("sub", "journal");
-    else if (action === "learn-pesticides") sp.set("sub", "pesticides");
+    if (action === "learn-pesticides") sp.set("sub", "pesticides");
     else if (action === "learn-fertilizers") sp.set("sub", "fertilizers");
     else if (action === "learn-varieties") sp.set("sub", "varieties");
     else if (action === "learn-diseases") sp.set("sub", "diseases");
@@ -439,32 +459,42 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     };
   }, [status, session?.user.role]);
 
-  const apiNotifItems = (notifications.data?.data ?? []).filter((n) => n.kind !== "training");
-  const fallbackNotifItems = useMemo<AppNotification[]>(() => {
+  const rawApiNotifItems = (notifications.data?.data ?? []).filter((n) => n.kind !== "training");
+  const apiNotifItems = useMemo<AppNotification[]>(
+    () =>
+      rawApiNotifItems.map((n) =>
+        n.readAt || !localReadKeys.includes(`api:${n.id}`)
+          ? n
+          : { ...n, readAt: new Date().toISOString() },
+      ),
+    [rawApiNotifItems, localReadKeys],
+  );
+  const fallbackNotifItems = useMemo<Array<AppNotification & { _readKey: string }>>(() => {
     if (apiNotifItems.length > 0) return [];
     const reminders = (overview?.reminders ?? []).filter((r) => r.kind !== "training");
-    return reminders
-      .map((r, idx) => {
-        const id = -(idx + 1);
-        const isRead = localReadIds.includes(id);
-        const prefix =
-          r.kind === "violation" || r.kind === "journal"
-            ? "Cảnh báo vi phạm: "
-            : r.kind === "schedule"
-              ? "Lịch kiểm tra: "
-              : "";
-        const title = prefix && !r.title.startsWith(prefix) ? `${prefix}${r.title}` : r.title;
-        return {
-          id,
-          kind: (r.kind === "journal" || r.kind === "isolation" ? "violation" : r.kind) as AppNotification["kind"],
-          title,
-          body: r.detail ?? null,
-          link: `/portal?tab=${r.tab}`,
-          readAt: isRead ? new Date().toISOString() : null,
-          createdAt: r.date ?? new Date().toISOString(),
-        };
-      });
-  }, [apiNotifItems.length, overview?.reminders, localReadIds]);
+    return reminders.map((r, idx) => {
+      const id = -(idx + 1);
+      const readKey = `rem:${r.kind}:${r.title}:${r.date ?? ""}`;
+      const isRead = localReadKeys.includes(readKey);
+      const prefix =
+        r.kind === "violation" || r.kind === "journal"
+          ? "Cảnh báo vi phạm: "
+          : r.kind === "schedule"
+            ? "Lịch kiểm tra: "
+            : "";
+      const title = prefix && !r.title.startsWith(prefix) ? `${prefix}${r.title}` : r.title;
+      return {
+        id,
+        _readKey: readKey,
+        kind: (r.kind === "journal" || r.kind === "isolation" ? "violation" : r.kind) as AppNotification["kind"],
+        title,
+        body: r.detail ?? null,
+        link: `/portal?tab=${r.tab}`,
+        readAt: isRead ? new Date().toISOString() : null,
+        createdAt: r.date ?? new Date().toISOString(),
+      };
+    });
+  }, [apiNotifItems.length, overview?.reminders, localReadKeys]);
 
   if (invalidClientUrl) {
     notFound();
@@ -555,12 +585,13 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     }
   };
 
-  const notifItems = apiNotifItems.length > 0 ? apiNotifItems : fallbackNotifItems;
-  const unreadCount =
-    apiNotifItems.length > 0
-      ? (notifications.data?.unread ?? apiNotifItems.filter((n) => !n.readAt).length)
-      : fallbackNotifItems.filter((n) => !n.readAt).length;
-  const visibleNotifItems = notifFilter === "unread" ? notifItems.filter((n) => !n.readAt) : notifItems;
+  const notifItems: Array<AppNotification & { _readKey?: string }> =
+    apiNotifItems.length > 0 ? apiNotifItems : fallbackNotifItems;
+  const unreadNotifItems = notifItems.filter((n) => !n.readAt);
+  const readNotifItems = notifItems.filter((n) => Boolean(n.readAt));
+  const unreadCount = unreadNotifItems.length;
+  const readCount = readNotifItems.length;
+  const visibleNotifItems = notifFilter === "unread" ? unreadNotifItems : readNotifItems;
 
   const normalizedLinkedEmail = linkedEmail ? linkedEmail.trim().toLowerCase() : null;
   const normalizedAccountEmailInput = accountEmailInput.trim() ? accountEmailInput.trim().toLowerCase() : null;
@@ -603,11 +634,12 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     }
   };
 
-  const handleMarkRead = async (item: AppNotification) => {
+  const handleMarkRead = async (item: AppNotification & { _readKey?: string }) => {
     if (!item.readAt) {
       if (item.id < 0) {
-        setLocalReadIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]));
+        if (item._readKey) rememberLocalReadKeys([item._readKey]);
       } else {
+        rememberLocalReadKeys([`api:${item.id}`]);
         try {
           await api.post(`/notifications/${item.id}/read`);
           invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
@@ -630,8 +662,9 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     setMarkingAll(true);
     try {
       if (apiNotifItems.length === 0 && fallbackNotifItems.length > 0) {
-        setLocalReadIds(fallbackNotifItems.map((n) => n.id));
+        rememberLocalReadKeys(fallbackNotifItems.map((n) => n._readKey));
       } else {
+        rememberLocalReadKeys(apiNotifItems.map((n) => `api:${n.id}`));
         await api.post("/notifications/read-all");
         invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
       }
@@ -755,12 +788,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
           {tab === "diary" && <DiaryTab initialAction={intent.action} />}
           {tab === "stamps" && <StampsTab overview={overview} />}
           {tab === "inspection" && <InspectionTab />}
-          {tab === "learn" && (
-            <LearnTab
-              initialAction={intent.action}
-              onOpenTimeline={() => navigate("diary", "protocol-timeline")}
-            />
-          )}
+          {tab === "learn" && <LearnTab initialAction={intent.action} />}
           <SupportFooter onOpen={openSupport} />
         </div>
       </main>
@@ -1089,20 +1117,20 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                 <div className="pt-notif-filter-group">
                   <button
                     type="button"
-                    className={`pt-btn pt-btn-sm ${notifFilter === "all" ? "pt-btn-primary" : "pt-btn-ghost"}`}
-                    onClick={() => setNotifFilter("all")}
-                  >
-                    Tất cả ({notifItems.length})
-                  </button>
-                  <button
-                    type="button"
                     className={`pt-btn pt-btn-sm ${notifFilter === "unread" ? "pt-btn-primary" : "pt-btn-ghost"}`}
                     onClick={() => setNotifFilter("unread")}
                   >
                     Chưa đọc ({unreadCount})
                   </button>
+                  <button
+                    type="button"
+                    className={`pt-btn pt-btn-sm ${notifFilter === "read" ? "pt-btn-primary" : "pt-btn-ghost"}`}
+                    onClick={() => setNotifFilter("read")}
+                  >
+                    Đã đọc ({readCount})
+                  </button>
                 </div>
-                {!isDesktopDrawer && unreadCount > 0 && (
+                {!isDesktopDrawer && notifFilter === "unread" && unreadCount > 0 && (
                   <div className="pt-notif-action-group">
                     <BusyButton
                       type="button"
@@ -1122,16 +1150,20 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
 
             {!notifications.loading && visibleNotifItems.length === 0 && (
               isDesktopDrawer ? (
-                <p className="pt-drawer-empty-note">
-                  {notifFilter === "unread"
-                    ? t("Bạn đã đọc hết tất cả thông báo.")
-                    : t("Hiện chưa có thông báo mới nào từ HTX.")}
+                <p className="pt-drawer-empty-note" style={{ textAlign: "center" }}>
+                  {notifItems.length === 0
+                    ? t("Hiện chưa có thông báo mới nào từ HTX.")
+                    : notifFilter === "unread"
+                      ? t("Bạn đã đọc hết tất cả thông báo.")
+                      : t("Chưa có thông báo nào đã đọc.")}
                 </p>
               ) : (
                 <EmptyState icon="none">
-                  {notifFilter === "unread"
-                    ? "Bạn đã đọc hết tất cả thông báo."
-                    : "Hiện chưa có thông báo mới nào từ HTX."}
+                  {notifItems.length === 0
+                    ? "Hiện chưa có thông báo mới nào từ HTX."
+                    : notifFilter === "unread"
+                      ? "Bạn đã đọc hết tất cả thông báo."
+                      : "Chưa có thông báo nào đã đọc."}
                 </EmptyState>
               )
             )}
@@ -1154,9 +1186,6 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                         }
                       }}
                     >
-                      <div className="pt-notif-dot-col">
-                        <span className={`pt-notif-dot ${isUnread ? "is-active" : ""}`} aria-hidden="true" />
-                      </div>
                       <div className="pt-notif-content">
                         <div className="pt-notif-head">
                           <strong>{item.title}</strong>
