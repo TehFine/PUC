@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApiList } from "@/hooks/use-api";
@@ -10,12 +11,14 @@ import { formatVn } from "@/components/admin/shared/form-utils";
 import { badgeOf, HOUSEHOLD_STATUS, optionsOf } from "@/components/admin/shared/labels";
 import { useVillageOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
-import HouseholdAccountModal from "@/components/admin/households/HouseholdAccountModal";
-import HouseholdDetailModal from "@/components/admin/households/HouseholdDetailModal";
-import HouseholdFormModal from "@/components/admin/households/HouseholdFormModal";
-import HouseholdImportModal from "@/components/admin/households/HouseholdImportModal";
 import { getZoneColor, KNOWN_ZONES } from "@/components/zones/zone-data";
+import { lazyChunk } from "@/lib/lazy-chunk";
 import type { HouseholdRecord } from "@/types/households";
+
+const HouseholdAccountModal = dynamic(() => lazyChunk(() => import("@/components/admin/households/HouseholdAccountModal")), { ssr: false });
+const HouseholdDetailModal = dynamic(() => lazyChunk(() => import("@/components/admin/households/HouseholdDetailModal")), { ssr: false });
+const HouseholdFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/households/HouseholdFormModal")), { ssr: false });
+const HouseholdImportModal = dynamic(() => lazyChunk(() => import("@/components/admin/households/HouseholdImportModal")), { ssr: false });
 
 const PAGE_SIZE = 25;
 const STATUS_OPTIONS = optionsOf(HOUSEHOLD_STATUS);

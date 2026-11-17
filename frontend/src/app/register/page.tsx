@@ -26,7 +26,7 @@ export default function RegisterPage() {
               01
             </span>
             <div className="auth-timeline-body">
-              <strong className="auth-timeline-title">Lập hồ sơ nông hộ &amp; thửa vườn</strong>
+              <strong className="auth-timeline-title">Lập hồ sơ nông hộ và thửa vườn</strong>
               <p className="auth-timeline-desc">
                 Cung cấp CCCD, số điện thoại và thông tin ranh giới thửa đất cho Trưởng thôn hoặc cán bộ kỹ thuật HTX.
               </p>
@@ -37,9 +37,9 @@ export default function RegisterPage() {
               02
             </span>
             <div className="auth-timeline-body">
-              <strong className="auth-timeline-title">Thẩm định &amp; bàn giao tài khoản</strong>
+              <strong className="auth-timeline-title">Thẩm định và bàn giao tài khoản</strong>
               <p className="auth-timeline-desc">
-                HTX gắn hộ vào đúng mã số vùng trồng (PUC) và cấp tài khoản theo số điện thoại kèm mật khẩu khởi tạo.
+                HTX gắn hộ vào đúng mã số vùng trồng (PUC) và cấp tài khoản theo số điện thoại kèm mật khẩu khởi tạo. Sau khi được duyệt và nhận tài khoản, nông hộ có thể xác thực liên kết email Google ngay trong phần cài đặt cá nhân.
               </p>
             </div>
           </li>
@@ -48,11 +48,11 @@ export default function RegisterPage() {
               03
             </span>
             <div className="auth-timeline-body">
-              <strong className="auth-timeline-title">Tuân thủ quy trình chuẩn 2026–2027 &amp; ghi nhật ký</strong>
+              <strong className="auth-timeline-title">Tuân thủ quy trình chuẩn 2026-2027 và ghi nhật ký</strong>
               <p className="auth-timeline-desc">
-                Áp dụng đúng khuyến nghị quy trình chăm sóc sầu riêng 2026–2027 của HTX và cập nhật nhật ký đầy đủ để được đảm bảo thu mua đúng giá, giá cao.{" "}
+                Áp dụng đúng khuyến nghị quy trình chăm sóc sầu riêng 2026-2027 của HTX và cập nhật nhật ký đầy đủ để được đảm bảo thu mua đúng giá.{" "}
                 <Link href="/#quy-trinh" className="auth-switch-btn" style={{ marginLeft: 0 }}>
-                  Xem quy trình 2026–2027 →
+                  Xem quy trình 2026-2027
                 </Link>
               </p>
             </div>
@@ -80,7 +80,9 @@ export default function RegisterPage() {
 
         <div className="auth-contact-line">
           <span>Liên hệ Văn phòng HTX Cư Né</span>
-          <a href="tel:0366663778">0366 663 778</a>
+          <a href="tel:0366663778" style={{ fontVariantNumeric: "tabular-nums" }}>
+            0366 663 778
+          </a>
         </div>
 
         <Link href="/login" className="auth-submit is-link">

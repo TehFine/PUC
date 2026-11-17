@@ -2,7 +2,6 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { Check, Copy, Laptop, ShieldCheck, Smartphone } from "@/components/ui/PublicIcon";
 import { BusyButton, InlineError } from "@/components/portal/shared/controls";
 import { Field, Sheet } from "@/components/portal/ui";
 import { ConfirmDialog } from "@/components/ui/Modal";
@@ -48,6 +47,7 @@ export function TwoFactorSecuritySheet({
   const [setupData, setSetupData] = useState<TwoFactorSetupResponse | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [otpInput, setOtpInput] = useState("");
+  const [enablePassword, setEnablePassword] = useState("");
   const [disablePassword, setDisablePassword] = useState("");
   const [disableOtp, setDisableOtp] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
@@ -81,19 +81,25 @@ export function TwoFactorSecuritySheet({
       setErr("Vui lòng nhập đúng 6 chữ số từ ứng dụng xác thực.");
       return;
     }
+    if (!enablePassword) {
+      setErr("Vui lòng nhập mật khẩu hiện tại để bật xác thực 2 lớp.");
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
       const res = await api.post<{ enabled: boolean; backupCodes: string[] }>("/auth/2fa/enable", {
         code: clean,
+        currentPassword: enablePassword,
       });
       setBackupCodes(res.backupCodes ?? []);
       setSetupData(null);
       setOtpInput("");
+      setEnablePassword("");
       await onChanged();
       toast.success("Đã bật xác thực 2 lớp (OTP) cho tài khoản.");
     } catch (ex) {
-      setErr(errorMessage(ex, "Mã OTP không khớp. Vui lòng kiểm tra lại giờ thiết bị."));
+      setErr(errorMessage(ex, "Không bật được xác thực 2 lớp. Vui lòng kiểm tra lại mật khẩu và mã OTP."));
     } finally {
       setBusy(false);
     }
@@ -154,11 +160,8 @@ export function TwoFactorSecuritySheet({
             lineHeight: 1.5,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 7, fontWeight: 600, marginBottom: 4 }}>
-            <ShieldCheck size={17} style={{ color: enabled ? "#15803d" : "#64748b" }} />
-            <span>
-              Trạng thái hiện tại: {enabled ? "Đang bật bảo vệ OTP" : "Chưa kích hoạt"}
-            </span>
+          <div style={{ fontWeight: 600, marginBottom: 4, color: enabled ? "#15803d" : "#121212" }}>
+            Trạng thái hiện tại: {enabled ? "Đang bật bảo vệ OTP" : "Chưa kích hoạt"}
           </div>
           <div style={{ color: "#475569", fontSize: 12.5 }}>
             Tài khoản xem dữ liệu chi tiết vùng trồng, cơ sở đóng gói và hồ sơ thanh tra nên bật xác thực 2 lớp (TOTP) bằng ứng dụng Google Authenticator, Microsoft Authenticator hoặc Authy.
@@ -200,6 +203,7 @@ export function TwoFactorSecuritySheet({
                     fontWeight: 700,
                     letterSpacing: "0.08em",
                     fontSize: 13,
+                    fontVariantNumeric: "tabular-nums",
                   }}
                 >
                   {c}
@@ -207,10 +211,7 @@ export function TwoFactorSecuritySheet({
               ))}
             </div>
             <button type="button" className="pt-btn pt-btn-ghost" onClick={() => void copyBackupCodes()}>
-              {copiedCodes ? <Check size={15} /> : <Copy size={15} />}
-              <span style={{ marginLeft: 6 }}>
-                {copiedCodes ? "Đã sao chép danh sách mã" : "Sao chép tất cả mã dự phòng"}
-              </span>
+              <span>{copiedCodes ? "Đã sao chép danh sách mã" : "Sao chép tất cả mã dự phòng"}</span>
             </button>
           </div>
         )}
@@ -256,21 +257,42 @@ export function TwoFactorSecuritySheet({
                   fontWeight: 700,
                   letterSpacing: "0.08em",
                   wordBreak: "break-all",
+                  fontVariantNumeric: "tabular-nums",
                 }}
               >
                 {setupData.secret}
               </code>
             </div>
 
-            <Field label="Nhập mã OTP 6 chữ số hiển thị trên ứng dụng" htmlFor="um-2fa-code">
+            <Field label="Mã OTP 6 chữ số trên ứng dụng" htmlFor="um-2fa-code">
               <input
                 id="um-2fa-code"
                 type="text"
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 maxLength={6}
                 placeholder="123456"
                 value={otpInput}
-                onChange={(e) => setOtpInput(e.target.value)}
+                onChange={(e) => {
+                  setOtpInput(e.target.value);
+                  if (err) setErr(null);
+                }}
+                style={{ fontVariantNumeric: "tabular-nums" }}
+                required
+              />
+            </Field>
+
+            <Field label="Mật khẩu hiện tại" htmlFor="um-2fa-enable-pw">
+              <input
+                id="um-2fa-enable-pw"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Nhập mật khẩu hiện tại để xác nhận"
+                value={enablePassword}
+                onChange={(e) => {
+                  setEnablePassword(e.target.value);
+                  if (err) setErr(null);
+                }}
                 required
               />
             </Field>
@@ -285,6 +307,7 @@ export function TwoFactorSecuritySheet({
                 onClick={() => {
                   setSetupData(null);
                   setOtpInput("");
+                  setEnablePassword("");
                   setErr(null);
                 }}
               >
@@ -323,6 +346,7 @@ export function TwoFactorSecuritySheet({
                 placeholder="123456"
                 value={disableOtp}
                 onChange={(e) => setDisableOtp(e.target.value)}
+                style={{ fontVariantNumeric: "tabular-nums" }}
               />
             </Field>
 
@@ -375,8 +399,22 @@ export function ActiveSessionsSheet({
   }, []);
 
   useEffect(() => {
-    void loadSessions();
-  }, [loadSessions]);
+    let active = true;
+    api
+      .get<{ data: UserSessionItem[] }>("/auth/sessions")
+      .then((res) => {
+        if (active) setSessions(res.data ?? []);
+      })
+      .catch((e) => {
+        if (active) setErr(errorMessage(e, "Không tải được danh sách phiên đăng nhập."));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleRevokeOne = async (session: UserSessionItem) => {
     setBusyId(session.id);
@@ -417,7 +455,7 @@ export function ActiveSessionsSheet({
   return (
     <Sheet
       variant="drawer"
-      title="Phiên đăng nhập & Đăng xuất từ xa"
+      title="Phiên đăng nhập và đăng xuất từ xa"
       onClose={onClose}
       className="pt-password-sheet"
     >
@@ -450,68 +488,60 @@ export function ActiveSessionsSheet({
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {sessions.map((s) => {
-              const isMobile = /Mobile|Android|iPhone|iPad/i.test(s.userAgent || "");
-              return (
-                <div
-                  key={s.id}
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 8,
-                    border: "1px solid #d4d4d2",
-                    background: s.isCurrent ? "#f0fdf4" : "#ffffff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0 }}>
-                    <span style={{ color: s.isCurrent ? "#15803d" : "#475569", marginTop: 2 }}>
-                      {isMobile ? <Smartphone size={18} /> : <Laptop size={18} />}
-                    </span>
-                    <div style={{ fontSize: 12.5, lineHeight: 1.45 }}>
-                      <div style={{ fontWeight: 600, color: "#0f172a" }}>
-                        {summarizeUserAgent(s.userAgent)}{" "}
-                        {s.isCurrent && (
-                          <span
-                            style={{
-                              marginLeft: 6,
-                              padding: "1px 7px",
-                              borderRadius: 4,
-                              background: "#166534",
-                              color: "#ffffff",
-                              fontSize: 11,
-                              fontWeight: 600,
-                            }}
-                          >
-                            Thiết bị này
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ color: "#64748b", fontSize: 11.5 }}>
-                        IP: {s.ip || "Không rõ"} | Hoạt động: {new Date(s.lastUsedAt || s.createdAt).toLocaleString("vi-VN")}
-                      </div>
-                      <div style={{ color: "#94a3b8", fontSize: 11 }}>
-                        Hết hạn: {new Date(s.expiresAt).toLocaleString("vi-VN")}
-                      </div>
-                    </div>
+            {sessions.map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #d4d4d2",
+                  background: s.isCurrent ? "#f0fdf4" : "#ffffff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ fontSize: 12.5, lineHeight: 1.45, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, color: "#0f172a" }}>
+                    {summarizeUserAgent(s.userAgent)}{" "}
+                    {s.isCurrent && (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          padding: "1px 7px",
+                          borderRadius: 4,
+                          background: "#166534",
+                          color: "#ffffff",
+                          fontSize: 11,
+                          fontWeight: 600,
+                        }}
+                      >
+                        Thiết bị này
+                      </span>
+                    )}
                   </div>
-
-                  {!s.isCurrent && (
-                    <button
-                      type="button"
-                      className="btn btn-danger btn-sm"
-                      disabled={busyId !== null}
-                      onClick={() => setConfirmRevoke(s)}
-                    >
-                      {busyId === s.id ? "Đang xóa…" : "Xóa phiên"}
-                    </button>
-                  )}
+                  <div style={{ color: "#64748b", fontSize: 11.5, fontVariantNumeric: "tabular-nums" }}>
+                    IP: {s.ip || "Không rõ"}, Hoạt động: {new Date(s.lastUsedAt || s.createdAt).toLocaleString("vi-VN")}
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
+                    Hết hạn: {new Date(s.expiresAt).toLocaleString("vi-VN")}
+                  </div>
                 </div>
-              );
-            })}
+
+                {!s.isCurrent && (
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    disabled={busyId !== null}
+                    onClick={() => setConfirmRevoke(s)}
+                  >
+                    {busyId === s.id ? "Đang xóa…" : "Xóa phiên"}
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

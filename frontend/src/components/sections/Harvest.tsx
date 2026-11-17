@@ -542,7 +542,7 @@ export default function Harvest() {
       )}
 
       {/* ─── TAB 2: TÍNH LỊCH THU HOẠCH TỪ NHẬT KÝ CHĂM SÓC & THÔNG BÁO HỘ DÂN ─── */}
-      {tab === "plans" && (
+      {tab === "plans" && canReadHouseholds && (
         <div className="card">
           <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
             <div className="card-header-left">
@@ -662,7 +662,7 @@ export default function Harvest() {
       )}
 
       {/* ─── TAB 3: CẤP PHÁT TEM NÔNG HỘ ─── */}
-      {tab === "stamps" && (
+      {tab === "stamps" && canReadStamps && (
         <div className="card">
           <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
             <div className="card-header-left">Quản lý cấp phát dải tem QR cho nông hộ</div>

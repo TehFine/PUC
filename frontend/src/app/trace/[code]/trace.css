@@ -4367,3 +4367,24 @@ html[data-perf="lite"] .tr-search-btn {
     justify-content: center;
   }
 }
+
+/* ── Ảo hóa bố cục phần dưới trang truy xuất QR cho điện thoại cấu hình thấp ── */
+@media screen {
+  .tr-section + .tr-section,
+  .tr-source-household-card,
+  .tr-lab-card,
+  .tr-minute-item {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 320px;
+  }
+}
+
+@media print {
+  .tr-section + .tr-section,
+  .tr-source-household-card,
+  .tr-lab-card,
+  .tr-minute-item {
+    content-visibility: visible !important;
+    contain-intrinsic-size: none !important;
+  }
+}

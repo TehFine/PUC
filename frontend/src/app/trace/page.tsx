@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,10 +8,10 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import DwellSlideshow, { type DwellSlide } from "@/components/landing/DwellSlideshow";
 import LandingFooter from "@/components/landing/LandingFooter";
 import { Search } from "@/components/ui/PublicIcon";
-import { api } from "@/lib/api-client";
+import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, api } from "@/lib/api-client";
 import { replaceUrlPreservingState } from "@/lib/back-navigation";
 import { homePathFor } from "@/lib/routes";
-import { safeDecodeURIComponent } from "@/utils/url-safety";
+import { isSafeTraceCode, safeDecodeURIComponent } from "@/utils/url-safety";
 import { persistTraceLang } from "./[code]/trace-i18n";
 import "@/components/landing/landing.css";
 import "@/components/landing/swiss-landing.css";
@@ -63,23 +63,40 @@ interface DemoAuditPass {
 
 function resolveTraceInputHref(rawInput: string): string | null {
   const trimmed = rawInput.trim();
-  if (!trimmed) return null;
+  if (!trimmed || /^\.+$/.test(trimmed)) return null;
 
   const tokenPathMatch = /(?:^|\/)t\/([A-Za-z0-9_-]{6,64})(?:[/?#]|$)/.exec(trimmed);
   if (tokenPathMatch?.[1]) {
-    return `/t/${encodeURIComponent(tokenPathMatch[1])}`;
+    const candidate = safeDecodeURIComponent(tokenPathMatch[1]).trim();
+    return isSafeTraceCode(candidate) ? `/t/${encodeURIComponent(candidate)}` : null;
   }
 
   const tracePathMatch = /(?:^|\/)trace\/([^/?#\s]+)(?:[/?#]|$)/.exec(trimmed);
   if (tracePathMatch?.[1]) {
-    return `/trace/${encodeURIComponent(safeDecodeURIComponent(tracePathMatch[1]))}`;
+    const extracted = safeDecodeURIComponent(tracePathMatch[1]).trim();
+    return isSafeTraceCode(extracted) ? `/trace/${encodeURIComponent(extracted)}` : null;
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const last = parts[parts.length - 1];
+      if (!last) return null;
+      const extracted = safeDecodeURIComponent(last).trim();
+      return isSafeTraceCode(extracted) ? `/trace/${encodeURIComponent(extracted)}` : null;
+    } catch {
+      return null;
+    }
   }
 
   if (/^[A-Za-z0-9]{12,24}$/.test(trimmed) && /[a-z]/.test(trimmed) && /[A-Z0-9]/.test(trimmed)) {
-    return `/t/${encodeURIComponent(trimmed)}`;
+    return isSafeTraceCode(trimmed) ? `/t/${encodeURIComponent(trimmed)}` : null;
   }
 
-  return `/trace/${encodeURIComponent(trimmed)}`;
+  const candidate = safeDecodeURIComponent(trimmed).trim();
+  if (!isSafeTraceCode(candidate)) return null;
+  return `/trace/${encodeURIComponent(candidate)}`;
 }
 
 interface TraceSamplesResponse {
@@ -160,14 +177,46 @@ function formatLotScaleLine(lot: SampleLot): string | null {
   return null;
 }
 
+function extractAuditPassFromLocation(): string | null {
+  if (typeof window === "undefined") return null;
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const fromHash = hashParams.get("auditPass")?.trim();
+  if (fromHash && /^[A-Za-z0-9_-]{4,80}$/.test(fromHash)) return fromHash;
+  const searchParams = new URLSearchParams(window.location.search);
+  const fromQuery = searchParams.get("auditPass")?.trim();
+  if (fromQuery && /^[A-Za-z0-9_-]{4,80}$/.test(fromQuery)) return fromQuery;
+  return null;
+}
+
+function subscribeAuditPassSession(listener: () => void): () => void {
+  window.addEventListener(AUTH_LOGOUT_EVENT, listener);
+  window.addEventListener(AUTH_EXPIRED_EVENT, listener);
+  window.addEventListener("hashchange", listener);
+  return () => {
+    window.removeEventListener(AUTH_LOGOUT_EVENT, listener);
+    window.removeEventListener(AUTH_EXPIRED_EVENT, listener);
+    window.removeEventListener("hashchange", listener);
+  };
+}
+
+function readAuditSessionReady(): boolean {
+  try {
+    if (window.sessionStorage.getItem("puc_audit_pass")) return true;
+    return Boolean(extractAuditPassFromLocation());
+  } catch {
+    return false;
+  }
+}
+
 export default function TraceLookupPage() {
   const router = useRouter();
   const { status, session } = useAuth();
   const [code, setCode] = useState("");
+  const [inputError, setInputError] = useState<string | null>(null);
   const [samples, setSamples] = useState<TraceSamplesResponse | null>(() => cachedTraceSamples);
   const [loading, setLoading] = useState<boolean>(() => cachedTraceSamples === null);
   const [tab, setTab] = useState<SampleTab>("all");
-  const [auditSessionReady, setAuditSessionReady] = useState(false);
+  const auditSessionReady = useSyncExternalStore(subscribeAuditPassSession, readAuditSessionReady, () => false);
 
   const authenticated = status === "authenticated";
   const workspaceHref = homePathFor(session?.user.role);
@@ -183,18 +232,20 @@ export default function TraceLookupPage() {
         persistTraceLang("zh");
       }
 
-      const rawPass = params.get("auditPass")?.trim();
-      if (rawPass && /^[A-Za-z0-9_-]{12,80}$/.test(rawPass)) {
+      const rawPass = extractAuditPassFromLocation();
+      if (rawPass) {
         window.sessionStorage.setItem("puc_audit_pass", rawPass);
-        setAuditSessionReady(true);
-      } else if (window.sessionStorage.getItem("puc_audit_pass")) {
-        setAuditSessionReady(true);
       }
 
-      if (params.has("auditPass")) {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const hadQueryPass = params.has("auditPass");
+      const hadHashPass = hashParams.has("auditPass");
+      if (hadQueryPass || hadHashPass) {
         params.delete("auditPass");
+        hashParams.delete("auditPass");
         const qs = params.toString();
-        const cleanUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+        const hs = hashParams.toString();
+        const cleanUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}${hs ? `#${hs}` : ""}`;
         replaceUrlPreservingState(cleanUrl);
       }
     } catch {
@@ -222,8 +273,13 @@ export default function TraceLookupPage() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (!code.trim()) return;
     const targetHref = resolveTraceInputHref(code);
-    if (!targetHref) return;
+    if (!targetHref) {
+      setInputError("Mã tra cứu không hợp lệ. Vui lòng nhập mã lô, mã thùng hoặc đường dẫn QR trên nhãn.");
+      return;
+    }
+    setInputError(null);
     router.push(targetHref);
   };
 
@@ -337,7 +393,10 @@ export default function TraceLookupPage() {
                     <input
                       type="text"
                       value={code}
-                      onChange={(e) => setCode(e.target.value)}
+                      onChange={(e) => {
+                        setCode(e.target.value);
+                        if (inputError) setInputError(null);
+                      }}
                       placeholder="Nhập token /t/..., mã lô chữ hoặc mã thùng..."
                       aria-label="Token QR chống giả, mã lô hàng hoặc mã thùng đóng gói"
                       className="sw-trace-input"
@@ -348,7 +407,10 @@ export default function TraceLookupPage() {
                       <button
                         type="button"
                         className="sw-trace-clear"
-                        onClick={() => setCode("")}
+                        onClick={() => {
+                          setCode("");
+                          if (inputError) setInputError(null);
+                        }}
                         aria-label="Xóa mã đang nhập"
                       >
                         ×
@@ -359,6 +421,24 @@ export default function TraceLookupPage() {
                     <span>Tra cứu hồ sơ</span>
                   </button>
                 </form>
+
+                {inputError && (
+                  <p
+                    role="alert"
+                    style={{
+                      margin: "10px 0 0",
+                      padding: "8px 12px",
+                      borderRadius: 0,
+                      border: "1px solid #d4d4d2",
+                      background: "#fef2f2",
+                      color: "#b91c1c",
+                      fontSize: 13,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    {inputError}
+                  </p>
+                )}
 
                 {quickSamples.length > 0 && (
                   <div className="sw-trace-quick" aria-label="Mã mẫu tra cứu nhanh">
@@ -472,21 +552,23 @@ export default function TraceLookupPage() {
               </div>
               <div className="sw-field-audit-actions">
                 <Link
+                  prefetch={false}
                   href={`${
                     firstDemoPlot.qrToken
                       ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
                       : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
-                  }?auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}&lang=vi`}
+                  }?lang=vi#auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}`}
                   className="sw-field-audit-btn is-primary"
                 >
                   Thử Thẻ Đoàn tại Thửa {firstDemoPlot.plotCode} (VI)
                 </Link>
                 <Link
+                  prefetch={false}
                   href={`${
                     firstDemoPlot.qrToken
                       ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
                       : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
-                  }?auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}&lang=zh`}
+                  }?lang=zh#auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}`}
                   className="sw-field-audit-btn"
                 >
                   体验中国采购团果园核验 (中文)

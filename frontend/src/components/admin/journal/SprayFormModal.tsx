@@ -244,6 +244,10 @@ export default function SprayFormModal({
     if (areaHa.trim() && (parsedArea === undefined || parsedArea < 0)) {
       errs.areaHa = "Diện tích phải là số không âm.";
     }
+    const maxToday = todayIso();
+    if (!errs.sprayedOn && sprayedOn > maxToday) {
+      errs.sprayedOn = "Ngày phun thuốc không được ở tương lai (chỉ ghi nhận sau khi đã phun thực tế).";
+    }
     setFieldErrors(errs);
     if (hasErrors(errs)) return;
 
@@ -324,6 +328,7 @@ export default function SprayFormModal({
             label="Ngày phun"
             required
             type="date"
+            max={todayIso()}
             value={sprayedOn}
             onChange={setSprayedOn}
             error={fieldErrors.sprayedOn}

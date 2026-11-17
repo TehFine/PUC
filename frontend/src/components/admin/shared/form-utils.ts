@@ -1,10 +1,21 @@
+import { getServerCalibratedDate } from "@/lib/api-client";
+
 // Tiện ích nhỏ cho biểu mẫu khu quản trị: chuyển chuỗi nhập ↔ giá trị gửi backend.
 
-/** Ngày hôm nay theo giờ máy, dạng YYYY-MM-DD (dùng làm giá trị mặc định của ô ngày). */
+/** Ngày hôm nay theo giờ Việt Nam chuẩn máy chủ, dạng YYYY-MM-DD (dùng làm giá trị mặc định và giới hạn ngày thực hiện). */
 export function todayIso(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const now = getServerCalibratedDate();
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+  } catch {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
 }
 
 /** Chuỗi rỗng → null, ngược lại cắt khoảng trắng. */

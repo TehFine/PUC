@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useIsDesktopViewport } from "@/components/portal/ui";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import type { HarvestItem } from "@/types/entities";
-import { api, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
+import { api, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, AUTH_SCOPE_CHANGED_EVENT } from "@/lib/api-client";
 import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
@@ -40,6 +40,7 @@ if (typeof window !== "undefined") {
   };
   window.addEventListener(AUTH_LOGOUT_EVENT, clearBatchQrCache);
   window.addEventListener(AUTH_EXPIRED_EVENT, clearBatchQrCache);
+  window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, clearBatchQrCache);
 }
 
 function setBatchQrCacheEntry(code: string, url: string) {

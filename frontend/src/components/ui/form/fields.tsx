@@ -31,6 +31,8 @@ export function TextField({
   type = "text",
   placeholder,
   maxLength,
+  min,
+  max,
   autoComplete,
   inputMode,
   ...base
@@ -40,6 +42,8 @@ export function TextField({
   type?: "text" | "tel" | "email" | "password" | "date" | "time" | "url";
   placeholder?: string;
   maxLength?: number;
+  min?: string;
+  max?: string;
   autoComplete?: string;
   inputMode?: "text" | "numeric" | "decimal" | "tel";
 }) {
@@ -53,6 +57,8 @@ export function TextField({
         value={value}
         placeholder={placeholder}
         maxLength={maxLength}
+        min={min}
+        max={max}
         required={base.required}
         autoComplete={autoComplete}
         inputMode={inputMode}

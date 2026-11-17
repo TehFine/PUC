@@ -13,7 +13,7 @@ import {
   ShieldAlert,
 } from "@/components/ui/PublicIcon";
 import { TRACE_UI_COPY, type TraceLang } from "./trace-i18n";
-import { isSafeMediaUrl } from "@/utils/url-safety";
+import { isSafeMediaUrl, isSafeTraceCode } from "@/utils/url-safety";
 
 export interface FieldAuditPlotProfile {
   plotCode: string;
@@ -298,6 +298,10 @@ export default function FieldAuditGpsCheckCard({
     longitude: number,
     accuracyMeters?: number,
   ) => {
+    if (!isSafeTraceCode(scannedCode)) {
+      setGpsError(f.gpsPermissionErr);
+      return;
+    }
     setVerifying(true);
     setGpsError(null);
     try {

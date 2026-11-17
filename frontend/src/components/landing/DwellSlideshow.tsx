@@ -447,6 +447,7 @@ export default function DwellSlideshow({
               src={slide.src}
               alt={slide.alt}
               fill
+              quality={perfTier === "lite" ? 62 : 75}
               priority={isPriorityHero}
               loading={isPriorityHero ? undefined : "lazy"}
               decoding="async"

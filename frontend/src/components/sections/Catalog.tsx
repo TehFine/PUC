@@ -1,17 +1,21 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { Search } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
-import FertilizerFormModal from "@/components/admin/catalog/FertilizerFormModal";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import { FERTILIZER_CATEGORY, FERTILIZER_STATUS, PESTICIDE_STATUS, VARIETY_CATEGORY, VARIETY_STATUS } from "@/components/admin/catalog/labels";
-import PesticideFormModal from "@/components/admin/catalog/PesticideFormModal";
-import VarietyFormModal from "@/components/admin/catalog/VarietyFormModal";
-import VillageFormModal from "@/components/admin/catalog/VillageFormModal";
 import { useDebounced } from "@/components/admin/catalog/use-debounced";
 import BlockState from "@/components/admin/shared/BlockState";
+import { ProgressiveListFooter, useProgressiveCount } from "@/components/portal/shared/controls";
+import { lazyChunk } from "@/lib/lazy-chunk";
+
+const FertilizerFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/catalog/FertilizerFormModal")), { ssr: false });
+const PesticideFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/catalog/PesticideFormModal")), { ssr: false });
+const VarietyFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/catalog/VarietyFormModal")), { ssr: false });
+const VillageFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/catalog/VillageFormModal")), { ssr: false });
 import {
   CareProtocol2026List,
   DiseaseAndIpmList,
@@ -285,6 +289,15 @@ export default function Catalog() {
   // 5. Tiêu chuẩn
   const [viewingStandard, setViewingStandard] = useState<StandardDoc | null>(null);
 
+  const pestProgressive = useProgressiveCount(shownPesticides.length, 16, 16, `${debouncedPestQ}|${pestStatus}`);
+  const visiblePesticides = shownPesticides.slice(0, pestProgressive.visibleCount);
+
+  const fertProgressive = useProgressiveCount(shownFertilizers.length, 16, 16, `${debouncedFertQ}|${fertCategory}`);
+  const visibleFertilizers = shownFertilizers.slice(0, fertProgressive.visibleCount);
+
+  const varProgressive = useProgressiveCount(shownVarieties.length, 16, 16, `${debouncedVarQ}|${varCategory}`);
+  const visibleVarieties = shownVarieties.slice(0, varProgressive.visibleCount);
+
   return (
     <div id="section-catalog" className="admin-catalog-section">
       <div className="tab-bar" role="tablist" aria-label="Danh mục hệ thống">
@@ -415,84 +428,93 @@ export default function Catalog() {
           />
 
           {shownPesticides.length > 0 && (
-            <div className="pt-pest-list admin-catalog-grid">
-              {shownPesticides.map((p) => {
-                const imgSrc = getPesticideImage(p);
-                const st = PESTICIDE_STATUS[p.status] ?? PESTICIDE_STATUS.allowed;
-                const statusClass =
-                  p.status === "allowed"
-                    ? "pt-pest-status-allowed"
-                    : p.status === "banned"
-                    ? "pt-pest-status-banned"
-                    : "pt-pest-status-restricted";
+            <>
+              <div className="pt-pest-list admin-catalog-grid">
+                {visiblePesticides.map((p) => {
+                  const imgSrc = getPesticideImage(p);
+                  const st = PESTICIDE_STATUS[p.status] ?? PESTICIDE_STATUS.allowed;
+                  const statusClass =
+                    p.status === "allowed"
+                      ? "pt-pest-status-allowed"
+                      : p.status === "banned"
+                      ? "pt-pest-status-banned"
+                      : "pt-pest-status-restricted";
 
-                return (
-                  <article
-                    key={p.id}
-                    className={`pt-pest-card pt-pest-card-${p.status}`}
-                    onClick={() => setSelectedPesticide(p)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedPesticide(p);
-                      }
-                    }}
-                    title="Bấm để xem chi tiết thuốc BVTV"
-                  >
-                    <div className="pt-pest-card-img-wrap">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={imgSrc} alt={p.name} className="pt-pest-card-img" loading="lazy" />
-                    </div>
-
-                    <div className="pt-pest-card-content">
-                      <div className="pt-pest-card-top-row">
-                        <h3 className="pt-pest-card-name">{p.name}</h3>
-                        <span className={`pt-pest-mini-status ${statusClass}`}>{st.label}</span>
+                  return (
+                    <article
+                      key={p.id}
+                      className={`pt-pest-card pt-pest-card-${p.status}`}
+                      onClick={() => setSelectedPesticide(p)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedPesticide(p);
+                        }
+                      }}
+                      title="Bấm để xem chi tiết thuốc BVTV"
+                    >
+                      <div className="pt-pest-card-img-wrap">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={imgSrc} alt={p.name} className="pt-pest-card-img" loading="lazy" decoding="async" />
                       </div>
 
-                      <p className="pt-pest-card-sub">
-                        Hoạt chất: <strong>{p.activeIngredient}</strong>
-                        {p.concentration ? ` (${p.concentration})` : ""}
-                        {p.manufacturer ? `, ${p.manufacturer}` : ""}
-                      </p>
+                      <div className="pt-pest-card-content">
+                        <div className="pt-pest-card-top-row">
+                          <h3 className="pt-pest-card-name">{p.name}</h3>
+                          <span className={`pt-pest-mini-status ${statusClass}`}>{st.label}</span>
+                        </div>
 
-                      <div className="admin-catalog-card-foot">
-                        <div className="pt-pest-card-metric">
-                          <span className="admin-catalog-metric-item">
-                            Cách ly:{" "}
-                            <strong>{p.isolationDays != null ? `${p.isolationDays} ngày` : "Không áp dụng"}</strong>
-                          </span>
-                          {p.mrlMgKg !== null && (
+                        <p className="pt-pest-card-sub">
+                          Hoạt chất: <strong>{p.activeIngredient}</strong>
+                          {p.concentration ? ` (${p.concentration})` : ""}
+                          {p.manufacturer ? `, ${p.manufacturer}` : ""}
+                        </p>
+
+                        <div className="admin-catalog-card-foot">
+                          <div className="pt-pest-card-metric">
                             <span className="admin-catalog-metric-item">
-                              MRL: <strong>{formatVn(p.mrlMgKg, 3)} mg/kg</strong>
+                              Cách ly:{" "}
+                              <strong>{p.isolationDays != null ? `${p.isolationDays} ngày` : "Không áp dụng"}</strong>
                             </span>
-                          )}
-                        </div>
+                            {p.mrlMgKg !== null && (
+                              <span className="admin-catalog-metric-item">
+                                MRL: <strong>{formatVn(p.mrlMgKg, 3)} mg/kg</strong>
+                              </span>
+                            )}
+                          </div>
 
-                        <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="btn btn-outline btn-sm"
-                            onClick={() => setEditingPesticide(p)}
-                          >
-                            Sửa
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            onClick={() => setDeletingPesticide(p)}
-                          >
-                            Xóa
-                          </button>
+                          <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              onClick={() => setEditingPesticide(p)}
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              onClick={() => setDeletingPesticide(p)}
+                            >
+                              Xóa
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                    </article>
+                  );
+                })}
+              </div>
+              <ProgressiveListFooter
+                hasMore={pestProgressive.hasMore}
+                remainingCount={pestProgressive.remainingCount}
+                sentinelRef={pestProgressive.sentinelRef}
+                onShowMore={pestProgressive.showMore}
+                unitLabel="thuốc"
+              />
+            </>
           )}
         </div>
       )}
@@ -586,88 +608,97 @@ export default function Catalog() {
           />
 
           {shownFertilizers.length > 0 && (
-            <div className="pt-pest-list admin-catalog-grid">
-              {shownFertilizers.map((f) => {
-                const dto = toFertilizerDto(f);
-                const imgSrc = getFertilizerImage(dto);
-                const isEncouraged = f.status === "encouraged";
-                const isWarning = f.status === "warning";
-                const catLabel = FERTILIZER_CATEGORY[f.category] ?? f.category;
-                const st = FERTILIZER_STATUS[f.status] ?? FERTILIZER_STATUS.allowed;
+            <>
+              <div className="pt-pest-list admin-catalog-grid">
+                {visibleFertilizers.map((f) => {
+                  const dto = toFertilizerDto(f);
+                  const imgSrc = getFertilizerImage(dto);
+                  const isEncouraged = f.status === "encouraged";
+                  const isWarning = f.status === "warning";
+                  const catLabel = FERTILIZER_CATEGORY[f.category] ?? f.category;
+                  const st = FERTILIZER_STATUS[f.status] ?? FERTILIZER_STATUS.allowed;
 
-                return (
-                  <article
-                    key={f.id}
-                    className={`pt-pest-card pt-pest-card-${f.status}`}
-                    onClick={() => setSelectedFertilizer(dto)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedFertilizer(dto);
-                      }
-                    }}
-                    title="Bấm để xem chi tiết phân bón"
-                  >
-                    <div className="pt-pest-card-img-wrap">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={imgSrc} alt={f.name} className="pt-pest-card-img" loading="lazy" />
-                    </div>
-
-                    <div className="pt-pest-card-content">
-                      <div className="pt-pest-card-top-row">
-                        <h3 className="pt-pest-card-name">{f.name}</h3>
-                        <span
-                          className={`pt-pest-mini-status ${
-                            isEncouraged
-                              ? "pt-pest-status-allowed"
-                              : isWarning
-                              ? "pt-pest-status-banned"
-                              : "pt-pest-status-restricted"
-                          }`}
-                        >
-                          {st.label}
-                        </span>
+                  return (
+                    <article
+                      key={f.id}
+                      className={`pt-pest-card pt-pest-card-${f.status}`}
+                      onClick={() => setSelectedFertilizer(dto)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedFertilizer(dto);
+                        }
+                      }}
+                      title="Bấm để xem chi tiết phân bón"
+                    >
+                      <div className="pt-pest-card-img-wrap">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={imgSrc} alt={f.name} className="pt-pest-card-img" loading="lazy" decoding="async" />
                       </div>
 
-                      <p className="pt-pest-card-sub">
-                        <strong>{catLabel}</strong>, {f.formula}
-                        {f.manufacturer ? `, ${f.manufacturer}` : ""}
-                      </p>
-
-                      <div className="admin-catalog-card-foot">
-                        <div className="pt-pest-card-metric">
-                          <span className="admin-catalog-metric-item">
-                            Định mức: <strong>{f.dosage}</strong>
-                          </span>
-                          <span className="admin-catalog-metric-item">
-                            Cách bón: <strong>{f.applicationMethod}</strong>
+                      <div className="pt-pest-card-content">
+                        <div className="pt-pest-card-top-row">
+                          <h3 className="pt-pest-card-name">{f.name}</h3>
+                          <span
+                            className={`pt-pest-mini-status ${
+                              isEncouraged
+                                ? "pt-pest-status-allowed"
+                                : isWarning
+                                ? "pt-pest-status-banned"
+                                : "pt-pest-status-restricted"
+                            }`}
+                          >
+                            {st.label}
                           </span>
                         </div>
 
-                        <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="btn btn-outline btn-sm"
-                            onClick={() => setEditingFertilizer(f)}
-                          >
-                            Sửa
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            onClick={() => setDeletingFertilizer(f)}
-                          >
-                            Xóa
-                          </button>
+                        <p className="pt-pest-card-sub">
+                          <strong>{catLabel}</strong>, {f.formula}
+                          {f.manufacturer ? `, ${f.manufacturer}` : ""}
+                        </p>
+
+                        <div className="admin-catalog-card-foot">
+                          <div className="pt-pest-card-metric">
+                            <span className="admin-catalog-metric-item">
+                              Định mức: <strong>{f.dosage}</strong>
+                            </span>
+                            <span className="admin-catalog-metric-item">
+                              Cách bón: <strong>{f.applicationMethod}</strong>
+                            </span>
+                          </div>
+
+                          <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              onClick={() => setEditingFertilizer(f)}
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              onClick={() => setDeletingFertilizer(f)}
+                            >
+                              Xóa
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                    </article>
+                  );
+                })}
+              </div>
+              <ProgressiveListFooter
+                hasMore={fertProgressive.hasMore}
+                remainingCount={fertProgressive.remainingCount}
+                sentinelRef={fertProgressive.sentinelRef}
+                onShowMore={fertProgressive.showMore}
+                unitLabel="phân bón"
+              />
+            </>
           )}
         </div>
       )}
@@ -754,78 +785,87 @@ export default function Catalog() {
           />
 
           {shownVarieties.length > 0 && (
-            <div className="pt-pest-list admin-catalog-grid">
-              {shownVarieties.map((v) => {
-                const dto = toVarietyDto(v);
-                const imgSrc = getVarietyImage(dto);
-                const catLabel = v.category ? VARIETY_CATEGORY[v.category] : "Xuất khẩu chủ lực";
-                const st = v.status ? VARIETY_STATUS[v.status] : VARIETY_STATUS.allowed;
+            <>
+              <div className="pt-pest-list admin-catalog-grid">
+                {visibleVarieties.map((v) => {
+                  const dto = toVarietyDto(v);
+                  const imgSrc = getVarietyImage(dto);
+                  const catLabel = v.category ? VARIETY_CATEGORY[v.category] : "Xuất khẩu chủ lực";
+                  const st = v.status ? VARIETY_STATUS[v.status] : VARIETY_STATUS.allowed;
 
-                return (
-                  <article
-                    key={v.id}
-                    className="pt-pest-card pt-pest-card-allowed"
-                    onClick={() => setSelectedVariety(dto)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedVariety(dto);
-                      }
-                    }}
-                    title="Bấm để xem chi tiết giống sầu riêng"
-                  >
-                    <div className="pt-pest-card-img-wrap">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={imgSrc} alt={v.name} className="pt-pest-card-img" loading="lazy" />
-                    </div>
-
-                    <div className="pt-pest-card-content">
-                      <div className="pt-pest-card-top-row">
-                        <h3 className="pt-pest-card-name">{v.name}</h3>
-                        <span className="pt-pest-mini-status pt-pest-status-allowed">{st.label}</span>
+                  return (
+                    <article
+                      key={v.id}
+                      className="pt-pest-card pt-pest-card-allowed"
+                      onClick={() => setSelectedVariety(dto)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedVariety(dto);
+                        }
+                      }}
+                      title="Bấm để xem chi tiết giống sầu riêng"
+                    >
+                      <div className="pt-pest-card-img-wrap">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={imgSrc} alt={v.name} className="pt-pest-card-img" loading="lazy" decoding="async" />
                       </div>
 
-                      <p className="pt-pest-card-sub">
-                        <strong>{catLabel}</strong>, xuất xứ: <strong>{dto.origin || "Việt Nam"}</strong>
-                        {dto.weightRange ? `, ${dto.weightRange}` : ""}
-                      </p>
+                      <div className="pt-pest-card-content">
+                        <div className="pt-pest-card-top-row">
+                          <h3 className="pt-pest-card-name">{v.name}</h3>
+                          <span className="pt-pest-mini-status pt-pest-status-allowed">{st.label}</span>
+                        </div>
 
-                      <div className="admin-catalog-card-foot">
-                        <div className="pt-pest-card-metric">
-                          <span className="admin-catalog-metric-item">
-                            Thu hoạch: <strong>{dto.harvestYears || "105 - 120 ngày"}</strong>
-                          </span>
-                          {dto.yieldPerHa && (
+                        <p className="pt-pest-card-sub">
+                          <strong>{catLabel}</strong>, xuất xứ: <strong>{dto.origin || "Việt Nam"}</strong>
+                          {dto.weightRange ? `, ${dto.weightRange}` : ""}
+                        </p>
+
+                        <div className="admin-catalog-card-foot">
+                          <div className="pt-pest-card-metric">
                             <span className="admin-catalog-metric-item">
-                              Năng suất: <strong>{dto.yieldPerHa}</strong>
+                              Thu hoạch: <strong>{dto.harvestYears || "105 - 120 ngày"}</strong>
                             </span>
-                          )}
-                        </div>
+                            {dto.yieldPerHa && (
+                              <span className="admin-catalog-metric-item">
+                                Năng suất: <strong>{dto.yieldPerHa}</strong>
+                              </span>
+                            )}
+                          </div>
 
-                        <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="btn btn-outline btn-sm"
-                            onClick={() => setEditingVariety(v)}
-                          >
-                            Sửa
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            onClick={() => setDeletingVariety(v)}
-                          >
-                            Xóa
-                          </button>
+                          <div className="admin-catalog-actions" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              onClick={() => setEditingVariety(v)}
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              onClick={() => setDeletingVariety(v)}
+                            >
+                              Xóa
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                    </article>
+                  );
+                })}
+              </div>
+              <ProgressiveListFooter
+                hasMore={varProgressive.hasMore}
+                remainingCount={varProgressive.remainingCount}
+                sentinelRef={varProgressive.sentinelRef}
+                onShowMore={varProgressive.showMore}
+                unitLabel="giống"
+              />
+            </>
           )}
         </div>
       )}

@@ -112,8 +112,8 @@ const REPORTS: ReportSpec[] = [
   },
 ];
 
-function escapeHtml(text: string): string {
-  return text
+function escapeHtml(text: unknown): string {
+  return String(text ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -342,7 +342,7 @@ function buildPrintableReportHtml(
       ${tbodyHtml}
     </tbody>
   </table>
-  <div class="doc-summary">Tổng số bản ghi: ${data.total}</div>
+  <div class="doc-summary">Tổng số bản ghi: ${Number(data.total) || 0}</div>
   <div class="doc-Validations">
     <div class="sig-box">
       <div class="sig-date">&nbsp;</div>

@@ -5,6 +5,7 @@ import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
 import Pager from "@/components/admin/catalog/Pager";
 import { useDebounced } from "@/components/admin/catalog/use-debounced";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { toast } from "@/components/ui/Toast";
 import { useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
@@ -39,6 +40,10 @@ export default function AccountsTab({
 }: {
   createTrigger?: number;
 }) {
+  const { can } = useAuth();
+  const canCreateAccount = can("accounts", "create");
+  const canUpdateAccount = can("accounts", "update");
+  const canDeleteAccount = can("accounts", "delete");
   const [q, setQ] = useState("");
   const [role, setRole] = useState("");
   const [status, setStatus] = useState("");
@@ -122,9 +127,11 @@ export default function AccountsTab({
           <option value="active">Hoạt động</option>
           <option value="locked">Khóa</option>
         </select>
-        <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
-          Thêm tài khoản
-        </button>
+        {canCreateAccount && (
+          <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
+            Thêm tài khoản
+          </button>
+        )}
       </div>
 
       <div className="table-wrap">
@@ -223,10 +230,12 @@ export default function AccountsTab({
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                      <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(a)}>
-                        Sửa
-                      </button>
-                      {(a.activeSessionCount ?? 0) > 0 && (
+                      {canUpdateAccount && (
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(a)}>
+                          Sửa
+                        </button>
+                      )}
+                      {canUpdateAccount && (a.activeSessionCount ?? 0) > 0 && (
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
@@ -236,7 +245,7 @@ export default function AccountsTab({
                           Đăng xuất từ xa
                         </button>
                       )}
-                      {a.twoFactorEnabled && (
+                      {canUpdateAccount && a.twoFactorEnabled && (
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
@@ -246,17 +255,21 @@ export default function AccountsTab({
                           Đặt lại 2FA
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${isActive ? "btn-gold" : "btn-outline"}`}
-                        disabled={toggleStatus.pending}
-                        onClick={() => void handleToggleLock(a)}
-                      >
-                        {isActive ? "Khóa" : "Mở"}
-                      </button>
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeleting(a)}>
-                        Xóa
-                      </button>
+                      {canUpdateAccount && (
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${isActive ? "btn-gold" : "btn-outline"}`}
+                          disabled={toggleStatus.pending}
+                          onClick={() => void handleToggleLock(a)}
+                        >
+                          {isActive ? "Khóa" : "Mở"}
+                        </button>
+                      )}
+                      {canDeleteAccount && (
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeleting(a)}>
+                          Xóa
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

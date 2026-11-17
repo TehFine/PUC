@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ArrowRight } from "@/components/ui/PublicIcon";
 import { homePathFor } from "@/lib/routes";
+import { isSafeTraceCode, safeDecodeURIComponent } from "@/utils/url-safety";
 
 export default function LandingFooter({ fromTrace = false }: { fromTrace?: boolean }) {
   const router = useRouter();
@@ -20,15 +21,25 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
     const trimmed = query.trim();
     if (trimmed) {
       const tokenPathMatch = /(?:^|\/)t\/([A-Za-z0-9_-]{6,64})(?:[/?#]|$)/.exec(trimmed);
-      if (tokenPathMatch?.[1]) {
+      if (tokenPathMatch?.[1] && isSafeTraceCode(tokenPathMatch[1])) {
         router.push(`/t/${encodeURIComponent(tokenPathMatch[1])}`);
         return;
       }
-      if (/^[A-Za-z0-9]{12,24}$/.test(trimmed) && /[a-z]/.test(trimmed) && /[A-Z0-9]/.test(trimmed)) {
+      if (
+        /^[A-Za-z0-9]{12,24}$/.test(trimmed) &&
+        /[a-z]/.test(trimmed) &&
+        /[A-Z0-9]/.test(trimmed) &&
+        isSafeTraceCode(trimmed)
+      ) {
         router.push(`/t/${encodeURIComponent(trimmed)}`);
         return;
       }
-      router.push(`/trace/${encodeURIComponent(trimmed)}`);
+      const candidate = safeDecodeURIComponent(trimmed).trim();
+      if (isSafeTraceCode(candidate)) {
+        router.push(`/trace/${encodeURIComponent(candidate)}`);
+        return;
+      }
+      router.push("/trace");
       return;
     }
     if (fromTrace) {

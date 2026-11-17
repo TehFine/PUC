@@ -3,25 +3,13 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import jsQR from "jsqr";
-import {
-  AlertTriangle,
-  Camera,
-  CheckCircle2,
-  ExternalLink,
-  ImagePlus,
-  Lock,
-  QrCode,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-} from "@/components/ui/PublicIcon";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import { ALLOWED_IMAGE_MIMES } from "@/components/portal/shared/media";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { ROLE_LABELS } from "@/constants/roles";
 import { api, errorMessage } from "@/lib/api-client";
 import type { Role } from "@/types/api";
-import { safeDecodeURIComponent } from "@/utils/url-safety";
+import { isSafeTraceCode, safeDecodeURIComponent } from "@/utils/url-safety";
 
 interface ScopedTraceResponse {
   verifiedAt: string;
@@ -108,16 +96,18 @@ interface BarcodeDetectorLike {
 /** Trích xuất token chống giả hoặc mã lô từ chuỗi nội dung QR (/t/<token>, /trace/<code> hoặc mã thuần). */
 export function extractTraceTokenFromQrPayload(raw: string): string | null {
   const trimmed = raw.trim();
-  if (!trimmed) return null;
+  if (!trimmed || /^\.+$/.test(trimmed)) return null;
 
   const tokenMatch = /(?:^|\/)t\/([A-Za-z0-9_-]{4,80})(?:[/?#]|$)/.exec(trimmed);
   if (tokenMatch?.[1]) {
-    return safeDecodeURIComponent(tokenMatch[1]).trim();
+    const candidate = safeDecodeURIComponent(tokenMatch[1]).trim();
+    return isSafeTraceCode(candidate) ? candidate : null;
   }
 
   const traceMatch = /(?:^|\/)trace\/([^/?#\s]+)(?:[/?#]|$)/.exec(trimmed);
   if (traceMatch?.[1]) {
-    return safeDecodeURIComponent(traceMatch[1]).trim();
+    const candidate = safeDecodeURIComponent(traceMatch[1]).trim();
+    return isSafeTraceCode(candidate) ? candidate : null;
   }
 
   if (/^https?:\/\//i.test(trimmed)) {
@@ -125,13 +115,16 @@ export function extractTraceTokenFromQrPayload(raw: string): string | null {
       const parsed = new URL(trimmed);
       const parts = parsed.pathname.split("/").filter(Boolean);
       const last = parts[parts.length - 1];
-      if (last) return safeDecodeURIComponent(last).trim();
+      if (!last) return null;
+      const candidate = safeDecodeURIComponent(last).trim();
+      return isSafeTraceCode(candidate) ? candidate : null;
     } catch {
       return null;
     }
   }
 
-  return trimmed.slice(0, 80);
+  const candidate = safeDecodeURIComponent(trimmed.slice(0, 80)).trim();
+  return isSafeTraceCode(candidate) ? candidate : null;
 }
 
 export default function QrScannerModal({ onClose }: { onClose: () => void }) {
@@ -151,7 +144,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
   const scanTimerRef = useRef<number | null>(null);
   const busyLookupRef = useRef(false);
 
-  const stopCamera = useCallback(() => {
+  const releaseCameraResources = useCallback(() => {
     if (scanTimerRef.current !== null) {
       window.clearInterval(scanTimerRef.current);
       scanTimerRef.current = null;
@@ -163,8 +156,12 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-    setCameraReady(false);
   }, []);
+
+  const stopCamera = useCallback(() => {
+    releaseCameraResources();
+    setCameraReady(false);
+  }, [releaseCameraResources]);
 
   const fetchAuthenticatedTrace = useCallback(
     async (rawPayload: string) => {
@@ -196,18 +193,14 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     if (mode !== "camera" || result || loading) {
-      stopCamera();
+      releaseCameraResources();
       return;
     }
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setCameraError(
-        "Trình duyệt hoặc kết nối hiện tại không hỗ trợ mở camera trực tiếp. Bạn có thể chọn ảnh chụp mã QR hoặc nhập mã thủ công.",
-      );
       return;
     }
 
     let cancelled = false;
-    setCameraError(null);
 
     let detector: BarcodeDetectorLike | null = null;
     if (typeof window !== "undefined" && "BarcodeDetector" in window) {
@@ -244,6 +237,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
             // Một số trình duyệt mobile tự phát qua autoPlay
           }
         }
+        setCameraError(null);
         setCameraReady(true);
 
         scanTimerRef.current = window.setInterval(async () => {
@@ -292,9 +286,9 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
 
     return () => {
       cancelled = true;
-      stopCamera();
+      releaseCameraResources();
     };
-  }, [mode, result, loading, stopCamera, fetchAuthenticatedTrace]);
+  }, [mode, result, loading, releaseCameraResources, fetchAuthenticatedTrace]);
 
   const handleImageFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -358,13 +352,23 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
   const handleResetScan = () => {
     setResult(null);
     setLookupError(null);
+    setCameraError(null);
+    setCameraReady(false);
     setScannedToken(null);
   };
 
+  const effectiveCameraError =
+    cameraError ??
+    (typeof navigator !== "undefined" && !navigator.mediaDevices?.getUserMedia
+      ? "Trình duyệt hoặc kết nối hiện tại không hỗ trợ mở camera trực tiếp. Bạn có thể chọn ảnh chụp mã QR hoặc nhập mã thủ công."
+      : null);
+
   const fullDossierHref = result
-    ? result.publicData.lotIdentity.qrToken
-      ? `/t/${encodeURIComponent(result.publicData.lotIdentity.qrToken)}`
-      : `/trace/${encodeURIComponent(result.publicData.lotIdentity.lotCode)}`
+    ? isSafeTraceCode(result.publicData.lotIdentity.qrToken)
+      ? `/t/${encodeURIComponent(result.publicData.lotIdentity.qrToken.trim())}`
+      : isSafeTraceCode(result.publicData.lotIdentity.lotCode)
+        ? `/trace/${encodeURIComponent(result.publicData.lotIdentity.lotCode.trim())}`
+        : null
     : null;
 
   return (
@@ -379,7 +383,6 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
         <>
           {result && (
             <button type="button" className="btn btn-outline" onClick={handleResetScan}>
-              <RefreshCw size={14} />
               <span>Quét mã tiếp theo</span>
             </button>
           )}
@@ -392,7 +395,6 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 onClose();
               }}
             >
-              <ExternalLink size={14} />
               <span>Mở hồ sơ đầy đủ</span>
             </Link>
           )}
@@ -442,30 +444,30 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
               className={`btn btn-sm ${mode === "camera" ? "btn-primary" : "btn-outline"}`}
               onClick={() => {
                 setLookupError(null);
+                setCameraError(null);
+                setCameraReady(false);
                 setMode("camera");
               }}
             >
-              <Camera size={14} />
               <span>Quét bằng Camera</span>
             </button>
             <button
               type="button"
               className={`btn btn-sm ${mode === "manual" ? "btn-primary" : "btn-outline"}`}
               onClick={() => {
+                stopCamera();
                 setLookupError(null);
                 setMode("manual");
               }}
             >
-              <QrCode size={14} />
-              <span>Dán đường dẫn / Nhập mã lô</span>
+              <span>Dán đường dẫn hoặc nhập mã lô</span>
             </button>
             <button
               type="button"
               className="btn btn-sm btn-outline"
               onClick={() => fileInputRef.current?.click()}
             >
-              <ImagePlus size={14} />
-              <span>Chọn / Chụp ảnh QR</span>
+              <span>Chọn hoặc chụp ảnh QR</span>
             </button>
           </div>
 
@@ -473,7 +475,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
             <div
               style={{
                 position: "relative",
-                borderRadius: 10,
+                borderRadius: 8,
                 overflow: "hidden",
                 background: "#0f172a",
                 minHeight: 260,
@@ -483,17 +485,15 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 border: "1px solid var(--border)",
               }}
             >
-              {cameraError ? (
+              {effectiveCameraError ? (
                 <div style={{ padding: 24, textAlign: "center", color: "#e2e8f0", maxWidth: 440 }}>
-                  <AlertTriangle size={28} style={{ margin: "0 auto 10px", color: "#fbbf24" }} />
-                  <div style={{ fontSize: 13.5, lineHeight: 1.55, marginBottom: 14 }}>{cameraError}</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.55, marginBottom: 14 }}>{effectiveCameraError}</div>
                   <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                     <button
                       type="button"
                       className="btn btn-sm btn-primary"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <ImagePlus size={14} />
                       <span>Chụp hoặc tải ảnh QR</span>
                     </button>
                     <button
@@ -522,7 +522,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                       width: 190,
                       height: 190,
                       border: "2px solid rgba(74, 222, 128, 0.9)",
-                      borderRadius: 12,
+                      borderRadius: 8,
                       boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.34)",
                       pointerEvents: "none",
                     }}
@@ -559,7 +559,6 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setManualInput(e.target.value)}
               />
               <button type="submit" className="btn btn-primary" disabled={loading}>
-                <Search size={15} />
                 <span>{loading ? "Đang xác thực…" : "Kiểm tra ngay"}</span>
               </button>
             </form>
@@ -591,9 +590,8 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 lineHeight: 1.5,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 7, fontWeight: 700, marginBottom: 4 }}>
-                <Lock size={16} />
-                <span>{result.accessControl.scopeDeniedMessage || "Bạn không có quyền xem chi tiết lô này"}</span>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                {result.accessControl.scopeDeniedMessage || "Bạn không có quyền xem chi tiết lô này"}
               </div>
               <div>
                 Tài khoản <strong>{result.accessControl.viewerName}</strong> (
@@ -617,12 +615,9 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 flexWrap: "wrap",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                <ShieldCheck size={17} />
-                <span>
-                  Đã mở khóa <strong>{result.accessControl.viewerTierLabel}</strong> cho{" "}
-                  <strong>{result.accessControl.viewerName}</strong>
-                </span>
+              <div>
+                Đã mở khóa <strong>{result.accessControl.viewerTierLabel}</strong> cho{" "}
+                <strong>{result.accessControl.viewerName}</strong>
               </div>
               <span className="badge badge-green">Đúng phạm vi quản lý</span>
             </div>
@@ -727,13 +722,10 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 background: "#f7fbf8",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13.5, marginBottom: 8, color: "#14532d" }}>
-                <CheckCircle2 size={15} />
-                <span>
-                  Dữ liệu Cấp 3 (Quản lý): {result.authorityData.sourceHouseholds.length} hộ nguồn,{" "}
-                  {result.authorityData.cultivationDiaries.length} nhật ký,{" "}
-                  {result.authorityData.inspectionMinutes.length} biên bản
-                </span>
+              <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 8, color: "#14532d" }}>
+                Dữ liệu Cấp 3 (Quản lý): {result.authorityData.sourceHouseholds.length} hộ nguồn,{" "}
+                {result.authorityData.cultivationDiaries.length} nhật ký,{" "}
+                {result.authorityData.inspectionMinutes.length} biên bản
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}>
                 {result.authorityData.sourceHouseholds.slice(0, 5).map((hh, idx) => (
@@ -752,8 +744,8 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                       <strong>{hh.householdName}</strong> ({hh.householdCode}, {hh.villageName}
                       {hh.contributedPlotCode ? `, Mã lô vườn: ${hh.contributedPlotCode}` : ""})
                     </span>
-                    <span>
-                      {hh.contributedKg !== null ? <strong>{formatVn(hh.contributedKg, 0)} kg</strong> : "—"}
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {hh.contributedKg !== null ? <strong>{formatVn(hh.contributedKg, 0)} kg</strong> : "Chưa ghi nhận"}
                     </span>
                   </div>
                 ))}

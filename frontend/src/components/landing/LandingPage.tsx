@@ -1,13 +1,15 @@
+import dynamic from "next/dynamic";
 import AutoEnter from "./AutoEnter";
-import Catalog from "./Catalog";
 import DwellSlideshow, { type DwellSlide } from "./DwellSlideshow";
 import EditorialHero from "./EditorialHero";
-import Faq from "./Faq";
 import LandingFooter from "./LandingFooter";
-import News from "./News";
-import TrainingGallery from "./TrainingGallery";
 import "./landing.css";
 import "./swiss-landing.css";
+
+const TrainingGallery = dynamic(() => import("./TrainingGallery"));
+const News = dynamic(() => import("./News"));
+const Catalog = dynamic(() => import("./Catalog"));
+const Faq = dynamic(() => import("./Faq"));
 
 const MAP_SURVEY_SLIDES: readonly DwellSlide[] = [
   {

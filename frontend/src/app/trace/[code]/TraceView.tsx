@@ -4,12 +4,10 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import QRCode from "qrcode";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { SkeletonCards } from "@/components/ui/Skeleton";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { ROLE_LABELS } from "@/constants/roles";
-import { api, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
 import {
   PUC_URL_SYNC_EVENT,
   pushUrlNavigation,
@@ -19,6 +17,7 @@ import { reportRequestTime } from "@/lib/network";
 import {
   isSafeExternalHttpsUrl,
   isSafeMediaUrl,
+  isSafeTraceCode,
   safeDecodeURIComponent,
 } from "@/utils/url-safety";
 import type { Role } from "@/types/api";
@@ -41,8 +40,7 @@ import {
   MapPin,
   Globe,
 } from "@/components/ui/PublicIcon";
-import CoarseZoneOverviewMap from "./CoarseZoneOverviewMap";
-import FieldAuditGpsCheckCard, { type FieldAuditDataPayload } from "./FieldAuditGpsCheckCard";
+import type { FieldAuditDataPayload } from "./FieldAuditGpsCheckCard";
 import {
   TRACE_UI_COPY,
   detectInitialTraceLang,
@@ -68,7 +66,13 @@ import {
 } from "./trace-i18n";
 import "./trace.css";
 
+const CoarseZoneOverviewMap = dynamic(() => import("./CoarseZoneOverviewMap"), {
+  ssr: false,
+});
 const PlotMapModal = dynamic(() => import("@/components/portal/PlotMapModal"), {
+  ssr: false,
+});
+const FieldAuditGpsCheckCard = dynamic(() => import("./FieldAuditGpsCheckCard"), {
   ssr: false,
 });
 
@@ -462,22 +466,25 @@ interface TraceData {
 
 function resolveSearchNavigationHref(rawInput: string): string | null {
   const trimmed = rawInput.trim();
-  if (!trimmed) return null;
+  if (!trimmed || /^\.+$/.test(trimmed)) return null;
 
   const tokenPathMatch = /(?:^|\/)t\/([A-Za-z0-9_-]{6,64})(?:[/?#]|$)/.exec(trimmed);
-  if (tokenPathMatch?.[1]) {
+  if (tokenPathMatch?.[1] && !/^\.+$/.test(tokenPathMatch[1]) && isSafeTraceCode(tokenPathMatch[1])) {
     return `/t/${encodeURIComponent(tokenPathMatch[1])}`;
   }
 
   const tracePathMatch = /(?:^|\/)trace\/([^/?#\s]+)(?:[/?#]|$)/.exec(trimmed);
   if (tracePathMatch?.[1]) {
-    return `/trace/${encodeURIComponent(safeDecodeURIComponent(tracePathMatch[1]))}`;
+    const extracted = safeDecodeURIComponent(tracePathMatch[1]).trim();
+    if (!extracted || /^\.+$/.test(extracted) || !isSafeTraceCode(extracted)) return null;
+    return `/trace/${encodeURIComponent(extracted)}`;
   }
 
   if (/^[A-Za-z0-9]{12,24}$/.test(trimmed) && /[a-z]/.test(trimmed) && /[A-Z0-9]/.test(trimmed)) {
     return `/t/${encodeURIComponent(trimmed)}`;
   }
 
+  if (!isSafeTraceCode(trimmed)) return null;
   return `/trace/${encodeURIComponent(trimmed)}`;
 }
 
@@ -490,34 +497,84 @@ function classifyDiaryVisual(entry: TraceDiaryEntry): {
   if (entry.kind === "spray" || /phun|thuốc|bvtv|trừ sâu|trừ nấm|phòng bệnh|diệt khuẩn/.test(act)) {
     return {
       tone: "spray",
-      icon: <img src="/icons/diary-spray.svg" width={21} height={21} alt="" aria-hidden="true" />,
+      icon: (
+        <img
+          src="/icons/diary-spray.svg"
+          width={21}
+          height={21}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          aria-hidden="true"
+        />
+      ),
     };
   }
 
   if (/bón|phân|hữu cơ|npk|vi sinh|humic|vôi|dinh dưỡng/.test(act)) {
     return {
       tone: "fertilizer",
-      icon: <img src="/icons/diary-fertilizer.svg" width={21} height={21} alt="" aria-hidden="true" />,
+      icon: (
+        <img
+          src="/icons/diary-fertilizer.svg"
+          width={21}
+          height={21}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          aria-hidden="true"
+        />
+      ),
     };
   }
 
   if (/cắt cỏ|làm cỏ|dọn vườn|vệ sinh|tỉa|cành|tạo tán|rong cành/.test(act)) {
     return {
       tone: "prune",
-      icon: <img src="/icons/diary-prune.svg" width={20} height={20} alt="" aria-hidden="true" />,
+      icon: (
+        <img
+          src="/icons/diary-prune.svg"
+          width={20}
+          height={20}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          aria-hidden="true"
+        />
+      ),
     };
   }
 
   if (/tưới|nước|giữ ẩm/.test(act)) {
     return {
       tone: "water",
-      icon: <img src="/icons/diary-water.svg" width={20} height={20} alt="" aria-hidden="true" />,
+      icon: (
+        <img
+          src="/icons/diary-water.svg"
+          width={20}
+          height={20}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          aria-hidden="true"
+        />
+      ),
     };
   }
 
   return {
     tone: "care",
-    icon: <img src="/icons/diary-care.svg" width={20} height={20} alt="" aria-hidden="true" />,
+    icon: (
+      <img
+        src="/icons/diary-care.svg"
+        width={20}
+        height={20}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        aria-hidden="true"
+      />
+    ),
   };
 }
 
@@ -603,6 +660,12 @@ function readInitialViewParam(): ViewerTier | null {
 function readInitialAuditPass(): string | null {
   if (typeof window === "undefined") return null;
   try {
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const fromHash = hashParams.get("auditPass")?.trim();
+    if (fromHash && /^[A-Za-z0-9_-]{4,80}$/.test(fromHash)) {
+      window.sessionStorage.setItem(AUDIT_PASS_SESSION_KEY, fromHash);
+      return fromHash;
+    }
     const fromQuery = new URLSearchParams(window.location.search).get("auditPass")?.trim();
     if (fromQuery && /^[A-Za-z0-9_-]{4,80}$/.test(fromQuery)) {
       window.sessionStorage.setItem(AUDIT_PASS_SESSION_KEY, fromQuery);
@@ -618,6 +681,24 @@ function readInitialAuditPass(): string | null {
   return null;
 }
 
+function scrubAuditPassFromBrowserUrl(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const nextUrl = new URL(window.location.href);
+    const hashParams = new URLSearchParams(nextUrl.hash.replace(/^#/, ""));
+    const hadQuery = nextUrl.searchParams.has("auditPass");
+    const hadHash = hashParams.has("auditPass");
+    if (!hadQuery && !hadHash) return;
+    nextUrl.searchParams.delete("auditPass");
+    hashParams.delete("auditPass");
+    const qs = nextUrl.searchParams.toString();
+    const hs = hashParams.toString();
+    replaceUrlPreservingState(`${nextUrl.pathname}${qs ? `?${qs}` : ""}${hs ? `#${hs}` : ""}`);
+  } catch {
+    // Bỏ qua nếu trình duyệt chặn History API
+  }
+}
+
 export default function TraceView() {
   const params = useParams();
   const rawRouteParam =
@@ -626,11 +707,15 @@ export default function TraceView() {
       : typeof params.code === "string"
         ? params.code
         : "";
-  const code = rawRouteParam ? safeDecodeURIComponent(rawRouteParam) : "";
+  const decodedRouteParam = rawRouteParam ? safeDecodeURIComponent(rawRouteParam).trim() : "";
+  const code =
+    decodedRouteParam && !/^\.+$/.test(decodedRouteParam) && isSafeTraceCode(decodedRouteParam)
+      ? decodedRouteParam
+      : "";
 
   const router = useRouter();
   const pathname = usePathname();
-  const { status: authStatus } = useAuth();
+  const { status: authStatus, logout } = useAuth();
   const [lang, setLang] = useState<TraceLang>("vi");
   const [data, setData] = useState<TraceData | null>(null);
   const [selectedView, setSelectedView] = useState<ViewerTier | null>(() => readInitialViewParam());
@@ -649,26 +734,26 @@ export default function TraceView() {
 
   // Tự động chọn ngôn ngữ theo trình duyệt người quét (4d) ngay sau khi mount và ẩn auditPass khỏi URL
   useEffect(() => {
-    setLang(detectInitialTraceLang());
-    const pass = readInitialAuditPass();
-    setAuditPass(pass);
-    try {
-      const nextUrl = new URL(window.location.href);
-      if (nextUrl.searchParams.has("auditPass")) {
-        nextUrl.searchParams.delete("auditPass");
-        replaceUrlPreservingState(nextUrl.pathname + nextUrl.search + nextUrl.hash);
-      }
-    } catch {
-      // Bỏ qua nếu trình duyệt chặn History API
-    }
-
-    const onUrlSync = () => {
+    const syncFromUrl = () => {
+      const detectedLang = detectInitialTraceLang();
+      setLang((prev) => (prev === detectedLang ? prev : detectedLang));
+      const pass = readInitialAuditPass();
+      setAuditPass((prev) => (prev === pass ? prev : pass));
       const nextView = readInitialViewParam();
       setSelectedView((prev) => (prev === nextView ? prev : nextView));
+      scrubAuditPassFromBrowserUrl();
     };
-    window.addEventListener(PUC_URL_SYNC_EVENT, onUrlSync);
-    return () => window.removeEventListener(PUC_URL_SYNC_EVENT, onUrlSync);
-  }, []);
+    const rafId = window.requestAnimationFrame(syncFromUrl);
+    scrubAuditPassFromBrowserUrl();
+
+    window.addEventListener(PUC_URL_SYNC_EVENT, syncFromUrl);
+    window.addEventListener("hashchange", syncFromUrl);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener(PUC_URL_SYNC_EVENT, syncFromUrl);
+      window.removeEventListener("hashchange", syncFromUrl);
+    };
+  }, [pathname]);
 
   const handleChangeLang = (nextLang: TraceLang) => {
     setLang(nextLang);
@@ -678,7 +763,7 @@ export default function TraceView() {
   const handleApplyAuditPass = (e: React.FormEvent) => {
     e.preventDefault();
     let cleaned = auditPassInput.trim();
-    const urlMatch = /[?&]auditPass=([A-Za-z0-9_-]{4,80})(?:[&#]|$)/.exec(cleaned);
+    const urlMatch = /[?&#]auditPass=([A-Za-z0-9_-]{4,80})(?:[&#]|$)/.exec(cleaned);
     if (urlMatch?.[1]) {
       cleaned = urlMatch[1];
     }
@@ -721,7 +806,9 @@ export default function TraceView() {
     setGisModalPlot(null);
   }
 
-  const resolvedQrToken = data?.publicData?.lotIdentity?.qrToken || null;
+  const rawQrToken = data?.publicData?.lotIdentity?.qrToken || null;
+  const resolvedQrToken =
+    rawQrToken && !/^\.+$/.test(rawQrToken) && isSafeTraceCode(rawQrToken) ? rawQrToken : null;
 
   // (4b + Mục 5) Sinh mã QR đường dẫn token ngẫu nhiên chống giả /t/{token} với độ tương phản tuyệt đối và sửa lỗi mức Q
   useEffect(() => {
@@ -735,15 +822,18 @@ export default function TraceView() {
       ? `${origin}/t/${encodeURIComponent(resolvedQrToken)}`
       : `${origin}/trace/${encodeURIComponent(code)}`;
 
-    QRCode.toDataURL(targetUrl, {
-      margin: 1,
-      width: 320,
-      color: {
-        dark: "#000000",
-        light: "#ffffff",
-      },
-      errorCorrectionLevel: "Q",
-    })
+    void import("qrcode")
+      .then((mod) =>
+        mod.default.toDataURL(targetUrl, {
+          margin: 1,
+          width: 320,
+          color: {
+            dark: "#000000",
+            light: "#ffffff",
+          },
+          errorCorrectionLevel: "Q",
+        }),
+      )
       .then((url) => {
         if (active) setQrSrc(url);
       })
@@ -858,6 +948,8 @@ export default function TraceView() {
     const nextHref = resolveSearchNavigationHref(searchCode);
     if (nextHref) {
       router.push(nextHref);
+    } else if (searchCode.trim()) {
+      setErrorKind("invalid");
     }
   };
 
@@ -984,20 +1076,19 @@ export default function TraceView() {
   const loginWithNextHref = `/login?next=${encodeURIComponent(returnNextPath)}`;
 
   const handleSwitchAccount = async () => {
-    try {
-      await api.post("/auth/logout", undefined, { keepalive: true });
-    } catch {
-      // Bỏ qua lỗi mạng khi đăng xuất
-    }
     if (typeof window !== "undefined") {
       try {
         window.sessionStorage.removeItem(AUDIT_PASS_SESSION_KEY);
       } catch {
         // Bỏ qua lỗi xóa sessionStorage
       }
-      window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
-      window.location.href = loginWithNextHref;
     }
+    try {
+      await logout();
+    } catch {
+      // Bỏ qua lỗi mạng khi đăng xuất
+    }
+    router.replace(loginWithNextHref);
   };
 
   return (
@@ -1007,7 +1098,7 @@ export default function TraceView() {
         <div className="tr-wrap tr-topbar-inner">
           <Link href="/" className="tr-brand">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/newlogo.png" alt="" width={22} height={22} className="tr-brand-img" decoding="async" />
+            <img src="/newlogo.png" alt="" width={22} height={22} className="tr-brand-img" loading="lazy" decoding="async" />
             <span>{t.topbar.brand}</span>
           </Link>
 
@@ -1454,6 +1545,7 @@ export default function TraceView() {
                         src={qrSrc}
                         alt={t.hero.qrAlt(pub.lotIdentity.lotCode)}
                         className="tr-asset-qr-img"
+                        loading="lazy"
                         decoding="async"
                       />
                     ) : (
@@ -2291,9 +2383,12 @@ export default function TraceView() {
                       </p>
                       <div className="tr-source-plots-grid">
                         {data.enterpriseData.fieldAuditSourcePlots.map((sp) => {
-                          const plotHref = sp.qrToken
-                            ? `/t/${encodeURIComponent(sp.qrToken)}`
-                            : `/trace/${encodeURIComponent(sp.plotCode)}`;
+                          const plotHref =
+                            sp.qrToken && !/^\.+$/.test(sp.qrToken) && isSafeTraceCode(sp.qrToken)
+                              ? `/t/${encodeURIComponent(sp.qrToken)}`
+                              : !/^\.+$/.test(sp.plotCode) && isSafeTraceCode(sp.plotCode)
+                                ? `/trace/${encodeURIComponent(sp.plotCode)}`
+                                : "/trace";
                           return (
                             <Link key={sp.plotCode} href={plotHref} className="tr-source-plot-link">
                               <div className="tr-source-plot-top">

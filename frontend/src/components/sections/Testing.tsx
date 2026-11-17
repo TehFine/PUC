@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileText } from "@/components/ui/PublicIcon";
 import {
   BarChart,
@@ -15,10 +15,16 @@ import {
   ReferenceLine,
 } from "recharts";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { lazyChunk } from "@/lib/lazy-chunk";
 
-const LabTestCertificateModal = dynamic(() => import("@/components/portal/LabTestCertificateModal"), {
-  ssr: false,
-});
+const LabTestCertificateModal = dynamic(
+  () => lazyChunk(() => import("@/components/portal/LabTestCertificateModal")),
+  { ssr: false },
+);
+const LabTestFormModal = dynamic(
+  () => lazyChunk(() => import("@/components/admin/testing/LabTestFormModal")),
+  { ssr: false },
+);
 import { AXIS_TICK, GRID_STROKE, TOOLTIP_STYLE } from "@/components/ui/chart-theme";
 import { AreaTrend, CapsuleDonutChart, type DonutItem } from "@/components/ui/charts/KpiCharts";
 import { useApiList } from "@/hooks/use-api";
@@ -29,7 +35,6 @@ import { formatVn, percent } from "@/components/admin/shared/form-utils";
 import { badgeOf, LAB_RESULT, optionsOf } from "@/components/admin/shared/labels";
 import { useHouseholdOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
-import LabTestFormModal from "@/components/admin/testing/LabTestFormModal";
 import { usePerformanceTier } from "@/lib/network";
 import { formatDate } from "@/utils/format";
 import { isSafeExternalHttpsUrl, isSafeMediaUrl } from "@/utils/url-safety";
@@ -53,6 +58,21 @@ export default function Testing() {
   const [selectedTest, setSelectedTest] = useState<LabTestRecord | null>(null);
   const [editing, setEditing] = useState<LabTestRecord | "new" | null>(null);
   const [deleting, setDeleting] = useState<LabTestRecord | null>(null);
+  const [chartsReady, setChartsReady] = useState(false);
+
+  useEffect(() => {
+    let rafId = 0;
+    let timerId = 0;
+    if (perfTier === "lite") {
+      timerId = window.setTimeout(() => setChartsReady(true), 48);
+    } else {
+      rafId = window.requestAnimationFrame(() => setChartsReady(true));
+    }
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      if (timerId) window.clearTimeout(timerId);
+    };
+  }, [perfTier]);
 
   const { options: householdOptions } = useHouseholdOptions(Boolean(editing) && (canCreate || canUpdate));
   const list = useApiList<LabTestRecord>("testing", {
@@ -117,55 +137,59 @@ export default function Testing() {
       <div className="charts-row-3">
         <div className="chart-card">
           <div className="chart-title">Cadmium (Cd) – mg/kg</div>
-          <ResponsiveContainer width="100%" height={180} debounce={120}>
-            <BarChart data={cdData} margin={{ left: -20, right: 12, top: 8, bottom: 0 }}>
-              <defs>
-                <linearGradient id="cdOkGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#48bb78" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#2f855a" stopOpacity={0.88} />
-                </linearGradient>
-                <linearGradient id="cdBadGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f87171" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#e0674a" stopOpacity={0.92} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
-              <XAxis dataKey="plot" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-              <YAxis
-                domain={[0, 0.06]}
-                ticks={[0, 0.015, 0.03, 0.045, 0.06]}
-                tick={AXIS_TICK}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(val) => (val === 0 ? "0" : String(val))}
-              />
-              <Tooltip
-                contentStyle={TOOLTIP_STYLE}
-                cursor={{ fill: "rgba(20, 55, 47, 0.04)", radius: 6 }}
-                formatter={(val: unknown) => [`${val} mg/kg`, "Hàm lượng Cd"]}
-                labelFormatter={(lbl) => `Khu vực: ${lbl}`}
-              />
-              <ReferenceLine
-                y={0.05}
-                stroke="#e0674a"
-                strokeDasharray="3 3"
-                strokeWidth={1.2}
-                strokeOpacity={0.75}
-              />
-              <Bar
-                dataKey="cd"
-                name="Cd (mg/kg)"
-                barSize={14}
-                radius={[7, 7, 0, 0]}
-                background={{ fill: "rgba(20, 55, 47, 0.04)", radius: 7 }}
-                isAnimationActive={perfTier !== "lite"}
-              >
-                {cdData.map((e, i) => (
-                  <Cell key={i} fill={e.cd > 0.05 ? "url(#cdBadGrad)" : "url(#cdOkGrad)"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {chartsReady ? (
+            <ResponsiveContainer width="100%" height={180} debounce={120}>
+              <BarChart data={cdData} margin={{ left: -20, right: 12, top: 8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="cdOkGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#48bb78" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#2f855a" stopOpacity={0.88} />
+                  </linearGradient>
+                  <linearGradient id="cdBadGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f87171" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#e0674a" stopOpacity={0.92} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+                <XAxis dataKey="plot" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                <YAxis
+                  domain={[0, 0.06]}
+                  ticks={[0, 0.015, 0.03, 0.045, 0.06]}
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(val) => (val === 0 ? "0" : String(val))}
+                />
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  cursor={{ fill: "rgba(20, 55, 47, 0.04)", radius: 6 }}
+                  formatter={(val: unknown) => [`${val} mg/kg`, "Hàm lượng Cd"]}
+                  labelFormatter={(lbl) => `Khu vực: ${lbl}`}
+                />
+                <ReferenceLine
+                  y={0.05}
+                  stroke="#e0674a"
+                  strokeDasharray="3 3"
+                  strokeWidth={1.2}
+                  strokeOpacity={0.75}
+                />
+                <Bar
+                  dataKey="cd"
+                  name="Cd (mg/kg)"
+                  barSize={14}
+                  radius={[7, 7, 0, 0]}
+                  background={{ fill: "rgba(20, 55, 47, 0.04)", radius: 7 }}
+                  isAnimationActive={perfTier !== "lite"}
+                >
+                  {cdData.map((e, i) => (
+                    <Cell key={i} fill={e.cd > 0.05 ? "url(#cdBadGrad)" : "url(#cdOkGrad)"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ height: 180 }} aria-hidden="true" />
+          )}
           <div
             style={{
               display: "flex",
@@ -195,24 +219,32 @@ export default function Testing() {
 
         <div className="chart-card">
           <div className="chart-title">Dư lượng thuốc BVTV – ppm</div>
-          <AreaTrend
-            data={residuePoints}
-            unit=" ppm"
-            formatValue={(v) => v.toFixed(2)}
-            highlight="max"
-            height={190}
-            caption={
-              maxResidue.val > 0
-                ? `Mức cao nhất tại ${maxResidue.code}: ${maxResidue.val.toFixed(2)} ppm`
-                : "Chưa có dữ liệu mẫu"
-            }
-            ariaLabel="Dư lượng thuốc BVTV theo mẫu"
-          />
+          {chartsReady ? (
+            <AreaTrend
+              data={residuePoints}
+              unit=" ppm"
+              formatValue={(v) => v.toFixed(2)}
+              highlight="max"
+              height={190}
+              caption={
+                maxResidue.val > 0
+                  ? `Mức cao nhất tại ${maxResidue.code}: ${maxResidue.val.toFixed(2)} ppm`
+                  : "Chưa có dữ liệu mẫu"
+              }
+              ariaLabel="Dư lượng thuốc BVTV theo mẫu"
+            />
+          ) : (
+            <div style={{ height: 190 }} aria-hidden="true" />
+          )}
         </div>
 
         <div className="chart-card">
           <div className="chart-title">Tỷ lệ mẫu đạt / không đạt</div>
-          <CapsuleDonutChart data={passData} unit=" mẫu" ariaLabel="Tỷ lệ mẫu kiểm nghiệm đạt chuẩn xuất khẩu" />
+          {chartsReady ? (
+            <CapsuleDonutChart data={passData} unit=" mẫu" ariaLabel="Tỷ lệ mẫu kiểm nghiệm đạt chuẩn xuất khẩu" />
+          ) : (
+            <div style={{ height: 156 }} aria-hidden="true" />
+          )}
           <div style={{ fontSize: 12, color: "#277a48", textAlign: "center", fontWeight: 600, marginTop: 8 }}>
             {formatVn(passRate, 1)}% mẫu đạt tiêu chuẩn xuất khẩu
           </div>

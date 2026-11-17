@@ -6,6 +6,7 @@ import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
 import { useDebounced } from "@/components/admin/catalog/use-debounced";
 import NewsFormModal from "@/components/admin/news/NewsFormModal";
 import NewsPreviewModal from "@/components/admin/news/NewsPreviewModal";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { NEWS_CATEGORIES } from "@/components/landing/news-data";
 import { toast } from "@/components/ui/Toast";
 import { useApiList, useMutation } from "@/hooks/use-api";
@@ -15,6 +16,10 @@ import type { NewsRecord } from "@/types/news";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 
 export default function NewsAdmin() {
+  const { can } = useAuth();
+  const canCreateNews = can("news", "create");
+  const canUpdateNews = can("news", "update");
+  const canDeleteNews = can("news", "delete");
   const [search, setSearch] = useState("");
   const [selectedCat, setSelectedCat] = useState<string>("");
   const [selectedStatus, setSelectedStatus] = useState<string>("");
@@ -51,13 +56,15 @@ export default function NewsAdmin() {
 
   return (
     <>
-      <div className="page-header">
-        <div className="header-actions">
-          <button type="button" className="btn btn-primary" onClick={() => setEditingArticle("new")}>
-            Đăng tin mới
-          </button>
+      {canCreateNews && (
+        <div className="page-header">
+          <div className="header-actions">
+            <button type="button" className="btn btn-primary" onClick={() => setEditingArticle("new")}>
+              Đăng tin mới
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* KPI thống kê thực tế */}
       <div className="kpi-grid-4">
@@ -209,14 +216,16 @@ export default function NewsAdmin() {
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${isPublished ? "btn-outline" : "btn-primary"}`}
-                          disabled={togglePublish.pending}
-                          onClick={() => void handleTogglePublish(article)}
-                        >
-                          {isPublished ? "Gỡ đăng" : "Xuất bản"}
-                        </button>
+                        {canUpdateNews && (
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${isPublished ? "btn-outline" : "btn-primary"}`}
+                            disabled={togglePublish.pending}
+                            onClick={() => void handleTogglePublish(article)}
+                          >
+                            {isPublished ? "Gỡ đăng" : "Xuất bản"}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
@@ -224,20 +233,24 @@ export default function NewsAdmin() {
                         >
                           Xem
                         </button>
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={() => setEditingArticle(article)}
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          onClick={() => setDeletingArticle(article)}
-                        >
-                          Xóa
-                        </button>
+                        {canUpdateNews && (
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            onClick={() => setEditingArticle(article)}
+                          >
+                            Sửa
+                          </button>
+                        )}
+                        {canDeleteNews && (
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={() => setDeletingArticle(article)}
+                          >
+                            Xóa
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

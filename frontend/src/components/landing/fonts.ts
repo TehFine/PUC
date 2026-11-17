@@ -23,5 +23,6 @@ export const heroSans = Plus_Jakarta_Sans({
   weight: "variable",
   variable: "--font-hero-sans",
   display: "swap",
+  preload: false,
 });
 

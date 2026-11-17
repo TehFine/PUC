@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
 import { AuthBusyBorderRing, AuthError, AuthField, PasswordInput, ShowPasswordCheck } from "@/components/auth/auth-fields";
@@ -11,14 +11,7 @@ import { useBackLayer } from "@/lib/back-navigation";
 import { homePathFor } from "@/lib/routes";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import type { MfaChallengeResponse } from "@/types/api";
-
-function resolveSafeNextPath(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return null;
-  if (trimmed.startsWith("/login") || trimmed.startsWith("/register")) return null;
-  return trimmed;
-}
+import { resolveSafeNextPath } from "@/utils/url-safety";
 
 interface DemoGoogleAccount {
   id: number;
@@ -84,6 +77,7 @@ function loadGoogleIdentityScript(): Promise<void> {
 
 function GoogleLogoIcon({ size = 19 }: { size?: number }) {
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src="/icons/google.svg"
       className="auth-google-icon"
@@ -94,6 +88,10 @@ function GoogleLogoIcon({ size = 19 }: { size?: number }) {
     />
   );
 }
+
+const subscribeNoop = () => () => {};
+const readSafeNextFromWindow = () => resolveSafeNextPath(new URLSearchParams(window.location.search).get("next"));
+const getServerNull = () => null;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -107,7 +105,7 @@ export default function LoginPage() {
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
-  const [nextPath, setNextPath] = useState<string | null>(null);
+  const nextPath = useSyncExternalStore(subscribeNoop, readSafeNextFromWindow, getServerNull);
   const [mfaChallenge, setMfaChallenge] = useState<MfaChallengeResponse | null>(null);
   const [otpCode, setOtpCode] = useState("");
 
@@ -135,12 +133,6 @@ export default function LoginPage() {
     if (formRef.current) {
       formRef.current.reset();
     }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const rawNext = new URLSearchParams(window.location.search).get("next");
-    setNextPath(resolveSafeNextPath(rawNext));
   }, []);
 
   useBackLayer(Boolean(mfaChallenge), () => {
@@ -432,7 +424,7 @@ export default function LoginPage() {
               placeholder="Ví dụ: 123456 hoặc A1B2C3D4"
               value={otpCode}
               disabled={isBusy}
-              style={{ letterSpacing: "0.14em", fontWeight: 600 }}
+              style={{ letterSpacing: "0.14em", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}
               onChange={(event) => {
                 setOtpCode(event.target.value);
                 if (error) setError(null);
@@ -550,7 +542,7 @@ export default function LoginPage() {
           <div
             style={{
               padding: "10px 14px",
-              borderRadius: 4,
+              borderRadius: 0,
               background: "#f7f7f5",
               border: "1px solid #d4d4d2",
               fontSize: 12.5,

@@ -885,7 +885,8 @@ export default function Catalog() {
     if (trackWidth <= 0) return;
 
     if (maxScroll <= 4 || strip.scrollWidth <= 0) {
-      thumb.style.width = `${trackWidth}px`;
+      const fullW = `${trackWidth}px`;
+      if (thumb.style.width !== fullW) thumb.style.width = fullW;
       thumb.style.transform = "translate3d(0px, 0, 0)";
       return;
     }
@@ -896,7 +897,8 @@ export default function Catalog() {
     const progress = Math.min(1, Math.max(0, left / maxScroll));
     const offsetX = progress * travel;
 
-    thumb.style.width = `${thumbWidth}px`;
+    const nextW = `${thumbWidth}px`;
+    if (thumb.style.width !== nextW) thumb.style.width = nextW;
     thumb.style.transform = `translate3d(${offsetX.toFixed(1)}px, 0, 0)`;
   }, []);
 

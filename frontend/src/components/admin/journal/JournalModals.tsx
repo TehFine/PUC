@@ -213,6 +213,10 @@ export function JournalFormModal({
         recorder: "người ghi nhận",
       },
     );
+    const maxToday = todayIso();
+    if (!errs.entryOn && entryOn > maxToday) {
+      errs.entryOn = "Ngày thực hiện không được ở tương lai (chỉ ghi nhận công việc đã thực hiện).";
+    }
     setFieldErrors(errs);
     if (hasErrors(errs)) return;
 
@@ -271,6 +275,7 @@ export function JournalFormModal({
             label="Ngày thực hiện"
             required
             type="date"
+            max={todayIso()}
             value={entryOn}
             onChange={setEntryOn}
             error={fieldErrors.entryOn}

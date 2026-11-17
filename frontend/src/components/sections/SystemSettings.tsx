@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import AccountsTab from "@/components/settings/AccountsTab";
 import AuditLogTab from "@/components/settings/AuditLogTab";
 import RolesTab from "@/components/settings/RolesTab";
@@ -17,6 +18,8 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function SystemSettings() {
+  const { can } = useAuth();
+  const canCreateAccounts = can("accounts", "create");
   const [tab, setTab] = useState<Tab>("accounts");
   const selectTab = useUrlSubTab<Tab>(
     "sub",
@@ -29,7 +32,7 @@ export default function SystemSettings() {
 
   return (
     <>
-      {tab === "accounts" && (
+      {tab === "accounts" && canCreateAccounts && (
         <div className="page-header">
           <div className="header-actions">
             <button type="button" className="btn btn-primary" onClick={() => setCreateTrigger((c) => c + 1)}>

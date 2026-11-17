@@ -56,6 +56,34 @@ const SECTION_TITLES: Record<SectionId, string> = {
   news: "Bản tin",
 };
 
+const SECTION_RESOURCE: Record<SectionId, string> = {
+  dashboard: "dashboard",
+  households: "households",
+  zones: "plots",
+  approval: "approvals",
+  journal: "journal",
+  testing: "testing",
+  harvest: "harvest",
+  reports: "reports",
+  catalog: "pesticides",
+  system: "accounts",
+  news: "news",
+};
+
+const ALL_SECTIONS: SectionId[] = [
+  "dashboard",
+  "households",
+  "zones",
+  "approval",
+  "journal",
+  "testing",
+  "harvest",
+  "news",
+  "reports",
+  "catalog",
+  "system",
+];
+
 const LAST_NON_ZONES_SECTION_KEY = "puc:admin-last-non-zones";
 
 function isSectionId(raw: string | null): raw is SectionId {
@@ -64,7 +92,7 @@ function isSectionId(raw: string | null): raw is SectionId {
 
 export default function AdminApp({ initialSection }: { initialSection: SectionId }) {
   const router = useRouter();
-  const { status, session } = useAuth();
+  const { status, session, can } = useAuth();
   const [active, setActive] = useState<SectionId>(initialSection);
   const [lastNonZones, setLastNonZones] = useState<SectionId>(() => {
     if (initialSection !== "zones") return initialSection;
@@ -162,6 +190,37 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
   }, [navigate]);
 
   const renderSection = () => {
+    const requiredResource = SECTION_RESOURCE[active];
+    if (requiredResource && !can(requiredResource, "read")) {
+      const fallbackSection =
+        ALL_SECTIONS.find((sec) => can(SECTION_RESOURCE[sec], "read")) ?? "dashboard";
+      return (
+        <div
+          className="card"
+          style={{
+            maxWidth: 520,
+            margin: "28px auto",
+            padding: "24px",
+            textAlign: "center",
+            borderRadius: 6,
+            border: "1px solid #d4d4d2",
+          }}
+        >
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: "#14372f", margin: "0 0 8px" }}>
+            Không có quyền truy cập phân mục {SECTION_TITLES[active]}
+          </h2>
+          <p style={{ fontSize: 13.5, color: "#5f6d66", margin: "0 0 16px", lineHeight: 1.5 }}>
+            Tài khoản hiện tại không được phân quyền xem phân mục này.
+          </p>
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <button type="button" className="btn btn-primary" onClick={() => navigate(fallbackSection)}>
+              Về {SECTION_TITLES[fallbackSection]}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     switch (active) {
       case "dashboard":
         return <Dashboard />;

@@ -3,6 +3,10 @@
 import { useEffect } from "react";
 
 function annotateTable(table: HTMLTableElement) {
+  const rowCount = table.tBodies[0]?.rows.length ?? 0;
+  if (table.dataset.rtRowCount === String(rowCount) && table.classList.contains("responsive-table")) {
+    return;
+  }
   const headers = Array.from(table.tHead?.rows[0]?.cells ?? []).map((cell) =>
     (cell.textContent ?? "").replace(/\s+/g, " ").trim(),
   );
@@ -18,6 +22,7 @@ function annotateTable(table: HTMLTableElement) {
     });
     row.dataset.rtAnnotated = "1";
   });
+  table.dataset.rtRowCount = String(rowCount);
 }
 
 export default function ResponsiveTables() {

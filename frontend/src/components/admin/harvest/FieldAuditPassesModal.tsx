@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
 import { hasErrors, requireFields } from "@/components/admin/shared/form-utils";
 import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
@@ -55,7 +55,7 @@ export default function FieldAuditPassesModal({
 
   const buildInviteUrl = (passToken: string, lang?: string) => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return `${origin}/trace?auditPass=${encodeURIComponent(passToken)}&lang=${encodeURIComponent(lang || "zh")}`;
+    return `${origin}/trace?lang=${encodeURIComponent(lang || "zh")}#auditPass=${encodeURIComponent(passToken)}`;
   };
 
   const handleCreatePass = async (e: React.FormEvent) => {
@@ -140,25 +140,35 @@ export default function FieldAuditPassesModal({
   const endorseApi = useApi<EndorsementConfigDto>(
     activeTab === "endorsement" ? "/harvest/endorsement-config" : null,
   );
-  const [programTitle, setProgramTitle] = useState("");
-  const [directiveNo, setDirectiveNo] = useState("");
-  const [communeAuthority, setCommuneAuthority] = useState("");
-  const [provincialAuthority, setProvincialAuthority] = useState("");
-  const [officialPortalUrl, setOfficialPortalUrl] = useState("");
-  const [officialDomain, setOfficialDomain] = useState("");
-  const [inspectionUnit, setInspectionUnit] = useState("");
+  const [endorseDraft, setEndorseDraft] = useState<
+    Partial<Record<keyof EndorsementConfigDto, string>>
+  >({});
   const [endorseErrors, setEndorseErrors] = useState<Record<string, string | undefined>>({});
 
-  useEffect(() => {
-    if (!endorseApi.data) return;
-    setProgramTitle(endorseApi.data.programTitle || "");
-    setDirectiveNo(endorseApi.data.directiveNo || "");
-    setCommuneAuthority(endorseApi.data.communeAuthority || "");
-    setProvincialAuthority(endorseApi.data.provincialAuthority || "");
-    setOfficialPortalUrl(endorseApi.data.officialPortalUrl || "");
-    setOfficialDomain(endorseApi.data.officialDomain || "");
-    setInspectionUnit(endorseApi.data.inspectionUnit || "");
-  }, [endorseApi.data]);
+  const programTitle = endorseDraft.programTitle ?? endorseApi.data?.programTitle ?? "";
+  const directiveNo = endorseDraft.directiveNo ?? endorseApi.data?.directiveNo ?? "";
+  const communeAuthority = endorseDraft.communeAuthority ?? endorseApi.data?.communeAuthority ?? "";
+  const provincialAuthority =
+    endorseDraft.provincialAuthority ?? endorseApi.data?.provincialAuthority ?? "";
+  const officialPortalUrl =
+    endorseDraft.officialPortalUrl ?? endorseApi.data?.officialPortalUrl ?? "";
+  const officialDomain = endorseDraft.officialDomain ?? endorseApi.data?.officialDomain ?? "";
+  const inspectionUnit = endorseDraft.inspectionUnit ?? endorseApi.data?.inspectionUnit ?? "";
+
+  const setProgramTitle = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, programTitle: value }));
+  const setDirectiveNo = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, directiveNo: value }));
+  const setCommuneAuthority = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, communeAuthority: value }));
+  const setProvincialAuthority = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, provincialAuthority: value }));
+  const setOfficialPortalUrl = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, officialPortalUrl: value }));
+  const setOfficialDomain = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, officialDomain: value }));
+  const setInspectionUnit = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, inspectionUnit: value }));
 
   const saveEndorsement = useMutation(async (payload: Record<string, unknown>) => {
     return api.put<EndorsementConfigDto>("/harvest/endorsement-config", payload);
@@ -202,8 +212,9 @@ export default function FieldAuditPassesModal({
       inspectionUnit: inspectionUnit.trim(),
     });
     if (!updated) return;
-    toast.success("Đã cập nhật thông tin bảo chứng Cổng thông tin Tỉnh & UBND Xã trên toàn bộ mã QR.");
-    void endorseApi.refresh();
+    toast.success("Đã cập nhật thông tin bảo chứng Cổng thông tin Tỉnh và UBND Xã trên toàn bộ mã QR.");
+    await endorseApi.refresh();
+    setEndorseDraft({});
   };
 
   return (

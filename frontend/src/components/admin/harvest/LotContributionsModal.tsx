@@ -41,15 +41,17 @@ export default function LotContributionsModal({
   const [weightKg, setWeightKg] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
+  const handleHouseholdChange = (nextId: string) => {
+    setHouseholdId(nextId);
+    setPlotOptions([]);
+    setPlotCode("");
+    setLoadingPlots(Boolean(canEdit && Number(nextId)));
+  };
+
   useEffect(() => {
-    let active = true;
     const hId = Number(householdId);
-    if (!canEdit || !hId) {
-      setPlotOptions([]);
-      setPlotCode("");
-      return;
-    }
-    setLoadingPlots(true);
+    if (!canEdit || !hId) return;
+    let active = true;
     api
       .get<{ data?: HouseholdPlotOption[] }>(`/harvest-plan/household-plots?householdId=${hId}`)
       .then((res) => {
@@ -148,7 +150,7 @@ export default function LotContributionsModal({
               label="Hộ nông dân"
               required
               value={householdId}
-              onChange={setHouseholdId}
+              onChange={handleHouseholdChange}
               placeholder="Chọn hộ dân"
               options={households.rows.map((h) => ({
                 value: String(h.id),

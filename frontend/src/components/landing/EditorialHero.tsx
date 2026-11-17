@@ -164,6 +164,7 @@ export default function EditorialHero() {
     };
 
     const onScroll = () => {
+      if (!isDesktopNav) return;
       if (rafId === 0) {
         rafId = window.requestAnimationFrame(updateScroll);
       }
@@ -195,7 +196,7 @@ export default function EditorialHero() {
 
     scheduleMeasure();
     let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
+    if (typeof ResizeObserver !== "undefined" && window.innerWidth > 960) {
       ro = new ResizeObserver(onBodyResize);
       ro.observe(document.body);
     }
