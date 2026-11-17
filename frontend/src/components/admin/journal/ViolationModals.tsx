@@ -57,36 +57,25 @@ export function ViolationDetailModal({
         </>
       }
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-          gap: 12,
-          padding: 14,
-          borderRadius: 6,
-          border: "1px solid #d4d4d2",
-          background: "var(--mist)",
-          marginBottom: 14,
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mức độ và trạng thái</div>
-          <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+      <div className="admin-detail-list-card">
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Mức độ và trạng thái</span>
+          <div className="admin-detail-list-value">
             <span className={`badge ${sev.badge}`}>{sev.label}</span>
             <span className={`badge ${st.badge}`}>{st.label}</span>
           </div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Hộ nông dân</div>
-          <div style={{ fontWeight: 600 }}>{violation.householdLabel}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Hộ nông dân</span>
+          <div className="admin-detail-list-value">{violation.householdLabel}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày phát hiện</div>
-          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatDate(violation.detectedOn)}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Ngày phát hiện</span>
+          <div className="admin-detail-list-value">{formatDate(violation.detectedOn)}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã thửa</div>
-          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>{violation.plotCode || "Chưa gắn thửa"}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Mã thửa</span>
+          <div className="admin-detail-list-value is-code">{violation.plotCode || "Chưa gắn thửa"}</div>
         </div>
       </div>
 

@@ -43,64 +43,45 @@ export function JournalDetailModal({
         </>
       }
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-          gap: 12,
-          padding: 14,
-          borderRadius: 6,
-          border: "1px solid #d4d4d2",
-          background: "var(--mist)",
-          marginBottom: 14,
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày thực hiện tại vườn</div>
-          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatDate(entry.entryOn)}</div>
+      <div className="admin-detail-list-card">
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Ngày thực hiện tại vườn</span>
+          <div className="admin-detail-list-value">{formatDate(entry.entryOn)}</div>
         </div>
         {entry.serverRecordedAt && (
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Thời điểm khai báo thực tế</div>
-            <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-              {formatDateTime(entry.serverRecordedAt)}
-            </div>
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Thời điểm khai báo thực tế</span>
+            <div className="admin-detail-list-value">{formatDateTime(entry.serverRecordedAt)}</div>
           </div>
         )}
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Độ trễ khai báo</div>
-          <div
-            style={{
-              fontWeight: 600,
-              fontVariantNumeric: "tabular-nums",
-              color: (entry.lateDeclarationDays ?? 0) > 0 ? "#9a6712" : "#15803d",
-            }}
-          >
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Độ trễ khai báo</span>
+          <div className={`admin-detail-list-value ${(entry.lateDeclarationDays ?? 0) > 0 ? "is-warn" : "is-ok"}`}>
             {(entry.lateDeclarationDays ?? 0) > 0
               ? `Khai báo chậm ${entry.lateDeclarationDays} ngày`
               : "Đúng trong ngày"}
           </div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Hộ nông dân</div>
-          <div style={{ fontWeight: 600 }}>{entry.householdName}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Hộ nông dân</span>
+          <div className="admin-detail-list-value">{entry.householdName}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã thửa</div>
-          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>{entry.plotCode}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Mã thửa</span>
+          <div className="admin-detail-list-value is-code">{entry.plotCode}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Hoạt động</div>
-          <div style={{ fontWeight: 600 }}>{entry.activity}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Hoạt động</span>
+          <div className="admin-detail-list-value">{entry.activity}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Người ghi nhận</div>
-          <div style={{ fontWeight: 600 }}>{entry.recorder}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Người ghi nhận</span>
+          <div className="admin-detail-list-value">{entry.recorder}</div>
         </div>
         {(entry.latitude != null || entry.longitude != null) && (
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Tọa độ GPS</div>
-            <div style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5 }}>
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Tọa độ GPS</span>
+            <div className="admin-detail-list-value" style={{ fontFamily: "var(--font-num-stack)" }}>
               {entry.latitude?.toFixed(5)}, {entry.longitude?.toFixed(5)}
             </div>
           </div>

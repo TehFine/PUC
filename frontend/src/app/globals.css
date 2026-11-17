@@ -3536,6 +3536,69 @@ input[type="date"].filter-select {
 /* ─── VIOLATIONS ──────────────────────────────── */
 .violation-item {
   display: flex;
+/* ─── ADMIN DETAIL LIST CARD (CĂN GIỮA & ĐƯỜNG KẺ NGANG) ─── */
+.admin-detail-list-card {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+  border: 1px solid var(--card-border-soft);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.admin-detail-list-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 3px;
+  padding: 12px 18px;
+}
+
+.admin-detail-list-row + .admin-detail-list-row {
+  border-top: 1px solid #e5e7eb;
+}
+
+.admin-detail-list-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text-muted, #6b7280);
+  text-align: center;
+}
+
+.admin-detail-list-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.38;
+  color: var(--ink, #14372f);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-detail-list-value.is-ok {
+  color: #15803d;
+}
+
+.admin-detail-list-value.is-warn {
+  color: #9a6712;
+}
+
+.admin-detail-list-value.is-code {
+  font-family: var(--font-num-stack);
+  font-weight: 700;
+  color: #256b45;
+  letter-spacing: 0.015em;
+}
+
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;

@@ -47,75 +47,52 @@ export function SprayDetailModal({
         </>
       }
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-          gap: 12,
-          padding: 14,
-          borderRadius: 6,
-          border: "1px solid #d4d4d2",
-          background: "var(--mist)",
-          marginBottom: 14,
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày phun tại vườn</div>
-          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatDate(record.sprayedOn)}</div>
+      <div className="admin-detail-list-card">
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Ngày phun tại vườn</span>
+          <div className="admin-detail-list-value">{formatDate(record.sprayedOn)}</div>
         </div>
         {record.serverRecordedAt && (
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Thời điểm khai báo thực tế</div>
-            <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-              {formatDateTime(record.serverRecordedAt)}
-            </div>
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Thời điểm khai báo thực tế</span>
+            <div className="admin-detail-list-value">{formatDateTime(record.serverRecordedAt)}</div>
           </div>
         )}
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Độ trễ khai báo</div>
-          <div
-            style={{
-              fontWeight: 600,
-              fontVariantNumeric: "tabular-nums",
-              color: (record.lateDeclarationDays ?? 0) > 0 ? "#9a6712" : "#15803d",
-            }}
-          >
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Độ trễ khai báo</span>
+          <div className={`admin-detail-list-value ${(record.lateDeclarationDays ?? 0) > 0 ? "is-warn" : "is-ok"}`}>
             {(record.lateDeclarationDays ?? 0) > 0
               ? `Khai báo chậm ${record.lateDeclarationDays} ngày`
               : "Đúng trong ngày"}
           </div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Hộ nông dân</div>
-          <div style={{ fontWeight: 600 }}>{record.householdName}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Hộ nông dân</span>
+          <div className="admin-detail-list-value">{record.householdName}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã thửa</div>
-          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>
-            {record.plotCode || "Toàn vườn"}
-          </div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Mã thửa</span>
+          <div className="admin-detail-list-value is-code">{record.plotCode || "Toàn vườn"}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Loại thuốc BVTV</div>
-          <div style={{ fontWeight: 600 }}>{record.pesticideName}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Loại thuốc BVTV</span>
+          <div className="admin-detail-list-value">{record.pesticideName}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Liều lượng pha phun</div>
-          <div style={{ fontWeight: 600 }}>{record.dose}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Liều lượng pha phun</span>
+          <div className="admin-detail-list-value">{record.dose}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Diện tích phun</div>
-          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{record.areaHa} ha</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Diện tích phun</span>
+          <div className="admin-detail-list-value">{record.areaHa} ha</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Thời gian cách ly (PHI)</div>
-          <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums", color: "#9a6712" }}>
-            {record.isolationDays ?? 0} ngày
-          </div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Thời gian cách ly (PHI)</span>
+          <div className="admin-detail-list-value is-warn">{record.isolationDays ?? 0} ngày</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Trạng thái dư lượng</div>
-          <div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Trạng thái dư lượng</span>
+          <div className="admin-detail-list-value">
             <span className={`badge ${mrl.badge}`}>{mrl.label}</span>
           </div>
         </div>
