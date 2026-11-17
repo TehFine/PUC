@@ -214,10 +214,6 @@ export default function Zones() {
               onPendingEditHandled={() => setPendingEditCode(null)}
             />
           </div>
-
-          <button type="button" className="map-sheet-btn" onClick={() => setSheet("overview")}>
-            {features.length} thửa
-          </button>
         </div>
       ) : (
         <PlotsTable
