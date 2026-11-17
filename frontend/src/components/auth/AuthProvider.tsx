@@ -1,14 +1,25 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, ApiError, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  api,
+  ApiError,
+  AUTH_EXPIRED_EVENT,
+  AUTH_LOGOUT_EVENT,
+  clearApiClientCaches,
+  setAuthScopeUser,
+} from "@/lib/api-client";
 import {
   attachOfflineSyncEngine,
+  clearAllOfflineReadSnapshots,
   clearOfflineAuthSession,
+  isDeviceOfflineNow,
   isTransientNetworkError,
   loadOfflineAuthSession,
+  purgeUserWorkingDraftsOnLogout,
   saveOfflineAuthSession,
+  triggerOfflineSyncNow,
 } from "@/lib/offline-sync";
 import type { Action, AuthSession, MfaChallengeResponse } from "@/types/api";
 
@@ -20,6 +31,7 @@ export interface GoogleLoginPayload {
 }
 
 type LoginApiResponse = AuthSession | MfaChallengeResponse;
+type AuthSyncMessage = "logout" | { type: "logout" } | { type: "login"; userId: number };
 
 function isMfaChallenge(res: LoginApiResponse): res is MfaChallengeResponse {
   return Boolean(res && typeof res === "object" && "mfaRequired" in res && res.mfaRequired === true);
@@ -31,6 +43,9 @@ function isValidAuthSession(value: unknown): value is AuthSession {
   return Boolean(
     candidate.user &&
       typeof candidate.user === "object" &&
+      typeof candidate.user.id === "number" &&
+      Number.isInteger(candidate.user.id) &&
+      candidate.user.id > 0 &&
       typeof candidate.user.role === "string" &&
       candidate.user.role.length > 0,
   );
@@ -56,19 +71,82 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_SYNC_CHANNEL = "puc-auth-sync";
+const PENDING_LOGOUT_STORAGE_KEY = "puc:pending-server-logout:v1";
+
+function markPendingServerLogout(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PENDING_LOGOUT_STORAGE_KEY, String(Date.now()));
+  } catch {
+    // ignore
+  }
+}
+
+function clearPendingServerLogout(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(PENDING_LOGOUT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function hasPendingServerLogout(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return Boolean(window.localStorage.getItem(PENDING_LOGOUT_STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}
+
+async function flushPendingServerLogout(): Promise<boolean> {
+  try {
+    await api.post("/auth/logout", undefined, { keepalive: true });
+    clearPendingServerLogout();
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError && error.status > 0 && error.status < 500) {
+      clearPendingServerLogout();
+      return true;
+    }
+    return false;
+  }
+}
 
 function isProtectedPath(pathname: string): boolean {
   return pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/portal" || pathname.startsWith("/portal/");
 }
 
-function broadcastAuthLogout(): void {
+function broadcastAuthMessage(message: AuthSyncMessage): void {
   if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return;
   try {
     const channel = new BroadcastChannel(AUTH_SYNC_CHANNEL);
-    channel.postMessage("logout");
+    channel.postMessage(message);
     channel.close();
   } catch {
     // Bỏ qua nếu trình duyệt chặn BroadcastChannel.
+  }
+}
+
+function purgeServiceWorkerAuthShell(): void {
+  if (typeof window === "undefined") return;
+  try {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.controller?.postMessage({ type: "CLEAR_AUTH_CACHE" });
+      void navigator.serviceWorker
+        .getRegistration("/")
+        .then((reg) => {
+          reg?.active?.postMessage({ type: "CLEAR_AUTH_CACHE" });
+          reg?.waiting?.postMessage({ type: "CLEAR_AUTH_CACHE" });
+        })
+        .catch(() => undefined);
+    }
+  } catch {
+    // ignore
+  }
+  if (typeof caches !== "undefined") {
+    void caches.delete("puc-portal-shell-v1").catch(() => undefined);
   }
 }
 
@@ -76,31 +154,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>("loading");
   const [session, setSession] = useState<AuthSession | null>(null);
+  const currentUserIdRef = useRef<number | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await api.get<AuthSession>("/auth/me");
-      if (!isValidAuthSession(result)) {
-        throw new Error("Invalid session payload");
-      }
-      saveOfflineAuthSession(result);
-      setSession(result);
-      setStatus("authenticated");
-      attachOfflineSyncEngine(result.user.id);
-    } catch (err) {
-      // Nếu đang ở vùng vườn mất sóng / mạng chập chờn (không phải lỗi 401/403 từ máy chủ),
-      // giữ nguyên phiên ngoại tuyến đã xác thực trước đó để nông hộ tiếp tục chụp ảnh & ghi nhật ký.
-      if (isTransientNetworkError(err)) {
-        const fallbackSession = loadOfflineAuthSession();
-        if (fallbackSession) {
-          setSession((prev) => prev ?? fallbackSession);
-          setStatus("authenticated");
-          attachOfflineSyncEngine(fallbackSession.user.id);
-          return;
+  const applyAuthenticatedSession = useCallback(
+    (result: AuthSession, options?: { broadcastLogin?: boolean }) => {
+      const prevUserId = currentUserIdRef.current;
+      const nextUserId = result.user.id;
+      const userChanged = prevUserId !== nextUserId;
+
+      currentUserIdRef.current = nextUserId;
+      setAuthScopeUser(nextUserId);
+      if (userChanged) {
+        clearApiClientCaches();
+        if (prevUserId !== null) {
+          purgeServiceWorkerAuthShell();
+          void clearAllOfflineReadSnapshots();
+          if (typeof window !== "undefined") {
+            try {
+              sessionStorage.clear();
+            } catch {}
+          }
+        }
+        if (options?.broadcastLogin !== false) {
+          broadcastAuthMessage({ type: "login", userId: nextUserId });
         }
       }
 
+      saveOfflineAuthSession(result);
+      setSession(result);
+      setStatus("authenticated");
+      attachOfflineSyncEngine(nextUserId);
+    },
+    [],
+  );
+
+  const clearClientAuthState = useCallback(
+    (options?: { redirectProtected?: boolean; broadcastLogout?: boolean }) => {
+      const prevUserId = currentUserIdRef.current;
+      currentUserIdRef.current = null;
+      setAuthScopeUser(null);
+      clearApiClientCaches();
       clearOfflineAuthSession();
+      purgeServiceWorkerAuthShell();
+      void clearAllOfflineReadSnapshots();
+      void purgeUserWorkingDraftsOnLogout(prevUserId);
       setSession(null);
       setStatus("anonymous");
       if (typeof window !== "undefined") {
@@ -108,54 +205,145 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           sessionStorage.clear();
         } catch {}
         window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
-        if (isProtectedPath(window.location.pathname)) {
+        if (options?.broadcastLogout) {
+          broadcastAuthMessage({ type: "logout" });
+        }
+        if (options?.redirectProtected && isProtectedPath(window.location.pathname)) {
           router.replace("/login");
         }
       }
-    }
-  }, [router]);
+    },
+    [router],
+  );
 
-  useEffect(() => {
-    let active = true;
-    api
-      .get<AuthSession>("/auth/me")
-      .then((result) => {
-        if (!active) return;
+  const refresh = useCallback(
+    async (broadcastLogin = true) => {
+      if (hasPendingServerLogout()) {
+        clearClientAuthState({ redirectProtected: true, broadcastLogout: false });
+        void flushPendingServerLogout();
+        return;
+      }
+      try {
+        const result = await api.get<AuthSession>("/auth/me");
         if (!isValidAuthSession(result)) {
-          clearOfflineAuthSession();
-          setSession(null);
-          setStatus("anonymous");
+          throw new Error("Invalid session payload");
+        }
+        if (hasPendingServerLogout()) {
+          void flushPendingServerLogout();
           return;
         }
-        saveOfflineAuthSession(result);
-        setSession(result);
-        setStatus("authenticated");
-        attachOfflineSyncEngine(result.user.id);
-      })
-      .catch((err) => {
-        if (!active) return;
-        if (isTransientNetworkError(err)) {
+        applyAuthenticatedSession(result, { broadcastLogin });
+      } catch (err) {
+        // Nếu đang ở vùng vườn mất sóng / mạng chập chờn (không phải lỗi 401/403 từ máy chủ),
+        // giữ nguyên phiên ngoại tuyến đã xác thực trước đó để nông hộ tiếp tục chụp ảnh và ghi nhật ký.
+        if (isTransientNetworkError(err) && !hasPendingServerLogout()) {
           const fallbackSession = loadOfflineAuthSession();
           if (fallbackSession) {
-            setSession(fallbackSession);
+            currentUserIdRef.current = fallbackSession.user.id;
+            setAuthScopeUser(fallbackSession.user.id);
+            setSession((prev) => prev ?? fallbackSession);
             setStatus("authenticated");
             attachOfflineSyncEngine(fallbackSession.user.id);
             return;
           }
         }
-        clearOfflineAuthSession();
-        setStatus("anonymous");
+
+        clearClientAuthState({ redirectProtected: true, broadcastLogout: false });
+      }
+    },
+    [applyAuthenticatedSession, clearClientAuthState],
+  );
+
+  useEffect(() => {
+    let active = true;
+    let fastFallbackTimer: ReturnType<typeof setTimeout> | undefined;
+
+    // Đăng ký Service Worker đệm tài nguyên tĩnh và khung /portal ngoại tuyến, kèm lắng nghe tín hiệu Background Sync.
+    const onSwMessage = (event: MessageEvent) => {
+      if (event.origin && event.origin !== window.location.origin) return;
+      const isTrustedWorker =
+        !navigator.serviceWorker.controller ||
+        event.source === navigator.serviceWorker.controller ||
+        (typeof ServiceWorker !== "undefined" && event.source instanceof ServiceWorker);
+      if (!isTrustedWorker) return;
+      if (event.data && typeof event.data === "object" && event.data.type === "PUC_SW_SYNC_TRIGGER") {
+        void triggerOfflineSyncNow(true);
+      }
+    };
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", onSwMessage);
+      if (process.env.NODE_ENV === "production") {
+        void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
+      }
+    }
+
+    const applyLocalFallbackIfValid = (): boolean => {
+      if (hasPendingServerLogout()) return false;
+      const fallbackSession = loadOfflineAuthSession();
+      if (!fallbackSession) return false;
+      currentUserIdRef.current = fallbackSession.user.id;
+      setAuthScopeUser(fallbackSession.user.id);
+      setSession((prev) => prev ?? fallbackSession);
+      setStatus("authenticated");
+      attachOfflineSyncEngine(fallbackSession.user.id);
+      return true;
+    };
+
+    if (hasPendingServerLogout()) {
+      void (isDeviceOfflineNow() ? Promise.resolve(false) : flushPendingServerLogout()).finally(() => {
+        if (active) {
+          clearClientAuthState({ redirectProtected: true, broadcastLogout: false });
+        }
       });
+    } else if (isDeviceOfflineNow() && applyLocalFallbackIfValid()) {
+      // Thiết bị đang mất mạng hoàn toàn ngoài rẫy: vào thẳng Cổng hộ dân trong 0ms không bắt chờ mạng.
+    } else {
+      // Nếu có phiên ngoại tuyến hợp lệ nhưng sóng 1 vạch ngoài rẫy làm /auth/me treo lâu hơn 2,4 giây:
+      // mở giao diện tạm từ phiên cục bộ để bà con chụp ảnh ngay, trong khi /auth/me vẫn chạy nền đối chiếu
+      // (nếu máy chủ trả 401/403 do thu hồi phiên từ xa thì nhánh catch bên dưới sẽ đăng xuất ngay lập tức).
+      if (loadOfflineAuthSession()) {
+        fastFallbackTimer = setTimeout(() => {
+          if (active && currentUserIdRef.current === null && !hasPendingServerLogout()) {
+            applyLocalFallbackIfValid();
+          }
+        }, 2400);
+      }
+
+      api
+        .get<AuthSession>("/auth/me")
+        .then((result) => {
+          if (fastFallbackTimer) clearTimeout(fastFallbackTimer);
+          if (!active) return;
+          if (hasPendingServerLogout()) {
+            void flushPendingServerLogout();
+            return;
+          }
+          if (!isValidAuthSession(result)) {
+            clearClientAuthState({ redirectProtected: false, broadcastLogout: false });
+            return;
+          }
+          applyAuthenticatedSession(result, { broadcastLogin: true });
+        })
+        .catch((err) => {
+          if (fastFallbackTimer) clearTimeout(fastFallbackTimer);
+          if (!active) return;
+          if (isTransientNetworkError(err) && applyLocalFallbackIfValid()) {
+            return;
+          }
+          clearClientAuthState({ redirectProtected: false, broadcastLogout: false });
+        });
+    }
 
     const onOnline = () => {
+      if (hasPendingServerLogout()) {
+        void flushPendingServerLogout();
+        return;
+      }
       void api
         .get<AuthSession>("/auth/me")
         .then((result) => {
-          if (!active || !isValidAuthSession(result)) return;
-          saveOfflineAuthSession(result);
-          setSession(result);
-          setStatus("authenticated");
-          attachOfflineSyncEngine(result.user.id);
+          if (!active || hasPendingServerLogout() || !isValidAuthSession(result)) return;
+          applyAuthenticatedSession(result, { broadcastLogin: true });
         })
         .catch(() => {
           // Nếu phiên thật sự hết hạn, api-client sẽ tự phát AUTH_EXPIRED_EVENT.
@@ -163,21 +351,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const onExpired = () => {
-      clearOfflineAuthSession();
-      setSession(null);
-      setStatus("anonymous");
-      try {
-        sessionStorage.clear();
-      } catch {}
-      broadcastAuthLogout();
-      if (isProtectedPath(window.location.pathname)) {
-        router.replace("/login");
-      }
+      clearClientAuthState({ redirectProtected: true, broadcastLogout: true });
     };
 
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) {
-        void refresh();
+        void refresh(true);
       }
     };
 
@@ -185,17 +364,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof BroadcastChannel !== "undefined") {
       try {
         channel = new BroadcastChannel(AUTH_SYNC_CHANNEL);
-        channel.onmessage = (event: MessageEvent) => {
-          if (event.data === "logout" || (event.data && typeof event.data === "object" && event.data.type === "logout")) {
-            clearOfflineAuthSession();
-            setSession(null);
-            setStatus("anonymous");
-            try {
-              sessionStorage.clear();
-            } catch {}
-            window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
-            if (isProtectedPath(window.location.pathname)) {
-              router.replace("/login");
+        channel.onmessage = (event: MessageEvent<AuthSyncMessage>) => {
+          const msg = event.data;
+          if (msg === "logout" || (msg && typeof msg === "object" && msg.type === "logout")) {
+            clearClientAuthState({ redirectProtected: true, broadcastLogout: false });
+            return;
+          }
+          if (
+            msg &&
+            typeof msg === "object" &&
+            msg.type === "login" &&
+            typeof msg.userId === "number" &&
+            Number.isInteger(msg.userId) &&
+            msg.userId > 0
+          ) {
+            if (msg.userId !== currentUserIdRef.current) {
+              // Tab khác vừa đăng nhập tài khoản mới: xóa ngay dữ liệu tài khoản cũ trước khi tải lại /auth/me.
+              currentUserIdRef.current = null;
+              setAuthScopeUser(null);
+              clearApiClientCaches();
+              setSession(null);
+              void refresh(false);
             }
           }
         };
@@ -209,6 +398,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("pageshow", onPageShow);
     return () => {
       active = false;
+      if (fastFallbackTimer) clearTimeout(fastFallbackTimer);
+      if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", onSwMessage);
+      }
       window.removeEventListener("online", onOnline);
       window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
       window.removeEventListener("pageshow", onPageShow);
@@ -216,47 +409,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         channel?.close();
       } catch {}
     };
-  }, [refresh, router]);
+  }, [applyAuthenticatedSession, clearClientAuthState, refresh]);
 
-  const login = useCallback(async (username: string, password: string): Promise<MfaChallengeResponse | null> => {
-    const result = await api.post<LoginApiResponse>("/auth/login", { username, password });
-    if (isMfaChallenge(result)) {
-      return result;
-    }
-    saveOfflineAuthSession(result);
-    setSession(result);
-    setStatus("authenticated");
-    attachOfflineSyncEngine(result.user.id);
-    return null;
-  }, []);
+  const login = useCallback(
+    async (username: string, password: string): Promise<MfaChallengeResponse | null> => {
+      const result = await api.post<LoginApiResponse>("/auth/login", { username, password });
+      if (isMfaChallenge(result)) {
+        return result;
+      }
+      clearPendingServerLogout();
+      applyAuthenticatedSession(result, { broadcastLogin: true });
+      return null;
+    },
+    [applyAuthenticatedSession],
+  );
 
-  const loginWithGoogle = useCallback(async (payload?: GoogleLoginPayload): Promise<MfaChallengeResponse | null> => {
-    const result = await api.post<LoginApiResponse>("/auth/google", payload ?? {});
-    if (isMfaChallenge(result)) {
-      return result;
-    }
-    saveOfflineAuthSession(result);
-    setSession(result);
-    setStatus("authenticated");
-    attachOfflineSyncEngine(result.user.id);
-    return null;
-  }, []);
+  const loginWithGoogle = useCallback(
+    async (payload?: GoogleLoginPayload): Promise<MfaChallengeResponse | null> => {
+      const result = await api.post<LoginApiResponse>("/auth/google", payload ?? {});
+      if (isMfaChallenge(result)) {
+        return result;
+      }
+      clearPendingServerLogout();
+      applyAuthenticatedSession(result, { broadcastLogin: true });
+      return null;
+    },
+    [applyAuthenticatedSession],
+  );
 
-  const verifyOtp = useCallback(async (challengeToken: string, code: string) => {
-    const result = await api.post<AuthSession>("/auth/verify-otp", { challengeToken, code });
-    saveOfflineAuthSession(result);
-    setSession(result);
-    setStatus("authenticated");
-    attachOfflineSyncEngine(result.user.id);
-  }, []);
+  const verifyOtp = useCallback(
+    async (challengeToken: string, code: string) => {
+      const result = await api.post<AuthSession>("/auth/verify-otp", { challengeToken, code });
+      clearPendingServerLogout();
+      applyAuthenticatedSession(result, { broadcastLogin: true });
+    },
+    [applyAuthenticatedSession],
+  );
 
   const refreshSession = useCallback(async () => {
     const result = await api.get<AuthSession>("/auth/me");
-    saveOfflineAuthSession(result);
-    setSession(result);
-    setStatus("authenticated");
-    attachOfflineSyncEngine(result.user.id);
-  }, []);
+    if (!isValidAuthSession(result)) {
+      throw new Error("Invalid session payload");
+    }
+    applyAuthenticatedSession(result, { broadcastLogin: true });
+  }, [applyAuthenticatedSession]);
 
   const updateProfile = useCallback(
     async (payload: {
@@ -266,34 +462,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       googleCredential?: string;
     }) => {
       const result = await api.patch<AuthSession>("/auth/profile", payload);
-      saveOfflineAuthSession(result);
-      setSession(result);
+      applyAuthenticatedSession(result, { broadcastLogin: true });
     },
-    [],
+    [applyAuthenticatedSession],
   );
 
   const logout = useCallback(async () => {
-    clearOfflineAuthSession();
-    setSession(null);
-    setStatus("anonymous");
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
-      try {
-        sessionStorage.clear();
-      } catch {}
-      broadcastAuthLogout();
-    }
+    markPendingServerLogout();
+    clearClientAuthState({ redirectProtected: false, broadcastLogout: true });
     router.replace("/login");
-    try {
-      await api.post("/auth/logout", undefined, { keepalive: true });
-    } catch (error) {
-      if (!(error instanceof ApiError)) throw error;
-    } finally {
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
-      }
-    }
-  }, [router]);
+    await flushPendingServerLogout();
+  }, [clearClientAuthState, router]);
 
   const can = useCallback(
     (resource: string, action: Action) => session?.permissions?.[resource]?.includes(action) ?? false,

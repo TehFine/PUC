@@ -46,6 +46,11 @@ export async function lazyChunk<T>(loader: () => Promise<T>): Promise<T> {
   }
 
   if (typeof window !== "undefined" && isChunkLoadFailure(lastError)) {
+    // Tuyệt đối không tự động tải lại trang khi điện thoại nông hộ đang mất sóng hoàn toàn ở ngoài rẫy
+    // (sẽ làm văng ra màn hình mất mạng của trình duyệt và mất dữ liệu đang nhập).
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      throw lastError;
+    }
     try {
       const prev = Number(window.sessionStorage.getItem(CHUNK_RELOAD_STORAGE_KEY) || "0");
       const now = Date.now();

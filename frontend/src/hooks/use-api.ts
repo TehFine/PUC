@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AUTH_EXPIRED_EVENT,
   AUTH_LOGOUT_EVENT,
+  AUTH_SCOPE_CHANGED_EVENT,
   DATA_MUTATED_EVENT,
   DATA_SYNC_CHANNEL,
   api,
   errorMessage,
+  getAuthScopeUserId,
 } from "@/lib/api-client";
 import {
   isTransientNetworkError,
@@ -25,16 +27,21 @@ const CACHE_FRESH_MS = 25_000;
 const MAX_CACHE_ENTRIES = 120;
 const apiCache = new Map<string, CacheEntry>();
 const inflightRequests = new Map<string, Promise<unknown>>();
+const scopeResetListeners = new Set<(mode: "logout" | "scope") => void>();
 let authEpoch = 0;
 
-function setApiCacheEntry(path: string, data: unknown) {
-  if (apiCache.has(path)) {
-    apiCache.delete(path);
+function scopedApiKey(path: string): string {
+  return `${getAuthScopeUserId() ?? "anon"}:${path}`;
+}
+
+function setApiCacheEntry(cacheKey: string, data: unknown) {
+  if (apiCache.has(cacheKey)) {
+    apiCache.delete(cacheKey);
   } else if (apiCache.size >= MAX_CACHE_ENTRIES) {
     const oldest = apiCache.keys().next().value;
     if (oldest !== undefined) apiCache.delete(oldest);
   }
-  apiCache.set(path, { data, timestamp: Date.now() });
+  apiCache.set(cacheKey, { data, timestamp: Date.now() });
 }
 
 function markAllApiCacheStale() {
@@ -43,14 +50,23 @@ function markAllApiCacheStale() {
   }
 }
 
+/** Xóa sạch toàn bộ bộ nhớ đệm và request đang bay khi đăng xuất, hết phiên hoặc đổi tài khoản. */
+export function clearApiQueryCache(mode: "logout" | "scope" = "scope"): void {
+  authEpoch += 1;
+  apiCache.clear();
+  inflightRequests.clear();
+  for (const listener of scopeResetListeners) {
+    listener(mode);
+  }
+}
+
 if (typeof window !== "undefined") {
-  const clearAll = () => {
-    authEpoch += 1;
-    apiCache.clear();
-    inflightRequests.clear();
-  };
-  window.addEventListener(AUTH_LOGOUT_EVENT, clearAll);
-  window.addEventListener(AUTH_EXPIRED_EVENT, clearAll);
+  const onLogoutOrExpired = () => clearApiQueryCache("logout");
+  const onScopeChanged = () => clearApiQueryCache("scope");
+  window.addEventListener(AUTH_LOGOUT_EVENT, onLogoutOrExpired);
+  window.addEventListener(AUTH_EXPIRED_EVENT, onLogoutOrExpired);
+  // Đổi tài khoản trong cùng tab (đồng bộ đăng nhập đa tab): dữ liệu của tài khoản cũ không được dùng lại.
+  window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, onScopeChanged);
   // Khi dữ liệu thay đổi: đánh dấu stale (timestamp = 0) thay vì xóa trắng để chuyển tab không nháy skeleton,
   // đồng thời tự động đối chiếu lại ngay qua If-None-Match (304 Not Modified 0-byte nếu tab đó không đổi).
   window.addEventListener(DATA_MUTATED_EVENT, markAllApiCacheStale);
@@ -71,25 +87,28 @@ export function invalidateApiCache(prefix?: string) {
     return;
   }
   for (const key of apiCache.keys()) {
-    if (key.startsWith(prefix)) {
+    const sep = key.indexOf(":");
+    const rawPath = sep >= 0 ? key.slice(sep + 1) : key;
+    if (rawPath.startsWith(prefix)) {
       apiCache.delete(key);
     }
   }
 }
 
 function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
+  const cacheKey = scopedApiKey(path);
   if (forceRefresh) {
-    apiCache.delete(path);
+    apiCache.delete(cacheKey);
   }
-  const existing = inflightRequests.get(path) as Promise<T> | undefined;
+  const existing = inflightRequests.get(cacheKey) as Promise<T> | undefined;
   if (existing) return existing;
 
   const requestEpoch = authEpoch;
   const request = api
     .get<T>(path)
     .then((result) => {
-      if (requestEpoch === authEpoch) {
-        setApiCacheEntry(path, result);
+      if (requestEpoch === authEpoch && scopedApiKey(path) === cacheKey) {
+        setApiCacheEntry(cacheKey, result);
         void saveOfflineReadSnapshot(path, result);
       }
       return result;
@@ -97,9 +116,9 @@ function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
     .catch(async (err) => {
       if (isTransientNetworkError(err)) {
         const snapshot = await loadOfflineReadSnapshot<T>(path);
-        if (snapshot !== null && requestEpoch === authEpoch) {
-          setApiCacheEntry(path, snapshot);
-          const entry = apiCache.get(path);
+        if (snapshot !== null && requestEpoch === authEpoch && scopedApiKey(path) === cacheKey) {
+          setApiCacheEntry(cacheKey, snapshot);
+          const entry = apiCache.get(cacheKey);
           if (entry) entry.timestamp = 0;
           return snapshot;
         }
@@ -107,12 +126,12 @@ function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
       throw err;
     })
     .finally(() => {
-      if (inflightRequests.get(path) === request) {
-        inflightRequests.delete(path);
+      if (inflightRequests.get(cacheKey) === request) {
+        inflightRequests.delete(cacheKey);
       }
     });
 
-  inflightRequests.set(path, request);
+  inflightRequests.set(cacheKey, request);
   return request;
 }
 
@@ -123,24 +142,25 @@ function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
  * `path = null` để tạm chưa tải (ví dụ chờ người dùng chọn bản ghi).
  */
 export function useApi<T>(path: string | null) {
-  const [trackedPath, setTrackedPath] = useState<string | null>(path);
+  const cacheKey = path === null ? null : scopedApiKey(path);
+  const [trackedKey, setTrackedKey] = useState<string | null>(cacheKey);
   const [data, setData] = useState<T | null>(() => {
-    if (path === null) return null;
-    const cached = apiCache.get(path);
+    if (cacheKey === null) return null;
+    const cached = apiCache.get(cacheKey);
     return cached ? (cached.data as T) : null;
   });
   const [loading, setLoading] = useState<boolean>(() => {
-    if (path === null) return false;
-    return !apiCache.has(path);
+    if (cacheKey === null) return false;
+    return !apiCache.has(cacheKey);
   });
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(path);
 
-  if (trackedPath !== path) {
-    setTrackedPath(path);
-    const cached = path !== null ? apiCache.get(path) : undefined;
+  if (trackedKey !== cacheKey) {
+    setTrackedKey(cacheKey);
+    const cached = cacheKey !== null ? apiCache.get(cacheKey) : undefined;
     setData(cached ? (cached.data as T) : null);
-    setLoading(path !== null && !cached);
+    setLoading(cacheKey !== null && !cached);
     setError(null);
   }
 
@@ -155,7 +175,8 @@ export function useApi<T>(path: string | null) {
       setLoading(false);
       return;
     }
-    const cached = !forceRefresh ? apiCache.get(current) : undefined;
+    const currentKey = scopedApiKey(current);
+    const cached = !forceRefresh ? apiCache.get(currentKey) : undefined;
     if (cached) {
       setData(cached.data as T);
       setLoading(false);
@@ -164,11 +185,24 @@ export function useApi<T>(path: string | null) {
       }
     } else {
       setLoading(true);
+      void loadOfflineReadSnapshot<T>(current).then((snapshot) => {
+        if (snapshot === null || latest.current !== current || scopedApiKey(current) !== currentKey) return;
+        if (!apiCache.has(currentKey)) {
+          setApiCacheEntry(currentKey, snapshot);
+          const entry = apiCache.get(currentKey);
+          if (entry) entry.timestamp = 0;
+          setData((prev) => prev ?? snapshot);
+          setLoading(false);
+          setError(null);
+        }
+      });
     }
     setError(null);
     try {
       const result = await fetchDeduped<T>(current, forceRefresh);
-      if (latest.current === current) setData(result);
+      if (latest.current === current && scopedApiKey(current) === currentKey) {
+        setData(result);
+      }
     } catch (err) {
       if (latest.current === current && !cached) {
         setData(null);
@@ -182,13 +216,29 @@ export function useApi<T>(path: string | null) {
   useEffect(() => {
     latest.current = path;
     void refresh(false);
-  }, [path, refresh]);
+  }, [path, cacheKey, refresh]);
+
+  useEffect(() => {
+    const onScopeReset = (mode: "logout" | "scope") => {
+      setData(null);
+      setError(null);
+      if (mode === "scope" && latest.current !== null && getAuthScopeUserId() !== null) {
+        void refresh(true);
+      } else {
+        setLoading(false);
+      }
+    };
+    scopeResetListeners.add(onScopeReset);
+    return () => {
+      scopeResetListeners.delete(onScopeReset);
+    };
+  }, [refresh]);
 
   const setCachedData = (next: T | null | ((prev: T | null) => T | null)) => {
     setData((prev) => {
       const resolved = typeof next === "function" ? (next as (prev: T | null) => T | null)(prev) : next;
       if (latest.current && resolved !== null) {
-        setApiCacheEntry(latest.current, resolved);
+        setApiCacheEntry(scopedApiKey(latest.current), resolved);
       }
       return resolved;
     });

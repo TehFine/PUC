@@ -1,8 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, api, errorMessage } from "@/lib/api-client";
 import {
+  AUTH_EXPIRED_EVENT,
+  AUTH_LOGOUT_EVENT,
+  AUTH_SCOPE_CHANGED_EVENT,
+  api,
+  errorMessage,
+  getAuthScopeUserId,
+} from "@/lib/api-client";
+import {
+  isDeviceOfflineNow,
   isTransientNetworkError,
   loadOfflineReadSnapshot,
   registerOfflinePortalInvalidator,
@@ -12,7 +20,7 @@ import type { ListResponse } from "@/types/api";
 
 /*
  * Bộ nhớ đệm dùng chung cho cổng hộ dân.
- * - Mỗi khóa là một đường dẫn API đầy đủ (ví dụ `/portal/journal`).
+ * - Mỗi khóa lưu đệm gắn với tài khoản đang hoạt động (`<userId>:<path>`).
  * - Nhiều component cùng dùng một khóa sẽ chia sẻ dữ liệu và một request đang chạy.
  * - `refreshPortal(...)` báo cho MỌI component đang hiển thị khóa đó tải lại (sửa lỗi overview cũ sau khi ghi).
  */
@@ -32,7 +40,12 @@ const EMPTY_ARRAY: never[] = [];
 const cache = new Map<string, SharedCacheEntry>();
 const inflight = new Map<string, Promise<unknown>>();
 const listeners = new Map<string, Set<Listener>>();
+const authResetListeners = new Set<(mode: "logout" | "scope") => void>();
 let portalAuthEpoch = 0;
+
+function scopedPortalKey(key: string): string {
+  return `${getAuthScopeUserId() ?? "anon"}:${key}`;
+}
 
 function getFreshMs(key: string): number {
   if (key.startsWith("/pesticides") || key.startsWith("/varieties") || key.startsWith("/fertilizers")) {
@@ -41,25 +54,26 @@ function getFreshMs(key: string): number {
   return DYNAMIC_FRESH_MS;
 }
 
-function setCacheEntry(key: string, data: unknown, timestamp = Date.now()) {
-  if (cache.has(key)) {
-    cache.delete(key);
+function setCacheEntry(cacheKey: string, data: unknown, timestamp = Date.now()) {
+  if (cache.has(cacheKey)) {
+    cache.delete(cacheKey);
   } else if (cache.size >= MAX_CACHE_ENTRIES) {
     const oldest = cache.keys().next().value;
     if (oldest !== undefined) cache.delete(oldest);
   }
-  cache.set(key, { data, timestamp });
+  cache.set(cacheKey, { data, timestamp });
 }
 
 function fetchShared<T>(key: string): Promise<T> {
-  const running = inflight.get(key);
+  const cacheKey = scopedPortalKey(key);
+  const running = inflight.get(cacheKey);
   if (running) return running as Promise<T>;
   const requestEpoch = portalAuthEpoch;
   const request = api
     .get<T>(key)
     .then((result) => {
-      if (requestEpoch === portalAuthEpoch) {
-        setCacheEntry(key, result);
+      if (requestEpoch === portalAuthEpoch && scopedPortalKey(key) === cacheKey) {
+        setCacheEntry(cacheKey, result);
         void saveOfflineReadSnapshot(key, result);
       }
       return result;
@@ -67,19 +81,19 @@ function fetchShared<T>(key: string): Promise<T> {
     .catch(async (err) => {
       if (isTransientNetworkError(err)) {
         const snapshot = await loadOfflineReadSnapshot<T>(key);
-        if (snapshot !== null && requestEpoch === portalAuthEpoch) {
-          setCacheEntry(key, snapshot, 0);
+        if (snapshot !== null && requestEpoch === portalAuthEpoch && scopedPortalKey(key) === cacheKey) {
+          setCacheEntry(cacheKey, snapshot, 0);
           return snapshot;
         }
       }
       throw err;
     })
     .finally(() => {
-      if (inflight.get(key) === request) {
-        inflight.delete(key);
+      if (inflight.get(cacheKey) === request) {
+        inflight.delete(cacheKey);
       }
     });
-  inflight.set(key, request);
+  inflight.set(cacheKey, request);
   return request;
 }
 
@@ -96,14 +110,15 @@ function subscribe(key: string, listener: Listener) {
 /** Yêu cầu mọi nơi đang dùng các khóa (đường dẫn API đầy đủ) tải lại. Khóa chưa ai dùng sẽ bị đánh dấu cũ để lần sau tải mới. */
 export function invalidateQueries(...keys: string[]) {
   for (const key of new Set(keys)) {
-    const existing = cache.get(key);
+    const cacheKey = scopedPortalKey(key);
+    const existing = cache.get(cacheKey);
     if (existing) existing.timestamp = 0;
     const set = listeners.get(key);
     if (set && set.size > 0) {
-      inflight.delete(key);
+      inflight.delete(cacheKey);
       set.forEach((listener) => listener());
     } else {
-      cache.delete(key);
+      cache.delete(cacheKey);
     }
   }
 }
@@ -140,15 +155,23 @@ registerOfflinePortalInvalidator((keys) => {
   refreshPortal(...(keys as PortalKey[]));
 });
 
-// Đăng xuất / hết phiên: tăng thế hệ phiên và xóa toàn bộ dữ liệu của hộ khỏi bộ nhớ để tài khoản khác không thấy.
+/** Xóa toàn bộ bộ nhớ đệm cổng hộ dân khi đăng xuất, hết phiên hoặc đổi tài khoản. */
+export function clearPortalQueryCache(mode: "logout" | "scope" = "scope"): void {
+  portalAuthEpoch += 1;
+  cache.clear();
+  inflight.clear();
+  for (const listener of authResetListeners) {
+    listener(mode);
+  }
+}
+
+// Đăng xuất / hết phiên / đổi tài khoản: tăng thế hệ phiên và xóa toàn bộ dữ liệu của hộ khỏi bộ nhớ để tài khoản khác không thấy.
 if (typeof window !== "undefined") {
-  const clearAll = () => {
-    portalAuthEpoch += 1;
-    cache.clear();
-    inflight.clear();
-  };
-  window.addEventListener(AUTH_LOGOUT_EVENT, clearAll);
-  window.addEventListener(AUTH_EXPIRED_EVENT, clearAll);
+  const onLogoutOrExpired = () => clearPortalQueryCache("logout");
+  const onScopeChanged = () => clearPortalQueryCache("scope");
+  window.addEventListener(AUTH_LOGOUT_EVENT, onLogoutOrExpired);
+  window.addEventListener(AUTH_EXPIRED_EVENT, onLogoutOrExpired);
+  window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, onScopeChanged);
 }
 
 /**
@@ -156,26 +179,31 @@ if (typeof window !== "undefined") {
  * `key = null` để chưa tải.
  */
 export function useSharedQuery<T>(key: string | null) {
-  const [data, setData] = useState<T | null>(() => (key ? ((cache.get(key)?.data as T | undefined) ?? null) : null));
-  const [loading, setLoading] = useState(() => (key ? !cache.has(key) : false));
+  const cacheKey = key ? scopedPortalKey(key) : null;
+  const [data, setData] = useState<T | null>(() =>
+    cacheKey ? ((cache.get(cacheKey)?.data as T | undefined) ?? null) : null,
+  );
+  const [loading, setLoading] = useState(() => (cacheKey ? !cache.has(cacheKey) : false));
   const [error, setError] = useState<string | null>(null);
-  const [prevKey, setPrevKey] = useState<string | null>(key);
+  const [prevKey, setPrevKey] = useState<string | null>(cacheKey);
 
-  if (prevKey !== key) {
-    setPrevKey(key);
-    const cached = key ? cache.get(key) : undefined;
+  if (prevKey !== cacheKey) {
+    setPrevKey(cacheKey);
+    const cached = cacheKey ? cache.get(cacheKey) : undefined;
     setData(cached ? (cached.data as T) : null);
-    setLoading(key ? !cached : false);
+    setLoading(cacheKey ? !cached : false);
     setError(null);
   }
 
   const load = useCallback(
     async (silent: boolean) => {
       if (!key) return;
+      const expectedCacheKey = scopedPortalKey(key);
       if (!silent) setLoading(true);
       setError(null);
       try {
         const result = await fetchShared<T>(key);
+        if (scopedPortalKey(key) !== expectedCacheKey) return;
         setData((prev) =>
           key === NOTIFICATIONS_PATH && prev !== null && JSON.stringify(prev) === JSON.stringify(result)
             ? prev
@@ -183,7 +211,7 @@ export function useSharedQuery<T>(key: string | null) {
         );
       } catch (err) {
         // Giữ dữ liệu cũ nếu đã có; chỉ báo lỗi khi chưa có gì để hiển thị.
-        if (!cache.has(key)) setError(errorMessage(err, "Không tải được dữ liệu."));
+        if (!cache.has(expectedCacheKey)) setError(errorMessage(err, "Không tải được dữ liệu."));
       } finally {
         setLoading(false);
       }
@@ -192,14 +220,27 @@ export function useSharedQuery<T>(key: string | null) {
   );
 
   useEffect(() => {
-    if (!key) return;
+    if (!key || !cacheKey) return;
     let active = true;
-    const cached = cache.get(key);
+    const cached = cache.get(cacheKey);
     const isFresh = cached !== undefined && Date.now() - cached.timestamp < getFreshMs(key);
+    if (!cached) {
+      // Dựng tức thì dữ liệu từ IndexedDB (< 10ms) khi mở ứng dụng ở vùng rẫy sóng yếu/mất sóng,
+      // trong khi mạng vẫn đối chiếu lại ở nền nếu có kết nối.
+      void loadOfflineReadSnapshot<T>(key).then((snapshot) => {
+        if (!active || snapshot === null || scopedPortalKey(key) !== cacheKey) return;
+        if (!cache.has(cacheKey)) {
+          setCacheEntry(cacheKey, snapshot, 0);
+          setData((prev) => prev ?? snapshot);
+          setLoading(false);
+          setError(null);
+        }
+      });
+    }
     if (!isFresh) {
       fetchShared<T>(key)
         .then((result) => {
-          if (!active) return;
+          if (!active || scopedPortalKey(key) !== cacheKey) return;
           setData((prev) =>
             key === NOTIFICATIONS_PATH && prev !== null && JSON.stringify(prev) === JSON.stringify(result)
               ? prev
@@ -209,7 +250,7 @@ export function useSharedQuery<T>(key: string | null) {
         })
         .catch((err) => {
           if (!active) return;
-          if (!cache.has(key)) setError(errorMessage(err, "Không tải được dữ liệu."));
+          if (!cache.has(cacheKey)) setError(errorMessage(err, "Không tải được dữ liệu."));
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -222,14 +263,31 @@ export function useSharedQuery<T>(key: string | null) {
       active = false;
       unsubscribe();
     };
+  }, [key, cacheKey, load]);
+
+  useEffect(() => {
+    const onAuthReset = (mode: "logout" | "scope") => {
+      setData(null);
+      setError(null);
+      if (mode === "scope" && key !== null && getAuthScopeUserId() !== null) {
+        void load(false);
+      } else {
+        setLoading(false);
+      }
+    };
+    authResetListeners.add(onAuthReset);
+    return () => {
+      authResetListeners.delete(onAuthReset);
+    };
   }, [key, load]);
 
   /** Tải lại khóa này ở mọi nơi đang dùng. */
   const refresh = useCallback(async () => {
     if (!key) return;
-    const existing = cache.get(key);
+    const currentCacheKey = scopedPortalKey(key);
+    const existing = cache.get(currentCacheKey);
     if (existing) existing.timestamp = 0;
-    inflight.delete(key);
+    inflight.delete(currentCacheKey);
     const set = listeners.get(key);
     set?.forEach((listener) => listener());
     if (!set || set.size === 0) await load(true);
@@ -240,7 +298,7 @@ export function useSharedQuery<T>(key: string | null) {
       setData((prev) => {
         const resolved = typeof next === "function" ? (next as (prev: T | null) => T | null)(prev) : next;
         if (key && resolved !== null) {
-          setCacheEntry(key, resolved);
+          setCacheEntry(scopedPortalKey(key), resolved);
         }
         return resolved;
       });
@@ -267,4 +325,40 @@ export function useCatalog<T>(resource: "pesticides" | "varieties" | "fertilizer
   const state = useSharedQuery<ListResponse<T> | T[]>(enabled ? `/${resource}?pageSize=500` : null);
   const rows = Array.isArray(state.data) ? state.data : (state.data?.data ?? (EMPTY_ARRAY as T[]));
   return { rows, loaded: state.data !== null, loading: state.loading, error: state.error, refresh: state.refresh };
+}
+
+const ESSENTIAL_ORCHARD_PATHS = [
+  "/portal/plots",
+  "/pesticides?pageSize=500",
+  "/portal/journal",
+  "/portal/spray",
+] as const;
+
+let lastWarmUserId: number | null = null;
+let lastWarmAt = 0;
+
+/**
+ * Làm ấm êm ái dữ liệu thiết yếu cho nông hộ đi rẫy (danh sách thửa đất, danh mục thuốc BVTV kèm ngày cách ly PHI,
+ * nhật ký canh tác và phun thuốc) xuống IndexedDB để khi vào vùng rẫy mất sóng vẫn chọn thửa và chọn thuốc đầy đủ.
+ */
+export async function warmPortalEssentialOfflineCache(): Promise<void> {
+  const uid = getAuthScopeUserId();
+  if (!uid || isDeviceOfflineNow()) return;
+  if (lastWarmUserId === uid && Date.now() - lastWarmAt < 10 * 60_000) return;
+  lastWarmUserId = uid;
+  lastWarmAt = Date.now();
+
+  for (const path of ESSENTIAL_ORCHARD_PATHS) {
+    if (getAuthScopeUserId() !== uid || isDeviceOfflineNow()) return;
+    const cacheKey = scopedPortalKey(path);
+    if (cache.has(cacheKey)) continue;
+    const existingSnap = await loadOfflineReadSnapshot(path);
+    if (existingSnap !== null) continue;
+    try {
+      await fetchShared(path);
+    } catch {
+      // Bỏ qua êm nếu đường truyền chập chờn.
+    }
+    await new Promise((r) => setTimeout(r, 450));
+  }
 }

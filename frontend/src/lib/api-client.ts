@@ -1,4 +1,4 @@
-import { reportRequestTime } from "@/lib/network";
+import { getNetworkQualitySnapshot, reportRequestTime } from "@/lib/network";
 import { reportServerFailure, reportServerHealthy } from "@/lib/system-alert";
 
 export class ApiError extends Error {
@@ -22,6 +22,46 @@ export const AUTH_LOGOUT_EVENT = "auth:logout";
 /** Sự kiện & kênh đồng bộ phát ra khi dữ liệu nghiệp vụ trên hệ thống vừa thay đổi (POST/PATCH/PUT/DELETE). */
 export const DATA_MUTATED_EVENT = "puc:data-mutated";
 export const DATA_SYNC_CHANNEL = "puc-data-sync";
+
+const SERVER_CLOCK_OFFSET_KEY = "puc:server-clock-offset:v1";
+let serverClockOffsetMs: number | null = null;
+
+function readStoredClockOffset(): number {
+  if (serverClockOffsetMs !== null) return serverClockOffsetMs;
+  if (typeof window === "undefined") return 0;
+  try {
+    const raw = window.sessionStorage.getItem(SERVER_CLOCK_OFFSET_KEY);
+    const parsed = raw !== null ? Number(raw) : 0;
+    serverClockOffsetMs = Number.isFinite(parsed) && Math.abs(parsed) <= 3650 * 86_400_000 ? parsed : 0;
+    return serverClockOffsetMs;
+  } catch {
+    serverClockOffsetMs = 0;
+    return 0;
+  }
+}
+
+export function syncServerClockFromHeader(dateHeader: string | null | undefined): void {
+  if (!dateHeader) return;
+  const serverMs = Date.parse(dateHeader);
+  if (!Number.isFinite(serverMs)) return;
+  const offset = serverMs - Date.now();
+  if (Math.abs(offset) > 3650 * 86_400_000) return;
+  serverClockOffsetMs = offset;
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem(SERVER_CLOCK_OFFSET_KEY, String(Math.round(offset)));
+    } catch {
+      // ignore storage restriction
+    }
+  }
+}
+
+/**
+ * Thời điểm hiện tại đã hiệu chuẩn theo đồng hồ máy chủ (chống việc đồng hồ điện thoại bị chỉnh nhanh sang tương lai để khai khống ngày).
+ */
+export function getServerCalibratedDate(): Date {
+  return new Date(Date.now() + readStoredClockOffset());
+}
 
 let syncChannel: BroadcastChannel | null = null;
 
@@ -90,19 +130,67 @@ export function clearMemoryEtagCache(): void {
   memoryEtagCache.clear();
 }
 
-function setMemoryEtagEntry(path: string, etag: string, data: unknown): void {
-  if (memoryEtagCache.has(path)) {
-    memoryEtagCache.delete(path);
+function setMemoryEtagEntry(cacheKey: string, etag: string, data: unknown): void {
+  if (memoryEtagCache.has(cacheKey)) {
+    memoryEtagCache.delete(cacheKey);
   } else if (memoryEtagCache.size >= MAX_ETAG_ENTRIES) {
     const oldest = memoryEtagCache.keys().next().value;
     if (oldest !== undefined) memoryEtagCache.delete(oldest);
   }
-  memoryEtagCache.set(path, { etag, data });
+  memoryEtagCache.set(cacheKey, { etag, data });
+}
+
+/**
+ * Sự kiện phát ra khi tài khoản đang hoạt động trong tab này đổi sang tài khoản khác (hoặc về trạng thái chưa đăng nhập):
+ * mọi bộ nhớ đệm trong bộ nhớ (API, ETag, cổng hộ dân, mã QR) phải dọn sạch và hủy tiến trình đồng bộ của tài khoản cũ.
+ */
+export const AUTH_SCOPE_CHANGED_EVENT = "auth:scope-changed";
+
+let authScopeUserId: number | null = null;
+
+function etagCacheKey(path: string): string {
+  return `${authScopeUserId ?? "anon"}:${path}`;
 }
 
 if (typeof window !== "undefined") {
-  window.addEventListener(AUTH_LOGOUT_EVENT, clearMemoryEtagCache);
-  window.addEventListener(AUTH_EXPIRED_EVENT, clearMemoryEtagCache);
+  const clearOnAuthEnd = () => {
+    authScopeUserId = null;
+    clearMemoryEtagCache();
+  };
+  window.addEventListener(AUTH_LOGOUT_EVENT, clearOnAuthEnd);
+  window.addEventListener(AUTH_EXPIRED_EVENT, clearOnAuthEnd);
+}
+
+/** Tài khoản đang hoạt động trong tab hiện tại (dùng để gắn chủ sở hữu cho dữ liệu lưu đệm). */
+export function getAuthScopeUserId(): number | null {
+  return authScopeUserId;
+}
+
+/** Xóa toàn bộ bộ nhớ đệm phía client (ETag, useApi, usePortal) khi đăng nhập mới hoặc đổi tài khoản. */
+export function clearApiClientCaches(): void {
+  clearMemoryEtagCache();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(AUTH_SCOPE_CHANGED_EVENT, {
+        detail: { previous: authScopeUserId, next: authScopeUserId },
+      }),
+    );
+  }
+}
+
+/**
+ * Cập nhật tài khoản đang hoạt động. Khi chuyển giữa các tài khoản (hoặc đăng xuất),
+ * xóa bộ nhớ đệm ETag và phát `AUTH_SCOPE_CHANGED_EVENT` đồng bộ để các bộ nhớ đệm khác tự dọn ngay lập tức.
+ */
+export function setAuthScopeUser(userId: number | null | undefined): void {
+  const next = typeof userId === "number" && Number.isInteger(userId) && userId > 0 ? userId : null;
+  if (next === authScopeUserId) return;
+  const previous = authScopeUserId;
+  authScopeUserId = next;
+  clearMemoryEtagCache();
+  if (typeof window !== "undefined" && previous !== null) {
+    window.dispatchEvent(new CustomEvent(AUTH_SCOPE_CHANGED_EVENT, { detail: { previous, next } }));
+  }
 }
 
 export interface RequestOptions {
@@ -116,7 +204,8 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   const isMutating = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
   const canUseEtag = method === "GET" && !path.startsWith("/auth");
   const requestEpoch = etagSessionEpoch;
-  const cachedEtag = canUseEtag ? memoryEtagCache.get(path) : undefined;
+  const requestEtagKey = etagCacheKey(path);
+  const cachedEtag = canUseEtag ? memoryEtagCache.get(requestEtagKey) : undefined;
 
   const send = async () => {
     const startedAt = performance.now();
@@ -128,15 +217,22 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       headers = { "If-None-Match": cachedEtag.etag, ...rawHeaders };
     }
     try {
+      const effectiveSignal =
+        init?.signal ??
+        (method === "GET" && !path.startsWith("/reports/") && typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+          ? AbortSignal.timeout(getNetworkQualitySnapshot() === "slow" ? 5500 : 9500)
+          : undefined);
       return await fetch(`/api${path}`, {
         cache: "no-store",
         credentials: "same-origin",
         ...init,
+        signal: effectiveSignal,
         keepalive: init?.keepalive,
         headers,
       });
     } catch (err) {
-      const isAbort = err instanceof DOMException && err.name === "AbortError";
+      const isAbort =
+        err instanceof DOMException && (err.name === "AbortError" || err.name === "TimeoutError");
       if (!isAbort) {
         reportServerFailure("unreachable");
       }
@@ -147,6 +243,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   };
 
   let response = await send();
+  syncServerClockFromHeader(response.headers.get("date"));
   // Trên gói miễn phí Render + Vercel, lần truy cập đầu sau khi máy chủ ngủ đông (cold start)
   // có thể trả 502 / 503 / 504 tạm thời trong vài giây đầu: tự động thử lại êm cho truy vấn GET.
   if (
@@ -209,10 +306,15 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   if (!text) return undefined as T;
   try {
     const parsed = JSON.parse(text) as T;
-    if (canUseEtag && requestEpoch === etagSessionEpoch && text.length <= MAX_ETAG_PAYLOAD_CHARS) {
+    if (
+      canUseEtag &&
+      requestEpoch === etagSessionEpoch &&
+      etagCacheKey(path) === requestEtagKey &&
+      text.length <= MAX_ETAG_PAYLOAD_CHARS
+    ) {
       const responseEtag = response.headers.get("ETag");
       if (responseEtag) {
-        setMemoryEtagEntry(path, responseEtag, parsed);
+        setMemoryEtagEntry(requestEtagKey, responseEtag, parsed);
       }
     }
     return parsed;
@@ -253,7 +355,13 @@ export interface UploadedFile {
   url: string;
   mimeType: string;
   sizeBytes: number;
+  sha256?: string;
+  deduplicated?: boolean;
 }
+
+export type UploadHashCheckResult =
+  | { found: false }
+  | { found: true; id: number; url: string; mimeType: string; sizeBytes: number; sha256: string };
 
 export const api = {
   get: <T>(path: string, options?: RequestOptions) =>
@@ -270,17 +378,42 @@ export const api = {
     apiRequest<T>(path, jsonRequest("PATCH", body, options)),
   delete: <T>(path: string, options?: RequestOptions) =>
     apiRequest<T>(path, jsonRequest("DELETE", undefined, options)),
+  /** Kiểm tra nhanh theo SHA-256 xem tệp của chính người dùng này đã có trên máy chủ chưa (tránh tải lại trên sóng yếu). */
+  checkUploadByHash: (
+    purpose: UploadPurpose,
+    sha256: string,
+    sizeBytes?: number,
+    options?: RequestOptions,
+  ) => {
+    const qs = new URLSearchParams({ purpose, sha256 });
+    if (typeof sizeBytes === "number" && Number.isInteger(sizeBytes) && sizeBytes > 0) {
+      qs.set("size", String(sizeBytes));
+    }
+    return apiRequest<UploadHashCheckResult>(`/uploads/by-hash?${qs.toString()}`, {
+      signal: options?.signal,
+      headers: options?.headers,
+    });
+  },
   /** Tải một tệp lên `/api/uploads` (multipart). Trả về `{ id, url }` để gửi kèm bản ghi nghiệp vụ. */
-  upload: (file: Blob, purpose: UploadPurpose, filename = "upload", options?: RequestOptions) => {
+  upload: (
+    file: Blob,
+    purpose: UploadPurpose,
+    filename = "upload",
+    options?: RequestOptions & { sha256?: string },
+  ) => {
     const form = new FormData();
     form.append("purpose", purpose);
     form.append("file", file, file instanceof File ? file.name : filename);
+    const headers: Record<string, string> = {
+      ...(options?.sha256 ? { "X-Upload-Sha256": options.sha256 } : undefined),
+      ...options?.headers,
+    };
     return apiRequest<UploadedFile>("/uploads", {
       method: "POST",
       body: form,
       keepalive: options?.keepalive,
       signal: options?.signal,
-      headers: options?.headers,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
     });
   },
 };

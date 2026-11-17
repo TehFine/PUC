@@ -1,3 +1,5 @@
+import { isSafeRasterDataUrl } from "./url-safety";
+
 /**
  * Tiện ích tải tệp (Blob / Data URL / CSV UTF-8 BOM) tương thích mọi trình duyệt
  * kể cả iOS Safari, Android Chrome, Firefox Mobile và WebView (tránh lỗi thu hồi Blob URL sớm).
@@ -31,6 +33,7 @@ export function triggerBlobDownload(blob: Blob, filename: string): void {
 }
 
 export function triggerDataUrlDownload(dataUrl: string, filename: string): void {
+  if (!isSafeRasterDataUrl(dataUrl)) return;
   const safeName = sanitizeDownloadFilename(filename);
   const link = document.createElement("a");
   link.href = dataUrl;

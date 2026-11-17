@@ -1,0 +1,26 @@
+{
+  "name": "HTX Cư Né - Cổng Vùng Trồng Sầu Riêng",
+  "short_name": "HTX Cư Né",
+  "description": "Ghi nhật ký canh tác, chụp ảnh hiện trường ngoài rẫy ngoại tuyến và truy xuất nguồn gốc vùng trồng sầu riêng HTX Cư Né",
+  "start_url": "/portal",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f7f5",
+  "theme_color": "#14372f",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "/newlogo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/newlogo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
+

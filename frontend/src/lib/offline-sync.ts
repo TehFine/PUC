@@ -3,30 +3,54 @@
 import { useSyncExternalStore } from "react";
 import {
   compressImage,
+  computeBlobSha256Hex,
   encodedImageName,
   isSupportedImageFile,
   purposeAllowsVideo,
   validatePickedFile,
 } from "@/components/portal/shared/media";
+import { getNetworkQualitySnapshot } from "@/lib/network";
 import {
   AUTH_EXPIRED_EVENT,
   AUTH_LOGOUT_EVENT,
+  AUTH_SCOPE_CHANGED_EVENT,
   ApiError,
   api,
   apiRequest,
   errorMessage,
+  getAuthScopeUserId,
+  getServerCalibratedDate,
   notifyDataMutated,
   type UploadPurpose,
 } from "@/lib/api-client";
 import type { AuthSession } from "@/types/api";
 
 const DB_NAME = "puc-offline-sync-v1";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_OUTBOX = "outbox";
 const STORE_SNAPSHOTS = "read_snapshots";
+const STORE_DRAFTS = "field_drafts";
 const AUTH_SNAPSHOT_STORAGE_KEY = "puc:offline-auth-session:v1";
-const AUTH_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
+/** Phiên ngoại tuyến chỉ giữ tối đa 48 giờ trên thiết bị (thiết bị dùng chung tại HTX). */
+const AUTH_SNAPSHOT_MAX_AGE_MS = 48 * 60 * 60_000;
 const MAX_READ_SNAPSHOTS = 90;
+/** Giới hạn tuổi thọ (7 ngày) và số lượng tối đa (24 bản) của Kho giữ hình ngoài rẫy để chống đầy bộ nhớ máy cũ. */
+const MAX_DRAFT_AGE_MS = 7 * 24 * 60 * 60_000;
+const MAX_TOTAL_DRAFTS = 24;
+/**
+ * Các bảng dữ liệu nhạy cảm cấp quản trị (CCCD, SĐT, tài khoản, nhật ký kiểm toán, hồ sơ đăng ký, báo cáo, hợp đồng)
+ * tuyệt đối không lưu bản chụp đọc ngoại tuyến xuống IndexedDB.
+ */
+const SENSITIVE_SNAPSHOT_PREFIXES = [
+  "/households",
+  "/accounts",
+  "/audit-log",
+  "/registrations",
+  "/reports",
+  "/contracts",
+];
+/** Chỉ cho phép giả lập mạng qua `?net=` khi chạy môi trường phát triển. */
+const ALLOW_NET_SIMULATION = process.env.NODE_ENV === "development";
 
 const PHOTO_UPLOAD_TIMEOUT_MS = 15_000;
 const VIDEO_UPLOAD_TIMEOUT_MS = 40_000;
@@ -51,9 +75,32 @@ export interface OfflineMediaSlot {
   mimeType: string;
   sizeBytes: number;
   isVideo: boolean;
+  durationSec?: number | null;
+  posterDataUrl?: string | null;
+  sha256?: string;
   blob?: Blob;
   uploadedId?: number;
   uploadedUrl?: string;
+}
+
+export interface OfflineFieldDraft {
+  id: string;
+  userId: number;
+  isAutoWorkingDraft?: boolean;
+  plotCode: string;
+  entryOn: string;
+  activity: string;
+  detail: string;
+  lateReason: string;
+  pesticideId: string;
+  dose: string;
+  areaHa: string;
+  source: string;
+  coords: { latitude: number; longitude: number } | null;
+  capturedAtIso: string;
+  capturedDateVn: string;
+  updatedAt: number;
+  mediaSlots: OfflineMediaSlot[];
 }
 
 export interface OfflineMediaBinding {
@@ -92,10 +139,13 @@ interface ReadSnapshotRecord {
 
 export interface OfflineSyncSnapshot {
   items: OfflineOutboxItem[];
+  drafts: OfflineFieldDraft[];
+  workingDraft: OfflineFieldDraft | null;
   queuedCount: number;
   failedCount: number;
   pendingMediaCount: number;
   isSyncing: boolean;
+  isPreUploadingDrafts: boolean;
   activeItemLabel: string | null;
   activeMediaProgress: { done: number; total: number } | null;
   recentSyncedCount: number;
@@ -104,10 +154,13 @@ export interface OfflineSyncSnapshot {
 
 const EMPTY_SYNC_SNAPSHOT: OfflineSyncSnapshot = Object.freeze({
   items: [],
+  drafts: [],
+  workingDraft: null,
   queuedCount: 0,
   failedCount: 0,
   pendingMediaCount: 0,
   isSyncing: false,
+  isPreUploadingDrafts: false,
   activeItemLabel: null,
   activeMediaProgress: null,
   recentSyncedCount: 0,
@@ -134,13 +187,17 @@ export function loadOfflineAuthSession(): AuthSession | null {
     const raw = window.localStorage.getItem(AUTH_SNAPSHOT_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { session?: AuthSession; savedAt?: number };
+    const savedAt = parsed?.savedAt;
     if (
       !parsed?.session?.user?.id ||
       typeof parsed.session.user.role !== "string" ||
-      typeof parsed.savedAt !== "number" ||
-      Date.now() - parsed.savedAt > AUTH_SNAPSHOT_MAX_AGE_MS
+      typeof savedAt !== "number" ||
+      savedAt > Date.now() + 5 * 60_000 ||
+      Date.now() - savedAt > AUTH_SNAPSHOT_MAX_AGE_MS
     ) {
+      // Phiên ngoại tuyến hết hạn hoặc hỏng: xóa luôn bản chụp dữ liệu đọc để không mở lại được sau này.
       window.localStorage.removeItem(AUTH_SNAPSHOT_STORAGE_KEY);
+      void clearAllOfflineReadSnapshots();
       return null;
     }
     return parsed.session;
@@ -183,6 +240,11 @@ function openOfflineDb(): Promise<IDBDatabase | null> {
           snaps.createIndex("by_user", "userId", { unique: false });
           snaps.createIndex("by_saved", "savedAt", { unique: false });
         }
+        if (!db.objectStoreNames.contains(STORE_DRAFTS)) {
+          const drafts = db.createObjectStore(STORE_DRAFTS, { keyPath: "id" });
+          drafts.createIndex("by_user", "userId", { unique: false });
+          drafts.createIndex("by_updated", "updatedAt", { unique: false });
+        }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => {
@@ -215,15 +277,32 @@ function idbTxDone(tx: IDBTransaction): Promise<void> {
 
 /* ──────────────────────────── Lưu đệm đọc ngoại tuyến (cho danh sách thửa / thuốc / lộ trình) ──────────────────────────── */
 
-function currentSessionUserId(): number | null {
-  return loadOfflineAuthSession()?.user?.id ?? null;
+/** Bảng nhạy cảm cấp quản trị không bao giờ được lưu/đọc bản chụp ngoại tuyến. */
+export function isOfflineSnapshotAllowed(path: string): boolean {
+  const normalized = (path.split(/[?#]/, 1)[0] ?? "").trim().replace(/\/+/g, "/").toLowerCase();
+  if (!normalized.startsWith("/")) return false;
+  return !SENSITIVE_SNAPSHOT_PREFIXES.some(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
+  );
 }
 
+/**
+ * Bản chụp đọc gắn với tài khoản đang hoạt động trong TAB hiện tại (không đọc localStorage dùng chung giữa các tab,
+ * tránh lưu dữ liệu tài khoản A dưới khóa của tài khoản B vừa đăng nhập ở tab khác).
+ */
+function snapshotScopeUserId(): number | null {
+  return getAuthScopeUserId();
+}
+
+let legacySensitiveSnapshotsPurged = false;
+
 export async function saveOfflineReadSnapshot(path: string, data: unknown): Promise<void> {
-  const userId = currentSessionUserId();
-  if (!userId || data === null || data === undefined) return;
+  const userId = snapshotScopeUserId();
+  if (!userId || data === null || data === undefined || !isOfflineSnapshotAllowed(path)) return;
   const db = await openOfflineDb();
   if (!db) return;
+  // Phiên đã đổi trong lúc mở IndexedDB: bỏ qua để không ghi dữ liệu sai chủ.
+  if (snapshotScopeUserId() !== userId) return;
 
   try {
     const tx = db.transaction(STORE_SNAPSHOTS, "readwrite");
@@ -236,6 +315,16 @@ export async function saveOfflineReadSnapshot(path: string, data: unknown): Prom
       savedAt: Date.now(),
     };
     store.put(record);
+    // Dọn một lần mỗi phiên tải trang các bản chụp nhạy cảm còn sót từ phiên bản cũ.
+    if (!legacySensitiveSnapshotsPurged) {
+      legacySensitiveSnapshotsPurged = true;
+      const legacyRecords = (await idbReq(store.getAll())) as ReadSnapshotRecord[];
+      for (const legacy of legacyRecords) {
+        if (legacy && (typeof legacy.path !== "string" || !isOfflineSnapshotAllowed(legacy.path))) {
+          store.delete(legacy.key);
+        }
+      }
+    }
     const allKeys = await idbReq(store.getAllKeys());
     if (allKeys.length > MAX_READ_SNAPSHOTS) {
       const allRecords = (await idbReq(store.getAll())) as ReadSnapshotRecord[];
@@ -252,8 +341,8 @@ export async function saveOfflineReadSnapshot(path: string, data: unknown): Prom
 }
 
 export async function loadOfflineReadSnapshot<T>(path: string): Promise<T | null> {
-  const userId = currentSessionUserId();
-  if (!userId) return null;
+  const userId = snapshotScopeUserId();
+  if (!userId || !isOfflineSnapshotAllowed(path)) return null;
   const db = await openOfflineDb();
   if (!db) return null;
   try {
@@ -261,7 +350,8 @@ export async function loadOfflineReadSnapshot<T>(path: string): Promise<T | null
     const rec = (await idbReq(tx.objectStore(STORE_SNAPSHOTS).get(`${userId}:${path}`))) as
       | ReadSnapshotRecord
       | undefined;
-    return rec ? (rec.data as T) : null;
+    if (!rec || rec.userId !== userId || snapshotScopeUserId() !== userId) return null;
+    return rec.data as T;
   } catch {
     return null;
   }
@@ -284,6 +374,7 @@ export async function clearAllOfflineReadSnapshots(): Promise<void> {
 export function isDeviceOfflineNow(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
   if (navigator.onLine === false) return true;
+  if (!ALLOW_NET_SIMULATION) return false;
   try {
     const forced = new URLSearchParams(window.location.search).get("net");
     if (forced === "offline") return true;
@@ -293,16 +384,24 @@ export function isDeviceOfflineNow(): boolean {
   return document.documentElement?.dataset?.net === "offline";
 }
 
+/**
+ * Lỗi mạng tạm thời (mất sóng, hết thời gian chờ, máy chủ ngủ đông 502/503/504) cho phép dùng dữ liệu ngoại tuyến.
+ * Mọi phản hồi HTTP khác từ máy chủ (đặc biệt 401/403 khi phiên bị thu hồi) tuyệt đối không bao giờ bị coi là mất mạng,
+ * kể cả khi trình duyệt đang báo ngoại tuyến.
+ */
 export function isTransientNetworkError(err: unknown): boolean {
+  if (err instanceof ApiError) {
+    return err.status === 408 || err.status === 502 || err.status === 503 || err.status === 504;
+  }
+  if (err instanceof OfflineAuthChangedError) {
+    return false;
+  }
   if (isDeviceOfflineNow()) return true;
   if (err instanceof TypeError) return true;
   if (typeof DOMException !== "undefined" && err instanceof DOMException) {
     if (err.name === "AbortError" || err.name === "TimeoutError" || err.name === "NetworkError") {
       return true;
     }
-  }
-  if (err instanceof ApiError) {
-    return err.status === 408 || err.status === 502 || err.status === 503 || err.status === 504;
   }
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
@@ -350,7 +449,7 @@ function todayVnIso(): string {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(new Date());
+  }).formatToParts(getServerCalibratedDate());
   const y = parts.find((p) => p.type === "year")?.value ?? "2026";
   const m = parts.find((p) => p.type === "month")?.value ?? "01";
   const d = parts.find((p) => p.type === "day")?.value ?? "01";
@@ -366,6 +465,71 @@ let syncRunning = false;
 let clearRecentTimer: ReturnType<typeof setTimeout> | undefined;
 let portalInvalidateHandler: ((keys: string[]) => void) | null = null;
 
+/*
+ * Bộ đếm thế hệ phiên đồng bộ: tăng mỗi khi đăng xuất, hết phiên hoặc đổi tài khoản trên cùng thiết bị.
+ * Mọi tiến trình tải ảnh/gửi bản ghi đang chạy đều chụp lại thế hệ lúc bắt đầu và dừng ngay khi thế hệ thay đổi,
+ * đồng thời AbortController hủy tức thì request đang bay để không gửi nhật ký của tài khoản cũ bằng cookie tài khoản mới.
+ */
+let syncAuthEpoch = 0;
+let authAbortController: AbortController | null = null;
+
+function currentAuthSignal(): AbortSignal {
+  if (!authAbortController) authAbortController = new AbortController();
+  return authAbortController.signal;
+}
+
+function invalidateSyncAuth(): void {
+  syncAuthEpoch += 1;
+  const controller = authAbortController;
+  authAbortController = null;
+  if (controller && !controller.signal.aborted) {
+    try {
+      controller.abort(new DOMException("Phiên đăng nhập trên thiết bị đã thay đổi.", "AbortError"));
+    } catch {
+      controller.abort();
+    }
+  }
+}
+
+/** Gộp tín hiệu hủy theo phiên đăng nhập với giới hạn thời gian của từng request. */
+function authScopedSignal(authSignal: AbortSignal, timeoutMs: number): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const anyFn = (AbortSignal as typeof AbortSignal & { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  if (typeof anyFn === "function") {
+    return anyFn.call(AbortSignal, [authSignal, timeoutSignal]);
+  }
+  const controller = new AbortController();
+  const forward = (source: AbortSignal) => {
+    if (!controller.signal.aborted) controller.abort(source.reason);
+  };
+  for (const source of [authSignal, timeoutSignal]) {
+    if (source.aborted) {
+      forward(source);
+      break;
+    }
+    source.addEventListener("abort", () => forward(source), { once: true });
+  }
+  return controller.signal;
+}
+
+/** Tạo bộ kiểm tra "vẫn đúng tài khoản" cho một tiến trình đồng bộ/gửi bản ghi. */
+function captureSyncOwner(userId: number | null): { signal: AbortSignal; isOwner: () => boolean } {
+  const epoch = syncAuthEpoch;
+  const signal = currentAuthSignal();
+  return {
+    signal,
+    isOwner: () =>
+      userId !== null && epoch === syncAuthEpoch && activeSyncUserId === userId && !signal.aborted,
+  };
+}
+
+class OfflineAuthChangedError extends Error {
+  constructor() {
+    super("Phiên đăng nhập trên thiết bị đã thay đổi.");
+    this.name = "OfflineAuthChangedError";
+  }
+}
+
 export function registerOfflinePortalInvalidator(fn: (keys: string[]) => void): void {
   portalInvalidateHandler = fn;
 }
@@ -376,12 +540,47 @@ function emitSyncChange(): void {
   }
 }
 
+let persistentStorageRequested = false;
+
+function ensurePersistentStorageOnce(): void {
+  if (persistentStorageRequested || typeof navigator === "undefined") return;
+  persistentStorageRequested = true;
+  try {
+    void navigator.storage?.persist?.().catch(() => undefined);
+  } catch {
+    // ignore
+  }
+}
+
+function requestSwBackgroundSync(): void {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  try {
+    void navigator.serviceWorker.ready
+      .then((reg) => {
+        const syncReg = reg as ServiceWorkerRegistration & {
+          sync?: { register: (tag: string) => Promise<void> };
+        };
+        return syncReg.sync?.register("puc-outbox-sync");
+      })
+      .catch(() => undefined);
+  } catch {
+    // ignore
+  }
+}
+
 function recomputeSnapshot(
   items: OfflineOutboxItem[],
   patch?: Partial<
     Pick<
       OfflineSyncSnapshot,
-      "isSyncing" | "activeItemLabel" | "activeMediaProgress" | "recentSyncedCount" | "lastSyncedAt"
+      | "drafts"
+      | "workingDraft"
+      | "isSyncing"
+      | "isPreUploadingDrafts"
+      | "activeItemLabel"
+      | "activeMediaProgress"
+      | "recentSyncedCount"
+      | "lastSyncedAt"
     >
   >,
 ): void {
@@ -395,10 +594,13 @@ function recomputeSnapshot(
 
   currentSnapshot = {
     items: sorted,
+    drafts: patch?.drafts !== undefined ? patch.drafts : currentSnapshot.drafts,
+    workingDraft: patch?.workingDraft !== undefined ? patch.workingDraft : currentSnapshot.workingDraft,
     queuedCount,
     failedCount,
     pendingMediaCount,
     isSyncing: patch?.isSyncing ?? currentSnapshot.isSyncing,
+    isPreUploadingDrafts: patch?.isPreUploadingDrafts ?? currentSnapshot.isPreUploadingDrafts,
     activeItemLabel: patch?.activeItemLabel !== undefined ? patch.activeItemLabel : currentSnapshot.activeItemLabel,
     activeMediaProgress:
       patch?.activeMediaProgress !== undefined ? patch.activeMediaProgress : currentSnapshot.activeMediaProgress,
@@ -423,6 +625,103 @@ async function listUserOutboxItems(userId: number | null): Promise<OfflineOutbox
   }
 }
 
+async function listUserDraftsAll(userId: number | null): Promise<OfflineFieldDraft[]> {
+  if (!userId) return [];
+  const db = await openOfflineDb();
+  if (!db || !db.objectStoreNames.contains(STORE_DRAFTS)) return [];
+  try {
+    const tx = db.transaction(STORE_DRAFTS, "readonly");
+    const index = tx.objectStore(STORE_DRAFTS).index("by_user");
+    const rows = (await idbReq(index.getAll(userId))) as OfflineFieldDraft[];
+    return rows.sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
+}
+
+function splitDrafts(allDrafts: OfflineFieldDraft[]): {
+  drafts: OfflineFieldDraft[];
+  workingDraft: OfflineFieldDraft | null;
+} {
+  const workingDraft = allDrafts.find((d) => d.isAutoWorkingDraft) ?? null;
+  const drafts = allDrafts.filter((d) => !d.isAutoWorkingDraft);
+  return { drafts, workingDraft };
+}
+
+async function pruneExpiredAndExcessDrafts(keepDraftId?: string): Promise<void> {
+  const db = await openOfflineDb();
+  if (!db || !db.objectStoreNames.contains(STORE_DRAFTS)) return;
+  try {
+    const tx = db.transaction(STORE_DRAFTS, "readwrite");
+    const store = tx.objectStore(STORE_DRAFTS);
+    const all = ((await idbReq(store.getAll())) as OfflineFieldDraft[]) ?? [];
+    const now = Date.now();
+    const survivors: OfflineFieldDraft[] = [];
+    for (const d of all) {
+      if (!d || typeof d.id !== "string") continue;
+      if (d.id !== keepDraftId && (typeof d.updatedAt !== "number" || now - d.updatedAt > MAX_DRAFT_AGE_MS)) {
+        store.delete(d.id);
+      } else {
+        survivors.push(d);
+      }
+    }
+    if (survivors.length > MAX_TOTAL_DRAFTS) {
+      survivors.sort((a, b) => a.updatedAt - b.updatedAt);
+      let excess = survivors.length - MAX_TOTAL_DRAFTS;
+      for (const candidate of survivors) {
+        if (excess <= 0) break;
+        if (candidate.id === keepDraftId) continue;
+        store.delete(candidate.id);
+        excess -= 1;
+      }
+    }
+    await idbTxDone(tx);
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+async function putFieldDraftRecord(draft: OfflineFieldDraft): Promise<void> {
+  const db = await openOfflineDb();
+  if (!db || !db.objectStoreNames.contains(STORE_DRAFTS)) {
+    throw new Error("Thiết bị không hỗ trợ lưu trữ ảnh tạm ngoại tuyến IndexedDB.");
+  }
+  const writeOnce = async () => {
+    const tx = db.transaction(STORE_DRAFTS, "readwrite");
+    tx.objectStore(STORE_DRAFTS).put(draft);
+    await idbTxDone(tx);
+  };
+  try {
+    await writeOnce();
+  } catch (err) {
+    const errName = err instanceof DOMException ? err.name : (err as { name?: string } | null)?.name;
+    if (errName === "QuotaExceededError") {
+      await pruneExpiredAndExcessDrafts(draft.id);
+      await clearAllOfflineReadSnapshots();
+      await writeOnce();
+    } else {
+      throw err;
+    }
+  }
+  void pruneExpiredAndExcessDrafts(draft.id);
+}
+
+/** Xóa bản nháp tự động đang điền dở (chứa tọa độ GPS vườn và ảnh chụp tạm) khi đăng xuất trên thiết bị dùng chung. */
+export async function purgeUserWorkingDraftsOnLogout(userId: number | null): Promise<void> {
+  if (userId && Number.isInteger(userId) && userId > 0) {
+    await deleteFieldDraftRecordById(`working:${userId}`).catch(() => undefined);
+  }
+  await pruneExpiredAndExcessDrafts();
+}
+
+async function deleteFieldDraftRecordById(id: string): Promise<void> {
+  const db = await openOfflineDb();
+  if (!db || !db.objectStoreNames.contains(STORE_DRAFTS)) return;
+  const tx = db.transaction(STORE_DRAFTS, "readwrite");
+  tx.objectStore(STORE_DRAFTS).delete(id);
+  await idbTxDone(tx);
+}
+
 async function putOutboxItem(item: OfflineOutboxItem): Promise<void> {
   const db = await openOfflineDb();
   if (!db) throw new Error("Thiết bị không hỗ trợ lưu trữ ngoại tuyến IndexedDB.");
@@ -440,24 +739,45 @@ async function deleteOutboxItemById(id: string): Promise<void> {
 }
 
 export async function refreshOfflineQueueState(userId?: number | null): Promise<void> {
-  const uid = userId !== undefined ? userId : (activeSyncUserId ?? currentSessionUserId());
-  activeSyncUserId = uid;
-  const items = await listUserOutboxItems(uid);
-  recomputeSnapshot(items);
+  const uid = userId !== undefined ? userId : activeSyncUserId;
+  // Không bao giờ để một tiến trình cũ ghi đè tài khoản đang hoạt động (chống hiện hàng đợi của hộ khác).
+  if (uid !== activeSyncUserId) return;
+  const epoch = syncAuthEpoch;
+  const [items, allDrafts] = await Promise.all([listUserOutboxItems(uid), listUserDraftsAll(uid)]);
+  if (epoch !== syncAuthEpoch || uid !== activeSyncUserId) return;
+  const { drafts, workingDraft } = splitDrafts(allDrafts);
+  recomputeSnapshot(items, { drafts, workingDraft });
+}
+
+async function readOwnOutboxItem(id: string): Promise<OfflineOutboxItem | null> {
+  const db = await openOfflineDb();
+  if (!db || activeSyncUserId === null) return null;
+  try {
+    const tx = db.transaction(STORE_OUTBOX, "readonly");
+    const existing = (await idbReq(tx.objectStore(STORE_OUTBOX).get(id))) as OfflineOutboxItem | undefined;
+    return existing && existing.userId === activeSyncUserId ? existing : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function removeOfflineOutboxItem(id: string): Promise<void> {
-  await deleteOutboxItemById(id);
+  // Chỉ cho xóa bản ghi thuộc đúng tài khoản đang đăng nhập.
+  const own = await readOwnOutboxItem(id);
+  if (!own) return;
+  await deleteOutboxItemById(own.id);
   await refreshOfflineQueueState();
 }
 
 export async function retryOfflineOutboxItem(id: string): Promise<void> {
+  const own = await readOwnOutboxItem(id);
+  if (!own) return;
   const db = await openOfflineDb();
   if (!db) return;
   const tx = db.transaction(STORE_OUTBOX, "readwrite");
   const store = tx.objectStore(STORE_OUTBOX);
   const existing = (await idbReq(store.get(id))) as OfflineOutboxItem | undefined;
-  if (existing) {
+  if (existing && existing.userId === own.userId) {
     existing.status = "queued";
     existing.nextRetryAt = 0;
     existing.lastError = null;
@@ -468,6 +788,116 @@ export async function retryOfflineOutboxItem(id: string): Promise<void> {
   void triggerOfflineSyncNow();
 }
 
+/* ──────────────────────────── Kho giữ hình chụp ngoài rẫy để điền chi tiết sau ──────────────────────────── */
+
+export interface SaveFieldDraftInput {
+  id?: string;
+  isAutoWorkingDraft?: boolean;
+  plotCode: string;
+  entryOn: string;
+  activity: string;
+  detail?: string;
+  lateReason?: string;
+  pesticideId?: string;
+  dose?: string;
+  areaHa?: string;
+  source?: string;
+  coords?: { latitude: number; longitude: number } | null;
+  capturedAtIso?: string;
+  capturedDateVn?: string;
+  items: Array<{
+    name: string;
+    isVideo: boolean;
+    durationSec?: number | null;
+    posterDataUrl?: string | null;
+    file?: File;
+    blob?: Blob;
+    precompressed?: boolean;
+    sha256?: string;
+    uploadedId?: number;
+    uploadedUrl?: string;
+  }>;
+}
+
+export async function saveOfflineFieldDraft(input: SaveFieldDraftInput): Promise<OfflineFieldDraft | null> {
+  const uid = activeSyncUserId ?? getAuthScopeUserId();
+  if (!uid) return null;
+  ensurePersistentStorageOnce();
+
+  const draftId = input.isAutoWorkingDraft
+    ? `working:${uid}`
+    : (input.id ?? `draft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`);
+
+  // Nếu bản nháp tự động không còn tệp nào thì xóa ngay bản nháp làm việc
+  if (input.isAutoWorkingDraft && input.items.length === 0) {
+    await deleteFieldDraftRecordById(draftId);
+    await refreshOfflineQueueState(uid);
+    return null;
+  }
+
+  const { slots } = await prepareCompressedMediaSlots(
+    [
+      {
+        slotKey: "photos",
+        purpose: "journal",
+        items: input.items,
+        binding: { arrayField: "photoIds", primaryField: "photoId" },
+      },
+    ],
+    { keepBlobEvenWhenUploaded: true },
+  );
+
+  const nowIso = input.capturedAtIso ?? new Date().toISOString();
+  const dateVn = input.capturedDateVn ?? todayVnIso();
+
+  const record: OfflineFieldDraft = {
+    id: draftId,
+    userId: uid,
+    isAutoWorkingDraft: Boolean(input.isAutoWorkingDraft),
+    plotCode: input.plotCode,
+    entryOn: input.entryOn || dateVn,
+    activity: input.activity,
+    detail: input.detail ?? "",
+    lateReason: input.lateReason ?? "",
+    pesticideId: input.pesticideId ?? "",
+    dose: input.dose ?? "",
+    areaHa: input.areaHa ?? "",
+    source: input.source ?? "",
+    coords: input.coords ?? null,
+    capturedAtIso: nowIso,
+    capturedDateVn: dateVn,
+    updatedAt: Date.now(),
+    mediaSlots: slots,
+  };
+
+  await putFieldDraftRecord(record);
+  await refreshOfflineQueueState(uid);
+  requestSwBackgroundSync();
+  if (!isDeviceOfflineNow()) {
+    void triggerOfflineSyncNow(false);
+  }
+  return record;
+}
+
+export async function clearWorkingFieldDraft(): Promise<void> {
+  const uid = activeSyncUserId ?? getAuthScopeUserId();
+  if (!uid) return;
+  await deleteFieldDraftRecordById(`working:${uid}`);
+  await refreshOfflineQueueState(uid);
+}
+
+export async function removeOfflineFieldDraft(id: string): Promise<void> {
+  const uid = activeSyncUserId ?? getAuthScopeUserId();
+  if (!uid) return;
+  const db = await openOfflineDb();
+  if (!db || !db.objectStoreNames.contains(STORE_DRAFTS)) return;
+  const tx = db.transaction(STORE_DRAFTS, "readonly");
+  const existing = (await idbReq(tx.objectStore(STORE_DRAFTS).get(id))) as OfflineFieldDraft | undefined;
+  if (!existing || existing.userId !== uid) return;
+  await deleteFieldDraftRecordById(id);
+  await refreshOfflineQueueState(uid);
+}
+
 /* ──────────────────────────── Đóng gói ảnh/video nén WebP sẵn sàng lưu ngoại tuyến ──────────────────────────── */
 
 export interface OfflineMediaInputGroup {
@@ -476,14 +906,22 @@ export interface OfflineMediaInputGroup {
   items: Array<{
     name: string;
     isVideo: boolean;
+    durationSec?: number | null;
+    posterDataUrl?: string | null;
     file?: File;
+    blob?: Blob;
+    precompressed?: boolean;
+    sha256?: string;
     uploadedId?: number;
     uploadedUrl?: string;
   }>;
   binding: OfflineMediaBinding;
 }
 
-async function prepareCompressedMediaSlots(groups: OfflineMediaInputGroup[]): Promise<{
+async function prepareCompressedMediaSlots(
+  groups: OfflineMediaInputGroup[],
+  options?: { keepBlobEvenWhenUploaded?: boolean },
+): Promise<{
   slots: OfflineMediaSlot[];
   bindings: Record<string, OfflineMediaBinding>;
 }> {
@@ -493,43 +931,77 @@ async function prepareCompressedMediaSlots(groups: OfflineMediaInputGroup[]): Pr
   for (const group of groups) {
     bindings[group.slotKey] = group.binding;
     for (const item of group.items) {
-      if (item.uploadedId && Number.isInteger(item.uploadedId) && item.uploadedId > 0) {
+      const hasUploaded = Boolean(item.uploadedId && Number.isInteger(item.uploadedId) && item.uploadedId > 0);
+      if (hasUploaded && !options?.keepBlobEvenWhenUploaded) {
         slots.push({
           slotKey: group.slotKey,
           purpose: group.purpose,
           fileName: item.name,
           mimeType: item.isVideo ? "video/mp4" : "image/webp",
-          sizeBytes: 0,
+          sizeBytes: item.file?.size ?? item.blob?.size ?? 0,
           isVideo: item.isVideo,
+          durationSec: item.durationSec,
+          posterDataUrl: item.posterDataUrl,
+          sha256: item.sha256,
           uploadedId: item.uploadedId,
           uploadedUrl: item.uploadedUrl,
         });
         continue;
       }
 
-      if (!item.file) continue;
-      const allowPdf = group.purpose === "approval" || group.purpose === "lab";
-      const allowVideo = purposeAllowsVideo(group.purpose);
-      const problem = validatePickedFile(item.file, { allowPdf, allowVideo });
-      if (problem) {
-        throw new Error(problem);
+      const rawBlob = item.file ?? item.blob;
+      if (!rawBlob) {
+        if (hasUploaded) {
+          slots.push({
+            slotKey: group.slotKey,
+            purpose: group.purpose,
+            fileName: item.name,
+            mimeType: item.isVideo ? "video/mp4" : "image/webp",
+            sizeBytes: 0,
+            isVideo: item.isVideo,
+            durationSec: item.durationSec,
+            posterDataUrl: item.posterDataUrl,
+            sha256: item.sha256,
+            uploadedId: item.uploadedId,
+            uploadedUrl: item.uploadedUrl,
+          });
+        }
+        continue;
       }
 
-      const isImage = isSupportedImageFile(item.file);
-      const compressedBlob = isImage ? await compressImage(item.file) : item.file;
-      const finalName =
-        isImage && compressedBlob !== item.file
-          ? encodedImageName(item.file.name, compressedBlob.type || "image/webp")
-          : item.file.name;
+      let compressedBlob: Blob = rawBlob;
+      let finalName = item.name;
+
+      if (item.file && !item.precompressed) {
+        const allowPdf = group.purpose === "approval" || group.purpose === "lab";
+        const allowVideo = purposeAllowsVideo(group.purpose);
+        const problem = validatePickedFile(item.file, { allowPdf, allowVideo });
+        if (problem) {
+          throw new Error(problem);
+        }
+        const isImage = isSupportedImageFile(item.file);
+        compressedBlob = isImage ? await compressImage(item.file) : item.file;
+        finalName =
+          isImage && compressedBlob !== item.file
+            ? encodedImageName(item.file.name, compressedBlob.type || "image/webp")
+            : item.file.name;
+      }
+
+      const sha256 = item.sha256 ?? (await computeBlobSha256Hex(compressedBlob));
 
       slots.push({
         slotKey: group.slotKey,
         purpose: group.purpose,
         fileName: finalName,
-        mimeType: compressedBlob.type || item.file.type || "image/jpeg",
+        mimeType: compressedBlob.type || item.file?.type || (item.isVideo ? "video/mp4" : "image/webp"),
         sizeBytes: compressedBlob.size,
         isVideo: item.isVideo,
+        durationSec: item.durationSec,
+        posterDataUrl: item.posterDataUrl,
+        sha256,
         blob: compressedBlob,
+        uploadedId: hasUploaded ? item.uploadedId : undefined,
+        uploadedUrl: hasUploaded ? item.uploadedUrl : undefined,
       });
     }
   }
@@ -557,16 +1029,38 @@ function applyMediaIdsToPayload(
   return payload;
 }
 
-async function uploadSingleSlot(slot: OfflineMediaSlot): Promise<{ id: number; url: string }> {
+async function uploadSingleSlot(
+  slot: OfflineMediaSlot,
+  authSignal: AbortSignal,
+  checkHashFirst = false,
+): Promise<{ id: number; url: string }> {
   if (slot.uploadedId && slot.uploadedId > 0) {
     return { id: slot.uploadedId, url: slot.uploadedUrl ?? `/api/uploads/${slot.uploadedId}` };
   }
   if (!slot.blob) {
     throw new Error(`Không đọc được dữ liệu tệp "${slot.fileName}" đã lưu trên thiết bị.`);
   }
+  const sha256 = slot.sha256 ?? (await computeBlobSha256Hex(slot.blob));
+  if (sha256) slot.sha256 = sha256;
+
+  // Khi thử lại từ vùng sóng yếu hoặc tải nền bản nháp: hỏi trước bằng 80 byte GET xem máy chủ đã nhận tệp chưa
+  if (checkHashFirst && sha256 && slot.sizeBytes > 0) {
+    try {
+      const existing = await api.checkUploadByHash(slot.purpose, sha256, slot.sizeBytes, {
+        signal: authScopedSignal(authSignal, 4_000),
+      });
+      if (existing.found) {
+        return { id: existing.id, url: existing.url };
+      }
+    } catch {
+      // Nếu đường truyền gián đoạn hoặc phiên chưa sẵn sàng, chuyển thẳng sang tải tệp bên dưới.
+    }
+  }
+
   const timeoutMs = slot.isVideo ? VIDEO_UPLOAD_TIMEOUT_MS : PHOTO_UPLOAD_TIMEOUT_MS;
   const uploaded = await api.upload(slot.blob, slot.purpose, slot.fileName, {
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: authScopedSignal(authSignal, timeoutMs),
+    sha256,
   });
   return { id: uploaded.id, url: uploaded.url };
 }
@@ -581,6 +1075,9 @@ export interface SubmitFieldRecordOptions<TResponse> {
   mediaGroups?: OfflineMediaInputGroup[];
   portalKeysToInvalidate?: string[];
   onProgress?: (progress: { done: number; total: number } | null) => void;
+  /** Cho phép giữ nguyên mốc giờ chụp ảnh thực tế ngoài rẫy khi hoàn tất từ bản nháp. */
+  capturedAtIso?: string;
+  capturedDateVn?: string;
   /** Cho phép truyền sẵn userId từ AuthContext (ưu tiên hơn đọc localStorage). */
   userId?: number | null;
   /** Kiểu phản hồi mong đợi khi gửi trực tuyến thành công. */
@@ -591,75 +1088,118 @@ export type SubmitFieldRecordResult<TResponse> =
   | { mode: "synced"; data: TResponse }
   | { mode: "queued"; item: OfflineOutboxItem };
 
+const INLINE_FAST_SYNC_BUDGET_MS = 5_500;
+
 /**
- * Luồng gửi bản ghi kèm ảnh/video thông minh cho vùng sóng yếu & mất sóng:
- * 1. Nén ảnh sang WebP siêu nhẹ ngay trên điện thoại.
- * 2. Nếu thiết bị đang mất mạng (`offline`), lưu thẳng vào IndexedDB trong < 200ms mà không bắt nông hộ chờ timeout.
- * 3. Nếu đang có sóng nhưng yếu/chập chờn: tải từng tệp có giới hạn thời gian; nếu đứt mạng giữa chừng (sau khi đã tải được một vài ảnh
- *    hoặc khi đang gửi bản ghi), tự động lưu toàn bộ trạng thái dở dang + `X-Idempotency-Key` vào IndexedDB để đồng bộ tiếp khi ra vùng sóng khỏe.
+ * Luồng gửi bản ghi kèm ảnh/video ưu tiên người dùng ngoài rẫy sóng yếu hoặc mất sóng (Local-First Outbox):
+ * 1. Tái sử dụng trực tiếp ảnh đã nén WebP + mã băm SHA-256 (không bao giờ giải mã/nén lại lần 2).
+ * 2. Luôn ghi an toàn bản ghi vào IndexedDB TRƯỚC TIÊN (< 80ms) rồi mới chạm tới mạng: dù bà con khóa màn hình ngay
+ *    sau khi bấm Lưu, dữ liệu và hình ảnh vẫn nằm nguyên trên máy, tuyệt đối không bao giờ mất.
+ * 3. Nếu đang mất sóng, sóng 2G/3G yếu (`netQuality !== "good"`), hoặc có video/nhiều ảnh chưa tải trước:
+ *    trả kết quả ngay lập tức không bắt đứng chờ ngoài nắng, rồi tự động đồng bộ nền từng ảnh kèm checkpoint.
+ * 4. Nếu mạng khỏe và ảnh đã được tải nền sẵn khi đang nhập biểu mẫu: gửi hoàn tất trong < 300ms (hoặc tự chuyển sang
+ *    đồng bộ nền nếu mạng khựng quá 5,5 giây).
  */
 export async function submitFieldRecordWithOfflineQueue<TResponse = unknown>(
   options: SubmitFieldRecordOptions<TResponse>,
 ): Promise<SubmitFieldRecordResult<TResponse>> {
   const method = options.method ?? "POST";
-  const userId = options.userId ?? activeSyncUserId ?? currentSessionUserId();
+  const userId = options.userId ?? activeSyncUserId ?? getAuthScopeUserId();
+  if (!userId) {
+    throw new Error("Không xác định được phiên tài khoản để lưu nhật ký. Vui lòng đăng nhập lại.");
+  }
+  ensurePersistentStorageOnce();
+  const owner = captureSyncOwner(userId);
   const idempotencyKey = generateIdempotencyKey();
-  const capturedAtIso = new Date().toISOString();
-  const capturedDateVn = todayVnIso();
+  const capturedAtIso = options.capturedAtIso ?? getServerCalibratedDate().toISOString();
+  const capturedDateVn = options.capturedDateVn ?? todayVnIso();
+  const nowDateVn = todayVnIso();
+
+  if (BACKDATE_AWARE_ENDPOINTS.has(options.endpoint)) {
+    const rawExecDate =
+      (typeof options.payload.entryOn === "string" && options.payload.entryOn) ||
+      (typeof options.payload.sprayedOn === "string" && options.payload.sprayedOn) ||
+      (typeof options.payload.performedOn === "string" && options.payload.performedOn) ||
+      "";
+    if (rawExecDate && /^\d{4}-\d{2}-\d{2}$/.test(rawExecDate)) {
+      if (rawExecDate > nowDateVn) {
+        throw new Error("Ngày thực hiện không được ở tương lai. Chỉ được ghi nhận sau khi đã thực hiện công việc.");
+      }
+      if (options.capturedDateVn && /^\d{4}-\d{2}-\d{2}$/.test(options.capturedDateVn) && rawExecDate > options.capturedDateVn) {
+        throw new Error("Ngày thực hiện không được vượt quá ngày chụp hình hiện trường tại vườn.");
+      }
+    }
+  }
 
   const { slots, bindings } = await prepareCompressedMediaSlots(options.mediaGroups ?? []);
 
-  const enqueueNow = async (): Promise<SubmitFieldRecordResult<TResponse>> => {
-    if (!userId) {
-      throw new Error("Không xác định được phiên tài khoản để lưu ngoại tuyến. Vui lòng đăng nhập lại.");
-    }
-    const item: OfflineOutboxItem = {
-      id: idempotencyKey,
-      userId,
-      kind: options.kind,
-      label: options.label,
-      plotCode: options.plotCode,
-      endpoint: options.endpoint,
-      method,
-      payload: options.payload,
-      mediaBindings: bindings,
-      mediaSlots: slots,
-      capturedAtIso,
-      capturedDateVn,
-      createdAt: Date.now(),
-      status: "queued",
-      attempts: 0,
-      nextRetryAt: Date.now() + 5_000,
-      lastError: null,
-      portalKeysToInvalidate: options.portalKeysToInvalidate,
-    };
-    await putOutboxItem(item);
-    await refreshOfflineQueueState(userId);
-    options.onProgress?.(null);
-    return { mode: "queued", item };
+  const item: OfflineOutboxItem = {
+    id: idempotencyKey,
+    userId,
+    kind: options.kind,
+    label: options.label,
+    plotCode: options.plotCode,
+    endpoint: options.endpoint,
+    method,
+    payload: options.payload,
+    mediaBindings: bindings,
+    mediaSlots: slots,
+    capturedAtIso,
+    capturedDateVn,
+    createdAt: Date.now(),
+    status: "queued",
+    attempts: 0,
+    nextRetryAt: 0,
+    lastError: null,
+    portalKeysToInvalidate: options.portalKeysToInvalidate,
   };
 
-  if (isDeviceOfflineNow()) {
-    return enqueueNow();
+  // Bước 1: Ghi cứng xuống IndexedDB ngay lập tức trước mọi thao tác mạng.
+  await putOutboxItem(item);
+  requestSwBackgroundSync();
+
+  const pendingSlots = slots.filter((s) => !s.uploadedId);
+  const netQuality = getNetworkQualitySnapshot();
+  const shouldQueueImmediately =
+    isDeviceOfflineNow() ||
+    netQuality !== "good" ||
+    pendingSlots.some((s) => s.isVideo) ||
+    pendingSlots.length > 2;
+
+  if (shouldQueueImmediately) {
+    if (owner.isOwner()) {
+      await refreshOfflineQueueState(userId);
+      if (!isDeviceOfflineNow()) {
+        void triggerOfflineSyncNow(true);
+      }
+    }
+    options.onProgress?.(null);
+    return { mode: "queued", item };
   }
 
+  // Bước 2: Mạng đang khỏe và còn ít (hoặc 0) ảnh nhỏ chưa tải -> thử hoàn tất trực tuyến trong ngân sách 5,5 giây.
+  const fastInlineSignal = authScopedSignal(owner.signal, INLINE_FAST_SYNC_BUDGET_MS);
+
   try {
-    const pendingSlots = slots.filter((s) => !s.uploadedId);
     if (pendingSlots.length > 0) {
       options.onProgress?.({ done: 0, total: pendingSlots.length });
       let done = 0;
       for (const slot of pendingSlots) {
-        const uploaded = await uploadSingleSlot(slot);
+        if (!owner.isOwner()) throw new OfflineAuthChangedError();
+        const uploaded = await uploadSingleSlot(slot, fastInlineSignal, false);
         slot.uploadedId = uploaded.id;
         slot.uploadedUrl = uploaded.url;
-        // Giải phóng Blob đã tải thành công để giảm dung lượng nếu bước sau phải lưu hàng đợi
         slot.blob = undefined;
+        await putOutboxItem(item);
         done += 1;
         options.onProgress?.({ done, total: pendingSlots.length });
       }
     }
 
-    const finalPayload = applyMediaIdsToPayload(options.payload, slots, bindings);
+    const withMedia = applyMediaIdsToPayload(options.payload, slots, bindings);
+    const finalPayload = enrichOfflineLateReason(item, withMedia);
+    if (!owner.isOwner()) throw new OfflineAuthChangedError();
+
     const data = await apiRequest<TResponse>(options.endpoint, {
       method,
       headers: {
@@ -667,14 +1207,31 @@ export async function submitFieldRecordWithOfflineQueue<TResponse = unknown>(
         "X-Idempotency-Key": idempotencyKey,
       },
       body: JSON.stringify(finalPayload),
-      signal: AbortSignal.timeout(RECORD_SUBMIT_TIMEOUT_MS),
+      signal: fastInlineSignal,
     });
+
+    await deleteOutboxItemById(item.id);
+    if (owner.isOwner()) {
+      await refreshOfflineQueueState(userId);
+    }
     options.onProgress?.(null);
     return { mode: "synced", data };
   } catch (err) {
     options.onProgress?.(null);
-    if (isTransientNetworkError(err) && userId) {
-      return enqueueNow();
+    if (err instanceof OfflineAuthChangedError || !owner.isOwner() || isTransientNetworkError(err)) {
+      item.nextRetryAt = Date.now() + 3_000;
+      await putOutboxItem(item);
+      if (owner.isOwner()) {
+        await refreshOfflineQueueState(userId);
+        void triggerOfflineSyncNow(false);
+      }
+      return { mode: "queued", item };
+    }
+    // Lỗi dữ liệu nghiệp vụ do máy chủ trả về ngay lúc biểu mẫu còn mở (400/403/404/409):
+    // xóa bản tạm trong hàng đợi để người dùng sửa trực tiếp trên biểu mẫu mà không bị đọng bản lỗi.
+    await deleteOutboxItemById(item.id);
+    if (owner.isOwner()) {
+      await refreshOfflineQueueState(userId);
     }
     throw err;
   }
@@ -721,19 +1278,40 @@ function enrichOfflineLateReason(item: OfflineOutboxItem, payload: Record<string
 
 async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
   if (syncRunning) return;
-  const uid = activeSyncUserId ?? currentSessionUserId();
+  // Chỉ đồng bộ cho tài khoản đang hoạt động trong tab (không đọc localStorage dùng chung giữa các tab).
+  const uid = activeSyncUserId;
   if (!uid) return;
+  const owner = captureSyncOwner(uid);
 
-  const initialItems = await listUserOutboxItems(uid);
+  /** Chỉ cập nhật thanh trạng thái khi tài khoản chạy tiến trình vẫn là tài khoản đang đăng nhập. */
+  const publishIfOwner = (
+    items: OfflineOutboxItem[],
+    patch: Parameters<typeof recomputeSnapshot>[1],
+  ): void => {
+    if (owner.isOwner()) recomputeSnapshot(items, patch);
+  };
+
+  const [initialItems, initialAllDrafts] = await Promise.all([
+    listUserOutboxItems(uid),
+    listUserDraftsAll(uid),
+  ]);
+  if (!owner.isOwner()) return;
   const now = Date.now();
   const candidates = initialItems.filter(
     (it) =>
       (it.status === "queued" || it.status === "syncing") &&
       (forceIgnoreBackoff || it.nextRetryAt <= now),
   );
-  if (candidates.length === 0) {
-    recomputeSnapshot(initialItems, {
+  const draftsNeedingPreUpload = initialAllDrafts.filter((d) =>
+    d.mediaSlots.some((s) => !s.uploadedId && Boolean(s.blob)),
+  );
+  if (candidates.length === 0 && draftsNeedingPreUpload.length === 0) {
+    const { drafts, workingDraft } = splitDrafts(initialAllDrafts);
+    publishIfOwner(initialItems, {
+      drafts,
+      workingDraft,
       isSyncing: false,
+      isPreUploadingDrafts: false,
       activeItemLabel: null,
       activeMediaProgress: null,
     });
@@ -741,9 +1319,13 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
   }
 
   const reachable = await probeUsableConnection();
-  if (!reachable) {
-    recomputeSnapshot(initialItems, {
+  if (!reachable || !owner.isOwner()) {
+    const { drafts, workingDraft } = splitDrafts(initialAllDrafts);
+    publishIfOwner(initialItems, {
+      drafts,
+      workingDraft,
       isSyncing: false,
+      isPreUploadingDrafts: false,
       activeItemLabel: null,
       activeMediaProgress: null,
     });
@@ -757,14 +1339,15 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
   try {
     for (const item of candidates) {
       if (isDeviceOfflineNow()) break;
-      if ((activeSyncUserId ?? currentSessionUserId()) !== uid) break;
+      if (!owner.isOwner()) break;
 
       item.status = "syncing";
       await putOutboxItem(item);
 
       const totalFiles = item.mediaSlots.length;
       let uploadedFiles = item.mediaSlots.filter((s) => Boolean(s.uploadedId)).length;
-      recomputeSnapshot(await listUserOutboxItems(uid), {
+      let madeSlotProgress = false;
+      publishIfOwner(await listUserOutboxItems(uid), {
         isSyncing: true,
         activeItemLabel: item.label,
         activeMediaProgress: totalFiles > 0 ? { done: uploadedFiles, total: totalFiles } : null,
@@ -774,13 +1357,16 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
         // 1. Tải tuần tự từng ảnh/video chưa tải lên và lưu checkpoint ngay sau mỗi tệp
         for (const slot of item.mediaSlots) {
           if (slot.uploadedId && slot.uploadedId > 0) continue;
-          const uploaded = await uploadSingleSlot(slot);
+          // Kiểm tra lại tài khoản trước TỪNG tệp (mỗi tệp có thể mất 15 đến 40 giây trên sóng yếu).
+          if (!owner.isOwner()) throw new OfflineAuthChangedError();
+          const uploaded = await uploadSingleSlot(slot, owner.signal, item.attempts > 0);
           slot.uploadedId = uploaded.id;
           slot.uploadedUrl = uploaded.url;
           slot.blob = undefined;
           uploadedFiles += 1;
+          madeSlotProgress = true;
           await putOutboxItem(item);
-          recomputeSnapshot(await listUserOutboxItems(uid), {
+          publishIfOwner(await listUserOutboxItems(uid), {
             isSyncing: true,
             activeItemLabel: item.label,
             activeMediaProgress: totalFiles > 0 ? { done: uploadedFiles, total: totalFiles } : null,
@@ -791,6 +1377,8 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
         const withMedia = applyMediaIdsToPayload(item.payload, item.mediaSlots, item.mediaBindings);
         const finalPayload = enrichOfflineLateReason(item, withMedia);
 
+        // Kiểm tra lần cuối ngay trước khi gửi: không bao giờ gửi bản ghi của hộ A bằng cookie phiên của hộ B.
+        if (!owner.isOwner()) throw new OfflineAuthChangedError();
         await apiRequest(item.endpoint, {
           method: item.method,
           headers: {
@@ -798,7 +1386,7 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
             "X-Idempotency-Key": item.id,
           },
           body: JSON.stringify(finalPayload),
-          signal: AbortSignal.timeout(RECORD_SUBMIT_TIMEOUT_MS),
+          signal: authScopedSignal(owner.signal, RECORD_SUBMIT_TIMEOUT_MS),
         });
 
         await deleteOutboxItemById(item.id);
@@ -807,6 +1395,12 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
           portalKeysToRefresh.add(k);
         }
       } catch (err) {
+        // Đăng xuất hoặc đổi tài khoản giữa chừng: trả bản ghi về hàng đợi của đúng chủ sở hữu và dừng ngay.
+        if (err instanceof OfflineAuthChangedError || !owner.isOwner()) {
+          item.status = "queued";
+          await putOutboxItem(item);
+          break;
+        }
         if (err instanceof ApiError && err.status === 401) {
           item.status = "queued";
           await putOutboxItem(item);
@@ -822,9 +1416,13 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
           break;
         }
         if (isTransientNetworkError(err)) {
-          const backoffMs = Math.min(120_000, 10_000 * Math.pow(2, Math.min(item.attempts, 3)));
+          // Nếu lượt này đã tải thêm được ít nhất 1 ảnh mới thì đặt lại bộ đếm backoff để các ảnh kế tiếp lên đều đặn.
+          const nextAttempts = madeSlotProgress ? 0 : item.attempts + 1;
+          const backoffMs = madeSlotProgress
+            ? 4_000
+            : Math.min(90_000, 8_000 * Math.pow(2, Math.min(item.attempts, 3)));
           item.status = "queued";
-          item.attempts += 1;
+          item.attempts = nextAttempts;
           item.nextRetryAt = Date.now() + backoffMs;
           item.lastError = null;
           await putOutboxItem(item);
@@ -838,29 +1436,103 @@ async function runSyncLoopInternal(forceIgnoreBackoff: boolean): Promise<void> {
         await putOutboxItem(item);
       }
     }
+
+    // 3. Ưu tiên thứ 2: Tải trước êm ái ở nền các ảnh trong "Kho giữ hình ngoài rẫy" (field_drafts)
+    // để khi bà con về nhà mở bản nháp lên bấm Lưu nhật ký thì hoàn tất ngay lập tức (0 KB tải lại).
+    if (!isDeviceOfflineNow() && owner.isOwner()) {
+      const freshDrafts = await listUserDraftsAll(uid);
+      const pendingDrafts = freshDrafts.filter((d) =>
+        d.mediaSlots.some((s) => !s.uploadedId && Boolean(s.blob)),
+      );
+      if (pendingDrafts.length > 0) {
+        const split = splitDrafts(freshDrafts);
+        publishIfOwner(await listUserOutboxItems(uid), {
+          drafts: split.drafts,
+          workingDraft: split.workingDraft,
+          isPreUploadingDrafts: true,
+        });
+        for (const draft of pendingDrafts) {
+          if (isDeviceOfflineNow() || !owner.isOwner()) break;
+          let draftChanged = false;
+          for (const slot of draft.mediaSlots) {
+            if (slot.uploadedId && slot.uploadedId > 0) continue;
+            if (!slot.blob) continue;
+            if (isDeviceOfflineNow() || !owner.isOwner()) break;
+            try {
+              const uploaded = await uploadSingleSlot(slot, owner.signal, true);
+              slot.uploadedId = uploaded.id;
+              slot.uploadedUrl = uploaded.url;
+              draftChanged = true;
+              // Kiểm tra bản nháp vẫn còn tồn tại (người dùng chưa xóa/lưu xong trong lúc ảnh đang tải nền)
+              const latestList = await listUserDraftsAll(uid);
+              const latestSame = latestList.find((d) => d.id === draft.id);
+              if (latestSame && owner.isOwner()) {
+                const targetSlot = latestSame.mediaSlots.find(
+                  (ms) =>
+                    (slot.sha256 && ms.sha256 === slot.sha256) ||
+                    (ms.fileName === slot.fileName && ms.sizeBytes === slot.sizeBytes),
+                );
+                if (targetSlot) {
+                  targetSlot.uploadedId = uploaded.id;
+                  targetSlot.uploadedUrl = uploaded.url;
+                  await putFieldDraftRecord(latestSame);
+                }
+              }
+            } catch {
+              // Giữ nguyên ảnh trong máy cho lần có sóng tiếp theo, tuyệt đối không làm phiền người dùng.
+              break;
+            }
+          }
+          if (draftChanged && owner.isOwner()) {
+            const updatedAll = await listUserDraftsAll(uid);
+            const updatedSplit = splitDrafts(updatedAll);
+            publishIfOwner(await listUserOutboxItems(uid), {
+              drafts: updatedSplit.drafts,
+              workingDraft: updatedSplit.workingDraft,
+            });
+          }
+        }
+      }
+    }
   } finally {
     syncRunning = false;
-    const remaining = await listUserOutboxItems(uid);
-    if (syncedInBatch > 0) {
-      if (portalKeysToRefresh.size > 0 && portalInvalidateHandler) {
-        portalInvalidateHandler(Array.from(portalKeysToRefresh));
-      }
-      notifyDataMutated();
-      if (clearRecentTimer) clearTimeout(clearRecentTimer);
-      clearRecentTimer = setTimeout(() => {
-        currentSnapshot = { ...currentSnapshot, recentSyncedCount: 0 };
-        emitSyncChange();
-      }, 6_000);
-    }
+    if (owner.isOwner()) {
+      const [remaining, remainingDrafts] = await Promise.all([
+        listUserOutboxItems(uid),
+        listUserDraftsAll(uid),
+      ]);
+      if (owner.isOwner()) {
+        if (syncedInBatch > 0) {
+          if (portalKeysToRefresh.size > 0 && portalInvalidateHandler) {
+            portalInvalidateHandler(Array.from(portalKeysToRefresh));
+          }
+          notifyDataMutated();
+          if (clearRecentTimer) clearTimeout(clearRecentTimer);
+          clearRecentTimer = setTimeout(() => {
+            currentSnapshot = { ...currentSnapshot, recentSyncedCount: 0 };
+            emitSyncChange();
+          }, 6_000);
+        }
 
-    recomputeSnapshot(remaining, {
-      isSyncing: false,
-      activeItemLabel: null,
-      activeMediaProgress: null,
-      recentSyncedCount:
-        syncedInBatch > 0 ? currentSnapshot.recentSyncedCount + syncedInBatch : currentSnapshot.recentSyncedCount,
-      lastSyncedAt: syncedInBatch > 0 ? Date.now() : currentSnapshot.lastSyncedAt,
-    });
+        const split = splitDrafts(remainingDrafts);
+        recomputeSnapshot(remaining, {
+          drafts: split.drafts,
+          workingDraft: split.workingDraft,
+          isSyncing: false,
+          isPreUploadingDrafts: false,
+          activeItemLabel: null,
+          activeMediaProgress: null,
+          recentSyncedCount:
+            syncedInBatch > 0 ? currentSnapshot.recentSyncedCount + syncedInBatch : currentSnapshot.recentSyncedCount,
+          lastSyncedAt: syncedInBatch > 0 ? Date.now() : currentSnapshot.lastSyncedAt,
+        });
+      }
+    } else if (activeSyncUserId !== null) {
+      // Tài khoản mới đã đăng nhập trong lúc tiến trình cũ đang dừng: nhường lượt đồng bộ cho tài khoản mới.
+      setTimeout(() => {
+        void triggerOfflineSyncNow(false);
+      }, 300);
+    }
   }
 }
 
@@ -892,10 +1564,48 @@ export async function triggerOfflineSyncNow(forceIgnoreBackoff = true): Promise<
 
 let engineAttached = false;
 
+function resetSyncStateForAuthChange(): void {
+  invalidateSyncAuth();
+  activeSyncUserId = null;
+  recomputeSnapshot([], {
+    drafts: [],
+    workingDraft: null,
+    isSyncing: false,
+    isPreUploadingDrafts: false,
+    activeItemLabel: null,
+    activeMediaProgress: null,
+    recentSyncedCount: 0,
+  });
+}
+
+// Đăng ký ngay khi nạp mô-đun (không chờ gắn bộ máy đồng bộ) để mọi tiến trình gửi bản ghi đang chạy
+// đều bị hủy tức thì khi đăng xuất, hết phiên hoặc đổi tài khoản trên cùng thiết bị.
+if (typeof window !== "undefined") {
+  const onAuthCleared = () => {
+    const prevUid = activeSyncUserId ?? getAuthScopeUserId();
+    resetSyncStateForAuthChange();
+    clearOfflineAuthSession();
+    void clearAllOfflineReadSnapshots();
+    void purgeUserWorkingDraftsOnLogout(prevUid);
+  };
+  const onScopeChanged = () => {
+    if (activeSyncUserId !== getAuthScopeUserId()) {
+      resetSyncStateForAuthChange();
+    }
+  };
+  window.addEventListener(AUTH_LOGOUT_EVENT, onAuthCleared);
+  window.addEventListener(AUTH_EXPIRED_EVENT, onAuthCleared);
+  window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, onScopeChanged);
+}
+
 export function attachOfflineSyncEngine(userId: number | null): void {
-  activeSyncUserId = userId;
+  if (userId !== activeSyncUserId) {
+    // Đổi tài khoản: hủy mọi tiến trình tải ảnh/gửi bản ghi của tài khoản trước.
+    invalidateSyncAuth();
+    activeSyncUserId = userId;
+  }
   void refreshOfflineQueueState(userId).then(() => {
-    if (userId) {
+    if (userId && activeSyncUserId === userId) {
       void triggerOfflineSyncNow(false);
     }
   });
@@ -919,25 +1629,18 @@ export function attachOfflineSyncEngine(userId: number | null): void {
   conn?.addEventListener?.("change", onSignal);
 
   const heartbeat = window.setInterval(() => {
-    if (currentSnapshot.queuedCount > 0 && !isDeviceOfflineNow()) {
+    const hasPendingDraftUpload =
+      currentSnapshot.drafts.some((d) => d.mediaSlots.some((s) => !s.uploadedId && Boolean(s.blob))) ||
+      Boolean(currentSnapshot.workingDraft?.mediaSlots.some((s) => !s.uploadedId && Boolean(s.blob)));
+    if (
+      activeSyncUserId !== null &&
+      (currentSnapshot.queuedCount > 0 || hasPendingDraftUpload) &&
+      !isDeviceOfflineNow()
+    ) {
       void triggerOfflineSyncNow(false);
     }
   }, HEARTBEAT_MS);
   void heartbeat;
-
-  const onAuthCleared = () => {
-    activeSyncUserId = null;
-    clearOfflineAuthSession();
-    void clearAllOfflineReadSnapshots();
-    recomputeSnapshot([], {
-      isSyncing: false,
-      activeItemLabel: null,
-      activeMediaProgress: null,
-      recentSyncedCount: 0,
-    });
-  };
-  window.addEventListener(AUTH_LOGOUT_EVENT, onAuthCleared);
-  window.addEventListener(AUTH_EXPIRED_EVENT, onAuthCleared);
 }
 
 function subscribeOfflineSync(listener: () => void): () => void {

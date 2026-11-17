@@ -40,14 +40,20 @@ const emit = () => listeners.forEach((listener) => listener());
 const getConnection = (): NetworkInformationLike | undefined =>
   (navigator as NavigatorWithHardware).connection;
 
-/** Cho phép thử giao diện mạng yếu bằng cách thêm ?net=slow (hoặc ?net=offline) vào địa chỉ trang. */
+/**
+ * Cho phép thử giao diện mạng yếu bằng cách thêm ?net=slow (hoặc ?net=offline) vào địa chỉ trang.
+ * Chỉ hoạt động ở môi trường phát triển: trên production, tham số này không được phép giả lập mất mạng
+ * (tránh mở khóa dữ liệu ngoại tuyến khi phiên đã bị thu hồi).
+ */
 function forcedQuality(): NetQuality | null {
+  if (process.env.NODE_ENV !== "development" || typeof window === "undefined") return null;
   const value = new URLSearchParams(window.location.search).get("net");
   return value === "slow" || value === "offline" || value === "good" ? value : null;
 }
 
 /** Cho phép ép chế độ hiệu năng bằng ?perf=lite hoặc ?perf=full. */
 function forcedPerfTier(): PerfTier | null {
+  if (typeof window === "undefined") return null;
   const value = new URLSearchParams(window.location.search).get("perf");
   return value === "lite" || value === "full" ? value : null;
 }
@@ -81,6 +87,7 @@ function readPerfTier(): PerfTier {
 }
 
 function readQuality(): NetQuality {
+  if (typeof navigator === "undefined") return "good";
   const forced = forcedQuality();
   if (forced) return forced;
   if (!navigator.onLine) return "offline";
@@ -93,6 +100,11 @@ function readQuality(): NetQuality {
   const isSeverelyCongested =
     (connection.rtt ?? 0) >= 1000 && (connection.downlink ?? 10) > 0 && (connection.downlink ?? 10) < 0.5;
   return is2G || isSeverelyCongested ? "slow" : "good";
+}
+
+/** Đọc tức thì chất lượng đường truyền hiện tại (dùng cho bộ nén ảnh và bộ lập lịch hàng đợi ngoài React). */
+export function getNetworkQualitySnapshot(): NetQuality {
+  return readQuality();
 }
 
 /**

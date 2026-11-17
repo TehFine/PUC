@@ -1,3 +1,4 @@
+import { getServerCalibratedDate } from "@/lib/api-client";
 import type { HouseholdStatus, PlotStatus, PortalHarvest, PortalScheduleItem } from "@/types/portal";
 
 export type Tone = "green" | "gold" | "red" | "blue" | "gray";
@@ -95,12 +96,12 @@ export function daysSince(iso: string | null | undefined): number | null {
   return Math.round((today - then) / 86_400_000);
 }
 
-/** Ngày hôm nay (YYYY-MM-DD) theo giờ Việt Nam, không phụ thuộc múi giờ máy và không dùng `toISOString()` (UTC). */
+/** Ngày hôm nay (YYYY-MM-DD) theo giờ Việt Nam chuẩn máy chủ, không phụ thuộc đồng hồ máy người dùng bị chỉnh lệch và không dùng `toISOString()` (UTC). */
 export const todayIso = (): string => {
+  const now = getServerCalibratedDate();
   try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   } catch {
-    const now = new Date();
     const pad = (value: number) => String(value).padStart(2, "0");
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   }
