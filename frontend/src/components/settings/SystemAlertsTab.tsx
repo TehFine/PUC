@@ -116,47 +116,44 @@ export default function SystemAlertsTab() {
       <div
         className="card"
         style={{
-          padding: "16px 20px",
+          padding: 0,
+          overflow: "hidden",
           display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
+          flexDirection: "column",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span
+        <div style={{ padding: "16px 20px" }}>
+          <div
             style={{
-              width: 11,
-              height: 11,
-              borderRadius: "50%",
-              background: health.loading ? "#94a3b8" : isHealthy ? "#16a34a" : "#dc2626",
-              flexShrink: 0,
+              fontWeight: 700,
+              fontSize: 15,
+              lineHeight: 1.35,
+              color: health.loading ? "#0f172a" : isHealthy ? "#14372f" : "#b91c1c",
             }}
-          />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14.5, color: "#0f172a" }}>
-              {health.loading
-                ? "Đang kiểm tra kết nối máy chủ & CSDL…"
-                : isHealthy
-                  ? "Máy chủ & Cơ sở dữ liệu hoạt động ổn định"
-                  : "Cảnh báo: Phát hiện gián đoạn kết nối máy chủ / CSDL"}
-            </div>
-            <div style={{ fontSize: 12.5, color: "#64748b", marginTop: 2 }}>
-              Khi máy chủ gặp lỗi 5xx hoặc mất kết nối, toàn bộ người dùng đang mở ứng dụng sẽ tự động nhận cảnh báo khẩn ngay trên đầu màn hình.
-            </div>
+          >
+            {health.loading
+              ? "Đang kiểm tra kết nối máy chủ và cơ sở dữ liệu…"
+              : isHealthy
+                ? "Máy chủ và cơ sở dữ liệu hoạt động ổn định"
+                : "Cảnh báo: Phát hiện gián đoạn kết nối máy chủ hoặc cơ sở dữ liệu"}
+          </div>
+          <div style={{ fontSize: 13, color: "#5f6d66", lineHeight: 1.5, marginTop: 4 }}>
+            Khi máy chủ gặp lỗi 5xx hoặc mất kết nối, toàn bộ người dùng đang mở ứng dụng sẽ tự động nhận cảnh báo khẩn ngay trên đầu màn hình.
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-sm"
-          onClick={() => {
-            void health.refresh();
-            void checkSystemHealth();
-          }}
-        >
-          Kiểm tra lại ngay
-        </button>
+        <footer className="dash-bento-footer">
+          <button
+            type="button"
+            className="dash-bento-footer-btn"
+            disabled={health.loading}
+            onClick={() => {
+              void health.refresh();
+              void checkSystemHealth();
+            }}
+          >
+            {health.loading ? "Đang kiểm tra…" : "Kiểm tra lại ngay"}
+          </button>
+        </footer>
       </div>
 
       {/* Cảnh báo đang bật (nếu có) */}
@@ -244,8 +241,8 @@ export default function SystemAlertsTab() {
               value={severity}
               onChange={(e) => setSeverity(e.target.value as SystemAlertSeverity)}
             >
-              <option value="critical">Khẩn cấp – Sự cố hệ thống (Đỏ)</option>
-              <option value="warning">Cảnh báo – Bảo trì kỹ thuật (Cam)</option>
+              <option value="critical">Khẩn cấp, sự cố hệ thống (Đỏ)</option>
+              <option value="warning">Cảnh báo, bảo trì kỹ thuật (Cam)</option>
             </select>
           </div>
 

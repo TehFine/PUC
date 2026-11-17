@@ -6392,7 +6392,7 @@ code {
     border-radius: 8px;
     box-shadow: var(--shadow-card);
   }
-  .table-wrap .responsive-table tbody td {
+  .table-wrap .responsive-table tbody tr td {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -6410,6 +6410,9 @@ code {
     font-variant-numeric: tabular-nums;
     vertical-align: middle;
     min-width: 0;
+  }
+  .table-wrap .responsive-table tbody tr:last-child td:not(:last-child) {
+    border-bottom: 1px solid rgba(20, 55, 47, 0.13);
   }
   .table-wrap .responsive-table tbody td.news-admin-main-cell {
     align-items: flex-start;
@@ -6432,7 +6435,7 @@ code {
   .table-wrap .responsive-table tbody td:nth-child(even):not(:last-child):not(.news-admin-main-cell) {
     border-left: 1px solid rgba(20, 55, 47, 0.13);
   }
-  .table-wrap .responsive-table tbody td:last-child {
+  .table-wrap .responsive-table tbody tr td:last-child {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -6466,22 +6469,28 @@ code {
     flex-wrap: nowrap !important;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
     margin-inline: 0;
+  }
+  .table-wrap .responsive-table tbody td:last-child > .table-actions:has(> .btn:nth-child(5)),
+  .table-wrap .responsive-table tbody td:last-child > div:has(> .btn:nth-child(5)) {
+    flex-wrap: wrap !important;
   }
   .table-wrap .responsive-table tbody td:last-child > .btn,
   .table-wrap .responsive-table tbody td:last-child > .table-actions .btn,
   .table-wrap .responsive-table tbody td:last-child > div:has(.btn) .btn {
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-width: 0;
     height: 36px;
     min-height: 36px;
     justify-content: center;
-    padding: 0 6px;
+    padding: 0 8px;
     font-size: 12.5px;
     font-weight: 600;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .table-wrap .responsive-table tbody td:nth-last-child(2):nth-child(odd) {
     grid-column: 1 / -1;
@@ -6504,11 +6513,11 @@ code {
     text-align: center;
     text-transform: uppercase;
   }
-  .table-wrap .responsive-table tbody td[colspan] {
+  .table-wrap .responsive-table tbody tr td[colspan] {
     grid-column: 1 / -1;
     display: block;
     padding: 24px 0;
-    border: 0;
+    border: 0 !important;
     text-align: center;
   }
   .table-wrap .responsive-table tbody td[colspan]::before { content: none; }

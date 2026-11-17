@@ -228,10 +228,10 @@ export default function AccountsTab({
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
-                          title="Đăng xuất từ xa tất cả thiết bị của tài khoản này"
+                          title="Xóa toàn bộ phiên đăng nhập từ xa của tài khoản này"
                           onClick={() => setRevokingAccount(a)}
                         >
-                          Đăng xuất từ xa
+                          Xóa phiên
                         </button>
                       )}
                       {canUpdateAccount && a.twoFactorEnabled && (
@@ -241,7 +241,7 @@ export default function AccountsTab({
                           title="Đặt lại xác thực 2 lớp nếu người dùng mất thiết bị OTP"
                           onClick={() => setResetting2faAccount(a)}
                         >
-                          Đặt lại 2FA
+                          Gỡ 2FA
                         </button>
                       )}
                       {canUpdateAccount && (
