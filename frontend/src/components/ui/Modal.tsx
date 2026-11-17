@@ -21,6 +21,7 @@ export function Modal({
   width = 560,
   variant = "drawer",
   closeOnBackdrop = true,
+  hideCloseButton = false,
   className = "",
 }: {
   title: string;
@@ -30,6 +31,7 @@ export function Modal({
   width?: number;
   variant?: "drawer" | "modal";
   closeOnBackdrop?: boolean;
+  hideCloseButton?: boolean;
   className?: string;
 }) {
   const titleId = useId();
@@ -211,18 +213,20 @@ export function Modal({
                 </button>
               )}
               <h2 id={titleId}>{title}</h2>
-              <button
-                type="button"
-                className="pt-icon-btn pt-sheet-close-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleClose();
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                aria-label="Đóng"
-              >
-                <CloseCircleIcon size={28} />
-              </button>
+              {!hideCloseButton && (
+                <button
+                  type="button"
+                  className="pt-icon-btn pt-sheet-close-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleClose();
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  aria-label="Đóng"
+                >
+                  <CloseCircleIcon size={28} />
+                </button>
+              )}
               {variant === "drawer" && <span className="pt-drawer-head-spacer" aria-hidden="true" />}
             </header>
           </div>
@@ -267,6 +271,7 @@ export function ConfirmDialog({
       onClose={pending ? () => undefined : onClose}
       width={420}
       variant="modal"
+      hideCloseButton
       className="modal-confirm-sheet"
       footer={
         <>

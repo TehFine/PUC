@@ -4184,7 +4184,7 @@ input[type="date"].filter-select {
 .modal.pt-sheet.modal-confirm-sheet .modal-header {
   position: relative;
   justify-content: center;
-  padding: 20px 44px 8px !important;
+  padding: 20px 22px 8px !important;
   border-bottom: none !important;
 }
 
@@ -4198,11 +4198,7 @@ input[type="date"].filter-select {
 }
 
 .modal.pt-sheet.modal-confirm-sheet .modal-header .pt-sheet-close-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 32px;
-  height: 32px;
+  display: none !important;
 }
 
 .modal.pt-sheet.modal-confirm-sheet .modal-body {
@@ -4385,7 +4381,7 @@ input[type="date"].filter-select {
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
 }
 
 .modal-footer:not(:has(> div)) > :is(.btn-primary, .btn-confirm-primary) {
@@ -4399,19 +4395,23 @@ input[type="date"].filter-select {
 }
 
 .modal-footer:not(:has(> div)) > :is(button, a, .btn):hover:not(:disabled) {
-  background: #f2f6fc !important;
+  background: #f5f8fc !important;
+  color: #007aff !important;
 }
 
 .modal-footer:not(:has(> div)) > .btn-danger:hover:not(:disabled) {
-  background: #fef2f2 !important;
+  background: #fdf3f3 !important;
+  color: #dc2626 !important;
 }
 
 .modal-footer:not(:has(> div)) > :is(button, a, .btn):active:not(:disabled) {
-  background: #e5edf9 !important;
+  background: #eaf0f8 !important;
+  color: #007aff !important;
 }
 
 .modal-footer:not(:has(> div)) > .btn-danger:active:not(:disabled) {
-  background: #fee2e2 !important;
+  background: #fbe7e7 !important;
+  color: #dc2626 !important;
 }
 
 .modal-footer:not(:has(> div)) > :is(button, a, .btn):disabled {
