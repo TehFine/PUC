@@ -66,45 +66,37 @@ export default function NewsAdmin() {
         </div>
       )}
 
-      {/* KPI thống kê thực tế */}
-      <div className="kpi-grid-4">
-        <div className="kpi-card">
-          <div className="kpi-head">
-            <div className="kpi-val">{newsList.total}</div>
-            <div className="kpi-meta">
-              <div className="kpi-label">Tổng số bài viết</div>
-              <div className="kpi-trend">Trong hệ thống</div>
-            </div>
+      {/* Thẻ tổng hợp chỉ số bài viết */}
+      <section className="news-summary-card" aria-label="Thống kê bài viết">
+        <div className="news-summary-row">
+          <div className="news-summary-meta">
+            <span className="news-summary-label">Tổng số bài viết</span>
+            <span className="news-summary-sub">Trong hệ thống</span>
           </div>
+          <strong className="news-summary-val">{newsList.total}</strong>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-head">
-            <div className="kpi-val">{publishedCount}</div>
-            <div className="kpi-meta">
-              <div className="kpi-label">Đã xuất bản</div>
-              <div className="kpi-trend">Hiển thị trang chủ</div>
-            </div>
+        <div className="news-summary-row">
+          <div className="news-summary-meta">
+            <span className="news-summary-label">Đã xuất bản</span>
+            <span className="news-summary-sub">Hiển thị trang chủ</span>
           </div>
+          <strong className="news-summary-val">{publishedCount}</strong>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-head">
-            <div className="kpi-val">{draftCount}</div>
-            <div className="kpi-meta">
-              <div className="kpi-label">Bản nháp</div>
-              <div className="kpi-trend">Chờ duyệt đăng</div>
-            </div>
+        <div className="news-summary-row">
+          <div className="news-summary-meta">
+            <span className="news-summary-label">Bản nháp</span>
+            <span className="news-summary-sub">Chờ duyệt đăng</span>
           </div>
+          <strong className="news-summary-val">{draftCount}</strong>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-head">
-            <div className="kpi-val">4</div>
-            <div className="kpi-meta">
-              <div className="kpi-label">Chuyên mục tin</div>
-              <div className="kpi-trend">4 nhóm chủ đề</div>
-            </div>
+        <div className="news-summary-row">
+          <div className="news-summary-meta">
+            <span className="news-summary-label">Chuyên mục tin</span>
+            <span className="news-summary-sub">4 nhóm chủ đề</span>
           </div>
+          <strong className="news-summary-val">4</strong>
         </div>
-      </div>
+      </section>
 
       {/* Bộ lọc & Danh sách bài viết */}
       <div className="filter-bar" style={{ marginTop: 16 }}>

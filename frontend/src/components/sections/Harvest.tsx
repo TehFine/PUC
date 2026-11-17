@@ -23,7 +23,6 @@ const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScanne
 const TraceAccessLogsModal = dynamic(() => import("@/components/admin/harvest/TraceAccessLogsModal"), { ssr: false });
 const PlotQuotasModal = dynamic(() => import("@/components/admin/harvest/PlotQuotasModal"), { ssr: false });
 const FieldAuditPassesModal = dynamic(() => import("@/components/admin/harvest/FieldAuditPassesModal"), { ssr: false });
-import { KpiChartView, renderKpiValue, type ChartPoint, type KpiChartSpec } from "@/components/ui/charts/KpiCharts";
 import { useApi, useApiList } from "@/hooks/use-api";
 import type {
   ContractRecord,
@@ -181,78 +180,35 @@ export default function Harvest() {
     const lotRows = allLots.rows;
     const totalTons = lotRows.reduce((sum, l) => sum + Number(l.weightTons || 0), 0);
     const exportedCount = lotRows.filter((l) => l.status === "exported" || l.status === "delivered").length;
-    const exportedPct = lotRows.length > 0 ? Math.round((exportedCount / lotRows.length) * 100) : 0;
     const contractRows = contracts.rows;
     const totalContractTons = contractRows.reduce((sum, c) => sum + Number(c.targetTons || 0), 0);
     const totalStamps = stampAllocations.rows.reduce((sum, s) => sum + Number(s.quantityAllocated || 0), 0);
     const activatedStamps = stampAllocations.rows.reduce((sum, s) => sum + Number(s.activatedCount || 0), 0);
 
-    const lotPoints: ChartPoint[] =
-      lotRows.length > 0
-        ? lotRows
-            .slice(0, 6)
-            .reverse()
-            .map((l) => ({ label: l.code.replace(/^LO-\d+-/, "#"), value: Number(l.weightTons || 0) }))
-        : [{ label: "Lô", value: 0 }];
-
-    const contractPoints: ChartPoint[] =
-      contractRows.length > 0
-        ? contractRows.slice(0, 4).map((c) => ({
-            label: (c.enterpriseName || c.code).slice(0, 12),
-            value: Number(c.targetTons || 0),
-          }))
-        : [{ label: "HĐ", value: 0 }];
-
-    const stampPct = totalStamps > 0 ? Math.round((activatedStamps / totalStamps) * 100) : 0;
-
     return [
       {
-        val: `${formatVn(totalTons, 1)} tấn`,
+        num: formatVn(totalTons, 1),
+        unit: "tấn",
         label: "Tổng sản lượng lô",
         sub: `${lotRows.length} lô thu hoạch`,
-        chart: {
-          kind: "area" as const,
-          tone: "lime" as const,
-          unit: " tấn",
-          highlight: "max" as const,
-          caption: "Sản lượng các lô gần nhất",
-          data: lotPoints,
-        } satisfies KpiChartSpec,
       },
       {
-        val: `${lotRows.length} lô`,
+        num: String(lotRows.length),
+        unit: "lô",
         label: "Lô hàng tạo ra",
-        sub: `${exportedCount} lô đã xuất/giao`,
-        chart: {
-          kind: "gauge" as const,
-          tone: "lime" as const,
-          value: exportedPct,
-          caption: `${exportedCount}/${lotRows.length} lô hoàn tất`,
-        } satisfies KpiChartSpec,
+        sub: `${exportedCount} lô đã xuất hoặc giao`,
       },
       {
-        val: `${contractRows.length} HĐ`,
+        num: String(contractRows.length),
+        unit: "HĐ",
         label: "Hợp đồng bao tiêu",
         sub: `${formatVn(totalContractTons, 0)} tấn cam kết`,
-        suffix: "theo hợp đồng",
-        chart: {
-          kind: "bars" as const,
-          tone: "ink" as const,
-          unit: " tấn",
-          highlight: "max" as const,
-          data: contractPoints,
-        } satisfies KpiChartSpec,
       },
       {
-        val: `${formatVn(totalStamps, 0)} tem`,
+        num: formatVn(totalStamps, 0),
+        unit: "tem",
         label: "Tem nông hộ đã cấp",
         sub: `${formatVn(activatedStamps, 0)} tem đã kích hoạt`,
-        chart: {
-          kind: "gauge" as const,
-          tone: "ink" as const,
-          value: stampPct,
-          caption: `${activatedStamps}/${totalStamps} tem đã dán`,
-        } satisfies KpiChartSpec,
       },
     ];
   }, [allLots.rows, contracts.rows, stampAllocations.rows]);
@@ -313,20 +269,20 @@ export default function Harvest() {
         </div>
       </div>
 
-      <div className="kpi-grid-4">
-        {kpis.map(({ val, label, sub, chart, suffix }, i) => (
-          <div key={i} className="kpi-card has-chart">
-            <div className="kpi-head">
-              <div className="kpi-val">{renderKpiValue(val)}</div>
-              <div className="kpi-meta">
-                <div className="kpi-label">{label}</div>
-                <div className="kpi-trend up">{sub}</div>
-              </div>
+      <section className="news-summary-card" aria-label="Thống kê thu hoạch và truy xuất">
+        {kpis.map(({ num, unit, label, sub }) => (
+          <div key={label} className="news-summary-row">
+            <div className="news-summary-meta">
+              <span className="news-summary-label">{label}</span>
+              <span className="news-summary-sub">{sub}</span>
             </div>
-            <KpiChartView chart={chart} label={label} suffix={suffix} />
+            <strong className="news-summary-val">
+              {num}
+              {unit && <span className="news-summary-unit">{unit}</span>}
+            </strong>
           </div>
         ))}
-      </div>
+      </section>
 
       {/* Thanh chuyển tab quy trình chuỗi liên kết */}
       <div className="tab-bar" style={{ marginTop: 20, marginBottom: 16 }}>
