@@ -137,40 +137,30 @@ export default function ApprovalDetailModal({
         </>
       }
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: 12,
-          padding: 16,
-          borderRadius: 8,
-          background: "var(--mist)",
-          marginBottom: 16,
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã hồ sơ</div>
-          <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "#256b45" }}>{record.code}</div>
+      <div className="admin-detail-list-card" style={{ marginBottom: 16 }}>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Mã hồ sơ</span>
+          <div className="admin-detail-list-value is-code">{record.code}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Người nộp / Hộ dân</div>
-          <div style={{ fontWeight: 600 }}>{record.applicantName}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Người nộp, hộ dân</span>
+          <div className="admin-detail-list-value">{record.applicantName}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Loại yêu cầu</div>
-          <div style={{ fontWeight: 600 }}>{record.requestType}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Loại yêu cầu</span>
+          <div className="admin-detail-list-value">{record.requestType}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày nộp</div>
-          <div style={{ fontWeight: 600 }}>{formatDate(record.submittedOn)}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Ngày nộp</span>
+          <div className="admin-detail-list-value">{formatDate(record.submittedOn)}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mã thửa (plotCode)</div>
-          <div style={{ fontWeight: 600, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{record.plotCode || "—"}</div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Mã thửa</span>
+          <div className="admin-detail-list-value is-code">{record.plotCode || "Chưa gắn thửa"}</div>
         </div>
-        <div>
-          <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Mức ưu tiên &amp; Trạng thái</div>
-          <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Mức ưu tiên và trạng thái</span>
+          <div className="admin-detail-list-value">
             <span className={`badge ${pr.badge}`}>{pr.label}</span>
             <span className={`badge ${st.badge}`}>{st.label}</span>
           </div>

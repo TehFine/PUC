@@ -85,48 +85,31 @@ export function MinuteDetailModal({
         </>
       }
     >
-      <div style={{ display: "grid", gap: 12, padding: 14, borderRadius: 6, border: "1px solid #d4d4d2", background: "var(--mist)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Số biên bản</div>
-            <div
-              style={{
-                fontWeight: 700,
-                fontFamily: "var(--font-num-stack)",
-                fontVariantNumeric: "tabular-nums",
-                color: "#256b45",
-              }}
-            >
-              {minute.code}
-            </div>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div className="admin-detail-list-card" style={{ marginBottom: 0 }}>
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Số biên bản</span>
+            <div className="admin-detail-list-value is-code">{minute.code}</div>
           </div>
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Ngày kiểm tra</div>
-            <div style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{formatDate(minute.heldOn)}</div>
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Ngày kiểm tra</span>
+            <div className="admin-detail-list-value">{formatDate(minute.heldOn)}</div>
           </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Địa điểm và phạm vi</div>
-            <div style={{ fontWeight: 600 }}>{minute.location}</div>
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Địa điểm và phạm vi</span>
+            <div className="admin-detail-list-value">{minute.location}</div>
           </div>
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Thửa vườn kiểm tra</div>
-            <div style={{ fontWeight: 700, fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>
-              {minute.plotCode || "Toàn vùng"}
-            </div>
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Thửa vườn kiểm tra</span>
+            <div className="admin-detail-list-value is-code">{minute.plotCode || "Toàn vùng"}</div>
           </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Cán bộ kiểm tra</div>
-            <div style={{ fontWeight: 600 }}>{minute.officer}</div>
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Cán bộ kiểm tra</span>
+            <div className="admin-detail-list-value">{minute.officer}</div>
           </div>
-          <div>
-            <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Kết luận</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Kết luận</span>
+            <div className="admin-detail-list-value">
               <span className={`badge ${resBadge.badge}`}>{resBadge.label}</span>
               {minute.isLateEntry ? (
                 <span className="badge badge-gold">Ghi nhận bổ sung (&gt;48h)</span>
