@@ -150,16 +150,16 @@ export default function Sidebar({ active, onNavigate }: Props) {
       { id: "households", label: "Nông hộ", desc: "Danh sách hộ thành viên và chuẩn xuất khẩu.", resource: "households" },
       { id: "zones", label: "Vùng trồng", desc: "Bản đồ ranh giới thửa đất và chỉ số canh tác.", resource: "plots" },
       {
-        id: "approval",
-        label: "Hồ sơ",
-        desc: "Tiếp nhận, xét duyệt hồ sơ, tài khoản đăng ký và lịch kiểm tra.",
-        resource: "approvals",
-      },
-      {
         id: "journal",
         label: "Nhật ký",
         desc: "Theo dõi nhật ký canh tác, phun thuốc và vi phạm.",
         resource: "journal",
+      },
+      {
+        id: "approval",
+        label: "Hồ sơ",
+        desc: "Tiếp nhận, xét duyệt hồ sơ, tài khoản đăng ký và lịch kiểm tra.",
+        resource: "approvals",
       },
       { id: "testing", label: "Kiểm nghiệm", desc: "Kết quả phân tích mẫu và tồn dư thuốc BVTV.", resource: "testing" },
       { id: "harvest", label: "Lô hàng", desc: "Quản lý lô thu hoạch, tem truy xuất và hợp đồng.", resource: "harvest" },
