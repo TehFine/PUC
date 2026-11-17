@@ -206,6 +206,9 @@ export default function MapView({
   const editTargetRef = useRef<PlotFeature | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hoverLatLngRef = useRef<Leaflet.LatLng | null>(null);
+  const keyZoomHoldingRef = useRef(false);
+  const defaultZoomSnapRef = useRef(0.25);
 
   const [ready, setReady] = useState(false);
   const [mode, setMode] = useState<Mode>("idle");
@@ -1056,12 +1059,14 @@ export default function MapView({
 
       leafletRef.current = L;
       const lowEnd = isLowEndDevice();
+      const initialZoomSnap = lowEnd ? 0.5 : 0.25;
+      defaultZoomSnapRef.current = initialZoomSnap;
       const map = L.map(mapElementRef.current, {
         zoomControl: false,
         attributionControl: false,
         minZoom: 9,
         maxZoom: MAX_MAP_ZOOM,
-        zoomSnap: lowEnd ? 0.5 : 0.25,
+        zoomSnap: initialZoomSnap,
         zoomDelta: lowEnd ? 1 : 0.5,
         wheelPxPerZoomLevel: lowEnd ? 60 : 90,
         fadeAnimation: !lowEnd,
@@ -1081,6 +1086,7 @@ export default function MapView({
       compareGroupRef.current = L.layerGroup().addTo(map);
 
       const refreshActiveOverlay = () => {
+        if (keyZoomHoldingRef.current) return;
         setZoomLevel(map.getZoom());
         if (modeRef.current !== "idle" && verticesRef.current.length > 0) {
           redrawDraftRef.current(verticesRef.current);
@@ -1090,6 +1096,12 @@ export default function MapView({
       };
 
       map.on("zoomend", refreshActiveOverlay);
+      map.on("mousemove", (event) => {
+        hoverLatLngRef.current = event.latlng;
+      });
+      map.getContainer().addEventListener("mouseleave", () => {
+        hoverLatLngRef.current = null;
+      });
       map.on("moveend", () => {
         if (modeRef.current !== "idle" && verticesRef.current.length > 40) {
           redrawDraftRef.current(verticesRef.current);
@@ -1325,10 +1337,152 @@ export default function MapView({
     };
   }, [pushHistorySnapshot, syncSelectedVertex]);
 
-  // Phím tắt thao tác nhanh cho quản trị viên khi đang vẽ / sửa thửa đất
+  // Phím tắt thao tác nhanh trên máy tính khi đang vẽ / chỉnh sửa thửa đất (F1 phóng to, F2 thu nhỏ, F3 hoàn tác)
   useEffect(() => {
     if (mode === "idle") return;
+
+    const TAP_ZOOM_STEP = 0.45;
+    let activeZoomKey: "F1" | "F2" | null = null;
+    let holdDelayTimer: number | null = null;
+    let holdRafId = 0;
+    let holdStartMs = 0;
+    let lastFrameMs = 0;
+    let lastUiSyncMs = 0;
+    let currentHoldZoom = 0;
+    let pendingTargetZoom: number | null = null;
+    let pendingTargetUntilMs = 0;
+    let lastUndoRepeatMs = 0;
+
+    const clampZoom = (z: number, map: Leaflet.Map) => {
+      const minZ = map.getMinZoom() || 9;
+      const maxZ = map.getMaxZoom() || MAX_MAP_ZOOM;
+      return Math.min(maxZ, Math.max(minZ, z));
+    };
+
+    const stopKeyZoom = () => {
+      if (holdDelayTimer !== null) {
+        window.clearTimeout(holdDelayTimer);
+        holdDelayTimer = null;
+      }
+      if (holdRafId) {
+        window.cancelAnimationFrame(holdRafId);
+        holdRafId = 0;
+      }
+      const wasHolding = keyZoomHoldingRef.current;
+      keyZoomHoldingRef.current = false;
+      activeZoomKey = null;
+
+      const map = mapRef.current;
+      if (map) {
+        map.options.zoomSnap = defaultZoomSnapRef.current;
+        if (wasHolding) {
+          setZoomLevel(map.getZoom());
+          if (modeRef.current !== "idle" && verticesRef.current.length > 0) {
+            redrawDraftRef.current(verticesRef.current);
+          }
+        }
+      }
+    };
+
+    const startHoldZoomLoop = (key: "F1" | "F2") => {
+      const map = mapRef.current;
+      if (!map || holdRafId) return;
+      const dir = key === "F1" ? 1 : -1;
+      map.stop();
+      map.options.zoomSnap = 0;
+      keyZoomHoldingRef.current = true;
+      currentHoldZoom = map.getZoom();
+      const now = performance.now();
+      holdStartMs = now;
+      lastFrameMs = now;
+      lastUiSyncMs = now;
+
+      const step = (frameNow: number) => {
+        const activeMap = mapRef.current;
+        if (!activeMap || activeZoomKey !== key) {
+          stopKeyZoom();
+          return;
+        }
+        const dt = Math.min(0.05, Math.max(0, (frameNow - lastFrameMs) / 1000));
+        lastFrameMs = frameNow;
+        const heldSec = (frameNow - holdStartMs) / 1000;
+        // Bắt đầu tốc độ vừa phải (1.75 mức/giây), nhấn giữ lâu tự tăng tốc mượt lên 3.8 mức/giây để phóng sâu nhanh
+        const speedPerSec = Math.min(3.8, 1.75 + heldSec * 1.35);
+        const nextZoom = clampZoom(currentHoldZoom + dir * speedPerSec * dt, activeMap);
+        if (Math.abs(nextZoom - currentHoldZoom) > 0.0001) {
+          currentHoldZoom = nextZoom;
+          const anchor = hoverLatLngRef.current ?? activeMap.getCenter();
+          activeMap.setZoomAround(anchor, currentHoldZoom, { animate: false });
+          if (frameNow - lastUiSyncMs >= 90) {
+            lastUiSyncMs = frameNow;
+            setZoomLevel(currentHoldZoom);
+          }
+        }
+        holdRafId = window.requestAnimationFrame(step);
+      };
+
+      holdRafId = window.requestAnimationFrame(step);
+    };
+
     const onKeyDown = (ev: KeyboardEvent) => {
+      if (document.querySelector('.modal-overlay, [role="dialog"][aria-modal="true"]')) return;
+
+      // F1: phóng to, F2: thu nhỏ (chặn hành vi mở Trợ giúp mặc định của trình duyệt)
+      if ((ev.key === "F1" || ev.key === "F2") && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const map = mapRef.current;
+        if (!map) return;
+
+        if (ev.repeat) {
+          if (activeZoomKey === ev.key && !holdRafId) {
+            if (holdDelayTimer !== null) {
+              window.clearTimeout(holdDelayTimer);
+              holdDelayTimer = null;
+            }
+            startHoldZoomLoop(ev.key);
+          }
+          return;
+        }
+
+        if (activeZoomKey && activeZoomKey !== ev.key) {
+          stopKeyZoom();
+        }
+        activeZoomKey = ev.key;
+        const dir = ev.key === "F1" ? 1 : -1;
+        const now = performance.now();
+        const baseZoom =
+          pendingTargetZoom !== null && now < pendingTargetUntilMs ? pendingTargetZoom : map.getZoom();
+        const nextZoom = clampZoom(baseZoom + dir * TAP_ZOOM_STEP, map);
+        pendingTargetZoom = nextZoom;
+        pendingTargetUntilMs = now + 260;
+
+        map.options.zoomSnap = 0;
+        const anchor = hoverLatLngRef.current ?? map.getCenter();
+        map.setZoomAround(anchor, nextZoom, { animate: true });
+
+        if (holdDelayTimer !== null) window.clearTimeout(holdDelayTimer);
+        holdDelayTimer = window.setTimeout(() => {
+          holdDelayTimer = null;
+          if (activeZoomKey === ev.key) {
+            startHoldZoomLoop(ev.key);
+          }
+        }, 165);
+        return;
+      }
+
+      // F3: hoàn tác đỉnh vừa vẽ / chỉnh sửa (chặn thanh Tìm kiếm F3 mặc định của trình duyệt)
+      if (ev.key === "F3" && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (saving) return;
+        const now = performance.now();
+        if (ev.repeat && now - lastUndoRepeatMs < 180) return;
+        lastUndoRepeatMs = now;
+        handleUndo();
+        return;
+      }
+
       const target = ev.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
 
@@ -1356,8 +1510,23 @@ export default function MapView({
         finishDraftRef.current();
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+
+    const onKeyUp = (ev: KeyboardEvent) => {
+      if ((ev.key === "F1" || ev.key === "F2") && activeZoomKey === ev.key) {
+        ev.preventDefault();
+        stopKeyZoom();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    window.addEventListener("keyup", onKeyUp, { capture: true });
+    window.addEventListener("blur", stopKeyZoom);
+    return () => {
+      stopKeyZoom();
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+      window.removeEventListener("keyup", onKeyUp, { capture: true });
+      window.removeEventListener("blur", stopKeyZoom);
+    };
   }, [mode, saving, handleUndo, handleRedo]);
 
   // Vẽ mốc đỉnh địa chính và chiều dài cạnh khi phóng sát (Z >= 17) vào thửa đang chọn
@@ -1863,6 +2032,7 @@ export default function MapView({
         onFit={fitPlots}
         onFocusSelected={selectedFeature && mode === "idle" ? focusSelectedPlot : undefined}
         zoomLevel={ready ? zoomLevel : undefined}
+        drawingActive={mode !== "idle"}
       />
 
       {mode !== "idle" && (

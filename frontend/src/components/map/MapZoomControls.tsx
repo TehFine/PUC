@@ -4,6 +4,7 @@ interface MapZoomControlsProps {
   onFit: () => void;
   onFocusSelected?: () => void;
   zoomLevel?: number;
+  drawingActive?: boolean;
 }
 
 export default function MapZoomControls({
@@ -12,6 +13,7 @@ export default function MapZoomControls({
   onFit,
   onFocusSelected,
   zoomLevel,
+  drawingActive = false,
 }: MapZoomControlsProps) {
   return (
     <div className="plotmap-zoom">
@@ -30,10 +32,20 @@ export default function MapZoomControls({
           Sát thửa
         </button>
       )}
-      <button type="button" className="map-tool" onClick={onZoomIn}>
+      <button
+        type="button"
+        className="map-tool"
+        onClick={onZoomIn}
+        title={drawingActive ? "Phóng to bản đồ (Phím F1, bấm hoặc nhấn giữ)" : "Phóng to bản đồ"}
+      >
         Phóng to
       </button>
-      <button type="button" className="map-tool" onClick={onZoomOut}>
+      <button
+        type="button"
+        className="map-tool"
+        onClick={onZoomOut}
+        title={drawingActive ? "Thu nhỏ bản đồ (Phím F2, bấm hoặc nhấn giữ)" : "Thu nhỏ bản đồ"}
+      >
         Thu nhỏ
       </button>
       <button type="button" className="map-tool" onClick={onFit}>

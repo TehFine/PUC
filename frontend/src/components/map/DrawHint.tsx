@@ -250,7 +250,7 @@ export default function DrawHint({
           className="btn btn-outline btn-sm"
           onClick={onUndo}
           disabled={!canUndo || saving}
-          title="Hoàn tác thao tác vừa thực hiện (Ctrl+Z)"
+          title="Hoàn tác thao tác vừa thực hiện (F3 hoặc Ctrl+Z)"
         >
           Hoàn tác
         </button>
@@ -357,6 +357,13 @@ export default function DrawHint({
           <span>Cập nhật diện tích hồ sơ theo ranh giới thực tế mới</span>
         </label>
       )}
+
+      <div className="plotmap-kbd-hint" aria-label="Phím tắt bổ trợ trên máy tính">
+        <span>Phím tắt:</span>
+        <span><kbd>F1</kbd> phóng to</span>
+        <span><kbd>F2</kbd> thu nhỏ</span>
+        <span><kbd>F3</kbd> hoàn tác</span>
+      </div>
 
       <div className="plotmap-hint-actions">
         <button type="button" className="btn btn-outline btn-sm" onClick={onCancel} disabled={saving}>
