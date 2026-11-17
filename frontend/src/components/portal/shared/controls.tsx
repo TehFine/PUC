@@ -1346,17 +1346,232 @@ export function AttachmentsField({
 
 /* ──────────────────────────── Hiển thị ảnh & video tối ưu (Zero-Bandwidth Video + Lightbox) ──────────────────────────── */
 
+const MAX_VIDEO_THUMB_CACHE = 40;
+const VIDEO_THUMB_TIMEOUT_MS = 5500;
+const videoThumbnailCache = new Map<string, string>();
+const inflightVideoThumbnails = new Map<string, Promise<string | null>>();
+let videoThumbAuthCleanupInstalled = false;
+
+function ensureVideoThumbAuthCleanup(): void {
+  if (videoThumbAuthCleanupInstalled || typeof window === "undefined") return;
+  videoThumbAuthCleanupInstalled = true;
+  const clearCache = () => {
+    videoThumbnailCache.clear();
+    inflightVideoThumbnails.clear();
+  };
+  window.addEventListener(AUTH_LOGOUT_EVENT, clearCache);
+  window.addEventListener(AUTH_EXPIRED_EVENT, clearCache);
+  window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, clearCache);
+}
+
+function rememberVideoThumbnail(url: string, dataUrl: string): void {
+  if (videoThumbnailCache.has(url)) {
+    videoThumbnailCache.delete(url);
+  } else if (videoThumbnailCache.size >= MAX_VIDEO_THUMB_CACHE) {
+    const oldestKey = videoThumbnailCache.keys().next().value;
+    if (oldestKey) videoThumbnailCache.delete(oldestKey);
+  }
+  videoThumbnailCache.set(url, dataUrl);
+}
+
+function captureVideoFrameThumbnail(url: string): Promise<string | null> {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return Promise.resolve(null);
+  }
+  ensureVideoThumbAuthCleanup();
+
+  const cached = videoThumbnailCache.get(url);
+  if (cached) return Promise.resolve(cached);
+  if (isDeviceOfflineNow()) return Promise.resolve(null);
+
+  const existing = inflightVideoThumbnails.get(url);
+  if (existing) return existing;
+
+  const job = new Promise<string | null>((resolve) => {
+    const video = document.createElement("video");
+    let settled = false;
+    let seekFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      if (seekFallbackTimer) {
+        clearTimeout(seekFallbackTimer);
+        seekFallbackTimer = null;
+      }
+      video.onloadedmetadata = null;
+      video.onloadeddata = null;
+      video.onseeked = null;
+      video.onerror = null;
+      try {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      } catch {
+        // ignore
+      }
+    };
+
+    const finish = (result: string | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      cleanup();
+      if (result) {
+        rememberVideoThumbnail(url, result);
+      }
+      resolve(result);
+    };
+
+    const captureCurrentFrame = () => {
+      if (settled) return;
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      if (!vw || !vh) {
+        finish(null);
+        return;
+      }
+      try {
+        const scale = Math.min(1, 640 / vw);
+        const targetW = Math.max(1, Math.round(vw * scale));
+        const targetH = Math.max(1, Math.round(vh * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          finish(null);
+          return;
+        }
+        ctx.drawImage(video, 0, 0, targetW, targetH);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.74);
+        finish(dataUrl.startsWith("data:image/jpeg") && dataUrl.length > 256 ? dataUrl : null);
+      } catch {
+        finish(null);
+      }
+    };
+
+    const timeoutId = setTimeout(() => finish(null), VIDEO_THUMB_TIMEOUT_MS);
+
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+
+    video.onloadedmetadata = () => {
+      if (settled) return;
+      video.preload = "auto";
+      const targetTime = Number.isFinite(video.duration) && video.duration > 0.25 ? 0.15 : 0.01;
+      try {
+        video.currentTime = targetTime;
+      } catch {
+        // Đợi onloadeddata nếu trình duyệt chưa cho seek ngay
+      }
+    };
+
+    video.onloadeddata = () => {
+      if (settled) return;
+      if (video.currentTime > 0 && video.readyState >= 2) {
+        captureCurrentFrame();
+        return;
+      }
+      if (!seekFallbackTimer) {
+        seekFallbackTimer = setTimeout(() => {
+          if (!settled && video.readyState >= 2) {
+            captureCurrentFrame();
+          }
+        }, 700);
+      }
+    };
+
+    video.onseeked = () => {
+      if (video.readyState >= 2) {
+        captureCurrentFrame();
+      }
+    };
+
+    video.onerror = () => finish(null);
+
+    try {
+      video.src = url;
+      video.load();
+    } catch {
+      finish(null);
+    }
+  }).finally(() => {
+    inflightVideoThumbnails.delete(url);
+  });
+
+  inflightVideoThumbnails.set(url, job);
+  return job;
+}
+
 function LazyVideoCard({ url, caption }: { url: string; caption?: string }) {
   const [playing, setPlaying] = useState(false);
+  const [thumbState, setThumbState] = useState<{ url: string; dataUrl: string | null }>(() => ({
+    url,
+    dataUrl: videoThumbnailCache.get(url) ?? null,
+  }));
+  const thumbUrl = thumbState.url === url ? thumbState.dataUrl : (videoThumbnailCache.get(url) ?? null);
+
+  useEffect(() => {
+    if (playing || thumbUrl) return;
+    let cancelled = false;
+
+    const attemptCapture = () => {
+      void captureVideoFrameThumbnail(url).then((captured) => {
+        if (!cancelled && captured) {
+          setThumbState({ url, dataUrl: captured });
+        }
+      });
+    };
+
+    attemptCapture();
+    window.addEventListener("online", attemptCapture);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("online", attemptCapture);
+    };
+  }, [url, playing, thumbUrl]);
 
   if (!playing) {
     return (
       <div className="pt-lazy-video-card">
-        <div className="pt-lazy-video-copy">
-          <strong>Video minh chứng hiện trường</strong>
-          <span>Chỉ tải dữ liệu video khi bạn bấm phát để tiết kiệm dung lượng mạng</span>
-          {caption && <div className="pt-lazy-video-caption">{caption}</div>}
-        </div>
+        {thumbUrl ? (
+          <button
+            type="button"
+            className="pt-lazy-video-thumb-wrap"
+            onClick={() => setPlaying(true)}
+            aria-label={caption ? `Phát ${caption}` : "Phát video minh chứng hiện trường"}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- ảnh chụp khung hình tạm thời dạng Data URL */}
+            <img
+              src={thumbUrl}
+              alt={caption || "Video minh chứng hiện trường"}
+              className="pt-lazy-video-thumb"
+              decoding="async"
+            />
+            {caption && <span className="pt-lazy-video-thumb-caption">{caption}</span>}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="pt-lazy-video-copy"
+            onClick={() => setPlaying(true)}
+            aria-label={caption ? `Phát ${caption}` : "Phát video minh chứng hiện trường"}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- biểu tượng video tĩnh nội bộ */}
+            <img
+              src="/video.png"
+              alt=""
+              width={34}
+              height={34}
+              className="pt-lazy-video-fallback-icon"
+              aria-hidden="true"
+            />
+            <strong>Video minh chứng hiện trường</strong>
+            {caption && <span className="pt-lazy-video-caption">{caption}</span>}
+          </button>
+        )}
         <div className="pt-lazy-video-actions">
           <button type="button" className="pt-lazy-video-play-btn" onClick={() => setPlaying(true)}>
             Phát video

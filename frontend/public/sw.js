@@ -19,6 +19,7 @@ const PRECACHE_ASSETS = [
   "/location-pin.png",
   "/map-pin.png",
   "/photo-camera.png",
+  "/video.png",
   "/empty.png",
 ];
 
