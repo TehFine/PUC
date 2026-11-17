@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { RadialPngIcon } from "@/components/portal/RadialIcons";
 import { ConfirmDialog } from "@/components/ui/Modal";
 import { formatAreaSqm, formatHa, formatPerimeterMeters } from "@/utils/plot-utils";
 import type { DrawStyle, MapMessage, Mode, PreviewState } from "./map-types";
@@ -149,10 +150,12 @@ export default function DrawHint({
             )}
             <button
               type="button"
-              className="btn btn-outline btn-sm"
+              className="plotmap-hint-collapse-btn"
               onClick={() => setCollapsed(false)}
+              aria-label="Mở rộng bảng điều khiển"
+              title="Mở rộng bảng điều khiển"
             >
-              Mở rộng
+              <RadialPngIcon src="/expand.png" size={16} />
             </button>
           </div>
         </div>
@@ -162,7 +165,8 @@ export default function DrawHint({
 
   return (
     <div className="plotmap-hint" role="region" aria-label={title}>
-      <div className="plotmap-hint-toprow">
+      <div className="plotmap-hint-body">
+        <div className="plotmap-hint-toprow">
         <div className="plotmap-hint-head">
           <strong>{title}</strong>
           <span>{guideText}</span>
@@ -171,9 +175,10 @@ export default function DrawHint({
           type="button"
           className="plotmap-hint-collapse-btn"
           onClick={() => setCollapsed(true)}
+          aria-label="Thu gọn bảng điều khiển"
           title="Thu gọn bảng điều khiển để nhìn rộng bản đồ"
         >
-          Thu gọn
+          <RadialPngIcon src="/minimize.png" size={16} />
         </button>
       </div>
 
@@ -358,20 +363,21 @@ export default function DrawHint({
         </label>
       )}
 
-      <div className="plotmap-kbd-hint" aria-label="Phím tắt bổ trợ trên máy tính">
-        <span>Phím tắt:</span>
-        <span><kbd>F1</kbd> phóng to</span>
-        <span><kbd>F2</kbd> thu nhỏ</span>
-        <span><kbd>F3</kbd> hoàn tác</span>
+        <div className="plotmap-kbd-hint" aria-label="Phím tắt bổ trợ trên máy tính">
+          <span>Phím tắt:</span>
+          <span><kbd>F1</kbd> phóng to</span>
+          <span><kbd>F2</kbd> thu nhỏ</span>
+          <span><kbd>F3</kbd> hoàn tác</span>
+        </div>
       </div>
 
-      <div className="plotmap-hint-actions">
-        <button type="button" className="btn btn-outline btn-sm" onClick={onCancel} disabled={saving}>
+      <footer className="plotmap-hint-actions">
+        <button type="button" className="btn btn-outline" onClick={onCancel} disabled={saving}>
           Hủy
         </button>
         <button
           type="button"
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary"
           onClick={onFinish}
           disabled={saving || preview.points < 3 || preview.selfIntersections > 0}
         >
@@ -383,7 +389,7 @@ export default function DrawHint({
                 ? "Lưu hình dạng"
                 : "Hoàn tất"}
         </button>
-      </div>
+      </footer>
 
       {confirmKind === "deleteVertex" && onDeleteSelectedVertex && selectedVertexIndex !== null && (
         <ConfirmDialog

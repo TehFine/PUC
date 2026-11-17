@@ -41,11 +41,7 @@ export default function ZonesOverviewCard({
   return (
     <aside className="card zones-sidebar">
       <div className="zones-sidebar-head">
-        <div>
-          <div className="zones-sidebar-kicker">Tổng quan dữ liệu</div>
-          <div className="zones-sidebar-title">{plotCount} thửa đất</div>
-        </div>
-        <span className="badge badge-gray">{summary.zones} mã vùng</span>
+        <div className="zones-sidebar-title">Tổng quan</div>
       </div>
 
       <div className="zone-stats embedded">
