@@ -2707,19 +2707,18 @@ input[type="date"].filter-select {
 
 .pp-close {
   flex: none;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   display: grid;
   place-items: center;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: none;
   background: transparent;
   color: var(--ink);
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+  transition: opacity 0.16s ease;
 }
-.pp-close:hover { background: rgba(20, 55, 47, 0.06); border-color: rgba(20, 55, 47, 0.14); }
+.pp-close:hover { background: transparent; opacity: 0.76; }
 
 .pp-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 14px; }
 
@@ -6027,7 +6026,7 @@ code {
   .table-wrap .responsive-table tbody {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
   }
   .table-wrap .responsive-table tbody tr {
     display: grid;
@@ -6037,20 +6036,21 @@ code {
     padding: 0;
     overflow: hidden;
     background: var(--bg-card);
-    border: 1px solid rgba(20, 55, 47, 0.16);
+    border: 1px solid rgba(15, 23, 42, 0.08);
     border-radius: 8px;
-    box-shadow: none;
+    box-shadow: var(--shadow-card);
   }
   .table-wrap .responsive-table tbody td {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 3px;
-    padding: 10px 13px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 11px 12px;
     border: 0;
     border-bottom: 1px solid rgba(20, 55, 47, 0.13);
     white-space: normal;
-    text-align: left !important;
+    text-align: center !important;
     font-size: 13px;
     font-variant-numeric: tabular-nums;
     vertical-align: top;

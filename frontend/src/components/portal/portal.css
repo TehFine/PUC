@@ -6091,6 +6091,14 @@ body.pt-body {
 .pt-icon-btn svg,
 .pt-icon-btn .pub-icon,
 .pt-icon-btn img { width: 20px; height: 20px; stroke-width: 2; }
+.pt-sheet-close-btn,
+.pt-sheet-close-btn:hover {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.pt-sheet-close-btn:hover { opacity: 0.76; }
+.pt-sheet-close-btn img { width: 28px; height: 28px; }
 
 /* Bảng trượt + biểu mẫu */
 .pt-sheet-backdrop {
