@@ -4,30 +4,44 @@ import { STATUS_LABELS } from "@/types/geo";
 import { formatHa } from "@/utils/plot-utils";
 import { getZoneColor, plotArea } from "./zone-data";
 
-export default function PlotRow({ feature }: { feature: PlotFeature }) {
+interface PlotRowProps {
+  feature: PlotFeature;
+  onSelect?: (code: string) => void;
+}
+
+export default function PlotRow({ feature, onSelect }: PlotRowProps) {
   const props = feature.properties;
   const zc = getZoneColor(props.zone || props.code);
-  return (
-    <div className="zg-item">
-      <span
-        className="badge"
-        style={{
-          fontFamily: "var(--font-num-stack)",
-          fontVariantNumeric: "tabular-nums",
-          letterSpacing: "0.01em",
-          fontSize: 12,
-          fontWeight: 700,
-          color: zc.text,
-        }}
-      >
-        {props.code}
-      </span>
-      <span className="zg-meta">
-        {props.owner || "-"} - {formatHa(plotArea(feature))}
-      </span>
+  const areaLabel = formatHa(plotArea(feature));
+  const ownerLabel = props.owner || "Chưa gán chủ hộ";
+
+  const content = (
+    <>
+      <div className="zg-plot-main">
+        <strong className="zg-plot-owner">{ownerLabel}</strong>
+        <span className="zg-plot-sub">
+          <span style={{ color: zc.text, fontWeight: 700 }}>{props.code}</span>
+          {props.village ? `, ${props.village}` : ""}
+          {`, ${areaLabel}`}
+        </span>
+      </div>
       <span className={`badge ${STATUS_BADGE[props.status]}`}>
         {STATUS_LABELS[props.status]}
       </span>
-    </div>
+    </>
   );
+
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        className="zg-item zg-item-btn"
+        onClick={() => onSelect(props.code)}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="zg-item">{content}</div>;
 }

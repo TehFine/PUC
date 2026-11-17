@@ -20,11 +20,18 @@ interface PlotsTableProps {
   loading: boolean;
   summary: PlotsSummary;
   onEditPlot?: (code: string) => void;
+  onRedrawPlot?: (code: string) => void;
 }
 
 const emptyCellStyle = { textAlign: "center", padding: 28, color: "var(--text-muted)" } as const;
 
-export default function PlotsTable({ features, loading, summary, onEditPlot }: PlotsTableProps) {
+export default function PlotsTable({
+  features,
+  loading,
+  summary,
+  onEditPlot,
+  onRedrawPlot,
+}: PlotsTableProps) {
   const [signboardTarget, setSignboardTarget] = useState<{
     plot: PortalPlot;
     householdName: string;
@@ -177,12 +184,22 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                         <QrCode size={13} />
                         <span>Biển QR Vườn</span>
                       </button>
+                      {onRedrawPlot && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => onRedrawPlot(props.code)}
+                          title="Mở bản đồ vệ tinh và tiến hành vẽ lại ranh giới thửa đất từ đầu"
+                        >
+                          Vẽ lại hình dạng
+                        </button>
+                      )}
                       {onEditPlot && (
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
                           onClick={() => onEditPlot(props.code)}
-                          title="Mở bản đồ để chỉnh sửa hình dạng ranh giới thửa đất này"
+                          title="Mở bản đồ để chỉnh sửa các đỉnh ranh giới hiện có của thửa đất"
                         >
                           Sửa hình dạng
                         </button>

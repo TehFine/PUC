@@ -2,6 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import type { PendingPlotAction } from "@/components/map/MapView";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { MapSkeleton } from "@/components/ui/Skeleton";
@@ -11,6 +13,7 @@ import ZoneDetailCard from "@/components/zones/ZoneDetailCard";
 import ZoneSourceCard from "@/components/zones/ZoneSourceCard";
 import ZonesOverviewCard from "@/components/zones/ZonesOverviewCard";
 import { buildZoneRows, summarizePlots } from "@/components/zones/zone-data";
+import { canRedrawPlotShapeByRole } from "@/constants/roles";
 import { usePlots } from "@/hooks/use-plots";
 import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useBackLayer, useUrlSubTab } from "@/lib/back-navigation";
 
@@ -24,13 +27,15 @@ type SheetMode = "overview" | "zone" | "list" | null;
 const isZoneView = (raw: string): raw is ZoneView => raw === "map" || raw === "list";
 
 export default function Zones() {
+  const { session, can } = useAuth();
+  const canEditPlotShape = canRedrawPlotShapeByRole(session?.user.role) && can("plots", "update");
   const { plots, loading, error, refresh } = usePlots();
   const [view, setView] = useState<ZoneView>(() =>
     readInitialUrlSubTab("sub", "map", isZoneView, ADMIN_LAST_URL_KEY),
   );
   const [sheet, setSheet] = useState<SheetMode>(null);
   const [activeZone, setActiveZone] = useState<string | null>(null);
-  const [pendingEditCode, setPendingEditCode] = useState<string | null>(null);
+  const [pendingPlotAction, setPendingPlotAction] = useState<PendingPlotAction | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const sheetHeadRef = useRef<HTMLDivElement>(null);
@@ -104,6 +109,17 @@ export default function Zones() {
     setActiveZone(code);
     setSheet("zone");
   };
+
+  const openPlotOnMap = useCallback(
+    (code: string, action: PendingPlotAction["action"] = "inspect") => {
+      setPendingPlotAction({ code, action, seq: Date.now() });
+      setSheet(null);
+      if (view !== "map") {
+        selectZoneView("map");
+      }
+    },
+    [selectZoneView, view],
+  );
 
   return (
     <div className="zones-page">
@@ -204,17 +220,30 @@ export default function Zones() {
               onOpenZone={openZone}
             />
             <ZoneSourceCard sources={summary.sources} zoneRows={zoneRows} />
-            {isMobile && sheet === "zone" && <ZoneDetailCard zone={activeZoneRow} plots={activeZonePlots} />}
-            {isMobile && sheet === "list" && <AllPlotsCard features={features} zoneCount={summary.zones} />}
+            {isMobile && sheet === "zone" && (
+              <ZoneDetailCard
+                zone={activeZoneRow}
+                plots={activeZonePlots}
+                onSelectPlot={(code) => openPlotOnMap(code, "inspect")}
+              />
+            )}
+            {isMobile && sheet === "list" && (
+              <AllPlotsCard
+                features={features}
+                zoneCount={summary.zones}
+                onSelectPlot={(code) => openPlotOnMap(code, "inspect")}
+              />
+            )}
           </div>
 
           <div className="zones-map-area">
             <MapView
               plots={plots}
               loading={loading}
+              canEditShape={canEditPlotShape}
               onChanged={refresh}
-              pendingEditCode={pendingEditCode}
-              onPendingEditHandled={() => setPendingEditCode(null)}
+              pendingPlotAction={pendingPlotAction}
+              onPendingPlotActionHandled={() => setPendingPlotAction(null)}
             />
           </div>
         </div>
@@ -223,11 +252,8 @@ export default function Zones() {
           features={features}
           loading={loading}
           summary={summary}
-          onEditPlot={(code) => {
-            setPendingEditCode(code);
-            setSheet(null);
-            selectZoneView("map");
-          }}
+          onEditPlot={canEditPlotShape ? (code) => openPlotOnMap(code, "edit") : undefined}
+          onRedrawPlot={canEditPlotShape ? (code) => openPlotOnMap(code, "redraw") : undefined}
         />
       )}
     </div>

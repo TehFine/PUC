@@ -6,9 +6,10 @@ import { getZoneColor, type ZoneRowData } from "./zone-data";
 interface ZoneDetailCardProps {
   zone: ZoneRowData | null;
   plots: PlotFeature[];
+  onSelectPlot?: (code: string) => void;
 }
 
-export default function ZoneDetailCard({ zone, plots }: ZoneDetailCardProps) {
+export default function ZoneDetailCard({ zone, plots, onSelectPlot }: ZoneDetailCardProps) {
   const zc = zone ? getZoneColor(zone.code) : null;
   return (
     <aside className="card zones-sheet-card zones-sheet-zone">
@@ -51,7 +52,11 @@ export default function ZoneDetailCard({ zone, plots }: ZoneDetailCardProps) {
               </div>
             )}
             {plots.map((feature) => (
-              <PlotRow key={feature.properties.code} feature={feature} />
+              <PlotRow
+                key={feature.properties.code}
+                feature={feature}
+                onSelect={onSelectPlot}
+              />
             ))}
           </div>
         </>
