@@ -353,9 +353,14 @@ describe("lô thu hoạch, khai báo thu hoạch và cấp phát tem", () => {
     expect(gen.status).toBe(201);
     expect(gen.body.data).toHaveLength(2);
 
+    // Hộ 3 (Lê Văn Cường) có phun thuốc cấm và mẫu kiểm nghiệm Không đạt nên bị khóa cứng ngay cả khi không truyền plotCode
+    expect(
+      (await htx.post("/api/harvest/1/contributions").send({ householdId: 3, weightKg: 620.5 })).status,
+    ).toBe(400);
+
     const upserted = await htx
       .post("/api/harvest/1/contributions")
-      .send({ householdId: 3, weightKg: 620.5 });
+      .send({ householdId: 8, weightKg: 620.5 });
     expect(upserted.status).toBe(201);
     expect(upserted.body.weightKg).toBe(620.5);
 
@@ -909,6 +914,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     const cccdReset = await request(app).post("/api/auth/forgot-password/verify-cccd").send({
       username: USERS.inspector,
       cccd: "260444333222",
+      fullName: "Hộ Trùng SĐT Cán Bộ",
       newPassword: "AttackerPassword123",
     });
     expect(cccdReset.status).toBe(400);
@@ -1549,8 +1555,10 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     expect(setupRes.body.secret).toMatch(/^[A-Z2-7]{16,}$/);
     expect(setupRes.body.otpauthUrl).toContain("otpauth://totp/");
 
-    const validTotp = generateTotpCode(setupRes.body.secret);
-    const enableRes = await mfaSetupAgent.post("/api/auth/2fa/enable").send({ code: validTotp });
+    const validTotp = generateTotpCode(setupRes.body.secret, Date.now() - 30_000);
+    const enableRes = await mfaSetupAgent
+      .post("/api/auth/2fa/enable")
+      .send({ code: validTotp, currentPassword: "SecurePassword123" });
     expect(enableRes.status).toBe(200);
     expect(enableRes.body.enabled).toBe(true);
     expect(enableRes.body.backupCodes).toHaveLength(8);

@@ -2,6 +2,7 @@ import type { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
+import { createHash } from "node:crypto";
 import { unlink } from "node:fs/promises";
 import type { Server } from "node:http";
 import { join, resolve } from "node:path";
@@ -123,6 +124,91 @@ describe("Đồng bộ vùng sóng yếu & Chống ghi trùng bằng X-Idempoten
     expect(downloadRes.status).toBe(200);
     expect(downloadRes.headers["content-type"]).toContain("image/png");
     expect(Buffer.compare(downloadRes.body as Buffer, TINY_PNG)).toBe(0);
+  });
+
+  it("chống tải trùng BYTEA bằng X-Upload-Sha256 + GET /api/uploads/by-hash, chặn tệp lỗi bit và cô lập chặt giữa các hộ", async () => {
+    const farmerAn = await loggedIn("0905123456");
+    const farmerBinh = await loggedIn("0912234567");
+
+    // Tạo một tệp PNG hợp lệ duy nhất bằng cách thêm chunk tEXt vào trước IEND của TINY_PNG
+    const uniqueText = Buffer.from(`orchard_dedup_${Date.now()}`, "ascii");
+    const textKeyword = Buffer.from("Comment\0", "ascii");
+    const chunkData = Buffer.concat([textKeyword, uniqueText]);
+    const chunkType = Buffer.from("tEXt", "ascii");
+    // Tính CRC32 chuẩn của PNG cho tEXt chunk (hoặc dùng JPEG hợp lệ có phần đệm APP0/COM ở trước EOI)
+    // Dùng JPEG tối giản hợp lệ kèm comment duy nhất để detectType luôn nhận image/jpeg
+    const uniqueComment = Buffer.from(`PUC-ORCHARD-${Date.now()}`, "ascii");
+    const comLen = Buffer.alloc(2);
+    comLen.writeUInt16BE(uniqueComment.length + 2, 0);
+    const uniqueJpeg = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+      Buffer.from("JFIF\0\x01\x01\x00\x00\x01\x00\x01\x00\x00", "binary"),
+      Buffer.from([0xff, 0xfe]),
+      comLen,
+      uniqueComment,
+      Buffer.from([0xff, 0xd9]),
+    ]);
+    void chunkData;
+    void chunkType;
+
+    const sha256 = createHash("sha256").update(uniqueJpeg).digest("hex");
+
+    // 1. Trước khi tải lên: kiểm tra by-hash trả found: false
+    const preCheck = await farmerAn
+      .get("/api/uploads/by-hash")
+      .query({ purpose: "journal", sha256, size: uniqueJpeg.length });
+    expect(preCheck.status).toBe(200);
+    expect(preCheck.body).toEqual({ found: false });
+
+    // 2. Gửi sai X-Upload-Sha256 (giả lập đứt mạng/lỗi bit trên sóng 2G) -> bị từ chối 400
+    const corrupted = await farmerAn
+      .post("/api/uploads")
+      .set("X-Upload-Sha256", "0".repeat(64))
+      .field("purpose", "journal")
+      .attach("file", uniqueJpeg, "ray-sau-rieng.jpg");
+    expect(corrupted.status).toBe(400);
+
+    // 3. Tải lên hợp lệ lần 1 kèm X-Upload-Sha256
+    const firstUp = await farmerAn
+      .post("/api/uploads")
+      .set("X-Upload-Sha256", sha256)
+      .field("purpose", "journal")
+      .attach("file", uniqueJpeg, "ray-sau-rieng.jpg");
+    expect(firstUp.status).toBe(201);
+    expect(firstUp.body.sha256).toBe(sha256);
+    const savedId = firstUp.body.id as number;
+
+    // 4. Hộ An thử tải lại cùng ảnh (giả lập rớt phản hồi chiều về) -> trả về đúng ID cũ, không nhân đôi dòng CSDL
+    const retryUp = await farmerAn
+      .post("/api/uploads")
+      .set("X-Upload-Sha256", sha256)
+      .field("purpose", "journal")
+      .attach("file", uniqueJpeg, "ray-sau-rieng.jpg");
+    expect(retryUp.status).toBe(201);
+    expect(retryUp.body.id).toBe(savedId);
+    expect(retryUp.body.deduplicated).toBe(true);
+
+    // 5. Kiểm tra nhanh bằng by-hash cho Hộ An -> found: true (tiết kiệm băng thông tải lại)
+    const afterCheck = await farmerAn
+      .get("/api/uploads/by-hash")
+      .query({ purpose: "journal", sha256, size: uniqueJpeg.length });
+    expect(afterCheck.status).toBe(200);
+    expect(afterCheck.body.found).toBe(true);
+    expect(afterCheck.body.id).toBe(savedId);
+
+    // 6. Hộ Bình kiểm tra cùng mã băm của Hộ An -> found: false (cô lập tuyệt đối giữa các hộ)
+    const otherCheck = await farmerBinh
+      .get("/api/uploads/by-hash")
+      .query({ purpose: "journal", sha256, size: uniqueJpeg.length });
+    expect(otherCheck.status).toBe(200);
+    expect(otherCheck.body).toEqual({ found: false });
+
+    const db = nest.get(DatabaseService);
+    const countRes = await db.query<{ cnt: string }>(
+      "SELECT COUNT(*)::text AS cnt FROM attachments WHERE sha256_hex = $1",
+      [sha256],
+    );
+    expect(Number(countRes.rows[0]?.cnt)).toBe(1);
   });
 });
 
