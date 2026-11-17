@@ -262,38 +262,19 @@ export default function Journal() {
                     <td>
                       <span
                         style={{
-                          display: "inline-block",
                           fontFamily: "var(--font-num-stack)",
                           fontVariantNumeric: "tabular-nums",
                           letterSpacing: "0.015em",
-                          fontSize: 12.5,
+                          fontSize: 13,
                           color: zc.text,
-                          background: zc.bg,
-                          border: "none",
-                          padding: "4px 10px",
-                          borderRadius: 8,
                           fontWeight: 700,
                         }}
                       >
                         {j.plotCode}
                       </span>
                     </td>
-                    <td>
-                      <span
-                        style={{
-                          padding: "2px 8px",
-                          background: "#f2f8f4",
-                          color: "#256b45",
-                          border: "1px solid #d5eadd",
-                          borderRadius: 6,
-                          fontSize: 11.5,
-                          fontWeight: 500,
-                        }}
-                      >
-                        {j.activity}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--text-secondary)", maxWidth: 220 }}>{j.detail || "—"}</td>
+                    <td style={{ fontWeight: 500, color: "var(--ink)" }}>{j.activity}</td>
+                    <td style={{ fontSize: 12, color: "var(--text-secondary)", maxWidth: 220 }}>{j.detail || "-"}</td>
                     <td style={{ fontSize: 12 }}>{j.recorder}</td>
                     <td style={{ textAlign: "center" }}>
                       {j.hasPhoto || j.photoUrl ? (
@@ -306,7 +287,7 @@ export default function Journal() {
                           Có ảnh
                         </button>
                       ) : (
-                        <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>
+                        <span style={{ color: "var(--text-muted)", fontSize: 12 }}>-</span>
                       )}
                     </td>
                     <td>

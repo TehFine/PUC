@@ -211,16 +211,11 @@ export default function Households() {
                   <td>
                     <span
                       style={{
-                        display: "inline-block",
                         fontFamily: "var(--font-num-stack)",
                         fontVariantNumeric: "tabular-nums",
-                        fontSize: 12.5,
+                        fontSize: 13,
                         letterSpacing: "0.015em",
-                        background: zc.bg,
                         color: zc.text,
-                        border: "none",
-                        padding: "4px 10px",
-                        borderRadius: 8,
                         fontWeight: 700,
                       }}
                     >

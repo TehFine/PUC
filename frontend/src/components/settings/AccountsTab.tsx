@@ -192,20 +192,8 @@ export default function AccountsTab({
                       )}
                     </div>
                   </td>
-                  <td>
-                    <span
-                      style={{
-                        padding: "2px 8px",
-                        borderRadius: 6,
-                        fontSize: 11,
-                        fontWeight: 500,
-                        background: "#f2f8f4",
-                        color: "#256b45",
-                        border: "1px solid #d5eadd",
-                      }}
-                    >
-                      {ROLE_LABELS[a.role] ?? a.role}
-                    </span>
+                  <td style={{ fontWeight: 600, color: "#256b45" }}>
+                    {ROLE_LABELS[a.role] ?? a.role}
                   </td>
                   <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                     {formatAccountScope(a)}

@@ -99,22 +99,17 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                         fontFamily: "var(--font-num-stack)",
                         fontVariantNumeric: "tabular-nums",
                         letterSpacing: "0.015em",
-                        fontSize: 12.5,
+                        fontSize: 13,
                         fontWeight: 700,
                         color: zc.text,
-                        background: zc.bg,
-                        border: "1px solid rgba(20, 55, 47, 0.12)",
-                        padding: "3px 8px",
-                        borderRadius: 6,
-                        display: "inline-block",
                       }}
                     >
                       {props.code}
                     </span>
                   </td>
-                  <td>{props.sheet || "—"}</td>
-                  <td>{props.parcel || "—"}</td>
-                  <td style={{ fontWeight: 600 }}>{props.owner || "—"}</td>
+                  <td>{props.sheet || "-"}</td>
+                  <td>{props.parcel || "-"}</td>
+                  <td style={{ fontWeight: 600 }}>{props.owner || "-"}</td>
                   <td>{areaText}</td>
                   <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "var(--text-secondary)" }}>
                     {formatCoords(center?.lat, center?.lng)}
@@ -125,20 +120,15 @@ export default function PlotsTable({ features, loading, summary, onEditPlot }: P
                         fontFamily: "var(--font-num-stack)",
                         fontVariantNumeric: "tabular-nums",
                         letterSpacing: "0.015em",
-                        fontSize: 12,
+                        fontSize: 12.5,
                         fontWeight: 600,
-                        background: zc.bg,
                         color: zc.text,
-                        border: "1px solid rgba(20, 55, 47, 0.12)",
-                        padding: "3px 8px",
-                        borderRadius: 6,
-                        display: "inline-block",
                       }}
                     >
-                      {props.zone || "—"}
+                      {props.zone || "-"}
                     </span>
                   </td>
-                  <td>{props.variety || "—"}</td>
+                  <td>{props.variety || "-"}</td>
                   <td>
                     <span className={`badge ${SOURCE_BADGE[props.source] ?? "badge-gray"}`}>
                       {SOURCE_LABELS[props.source] ?? "Khảo sát"}

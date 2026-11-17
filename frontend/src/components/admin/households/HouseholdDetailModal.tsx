@@ -82,24 +82,16 @@ export default function HouseholdDetailModal({
       <div className="admin-detail-list-card" style={{ marginBottom: 18 }}>
         <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Mã vùng trồng, mã hộ</span>
-          <div className="admin-detail-list-value">
-            <span
-              style={{
-                display: "inline-block",
-                fontWeight: 700,
-                fontFamily: "var(--font-num-stack)",
-                fontVariantNumeric: "tabular-nums",
-                letterSpacing: "0.015em",
-                fontSize: 13,
-                color: zc.text,
-                background: zc.bg,
-                border: "none",
-                padding: "4px 10px",
-                borderRadius: 6,
-              }}
-            >
-              {household.code}
-            </span>
+          <div
+            className="admin-detail-list-value"
+            style={{
+              fontWeight: 700,
+              fontFamily: "var(--font-num-stack)",
+              letterSpacing: "0.015em",
+              color: zc.text,
+            }}
+          >
+            {household.code}
           </div>
         </div>
         <div className="admin-detail-list-row">

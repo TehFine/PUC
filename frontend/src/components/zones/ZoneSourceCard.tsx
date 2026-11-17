@@ -21,10 +21,9 @@ export default function ZoneSourceCard({
                 key={zone.code}
                 title={`${zone.code} (${zone.village})`}
                 style={{
-                  background: zc.bg,
+                  background: "transparent",
                   color: zc.text,
-                  padding: "3px 8px",
-                  borderRadius: 7,
+                  padding: 0,
                   border: "none",
                 }}
               >

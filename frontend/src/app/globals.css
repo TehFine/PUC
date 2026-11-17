@@ -1200,31 +1200,28 @@ body {
 .dash-bento-tag {
   display: inline-flex;
   align-items: center;
-  padding: 4px 9px;
-  border-radius: 5px;
-  font-size: 12px;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  border: 1px solid rgba(20, 55, 47, 0.12);
-  background: #f7f7f5;
+  border: none;
+  background: transparent;
   color: var(--ink);
 }
 
 .dash-bento-tag.is-ok {
-  background: #eef6f0;
-  border-color: rgba(21, 128, 61, 0.18);
+  background: transparent;
   color: #15803d;
 }
 
 .dash-bento-tag.is-warn {
-  background: #fdf6e9;
-  border-color: rgba(154, 103, 18, 0.2);
+  background: transparent;
   color: #9a6712;
 }
 
 .dash-bento-tag.is-danger {
-  background: #fef2f2;
-  border-color: rgba(185, 28, 28, 0.2);
+  background: transparent;
   color: #b91c1c;
 }
 
@@ -1923,22 +1920,24 @@ input[type="date"].filter-select {
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11.5px;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
-  border: 0;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.badge-green  { background: rgba(63, 155, 99, 0.14);  color: #277a48; }
-.badge-gold   { background: rgba(185, 138, 28, 0.16); color: #8a6510; }
-.badge-red    { background: rgba(217, 87, 58, 0.14);  color: #b73c20; }
-.badge-blue   { background: rgba(43, 108, 176, 0.12); color: #235f92; }
-.badge-gray   { background: rgba(20, 55, 47, 0.08);   color: var(--ink); }
-.badge-orange { background: rgba(192, 86, 33, 0.13);  color: #9a4a1d; }
+.badge-green  { color: #15803d; }
+.badge-gold   { color: #9a6712; }
+.badge-red    { color: #b91c1c; }
+.badge-blue   { color: #007aff; }
+.badge-gray   { color: var(--ink); }
+.badge-orange { color: #9a4a1d; }
 
 /* ─── TABS ────────────────────────────────────── */
 .tab-bar {
@@ -6906,36 +6905,30 @@ code {
 }
 
 #section-catalog .pt-pest-mini-status {
-  padding: 3px 9px;
-  border-radius: 4px;
-  font-size: 11.5px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent !important;
+  border: none !important;
+  font-size: 12.5px;
   font-weight: 600;
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
 }
 
 #section-catalog .pt-pest-mini-status.pt-pest-status-allowed {
-  background: #f0fdf4;
   color: #15803d;
-  border: 1px solid rgba(21, 128, 61, 0.2);
 }
 
 #section-catalog .pt-pest-mini-status.pt-pest-status-restricted {
-  background: #fffbeb;
   color: #9a6712;
-  border: 1px solid rgba(154, 103, 18, 0.22);
 }
 
 #section-catalog .pt-pest-mini-status.pt-pest-status-banned {
-  background: #fef2f2;
   color: #b91c1c;
-  border: 1px solid rgba(185, 28, 28, 0.22);
 }
 
 #section-catalog .pt-pest-mini-status.admin-catalog-neutral-tag {
-  background: #f7f7f5;
   color: #14372f;
-  border: 1px solid #d4d4d2;
 }
 
 #section-catalog .pt-pest-card-sub {

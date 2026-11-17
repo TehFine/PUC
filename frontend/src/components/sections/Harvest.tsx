@@ -452,37 +452,25 @@ export default function Harvest() {
                         <strong style={{ color: "#14372f" }}>{h.enterpriseName || h.buyer}</strong>
                         {h.contractCode && <div style={{ fontSize: 11, color: "#64748b" }}>HĐ: {h.contractCode}</div>}
                       </td>
-                      <td>
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: 6,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            background: "#f0fdf4",
-                            color: "#166534",
-                            border: "1px solid #bbf7d0",
-                            fontFamily: "var(--font-num-stack)",
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        >
-                          {h.packhouseCode || "VN-DLPH-0089"}
-                        </span>
+                      <td
+                        style={{
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          color: "#166534",
+                          fontFamily: "var(--font-num-stack)",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {h.packhouseCode || "VN-DLPH-0089"}
                       </td>
-                      <td>
-                        <span
-                          style={{
-                            padding: "2px 7px",
-                            borderRadius: 6,
-                            fontSize: 10.5,
-                            fontWeight: 500,
-                            background: h.market === "Trung Quốc" ? "#fbf6ea" : "#eef4fa",
-                            color: h.market === "Trung Quốc" ? "#8a6415" : "#235f92",
-                            border: `1px solid ${h.market === "Trung Quốc" ? "#ece1c5" : "#d6e4f0"}`,
-                          }}
-                        >
-                          {h.market}
-                        </span>
+                      <td
+                        style={{
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          color: h.market === "Trung Quốc" ? "#8a6415" : "#235f92",
+                        }}
+                      >
+                        {h.market}
                       </td>
                       <td>
                         <a
@@ -802,22 +790,16 @@ export default function Harvest() {
                       <td>
                         <strong style={{ color: "#166534" }}>{c.enterpriseName}</strong>
                       </td>
-                      <td>
-                        <span
-                          style={{
-                            padding: "2px 8px",
-                            borderRadius: 6,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            background: "#f0fdf4",
-                            color: "#166534",
-                            border: "1px solid #bbf7d0",
-                            fontFamily: "var(--font-num-stack)",
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        >
-                          {c.packhouseCode || "VN-DLPH-0089"}
-                        </span>
+                      <td
+                        style={{
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          color: "#166534",
+                          fontFamily: "var(--font-num-stack)",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {c.packhouseCode || "VN-DLPH-0089"}
                       </td>
                       <td>{c.signedOn ? c.signedOn.slice(0, 10) : "—"}</td>
                       <td>{c.validUntil ? c.validUntil.slice(0, 10) : "—"}</td>
@@ -987,24 +969,16 @@ export default function Harvest() {
                     <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{e.taxCode || "—"}</td>
                     <td>{e.representative || "—"}</td>
                     <td>{e.phone || "—"}</td>
-                    <td>
-                      <span
-                        style={{
-                          padding: "3px 9px",
-                          borderRadius: 6,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          background: "#ecfdf5",
-                          color: "#065f46",
-                          border: "1px solid #a7f3d0",
-                          fontFamily: "var(--font-num-stack)",
-                          fontVariantNumeric: "tabular-nums",
-                          display: "inline-flex",
-                          alignItems: "center",
-                        }}
-                      >
-                        <span>{e.packhouseCode || "VN-DLPH-0089"}</span>
-                      </span>
+                    <td
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        color: "#065f46",
+                        fontFamily: "var(--font-num-stack)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {e.packhouseCode || "VN-DLPH-0089"}
                     </td>
                     <td style={{ fontSize: 12, color: "#475569", maxWidth: 260 }}>{e.address || "—"}</td>
                     <td>

@@ -269,10 +269,8 @@ export default function Approval() {
                       <td>{p.requestType}</td>
                       <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5 }}>{p.plotCode || "—"}</td>
                       <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(p.submittedOn)}</td>
-                      <td style={{ textAlign: "center" }}>
-                        <span style={{ background: "#f4f5f3", padding: "2px 8px", borderRadius: 6, fontSize: 11.5 }}>
-                          {p.docsCount} file
-                        </span>
+                      <td style={{ textAlign: "center", fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>
+                        {p.docsCount} file
                       </td>
                       <td>
                         <span className={`badge ${pr.badge}`}>{pr.label}</span>

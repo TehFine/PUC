@@ -114,12 +114,9 @@ export default function ZonesOverviewCard({
                   fontFamily: "var(--font-num-stack)",
                   fontVariantNumeric: "tabular-nums",
                   letterSpacing: "0.01em",
-                  fontSize: 11,
-                  background: zc.bg,
+                  fontSize: 12,
+                  fontWeight: 700,
                   color: zc.text,
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "4px 9px",
                 }}
               >
                 {zone.code}

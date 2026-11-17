@@ -130,11 +130,8 @@ export default function PlotPopup({
         <span
           className="badge"
           style={{
-            background: zc.bg,
             color: zc.text,
-            border: "1px solid rgba(20, 55, 47, 0.12)",
-            borderRadius: 6,
-            padding: "4px 9px",
+            fontWeight: 700,
             fontFamily: "var(--font-num-stack)",
             fontVariantNumeric: "tabular-nums",
             letterSpacing: "0.01em",
