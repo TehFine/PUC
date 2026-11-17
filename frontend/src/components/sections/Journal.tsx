@@ -41,7 +41,6 @@ export default function Journal() {
   const { can } = useAuth();
   const canReadViolations = can("violations", "read");
 
-  const canCreateJournal = can("journal", "create");
   const canUpdateJournal = can("journal", "update");
   const canDeleteJournal = can("journal", "delete");
 
@@ -49,7 +48,6 @@ export default function Journal() {
   const canUpdateViolation = can("violations", "update");
   const canDeleteViolation = can("violations", "delete");
 
-  const canCreateSpray = can("spray", "create");
   const canUpdateSpray = can("spray", "update");
   const canDeleteSpray = can("spray", "delete");
 
@@ -85,7 +83,7 @@ export default function Journal() {
 
   // Modals for Spray (khai báo sớm để chỉ tải danh mục thuốc BVTV khi cần mở biểu mẫu)
   const [viewingSpray, setViewingSpray] = useState<SprayRow | null>(null);
-  const [editingSpray, setEditingSpray] = useState<SprayRow | "new" | null>(null);
+  const [editingSpray, setEditingSpray] = useState<SprayRow | null>(null);
   const [deletingSpray, setDeletingSpray] = useState<SprayRow | null>(null);
 
   // Options for selectors
@@ -147,7 +145,7 @@ export default function Journal() {
 
   // Modals for Journal
   const [viewingJournal, setViewingJournal] = useState<JournalRow | null>(null);
-  const [editingJournal, setEditingJournal] = useState<JournalRow | "new" | null>(null);
+  const [editingJournal, setEditingJournal] = useState<JournalRow | null>(null);
   const [deletingJournal, setDeletingJournal] = useState<JournalRow | null>(null);
 
   // Modals for Violations
@@ -168,24 +166,12 @@ export default function Journal() {
 
   return (
     <>
-      {(canCreateJournal || (canReadViolations && canCreateViolation) || canCreateSpray) && (
+      {canReadViolations && canCreateViolation && (
         <div className="page-header">
           <div className="header-actions">
-            {canCreateJournal && (
-              <button type="button" className="btn btn-primary" onClick={() => setEditingJournal("new")}>
-                Ghi nhật ký
-              </button>
-            )}
-            {canReadViolations && canCreateViolation && (
-              <button type="button" className="btn btn-outline" onClick={() => setEditingViolation("new")}>
-                Ghi nhận vi phạm
-              </button>
-            )}
-            {canCreateSpray && (
-              <button type="button" className="btn btn-outline" onClick={() => setEditingSpray("new")}>
-                Ghi phun thuốc
-              </button>
-            )}
+            <button type="button" className="btn btn-primary" onClick={() => setEditingViolation("new")}>
+              Ghi nhận vi phạm
+            </button>
           </div>
         </div>
       )}
@@ -397,11 +383,6 @@ export default function Journal() {
                 </option>
               ))}
             </select>
-            {canCreateViolation && (
-              <button type="button" className="btn btn-primary" onClick={() => setEditingViolation("new")}>
-                Ghi nhận vi phạm
-              </button>
-            )}
           </div>
 
           <BlockState
@@ -515,11 +496,6 @@ export default function Journal() {
                 </option>
               ))}
             </select>
-            {canCreateSpray && (
-              <button type="button" className="btn btn-primary" onClick={() => setEditingSpray("new")}>
-                Ghi phun thuốc
-              </button>
-            )}
           </div>
 
           <div className="table-wrap">
@@ -627,7 +603,7 @@ export default function Journal() {
 
       {editingJournal && (
         <JournalFormModal
-          initial={editingJournal === "new" ? null : editingJournal}
+          initial={editingJournal}
           householdOptions={householdOptions}
           onClose={() => setEditingJournal(null)}
           onSaved={() => {
@@ -718,7 +694,7 @@ export default function Journal() {
 
       {editingSpray && (
         <SprayFormModal
-          initial={editingSpray === "new" ? null : editingSpray}
+          initial={editingSpray}
           householdOptions={householdOptions}
           pesticides={pesticides}
           pesticideOptions={pesticideOptions}
