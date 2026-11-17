@@ -12014,7 +12014,9 @@ body.pt-body .pt-pesticide-modal-header .pt-training-code-pill {
   justify-content: stretch !important;
   gap: 1px !important;
   padding: 0 !important;
+  margin-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
   border-top: 1px solid rgba(60, 60, 67, 0.16) !important;
+  border-bottom: 1px solid rgba(60, 60, 67, 0.16) !important;
   background: rgba(60, 60, 67, 0.16) !important;
   flex-shrink: 0;
 }
@@ -12022,10 +12024,10 @@ body.pt-body .pt-pesticide-modal-header .pt-training-code-pill {
 .pt-sheet.pt-diary-form-sheet .pt-diary-footer-btn {
   flex: 1 1 0;
   min-width: 0;
-  height: calc(50px + env(safe-area-inset-bottom, 0px));
-  min-height: calc(50px + env(safe-area-inset-bottom, 0px));
+  height: 50px;
+  min-height: 50px;
   margin: 0;
-  padding: 0 16px env(safe-area-inset-bottom, 0px);
+  padding: 0 16px;
   border: none !important;
   border-radius: 0 !important;
   outline: none;
@@ -12068,6 +12070,9 @@ body.pt-body .pt-pesticide-modal-header .pt-training-code-pill {
 }
 
 @media screen and (min-width: 760px) {
+  .pt-sheet.pt-diary-form-sheet > .pt-sheet-footer {
+    margin-bottom: 10px !important;
+  }
   .pt-sheet.pt-diary-form-sheet .pt-diary-footer-btn {
     height: 50px;
     min-height: 50px;
