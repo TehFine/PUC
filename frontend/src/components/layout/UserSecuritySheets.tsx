@@ -455,13 +455,13 @@ export function ActiveSessionsSheet({
   return (
     <Sheet
       variant="drawer"
-      title="Phiên đăng nhập và đăng xuất từ xa"
+      title="Phiên đăng nhập"
       onClose={onClose}
       className="pt-password-sheet"
     >
       <div className="pt-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <p className="pt-hint" style={{ margin: 0 }}>
-          Mọi phiên đăng nhập đều lưu bằng cookie <code>httpOnly</code> có thời hạn tự động hết hiệu lực. Bạn có thể thu hồi ngay lập tức bất kỳ thiết bị nào nghi ngờ quên đăng xuất.
+          Danh sách thiết bị đang đăng nhập tài khoản của bạn. Hãy xóa phiên nếu thấy thiết bị lạ hoặc quên đăng xuất.
         </p>
 
         {otherCount > 0 && (
@@ -492,18 +492,15 @@ export function ActiveSessionsSheet({
               <div
                 key={s.id}
                 style={{
-                  padding: "12px 14px",
                   borderRadius: 8,
                   border: "1px solid #d4d4d2",
                   background: s.isCurrent ? "#f0fdf4" : "#ffffff",
+                  overflow: "hidden",
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  flexWrap: "wrap",
+                  flexDirection: "column",
                 }}
               >
-                <div style={{ fontSize: 12.5, lineHeight: 1.45, minWidth: 0 }}>
+                <div style={{ padding: "12px 14px", fontSize: 12.5, lineHeight: 1.45, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, color: "#0f172a" }}>
                     {summarizeUserAgent(s.userAgent)}{" "}
                     {s.isCurrent && (
@@ -531,14 +528,24 @@ export function ActiveSessionsSheet({
                 </div>
 
                 {!s.isCurrent && (
-                  <button
-                    type="button"
-                    className="btn btn-danger btn-sm"
-                    disabled={busyId !== null}
-                    onClick={() => setConfirmRevoke(s)}
+                  <div
+                    style={{
+                      padding: "9px 14px",
+                      borderTop: "1px solid #e2e5e3",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "flex-end",
+                    }}
                   >
-                    {busyId === s.id ? "Đang xóa…" : "Xóa phiên"}
-                  </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      disabled={busyId !== null}
+                      onClick={() => setConfirmRevoke(s)}
+                    >
+                      {busyId === s.id ? "Đang xóa…" : "Xóa phiên"}
+                    </button>
+                  </div>
                 )}
               </div>
             ))}

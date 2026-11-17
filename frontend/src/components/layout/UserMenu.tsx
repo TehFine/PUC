@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Laptop, Mail, QrCode, ShieldCheck, UserCheck } from "@/components/ui/PublicIcon";
+import { ArrowLeft, Mail, QrCode } from "@/components/ui/PublicIcon";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { AdminNotificationBell } from "@/components/admin/notifications/AdminNotificationsSheet";
 import ChangePasswordModal from "@/components/admin/notifications/ChangePasswordModal";
@@ -188,7 +188,7 @@ export default function UserMenu({
               </div>
 
               <div className="pt-profile-row">
-                <span className="pt-profile-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, color: "#166534" }}>
+                <span className="pt-profile-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24 }}>
                   <Mail size={20} />
                 </span>
                 <div className="pt-profile-row-content">
@@ -214,9 +214,7 @@ export default function UserMenu({
               </div>
 
               <div className="pt-profile-row">
-                <span className="pt-profile-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, color: twoFactorEnabled ? "#166534" : "#64748b" }}>
-                  <ShieldCheck size={20} />
-                </span>
+                <RadialPngIcon src="/face-id.png" size={24} className="pt-profile-icon" />
                 <div className="pt-profile-row-content">
                   <span className="pt-profile-label">Bảo mật xác thực 2 lớp (OTP)</span>
                   <strong className="pt-profile-val" style={{ color: twoFactorEnabled ? "#15803d" : undefined }}>
@@ -236,8 +234,8 @@ export default function UserMenu({
                     setScanningQr(true);
                   }}
                 >
-                  <span className="pt-profile-action-icon" aria-hidden="true" style={{ color: "#166534" }}>
-                    <QrCode size={20} />
+                  <span className="pt-profile-action-icon" aria-hidden="true">
+                    <RadialPngIcon src="/qr-code.png" size={22} />
                   </span>
                   <span className="pt-profile-action-title">Quét QR truy xuất nhanh</span>
                   <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
@@ -252,8 +250,8 @@ export default function UserMenu({
                   setManaging2fa(true);
                 }}
               >
-                <span className="pt-profile-action-icon" aria-hidden="true" style={{ color: "#166534" }}>
-                  <ShieldCheck size={20} />
+                <span className="pt-profile-action-icon" aria-hidden="true">
+                  <RadialPngIcon src="/face-id.png" size={22} />
                 </span>
                 <span className="pt-profile-action-title">
                   Xác thực 2 lớp (OTP){twoFactorEnabled ? " - Đang bật" : ""}
@@ -269,8 +267,8 @@ export default function UserMenu({
                   setManagingSessions(true);
                 }}
               >
-                <span className="pt-profile-action-icon" aria-hidden="true" style={{ color: "#166534" }}>
-                  <Laptop size={20} />
+                <span className="pt-profile-action-icon" aria-hidden="true">
+                  <RadialPngIcon src="/signal.png" size={22} />
                 </span>
                 <span className="pt-profile-action-title">Phiên đăng nhập &amp; Đăng xuất từ xa</span>
                 <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
@@ -281,8 +279,8 @@ export default function UserMenu({
                 className="pt-profile-intro-btn"
                 onClick={openEditProfile}
               >
-                <span className="pt-profile-action-icon" aria-hidden="true" style={{ color: "#166534" }}>
-                  <UserCheck size={20} />
+                <span className="pt-profile-action-icon" aria-hidden="true">
+                  <RadialPngIcon src="/update.png" size={21} />
                 </span>
                 <span className="pt-profile-action-title">Cập nhật hồ sơ & Email Google</span>
                 <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
