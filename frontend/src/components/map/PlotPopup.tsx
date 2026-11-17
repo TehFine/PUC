@@ -22,6 +22,7 @@ interface PlotPopupProps {
   overlaps: PlotOverlap[];
   onCompare: () => void;
   onEditShape?: () => void;
+  onRedrawShape?: () => void;
   onFocusPlot?: () => void;
   onClose: () => void;
 }
@@ -34,6 +35,7 @@ export default function PlotPopup({
   overlaps,
   onCompare,
   onEditShape,
+  onRedrawShape,
   onFocusPlot,
   onClose,
 }: PlotPopupProps) {
@@ -116,9 +118,10 @@ export default function PlotPopup({
         <header className="pp-head">
           <div>
             <div className="pp-kicker" style={{ color: zc.text }}>
-              Thửa đất {props.code}
+              Thửa {props.code}
+              {featureLabel(feature) ? `, tờ/thửa ${featureLabel(feature)}` : ""}
             </div>
-            <h3 className="pp-title">Tờ/thửa {featureLabel(feature)}</h3>
+            <h3 className="pp-title">{props.owner || `Thửa ${props.code}`}</h3>
           </div>
           <button type="button" className="pp-close" onClick={handleClose} aria-label="Đóng">
             <CloseCircleIcon size={28} strokeWidth={2.2} />
@@ -196,6 +199,26 @@ export default function PlotPopup({
       </p>
 
       <div className="pp-actions">
+        {onRedrawShape && (
+          <button
+            type="button"
+            className="pp-btn pp-btn-primary"
+            onClick={onRedrawShape}
+            title="Xóa khung tạm hiện tại để chấm hoặc vẽ lại ranh giới thực tế của hộ trên ảnh vệ tinh"
+          >
+            Vẽ lại hình dạng
+          </button>
+        )}
+        {onEditShape && (
+          <button
+            type="button"
+            className={onRedrawShape ? "pp-btn pp-btn-secondary" : "pp-btn pp-btn-primary"}
+            onClick={onEditShape}
+            title="Kéo dời các đỉnh ranh giới hiện có của thửa đất"
+          >
+            Sửa hình dạng
+          </button>
+        )}
         {onFocusPlot && (
           <button
             type="button"
@@ -204,11 +227,6 @@ export default function PlotPopup({
             title="Phóng sát thửa đất để xem ranh giới chi tiết và số đo từng cạnh"
           >
             Phóng sát thửa
-          </button>
-        )}
-        {onEditShape && (
-          <button type="button" className="pp-btn pp-btn-primary" onClick={onEditShape}>
-            Sửa hình dạng thửa
           </button>
         )}
         <button type="button" className="pp-btn pp-btn-secondary" onClick={onCompare}>

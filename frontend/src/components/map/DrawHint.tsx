@@ -6,6 +6,7 @@ import type { DrawStyle, MapMessage, Mode, PreviewState } from "./map-types";
 interface DrawHintProps {
   mode: Exclude<Mode, "idle">;
   plotCode?: string;
+  ownerName?: string;
   drawStyle: DrawStyle;
   onDrawStyleChange: (style: DrawStyle) => void;
   preview: PreviewState;
@@ -31,6 +32,7 @@ interface DrawHintProps {
 export default function DrawHint({
   mode,
   plotCode,
+  ownerName,
   drawStyle,
   onDrawStyleChange,
   preview,
@@ -65,7 +67,9 @@ export default function DrawHint({
         ? "Đo GPS thực địa"
         : mode === "edit"
           ? plotCode
-            ? `Sửa ranh giới ${plotCode}`
+            ? ownerName
+              ? `Vẽ, sửa ${plotCode} (${ownerName})`
+              : `Sửa ranh giới ${plotCode}`
             : "Sửa ranh giới thửa"
           : plotCode
             ? `Đối chiếu ${plotCode}`
@@ -113,6 +117,7 @@ export default function DrawHint({
   };
 
   if (collapsed) {
+    const canSaveQuick = !saving && preview.points >= 3 && preview.selfIntersections === 0;
     return (
       <div className="plotmap-hint is-collapsed" role="region" aria-label={title}>
         <div className="plotmap-hint-collapsed-bar">
@@ -122,13 +127,34 @@ export default function DrawHint({
               {preview.points} đỉnh, {formatHa(preview.areaHa)} ({formatAreaSqm(preview.areaHa)})
             </span>
           </div>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={() => setCollapsed(false)}
-          >
-            Mở rộng
-          </button>
+          <div className="plotmap-hint-collapsed-actions">
+            {canUndo && (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={onUndo}
+                disabled={saving}
+              >
+                Hoàn tác
+              </button>
+            )}
+            {canSaveQuick && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={onFinish}
+              >
+                Lưu
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => setCollapsed(false)}
+            >
+              Mở rộng
+            </button>
+          </div>
         </div>
       </div>
     );

@@ -2249,6 +2249,13 @@ input[type="date"].filter-select {
   color: var(--text-secondary);
 }
 
+.plotmap-hint-collapsed-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .plotmap-hint-toprow {
   display: flex;
   align-items: flex-start;
@@ -2853,8 +2860,24 @@ input[type="date"].filter-select {
 @keyframes pp-pop { from { opacity: 0; transform: translateX(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 900px) {
-  .plotmap-popup { padding: 18px 18px 16px; border-radius: 8px; }
-  .pp-title { font-size: 22px; }
+  .plotmap-popup {
+    padding: 18px 18px 0;
+    border-radius: 8px 8px 0 0;
+  }
+  .pp-title { font-size: 21px; }
+  .plotmap-popup .pp-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    background: #ffffff;
+    margin-top: 14px;
+    padding: 12px 0 calc(14px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid #e5e7eb;
+  }
+  .plotmap-popup .pp-btn {
+    min-height: 40px;
+    font-size: 13px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
