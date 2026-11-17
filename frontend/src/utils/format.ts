@@ -20,3 +20,32 @@ export function formatDateTime(value: string | null | undefined): string {
 
 export const formatNumber = (value: number | null | undefined, fractionDigits: number) =>
   value === null || value === undefined ? "—" : value.toFixed(fractionDigits);
+
+const DIARY_ROLE_LABELS: Record<string, string> = {
+  admin: "Quản trị viên",
+  htx_officer: "Cán bộ HTX",
+  inspector: "Cán bộ kiểm tra",
+  village_officer: "Cán bộ thôn",
+  enterprise: "Doanh nghiệp",
+  farmer: "Chủ hộ",
+};
+
+export function formatDiaryRole(role: string | null | undefined): string | null {
+  if (!role) return null;
+  return DIARY_ROLE_LABELS[role] ?? null;
+}
+
+/** Hiển thị rõ tên và vai trò người chỉnh sửa nhật ký (ví dụ: "Nguyễn Văn A (Quản trị viên)"). */
+export function formatDiaryEditor(
+  name: string | null | undefined,
+  role?: string | null,
+): string | null {
+  const cleanName = typeof name === "string" ? name.trim() : "";
+  const roleLabel = formatDiaryRole(role);
+  if (!cleanName && !roleLabel) return null;
+  if (!cleanName) return roleLabel;
+  if (!roleLabel || cleanName.toLowerCase().includes(roleLabel.toLowerCase())) {
+    return cleanName;
+  }
+  return `${cleanName} (${roleLabel})`;
+}

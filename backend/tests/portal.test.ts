@@ -925,5 +925,100 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
       expect(lateJournal.body.declaredOn).toBe(todayStr);
       expect(lateJournal.body.lateDeclarationDays).toBe(2);
     });
+
+    it("ghi nhận rõ người sửa, vai trò, thời điểm và gửi thông báo khi quản trị viên sửa nhật ký của hộ", async () => {
+      const binh = await loggedIn(USERS.farmerBinh);
+      const admin = await loggedIn(USERS.admin);
+
+      const plotsRes = await binh.get("/api/portal/plots");
+      const plotCode: string = plotsRes.body.data[0]?.code ?? "TH1-002";
+
+      const photoId = await uploadFile(binh, "journal");
+      const createdJournal = await binh.post("/api/portal/journal").send({
+        plotCode,
+        activity: "Tưới nước giữ ẩm",
+        detail: "Tưới nhỏ giọt 30 phút",
+        photoIds: [photoId],
+      });
+      expect(createdJournal.status).toBe(201);
+      expect(createdJournal.body.recorder).toBe("Chủ hộ");
+      expect(createdJournal.body.updatedByName).toBeNull();
+      expect(createdJournal.body.editCount).toBe(0);
+
+      const patchedJournal = await admin.patch(`/api/journal/${createdJournal.body.id}`).send({
+        detail: "Tưới nhỏ giọt 45 phút quanh tán cây",
+      });
+      expect(patchedJournal.status).toBe(200);
+      expect(patchedJournal.body.recorder).toBe("Chủ hộ");
+      expect(patchedJournal.body.updatedByRole).toBe("admin");
+      expect(typeof patchedJournal.body.updatedByName).toBe("string");
+      expect(patchedJournal.body.updatedByName.length).toBeGreaterThan(0);
+      expect(typeof patchedJournal.body.updatedAt).toBe("string");
+      expect(patchedJournal.body.editCount).toBe(1);
+
+      const portalJournalList = await binh.get("/api/portal/journal");
+      const farmerViewJournal = portalJournalList.body.data.find(
+        (row: { id: number }) => row.id === createdJournal.body.id,
+      );
+      expect(farmerViewJournal).toMatchObject({
+        id: createdJournal.body.id,
+        recorder: "Chủ hộ",
+        updatedByName: patchedJournal.body.updatedByName,
+        updatedByRole: "admin",
+        editCount: 1,
+      });
+
+      const pesticidesRes = await binh.get("/api/pesticides");
+      const allowedPest = (pesticidesRes.body.data as Array<{ id: number; status: string }>).find(
+        (p) => p.status === "allowed",
+      );
+      expect(allowedPest).toBeDefined();
+
+      const createdSpray = await binh.post("/api/portal/spray").send({
+        plotCode,
+        pesticideId: allowedPest!.id,
+        dose: "15 ml / bình 25L",
+        areaHa: 0.4,
+      });
+      expect(createdSpray.status).toBe(201);
+      expect(createdSpray.body.recordedByRole).toBe("farmer");
+      expect(createdSpray.body.updatedByName).toBeNull();
+      expect(createdSpray.body.editCount).toBe(0);
+
+      const patchedSpray = await admin.patch(`/api/spray/${createdSpray.body.id}`).send({
+        dose: "20 ml / bình 25L",
+      });
+      expect(patchedSpray.status).toBe(200);
+      expect(patchedSpray.body.recordedByRole).toBe("farmer");
+      expect(patchedSpray.body.updatedByRole).toBe("admin");
+      expect(patchedSpray.body.updatedByName).toBe(patchedJournal.body.updatedByName);
+      expect(patchedSpray.body.editCount).toBe(1);
+
+      const portalSprayList = await binh.get("/api/portal/spray");
+      const farmerViewSpray = portalSprayList.body.data.find(
+        (row: { id: number }) => row.id === createdSpray.body.id,
+      );
+      expect(farmerViewSpray).toMatchObject({
+        id: createdSpray.body.id,
+        recordedByRole: "farmer",
+        updatedByName: patchedSpray.body.updatedByName,
+        updatedByRole: "admin",
+        editCount: 1,
+      });
+
+      const notifs = await binh.get("/api/notifications");
+      expect(notifs.status).toBe(200);
+      expect(
+        notifs.body.data.some(
+          (n: { title?: string; body?: string }) =>
+            n.title === "Nhật ký canh tác đã được chỉnh sửa" &&
+            typeof n.body === "string" &&
+            n.body.includes(patchedJournal.body.updatedByName),
+        ),
+      ).toBe(true);
+
+      await admin.delete(`/api/journal/${createdJournal.body.id}`);
+      await admin.delete(`/api/spray/${createdSpray.body.id}`);
+    });
   });
 });

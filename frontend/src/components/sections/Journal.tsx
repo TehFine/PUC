@@ -26,7 +26,7 @@ import {
   ViolationFormModal,
   ViolationResolveModal,
 } from "@/components/admin/journal/ViolationModals";
-import { formatDate } from "@/utils/format";
+import { formatDate, formatDiaryEditor } from "@/utils/format";
 import type { DashboardSummary } from "@/types/dashboard";
 import type { JournalRow, SprayRow, ViolationRow } from "@/types/journal";
 
@@ -250,58 +250,65 @@ export default function Journal() {
                 {journalList.rows.map((j) => {
                   const zc = getZoneColor(j.plotCode);
                   return (
-                  <tr key={j.id}>
-                    <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(j.entryOn)}</td>
-                    <td style={{ fontWeight: 500 }}>{j.householdName}</td>
-                    <td>
-                      <span
-                        style={{
-                          fontFamily: "var(--font-num-stack)",
-                          fontVariantNumeric: "tabular-nums",
-                          letterSpacing: "0.015em",
-                          fontSize: 13,
-                          color: zc.text,
-                          fontWeight: 700,
-                        }}
-                      >
-                        {j.plotCode}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight: 500, color: "var(--ink)" }}>{j.activity}</td>
-                    <td style={{ fontSize: 12, color: "var(--text-secondary)", maxWidth: 220 }}>{j.detail || "-"}</td>
-                    <td style={{ fontSize: 12 }}>{j.recorder}</td>
-                    <td style={{ textAlign: "center" }}>
-                      {j.hasPhoto || j.photoUrl ? (
-                        <button
-                          type="button"
-                          className="badge badge-blue"
-                          style={{ cursor: "pointer" }}
-                          onClick={() => setViewingJournal(j)}
+                    <tr key={j.id}>
+                      <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(j.entryOn)}</td>
+                      <td style={{ fontWeight: 500 }}>{j.householdName}</td>
+                      <td>
+                        <span
+                          style={{
+                            fontFamily: "var(--font-num-stack)",
+                            fontVariantNumeric: "tabular-nums",
+                            letterSpacing: "0.015em",
+                            fontSize: 13,
+                            color: zc.text,
+                            fontWeight: 700,
+                          }}
                         >
-                          Có ảnh
-                        </button>
-                      ) : (
-                        <span style={{ color: "var(--text-muted)", fontSize: 12 }}>-</span>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewingJournal(j)}>
-                          Xem
-                        </button>
-                        {canUpdateJournal && (
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingJournal(j)}>
-                            Sửa
-                          </button>
+                          {j.plotCode}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight: 500, color: "var(--ink)" }}>{j.activity}</td>
+                      <td style={{ fontSize: 12, color: "var(--text-secondary)", maxWidth: 220 }}>{j.detail || "-"}</td>
+                      <td style={{ fontSize: 12 }}>
+                        <div>{j.recorder}</div>
+                        {j.updatedByName && (
+                          <div style={{ fontSize: 11.5, color: "#9a6712", fontWeight: 500, marginTop: 2 }}>
+                            Đã sửa: {formatDiaryEditor(j.updatedByName, j.updatedByRole)}
+                          </div>
                         )}
-                        {canDeleteJournal && (
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingJournal(j)}>
-                            Xóa
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        {j.hasPhoto || j.photoUrl ? (
+                          <button
+                            type="button"
+                            className="badge badge-blue"
+                            style={{ cursor: "pointer" }}
+                            onClick={() => setViewingJournal(j)}
+                          >
+                            Có ảnh
                           </button>
+                        ) : (
+                          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>-</span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewingJournal(j)}>
+                            Xem
+                          </button>
+                          {canUpdateJournal && (
+                            <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingJournal(j)}>
+                              Sửa
+                            </button>
+                          )}
+                          {canDeleteJournal && (
+                            <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingJournal(j)}>
+                              Xóa
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -507,7 +514,14 @@ export default function Journal() {
                       <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 600 }}>
                         {s.plotCode || "—"}
                       </td>
-                      <td>{s.pesticideName}</td>
+                      <td>
+                        <div>{s.pesticideName}</div>
+                        {s.updatedByName && (
+                          <div style={{ fontSize: 11.5, color: "#9a6712", fontWeight: 500, marginTop: 2 }}>
+                            Đã sửa: {formatDiaryEditor(s.updatedByName, s.updatedByRole)}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.source || "—"}</td>
                       <td>{s.dose}</td>
                       <td>{formatVn(s.areaHa, 2)} ha</td>
@@ -551,10 +565,10 @@ export default function Journal() {
           onEdit={
             canUpdateJournal
               ? () => {
-                  const row = viewingJournal;
-                  setViewingJournal(null);
-                  setEditingJournal(row);
-                }
+                const row = viewingJournal;
+                setViewingJournal(null);
+                setEditingJournal(row);
+              }
               : undefined
           }
         />
@@ -567,10 +581,10 @@ export default function Journal() {
           onEdit={
             canUpdateSpray
               ? () => {
-                  const row = viewingSpray;
-                  setViewingSpray(null);
-                  setEditingSpray(row);
-                }
+                const row = viewingSpray;
+                setViewingSpray(null);
+                setEditingSpray(row);
+              }
               : undefined
           }
         />

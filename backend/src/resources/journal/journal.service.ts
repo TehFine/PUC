@@ -6,18 +6,30 @@ import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "..
 import { badRequest, forbidden } from "../../common/errors/app.exception";
 import { attachmentUrlSql, attachmentUrlsSql, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
+import { NotificationsService } from "../../notifications/notifications.service";
 import { assertPlotOwned } from "../../portal/common/portal-context";
 import { UploadsService } from "../../uploads/uploads.service";
 
 const SEALED_LEDGER_ERR =
   "Bản ghi sổ cái đã quá thời hạn 24 giờ niêm phong hoặc đã gắn với lô xuất khẩu, không thể chỉnh sửa/xóa.";
 
+const STAFF_ROLE_LABELS: Record<string, string> = {
+  admin: "Quản trị viên",
+  htx_officer: "Cán bộ HTX",
+  inspector: "Cán bộ kiểm tra",
+  village_officer: "Cán bộ thôn",
+  enterprise: "Doanh nghiệp",
+  farmer: "Chủ hộ",
+};
+
 interface ExistingJournalRow {
   household_id: number;
   plot_code: string | null;
+  activity: string;
   server_recorded_at: Date | string | null;
   photo_id: number | null;
   photo_ids: number[] | null;
+  edit_count: number | null;
 }
 
 @Injectable()
@@ -26,6 +38,7 @@ export class JournalService extends BaseCrudService {
     db: DatabaseService,
     audit: AuditService,
     private readonly uploads: UploadsService,
+    private readonly notifications: NotificationsService,
   ) {
     super(db, audit, {
       resource: "journal",
@@ -40,13 +53,19 @@ export class JournalService extends BaseCrudService {
       to_char(t.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
       GREATEST(0, ((t.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - t.entry_on))::int AS late_declaration_days,
       t.entry_delay_hours::float8 AS entry_delay_hours,
-      t.is_late_entry, t.late_reason, t.record_hash, t.gps_verified, t.gps_distance_m::float8 AS gps_distance_m`,
+      t.is_late_entry, t.late_reason, t.record_hash, t.gps_verified, t.gps_distance_m::float8 AS gps_distance_m,
+      t.updated_by_user_id, t.updated_by_name, t.updated_by_role, t.updated_at, t.edit_count`,
       from: `journal_entries t JOIN households h ON h.id = t.household_id`,
       orderBy: "t.entry_on DESC, t.id DESC",
-      search: ["h.name", "t.plot_code", "t.activity", "t.detail"],
+      search: ["h.name", "t.plot_code", "t.activity", "t.detail", "t.updated_by_name"],
       filters: { householdId: "t.household_id", activity: "t.activity" },
       scope: villageScope("h.village_id"),
+      virtual: ["_notifyHouseholdEdit"],
     });
+  }
+
+  protected override auditAction(method: "POST" | "PATCH"): string | undefined {
+    return method === "PATCH" ? "Chỉnh sửa nhật ký" : undefined;
   }
 
   private async assertNotExportLocked(
@@ -89,6 +108,12 @@ export class JournalService extends BaseCrudService {
     }
     await assertHouseholdInScope(this.db, input, context.user);
     const out: Record<string, unknown> = { ...input };
+    delete out.updatedByUserId;
+    delete out.updatedByName;
+    delete out.updatedByRole;
+    delete out.updatedAt;
+    delete out.editCount;
+
     if (typeof out.entryOn === "string" && out.entryOn > todayVn()) {
       throw badRequest("Ngày thực hiện không được ở tương lai. Chỉ ghi nhận nhật ký cho công việc đã thực hiện.");
     }
@@ -96,7 +121,7 @@ export class JournalService extends BaseCrudService {
     let existing: ExistingJournalRow | undefined;
     if (context.method === "PATCH" && context.id !== undefined) {
       const exRes = await this.db.query<ExistingJournalRow>(
-        "SELECT household_id, plot_code, server_recorded_at, photo_id, photo_ids FROM journal_entries WHERE id = $1",
+        "SELECT household_id, plot_code, activity, server_recorded_at, photo_id, photo_ids, edit_count FROM journal_entries WHERE id = $1",
         [context.id],
       );
       existing = exRes.rows[0];
@@ -108,6 +133,11 @@ export class JournalService extends BaseCrudService {
       await assertHouseholdInScope(this.db, { householdId: existing.household_id }, context.user);
       await this.assertJournalEditable(existing);
       delete out.recorder;
+      out.updatedByUserId = context.user.id;
+      out.updatedByName = context.user.fullName;
+      out.updatedByRole = context.user.role;
+      out.updatedAt = new Date().toISOString();
+      out.editCount = Number(existing.edit_count ?? 0) + 1;
     } else {
       out.recorder = context.user.fullName;
     }
@@ -158,7 +188,39 @@ export class JournalService extends BaseCrudService {
       await this.assertNotExportLocked(effectiveHouseholdId, (out.plotCode as string | null | undefined) ?? existing.plot_code);
     }
 
+    if (context.method === "PATCH" && existing && context.user.role !== "farmer" && effectiveHouseholdId > 0) {
+      out._notifyHouseholdEdit = {
+        householdId: effectiveHouseholdId,
+        activity: typeof out.activity === "string" && out.activity.trim() ? out.activity.trim() : existing.activity,
+        plotCode: (typeof out.plotCode === "string" ? out.plotCode : existing.plot_code) ?? null,
+        actorName: context.user.fullName,
+        actorRole: context.user.role,
+      };
+    }
+
     return out;
+  }
+
+  protected override async afterWrite(_id: number, input: Record<string, unknown>) {
+    const editInfo = input._notifyHouseholdEdit as
+      | {
+          householdId: number;
+          activity: string;
+          plotCode: string | null;
+          actorName: string;
+          actorRole: string;
+        }
+      | undefined;
+    if (!editInfo) return;
+
+    const roleLabel = STAFF_ROLE_LABELS[editInfo.actorRole] ?? "Cán bộ";
+    const plotText = editInfo.plotCode ? ` tại thửa ${editInfo.plotCode}` : "";
+    await this.notifications.notifyHousehold(editInfo.householdId, {
+      kind: "protocol",
+      title: "Nhật ký canh tác đã được chỉnh sửa",
+      body: `Bản ghi "${editInfo.activity}"${plotText} đã được ${roleLabel} ${editInfo.actorName} cập nhật.`,
+      link: "/portal?tab=diary",
+    });
   }
 
   protected override async guardDelete(id: number, user: AuthUser) {
@@ -166,7 +228,7 @@ export class JournalService extends BaseCrudService {
       throw forbidden("Bạn không có quyền xóa nhật ký canh tác ngoài phạm vi quản lý.");
     }
     const { rows } = await this.db.query<ExistingJournalRow>(
-      "SELECT household_id, plot_code, server_recorded_at, photo_id, photo_ids FROM journal_entries WHERE id = $1",
+      "SELECT household_id, plot_code, activity, server_recorded_at, photo_id, photo_ids, edit_count FROM journal_entries WHERE id = $1",
       [id],
     );
     if (rows[0]) {

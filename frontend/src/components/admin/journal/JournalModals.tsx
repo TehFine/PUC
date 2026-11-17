@@ -11,7 +11,7 @@ import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
 import { MultiPhotoField, StoredMediaGallery, useMultiPhotoPicker } from "@/components/portal/shared/controls";
-import { formatDate, formatDateTime } from "@/utils/format";
+import { formatDate, formatDateTime, formatDiaryEditor } from "@/utils/format";
 import type { JournalRow } from "@/types/journal";
 
 export function JournalDetailModal({
@@ -75,9 +75,28 @@ export function JournalDetailModal({
           <div className="admin-detail-list-value">{entry.activity}</div>
         </div>
         <div className="admin-detail-list-row">
-          <span className="admin-detail-list-label">Người ghi nhận</span>
+          <span className="admin-detail-list-label">Người ghi ban đầu</span>
           <div className="admin-detail-list-value">{entry.recorder}</div>
         </div>
+        {(entry.updatedByName || entry.updatedAt) && (
+          <>
+            <div className="admin-detail-list-row">
+              <span className="admin-detail-list-label">Người chỉnh sửa</span>
+              <div className="admin-detail-list-value is-warn">
+                {formatDiaryEditor(entry.updatedByName, entry.updatedByRole) || "Đã chỉnh sửa"}
+                {(entry.editCount ?? 0) > 1 ? ` (sửa ${entry.editCount} lần)` : ""}
+              </div>
+            </div>
+            {entry.updatedAt && (
+              <div className="admin-detail-list-row">
+                <span className="admin-detail-list-label">Thời điểm chỉnh sửa</span>
+                <div className="admin-detail-list-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {formatDateTime(entry.updatedAt)}
+                </div>
+              </div>
+            )}
+          </>
+        )}
         {(entry.latitude != null || entry.longitude != null) && (
           <div className="admin-detail-list-row">
             <span className="admin-detail-list-label">Tọa độ GPS</span>
@@ -283,10 +302,12 @@ export function JournalFormModal({
             error={fieldErrors.activity}
           />
           <TextField
-            label="Người ghi nhận"
+            label={isEdit ? "Người ghi ban đầu" : "Người ghi nhận"}
             required
             value={recorder}
             onChange={setRecorder}
+            disabled={isEdit}
+            hint={isEdit ? "Hệ thống tự ghi nhận tài khoản của bạn là người chỉnh sửa." : undefined}
             maxLength={100}
             error={fieldErrors.recorder}
           />

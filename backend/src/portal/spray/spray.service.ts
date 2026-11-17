@@ -67,6 +67,7 @@ const SPRAY_COLUMNS = `s.id, s.sprayed_on, s.plot_code, s.pesticide_id, p.name A
   to_char(s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
   GREATEST(0, ((s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - s.sprayed_on))::int AS late_declaration_days,
   s.entry_delay_hours::float8 AS entry_delay_hours, s.is_late_entry, s.late_reason, s.record_hash,
+  s.recorded_by_role, s.updated_by_name, s.updated_by_role, s.updated_at, s.edit_count,
   (${SPRAY_DELETABLE_SQL}) AS can_delete`;
 
 /** Nhật ký phun thuốc của hộ. */

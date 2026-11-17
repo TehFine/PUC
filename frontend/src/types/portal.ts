@@ -106,6 +106,10 @@ export interface PortalJournalEntry {
   createdAt?: string | null;
   /** Server có thể trả sẵn cờ cho phép xóa. */
   canDelete?: boolean;
+  updatedByName?: string | null;
+  updatedByRole?: string | null;
+  updatedAt?: string | null;
+  editCount?: number;
 }
 
 export interface CreateJournalBody {
@@ -144,6 +148,11 @@ export interface PortalSprayRecord {
   recordHash?: string | null;
   createdAt?: string | null;
   canDelete?: boolean;
+  recordedByRole?: string | null;
+  updatedByName?: string | null;
+  updatedByRole?: string | null;
+  updatedAt?: string | null;
+  editCount?: number;
 }
 
 export interface CreateSprayBody {

@@ -21,6 +21,11 @@ export interface JournalRow {
   isLateEntry?: boolean;
   lateReason?: string | null;
   recordHash?: string | null;
+  updatedByUserId?: number | null;
+  updatedByName?: string | null;
+  updatedByRole?: string | null;
+  updatedAt?: string | null;
+  editCount?: number;
 }
 
 export type ViolationSeverity = "critical" | "warning";
@@ -73,4 +78,10 @@ export interface SprayRow {
   isLateEntry?: boolean;
   lateReason?: string | null;
   recordHash?: string | null;
+  recordedByRole?: string | null;
+  updatedByUserId?: number | null;
+  updatedByName?: string | null;
+  updatedByRole?: string | null;
+  updatedAt?: string | null;
+  editCount?: number;
 }

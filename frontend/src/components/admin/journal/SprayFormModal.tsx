@@ -11,7 +11,7 @@ import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, numberText, parseNumber, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
 import { badgeOf, MRL_STATUS, optionsOf } from "@/components/admin/shared/labels";
 import { MultiPhotoField, StoredMediaGallery, useMultiPhotoPicker } from "@/components/portal/shared/controls";
-import { formatDate, formatDateTime } from "@/utils/format";
+import { formatDate, formatDateTime, formatDiaryEditor, formatDiaryRole } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type { MrlStatus, SprayRow } from "@/types/journal";
 
@@ -96,6 +96,31 @@ export function SprayDetailModal({
             <span className={`badge ${mrl.badge}`}>{mrl.label}</span>
           </div>
         </div>
+        {record.recordedByRole && (
+          <div className="admin-detail-list-row">
+            <span className="admin-detail-list-label">Người ghi ban đầu</span>
+            <div className="admin-detail-list-value">{formatDiaryRole(record.recordedByRole) || record.recordedByRole}</div>
+          </div>
+        )}
+        {(record.updatedByName || record.updatedAt) && (
+          <>
+            <div className="admin-detail-list-row">
+              <span className="admin-detail-list-label">Người chỉnh sửa</span>
+              <div className="admin-detail-list-value is-warn">
+                {formatDiaryEditor(record.updatedByName, record.updatedByRole) || "Đã chỉnh sửa"}
+                {(record.editCount ?? 0) > 1 ? ` (sửa ${record.editCount} lần)` : ""}
+              </div>
+            </div>
+            {record.updatedAt && (
+              <div className="admin-detail-list-row">
+                <span className="admin-detail-list-label">Thời điểm chỉnh sửa</span>
+                <div className="admin-detail-list-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {formatDateTime(record.updatedAt)}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div style={{ marginBottom: 14 }}>

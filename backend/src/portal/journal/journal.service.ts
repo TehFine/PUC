@@ -30,6 +30,7 @@ const JOURNAL_COLUMNS = `j.id, j.entry_on, j.plot_code, j.activity, j.detail, j.
   GREATEST(0, ((j.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - j.entry_on))::int AS late_declaration_days,
   j.entry_delay_hours::float8 AS entry_delay_hours, j.is_late_entry, j.late_reason,
   j.record_hash, j.gps_verified, j.gps_distance_m::float8 AS gps_distance_m, j.capture_source,
+  j.updated_by_name, j.updated_by_role, j.updated_at, j.edit_count,
   (j.recorder = '${FARMER_RECORDER}' AND j.created_at > now() - interval '24 hours'
      AND EXISTS (SELECT 1 FROM attachments a WHERE a.id = j.photo_id AND a.household_id = j.household_id)) AS can_delete`;
 

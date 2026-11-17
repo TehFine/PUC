@@ -35,6 +35,7 @@ export function TextField({
   max,
   autoComplete,
   inputMode,
+  disabled,
   ...base
 }: BaseProps & {
   value: string;
@@ -46,6 +47,7 @@ export function TextField({
   max?: string;
   autoComplete?: string;
   inputMode?: "text" | "numeric" | "decimal" | "tel";
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
@@ -59,6 +61,7 @@ export function TextField({
         maxLength={maxLength}
         min={min}
         max={max}
+        disabled={disabled}
         required={base.required}
         autoComplete={autoComplete}
         inputMode={inputMode}

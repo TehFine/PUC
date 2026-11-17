@@ -14,6 +14,15 @@ import { UploadsService } from "../../uploads/uploads.service";
 const SEALED_LEDGER_ERR =
   "Bản ghi sổ cái đã quá thời hạn 24 giờ niêm phong hoặc đã gắn với lô xuất khẩu, không thể chỉnh sửa/xóa.";
 
+const STAFF_ROLE_LABELS: Record<string, string> = {
+  admin: "Quản trị viên",
+  htx_officer: "Cán bộ HTX",
+  inspector: "Cán bộ kiểm tra",
+  village_officer: "Cán bộ thôn",
+  enterprise: "Doanh nghiệp",
+  farmer: "Chủ hộ",
+};
+
 interface ExistingSprayRow {
   pesticide_id: number;
   server_recorded_at: Date | string | null;
@@ -21,6 +30,7 @@ interface ExistingSprayRow {
   household_id: number;
   plot_code: string | null;
   isolation_days: number | null;
+  edit_count: number | null;
 }
 
 @Injectable()
@@ -44,15 +54,20 @@ export class SprayService extends BaseCrudService {
       to_char(t.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
       GREATEST(0, ((t.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - t.sprayed_on))::int AS late_declaration_days,
       t.entry_delay_hours::float8 AS entry_delay_hours,
-      t.is_late_entry, t.late_reason, t.record_hash`,
+      t.is_late_entry, t.late_reason, t.record_hash,
+      t.recorded_by_role, t.updated_by_user_id, t.updated_by_name, t.updated_by_role, t.updated_at, t.edit_count`,
       from: `spray_records t JOIN households h ON h.id = t.household_id
       JOIN pesticides p ON p.id = t.pesticide_id`,
       orderBy: "t.sprayed_on DESC, t.id DESC",
-      search: ["h.name", "p.name", "t.source", "t.plot_code"],
+      search: ["h.name", "p.name", "t.source", "t.plot_code", "t.updated_by_name"],
       filters: { householdId: "t.household_id", pesticideId: "t.pesticide_id", mrlStatus: "t.mrl_status" },
       scope: villageScope("h.village_id"),
-      virtual: ["_notifyAlert"],
+      virtual: ["_notifyAlert", "_notifyHouseholdEdit"],
     });
+  }
+
+  protected override auditAction(method: "POST" | "PATCH"): string | undefined {
+    return method === "PATCH" ? "Chỉnh sửa nhật ký phun thuốc" : undefined;
   }
 
   private async assertNotExportLocked(
@@ -96,6 +111,12 @@ export class SprayService extends BaseCrudService {
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     await assertHouseholdInScope(this.db, input, context.user);
     const out: Record<string, unknown> = { ...input };
+    delete out.updatedByUserId;
+    delete out.updatedByName;
+    delete out.updatedByRole;
+    delete out.updatedAt;
+    delete out.editCount;
+
     if (typeof out.sprayedOn === "string" && out.sprayedOn > todayVn()) {
       throw badRequest("Ngày phun thuốc không được ở tương lai. Chỉ ghi nhận sau khi đã phun thực tế.");
     }
@@ -111,7 +132,7 @@ export class SprayService extends BaseCrudService {
     let existing: ExistingSprayRow | undefined;
     if (context.method === "PATCH" && context.id !== undefined) {
       const exRes = await this.db.query<ExistingSprayRow>(
-        "SELECT pesticide_id, server_recorded_at, sprayed_on::text AS sprayed_on, household_id, plot_code, isolation_days FROM spray_records WHERE id = $1",
+        "SELECT pesticide_id, server_recorded_at, sprayed_on::text AS sprayed_on, household_id, plot_code, isolation_days, edit_count FROM spray_records WHERE id = $1",
         [context.id],
       );
       existing = exRes.rows[0];
@@ -119,6 +140,11 @@ export class SprayService extends BaseCrudService {
         return out;
       }
       await this.assertSprayEditable(existing);
+      out.updatedByUserId = context.user.id;
+      out.updatedByName = context.user.fullName;
+      out.updatedByRole = context.user.role;
+      out.updatedAt = new Date().toISOString();
+      out.editCount = Number(existing.edit_count ?? 0) + 1;
     }
 
     const effectiveHouseholdId = Number(out.householdId ?? existing?.household_id ?? 0);
@@ -194,11 +220,41 @@ export class SprayService extends BaseCrudService {
           };
         }
       }
+
+      if (context.method === "PATCH" && existing && context.user.role !== "farmer" && effectiveHouseholdId > 0) {
+        out._notifyHouseholdEdit = {
+          householdId: effectiveHouseholdId,
+          pesticideName: pesticide.name,
+          plotCode: (out.plotCode as string | null | undefined) ?? existing.plot_code ?? null,
+          actorName: context.user.fullName,
+          actorRole: context.user.role,
+        };
+      }
     }
     return out;
   }
 
   protected override async afterWrite(id: number, input: Record<string, unknown>) {
+    const editInfo = input._notifyHouseholdEdit as
+      | {
+          householdId: number;
+          pesticideName: string;
+          plotCode: string | null;
+          actorName: string;
+          actorRole: string;
+        }
+      | undefined;
+    if (editInfo) {
+      const roleLabel = STAFF_ROLE_LABELS[editInfo.actorRole] ?? "Cán bộ";
+      const plotText = editInfo.plotCode ? ` tại thửa ${editInfo.plotCode}` : "";
+      await this.notifications.notifyHousehold(editInfo.householdId, {
+        kind: "protocol",
+        title: "Nhật ký phun thuốc đã được chỉnh sửa",
+        body: `Bản ghi phun thuốc "${editInfo.pesticideName}"${plotText} đã được ${roleLabel} ${editInfo.actorName} cập nhật.`,
+        link: "/portal?tab=diary",
+      });
+    }
+
     const alert = input._notifyAlert as
       | { pesticideName: string; pesticideStatus: string; householdId: number; plotCode: string | null }
       | undefined;

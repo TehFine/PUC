@@ -11,7 +11,7 @@ import { requestEditPlotShape } from "@/components/admin/shared/counts-events";
 import { formatVn } from "@/components/admin/shared/form-utils";
 import { badgeOf, HOUSEHOLD_STATUS, LAB_RESULT, SEVERITY, VIOLATION_STATUS } from "@/components/admin/shared/labels";
 import { getZoneColor } from "@/components/zones/zone-data";
-import { formatDate } from "@/utils/format";
+import { formatDate, formatDiaryEditor } from "@/utils/format";
 import { formatCoords, plotCenterCoords } from "@/utils/plot-utils";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { HouseholdRow } from "@/types/households";
@@ -221,7 +221,14 @@ export default function HouseholdDetailModal({
                   <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "#256b45", whiteSpace: "nowrap" }}>{j.plotCode}</td>
                   <td>{j.activity}</td>
                   <td className="cell-wrap" style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>{j.detail || "-"}</td>
-                  <td style={{ fontSize: 12.5 }}>{j.recorder}</td>
+                  <td style={{ fontSize: 12.5 }}>
+                    <div>{j.recorder}</div>
+                    {j.updatedByName && (
+                      <div style={{ fontSize: 11.5, color: "#9a6712", fontWeight: 500, marginTop: 2 }}>
+                        Đã sửa: {formatDiaryEditor(j.updatedByName, j.updatedByRole)}
+                      </div>
+                    )}
+                  </td>
                   <td>
                     {isSafeMediaUrl(j.photoUrl) ? (
                       <a href={j.photoUrl} target="_blank" rel="noopener noreferrer" className="badge badge-blue">

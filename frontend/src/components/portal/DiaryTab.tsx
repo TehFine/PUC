@@ -14,7 +14,7 @@ import {
   useOfflineSyncState,
 } from "@/lib/offline-sync";
 import { daysUntil, JOURNAL_ACTIVITIES, todayIso, toNumber } from "@/lib/portal-labels";
-import { formatDate, formatDateTime } from "@/utils/format";
+import { formatDate, formatDateTime, formatDiaryEditor, formatDiaryRole } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type {
   CreateJournalBody,
@@ -811,13 +811,32 @@ function JournalDetailModal({
           </span>
         </div>
         <div className="pt-detail-cell">
-          <span className="pt-detail-cell-label">Người ghi chép</span>
+          <span className="pt-detail-cell-label">Người ghi ban đầu</span>
           <span className="pt-detail-cell-value">{entry.recorder || "Chủ hộ"}</span>
         </div>
         <div className="pt-detail-cell">
           <span className="pt-detail-cell-label">Mã ghi nhận</span>
           <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums" }}>#NK-{entry.id}</span>
         </div>
+        {(entry.updatedByName || entry.updatedAt) && (
+          <>
+            <div className="pt-detail-cell">
+              <span className="pt-detail-cell-label">Người chỉnh sửa</span>
+              <span className="pt-detail-cell-value" style={{ color: "#9a6712", fontWeight: 600 }}>
+                {formatDiaryEditor(entry.updatedByName, entry.updatedByRole) || "Đã chỉnh sửa"}
+                {(entry.editCount ?? 0) > 1 ? ` (${entry.editCount} lần)` : ""}
+              </span>
+            </div>
+            {entry.updatedAt && (
+              <div className="pt-detail-cell">
+                <span className="pt-detail-cell-label">Thời điểm chỉnh sửa</span>
+                <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {formatDateTime(entry.updatedAt)}
+                </span>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {hasRealCoords && (
@@ -1007,6 +1026,31 @@ function SprayDetailModal({
             {record.isolationDays} ngày (thu từ {safeDateIso ? formatDate(safeDateIso) : formatDate(record.sprayedOn)})
           </span>
         </div>
+        {record.recordedByRole && (
+          <div className="pt-detail-cell">
+            <span className="pt-detail-cell-label">Người ghi ban đầu</span>
+            <span className="pt-detail-cell-value">{formatDiaryRole(record.recordedByRole) || "Chủ hộ"}</span>
+          </div>
+        )}
+        {(record.updatedByName || record.updatedAt) && (
+          <>
+            <div className="pt-detail-cell">
+              <span className="pt-detail-cell-label">Người chỉnh sửa</span>
+              <span className="pt-detail-cell-value" style={{ color: "#9a6712", fontWeight: 600 }}>
+                {formatDiaryEditor(record.updatedByName, record.updatedByRole) || "Đã chỉnh sửa"}
+                {(record.editCount ?? 0) > 1 ? ` (${record.editCount} lần)` : ""}
+              </span>
+            </div>
+            {record.updatedAt && (
+              <div className="pt-detail-cell">
+                <span className="pt-detail-cell-label">Thời điểm chỉnh sửa</span>
+                <span className="pt-detail-cell-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {formatDateTime(record.updatedAt)}
+                </span>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div className="pt-detail-section">
@@ -1202,8 +1246,23 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                               aria-hidden="true"
                             />
                             <span className="pt-widget-item-text">
-                              {entry.activity}
-                              {entry.plotCode ? ` - ${entry.plotCode}` : ""}
+                              <span>
+                                {entry.activity}
+                                {entry.plotCode ? ` - ${entry.plotCode}` : ""}
+                              </span>
+                              {entry.updatedByName && (
+                                <span
+                                  style={{
+                                    display: "block",
+                                    fontSize: 12,
+                                    fontWeight: 500,
+                                    color: "#9a6712",
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  Đã sửa bởi {formatDiaryEditor(entry.updatedByName, entry.updatedByRole)}
+                                </span>
+                              )}
                             </span>
                             <span className="pt-diary-item-date" style={{ fontVariantNumeric: "tabular-nums" }}>
                               {formatDate(entry.entryOn)}
@@ -1248,8 +1307,23 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                             aria-hidden="true"
                           />
                           <span className="pt-widget-item-text">
-                            Phun thuốc: {record.pesticide}
-                            {record.plotCode ? ` - ${record.plotCode}` : ""}
+                            <span>
+                              Phun thuốc: {record.pesticide}
+                              {record.plotCode ? ` - ${record.plotCode}` : ""}
+                            </span>
+                            {record.updatedByName && (
+                              <span
+                                style={{
+                                  display: "block",
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  color: "#9a6712",
+                                  marginTop: 2,
+                                }}
+                              >
+                                Đã sửa bởi {formatDiaryEditor(record.updatedByName, record.updatedByRole)}
+                              </span>
+                            )}
                           </span>
                           <span className="pt-diary-item-date" style={{ fontVariantNumeric: "tabular-nums" }}>
                             {formatDate(record.sprayedOn)}
