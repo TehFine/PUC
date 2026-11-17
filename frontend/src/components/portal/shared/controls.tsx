@@ -1548,6 +1548,7 @@ function LazyVideoCard({ url, caption }: { url: string; caption?: string }) {
               src={thumbUrl}
               alt={caption || "Video minh chứng hiện trường"}
               className="pt-lazy-video-thumb"
+              draggable={false}
               decoding="async"
             />
             {caption && <span className="pt-lazy-video-thumb-caption">{caption}</span>}
@@ -1566,6 +1567,7 @@ function LazyVideoCard({ url, caption }: { url: string; caption?: string }) {
               width={34}
               height={34}
               className="pt-lazy-video-fallback-icon"
+              draggable={false}
               aria-hidden="true"
             />
             <strong>Video minh chứng hiện trường</strong>
@@ -1576,9 +1578,6 @@ function LazyVideoCard({ url, caption }: { url: string; caption?: string }) {
           <button type="button" className="pt-lazy-video-play-btn" onClick={() => setPlaying(true)}>
             Phát video
           </button>
-          <a href={url} target="_blank" rel="noopener noreferrer" className="pt-lazy-video-link">
-            Mở tệp gốc
-          </a>
         </div>
       </div>
     );
@@ -1627,41 +1626,54 @@ function MissingStoredImageCard({ caption }: { caption?: string }) {
   );
 }
 
+function VideoThumbTile({ url, label }: { url: string; label: string }) {
+  const [thumbState, setThumbState] = useState<{ url: string; dataUrl: string | null }>(() => ({
+    url,
+    dataUrl: videoThumbnailCache.get(url) ?? null,
+  }));
+  const thumbUrl = thumbState.url === url ? thumbState.dataUrl : (videoThumbnailCache.get(url) ?? null);
+
+  useEffect(() => {
+    if (thumbUrl) return;
+    let cancelled = false;
+    void captureVideoFrameThumbnail(url).then((captured) => {
+      if (!cancelled && captured) {
+        setThumbState({ url, dataUrl: captured });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url, thumbUrl]);
+
+  if (thumbUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- ảnh chụp khung hình tạm thời dạng Data URL
+      <img src={thumbUrl} alt={label} className="pt-stored-gallery-img" decoding="async" />
+    );
+  }
+  return (
+    <span className="pt-stored-video-thumb-fallback" aria-hidden="true">
+      {/* eslint-disable-next-line @next/next/no-img-element -- biểu tượng video tĩnh nội bộ */}
+      <img src="/video.png" alt="" width={22} height={22} />
+    </span>
+  );
+}
+
 /** Ảnh hoặc video hiện trường đơn lẻ đã lưu trên server (`/api/uploads/:id`). */
 export function StoredPhoto({ url, alt, caption }: { url: string; alt: string; caption?: string }) {
-  const [broken, setBroken] = useState(false);
   if (!isSafeMediaUrl(url)) return null;
   if (isVideoMediaUrl(url)) {
     return <LazyVideoCard url={url} caption={caption} />;
   }
-  if (broken) {
-    return <MissingStoredImageCard caption={caption} />;
-  }
-  return (
-    <a className="pt-detail-photo-frame" href={url} target="_blank" rel="noopener noreferrer" title="Mở tệp gốc">
-      {/* eslint-disable-next-line @next/next/no-img-element -- ảnh tải lên phục vụ qua API có cookie phiên */}
-      <img
-        src={url}
-        alt={alt}
-        className="pt-detail-photo-img"
-        loading="lazy"
-        decoding="async"
-        onError={() => setBroken(true)}
-      />
-      {caption && (
-        <div className="pt-detail-photo-overlay">
-          <span>{caption}</span>
-        </div>
-      )}
-    </a>
-  );
+  return <StoredMediaGallery urls={[url]} altPrefix={alt} caption={caption} />;
 }
 
 /**
  * Bộ sưu tập nhiều ảnh và video hiện trường đã lưu:
- * - Tự động gom `urls` (hoặc lùi về `fallbackUrl` với dữ liệu cũ 1 ảnh).
- * - Ảnh hiển thị lưới thu nhỏ `loading="lazy"`, bấm vào mở hộp thoại xem phóng to có nút Trước / Tiếp.
- * - Video hiển thị thẻ chờ 0 KB băng thông, chỉ phát qua HTTP Range (206) khi người dùng bấm "Phát video".
+ * - Tự động gom chung cả ảnh và video theo đúng thứ tự đính kèm.
+ * - Hỗ trợ vuốt ngang trực tiếp trên khung ảnh/video (cả ở màn hình chi tiết nhật ký lẫn hộp thoại xem phóng to)
+ *   để chuyển mượt sang ảnh mới hoặc video kế bên.
  */
 export function StoredMediaGallery({
   urls,
@@ -1699,159 +1711,491 @@ export function StoredMediaGallery({
   }, [urls, fallbackUrl]);
 
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
+  const [activeSlide, setActiveSlide] = useState(0);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const carouselTrackRef = useRef<HTMLDivElement | null>(null);
+  const scrollRafRef = useRef<number>(0);
+  const didCarouselDragRef = useRef(false);
+  const carouselDragRef = useRef<{
+    active: boolean;
+    startX: number;
+    startScrollLeft: number;
+    dx: number;
+    moved: boolean;
+  }>({ active: false, startX: 0, startScrollLeft: 0, dx: 0, moved: false });
+  const stageInnerRef = useRef<HTMLDivElement | null>(null);
+  const swipeStateRef = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    dx: number;
+    lockedAxis: "x" | "y" | null;
+  }>({ active: false, startX: 0, startY: 0, dx: 0, lockedAxis: null });
+
+  const allImageCount = useMemo(
+    () => safeUrls.filter((u) => !isVideoMediaUrl(u)).length,
+    [safeUrls],
+  );
+  const mediaItems = useMemo(
+    () =>
+      safeUrls
+        .filter((u) => isVideoMediaUrl(u) || !brokenImages[u])
+        .map((u) => ({ url: u, isVideo: isVideoMediaUrl(u) })),
+    [safeUrls, brokenImages],
+  );
+  const brokenCount = allImageCount - mediaItems.filter((m) => !m.isVideo).length;
+
+  const safeSlide = mediaItems.length > 0 ? Math.min(activeSlide, mediaItems.length - 1) : 0;
+  const safeViewerIndex =
+    viewerIndex !== null && mediaItems.length > 0
+      ? Math.max(0, Math.min(viewerIndex, mediaItems.length - 1))
+      : null;
+  const activeViewerItem = safeViewerIndex !== null ? mediaItems[safeViewerIndex] : null;
+
+  const scrollToSlide = useCallback((idx: number) => {
+    const track = carouselTrackRef.current;
+    if (!track) return;
+    const clamped = Math.max(0, Math.min(idx, mediaItems.length - 1));
+    setActiveSlide(clamped);
+    const width = track.clientWidth;
+    if (width > 0) {
+      track.scrollTo({ left: clamped * width, behavior: "smooth" });
+    }
+  }, [mediaItems.length]);
+
+  const handleCarouselScroll = useCallback(() => {
+    if (scrollRafRef.current) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = 0;
+      const track = carouselTrackRef.current;
+      if (!track || track.clientWidth <= 0) return;
+      const idx = Math.round(track.scrollLeft / track.clientWidth);
+      setActiveSlide((prev) => (prev === idx ? prev : idx));
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (safeViewerIndex === null || mediaItems.length <= 1) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setViewerIndex((prev) => {
+          if (prev === null || prev <= 0) return prev;
+          const next = prev - 1;
+          scrollToSlide(next);
+          return next;
+        });
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setViewerIndex((prev) => {
+          if (prev === null || prev >= mediaItems.length - 1) return prev;
+          const next = prev + 1;
+          scrollToSlide(next);
+          return next;
+        });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [safeViewerIndex, mediaItems.length, scrollToSlide]);
 
   if (safeUrls.length === 0) return null;
 
-  const allImageCandidates = safeUrls.filter((u) => !isVideoMediaUrl(u));
-  const imageUrls = allImageCandidates.filter((u) => !brokenImages[u]);
-  const brokenCount = allImageCandidates.length - imageUrls.length;
-  const videoUrls = safeUrls.filter((u) => isVideoMediaUrl(u));
+  const resetStageTransform = (animate: boolean) => {
+    const el = stageInnerRef.current;
+    if (!el) return;
+    el.style.transition = animate ? "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)" : "none";
+    el.style.transform = "translate3d(0, 0, 0)";
+  };
 
-  const activeImageUrl = viewerIndex !== null && viewerIndex >= 0 && viewerIndex < imageUrls.length ? imageUrls[viewerIndex] : null;
+  const beginSwipe = (x: number, y: number) => {
+    if (mediaItems.length <= 1) return;
+    swipeStateRef.current = { active: true, startX: x, startY: y, dx: 0, lockedAxis: null };
+    resetStageTransform(false);
+  };
+
+  const moveSwipe = (x: number, y: number) => {
+    const st = swipeStateRef.current;
+    if (!st.active) return;
+    const dx = x - st.startX;
+    const dy = y - st.startY;
+    if (!st.lockedAxis) {
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      st.lockedAxis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+    }
+    if (st.lockedAxis !== "x") return;
+    st.dx = dx;
+    const atStart = (safeViewerIndex ?? 0) <= 0 && dx > 0;
+    const atEnd = (safeViewerIndex ?? 0) >= mediaItems.length - 1 && dx < 0;
+    const damped = atStart || atEnd ? dx * 0.25 : dx * 0.65;
+    if (stageInnerRef.current) {
+      stageInnerRef.current.style.transition = "none";
+      stageInnerRef.current.style.transform = `translate3d(${damped.toFixed(1)}px, 0, 0)`;
+    }
+  };
+
+  const endSwipe = () => {
+    const st = swipeStateRef.current;
+    if (!st.active) return;
+    st.active = false;
+    const dx = st.dx;
+    const axis = st.lockedAxis;
+    st.dx = 0;
+    st.lockedAxis = null;
+    resetStageTransform(true);
+
+    if (axis !== "x" || safeViewerIndex === null) return;
+    if (dx <= -42 && safeViewerIndex < mediaItems.length - 1) {
+      setViewerIndex(safeViewerIndex + 1);
+      scrollToSlide(safeViewerIndex + 1);
+    } else if (dx >= 42 && safeViewerIndex > 0) {
+      setViewerIndex(safeViewerIndex - 1);
+      scrollToSlide(safeViewerIndex - 1);
+    }
+  };
 
   return (
     <div className="pt-stored-gallery-wrap">
-      {imageUrls.length === 1 && videoUrls.length === 0 && !compact ? (
-        <button
-          type="button"
-          className="pt-detail-photo-frame pt-gallery-single-btn"
-          onClick={() => setViewerIndex(0)}
-          title="Bấm để xem ảnh cỡ lớn"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageUrls[0]}
-            alt={`${altPrefix} 1`}
-            className="pt-detail-photo-img"
-            loading="lazy"
-            decoding="async"
-            onError={() => setBrokenImages((prev) => ({ ...prev, [imageUrls[0]]: true }))}
-          />
-          {caption && (
-            <div className="pt-detail-photo-overlay">
-              <span>{caption}</span>
-            </div>
-          )}
-        </button>
-      ) : (
-        imageUrls.length > 0 && (
-          <div className={`pt-stored-gallery-grid ${compact ? "is-compact" : ""}`.trim()}>
-            {imageUrls.map((u, idx) => (
+      {brokenCount > 0 && mediaItems.length === 0 && <MissingStoredImageCard caption={caption} />}
+
+      {mediaItems.length === 1 && !compact && (
+        mediaItems[0].isVideo ? (
+          <LazyVideoCard url={mediaItems[0].url} caption={caption} />
+        ) : (
+          <button
+            type="button"
+            className="pt-detail-photo-frame pt-gallery-single-btn"
+            onClick={() => setViewerIndex(0)}
+            title="Bấm để xem ảnh cỡ lớn"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={mediaItems[0].url}
+              alt={`${altPrefix} 1`}
+              className="pt-detail-photo-img"
+              loading="lazy"
+              decoding="async"
+              onError={() => setBrokenImages((prev) => ({ ...prev, [mediaItems[0].url]: true }))}
+            />
+            {caption && (
+              <div className="pt-detail-photo-overlay">
+                <span>{caption}</span>
+              </div>
+            )}
+          </button>
+        )
+      )}
+
+      {mediaItems.length > 1 && !compact && (
+        <div className="pt-media-carousel" data-no-sheet-drag="true">
+          <div
+            ref={carouselTrackRef}
+            className="pt-media-carousel-track"
+            onScroll={handleCarouselScroll}
+            data-no-sheet-drag="true"
+            onClickCapture={(e) => {
+              if (didCarouselDragRef.current) {
+                e.preventDefault();
+                e.stopPropagation();
+                didCarouselDragRef.current = false;
+              }
+            }}
+            onPointerDown={(e) => {
+              if (e.pointerType !== "mouse" || e.button !== 0) return;
+              if ((e.target as HTMLElement | null)?.closest("video")) return;
+              const track = carouselTrackRef.current;
+              if (!track) return;
+              didCarouselDragRef.current = false;
+              carouselDragRef.current = {
+                active: true,
+                startX: e.clientX,
+                startScrollLeft: track.scrollLeft,
+                dx: 0,
+                moved: false,
+              };
+            }}
+            onPointerMove={(e) => {
+              if (e.pointerType !== "mouse") return;
+              const st = carouselDragRef.current;
+              const track = carouselTrackRef.current;
+              if (!st.active || !track) return;
+              const dx = e.clientX - st.startX;
+              st.dx = dx;
+              if (!st.moved && Math.abs(dx) > 8) {
+                st.moved = true;
+                didCarouselDragRef.current = true;
+                track.style.scrollSnapType = "none";
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+              }
+              if (st.moved) {
+                track.scrollLeft = st.startScrollLeft - dx;
+              }
+            }}
+            onPointerUp={(e) => {
+              if (e.pointerType !== "mouse") return;
+              const st = carouselDragRef.current;
+              const track = carouselTrackRef.current;
+              if (!st.active) return;
+              st.active = false;
+              if (st.moved && track) {
+                track.style.scrollSnapType = "";
+                const target =
+                  st.dx <= -40
+                    ? safeSlide + 1
+                    : st.dx >= 40
+                      ? safeSlide - 1
+                      : track.clientWidth > 0
+                        ? Math.round(track.scrollLeft / track.clientWidth)
+                        : safeSlide;
+                scrollToSlide(target);
+                window.setTimeout(() => {
+                  didCarouselDragRef.current = false;
+                }, 0);
+              }
+            }}
+            onPointerCancel={(e) => {
+              if (e.pointerType !== "mouse") return;
+              carouselDragRef.current.active = false;
+              if (carouselTrackRef.current) {
+                carouselTrackRef.current.style.scrollSnapType = "";
+              }
+              didCarouselDragRef.current = false;
+            }}
+          >
+            {mediaItems.map((item, idx) => (
+              <div key={item.url} className="pt-media-carousel-slide">
+                {item.isVideo ? (
+                  <LazyVideoCard
+                    url={item.url}
+                    caption={`Video ${idx + 1}/${mediaItems.length}`}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="pt-detail-photo-frame pt-gallery-single-btn"
+                    onClick={() => setViewerIndex(idx)}
+                    title={`Bấm để phóng to (${idx + 1}/${mediaItems.length})`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.url}
+                      alt={`${altPrefix} ${idx + 1}`}
+                      className="pt-detail-photo-img"
+                      draggable={false}
+                      loading={idx === 0 ? "eager" : "lazy"}
+                      decoding="async"
+                      onError={() => setBrokenImages((prev) => ({ ...prev, [item.url]: true }))}
+                    />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-media-carousel-bar">
+            <span className="pt-media-carousel-count" style={{ fontVariantNumeric: "tabular-nums" }}>
+              {mediaItems[safeSlide]?.isVideo ? "Video" : "Ảnh"} {safeSlide + 1}/{mediaItems.length}
+            </span>
+            <div className="pt-media-carousel-nav">
               <button
-                key={u}
                 type="button"
-                className="pt-stored-gallery-cell"
-                onClick={() => setViewerIndex(idx)}
-                title={`Xem phóng to ảnh ${idx + 1}/${imageUrls.length}`}
+                className="pt-media-carousel-btn"
+                disabled={safeSlide <= 0}
+                onClick={() => scrollToSlide(safeSlide - 1)}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                Trước
+              </button>
+              <button
+                type="button"
+                className="pt-media-carousel-btn"
+                disabled={safeSlide >= mediaItems.length - 1}
+                onClick={() => scrollToSlide(safeSlide + 1)}
+              >
+                Tiếp
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-media-thumb-strip" data-no-sheet-drag="true">
+            {mediaItems.map((item, idx) => (
+              <button
+                key={item.url}
+                type="button"
+                className={`pt-media-thumb-item ${idx === safeSlide ? "is-active" : ""}`.trim()}
+                onClick={() => scrollToSlide(idx)}
+                aria-label={`${item.isVideo ? "Video" : "Ảnh"} ${idx + 1}/${mediaItems.length}`}
+              >
+                {item.isVideo ? (
+                  <VideoThumbTile url={item.url} label={`${altPrefix} ${idx + 1}`} />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.url}
+                    alt={`${altPrefix} ${idx + 1}`}
+                    className="pt-stored-gallery-img"
+                    loading="lazy"
+                    decoding="async"
+                    onError={() => setBrokenImages((prev) => ({ ...prev, [item.url]: true }))}
+                  />
+                )}
+                <span className="pt-stored-gallery-badge" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {item.isVideo ? `Video` : `${idx + 1}/${mediaItems.length}`}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {compact && mediaItems.length > 0 && (
+        <div className="pt-stored-gallery-grid is-compact">
+          {mediaItems.map((item, idx) => (
+            <button
+              key={item.url}
+              type="button"
+              className="pt-stored-gallery-cell"
+              onClick={() => setViewerIndex(idx)}
+              title={`Xem (${idx + 1}/${mediaItems.length})`}
+            >
+              {item.isVideo ? (
+                <VideoThumbTile url={item.url} label={`${altPrefix} ${idx + 1}`} />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={u}
+                  src={item.url}
                   alt={`${altPrefix} ${idx + 1}`}
                   className="pt-stored-gallery-img"
                   loading="lazy"
                   decoding="async"
-                  onError={() => setBrokenImages((prev) => ({ ...prev, [u]: true }))}
+                  onError={() => setBrokenImages((prev) => ({ ...prev, [item.url]: true }))}
                 />
-                {imageUrls.length > 1 && (
-                  <span className="pt-stored-gallery-badge" style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {idx + 1}/{imageUrls.length}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        )
-      )}
-
-      {brokenCount > 0 && imageUrls.length === 0 && videoUrls.length === 0 && (
-        <MissingStoredImageCard caption={caption} />
-      )}
-
-      {videoUrls.length > 0 && (
-        <div className="pt-stored-video-list">
-          {videoUrls.map((vUrl, idx) => (
-            <LazyVideoCard
-              key={vUrl}
-              url={vUrl}
-              caption={videoUrls.length > 1 ? `Video hiện trường ${idx + 1}/${videoUrls.length}` : caption}
-            />
+              )}
+              {mediaItems.length > 1 || item.isVideo ? (
+                <span className="pt-stored-gallery-badge" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {item.isVideo ? "Video" : `${idx + 1}/${mediaItems.length}`}
+                </span>
+              ) : null}
+            </button>
           ))}
         </div>
       )}
 
-      {caption && (imageUrls.length > 1 || compact) && (
+      {caption && (mediaItems.length > 1 || compact) && (
         <div className="pt-stored-gallery-caption">{caption}</div>
       )}
 
-      {activeImageUrl && viewerIndex !== null && (
+      {activeViewerItem && safeViewerIndex !== null && (
         <Modal
-          title={`${altPrefix} (${viewerIndex + 1}/${imageUrls.length})`}
+          title={`${altPrefix} (${safeViewerIndex + 1}/${mediaItems.length})`}
           onClose={() => setViewerIndex(null)}
           width={760}
           footer={
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ display: "inline-flex", gap: 6 }}>
-                {imageUrls.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-sm"
-                      disabled={viewerIndex <= 0}
-                      onClick={() => setViewerIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
-                    >
-                      Ảnh trước
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-sm"
-                      disabled={viewerIndex >= imageUrls.length - 1}
-                      onClick={() =>
-                        setViewerIndex((prev) =>
-                          prev !== null && prev < imageUrls.length - 1 ? prev + 1 : prev,
-                        )
-                      }
-                    >
-                      Ảnh tiếp
-                    </button>
-                  </>
-                )}
-              </div>
-              <div style={{ display: "inline-flex", gap: 8 }}>
-                <a
-                  href={activeImageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-outline btn-sm"
-                  style={{ textDecoration: "none" }}
+            mediaItems.length > 1 ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  disabled={safeViewerIndex <= 0}
+                  onClick={() => {
+                    const next = Math.max(0, safeViewerIndex - 1);
+                    setViewerIndex(next);
+                    scrollToSlide(next);
+                  }}
                 >
-                  Mở tệp gốc
-                </a>
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => setViewerIndex(null)}>
+                  Trước
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  disabled={safeViewerIndex >= mediaItems.length - 1}
+                  onClick={() => {
+                    const next = Math.min(mediaItems.length - 1, safeViewerIndex + 1);
+                    setViewerIndex(next);
+                    scrollToSlide(next);
+                  }}
+                >
+                  Tiếp
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => setViewerIndex(null)}>
                   Đóng
                 </button>
-              </div>
-            </div>
+              </>
+            ) : (
+              <button type="button" className="btn btn-primary" onClick={() => setViewerIndex(null)}>
+                Đóng
+              </button>
+            )
           }
         >
-          <div style={{ background: "#f7f7f5", border: "1px solid #d4d4d2", borderRadius: 6, overflow: "hidden" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={activeImageUrl}
-              alt={`${altPrefix} ${viewerIndex + 1}`}
-              style={{
-                width: "100%",
-                maxHeight: "70vh",
-                objectFit: "contain",
-                display: "block",
-                margin: "0 auto",
-              }}
-              decoding="async"
-            />
+          <div
+            className="pt-media-viewer-stage"
+            data-no-sheet-drag="true"
+            onTouchStart={(e) => {
+              if (e.touches.length !== 1) return;
+              const target = e.target as HTMLElement | null;
+              if (target?.tagName === "VIDEO") {
+                const rect = target.getBoundingClientRect();
+                if (e.touches[0].clientY > rect.bottom - 52) return;
+              }
+              beginSwipe(e.touches[0].clientX, e.touches[0].clientY);
+            }}
+            onTouchMove={(e) => {
+              if (e.touches.length === 1) {
+                moveSwipe(e.touches[0].clientX, e.touches[0].clientY);
+              }
+            }}
+            onTouchEnd={() => endSwipe()}
+            onTouchCancel={() => endSwipe()}
+            onPointerDown={(e) => {
+              if (e.pointerType === "mouse" && e.button === 0 && !(e.target as HTMLElement | null)?.closest("video")) {
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                beginSwipe(e.clientX, e.clientY);
+              }
+            }}
+            onPointerMove={(e) => {
+              if (e.pointerType === "mouse") {
+                moveSwipe(e.clientX, e.clientY);
+              }
+            }}
+            onPointerUp={(e) => {
+              if (e.pointerType === "mouse") endSwipe();
+            }}
+            onPointerCancel={(e) => {
+              if (e.pointerType === "mouse") endSwipe();
+            }}
+          >
+            <div ref={stageInnerRef} className="pt-media-viewer-inner">
+              {activeViewerItem.isVideo ? (
+                <video
+                  key={activeViewerItem.url}
+                  src={activeViewerItem.url}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="metadata"
+                  className="pt-media-viewer-content"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={activeViewerItem.url}
+                  src={activeViewerItem.url}
+                  alt={`${altPrefix} ${safeViewerIndex + 1}`}
+                  className="pt-media-viewer-content"
+                  draggable={false}
+                  decoding="async"
+                />
+              )}
+            </div>
           </div>
           {caption && (
-            <div style={{ marginTop: 8, fontSize: 12.5, color: "#5f6d66", fontVariantNumeric: "tabular-nums" }}>
+            <div className="pt-media-viewer-caption">
               {caption}
             </div>
           )}
