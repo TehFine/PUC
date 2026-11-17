@@ -1355,6 +1355,7 @@ function LazyVideoCard({ url, caption }: { url: string; caption?: string }) {
         <div className="pt-lazy-video-copy">
           <strong>Video minh chứng hiện trường</strong>
           <span>Chỉ tải dữ liệu video khi bạn bấm phát để tiết kiệm dung lượng mạng</span>
+          {caption && <div className="pt-lazy-video-caption">{caption}</div>}
         </div>
         <div className="pt-lazy-video-actions">
           <button type="button" className="pt-lazy-video-play-btn" onClick={() => setPlaying(true)}>
@@ -1364,7 +1365,6 @@ function LazyVideoCard({ url, caption }: { url: string; caption?: string }) {
             Mở tệp gốc
           </a>
         </div>
-        {caption && <div className="pt-lazy-video-caption">{caption}</div>}
       </div>
     );
   }
