@@ -21,6 +21,7 @@ interface UserSessionSnapshot {
   village_id: number | null;
   household_id: number | null;
   enterprise_id: number | null;
+  enterprise_status: string | null;
   assigned_commune: string | null;
   assigned_region: string | null;
   coop_code: string;
@@ -34,9 +35,9 @@ const AUTH_SESSION_CACHE_TTL_MS = 15_000;
 
 /**
  * Yêu cầu đăng nhập cho mọi route trừ route gắn @Public().
- * Gộp truy vấn người dùng và trạng thái phiên (`refresh_tokens`) vào 1 câu SQL duy nhất,
+ * Gộp truy vấn người dùng, trạng thái doanh nghiệp liên kết và trạng thái phiên (`refresh_tokens`) vào 1 câu SQL duy nhất,
  * kết hợp bộ nhớ đệm L1 trên RAM có Singleflight và tự động xóa tức thì qua `DatabaseService`
- * bất cứ khi nào bảng `users` hoặc `refresh_tokens` có thay đổi (khóa tài khoản, đổi vai trò, thu hồi phiên từ xa).
+ * bất cứ khi nào bảng `users`, `enterprises` hoặc `refresh_tokens` có thay đổi (khóa tài khoản, đổi vai trò, thu hồi phiên từ xa).
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -49,38 +50,33 @@ export class JwtAuthGuard implements CanActivate {
     @Optional() private readonly cache?: AppCacheService,
   ) {}
 
-  private queryUserAndSession(userId: number, sessionId?: number): Promise<UserSessionSnapshot | null> {
-    const sidParam = sessionId !== undefined ? sessionId : null;
+  private queryUserAndSession(userId: number, sessionId: number): Promise<UserSessionSnapshot | null> {
     return this.db
       .query<UserSessionSnapshot>(
         `SELECT u.id, u.full_name, u.username, u.email, u.role, u.status, u.village_id, u.household_id,
-                u.enterprise_id, u.assigned_commune, u.assigned_region, u.coop_code,
+                u.enterprise_id, ent.status AS enterprise_status,
+                u.assigned_commune, u.assigned_region, u.coop_code,
                 u.two_factor_enabled, u.token_version,
-                CASE
-                  WHEN $2::bigint IS NULL THEN true
-                  ELSE EXISTS (
-                    SELECT 1 FROM refresh_tokens rt
-                    WHERE rt.id = $2::bigint AND rt.user_id = u.id AND rt.revoked_at IS NULL AND rt.expires_at > now()
-                  )
-                END AS session_active,
-                CASE
-                  WHEN $2::bigint IS NULL THEN NULL
-                  ELSE (
-                    SELECT (EXTRACT(EPOCH FROM rt.expires_at) * 1000)::float8
-                    FROM refresh_tokens rt
-                    WHERE rt.id = $2::bigint AND rt.user_id = u.id AND rt.revoked_at IS NULL
-                    LIMIT 1
-                  )
-                END AS session_expires_ms
+                EXISTS (
+                  SELECT 1 FROM refresh_tokens rt
+                  WHERE rt.id = $2::bigint AND rt.user_id = u.id AND rt.revoked_at IS NULL AND rt.expires_at > now()
+                ) AS session_active,
+                (
+                  SELECT (EXTRACT(EPOCH FROM rt.expires_at) * 1000)::float8
+                  FROM refresh_tokens rt
+                  WHERE rt.id = $2::bigint AND rt.user_id = u.id AND rt.revoked_at IS NULL
+                  LIMIT 1
+                ) AS session_expires_ms
          FROM users u
+         LEFT JOIN enterprises ent ON ent.id = u.enterprise_id
          WHERE u.id = $1`,
-        [userId, sidParam],
+        [userId, sessionId],
       )
       .then((res) => res.rows[0] ?? null);
   }
 
-  private loadUserSession(userId: number, sessionId?: number): Promise<UserSessionSnapshot | null> {
-    const key = `auth:u:${userId}:s:${sessionId ?? 0}`;
+  private loadUserSession(userId: number, sessionId: number): Promise<UserSessionSnapshot | null> {
+    const key = `auth:u:${userId}:s:${sessionId}`;
     if (this.cache) {
       return this.cache.getOrLoad(key, AUTH_SESSION_CACHE_TTL_MS, ["auth"], () =>
         this.queryUserAndSession(userId, sessionId),
@@ -109,11 +105,13 @@ export class JwtAuthGuard implements CanActivate {
     const cachedVerified = request[VERIFIED_TOKEN_CACHE_KEY];
     let verified = cachedVerified;
     if (verified === undefined) {
-      const token = request.cookies?.[ACCESS_COOKIE] as string | undefined;
+      const rawCookie = request.cookies?.[ACCESS_COOKIE];
+      const token =
+        typeof rawCookie === "string" && rawCookie.length >= 16 && rawCookie.length <= 4096 ? rawCookie : undefined;
       verified = token ? await this.tokens.verifyAccessToken(token) : null;
       request[VERIFIED_TOKEN_CACHE_KEY] = verified;
     }
-    if (!verified) {
+    if (!verified || !verified.sessionId) {
       if (isPublic || isOptionalAuth) return true;
       throw unauthorized();
     }
@@ -124,13 +122,15 @@ export class JwtAuthGuard implements CanActivate {
       throw unauthorized();
     }
 
-    if (verified.sessionId !== undefined) {
-      const expiredNow =
-        row.session_expires_ms !== null && Number(row.session_expires_ms) <= Date.now();
-      if (!row.session_active || expiredNow) {
-        if (isPublic || isOptionalAuth) return true;
-        throw unauthorized();
-      }
+    const expiredNow = row.session_expires_ms === null || Number(row.session_expires_ms) <= Date.now();
+    if (!row.session_active || expiredNow) {
+      if (isPublic || isOptionalAuth) return true;
+      throw unauthorized();
+    }
+
+    if (row.role === "enterprise" && row.enterprise_id !== null && row.enterprise_status !== "active") {
+      if (isPublic || isOptionalAuth) return true;
+      throw unauthorized("Đơn vị doanh nghiệp liên kết hiện không còn hiệu lực hoạt động.");
     }
 
     request.user = {
@@ -146,7 +146,7 @@ export class JwtAuthGuard implements CanActivate {
       assignedRegion: row.assigned_region ?? null,
       coopCode: row.coop_code || "HTX-CUNE",
       twoFactorEnabled: Boolean(row.two_factor_enabled),
-      sessionId: verified.sessionId ?? null,
+      sessionId: verified.sessionId,
     };
     return true;
   }

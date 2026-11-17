@@ -13,7 +13,7 @@ export const JWT_AUDIENCE = "puc-krongbuk-client";
 export interface VerifiedAccessToken {
   userId: number;
   tokenVersion: number;
-  sessionId?: number;
+  sessionId: number;
 }
 
 @Injectable()
@@ -29,11 +29,11 @@ export class TokensService {
     this.cookieSecure = config.get("cookieSecure", { infer: true });
   }
 
-  signAccessToken(userId: number, tokenVersion = 0, sessionId?: number): Promise<string> {
-    const claims: { ver: number; sid?: number } = { ver: tokenVersion };
-    if (sessionId !== undefined && Number.isInteger(sessionId) && sessionId > 0) {
-      claims.sid = sessionId;
+  signAccessToken(userId: number, tokenVersion: number, sessionId: number): Promise<string> {
+    if (!Number.isInteger(sessionId) || sessionId <= 0) {
+      throw new Error("Mã phiên đăng nhập (sid) hợp lệ là bắt buộc khi cấp access token.");
     }
+    const claims: { ver: number; sid: number } = { ver: tokenVersion, sid: sessionId };
     return this.jwt.signAsync(claims, {
       subject: String(userId),
       algorithm: "HS256",
@@ -42,8 +42,11 @@ export class TokensService {
     });
   }
 
-  /** Trả về id người dùng, phiên bản token và mã phiên (nếu có) khi token hợp lệ, ngược lại null. */
+  /** Trả về id người dùng, phiên bản token và mã phiên bắt buộc (`sid > 0`) khi token hợp lệ, ngược lại null. */
   async verifyAccessToken(token: string): Promise<VerifiedAccessToken | null> {
+    if (typeof token !== "string" || token.length < 16 || token.length > 4096) {
+      return null;
+    }
     try {
       const payload = await this.jwt.verifyAsync<{ sub?: string; ver?: number; sid?: number }>(token, {
         algorithms: ["HS256"],
@@ -52,15 +55,18 @@ export class TokensService {
       });
       const userId = Number(payload.sub);
       const tokenVersion = payload.ver === undefined ? 0 : Number(payload.ver);
-      if (!Number.isInteger(userId) || userId <= 0 || !Number.isInteger(tokenVersion) || tokenVersion < 0) {
+      const sid = payload.sid !== undefined ? Number(payload.sid) : NaN;
+      if (
+        !Number.isInteger(userId) ||
+        userId <= 0 ||
+        !Number.isInteger(tokenVersion) ||
+        tokenVersion < 0 ||
+        !Number.isInteger(sid) ||
+        sid <= 0
+      ) {
         return null;
       }
-      if (payload.sid !== undefined) {
-        const sid = Number(payload.sid);
-        if (!Number.isInteger(sid) || sid <= 0) return null;
-        return { userId, tokenVersion, sessionId: sid };
-      }
-      return { userId, tokenVersion };
+      return { userId, tokenVersion, sessionId: sid };
     } catch {
       return null;
     }

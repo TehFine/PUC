@@ -1,6 +1,6 @@
 import { PipeTransform, Type, ValidationError, ValidationPipe } from "@nestjs/common";
 import type { ArgumentMetadata } from "@nestjs/common";
-import { notFound, ValidationDetail, ValidationException } from "../errors/app.exception";
+import { badRequest, notFound, ValidationDetail, ValidationException } from "../errors/app.exception";
 
 // Thông báo mặc định của class-validator luôn bắt đầu bằng tên trường; thông báo tùy biến (đã là tiếng Việt) giữ nguyên.
 const DEFAULT_MESSAGES: Record<string, string> = {
@@ -56,7 +56,10 @@ const UNSAFE_TEXT_CTRL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A
 
 /** Chuẩn hóa Unicode NFC và loại bỏ ký tự NUL / điều khiển độc hại đệ quy trên mọi dữ liệu vào. */
 function sanitizeIncomingValue(value: unknown, depth = 0): unknown {
-  if (depth > 12 || value === null || value === undefined) return value;
+  if (depth > 24) {
+    throw badRequest("Dữ liệu đầu vào lồng nhau vượt quá giới hạn cho phép.");
+  }
+  if (value === null || value === undefined) return value;
   if (typeof value === "string") {
     return value.normalize("NFC").replace(UNSAFE_TEXT_CTRL_RE, "");
   }
@@ -66,9 +69,14 @@ function sanitizeIncomingValue(value: unknown, depth = 0): unknown {
   if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
     const out: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-      if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
       const cleanKey = key.normalize("NFC").replace(UNSAFE_TEXT_CTRL_RE, "");
-      out[cleanKey] = sanitizeIncomingValue(entry, depth + 1);
+      if (!cleanKey || cleanKey === "__proto__" || cleanKey === "constructor" || cleanKey === "prototype") continue;
+      Object.defineProperty(out, cleanKey, {
+        value: sanitizeIncomingValue(entry, depth + 1),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
     return out;
   }

@@ -68,7 +68,8 @@ export class AppThrottlerGuard extends ThrottlerGuard {
     let verified = expressReq[VERIFIED_TOKEN_CACHE_KEY];
     if (verified === undefined) {
       const rawCookie = expressReq.cookies?.[ACCESS_COOKIE];
-      const token = typeof rawCookie === "string" && rawCookie.length > 16 ? rawCookie : undefined;
+      const token =
+        typeof rawCookie === "string" && rawCookie.length >= 16 && rawCookie.length <= 4096 ? rawCookie : undefined;
       verified = token ? await this.tokens.verifyAccessToken(token) : null;
       expressReq[VERIFIED_TOKEN_CACHE_KEY] = verified;
     }

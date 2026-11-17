@@ -125,6 +125,7 @@ export class AuthController {
     return this.auth.sessionOf(user);
   }
 
+  @Throttle(RateLimitTier.AUTH_SENSITIVE_ACCOUNT)
   @Patch("profile")
   updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto, @Ip() ip: string) {
     return this.auth.updateProfile(user, dto, ip);

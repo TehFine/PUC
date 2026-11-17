@@ -82,7 +82,9 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   // Duyệt tài khoản hộ dân tự đăng ký (xem, duyệt = update, từ chối = delete).
   registrations: { read: HTX, update: HTX, delete: HTX },
   contracts: { read: SUPPLY_CHAIN_READERS, create: HTX, update: HTX, delete: ADMIN },
-  enterprises: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
+  // Danh bạ doanh nghiệp (mã số thuế, SĐT, người đại diện): chỉ cán bộ giám sát chuỗi cung ứng;
+  // tài khoản doanh nghiệp chỉ thấy hồ sơ của chính mình (phạm vi áp dụng ở EnterprisesService).
+  enterprises: { read: SUPPLY_CHAIN_READERS, create: HTX, update: HTX, delete: ADMIN },
   fertilizers: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   // Bản tin: cán bộ HTX soạn/đăng; người xem công khai đọc qua /api/public/news.
   news: { read: HTX, create: HTX, update: HTX, delete: HTX },

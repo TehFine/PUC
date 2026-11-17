@@ -1,3 +1,4 @@
+import type { Server } from "node:http";
 import "reflect-metadata";
 import { Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -11,6 +12,11 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
   configureApp(app);
   app.enableShutdownHooks();
+
+  const server = app.getHttpServer() as Server;
+  server.headersTimeout = 15_000;
+  server.requestTimeout = 60_000;
+  server.keepAliveTimeout = 5_000;
 
   const config = app.get<ConfigService<AppConfig, true>>(ConfigService);
   const port = config.get("port", { infer: true });

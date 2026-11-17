@@ -10,6 +10,7 @@ import {
   IsPositive,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateIf,
@@ -42,9 +43,10 @@ export const OptionalIsoDate = () =>
     IsoDate(),
   );
 
-export const NonNegative = () => applyDecorators(IsNumber({ allowNaN: false, allowInfinity: false }), Min(0));
-export const Count = () => applyDecorators(IsInt(), Min(0));
-export const RecordId = () => applyDecorators(IsInt(), IsPositive());
+export const NonNegative = (max = 1_000_000_000) =>
+  applyDecorators(IsNumber({ allowNaN: false, allowInfinity: false }), Min(0), Max(max));
+export const Count = (max = 1_000_000) => applyDecorators(IsInt(), Min(0), Max(max));
+export const RecordId = () => applyDecorators(IsInt(), IsPositive(), Max(Number.MAX_SAFE_INTEGER));
 export const OneOf = (values: readonly string[]) => IsIn(values);
 
 /** Trường có thể bỏ qua (undefined) nhưng nếu gửi thì không được null. */

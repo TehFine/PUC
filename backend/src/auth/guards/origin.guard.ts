@@ -21,26 +21,56 @@ export class OriginGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     if (SAFE_METHODS.has(request.method)) return true;
 
-    const secFetchSite = request.headers["sec-fetch-site"];
-    if (secFetchSite === "cross-site") {
+    const rawSecFetchSite = request.headers["sec-fetch-site"];
+    const secFetchSites = Array.isArray(rawSecFetchSite)
+      ? rawSecFetchSite
+      : rawSecFetchSite
+        ? [rawSecFetchSite]
+        : [];
+    if (secFetchSites.some((v) => v.trim().toLowerCase() === "cross-site")) {
       throw forbidden("Nguồn gửi yêu cầu chéo trang (cross-site) không được phép.");
     }
 
-    const origin = request.headers.origin;
-    if (origin) {
-      if (!this.allowed.includes(origin)) throw forbidden("Nguồn gửi yêu cầu không được phép.");
-      return true;
-    }
-
-    const referer = request.headers.referer;
-    if (referer) {
-      let refererOrigin = "";
+    const rawOrigin = request.headers.origin;
+    if (rawOrigin !== undefined) {
+      if (typeof rawOrigin !== "string" || !rawOrigin.trim() || rawOrigin.trim().toLowerCase() === "null") {
+        throw forbidden("Nguồn gửi yêu cầu không được phép.");
+      }
+      let normalizedOrigin = "";
       try {
-        refererOrigin = new URL(referer).origin;
+        const parsed = new URL(rawOrigin.trim());
+        if (
+          (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+          parsed.username !== "" ||
+          parsed.password !== "" ||
+          (parsed.pathname !== "/" && parsed.pathname !== "") ||
+          parsed.search !== "" ||
+          parsed.hash !== ""
+        ) {
+          throw forbidden("Nguồn gửi yêu cầu không được phép.");
+        }
+        normalizedOrigin = parsed.origin;
       } catch {
         throw forbidden("Nguồn gửi yêu cầu không được phép.");
       }
-      if (!this.allowed.includes(refererOrigin)) {
+      if (!normalizedOrigin || normalizedOrigin === "null" || !this.allowed.includes(normalizedOrigin)) {
+        throw forbidden("Nguồn gửi yêu cầu không được phép.");
+      }
+      return true;
+    }
+
+    const rawReferer = request.headers.referer;
+    if (rawReferer !== undefined) {
+      if (typeof rawReferer !== "string" || !rawReferer.trim()) {
+        throw forbidden("Nguồn gửi yêu cầu không được phép.");
+      }
+      let refererOrigin = "";
+      try {
+        refererOrigin = new URL(rawReferer.trim()).origin;
+      } catch {
+        throw forbidden("Nguồn gửi yêu cầu không được phép.");
+      }
+      if (!refererOrigin || refererOrigin === "null" || !this.allowed.includes(refererOrigin)) {
         throw forbidden("Nguồn gửi yêu cầu không được phép.");
       }
       return true;

@@ -14,10 +14,12 @@ import { OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 const MAX_PASSWORD_UTF8_BYTES = 72;
 
-const NormalizePassword = () =>
+/** Chuẩn hóa mật khẩu về Unicode NFC trước khi kiểm tra độ dài byte và băm (dùng chung cho mọi DTO có mật khẩu). */
+export const NormalizePassword = () =>
   Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.normalize("NFC") : value));
 
-function MaxPasswordUtf8Bytes(maxBytes = MAX_PASSWORD_UTF8_BYTES) {
+/** bcrypt chỉ dùng 72 byte đầu: chặn mật khẩu dài hơn để không âm thầm cắt bớt. */
+export function MaxPasswordUtf8Bytes(maxBytes = MAX_PASSWORD_UTF8_BYTES) {
   return ValidateBy({
     name: "maxPasswordUtf8Bytes",
     constraints: [maxBytes],
@@ -127,7 +129,10 @@ export class RegisterDto {
   @RecordId()
   villageId?: number | null;
 
-  /** Email Google liên kết (không bắt buộc) để đăng nhập nhanh bằng Google sau khi được duyệt. */
+  /**
+   * Email Google liên kết (không bắt buộc). Chỉ được lưu khi kèm `googleCredential` hợp lệ chứng minh quyền sở hữu
+   * hộp thư; gửi email thô không kèm credential vẫn được chấp nhận để tương thích client cũ nhưng bị bỏ qua.
+   */
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => {
     if (typeof value !== "string") return value;
@@ -137,6 +142,12 @@ export class RegisterDto {
   @IsEmail({}, { message: "Địa chỉ email liên kết không hợp lệ." })
   @MaxLength(120)
   email?: string | null;
+
+  /** Google ID Token xác minh quyền sở hữu `email` khi muốn liên kết ngay lúc đăng ký. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  googleCredential?: string;
 
   /** Mã hộ hoặc thông tin giúp cán bộ đối chiếu. */
   @OptionalText(300)
@@ -162,11 +173,12 @@ export class ForgotPasswordCccdDto {
   @Matches(/^[0-9]{12}$/, { message: "Số Căn cước công dân (CCCD) gồm đúng 12 chữ số." })
   cccd!: string;
 
-  @IsOptional()
+  /** Họ tên chủ hộ đúng như hồ sơ hộ (bắt buộc, đối chiếu cùng CCCD). */
   @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.normalize("NFC").trim() : value))
   @IsString()
+  @IsNotEmpty({ message: "Vui lòng nhập họ tên chủ hộ." })
   @MaxLength(120)
-  fullName?: string;
+  fullName!: string;
 
   @NormalizePassword()
   @IsString()
@@ -221,12 +233,18 @@ export class VerifyOtpChallengeDto {
   code!: string;
 }
 
-/** Kích hoạt xác thực 2 lớp bằng mã OTP 6 chữ số đầu tiên từ ứng dụng xác thực. */
+/** Kích hoạt xác thực 2 lớp bằng mã OTP 6 chữ số đầu tiên từ ứng dụng xác thực, kèm xác nhận lại mật khẩu hiện tại. */
 export class EnableTwoFactorDto {
   @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.replace(/\s+/g, "") : value))
   @IsString()
   @Matches(/^[0-9]{6}$/, { message: "Mã OTP xác nhận gồm đúng 6 chữ số." })
   code!: string;
+
+  @NormalizePassword()
+  @IsString()
+  @IsNotEmpty({ message: "Vui lòng nhập mật khẩu hiện tại để bật xác thực 2 lớp." })
+  @MaxPasswordUtf8Bytes()
+  currentPassword!: string;
 }
 
 /** Tắt xác thực 2 lớp (yêu cầu mật khẩu hiện tại hoặc mã OTP 6 chữ số đang hiệu lực). */

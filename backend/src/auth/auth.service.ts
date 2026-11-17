@@ -3,12 +3,14 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import bcrypt from "bcryptjs";
 import { AuditService } from "../audit/audit.service";
+import { buildTwoFactorKeyring, isSealed, openString, sealString, type TwoFactorKeyring } from "../common/crypto/secret-box";
 import {
   buildOtpAuthUrl,
   generateBackupCodes,
   generateTotpCode,
   generateTotpSecret,
   hashBackupCode,
+  hashBackupCodeV2,
   verifyTotpCode,
 } from "../common/crypto/totp";
 import { AppException, badRequest, notFound, unauthorized } from "../common/errors/app.exception";
@@ -36,17 +38,23 @@ const GLOBAL_DB_LOCK_FAILED_LOGINS = 50;
 const LOCK_MINUTES = 15;
 const REUSE_GRACE_MS = 2_000;
 const MAX_ACTIVE_SESSIONS_PER_USER = 10;
+const MAX_SESSION_FAMILY_DAYS = 30;
 const OTP_CHALLENGE_TTL_MIN = 5;
 const MAX_OTP_CHALLENGE_ATTEMPTS = 5;
+/** Ngưỡng nhập sai OTP cấp người dùng (cộng dồn qua mọi phiên thử thách); mỗi lần chạm ngưỡng khóa lâu gấp đôi. */
+const MAX_OTP_USER_FAILURES = 5;
+const OTP_LOCK_MAX_MINUTES = 1440;
 const MAX_PASSWORD_UTF8_BYTES = 72;
 const CCCD_MAX_FAILED_ATTEMPTS = 3;
 const CCCD_IP_MAX_FAILED_ATTEMPTS = 10;
 const CCCD_LOCK_TIERS_MINUTES = [30, 120, 1440] as const;
 const MAX_TRACKED_RATE_KEYS = 10_000;
+/** Khi vượt trần, dọn xuống còn 90% để không phải sắp xếp lại toàn bộ bảng ở mỗi lần ghi nhận lỗi. */
+const PRUNE_TARGET_RATE_KEYS = Math.floor(MAX_TRACKED_RATE_KEYS * 0.9);
 const ANONYMOUS_AUDIT_ACTOR = { id: null, name: "Khách (chưa xác thực)" } as const;
 
 // Băm giả để thời gian phản hồi không lộ việc tài khoản có tồn tại hay không.
-const DUMMY_HASH = bcrypt.hashSync("không-phải-mật-khẩu-thật", 10);
+const DUMMY_HASH = bcrypt.hashSync("không-phải-mật-khẩu-thật", 12);
 
 function normalizePasswordInput(raw: string): string {
   const normalized = raw.normalize("NFC");
@@ -98,6 +106,7 @@ interface UserRow {
   two_factor_secret: string | null;
   two_factor_backup_codes: unknown;
   two_factor_last_used_step: string | number | null;
+  two_factor_failed_count: number;
   failed_login_count: number;
   locked_until: Date | null;
   token_version: number;
@@ -138,6 +147,7 @@ export class AuthService {
   private readonly allowDevDemoLogin: boolean;
   private readonly loginFailuresByIpUser = new Map<string, LoginAttemptBucket>();
   private readonly cccdCooldownByKey = new Map<string, CccdCooldownBucket>();
+  private readonly twoFactorKeys: TwoFactorKeyring;
 
   constructor(
     private readonly db: DatabaseService,
@@ -150,13 +160,17 @@ export class AuthService {
     this.isProduction = config.get("isProduction", { infer: true });
     this.googleClientId = config.get("googleClientId", { infer: true });
     this.allowDevDemoLogin = config.get("allowDevDemoLogin", { infer: true });
+    this.twoFactorKeys = buildTwoFactorKeyring({
+      totpEncryptionKey: config.get("totpEncryptionKey", { infer: true }),
+      jwtAccessSecret: config.get("jwt", { infer: true }).accessSecret,
+    });
   }
 
   private static readonly USER_AUTH_COLUMNS = `
     u.id, u.full_name, u.username, u.email, u.password_hash, u.role, u.status,
     u.village_id, u.household_id, u.enterprise_id, u.assigned_commune, u.assigned_region,
     u.coop_code, u.two_factor_enabled, u.two_factor_secret, u.two_factor_backup_codes,
-    u.two_factor_last_used_step, u.failed_login_count, u.locked_until, u.token_version
+    u.two_factor_last_used_step, u.two_factor_failed_count, u.failed_login_count, u.locked_until, u.token_version
   `;
 
   private loginPairKey(ip: string | undefined, username: string): string {
@@ -165,6 +179,10 @@ export class AuthService {
     return `${cleanIp}|${cleanUser}`;
   }
 
+  /**
+   * Giới hạn bộ nhớ của bảng đếm lỗi: ưu tiên xóa mục hết hạn, rồi mục chưa bị khóa cũ nhất; chỉ khi toàn bộ còn lại
+   * đang bị khóa mới xóa mục sắp hết hạn khóa nhất. Kẻ tấn công không thể xả khóa của nạn nhân bằng cách bơm khóa mới.
+   */
   private pruneMap<T extends { updatedAt: number; lockedUntil: number }>(map: Map<string, T>, maxAgeMs: number): void {
     if (map.size <= MAX_TRACKED_RATE_KEYS) return;
     const now = Date.now();
@@ -173,10 +191,19 @@ export class AuthService {
         map.delete(k);
       }
     }
-    while (map.size > MAX_TRACKED_RATE_KEYS) {
-      const oldestKey = map.keys().next().value;
-      if (oldestKey === undefined) break;
-      map.delete(oldestKey);
+    if (map.size <= PRUNE_TARGET_RATE_KEYS) return;
+
+    const unlocked = [...map].filter(([, v]) => v.lockedUntil <= now).sort((a, b) => a[1].updatedAt - b[1].updatedAt);
+    for (const [k] of unlocked) {
+      if (map.size <= PRUNE_TARGET_RATE_KEYS) return;
+      map.delete(k);
+    }
+
+    if (map.size <= MAX_TRACKED_RATE_KEYS) return;
+    const locked = [...map].sort((a, b) => a[1].lockedUntil - b[1].lockedUntil);
+    for (const [k] of locked) {
+      if (map.size <= MAX_TRACKED_RATE_KEYS) return;
+      map.delete(k);
     }
   }
 
@@ -300,6 +327,105 @@ export class AuthService {
     return matchedStep;
   }
 
+  private totpAad(userId: number): string {
+    return `puc-totp-secret:${Number(userId)}`;
+  }
+
+  /** Mã hóa khóa TOTP bằng khóa chính AES-256-GCM, ràng buộc với id người dùng. */
+  private sealTotpSecret(userId: number, secretBase32: string): string {
+    return sealString(this.twoFactorKeys.encryptionKeys[0], secretBase32, this.totpAad(userId));
+  }
+
+  /**
+   * Giải mã khóa TOTP đã lưu; chấp nhận giá trị Base32 dạng rõ cũ (cần mã hóa lại) và bản mã của khóa dự phòng
+   * (cần mã hóa lại bằng khóa chính). Trả null khi không giải mã được (sai khóa hoặc dữ liệu bị sửa đổi).
+   */
+  private openTotpSecret(userId: number, stored: string | null): { secret: string; needsRewrap: boolean } | null {
+    if (!stored) return null;
+    if (!isSealed(stored)) {
+      return /^[A-Z2-7]+=*$/i.test(stored.trim()) ? { secret: stored.trim(), needsRewrap: true } : null;
+    }
+    const keys = this.twoFactorKeys.encryptionKeys;
+    for (let i = 0; i < keys.length; i++) {
+      try {
+        return { secret: openString(keys[i], stored, this.totpAad(userId)), needsRewrap: i > 0 };
+      } catch {
+        // Thử khóa kế tiếp trong bộ khóa.
+      }
+    }
+    return null;
+  }
+
+  /** Mã hóa lại (lazy migration) khóa TOTP dạng rõ hoặc khóa cũ sau khi người dùng xác thực thành công. */
+  private async rewrapTotpSecret(userId: number, previousStored: string, secretBase32: string): Promise<void> {
+    await this.db
+      .query("UPDATE users SET two_factor_secret = $2 WHERE id = $1 AND two_factor_secret = $3", [
+        userId,
+        this.sealTotpSecret(userId, secretBase32),
+        previousStored,
+      ])
+      .catch(() => undefined);
+  }
+
+  private hashBackupCodeForUser(userId: number, code: string): string {
+    return hashBackupCodeV2(this.twoFactorKeys.backupHmacKeys[0], Number(userId), code);
+  }
+
+  /** Mọi dạng băm hợp lệ của một mã dự phòng: HMAC v2 theo từng khóa trong bộ khóa và SHA-256 v1 cũ. */
+  private backupCodeCandidates(userId: number, code: string): string[] {
+    return [
+      ...this.twoFactorKeys.backupHmacKeys.map((key) => hashBackupCodeV2(key, Number(userId), code)),
+      hashBackupCode(code),
+    ];
+  }
+
+  /**
+   * Ghi nhận nhập sai OTP ở cấp người dùng (không phụ thuộc phiên thử thách). Mỗi lần chạm bội số ngưỡng sẽ đặt
+   * `locked_until` với thời gian tăng gấp đôi (15, 30, 60 phút..., tối đa 24 giờ) và vô hiệu các thử thách đang mở.
+   */
+  private async recordOtpFailure(userId: number): Promise<boolean> {
+    const { rows } = await this.db.query<{ locked: boolean }>(
+      `UPDATE users
+       SET two_factor_failed_count = two_factor_failed_count + 1,
+           locked_until = CASE
+             WHEN (two_factor_failed_count + 1) % $2::int = 0 THEN GREATEST(
+               COALESCE(locked_until, now()),
+               now() + make_interval(mins => LEAST(
+                 $4::int,
+                 $3::int * (2 ^ LEAST(10, ((two_factor_failed_count + 1) / $2::int) - 1))::int
+               ))
+             )
+             ELSE locked_until
+           END
+       WHERE id = $1
+       RETURNING (locked_until IS NOT NULL AND locked_until > now()) AS locked`,
+      [userId, MAX_OTP_USER_FAILURES, LOCK_MINUTES, OTP_LOCK_MAX_MINUTES],
+    );
+    const locked = Boolean(rows[0]?.locked);
+    if (locked) {
+      await this.db.query(
+        "UPDATE auth_otp_challenges SET consumed_at = now() WHERE user_id = $1 AND consumed_at IS NULL",
+        [userId],
+      );
+    }
+    return locked;
+  }
+
+  private async assertActiveEnterpriseIfRequired(user: { role: Role; enterprise_id: number | null }): Promise<void> {
+    if (user.role !== "enterprise" || !user.enterprise_id) return;
+    const { rows } = await this.db.query<{ status: string }>(
+      "SELECT status FROM enterprises WHERE id = $1 LIMIT 1",
+      [user.enterprise_id],
+    );
+    if (rows[0]?.status !== "active") {
+      throw new AppException(
+        403,
+        "Đơn vị doanh nghiệp liên kết hiện không còn hiệu lực hoạt động.",
+        "ENTERPRISE_INACTIVE",
+      );
+    }
+  }
+
   private rowToAuthUser(user: UserRow, sessionId?: number | null): AuthUser {
     return {
       id: Number(user.id),
@@ -346,16 +472,24 @@ export class AuthService {
   ): Promise<MfaChallengeResult> {
     const rawToken = randomBytes(32).toString("base64url");
     const tokenHash = this.tokens.hashToken(rawToken);
-    await this.db.query(
-      `DELETE FROM auth_otp_challenges
-       WHERE user_id = $1 AND (expires_at < now() OR consumed_at IS NOT NULL)`,
-      [user.id],
-    );
-    await this.db.query(
-      `INSERT INTO auth_otp_challenges (challenge_token_hash, user_id, auth_method, expires_at, ip, user_agent)
-       VALUES ($1, $2, $3, now() + make_interval(mins => $4), $5, $6)`,
-      [tokenHash, user.id, authMethod, OTP_CHALLENGE_TTL_MIN, meta.ip ?? null, meta.userAgent?.slice(0, 300) ?? null],
-    );
+    // Khóa theo dòng người dùng để hai lượt đăng nhập song song không thể cùng chèn 2 thử thách còn hiệu lực.
+    const client = await this.db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [user.id]);
+      await client.query(`DELETE FROM auth_otp_challenges WHERE user_id = $1`, [user.id]);
+      await client.query(
+        `INSERT INTO auth_otp_challenges (challenge_token_hash, user_id, auth_method, expires_at, ip, user_agent)
+         VALUES ($1, $2, $3, now() + make_interval(mins => $4), $5, $6)`,
+        [tokenHash, user.id, authMethod, OTP_CHALLENGE_TTL_MIN, meta.ip ?? null, meta.userAgent?.slice(0, 300) ?? null],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
     await this.audit.write(
       { ip: meta.ip },
       { action: "Yêu cầu xác thực 2 lớp (OTP)", object: user.username, detail: `Phương thức bước 1: ${authMethod}` },
@@ -423,6 +557,7 @@ export class AuthService {
     if (user.status !== "active") {
       throw new AppException(403, "Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.", "ACCOUNT_DISABLED");
     }
+    await this.assertActiveEnterpriseIfRequired(user);
 
     const unlocked = await this.db.query(
       `UPDATE users
@@ -455,10 +590,18 @@ export class AuthService {
   }
 
   private async verifyGoogleIdToken(credential: string): Promise<{ email: string }> {
+    if (!this.googleClientId) {
+      throw unauthorized("Đăng nhập Google chưa được kích hoạt trên hệ thống.");
+    }
+    const trimmed = typeof credential === "string" ? credential.trim() : "";
+    if (!/^[A-Za-z0-9_-]{10,1024}\.[A-Za-z0-9_-]{10,2048}\.[A-Za-z0-9_-]{32,1024}$/.test(trimmed)) {
+      throw unauthorized("Token Google không hợp lệ.");
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5_000);
     try {
-      const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`;
+      const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(trimmed)}`;
       const res = await fetch(url, { method: "GET", signal: controller.signal });
       if (!res.ok) {
         throw unauthorized("Token đăng nhập Google không hợp lệ hoặc đã hết hạn.");
@@ -466,6 +609,7 @@ export class AuthService {
       const payload = (await res.json()) as {
         iss?: string;
         aud?: string;
+        azp?: string;
         exp?: string;
         email?: string;
         email_verified?: string | boolean;
@@ -473,11 +617,11 @@ export class AuthService {
       if (payload.iss !== "https://accounts.google.com" && payload.iss !== "accounts.google.com") {
         throw unauthorized("Nguồn phát hành token Google không hợp lệ.");
       }
-      if (!this.googleClientId) {
-        throw unauthorized("Chức năng đăng nhập Google chưa được cấu hình (thiếu GOOGLE_CLIENT_ID).");
-      }
       if (payload.aud !== this.googleClientId) {
         throw unauthorized("Token Google không khớp ứng dụng (client_id).");
+      }
+      if (payload.azp && payload.azp !== this.googleClientId) {
+        throw unauthorized("Token Google không hợp lệ.");
       }
       const expSec = Number(payload.exp ?? 0);
       if (!Number.isFinite(expSec) || expSec * 1000 <= Date.now()) {
@@ -604,6 +748,7 @@ export class AuthService {
       if (user.status !== "active") {
         throw new AppException(403, "Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.", "ACCOUNT_DISABLED");
       }
+      await this.assertActiveEnterpriseIfRequired(user);
     } catch (error) {
       await this.audit.write(
         { ip: meta.ip, user: undefined },
@@ -656,11 +801,21 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(cleanPassword, 12);
-    const cleanEmail = dto.email?.trim().toLowerCase() || null;
-    if (cleanEmail) {
-      if (SYNTHETIC_EMAIL_RE.test(cleanEmail)) {
+    // Chỉ lưu email khi có Google ID Token hợp lệ chứng minh quyền sở hữu hộp thư. Email thô không kèm credential
+    // bị bỏ qua (tương thích client cũ): nếu lưu, khi cán bộ duyệt hộ sẽ mở luôn quyền đăng nhập Google cho email lạ.
+    let cleanEmail: string | null = null;
+    const requestedEmail = dto.email?.trim().toLowerCase() || null;
+    if (requestedEmail && dto.googleCredential) {
+      if (SYNTHETIC_EMAIL_RE.test(requestedEmail)) {
         throw badRequest("Địa chỉ email không hợp lệ.");
       }
+      const verifiedGoogle = await this.verifyGoogleToken(dto.googleCredential);
+      if (verifiedGoogle.email !== requestedEmail) {
+        throw badRequest("Email trong Google Token không trùng khớp với địa chỉ email bạn muốn liên kết.");
+      }
+      cleanEmail = requestedEmail;
+    }
+    if (cleanEmail) {
       const existingEmail = await this.db.query(
         "SELECT 1 FROM users WHERE LOWER(email) = $1 AND status <> 'pending' LIMIT 1",
         [cleanEmail],
@@ -693,21 +848,34 @@ export class AuthService {
 
   /** Xoay vòng refresh token. Ném 401 (kèm `clear` để controller xóa cookie) khi token không dùng được. */
   async refresh(token: string | undefined, meta: ClientMeta): Promise<IssuedTokens> {
-    if (!token) throw new RefreshRejected();
+    if (!token || typeof token !== "string" || token.length < 16 || token.length > 512) {
+      throw new RefreshRejected();
+    }
 
     const { rows } = await this.db.query<{
       id: number;
       user_id: number;
       expires_at: Date;
       revoked_at: Date | null;
+      revoked_reason: string | null;
+      reuse_handled: boolean;
+      family_started_at: Date;
       ip: string | null;
       status: string;
+      role: Role;
+      enterprise_id: number | null;
+      enterprise_status: string | null;
       token_version: number;
       full_name: string;
       username: string;
     }>(
-      `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked_at, rt.ip, u.status, u.token_version, u.full_name, u.username
-       FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id
+      `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked_at, rt.revoked_reason,
+              rt.reuse_handled, rt.family_started_at, rt.ip,
+              u.status, u.role, u.enterprise_id, ent.status AS enterprise_status,
+              u.token_version, u.full_name, u.username
+       FROM refresh_tokens rt
+       JOIN users u ON u.id = rt.user_id
+       LEFT JOIN enterprises ent ON ent.id = u.enterprise_id
        WHERE rt.token_hash = $1`,
       [this.tokens.hashToken(token)],
     );
@@ -715,71 +883,79 @@ export class AuthService {
     if (!row) throw new RefreshRejected();
 
     if (row.revoked_at) {
+      if (row.revoked_reason === "logout" || row.revoked_reason === "security") {
+        throw new RefreshRejected();
+      }
       const withinGrace =
-        Date.now() - row.revoked_at.getTime() <= REUSE_GRACE_MS &&
+        Date.now() - new Date(row.revoked_at).getTime() <= REUSE_GRACE_MS &&
         Boolean(row.ip) &&
         Boolean(meta.ip) &&
         row.ip === meta.ip;
-      if (!withinGrace) {
-        await this.revokeAllSessions(row.user_id);
-        await this.audit.write(
-          { ip: meta.ip },
-          {
-            action: "Cảnh báo bảo mật",
-            object: "Phiên đăng nhập",
-            detail: "Phát hiện dùng lại refresh token đã thu hồi; đã thu hồi toàn bộ phiên.",
-          },
-          { id: row.user_id, name: row.full_name },
+      if (!withinGrace && !row.reuse_handled) {
+        const claimed = await this.db.query<{ id: number }>(
+          "UPDATE refresh_tokens SET reuse_handled = true WHERE id = $1 AND reuse_handled = false RETURNING id",
+          [row.id],
         );
+        if ((claimed.rowCount ?? 0) > 0) {
+          await this.revokeAllSessions(row.user_id);
+          await this.audit.write(
+            { ip: meta.ip },
+            {
+              action: "Cảnh báo bảo mật",
+              object: "Phiên đăng nhập",
+              detail: "Phát hiện dùng lại refresh token đã thu hồi; đã thu hồi toàn bộ phiên.",
+            },
+            { id: row.user_id, name: row.full_name },
+          );
+        }
       }
       throw new RefreshRejected();
     }
-    if (row.expires_at.getTime() < Date.now() || row.status !== "active") {
+
+    const familyStartedAt = new Date(row.family_started_at);
+    const maxAbsoluteExpires = new Date(familyStartedAt.getTime() + MAX_SESSION_FAMILY_DAYS * 24 * 60 * 60_000);
+    const now = Date.now();
+    if (maxAbsoluteExpires.getTime() <= now) {
+      await this.db.query(
+        "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'logout' WHERE id = $1 AND revoked_at IS NULL",
+        [row.id],
+      );
+      throw new RefreshRejected();
+    }
+    if (
+      new Date(row.expires_at).getTime() <= now ||
+      row.status !== "active" ||
+      (row.role === "enterprise" && row.enterprise_id !== null && row.enterprise_status !== "active")
+    ) {
       throw new RefreshRejected();
     }
 
     const revoked = await this.db.query(
-      "UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL",
+      "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'rotated' WHERE id = $1 AND revoked_at IS NULL",
       [row.id],
     );
     if (revoked.rowCount === 0) {
       throw new RefreshRejected();
     }
-    return this.issueSession(row.user_id, meta, row.token_version);
+    return this.issueSession(row.user_id, meta, row.token_version, familyStartedAt);
   }
 
   async logout(refreshToken: string | undefined, accessToken?: string): Promise<void> {
-    let revokedBySession = false;
-    let legacyUserId: number | null = null;
-    let legacyTokenVersion: number | null = null;
-
-    if (refreshToken) {
-      const res = await this.db.query<{ id: number }>(
-        "UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL RETURNING id",
+    if (refreshToken && typeof refreshToken === "string" && refreshToken.length >= 16 && refreshToken.length <= 512) {
+      await this.db.query<{ id: number }>(
+        "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'logout' WHERE token_hash = $1 AND revoked_at IS NULL RETURNING id",
         [this.tokens.hashToken(refreshToken)],
       );
-      if ((res.rowCount ?? 0) > 0) revokedBySession = true;
     }
 
-    if (accessToken) {
+    if (accessToken && typeof accessToken === "string" && accessToken.length >= 16 && accessToken.length <= 4096) {
       const verified = await this.tokens.verifyAccessToken(accessToken);
       if (verified?.sessionId) {
         await this.db.query(
-          "UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
+          "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'logout' WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
           [verified.sessionId, verified.userId],
         );
-        revokedBySession = true;
-      } else if (verified?.userId) {
-        legacyUserId = verified.userId;
-        legacyTokenVersion = verified.tokenVersion;
       }
-    }
-
-    if (!revokedBySession && legacyUserId !== null && legacyTokenVersion !== null) {
-      await this.db.query(
-        "UPDATE users SET token_version = token_version + 1 WHERE id = $1 AND token_version = $2",
-        [legacyUserId, legacyTokenVersion],
-      );
     }
   }
 
@@ -914,6 +1090,10 @@ export class AuthService {
       throw error;
     }
 
+    if (emailChanged) {
+      await this.revokeOtherSessions(user, ip);
+    }
+
     await this.audit.write(
       { ip, user },
       {
@@ -942,10 +1122,16 @@ export class AuthService {
     const cleanUsername = dto.username.normalize("NFC").trim();
     const cleanCccd = dto.cccd.trim();
     const cleanNewPassword = normalizePasswordInput(dto.newPassword);
-    const cleanFullName = dto.fullName !== undefined && dto.fullName.trim().length > 0 ? dto.fullName.trim() : null;
+    const cleanFullName = typeof dto.fullName === "string" ? dto.fullName.normalize("NFC").trim() : "";
     const passwordHashPromise = bcrypt.hash(cleanNewPassword, 12);
     const genericMismatchMessage =
       "Số điện thoại/tên đăng nhập hoặc số CCCD 12 chữ số không khớp với hồ sơ hộ nông dân đang hoạt động.";
+    const lockedError = () =>
+      new AppException(
+        429,
+        "Tài khoản đang tạm khóa do xác thực sai nhiều lần. Vui lòng thử lại sau hoặc gửi yêu cầu nhờ cán bộ HTX duyệt.",
+        "ACCOUNT_LOCKED",
+      );
 
     const { rows } = await this.db.query<{
       id: number;
@@ -954,13 +1140,13 @@ export class AuthService {
       role: Role;
       status: string;
       household_id: number | null;
-      failed_login_count: number;
       locked_until: Date | null;
+      cccd_reset_locked_until: Date | null;
       household_cccd: string | null;
       household_name: string | null;
     }>(
       `SELECT u.id, u.full_name, u.username, u.role, u.status, u.household_id,
-              u.failed_login_count, u.locked_until,
+              u.locked_until, u.cccd_reset_locked_until,
               h1.cccd AS household_cccd, h1.name AS household_name
        FROM users u
        LEFT JOIN households h1 ON h1.id = u.household_id
@@ -970,46 +1156,45 @@ export class AuthService {
     );
     const user = rows[0];
     const passwordHash = await passwordHashPromise;
+    const now = Date.now();
 
-    // Giữ nguyên hợp đồng bảo mật: từ chối ngay tài khoản quản trị viên/cán bộ (hoặc chưa gắn hộ) bằng 400 trước mọi bước đối chiếu CCCD.
-    if (user && (user.role !== "farmer" || user.household_id === null)) {
-      throw badRequest(genericMismatchMessage);
-    }
-
+    // Kiểm tra khóa đồng nhất cho mọi vai trò TRƯỚC khi rẽ nhánh, để phản hồi 400/429 không lộ tài khoản nào là cán bộ/quản trị.
     if (
       this.isCccdResetLocked(meta.ip, cleanUsername, user?.id) ||
-      (user?.locked_until && user.locked_until.getTime() > Date.now())
+      (user?.cccd_reset_locked_until && user.cccd_reset_locked_until.getTime() > now) ||
+      (user?.locked_until && user.locked_until.getTime() > now)
     ) {
-      throw new AppException(
-        429,
-        "Tài khoản đang tạm khóa do xác thực sai nhiều lần. Vui lòng thử lại sau hoặc gửi yêu cầu nhờ cán bộ HTX duyệt.",
-        "ACCOUNT_LOCKED",
-      );
+      throw lockedError();
     }
 
+    // Chỉ nông hộ đang hoạt động đã gắn hồ sơ hộ mới được khôi phục bằng CCCD; vai trò khác luôn bị coi là không khớp.
+    const eligible =
+      user && user.role === "farmer" && user.household_id !== null && user.status === "active" ? user : null;
     const cccdMatches =
-      Boolean(user) &&
-      Boolean(user.household_cccd) &&
-      constantTimeEqualStr(user.household_cccd!.trim(), cleanCccd);
+      eligible !== null &&
+      Boolean(eligible.household_cccd) &&
+      constantTimeEqualStr((eligible.household_cccd ?? "").trim(), cleanCccd);
     const fullNameMatches =
-      cleanFullName === null ||
-      (Boolean(user?.household_name) &&
-        normalizePersonName(cleanFullName) === normalizePersonName(user!.household_name!));
+      eligible !== null &&
+      cleanFullName.length > 0 &&
+      Boolean(eligible.household_name) &&
+      normalizePersonName(cleanFullName) === normalizePersonName(eligible.household_name ?? "");
 
-    if (!user || !cccdMatches || !fullNameMatches || user.status !== "active") {
+    if (!eligible || !cccdMatches || !fullNameMatches) {
       const lockMinutes = this.recordCccdResetFailure(meta.ip, cleanUsername, user?.id);
       if (user) {
-        if (lockMinutes > 0) {
-          await this.db.query(
-            `UPDATE users
-             SET failed_login_count = 0,
-                 locked_until = GREATEST(COALESCE(locked_until, now()), now() + make_interval(mins => $2))
-             WHERE id = $1`,
-            [user.id, lockMinutes],
-          );
-        } else {
-          await this.db.query(`UPDATE users SET failed_login_count = failed_login_count + 1 WHERE id = $1`, [user.id]);
-        }
+        // Khóa thử lại CCCD lưu ở cột riêng: không chạm users.locked_until nên không chặn đăng nhập mật khẩu/Google của chủ tài khoản thật.
+        await this.db.query(
+          `UPDATE users
+           SET cccd_reset_failed_count = CASE WHEN cccd_reset_failed_count + 1 >= $2 THEN 0 ELSE cccd_reset_failed_count + 1 END,
+               cccd_reset_locked_until = CASE
+                 WHEN $3::int > 0 OR cccd_reset_failed_count + 1 >= $2
+                   THEN GREATEST(COALESCE(cccd_reset_locked_until, now()), now() + make_interval(mins => GREATEST($3::int, $4::int)))
+                 ELSE cccd_reset_locked_until
+               END
+           WHERE id = $1`,
+          [user.id, CCCD_MAX_FAILED_ATTEMPTS, lockMinutes, CCCD_LOCK_TIERS_MINUTES[0]],
+        );
         await this.audit.write(
           { ip: meta.ip },
           { action: "Khôi phục mật khẩu bằng CCCD thất bại", object: user.username },
@@ -1027,26 +1212,25 @@ export class AuthService {
 
     const updated = await this.db.query(
       `UPDATE users
-       SET password_hash = $2, email = NULL, failed_login_count = 0, locked_until = NULL
-       WHERE id = $1 AND role = 'farmer' AND (locked_until IS NULL OR locked_until <= now())`,
-      [user.id, passwordHash],
+       SET password_hash = $2, email = NULL, failed_login_count = 0,
+           cccd_reset_failed_count = 0, cccd_reset_locked_until = NULL
+       WHERE id = $1 AND role = 'farmer' AND household_id IS NOT NULL AND status = 'active'
+         AND (locked_until IS NULL OR locked_until <= now())
+         AND (cccd_reset_locked_until IS NULL OR cccd_reset_locked_until <= now())`,
+      [eligible.id, passwordHash],
     );
     if (updated.rowCount === 0) {
-      throw new AppException(
-        429,
-        "Tài khoản đang tạm khóa do xác thực sai nhiều lần. Vui lòng thử lại sau.",
-        "ACCOUNT_LOCKED",
-      );
+      throw lockedError();
     }
 
-    this.clearCccdResetFailures(meta.ip, cleanUsername, user.id);
+    this.clearCccdResetFailures(meta.ip, cleanUsername, eligible.id);
     this.clearLoginPairFailures(meta.ip, cleanUsername);
-    await this.db.query("DELETE FROM password_reset_requests WHERE user_id = $1 AND status = 'pending'", [user.id]);
-    await this.revokeAllSessions(user.id);
+    await this.db.query("DELETE FROM password_reset_requests WHERE user_id = $1 AND status = 'pending'", [eligible.id]);
+    await this.revokeAllSessions(eligible.id);
     await this.audit.write(
       { ip: meta.ip },
-      { action: "Đặt lại mật khẩu (xác minh CCCD)", object: user.username, detail: "Đã thu hồi phiên và gỡ email liên kết OAuth" },
-      { id: user.id, name: user.full_name },
+      { action: "Đặt lại mật khẩu (xác minh CCCD)", object: eligible.username, detail: "Đã thu hồi phiên và gỡ email liên kết OAuth" },
+      { id: eligible.id, name: eligible.full_name },
     );
 
     return { ok: true, mode: "instant" };
@@ -1168,37 +1352,105 @@ export class AuthService {
     ) {
       throw unauthorized("Phiên xác thực OTP đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.");
     }
+    if (row.locked_until && row.locked_until.getTime() > Date.now()) {
+      throw new AppException(429, "Tài khoản tạm khóa do nhập sai mã xác thực nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
+    }
     if (row.status !== "active" || !row.two_factor_enabled || !row.two_factor_secret) {
       throw unauthorized("Tài khoản không khả dụng cho xác thực 2 lớp.");
+    }
+    await this.assertActiveEnterpriseIfRequired(row);
+    const opened = this.openTotpSecret(row.id, row.two_factor_secret);
+    if (!opened) {
+      throw unauthorized("Không đọc được khóa xác thực 2 lớp của tài khoản. Vui lòng liên hệ quản trị viên để đặt lại.");
     }
 
     const cleanCode = dto.code.replace(/[\s-]/g, "").toUpperCase();
     let verified = false;
     let usedBackupCode = false;
     let usedTotpStep: number | null = null;
-    let remainingBackupHashes: string[] | null = null;
+    let replayDetected = false;
+    let challengeAlreadyConsumed = false;
 
-    if (/^[0-9]{6}$/.test(cleanCode)) {
-      const matchedStep = this.matchTotpStep(row.two_factor_secret, cleanCode, 1);
-      const lastUsedStep =
-        row.two_factor_last_used_step !== null && row.two_factor_last_used_step !== undefined
-          ? Number(row.two_factor_last_used_step)
-          : null;
-      if (matchedStep !== null && (lastUsedStep === null || matchedStep > lastUsedStep)) {
-        verified = true;
-        usedTotpStep = matchedStep;
+    const client = await this.db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const lockedChallenge = await client.query<{
+        consumed_at: Date | null;
+        expires_at: Date;
+        attempts: number;
+      }>("SELECT consumed_at, expires_at, attempts FROM auth_otp_challenges WHERE id = $1 FOR UPDATE", [
+        row.challenge_id,
+      ]);
+      const curChallenge = lockedChallenge.rows[0];
+      if (
+        !curChallenge ||
+        curChallenge.consumed_at !== null ||
+        curChallenge.expires_at.getTime() <= Date.now() ||
+        curChallenge.attempts >= MAX_OTP_CHALLENGE_ATTEMPTS
+      ) {
+        challengeAlreadyConsumed = true;
+      } else if (/^[0-9]{6}$/.test(cleanCode)) {
+        const matchedStep = this.matchTotpStep(opened.secret, cleanCode, 1);
+        const lastUsedStep =
+          row.two_factor_last_used_step !== null && row.two_factor_last_used_step !== undefined
+            ? Number(row.two_factor_last_used_step)
+            : null;
+        if (matchedStep !== null && (lastUsedStep === null || matchedStep > lastUsedStep)) {
+          // Chiếm bước thời gian nguyên tử: hai yêu cầu song song cùng mã chỉ một yêu cầu thắng.
+          const stepClaimed = await client.query(
+            `UPDATE users
+             SET two_factor_last_used_step = $2
+             WHERE id = $1 AND (two_factor_last_used_step IS NULL OR two_factor_last_used_step < $2)`,
+            [row.id, matchedStep],
+          );
+          if ((stepClaimed.rowCount ?? 0) > 0) {
+            verified = true;
+            usedTotpStep = matchedStep;
+          } else {
+            replayDetected = true;
+          }
+        } else if (matchedStep !== null) {
+          replayDetected = true;
+        }
+      } else if (/^[0-9A-Z]{8}$/.test(cleanCode)) {
+        // Tiêu thụ mã dự phòng một lần nguyên tử ngay trong SQL (jsonb - text[] kèm điều kiện ?|), trước khi cấp phiên:
+        // hai yêu cầu song song dùng cùng một mã thì chỉ đúng một yêu cầu xóa được mã (rowCount = 1), không ghi đè mảng cũ.
+        const consumedBackup = await client.query(
+          `UPDATE users
+           SET two_factor_backup_codes = two_factor_backup_codes - $2::text[]
+           WHERE id = $1 AND two_factor_enabled = true AND two_factor_backup_codes ?| $2::text[]`,
+          [row.id, this.backupCodeCandidates(row.id, cleanCode)],
+        );
+        if ((consumedBackup.rowCount ?? 0) > 0) {
+          verified = true;
+          usedBackupCode = true;
+        }
       }
-    } else if (/^[0-9A-Z]{8}$/.test(cleanCode)) {
-      const candidateHash = hashBackupCode(cleanCode);
-      const storedHashes = Array.isArray(row.two_factor_backup_codes)
-        ? row.two_factor_backup_codes.filter((x): x is string => typeof x === "string")
-        : [];
-      const idx = storedHashes.indexOf(candidateHash);
-      if (idx !== -1) {
-        verified = true;
-        usedBackupCode = true;
-        remainingBackupHashes = storedHashes.filter((_, i) => i !== idx);
+
+      if (verified) {
+        const consumed = await client.query(
+          `UPDATE auth_otp_challenges SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL`,
+          [row.challenge_id],
+        );
+        if ((consumed.rowCount ?? 0) === 0) {
+          await client.query("ROLLBACK");
+          challengeAlreadyConsumed = true;
+          verified = false;
+        } else {
+          await client.query("COMMIT");
+        }
+      } else {
+        await client.query("COMMIT");
       }
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    if (challengeAlreadyConsumed) {
+      throw unauthorized("Phiên xác thực OTP đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.");
     }
 
     if (!verified) {
@@ -1209,44 +1461,32 @@ export class AuthService {
          WHERE id = $1`,
         [row.challenge_id, MAX_OTP_CHALLENGE_ATTEMPTS],
       );
+      const locked = await this.recordOtpFailure(row.id);
       await this.audit.write(
         { ip: meta.ip },
-        { action: "Xác thực OTP bước 2 thất bại", object: row.username },
+        {
+          action: "Xác thực OTP bước 2 thất bại",
+          object: row.username,
+          detail: locked
+            ? "Nhập sai mã quá số lần cho phép; đã khóa tạm tài khoản."
+            : replayDetected
+              ? "Phát hiện phát lại mã OTP đã sử dụng."
+              : undefined,
+        },
         { id: row.id, name: row.full_name },
       );
+      if (locked) {
+        throw new AppException(429, "Tài khoản tạm khóa do nhập sai mã xác thực nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
+      }
+      if (replayDetected) {
+        throw unauthorized("Mã xác thực OTP này đã được sử dụng. Vui lòng đợi mã mới trên ứng dụng xác thực.");
+      }
       throw unauthorized("Mã xác thực OTP không đúng hoặc đã được sử dụng. Vui lòng kiểm tra lại ứng dụng xác thực.");
     }
 
-    if (usedTotpStep !== null) {
-      const stepClaimed = await this.db.query(
-        `UPDATE users
-         SET two_factor_last_used_step = $2, last_login_at = now()
-         WHERE id = $1 AND (two_factor_last_used_step IS NULL OR two_factor_last_used_step < $2)`,
-        [row.id, usedTotpStep],
-      );
-      if ((stepClaimed.rowCount ?? 0) === 0) {
-        await this.audit.write(
-          { ip: meta.ip },
-          { action: "Xác thực OTP bước 2 thất bại", object: row.username, detail: "Phát hiện phát lại mã OTP đã sử dụng." },
-          { id: row.id, name: row.full_name },
-        );
-        throw unauthorized("Mã xác thực OTP này đã được sử dụng. Vui lòng đợi mã mới trên ứng dụng xác thực.");
-      }
-    }
-
-    const consumed = await this.db.query(
-      `UPDATE auth_otp_challenges SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL`,
-      [row.challenge_id],
-    );
-    if (consumed.rowCount === 0) {
-      throw unauthorized("Phiên xác thực OTP đã được sử dụng. Vui lòng đăng nhập lại.");
-    }
-
-    if (usedBackupCode && remainingBackupHashes !== null) {
-      await this.db.query(
-        `UPDATE users SET last_login_at = now(), two_factor_backup_codes = $2::jsonb WHERE id = $1`,
-        [row.id, JSON.stringify(remainingBackupHashes)],
-      );
+    await this.db.query(`UPDATE users SET last_login_at = now(), two_factor_failed_count = 0 WHERE id = $1`, [row.id]);
+    if (usedTotpStep !== null && opened.needsRewrap) {
+      await this.rewrapTotpSecret(row.id, row.two_factor_secret, opened.secret);
     }
 
     const tokens = await this.issueSession(row.id, meta, row.token_version);
@@ -1274,9 +1514,10 @@ export class AuthService {
     }
 
     const secret = generateTotpSecret();
+    // Khóa chờ kích hoạt cũng được mã hóa AES-256-GCM khi lưu.
     const updated = await this.db.query(
       `UPDATE users SET two_factor_pending_secret = $2 WHERE id = $1 AND two_factor_enabled = false`,
-      [user.id, secret],
+      [user.id, this.sealTotpSecret(user.id, secret)],
     );
     if ((updated.rowCount ?? 0) === 0) {
       throw badRequest("Tài khoản đã bật xác thực 2 lớp. Vui lòng tắt xác thực 2 lớp hiện tại trước khi thiết lập lại.");
@@ -1294,38 +1535,75 @@ export class AuthService {
     };
   }
 
-  /** Xác nhận mã TOTP 6 chữ số đầu tiên và bật xác thực 2 lớp kèm bộ 8 mã dự phòng. */
+  /** Xác nhận lại mật khẩu hiện tại cùng mã TOTP 6 chữ số đầu tiên rồi bật xác thực 2 lớp kèm bộ 8 mã dự phòng. */
   async enableTwoFactor(user: AuthUser, dto: EnableTwoFactorDto, ip?: string) {
     const { rows } = await this.db.query<{
+      password_hash: string;
+      locked_until: Date | null;
       two_factor_enabled: boolean;
       two_factor_pending_secret: string | null;
-    }>(`SELECT two_factor_enabled, two_factor_pending_secret FROM users WHERE id = $1`, [user.id]);
-    if (!rows[0]) throw unauthorized();
-    if (rows[0].two_factor_enabled) {
+    }>(
+      `SELECT password_hash, locked_until, two_factor_enabled, two_factor_pending_secret FROM users WHERE id = $1`,
+      [user.id],
+    );
+    const current = rows[0];
+    if (!current) throw unauthorized();
+    if (current.two_factor_enabled) {
       throw badRequest("Tài khoản đã bật xác thực 2 lớp. Vui lòng tắt xác thực 2 lớp hiện tại trước khi thiết lập lại.");
     }
-    const pending = rows[0].two_factor_pending_secret;
+    if (current.locked_until && current.locked_until.getTime() > Date.now()) {
+      throw new AppException(429, "Tài khoản tạm khóa do nhập sai thông tin xác thực nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
+    }
+
+    const cleanCurrentPassword = normalizePasswordInput(dto.currentPassword);
+    if (!(await bcrypt.compare(cleanCurrentPassword, current.password_hash))) {
+      const { rows: failRows } = await this.db.query<{ locked: boolean }>(
+        `UPDATE users
+         SET failed_login_count = CASE WHEN failed_login_count + 1 >= $2 THEN 0 ELSE failed_login_count + 1 END,
+             locked_until = CASE WHEN failed_login_count + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END
+         WHERE id = $1
+         RETURNING (locked_until IS NOT NULL AND locked_until > now()) AS locked`,
+        [user.id, MAX_FAILED_LOGINS, LOCK_MINUTES],
+      );
+      if (failRows[0]?.locked) {
+        await this.revokeAllSessions(user.id);
+      }
+      await this.audit.write({ ip, user }, { action: "Bật xác thực 2 lớp thất bại", object: user.username, detail: "Sai mật khẩu hiện tại." });
+      throw badRequest("Mật khẩu hiện tại không đúng.");
+    }
+
+    const pending = this.openTotpSecret(user.id, current.two_factor_pending_secret);
     if (!pending) {
       throw badRequest("Chưa khởi tạo khóa xác thực 2 lớp. Vui lòng bấm tạo mã QR thiết lập trước.");
     }
-    if (!verifyTotpCode(pending, dto.code, 1)) {
+    const matchedStep = this.matchTotpStep(pending.secret, dto.code, 1);
+    if (matchedStep === null) {
       throw badRequest("Mã OTP 6 chữ số không khớp. Vui lòng kiểm tra thời gian trên thiết bị và nhập lại.");
     }
 
-    const { plainCodes, hashedCodes } = generateBackupCodes(8);
+    const { plainCodes, hashedCodes } = generateBackupCodes(8, (code) => this.hashBackupCodeForUser(user.id, code));
+    // Ghi nhận bước thời gian vừa dùng để mã kích hoạt không thể phát lại cho đăng nhập bước 2 hoặc tắt 2 lớp.
     const updated = await this.db.query(
       `UPDATE users
        SET two_factor_enabled = true,
            two_factor_secret = $2,
            two_factor_pending_secret = NULL,
            two_factor_backup_codes = $3::jsonb,
-           two_factor_last_used_step = NULL
-       WHERE id = $1 AND two_factor_enabled = false`,
-      [user.id, pending, JSON.stringify(hashedCodes)],
+           two_factor_last_used_step = $4,
+           two_factor_failed_count = 0
+       WHERE id = $1 AND two_factor_enabled = false AND two_factor_pending_secret = $5`,
+      [
+        user.id,
+        this.sealTotpSecret(user.id, pending.secret),
+        JSON.stringify(hashedCodes),
+        matchedStep,
+        current.two_factor_pending_secret,
+      ],
     );
     if ((updated.rowCount ?? 0) === 0) {
-      throw badRequest("Tài khoản đã bật xác thực 2 lớp. Vui lòng tắt xác thực 2 lớp hiện tại trước khi thiết lập lại.");
+      throw badRequest("Khóa xác thực 2 lớp vừa thay đổi hoặc đã được bật. Vui lòng tải lại và thử lại.");
     }
+    await this.revokeOtherSessions(user, ip);
     await this.audit.write({ ip, user }, { action: "Bật xác thực 2 lớp (OTP)", object: user.username });
     return { ok: true as const, enabled: true as const, backupCodes: plainCodes };
   }
@@ -1354,7 +1632,8 @@ export class AuthService {
 
     let confirmed = false;
     if (dto.code && row.two_factor_secret) {
-      const matchedStep = this.matchTotpStep(row.two_factor_secret, dto.code, 1);
+      const opened = this.openTotpSecret(user.id, row.two_factor_secret);
+      const matchedStep = opened ? this.matchTotpStep(opened.secret, dto.code, 1) : null;
       const lastUsedStep =
         row.two_factor_last_used_step !== null && row.two_factor_last_used_step !== undefined
           ? Number(row.two_factor_last_used_step)
@@ -1368,6 +1647,13 @@ export class AuthService {
         );
         if ((claimed.rowCount ?? 0) > 0) {
           confirmed = true;
+        }
+      }
+      if (!confirmed) {
+        // Sai mã OTP khi tắt 2 lớp cũng cộng vào bộ đếm khóa cấp người dùng như bước đăng nhập.
+        const locked = await this.recordOtpFailure(user.id);
+        if (locked) {
+          await this.revokeAllSessions(user.id);
         }
       }
     } else if (dto.currentPassword) {
@@ -1398,7 +1684,8 @@ export class AuthService {
        SET two_factor_enabled = false,
            two_factor_secret = NULL,
            two_factor_pending_secret = NULL,
-           two_factor_backup_codes = '[]'::jsonb
+           two_factor_backup_codes = '[]'::jsonb,
+           two_factor_failed_count = 0
        WHERE id = $1`,
       [user.id],
     );
@@ -1440,7 +1727,7 @@ export class AuthService {
   async revokeSession(user: AuthUser, sessionId: number, ip?: string) {
     const res = await this.db.query<{ ip: string | null; user_agent: string | null }>(
       `UPDATE refresh_tokens
-       SET revoked_at = now()
+       SET revoked_at = now(), revoked_reason = 'logout'
        WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
        RETURNING ip, user_agent`,
       [sessionId, user.id],
@@ -1466,14 +1753,14 @@ export class AuthService {
   async revokeOtherSessions(user: AuthUser, ip?: string) {
     if (!user.sessionId) {
       const res = await this.db.query(
-        `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
+        `UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = $1 AND revoked_at IS NULL`,
         [user.id],
       );
       return { ok: true as const, revokedCount: res.rowCount ?? 0 };
     }
     const res = await this.db.query(
       `UPDATE refresh_tokens
-       SET revoked_at = now()
+       SET revoked_at = now(), revoked_reason = 'security'
        WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL`,
       [user.id, user.sessionId],
     );
@@ -1487,11 +1774,19 @@ export class AuthService {
   private async revokeAllSessions(userId: number) {
     await Promise.all([
       this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]),
-      this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [userId]),
+      this.db.query(
+        "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = $1 AND revoked_at IS NULL",
+        [userId],
+      ),
     ]);
   }
 
-  private async issueSession(userId: number, meta: ClientMeta, knownTokenVersion?: number): Promise<IssuedTokens> {
+  private async issueSession(
+    userId: number,
+    meta: ClientMeta,
+    knownTokenVersion?: number,
+    familyStartedAt?: Date,
+  ): Promise<IssuedTokens> {
     const refresh = this.tokens.newRefreshToken();
     let tokenVersion = knownTokenVersion;
     if (tokenVersion === undefined) {
@@ -1500,23 +1795,43 @@ export class AuthService {
       ]);
       tokenVersion = vRes.rows[0]?.token_version ?? 0;
     }
+    // Chỉ dọn các dòng hết hạn tự nhiên: giữ refresh token đã thu hồi tới hết TTL để còn phát hiện dùng lại token bị đánh cắp.
     await this.db.query(
       `DELETE FROM refresh_tokens
-       WHERE user_id = $1 AND (expires_at < now() OR revoked_at < now() - interval '1 day')`,
+       WHERE user_id = $1 AND expires_at < now()`,
       [userId],
     );
     const ins = await this.db.query<{ id: number }>(
-      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent, ip, last_used_at)
-       VALUES ($1, $2, now() + make_interval(days => $3), $4, $5, now())
+      `INSERT INTO refresh_tokens (user_id, token_hash, family_started_at, expires_at, user_agent, ip, last_used_at)
+       VALUES (
+         $1,
+         $2,
+         COALESCE($6::timestamptz, now()),
+         LEAST(
+           COALESCE($6::timestamptz, now()) + make_interval(days => $7),
+           now() + make_interval(days => $3)
+         ),
+         $4,
+         $5,
+         now()
+       )
        RETURNING id`,
-      [userId, refresh.hash, this.refreshTtlDays, meta.userAgent?.slice(0, 300) ?? null, meta.ip ?? null],
+      [
+        userId,
+        refresh.hash,
+        this.refreshTtlDays,
+        meta.userAgent?.slice(0, 300) ?? null,
+        meta.ip ?? null,
+        familyStartedAt ?? null,
+        MAX_SESSION_FAMILY_DAYS,
+      ],
     );
     const sessionId = Number(ins.rows[0].id);
 
     // Giới hạn tối đa 10 phiên đang hoạt động trên mỗi tài khoản; thu hồi các phiên cũ nhất vượt ngưỡng.
     await this.db.query(
       `UPDATE refresh_tokens
-       SET revoked_at = now()
+       SET revoked_at = now(), revoked_reason = 'logout'
        WHERE user_id = $1
          AND revoked_at IS NULL
          AND expires_at > now()

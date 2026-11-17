@@ -4,11 +4,13 @@ import {
   Controller,
   ExecutionContext,
   Get,
+  Headers,
   Injectable,
   NestInterceptor,
   Param,
   ParseFilePipeBuilder,
   Post,
+  Query,
   Req,
   Res,
   StreamableFile,
@@ -22,35 +24,50 @@ import { memoryStorage } from "multer";
 import { finalize, type Observable } from "rxjs";
 import type { AuthUser } from "../auth/auth-user";
 import { CurrentUser, Public } from "../auth/auth.decorators";
-import { AppException, notFound } from "../common/errors/app.exception";
+import { AppException, badRequest, notFound } from "../common/errors/app.exception";
 import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
 import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import { UploadDto } from "./upload.dto";
-import { type AttachmentRow, UploadsService } from "./uploads.service";
+import { type AttachmentRow, type UploadPurpose, UploadsService } from "./uploads.service";
 
 /** Giới hạn cứng của multer (lớn hơn UPLOAD_MAX_MB / giới hạn video một chút; kiểm tra chính xác trong service). */
 const MULTER_LIMIT_BYTES = 25 * 1024 * 1024;
-const MAX_CONCURRENT_UPLOADS = 6;
+const MAX_CONCURRENT_UPLOADS = 8;
+const MAX_CONCURRENT_UPLOADS_PER_ACTOR = 2;
 let activeUploadCount = 0;
+const activeUploadsByActor = new Map<string, number>();
 
 /**
- * Chặn số luồng tải tệp đồng thời TRƯỚC khi `FileInterceptor` nạp bộ đệm 25 MB vào RAM (`memoryStorage()`),
- * chống cạn kiệt bộ nhớ máy chủ (OOM).
+ * Chặn số luồng tải tệp đồng thời (toàn cục và theo từng người dùng/IP) TRƯỚC khi `FileInterceptor`
+ * nạp bộ đệm 25 MB vào RAM (`memoryStorage()`), chống cạn kiệt bộ nhớ máy chủ (OOM).
  */
 @Injectable()
 class UploadConcurrencyInterceptor implements NestInterceptor {
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    if (activeUploadCount >= MAX_CONCURRENT_UPLOADS) {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const req = context.switchToHttp().getRequest<Request>();
+    const actorKey = req.user?.id
+      ? `user:${req.user.id}`
+      : `ip:${(req.ip || req.socket?.remoteAddress || "unknown").trim()}`;
+    const actorCount = activeUploadsByActor.get(actorKey) ?? 0;
+    if (actorCount >= MAX_CONCURRENT_UPLOADS_PER_ACTOR || activeUploadCount >= MAX_CONCURRENT_UPLOADS) {
       throw new AppException(
         429,
         "Máy chủ đang xử lý nhiều tệp tải lên cùng lúc. Vui lòng thử lại sau giây lát.",
         "TOO_MANY_UPLOADS",
       );
     }
+    req.setTimeout?.(45_000);
     activeUploadCount += 1;
+    activeUploadsByActor.set(actorKey, actorCount + 1);
     return next.handle().pipe(
       finalize(() => {
         activeUploadCount = Math.max(0, activeUploadCount - 1);
+        const remaining = (activeUploadsByActor.get(actorKey) ?? 1) - 1;
+        if (remaining <= 0) {
+          activeUploadsByActor.delete(actorKey);
+        } else {
+          activeUploadsByActor.set(actorKey, remaining);
+        }
       }),
     );
   }
@@ -121,33 +138,46 @@ async function streamAttachment(
   }
 
   const opened = await uploads.openFile(attachment);
-  const total = opened.totalBytes;
-  applySafeFileHeaders(res, attachment, total);
+  try {
+    const total = opened.totalBytes;
+    applySafeFileHeaders(res, attachment, total);
 
-  const etag = `"att-${attachment.public_token}-${total}"`;
-  if (req.headers["if-none-match"] === etag) {
+    const etag = `"att-${attachment.public_token}-${total}"`;
+    if (req.headers["if-none-match"] === etag) {
+      await opened.close();
+      res.status(304);
+      return new StreamableFile(Buffer.alloc(0));
+    }
+
+    const range = parseByteRange(req.headers.range, total);
+    if (range === "invalid") {
+      await opened.close();
+      res.status(416).setHeader("Content-Range", `bytes */${total}`);
+      return new StreamableFile(Buffer.alloc(0));
+    }
+
+    if (range) {
+      const chunkLen = range.end - range.start + 1;
+      res.status(206);
+      res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${total}`);
+      res.setHeader("Content-Length", String(chunkLen));
+      if (req.method === "HEAD") {
+        await opened.close();
+        return new StreamableFile(Buffer.alloc(0));
+      }
+      return new StreamableFile(opened.createStream(range));
+    }
+
+    res.setHeader("Content-Length", String(total));
+    if (req.method === "HEAD") {
+      await opened.close();
+      return new StreamableFile(Buffer.alloc(0));
+    }
+    return new StreamableFile(opened.createStream());
+  } catch (err) {
     await opened.close();
-    res.status(304);
-    return new StreamableFile(Buffer.alloc(0));
+    throw err;
   }
-
-  const range = parseByteRange(req.headers.range, total);
-  if (range === "invalid") {
-    await opened.close();
-    res.status(416).setHeader("Content-Range", `bytes */${total}`);
-    return new StreamableFile(Buffer.alloc(0));
-  }
-
-  if (range) {
-    const chunkLen = range.end - range.start + 1;
-    res.status(206);
-    res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${total}`);
-    res.setHeader("Content-Length", String(chunkLen));
-    return new StreamableFile(opened.createStream(range));
-  }
-
-  res.setHeader("Content-Length", String(total));
-  return new StreamableFile(opened.createStream());
 }
 
 @Controller()
@@ -165,8 +195,34 @@ export class UploadsController {
     @UploadedFile(new ParseFilePipeBuilder().build({ fileIsRequired: false })) file: Express.Multer.File | undefined,
     @Body() dto: UploadDto,
     @CurrentUser() user: AuthUser,
+    @Headers("x-upload-sha256") expectedSha256?: string | string[],
   ) {
-    return this.uploads.save(file, dto.purpose, user);
+    return this.uploads.save(file, dto.purpose, user, expectedSha256);
+  }
+
+  /**
+   * Kiểm tra nhanh theo mã băm SHA-256 xem tệp của chính tài khoản này đã được lưu trên máy chủ chưa
+   * (tiết kiệm 99% băng thông khi thử lại từ vùng rẫy sóng 2G/3G chập chờn).
+   */
+  @Get("uploads/by-hash")
+  @Throttle(RateLimitTier.UPLOAD_WRITE)
+  async checkByHash(
+    @Query("purpose") purpose: string | undefined,
+    @Query("sha256") sha256: string | undefined,
+    @Query("size") rawSize: string | undefined,
+    @CurrentUser() user: AuthUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.setHeader("Cache-Control", "private, no-store");
+    let sizeBytes: number | undefined;
+    if (rawSize !== undefined && rawSize !== "") {
+      const parsedSize = Number(rawSize);
+      if (!Number.isInteger(parsedSize) || parsedSize <= 0 || parsedSize > MULTER_LIMIT_BYTES) {
+        throw badRequest("Kích thước tệp kiểm tra không hợp lệ.");
+      }
+      sizeBytes = parsedSize;
+    }
+    return this.uploads.findOwnedByHash(user, (purpose ?? "") as UploadPurpose, sha256, sizeBytes);
   }
 
   /**

@@ -113,10 +113,9 @@ export class BoundedThrottlerStorage implements ThrottlerStorage, OnApplicationS
 
     if (state.blockedUntil > 0 && state.blockedUntil <= now) {
       state.blockedUntil = 0;
-      state.hits = [];
     }
 
-    // Lọc các lượt truy cập còn nằm trong cửa sổ trượt `ttlMs`.
+    // Lọc các lượt truy cập còn nằm trong cửa sổ trượt `ttlMs` (chỉ loại bỏ mốc đã thật sự hết hạn).
     state.hits = state.hits.filter((exp) => exp > now);
     if (state.expiresAt <= now) {
       state.expiresAt = now + ttlMs;

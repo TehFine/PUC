@@ -5,6 +5,8 @@ import { NotificationsService } from "../../notifications/notifications.service"
 import { RateLimitException } from "../throttler/rate-limit.policy";
 import { AppException, ValidationException } from "./app.exception";
 
+const INTERNAL_ERROR_MESSAGE = "Không xử lý được yêu cầu. Vui lòng thử lại.";
+
 const PG_MESSAGES: Record<string, { status: number; message: string }> = {
   "23505": { status: 409, message: "Dữ liệu đã tồn tại (trùng giá trị duy nhất)." },
   "23503": { status: 409, message: "Bản ghi liên quan không tồn tại hoặc đang được sử dụng." },
@@ -47,6 +49,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
+    if (response.headersSent) {
+      if (!response.writableEnded) response.end();
+      return;
+    }
     const { status, body } = this.toResponse(exception);
     if (status >= 500) {
       this.recordInternalError();
@@ -81,6 +87,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
         body: { error: exception.message, code: exception.code, details: exception.details },
       };
     }
+    // Lỗi máy chủ (>= 500) dù được ném dưới dạng HttpException cũng không trả nguyên văn thông điệp gốc
+    // (có thể chứa chi tiết nội bộ như tên bảng, đường dẫn, cấu hình); chỉ ghi log phía máy chủ.
+    if (exception instanceof HttpException && exception.getStatus() >= 500) {
+      this.logger.error(exception.stack ?? exception.message);
+      return { status: exception.getStatus(), body: { error: INTERNAL_ERROR_MESSAGE, code: "INTERNAL" } };
+    }
     if (exception instanceof AppException) {
       return { status: exception.getStatus(), body: { error: exception.message, code: exception.code } };
     }
@@ -106,7 +118,38 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       if (status === 404) return { status, body: { error: "Không tìm thấy đường dẫn.", code: "NOT_FOUND" } };
-      return { status, body: { error: exception.message, code: STATUS_CODES[status] ?? "ERROR" } };
+      if (status === 413) {
+        return {
+          status: 413,
+          body: { error: "Dữ liệu hoặc tệp tải lên vượt quá dung lượng cho phép.", code: "PAYLOAD_TOO_LARGE" },
+        };
+      }
+      const rawMsg = exception.message || "";
+      let localizedMsg = rawMsg;
+      if (/file too large/i.test(rawMsg)) {
+        localizedMsg = "Dữ liệu hoặc tệp tải lên vượt quá dung lượng cho phép.";
+      } else if (/unexpected field/i.test(rawMsg)) {
+        localizedMsg = "Trường tệp tải lên không hợp lệ.";
+      } else if (/too many files/i.test(rawMsg)) {
+        localizedMsg = "Số lượng tệp tải lên vượt quá giới hạn cho phép.";
+      } else if (/multipart:\s*boundary not found/i.test(rawMsg)) {
+        localizedMsg = "Định dạng dữ liệu biểu mẫu tải lên không hợp lệ.";
+      }
+      return { status, body: { error: localizedMsg, code: STATUS_CODES[status] ?? "ERROR" } };
+    }
+
+    if ((exception as { name?: string })?.name === "MulterError") {
+      const multerCode = (exception as { code?: string }).code;
+      if (multerCode === "LIMIT_FILE_SIZE") {
+        return {
+          status: 413,
+          body: { error: "Dữ liệu hoặc tệp tải lên vượt quá dung lượng cho phép.", code: "PAYLOAD_TOO_LARGE" },
+        };
+      }
+      return {
+        status: 400,
+        body: { error: "Trường hoặc số lượng tệp tải lên không hợp lệ.", code: "BAD_REQUEST" },
+      };
     }
 
     // Lỗi từ body-parser của Express.
@@ -125,6 +168,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     this.logger.error(exception instanceof Error ? (exception.stack ?? exception.message) : String(exception));
-    return { status: 500, body: { error: "Không xử lý được yêu cầu. Vui lòng thử lại.", code: "INTERNAL" } };
+    return { status: 500, body: { error: INTERNAL_ERROR_MESSAGE, code: "INTERNAL" } };
   }
 }

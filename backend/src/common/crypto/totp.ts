@@ -106,13 +106,31 @@ export function verifyTotpCode(secretBase32: string, rawCode: string, windowStep
 
 const BACKUP_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-export function hashBackupCode(code: string): string {
-  const normalized = code.replace(/[\s-]/g, "").toUpperCase();
-  return createHash("sha256").update(`puc-2fa-backup-v1:${normalized}`).digest("hex");
+function normalizeBackupCode(code: string): string {
+  return code.replace(/[\s-]/g, "").toUpperCase();
 }
 
-/** Sinh bộ 8 mã khôi phục dự phòng một lần (định dạng XXXX-XXXX) kèm bản băm SHA-256 lưu DB. */
-export function generateBackupCodes(count = 8): { plainCodes: string[]; hashedCodes: string[] } {
+/** Băm SHA-256 kiểu cũ (v1, không khóa bí mật); chỉ giữ để đối chiếu mã dự phòng đã phát hành trước đây. */
+export function hashBackupCode(code: string): string {
+  return createHash("sha256").update(`puc-2fa-backup-v1:${normalizeBackupCode(code)}`).digest("hex");
+}
+
+export const BACKUP_HASH_V2_PREFIX = "h2:";
+
+/**
+ * Băm mã dự phòng v2: HMAC-SHA256 có khóa bí mật phía máy chủ (pepper) và ràng buộc với id người dùng,
+ * nên lộ bảng users cũng không dò ngược được mã (không gian mã nhỏ) hay dùng chéo giữa các tài khoản.
+ */
+export function hashBackupCodeV2(hmacKey: Buffer, userId: number, code: string): string {
+  const digest = createHmac("sha256", hmacKey).update(`puc-2fa-backup-v2:${userId}:${normalizeBackupCode(code)}`).digest("hex");
+  return `${BACKUP_HASH_V2_PREFIX}${digest}`;
+}
+
+/** Sinh bộ 8 mã khôi phục dự phòng một lần (định dạng XXXX-XXXX) kèm bản băm lưu DB (mặc định SHA-256 v1, nên truyền hàm băm v2). */
+export function generateBackupCodes(
+  count = 8,
+  hash: (code: string) => string = hashBackupCode,
+): { plainCodes: string[]; hashedCodes: string[] } {
   const plainCodes: string[] = [];
   const hashedCodes: string[] = [];
   for (let i = 0; i < count; i++) {
@@ -123,7 +141,7 @@ export function generateBackupCodes(count = 8): { plainCodes: string[]; hashedCo
     }
     const formatted = `${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
     plainCodes.push(formatted);
-    hashedCodes.push(hashBackupCode(formatted));
+    hashedCodes.push(hash(formatted));
   }
   return { plainCodes, hashedCodes };
 }

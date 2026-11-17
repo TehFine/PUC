@@ -39,6 +39,12 @@ class EnvironmentVariables {
   @MinLength(32, { message: "JWT_ACCESS_SECRET cần tối thiểu 32 ký tự" })
   JWT_ACCESS_SECRET!: string;
 
+  /** Khóa gốc riêng để mã hóa khóa TOTP 2 lớp (AES-256-GCM) và làm pepper HMAC cho mã dự phòng. */
+  @IsOptional()
+  @IsString()
+  @MinLength(32, { message: "TOTP_ENCRYPTION_KEY cần tối thiểu 32 ký tự" })
+  TOTP_ENCRYPTION_KEY?: string;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -117,6 +123,8 @@ export interface AppConfig {
   trustProxy: string[] | boolean | number;
   database: { url: string; ssl: boolean; sslRejectUnauthorized: boolean; sslCa?: string };
   jwt: { accessSecret: string; accessTtlMin: number; refreshTtlDays: number };
+  /** Khóa gốc mã hóa bí mật 2 lớp; để trống thì dẫn xuất HKDF từ JWT_ACCESS_SECRET với nhãn riêng. */
+  totpEncryptionKey?: string;
   cookieSecure: boolean;
   seedPassword?: string;
   googleClientId?: string;
@@ -133,6 +141,15 @@ export interface AppConfig {
   };
 }
 
+/** Chuỗi mẫu của môi trường dev/test tuyệt đối không được xuất hiện trong khóa bí mật hay DATABASE_URL trên production. */
+const WEAK_SECRET_DENYLIST = /change-?me|example|htx_dev_password|dev-local-secret|test-access-secret/i;
+/** Mật khẩu CSDL mẫu trong docker-compose và .env.example. */
+const DEV_DATABASE_PASSWORD_RE = /htx_dev_password|change-?me/i;
+
+function isWeakSecret(secret: string): boolean {
+  return WEAK_SECRET_DENYLIST.test(secret) || new Set(secret).size < 10;
+}
+
 /** Đọc và kiểm tra biến môi trường; ném lỗi liệt kê mọi biến sai để dừng khởi động sớm. */
 export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
   const env = plainToInstance(EnvironmentVariables, raw);
@@ -144,35 +161,87 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error(`Cấu hình môi trường không hợp lệ:\n${details}`);
   }
 
-  const corsOrigins = env.CORS_ORIGIN.split(",")
+  const invalid = (detail: string) => new Error(`Cấu hình môi trường không hợp lệ:\n  - ${detail}`);
+
+  const rawOrigins = env.CORS_ORIGIN.split(",")
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
-  if (corsOrigins.length === 0 || corsOrigins.some((origin) => origin === "*" || origin === "null" || !/^https?:\/\/[^/\s]+$/i.test(origin))) {
-    throw new Error("Cấu hình môi trường không hợp lệ:\n  - CORS_ORIGIN: Phải là danh sách origin http(s) cụ thể, không dùng '*' hoặc 'null'");
+  if (rawOrigins.length === 0) {
+    throw invalid("CORS_ORIGIN: Phải là danh sách origin http(s) cụ thể, không dùng '*' hoặc 'null'");
   }
+  const corsOrigins: string[] = [];
+  for (const item of rawOrigins) {
+    if (item === "*" || item.toLowerCase() === "null") {
+      throw invalid("CORS_ORIGIN: Phải là danh sách origin http(s) cụ thể, không dùng '*' hoặc 'null'");
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(item);
+    } catch {
+      throw invalid(`CORS_ORIGIN: Origin không hợp lệ (${item})`);
+    }
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      (parsed.pathname !== "/" && parsed.pathname !== "") ||
+      parsed.search !== "" ||
+      parsed.hash !== "" ||
+      parsed.origin === "null"
+    ) {
+      throw invalid(
+        "CORS_ORIGIN: Phải là danh sách origin http(s) cụ thể, không chứa đường dẫn, tham số hoặc thông tin xác thực",
+      );
+    }
+    if (!corsOrigins.includes(parsed.origin)) {
+      corsOrigins.push(parsed.origin);
+    }
+  }
+
+  const isLocalDb = (() => {
+    try {
+      const host = new URL(env.DATABASE_URL).hostname.toLowerCase();
+      return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]" || host === "db";
+    } catch {
+      return false;
+    }
+  })();
 
   const isProduction = env.NODE_ENV === NodeEnv.Production;
   const rawTrustProxy = env.TRUST_PROXY?.trim();
 
   if (isProduction) {
-    if (/change-me|example|htx_dev_password/i.test(env.JWT_ACCESS_SECRET) || new Set(env.JWT_ACCESS_SECRET).size < 10) {
-      throw new Error(
-        "Cấu hình môi trường không hợp lệ:\n  - JWT_ACCESS_SECRET: Không được dùng khóa mẫu hoặc khóa có độ ngẫu nhiên thấp khi NODE_ENV=production",
-      );
+    if (isWeakSecret(env.JWT_ACCESS_SECRET)) {
+      throw invalid("JWT_ACCESS_SECRET: Không được dùng khóa mẫu hoặc khóa có độ ngẫu nhiên thấp khi NODE_ENV=production");
+    }
+    if (env.TOTP_ENCRYPTION_KEY !== undefined && isWeakSecret(env.TOTP_ENCRYPTION_KEY)) {
+      throw invalid("TOTP_ENCRYPTION_KEY: Không được dùng khóa mẫu hoặc khóa có độ ngẫu nhiên thấp khi NODE_ENV=production");
+    }
+    if (DEV_DATABASE_PASSWORD_RE.test(env.DATABASE_URL)) {
+      throw invalid("DATABASE_URL: Không được dùng mật khẩu CSDL mẫu của môi trường dev khi NODE_ENV=production");
+    }
+    if (!isLocalDb && env.DATABASE_SSL === "false") {
+      throw invalid("DATABASE_SSL: Không được tắt kết nối TLS tới CSDL từ xa khi NODE_ENV=production");
     }
     if (env.ALLOW_DEV_DEMO_LOGIN === "true") {
-      throw new Error(
-        "Cấu hình môi trường không hợp lệ:\n  - ALLOW_DEV_DEMO_LOGIN: Không được bật chế độ đăng nhập thử nghiệm khi NODE_ENV=production",
-      );
+      throw invalid("ALLOW_DEV_DEMO_LOGIN: Không được bật chế độ đăng nhập thử nghiệm khi NODE_ENV=production");
     }
     if (env.COOKIE_SECURE === "false") {
-      throw new Error(
-        "Cấu hình môi trường không hợp lệ:\n  - COOKIE_SECURE: Không được tắt cờ Secure của cookie phiên khi NODE_ENV=production",
+      throw invalid("COOKIE_SECURE: Không được tắt cờ Secure của cookie phiên khi NODE_ENV=production");
+    }
+    if (!rawTrustProxy) {
+      throw invalid(
+        "TRUST_PROXY: Bắt buộc khai báo tường minh khi NODE_ENV=production (ví dụ '1' sau một reverse proxy, 'loopback' nếu không có proxy, hoặc dải IP proxy tin cậy)",
       );
     }
     if (rawTrustProxy === "true") {
-      throw new Error(
-        "Cấu hình môi trường không hợp lệ:\n  - TRUST_PROXY: Không được đặt 'true' mở toàn bộ trên production; hãy chỉ định số bước nhảy (ví dụ '1') hoặc dải IP proxy tin cậy",
+      throw invalid(
+        "TRUST_PROXY: Không được đặt 'true' mở toàn bộ trên production; hãy chỉ định số bước nhảy (ví dụ '1') hoặc dải IP proxy tin cậy",
+      );
+    }
+    if (env.DATABASE_SSL_REJECT_UNAUTHORIZED === "false") {
+      throw invalid(
+        "DATABASE_SSL_REJECT_UNAUTHORIZED: Không được tắt xác minh chứng chỉ TLS của CSDL khi NODE_ENV=production; hãy cung cấp DATABASE_CA_CERT nếu dùng CA riêng",
       );
     }
   }
@@ -196,19 +265,11 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
       ? rawCa.replace(/\\n/g, "\n")
       : Buffer.from(rawCa, "base64").toString("utf8")
     : undefined;
+  const sslEnabled = env.DATABASE_SSL !== undefined ? env.DATABASE_SSL === "true" : !isLocalDb;
+  // Production bật SSL thì mặc định bắt buộc xác minh chứng chỉ (chống tấn công xen giữa); dev giữ hành vi cũ.
   const sslRejectUnauthorized = env.DATABASE_SSL_REJECT_UNAUTHORIZED
     ? env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
-    : Boolean(sslCa);
-
-  const isLocalDb = (() => {
-    try {
-      const host = new URL(env.DATABASE_URL).hostname.toLowerCase();
-      return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]" || host === "db";
-    } catch {
-      return false;
-    }
-  })();
-  const sslEnabled = env.DATABASE_SSL !== undefined ? env.DATABASE_SSL === "true" : !isLocalDb;
+    : (isProduction && sslEnabled) || Boolean(sslCa);
 
   return {
     nodeEnv: env.NODE_ENV,
@@ -227,6 +288,7 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
       accessTtlMin: env.ACCESS_TOKEN_TTL_MIN,
       refreshTtlDays: env.REFRESH_TOKEN_TTL_DAYS,
     },
+    totpEncryptionKey: env.TOTP_ENCRYPTION_KEY?.trim() || undefined,
     cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === "true" : isProduction,
     seedPassword: env.SEED_PASSWORD,
     googleClientId: env.GOOGLE_CLIENT_ID?.trim() || undefined,
