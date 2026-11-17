@@ -4417,7 +4417,7 @@ input[type="date"].filter-select {
   margin-bottom: 0;
 }
 
-.form-group label {
+.form-group > label:not(.btn) {
   display: block;
   font-size: 13.5px;
   font-weight: 600;
@@ -4540,7 +4540,7 @@ select.form-input {
   cursor: pointer;
 }
 
-.modal:not(.modal-confirm-sheet) .form-group label {
+.modal:not(.modal-confirm-sheet) .form-group > label:not(.btn) {
   color: #1c1c1e;
   padding-inline: 2px;
   margin-bottom: 8px;
@@ -6182,17 +6182,21 @@ code {
     flex-wrap: nowrap !important;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
     width: 100%;
     margin-inline: 0;
   }
   .table-wrap .responsive-table tbody td:last-child > .btn,
   .table-wrap .responsive-table tbody td:last-child > .table-actions .btn,
   .table-wrap .responsive-table tbody td:last-child > div:has(.btn) .btn {
-    flex: 1 1 auto;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 36px;
+    min-height: 36px;
     justify-content: center;
-    padding: 6px 8px;
-    font-size: 11.5px;
+    padding: 0 6px;
+    font-size: 12.5px;
+    font-weight: 600;
     white-space: nowrap;
   }
   .table-wrap .responsive-table tbody td:nth-last-child(2):nth-child(odd) {

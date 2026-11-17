@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useState } from "react";
+import { type ChangeEvent, useRef, useState } from "react";
 import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { CheckboxField, FormGrid, NumberField, SelectField, TextField, type Option } from "@/components/ui/form/fields";
@@ -11,12 +11,12 @@ import { dateText, hasErrors, numberText, parseNumber, requireFields, todayIso }
 import { LAB_RESULT, optionsOf } from "@/components/admin/shared/labels";
 import { ALLOWED_IMAGE_MIMES, uploadOptimizedFile } from "@/components/portal/shared/media";
 import type { LabRecordStatus, LabResult, LabTestRecord } from "@/types/testing";
-import { isSafeExternalHttpsUrl, isSafeMediaUrl } from "@/utils/url-safety";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 
 const RESULT_OPTIONS = optionsOf(LAB_RESULT);
 const RECORD_STATUS_OPTIONS: Option[] = [
-  { value: "verified", label: "Đã kiểm chứng (hiển thị trên QR công khai)" },
-  { value: "draft", label: "Bản nháp nội bộ (ẩn trên QR công khai)" },
+  { value: "verified", label: "Đã kiểm chứng (hiển thị QR)" },
+  { value: "draft", label: "Bản nháp nội bộ" },
 ];
 
 export default function LabTestFormModal({
@@ -31,6 +31,7 @@ export default function LabTestFormModal({
   onSaved: () => void;
 }) {
   const isEdit = Boolean(initial);
+  const scanInputRef = useRef<HTMLInputElement | null>(null);
   const [code, setCode] = useState(initial?.code ?? "");
   const [householdId, setHouseholdId] = useState(
     initial?.householdId ? String(initial.householdId) : (householdOptions[0]?.value ?? ""),
@@ -47,8 +48,6 @@ export default function LabTestFormModal({
   const [labAccreditationCode, setLabAccreditationCode] = useState(
     initial?.labAccreditationCode ?? "ISO/IEC 17025:2017 - VILAS 238",
   );
-  const [externalVerifyCode, setExternalVerifyCode] = useState(initial?.externalVerifyCode ?? "");
-  const [externalVerifyUrl, setExternalVerifyUrl] = useState(initial?.externalVerifyUrl ?? "");
   const [scanAttachmentId, setScanAttachmentId] = useState<number | null>(initial?.scanAttachmentId ?? null);
   const [scanUrl, setScanUrl] = useState<string | null>(initial?.scanUrl ?? null);
   const [uploadingScan, setUploadingScan] = useState(false);
@@ -112,11 +111,7 @@ export default function LabTestFormModal({
     }
     const parsedChlor = parseNumber(chlorpyrifosMgKg);
     if (chlorpyrifosMgKg.trim() && (parsedChlor === undefined || parsedChlor < 0)) {
-      errs.chlorpyrifosMgKg = "Giá trị Chlorpyrifos phải là số không âm (hoặc để trống = KPH).";
-    }
-    const cleanVerifyUrl = externalVerifyUrl.trim();
-    if (cleanVerifyUrl && !isSafeExternalHttpsUrl(cleanVerifyUrl)) {
-      errs.externalVerifyUrl = "Đường dẫn tra cứu chéo độc lập phải là URL https:// hợp lệ.";
+      errs.chlorpyrifosMgKg = "Giá trị Chlorpyrifos phải là số không âm.";
     }
 
     setFieldErrors(errs);
@@ -135,8 +130,6 @@ export default function LabTestFormModal({
       recordStatus,
       lab: lab.trim(),
       labAccreditationCode: labAccreditationCode.trim() || null,
-      externalVerifyCode: externalVerifyCode.trim() || null,
-      externalVerifyUrl: cleanVerifyUrl || null,
       scanAttachmentId,
     };
 
@@ -167,7 +160,7 @@ export default function LabTestFormModal({
       <form id="testing-form" onSubmit={(e) => void submit(e)} noValidate>
         <FormGrid>
           <TextField
-            label="Mã mẫu kiểm nghiệm"
+            label="Mã mẫu"
             required
             value={code}
             onChange={setCode}
@@ -195,11 +188,11 @@ export default function LabTestFormModal({
             error={fieldErrors.householdId}
           />
           <TextField
-            label="Mã thửa (plotCode)"
+            label="Mã thửa"
             required
             value={plotCode}
             onChange={setPlotCode}
-            placeholder="VD: TH-01"
+            placeholder="VD: EK10-01"
             maxLength={40}
             error={fieldErrors.plotCode}
           />
@@ -207,23 +200,23 @@ export default function LabTestFormModal({
 
         <FormGrid>
           <NumberField
-            label="Cadmium - Cd (mg/kg)"
+            label="Cadimi (mg/kg)"
             required
             value={cdMgKg}
             onChange={setCdMgKg}
             min={0}
             step={0.001}
-            hint="Ngưỡng GACC ≤ 0.05 mg/kg"
+            hint="Ngưỡng chuẩn ≤ 0.05"
             error={fieldErrors.cdMgKg}
           />
           <NumberField
-            label="Tổng dư lượng BVTV (mg/kg)"
+            label="Dư lượng BVTV (mg/kg)"
             required
             value={residueMgKg}
             onChange={setResidueMgKg}
             min={0}
             step={0.001}
-            hint="Ngưỡng VietGAP ≤ 0.10 mg/kg"
+            hint="Ngưỡng chuẩn ≤ 0.10"
             error={fieldErrors.residueMgKg}
           />
         </FormGrid>
@@ -235,11 +228,11 @@ export default function LabTestFormModal({
             onChange={setChlorpyrifosMgKg}
             min={0}
             step={0.001}
-            placeholder="Để trống = KPH"
+            placeholder="Trống nếu không phát hiện"
             error={fieldErrors.chlorpyrifosMgKg}
           />
           <SelectField
-            label="Kết luận chung"
+            label="Kết luận"
             value={result}
             onChange={(val) => setResult(val as LabResult)}
             options={RESULT_OPTIONS}
@@ -248,96 +241,115 @@ export default function LabTestFormModal({
 
         <FormGrid>
           <TextField
-            label="Đơn vị kiểm nghiệm (Lab)"
+            label="Đơn vị kiểm nghiệm"
             required
             value={lab}
             onChange={setLab}
             maxLength={100}
             error={fieldErrors.lab}
           />
-          <SelectField
-            label="Trạng thái kiểm chứng dữ liệu"
-            value={recordStatus}
-            onChange={(val) => setRecordStatus(val as LabRecordStatus)}
-            options={RECORD_STATUS_OPTIONS}
+          <TextField
+            label="Mã công nhận Lab"
+            value={labAccreditationCode}
+            onChange={setLabAccreditationCode}
+            placeholder="VD: ISO/IEC 17025 - VILAS 238"
+            maxLength={140}
           />
         </FormGrid>
 
-        <div
-          style={{
-            border: "1px solid #d4d4d2",
-            borderRadius: 6,
-            background: "#f0fdf4",
-            padding: "12px 14px",
-            marginBottom: 14,
-          }}
-        >
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#14532d", marginBottom: 8 }}>
-            Xác thực chéo độc lập ISO/IEC 17025 (Dành cho đối tác thu mua &amp; hải quan)
-          </div>
-          <FormGrid>
-            <TextField
-              label="Mã công nhận năng lực Lab (VILAS / CNAS)"
-              value={labAccreditationCode}
-              onChange={setLabAccreditationCode}
-              placeholder="VD: ISO/IEC 17025:2017 - VILAS 238"
-              maxLength={140}
-            />
-            <TextField
-              label="Mã tra cứu phiếu gốc trên cổng Lab"
-              value={externalVerifyCode}
-              onChange={setExternalVerifyCode}
-              placeholder="VD: VILAS238-2026-00891"
-              maxLength={80}
-            />
-          </FormGrid>
-          <TextField
-            label="Đường dẫn cổng tra cứu độc lập của phòng Lab (https://)"
-            value={externalVerifyUrl}
-            onChange={setExternalVerifyUrl}
-            placeholder="https://quatest3.com.vn/tra-cuu-ket-qua"
-            maxLength={300}
-            hint="Đối tác quét QR có thể bấm sang thẳng cổng phòng kiểm nghiệm độc lập để đối chiếu số phiếu."
-            error={fieldErrors.externalVerifyUrl}
-          />
-        </div>
+        <SelectField
+          label="Trạng thái công bố"
+          value={recordStatus}
+          onChange={(val) => setRecordStatus(val as LabRecordStatus)}
+          options={RECORD_STATUS_OPTIONS}
+        />
 
         <div className="form-group">
-          <label>Bản scan giấy kiểm nghiệm gốc (PDF, JPG, PNG - hiển thị trên QR công khai)</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
-            <label className="btn btn-outline btn-sm" style={{ cursor: uploadingScan ? "wait" : "pointer", margin: 0 }}>
-              <input
-                type="file"
-                accept="application/pdf,image/jpeg,image/png,image/webp"
-                onChange={(e) => void handleScanPick(e)}
-                disabled={uploadingScan}
-                style={{ display: "none" }}
-              />
-              {uploadingScan ? "Đang tải lên…" : scanUrl ? "Đổi tệp scan" : "Tải tệp scan lên"}
-            </label>
-            {scanUrl && (
-              <>
-                {isSafeMediaUrl(scanUrl) && (
-                  <a
-                    href={scanUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-outline btn-sm"
-                    style={{ textDecoration: "none" }}
-                  >
-                    Xem bản scan đã gắn
-                  </a>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-danger btn-sm"
-                  onClick={() => setConfirmRemoveScan(true)}
+          <label>Bản scan phiếu gốc (PDF, JPG, PNG)</label>
+          <input
+            ref={scanInputRef}
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,image/webp"
+            onChange={(e) => void handleScanPick(e)}
+            disabled={uploadingScan}
+            style={{ display: "none" }}
+          />
+          {!scanUrl ? (
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={uploadingScan}
+              onClick={() => scanInputRef.current?.click()}
+              style={{
+                width: "100%",
+                height: 46,
+                minHeight: 46,
+                justifyContent: "center",
+                borderRadius: 6,
+                fontWeight: 600,
+                fontSize: 14,
+              }}
+            >
+              {uploadingScan ? "Đang tải tệp lên…" : "Tải tệp lên"}
+            </button>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isSafeMediaUrl(scanUrl) ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
+              {isSafeMediaUrl(scanUrl) && (
+                <a
+                  href={scanUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-outline"
+                  style={{
+                    height: 42,
+                    minHeight: 42,
+                    justifyContent: "center",
+                    borderRadius: 6,
+                    fontWeight: 600,
+                    textDecoration: "none",
+                  }}
                 >
-                  Xóa tệp
-                </button>
-              </>
-            )}
-          </div>
+                  Xem tệp
+                </a>
+              )}
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={uploadingScan}
+                onClick={() => scanInputRef.current?.click()}
+                style={{
+                  height: 42,
+                  minHeight: 42,
+                  justifyContent: "center",
+                  borderRadius: 6,
+                  fontWeight: 600,
+                }}
+              >
+                {uploadingScan ? "Đang tải…" : "Đổi tệp"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={uploadingScan}
+                onClick={() => setConfirmRemoveScan(true)}
+                style={{
+                  height: 42,
+                  minHeight: 42,
+                  justifyContent: "center",
+                  borderRadius: 6,
+                  fontWeight: 600,
+                }}
+              >
+                Xóa tệp
+              </button>
+            </div>
+          )}
           {confirmRemoveScan && (
             <ConfirmDialog
               title="Xóa tệp scan phiếu kiểm nghiệm"
@@ -353,13 +365,13 @@ export default function LabTestFormModal({
             />
           )}
           {uploadError && (
-            <small role="alert" style={{ display: "block", marginTop: 5, color: "#b73c20", fontSize: 12 }}>
+            <small role="alert" style={{ display: "block", marginTop: 6, color: "#b73c20", fontSize: 12 }}>
               {uploadError}
             </small>
           )}
         </div>
 
-        <CheckboxField label="Phát hiện dương tính chất cấm Vàng O (Auramine O)" checked={yellowOPositive} onChange={setYellowOPositive} />
+        <CheckboxField label="Phát hiện dương tính chất cấm Vàng O" checked={yellowOPositive} onChange={setYellowOPositive} />
 
         <FormError message={save.error} />
       </form>

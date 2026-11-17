@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
-import { FileText } from "@/components/ui/PublicIcon";
 import {
   BarChart,
   Bar,
@@ -37,7 +36,7 @@ import { useHouseholdOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
 import { usePerformanceTier } from "@/lib/network";
 import { formatDate } from "@/utils/format";
-import { isSafeExternalHttpsUrl, isSafeMediaUrl } from "@/utils/url-safety";
+import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { LabTestRecord } from "@/types/testing";
 
 const PAGE_SIZE = 25;
@@ -370,48 +369,23 @@ export default function Testing() {
                       )}
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                      <div className="table-actions">
                         <button
                           type="button"
                           className="btn btn-outline btn-sm"
-                          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                           onClick={() => setSelectedTest(t)}
                         >
-                          <FileText size={13} />
-                          Xem phiếu A4
+                          Xem phiếu
                         </button>
-                        {isSafeExternalHttpsUrl(t.externalVerifyUrl) && (
-                          <a
-                            href={t.externalVerifyUrl.trim()}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            referrerPolicy="no-referrer"
-                            className="btn btn-outline btn-sm"
-                            title={
-                              t.externalVerifyCode
-                                ? `Mã tra cứu cổng Lab độc lập: ${t.externalVerifyCode}`
-                                : "Đối chiếu trực tiếp trên cổng tra cứu của phòng kiểm nghiệm"
-                            }
-                            style={{
-                              textDecoration: "none",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 4,
-                              color: "#166534",
-                            }}
-                          >
-                            Tra cứu chéo Lab
-                          </a>
-                        )}
                         {isSafeMediaUrl(t.scanUrl) && (
                           <a
                             href={t.scanUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="btn btn-outline btn-sm"
-                            style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                            style={{ textDecoration: "none" }}
                           >
-                            Bản scan gốc
+                            Bản scan
                           </a>
                         )}
                         {canUpdate && (
