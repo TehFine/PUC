@@ -279,7 +279,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
       .catch(() => {
         if (!cancelled) {
           setCameraError(
-            "Không cấp được quyền truy cập camera. Vui lòng cho phép quyền máy ảnh trên trình duyệt, hoặc bấm chọn ảnh chụp mã QR bên dưới.",
+            "Chưa có quyền truy cập máy ảnh. Hãy cấp quyền trên trình duyệt hoặc chọn ảnh chụp mã QR.",
           );
         }
       });
@@ -373,7 +373,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal
-      title="Quét QR truy xuất trong hệ thống"
+      title="Quét mã QR"
       onClose={() => {
         stopCamera();
         onClose();
@@ -383,7 +383,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
         <>
           {result && (
             <button type="button" className="btn btn-outline" onClick={handleResetScan}>
-              <span>Quét mã tiếp theo</span>
+              <span>Quét tiếp</span>
             </button>
           )}
           {fullDossierHref && (
@@ -395,7 +395,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 onClose();
               }}
             >
-              <span>Mở hồ sơ đầy đủ</span>
+              <span>Xem hồ sơ</span>
             </Link>
           )}
           <button
@@ -411,21 +411,6 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
         </>
       }
     >
-      <div
-        style={{
-          padding: "10px 13px",
-          borderRadius: 8,
-          background: "#f2f8f4",
-          border: "1px solid #d4d4d2",
-          fontSize: 12.5,
-          lineHeight: 1.5,
-          color: "#1c4e30",
-          marginBottom: 14,
-        }}
-      >
-        <strong>Quét nhanh bằng phiên đã đăng nhập:</strong> Ứng dụng tự động trích xuất token trong mã QR và gọi trực tiếp API xác thực của máy chủ theo vai trò và phạm vi quản lý hiện tại, không cần đăng nhập lại trên trình duyệt.
-      </div>
-
       <canvas ref={canvasRef} style={{ display: "none" }} />
       <input
         ref={fileInputRef}
@@ -438,10 +423,18 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
 
       {!result && (
         <>
-          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 8,
+              marginBottom: 14,
+            }}
+          >
             <button
               type="button"
               className={`btn btn-sm ${mode === "camera" ? "btn-primary" : "btn-outline"}`}
+              style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 10px" }}
               onClick={() => {
                 setLookupError(null);
                 setCameraError(null);
@@ -449,25 +442,27 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 setMode("camera");
               }}
             >
-              <span>Quét bằng Camera</span>
+              <span>Máy ảnh</span>
             </button>
             <button
               type="button"
               className={`btn btn-sm ${mode === "manual" ? "btn-primary" : "btn-outline"}`}
+              style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 10px" }}
               onClick={() => {
                 stopCamera();
                 setLookupError(null);
                 setMode("manual");
               }}
             >
-              <span>Dán đường dẫn hoặc nhập mã lô</span>
+              <span>Nhập mã</span>
             </button>
             <button
               type="button"
               className="btn btn-sm btn-outline"
+              style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 10px" }}
               onClick={() => fileInputRef.current?.click()}
             >
-              <span>Chọn hoặc chụp ảnh QR</span>
+              <span>Tải ảnh QR</span>
             </button>
           </div>
 
@@ -486,23 +481,46 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
               }}
             >
               {effectiveCameraError ? (
-                <div style={{ padding: 24, textAlign: "center", color: "#e2e8f0", maxWidth: 440 }}>
-                  <div style={{ fontSize: 13.5, lineHeight: 1.55, marginBottom: 14 }}>{effectiveCameraError}</div>
-                  <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    padding: "28px 20px",
+                    textAlign: "center",
+                    color: "#e2e8f0",
+                    width: "100%",
+                    maxWidth: 380,
+                    margin: "0 auto",
+                  }}
+                >
+                  <div style={{ fontSize: 13.5, lineHeight: 1.55, marginBottom: 16 }}>{effectiveCameraError}</div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: 8,
+                      width: "100%",
+                    }}
+                  >
                     <button
                       type="button"
                       className="btn btn-sm btn-primary"
+                      style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 12px" }}
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <span>Chụp hoặc tải ảnh QR</span>
+                      <span>Tải ảnh QR</span>
                     </button>
                     <button
                       type="button"
                       className="btn btn-sm btn-outline"
-                      style={{ background: "#ffffff" }}
+                      style={{
+                        width: "100%",
+                        minHeight: 40,
+                        justifyContent: "center",
+                        padding: "0 12px",
+                        background: "#ffffff",
+                      }}
                       onClick={() => setMode("manual")}
                     >
-                      Nhập mã thủ công
+                      Nhập mã
                     </button>
                   </div>
                 </div>
@@ -542,24 +560,32 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                     }}
                   >
                     {cameraReady
-                      ? "Đưa mã QR trên thùng hoặc tem vào khung xanh để tự động nhận diện…"
-                      : "Đang khởi tạo máy ảnh thiết bị…"}
+                      ? "Đưa mã QR vào khung để tự động nhận diện"
+                      : "Đang khởi tạo máy ảnh..."}
                   </div>
                 </>
               )}
             </div>
           ) : (
-            <form onSubmit={handleManualSubmit} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <form
+              onSubmit={handleManualSubmit}
+              style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8, alignItems: "stretch" }}
+            >
               <input
                 type="text"
                 className="filter-input"
-                style={{ flex: 1, minWidth: 220 }}
-                placeholder="Dán link /t/9fQ2xKp7... hoặc nhập mã lô (VD: LH-2024-038)"
+                style={{ width: "100%", minWidth: 0, minHeight: 42 }}
+                placeholder="Dán đường dẫn QR hoặc nhập mã lô (VD: LH-2024-038)"
                 value={manualInput}
                 onChange={(e) => setManualInput(e.target.value)}
               />
-              <button type="submit" className="btn btn-primary" disabled={loading}>
-                <span>{loading ? "Đang xác thực…" : "Kiểm tra ngay"}</span>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{ minHeight: 42, padding: "0 18px", whiteSpace: "nowrap" }}
+                disabled={loading}
+              >
+                <span>{loading ? "Đang tra…" : "Tra cứu"}</span>
               </button>
             </form>
           )}
