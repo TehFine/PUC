@@ -232,5 +232,12 @@ export function configureApp(app: NestExpressApplication): void {
     next();
   });
 
+  // Đáp ứng kiểm tra sống còn (Health Check) mặc định của Render tại `/` hoặc `/health` ngoài `/api/health`.
+  const httpAdapter = app.getHttpAdapter();
+  const expressApp = httpAdapter.getInstance();
+  expressApp.get(["/", "/health"], (_req: Request, res: Response) => {
+    res.status(200).json({ status: "ok", service: "htx-backend" });
+  });
+
   app.setGlobalPrefix("api");
 }

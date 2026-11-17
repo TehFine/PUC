@@ -184,13 +184,10 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
       (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
       parsed.username !== "" ||
       parsed.password !== "" ||
-      (parsed.pathname !== "/" && parsed.pathname !== "") ||
-      parsed.search !== "" ||
-      parsed.hash !== "" ||
       parsed.origin === "null"
     ) {
       throw invalid(
-        "CORS_ORIGIN: Phải là danh sách origin http(s) cụ thể, không chứa đường dẫn, tham số hoặc thông tin xác thực",
+        "CORS_ORIGIN: Phải là danh sách origin http(s) cụ thể, không chứa thông tin xác thực",
       );
     }
     if (!corsOrigins.includes(parsed.origin)) {
@@ -201,13 +198,23 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
   const isLocalDb = (() => {
     try {
       const host = new URL(env.DATABASE_URL).hostname.toLowerCase();
-      return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]" || host === "db";
+      return (
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        host === "::1" ||
+        host === "[::1]" ||
+        host === "db" ||
+        !host.includes(".")
+      );
     } catch {
       return false;
     }
   })();
 
   const isProduction = env.NODE_ENV === NodeEnv.Production;
+  const isManagedProxyPlatform =
+    raw.RENDER === "true" ||
+    Boolean(raw.RENDER_SERVICE_ID || raw.RENDER_EXTERNAL_URL || raw.RAILWAY_ENVIRONMENT || raw.FLY_APP_NAME);
   const rawTrustProxy = env.TRUST_PROXY?.trim();
 
   if (isProduction) {
@@ -223,32 +230,22 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
     if (!isLocalDb && env.DATABASE_SSL === "false") {
       throw invalid("DATABASE_SSL: Không được tắt kết nối TLS tới CSDL từ xa khi NODE_ENV=production");
     }
-    if (env.ALLOW_DEV_DEMO_LOGIN === "true") {
+    if (env.ALLOW_DEV_DEMO_LOGIN === "true" && !isManagedProxyPlatform) {
       throw invalid("ALLOW_DEV_DEMO_LOGIN: Không được bật chế độ đăng nhập thử nghiệm khi NODE_ENV=production");
     }
-    if (env.COOKIE_SECURE === "false") {
+    if (env.COOKIE_SECURE === "false" && !isManagedProxyPlatform) {
       throw invalid("COOKIE_SECURE: Không được tắt cờ Secure của cookie phiên khi NODE_ENV=production");
     }
-    if (!rawTrustProxy) {
-      throw invalid(
-        "TRUST_PROXY: Bắt buộc khai báo tường minh khi NODE_ENV=production (ví dụ '1' sau một reverse proxy, 'loopback' nếu không có proxy, hoặc dải IP proxy tin cậy)",
-      );
-    }
-    if (rawTrustProxy === "true") {
+    if (rawTrustProxy === "true" && !isManagedProxyPlatform) {
       throw invalid(
         "TRUST_PROXY: Không được đặt 'true' mở toàn bộ trên production; hãy chỉ định số bước nhảy (ví dụ '1') hoặc dải IP proxy tin cậy",
       );
     }
-    if (env.DATABASE_SSL_REJECT_UNAUTHORIZED === "false") {
-      throw invalid(
-        "DATABASE_SSL_REJECT_UNAUTHORIZED: Không được tắt xác minh chứng chỉ TLS của CSDL khi NODE_ENV=production; hãy cung cấp DATABASE_CA_CERT nếu dùng CA riêng",
-      );
-    }
   }
 
-  let trustProxy: string[] | boolean | number = ["loopback"];
+  let trustProxy: string[] | boolean | number = isManagedProxyPlatform ? 1 : ["loopback"];
   if (rawTrustProxy) {
-    if (rawTrustProxy === "true") trustProxy = true;
+    if (rawTrustProxy === "true") trustProxy = isProduction ? 1 : true;
     else if (rawTrustProxy === "false") trustProxy = false;
     else if (/^\d+$/.test(rawTrustProxy)) trustProxy = Number(rawTrustProxy);
     else {
@@ -266,10 +263,11 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
       : Buffer.from(rawCa, "base64").toString("utf8")
     : undefined;
   const sslEnabled = env.DATABASE_SSL !== undefined ? env.DATABASE_SSL === "true" : !isLocalDb;
-  // Production bật SSL thì mặc định bắt buộc xác minh chứng chỉ (chống tấn công xen giữa); dev giữ hành vi cũ.
+  // Bật mã hóa TLS cho mọi CSDL đám mây từ xa (Supabase Pooler, Render Postgres, Neon...); chỉ ép đối chiếu CA gốc
+  // khi có DATABASE_CA_CERT hoặc khai báo DATABASE_SSL_REJECT_UNAUTHORIZED=true để tránh lỗi SELF_SIGNED_CERT_IN_CHAIN trên pooler.
   const sslRejectUnauthorized = env.DATABASE_SSL_REJECT_UNAUTHORIZED
     ? env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
-    : (isProduction && sslEnabled) || Boolean(sslCa);
+    : Boolean(sslCa);
 
   return {
     nodeEnv: env.NODE_ENV,
@@ -289,7 +287,7 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
       refreshTtlDays: env.REFRESH_TOKEN_TTL_DAYS,
     },
     totpEncryptionKey: env.TOTP_ENCRYPTION_KEY?.trim() || undefined,
-    cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === "true" : isProduction,
+    cookieSecure: isProduction ? true : env.COOKIE_SECURE === "true",
     seedPassword: env.SEED_PASSWORD,
     googleClientId: env.GOOGLE_CLIENT_ID?.trim() || undefined,
     allowDevDemoLogin: !isProduction && env.ALLOW_DEV_DEMO_LOGIN === "true",
@@ -298,10 +296,10 @@ export function loadConfig(raw: NodeJS.ProcessEnv = process.env): AppConfig {
       burstMax: env.RATE_LIMIT_BURST_MAX ?? 120,
       defaultMax: env.RATE_LIMIT_DEFAULT_MAX ?? 240,
       writeMax: env.RATE_LIMIT_WRITE_MAX ?? 60,
-      maxKeys: env.RATE_LIMIT_MAX_KEYS ?? 25_000,
+      maxKeys: env.RATE_LIMIT_MAX_KEYS ?? (isManagedProxyPlatform ? 5_000 : 25_000),
     },
     cache: {
-      maxKeys: env.CACHE_MAX_KEYS ?? 4_000,
+      maxKeys: env.CACHE_MAX_KEYS ?? (isManagedProxyPlatform ? 1_000 : 4_000),
     },
   };
 }

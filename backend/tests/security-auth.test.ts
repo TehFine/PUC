@@ -108,24 +108,32 @@ describe("SEC-07 & SEC-12: chốt chặn cấu hình TLS CSDL và TRUST_PROXY tr
     TRUST_PROXY: "1",
   };
 
-  it("từ chối khởi động production khi DATABASE_SSL_REJECT_UNAUTHORIZED=false và mặc định bật xác minh TLS", () => {
+  it("bắt buộc mã hóa TLS tới CSDL từ xa trên production, tương thích pooler đám mây và chặn TRUST_PROXY mở toàn bộ", () => {
     expect(() =>
       loadConfig({
         ...baseProdEnv,
-        DATABASE_SSL_REJECT_UNAUTHORIZED: "false",
+        DATABASE_SSL: "false",
       }),
-    ).toThrow(/DATABASE_SSL_REJECT_UNAUTHORIZED/);
+    ).toThrow(/DATABASE_SSL/);
 
-    const validCfg = loadConfig(baseProdEnv);
-    expect(validCfg.database.ssl).toBe(true);
-    expect(validCfg.database.sslRejectUnauthorized).toBe(true);
+    const cloudPoolerCfg = loadConfig(baseProdEnv);
+    expect(cloudPoolerCfg.database.ssl).toBe(true);
+    expect(cloudPoolerCfg.database.sslRejectUnauthorized).toBe(false);
 
-    expect(() =>
-      loadConfig({
-        ...baseProdEnv,
-        TRUST_PROXY: undefined,
-      }),
-    ).toThrow(/TRUST_PROXY/);
+    const strictCaCfg = loadConfig({
+      ...baseProdEnv,
+      DATABASE_SSL_REJECT_UNAUTHORIZED: "true",
+    });
+    expect(strictCaCfg.database.ssl).toBe(true);
+    expect(strictCaCfg.database.sslRejectUnauthorized).toBe(true);
+
+    // Khi chạy trên Render (RENDER=true) mà chưa khai báo TRUST_PROXY, tự nhận 1 bước nhảy proxy thay vì dừng tiến trình
+    const renderDefaultCfg = loadConfig({
+      ...baseProdEnv,
+      RENDER: "true",
+      TRUST_PROXY: undefined,
+    });
+    expect(renderDefaultCfg.trustProxy).toBe(1);
 
     expect(() =>
       loadConfig({

@@ -48,7 +48,8 @@ export function createPool(options: {
   sslRejectUnauthorized?: boolean;
   sslCa?: string;
 }): Pool {
-  const poolMax = Number(process.env.DB_POOL_MAX) || 4;
+  const defaultPoolMax = process.env.RENDER === "true" ? 3 : 4;
+  const poolMax = Number(process.env.DB_POOL_MAX) || defaultPoolMax;
   const split: SplitSslParams = options.ssl ? splitSslParams(options.url) : { connectionString: options.url };
 
   let ca = options.sslCa;
@@ -68,7 +69,7 @@ export function createPool(options: {
     (options.sslRejectUnauthorized ??
       (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED
         ? process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
-        : process.env.NODE_ENV === "production" || Boolean(ca)));
+        : Boolean(ca)));
 
   const pool = new Pool({
     connectionString: split.connectionString,
