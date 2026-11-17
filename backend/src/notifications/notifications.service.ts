@@ -95,7 +95,14 @@ export class NotificationsService {
    * và Cán bộ thôn phụ trách đúng thôn của hộ dân (chỉ gửi cho vai trò có quyền đọc và thuộc phạm vi địa bàn/HTX).
    */
   async notifyOversightForHousehold(householdId: number, input: NotificationInput): Promise<void> {
-    const globalCandidateRoles: Role[] = ["admin", "htx_officer", "inspector"];
+    const globalCandidateRoles: Role[] = [
+      "admin",
+      "htx_head",
+      "htx_deputy",
+      "support_specialist",
+      "htx_officer",
+      "inspector",
+    ];
     const requiredResource =
       input.kind === "approval" ? "approvals" : input.kind === "violation" ? "violations" : null;
     const allowedGlobalRoles = requiredResource

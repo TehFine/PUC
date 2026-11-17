@@ -24,6 +24,9 @@ const num = (value: string): number | null => {
 
 const ROLE: Record<string, string> = {
   "Quản trị viên": "admin",
+  "Trưởng HTX": "htx_head",
+  "Phó HTX": "htx_deputy",
+  "Chuyên viên hỗ trợ hệ thống": "support_specialist",
   "Cán bộ HTX": "htx_officer",
   "Kiểm tra viên": "inspector",
   "Cán bộ Thôn": "village_officer",

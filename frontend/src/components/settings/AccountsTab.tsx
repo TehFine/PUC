@@ -7,6 +7,7 @@ import Pager from "@/components/admin/catalog/Pager";
 import { useDebounced } from "@/components/admin/catalog/use-debounced";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { toast } from "@/components/ui/Toast";
+import { isCoopStaffRole } from "@/constants/roles";
 import { useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import type { AccountRecord } from "@/types/accounts";
@@ -29,7 +30,7 @@ function formatAccountScope(a: AccountRecord): string {
   if (a.role === "inspector") {
     return a.assignedRegion || "Tỉnh Đắk Lắk";
   }
-  if (a.role === "admin" || a.role === "htx_officer") {
+  if (isCoopStaffRole(a.role)) {
     return a.coopCode || "HTX-CUNE";
   }
   return a.villageName || "—";

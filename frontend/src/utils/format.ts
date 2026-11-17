@@ -23,6 +23,9 @@ export const formatNumber = (value: number | null | undefined, fractionDigits: n
 
 const DIARY_ROLE_LABELS: Record<string, string> = {
   admin: "Quản trị viên",
+  htx_head: "Trưởng HTX",
+  htx_deputy: "Phó HTX",
+  support_specialist: "Chuyên viên hỗ trợ hệ thống",
   htx_officer: "Cán bộ HTX",
   inspector: "Cán bộ kiểm tra",
   village_officer: "Cán bộ thôn",

@@ -14,6 +14,7 @@ import IncidentTraceModal from "@/components/admin/harvest/IncidentTraceModal";
 import LotContributionsModal from "@/components/admin/harvest/LotContributionsModal";
 import { StampAllocationModal, StampListModal } from "@/components/admin/harvest/StampModals";
 import { toast } from "@/components/ui/Toast";
+import { isCoopStaffRole } from "@/constants/roles";
 import { api, errorMessage } from "@/lib/api-client";
 import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
 
@@ -69,7 +70,7 @@ export default function Harvest() {
   const { can, session } = useAuth();
   const canReadHouseholds = can("households", "read");
   const canReadApprovals = can("approvals", "read");
-  const canEditEndorsement = session?.user.role === "admin" || session?.user.role === "htx_officer";
+  const canEditEndorsement = isCoopStaffRole(session?.user.role);
   const canReadStamps = can("stamps", "read");
   const canCreateHarvest = can("harvest", "create");
   const canUpdateHarvest = can("harvest", "update");

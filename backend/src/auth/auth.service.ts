@@ -1301,7 +1301,10 @@ export class AuthService {
       throw error;
     }
 
-    const recipientRoles = user.role === "farmer" && user.status === "active" ? ["admin", "htx_officer"] : ["admin"];
+    const recipientRoles =
+      user.role === "farmer" && user.status === "active"
+        ? ["admin", "htx_head", "htx_deputy", "support_specialist", "htx_officer"]
+        : ["admin", "htx_head", "support_specialist"];
     await this.notifications.notifyRoles(recipientRoles, {
       kind: "system",
       title: `Yêu cầu cấp lại mật khẩu: ${cleanFullName} (${user.username})`,

@@ -2,7 +2,7 @@ import { PartialType } from "@nestjs/mapped-types";
 import { Transform } from "class-transformer";
 import { IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 import { MaxPasswordUtf8Bytes, NormalizePassword } from "../../auth/dto/auth.dto";
-import type { Role } from "../../auth/permissions";
+import { ROLES, type Role } from "../../auth/permissions";
 import { OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateAccountDto {
@@ -32,7 +32,7 @@ export class CreateAccountDto {
   @Matches(/[0-9]/, { message: "Mật khẩu cần có chữ số." })
   password!: string;
 
-  @IsIn(["admin", "htx_officer", "inspector", "village_officer", "enterprise", "farmer"])
+  @IsIn([...ROLES])
   role!: Role;
 
   @OptionalField()

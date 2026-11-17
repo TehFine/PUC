@@ -5,6 +5,7 @@ import FormModal from "@/components/admin/catalog/FormModal";
 import { str } from "@/components/admin/catalog/form-utils";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
 import { toast } from "@/components/ui/Toast";
+import { isCoopStaffRole } from "@/constants/roles";
 import { useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import type { AccountRecord, AccountStatus } from "@/types/accounts";
@@ -173,7 +174,7 @@ export default function AccountFormModal({
             placeholder="VD: Tỉnh Đắk Lắk hoặc Huyện Krông Búk"
           />
         )}
-        {(role === "admin" || role === "htx_officer") && (
+        {isCoopStaffRole(role) && (
           <TextField
             label="Mã HTX quản lý"
             value={coopCode}

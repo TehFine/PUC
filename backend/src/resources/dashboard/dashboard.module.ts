@@ -1,7 +1,7 @@
 import { Controller, Get, Injectable, Module } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
-import { can } from "../../auth/permissions";
+import { can, isAdminPrivilegedRole, isCoopStaffRole } from "../../auth/permissions";
 import { isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
 import { camelRow, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
@@ -59,7 +59,7 @@ export class DashboardService {
     // Lịch đột xuất chỉ hiển thị cho vai trò lập và thực hiện kiểm tra.
     const canSeeSuddenSchedule = INSPECTION_ROLES.includes(user.role);
     const isEnterprise = user.role === "enterprise";
-    const isCoopStaff = user.role === "admin" || user.role === "htx_officer";
+    const isCoopStaff = isCoopStaffRole(user.role);
     const inCoopScope = isStaffInCuneCoopScope(user, true);
 
     const countsParams: unknown[] = [];
@@ -87,7 +87,7 @@ export class DashboardService {
     } else {
       harvestLotScope = "WHERE upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = 'HTX-CUNE'";
     }
-    const isAdmin = user.role === "admin";
+    const isAdmin = isAdminPrivilegedRole(user.role);
 
     const hasPlots = await this.hasPlotsTable();
 

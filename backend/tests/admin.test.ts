@@ -2137,4 +2137,68 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
 
     expect((await admin.post(`/api/system-alerts/${staffAlert.body.id}/resolve`).send({})).status).toBe(200);
   });
+
+  it("Phân quyền Trưởng HTX (htx_head), Phó HTX (htx_deputy) và Chuyên viên hỗ trợ hệ thống (support_specialist)", async () => {
+    const admin = await loggedIn(USERS.admin);
+
+    const headAcc = await admin.post("/api/accounts").send({
+      fullName: "Trần Đăng Sáu Test",
+      username: "0982576648",
+      password: "HeadPassword123",
+      role: "htx_head",
+      coopCode: "HTX-CUNE",
+    });
+    expect(headAcc.status).toBe(201);
+    expect(headAcc.body.role).toBe("htx_head");
+
+    const deputyAcc = await admin.post("/api/accounts").send({
+      fullName: "Đặng Văn Thêm Test",
+      username: "0394564316",
+      password: "DeputyPassword123",
+      role: "htx_deputy",
+      coopCode: "HTX-CUNE",
+    });
+    expect(deputyAcc.status).toBe(201);
+    expect(deputyAcc.body.role).toBe("htx_deputy");
+
+    const supportAcc = await admin.post("/api/accounts").send({
+      fullName: "Đặng Xuân Thắng Test",
+      username: "0868060594",
+      password: "SupportPassword123",
+      role: "support_specialist",
+      coopCode: "HTX-CUNE",
+    });
+    expect(supportAcc.status).toBe(201);
+    expect(supportAcc.body.role).toBe("support_specialist");
+
+    const headAgent = await loggedIn("0982576648", "HeadPassword123");
+    const deputyAgent = await loggedIn("0394564316", "DeputyPassword123");
+    const supportAgent = await loggedIn("0868060594", "SupportPassword123");
+
+    // Trưởng HTX và Chuyên viên hỗ trợ hệ thống có toàn quyền xem & quản trị tài khoản
+    expect((await headAgent.get("/api/accounts")).status).toBe(200);
+    expect((await supportAgent.get("/api/accounts")).status).toBe(200);
+
+    // Phó HTX được xem danh sách tài khoản, nhật ký thao tác và hộ dân đầy đủ CCCD, nhưng không tạo/xóa tài khoản
+    expect((await deputyAgent.get("/api/accounts")).status).toBe(200);
+    expect((await deputyAgent.get("/api/audit-log")).status).toBe(200);
+    const deputyHh = await deputyAgent.get("/api/households");
+    expect(deputyHh.status).toBe(200);
+    expect(deputyHh.body.data[0].cccd).not.toContain("*");
+    expect(
+      (
+        await deputyAgent.post("/api/accounts").send({
+          fullName: "Không Được Tạo",
+          username: "0999888777",
+          password: "BlockedPassword123",
+          role: "farmer",
+        })
+      ).status,
+    ).toBe(403);
+
+    // Dọn tài khoản kiểm thử để không ảnh hưởng các ca sau
+    expect((await admin.delete(`/api/accounts/${deputyAcc.body.id}`)).status).toBe(200);
+    expect((await admin.delete(`/api/accounts/${supportAcc.body.id}`)).status).toBe(200);
+    expect((await admin.delete(`/api/accounts/${headAcc.body.id}`)).status).toBe(200);
+  });
 });

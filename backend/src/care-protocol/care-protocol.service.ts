@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
-import { can } from "../auth/permissions";
+import { can, isCoopStaffRole } from "../auth/permissions";
 import { isStaffInCuneCoopScope } from "../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
@@ -94,7 +94,7 @@ function isStaffInPlanScope(
   user: AuthUser,
   row: { village_id: number; village_name?: string | null; plot_code?: string | null },
 ): boolean {
-  if (user.role === "htx_officer" || user.role === "admin") {
+  if (isCoopStaffRole(user.role)) {
     const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
     if (userCoop !== "HTX-CUNE") return false;
   }

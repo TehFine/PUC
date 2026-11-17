@@ -55,9 +55,16 @@ function isImpersonatedPrivilegedLabel(value: string, hasVerifiedUserId: boolean
       folded === "administrator" ||
       folded === "quan tri" ||
       folded === "quan tri vien" ||
+      folded === "truong htx" ||
+      folded === "pho htx" ||
+      folded === "chuyen vien ho tro" ||
+      folded === "chuyen vien ho tro he thong" ||
       folded.startsWith("admin ") ||
       folded.startsWith("administrator ") ||
-      folded.startsWith("quan tri ")
+      folded.startsWith("quan tri ") ||
+      folded.startsWith("truong htx ") ||
+      folded.startsWith("pho htx ") ||
+      folded.startsWith("chuyen vien ho tro ")
     ) {
       return true;
     }

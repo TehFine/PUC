@@ -12,6 +12,9 @@ export default function RolesTab() {
   const countByRole = useMemo(() => {
     const map: Record<Role, number> = {
       admin: 0,
+      htx_head: 0,
+      htx_deputy: 0,
+      support_specialist: 0,
       htx_officer: 0,
       inspector: 0,
       village_officer: 0,

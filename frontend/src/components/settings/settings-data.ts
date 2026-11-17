@@ -2,6 +2,9 @@ import type { Role } from "@/types/api";
 
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Quản trị viên",
+  htx_head: "Trưởng HTX",
+  htx_deputy: "Phó HTX",
+  support_specialist: "Chuyên viên hỗ trợ hệ thống",
   htx_officer: "Cán bộ HTX",
   inspector: "Kiểm tra viên",
   village_officer: "Cán bộ Thôn",
@@ -15,11 +18,44 @@ export const ROLES: {
   perms: { label: string; ok: boolean }[];
 }[] = [
   {
+    role: "htx_head",
+    name: "Trưởng HTX",
+    perms: [
+      { label: "Toàn quyền điều hành HTX và hệ thống", ok: true },
+      { label: "Duyệt hồ sơ và khai báo thu hoạch", ok: true },
+      { label: "Quản lý tài khoản và phân quyền", ok: true },
+      { label: "Xuất báo cáo kiểm toán đầy đủ", ok: true },
+      { label: "Xem nhật ký thao tác hệ thống", ok: true },
+    ],
+  },
+  {
+    role: "htx_deputy",
+    name: "Phó HTX",
+    perms: [
+      { label: "Điều hành nghiệp vụ vùng trồng và hộ dân", ok: true },
+      { label: "Duyệt hồ sơ, lô hàng và cấp phát tem", ok: true },
+      { label: "Lập biên bản kiểm tra và xử lý vi phạm", ok: true },
+      { label: "Xuất báo cáo kiểm toán và xem nhật ký", ok: true },
+      { label: "Thêm, sửa hoặc xóa tài khoản quản trị", ok: false },
+    ],
+  },
+  {
+    role: "support_specialist",
+    name: "Chuyên viên hỗ trợ hệ thống",
+    perms: [
+      { label: "Cấp tài khoản và hỗ trợ đặt lại mật khẩu", ok: true },
+      { label: "Hỗ trợ kỹ thuật hồ sơ, thửa đất và nhật ký", ok: true },
+      { label: "Phát thông báo khẩn và xử lý sự cố", ok: true },
+      { label: "Xem nhật ký thao tác hệ thống", ok: true },
+      { label: "Xuất báo cáo kiểm toán và dữ liệu vùng trồng", ok: true },
+    ],
+  },
+  {
     role: "admin",
     name: "Quản trị viên",
     perms: [
       { label: "Toàn quyền hệ thống", ok: true },
-      { label: "Duyệt hồ sơ & Khai báo", ok: true },
+      { label: "Duyệt hồ sơ và khai báo", ok: true },
       { label: "Quản lý tài khoản", ok: true },
       { label: "Xuất báo cáo", ok: true },
       { label: "Xem nhật ký audit", ok: true },

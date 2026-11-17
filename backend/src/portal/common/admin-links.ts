@@ -8,6 +8,13 @@ export const ADMIN_LINKS = {
 } as const;
 
 /** Các vai trò cán bộ HTX nhận thông báo khi hộ gửi dữ liệu cần xử lý. */
-export const HTX_ROLES = ["admin", "htx_officer"];
+export const HTX_ROLES = ["admin", "htx_head", "htx_deputy", "support_specialist", "htx_officer"];
 /** Cán bộ HTX và kiểm tra viên (dùng cho phản hồi vi phạm). */
-export const INSPECTION_ROLES = ["admin", "htx_officer", "inspector"];
+export const INSPECTION_ROLES = [
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+  "htx_officer",
+  "inspector",
+];

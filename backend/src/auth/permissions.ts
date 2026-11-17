@@ -1,5 +1,35 @@
-export const ROLES = ["admin", "htx_officer", "inspector", "village_officer", "enterprise", "farmer"] as const;
+export const ROLES = [
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+  "htx_officer",
+  "inspector",
+  "village_officer",
+  "enterprise",
+  "farmer",
+] as const;
 export type Role = (typeof ROLES)[number];
+
+/** Nhóm vai trò có toàn quyền quản trị tài khoản, mở khóa và duyệt cấp lại mật khẩu cho mọi tài khoản. */
+export const ADMIN_PRIVILEGED_ROLES: readonly Role[] = ["admin", "htx_head", "support_specialist"];
+
+/** Nhóm vai trò thuộc ban điều hành, hỗ trợ hệ thống và cán bộ trung tâm của Hợp tác xã (phạm vi HTX-CUNE). */
+export const COOP_STAFF_ROLES: readonly Role[] = [
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+  "htx_officer",
+];
+
+export function isAdminPrivilegedRole(role?: string | null): boolean {
+  return typeof role === "string" && (ADMIN_PRIVILEGED_ROLES as readonly string[]).includes(role);
+}
+
+export function isCoopStaffRole(role?: string | null): boolean {
+  return typeof role === "string" && (COOP_STAFF_ROLES as readonly string[]).includes(role);
+}
 
 export const ACTIONS = ["read", "create", "update", "delete"] as const;
 export type Action = (typeof ACTIONS)[number];
@@ -37,15 +67,54 @@ export const RESOURCES = [
 export type ResourceKey = (typeof RESOURCES)[number];
 
 const ALL: Role[] = [...ROLES];
-const STAFF: Role[] = ["admin", "htx_officer", "inspector", "village_officer"];
+const STAFF: Role[] = [
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+  "htx_officer",
+  "inspector",
+  "village_officer",
+];
 const DASHBOARD_READERS: Role[] = [...STAFF, "enterprise"];
-const OVERSIGHT: Role[] = ["admin", "htx_officer", "inspector"];
-const SUPPLY_CHAIN_READERS: Role[] = ["admin", "htx_officer", "inspector", "enterprise"];
-const ADMIN: Role[] = ["admin"];
-const HTX: Role[] = ["admin", "htx_officer"];
-const INSPECTOR: Role[] = ["admin", "inspector"];
-const HTX_OR_INSPECTOR: Role[] = ["admin", "htx_officer", "inspector"];
-const FIELD_WRITERS: Role[] = ["admin", "htx_officer", "village_officer"];
+const OVERSIGHT: Role[] = [
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+  "htx_officer",
+  "inspector",
+];
+const SUPPLY_CHAIN_READERS: Role[] = [
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+  "htx_officer",
+  "inspector",
+  "enterprise",
+];
+const ADMIN: Role[] = ["admin", "htx_head", "support_specialist"];
+const ACCOUNTS_READERS: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist"];
+const AUDIT_READERS: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist"];
+const HTX: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist", "htx_officer"];
+const INSPECTOR: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist", "inspector"];
+const HTX_OR_INSPECTOR: Role[] = [
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+  "htx_officer",
+  "inspector",
+];
+const FIELD_WRITERS: Role[] = [
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+  "htx_officer",
+  "village_officer",
+];
 const FARMER: Role[] = ["farmer"];
 
 /**
@@ -73,8 +142,8 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   pesticides: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   varieties: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   villages: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
-  accounts: { read: ADMIN, create: ADMIN, update: ADMIN, delete: ADMIN },
-  "audit-log": { read: ADMIN },
+  accounts: { read: ACCOUNTS_READERS, create: ADMIN, update: ADMIN, delete: ADMIN },
+  "audit-log": { read: AUDIT_READERS },
   plots: { read: STAFF, create: HTX, update: HTX },
   "plot-measurements": { read: STAFF, create: HTX_OR_INSPECTOR },
   // Cổng hộ dân: chỉ tài khoản nông dân được xem/ghi dữ liệu của chính hộ mình (phạm vi áp dụng ở PortalService).

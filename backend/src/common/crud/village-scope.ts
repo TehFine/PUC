@@ -1,4 +1,5 @@
 import type { AuthUser } from "../../auth/auth-user";
+import { isCoopStaffRole } from "../../auth/permissions";
 import { DatabaseService } from "../../database/database.service";
 import { badRequest, forbidden } from "../errors/app.exception";
 
@@ -63,7 +64,7 @@ function normVillageKey(val?: string | null): string {
 export function isStaffInCuneCoopScope(user: AuthUser | undefined, allowEaKhal = false): boolean {
   if (!user) return true;
   if (user.role === "enterprise" || user.role === "farmer") return false;
-  if (user.role === "htx_officer" || user.role === "admin") {
+  if (isCoopStaffRole(user.role)) {
     const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
     if (userCoop !== "HTX-CUNE") return false;
   }
@@ -98,7 +99,7 @@ export function isStaffInParcelScope(
 ): boolean {
   if (!user) return true;
   if (user.role === "enterprise" || user.role === "farmer") return false;
-  if (user.role === "htx_officer" || user.role === "admin") {
+  if (isCoopStaffRole(user.role)) {
     const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
     if (userCoop !== "HTX-CUNE") return false;
   }
@@ -143,7 +144,7 @@ export const villageScope = (column: string) => (user: AuthUser, params: unknown
     return null;
   }
 
-  if (user.role === "htx_officer" || user.role === "admin") {
+  if (isCoopStaffRole(user.role)) {
     const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
     if (userCoop !== "HTX-CUNE") return "1 = 0";
   }

@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import type { AuthUser } from "../../auth/auth-user";
-import { can, type Role } from "../../auth/permissions";
+import { can, COOP_STAFF_ROLES, type Role } from "../../auth/permissions";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import type { ListQueryDto } from "../../common/crud/list-query.dto";
@@ -20,7 +20,7 @@ import { DatabaseService } from "../../database/database.service";
 import { CreateHouseholdDto, IssueHouseholdAccountDto } from "./households.dto";
 
 /** Chỉ quản trị viên và cán bộ HTX (người duyệt hồ sơ) được xem/tìm theo số CCCD đầy đủ. */
-const CCCD_FULL_ACCESS: Role[] = ["admin", "htx_officer"];
+const CCCD_FULL_ACCESS: readonly Role[] = COOP_STAFF_ROLES;
 export const canSeeCccd = (user: AuthUser) => CCCD_FULL_ACCESS.includes(user.role);
 const canSeeAccountCredentials = (user: AuthUser) =>
   can(user.role, "registrations", "read") || can(user.role, "accounts", "read");

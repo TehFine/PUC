@@ -71,7 +71,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (this.recentInternalErrors.length >= 3 && now - this.lastInternalAlertAt >= 30 * 60_000) {
       this.lastInternalAlertAt = now;
       this.recentInternalErrors = [];
-      void this.notifications.notifyRoles(["admin", "htx_officer"], {
+      void this.notifications.notifyRoles(["admin", "htx_head", "support_specialist", "htx_officer"], {
         kind: "system",
         title: "[KHẨN] Phát hiện sự cố lỗi máy chủ nội bộ (500)",
         body: "Hệ thống vừa ghi nhận nhiều lỗi xử lý 500 liên tiếp. Vui lòng kiểm tra trạng thái dịch vụ trong Quản trị hệ thống.",

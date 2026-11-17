@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
+import { ADMIN_PRIVILEGED_ROLES, isAdminPrivilegedRole } from "../../auth/permissions";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { AppException, badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
@@ -77,7 +78,8 @@ export class AccountsService extends BaseCrudService {
     if (
       context.method === "PATCH" &&
       context.id !== undefined &&
-      ((next.role !== undefined && next.role !== "admin") || (next.status !== undefined && next.status !== "active"))
+      ((next.role !== undefined && !isAdminPrivilegedRole(String(next.role))) ||
+        (next.status !== undefined && next.status !== "active"))
     ) {
       await this.assertNotLastActiveAdmin(context.id);
     }
@@ -125,9 +127,10 @@ export class AccountsService extends BaseCrudService {
           "SELECT role, status FROM users WHERE id = $1 FOR UPDATE",
           [targetUserId],
         );
-        if (targetRes.rows[0]?.role === "admin" && targetRes.rows[0]?.status === "active") {
+        if (isAdminPrivilegedRole(targetRes.rows[0]?.role) && targetRes.rows[0]?.status === "active") {
           const activeAdmins = await client.query<{ id: number }>(
-            "SELECT id FROM users WHERE role = 'admin' AND status = 'active' FOR UPDATE",
+            "SELECT id FROM users WHERE role = ANY($1::text[]) AND status = 'active' FOR UPDATE",
+            [ADMIN_PRIVILEGED_ROLES],
           );
           const remaining = activeAdmins.rows.filter((r) => Number(r.id) !== Number(targetUserId));
           if (remaining.length === 0) {
@@ -152,7 +155,7 @@ export class AccountsService extends BaseCrudService {
       throw forbidden("Không thể tự khóa hoặc tự hạ quyền chính tài khoản đang đăng nhập.");
     }
     const mayReduceAdmins =
-      (patch.role !== undefined && patch.role !== "admin") ||
+      (patch.role !== undefined && !isAdminPrivilegedRole(patch.role)) ||
       (patch.status !== undefined && patch.status !== "active");
     return this.withSerializedAdminGuard(id, mayReduceAdmins, () => super.update(id, dto, user, ip));
   }
@@ -260,9 +263,10 @@ export class AccountsService extends BaseCrudService {
         "SELECT role, status FROM users WHERE id = $1 FOR UPDATE",
         [userId],
       );
-      if (rows[0]?.role === "admin" && rows[0]?.status === "active") {
+      if (isAdminPrivilegedRole(rows[0]?.role) && rows[0]?.status === "active") {
         const admins = await client.query<{ id: number }>(
-          "SELECT id FROM users WHERE role = 'admin' AND status = 'active' FOR UPDATE",
+          "SELECT id FROM users WHERE role = ANY($1::text[]) AND status = 'active' FOR UPDATE",
+          [ADMIN_PRIVILEGED_ROLES],
         );
         const remaining = admins.rows.filter((r) => Number(r.id) !== Number(userId));
         if (remaining.length === 0) {

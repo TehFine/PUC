@@ -3,6 +3,7 @@ import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
+import { isCoopStaffRole } from "../../auth/permissions";
 import { AuditService } from "../../audit/audit.service";
 import { isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest, forbidden } from "../../common/errors/app.exception";
@@ -146,7 +147,7 @@ export class ReportsService {
       throw badRequest("Loại báo cáo không hợp lệ.");
     }
     const wantUnmaskedAudit = rawQuery.audit === "1";
-    if (wantUnmaskedAudit && user.role !== "admin" && user.role !== "htx_officer") {
+    if (wantUnmaskedAudit && !isCoopStaffRole(user.role)) {
       throw forbidden("Chỉ Quản trị viên hoặc Cán bộ HTX mới có quyền xuất báo cáo kiểm toán đầy đủ CCCD.");
     }
 
@@ -260,7 +261,7 @@ export class ReportsService {
           conds.push(`h.village_id = $${params.length}`);
         }
         const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
-        const fullCccd = inCoopScope && allowUnmaskedCccd && (user.role === "admin" || user.role === "htx_officer");
+        const fullCccd = inCoopScope && allowUnmaskedCccd && isCoopStaffRole(user.role);
         const cccdSelectExpr = fullCccd
           ? "h.cccd AS cccd"
           : "CASE WHEN h.cccd IS NULL OR btrim(h.cccd) = '' THEN '' ELSE '**********' || right(btrim(h.cccd), 2) END AS cccd";

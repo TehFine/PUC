@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import type { AuthUser } from "../auth/auth-user";
+import { isAdminPrivilegedRole } from "../auth/permissions";
 import { AuditService } from "../audit/audit.service";
 import { isStaffInCuneCoopScope, isStaffInParcelScope } from "../common/crud/village-scope";
 import { AppException, forbidden, notFound } from "../common/errors/app.exception";
@@ -69,7 +70,7 @@ export class RegistrationsService {
     if (user && !isStaffInCuneCoopScope(user, true)) {
       return { data: [], passwordResets: [], total: 0 };
     }
-    const isAdmin = user?.role === "admin";
+    const isAdmin = isAdminPrivilegedRole(user?.role);
     const [regRes, resetRes, officerVillageName] = await Promise.all([
       this.db.query<{
         id: number;
@@ -149,7 +150,7 @@ export class RegistrationsService {
     if (user && !isStaffInCuneCoopScope(user, true)) {
       return { data: [], total: 0 };
     }
-    const isAdmin = user?.role === "admin";
+    const isAdmin = isAdminPrivilegedRole(user?.role);
     const [{ rows }, officerVillageName] = await Promise.all([
       this.db.query<{
         id: number;
@@ -353,7 +354,7 @@ export class RegistrationsService {
         throw notFound("Tài khoản gắn với yêu cầu cấp lại mật khẩu không còn tồn tại.");
       }
 
-      if (user.role !== "admin") {
+      if (!isAdminPrivilegedRole(user.role)) {
         if (targetUser.role !== "farmer") {
           throw forbidden("Chỉ quản trị viên mới được phép duyệt đặt lại mật khẩu cho tài khoản cán bộ hoặc quản trị viên.");
         }
@@ -385,7 +386,7 @@ export class RegistrationsService {
         }
       }
 
-      const canUnlockLocked = user.role === "admin";
+      const canUnlockLocked = isAdminPrivilegedRole(user.role);
       await client.query(
         `UPDATE users
          SET password_hash = $1,
@@ -462,7 +463,7 @@ export class RegistrationsService {
     if (!target) {
       throw notFound("Không có yêu cầu cấp lại mật khẩu nào đang chờ duyệt với mã này.");
     }
-    if (user.role !== "admin" && (target.role !== "farmer" || target.status !== "active")) {
+    if (!isAdminPrivilegedRole(user.role) && (target.role !== "farmer" || target.status !== "active")) {
       throw forbidden(OUT_OF_SCOPE_MSG);
     }
     const officerVillageName = await this.resolveOfficerVillageName(user);
@@ -474,7 +475,7 @@ export class RegistrationsService {
       throw forbidden(OUT_OF_SCOPE_MSG);
     }
 
-    const isAdmin = user.role === "admin";
+    const isAdmin = isAdminPrivilegedRole(user.role);
     const { rows } = await this.db.query<{ username: string; full_name: string }>(
       `UPDATE password_reset_requests r
        SET status = 'rejected', reviewed_by = $2, reviewed_at = now()

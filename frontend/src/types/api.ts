@@ -1,7 +1,16 @@
 // Kiểu dữ liệu "chuẩn" do backend trả về (camelCase, enum, ngày ISO, số là number).
 // Các mapper trong lib/mappers.ts chuyển sang kiểu hiển thị ở types/entities.ts.
 
-export type Role = "admin" | "htx_officer" | "inspector" | "village_officer" | "enterprise" | "farmer";
+export type Role =
+  | "admin"
+  | "htx_head"
+  | "htx_deputy"
+  | "support_specialist"
+  | "htx_officer"
+  | "inspector"
+  | "village_officer"
+  | "enterprise"
+  | "farmer";
 export type Action = "read" | "create" | "update" | "delete";
 
 export interface AuthUser {

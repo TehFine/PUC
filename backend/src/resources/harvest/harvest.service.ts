@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
-import { can } from "../../auth/permissions";
+import { can, isCoopStaffRole } from "../../auth/permissions";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { generateQrToken } from "../../common/crypto/qr-token";
@@ -110,7 +110,7 @@ function isStaffInParcelScope(
 ): boolean {
   if (!user) return true;
   if (user.role === "enterprise") return false;
-  if (user.role === "htx_officer" || user.role === "admin") {
+  if (isCoopStaffRole(user.role)) {
     const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
     if (userCoop !== "HTX-CUNE") return false;
   }
@@ -146,7 +146,7 @@ function isStaffInParcelScope(
 function isStaffInCuneCoopScope(user: AuthUser | undefined, allowEaKhal = false): boolean {
   if (!user) return true;
   if (user.role === "enterprise") return false;
-  if (user.role === "htx_officer" || user.role === "admin") {
+  if (isCoopStaffRole(user.role)) {
     const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
     if (userCoop !== "HTX-CUNE") return false;
   }
@@ -218,7 +218,7 @@ export class HarvestService extends BaseCrudService {
           }
           return null;
         }
-        if (user.role === "htx_officer" || user.role === "admin") {
+        if (isCoopStaffRole(user.role)) {
           if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
             return "1 = 0";
           }
@@ -288,7 +288,7 @@ export class HarvestService extends BaseCrudService {
       }
       return;
     }
-    if (user.role === "htx_officer" || user.role === "admin") {
+    if (isCoopStaffRole(user.role)) {
       if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
         throw notFound(notFoundMsg);
       }
@@ -1225,7 +1225,7 @@ export class HarvestService extends BaseCrudService {
       if (user.role === "enterprise") {
         lotParams.push(user.enterpriseId ?? -1);
         lotScopeSql += ` AND hl.enterprise_id = $${lotParams.length}`;
-      } else if (user.role === "htx_officer" || user.role === "admin") {
+      } else if (isCoopStaffRole(user.role)) {
         lotParams.push((user.coopCode || "HTX-CUNE").trim().toUpperCase());
         lotScopeSql += ` AND upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = $${lotParams.length}`;
       }
@@ -2428,7 +2428,7 @@ export class HarvestService extends BaseCrudService {
 
   /** Cập nhật cấu hình Bảo chứng Chính quyền Tỉnh và UBND Xã (chỉ Quản trị viên / Cán bộ HTX trong phạm vi). */
   async updateEndorsementConfig(dto: UpdateEndorsementConfigDto, user: AuthUser, ip?: string) {
-    if ((user.role !== "admin" && user.role !== "htx_officer") || !isStaffInCuneCoopScope(user, false)) {
+    if (!isCoopStaffRole(user.role) || !isStaffInCuneCoopScope(user, false)) {
       throw forbidden("Chỉ Quản trị viên hoặc Ban quản trị thuộc đơn vị mới được phép cập nhật thông tin bảo chứng chính thức.");
     }
     if (!/^https:\/\/[^\s<>"'`]+$/i.test(dto.officialPortalUrl.trim())) {

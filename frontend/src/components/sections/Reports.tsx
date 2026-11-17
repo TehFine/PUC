@@ -6,6 +6,7 @@ import { todayIso } from "@/components/admin/catalog/form-utils";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
+import { isCoopStaffRole } from "@/constants/roles";
 import { useApiList } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
 import type { VillageRecord } from "@/types/catalog";
@@ -427,8 +428,7 @@ function renderPrintableReport(
 
 export default function Reports() {
   const { session } = useAuth();
-  const canExportAudit =
-    session?.user.role === "admin" || session?.user.role === "htx_officer";
+  const canExportAudit = isCoopStaffRole(session?.user.role);
   const villages = useApiList<VillageRecord>("villages");
   const [selectedReport, setSelectedReport] = useState<ReportSpec | null>(null);
   const [from, setFrom] = useState<string>("");

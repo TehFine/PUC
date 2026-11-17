@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
-import { can } from "../auth/permissions";
+import { can, isCoopStaffRole } from "../auth/permissions";
 import { verifyOrderedChain, type VerifiableChainEntry } from "../common/crypto/integrity-chain";
 import { forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
@@ -214,7 +214,14 @@ export class TraceabilityService {
 
   resolveRoleBaseTier(user?: AuthUser): ViewerTier {
     if (!user) return "public";
-    if (user.role === "admin" || user.role === "inspector" || user.role === "village_officer") {
+    if (
+      user.role === "admin" ||
+      user.role === "htx_head" ||
+      user.role === "htx_deputy" ||
+      user.role === "support_specialist" ||
+      user.role === "inspector" ||
+      user.role === "village_officer"
+    ) {
       return "authority";
     }
     if (user.role === "enterprise" || user.role === "htx_officer") {
@@ -255,7 +262,7 @@ export class TraceabilityService {
       scopeReason = inScope
         ? "Thuộc cơ sở đóng gói / doanh nghiệp sở hữu lô"
         : "Lô hàng không thuộc cơ sở đóng gói hoặc doanh nghiệp của tài khoản này";
-    } else if (user.role === "htx_officer" || user.role === "admin") {
+    } else if (isCoopStaffRole(user.role)) {
       const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
       const lotCoop = (scope.coopCode || "HTX-CUNE").trim().toUpperCase();
       inScope = userCoop === lotCoop;
