@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { ShareBar } from "@/components/ui/charts/KpiCharts";
 import { useApi, useApiList } from "@/hooks/use-api";
 import { useUrlSubTab } from "@/lib/back-navigation";
 import BlockState from "@/components/admin/shared/BlockState";
@@ -138,7 +137,6 @@ export default function Journal() {
   });
 
   // Compute real KPIs from summary & loaded lists (no hardcoded numbers)
-  const totalHouseholds = summary?.counts?.households ?? households.length;
   const qualifiedHouseholds =
     summary?.counts?.qualifiedHouseholds ?? households.filter((h) => h.status === "qualified").length;
   const improveHouseholds = households.filter((h) => h.status === "improve" || h.status === "pending").length;
@@ -146,7 +144,6 @@ export default function Journal() {
     summary?.counts?.openViolations ??
     (canReadViolations ? violationsList.rows.filter((v) => v.status === "open").length : 0);
   const journalRecent = summary?.counts?.journalLast30Days ?? journalList.total;
-  const kpiDenom = Math.max(totalHouseholds, 1);
 
   // Modals for Journal
   const [viewingJournal, setViewingJournal] = useState<JournalRow | null>(null);
@@ -193,39 +190,22 @@ export default function Journal() {
         </div>
       )}
 
-      <div className="compliance-kpi">
-        <div className="comp-kpi-item ok">
-          <div className="comp-kpi-head">
-            <div className="comp-kpi-num">{qualifiedHouseholds}</div>
-            <div className="comp-kpi-label">Hộ đủ chuẩn xuất khẩu</div>
-          </div>
-          <ShareBar value={qualifiedHouseholds} total={kpiDenom} tone="lime" ariaLabel="Hộ đủ chuẩn xuất khẩu" />
+      <div className="compliance-kpi" role="region" aria-label="Tổng hợp tuân thủ canh tác">
+        <div className="comp-kpi-row ok">
+          <span className="comp-kpi-label">Hộ đủ chuẩn xuất khẩu</span>
+          <strong className="comp-kpi-num">{formatVn(qualifiedHouseholds)}</strong>
         </div>
-        <div className="comp-kpi-item warn">
-          <div className="comp-kpi-head">
-            <div className="comp-kpi-num">{improveHouseholds}</div>
-            <div className="comp-kpi-label">Hộ cần cải thiện / chờ duyệt</div>
-          </div>
-          <ShareBar value={improveHouseholds} total={kpiDenom} tone="amber" ariaLabel="Hộ cần cải thiện" />
+        <div className="comp-kpi-row warn">
+          <span className="comp-kpi-label">Hộ cần cải thiện, chờ duyệt</span>
+          <strong className="comp-kpi-num">{formatVn(improveHouseholds)}</strong>
         </div>
-        <div className="comp-kpi-item danger">
-          <div className="comp-kpi-head">
-            <div className="comp-kpi-num">{openViolations}</div>
-            <div className="comp-kpi-label">Vi phạm đang mở</div>
-          </div>
-          <ShareBar value={openViolations} total={kpiDenom} tone="rose" ariaLabel="Vi phạm đang mở" />
+        <div className="comp-kpi-row danger">
+          <span className="comp-kpi-label">Vi phạm đang mở</span>
+          <strong className="comp-kpi-num">{formatVn(openViolations)}</strong>
         </div>
-        <div className="comp-kpi-item info">
-          <div className="comp-kpi-head">
-            <div className="comp-kpi-num">{journalRecent}</div>
-            <div className="comp-kpi-label">Bản ghi nhật ký</div>
-          </div>
-          <ShareBar
-            value={Math.min(journalRecent, Math.max(journalList.total, 1))}
-            total={Math.max(journalList.total, 1)}
-            tone="sky"
-            ariaLabel="Bản ghi nhật ký"
-          />
+        <div className="comp-kpi-row info">
+          <span className="comp-kpi-label">Bản ghi nhật ký</span>
+          <strong className="comp-kpi-num">{formatVn(journalRecent)}</strong>
         </div>
       </div>
 

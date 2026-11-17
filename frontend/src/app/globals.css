@@ -3487,96 +3487,51 @@ input[type="date"].filter-select {
 
 /* ─── COMPLIANCE ──────────────────────────────── */
 .compliance-kpi {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.comp-kpi-item {
-  padding: 18px 20px;
-  border: 1px solid rgba(20, 55, 47, 0.12);
-  border-radius: 6px;
-  background: #ffffff;
-  box-shadow: none;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  transition: border-color 0.16s ease;
+  margin-bottom: 16px;
+  border: 1px solid rgba(20, 55, 47, 0.12);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+  overflow: hidden;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .comp-kpi-item:hover {
-    border-color: rgba(20, 55, 47, 0.28);
-  }
-}
-
-.comp-kpi-head {
+.comp-kpi-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 16px;
+  padding: 13px 18px;
+}
+
+.comp-kpi-row + .comp-kpi-row {
+  border-top: 1px solid #e5e7eb;
+}
+
+.comp-kpi-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink, #14372f);
+  line-height: 1.4;
 }
 
 .comp-kpi-num {
   font-family: var(--font-display-stack);
   font-variation-settings: normal;
-  font-size: clamp(2rem, 2.5vw, 2.6rem);
-  font-weight: 750;
-  line-height: 1.05;
-  margin-bottom: 0;
-  color: var(--ink);
-  letter-spacing: -0.025em;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink, #14372f);
+  letter-spacing: -0.02em;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
-.comp-kpi-item.ok     .comp-kpi-num { color: #15803d; }
-.comp-kpi-item.warn   .comp-kpi-num { color: #9a6712; }
-.comp-kpi-item.danger .comp-kpi-num { color: #b91c1c; }
-.comp-kpi-item.info   .comp-kpi-num { color: #14372f; }
-
-.comp-kpi-label {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--ink-soft);
-  text-align: right;
-  line-height: 1.35;
-  margin-left: auto;
-  max-width: 155px;
-}
-
-.comp-kpi-item .vc-share {
-  margin-top: auto;
-  width: 100%;
-  padding-right: 0;
-}
-
-.comp-kpi-item .vc-share-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 6px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.comp-kpi-item .vc-share-row span {
-  color: rgba(20, 55, 47, 0.65);
-}
-
-.comp-kpi-item .vc-share-row b {
-  font-size: 13px;
-  color: var(--ink, #14372f);
-}
-
-.comp-kpi-item .vc-share-track {
-  height: 8px;
-  border-radius: 4px;
-  background: rgba(20, 55, 47, 0.12);
-  overflow: hidden;
-}
+.comp-kpi-row.ok     .comp-kpi-num { color: #15803d; }
+.comp-kpi-row.warn   .comp-kpi-num { color: #9a6712; }
+.comp-kpi-row.danger .comp-kpi-num { color: #b91c1c; }
+.comp-kpi-row.info   .comp-kpi-num { color: #14372f; }
 
 /* ─── VIOLATIONS ──────────────────────────────── */
 .violation-item {
@@ -5225,7 +5180,6 @@ code {
   }
 
   .kpi-grid, .kpi-grid-4 { grid-template-columns: repeat(2, 1fr); }
-  .compliance-kpi { grid-template-columns: repeat(2, 1fr); }
   .roles-grid { grid-template-columns: 1fr; }
   .catalog-cards { grid-template-columns: repeat(2, 1fr); }
   .report-grid { grid-template-columns: 1fr; }
@@ -5748,9 +5702,9 @@ code {
     text-align: right;
     justify-content: flex-end;
   }
-  .compliance-kpi { gap: 10px; }
-  .comp-kpi-item { padding: 12px 13px; }
-  .comp-kpi-num { font-size: 21px; }
+  .comp-kpi-row { padding: 11px 14px; }
+  .comp-kpi-label { font-size: 13.5px; }
+  .comp-kpi-num { font-size: 18px; }
 
   .charts-row, .charts-row-3 {
     grid-template-columns: 1fr;
@@ -6361,7 +6315,6 @@ code {
 
 @media (max-width: 359px) {
   .kpi-grid, .kpi-grid-4 { grid-template-columns: 1fr; }
-  .compliance-kpi { grid-template-columns: 1fr; }
   .page-header h1 { font-size: 1.9rem; }
   .zones-map-area .map-tool {
     padding: 4px 7px;
@@ -6523,7 +6476,7 @@ code {
 @media (max-width: 900px) {
   .header-home { display: none !important; }
   .user-menu-panel { top: calc(100% + 10px); left: 0; right: auto; }
-  :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card) {
+  :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card) {
     filter: none !important;
     border-radius: 6px;
     border: 1px solid rgba(20, 55, 47, 0.12);
@@ -7080,7 +7033,7 @@ html.is-scrolling-down .zones-map-area .plotmap-zoom,
 /* Cô lập layout & style cho các thẻ/hàng lặp lại để thao tác trên 1 phần tử không làm reflow toàn trang */
 .table-wrap tbody tr,
 .kpi-card,
-.comp-kpi-item,
+.compliance-kpi,
 .report-card,
 .variety-card,
 .schedule-card,
@@ -7167,13 +7120,13 @@ html[data-perf="lite"] :is(.pt-minimap-pin-pulse, .pt-plot-minimap-loading, .pt-
   animation: none !important;
 }
 
-html[data-perf="lite"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card),
-html[data-net="slow"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card) {
+html[data-perf="lite"] :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card),
+html[data-net="slow"] :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card) {
   filter: none !important;
 }
 
-html[data-perf="lite"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card)::before,
-html[data-net="slow"] :is(.kpi-card, .comp-kpi-item, .report-card, .variety-card, .schedule-card)::before {
+html[data-perf="lite"] :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card)::before,
+html[data-net="slow"] :is(.kpi-card, .compliance-kpi, .report-card, .variety-card, .schedule-card)::before {
   border: 1px solid rgba(20, 55, 47, 0.08);
 }
 
