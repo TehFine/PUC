@@ -2,7 +2,8 @@ import { applyDecorators } from "@nestjs/common";
 import { IsInt, IsNumber, IsOptional, IsPositive, Max, Min } from "class-validator";
 
 /** Id tệp đính kèm tùy chọn (cho phép bỏ trống hoặc null). */
-export const OptionalAttachmentId = () => applyDecorators(IsOptional(), IsInt(), IsPositive());
+export const OptionalAttachmentId = () =>
+  applyDecorators(IsOptional(), IsInt(), IsPositive(), Max(Number.MAX_SAFE_INTEGER));
 
 /** Số thực hữu hạn trong khoảng [min, max]. */
 export const NumberIn = (min: number, max: number) =>

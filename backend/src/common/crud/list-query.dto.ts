@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 
 /** Tham số phân trang/tìm kiếm chung. Các tham số lọc riêng của từng tài nguyên được đọc từ query thô. */
@@ -16,6 +16,7 @@ export class ListQueryDto {
   pageSize = 100;
 
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value))
   @IsString()
   @MaxLength(100)
   q?: string;

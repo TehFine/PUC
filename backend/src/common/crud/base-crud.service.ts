@@ -74,6 +74,9 @@ export abstract class BaseCrudService {
   async list(user: AuthUser, query: ListQueryDto & Record<string, unknown>) {
     const { config } = this;
     const { page, pageSize, q } = query;
+    const safePage = Math.min(10_000, Math.max(1, Math.trunc(Number(page) || 1)));
+    const safePageSize = Math.min(500, Math.max(1, Math.trunc(Number(pageSize) || 100)));
+    const cleanQ = typeof q === "string" ? q.trim() : undefined;
     const params: unknown[] = [];
     const conditions: string[] = [];
 
@@ -95,10 +98,10 @@ export abstract class BaseCrudService {
     }
 
     const searchColumns = config.searchFor?.(user) ?? config.search;
-    if (q && searchColumns?.length) {
-      params.push(`%${q.replace(/[\\%_]/g, "\\$&")}%`);
+    if (cleanQ && searchColumns?.length) {
+      params.push(`%${cleanQ.replace(/[\\%_]/g, "\\$&")}%`);
       const ref = `$${params.length}`;
-      conditions.push(`(${searchColumns.map((column) => `${column}::text ILIKE ${ref}`).join(" OR ")})`);
+      conditions.push(`(${searchColumns.map((column) => `${column}::text ILIKE ${ref} ESCAPE '\\'`).join(" OR ")})`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -108,13 +111,13 @@ export abstract class BaseCrudService {
          FROM ${config.from} ${where}
          ORDER BY ${config.orderBy}
          LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-        [...params, pageSize, (page - 1) * pageSize],
+        [...params, safePageSize, (safePage - 1) * safePageSize],
       );
 
       let total = 0;
       if (rows.length > 0) {
         total = Number(rows[0].__total_count ?? 0);
-      } else if (page > 1) {
+      } else if (safePage > 1) {
         total = (
           await this.db.query<{ total: number }>(`SELECT count(*)::int AS total FROM ${config.from} ${where}`, params)
         ).rows[0].total;
@@ -124,16 +127,18 @@ export abstract class BaseCrudService {
         const { __total_count: _ignored, ...rest } = row;
         return mapRow(rest);
       });
-      return { data, total, page, pageSize };
+      return { data, total, page: safePage, pageSize: safePageSize };
     };
 
     if (
       this.db.cache &&
+      !cleanQ &&
+      safePage === 1 &&
       !config.scope &&
       !config.searchFor &&
       GLOBAL_CATALOG_TABLES.has(config.table)
     ) {
-      const cacheKey = `crud:${config.table}:p=${page}:ps=${pageSize}:w=${where}:v=${JSON.stringify(params)}`;
+      const cacheKey = `crud:${config.table}:p=${safePage}:ps=${safePageSize}:w=${where}:v=${JSON.stringify(params)}`;
       return this.db.cache.getOrLoad(cacheKey, CATALOG_LIST_CACHE_TTL_MS, ["catalog"], runListQuery);
     }
 

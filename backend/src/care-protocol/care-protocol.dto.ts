@@ -8,14 +8,12 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
 } from "class-validator";
-
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+import { IsoDate } from "../common/validation/fields";
 
 export class ConfigurePlotCarePlanDto {
   @IsString()
@@ -28,8 +26,7 @@ export class ConfigurePlotCarePlanDto {
   })
   mode!: "cycle_start" | "start_cycle" | "current_milestone";
 
-  @IsString()
-  @Matches(ISO_DATE_RE, { message: "Ngày mốc phải có định dạng YYYY-MM-DD." })
+  @IsoDate()
   anchorDate!: string;
 
   @IsOptional()
@@ -47,6 +44,7 @@ export class ConfigurePlotCarePlanDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
   householdId?: number;
 }
 
@@ -62,8 +60,7 @@ export class DeclareCareMilestoneDto {
   milestoneCode!: string;
 
   @IsOptional()
-  @IsString()
-  @Matches(ISO_DATE_RE, { message: "Ngày thực hiện không hợp lệ." })
+  @IsoDate()
   performedOn?: string;
 
   @IsString()
@@ -77,6 +74,7 @@ export class DeclareCareMilestoneDto {
   @IsArray()
   @ArrayMaxSize(20)
   @IsString({ each: true })
+  @MaxLength(150, { each: true })
   selectedProducts!: string[];
 
   @IsString()
@@ -98,6 +96,7 @@ export class DeclareCareMilestoneDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
   pesticideId?: number;
 
   @IsOptional()
@@ -109,6 +108,7 @@ export class DeclareCareMilestoneDto {
   @Type(() => Number)
   @IsInt({ message: "Mã ảnh hiện trường không hợp lệ." })
   @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
   fieldPhotoId?: number;
 
   @IsOptional()
@@ -117,12 +117,14 @@ export class DeclareCareMilestoneDto {
   @Type(() => Number)
   @IsInt({ each: true })
   @Min(1, { each: true })
+  @Max(Number.MAX_SAFE_INTEGER, { each: true })
   fieldPhotoIds?: number[];
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
   invoicePhotoId?: number;
 
   @IsOptional()
@@ -131,6 +133,7 @@ export class DeclareCareMilestoneDto {
   @Type(() => Number)
   @IsInt({ each: true })
   @Min(1, { each: true })
+  @Max(Number.MAX_SAFE_INTEGER, { each: true })
   invoicePhotoIds?: number[];
 
   @IsOptional()
@@ -172,5 +175,6 @@ export class CareProtocolListQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(Number.MAX_SAFE_INTEGER)
   householdId?: number;
 }

@@ -1,5 +1,5 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsIn, IsOptional } from "class-validator";
+import { IsIn, IsOptional, Max } from "class-validator";
 import { Count, NonNegative, OptionalText, Text } from "../../common/validation/fields";
 
 export class CreatePesticideDto {
@@ -17,10 +17,12 @@ export class CreatePesticideDto {
 
   @IsOptional()
   @NonNegative()
+  @Max(1_000)
   mrlMgKg?: number | null;
 
   @IsOptional()
   @Count()
+  @Max(365)
   isolationDays?: number | null;
 
   @IsIn(["allowed", "banned", "restricted"])

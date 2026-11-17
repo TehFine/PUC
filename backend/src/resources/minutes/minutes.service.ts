@@ -1,12 +1,28 @@
 import { Injectable } from "@nestjs/common";
+import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
-import { villageScope } from "../../common/crud/village-scope";
+import {
+  assertHouseholdInScope,
+  isStaffInCuneCoopScope,
+  isStaffInParcelScope,
+  villageScope,
+} from "../../common/crud/village-scope";
 import { badRequest, forbidden } from "../../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../../common/geo/plot-proximity";
 import { publicAttachmentUrlSql, publicAttachmentUrlsSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
+import { assertPlotOwned } from "../../portal/common/portal-context";
 import { UploadsService } from "../../uploads/uploads.service";
+
+const SEALED_MINUTE_ERR =
+  "Biên bản kiểm tra đã quá thời hạn 24 giờ niêm phong hoặc đã gắn với lô xuất khẩu, không thể chỉnh sửa hoặc xóa.";
+
+interface MinuteSealRow {
+  server_recorded_at: Date | string | null;
+  household_id: number | null;
+  plot_code: string | null;
+}
 
 @Injectable()
 export class MinutesService extends BaseCrudService {
@@ -53,7 +69,81 @@ export class MinutesService extends BaseCrudService {
     return null;
   }
 
+  /**
+   * Niêm phong sổ cái biên bản kiểm tra: chỉ sửa hoặc xóa trong 24 giờ kể từ thời điểm máy chủ ghi nhận
+   * và khi hộ, thửa liên quan chưa đóng góp vào lô đang vận chuyển, đã giao hoặc đã xuất khẩu lập sau biên bản.
+   */
+  private async assertMinuteEditable(row: MinuteSealRow) {
+    if (row.server_recorded_at) {
+      const recordedMs = new Date(row.server_recorded_at).getTime();
+      if (Number.isFinite(recordedMs) && Date.now() - recordedMs > 24 * 3600_000) {
+        throw badRequest(SEALED_MINUTE_ERR);
+      }
+    }
+    const householdId = row.household_id !== null && row.household_id !== undefined ? Number(row.household_id) : null;
+    const plotCode = typeof row.plot_code === "string" ? row.plot_code.trim() : "";
+    if (!householdId && !plotCode) return;
+    const recIso = row.server_recorded_at ? new Date(row.server_recorded_at).toISOString() : null;
+    const locked = await this.db.query(
+      `SELECT 1
+       FROM harvest_contributions hc
+       JOIN harvest_lots hl ON hl.id = hc.lot_id
+       WHERE hl.status IN ('in_transit', 'delivered', 'exported')
+         AND (
+           ($1::bigint IS NOT NULL AND hc.household_id = $1
+             AND ($2 = '' OR btrim(hc.plot_code) = '' OR upper(hc.plot_code) = upper($2)))
+           OR ($1::bigint IS NULL AND $2 <> '' AND upper(hc.plot_code) = upper($2))
+         )
+         AND ($3::timestamptz IS NULL OR hl.created_at >= $3::timestamptz)
+       LIMIT 1`,
+      [householdId, plotCode, recIso],
+    );
+    if ((locked.rowCount ?? 0) > 0) {
+      throw badRequest(SEALED_MINUTE_ERR);
+    }
+  }
+
+  protected override async guardDelete(id: number, user: AuthUser) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền xóa biên bản ngoài phạm vi quản lý.");
+    }
+    const { rows } = await this.db.query<MinuteSealRow & { village_id: number | null; village_name: string | null }>(
+      `SELECT m.server_recorded_at, m.household_id, m.plot_code, m.village_id, v.name AS village_name
+       FROM inspection_minutes m
+       LEFT JOIN villages v ON v.id = m.village_id
+       WHERE m.id = $1`,
+      [id],
+    );
+    if (rows[0]) {
+      if (rows[0].household_id !== null) {
+        await assertHouseholdInScope(this.db, { householdId: rows[0].household_id }, user);
+      } else {
+        const officerVillageName =
+          user.role === "village_officer" && user.villageId
+            ? (await this.db.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [user.villageId])).rows[0]?.name ?? null
+            : null;
+        if (
+          !isStaffInParcelScope(
+            user,
+            {
+              villageId: rows[0].village_id,
+              villageName: rows[0].village_name,
+              plotCode: rows[0].plot_code,
+            },
+            officerVillageName,
+          )
+        ) {
+          throw forbidden("Biên bản này không thuộc phạm vi quản lý của bạn.");
+        }
+      }
+      await this.assertMinuteEditable(rows[0]);
+    }
+  }
+
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (!isStaffInCuneCoopScope(context.user, true)) {
+      throw forbidden("Bạn không có quyền lập hoặc cập nhật biên bản ngoài phạm vi quản lý.");
+    }
     const out = { ...input };
     delete out.gpsVerified;
     delete out.gpsDistanceM;
@@ -66,6 +156,7 @@ export class MinutesService extends BaseCrudService {
           plot_code: string | null;
           latitude: number | null;
           longitude: number | null;
+          server_recorded_at: Date | string | null;
         }
       | undefined;
 
@@ -77,14 +168,21 @@ export class MinutesService extends BaseCrudService {
         plot_code: string | null;
         latitude: number | null;
         longitude: number | null;
+        server_recorded_at: Date | string | null;
       }>(
         `SELECT household_id, village_id, location, plot_code,
-                latitude::float8 AS latitude, longitude::float8 AS longitude
+                latitude::float8 AS latitude, longitude::float8 AS longitude, server_recorded_at
          FROM inspection_minutes
          WHERE id = $1`,
         [context.id],
       );
       existing = ex.rows[0];
+      if (existing) {
+        if (existing.household_id !== null) {
+          await assertHouseholdInScope(this.db, { householdId: existing.household_id }, context.user);
+        }
+        await this.assertMinuteEditable(existing);
+      }
     }
 
     const effHouseholdId =
@@ -95,12 +193,15 @@ export class MinutesService extends BaseCrudService {
         : existing?.household_id !== null && existing?.household_id !== undefined
           ? Number(existing.household_id)
           : null;
-    const effPlot =
+    let effPlot =
       out.plotCode !== undefined
         ? typeof out.plotCode === "string" && out.plotCode.trim()
           ? out.plotCode.trim()
           : null
         : existing?.plot_code ?? null;
+    if (out.plotCode !== undefined && !effPlot) {
+      out.plotCode = null;
+    }
     const effLocation =
       out.location !== undefined
         ? typeof out.location === "string"
@@ -108,9 +209,15 @@ export class MinutesService extends BaseCrudService {
           : ""
         : existing?.location ?? "";
 
+    const officerVillageName =
+      context.user.role === "village_officer" && context.user.villageId
+        ? (await this.db.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [context.user.villageId])).rows[0]?.name ?? null
+        : null;
+
     let resolvedVillageId: number | null | undefined;
 
     if (effHouseholdId !== null) {
+      await assertHouseholdInScope(this.db, { householdId: effHouseholdId }, context.user);
       const hhRes = await this.db.query<{ village_id: number | null }>(
         "SELECT village_id FROM households WHERE id = $1",
         [effHouseholdId],
@@ -125,34 +232,105 @@ export class MinutesService extends BaseCrudService {
           throw forbidden("Cán bộ thôn chỉ được lập hoặc cập nhật biên bản cho hộ thuộc thôn mình phụ trách.");
         }
       }
+      if (effPlot) {
+        const cleanPlot = await assertPlotOwned(this.db, effHouseholdId, effPlot);
+        effPlot = cleanPlot;
+        if (out.plotCode !== undefined || context.method === "POST") {
+          out.plotCode = cleanPlot;
+        }
+      }
       resolvedVillageId = hhVillageId;
     } else if (effPlot) {
+      let plotMeta: {
+        village_id: number | null;
+        village_name: string | null;
+        zone_code: string | null;
+        plot_code: string;
+      } | null = null;
       try {
-        const plotRes = await this.db.query<{ village_id: number | null }>(
-          `SELECT COALESCE(h.village_id, v.id) AS village_id
+        const plotRes = await this.db.query<{
+          village_id: number | null;
+          village_name: string | null;
+          zone_code: string | null;
+          plot_code: string;
+        }>(
+          `SELECT COALESCE(h.village_id, v.id) AS village_id,
+                  COALESCE(v_hh.name, p.village) AS village_name,
+                  p.zone_code,
+                  COALESCE(to_jsonb(p)->>'code', to_jsonb(p)->>'plot_code') AS plot_code
            FROM plots p
            LEFT JOIN households h ON h.id = p.household_id
+           LEFT JOIN villages v_hh ON v_hh.id = h.village_id
            LEFT JOIN villages v ON lower(btrim(v.name)) = lower(btrim(p.village))
-           WHERE COALESCE(to_jsonb(p)->>'code', to_jsonb(p)->>'plot_code') = $1
+           WHERE upper(btrim(COALESCE(to_jsonb(p)->>'code', to_jsonb(p)->>'plot_code', ''))) = upper(btrim($1))
            LIMIT 1`,
           [effPlot],
         );
-        const plotRow = plotRes.rows[0];
-        if (plotRow) {
-          const plotVillageId = plotRow.village_id !== null ? Number(plotRow.village_id) : null;
-          if (context.user.role === "village_officer") {
-            if (!context.user.villageId || (plotVillageId !== null && plotVillageId !== Number(context.user.villageId))) {
-              throw forbidden("Cán bộ thôn chỉ được lập hoặc cập nhật biên bản cho thửa đất thuộc thôn mình phụ trách.");
-            }
-          }
-          if (plotVillageId !== null) {
-            resolvedVillageId = plotVillageId;
-          }
+        if (plotRes.rows[0]) {
+          plotMeta = plotRes.rows[0];
         }
       } catch (error) {
         if (error instanceof Error && "status" in error) throw error;
         // Bảng plots có thể chưa được khởi tạo trong môi trường tối giản.
       }
+
+      if (!plotMeta) {
+        try {
+          const sbRes = await this.db.query<{
+            village_id: number | null;
+            village_name: string | null;
+            zone_code: string | null;
+            plot_code: string;
+          }>(
+            `SELECT h.village_id,
+                    COALESCE(v.name, pst.village_name) AS village_name,
+                    pst.zone_code,
+                    pst.plot_code
+             FROM plot_signboard_tokens pst
+             LEFT JOIN households h ON h.id = pst.household_id
+             LEFT JOIN villages v ON v.id = h.village_id
+             WHERE upper(btrim(pst.plot_code)) = upper(btrim($1))
+             LIMIT 1`,
+            [effPlot],
+          );
+          if (sbRes.rows[0]) {
+            plotMeta = sbRes.rows[0];
+          }
+        } catch (error) {
+          if (error instanceof Error && "status" in error) throw error;
+        }
+      }
+
+      if (plotMeta) {
+        const plotVillageId = plotMeta.village_id !== null ? Number(plotMeta.village_id) : null;
+        if (
+          !isStaffInParcelScope(
+            context.user,
+            {
+              villageId: plotVillageId,
+              villageName: plotMeta.village_name,
+              zoneCode: plotMeta.zone_code,
+              plotCode: plotMeta.plot_code,
+            },
+            officerVillageName,
+          )
+        ) {
+          throw forbidden("Thửa đất không thuộc địa bàn quản lý của bạn.");
+        }
+        effPlot = plotMeta.plot_code;
+        if (out.plotCode !== undefined || context.method === "POST") {
+          out.plotCode = plotMeta.plot_code;
+        }
+        if (plotVillageId !== null) {
+          resolvedVillageId = plotVillageId;
+        }
+      } else if (
+        !isStaffInParcelScope(context.user, { plotCode: effPlot }, officerVillageName)
+      ) {
+        throw forbidden("Thửa đất không thuộc địa bàn quản lý của bạn.");
+      }
+    } else if (!isStaffInCuneCoopScope(context.user, false)) {
+      throw forbidden("Bạn không có quyền lập biên bản ngoài phạm vi quản lý.");
     }
 
     if (context.user.role === "village_officer") {

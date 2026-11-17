@@ -76,6 +76,9 @@ export class StampsService {
     if (hhRes.rows[0]?.status === "violation") {
       throw badRequest("Hộ đang có vi phạm chưa khắc phục, tạm khóa kích hoạt tem truy xuất.");
     }
+    if (hhRes.rows[0]?.status === "pending") {
+      throw badRequest("Hộ nông dân hoặc thửa đất đang chờ phê duyệt hồ sơ, chưa thể khai báo thu hoạch / kích hoạt tem.");
+    }
 
     const cleanPlotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
     const hasPlots =
@@ -87,6 +90,9 @@ export class StampsService {
       );
       if (plotRes.rows[0]?.status === "violation") {
         throw badRequest("Thửa đất đang có vi phạm chưa khắc phục, không thể kích hoạt tem truy xuất.");
+      }
+      if (plotRes.rows[0]?.status === "pending") {
+        throw badRequest("Hộ nông dân hoặc thửa đất đang chờ phê duyệt hồ sơ, chưa thể khai báo thu hoạch / kích hoạt tem.");
       }
     }
 
@@ -126,6 +132,7 @@ export class StampsService {
          AND household_id = $2
          AND status = 'allocated'
          AND (plot_code IS NULL OR btrim(plot_code) = '' OR upper(plot_code) = upper($3))
+         AND EXISTS (SELECT 1 FROM households h WHERE h.id = $2 AND h.status NOT IN ('violation', 'pending'))
        RETURNING ${STAMP_COLUMNS}`,
       [cleanSerial, householdId, cleanPlotCode, dto.fruitWeightKg, dto.grade, photoId ?? null, today],
     );

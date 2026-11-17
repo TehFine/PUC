@@ -14,6 +14,7 @@ import {
   MaxLength,
   MinLength,
 } from "class-validator";
+import { MaxPasswordUtf8Bytes, NormalizePassword } from "../../auth/dto/auth.dto";
 import { Count, NonNegative, OptionalField, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateHouseholdDto {
@@ -76,9 +77,10 @@ export class IssueHouseholdAccountDto {
   @Matches(/^[0-9A-Za-z._-]{3,64}$/, { message: "Tên đăng nhập gồm 3–64 ký tự chữ, số, . _ -" })
   username?: string;
 
+  @NormalizePassword()
   @IsString()
   @MinLength(8, { message: "Mật khẩu ban hành cần tối thiểu 8 ký tự." })
-  @MaxLength(200)
+  @MaxPasswordUtf8Bytes()
   @Matches(/[A-Za-z]/, { message: "Mật khẩu cần có chữ cái." })
   @Matches(/[0-9]/, { message: "Mật khẩu cần có chữ số." })
   password!: string;

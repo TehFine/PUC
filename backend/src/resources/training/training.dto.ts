@@ -1,5 +1,5 @@
 import { OmitType, PartialType } from "@nestjs/mapped-types";
-import { IsBoolean, IsIn, IsInt, IsOptional, IsPositive, Matches } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsOptional, IsPositive, Matches, Max } from "class-validator";
 import { Count, IsoDate, OptionalField, OptionalText, Text } from "../../common/validation/fields";
 
 export class CreateTrainingCourseDto {
@@ -29,10 +29,12 @@ export class CreateTrainingCourseDto {
 
   @OptionalField()
   @Count()
+  @Max(5_000)
   enrolled?: number;
 
   @IsInt()
   @IsPositive()
+  @Max(5_000)
   capacity!: number;
 
   @OptionalField()

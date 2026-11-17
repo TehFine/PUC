@@ -31,7 +31,7 @@ export class StampsController extends ReadOnlyCrudController("stamps") {
 
   @Get(":id/stamps")
   @Authorize("stamps", "read")
-  listStamps(@Param("id", ParseRecordIdPipe) id: number) {
-    return this.stamps.listStamps(id);
+  listStamps(@Param("id", ParseRecordIdPipe) id: number, @CurrentUser() user: AuthUser) {
+    return this.stamps.listStamps(id, user);
   }
 }

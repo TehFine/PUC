@@ -1,7 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
-import { badRequest, forbidden, notFound } from "../common/errors/app.exception";
+import { can } from "../auth/permissions";
+import { isStaffInCuneCoopScope } from "../common/crud/village-scope";
+import { AppException, badRequest, forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
 import { attachmentUrlSql, attachmentUrlsSql, camelRows, todayVn } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
@@ -10,6 +12,7 @@ import { ADMIN_LINKS, INSPECTION_ROLES } from "../portal/common/admin-links";
 import {
   assertPlotOwned,
   type ClientContext,
+  conflict,
   householdIdOf,
   plotsTableExists,
   withTransaction,
@@ -629,6 +632,33 @@ export class CareProtocolService {
 
     const fieldMedia = await this.uploads.assertUsableDetailed(rawFieldIds, user, "journal", householdId);
     const primaryFieldPhotoId = fieldMedia.primaryId!;
+
+    const fieldAttMetaRes = await this.db.query<{ earliest_upload_on: string | null }>(
+      `SELECT MIN(to_char(created_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')) AS earliest_upload_on
+         FROM attachments
+        WHERE id = ANY($1::bigint[])`,
+      [fieldMedia.ids],
+    );
+    const earliestFieldUploadOn = fieldAttMetaRes.rows[0]?.earliest_upload_on;
+    if (earliestFieldUploadOn && performedOn > earliestFieldUploadOn) {
+      throw badRequest(
+        "Ảnh hiện trường đã được chụp và tải lên trước ngày thực hiện đã chọn, không thể dùng để khai trước mốc chăm sóc chưa thực hiện.",
+      );
+    }
+    const reusedMilestonePhotoRes = await this.db.query(
+      `SELECT 1
+         FROM care_milestone_declarations
+        WHERE household_id = $1
+          AND (field_photo_id = ANY($2::bigint[]) OR field_photo_ids && $2::bigint[])
+        LIMIT 1`,
+      [householdId, fieldMedia.ids],
+    );
+    if ((reusedMilestonePhotoRes.rowCount ?? 0) > 0) {
+      throw badRequest(
+        "Ảnh hiện trường này đã được sử dụng cho một mốc chăm sóc khác. Vui lòng chụp ảnh thực tế mới tại vườn.",
+      );
+    }
+
     const invoiceMedia =
       rawInvoiceIds.length > 0
         ? await this.uploads.assertUsableDetailed(rawInvoiceIds, user, "journal", householdId, { imagesOnly: true })
@@ -688,25 +718,9 @@ export class CareProtocolService {
       };
     }
 
-    const scheduledOn = milestoneSpec ? addIsoDays(plan.cycle_start_on, milestoneSpec.cycleDayStart) : performedOn;
-    const dueOn = milestoneSpec ? addIsoDays(plan.cycle_start_on, milestoneSpec.cycleDayEnd) : performedOn;
     const expectedTreeState = milestoneSpec
       ? milestoneSpec.treeState
       : `Đọt ${senProSpec!.shootState}`;
-
-    const compliance = evaluateDeclarationCompliance({
-      milestone: milestoneSpec,
-      senProRule: senProSpec,
-      performedOn,
-      dueOn: milestoneSpec ? dueOn : null,
-      actualTreeState: dto.actualTreeState.trim(),
-      followedStandard: dto.followedStandard,
-      selectedProducts: dto.selectedProducts,
-      actualDosage: dto.actualDosage.trim(),
-      extraInputs: dto.extraInputs?.trim() || null,
-      pesticideStatus: pesticideInfo?.status ?? null,
-      pesticideName: pesticideInfo?.name ?? null,
-    });
 
     const gpsCheck = await verifyPlotGpsProximity(this.db, plotCode, dto.latitude, dto.longitude);
 
@@ -743,247 +757,334 @@ export class CareProtocolService {
             (isLateOver48h ? "Khai báo bổ sung theo mốc quy trình chăm sóc" : null))
         : null;
 
-    const currentReminderLead = Math.max(1, Number(plan.reminder_lead_days ?? 1));
-    const nextReminderLeadDays =
-      lateDeclarationDays >= 2
-        ? Math.min(4, Math.max(2, lateDeclarationDays))
-        : lateDeclarationDays === 1
-          ? Math.max(2, currentReminderLead)
-          : Math.max(1, currentReminderLead - 1);
+    let txResult: {
+      declarationId: number;
+      declaredAt: string;
+      journalEntryId: number;
+      sprayRecordId: number | null;
+      createdViolationId: number | null;
+      nextMilestone: SequentialMilestoneSpec | null;
+      effectiveCycleStart: string;
+      scheduleAdjustedDays: number;
+      nextPlanStatus: "active" | "completed";
+      nextReminderLeadDays: number;
+      compliance: ReturnType<typeof evaluateDeclarationCompliance>;
+    };
 
-    const txResult = await withTransaction(this.db, async (client) => {
-      // 1. Ghi tự động vào sổ cái Nhật ký canh tác (niêm phong SHA-256)
-      const jIns = await client.query<{ id: number }>(
-        `INSERT INTO journal_entries
-           (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, photo_ids, latitude, longitude, gps_verified, gps_distance_m, capture_source, late_reason)
-         VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8::bigint[], $9, $10, $11, $12, 'camera', $13)
-         RETURNING id`,
-        [
+    try {
+      txResult = await withTransaction(this.db, async (client) => {
+        const lockedPlanRes = await client.query<{
+          id: number;
+          household_id: number;
+          plot_code: string;
+          cycle_start_on: string;
+          start_milestone_seq: number;
+          current_milestone_code: string;
+          reminder_lead_days: number;
+          status: "active" | "completed" | "paused";
+        }>(
+          `SELECT id,
+                  household_id,
+                  plot_code,
+                  to_char(cycle_start_on, 'YYYY-MM-DD') AS cycle_start_on,
+                  start_milestone_seq,
+                  current_milestone_code,
+                  COALESCE(reminder_lead_days, 1)::int AS reminder_lead_days,
+                  status
+           FROM plot_care_plans
+           WHERE id = $1 AND household_id = $2
+           FOR UPDATE`,
+          [plan.id, householdId],
+        );
+        const lockedPlan = lockedPlanRes.rows[0];
+        if (!lockedPlan) {
+          throw notFound("Không tìm thấy lộ trình chăm sóc của thửa đất.");
+        }
+
+        if (!senProSpec) {
+          const dupCheck = await client.query(
+            `SELECT 1
+             FROM care_milestone_declarations
+             WHERE plan_id = $1 AND milestone_code = $2 AND is_senpro = false
+             LIMIT 1`,
+            [lockedPlan.id, dto.milestoneCode],
+          );
+          if ((dupCheck.rowCount ?? 0) > 0) {
+            throw conflict("Mốc chăm sóc này đã được khai báo trước đó.");
+          }
+        }
+
+        const scheduledOn = milestoneSpec
+          ? addIsoDays(lockedPlan.cycle_start_on, milestoneSpec.cycleDayStart)
+          : performedOn;
+        const dueOn = milestoneSpec
+          ? addIsoDays(lockedPlan.cycle_start_on, milestoneSpec.cycleDayEnd)
+          : performedOn;
+        const compliance = evaluateDeclarationCompliance({
+          milestone: milestoneSpec,
+          senProRule: senProSpec,
           performedOn,
-          householdId,
-          plotCode,
-          journalActivity,
-          journalDetail,
-          FARMER_RECORDER,
-          primaryFieldPhotoId,
-          fieldMedia.ids,
-          dto.latitude ?? null,
-          dto.longitude ?? null,
-          gpsCheck.verified,
-          gpsCheck.distanceMeters,
-          lateReason,
-        ],
-      );
-      const journalEntryId = jIns.rows[0].id;
+          dueOn: milestoneSpec ? dueOn : null,
+          actualTreeState: dto.actualTreeState.trim(),
+          followedStandard: dto.followedStandard,
+          selectedProducts: dto.selectedProducts,
+          actualDosage: dto.actualDosage.trim(),
+          extraInputs: dto.extraInputs?.trim() || null,
+          pesticideStatus: pesticideInfo?.status ?? null,
+          pesticideName: pesticideInfo?.name ?? null,
+        });
 
-      // 2. Nếu có kết hợp phun thuốc BVTV -> ghi đồng thời vào spray_records để khóa ngày cách ly PHI
-      let sprayRecordId: number | null = null;
-      if (pesticideInfo) {
-        const mrlStatus =
-          pesticideInfo.status === "banned" || pesticideInfo.status === "restricted" ? "exceeded" : "pass";
-        const sIns = await client.query<{ id: number }>(
-          `INSERT INTO spray_records
-             (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, late_reason)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        const currentReminderLead = Math.max(1, Number(lockedPlan.reminder_lead_days ?? 1));
+        const nextReminderLeadDays =
+          lateDeclarationDays >= 2
+            ? Math.min(4, Math.max(2, lateDeclarationDays))
+            : lateDeclarationDays === 1
+              ? Math.max(2, currentReminderLead)
+              : Math.max(1, currentReminderLead - 1);
+
+        // 1. Ghi tự động vào sổ cái Nhật ký canh tác (niêm phong SHA-256)
+        const jIns = await client.query<{ id: number }>(
+          `INSERT INTO journal_entries
+             (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, photo_ids, latitude, longitude, gps_verified, gps_distance_m, capture_source, late_reason)
+           VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8::bigint[], $9, $10, $11, $12, 'camera', $13)
            RETURNING id`,
           [
             performedOn,
             householdId,
-            pesticideInfo.id,
-            dto.supplierName?.trim() || null,
-            dto.pesticideDose?.trim() || dto.actualDosage.trim().slice(0, 100),
-            plotAreaHa,
-            pesticideInfo.isolation_days,
-            mrlStatus,
             plotCode,
+            journalActivity,
+            journalDetail,
+            FARMER_RECORDER,
+            primaryFieldPhotoId,
+            fieldMedia.ids,
+            dto.latitude ?? null,
+            dto.longitude ?? null,
+            gpsCheck.verified,
+            gpsCheck.distanceMeters,
             lateReason,
           ],
         );
-        sprayRecordId = sIns.rows[0].id;
-      }
+        const journalEntryId = jIns.rows[0].id;
 
-      // 3. Lưu bản khai báo mốc quy trình chăm sóc kèm đồng thời ngày thực làm + thời điểm khai báo thực tế + số ngày khai báo chậm
-      const declIns = await client.query<{ id: number; declared_at: string }>(
-        `INSERT INTO care_milestone_declarations
-           (plan_id, household_id, plot_code, stage_code, milestone_code, is_senpro,
-            scheduled_on, due_on, performed_on, declared_at, declared_on, late_declaration_days, late_reason,
-            expected_tree_state, actual_tree_state,
-            followed_standard, selected_products, actual_dosage, extra_inputs, supplier_name,
-            pesticide_id, pesticide_dose, field_photo_id, field_photo_ids, invoice_photo_id, invoice_photo_ids,
-            latitude, longitude, gps_verified, gps_distance_m,
-            journal_entry_id, spray_record_id, compliance_status, compliance_issues, farmer_note)
-         VALUES
-           ($1, $2, $3, $4, $5, $6,
-            $7, $8, $9, date_trunc('second', clock_timestamp()), $10::date, $11, $12,
-            $13, $14,
-            $15, $16::jsonb, $17, $18, $19,
-            $20, $21, $22, $23::bigint[], $24, $25::bigint[],
-            $26, $27, $28, $29,
-            $30, $31, $32, $33::jsonb, $34)
-         RETURNING id, declared_at::text AS declared_at`,
-        [
-          plan.id,
-          householdId,
-          plotCode,
-          milestoneSpec ? milestoneSpec.stageCode : "senpro",
-          dto.milestoneCode,
-          Boolean(senProSpec),
-          milestoneSpec ? scheduledOn : null,
-          milestoneSpec ? dueOn : null,
-          performedOn,
-          today,
-          lateDeclarationDays,
-          lateReason,
-          expectedTreeState,
-          dto.actualTreeState.trim(),
-          dto.followedStandard,
-          JSON.stringify(selectedProductLabels),
-          dto.actualDosage.trim(),
-          dto.extraInputs?.trim() || null,
-          dto.supplierName?.trim() || null,
-          pesticideInfo?.id ?? null,
-          dto.pesticideDose?.trim() || null,
-          primaryFieldPhotoId,
-          fieldMedia.ids,
-          primaryInvoicePhotoId,
-          invoiceMedia.ids,
-          dto.latitude ?? null,
-          dto.longitude ?? null,
-          gpsCheck.verified,
-          gpsCheck.distanceMeters,
-          journalEntryId,
-          sprayRecordId,
-          compliance.complianceStatus,
-          JSON.stringify(compliance.issues),
-          dto.farmerNote?.trim() || null,
-        ],
-      );
+        // 2. Nếu có kết hợp phun thuốc BVTV -> ghi đồng thời vào spray_records để khóa ngày cách ly PHI
+        let sprayRecordId: number | null = null;
+        if (pesticideInfo) {
+          const mrlStatus =
+            pesticideInfo.status === "banned" || pesticideInfo.status === "restricted" ? "exceeded" : "pass";
+          const sIns = await client.query<{ id: number }>(
+            `INSERT INTO spray_records
+               (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, late_reason, recorded_by_role, created_by_user_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'farmer', $11)
+             RETURNING id`,
+            [
+              performedOn,
+              householdId,
+              pesticideInfo.id,
+              dto.supplierName?.trim() || null,
+              dto.pesticideDose?.trim() || dto.actualDosage.trim().slice(0, 100),
+              plotAreaHa,
+              pesticideInfo.isolation_days,
+              mrlStatus,
+              plotCode,
+              lateReason,
+              user.id,
+            ],
+          );
+          sprayRecordId = sIns.rows[0].id;
+        }
 
-      // 4. Chỉ tự động ghi nhận phản hồi cho vi phạm trễ nhật ký hoặc quá hạn lộ trình khi bản khai báo đạt chuẩn
-      if (compliance.complianceStatus === "compliant") {
-        const autoResponseNote = `Đã khai báo hoàn thành mốc ${stageLabel} tại Thửa ${plotCode} ngày ${formatIsoVn(performedOn)}.`;
-        await client.query(
-          `UPDATE violations v
-           SET farmer_response = $2,
-               farmer_response_at = now(),
-               farmer_response_photo_id = COALESCE(farmer_response_photo_id, $3),
-               farmer_response_photo_ids = CASE
-                 WHEN cardinality(v.farmer_response_photo_ids) > 0 THEN v.farmer_response_photo_ids
-                 ELSE $4::bigint[]
-               END
-           WHERE v.household_id = $1
-             AND v.status = 'open'
-             AND v.farmer_response IS NULL
-             AND v.detected_on <= $6::date
-             AND (${isJournalViolationSql("v")} OR v.title ILIKE '%trễ hạn%' OR v.title ILIKE '%quá hạn%')
-             AND (v.plot_code IS NULL OR upper(v.plot_code) = upper($5))`,
-          [householdId, autoResponseNote, primaryFieldPhotoId, fieldMedia.ids, plotCode, performedOn],
-        );
-      }
-
-      // 5. Nếu khai báo sai quy trình nghiêm trọng (violation) -> mở bản ghi vi phạm để cán bộ HTX theo dõi sát
-      let createdViolationId: number | null = null;
-      if (compliance.complianceStatus === "violation") {
-        const issueSummary = compliance.issues.map((i) => i.message).join(" ");
-        const vIns = await client.query<{ id: number }>(
-          `INSERT INTO violations
-             (severity, title, household_id, household_label, detected_on, plot_code, description, status)
-           VALUES ($1, $2, $3, $4, $5::date, $6, $7, 'open')
-           RETURNING id`,
+        // 3. Lưu bản khai báo mốc quy trình chăm sóc kèm đồng thời ngày thực làm + thời điểm khai báo thực tế + số ngày khai báo chậm
+        const declIns = await client.query<{ id: number; declared_at: string }>(
+          `INSERT INTO care_milestone_declarations
+             (plan_id, household_id, plot_code, stage_code, milestone_code, is_senpro,
+              scheduled_on, due_on, performed_on, declared_at, declared_on, late_declaration_days, late_reason,
+              expected_tree_state, actual_tree_state,
+              followed_standard, selected_products, actual_dosage, extra_inputs, supplier_name,
+              pesticide_id, pesticide_dose, field_photo_id, field_photo_ids, invoice_photo_id, invoice_photo_ids,
+              latitude, longitude, gps_verified, gps_distance_m,
+              journal_entry_id, spray_record_id, compliance_status, compliance_issues, farmer_note)
+           VALUES
+             ($1, $2, $3, $4, $5, $6,
+              $7, $8, $9, date_trunc('second', clock_timestamp()), $10::date, $11, $12,
+              $13, $14,
+              $15, $16::jsonb, $17, $18, $19,
+              $20, $21, $22, $23::bigint[], $24, $25::bigint[],
+              $26, $27, $28, $29,
+              $30, $31, $32, $33::jsonb, $34)
+           RETURNING id, declared_at::text AS declared_at`,
           [
-            compliance.issues.some((i) => i.code === "forbidden_substance" || i.code === "banned_pesticide")
-              ? "critical"
-              : "warning",
-            `Sai lệch quy trình chăm sóc (${stageLabel})`,
+            lockedPlan.id,
             householdId,
-            `${plan.household_name} (${plan.household_code})`,
-            today,
             plotCode,
-            issueSummary.slice(0, 900),
+            milestoneSpec ? milestoneSpec.stageCode : "senpro",
+            dto.milestoneCode,
+            Boolean(senProSpec),
+            milestoneSpec ? scheduledOn : null,
+            milestoneSpec ? dueOn : null,
+            performedOn,
+            today,
+            lateDeclarationDays,
+            lateReason,
+            expectedTreeState,
+            dto.actualTreeState.trim(),
+            dto.followedStandard,
+            JSON.stringify(selectedProductLabels),
+            dto.actualDosage.trim(),
+            dto.extraInputs?.trim() || null,
+            dto.supplierName?.trim() || null,
+            pesticideInfo?.id ?? null,
+            dto.pesticideDose?.trim() || null,
+            primaryFieldPhotoId,
+            fieldMedia.ids,
+            primaryInvoicePhotoId,
+            invoiceMedia.ids,
+            dto.latitude ?? null,
+            dto.longitude ?? null,
+            gpsCheck.verified,
+            gpsCheck.distanceMeters,
+            journalEntryId,
+            sprayRecordId,
+            compliance.complianceStatus,
+            JSON.stringify(compliance.issues),
+            dto.farmerNote?.trim() || null,
           ],
         );
-        createdViolationId = vIns.rows[0].id;
-      }
 
-      // 6. Chuyển con trỏ sang mốc tuần tự tiếp theo và tự động căn chỉnh lịch theo ngày thực làm (performedOn)
-      let nextMilestone: SequentialMilestoneSpec | null = null;
-      let effectiveCycleStart = plan.cycle_start_on;
-      let nextPlanStatus: "active" | "completed" = plan.status === "completed" ? "completed" : "active";
-
-      if (milestoneSpec) {
-        // Căn chỉnh nhịp sinh học tiếp theo tính đúng từ ngày thực làm tại vườn (dù hộ khai báo muộn vài ngày sau đó)
-        if (performedOn !== scheduledOn) {
-          effectiveCycleStart = addIsoDays(performedOn, -milestoneSpec.cycleDayStart);
+        // 4. Chỉ tự động ghi nhận phản hồi cho vi phạm trễ nhật ký hoặc quá hạn lộ trình khi bản khai báo đạt chuẩn
+        if (compliance.complianceStatus === "compliant") {
+          const autoResponseNote = `Đã khai báo hoàn thành mốc ${stageLabel} tại Thửa ${plotCode} ngày ${formatIsoVn(performedOn)}.`;
+          await client.query(
+            `UPDATE violations v
+             SET farmer_response = $2,
+                 farmer_response_at = now(),
+                 farmer_response_photo_id = COALESCE(farmer_response_photo_id, $3),
+                 farmer_response_photo_ids = CASE
+                   WHEN cardinality(v.farmer_response_photo_ids) > 0 THEN v.farmer_response_photo_ids
+                   ELSE $4::bigint[]
+                 END
+             WHERE v.household_id = $1
+               AND v.status = 'open'
+               AND v.farmer_response IS NULL
+               AND v.detected_on <= $6::date
+               AND (${isJournalViolationSql("v")} OR v.title ILIKE '%trễ hạn%' OR v.title ILIKE '%quá hạn%')
+               AND (v.plot_code IS NULL OR upper(v.plot_code) = upper($5))`,
+            [householdId, autoResponseNote, primaryFieldPhotoId, fieldMedia.ids, plotCode, performedOn],
+          );
         }
 
-        const declaredCodesRes = await client.query<{ milestone_code: string }>(
-          `SELECT DISTINCT milestone_code
-           FROM care_milestone_declarations
-           WHERE plan_id = $1 AND is_senpro = false`,
-          [plan.id],
-        );
-        const doneCodes = new Set(declaredCodesRes.rows.map((r) => r.milestone_code));
-        doneCodes.add(milestoneSpec.code);
-
-        nextMilestone =
-          SEQUENTIAL_MILESTONES_2026_2027.find(
-            (m) => m.seq >= plan.start_milestone_seq && !doneCodes.has(m.code),
-          ) ?? null;
-
-        if (nextMilestone) {
-          await client.query(
-            `UPDATE plot_care_plans
-             SET current_milestone_code = $2,
-                 cycle_start_on = $3::date,
-                 reminder_lead_days = $4,
-                 last_late_declaration_days = $5,
-                 status = 'active',
-                 updated_at = now()
-             WHERE id = $1`,
-            [plan.id, nextMilestone.code, effectiveCycleStart, nextReminderLeadDays, lateDeclarationDays],
+        // 5. Nếu khai báo sai quy trình nghiêm trọng (violation) -> mở bản ghi vi phạm để cán bộ HTX theo dõi sát
+        let createdViolationId: number | null = null;
+        if (compliance.complianceStatus === "violation") {
+          const issueSummary = compliance.issues.map((i) => i.message).join(" ");
+          const vIns = await client.query<{ id: number }>(
+            `INSERT INTO violations
+               (severity, title, household_id, household_label, detected_on, plot_code, description, status)
+             VALUES ($1, $2, $3, $4, $5::date, $6, $7, 'open')
+             RETURNING id`,
+            [
+              compliance.issues.some((i) => i.code === "forbidden_substance" || i.code === "banned_pesticide")
+                ? "critical"
+                : "warning",
+              `Sai lệch quy trình chăm sóc (${stageLabel})`,
+              householdId,
+              `${plan.household_name} (${plan.household_code})`,
+              today,
+              plotCode,
+              issueSummary.slice(0, 900),
+            ],
           );
-          await client.query(
-            `DELETE FROM care_protocol_alert_logs
-             WHERE plan_id = $1 AND milestone_code = $2 AND alert_type IN ('due_soon', 'due_day_prompt')`,
-            [plan.id, nextMilestone.code],
+          createdViolationId = vIns.rows[0].id;
+        }
+
+        // 6. Chuyển con trỏ sang mốc tuần tự tiếp theo và tự động căn chỉnh lịch theo ngày thực làm (performedOn)
+        let nextMilestone: SequentialMilestoneSpec | null = null;
+        let effectiveCycleStart = lockedPlan.cycle_start_on;
+        let nextPlanStatus: "active" | "completed" = lockedPlan.status === "completed" ? "completed" : "active";
+
+        if (milestoneSpec) {
+          if (performedOn !== scheduledOn) {
+            effectiveCycleStart = addIsoDays(performedOn, -milestoneSpec.cycleDayStart);
+          }
+
+          const declaredCodesRes = await client.query<{ milestone_code: string }>(
+            `SELECT DISTINCT milestone_code
+             FROM care_milestone_declarations
+             WHERE plan_id = $1 AND is_senpro = false`,
+            [lockedPlan.id],
           );
+          const doneCodes = new Set(declaredCodesRes.rows.map((r) => r.milestone_code));
+          doneCodes.add(milestoneSpec.code);
+
+          nextMilestone =
+            SEQUENTIAL_MILESTONES_2026_2027.find(
+              (m) => m.seq >= lockedPlan.start_milestone_seq && !doneCodes.has(m.code),
+            ) ?? null;
+
+          if (nextMilestone) {
+            await client.query(
+              `UPDATE plot_care_plans
+               SET current_milestone_code = $2,
+                   cycle_start_on = $3::date,
+                   reminder_lead_days = $4,
+                   last_late_declaration_days = $5,
+                   status = 'active',
+                   updated_at = now()
+               WHERE id = $1`,
+              [lockedPlan.id, nextMilestone.code, effectiveCycleStart, nextReminderLeadDays, lateDeclarationDays],
+            );
+            await client.query(
+              `DELETE FROM care_protocol_alert_logs
+               WHERE plan_id = $1 AND milestone_code = $2 AND alert_type IN ('due_soon', 'due_day_prompt')`,
+              [lockedPlan.id, nextMilestone.code],
+            );
+          } else {
+            nextPlanStatus = "completed";
+            await client.query(
+              `UPDATE plot_care_plans
+               SET current_milestone_code = 'completed',
+                   cycle_start_on = $2::date,
+                   reminder_lead_days = $3,
+                   last_late_declaration_days = $4,
+                   status = 'completed',
+                   updated_at = now()
+               WHERE id = $1`,
+              [lockedPlan.id, effectiveCycleStart, nextReminderLeadDays, lateDeclarationDays],
+            );
+          }
         } else {
-          nextPlanStatus = "completed";
           await client.query(
             `UPDATE plot_care_plans
-             SET current_milestone_code = 'completed',
-                 cycle_start_on = $2::date,
-                 reminder_lead_days = $3,
-                 last_late_declaration_days = $4,
-                 status = 'completed',
+             SET reminder_lead_days = $2,
+                 last_late_declaration_days = $3,
                  updated_at = now()
              WHERE id = $1`,
-            [plan.id, effectiveCycleStart, nextReminderLeadDays, lateDeclarationDays],
+            [lockedPlan.id, nextReminderLeadDays, lateDeclarationDays],
           );
         }
-      } else {
-        await client.query(
-          `UPDATE plot_care_plans
-           SET reminder_lead_days = $2,
-               last_late_declaration_days = $3,
-               updated_at = now()
-           WHERE id = $1`,
-          [plan.id, nextReminderLeadDays, lateDeclarationDays],
-        );
-      }
 
-      return {
-        declarationId: declIns.rows[0].id,
-        declaredAt: declIns.rows[0].declared_at,
-        journalEntryId,
-        sprayRecordId,
-        createdViolationId,
-        nextMilestone,
-        effectiveCycleStart,
-        scheduleAdjustedDays: diffIsoDays(effectiveCycleStart, plan.cycle_start_on),
-        nextPlanStatus,
-      };
-    });
+        return {
+          declarationId: declIns.rows[0].id,
+          declaredAt: declIns.rows[0].declared_at,
+          journalEntryId,
+          sprayRecordId,
+          createdViolationId,
+          nextMilestone,
+          effectiveCycleStart,
+          scheduleAdjustedDays: diffIsoDays(effectiveCycleStart, lockedPlan.cycle_start_on),
+          nextPlanStatus,
+          nextReminderLeadDays,
+          compliance,
+        };
+      });
+    } catch (error) {
+      if (error instanceof AppException) throw error;
+      if ((error as { code?: string })?.code === "23505") {
+        throw conflict("Mốc chăm sóc này đã được khai báo trước đó.");
+      }
+      throw error;
+    }
+
+    const { compliance, nextReminderLeadDays } = txResult;
 
     // 7. Gửi cảnh báo tức thời tới CẢ Hộ nông dân VÀ Quản trị viên HTX nếu phát hiện sai lệch hoặc trễ hạn
     if (pesticideInfo && (pesticideInfo.status === "banned" || pesticideInfo.status === "restricted")) {
@@ -1110,10 +1211,7 @@ export class CareProtocolService {
 
   /** Quản trị viên / Cán bộ HTX: danh sách tiến độ toàn xã (có lọc theo phạm vi thôn/xã/địa bàn/HTX). */
   async adminListPlans(query: CareProtocolListQueryDto, user: AuthUser) {
-    if (
-      (user.role === "htx_officer" || user.role === "admin") &&
-      (user.coopCode || "HTX-CUNE").trim().toUpperCase() !== "HTX-CUNE"
-    ) {
+    if (!isStaffInCuneCoopScope(user, true)) {
       return {
         season: PROTOCOL_SEASON,
         today: todayVn(),
@@ -1122,7 +1220,9 @@ export class CareProtocolService {
       };
     }
 
-    await this.ensureAllHouseholdPlans();
+    if (isStaffInCuneCoopScope(user, false) && can(user.role, "journal", "create")) {
+      await this.ensureAllHouseholdPlans();
+    }
 
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -1201,14 +1301,12 @@ export class CareProtocolService {
     overdueWarnings: number;
     criticalViolations: number;
   }> {
-    if (
-      user &&
-      (user.role === "htx_officer" || user.role === "admin") &&
-      (user.coopCode || "HTX-CUNE").trim().toUpperCase() !== "HTX-CUNE"
-    ) {
+    if (user && !isStaffInCuneCoopScope(user, true)) {
       return { scanned: 0, dueNotifications: 0, overdueWarnings: 0, criticalViolations: 0 };
     }
-    await this.ensureAllHouseholdPlans();
+    if (!user || (isStaffInCuneCoopScope(user, false) && can(user.role, "journal", "create"))) {
+      await this.ensureAllHouseholdPlans();
+    }
     const allPlans = await this.loadPlanRows("WHERE pcp.status = 'active'", []);
     const scopedPlans = user ? allPlans.filter((p) => isStaffInPlanScope(user, p)) : allPlans;
     return this.evaluateAndDispatchAlerts(scopedPlans);

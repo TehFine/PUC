@@ -39,7 +39,7 @@ export async function resolvePlotHouseholdId(
     const found = await db.query<{ id: number | string }>("SELECT id FROM households WHERE id = $1 LIMIT 1", [
       explicitId,
     ]);
-    if (found.rows[0]) return Number(found.rows[0].id);
+    return found.rows[0] ? Number(found.rows[0].id) : null;
   }
 
   const owner = typeof input.ownerName === "string" ? input.ownerName.trim() : "";
@@ -56,9 +56,7 @@ export async function resolvePlotHouseholdId(
        LIMIT 2`,
       [owner, village],
     );
-    if (byVillage.rows.length === 1) {
-      return Number(byVillage.rows[0].id);
-    }
+    return byVillage.rows.length === 1 ? Number(byVillage.rows[0].id) : null;
   }
 
   const globalMatch = await db.query<{ id: number | string }>(

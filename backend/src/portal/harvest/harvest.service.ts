@@ -11,8 +11,11 @@ import {
   assertPlotNotInIsolation,
   assertPlotOwned,
   type ClientContext,
+  conflict,
   exceedsWithTolerance,
   householdIdOf,
+  plotsTableExists,
+  withTransaction,
 } from "../common/portal-context";
 import type { CreateHarvestDeclarationDto } from "./harvest.dto";
 
@@ -70,9 +73,16 @@ export class HarvestService {
 
   async createDeclaration(dto: CreateHarvestDeclarationDto, user: AuthUser, context: ClientContext) {
     const householdId = householdIdOf(user);
-    const harvestedOn = dto.harvestedOn ?? todayVn();
-    if (harvestedOn > todayVn()) {
-      throw badRequest("Ngày thu hái không được ở tương lai.");
+    const today = todayVn();
+    const harvestedOn = dto.harvestedOn ?? today;
+    if (harvestedOn > today) {
+      throw badRequest("Ngày thu hái không được ở tương lai. Chỉ khai báo sản lượng sau khi đã thu hái thực tế.");
+    }
+    const harvestBackdateDays = Math.round(
+      (new Date(`${today}T00:00:00Z`).getTime() - new Date(`${harvestedOn}T00:00:00Z`).getTime()) / 86_400_000,
+    );
+    if (harvestBackdateDays > 7) {
+      throw badRequest("Không được khai báo thu hái lùi quá 7 ngày.");
     }
 
     const gradeAKg = dto.gradeAKg ?? 0;
@@ -81,44 +91,74 @@ export class HarvestService {
       throw badRequest("Tổng khối lượng phân loại (A + B) không được vượt quá tổng sản lượng thu hái.");
     }
 
-    const hhRes = await this.db.query<{ status: string }>("SELECT status FROM households WHERE id = $1", [householdId]);
-    if (hhRes.rows[0]?.status === "violation") {
-      throw badRequest("Hộ đang có vi phạm chưa khắc phục, không thể khai báo thu hái.");
-    }
-
     const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
-    const hasPlots =
-      (await this.db.query<{ t: string | null }>("SELECT to_regclass('public.plots') AS t")).rows[0]?.t !== null;
-    if (hasPlots) {
-      const plotRes = await this.db.query<{ status: string }>(
-        "SELECT status FROM plots WHERE household_id = $1 AND upper(code) = upper($2) LIMIT 1",
-        [householdId, plotCode],
-      );
-      if (plotRes.rows[0]?.status === "violation") {
-        throw badRequest("Thửa đất đang có vi phạm chưa khắc phục, không thể khai báo thu hái.");
-      }
-    }
-    await assertPlotNotInIsolation(this.db, householdId, plotCode, harvestedOn);
+    const hasPlots = await plotsTableExists(this.db);
     const [photoId] = await this.uploads.assertUsable(dto.photoId ? [dto.photoId] : [], user, "harvest");
 
-    const inserted = await this.db.query<{ id: number }>(
-      `INSERT INTO harvest_declarations
-         (household_id, plot_code, harvested_on, weight_kg, grade_a_kg, grade_b_kg, quality_rating, note, photo_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING id`,
-      [
-        householdId,
-        plotCode,
-        harvestedOn,
-        dto.weightKg,
-        gradeAKg,
-        gradeBKg,
-        dto.qualityRating || "Loại 1 (VIP)",
-        dto.note ?? null,
-        photoId ?? null,
-      ],
-    );
-    const id = inserted.rows[0].id;
+    const id = await withTransaction(this.db, async (client) => {
+      const hhRes = await client.query<{ id: number; status: string }>(
+        "SELECT id, status FROM households WHERE id = $1 FOR UPDATE",
+        [householdId],
+      );
+      const hhRow = hhRes.rows[0];
+      if (!hhRow) {
+        throw badRequest("Hộ nông dân không tồn tại.");
+      }
+      if (hhRow.status === "violation") {
+        throw badRequest("Hộ đang có vi phạm chưa khắc phục, không thể khai báo thu hái.");
+      }
+      if (hhRow.status === "pending") {
+        throw badRequest("Hộ nông dân hoặc thửa đất đang chờ phê duyệt hồ sơ, chưa thể khai báo thu hoạch / kích hoạt tem.");
+      }
+
+      if (hasPlots) {
+        const plotRes = await client.query<{ status: string }>(
+          "SELECT status FROM plots WHERE household_id = $1 AND upper(code) = upper($2) LIMIT 1 FOR UPDATE",
+          [householdId, plotCode],
+        );
+        if (plotRes.rows[0]?.status === "violation") {
+          throw badRequest("Thửa đất đang có vi phạm chưa khắc phục, không thể khai báo thu hái.");
+        }
+        if (plotRes.rows[0]?.status === "pending") {
+          throw badRequest("Hộ nông dân hoặc thửa đất đang chờ phê duyệt hồ sơ, chưa thể khai báo thu hoạch / kích hoạt tem.");
+        }
+      }
+
+      await assertPlotNotInIsolation(client, householdId, plotCode, harvestedOn);
+
+      const dupRes = await client.query(
+        `SELECT 1
+         FROM harvest_declarations
+         WHERE household_id = $1
+           AND upper(btrim(plot_code)) = upper($2)
+           AND harvested_on = $3::date
+           AND status IN ('submitted', 'confirmed')
+         LIMIT 1`,
+        [householdId, plotCode, harvestedOn],
+      );
+      if ((dupRes.rowCount ?? 0) > 0) {
+        throw conflict("Thửa đất này đã có bản khai báo thu hái trong ngày đã chọn.");
+      }
+
+      const inserted = await client.query<{ id: number }>(
+        `INSERT INTO harvest_declarations
+           (household_id, plot_code, harvested_on, weight_kg, grade_a_kg, grade_b_kg, quality_rating, note, photo_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id`,
+        [
+          householdId,
+          plotCode,
+          harvestedOn,
+          dto.weightKg,
+          gradeAKg,
+          gradeBKg,
+          dto.qualityRating || "Loại 1 (VIP)",
+          dto.note ?? null,
+          photoId ?? null,
+        ],
+      );
+      return inserted.rows[0].id;
+    });
 
     await this.audit.write(
       { ip: context.ip, user },

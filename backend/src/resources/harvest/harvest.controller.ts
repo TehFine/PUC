@@ -28,7 +28,7 @@ export class HarvestPlotQuotasController {
     @Query("q") q?: string,
   ) {
     return this.harvestService.listPlotQuotas(
-      { seasonYear: seasonYear ? Number(seasonYear) : undefined, q },
+      { seasonYear: seasonYear ? Number(seasonYear) : undefined, q: typeof q === "string" ? q.slice(0, 100) : undefined },
       user,
     );
   }
@@ -51,7 +51,7 @@ export class HarvestPlotSignboardsController {
   @Get()
   @Authorize("households", "read")
   listSignboards(@CurrentUser() user: AuthUser, @Query("q") q?: string) {
-    return this.harvestService.listPlotSignboards({ q }, user);
+    return this.harvestService.listPlotSignboards({ q: typeof q === "string" ? q.slice(0, 100) : undefined }, user);
   }
 }
 
@@ -137,8 +137,8 @@ export class HarvestTraceAccessLogsController {
   ) {
     return this.harvestService.listTraceAccessLogs(
       {
-        lotCode,
-        q,
+        lotCode: typeof lotCode === "string" ? lotCode.slice(0, 100) : undefined,
+        q: typeof q === "string" ? q.slice(0, 100) : undefined,
         scopeGranted,
         limit: limit ? Number(limit) : undefined,
       },
@@ -189,7 +189,10 @@ export class HarvestPlanController {
     @Query("q") q?: string,
     @Query("status") status?: string,
   ) {
-    return this.harvestService.listHarvestPlan(user, { q, status });
+    return this.harvestService.listHarvestPlan(user, {
+      q: typeof q === "string" ? q.slice(0, 100) : undefined,
+      status: typeof status === "string" ? status.slice(0, 40) : undefined,
+    });
   }
 
   @Post("notify")

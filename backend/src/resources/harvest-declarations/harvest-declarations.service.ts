@@ -3,6 +3,8 @@ import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { ReadOnlyCrudController } from "../../common/crud/crud-controller.factory";
 import { BaseCrudService } from "../../common/crud/base-crud.service";
+import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
+import { forbidden, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -33,6 +35,7 @@ export class HarvestDeclarationsService extends BaseCrudService {
       orderBy: "t.harvested_on DESC, t.id DESC",
       search: ["h.name", "h.code", "t.plot_code", "t.note"],
       filters: { status: "t.status", householdId: "t.household_id" },
+      scope: villageScope("h.village_id"),
     });
   }
 
@@ -43,6 +46,18 @@ export class HarvestDeclarationsService extends BaseCrudService {
     user: AuthUser,
     ip?: string,
   ) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền xử lý khai báo thu hoạch ngoài phạm vi quản lý.");
+    }
+    const existingRes = await this.db.query<{ id: number; household_id: number }>(
+      "SELECT id, household_id FROM harvest_declarations WHERE id = $1",
+      [id],
+    );
+    if (!existingRes.rows[0]) {
+      throw notFound();
+    }
+    await assertHouseholdInScope(this.db, { householdId: existingRes.rows[0].household_id }, user);
+
     const { rows } = await this.db.query<{
       id: number;
       household_id: number;

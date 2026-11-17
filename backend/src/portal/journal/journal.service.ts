@@ -63,12 +63,17 @@ export class JournalService {
     const householdId = householdIdOf(user);
     const today = todayVn();
     const entryOn = dto.entryOn ?? today;
-    if (entryOn > today) throw badRequest("Ngày ghi nhật ký không được ở tương lai.");
+    if (entryOn > today) {
+      throw badRequest("Ngày thực hiện không được ở tương lai. Chỉ được ghi nhật ký sau khi đã thực hiện công việc tại vườn.");
+    }
     const backdatedDays = diffCalendarDays(today, entryOn);
     if (backdatedDays > 7) {
       throw badRequest(
         "Không được ghi lùi nhật ký quá 7 ngày để đảm bảo tính minh bạch sổ cái vùng trồng. Vui lòng liên hệ cán bộ kỹ thuật xã để lập biên bản ghi nhận bổ sung.",
       );
+    }
+    if (backdatedDays > 2 && (!dto.lateReason || dto.lateReason.trim().length < 5)) {
+      throw badRequest("Bản ghi khai báo chậm trên 2 ngày bắt buộc phải nêu rõ lý do ghi bổ sung.");
     }
     const plotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
     const rawPhotoIds = [
@@ -79,6 +84,33 @@ export class JournalService {
     const media = await this.uploads.assertUsableDetailed(rawPhotoIds, user, "journal", householdId);
     const photoId = media.primaryId;
     if (!photoId) throw badRequest("Vui lòng chụp hoặc chọn ảnh thực địa.");
+
+    // Chống khai khống bằng ảnh chụp cũ hoặc dùng lại ảnh của bản ghi nhật ký khác
+    const attMetaRes = await this.db.query<{ earliest_upload_on: string | null }>(
+      `SELECT MIN(to_char(created_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')) AS earliest_upload_on
+         FROM attachments
+        WHERE id = ANY($1::bigint[])`,
+      [media.ids],
+    );
+    const earliestUploadOn = attMetaRes.rows[0]?.earliest_upload_on;
+    if (earliestUploadOn && entryOn > earliestUploadOn) {
+      throw badRequest(
+        "Ảnh hiện trường đã được chụp và tải lên trước ngày thực hiện đã chọn, không thể dùng để khai trước công việc chưa thực hiện.",
+      );
+    }
+    const reusedPhotoRes = await this.db.query(
+      `SELECT 1
+         FROM journal_entries
+        WHERE household_id = $1
+          AND (photo_id = ANY($2::bigint[]) OR photo_ids && $2::bigint[])
+        LIMIT 1`,
+      [householdId, media.ids],
+    );
+    if ((reusedPhotoRes.rowCount ?? 0) > 0) {
+      throw badRequest(
+        "Ảnh hiện trường này đã được sử dụng cho một bản ghi nhật ký khác. Vui lòng chụp ảnh thực tế mới tại vườn.",
+      );
+    }
 
     const gpsCheck = await verifyPlotGpsProximity(this.db, plotCode, dto.latitude, dto.longitude);
     const captureSource = dto.captureSource ?? "camera";

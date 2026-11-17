@@ -4,7 +4,7 @@ import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest } from "../../common/errors/app.exception";
-import { attachmentUrlSql, attachmentUrlsSql } from "../../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { INSPECTION_ROLES } from "../../portal/common/admin-links";
@@ -96,6 +96,17 @@ export class SprayService extends BaseCrudService {
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     await assertHouseholdInScope(this.db, input, context.user);
     const out: Record<string, unknown> = { ...input };
+    if (typeof out.sprayedOn === "string" && out.sprayedOn > todayVn()) {
+      throw badRequest("Ngày phun thuốc không được ở tương lai. Chỉ ghi nhận sau khi đã phun thực tế.");
+    }
+    if (context.method === "POST") {
+      // Ghi nhận vai trò người tạo để cổng hộ dân không cho hộ tự xóa bản ghi do cán bộ ghi nhận.
+      out.recordedByRole = context.user.role;
+      out.createdByUserId = context.user.id;
+    } else {
+      delete out.recordedByRole;
+      delete out.createdByUserId;
+    }
 
     let existing: ExistingSprayRow | undefined;
     if (context.method === "PATCH" && context.id !== undefined) {

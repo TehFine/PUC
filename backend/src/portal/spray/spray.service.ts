@@ -16,6 +16,48 @@ function diffCalendarDays(laterIso: string, earlierIso: string): number {
   return Math.round((a - b) / 86_400_000);
 }
 
+/** Điều kiện khớp thửa giữa bản ghi phun `s` và bản ghi nghiệp vụ khác (thửa rỗng ở một trong hai bên coi như cả hộ). */
+const plotMatchSql = (column: string) =>
+  `(s.plot_code IS NULL OR btrim(s.plot_code) = '' OR ${column} IS NULL OR btrim(${column}) = '' OR upper(btrim(${column})) = upper(btrim(s.plot_code)))`;
+
+/**
+ * Bản ghi phun thuốc hộ được tự xóa (sổ cái niêm phong 24 giờ):
+ * - Do chính hộ nhập trên cổng hộ dân (không xóa được bản ghi do cán bộ ghi nhận).
+ * - Trong vòng 24 giờ sau khi nhập, không dùng thuốc cấm hoặc hạn chế (cần lưu vết giám sát).
+ * - Chưa có lô thu hoạch, kích hoạt tem hay khai báo thu hái nào của hộ, thửa đó kể từ ngày phun
+ *   (chặn xóa dấu vết cách ly PHI ngay trước khi kích hoạt tem hoặc xuất lô).
+ */
+const SPRAY_DELETABLE_SQL = `s.recorded_by_role = 'farmer'
+  AND s.created_at > now() - interval '24 hours'
+  AND p.status NOT IN ('banned', 'restricted')
+  AND NOT EXISTS (
+    SELECT 1 FROM harvest_contributions hc
+    JOIN harvest_lots hl ON hl.id = hc.lot_id
+    WHERE hc.household_id = s.household_id
+      AND hl.status <> 'revoked'
+      AND ${plotMatchSql("hc.plot_code")}
+      AND (hl.harvested_on >= s.sprayed_on OR hl.created_at >= s.created_at)
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM farmer_stamps fs
+    WHERE fs.household_id = s.household_id
+      AND fs.status = 'activated'
+      AND ${plotMatchSql("fs.plot_code")}
+      AND COALESCE(fs.harvest_date, (fs.activated_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, s.sprayed_on) >= s.sprayed_on
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM harvest_declarations hd
+    WHERE hd.household_id = s.household_id
+      AND hd.status <> 'rejected'
+      AND ${plotMatchSql("hd.plot_code")}
+      AND (hd.harvested_on >= s.sprayed_on OR hd.created_at >= s.created_at)
+  )`;
+
+/** Thuốc hạn chế hoặc cấm luôn ghi nhận vượt ngưỡng MRL, thống nhất với SprayService phía quản trị. */
+export function mrlStatusForPesticide(status: string | null | undefined): "pass" | "exceeded" {
+  return status === "banned" || status === "restricted" ? "exceeded" : "pass";
+}
+
 const SPRAY_COLUMNS = `s.id, s.sprayed_on, s.plot_code, s.pesticide_id, p.name AS pesticide, p.status AS pesticide_status, s.source,
   s.dose, s.area_ha, s.isolation_days, (s.sprayed_on + s.isolation_days) AS isolation_ends_on, s.mrl_status, s.note,
   ${attachmentUrlSql("s.photo_id")} AS photo_url,
@@ -25,7 +67,7 @@ const SPRAY_COLUMNS = `s.id, s.sprayed_on, s.plot_code, s.pesticide_id, p.name A
   to_char(s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
   GREATEST(0, ((s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - s.sprayed_on))::int AS late_declaration_days,
   s.entry_delay_hours::float8 AS entry_delay_hours, s.is_late_entry, s.late_reason, s.record_hash,
-  (s.created_at > now() - interval '24 hours' AND p.status <> 'banned') AS can_delete`;
+  (${SPRAY_DELETABLE_SQL}) AS can_delete`;
 
 /** Nhật ký phun thuốc của hộ. */
 @Injectable()
@@ -51,12 +93,17 @@ export class SprayService {
     const householdId = householdIdOf(user);
     const today = todayVn();
     const sprayedOn = dto.sprayedOn ?? today;
-    if (sprayedOn > today) throw badRequest("Ngày phun thuốc không được ở tương lai.");
+    if (sprayedOn > today) {
+      throw badRequest("Ngày phun thuốc không được ở tương lai. Chỉ được ghi nhận sau khi đã phun thực tế tại vườn.");
+    }
     const backdatedDays = diffCalendarDays(today, sprayedOn);
     if (backdatedDays > 7) {
       throw badRequest(
         "Không được ghi lùi nhật ký phun thuốc quá 7 ngày để đảm bảo tính toàn vẹn thời gian cách ly (PHI). Vui lòng liên hệ cán bộ kỹ thuật xã để ghi nhận bổ sung.",
       );
+    }
+    if (backdatedDays > 2 && (!dto.lateReason || dto.lateReason.trim().length < 5)) {
+      throw badRequest("Bản ghi phun thuốc khai báo chậm trên 2 ngày bắt buộc phải nêu rõ lý do ghi bổ sung.");
     }
     const plotCode = dto.plotCode ? await assertPlotOwned(this.db, householdId, dto.plotCode) : null;
 
@@ -68,8 +115,8 @@ export class SprayService {
     ).rows[0];
     if (!pesticide) throw badRequest("Không tìm thấy loại thuốc đã chọn.");
 
-    // Thuốc bị cấm luôn bị ghi nhận là không đạt để cán bộ kiểm tra theo dõi và cảnh báo ngay.
-    const mrlStatus = pesticide.status === "banned" ? "exceeded" : "pass";
+    // Thuốc cấm hoặc hạn chế luôn bị ghi nhận là không đạt để cán bộ kiểm tra theo dõi và cảnh báo ngay.
+    const mrlStatus = mrlStatusForPesticide(pesticide.status);
     const rawPhotoIds = [
       ...(dto.photoIds ?? []),
       ...(dto.photoId ? [dto.photoId] : []),
@@ -79,10 +126,39 @@ export class SprayService {
         ? await this.uploads.assertUsableDetailed(rawPhotoIds, user, "journal", householdId)
         : { ids: [] as number[], primaryId: null };
 
+    if (media.ids.length > 0) {
+      const attMetaRes = await this.db.query<{ earliest_upload_on: string | null }>(
+        `SELECT MIN(to_char(created_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')) AS earliest_upload_on
+           FROM attachments
+          WHERE id = ANY($1::bigint[])`,
+        [media.ids],
+      );
+      const earliestUploadOn = attMetaRes.rows[0]?.earliest_upload_on;
+      if (earliestUploadOn && sprayedOn > earliestUploadOn) {
+        throw badRequest(
+          "Ảnh hiện trường đã được chụp và tải lên trước ngày phun đã chọn, không thể dùng để khai trước công việc chưa thực hiện.",
+        );
+      }
+      const reusedSprayPhotoRes = await this.db.query(
+        `SELECT 1
+           FROM spray_records
+          WHERE household_id = $1
+            AND (photo_id = ANY($2::bigint[]) OR photo_ids && $2::bigint[])
+          LIMIT 1`,
+        [householdId, media.ids],
+      );
+      if ((reusedSprayPhotoRes.rowCount ?? 0) > 0) {
+        throw badRequest(
+          "Ảnh hiện trường này đã được sử dụng cho một bản ghi phun thuốc khác. Vui lòng chụp ảnh thực tế mới tại vườn.",
+        );
+      }
+    }
+
     const { rows } = await this.db.query<{ id: number }>(
       `INSERT INTO spray_records
-         (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, note, photo_id, photo_ids, late_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::bigint[], $13) RETURNING id`,
+         (sprayed_on, household_id, pesticide_id, source, dose, area_ha, isolation_days, mrl_status, plot_code, note, photo_id, photo_ids, late_reason,
+          recorded_by_role, created_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::bigint[], $13, 'farmer', $14) RETURNING id`,
       [
         sprayedOn,
         householdId,
@@ -97,6 +173,7 @@ export class SprayService {
         media.primaryId,
         media.ids,
         dto.lateReason ?? null,
+        user.id,
       ],
     );
 
@@ -140,7 +217,10 @@ export class SprayService {
     return camelRow(created.rows[0]);
   }
 
-  /** Cho phép hộ xóa bản ghi phun thuốc nhập nhầm trong vòng 24 giờ (trừ bản ghi thuốc cấm cần lưu vết giám sát). */
+  /**
+   * Cho phép hộ xóa bản ghi phun thuốc tự nhập nhầm trong vòng 24 giờ. Không xóa được bản ghi do cán bộ ghi nhận,
+   * bản ghi thuốc cấm hoặc hạn chế, hay bản ghi đã có thu hoạch, kích hoạt tem, lô hàng phát sinh sau ngày phun.
+   */
   async remove(id: number, user: AuthUser, context: ClientContext) {
     const householdId = householdIdOf(user);
     const deleted = await this.db.query<{ id: number; pesticide: string; plot_code: string | null }>(
@@ -149,22 +229,34 @@ export class SprayService {
        WHERE s.id = $1
          AND s.household_id = $2
          AND p.id = s.pesticide_id
-         AND s.created_at > now() - interval '24 hours'
-         AND p.status <> 'banned'
+         AND ${SPRAY_DELETABLE_SQL}
        RETURNING s.id, p.name AS pesticide, s.plot_code`,
       [id, householdId],
     );
     if (deleted.rowCount === 0) {
-      const exists = await this.db.query<{ status: string }>(
-        `SELECT p.status FROM spray_records s JOIN pesticides p ON p.id = s.pesticide_id
+      const exists = await this.db.query<{ status: string; farmer_created: boolean; within_24h: boolean }>(
+        `SELECT p.status,
+                (s.recorded_by_role = 'farmer') AS farmer_created,
+                (s.created_at > now() - interval '24 hours') AS within_24h
+         FROM spray_records s JOIN pesticides p ON p.id = s.pesticide_id
          WHERE s.id = $1 AND s.household_id = $2`,
         [id, householdId],
       );
       if (exists.rowCount === 0) throw notFound("Không tìm thấy bản ghi phun thuốc.");
-      if (exists.rows[0].status === "banned") {
+      const found = exists.rows[0];
+      if (found.status === "banned") {
         throw forbidden("Bản ghi khai báo thuốc cấm đã được chuyển tới cán bộ kỹ thuật HTX để hỗ trợ xử lý, không thể tự xóa.");
       }
-      throw forbidden("Chỉ xóa được bản ghi phun thuốc trong vòng 24 giờ sau khi nhập.");
+      if (found.status === "restricted") {
+        throw forbidden("Bản ghi thuốc hạn chế cần lưu vết giám sát, không thể tự xóa. Vui lòng liên hệ cán bộ kỹ thuật HTX.");
+      }
+      if (!found.farmer_created) {
+        throw forbidden("Bản ghi do cán bộ ghi nhận, hộ không thể tự xóa.");
+      }
+      if (!found.within_24h) {
+        throw forbidden("Chỉ xóa được bản ghi phun thuốc trong vòng 24 giờ sau khi nhập.");
+      }
+      throw forbidden("Bản ghi đã gắn với thu hái, kích hoạt tem hoặc lô hàng sau ngày phun, không thể xóa.");
     }
     const row = deleted.rows[0];
     await this.audit.write(

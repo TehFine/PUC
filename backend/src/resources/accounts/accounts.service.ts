@@ -34,7 +34,12 @@ export class AccountsService extends BaseCrudService {
   /** Băm mật khẩu trước khi lưu; kiểm tra phạm vi đơn vị (doanh nghiệp/xã/địa bàn/HTX); không cho tự đổi vai trò, khóa chính mình, hoặc làm mất quản trị viên cuối cùng. */
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     const next: Record<string, unknown> = { ...input };
-    if (typeof next.password === "string") next.passwordHash = await bcrypt.hash(next.password, 12);
+    if (typeof next.password === "string") {
+      // Phòng thủ chiều sâu ngoài DTO: chuẩn hóa NFC và chặn quá 72 byte UTF-8 (bcrypt cắt bỏ phần dư).
+      const normalizedPassword = next.password.normalize("NFC");
+      if (Buffer.byteLength(normalizedPassword, "utf8") > 72) throw badRequest("Mật khẩu tối đa 72 byte UTF-8.");
+      next.passwordHash = await bcrypt.hash(normalizedPassword, 12);
+    }
     delete next.password;
 
     let existing: { role: string; status: string; household_id: number | null } | undefined;
@@ -157,7 +162,7 @@ export class AccountsService extends BaseCrudService {
     return this.withSerializedAdminGuard(id, true, () => super.remove(id, user, ip));
   }
 
-  /** Khóa tài khoản, đổi mật khẩu, đổi vai trò hoặc đổi bất kỳ phạm vi quản lý nào thì tăng token_version và thu hồi mọi phiên đăng nhập. */
+  /** Khóa tài khoản, đổi mật khẩu, đổi email, đổi vai trò hoặc đổi bất kỳ phạm vi quản lý nào thì tăng token_version và thu hồi mọi phiên đăng nhập. */
   protected override async afterWrite(userId: number, input: Record<string, unknown>) {
     if (
       input.status === "locked" ||
@@ -169,13 +174,15 @@ export class AccountsService extends BaseCrudService {
       input.assignedCommune !== undefined ||
       input.assignedRegion !== undefined ||
       input.coopCode !== undefined ||
-      input.username !== undefined
+      input.username !== undefined ||
+      input.email !== undefined
     ) {
       await Promise.all([
         this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]),
-        this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [
-          userId,
-        ]),
+        this.db.query(
+          "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = $1 AND revoked_at IS NULL",
+          [userId],
+        ),
       ]);
     }
   }
@@ -190,9 +197,10 @@ export class AccountsService extends BaseCrudService {
 
     const [, revRes] = await Promise.all([
       this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [targetUserId]),
-      this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [
-        targetUserId,
-      ]),
+      this.db.query(
+        "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = $1 AND revoked_at IS NULL",
+        [targetUserId],
+      ),
     ]);
     await this.audit.write(
       { ip, user: actor },
@@ -224,9 +232,10 @@ export class AccountsService extends BaseCrudService {
          WHERE id = $1`,
         [targetUserId],
       ),
-      this.db.query("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [
-        targetUserId,
-      ]),
+      this.db.query(
+        "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = $1 AND revoked_at IS NULL",
+        [targetUserId],
+      ),
     ]);
     await this.audit.write(
       { ip, user: actor },

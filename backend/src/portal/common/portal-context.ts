@@ -69,40 +69,50 @@ export async function assertPlotOwned(
     }>(
       `SELECT
          EXISTS (SELECT 1 FROM plots WHERE household_id = $1) AS has_plots,
-         EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id = $1) AS owned,
-         EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id IS NULL) AS unowned_plot_exists,
-         EXISTS (SELECT 1 FROM plots WHERE upper(code) = upper($2) AND household_id IS NOT NULL AND household_id <> $1) AS foreign_owned`,
+         EXISTS (SELECT 1 FROM plots WHERE upper(btrim(code)) = upper($2) AND household_id = $1) AS owned,
+         EXISTS (SELECT 1 FROM plots WHERE upper(btrim(code)) = upper($2) AND household_id IS NULL) AS unowned_plot_exists,
+         EXISTS (SELECT 1 FROM plots WHERE upper(btrim(code)) = upper($2) AND household_id IS NOT NULL AND household_id <> $1) AS foreign_owned`,
       [householdId, code],
     );
     const check = rows[0];
+    if (check.owned) {
+      return code;
+    }
     if (check.foreign_owned || check.unowned_plot_exists || (check.has_plots && !check.owned)) {
       throw badRequest(`Thửa "${code}" không thuộc hộ của bạn.`);
     }
-    return code;
   }
 
-  // Khi chưa bật bảng PostGIS `plots`, đối chiếu quyền sở hữu thửa qua dữ liệu nghiệp vụ đã gắn hộ.
+  // Đối chiếu chéo quyền sở hữu thửa qua bảng QR đầu vườn, hạn ngạch mùa vụ và lịch sử nghiệp vụ đã gắn hộ.
   const { rows } = await db.query<{ foreign_owned: boolean }>(
     `SELECT (
        EXISTS (
-         SELECT 1 FROM journal_entries WHERE upper(plot_code) = upper($2) AND household_id <> $1
+         SELECT 1 FROM plot_signboard_tokens WHERE household_id IS NOT NULL AND household_id <> $1 AND upper(btrim(plot_code)) = upper($2)
          UNION ALL
-         SELECT 1 FROM farmer_stamps WHERE upper(plot_code) = upper($2) AND household_id <> $1
+         SELECT 1 FROM plot_season_quotas WHERE household_id IS NOT NULL AND household_id <> $1 AND upper(btrim(plot_code)) = upper($2)
          UNION ALL
-         SELECT 1 FROM lab_tests WHERE upper(plot_code) = upper($2) AND household_id <> $1
+         SELECT 1 FROM journal_entries WHERE household_id IS NOT NULL AND household_id <> $1 AND upper(btrim(plot_code)) = upper($2)
+         UNION ALL
+         SELECT 1 FROM farmer_stamps WHERE household_id IS NOT NULL AND household_id <> $1 AND upper(btrim(plot_code)) = upper($2)
+         UNION ALL
+         SELECT 1 FROM lab_tests WHERE household_id IS NOT NULL AND household_id <> $1 AND upper(btrim(plot_code)) = upper($2)
        )
        AND NOT EXISTS (
-         SELECT 1 FROM journal_entries WHERE upper(plot_code) = upper($2) AND household_id = $1
+         SELECT 1 FROM plot_signboard_tokens WHERE household_id = $1 AND upper(btrim(plot_code)) = upper($2)
          UNION ALL
-         SELECT 1 FROM farmer_stamps WHERE upper(plot_code) = upper($2) AND household_id = $1
+         SELECT 1 FROM plot_season_quotas WHERE household_id = $1 AND upper(btrim(plot_code)) = upper($2)
          UNION ALL
-         SELECT 1 FROM lab_tests WHERE upper(plot_code) = upper($2) AND household_id = $1
+         SELECT 1 FROM journal_entries WHERE household_id = $1 AND upper(btrim(plot_code)) = upper($2)
+         UNION ALL
+         SELECT 1 FROM farmer_stamps WHERE household_id = $1 AND upper(btrim(plot_code)) = upper($2)
+         UNION ALL
+         SELECT 1 FROM lab_tests WHERE household_id = $1 AND upper(btrim(plot_code)) = upper($2)
        )
      ) AS foreign_owned`,
     [householdId, code],
   );
   if (rows[0]?.foreign_owned) {
-    throw badRequest(`Thửa "${code}" không thuộc hộ của bạn.`);
+    throw badRequest("Mã lô/thửa không thuộc quyền canh tác của hộ.");
   }
   return code;
 }

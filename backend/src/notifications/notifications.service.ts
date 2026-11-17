@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
 import { can, type Role } from "../auth/permissions";
-import { villageScope } from "../common/crud/village-scope";
+import { isStaffInCuneCoopScope, isStaffInParcelScope, villageScope } from "../common/crud/village-scope";
 import { camelRows } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
 
@@ -44,17 +44,55 @@ export class NotificationsService {
     );
   }
 
-  /** Gửi tới mọi tài khoản đang hoạt động thuộc các vai trò cho trước (ví dụ cán bộ HTX khi hộ gửi hồ sơ). */
+  /** Gửi tới mọi tài khoản đang hoạt động thuộc các vai trò cho trước (chỉ trong phạm vi HTX Cư Né / địa bàn cho phép). */
   async notifyRoles(roles: string[], input: NotificationInput): Promise<void> {
-    await this.insert(
-      `SELECT id FROM users WHERE role = ANY($5::text[]) AND status = 'active'`,
-      [input.kind, input.title, input.body ?? null, input.link ?? null, roles],
-    );
+    if (roles.length === 0) return;
+    try {
+      const { rows } = await this.db.query<{
+        id: number;
+        role: Role;
+        village_id: number | null;
+        assigned_commune: string | null;
+        assigned_region: string | null;
+        coop_code: string | null;
+      }>(
+        `SELECT id, role, village_id, assigned_commune, assigned_region, coop_code
+         FROM users
+         WHERE role = ANY($1::text[]) AND status = 'active'`,
+        [roles],
+      );
+      const recipientIds = rows
+        .filter((r) => {
+          if (r.role === "farmer" || r.role === "enterprise") return true;
+          return isStaffInCuneCoopScope(
+            {
+              id: Number(r.id),
+              fullName: "",
+              username: "",
+              role: r.role,
+              villageId: r.village_id !== null ? Number(r.village_id) : null,
+              householdId: null,
+              assignedCommune: r.assigned_commune,
+              assignedRegion: r.assigned_region,
+              coopCode: r.coop_code || "HTX-CUNE",
+            },
+            false,
+          );
+        })
+        .map((r) => Number(r.id));
+      if (recipientIds.length === 0) return;
+      await this.insert(
+        `SELECT unnest($5::bigint[]) AS id`,
+        [input.kind, input.title, input.body ?? null, input.link ?? null, recipientIds],
+      );
+    } catch (error) {
+      this.logger.error(`Không gửi được thông báo: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
    * Gửi cảnh báo tuân thủ quy trình tới Quản trị viên, Cán bộ HTX, Kiểm tra viên
-   * và Cán bộ thôn phụ trách đúng thôn của hộ dân (chỉ gửi cho vai trò có quyền đọc phân hệ tương ứng).
+   * và Cán bộ thôn phụ trách đúng thôn của hộ dân (chỉ gửi cho vai trò có quyền đọc và thuộc phạm vi địa bàn/HTX).
    */
   async notifyOversightForHousehold(householdId: number, input: NotificationInput): Promise<void> {
     const globalCandidateRoles: Role[] = ["admin", "htx_officer", "inspector"];
@@ -66,29 +104,67 @@ export class NotificationsService {
     const allowVillageOfficer = requiredResource ? can("village_officer", requiredResource, "read") : true;
     if (allowedGlobalRoles.length === 0 && !allowVillageOfficer) return;
 
-    await this.insert(
-      `SELECT u.id
-       FROM users u
-       WHERE u.status = 'active'
-         AND (
-           u.role = ANY($6::text[])
-           OR (
-             $7::boolean
-             AND u.role = 'village_officer'
-             AND u.village_id IS NOT NULL
-             AND u.village_id = (SELECT h.village_id FROM households h WHERE h.id = $5)
-           )
-         )`,
-      [
-        input.kind,
-        input.title,
-        input.body ?? null,
-        input.link ?? null,
-        householdId,
-        allowedGlobalRoles,
-        allowVillageOfficer,
-      ],
-    );
+    try {
+      const [hhRes, staffRes] = await Promise.all([
+        this.db.query<{ village_id: number | null; village_name: string | null }>(
+          `SELECT h.village_id, v.name AS village_name
+           FROM households h
+           LEFT JOIN villages v ON v.id = h.village_id
+           WHERE h.id = $1`,
+          [householdId],
+        ),
+        this.db.query<{
+          id: number;
+          role: Role;
+          village_id: number | null;
+          village_name: string | null;
+          assigned_commune: string | null;
+          assigned_region: string | null;
+          coop_code: string | null;
+        }>(
+          `SELECT u.id, u.role, u.village_id, v.name AS village_name,
+                  u.assigned_commune, u.assigned_region, u.coop_code
+           FROM users u
+           LEFT JOIN villages v ON v.id = u.village_id
+           WHERE u.status = 'active'
+             AND (
+               u.role = ANY($1::text[])
+               OR ($2::boolean AND u.role = 'village_officer')
+             )`,
+          [allowedGlobalRoles, allowVillageOfficer],
+        ),
+      ]);
+      const hh = hhRes.rows[0];
+      if (!hh) return;
+
+      const recipientIds = staffRes.rows
+        .filter((u) =>
+          isStaffInParcelScope(
+            {
+              id: Number(u.id),
+              fullName: "",
+              username: "",
+              role: u.role,
+              villageId: u.village_id !== null ? Number(u.village_id) : null,
+              householdId: null,
+              assignedCommune: u.assigned_commune,
+              assignedRegion: u.assigned_region,
+              coopCode: u.coop_code || "HTX-CUNE",
+            },
+            { villageId: hh.village_id, villageName: hh.village_name },
+            u.village_name,
+          ),
+        )
+        .map((u) => Number(u.id));
+      if (recipientIds.length === 0) return;
+
+      await this.insert(
+        `SELECT unnest($5::bigint[]) AS id`,
+        [input.kind, input.title, input.body ?? null, input.link ?? null, recipientIds],
+      );
+    } catch (error) {
+      this.logger.error(`Không gửi được thông báo giám sát: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /** Gửi tới tất cả hộ dân có tài khoản (ví dụ lịch kiểm tra, khóa tập huấn mới). */
@@ -192,7 +268,7 @@ export class NotificationsService {
              AND NOT EXISTS (
                SELECT 1 FROM notifications n
                WHERE n.user_id = $1
-                 AND (n.link = '/portal?tab=diary&violationId=' || v.id OR (n.kind = 'violation' AND n.title LIKE '%' || v.title))
+                 AND (n.link = '/portal?tab=diary&violationId=' || v.id OR (n.kind = 'violation' AND strpos(n.title, v.title) > 0))
              )
            ORDER BY v.detected_on ASC, v.id ASC
          ),
@@ -207,12 +283,22 @@ export class NotificationsService {
              now()
            FROM inspection_schedule i
            WHERE i.scheduled_on >= current_date
+             AND i.kind <> 'sudden'
              AND NOT EXISTS (
                SELECT 1 FROM notifications n
                WHERE n.user_id = $1
-                 AND (n.link = '/portal?tab=inspection&scheduleId=' || i.id OR (n.kind = 'schedule' AND n.title LIKE '%' || i.title))
+                 AND (n.link = '/portal?tab=inspection&scheduleId=' || i.id OR (n.kind = 'schedule' AND strpos(n.title, i.title) > 0))
              )
            ORDER BY i.scheduled_on ASC, i.id ASC
+         ),
+         del_sudden AS (
+           -- Gỡ thông báo lịch đã đồng bộ trước đó nếu đợt kiểm tra đã chuyển sang đột xuất.
+           DELETE FROM notifications n
+           USING inspection_schedule i
+           WHERE n.user_id = $1
+             AND n.kind = 'schedule'
+             AND n.link = '/portal?tab=inspection&scheduleId=' || i.id
+             AND i.kind = 'sudden'
          )
          UPDATE notifications n
          SET read_at = now()

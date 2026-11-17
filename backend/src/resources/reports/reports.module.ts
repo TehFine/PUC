@@ -4,6 +4,7 @@ import type { Response } from "express";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { AuditService } from "../../audit/audit.service";
+import { isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest, forbidden } from "../../common/errors/app.exception";
 import { RateLimitTier } from "../../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../../database/database.service";
@@ -28,15 +29,18 @@ export type ReportType = (typeof REPORT_TYPES)[number];
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_EXPORT_ROWS = 10_000;
+const PREVIEW_EXPORT_ROWS = 50;
 
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
-  const text = value instanceof Date ? value.toISOString() : String(value);
-  const safe = /^[=+\-@\t\r\n|]/.test(text) || /^\s+[=+\-@|]/.test(text) ? `'${text}` : text;
-  if (/[",\r\n]/.test(safe)) {
-    return `"${safe.replace(/"/g, '""')}"`;
-  }
-  return safe;
+  const raw = value instanceof Date ? value.toISOString() : String(value);
+  if (!raw) return "";
+  const cleaned = raw.replace(/\r\n/g, "\n").replace(/[\r\u0000]/g, "");
+  if (!cleaned) return "";
+  const needsPrefix =
+    /^\s*[=+\-@\t\r\n|]/.test(raw) || /(?:^|\n)\s*[=+\-@\t|]/.test(cleaned);
+  const safe = needsPrefix ? `'${cleaned}` : cleaned;
+  return `"${safe.replace(/"/g, '""')}"`;
 }
 
 function toCsv(headers: string[], rows: unknown[][]): string {
@@ -147,7 +151,15 @@ export class ReportsService {
     }
 
     const filter = this.parseFilter(rawQuery, user);
-    const { headers, rows } = await this.buildReportTable(type as ReportType, filter, user, wantUnmaskedAudit);
+    const isFullExport = recordAudit || wantUnmaskedAudit;
+    const rowLimit = isFullExport ? MAX_EXPORT_ROWS : PREVIEW_EXPORT_ROWS;
+    const { headers, rows } = await this.buildReportTable(
+      type as ReportType,
+      filter,
+      user,
+      wantUnmaskedAudit,
+      rowLimit,
+    );
 
     if (wantUnmaskedAudit) {
       await this.audit.write(
@@ -163,10 +175,15 @@ export class ReportsService {
         { ip, user },
         { action: "Xuất báo cáo", object: `Báo cáo ${type}`, detail: JSON.stringify(filter) },
       );
+    } else if (rawQuery.preview !== "1" && rawQuery.preview !== "true") {
+      await this.audit.write(
+        { ip, user },
+        { action: "Xem trước báo cáo", object: `Báo cáo ${type}`, detail: JSON.stringify(filter) },
+      );
     }
 
     const total = rows.length;
-    const exposedRows = recordAudit || wantUnmaskedAudit ? rows : rows.slice(0, 50);
+    const exposedRows = isFullExport ? rows : rows.slice(0, PREVIEW_EXPORT_ROWS);
     const stringRows = exposedRows.map((row) =>
       row.map((cell) => (cell === null || cell === undefined ? "" : String(cell))),
     );
@@ -208,7 +225,9 @@ export class ReportsService {
       filter.to = raw.to;
     }
     if (user.role === "village_officer") {
-      filter.villageId = user.villageId ?? -1;
+      if (user.villageId !== null && user.villageId !== undefined) {
+        filter.villageId = user.villageId;
+      }
     } else if (raw.villageId !== undefined && raw.villageId !== "") {
       const id = Number(raw.villageId);
       if (!Number.isInteger(id) || id <= 0) throw badRequest("Tham số villageId không hợp lệ.");
@@ -222,17 +241,26 @@ export class ReportsService {
     filter: ReportFilter,
     user: AuthUser,
     allowUnmaskedCccd = false,
+    rowLimit = MAX_EXPORT_ROWS,
   ): Promise<{ headers: string[]; rows: unknown[][] }> {
+    const inCoopScope = isStaffInCuneCoopScope(user, true);
+
     switch (type) {
       case "households": {
         const params: unknown[] = [];
         const conds: string[] = [];
+        if (!inCoopScope) {
+          conds.push("1 = 0");
+        } else {
+          const scoped = villageScope("h.village_id")(user, params);
+          if (scoped) conds.push(scoped);
+        }
         if (filter.villageId) {
           params.push(filter.villageId);
           conds.push(`h.village_id = $${params.length}`);
         }
         const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
-        const fullCccd = allowUnmaskedCccd && (user.role === "admin" || user.role === "htx_officer");
+        const fullCccd = inCoopScope && allowUnmaskedCccd && (user.role === "admin" || user.role === "htx_officer");
         const cccdSelectExpr = fullCccd
           ? "h.cccd AS cccd"
           : "CASE WHEN h.cccd IS NULL OR btrim(h.cccd) = '' THEN '' ELSE '**********' || right(btrim(h.cccd), 2) END AS cccd";
@@ -243,7 +271,7 @@ export class ReportsService {
            JOIN villages v ON v.id = h.village_id
            ${where}
            ORDER BY h.id
-           LIMIT ${MAX_EXPORT_ROWS}`,
+           LIMIT ${rowLimit}`,
           params,
         );
         return {
@@ -262,7 +290,7 @@ export class ReportsService {
       }
 
       case "journal": {
-        const { where, params } = this.dateVillageWhere("j.entry_on", "h.village_id", filter);
+        const { where, params } = this.dateVillageWhere("j.entry_on", "h.village_id", filter, user);
         const { rows } = await this.db.query(
           `SELECT j.entry_on, h.code AS household_code, h.name AS household_name,
                   v.name AS village_name, j.plot_code, j.activity, j.detail, j.recorder
@@ -271,7 +299,7 @@ export class ReportsService {
            JOIN villages v ON v.id = h.village_id
            ${where}
            ORDER BY j.entry_on DESC, j.id DESC
-           LIMIT ${MAX_EXPORT_ROWS}`,
+           LIMIT ${rowLimit}`,
           params,
         );
         return {
@@ -290,7 +318,7 @@ export class ReportsService {
       }
 
       case "spray": {
-        const { where, params } = this.dateVillageWhere("s.sprayed_on", "h.village_id", filter);
+        const { where, params } = this.dateVillageWhere("s.sprayed_on", "h.village_id", filter, user);
         const { rows } = await this.db.query(
           `SELECT s.sprayed_on, h.code AS household_code, h.name AS household_name,
                   v.name AS village_name, s.plot_code, p.name AS pesticide_name,
@@ -301,7 +329,7 @@ export class ReportsService {
            JOIN pesticides p ON p.id = s.pesticide_id
            ${where}
            ORDER BY s.sprayed_on DESC, s.id DESC
-           LIMIT ${MAX_EXPORT_ROWS}`,
+           LIMIT ${rowLimit}`,
           params,
         );
         return {
@@ -335,7 +363,7 @@ export class ReportsService {
       }
 
       case "lab-tests": {
-        const { where, params } = this.dateVillageWhere("lt.sampled_on", "h.village_id", filter);
+        const { where, params } = this.dateVillageWhere("lt.sampled_on", "h.village_id", filter, user);
         const { rows } = await this.db.query(
           `SELECT lt.code, lt.sampled_on, h.code AS household_code, h.name AS household_name,
                   v.name AS village_name, lt.plot_code, lt.cd_mg_kg, lt.yellow_o_positive,
@@ -345,7 +373,7 @@ export class ReportsService {
            JOIN villages v ON v.id = h.village_id
            ${where}
            ORDER BY lt.sampled_on DESC, lt.id DESC
-           LIMIT ${MAX_EXPORT_ROWS}`,
+           LIMIT ${rowLimit}`,
           params,
         );
         return {
@@ -381,7 +409,7 @@ export class ReportsService {
       }
 
       case "violations": {
-        const { where, params } = this.dateVillageWhere("vl.detected_on", "h.village_id", filter);
+        const { where, params } = this.dateVillageWhere("vl.detected_on", "h.village_id", filter, user);
         const { rows } = await this.db.query(
           `SELECT vl.id, vl.detected_on, vl.severity, vl.title, vl.household_label,
                   vl.plot_code, vl.status, vl.farmer_response, vl.resolved_on, vl.resolution_notes
@@ -389,7 +417,7 @@ export class ReportsService {
            LEFT JOIN households h ON h.id = vl.household_id
            ${where}
            ORDER BY vl.detected_on DESC, vl.id DESC
-           LIMIT ${MAX_EXPORT_ROWS}`,
+           LIMIT ${rowLimit}`,
           params,
         );
         return {
@@ -423,6 +451,25 @@ export class ReportsService {
       case "harvest": {
         const params: unknown[] = [];
         const conds: string[] = [];
+        if (!inCoopScope) {
+          conds.push("1 = 0");
+        } else {
+          conds.push("upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = 'HTX-CUNE'");
+          const scoped = villageScope("h_sc.village_id")(user, params);
+          if (scoped) {
+            if (scoped === "1 = 0") {
+              conds.push("1 = 0");
+            } else {
+              conds.push(
+                `EXISTS (
+                   SELECT 1 FROM harvest_contributions hc_sc
+                   JOIN households h_sc ON h_sc.id = hc_sc.household_id
+                   WHERE hc_sc.lot_id = hl.id AND (${scoped})
+                 )`,
+              );
+            }
+          }
+        }
         if (filter.from) {
           params.push(filter.from);
           conds.push(`hl.harvested_on >= $${params.length}::date`);
@@ -448,7 +495,7 @@ export class ReportsService {
            FROM harvest_lots hl
            ${where}
            ORDER BY hl.harvested_on DESC, hl.id DESC
-           LIMIT ${MAX_EXPORT_ROWS}`,
+           LIMIT ${rowLimit}`,
           params,
         );
         return {
@@ -476,7 +523,7 @@ export class ReportsService {
       }
 
       case "training-registrations": {
-        const { where, params } = this.dateVillageWhere("tc.held_on", "h.village_id", filter);
+        const { where, params } = this.dateVillageWhere("tc.held_on", "h.village_id", filter, user);
         const { rows } = await this.db.query(
           `SELECT tc.title, tc.held_on, h.code AS household_code, h.name AS household_name,
                   h.phone, v.name AS village_name, tr.status, tr.registered_at
@@ -486,7 +533,7 @@ export class ReportsService {
            JOIN villages v ON v.id = h.village_id
            ${where}
            ORDER BY tc.held_on DESC NULLS LAST, tr.id ASC
-           LIMIT ${MAX_EXPORT_ROWS}`,
+           LIMIT ${rowLimit}`,
           params,
         );
         return {
@@ -515,9 +562,15 @@ export class ReportsService {
     }
   }
 
-  private dateVillageWhere(dateCol: string, villageCol: string | null, filter: ReportFilter) {
+  private dateVillageWhere(dateCol: string, villageCol: string | null, filter: ReportFilter, user: AuthUser) {
     const params: unknown[] = [];
     const conds: string[] = [];
+    if (!isStaffInCuneCoopScope(user, true)) {
+      conds.push("1 = 0");
+    } else if (villageCol) {
+      const scoped = villageScope(villageCol)(user, params);
+      if (scoped) conds.push(scoped);
+    }
     if (filter.from) {
       params.push(filter.from);
       conds.push(`${dateCol} >= $${params.length}::date`);

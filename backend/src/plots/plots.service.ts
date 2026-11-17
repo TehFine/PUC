@@ -1,6 +1,11 @@
 import type { FeatureCollection, Polygon } from "geojson";
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
+import {
+  assertHouseholdInScope,
+  isStaffInCuneCoopScope,
+  isStaffInParcelScope,
+} from "../common/crud/village-scope";
 import { AppException, badRequest, forbidden } from "../common/errors/app.exception";
 import { resolvePlotHouseholdId, syncHouseholdAndVillageStats } from "../common/sql/stats-sync";
 import { DatabaseService } from "../database/database.service";
@@ -31,6 +36,8 @@ interface PlotRow {
   status: PlotStatus;
   source_ref: string | null;
   household_id?: string | number | null;
+  hh_village_id?: string | number | null;
+  hh_village_name?: string | null;
   qr_token?: string | null;
   tree_count?: string | number | null;
   season_quota_kg?: string | number | null;
@@ -220,6 +227,10 @@ function cleanText(value: unknown, max = 160): string {
   return String(value ?? "").trim().slice(0, max);
 }
 
+function normVillageCompare(value: string | null | undefined): string {
+  return (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 function normalizeSource(value: unknown, fallback: PlotSource): PlotSource {
   return value === "declared" || value === "measured" || value === "cadastral" || value === "demo"
     ? value
@@ -287,30 +298,45 @@ export class PlotsService {
     if (!user || user.role !== "village_officer") return null;
     if (!user.villageId) return "";
     const { rows } = await this.db.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [user.villageId]);
-    return rows[0]?.name ?? "";
+    return (rows[0]?.name ?? "").replace(/\s+/g, " ").trim();
   }
 
   async listPlots(user?: AuthUser): Promise<PlotCollection> {
-    const scopeKey =
-      user?.role === "village_officer" ? `v:${user.villageId ?? "none"}` : "all";
+    if (user && !isStaffInCuneCoopScope(user, true)) {
+      return { type: "FeatureCollection", features: [] };
+    }
+    const scopeKey = user
+      ? [
+          user.role,
+          `c=${(user.coopCode || "HTX-CUNE").trim().toUpperCase()}`,
+          `ar=${encodeURIComponent((user.assignedRegion ?? "").trim())}`,
+          `ac=${encodeURIComponent((user.assignedCommune ?? "").trim())}`,
+          `v=${user.villageId ?? "none"}`,
+        ].join(":")
+      : "system";
     const loadCollection = async (): Promise<PlotCollection> => {
       const scopedVillage = await this.resolveScopedVillageName(user);
-      if (scopedVillage === "") {
+      if (user?.role === "village_officer" && !scopedVillage && !user.assignedCommune?.trim()) {
         return { type: "FeatureCollection", features: [] };
       }
+      const officerVillageName = scopedVillage || null;
       const hasPlots = await this.hasPlotsTable();
       if (!hasPlots) {
         const hasSign = await this.hasSignboardTable();
         if (!hasSign) return { type: "FeatureCollection", features: [] };
         const paramsFb: unknown[] = [];
-        const whereFb = scopedVillage !== null ? (paramsFb.push(scopedVillage), "AND pst.village_name = $1") : "";
+        const whereFb =
+          scopedVillage !== null && scopedVillage !== ""
+            ? (paramsFb.push(scopedVillage),
+              "AND lower(regexp_replace(btrim(COALESCE(pst.village_name, v_hh.name, '')), '\\s+', ' ', 'g')) = lower(btrim($1))")
+            : "";
         const { rows: fbRows } = await this.db.query<PlotRow>(
           `SELECT ROW_NUMBER() OVER (ORDER BY pst.plot_code)::int AS id,
                   pst.plot_code AS code,
                   ''::text AS sheet,
                   ''::text AS parcel,
                   COALESCE(h.name, '') AS owner,
-                  COALESCE(pst.village_name, '') AS village,
+                  COALESCE(pst.village_name, v_hh.name, '') AS village,
                   COALESCE(pst.zone_code, 'VN-DLOR-0086') AS zone,
                   COALESCE(pst.variety, 'Ri6 & Monthong (Dona)') AS variety,
                   pst.planted_year AS year,
@@ -319,6 +345,8 @@ export class PlotsService {
                   'approved'::text AS status,
                   NULL::text AS source_ref,
                   pst.household_id,
+                  h.village_id AS hh_village_id,
+                  v_hh.name AS hh_village_name,
                   pst.qr_token,
                   COALESCE(psq.tree_count, pst.tree_count) AS tree_count,
                   psq.max_quota_kg AS season_quota_kg,
@@ -327,26 +355,48 @@ export class PlotsService {
                   pst.geometry_json
            FROM plot_signboard_tokens pst
            LEFT JOIN households h ON h.id = pst.household_id
+           LEFT JOIN villages v_hh ON v_hh.id = h.village_id
            LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(pst.plot_code)
            WHERE pst.geometry_json IS NOT NULL ${whereFb}
            ORDER BY pst.zone_code, pst.plot_code`,
           paramsFb,
         );
-        return { type: "FeatureCollection", features: fbRows.map(rowToFeature) };
+        const filteredFb = fbRows.filter((r) =>
+          isStaffInParcelScope(
+            user,
+            {
+              villageId: r.hh_village_id != null ? Number(r.hh_village_id) : null,
+              villageName: r.village || r.hh_village_name,
+              zoneCode: r.zone,
+              plotCode: r.code,
+            },
+            officerVillageName,
+          ),
+        );
+        return { type: "FeatureCollection", features: filteredFb.map(rowToFeature) };
       }
       const params: unknown[] = [];
-      const where = scopedVillage !== null ? (params.push(scopedVillage), "WHERE p.village = $1") : "";
+      const where =
+        scopedVillage !== null && scopedVillage !== ""
+          ? (params.push(scopedVillage),
+            "WHERE lower(regexp_replace(btrim(COALESCE(p.village, v_hh.name, '')), '\\s+', ' ', 'g')) = lower(btrim($1))")
+          : "";
       const { rows } = await this.db.query<PlotRow>(
         `
           SELECT p.id, p.code, p.sheet_no AS sheet, p.parcel_no AS parcel, p.owner_name AS owner,
-                 p.village, p.zone_code AS zone, p.variety, p.planted_year AS year, p.area_ha,
+                 COALESCE(NULLIF(btrim(p.village), ''), v_hh.name, p.village) AS village,
+                 p.zone_code AS zone, p.variety, p.planted_year AS year, p.area_ha,
                  p.source, p.status, p.source_ref, p.household_id,
+                 h.village_id AS hh_village_id,
+                 v_hh.name AS hh_village_name,
                  COALESCE(p.qr_token, pst.qr_token) AS qr_token,
                  COALESCE(psq.tree_count, p.tree_count, pst.tree_count) AS tree_count,
                  COALESCE(psq.max_quota_kg, p.season_quota_kg) AS season_quota_kg,
                  ST_Y(ST_Centroid(p.geom)) AS lat, ST_X(ST_Centroid(p.geom)) AS lng,
                  ST_AsGeoJSON(p.geom) AS geometry_json
           FROM plots p
+          LEFT JOIN households h ON h.id = p.household_id
+          LEFT JOIN villages v_hh ON v_hh.id = h.village_id
           LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
           LEFT JOIN plot_season_quotas psq ON psq.season_year = EXTRACT(YEAR FROM now())::int AND upper(psq.plot_code) = upper(p.code)
           ${where}
@@ -354,7 +404,19 @@ export class PlotsService {
         `,
         params,
       );
-      return { type: "FeatureCollection", features: rows.map(rowToFeature) };
+      const filteredRows = rows.filter((r) =>
+        isStaffInParcelScope(
+          user,
+          {
+            villageId: r.hh_village_id != null ? Number(r.hh_village_id) : null,
+            villageName: r.village || r.hh_village_name,
+            zoneCode: r.zone,
+            plotCode: r.code,
+          },
+          officerVillageName,
+        ),
+      );
+      return { type: "FeatureCollection", features: filteredRows.map(rowToFeature) };
     };
 
     if (!this.db.cache) return loadCollection();
@@ -396,26 +458,109 @@ export class PlotsService {
   }
 
   async createPlot(input: CreatePlotInput, user?: AuthUser): Promise<CreatedPlot> {
+    if (user && !isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền tạo thửa đất ngoài phạm vi quản lý.");
+    }
     if (!input || typeof input !== "object") throw new PlotInputError("Thiếu dữ liệu thửa đất.");
     const geometry = normalizeGeometry(input.geometry);
     const pgAreaHa = await this.validatePostgisGeometry(this.db, geometry);
     const properties = toProperties(input, geometry);
     properties.areaHa = pgAreaHa;
     const scopedVillage = await this.resolveScopedVillageName(user);
+    const officerVillageName = scopedVillage || null;
     if (scopedVillage !== null) {
-      if (!scopedVillage) throw forbidden("Tài khoản cán bộ thôn chưa được gắn thôn phụ trách.");
-      if (properties.village && properties.village !== scopedVillage) {
+      if (!scopedVillage && !user?.assignedCommune?.trim()) {
+        throw forbidden("Tài khoản cán bộ thôn chưa được gắn thôn phụ trách.");
+      }
+      if (scopedVillage && properties.village && normVillageCompare(properties.village) !== normVillageCompare(scopedVillage)) {
         throw forbidden("Cán bộ thôn chỉ được tạo thửa đất thuộc thôn mình phụ trách.");
       }
-      properties.village = scopedVillage;
+      if (scopedVillage) {
+        properties.village = scopedVillage;
+      }
       properties.status = "pending";
     }
+
+    if (input.householdId !== undefined && input.householdId !== null) {
+      if (user) {
+        await assertHouseholdInScope(this.db, { householdId: input.householdId }, user);
+      }
+      const hhCheck = await this.db.query<{ id: number; name: string; village_id: number | null; village_name: string | null }>(
+        `SELECT h.id, h.name, h.village_id, v.name AS village_name
+         FROM households h
+         LEFT JOIN villages v ON v.id = h.village_id
+         WHERE h.id = $1`,
+        [input.householdId],
+      );
+      const hhRow = hhCheck.rows[0];
+      if (!hhRow) {
+        throw badRequest("Hộ nông dân liên kết không tồn tại.");
+      }
+      if (hhRow.village_name) {
+        if (properties.village && normVillageCompare(properties.village) !== normVillageCompare(hhRow.village_name)) {
+          throw badRequest("Tên thôn của thửa đất không khớp với thôn của hộ nông dân được gắn.");
+        }
+        properties.village = hhRow.village_name;
+      }
+      if (!properties.owner) {
+        properties.owner = hhRow.name;
+      }
+    }
+
     const pool = this.db.pool;
-    const linkedHouseholdId = await resolvePlotHouseholdId(pool, {
+    let linkedHouseholdId = await resolvePlotHouseholdId(pool, {
       householdId: input.householdId,
       ownerName: properties.owner,
       villageName: properties.village,
     });
+
+    if (linkedHouseholdId !== null) {
+      const hhMeta = await this.db.query<{ village_id: number | null; village_name: string | null }>(
+        `SELECT h.village_id, v.name AS village_name
+         FROM households h
+         LEFT JOIN villages v ON v.id = h.village_id
+         WHERE h.id = $1`,
+        [linkedHouseholdId],
+      );
+      const hm = hhMeta.rows[0];
+      if (hm) {
+        if (
+          user &&
+          !isStaffInParcelScope(
+            user,
+            {
+              villageId: hm.village_id,
+              villageName: hm.village_name,
+              zoneCode: properties.zone,
+              plotCode: properties.code,
+            },
+            officerVillageName,
+          )
+        ) {
+          if (input.householdId !== undefined && input.householdId !== null) {
+            throw forbidden("Hộ nông dân này không thuộc phạm vi quản lý của bạn.");
+          }
+          linkedHouseholdId = null;
+        } else if (hm.village_name) {
+          properties.village = hm.village_name;
+        }
+      }
+    }
+
+    if (
+      user &&
+      !isStaffInParcelScope(
+        user,
+        {
+          villageName: properties.village,
+          zoneCode: properties.zone,
+          plotCode: properties.code,
+        },
+        officerVillageName,
+      )
+    ) {
+      throw forbidden("Bạn không có quyền tạo thửa đất ngoài địa bàn quản lý.");
+    }
 
     try {
       const { rows } = await pool.query<PlotRow>(
@@ -503,9 +648,13 @@ export class PlotsService {
     updateArea = false,
     user?: AuthUser,
   ): Promise<CreatedPlot> {
+    if (user && !isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền chỉnh sửa thửa đất ngoài phạm vi quản lý.");
+    }
     const code = normalizeCode(codeInput);
     const geometry = normalizeGeometry(geometryInput);
     const scopedVillage = await this.resolveScopedVillageName(user);
+    const officerVillageName = scopedVillage || null;
     const pool = this.db.pool;
     const client = await pool.connect();
 
@@ -516,13 +665,38 @@ export class PlotsService {
       const existing = await client.query<{
         id: string | number;
         village: string | null;
+        zone_code: string | null;
         household_id: string | number | null;
-      }>("SELECT id, village, household_id FROM plots WHERE code = $1 FOR UPDATE", [code]);
+        hh_village_id: number | null;
+        hh_village_name: string | null;
+      }>(
+        `SELECT p.id, p.village, p.zone_code, p.household_id,
+                h.village_id AS hh_village_id, v.name AS hh_village_name
+         FROM plots p
+         LEFT JOIN households h ON h.id = p.household_id
+         LEFT JOIN villages v ON v.id = h.village_id
+         WHERE p.code = $1
+         FOR UPDATE OF p`,
+        [code],
+      );
       if (existing.rows.length === 0) {
         throw new PlotInputError(`Không tìm thấy thửa đất có mã ${code}.`);
       }
-      if (scopedVillage !== null && existing.rows[0].village !== scopedVillage) {
-        throw forbidden("Bạn không có quyền chỉnh sửa thửa đất ngoài thôn phụ trách.");
+      const exRow = existing.rows[0];
+      if (
+        user &&
+        !isStaffInParcelScope(
+          user,
+          {
+            villageId: exRow.hh_village_id,
+            villageName: exRow.village || exRow.hh_village_name,
+            zoneCode: exRow.zone_code,
+            plotCode: code,
+          },
+          officerVillageName,
+        )
+      ) {
+        throw forbidden("Bạn không có quyền chỉnh sửa thửa đất ngoài địa bàn quản lý.");
       }
 
       const { rows } = await client.query<PlotRow>(
@@ -590,6 +764,9 @@ export class PlotsService {
     if (user?.role === "village_officer") {
       throw forbidden("Chỉ quản trị viên hoặc cán bộ HTX/kiểm tra mới có quyền nhập dữ liệu địa chính hàng loạt.");
     }
+    if (user && !isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền nhập dữ liệu địa chính ngoài phạm vi quản lý.");
+    }
     if (!collection || collection.type !== "FeatureCollection" || !Array.isArray(collection.features)) {
       throw new PlotInputError("Tệp phải là GeoJSON FeatureCollection.");
     }
@@ -625,6 +802,20 @@ export class PlotsService {
 
     const byCode = new Map<string, (typeof features)[number]>();
     for (const feature of features) {
+      if (
+        user &&
+        !isStaffInParcelScope(
+          user,
+          {
+            villageName: feature.properties.village,
+            zoneCode: feature.properties.zone,
+            plotCode: feature.properties.code,
+          },
+          null,
+        )
+      ) {
+        throw forbidden("Tệp địa chính chứa thửa đất nằm ngoài địa bàn quản lý của bạn.");
+      }
       byCode.set(feature.properties.code, feature);
     }
     const uniqueFeatures = Array.from(byCode.values());
@@ -724,12 +915,13 @@ export class PlotsService {
       }
 
       if (savedCodes.length > 0) {
-        // Tự gắn household_id khi tên chủ thửa trùng duy nhất trong cùng thôn hoặc trên toàn HTX.
+        // Tự gắn household_id khi tên chủ thửa trùng duy nhất trong cùng thôn (hoặc trên toàn HTX khi thửa chưa khai thôn), đồng thời đồng bộ tên thôn.
         await client.query(
           `UPDATE plots p
-           SET household_id = m.household_id
+           SET household_id = m.household_id,
+               village = m.village_name
            FROM (
-             SELECT DISTINCT ON (p0.id) p0.id AS plot_id, h.id AS household_id
+             SELECT DISTINCT ON (p0.id) p0.id AS plot_id, h.id AS household_id, v.name AS village_name
              FROM plots p0
              JOIN households h ON lower(btrim(h.name)) = lower(btrim(p0.owner_name))
              JOIN villages v ON v.id = h.village_id
@@ -738,20 +930,24 @@ export class PlotsService {
                AND btrim(COALESCE(p0.owner_name, '')) <> ''
                AND (
                  (
-                   lower(btrim(v.name)) = lower(btrim(COALESCE(p0.village, '')))
+                   btrim(COALESCE(p0.village, '')) <> ''
+                   AND lower(btrim(v.name)) = lower(btrim(p0.village))
                    AND (
                      SELECT count(*)
                      FROM households h2
                      JOIN villages v2 ON v2.id = h2.village_id
                      WHERE lower(btrim(h2.name)) = lower(btrim(p0.owner_name))
-                       AND lower(btrim(v2.name)) = lower(btrim(COALESCE(p0.village, '')))
+                       AND lower(btrim(v2.name)) = lower(btrim(p0.village))
                    ) = 1
                  )
                  OR (
-                   SELECT count(*)
-                   FROM households h3
-                   WHERE lower(btrim(h3.name)) = lower(btrim(p0.owner_name))
-                 ) = 1
+                   btrim(COALESCE(p0.village, '')) = ''
+                   AND (
+                     SELECT count(*)
+                     FROM households h3
+                     WHERE lower(btrim(h3.name)) = lower(btrim(p0.owner_name))
+                   ) = 1
+                 )
                )
              ORDER BY p0.id, (lower(btrim(v.name)) = lower(btrim(COALESCE(p0.village, '')))) DESC
            ) m
@@ -782,6 +978,9 @@ export class PlotsService {
   }
 
   async addMeasurement(input: MeasurementInput, user?: AuthUser): Promise<MeasurementResult> {
+    if (user && !isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền thêm kết quả đo ngoài phạm vi quản lý.");
+    }
     if (!input || typeof input !== "object") throw new PlotInputError("Thiếu dữ liệu kết quả đo.");
     const geometry = normalizeGeometry(input.geometry);
     const areaHa = await this.validatePostgisGeometry(this.db, geometry);
@@ -789,17 +988,32 @@ export class PlotsService {
     if (!plotCode) throw new PlotInputError("Thiếu mã thửa cần đối chiếu.");
 
     const scopedVillage = await this.resolveScopedVillageName(user);
+    const officerVillageName = scopedVillage || null;
     const pool = this.db.pool;
 
     let plotId: number | null = null;
     let plotVillage: string | null = null;
+    let plotZone: string | null = null;
+    let hhVillageId: number | null = null;
     const rawPlotId = input.plotId !== undefined && input.plotId !== null ? String(input.plotId).trim() : "";
     if (rawPlotId !== "") {
       if (!/^\d+$/.test(rawPlotId)) {
         throw badRequest("Định danh thửa đất (plotId) không hợp lệ.");
       }
-      const found = await pool.query<{ id: string | number; code: string; village: string | null }>(
-        "SELECT id, code, village FROM plots WHERE id = $1",
+      const found = await pool.query<{
+        id: string | number;
+        code: string;
+        village: string | null;
+        zone_code: string | null;
+        hh_village_id: number | null;
+        hh_village_name: string | null;
+      }>(
+        `SELECT p.id, p.code, p.village, p.zone_code,
+                h.village_id AS hh_village_id, v.name AS hh_village_name
+         FROM plots p
+         LEFT JOIN households h ON h.id = p.household_id
+         LEFT JOIN villages v ON v.id = h.village_id
+         WHERE p.id = $1`,
         [Number(rawPlotId)],
       );
       if (found.rows.length > 0) {
@@ -808,22 +1022,50 @@ export class PlotsService {
         }
         plotId = Number(found.rows[0].id);
         plotCode = found.rows[0].code;
-        plotVillage = found.rows[0].village;
+        plotVillage = found.rows[0].village || found.rows[0].hh_village_name;
+        plotZone = found.rows[0].zone_code;
+        hhVillageId = found.rows[0].hh_village_id;
       }
     } else {
-      const found = await pool.query<{ id: string | number; code: string; village: string | null }>(
-        "SELECT id, code, village FROM plots WHERE upper(code) = upper($1)",
+      const found = await pool.query<{
+        id: string | number;
+        code: string;
+        village: string | null;
+        zone_code: string | null;
+        hh_village_id: number | null;
+        hh_village_name: string | null;
+      }>(
+        `SELECT p.id, p.code, p.village, p.zone_code,
+                h.village_id AS hh_village_id, v.name AS hh_village_name
+         FROM plots p
+         LEFT JOIN households h ON h.id = p.household_id
+         LEFT JOIN villages v ON v.id = h.village_id
+         WHERE upper(p.code) = upper($1)`,
         [plotCode],
       );
       if (found.rows.length > 0) {
         plotId = Number(found.rows[0].id);
         plotCode = found.rows[0].code;
-        plotVillage = found.rows[0].village;
+        plotVillage = found.rows[0].village || found.rows[0].hh_village_name;
+        plotZone = found.rows[0].zone_code;
+        hhVillageId = found.rows[0].hh_village_id;
       }
     }
     if (!plotId) throw new PlotInputError("Không tìm thấy thửa để lưu kết quả đo.");
-    if (scopedVillage !== null && plotVillage !== scopedVillage) {
-      throw forbidden("Bạn không có quyền thêm kết quả đo cho thửa đất ngoài thôn phụ trách.");
+    if (
+      user &&
+      !isStaffInParcelScope(
+        user,
+        {
+          villageId: hhVillageId,
+          villageName: plotVillage,
+          zoneCode: plotZone,
+          plotCode,
+        },
+        officerVillageName,
+      )
+    ) {
+      throw forbidden("Bạn không có quyền thêm kết quả đo cho thửa đất ngoài địa bàn quản lý.");
     }
 
     const { rows } = await pool.query<MeasurementRow>(
@@ -860,15 +1102,49 @@ export class PlotsService {
   }
 
   async listMeasurements(plotCode: string, user?: AuthUser): Promise<StoredMeasurement[]> {
+    if (user && !isStaffInCuneCoopScope(user, true)) {
+      return [];
+    }
     const code = cleanText(plotCode, 64);
     if (!code) return [];
+    if (!(await this.hasPlotsTable())) {
+      return [];
+    }
     const scopedVillage = await this.resolveScopedVillageName(user);
+    const officerVillageName = scopedVillage || null;
     const pool = this.db.pool;
-    if (scopedVillage !== null) {
-      const found = await pool.query<{ village: string | null }>("SELECT village FROM plots WHERE code = $1", [code]);
-      if (found.rows.length === 0 || found.rows[0].village !== scopedVillage) {
-        return [];
-      }
+    const found = await pool.query<{
+      village: string | null;
+      zone_code: string | null;
+      hh_village_id: number | null;
+      hh_village_name: string | null;
+    }>(
+      `SELECT p.village, p.zone_code, h.village_id AS hh_village_id, v.name AS hh_village_name
+       FROM plots p
+       LEFT JOIN households h ON h.id = p.household_id
+       LEFT JOIN villages v ON v.id = h.village_id
+       WHERE upper(p.code) = upper($1)
+       LIMIT 1`,
+      [code],
+    );
+    if (found.rows.length === 0) {
+      return [];
+    }
+    const meta = found.rows[0];
+    if (
+      user &&
+      !isStaffInParcelScope(
+        user,
+        {
+          villageId: meta.hh_village_id,
+          villageName: meta.village || meta.hh_village_name,
+          zoneCode: meta.zone_code,
+          plotCode: code,
+        },
+        officerVillageName,
+      )
+    ) {
+      return [];
     }
 
     const { rows } = await pool.query<MeasurementRow>(
@@ -876,7 +1152,7 @@ export class PlotsService {
         SELECT id, plot_code, measured_by, area_ha, note, created_at,
                ST_AsGeoJSON(geom) AS geometry_json
         FROM plot_measurements
-        WHERE plot_code = $1
+        WHERE upper(plot_code) = upper($1)
         ORDER BY created_at DESC
       `,
       [code],

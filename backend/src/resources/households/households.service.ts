@@ -3,11 +3,16 @@ import bcrypt from "bcryptjs";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import type { AuthUser } from "../../auth/auth-user";
-import type { Role } from "../../auth/permissions";
+import { can, type Role } from "../../auth/permissions";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import type { ListQueryDto } from "../../common/crud/list-query.dto";
-import { villageScope } from "../../common/crud/village-scope";
+import {
+  assertHouseholdInScope,
+  isStaffInCuneCoopScope,
+  isStaffInParcelScope,
+  villageScope,
+} from "../../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { publicAttachmentUrlSql } from "../../common/sql/rows";
 import { hasPlotsTable, syncHouseholdAndVillageStats } from "../../common/sql/stats-sync";
@@ -17,6 +22,8 @@ import { CreateHouseholdDto, IssueHouseholdAccountDto } from "./households.dto";
 /** Chỉ quản trị viên và cán bộ HTX (người duyệt hồ sơ) được xem/tìm theo số CCCD đầy đủ. */
 const CCCD_FULL_ACCESS: Role[] = ["admin", "htx_officer"];
 export const canSeeCccd = (user: AuthUser) => CCCD_FULL_ACCESS.includes(user.role);
+const canSeeAccountCredentials = (user: AuthUser) =>
+  can(user.role, "registrations", "read") || can(user.role, "accounts", "read");
 
 /** Che số CCCD, chỉ giữ 2 số cuối: 260123456789 -> **********89. */
 export const maskCccd = (value: unknown) => {
@@ -24,8 +31,19 @@ export const maskCccd = (value: unknown) => {
   return text.length > 2 ? `${"*".repeat(Math.max(0, text.length - 2))}${text.slice(-2)}` : "**";
 };
 
-const redact = <T extends Record<string, unknown> | null>(row: T, user: AuthUser, forceMask = false): T =>
-  !row || (!forceMask && canSeeCccd(user)) || !("cccd" in row) ? row : { ...row, cccd: maskCccd(row.cccd) };
+const redact = <T extends Record<string, unknown> | null>(row: T, user: AuthUser, forceMask = false): T => {
+  if (!row) return row;
+  const out: Record<string, unknown> = { ...row };
+  if ((forceMask || !canSeeCccd(user)) && "cccd" in out) {
+    out.cccd = maskCccd(out.cccd);
+  }
+  if (!canSeeAccountCredentials(user)) {
+    if ("accountId" in out) out.accountId = null;
+    if ("accountUsername" in out) out.accountUsername = null;
+    if ("accountEmail" in out) out.accountEmail = null;
+  }
+  return out as T;
+};
 
 export interface ImportResult {
   created: number;
@@ -59,13 +77,55 @@ export class HouseholdsService extends BaseCrudService {
     });
   }
 
+  private async resolveOfficerVillageName(user: AuthUser): Promise<string | null> {
+    if (user.role !== "village_officer" || !user.villageId) return null;
+    const { rows } = await this.db.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [user.villageId]);
+    return rows[0]?.name ?? null;
+  }
+
+  private async syncHouseholdPlotsVillage(householdId: number, villageId: number, hasPlots?: boolean): Promise<void> {
+    const vRes = await this.db.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [villageId]);
+    const villageName = vRes.rows[0]?.name;
+    if (!villageName) return;
+    const plotsAvailable = hasPlots ?? (await hasPlotsTable(this.db));
+    if (plotsAvailable) {
+      await this.db.query("UPDATE plots SET village = $2, updated_at = now() WHERE household_id = $1", [
+        householdId,
+        villageName,
+      ]);
+    }
+    await this.db
+      .query("UPDATE plot_signboard_tokens SET village_name = $2 WHERE household_id = $1", [householdId, villageName])
+      .catch(() => undefined);
+  }
+
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (!isStaffInCuneCoopScope(context.user, true)) {
+      throw forbidden("Bạn không có quyền thao tác hồ sơ hộ nông dân ngoài phạm vi quản lý.");
+    }
+    if (context.method === "PATCH" && context.id !== undefined) {
+      await assertHouseholdInScope(this.db, { householdId: context.id }, context.user);
+    }
     if (input.villageId !== undefined && input.villageId !== null) {
-      if (context.user.role === "village_officer" && input.villageId !== context.user.villageId) {
+      if (context.user.role === "village_officer" && context.user.villageId && Number(input.villageId) !== Number(context.user.villageId)) {
         throw forbidden("Cán bộ thôn chỉ được thao tác với hộ thuộc thôn mình phụ trách.");
       }
-      const village = await this.db.query("SELECT 1 FROM villages WHERE id = $1", [input.villageId]);
-      if (village.rowCount === 0) throw new AppException(409, "Thôn được chọn không tồn tại.", "DB_23503");
+      const village = await this.db.query<{ id: number; name: string }>("SELECT id, name FROM villages WHERE id = $1", [
+        input.villageId,
+      ]);
+      if (village.rowCount === 0 || !village.rows[0]) {
+        throw new AppException(409, "Thôn được chọn không tồn tại.", "DB_23503");
+      }
+      const officerVillageName = await this.resolveOfficerVillageName(context.user);
+      if (
+        !isStaffInParcelScope(
+          context.user,
+          { villageId: Number(input.villageId), villageName: village.rows[0].name },
+          officerVillageName,
+        )
+      ) {
+        throw forbidden("Bạn không có quyền thao tác với hộ thuộc địa bàn này.");
+      }
     }
     return input;
   }
@@ -103,6 +163,7 @@ export class HouseholdsService extends BaseCrudService {
           : oldVillageId;
     if (nextVillageId !== undefined && nextVillageId !== oldVillageId) {
       await this.db.query("UPDATE users SET village_id = $2 WHERE household_id = $1", [id, nextVillageId]);
+      await this.syncHouseholdPlotsVillage(id, nextVillageId);
     }
 
     const nextName =
@@ -139,11 +200,15 @@ export class HouseholdsService extends BaseCrudService {
     return redact(updated, user);
   }
 
-  protected override async guardDelete(id: number, _user: AuthUser) {
+  protected override async guardDelete(id: number, user: AuthUser) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền xóa hộ nông dân ngoài phạm vi quản lý.");
+    }
     const existing = await this.db.query("SELECT id FROM households WHERE id = $1", [id]);
     if ((existing.rowCount ?? 0) === 0) {
       return;
     }
+    await assertHouseholdInScope(this.db, { householdId: id }, user);
     const hasPlots = await hasPlotsTable(this.db);
     const plotsCheckSql = hasPlots ? "OR EXISTS (SELECT 1 FROM plots WHERE household_id = $1)" : "";
     const historyCheck = await this.db.query<{ has_history: boolean }>(
@@ -201,7 +266,16 @@ export class HouseholdsService extends BaseCrudService {
    * Dòng lỗi không làm hỏng các dòng khác.
    */
   async import(rows: Record<string, unknown>[], user: AuthUser, ip?: string): Promise<ImportResult> {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền nhập danh sách hộ ngoài phạm vi quản lý.");
+    }
     const result: ImportResult = { created: 0, updated: 0, errors: [] };
+    const [villagesRes, hasPlots, officerVillageName] = await Promise.all([
+      this.db.query<{ id: number; name: string }>("SELECT id, name FROM villages"),
+      hasPlotsTable(this.db),
+      this.resolveOfficerVillageName(user),
+    ]);
+    const villageNameById = new Map<number, string>(villagesRes.rows.map((v) => [Number(v.id), v.name]));
 
     for (const [index, raw] of rows.entries()) {
       const rowNo = index + 1;
@@ -215,13 +289,43 @@ export class HouseholdsService extends BaseCrudService {
         continue;
       }
 
-      if (user.role === "village_officer" && Number(dto.villageId) !== Number(user.villageId)) {
+      if (user.role === "village_officer" && user.villageId && Number(dto.villageId) !== Number(user.villageId)) {
         result.errors.push({ row: rowNo, message: "Cán bộ thôn chỉ được nhập hộ thuộc thôn mình phụ trách." });
         continue;
       }
 
+      const targetVillageName = villageNameById.get(Number(dto.villageId)) ?? null;
+      if (
+        targetVillageName !== null &&
+        !isStaffInParcelScope(user, { villageId: Number(dto.villageId), villageName: targetVillageName }, officerVillageName)
+      ) {
+        result.errors.push({ row: rowNo, message: "Thôn của hộ không thuộc phạm vi quản lý của bạn." });
+        continue;
+      }
+
       try {
-        const scopedVillageId = user.role === "village_officer" ? (user.villageId ?? -1) : null;
+        const existingRes = await this.db.query<{ id: number; village_id: number; village_name: string | null }>(
+          `SELECT h.id, h.village_id, v.name AS village_name
+           FROM households h
+           LEFT JOIN villages v ON v.id = h.village_id
+           WHERE h.code = $1
+           LIMIT 1`,
+          [dto.code],
+        );
+        const existingRow = existingRes.rows[0];
+        if (
+          existingRow &&
+          !isStaffInParcelScope(
+            user,
+            { villageId: existingRow.village_id, villageName: existingRow.village_name },
+            officerVillageName,
+          )
+        ) {
+          result.errors.push({ row: rowNo, message: "Mã hộ đang thuộc địa bàn khác, không được phép ghi đè." });
+          continue;
+        }
+
+        const scopedVillageId = user.role === "village_officer" && user.villageId ? Number(user.villageId) : null;
         const { rows: saved } = await this.db.query<{ id: number; village_id: number; inserted: boolean }>(
           `INSERT INTO households (code, name, cccd, phone, village_id, plot_count, area_ha, status)
            VALUES ($1, $2, $3, $4, $5, COALESCE($6::int, 0), COALESCE($7::numeric, 0), COALESCE($8::text, 'pending'))
@@ -262,6 +366,9 @@ export class HouseholdsService extends BaseCrudService {
             "UPDATE users SET village_id = $2 WHERE household_id = $1 AND village_id IS DISTINCT FROM $2",
             [saved[0].id, saved[0].village_id],
           );
+          if (existingRow && Number(existingRow.village_id) !== Number(saved[0].village_id)) {
+            await this.syncHouseholdPlotsVillage(Number(saved[0].id), Number(saved[0].village_id), hasPlots);
+          }
         }
       } catch (error) {
         const code = (error as { code?: string }).code ?? "";
@@ -288,17 +395,28 @@ export class HouseholdsService extends BaseCrudService {
    * Ban hành hoặc cấp lại tài khoản đăng nhập cho hộ nông dân sau khi đã thiết lập hồ sơ hộ.
    */
   async issueAccount(householdId: number, dto: IssueHouseholdAccountDto, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền cấp tài khoản ngoài phạm vi quản lý.");
+    }
     const { rows: hhRows } = await this.db.query<{
       id: number;
       code: string;
       name: string;
       phone: string;
       village_id: number;
-    }>("SELECT id, code, name, phone, village_id FROM households WHERE id = $1", [householdId]);
+      village_name: string | null;
+    }>(
+      `SELECT h.id, h.code, h.name, h.phone, h.village_id, v.name AS village_name
+       FROM households h
+       LEFT JOIN villages v ON v.id = h.village_id
+       WHERE h.id = $1`,
+      [householdId],
+    );
     const hh = hhRows[0];
     if (!hh) throw notFound("Không tìm thấy hồ sơ hộ nông dân này.");
-    if (user.role === "village_officer" && Number(hh.village_id) !== Number(user.villageId)) {
-      throw forbidden("Cán bộ thôn chỉ được thao tác với hộ thuộc thôn mình phụ trách.");
+    const officerVillageName = await this.resolveOfficerVillageName(user);
+    if (!isStaffInParcelScope(user, { villageId: hh.village_id, villageName: hh.village_name }, officerVillageName)) {
+      throw forbidden("Hộ nông dân này không thuộc phạm vi quản lý của bạn.");
     }
 
     const cleanUsername = (dto.username?.trim() || hh.phone.trim()).replace(/\s+/g, "");

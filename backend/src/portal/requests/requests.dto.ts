@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsInt, IsOptional, IsPositive } from "class-validator";
+import { ArrayMaxSize, IsArray, IsInt, IsOptional, IsPositive, Max } from "class-validator";
 import { Count, OptionalField, OptionalText, Text } from "../../common/validation/fields";
 
 /** Hộ dân gửi hồ sơ xin duyệt / đăng ký vùng trồng. */
@@ -17,9 +17,11 @@ export class CreatePortalApprovalDto {
   @ArrayMaxSize(10)
   @IsInt({ each: true })
   @IsPositive({ each: true })
+  @Max(Number.MAX_SAFE_INTEGER, { each: true })
   attachmentIds?: number[];
 
   @OptionalField()
   @Count()
+  @Max(200)
   docsCount?: number;
 }

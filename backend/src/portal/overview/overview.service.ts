@@ -59,7 +59,8 @@ export class OverviewService {
         ),
         this.db.query(
           `SELECT code, plot_code, sampled_on, result FROM lab_tests
-           WHERE household_id = $1 ORDER BY sampled_on DESC, id DESC LIMIT 1`,
+           WHERE household_id = $1 AND record_status = 'verified'
+           ORDER BY sampled_on DESC, id DESC LIMIT 1`,
           [id],
         ),
         this.reminders(id),
@@ -143,6 +144,7 @@ export class OverviewService {
                 '${PORTAL_TABS.inspection}', i.scheduled_on
          FROM inspection_schedule i, today
          WHERE i.scheduled_on BETWEEN today.d AND today.d + 7
+           AND i.kind <> 'sudden'
 
          UNION ALL
          SELECT 4, 'training', c.title,

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
+import { can } from "../auth/permissions";
 import { verifyOrderedChain, type VerifiableChainEntry } from "../common/crypto/integrity-chain";
 import { forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
@@ -33,6 +34,13 @@ const DEFAULT_COOP_NAME = "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp 
 const DEFAULT_PACKHOUSE_NAME = "Cơ sở Đóng gói - Sơ chế Liên kết HTX Cư Né";
 const DEFAULT_PACKHOUSE_CODE = "VN-DLPH-0089";
 const DEFAULT_PACKHOUSE_ADDRESS = "Km 19, Quốc lộ 14, Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+
+/** Che CCCD thống nhất: chỉ giữ 2 số cuối (ví dụ `**********89`), NULL khi hộ chưa khai CCCD. */
+const CCCD_MASKED_SQL =
+  "CASE WHEN h.cccd IS NOT NULL AND btrim(h.cccd) <> '' THEN '**********' || right(btrim(h.cccd), 2) ELSE NULL END";
+
+/** Nhãn trung tính cho lượt đối chứng GPS của chủ hộ chưa đồng ý công khai tên (Nghị định 13/2023/NĐ-CP). */
+const NEUTRAL_FARMER_ACTOR_LABEL = "Chủ hộ thành viên HTX";
 
 export interface TraceRequestContext {
   user?: AuthUser;
@@ -303,6 +311,66 @@ export class TraceabilityService {
       scopeDeniedMessage: null,
       scopeReason,
     };
+  }
+
+  /**
+   * Bộ lọc hộ nguồn cho dữ liệu Cấp 3 theo địa bàn của cán bộ xã/thôn.
+   * Lô ghép nguyên liệu nhiều thôn chỉ cần 1 hộ thuộc thôn của cán bộ là mở Cấp 3, nên từng hộ phải được lọc lại
+   * đúng quy tắc của `evaluateAccessAndScope` (thôn `villageId` và/hoặc xã `assignedCommune`).
+   * Trả về null khi vai trò không bị giới hạn theo thôn (quản trị, thanh tra, HTX).
+   */
+  private buildOfficerHouseholdFilter(
+    user?: AuthUser,
+  ): ((h: { villageId: number | null; adminLocations: string[] }) => boolean) | null {
+    if (!user || user.role !== "village_officer") return null;
+    const hasVillageRule = user.villageId !== null && user.villageId !== undefined;
+    const commune = user.assignedCommune ? user.assignedCommune.trim() : "";
+    if (!hasVillageRule && !commune) return () => false;
+    return (h) => {
+      const villageOk = !hasVillageRule || (h.villageId !== null && Number(h.villageId) === Number(user.villageId));
+      const communeOk = !commune || matchesJurisdiction(commune, h.adminLocations);
+      return villageOk && communeOk;
+    };
+  }
+
+  /** Quyền xem phiếu kiểm nghiệm nháp (chưa kiểm chứng) và vi phạm nội bộ theo ma trận quyền máy chủ. */
+  private resolveSensitiveTracePermissions(viewerTier: ViewerTier, user?: AuthUser) {
+    const isAuthority = viewerTier === "authority" && Boolean(user);
+    return {
+      canReadDraftLabs: isAuthority && can(user!.role, "testing", "read"),
+      canReadViolations: isAuthority && can(user!.role, "violations", "read"),
+    };
+  }
+
+  /**
+   * Vi phạm nội bộ khớp chính xác theo `household_id` (không dò chuỗi ILIKE trên nhãn hộ).
+   * Bản ghi cũ chưa gắn hộ chỉ được khớp khi trùng chính xác mã thửa thuộc phạm vi.
+   */
+  private async queryScopedViolations(householdIds: number[], plotCodes: string[], limit: number) {
+    const cleanHhIds = [...new Set(householdIds.filter((id) => Number.isFinite(id) && id > 0))];
+    const cleanPlots = [...new Set(plotCodes.map((c) => c.trim().toUpperCase()).filter(Boolean))];
+    if (cleanHhIds.length === 0 && cleanPlots.length === 0) return [];
+    const res = await this.db.query(
+      `SELECT v.severity, v.title, v.household_label, v.detected_on, v.plot_code, v.description, v.status
+       FROM violations v
+       WHERE v.household_id = ANY($1::bigint[])
+          OR (v.household_id IS NULL AND cardinality($2::text[]) > 0 AND upper(btrim(COALESCE(v.plot_code, ''))) = ANY($2::text[]))
+       ORDER BY v.detected_on DESC, v.id DESC
+       LIMIT $3`,
+      [cleanHhIds, cleanPlots, limit],
+    );
+    return camelRows(res.rows);
+  }
+
+  /** Biên bản kiểm tra mới nhất trong phạm vi hộ/thửa nguồn (không lấy biên bản toàn HTX). */
+  private async queryLatestScopedMinute(householdIds: number[], plotCodes: string[]) {
+    const rows = await this.queryScopedInspectionMinutes<{ code: string; officer: string; held_on: string }>(
+      "im.code, im.officer, im.held_on::text AS held_on",
+      householdIds,
+      plotCodes,
+      1,
+    );
+    return rows[0] ?? null;
   }
 
   /** Chuẩn hóa địa danh hành chính cấp xã/huyện/tỉnh (không bao giờ lộ địa chỉ nhà riêng của hộ). */
@@ -1285,8 +1353,10 @@ export class TraceabilityService {
     pucCode: string;
     lotId?: number | null;
     thisLotWeightKg?: number;
+    scopedThisLotWeightKg?: number;
     plotCodes: string[];
     householdIds: number[];
+    allowedPlotFilter?: (row: { householdId: number; plotCode: string }) => boolean;
   }) {
     if (!(await this.hasTable("plot_season_quotas"))) {
       return { publicSummary: null, enterpriseBreakdown: null };
@@ -1294,6 +1364,9 @@ export class TraceabilityService {
 
     const cleanPlots = [...new Set(params.plotCodes.map((c) => c.trim().toUpperCase()).filter(Boolean))];
     const cleanHhIds = [...new Set(params.householdIds.filter((id) => Number.isFinite(id) && id > 0))];
+    if (cleanPlots.length === 0 && cleanHhIds.length === 0) {
+      return { publicSummary: null, enterpriseBreakdown: null };
+    }
 
     const fetchQuotasForYear = async (yr: number) => {
       return this.db.query<{
@@ -1319,12 +1392,11 @@ export class TraceabilityService {
          FROM plot_season_quotas
          WHERE season_year = $1
            AND (
-             upper(zone_code) = upper($2)
-             OR (cardinality($3::text[]) > 0 AND upper(plot_code) = ANY($3::text[]))
-             OR (cardinality($4::bigint[]) > 0 AND household_id = ANY($4::bigint[]))
+             (cardinality($2::text[]) > 0 AND upper(btrim(plot_code)) = ANY($2::text[]))
+             OR (cardinality($3::bigint[]) > 0 AND household_id = ANY($3::bigint[]))
            )
          ORDER BY plot_code ASC`,
-        [yr, params.pucCode, cleanPlots, cleanHhIds],
+        [yr, cleanPlots, cleanHhIds],
       );
     };
 
@@ -1392,7 +1464,7 @@ export class TraceabilityService {
       plotCountPerHh.set(hid, (plotCountPerHh.get(hid) ?? 0) + 1);
     }
 
-    const plotsBreakdown = qRes.rows.map((r) => {
+    const annotatedPlots = qRes.rows.map((r) => {
       const pKey = r.plot_code.trim().toUpperCase();
       const hid = Number(r.household_id);
       const hhShare = (usedByHhFallback.get(hid) ?? 0) / Math.max(1, plotCountPerHh.get(hid) ?? 1);
@@ -1401,18 +1473,23 @@ export class TraceabilityService {
       const remainingKg = Number(Math.max(0, maxQuotaKg - usedKg).toFixed(1));
       const utilizationPct = maxQuotaKg > 0 ? Number(((usedKg / maxQuotaKg) * 100).toFixed(1)) : 0;
       return {
-        plotCode: r.plot_code,
-        zoneCode: r.zone_code,
-        areaHa: Number(r.area_ha || 0),
-        treeCount: Number(r.tree_count || 0),
-        maxQuotaKg,
-        usedKg,
-        remainingKg,
-        utilizationPct,
-        withinQuota: maxQuotaKg <= 0 ? true : usedKg <= maxQuotaKg,
-        assessedOn: toIsoDateOnly(r.assessed_on),
+        householdId: hid,
+        item: {
+          plotCode: r.plot_code,
+          zoneCode: r.zone_code,
+          areaHa: Number(r.area_ha || 0),
+          treeCount: Number(r.tree_count || 0),
+          maxQuotaKg,
+          usedKg,
+          remainingKg,
+          utilizationPct,
+          withinQuota: maxQuotaKg <= 0 ? true : usedKg <= maxQuotaKg,
+          assessedOn: toIsoDateOnly(r.assessed_on),
+        },
       };
     });
+
+    const plotsBreakdown = annotatedPlots.map((entry) => entry.item);
 
     const zoneMaxQuotaKg = Number(
       plotsBreakdown.reduce((sum, p) => sum + p.maxQuotaKg, 0).toFixed(1),
@@ -1447,12 +1524,62 @@ export class TraceabilityService {
       assessedOn,
     };
 
-    const enterpriseBreakdown = {
-      ...publicSummary,
-      thisLotWeightKg,
-      usedBeforeThisLotKg,
-      plots: plotsBreakdown,
+    const scopedPlotsBreakdown = params.allowedPlotFilter
+      ? annotatedPlots
+          .filter((entry) =>
+            params.allowedPlotFilter!({ householdId: entry.householdId, plotCode: entry.item.plotCode }),
+          )
+          .map((entry) => entry.item)
+      : plotsBreakdown;
+
+    let enterpriseBreakdown: typeof publicSummary & {
+      thisLotWeightKg: number;
+      usedBeforeThisLotKg: number;
+      plots: typeof plotsBreakdown;
     };
+
+    if (params.allowedPlotFilter) {
+      const entZoneMaxQuotaKg = Number(
+        scopedPlotsBreakdown.reduce((sum, p) => sum + p.maxQuotaKg, 0).toFixed(1),
+      );
+      const entTotalAreaHa = Number(scopedPlotsBreakdown.reduce((sum, p) => sum + p.areaHa, 0).toFixed(2));
+      const entTotalTreeCount = scopedPlotsBreakdown.reduce((sum, p) => sum + p.treeCount, 0);
+      const entThisLotWeightKg = Number(
+        (params.scopedThisLotWeightKg ?? params.thisLotWeightKg ?? 0).toFixed(1),
+      );
+      const entSumUsedKg = Number(
+        scopedPlotsBreakdown.reduce((sum, p) => sum + p.usedKg, 0).toFixed(1),
+      );
+      const entCumulativeUsedKg = Number(Math.max(entSumUsedKg, entThisLotWeightKg).toFixed(1));
+      const entUsedBeforeThisLotKg = Number(Math.max(0, entCumulativeUsedKg - entThisLotWeightKg).toFixed(1));
+      const entRemainingQuotaKg = Number(Math.max(0, entZoneMaxQuotaKg - entCumulativeUsedKg).toFixed(1));
+      const entUtilizationPct =
+        entZoneMaxQuotaKg > 0 ? Number(((entCumulativeUsedKg / entZoneMaxQuotaKg) * 100).toFixed(1)) : 0;
+      enterpriseBreakdown = {
+        seasonYear: params.seasonYear,
+        pucCode: params.pucCode,
+        assessedPlotCount: scopedPlotsBreakdown.length,
+        totalAreaHa: entTotalAreaHa,
+        totalTreeCount: entTotalTreeCount,
+        zoneMaxQuotaKg: entZoneMaxQuotaKg,
+        cumulativeUsedKg: entCumulativeUsedKg,
+        remainingQuotaKg: entRemainingQuotaKg,
+        utilizationPct: entUtilizationPct,
+        withinQuota: entZoneMaxQuotaKg <= 0 ? true : entCumulativeUsedKg <= entZoneMaxQuotaKg,
+        assessedBy,
+        assessedOn,
+        thisLotWeightKg: entThisLotWeightKg,
+        usedBeforeThisLotKg: entUsedBeforeThisLotKg,
+        plots: scopedPlotsBreakdown,
+      };
+    } else {
+      enterpriseBreakdown = {
+        ...publicSummary,
+        thisLotWeightKg,
+        usedBeforeThisLotKg,
+        plots: plotsBreakdown,
+      };
+    }
 
     return { publicSummary, enterpriseBreakdown };
   }
@@ -1589,7 +1716,7 @@ export class TraceabilityService {
           seasonYear: currentYear,
           pucCode: params.zoneCode,
           plotCodes: [params.plotCode],
-          householdIds: params.householdId ? [params.householdId] : [],
+          householdIds: [],
         }),
         this.db.query<{
           sprayed_on: unknown;
@@ -1667,21 +1794,19 @@ export class TraceabilityService {
            LIMIT 15`,
           [params.plotCode, params.householdId],
         ),
-        this.db.query(
-          `SELECT im.code,
-                  to_char(im.held_on, 'YYYY-MM-DD') AS held_on,
-                  im.location,
-                  im.officer,
-                  im.result,
-                  im.gps_verified,
-                  im.gps_distance_m::float8 AS gps_distance_m,
-                  im.record_hash,
-                  ${publicAttachmentUrlSql("im.photo_id")} AS photo_url
-           FROM inspection_minutes im
-           ORDER BY (CASE WHEN upper(COALESCE(im.plot_code, '')) = upper($1) THEN 0 ELSE 1 END),
-                    im.held_on DESC, im.id DESC
-           LIMIT 6`,
+        this.queryScopedInspectionMinutes(
+          `im.code,
+           to_char(im.held_on, 'YYYY-MM-DD') AS held_on,
+           im.location,
+           im.officer,
+           im.result,
+           im.gps_verified,
+           im.gps_distance_m::float8 AS gps_distance_m,
+           im.record_hash,
+           ${publicAttachmentUrlSql("im.photo_id")} AS photo_url`,
+          params.householdId ? [params.householdId] : [],
           [params.plotCode],
+          6,
         ),
         params.householdId
           ? this.db.query(
@@ -1702,16 +1827,25 @@ export class TraceabilityService {
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         (await this.hasTable("field_gps_checkins"))
           ? this.db.query(
-              `SELECT checked_at,
-                      actor_label,
-                      inside_polygon,
-                      distance_m::float8 AS distance_meters,
-                      verified
-               FROM field_gps_checkins
-               WHERE upper(plot_code) = upper($1)
-               ORDER BY checked_at DESC
+              // Bản ghi cũ có thể đã lưu họ tên chủ hộ: luôn hiển thị nhãn trung tính khi hộ chưa đồng ý công khai.
+              `SELECT fc.checked_at,
+                      CASE
+                        WHEN u.role = 'farmer'
+                             AND fc.audit_pass_id IS NULL
+                             AND NOT (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
+                          THEN $2::text
+                        ELSE fc.actor_label
+                      END AS actor_label,
+                      fc.inside_polygon,
+                      fc.distance_m::float8 AS distance_meters,
+                      fc.verified
+               FROM field_gps_checkins fc
+               LEFT JOIN users u ON u.id = fc.user_id
+               LEFT JOIN households h ON h.id = u.household_id
+               WHERE upper(fc.plot_code) = upper($1)
+               ORDER BY fc.checked_at DESC
                LIMIT 6`,
-              [params.plotCode],
+              [params.plotCode, NEUTRAL_FARMER_ACTOR_LABEL],
             )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
       ]);
@@ -1763,7 +1897,7 @@ export class TraceabilityService {
         mrlAllPass,
       },
       sealedLedger: camelRows(ledgerRes.rows),
-      inspectionHistory: camelRows(minutesRes.rows),
+      inspectionHistory: camelRows(minutesRes),
       linkedLots: camelRows(lotsRes.rows),
       recentGpsCheckins: camelRows(checkinsRes.rows),
     };
@@ -1920,10 +2054,23 @@ export class TraceabilityService {
       dto.accuracyMeters ?? null,
     );
 
+    let farmerConsented = false;
+    if (!passCheck?.active && ctx.user?.role === "farmer" && ctx.user.householdId) {
+      const consentRes = await this.db.query<{ public_trace_consent: boolean | null; status: string | null }>(
+        "SELECT public_trace_consent, status FROM households WHERE id = $1",
+        [Number(ctx.user.householdId)],
+      );
+      const hh = consentRes.rows[0];
+      farmerConsented = Boolean(hh?.public_trace_consent) && hh?.status === "qualified";
+    }
+
+    // Chủ hộ chưa đồng ý công khai: lưu nhãn trung tính, không ghi họ tên vào nhật ký đối chứng GPS.
     const actorLabel = passCheck?.active
       ? `${passCheck.delegationName} (${passCheck.code})`
       : ctx.user
-        ? `${ctx.user.fullName} (${ctx.user.role})`
+        ? ctx.user.role === "farmer" && !farmerConsented
+          ? NEUTRAL_FARMER_ACTOR_LABEL
+          : `${ctx.user.fullName} (${ctx.user.role})`
         : "Đoàn Thẩm định Thực địa";
 
     const checkedAt = new Date().toISOString();
@@ -2123,7 +2270,7 @@ export class TraceabilityService {
                 fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
                 h.name AS household_name, h.status AS household_status, h.public_trace_consent,
                 h.code AS household_code, h.phone AS household_phone, h.village_id,
-                repeat('*', greatest(length(h.cccd) - 4, 0)) || right(h.cccd, 4) AS cccd_masked,
+                ${CCCD_MASKED_SQL} AS cccd_masked,
                 v.name AS village_name,
                 ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
                 p.zone_code, p.variety, COALESCE(p.area_ha, h.area_ha)::float8 AS area_ha, p.planted_year,
@@ -2143,7 +2290,7 @@ export class TraceabilityService {
                   fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
                   h.name AS household_name, h.status AS household_status, h.public_trace_consent,
                   h.code AS household_code, h.phone AS household_phone, h.village_id,
-                  repeat('*', greatest(length(h.cccd) - 4, 0)) || right(h.cccd, 4) AS cccd_masked,
+                  ${CCCD_MASKED_SQL} AS cccd_masked,
                   v.name AS village_name,
                   ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
                   pst.zone_code, pst.variety, COALESCE(pst.area_ha, h.area_ha)::float8 AS area_ha, pst.planted_year,
@@ -2160,7 +2307,7 @@ export class TraceabilityService {
                   fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
                   h.name AS household_name, h.status AS household_status, h.public_trace_consent,
                   h.code AS household_code, h.phone AS household_phone, h.village_id,
-                  repeat('*', greatest(length(h.cccd) - 4, 0)) || right(h.cccd, 4) AS cccd_masked,
+                  ${CCCD_MASKED_SQL} AS cccd_masked,
                   v.name AS village_name,
                   ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
                   NULL::text AS zone_code, NULL::text AS variety, h.area_ha::float8 AS area_ha, NULL::int AS planted_year,
@@ -2206,7 +2353,7 @@ export class TraceabilityService {
                 h.phone AS household_phone,
                 h.village_id,
                 COALESCE(h.public_trace_consent, false) AS public_trace_consent,
-                CASE WHEN h.cccd IS NOT NULL THEN repeat('*', greatest(length(h.cccd) - 4, 0)) || right(h.cccd, 4) ELSE NULL END AS cccd_masked,
+                ${CCCD_MASKED_SQL} AS cccd_masked,
                 ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
                 COALESCE(ST_AsGeoJSON(p.geom), pst.geometry_json) AS geometry_json,
                 COALESCE(ST_Y(ST_Centroid(p.geom))::float8, pst.center_lat::float8) AS lat,
@@ -2257,7 +2404,7 @@ export class TraceabilityService {
                 h.phone AS household_phone,
                 h.village_id,
                 COALESCE(h.public_trace_consent, false) AS public_trace_consent,
-                CASE WHEN h.cccd IS NOT NULL THEN repeat('*', greatest(length(h.cccd) - 4, 0)) || right(h.cccd, 4) ELSE NULL END AS cccd_masked,
+                ${CCCD_MASKED_SQL} AS cccd_masked,
                 ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
                 pst.geometry_json,
                 pst.center_lat::float8 AS lat,
@@ -2321,7 +2468,7 @@ export class TraceabilityService {
       plot_code: string | null;
     }>(
       `SELECT h.id AS household_id, h.name AS household_name, h.code AS household_code,
-              h.phone, repeat('*', greatest(length(h.cccd) - 4, 0)) || right(h.cccd, 4) AS cccd_masked,
+              h.phone, ${CCCD_MASKED_SQL} AS cccd_masked,
               h.status AS household_status, h.public_trace_consent,
               h.village_id, v.name AS village_name, h.area_ha::float8 AS area_ha,
               hc.weight_kg::float8 AS weight_kg,
@@ -2463,13 +2610,15 @@ export class TraceabilityService {
       adminLocations: [...allSourceAdminLocations],
     });
     const viewerTier = access.viewerTier;
+    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(viewerTier, ctx.user);
 
-    // (4f) Trang công khai & doanh nghiệp chỉ lấy phiếu kiểm nghiệm trạng thái "đã kiểm chứng" (verified)
-    const verifiedLabClause = viewerTier === "authority" ? "" : "AND lt.record_status = 'verified'";
+    // (4f) Phiếu kiểm nghiệm nháp chỉ dành cho vai trò có quyền `testing:read`; còn lại chỉ lấy phiếu "đã kiểm chứng" (verified).
+    // Lô chưa có hộ/thửa đóng góp: trả danh sách rỗng, không lấy bù phiếu của hộ không liên quan.
+    const verifiedLabClause = canReadDraftLabs ? "" : "AND lt.record_status = 'verified'";
     const labTestsRes =
       contribHouseholdIds.length > 0 || contribPlotCodes.length > 0
         ? await this.db.query(
-            `SELECT lt.code, h.name AS household_name, h.code AS household_code, lt.plot_code, lt.sampled_on,
+            `SELECT lt.household_id, lt.code, h.name AS household_name, h.code AS household_code, lt.plot_code, lt.sampled_on,
                     lt.cd_mg_kg::float8 AS cd_mg_kg, lt.yellow_o_positive,
                     lt.residue_mg_kg::float8 AS residue_mg_kg, lt.chlorpyrifos_mg_kg::float8 AS chlorpyrifos_mg_kg,
                     lt.result, lt.lab, lt.record_status,
@@ -2487,21 +2636,10 @@ export class TraceabilityService {
              LIMIT 8`,
             [contribHouseholdIds, contribPlotCodes],
           )
-        : await this.db.query(
-            `SELECT lt.code, h.name AS household_name, h.code AS household_code, lt.plot_code, lt.sampled_on,
-                    lt.cd_mg_kg::float8 AS cd_mg_kg, lt.yellow_o_positive,
-                    lt.residue_mg_kg::float8 AS residue_mg_kg, lt.chlorpyrifos_mg_kg::float8 AS chlorpyrifos_mg_kg,
-                    lt.result, lt.lab, lt.record_status,
-                    lt.lab_accreditation_code, lt.external_verify_code, lt.external_verify_url,
-                    ${publicAttachmentUrlSql("lt.scan_attachment_id")} AS scan_url
-             FROM lab_tests lt
-             JOIN households h ON h.id = lt.household_id
-             WHERE 1 = 1 ${verifiedLabClause}
-             ORDER BY lt.sampled_on DESC, lt.id DESC
-             LIMIT 3`,
-          );
+        : { rows: [] as Record<string, unknown>[] };
 
     const rawLabTests = camelRows<{
+      householdId: number | null;
       code: string;
       householdName: string;
       householdCode: string;
@@ -2520,12 +2658,10 @@ export class TraceabilityService {
       scanUrl: string | null;
     }>(labTestsRes.rows);
 
-    const latestMinuteRes = await this.db.query<{ code: string; officer: string; held_on: string }>(
-      `SELECT code, officer, held_on::text AS held_on FROM inspection_minutes ORDER BY held_on DESC, id DESC LIMIT 1`,
-    );
-    const lastInspectionOn = toIsoDateOnly(latestMinuteRes.rows[0]?.held_on);
-    const latestMinuteCode = latestMinuteRes.rows[0]?.code ?? null;
-    const latestMinuteOfficer = latestMinuteRes.rows[0]?.officer ?? null;
+    const latestMinute = await this.queryLatestScopedMinute(contribHouseholdIds, contribPlotCodes);
+    const lastInspectionOn = toIsoDateOnly(latestMinute?.held_on);
+    const latestMinuteCode = latestMinute?.code ?? null;
+    const latestMinuteOfficer = latestMinute?.officer ?? null;
 
     const verifiedPlots = effectivePlots.filter((p) => p.status === "approved");
     const displayPlots = viewerTier === "public" && verifiedPlots.length > 0 ? verifiedPlots : effectivePlots;
@@ -2618,6 +2754,51 @@ export class TraceabilityService {
       Number(lotRow.weightTons || 0) * 1000;
     const seasonYear = harvestedOn ? Number(harvestedOn.slice(0, 4)) || new Date().getFullYear() : new Date().getFullYear();
 
+    // Cán bộ xã/thôn: chỉ thấy hộ và thửa nguồn thuộc địa bàn được phân công, kể cả khi lô ghép nhiều thôn.
+    const officerFilter = this.buildOfficerHouseholdFilter(ctx.user);
+    const scopedContribHouseholds = officerFilter
+      ? contribHouseholds.filter((h) => {
+          const hid = Number(h.household_id);
+          const hhPlots = sourcePlots.filter(
+            (p) =>
+              Number(p.household_id) === hid ||
+              (h.plot_code ? p.code.toUpperCase() === h.plot_code.toUpperCase() : false),
+          );
+          const adminLocations = [
+            this.resolveAdminLocation(h.village_name, null),
+            ...hhPlots.filter((p) => p.zone_code).map((p) => this.resolveAdminLocation(null, p.zone_code)),
+          ];
+          return officerFilter({ villageId: h.village_id !== null ? Number(h.village_id) : null, adminLocations });
+        })
+      : contribHouseholds;
+    const scopedHouseholdIds = [...new Set(scopedContribHouseholds.map((h) => Number(h.household_id)))];
+    const scopedHouseholdIdSet = new Set(scopedHouseholdIds);
+    const scopedPlotCodes = [
+      ...new Set(
+        scopedContribHouseholds
+          .map((h) => (h.plot_code ? h.plot_code.trim().toUpperCase() : ""))
+          .filter(Boolean),
+      ),
+    ];
+    const scopedPlotCodeSet = new Set(scopedPlotCodes);
+    const isPlotInOfficerScope = (p: { household_id: number; code: string }) =>
+      !officerFilter ||
+      scopedHouseholdIdSet.has(Number(p.household_id)) ||
+      (!Number(p.household_id) && scopedPlotCodeSet.has(p.code.toUpperCase()));
+    const scopedTotalContribKg = officerFilter
+      ? scopedContribHouseholds.reduce((s, h) => s + Number(h.weight_kg || 0), 0)
+      : totalContribKg;
+
+    const unpinnedContribHouseholdIds = [
+      ...new Set(
+        contribHouseholds
+          .filter((h) => !h.plot_code || !h.plot_code.trim())
+          .map((h) => Number(h.household_id)),
+      ),
+    ];
+    const unpinnedContribHouseholdIdSet = new Set(unpinnedContribHouseholdIds);
+    const contribPlotCodeSet = new Set(contribPlotCodes.map((c) => c.trim().toUpperCase()));
+
     const [integritySeal, massBalance] = await Promise.all([
       this.computeLedgerIntegritySummary(contribHouseholdIds, contribPlotCodes),
       this.computeMassBalanceSummary({
@@ -2625,11 +2806,17 @@ export class TraceabilityService {
         pucCode: primaryPucCode,
         lotId: internalLotId,
         thisLotWeightKg: totalContribKg,
+        scopedThisLotWeightKg: scopedTotalContribKg,
         plotCodes:
           contribPlotCodes.length > 0
             ? contribPlotCodes
             : effectivePlots.map((p) => p.code),
-        householdIds: contribHouseholdIds,
+        householdIds: unpinnedContribHouseholdIds,
+        allowedPlotFilter: officerFilter
+          ? (r) =>
+              scopedHouseholdIdSet.has(Number(r.householdId)) ||
+              (!Number(r.householdId) && scopedPlotCodeSet.has(r.plotCode.toUpperCase()))
+          : undefined,
       }),
     ]);
 
@@ -2712,6 +2899,8 @@ export class TraceabilityService {
     // Dữ liệu Cấp 2 (Doanh nghiệp hoặc Đoàn Thẩm định có Thẻ hợp lệ: vùng nguồn, hạn ngạch Mass-Balance, kiểm nghiệm chi tiết)
     let enterpriseData: Record<string, unknown> | undefined;
     if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active) {
+      const visibleContribHouseholds = officerFilter ? scopedContribHouseholds : contribHouseholds;
+      const visibleTotalContribKg = officerFilter ? scopedTotalContribKg : totalContribKg;
       const zoneMap = new Map<
         string,
         {
@@ -2724,8 +2913,8 @@ export class TraceabilityService {
         }
       >();
 
-      if (contribHouseholds.length > 0) {
-        for (const h of contribHouseholds) {
+      if (visibleContribHouseholds.length > 0) {
+        for (const h of visibleContribHouseholds) {
           const hPlots = sourcePlots.filter((p) => Number(p.household_id) === Number(h.household_id));
           const exactPlot = h.plot_code
             ? hPlots.find((p) => p.code.toUpperCase() === h.plot_code!.toUpperCase())
@@ -2753,7 +2942,7 @@ export class TraceabilityService {
           }
           zoneMap.set(key, cur);
         }
-      } else {
+      } else if (!officerFilter) {
         zoneMap.set(primaryPucCode, {
           zoneCode: primaryPucCode,
           villageName: "Vùng liên kết HTX Cư Né",
@@ -2767,18 +2956,35 @@ export class TraceabilityService {
       const sourceZones = [...zoneMap.values()].map((z) => ({
         zoneCode: z.zoneCode,
         villageName: z.villageName,
-        householdCount: z.householdIds.size || participatingHouseholdCount,
+        householdCount: z.householdIds.size || (officerFilter ? 0 : participatingHouseholdCount),
         areaHa: z.areaHa,
         weightKg: z.weightKg,
         status: z.status,
-        sharePct: totalContribKg > 0 ? Number(((z.weightKg / totalContribKg) * 100).toFixed(1)) : 100,
+        sharePct:
+          visibleTotalContribKg > 0 ? Number(((z.weightKg / visibleTotalContribKg) * 100).toFixed(1)) : 100,
       }));
+
+      const visibleLabTests = rawLabTests.filter((lt) => {
+        const hid = lt.householdId !== null && lt.householdId !== undefined ? Number(lt.householdId) : 0;
+        const pUpper = lt.plotCode ? lt.plotCode.trim().toUpperCase() : "";
+        if (officerFilter) {
+          if (!scopedHouseholdIdSet.has(hid) && (!pUpper || !scopedPlotCodeSet.has(pUpper))) {
+            return false;
+          }
+        }
+        if (viewerTier === "enterprise" && contribPlotCodeSet.size > 0 && !unpinnedContribHouseholdIdSet.has(hid)) {
+          if (pUpper && !contribPlotCodeSet.has(pUpper)) {
+            return false;
+          }
+        }
+        return true;
+      });
 
       enterpriseData = {
         sourceZones,
-        totalSourceWeightKg: totalContribKg,
+        totalSourceWeightKg: visibleTotalContribKg,
         massBalance: massBalance.enterpriseBreakdown,
-        fieldAuditSourcePlots: effectivePlots.slice(0, 12).map((p) => ({
+        fieldAuditSourcePlots: effectivePlots.filter(isPlotInOfficerScope).slice(0, 12).map((p) => ({
           plotCode: p.code,
           qrToken: p.qr_token,
           zoneCode: p.zone_code || primaryPucCode,
@@ -2786,7 +2992,7 @@ export class TraceabilityService {
           areaHa: p.area_ha,
           status: p.status,
         })),
-        detailedLabTests: rawLabTests.map((lt) => {
+        detailedLabTests: visibleLabTests.map((lt) => {
           const matchedPlot = sourcePlots.find((p) => p.code.toUpperCase() === lt.plotCode.toUpperCase());
           return {
             code: lt.code,
@@ -2824,8 +3030,8 @@ export class TraceabilityService {
     // Dữ liệu Cấp 3 (Cơ quan quản lý: danh sách hộ/thửa nguồn kèm GIS, nhật ký canh tác & thuốc BVTV niêm phong SHA-256, biên bản kiểm tra)
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority") {
-      const [diariesRes, minutesRes, violationsRes] = await Promise.all([
-        contribHouseholdIds.length > 0
+      const [diariesRes, minutesRows, violationRows] = await Promise.all([
+        scopedHouseholdIds.length > 0
           ? this.db.query(
               `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
@@ -2876,36 +3082,24 @@ export class TraceabilityService {
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
                LIMIT 25`,
-              [contribHouseholdIds],
+              [scopedHouseholdIds],
             )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
-        this.db.query(
-          `SELECT im.code, im.held_on, im.location, im.officer, im.result,
-                  im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
-                  im.record_hash, im.server_recorded_at,
-                  ${publicAttachmentUrlSql("im.photo_id")} AS photo_url
-           FROM inspection_minutes im
-           ORDER BY im.held_on DESC, im.id DESC
-           LIMIT 8`,
+        // Biên bản kiểm tra chỉ trong phạm vi hộ/thửa nguồn được xem (không lấy bù biên bản của hộ khác).
+        this.queryScopedInspectionMinutes(
+          `im.code, im.held_on, im.location, im.officer, im.result,
+           im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
+           im.record_hash, im.server_recorded_at,
+           ${publicAttachmentUrlSql("im.photo_id")} AS photo_url`,
+          scopedHouseholdIds,
+          scopedPlotCodes,
+          8,
         ),
-        contribHouseholdIds.length > 0
-          ? this.db.query(
-              `SELECT v.severity, v.title, v.household_label, v.detected_on, v.plot_code, v.description, v.status
-               FROM violations v
-               WHERE EXISTS (
-                 SELECT 1 FROM households h
-                 WHERE h.id = ANY($1::bigint[])
-                   AND (v.household_label ILIKE '%' || h.code || '%' OR v.household_label ILIKE '%' || h.name || '%')
-               )
-               ORDER BY v.detected_on DESC, v.id DESC
-               LIMIT 10`,
-              [contribHouseholdIds],
-            )
-          : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
+        canReadViolations ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 10) : Promise.resolve([]),
       ]);
 
       authorityData = {
-        sourceHouseholds: contribHouseholds.map((h) => ({
+        sourceHouseholds: scopedContribHouseholds.map((h) => ({
           householdCode: h.household_code,
           householdName: h.household_name,
           villageName: h.village_name,
@@ -2921,6 +3115,7 @@ export class TraceabilityService {
                 ? p.code.toUpperCase() === h.plot_code.toUpperCase()
                 : Number(p.household_id) === Number(h.household_id),
             )
+            .filter(isPlotInOfficerScope)
             .map((p) => ({
               plotCode: p.code,
               qrToken: p.qr_token,
@@ -2938,8 +3133,8 @@ export class TraceabilityService {
             })),
         })),
         cultivationDiaries: camelRows(diariesRes.rows),
-        inspectionMinutes: camelRows(minutesRes.rows),
-        internalViolations: camelRows(violationsRes.rows),
+        inspectionMinutes: camelRows(minutesRows),
+        internalViolations: violationRows,
       };
     }
 
@@ -3086,7 +3281,10 @@ export class TraceabilityService {
       raw.status === "allocated" || raw.plotStatus === "pending" || raw.householdStatus === "pending";
     const hasConsent = Boolean(raw.publicTraceConsent) && raw.householdStatus === "qualified" && !isDraftOrUnverified;
 
-    const [latestLotRes, latestMinuteRes] = await Promise.all([
+    const viewerEnterpriseId =
+      ctx.user?.role === "enterprise" && ctx.user.enterpriseId ? Number(ctx.user.enterpriseId) : null;
+
+    const [latestLotRes, latestMinute] = await Promise.all([
       this.db.query(
         `SELECT hl.id, hl.code, hl.qr_token, hl.enterprise_id, hl.coop_code, hl.packed_on, hl.exported_on, hl.market, hl.status,
                 hl.packhouse_code, COALESCE(hl.packhouse_name, e.name) AS packhouse_name,
@@ -3096,13 +3294,14 @@ export class TraceabilityService {
          JOIN harvest_lots hl ON hl.id = hc.lot_id
          LEFT JOIN enterprises e ON e.id = hl.enterprise_id
          WHERE hc.household_id = $1
-         ORDER BY hl.harvested_on DESC, hc.id DESC
+           AND ($2::text IS NULL OR COALESCE(btrim(hc.plot_code), '') = '' OR upper(btrim(hc.plot_code)) = upper($2))
+         ORDER BY (CASE WHEN $3::bigint IS NOT NULL AND hl.enterprise_id = $3 THEN 0 ELSE 1 END),
+                  (CASE WHEN $2::text IS NOT NULL AND upper(btrim(COALESCE(hc.plot_code, ''))) = upper($2) THEN 0 ELSE 1 END),
+                  hl.harvested_on DESC, hc.id DESC
          LIMIT 1`,
-        [householdId],
+        [householdId, stampPlotCode, viewerEnterpriseId],
       ),
-      this.db.query<{ code: string; officer: string; held_on: string }>(
-        `SELECT code, officer, held_on::text AS held_on FROM inspection_minutes ORDER BY held_on DESC, id DESC LIMIT 1`,
-      ),
+      this.queryLatestScopedMinute([householdId], stampPlotCode ? [stampPlotCode] : []),
     ]);
 
     const derivedZone = String(raw.householdCode || "").replace(/-(?:H|T)\d+$/i, "");
@@ -3119,7 +3318,8 @@ export class TraceabilityService {
       adminLocations: [adminLocation],
     });
     const viewerTier = access.viewerTier;
-    const verifiedLabClause = viewerTier === "authority" ? "" : "AND record_status = 'verified'";
+    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(viewerTier, ctx.user);
+    const verifiedLabClause = canReadDraftLabs ? "" : "AND record_status = 'verified'";
 
     const labTestsRes = await this.db.query(
       `SELECT code, plot_code, sampled_on, cd_mg_kg::float8 AS cd_mg_kg, yellow_o_positive,
@@ -3189,9 +3389,9 @@ export class TraceabilityService {
       toIsoDateOnly(raw.harvestDate) || toIsoDateOnly(raw.activatedAt);
     const packedOn = toIsoDateOnly(linkedLot?.packedOn) || addDaysIso(harvestedOn, 1);
     const exportedOn = toIsoDateOnly(linkedLot?.exportedOn);
-    const lastInspectionOn = toIsoDateOnly(latestMinuteRes.rows[0]?.held_on);
-    const latestMinuteCode = latestMinuteRes.rows[0]?.code ?? null;
-    const latestMinuteOfficer = latestMinuteRes.rows[0]?.officer ?? null;
+    const lastInspectionOn = toIsoDateOnly(latestMinute?.held_on);
+    const latestMinuteCode = latestMinute?.code ?? null;
+    const latestMinuteOfficer = latestMinute?.officer ?? null;
 
     const stampWeightKg =
       raw.fruitWeightKg !== null && raw.fruitWeightKg !== undefined ? Number(raw.fruitWeightKg) : null;
@@ -3205,7 +3405,7 @@ export class TraceabilityService {
         lotId: linkedLot?.id ? Number(linkedLot.id) : null,
         thisLotWeightKg: stampWeightKg ?? 0,
         plotCodes: stampPlotCode ? [stampPlotCode] : [],
-        householdIds: [householdId],
+        householdIds: stampPlotCode ? [] : [householdId],
       }),
     ]);
 
@@ -3251,6 +3451,12 @@ export class TraceabilityService {
     // Dữ liệu Cấp 2 (Doanh nghiệp hoặc Đoàn Thẩm định có Thẻ hợp lệ)
     let enterpriseData: Record<string, unknown> | undefined;
     if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active) {
+      const visibleStampLabs =
+        viewerTier === "enterprise" && stampPlotCode
+          ? rawLabs.filter(
+              (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === stampPlotCode.toUpperCase(),
+            )
+          : rawLabs;
       enterpriseData = {
         sourceZones: [
           {
@@ -3265,7 +3471,7 @@ export class TraceabilityService {
         ],
         totalSourceWeightKg: stampWeightKg ?? 0,
         massBalance: massBalance.enterpriseBreakdown,
-        detailedLabTests: rawLabs.map((lt) => ({
+        detailedLabTests: visibleStampLabs.map((lt) => ({
           code: lt.code,
           zoneCode: pucCode,
           sampledOn: toIsoDateOnly(lt.sampledOn) || lt.sampledOn,
@@ -3289,113 +3495,119 @@ export class TraceabilityService {
     // Dữ liệu Cấp 3 (Cơ quan quản lý)
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority") {
-      const [diariesRes, minutesRes, violationsRes] = await Promise.all([
-        this.db.query(
-          `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
-                  server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
-                  gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
-           FROM (
-             SELECT sr.sprayed_on AS entry_on,
-                    COALESCE(sr.plot_code, '') AS plot_code,
-                    ('Phun thuốc BVTV: ' || p.name) AS activity,
-                    ('Hoạt chất: ' || p.active_ingredient || ' | Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày') AS detail,
-                    h.name AS recorder,
-                    h.name AS household_name,
-                    'spray'::text AS kind,
-                    sr.mrl_status,
-                    sr.isolation_days,
-                    sr.server_recorded_at,
-                    sr.entry_delay_hours,
-                    sr.is_late_entry,
-                    sr.record_hash,
-                    false AS gps_verified,
-                    NULL::numeric AS gps_distance_m,
-                    NULL::text AS photo_url,
-                    sr.id AS sort_id
-             FROM spray_records sr
-             JOIN pesticides p ON p.id = sr.pesticide_id
-             JOIN households h ON h.id = sr.household_id
-             WHERE sr.household_id = $1
-             UNION ALL
-             SELECT je.entry_on,
-                    je.plot_code,
-                    je.activity,
-                    je.detail,
-                    je.recorder,
-                    $2::text AS household_name,
-                    'journal'::text AS kind,
-                    NULL::text AS mrl_status,
-                    NULL::int AS isolation_days,
-                    je.server_recorded_at,
-                    je.entry_delay_hours,
-                    je.is_late_entry,
-                    je.record_hash,
-                    je.gps_verified,
-                    je.gps_distance_m,
-                    ${publicAttachmentUrlSql("je.photo_id")} AS photo_url,
-                    je.id AS sort_id
-             FROM journal_entries je
-             WHERE je.household_id = $1
-           ) combined
-           ORDER BY entry_on DESC, sort_id DESC
-           LIMIT 20`,
-          [householdId, String(raw.householdName || "")],
+      const officerFilter = this.buildOfficerHouseholdFilter(ctx.user);
+      const householdVisible =
+        !officerFilter ||
+        officerFilter({
+          villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
+          adminLocations: [adminLocation],
+        });
+      const scopedHouseholdIds = householdVisible ? [householdId] : [];
+      const scopedPlotCodes = householdVisible && stampPlotCode ? [stampPlotCode] : [];
+      const [diariesRes, minutesRows, violationRows] = await Promise.all([
+        householdVisible
+          ? this.db.query(
+              `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
+                      server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
+                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
+               FROM (
+                 SELECT sr.sprayed_on AS entry_on,
+                        COALESCE(sr.plot_code, '') AS plot_code,
+                        ('Phun thuốc BVTV: ' || p.name) AS activity,
+                        ('Hoạt chất: ' || p.active_ingredient || ' | Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày') AS detail,
+                        h.name AS recorder,
+                        h.name AS household_name,
+                        'spray'::text AS kind,
+                        sr.mrl_status,
+                        sr.isolation_days,
+                        sr.server_recorded_at,
+                        sr.entry_delay_hours,
+                        sr.is_late_entry,
+                        sr.record_hash,
+                        false AS gps_verified,
+                        NULL::numeric AS gps_distance_m,
+                        NULL::text AS photo_url,
+                        sr.id AS sort_id
+                 FROM spray_records sr
+                 JOIN pesticides p ON p.id = sr.pesticide_id
+                 JOIN households h ON h.id = sr.household_id
+                 WHERE sr.household_id = $1
+                 UNION ALL
+                 SELECT je.entry_on,
+                        je.plot_code,
+                        je.activity,
+                        je.detail,
+                        je.recorder,
+                        $2::text AS household_name,
+                        'journal'::text AS kind,
+                        NULL::text AS mrl_status,
+                        NULL::int AS isolation_days,
+                        je.server_recorded_at,
+                        je.entry_delay_hours,
+                        je.is_late_entry,
+                        je.record_hash,
+                        je.gps_verified,
+                        je.gps_distance_m,
+                        ${publicAttachmentUrlSql("je.photo_id")} AS photo_url,
+                        je.id AS sort_id
+                 FROM journal_entries je
+                 WHERE je.household_id = $1
+               ) combined
+               ORDER BY entry_on DESC, sort_id DESC
+               LIMIT 20`,
+              [householdId, String(raw.householdName || "")],
+            )
+          : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
+        this.queryScopedInspectionMinutes(
+          `im.code, im.held_on, im.location, im.officer, im.result,
+           im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
+           im.record_hash, im.server_recorded_at,
+           ${publicAttachmentUrlSql("im.photo_id")} AS photo_url`,
+          scopedHouseholdIds,
+          scopedPlotCodes,
+          6,
         ),
-        this.db.query(
-          `SELECT im.code, im.held_on, im.location, im.officer, im.result,
-                  im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
-                  im.record_hash, im.server_recorded_at,
-                  ${publicAttachmentUrlSql("im.photo_id")} AS photo_url
-           FROM inspection_minutes im
-           ORDER BY im.held_on DESC, im.id DESC
-           LIMIT 6`,
-        ),
-        this.db.query(
-          `SELECT severity, title, household_label, detected_on, plot_code, description, status
-           FROM violations
-           WHERE (plot_code IS NOT NULL AND $1::text IS NOT NULL AND upper(plot_code) = upper($1))
-              OR household_label ILIKE '%' || $2 || '%'
-           ORDER BY detected_on DESC, id DESC
-           LIMIT 6`,
-          [stampPlotCode, String(raw.householdCode || "")],
-        ),
+        canReadViolations ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 6) : Promise.resolve([]),
       ]);
 
       authorityData = {
-        sourceHouseholds: [
-          {
-            householdCode: String(raw.householdCode),
-            householdName: String(raw.householdName),
-            villageName: String(raw.villageName || ""),
-            phone: String(raw.householdPhone || ""),
-            cccdMasked: String(raw.cccdMasked || ""),
-            status: String(raw.householdStatus || "qualified"),
-            publicTraceConsent: Boolean(raw.publicTraceConsent),
-            contributedKg: stampWeightKg,
-            contributedPlotCode: stampPlotCode,
-            plots: stampPlotCode
-              ? [
-                  {
-                    plotCode: stampPlotCode,
-                    zoneCode: pucCode,
-                    sheetNo: (raw.sheetNo as string | null) ?? null,
-                    parcelNo: (raw.parcelNo as string | null) ?? null,
-                    variety: (raw.variety as string | null) ?? null,
-                    plantedYear: raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
-                    areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
-                    status: String(raw.plotStatus || "approved"),
-                    source: (raw.plotSource as string | null) ?? null,
-                    lat: raw.lat !== null && raw.lat !== undefined ? Number(raw.lat) : null,
-                    lng: raw.lng !== null && raw.lng !== undefined ? Number(raw.lng) : null,
-                    geometryJson: (raw.geometryJson as string | null) ?? null,
-                  },
-                ]
-              : [],
-          },
-        ],
+        sourceHouseholds: householdVisible
+          ? [
+              {
+                householdCode: String(raw.householdCode),
+                householdName: String(raw.householdName),
+                villageName: String(raw.villageName || ""),
+                phone: String(raw.householdPhone || ""),
+                cccdMasked: String(raw.cccdMasked || ""),
+                status: String(raw.householdStatus || "qualified"),
+                publicTraceConsent: Boolean(raw.publicTraceConsent),
+                contributedKg: stampWeightKg,
+                contributedPlotCode: stampPlotCode,
+                plots: stampPlotCode
+                  ? [
+                      {
+                        plotCode: stampPlotCode,
+                        zoneCode: pucCode,
+                        sheetNo: (raw.sheetNo as string | null) ?? null,
+                        parcelNo: (raw.parcelNo as string | null) ?? null,
+                        variety: (raw.variety as string | null) ?? null,
+                        plantedYear:
+                          raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
+                        areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
+                        status: String(raw.plotStatus || "approved"),
+                        source: (raw.plotSource as string | null) ?? null,
+                        lat: raw.lat !== null && raw.lat !== undefined ? Number(raw.lat) : null,
+                        lng: raw.lng !== null && raw.lng !== undefined ? Number(raw.lng) : null,
+                        geometryJson: (raw.geometryJson as string | null) ?? null,
+                      },
+                    ]
+                  : [],
+              },
+            ]
+          : [],
         cultivationDiaries: camelRows(diariesRes.rows),
-        inspectionMinutes: camelRows(minutesRes.rows),
-        internalViolations: camelRows(violationsRes.rows),
+        inspectionMinutes: camelRows(minutesRows),
+        internalViolations: violationRows,
       };
     }
 
@@ -3571,28 +3783,31 @@ export class TraceabilityService {
           : "VN-DLOR-0086";
     const adminLocation = this.resolveAdminLocation(raw.village, pucCode);
 
-    const [latestLotRes, latestMinuteRes] = await Promise.all([
-      plotHouseholdId
-        ? this.db.query(
-            `SELECT hl.id, hl.code, hl.qr_token, hl.enterprise_id, hl.coop_code, hl.harvested_on, hl.packed_on, hl.exported_on,
-                    hl.weight_tons::float8 AS weight_tons, hl.market, hl.status,
-                    hl.packhouse_code, COALESCE(hl.packhouse_name, e.name) AS packhouse_name,
-                    COALESCE(hl.packhouse_address, e.address) AS packhouse_address,
-                    hl.phytosanitary_cert_no, hl.phytosanitary_issued_on,
-                    hc.weight_kg::float8 AS contributed_kg
-             FROM harvest_contributions hc
-             JOIN harvest_lots hl ON hl.id = hc.lot_id
-             LEFT JOIN enterprises e ON e.id = hl.enterprise_id
-             WHERE hc.household_id = $1
-             ORDER BY (CASE WHEN upper(COALESCE(hc.plot_code, '')) = upper($2) THEN 0 ELSE 1 END),
-                      hl.harvested_on DESC, hc.id DESC
-             LIMIT 1`,
-            [plotHouseholdId, plotCode],
-          )
-        : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
-      this.db.query<{ code: string; officer: string; held_on: string }>(
-        `SELECT code, officer, held_on::text AS held_on FROM inspection_minutes ORDER BY held_on DESC, id DESC LIMIT 1`,
+    const viewerEnterpriseId =
+      ctx.user?.role === "enterprise" && ctx.user.enterpriseId ? Number(ctx.user.enterpriseId) : null;
+
+    const [latestLotRes, latestMinute] = await Promise.all([
+      this.db.query(
+        `SELECT hl.id, hl.code, hl.qr_token, hl.enterprise_id, hl.coop_code, hl.harvested_on, hl.packed_on, hl.exported_on,
+                hl.weight_tons::float8 AS weight_tons, hl.market, hl.status,
+                hl.packhouse_code, COALESCE(hl.packhouse_name, e.name) AS packhouse_name,
+                COALESCE(hl.packhouse_address, e.address) AS packhouse_address,
+                hl.phytosanitary_cert_no, hl.phytosanitary_issued_on,
+                hc.weight_kg::float8 AS contributed_kg
+         FROM harvest_contributions hc
+         JOIN harvest_lots hl ON hl.id = hc.lot_id
+         LEFT JOIN enterprises e ON e.id = hl.enterprise_id
+         WHERE (
+           upper(btrim(COALESCE(hc.plot_code, ''))) = upper($2)
+           OR ($1::bigint IS NOT NULL AND hc.household_id = $1 AND COALESCE(btrim(hc.plot_code), '') = '')
+         )
+         ORDER BY (CASE WHEN $3::bigint IS NOT NULL AND hl.enterprise_id = $3 THEN 0 ELSE 1 END),
+                  (CASE WHEN upper(btrim(COALESCE(hc.plot_code, ''))) = upper($2) THEN 0 ELSE 1 END),
+                  hl.harvested_on DESC, hc.id DESC
+         LIMIT 1`,
+        [plotHouseholdId, plotCode, viewerEnterpriseId],
       ),
+      this.queryLatestScopedMinute(plotHouseholdId ? [plotHouseholdId] : [], [plotCode]),
     ]);
 
     const linkedLot = latestLotRes.rows[0] ? camelRow<Record<string, unknown>>(latestLotRes.rows[0]) : null;
@@ -3603,7 +3818,8 @@ export class TraceabilityService {
       adminLocations: [adminLocation],
     });
     const viewerTier = access.viewerTier;
-    const verifiedLabClause = viewerTier === "authority" ? "" : "AND record_status = 'verified'";
+    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(viewerTier, ctx.user);
+    const verifiedLabClause = canReadDraftLabs ? "" : "AND record_status = 'verified'";
 
     const labTestsRes = await this.db.query(
       `SELECT code, plot_code, sampled_on, cd_mg_kg::float8 AS cd_mg_kg, yellow_o_positive,
@@ -3675,9 +3891,9 @@ export class TraceabilityService {
     const harvestedOn = toIsoDateOnly(linkedLot?.harvestedOn);
     const packedOn = toIsoDateOnly(linkedLot?.packedOn);
     const exportedOn = toIsoDateOnly(linkedLot?.exportedOn);
-    const lastInspectionOn = toIsoDateOnly(latestMinuteRes.rows[0]?.held_on);
-    const latestMinuteCode = latestMinuteRes.rows[0]?.code ?? null;
-    const latestMinuteOfficer = latestMinuteRes.rows[0]?.officer ?? null;
+    const lastInspectionOn = toIsoDateOnly(latestMinute?.held_on);
+    const latestMinuteCode = latestMinute?.code ?? null;
+    const latestMinuteOfficer = latestMinute?.officer ?? null;
 
     const contribKg = linkedLot?.contributedKg ? Number(linkedLot.contributedKg) : 0;
     const seasonYear = harvestedOn ? Number(harvestedOn.slice(0, 4)) || new Date().getFullYear() : new Date().getFullYear();
@@ -3690,7 +3906,7 @@ export class TraceabilityService {
         lotId: linkedLot?.id ? Number(linkedLot.id) : null,
         thisLotWeightKg: contribKg,
         plotCodes: [plotCode],
-        householdIds: plotHouseholdId ? [plotHouseholdId] : [],
+        householdIds: [],
       }),
     ]);
 
@@ -3739,7 +3955,7 @@ export class TraceabilityService {
       Number(ctx.user.householdId) === plotHouseholdId;
     const canViewFieldAudit =
       Boolean(fieldAuditPass?.active) ||
-      (viewerTier !== "public" && !access.scopeDenied) ||
+      (viewerTier === "authority" && !access.scopeDenied) ||
       isOwnerFarmer;
 
     let fieldAuditData: Record<string, unknown> | undefined;
@@ -3768,6 +3984,12 @@ export class TraceabilityService {
 
     let enterpriseData: Record<string, unknown> | undefined;
     if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active) {
+      const visiblePlotLabs =
+        viewerTier === "enterprise"
+          ? rawLabs.filter(
+              (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === plotCode.toUpperCase(),
+            )
+          : rawLabs;
       enterpriseData = {
         sourceZones: [
           {
@@ -3782,7 +4004,7 @@ export class TraceabilityService {
         ],
         totalSourceWeightKg: contribKg,
         massBalance: massBalance.enterpriseBreakdown,
-        detailedLabTests: rawLabs.map((lt) => ({
+        detailedLabTests: visiblePlotLabs.map((lt) => ({
           code: lt.code,
           zoneCode: pucCode,
           sampledOn: toIsoDateOnly(lt.sampledOn) || lt.sampledOn,
@@ -3805,113 +4027,122 @@ export class TraceabilityService {
 
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority") {
-      const [diariesRes, minutesRes, violationsRes] = await Promise.all([
-        this.db.query(
-          `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
-                  server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
-                  gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
-           FROM (
-             SELECT sr.sprayed_on AS entry_on,
-                    COALESCE(sr.plot_code, $1::text) AS plot_code,
-                    ('Phun thuốc BVTV: ' || p.name) AS activity,
-                    ('Hoạt chất: ' || p.active_ingredient || ' | Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày') AS detail,
-                    h.name AS recorder,
-                    h.name AS household_name,
-                    'spray'::text AS kind,
-                    sr.mrl_status,
-                    sr.isolation_days,
-                    sr.server_recorded_at,
-                    sr.entry_delay_hours,
-                    sr.is_late_entry,
-                    sr.record_hash,
-                    false AS gps_verified,
-                    NULL::numeric AS gps_distance_m,
-                    NULL::text AS photo_url,
-                    sr.id AS sort_id
-             FROM spray_records sr
-             JOIN pesticides p ON p.id = sr.pesticide_id
-             JOIN households h ON h.id = sr.household_id
-             WHERE upper(sr.plot_code) = upper($1)
-                OR ($2::bigint IS NOT NULL AND sr.household_id = $2)
-             UNION ALL
-             SELECT je.entry_on,
-                    je.plot_code,
-                    je.activity,
-                    je.detail,
-                    je.recorder,
-                    $3::text AS household_name,
-                    'journal'::text AS kind,
-                    NULL::text AS mrl_status,
-                    NULL::int AS isolation_days,
-                    je.server_recorded_at,
-                    je.entry_delay_hours,
-                    je.is_late_entry,
-                    je.record_hash,
-                    je.gps_verified,
-                    je.gps_distance_m,
-                    ${publicAttachmentUrlSql("je.photo_id")} AS photo_url,
-                    je.id AS sort_id
-             FROM journal_entries je
-             WHERE upper(je.plot_code) = upper($1)
-           ) combined
-           ORDER BY entry_on DESC, sort_id DESC
-           LIMIT 20`,
-          [plotCode, plotHouseholdId, String(raw.ownerName || "")],
+      const officerFilter = this.buildOfficerHouseholdFilter(ctx.user);
+      const householdVisible =
+        !officerFilter ||
+        officerFilter({
+          villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
+          adminLocations: [adminLocation],
+        });
+      const scopedHouseholdIds = householdVisible && plotHouseholdId ? [plotHouseholdId] : [];
+      const scopedPlotCodes = householdVisible ? [plotCode] : [];
+      // Cán bộ xã/thôn: nhật ký theo mã thửa chỉ lấy bản ghi của hộ thuộc địa bàn (không lấy bản ghi hộ khác trùng mã thửa).
+      const restrictToScopedHouseholds = officerFilter !== null;
+      const [diariesRes, minutesRows, violationRows] = await Promise.all([
+        householdVisible
+          ? this.db.query(
+              `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
+                      server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
+                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
+               FROM (
+                 SELECT sr.sprayed_on AS entry_on,
+                        COALESCE(sr.plot_code, $1::text) AS plot_code,
+                        ('Phun thuốc BVTV: ' || p.name) AS activity,
+                        ('Hoạt chất: ' || p.active_ingredient || ' | Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày') AS detail,
+                        h.name AS recorder,
+                        h.name AS household_name,
+                        'spray'::text AS kind,
+                        sr.mrl_status,
+                        sr.isolation_days,
+                        sr.server_recorded_at,
+                        sr.entry_delay_hours,
+                        sr.is_late_entry,
+                        sr.record_hash,
+                        false AS gps_verified,
+                        NULL::numeric AS gps_distance_m,
+                        NULL::text AS photo_url,
+                        sr.id AS sort_id
+                 FROM spray_records sr
+                 JOIN pesticides p ON p.id = sr.pesticide_id
+                 JOIN households h ON h.id = sr.household_id
+                 WHERE (upper(sr.plot_code) = upper($1)
+                        OR ($2::bigint IS NOT NULL AND sr.household_id = $2))
+                   AND (NOT $4::boolean OR sr.household_id = ANY($5::bigint[]))
+                 UNION ALL
+                 SELECT je.entry_on,
+                        je.plot_code,
+                        je.activity,
+                        je.detail,
+                        je.recorder,
+                        $3::text AS household_name,
+                        'journal'::text AS kind,
+                        NULL::text AS mrl_status,
+                        NULL::int AS isolation_days,
+                        je.server_recorded_at,
+                        je.entry_delay_hours,
+                        je.is_late_entry,
+                        je.record_hash,
+                        je.gps_verified,
+                        je.gps_distance_m,
+                        ${publicAttachmentUrlSql("je.photo_id")} AS photo_url,
+                        je.id AS sort_id
+                 FROM journal_entries je
+                 WHERE upper(je.plot_code) = upper($1)
+                   AND (NOT $4::boolean OR je.household_id = ANY($5::bigint[]))
+               ) combined
+               ORDER BY entry_on DESC, sort_id DESC
+               LIMIT 20`,
+              [plotCode, plotHouseholdId, String(raw.ownerName || ""), restrictToScopedHouseholds, scopedHouseholdIds],
+            )
+          : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
+        this.queryScopedInspectionMinutes(
+          `im.code, im.held_on, im.location, im.officer, im.result,
+           im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
+           im.record_hash, im.server_recorded_at,
+           ${publicAttachmentUrlSql("im.photo_id")} AS photo_url`,
+          scopedHouseholdIds,
+          scopedPlotCodes,
+          6,
         ),
-        this.db.query(
-          `SELECT im.code, im.held_on, im.location, im.officer, im.result,
-                  im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
-                  im.record_hash, im.server_recorded_at,
-                  ${publicAttachmentUrlSql("im.photo_id")} AS photo_url
-           FROM inspection_minutes im
-           ORDER BY im.held_on DESC, im.id DESC
-           LIMIT 6`,
-        ),
-        this.db.query(
-          `SELECT severity, title, household_label, detected_on, plot_code, description, status
-           FROM violations
-           WHERE upper(COALESCE(plot_code, '')) = upper($1)
-              OR ($2::text IS NOT NULL AND $2 <> '' AND household_label ILIKE '%' || $2 || '%')
-           ORDER BY detected_on DESC, id DESC
-           LIMIT 6`,
-          [plotCode, String(raw.householdCode || "")],
-        ),
+        canReadViolations ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 6) : Promise.resolve([]),
       ]);
 
       authorityData = {
-        sourceHouseholds: [
-          {
-            householdCode: String(raw.householdCode || "Chưa gán mã hộ"),
-            householdName: String(raw.ownerName || "Chưa cập nhật"),
-            villageName: String(raw.village || ""),
-            phone: String(raw.householdPhone || ""),
-            cccdMasked: String(raw.cccdMasked || ""),
-            status: String(raw.householdStatus || raw.status || "pending"),
-            publicTraceConsent: Boolean(raw.publicTraceConsent),
-            contributedKg: linkedLot?.contributedKg ? Number(linkedLot.contributedKg) : null,
-            contributedPlotCode: plotCode,
-            plots: [
+        sourceHouseholds: householdVisible
+          ? [
               {
-                plotCode,
-                qrToken: plotQrToken,
-                zoneCode: pucCode,
-                sheetNo: (raw.sheetNo as string | null) ?? null,
-                parcelNo: (raw.parcelNo as string | null) ?? null,
-                variety: (raw.variety as string | null) ?? null,
-                plantedYear: raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
-                areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
-                status: String(raw.status || "pending"),
-                source: (raw.source as string | null) ?? null,
-                lat: raw.lat !== null && raw.lat !== undefined ? Number(raw.lat) : null,
-                lng: raw.lng !== null && raw.lng !== undefined ? Number(raw.lng) : null,
-                geometryJson: (raw.geometryJson as string | null) ?? null,
+                householdCode: String(raw.householdCode || "Chưa gán mã hộ"),
+                householdName: String(raw.ownerName || "Chưa cập nhật"),
+                villageName: String(raw.village || ""),
+                phone: String(raw.householdPhone || ""),
+                cccdMasked: String(raw.cccdMasked || ""),
+                status: String(raw.householdStatus || raw.status || "pending"),
+                publicTraceConsent: Boolean(raw.publicTraceConsent),
+                contributedKg: linkedLot?.contributedKg ? Number(linkedLot.contributedKg) : null,
+                contributedPlotCode: plotCode,
+                plots: [
+                  {
+                    plotCode,
+                    qrToken: plotQrToken,
+                    zoneCode: pucCode,
+                    sheetNo: (raw.sheetNo as string | null) ?? null,
+                    parcelNo: (raw.parcelNo as string | null) ?? null,
+                    variety: (raw.variety as string | null) ?? null,
+                    plantedYear: raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
+                    areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
+                    status: String(raw.status || "pending"),
+                    source: (raw.source as string | null) ?? null,
+                    lat: raw.lat !== null && raw.lat !== undefined ? Number(raw.lat) : null,
+                    lng: raw.lng !== null && raw.lng !== undefined ? Number(raw.lng) : null,
+                    geometryJson: (raw.geometryJson as string | null) ?? null,
+                  },
+                ],
               },
-            ],
-          },
-        ],
+            ]
+          : [],
         cultivationDiaries: camelRows(diariesRes.rows),
-        inspectionMinutes: camelRows(minutesRes.rows),
-        internalViolations: camelRows(violationsRes.rows),
+        inspectionMinutes: camelRows(minutesRows),
+        internalViolations: violationRows,
       };
     }
 

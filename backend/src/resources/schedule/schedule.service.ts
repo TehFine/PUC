@@ -21,6 +21,8 @@ export class ScheduleService extends BaseCrudService {
       orderBy: "t.scheduled_on ASC, t.id",
       search: ["t.title", "t.officer"],
       filters: { kind: "t.kind" },
+      // Lịch kiểm tra đột xuất chỉ hiển thị cho cán bộ HTX và kiểm tra viên; cán bộ thôn không được biết trước.
+      scope: (user) => (INSPECTION_ROLES.includes(user.role) ? null : "t.kind <> 'sudden'"),
       virtual: ["_method", "_notifySudden"],
     });
   }
@@ -42,13 +44,14 @@ export class ScheduleService extends BaseCrudService {
           title: String(out.title ?? prev.title),
           scheduledOn: String(out.scheduledOn ?? prev.scheduled_on),
           officer: String(out.officer ?? prev.officer),
+          previousTitle: prev.title,
         };
       }
     }
     return out;
   }
 
-  protected override async afterWrite(_id: number, input: Record<string, unknown>) {
+  protected override async afterWrite(id: number, input: Record<string, unknown>) {
     if (input._method === "POST") {
       if (input.kind === "sudden") {
         await this.notifications.notifyRoles(INSPECTION_ROLES, {
@@ -69,9 +72,23 @@ export class ScheduleService extends BaseCrudService {
     }
 
     const suddenAlert = input._notifySudden as
-      | { title: string; scheduledOn: string; officer: string }
+      | { title: string; scheduledOn: string; officer: string; previousTitle: string }
       | undefined;
     if (suddenAlert) {
+      // Đợt kiểm tra chuyển sang đột xuất: thu hồi thông báo lịch đã gửi cho hộ dân để không lộ trước ngày giờ kiểm tra.
+      await this.db.query(
+        `DELETE FROM notifications n
+         USING users u
+         WHERE u.id = n.user_id
+           AND u.role = 'farmer'
+           AND n.kind = 'schedule'
+           AND (
+             n.link = '/portal?tab=inspection&scheduleId=' || $1::text
+             OR n.title = 'Lịch kiểm tra mới: ' || $2
+             OR n.title = 'Lịch kiểm tra: ' || $2
+           )`,
+        [String(id), suddenAlert.previousTitle],
+      );
       await this.notifications.notifyRoles(INSPECTION_ROLES, {
         kind: "schedule",
         title: `Lịch kiểm tra đột xuất: ${suddenAlert.title}`,

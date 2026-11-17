@@ -2,9 +2,9 @@ import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
-import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
-import { badRequest } from "../../common/errors/app.exception";
-import { attachmentUrlSql, attachmentUrlsSql } from "../../common/sql/rows";
+import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
+import { badRequest, forbidden } from "../../common/errors/app.exception";
+import { attachmentUrlSql, attachmentUrlsSql, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { assertPlotOwned } from "../../portal/common/portal-context";
 import { UploadsService } from "../../uploads/uploads.service";
@@ -16,6 +16,8 @@ interface ExistingJournalRow {
   household_id: number;
   plot_code: string | null;
   server_recorded_at: Date | string | null;
+  photo_id: number | null;
+  photo_ids: number[] | null;
 }
 
 @Injectable()
@@ -82,20 +84,28 @@ export class JournalService extends BaseCrudService {
   }
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (!isStaffInCuneCoopScope(context.user, true)) {
+      throw forbidden("Bạn không có quyền thao tác nhật ký canh tác ngoài phạm vi quản lý.");
+    }
     await assertHouseholdInScope(this.db, input, context.user);
     const out: Record<string, unknown> = { ...input };
+    if (typeof out.entryOn === "string" && out.entryOn > todayVn()) {
+      throw badRequest("Ngày thực hiện không được ở tương lai. Chỉ ghi nhận nhật ký cho công việc đã thực hiện.");
+    }
 
     let existing: ExistingJournalRow | undefined;
     if (context.method === "PATCH" && context.id !== undefined) {
       const exRes = await this.db.query<ExistingJournalRow>(
-        "SELECT household_id, plot_code, server_recorded_at FROM journal_entries WHERE id = $1",
+        "SELECT household_id, plot_code, server_recorded_at, photo_id, photo_ids FROM journal_entries WHERE id = $1",
         [context.id],
       );
       existing = exRes.rows[0];
       if (!existing) {
         delete out.recorder;
+        delete out.hasPhoto;
         return out;
       }
+      await assertHouseholdInScope(this.db, { householdId: existing.household_id }, context.user);
       await this.assertJournalEditable(existing);
       delete out.recorder;
     } else {
@@ -109,20 +119,34 @@ export class JournalService extends BaseCrudService {
       out.plotCode = await assertPlotOwned(this.db, effectiveHouseholdId, effectivePlotCode);
     }
 
-    const rawPhotoIds = [
-      ...(Array.isArray(out.photoIds) ? (out.photoIds as number[]) : []),
-      ...(typeof out.photoId === "number" && out.photoId > 0 ? [out.photoId] : []),
-    ];
-    if (rawPhotoIds.length > 0) {
-      const media = await this.uploads.assertUsableDetailed(
-        rawPhotoIds,
-        context.user,
-        "journal",
-        effectiveHouseholdId > 0 ? effectiveHouseholdId : null,
+    if (out.photoIds !== undefined || out.photoId !== undefined) {
+      const explicitArray = Array.isArray(out.photoIds) ? (out.photoIds as number[]) : undefined;
+      const single = typeof out.photoId === "number" && out.photoId > 0 ? out.photoId : null;
+      const rawPhotoIds = [
+        ...(explicitArray ?? []),
+        ...(single !== null ? [single] : []),
+      ];
+      if (rawPhotoIds.length > 0) {
+        const media = await this.uploads.assertUsableDetailed(
+          rawPhotoIds,
+          context.user,
+          "journal",
+          effectiveHouseholdId > 0 ? effectiveHouseholdId : null,
+        );
+        out.photoId = media.primaryId;
+        out.photoIds = media.ids;
+        out.hasPhoto = Boolean(media.primaryId || media.ids.length > 0);
+      } else {
+        out.photoId = null;
+        out.photoIds = [];
+        out.hasPhoto = false;
+      }
+    } else if (context.method === "POST") {
+      out.hasPhoto = false;
+    } else {
+      out.hasPhoto = Boolean(
+        existing?.photo_id || (Array.isArray(existing?.photo_ids) && existing.photo_ids.length > 0),
       );
-      out.photoId = media.primaryId;
-      out.photoIds = media.ids;
-      out.hasPhoto = true;
     }
 
     if (
@@ -137,12 +161,16 @@ export class JournalService extends BaseCrudService {
     return out;
   }
 
-  protected override async guardDelete(id: number, _user: AuthUser) {
+  protected override async guardDelete(id: number, user: AuthUser) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền xóa nhật ký canh tác ngoài phạm vi quản lý.");
+    }
     const { rows } = await this.db.query<ExistingJournalRow>(
-      "SELECT household_id, plot_code, server_recorded_at FROM journal_entries WHERE id = $1",
+      "SELECT household_id, plot_code, server_recorded_at, photo_id, photo_ids FROM journal_entries WHERE id = $1",
       [id],
     );
     if (rows[0]) {
+      await assertHouseholdInScope(this.db, { householdId: rows[0].household_id }, user);
       await this.assertJournalEditable(rows[0]);
     }
   }

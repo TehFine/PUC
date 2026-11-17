@@ -3,6 +3,7 @@ import { Count, OptionalField, OptionalText, RecordId } from "../../common/valid
 
 export class CreateStampAllocationDto {
   @RecordId()
+  @Max(Number.MAX_SAFE_INTEGER)
   householdId!: number;
 
   @OptionalText(40)
@@ -13,6 +14,7 @@ export class CreateStampAllocationDto {
 
   @OptionalField()
   @Count()
+  @Max(5_000_000)
   maxQuotaStamps?: number;
 
   @IsInt()

@@ -1,6 +1,6 @@
 import { PartialType } from "@nestjs/mapped-types";
 import { Type } from "class-transformer";
-import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, Min } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, Max, Min } from "class-validator";
 import { IsoDate, OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateJournalDto {
@@ -8,6 +8,7 @@ export class CreateJournalDto {
   entryOn!: string;
 
   @RecordId()
+  @Max(Number.MAX_SAFE_INTEGER)
   householdId!: number;
 
   @Text(40)
@@ -28,6 +29,7 @@ export class CreateJournalDto {
 
   @IsOptional()
   @RecordId()
+  @Max(Number.MAX_SAFE_INTEGER)
   photoId?: number | null;
 
   @IsOptional()
@@ -36,6 +38,7 @@ export class CreateJournalDto {
   @Type(() => Number)
   @IsInt({ each: true })
   @Min(1, { each: true })
+  @Max(Number.MAX_SAFE_INTEGER, { each: true })
   photoIds?: number[];
 
   @OptionalText(250)

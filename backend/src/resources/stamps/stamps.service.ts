@@ -2,8 +2,8 @@ import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService } from "../../common/crud/base-crud.service";
-import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
-import { badRequest, notFound } from "../../common/errors/app.exception";
+import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
+import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -16,6 +16,17 @@ function extractShortHouseholdCode(code: string, id: number): string {
   if (match) return match[1].toUpperCase();
   const clean = code.replace(/[^A-Za-z0-9]/g, "").slice(-6).toUpperCase();
   return clean || `H${id}`;
+}
+
+function buildDisambiguatedHouseholdCode(code: string, id: number, baseShort: string): string {
+  const zonePart = code
+    .replace(/[-_\s]*H\d+$/i, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toUpperCase();
+  if (zonePart) {
+    return `${zonePart.slice(-8)}-${baseShort}`;
+  }
+  return `ID${id}-${baseShort}`;
 }
 
 @Injectable()
@@ -44,6 +55,20 @@ export class StampsService extends BaseCrudService {
   }
 
   async allocate(dto: CreateStampAllocationDto, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền cấp phát tem ngoài phạm vi quản lý.");
+    }
+    const currentYear = new Date().getFullYear();
+    let seasonYear = currentYear;
+    if (dto.season !== undefined && dto.season !== null && dto.season.trim() !== "") {
+      const m = /^Vụ\s+(20\d{2})$/i.exec(dto.season.trim());
+      if (!m) {
+        throw badRequest("Mùa vụ phải theo định dạng chuẩn 'Vụ YYYY' (ví dụ: Vụ 2026).");
+      }
+      seasonYear = Number(m[1]);
+    }
+    const season = `Vụ ${seasonYear}`;
+
     await assertHouseholdInScope(this.db, { householdId: dto.householdId }, user);
     const hhRes = await this.db.query<{
       id: number;
@@ -73,8 +98,7 @@ export class StampsService extends BaseCrudService {
       }
     }
 
-    const shortCode = extractShortHouseholdCode(household.code, household.id);
-    const serialPrefix = `KB-${shortCode}-`;
+    const baseShort = extractShortHouseholdCode(household.code, household.id);
 
     const client = await this.db.pool.connect();
     let allocId: number;
@@ -82,6 +106,9 @@ export class StampsService extends BaseCrudService {
     let toSerial: string;
     try {
       await client.query("BEGIN");
+      // Khóa tư vấn giao dịch theo hậu tố mã hộ để hai vùng khác nhau cùng có hộ -H01 không tranh chấp UNIQUE
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`stamp_alloc:${baseShort}`]);
+
       const lockedHh = await client.query<{ status: string; area_ha: number }>(
         "SELECT status, area_ha::float8 AS area_ha FROM households WHERE id = $1 FOR UPDATE",
         [household.id],
@@ -102,8 +129,7 @@ export class StampsService extends BaseCrudService {
         plotRow.area_ha = Number(livePlot.rows[0].area_ha ?? plotRow.area_ha);
       }
 
-      const year = new Date().getFullYear();
-      const season = dto.season?.trim() || `Vụ ${year}`;
+      const year = currentYear;
 
       const hhAreaHa = Number(liveHh.area_ha ?? 0) > 0 ? Number(liveHh.area_ha) : Number(plotRow?.area_ha ?? 0);
       if (hhAreaHa <= 0) {
@@ -121,7 +147,7 @@ export class StampsService extends BaseCrudService {
       const existingHhRes = await client.query<{ allocated_sum: number }>(
         `SELECT COALESCE(SUM(quantity_allocated), 0)::int AS allocated_sum
          FROM farmer_stamp_allocations
-         WHERE household_id = $1 AND season = $2 AND status <> 'revoked'`,
+         WHERE household_id = $1 AND upper(btrim(season)) = upper($2) AND status <> 'revoked'`,
         [household.id, season],
       );
       const existingHhAllocated = Number(existingHhRes.rows[0]?.allocated_sum ?? 0);
@@ -137,7 +163,7 @@ export class StampsService extends BaseCrudService {
           `SELECT COALESCE(SUM(fsa.quantity_allocated), 0)::int AS allocated_sum
            FROM farmer_stamp_allocations fsa
            WHERE fsa.household_id = $1
-             AND fsa.season = $2
+             AND upper(btrim(fsa.season)) = upper($2)
              AND fsa.status <> 'revoked'
              AND (
                fsa.plot_id = $3
@@ -157,24 +183,76 @@ export class StampsService extends BaseCrudService {
         );
       }
 
+      // Kiểm tra xem hậu tố ngắn (ví dụ H01) đã được hộ khác ở vùng/thôn khác sử dụng chưa
+      const prefixCheck = await client.query<{ owns_base: boolean; foreign_uses_base: boolean }>(
+        `SELECT
+           EXISTS (
+             SELECT 1 FROM farmer_stamp_allocations
+             WHERE household_id = $1 AND (from_serial LIKE $2 OR allocation_code LIKE $3)
+           ) AS owns_base,
+           (
+             EXISTS (
+               SELECT 1 FROM farmer_stamp_allocations
+               WHERE household_id <> $1 AND (from_serial LIKE $2 OR allocation_code LIKE $3)
+             )
+             OR EXISTS (
+               SELECT 1 FROM farmer_stamps
+               WHERE household_id <> $1 AND serial_code LIKE $2
+             )
+           ) AS foreign_uses_base`,
+        [household.id, `KB-${baseShort}-%`, `CPT-%-${baseShort}-%`],
+      );
+
+      let shortCode = baseShort;
+      if (!prefixCheck.rows[0]?.owns_base && prefixCheck.rows[0]?.foreign_uses_base) {
+        const candidate = buildDisambiguatedHouseholdCode(household.code, household.id, baseShort);
+        const candClash = await client.query<{ clashed: boolean }>(
+          `SELECT (
+             EXISTS (
+               SELECT 1 FROM farmer_stamp_allocations
+               WHERE household_id <> $1 AND (from_serial LIKE $2 OR allocation_code LIKE $3)
+             )
+             OR EXISTS (
+               SELECT 1 FROM farmer_stamps
+               WHERE household_id <> $1 AND serial_code LIKE $2
+             )
+           ) AS clashed`,
+          [household.id, `KB-${candidate}-%`, `CPT-%-${candidate}-%`],
+        );
+        shortCode = candClash.rows[0]?.clashed ? `ID${household.id}-${baseShort}` : candidate;
+      }
+
+      if (shortCode !== baseShort) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`stamp_alloc:${shortCode}`]);
+      }
+      const serialPrefix = `KB-${shortCode}-`;
+      const allocPrefix = `CPT-${year}-${shortCode}-`;
+
       const seqRes = await client.query<{ max_seq: number }>(
         `SELECT GREATEST(
-           COALESCE((SELECT MAX((substring(serial_code FROM '([0-9]+)$'))::int) FROM farmer_stamps WHERE household_id = $1 OR serial_code LIKE $2), 0),
-           COALESCE((SELECT MAX((substring(to_serial FROM '([0-9]+)$'))::int) FROM farmer_stamp_allocations WHERE household_id = $1 OR to_serial LIKE $2), 0)
+           COALESCE((SELECT MAX((substring(serial_code FROM '([0-9]+)$'))::int) FROM farmer_stamps WHERE serial_code LIKE $1), 0),
+           COALESCE((SELECT MAX((substring(to_serial FROM '([0-9]+)$'))::int) FROM farmer_stamp_allocations WHERE to_serial LIKE $1), 0)
          )::int AS max_seq`,
-        [household.id, `${serialPrefix}%`],
+        [`${serialPrefix}%`],
       );
       const startSeq = (seqRes.rows[0]?.max_seq ?? 0) + 1;
       const endSeq = startSeq + dto.quantity - 1;
       fromSerial = `${serialPrefix}${String(startSeq).padStart(6, "0")}`;
       toSerial = `${serialPrefix}${String(endSeq).padStart(6, "0")}`;
 
-      const countRes = await client.query<{ n: number }>(
-        "SELECT count(*)::int AS n FROM farmer_stamp_allocations WHERE household_id = $1",
-        [household.id],
+      const batchRes = await client.query<{ max_batch: number }>(
+        `SELECT GREATEST(
+           (SELECT count(*)::int FROM farmer_stamp_allocations WHERE household_id = $1),
+           COALESCE((
+             SELECT MAX((substring(allocation_code FROM '([0-9]+)$'))::int)
+             FROM farmer_stamp_allocations
+             WHERE allocation_code LIKE $2
+           ), 0)
+         )::int AS max_batch`,
+        [household.id, `${allocPrefix}%`],
       );
-      const batchNo = String((countRes.rows[0]?.n ?? 0) + 1).padStart(2, "0");
-      const allocationCode = `CPT-${year}-${shortCode}-${batchNo}`;
+      const batchNo = String((batchRes.rows[0]?.max_batch ?? 0) + 1).padStart(2, "0");
+      const allocationCode = `${allocPrefix}${batchNo}`;
 
       const insAlloc = await client.query<{ id: number }>(
         `INSERT INTO farmer_stamp_allocations
@@ -229,6 +307,9 @@ export class StampsService extends BaseCrudService {
   }
 
   async revoke(id: number, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền thu hồi tem ngoài phạm vi quản lý.");
+    }
     const existing = await this.db.query<{ household_id: number }>(
       "SELECT household_id FROM farmer_stamp_allocations WHERE id = $1",
       [id],
@@ -272,9 +353,13 @@ export class StampsService extends BaseCrudService {
     return this.findOne(id, user);
   }
 
-  async listStamps(allocationId: number) {
-    const alloc = await this.db.query("SELECT 1 FROM farmer_stamp_allocations WHERE id = $1", [allocationId]);
-    if (alloc.rowCount === 0) throw notFound("Không tìm thấy đợt cấp phát tem.");
+  async listStamps(allocationId: number, user?: AuthUser) {
+    if (user) {
+      await this.findOne(allocationId, user);
+    } else {
+      const alloc = await this.db.query("SELECT 1 FROM farmer_stamp_allocations WHERE id = $1", [allocationId]);
+      if (alloc.rowCount === 0) throw notFound("Không tìm thấy đợt cấp phát tem.");
+    }
 
     const { rows } = await this.db.query(
       `SELECT id, allocation_id, household_id, plot_code, serial_code, qr_token, status,

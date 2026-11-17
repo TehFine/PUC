@@ -28,10 +28,12 @@ export class CreateHarvestLotDto {
   exportedOn?: string | null;
 
   @NonNegative()
+  @Max(100_000)
   weightTons!: number;
 
   @OptionalField()
   @Count()
+  @Max(10_000)
   householdCount?: number;
 
   @Text(200)
@@ -51,10 +53,12 @@ export class CreateHarvestLotDto {
 
   @OptionalField()
   @RecordId()
+  @Max(Number.MAX_SAFE_INTEGER)
   enterpriseId?: number;
 
   @OptionalField()
   @RecordId()
+  @Max(Number.MAX_SAFE_INTEGER)
   contractId?: number;
 
   @OptionalText(50)

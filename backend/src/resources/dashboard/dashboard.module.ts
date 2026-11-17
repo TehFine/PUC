@@ -2,9 +2,10 @@ import { Controller, Get, Injectable, Module } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { can } from "../../auth/permissions";
-import { villageScope } from "../../common/crud/village-scope";
+import { isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
 import { camelRow, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
+import { INSPECTION_ROLES } from "../../portal/common/admin-links";
 import { TODAY_VN_SQL } from "../shared/state";
 
 @Injectable()
@@ -28,7 +29,16 @@ export class DashboardService {
   }
 
   async summary(user: AuthUser) {
-    const scopeKey = `dashboard:summary:${user.role}:${user.villageId ?? "all"}`;
+    // Khóa bộ đệm phải chứa đủ mọi chiều phạm vi dữ liệu để hai tài khoản khác phạm vi không dùng chung số liệu.
+    const scopeKey = [
+      "dashboard:summary",
+      user.role,
+      `v=${user.villageId ?? "all"}`,
+      `e=${user.enterpriseId ?? "none"}`,
+      `c=${(user.coopCode || "HTX-CUNE").trim().toUpperCase()}`,
+      `ac=${encodeURIComponent((user.assignedCommune ?? "").trim())}`,
+      `ar=${encodeURIComponent((user.assignedRegion ?? "").trim())}`,
+    ].join(":");
     if (this.db.cache) {
       return this.db.cache.getOrLoad(scopeKey, 15_000, ["dashboard"], () => this.computeSummary(user));
     }
@@ -45,6 +55,12 @@ export class DashboardService {
     const canReadLabTests = can(user.role, "testing", "read");
     const canReadTraining = can(user.role, "training", "read");
     const canReadSchedule = can(user.role, "schedule", "read");
+    const canReadDeclarations = can(user.role, "harvest-declarations", "read");
+    // Lịch đột xuất chỉ hiển thị cho vai trò lập và thực hiện kiểm tra.
+    const canSeeSuddenSchedule = INSPECTION_ROLES.includes(user.role);
+    const isEnterprise = user.role === "enterprise";
+    const isCoopStaff = user.role === "admin" || user.role === "htx_officer";
+    const inCoopScope = isStaffInCuneCoopScope(user, true);
 
     const countsParams: unknown[] = [];
     const hhScope = villageScope("h.village_id")(user, countsParams);
@@ -54,9 +70,23 @@ export class DashboardService {
 
     const violWhere = isVillageScoped ? "AND v.household_id IN (SELECT id FROM hh)" : "";
     const apprWhere = isVillageScoped ? "AND a.household_id IN (SELECT id FROM hh)" : "";
-    const harvestLotScope = isVillageScoped
-      ? `WHERE EXISTS (SELECT 1 FROM harvest_contributions hc JOIN hh ON hh.id = hc.household_id WHERE hc.lot_id = hl.id)`
-      : "";
+    const bindParam = (value: unknown) => {
+      countsParams.push(value);
+      return `$${countsParams.length}`;
+    };
+    let harvestLotScope = "";
+    if (isEnterprise) {
+      // Doanh nghiệp chỉ thấy sản lượng và số lô của chính mình; chưa gắn doanh nghiệp thì không thấy gì.
+      harvestLotScope = user.enterpriseId ? `WHERE hl.enterprise_id = ${bindParam(user.enterpriseId)}` : "WHERE 1 = 0";
+    } else if (!inCoopScope) {
+      harvestLotScope = "WHERE 1 = 0";
+    } else if (isVillageScoped) {
+      harvestLotScope = `WHERE upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = 'HTX-CUNE' AND EXISTS (SELECT 1 FROM harvest_contributions hc JOIN hh ON hh.id = hc.household_id WHERE hc.lot_id = hl.id)`;
+    } else if (isCoopStaff) {
+      harvestLotScope = `WHERE upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = ${bindParam((user.coopCode || "HTX-CUNE").trim().toUpperCase())}`;
+    } else {
+      harvestLotScope = "WHERE upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = 'HTX-CUNE'";
+    }
     const isAdmin = user.role === "admin";
 
     const hasPlots = await this.hasPlotsTable();
@@ -73,10 +103,13 @@ export class DashboardService {
              )
            )`
         : `(
-             CASE
-               WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT count(*)::int FROM hh)
-               ELSE COALESCE((SELECT v.household_count FROM villages v WHERE ${bindVillage("v.id")}), 0)
-             END
+             (SELECT count(*)::int FROM hh) +
+             (
+               SELECT coalesce(sum(v.household_count), 0)::int
+               FROM villages v
+               WHERE ${bindVillage("v.id")}
+                 AND NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+             )
            )`;
 
     const plotsCountExpr = !canReadHouseholds
@@ -106,18 +139,15 @@ export class DashboardService {
                  JOIN villages v0 ON ${v0Cond}
                  WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
                ) +
-               COALESCE(
-                 (
-                   SELECT v0.plot_count
-                   FROM villages v0
-                   WHERE ${v0Cond}
-                     AND NOT EXISTS (SELECT 1 FROM hh)
-                     AND NOT EXISTS (
-                       SELECT 1 FROM plots p0
-                       WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
-                     )
-                 ),
-                 0
+               (
+                 SELECT COALESCE(sum(v0.plot_count), 0)::int
+                 FROM villages v0
+                 WHERE ${v0Cond}
+                   AND NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v0.id)
+                   AND NOT EXISTS (
+                     SELECT 1 FROM plots p0
+                     WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
+                   )
                )
              )`;
             })()
@@ -131,10 +161,13 @@ export class DashboardService {
                )
              )`
           : `(
-               CASE
-                 WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh)
-                 ELSE COALESCE((SELECT v.plot_count FROM villages v WHERE ${bindVillage("v.id")}), 0)
-               END
+               (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
+               (
+                 SELECT COALESCE(sum(v.plot_count), 0)::int
+                 FROM villages v
+                 WHERE ${bindVillage("v.id")}
+                   AND NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+               )
              )`;
 
     const areaHaExpr = !canReadHouseholds
@@ -168,18 +201,15 @@ export class DashboardService {
                    JOIN villages v0 ON ${v0Cond}
                    WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
                  ) +
-                 COALESCE(
-                   (
-                     SELECT v0.area_ha::numeric
-                     FROM villages v0
-                     WHERE ${v0Cond}
-                       AND NOT EXISTS (SELECT 1 FROM hh)
-                       AND NOT EXISTS (
-                         SELECT 1 FROM plots p0
-                         WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
-                       )
-                   ),
-                   0
+                 (
+                   SELECT COALESCE(sum(v0.area_ha), 0)::numeric
+                   FROM villages v0
+                   WHERE ${v0Cond}
+                     AND NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v0.id)
+                     AND NOT EXISTS (
+                       SELECT 1 FROM plots p0
+                       WHERE p0.household_id IS NULL AND lower(btrim(p0.village)) = lower(btrim(v0.name))
+                     )
                  )
                )::numeric,
                2
@@ -199,10 +229,13 @@ export class DashboardService {
              )::float8`
           : `ROUND(
                (
-                 CASE
-                   WHEN (SELECT count(*) FROM hh) > 0 THEN (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh)
-                   ELSE COALESCE((SELECT v.area_ha::numeric FROM villages v WHERE ${bindVillage("v.id")}), 0)
-                 END
+                 (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+                 (
+                   SELECT COALESCE(sum(v.area_ha), 0)::numeric
+                   FROM villages v
+                   WHERE ${bindVillage("v.id")}
+                     AND NOT EXISTS (SELECT 1 FROM households h0 WHERE h0.village_id = v.id)
+                 )
                )::numeric,
                2
              )::float8`;
@@ -213,7 +246,7 @@ export class DashboardService {
     const pendingApprovalsExpr = canReadApprovals
       ? `(SELECT count(*)::int FROM approvals a WHERE a.status = 'pending' ${apprWhere})`
       : "0";
-    const pendingRegistrationsExpr = canReadRegistrations
+    const pendingRegistrationsExpr = canReadRegistrations && inCoopScope
       ? (() => {
           const regUserScope = isVillageScoped ? `AND ${bindVillage("u.village_id")}` : "";
           return `(
@@ -230,12 +263,22 @@ export class DashboardService {
          )`;
         })()
       : "0";
-    const labTestsExpr = canReadLabTests
-      ? `(SELECT count(*)::int FROM lab_tests lt JOIN hh ON hh.id = lt.household_id)`
-      : "0";
-    const labTestsPassedExpr = canReadLabTests
-      ? `(SELECT count(*)::int FROM lab_tests lt JOIN hh ON hh.id = lt.household_id WHERE lt.result = 'pass')`
-      : "0";
+    // Doanh nghiệp: chỉ phiếu đã xác thực của các hộ từng cung ứng vào lô hàng của chính mình.
+    const labScope = !canReadLabTests
+      ? null
+      : isEnterprise
+        ? user.enterpriseId
+          ? `FROM lab_tests lt
+             WHERE lt.record_status = 'verified'
+               AND EXISTS (
+                 SELECT 1 FROM harvest_contributions hc
+                 JOIN harvest_lots hl ON hl.id = hc.lot_id
+                 WHERE hc.household_id = lt.household_id AND hl.enterprise_id = ${bindParam(user.enterpriseId)}
+               )`
+          : "FROM lab_tests lt WHERE 1 = 0"
+        : "FROM lab_tests lt JOIN hh ON hh.id = lt.household_id WHERE true";
+    const labTestsExpr = labScope ? `(SELECT count(*)::int ${labScope})` : "0";
+    const labTestsPassedExpr = labScope ? `(SELECT count(*)::int ${labScope} AND lt.result = 'pass')` : "0";
     const harvestTonsExpr = canReadHarvest
       ? `(SELECT COALESCE(sum(hl.weight_tons), 0)::float8 FROM harvest_lots hl ${harvestLotScope})`
       : "0::float8";
@@ -260,12 +303,12 @@ export class DashboardService {
          ${openViolationsExpr} AS open_violations,
          ${pendingApprovalsExpr} AS pending_approvals,
          ${pendingRegistrationsExpr} AS pending_registrations,
-         ${canReadHarvest ? "(SELECT count(*)::int FROM harvest_declarations hd JOIN hh ON hh.id = hd.household_id WHERE hd.status = 'submitted')" : "0"} AS pending_declarations,
+         ${canReadDeclarations ? "(SELECT count(*)::int FROM harvest_declarations hd JOIN hh ON hh.id = hd.household_id WHERE hd.status = 'submitted')" : "0"} AS pending_declarations,
          ${labTestsExpr} AS lab_tests,
          ${labTestsPassedExpr} AS lab_tests_passed,
          ${harvestTonsExpr} AS harvest_tons,
          ${harvestLotsExpr} AS harvest_lots,
-         ${canReadTraining ? "(SELECT count(*)::int FROM training_courses)" : "0"} AS training_courses,
+         ${canReadTraining && (isEnterprise || inCoopScope) ? "(SELECT count(*)::int FROM training_courses)" : "0"} AS training_courses,
          ${journalLast30Expr} AS journal_last_30_days,
          ${
            canReadHouseholds
@@ -281,8 +324,9 @@ export class DashboardService {
       countsParams,
     );
 
+    // Phân bổ theo thôn (số hộ, thửa, diện tích) chỉ dành cho vai trò được xem danh sách hộ.
     const villagesParams: unknown[] = [];
-    const villagesWhereCond = villageScope("v.id")(user, villagesParams);
+    const villagesWhereCond = canReadHouseholds ? villageScope("v.id")(user, villagesParams) : "false";
     const villagesWhere = villagesWhereCond ? `WHERE ${villagesWhereCond}` : "";
 
     const trendParams: unknown[] = [];
@@ -424,7 +468,7 @@ export class DashboardService {
                : "'[]'::json"
            } AS pending_approvals,
            ${
-             canReadSchedule
+             canReadSchedule && inCoopScope
                ? `COALESCE(
                     (
                       SELECT json_agg(
@@ -441,6 +485,7 @@ export class DashboardService {
                         SELECT id, scheduled_on, title, officer, kind, plot_count
                         FROM inspection_schedule
                         WHERE scheduled_on >= ${TODAY_VN_SQL}
+                          ${canSeeSuddenSchedule ? "" : "AND kind <> 'sudden'"}
                         ORDER BY scheduled_on ASC, id ASC
                         LIMIT 5
                       ) s
