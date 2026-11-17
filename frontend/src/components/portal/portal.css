@@ -10,7 +10,7 @@ html.pt-html {
   height: auto !important;
   min-height: 100% !important;
   overflow-x: clip;
-  background-color: #efeff4 !important;
+  background-color: #f5f6f8 !important;
 }
 
 html:has(.pt-app) body,
@@ -18,7 +18,7 @@ body.pt-body {
   height: auto !important;
   min-height: 100% !important;
   overflow: visible !important;
-  background-color: #efeff4 !important;
+  background-color: #f5f6f8 !important;
 }
 
 .pt-app {
@@ -33,7 +33,7 @@ body.pt-body {
   padding-top: calc(64px + env(safe-area-inset-top, 0px));
   padding-bottom: 0;
   color: var(--ink);
-  background: #efeff4;
+  background: #f5f6f8;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -92,7 +92,7 @@ body.pt-body {
   }
 
   .pt-app {
-    background: #efeff4;
+    background: #f5f6f8;
   }
 }
 
@@ -11410,29 +11410,30 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet),
 html:has(.pt-app) .pt-sheet.is-drawer:not(.modal-confirm-sheet),
 html:has(.app-shell) .pt-sheet.is-drawer:not(.modal-confirm-sheet),
 body.pt-body .pt-sheet.is-drawer:not(.modal-confirm-sheet) {
-  background: #efeff4 !important;
+  background: #f5f6f8 !important;
   border: none !important;
 }
 
 html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-head,
 html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-head,
 body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-head {
-  background: #efeff4;
-  border-bottom: 1px solid rgba(60, 60, 67, 0.12);
+  background: #f5f6f8;
+  border-bottom: 1px solid rgba(60, 60, 67, 0.1);
 }
 
 html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-drawer-back-btn,
 html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-drawer-back-btn,
 body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-drawer-back-btn {
   background: #ffffff;
-  border: none;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
+  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
   color: #1c1c1e;
 }
 
 html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body,
 html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body,
 body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body {
-  background: #efeff4;
+  background: #f5f6f8;
   padding: 22px 18px calc(28px + env(safe-area-inset-bottom, 0px));
 }
 
@@ -11447,17 +11448,18 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body {
 html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer,
 html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer,
 body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
-  background: #efeff4;
-  border-top: 1px solid rgba(60, 60, 67, 0.12);
+  background: #f5f6f8;
+  border-top: 1px solid rgba(60, 60, 67, 0.1);
 }
 
-/* 2. Thẻ nội dung chính trên các tab Cổng hộ dân: trắng sáng #ffffff, sạch viền */
+/* 2. Thẻ nội dung chính trên các tab Cổng hộ dân: trắng sáng #ffffff kèm đổ bóng nhẹ kiểu iOS */
 .pt-app .pt-hero-shell {
-  --spec-line: rgba(60, 60, 67, 0.11);
+  --spec-line: rgba(60, 60, 67, 0.1);
   background: #ffffff;
-  border: none;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
   border-radius: 8px;
   padding: 4px 20px 18px;
+  box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
 }
 
 .pt-app .pt-hero-shell .pt-spec-row:first-child {
@@ -11495,14 +11497,14 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
 .pt-app .pt-vietgap-card,
 .pt-app .pt-lab-test-list {
   background: #ffffff;
-  border: none;
-  box-shadow: none;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
+  box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
 }
 
 .pt-app .pt-segmented {
   background: #ffffff;
-  border: 1px solid rgba(60, 60, 67, 0.14);
-  box-shadow: none;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.06));
+  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
 }
 
 .pt-app .pt-lab-test-list {
@@ -11517,8 +11519,8 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
 .pt-app .pt-pest-card.pt-pest-card-encouraged,
 .pt-app .pt-pest-card.pt-pest-card-warning {
   background: #ffffff;
-  border: none;
-  box-shadow: none;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
+  box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -11563,7 +11565,8 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
 /* Nhãn bộ lọc (Filter chips) trắng sáng trên nền xám */
 .pt-app .pt-pest-filter-chip:not(.is-active) {
   background: #ffffff;
-  border: none;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
+  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
   color: #1c1c1e;
 }
 
@@ -11571,7 +11574,7 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
   background: #fafafa;
 }
 
-/* 3. Ô nhập liệu, ô chọn, khung văn bản & thanh tìm kiếm: trắng sáng #ffffff, không viền thô */
+/* 3. Ô nhập liệu, ô chọn, khung văn bản & thanh tìm kiếm: trắng sáng #ffffff, đổ bóng nhẹ */
 html:has(.app-shell) .pt-sheet .pt-field input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 html:has(.app-shell) .pt-sheet .pt-field select,
 html:has(.app-shell) .pt-sheet .pt-field textarea,
@@ -11586,9 +11589,9 @@ body.pt-body .pt-field textarea,
 body.pt-body .pt-field input[type="date"],
 body.pt-body .pt-input-date {
   background-color: #ffffff;
-  border: none;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
   color: #1c1c1e;
-  box-shadow: none;
+  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
 }
 
 html:has(.app-shell) .pt-sheet .pt-field input:focus,
@@ -11605,7 +11608,8 @@ body.pt-body .pt-field select:focus,
 body.pt-body .pt-field textarea:focus {
   outline: none;
   background-color: #ffffff;
-  box-shadow: inset 0 0 0 1.5px #14372f;
+  border-color: #14372f;
+  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
 }
 
 .pt-app .pt-search,
@@ -11614,8 +11618,8 @@ html:has(.pt-app) .pt-search-field,
 html:has(.pt-app) .pt-sheet.is-drawer.pt-search-sheet .pt-search-field,
 body.pt-body .pt-search-field {
   background-color: #ffffff !important;
-  border: none !important;
-  box-shadow: none;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055)) !important;
+  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
 }
 
 .pt-app .pt-search:focus,
@@ -11623,7 +11627,8 @@ body.pt-body .pt-search-field {
 html:has(.pt-app) .pt-search-field:focus-within,
 html:has(.pt-app) .pt-sheet.is-drawer.pt-search-sheet .pt-search-field:focus-within {
   background-color: #ffffff !important;
-  box-shadow: inset 0 0 0 1.5px #14372f;
+  border-color: #14372f !important;
+  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
 }
 
 /* Chữ chú thích và nhãn phụ nằm trên nền xám #efeff4 giống phong cách Settings mẫu */
@@ -11668,9 +11673,9 @@ html:has(.pt-app) .pt-support-box,
 html:has(.pt-app) .pt-notif-item,
 html:has(.pt-app) .pt-list > li.pt-notif-item:first-child {
   background: #ffffff !important;
-  border: none !important;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055)) !important;
   border-radius: 8px;
-  box-shadow: none;
+  box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
 }
 
 html:has(.app-shell) .pt-sheet.pt-profile-sheet .pt-profile-footer,
@@ -11697,7 +11702,7 @@ body.pt-body .pt-sheet.pt-profile-sheet .pt-profile-logout-btn {
 
 html:has(.pt-app) .pt-ticket-notch,
 body.pt-body .pt-ticket-notch {
-  background: #efeff4;
+  background: #f5f6f8;
 }
 
 /* Các khối con nằm BÊN TRONG một thẻ cha đã trắng sẵn (#ffffff) dùng nền xám dịu nhẹ để phân lớp */
@@ -11705,15 +11710,17 @@ body.pt-body .pt-ticket-notch {
 .pt-app .pt-protocol-pillar,
 html:has(.pt-app) .pt-pesticide-efficacy-card .pt-instruction-dosage-box,
 html:has(.pt-app) .pt-pesticide-efficacy-card .pt-efficacy-tag {
-  background: #f2f2f7;
+  background: #f4f5f7;
   border: none;
 }
 
 /* Danh sách bài học nằm trực tiếp trên nền xám của Sheet chi tiết lớp tập huấn */
 html:has(.pt-app) .pt-training-detail-section > .pt-training-modules {
   background: #ffffff;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
   border-radius: 8px;
   padding: 2px 16px;
+  box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
 }
 
 /* Khung kéo thả tệp & nút đính kèm trên nền xám #efeff4 */
