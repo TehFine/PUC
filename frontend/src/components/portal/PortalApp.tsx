@@ -22,9 +22,22 @@ import { WORKSPACE_ACTIVE_SESSION_KEY } from "@/components/landing/AutoEnter";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { ConfirmDialog } from "@/components/ui/Modal";
 import OfflineSyncBar from "@/components/ui/OfflineSyncBar";
-import { invalidateQueries, NOTIFICATIONS_PATH, portalPath, usePortal, useSharedQuery } from "@/hooks/use-portal";
+import {
+  invalidateQueries,
+  NOTIFICATIONS_PATH,
+  portalPath,
+  usePortal,
+  useSharedQuery,
+  warmPortalEssentialOfflineCache,
+} from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
-import { api, errorMessage } from "@/lib/api-client";
+import {
+  api,
+  AUTH_EXPIRED_EVENT,
+  AUTH_LOGOUT_EVENT,
+  AUTH_SCOPE_CHANGED_EVENT,
+  errorMessage,
+} from "@/lib/api-client";
 import {
   ensureRootEntryBeforeSubPage,
   PUC_URL_SYNC_EVENT,
@@ -42,7 +55,7 @@ import dynamic from "next/dynamic";
 import "./portal.css";
 import HomeTab from "./HomeTab";
 import { PortalLangProvider, usePortalLang } from "./i18n";
-import { PortalSearchButton, type PortalAction, type PortalSearchTarget } from "./PortalSearch";
+import type { PortalAction, PortalSearchTarget } from "./PortalSearch";
 import { RadialPngIcon } from "./RadialIcons";
 import RadialNavWheel from "./RadialNavWheel";
 import { BusyButton, InlineError } from "./shared/controls";
@@ -51,6 +64,65 @@ import { SupportFooter, SystemSupportModal } from "./SystemSupport";
 import { DrawerSummaryFooter, EmptyState, Field, Sheet, StateBlock, useIsDesktopViewport, useSheetClose } from "./ui";
 
 const PortalTabLoading = () => <StateBlock loading error={null} />;
+const PortalSearchDialog = dynamic(() => lazyChunk(() => import("./PortalSearch")), { ssr: false });
+
+const LEGACY_READ_NOTIFS_KEY = "puc_portal_read_notifs";
+const READ_NOTIFS_PREFIX = "puc_portal_read_notifs:";
+
+function buildReadNotifsStorageKey(userId: number | null | undefined): string | null {
+  return typeof userId === "number" && Number.isInteger(userId) && userId > 0
+    ? `${READ_NOTIFS_PREFIX}${userId}`
+    : null;
+}
+
+/** Băm một chiều khóa nhắc nhở để không lưu nguyên văn tiêu đề vi phạm/nhắc việc trên thiết bị dùng chung. */
+function hashReminderReadKey(kind: string, title: string, date?: string | null): string {
+  const input = `${kind}|${title}|${date ?? ""}`;
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input.charCodeAt(i);
+    h1 ^= ch;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= ch + i;
+    h2 = Math.imul(h2, 0x85ebca6b);
+  }
+  return `rem:${(h1 >>> 0).toString(36)}-${(h2 >>> 0).toString(36)}`;
+}
+
+function loadScopedReadKeys(userId: number | null | undefined): string[] {
+  if (typeof window === "undefined") return [];
+  const storageKey = buildReadNotifsStorageKey(userId);
+  if (!storageKey) return [];
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === "string" && (x.startsWith("api:") || x.startsWith("rem:")))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function clearAllReadNotifStorage(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(LEGACY_READ_NOTIFS_KEY);
+  } catch {
+    // ignore
+  }
+  try {
+    for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
+      const k = window.sessionStorage.key(i);
+      if (k && (k === LEGACY_READ_NOTIFS_KEY || k.startsWith(READ_NOTIFS_PREFIX))) {
+        window.sessionStorage.removeItem(k);
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
 
 function DrawerCloseCta({ label }: { label: string }) {
   const close = useSheetClose();
@@ -222,6 +294,8 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const isDesktopDrawer = useIsDesktopViewport(760);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const pendingSearchTargetRef = useRef<PortalSearchTarget | null>(null);
   const [navWheelOpen, setNavWheelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -241,29 +315,55 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [notifFilter, setNotifFilter] = useState<"unread" | "read">("unread");
-  const [localReadKeys, setLocalReadKeys] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = window.localStorage.getItem("puc_portal_read_notifs");
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
-    } catch {
-      return [];
-    }
-  });
+  const activeUserId = session?.user.id ?? null;
+  const [readKeysState, setReadKeysState] = useState<{ userId: number | null; keys: string[] }>(() => ({
+    userId: activeUserId,
+    keys: loadScopedReadKeys(activeUserId),
+  }));
+  const localReadKeys = useMemo(
+    () => (readKeysState.userId === activeUserId ? readKeysState.keys : loadScopedReadKeys(activeUserId)),
+    [activeUserId, readKeysState],
+  );
 
-  const rememberLocalReadKeys = useCallback((keysToAdd: string[]) => {
-    if (keysToAdd.length === 0) return;
-    setLocalReadKeys((prev) => {
-      const merged = Array.from(new Set([...prev, ...keysToAdd])).slice(-200);
-      try {
-        window.localStorage.setItem("puc_portal_read_notifs", JSON.stringify(merged));
-      } catch {
-        // ignore storage quota errors
-      }
-      return merged;
-    });
+  useEffect(() => {
+    try {
+      window.localStorage.removeItem(LEGACY_READ_NOTIFS_KEY);
+    } catch {
+      // ignore
+    }
+    const onClearAuth = () => {
+      clearAllReadNotifStorage();
+      setReadKeysState({ userId: null, keys: [] });
+    };
+    window.addEventListener(AUTH_LOGOUT_EVENT, onClearAuth);
+    window.addEventListener(AUTH_EXPIRED_EVENT, onClearAuth);
+    window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, onClearAuth);
+    return () => {
+      window.removeEventListener(AUTH_LOGOUT_EVENT, onClearAuth);
+      window.removeEventListener(AUTH_EXPIRED_EVENT, onClearAuth);
+      window.removeEventListener(AUTH_SCOPE_CHANGED_EVENT, onClearAuth);
+    };
   }, []);
+
+  const rememberLocalReadKeys = useCallback(
+    (keysToAdd: string[]) => {
+      if (keysToAdd.length === 0 || !activeUserId) return;
+      setReadKeysState((prev) => {
+        const base = prev.userId === activeUserId ? prev.keys : loadScopedReadKeys(activeUserId);
+        const merged = Array.from(new Set([...base, ...keysToAdd])).slice(-200);
+        const storageKey = buildReadNotifsStorageKey(activeUserId);
+        if (storageKey) {
+          try {
+            window.sessionStorage.setItem(storageKey, JSON.stringify(merged));
+          } catch {
+            // ignore storage quota errors
+          }
+        }
+        return { userId: activeUserId, keys: merged };
+      });
+    },
+    [activeUserId],
+  );
 
   const openSupport = useCallback(() => setSupportOpen(true), []);
   const closeSupport = useCallback(() => setSupportOpen(false), []);
@@ -411,14 +511,19 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
 
   useEffect(() => {
     if (status !== "authenticated" || session?.user.role !== "farmer") return;
-    if (isLowEndDevice()) return;
-    const loaders = [
-      () => import("./PlotsTab"),
-      () => import("./DiaryTab"),
-      () => import("./StampsTab"),
-      () => import("./InspectionTab"),
-      () => import("./LearnTab"),
-    ];
+    const lowEnd = isLowEndDevice();
+    // Trên máy yếu chỉ nạp sẵn 2 gói nhẹ thiết yếu khi đi rẫy (Nhật ký và Thửa đất) để mở được khi mất sóng;
+    // máy mạnh nạp đủ các tab lúc nhàn rỗi.
+    const loaders = lowEnd
+      ? [() => import("./DiaryTab"), () => import("./PlotsTab")]
+      : [
+          () => import("./PlotsTab"),
+          () => import("./DiaryTab"),
+          () => import("./StampsTab"),
+          () => import("./InspectionTab"),
+          () => import("./LearnTab"),
+          () => import("./PortalSearch"),
+        ];
     let cancelled = false;
     let timerId = 0;
     let idleId = 0;
@@ -434,24 +539,28 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
 
     const runStep = (idx: number) => {
       if (cancelled || idx >= loaders.length) return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       const exec = () => {
         if (cancelled) return;
         loaders[idx]()
           .catch(() => {})
           .finally(() => {
             if (!cancelled) {
-              timerId = window.setTimeout(() => runStep(idx + 1), 650);
+              timerId = window.setTimeout(() => runStep(idx + 1), lowEnd ? 1100 : 650);
             }
           });
       };
       if (ric) {
-        idleId = ric(exec, { timeout: 2400 });
+        idleId = ric(exec, { timeout: 2800 });
       } else {
-        timerId = window.setTimeout(exec, 650);
+        timerId = window.setTimeout(exec, lowEnd ? 1100 : 650);
       }
     };
 
-    timerId = window.setTimeout(() => runStep(0), 2200);
+    timerId = window.setTimeout(() => {
+      void warmPortalEssentialOfflineCache();
+      runStep(0);
+    }, lowEnd ? 3200 : 2200);
     return () => {
       cancelled = true;
       if (timerId) window.clearTimeout(timerId);
@@ -474,7 +583,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     const reminders = (overview?.reminders ?? []).filter((r) => r.kind !== "training");
     return reminders.map((r, idx) => {
       const id = -(idx + 1);
-      const readKey = `rem:${r.kind}:${r.title}:${r.date ?? ""}`;
+      const readKey = hashReminderReadKey(r.kind, r.title, r.date);
       const isRead = localReadKeys.includes(readKey);
       const prefix =
         r.kind === "violation" || r.kind === "journal"
@@ -737,7 +846,18 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
             </button>
 
             {/* Tìm chức năng (máy tính): gõ bất kỳ chữ nào để được gợi ý đúng tab và thao tác */}
-            <PortalSearchButton id="portal-search-toggle" className="is-desktop" onPick={handleSearchPick} />
+            <button
+              id="portal-search-toggle"
+              type="button"
+              className="pt-notif-btn pt-search-btn is-desktop"
+              onClick={() => setSearchOpen(true)}
+              aria-expanded={searchOpen}
+              aria-haspopup="dialog"
+              aria-label={t("Tìm chức năng")}
+              title={t("Tìm chức năng")}
+            >
+              <RadialPngIcon src="/search.png" size={18} />
+            </button>
 
             <button
               id="portal-profile-toggle"
@@ -752,7 +872,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               <span className="pt-avatar">
                 {avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarUrl} alt={displayName} className="pt-avatar-img" />
+                  <img src={avatarUrl} alt={displayName} className="pt-avatar-img" loading="lazy" decoding="async" />
                 ) : (
                   initials
                 )}
@@ -763,7 +883,18 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
           {/* Phần điều hướng trên mobile: Nút tròn có icon menu */}
           <div className="pt-topbar-nav">
             {/* Tìm chức năng (điện thoại): đặt cạnh nút menu để không đè lên tiêu đề tab ở giữa */}
-            <PortalSearchButton id="portal-search-toggle-mobile" className="is-mobile" onPick={handleSearchPick} />
+            <button
+              id="portal-search-toggle-mobile"
+              type="button"
+              className="pt-notif-btn pt-search-btn is-mobile"
+              onClick={() => setSearchOpen(true)}
+              aria-expanded={searchOpen}
+              aria-haspopup="dialog"
+              aria-label={t("Tìm chức năng")}
+              title={t("Tìm chức năng")}
+            >
+              <RadialPngIcon src="/search.png" size={18} />
+            </button>
             <button
               id="portal-radial-toggle"
               type="button"
@@ -824,7 +955,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                   <div className="pt-profile-avatar-lg">
                     {avatarUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={avatarUrl} alt={displayName} className="pt-profile-avatar-img" />
+                      <img src={avatarUrl} alt={displayName} className="pt-profile-avatar-img" loading="lazy" decoding="async" />
                     ) : (
                       <span>{initials}</span>
                     )}
@@ -1289,6 +1420,20 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
             onClose={() => setPasswordOpen(false)}
           />
         </Sheet>
+      )}
+
+      {searchOpen && (
+        <PortalSearchDialog
+          onClose={() => {
+            setSearchOpen(false);
+            const target = pendingSearchTargetRef.current;
+            pendingSearchTargetRef.current = null;
+            if (target) handleSearchPick(target);
+          }}
+          onPick={(target) => {
+            pendingSearchTargetRef.current = target;
+          }}
+        />
       )}
 
       <SystemSupportModal

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useBackLayer } from "@/lib/back-navigation";
+import { isLowEndDevice } from "@/lib/network";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { usePortalLang } from "./i18n";
 import type { PortalTabId } from "./PortalApp";
@@ -138,17 +139,19 @@ export default function RadialNavWheel({
     }
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
 
+    const lite = isLowEndDevice();
+    const closeMs = lite ? 140 : CLOSE_DURATION_MS;
     if (sheetRef.current) {
       sheetRef.current.style.animation = "none";
       sheetRef.current.style.pointerEvents = "none";
       sheetRef.current.style.transition =
-        "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+        `transform ${lite ? 130 : 220}ms cubic-bezier(0.32, 0.72, 0, 1)`;
       sheetRef.current.style.transform = "translate3d(0, 105%, 0)";
     }
     if (backdropRef.current) {
       backdropRef.current.style.animation = "none";
       backdropRef.current.style.pointerEvents = "none";
-      backdropRef.current.style.transition = "opacity 200ms ease-out";
+      backdropRef.current.style.transition = `opacity ${lite ? 120 : 200}ms ease-out`;
       backdropRef.current.style.opacity = "0";
     }
 
@@ -156,7 +159,7 @@ export default function RadialNavWheel({
       setIsOpen(false);
       isClosingRef.current = false;
       propOnClose?.();
-    }, CLOSE_DURATION_MS);
+    }, closeMs);
   }, [propOnClose]);
 
   useBackLayer(isOpen, handleClose);
@@ -225,12 +228,13 @@ export default function RadialNavWheel({
     }
 
     if (selectTimerRef.current) clearTimeout(selectTimerRef.current);
+    const delayMs = isLowEndDevice() ? 55 : 110;
     selectTimerRef.current = setTimeout(() => {
       if (tabId !== currentTab) {
         onSelectTab(tabId);
       }
       handleClose();
-    }, 110);
+    }, delayMs);
   };
 
   const handleDone = () => {

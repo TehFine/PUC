@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { startTransition, useDeferredValue, useMemo, useState } from "react";
 import { invalidatePortal, useSharedQuery } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
 import { useUrlSubTab } from "@/lib/back-navigation";
@@ -28,7 +28,7 @@ import {
   type DiseaseOrPestItem,
 } from "./ipm-2026-data";
 import { getTrainingKicker, usePortalTrainings, type TrainingCourseItem } from "./training-shared";
-import { BusyButton, ConfirmButton, InlineError } from "./shared/controls";
+import { BusyButton, ConfirmButton, InlineError, ProgressiveListFooter, useProgressiveCount } from "./shared/controls";
 import { Card, EmptyState, FadeFilterBar, Pill, SectionDivider, SegmentedTabs, Sheet, StateBlock, useSheetClose } from "./ui";
 
 export { getTrainingKicker, usePortalTrainings, type TrainingCourseItem };
@@ -1339,6 +1339,7 @@ function PesticideList() {
     return rows.length > 0 ? rows : DEFAULT_PESTICIDES;
   }, [apiData]);
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedPesticide, setSelectedPesticide] = useState<PesticideDto | null>(null);
 
@@ -1351,18 +1352,28 @@ function PesticideList() {
     };
   }, [data]);
 
+  const indexedData = useMemo(
+    () =>
+      data.map((item) => ({
+        item,
+        haystack: `${item.name} ${item.activeIngredient} ${item.manufacturer ?? ""}`.toLowerCase(),
+      })),
+    [data],
+  );
+
   const shown = useMemo(() => {
-    return data.filter((item) => {
-      const q = query.trim().toLowerCase();
-      const matchesQuery =
-        !q ||
-        `${item.name} ${item.activeIngredient} ${item.manufacturer ?? ""}`
-          .toLowerCase()
-          .includes(q);
-      const matchesStatus = statusFilter === "all" || item.status === statusFilter;
-      return matchesQuery && matchesStatus;
-    });
-  }, [data, query, statusFilter]);
+    const q = deferredQuery.trim().toLowerCase();
+    return indexedData
+      .filter(({ item, haystack }) => {
+        const matchesQuery = !q || haystack.includes(q);
+        const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+        return matchesQuery && matchesStatus;
+      })
+      .map((entry) => entry.item);
+  }, [indexedData, deferredQuery, statusFilter]);
+
+  const progressive = useProgressiveCount(shown.length, 16, 16, `${deferredQuery}|${statusFilter}`);
+  const visiblePesticides = shown.slice(0, progressive.visibleCount);
 
   return (
     <section className="pt-pest-section" aria-labelledby="pesticide-heading">
@@ -1430,7 +1441,7 @@ function PesticideList() {
 
         {/* Danh sách thẻ thuốc trực quan cố định kích thước */}
         <div className="pt-pest-list">
-          {shown.map((item) => {
+          {visiblePesticides.map((item) => {
             const imgSrc = getPesticideImage(item);
 
             return (
@@ -1468,6 +1479,14 @@ function PesticideList() {
             );
           })}
         </div>
+
+        <ProgressiveListFooter
+          hasMore={progressive.hasMore}
+          remainingCount={progressive.remainingCount}
+          sentinelRef={progressive.sentinelRef}
+          onShowMore={progressive.showMore}
+          unitLabel="thuốc"
+        />
 
         {shown.length === 0 && (
           <EmptyState icon="search">Không tìm thấy thuốc phù hợp với tiêu chí lọc.</EmptyState>
@@ -1872,6 +1891,7 @@ function FertilizerList() {
   }, [apiData]);
 
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [categoryFilter, setCategoryFilter] = useState<FertilizerFilter>("all");
   const [selectedFertilizer, setSelectedFertilizer] = useState<FertilizerDto | null>(null);
 
@@ -1886,19 +1906,29 @@ function FertilizerList() {
     };
   }, [fertilizers]);
 
+  const indexedFertilizers = useMemo(
+    () =>
+      fertilizers.map((item) => ({
+        item,
+        haystack: `${item.name} ${item.formula ?? ""} ${item.manufacturer ?? ""} ${item.applicationMethod ?? ""}`.toLowerCase(),
+      })),
+    [fertilizers],
+  );
+
   const shown = useMemo(() => {
-    return fertilizers.filter((item) => {
-      const q = query.trim().toLowerCase();
-      const matchesQuery =
-        !q ||
-        `${item.name} ${item.formula ?? ""} ${item.manufacturer ?? ""} ${item.applicationMethod ?? ""}`
-          .toLowerCase()
-          .includes(q);
-      const matchesCategory =
-        categoryFilter === "all" || item.category === categoryFilter;
-      return matchesQuery && matchesCategory;
-    });
-  }, [fertilizers, query, categoryFilter]);
+    const q = deferredQuery.trim().toLowerCase();
+    return indexedFertilizers
+      .filter(({ item, haystack }) => {
+        const matchesQuery = !q || haystack.includes(q);
+        const matchesCategory =
+          categoryFilter === "all" || item.category === categoryFilter;
+        return matchesQuery && matchesCategory;
+      })
+      .map((entry) => entry.item);
+  }, [indexedFertilizers, deferredQuery, categoryFilter]);
+
+  const progressive = useProgressiveCount(shown.length, 16, 16, `${deferredQuery}|${categoryFilter}`);
+  const visibleFertilizers = shown.slice(0, progressive.visibleCount);
 
   return (
     <section className="pt-pest-section" aria-labelledby="fertilizer-heading">
@@ -1980,7 +2010,7 @@ function FertilizerList() {
 
         {/* Danh sách thẻ phân bón trực quan giống hệt thuốc BVTV */}
         <div className="pt-pest-list">
-          {shown.map((item) => {
+          {visibleFertilizers.map((item) => {
             const imgSrc = getFertilizerImage(item);
 
             return (
@@ -2020,6 +2050,14 @@ function FertilizerList() {
             );
           })}
         </div>
+
+        <ProgressiveListFooter
+          hasMore={progressive.hasMore}
+          remainingCount={progressive.remainingCount}
+          sentinelRef={progressive.sentinelRef}
+          onShowMore={progressive.showMore}
+          unitLabel="phân bón"
+        />
 
         {shown.length === 0 && (
           <EmptyState icon="search">Không tìm thấy phân bón phù hợp với tiêu chí lọc.</EmptyState>
@@ -2375,6 +2413,7 @@ function VarietyList() {
   }, [apiData]);
 
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [categoryFilter, setCategoryFilter] = useState<VarietyFilter>("all");
   const [selectedVariety, setSelectedVariety] = useState<VarietyDto | null>(null);
 
@@ -2388,19 +2427,29 @@ function VarietyList() {
     };
   }, [varieties]);
 
+  const indexedVarieties = useMemo(
+    () =>
+      varieties.map((item) => ({
+        item,
+        haystack: `${item.name} ${item.origin ?? ""} ${item.fleshColor ?? ""} ${item.description ?? ""}`.toLowerCase(),
+      })),
+    [varieties],
+  );
+
   const shown = useMemo(() => {
-    return varieties.filter((item) => {
-      const q = query.trim().toLowerCase();
-      const matchesQuery =
-        !q ||
-        `${item.name} ${item.origin ?? ""} ${item.fleshColor ?? ""} ${item.description ?? ""}`
-          .toLowerCase()
-          .includes(q);
-      const matchesCategory =
-        categoryFilter === "all" || item.category === categoryFilter;
-      return matchesQuery && matchesCategory;
-    });
-  }, [varieties, query, categoryFilter]);
+    const q = deferredQuery.trim().toLowerCase();
+    return indexedVarieties
+      .filter(({ item, haystack }) => {
+        const matchesQuery = !q || haystack.includes(q);
+        const matchesCategory =
+          categoryFilter === "all" || item.category === categoryFilter;
+        return matchesQuery && matchesCategory;
+      })
+      .map((entry) => entry.item);
+  }, [indexedVarieties, deferredQuery, categoryFilter]);
+
+  const progressive = useProgressiveCount(shown.length, 16, 16, `${deferredQuery}|${categoryFilter}`);
+  const visibleVarieties = shown.slice(0, progressive.visibleCount);
 
   return (
     <section className="pt-pest-section" aria-labelledby="variety-heading">
@@ -2475,7 +2524,7 @@ function VarietyList() {
 
         {/* Danh sách thẻ giống sầu riêng */}
         <div className="pt-pest-list">
-          {shown.map((item) => {
+          {visibleVarieties.map((item) => {
             const imgSrc = getVarietyImage(item);
 
             return (
@@ -2515,6 +2564,14 @@ function VarietyList() {
             );
           })}
         </div>
+
+        <ProgressiveListFooter
+          hasMore={progressive.hasMore}
+          remainingCount={progressive.remainingCount}
+          sentinelRef={progressive.sentinelRef}
+          onShowMore={progressive.showMore}
+          unitLabel="giống"
+        />
 
         {shown.length === 0 && (
           <EmptyState icon="search">Không tìm thấy giống sầu riêng phù hợp với tiêu chí lọc.</EmptyState>
@@ -2667,8 +2724,14 @@ export function DiseaseDetailModal({
   );
 }
 
+const INDEXED_DISEASES_2026 = DISEASES_AND_PESTS_2026.map((item) => ({
+  item,
+  haystack: `${item.name} ${item.scientificName} ${item.affectedParts} ${item.summary} ${item.recommendedProducts.join(" ")}`.toLowerCase(),
+}));
+
 export function DiseaseAndIpmList() {
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [kindFilter, setKindFilter] = useState<"all" | "disease" | "pest" | "care">("all");
   const [selectedItem, setSelectedItem] = useState<DiseaseOrPestItem | null>(null);
 
@@ -2683,18 +2746,17 @@ export function DiseaseAndIpmList() {
   );
 
   const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return DISEASES_AND_PESTS_2026.filter((item) => {
-      const matchesQ =
-        !q ||
-        `${item.name} ${item.scientificName} ${item.affectedParts} ${item.summary} ${item.recommendedProducts.join(" ")}`
-          .toLowerCase()
-          .includes(q);
+    const q = deferredQuery.trim().toLowerCase();
+    return INDEXED_DISEASES_2026.filter(({ item, haystack }) => {
+      const matchesQ = !q || haystack.includes(q);
       const matchesKind =
         kindFilter === "all" || kindFilter === "care" || item.kind === kindFilter;
       return matchesQ && matchesKind;
-    });
-  }, [query, kindFilter]);
+    }).map((entry) => entry.item);
+  }, [deferredQuery, kindFilter]);
+
+  const progressive = useProgressiveCount(shown.length, 16, 16, `${deferredQuery}|${kindFilter}`);
+  const visibleDiseases = shown.slice(0, progressive.visibleCount);
 
   return (
     <section className="pt-pest-section" aria-labelledby="ipm-heading">
@@ -2797,46 +2859,55 @@ export function DiseaseAndIpmList() {
         )}
 
         {kindFilter !== "care" && (
-          <div className="pt-pest-list">
-            {shown.map((item) => {
-              const isDisease = item.kind === "disease";
-              const imgSrc = isSafeMediaUrl(item.image) ? item.image : "/pesticides/amber.png";
-              return (
-                <article
-                  key={item.id}
-                  className={`pt-pest-card ${isDisease ? "pt-pest-card-restricted" : "pt-pest-card-allowed"}`}
-                  onClick={() => setSelectedItem(item)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedItem(item);
-                    }
-                  }}
-                  title="Bấm để xem triệu chứng và phác đồ xử lý IPM 2026"
-                >
-                  <div className="pt-pest-card-img-wrap">
-                    <img
-                      src={imgSrc}
-                      alt={item.name}
-                      loading="lazy"
-                      decoding="async"
-                      className="pt-pest-card-img"
-                      style={{ objectFit: "cover", borderRadius: 6 }}
-                    />
-                  </div>
-                  <div className="pt-pest-card-content">
-                    <h3 className="pt-pest-card-name">{item.name}</h3>
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
-                      {item.affectedParts} - Mức độ {item.prevalenceCode}
+          <>
+            <div className="pt-pest-list">
+              {visibleDiseases.map((item) => {
+                const isDisease = item.kind === "disease";
+                const imgSrc = isSafeMediaUrl(item.image) ? item.image : "/pesticides/amber.png";
+                return (
+                  <article
+                    key={item.id}
+                    className={`pt-pest-card ${isDisease ? "pt-pest-card-restricted" : "pt-pest-card-allowed"}`}
+                    onClick={() => setSelectedItem(item)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedItem(item);
+                      }
+                    }}
+                    title="Bấm để xem triệu chứng và phác đồ xử lý IPM 2026"
+                  >
+                    <div className="pt-pest-card-img-wrap">
+                      <img
+                        src={imgSrc}
+                        alt={item.name}
+                        loading="lazy"
+                        decoding="async"
+                        className="pt-pest-card-img"
+                        style={{ objectFit: "cover", borderRadius: 6 }}
+                      />
                     </div>
-                  </div>
-                  <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
-                </article>
-              );
-            })}
-          </div>
+                    <div className="pt-pest-card-content">
+                      <h3 className="pt-pest-card-name">{item.name}</h3>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                        {item.affectedParts} - Mức độ {item.prevalenceCode}
+                      </div>
+                    </div>
+                    <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
+                  </article>
+                );
+              })}
+            </div>
+            <ProgressiveListFooter
+              hasMore={progressive.hasMore}
+              remainingCount={progressive.remainingCount}
+              sentinelRef={progressive.sentinelRef}
+              onShowMore={progressive.showMore}
+              unitLabel="mục sâu bệnh"
+            />
+          </>
         )}
 
         {kindFilter !== "care" && shown.length === 0 && (
@@ -2874,6 +2945,8 @@ export function CareProtocolDetailModal({
         <img
           src={stage.imageSrc}
           alt={stage.imageAlt}
+          loading="lazy"
+          decoding="async"
           className="pt-pesticide-showcase-img"
           style={{
             objectFit: "cover",
@@ -2963,8 +3036,19 @@ export function CareProtocolDetailModal({
   );
 }
 
+const INDEXED_PROTOCOL_2026 = DURIAN_PROTOCOL_2026_2027.map((stage) => {
+  const milestoneText = stage.milestones
+    .map((m) => `${m.treeState} ${m.targetDay} ${m.action}`)
+    .join(" ");
+  return {
+    stage,
+    haystack: `${stage.order} ${stage.name} ${stage.duration} ${stage.summary} ${milestoneText} ${stage.keyRules.join(" ")}`.toLowerCase(),
+  };
+});
+
 export function CareProtocol2026List() {
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [groupFilter, setGroupFilter] = useState<"all" | ProtocolGroup>("all");
   const [selectedStage, setSelectedStage] = useState<DurianProtocolStage | null>(null);
 
@@ -2980,18 +3064,17 @@ export function CareProtocol2026List() {
   );
 
   const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return DURIAN_PROTOCOL_2026_2027.filter((stage) => {
+    const q = deferredQuery.trim().toLowerCase();
+    return INDEXED_PROTOCOL_2026.filter(({ stage, haystack }) => {
       const matchesGroup = groupFilter === "all" || stage.group === groupFilter;
       if (!matchesGroup) return false;
       if (!q) return true;
-      const milestoneText = stage.milestones
-        .map((m) => `${m.treeState} ${m.targetDay} ${m.action}`)
-        .join(" ");
-      const haystack = `${stage.order} ${stage.name} ${stage.duration} ${stage.summary} ${milestoneText} ${stage.keyRules.join(" ")}`.toLowerCase();
       return haystack.includes(q);
-    });
-  }, [query, groupFilter]);
+    }).map((entry) => entry.stage);
+  }, [deferredQuery, groupFilter]);
+
+  const progressive = useProgressiveCount(shown.length, 16, 16, `${deferredQuery}|${groupFilter}`);
+  const visibleStages = shown.slice(0, progressive.visibleCount);
 
   return (
     <section className="pt-pest-section" aria-labelledby="protocol-2026-heading">
@@ -3063,7 +3146,7 @@ export function CareProtocol2026List() {
         </FadeFilterBar>
 
         <div className="pt-pest-list">
-          {shown.map((stage) => {
+          {visibleStages.map((stage) => {
             const q = query.trim().toLowerCase();
             const matchedMilestone = q
               ? stage.milestones.find((m) =>
@@ -3093,7 +3176,7 @@ export function CareProtocol2026List() {
                     loading="lazy"
                     decoding="async"
                     className="pt-pest-card-img"
-                    style={{ objectFit: "cover", borderRadius: 14 }}
+                    style={{ objectFit: "cover", borderRadius: 6 }}
                   />
                 </div>
                 <div className="pt-pest-card-content">
@@ -3118,6 +3201,14 @@ export function CareProtocol2026List() {
             );
           })}
         </div>
+
+        <ProgressiveListFooter
+          hasMore={progressive.hasMore}
+          remainingCount={progressive.remainingCount}
+          sentinelRef={progressive.sentinelRef}
+          onShowMore={progressive.showMore}
+          unitLabel="giai đoạn"
+        />
 
         {shown.length === 0 && (
           <EmptyState icon="search">
@@ -3203,7 +3294,7 @@ export default function LearnTab({
             role="tab"
             aria-selected={view === item.id}
             className={view === item.id ? "active" : ""}
-            onClick={() => selectView(item.id)}
+            onClick={() => startTransition(() => selectView(item.id))}
           >
             {item.label}
           </button>

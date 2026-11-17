@@ -1,5 +1,3 @@
-@import "tailwindcss";
-
 /*
  * Giao diện quản trị (/admin) và cổng hộ dân (/portal) dùng chung ngôn ngữ thiết kế với trang giới thiệu:
  * nền trời xanh nhạt → trắng, chữ serif tạp chí màu xanh rêu đậm, thẻ trắng bo lớn / cắt chéo góc,
@@ -226,7 +224,9 @@ body {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: rgba(255, 255, 255, 0.97);
+  background: rgba(255, 255, 255, 0.98);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   border-bottom: 1px solid var(--border);
   box-shadow:
     0 10px 12px -5px rgba(20, 55, 47, 0.08),
@@ -3949,7 +3949,7 @@ input[type="date"].filter-select {
   align-items: stretch;
   justify-content: center;
   padding: 0;
-  background: rgba(15, 23, 42, 0.52);
+  background: rgba(15, 23, 42, 0.48);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   animation: pt-sheet-backdrop-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -7098,25 +7098,51 @@ html.is-scrolling-down .zones-map-area .plotmap-zoom,
   contain-intrinsic-size: auto 112px;
 }
 
+.catalog-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}
+
+.report-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 176px;
+}
+
 @media (max-width: 640px) {
   .table-wrap .responsive-table tbody tr {
     content-visibility: auto;
-    contain-intrinsic-size: auto 168px;
+    contain-intrinsic-size: auto 180px;
   }
 }
 
 @media print {
   .pt-pest-card,
+  .catalog-card,
+  .report-card,
   .table-wrap .responsive-table tbody tr {
     content-visibility: visible !important;
     contain-intrinsic-size: none !important;
   }
 }
 
+/* Chặn triệt để backdrop-filter trên toàn bộ thiết bị di động/máy tính bảng để tránh nghẽn GPU khi cuộn */
+@media (max-width: 999px) {
+  *,
+  *::before,
+  *::after {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
 /* Chế độ tối ưu phần cứng (kích hoạt tự động trên máy CPU <= 4 nhân, RAM <= 4GB, hoặc mạng yếu) */
-html[data-perf="lite"] *,
-html[data-perf="lite"] *::before,
-html[data-perf="lite"] *::after,
+html[data-perf="lite"] {
+  scroll-behavior: auto !important;
+}
+
+[data-perf="lite"] *,
+[data-perf="lite"] *::before,
+[data-perf="lite"] *::after,
 html[data-net="slow"] *,
 html[data-net="slow"] *::before,
 html[data-net="slow"] *::after {
@@ -7126,6 +7152,15 @@ html[data-net="slow"] *::after {
 
 html[data-perf="lite"] * {
   will-change: auto !important;
+}
+
+html[data-perf="lite"] :is(.modal, .modal-backdrop, .nav-backdrop, .sidebar, .tab-btn, .btn) {
+  animation-duration: 0.14s !important;
+  transition-duration: 0.14s !important;
+}
+
+html[data-perf="lite"] :is(.card, .chart-card, .report-card, .catalog-card, .variety-card, .schedule-card, .training-card, .violation-item, .table-wrap .responsive-table tbody tr) {
+  box-shadow: none !important;
 }
 
 html[data-perf="lite"] :is(.pt-minimap-pin-pulse, .pt-plot-minimap-loading, .pt-mapmodal-radar) {
@@ -7262,7 +7297,8 @@ html[data-net="slow"] .kpi-card svg rect {
   width: min(440px, calc(100vw - 24px));
   border-radius: 6px;
   border: 1px solid #d4d4d2;
-  padding: 22px 26px 20px;
+  padding: 0;
+  overflow: hidden;
   background: #ffffff;
   color: #121212;
   font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -7291,6 +7327,7 @@ html[data-net="slow"] .kpi-card svg rect {
   align-items: center;
   text-align: center;
   gap: 6px;
+  padding: 22px 26px 18px;
 }
 
 .sys-alert-badge {
@@ -7358,63 +7395,81 @@ html[data-net="slow"] .kpi-card svg rect {
 }
 
 .sys-alert-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 1px;
   width: 100%;
-  margin-top: 12px;
-  padding-top: 14px;
-  border-top: 1px solid #eaeae8;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #e2e2df;
+  background: #e2e2df;
 }
 
 .sys-alert-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 0 16px;
-  border-radius: 4px;
-  font-size: 13px;
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  margin: 0;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 0;
+  background: #ffffff;
+  color: #121212;
+  font-family: inherit;
+  font-size: 13.5px;
   font-weight: 500;
   line-height: 1.3;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   text-decoration: none;
   cursor: pointer;
   transition:
     background-color 0.16s ease,
-    border-color 0.16s ease,
     color 0.16s ease,
     opacity 0.16s ease;
 }
 
+.sys-alert-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px #121212;
+}
+
 .sys-alert-btn.is-solid {
-  border: 1px solid #121212;
-  background: #121212;
-  color: #ffffff;
+  background: #ffffff;
+  color: #121212;
+  font-weight: 600;
 }
 
 .sys-alert-btn.is-solid:hover:not(:disabled) {
-  border-color: #2b2b2b;
-  background: #2b2b2b;
+  background: #f5f5f3;
+}
+
+.sys-alert-btn.is-solid:active:not(:disabled) {
+  background: #ecece8;
 }
 
 .sys-alert-btn.is-solid:disabled {
-  opacity: 0.58;
+  opacity: 0.55;
   cursor: default;
 }
 
 .sys-alert-btn.is-ghost {
-  border: 1px solid #d4d4d2;
   background: #ffffff;
-  color: #121212;
+  color: #4a4a48;
+  font-weight: 500;
 }
 
 .sys-alert-btn.is-ghost:hover {
-  border-color: #121212;
   background: #f7f7f5;
   color: #121212;
+}
+
+.sys-alert-btn.is-ghost:active {
+  background: #ecece8;
 }
 
 .sys-alert-recovered-row {
@@ -7443,12 +7498,15 @@ html[data-net="slow"] .kpi-card svg rect {
 @media (max-width: 640px) {
   .sys-alert-banner {
     width: calc(100vw - 20px);
-    padding: 20px 18px 18px;
+    padding: 0;
   }
   .sys-alert-banner.is-recovered {
     width: max-content;
     max-width: calc(100vw - 20px);
     padding: 9px 16px;
+  }
+  .sys-alert-main {
+    padding: 20px 18px 16px;
   }
   .sys-alert-title {
     font-size: 16px;
@@ -7457,11 +7515,11 @@ html[data-net="slow"] .kpi-card svg rect {
     font-size: 13px;
   }
   .sys-alert-actions {
-    gap: 8px;
+    gap: 1px;
   }
   .sys-alert-btn {
-    min-height: 34px;
-    padding: 0 13px;
+    min-height: 44px;
+    padding: 8px 10px;
     font-size: 12.5px;
   }
 }
@@ -8096,17 +8154,17 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 
 .offline-sync-bar.is-syncing {
   background: #f3f7f4;
-  border-color: rgba(21, 128, 61, 0.24);
+  border-color: rgba(20, 55, 47, 0.14);
 }
 
 .offline-sync-bar.is-warning {
   background: #fffdf7;
-  border-color: rgba(154, 103, 18, 0.28);
+  border-color: rgba(20, 55, 47, 0.14);
 }
 
 .offline-sync-bar.is-done {
   background: #f0fdf4;
-  border-color: rgba(21, 128, 61, 0.24);
+  border-color: rgba(20, 55, 47, 0.14);
 }
 
 .offline-sync-copy {
@@ -8277,13 +8335,13 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 
 .offline-queue-badge.is-syncing {
   background: #f0fdf4;
-  border-color: rgba(21, 128, 61, 0.24);
+  border-color: #d4d4d2;
   color: #15803d;
 }
 
 .offline-queue-badge.is-failed {
   background: #fffbeb;
-  border-color: rgba(154, 103, 18, 0.26);
+  border-color: #d4d4d2;
   color: #9a6712;
 }
 
@@ -8328,7 +8386,7 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   margin: 0;
   padding: 8px 10px;
   border-radius: 5px;
-  border: 1px solid rgba(185, 28, 28, 0.22);
+  border: 1px solid #d4d4d2;
   background: #fef2f2;
   color: #b91c1c;
   font-size: 12.5px;

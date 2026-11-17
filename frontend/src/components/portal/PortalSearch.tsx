@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Search } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
@@ -440,7 +440,7 @@ function SearchDrawerFooter({
   );
 }
 
-function PortalSearchDialog({
+export function PortalSearchDialog({
   onClose,
   onPick,
 }: {
@@ -449,8 +449,9 @@ function PortalSearchDialog({
 }) {
   const { isZh, t } = usePortalLang();
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const activeIndex = useMemo(() => (isZh ? buildZhIndex(t) : VI_INDEX), [isZh, t]);
-  const results = useMemo(() => searchEntries(query, activeIndex), [query, activeIndex]);
+  const results = useMemo(() => searchEntries(deferredQuery, activeIndex), [deferredQuery, activeIndex]);
 
   return (
     <Sheet
@@ -464,6 +465,8 @@ function PortalSearchDialog({
     </Sheet>
   );
 }
+
+export default PortalSearchDialog;
 
 /** Nút kính lúp trên thanh đầu trang + popup tìm kiếm chức năng. */
 export function PortalSearchButton({

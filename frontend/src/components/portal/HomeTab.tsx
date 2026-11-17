@@ -348,6 +348,8 @@ export default function HomeTab({
                       alt=""
                       width={20}
                       height={20}
+                      loading="lazy"
+                      decoding="async"
                       className="pt-widget-note-icon"
                       aria-hidden="true"
                     />

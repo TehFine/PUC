@@ -4,12 +4,13 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortal } from "@/hooks/use-portal";
+import { lazyChunk } from "@/lib/lazy-chunk";
 import { relativeDayLabel } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalLabTest, PortalList, PortalScheduleItem } from "@/types/portal";
 import { EmptyState, SectionDivider, StateBlock } from "./ui";
 
-const LabTestCertificateModal = dynamic(() => import("./LabTestCertificateModal"), { ssr: false });
+const LabTestCertificateModal = dynamic(() => lazyChunk(() => import("./LabTestCertificateModal")), { ssr: false });
 
 const ROUTE_THEMES = [
   { titleColor: "#92400e" },

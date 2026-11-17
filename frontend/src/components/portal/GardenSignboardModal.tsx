@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
-import { Download, Printer } from "@/components/ui/PublicIcon";
 import type { PortalPlot } from "@/types/portal";
 import { triggerBlobDownload } from "@/utils/download";
 import { Sheet } from "./ui";
@@ -17,7 +15,6 @@ async function renderSignboardPngBlob(
   plot: PortalPlot,
   householdName: string,
   qrDataUrl: string,
-  resolvedToken: string | null,
 ): Promise<Blob> {
   const W = 1360;
   const H = 880;
@@ -149,17 +146,15 @@ async function renderSignboardPngBlob(
 
 export default function GardenSignboardModal({ plot, householdName, onClose }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
-  const [resolvedToken, setResolvedToken] = useState<string | null>(plot.qrToken ?? null);
-  const [resolvedTreeCount, setResolvedTreeCount] = useState<number | null>(plot.treeCount ?? null);
-  const [resolvedMaxQuotaKg, setResolvedMaxQuotaKg] = useState<number | null>(
-    plot.maxQuotaKg ?? null,
-  );
+  const [fetchedSignboard, setFetchedSignboard] = useState<{
+    plotCode: string;
+    qrToken?: string | null;
+    treeCount?: number | null;
+    maxQuotaKg?: number | null;
+  } | null>(null);
   const [downloadingPng, setDownloadingPng] = useState(false);
 
   useEffect(() => {
-    setResolvedToken(plot.qrToken ?? null);
-    setResolvedTreeCount(plot.treeCount ?? null);
-    setResolvedMaxQuotaKg(plot.maxQuotaKg ?? null);
     if (plot.qrToken) return;
 
     let active = true;
@@ -183,9 +178,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
             (r) => r.plotCode.toUpperCase() === plot.code.toUpperCase(),
           );
           if (exact) {
-            if (exact.qrToken) setResolvedToken(exact.qrToken);
-            if (exact.treeCount) setResolvedTreeCount(exact.treeCount);
-            if (exact.maxQuotaKg) setResolvedMaxQuotaKg(exact.maxQuotaKg);
+            setFetchedSignboard(exact);
           }
         },
       )
@@ -194,7 +187,15 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
     return () => {
       active = false;
     };
-  }, [plot.code, plot.qrToken, plot.treeCount, plot.maxQuotaKg]);
+  }, [plot.code, plot.qrToken]);
+
+  const matchedFallback =
+    fetchedSignboard && fetchedSignboard.plotCode.toUpperCase() === plot.code.toUpperCase()
+      ? fetchedSignboard
+      : null;
+  const resolvedToken = plot.qrToken ?? matchedFallback?.qrToken ?? null;
+  const resolvedTreeCount = plot.treeCount ?? matchedFallback?.treeCount ?? null;
+  const resolvedMaxQuotaKg = plot.maxQuotaKg ?? matchedFallback?.maxQuotaKg ?? null;
 
   useEffect(() => {
     let active = true;
@@ -202,14 +203,19 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
       ? `/t/${encodeURIComponent(resolvedToken)}`
       : `/trace/${encodeURIComponent(plot.code)}`;
     const url = `${window.location.origin}${pathPart}`;
-    void QRCode.toDataURL(url, {
-      margin: 1,
-      width: 340,
-      errorCorrectionLevel: "Q",
-      color: { dark: "#000000", light: "#ffffff" },
-    }).then((res) => {
-      if (active) setQrDataUrl(res);
-    });
+    void import("qrcode")
+      .then((mod) =>
+        mod.default.toDataURL(url, {
+          margin: 1,
+          width: 340,
+          errorCorrectionLevel: "Q",
+          color: { dark: "#000000", light: "#ffffff" },
+        }),
+      )
+      .then((res) => {
+        if (active) setQrDataUrl(res);
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -247,7 +253,6 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
         enrichedPlot,
         householdName,
         qrDataUrl,
-        resolvedToken,
       );
       triggerBlobDownload(blob, `Bien-cam-vuon-${safeCode}.png`);
     } catch {
@@ -272,7 +277,6 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
               onClick={() => void handleDownloadPng()}
               disabled={!qrDataUrl || downloadingPng}
             >
-              <Download size={15} />
               <span>{downloadingPng ? "Đang tạo ảnh…" : "Tải ảnh PNG"}</span>
             </button>
             <button
@@ -281,7 +285,6 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
               onClick={handlePrint}
               disabled={!qrDataUrl}
             >
-              <Printer size={16} />
               <span>In biển cắm vườn</span>
             </button>
           </div>

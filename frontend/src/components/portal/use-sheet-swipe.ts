@@ -120,12 +120,16 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
     };
 
     const snapBack = () => {
-      sheet.style.transition = `transform ${SNAP_BACK_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+      const snapMs =
+        typeof document !== "undefined" && document.documentElement.dataset.perf === "lite"
+          ? 140
+          : SNAP_BACK_MS;
+      sheet.style.transition = `transform ${snapMs}ms cubic-bezier(0.22, 1, 0.36, 1)`;
       setTransform(0);
       snapTimer = setTimeout(() => {
         sheet.style.transition = "";
         snapTimer = null;
-      }, SNAP_BACK_MS + 20);
+      }, snapMs + 20);
     };
 
     const finishDrag = (cancelled: boolean) => {
@@ -271,9 +275,9 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
       startY = e.clientY;
       lastY = e.clientY;
       mode = "pending";
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
-      window.addEventListener("pointercancel", onPointerUp);
+      window.addEventListener("pointermove", onPointerMove, { passive: true });
+      window.addEventListener("pointerup", onPointerUp, { passive: true });
+      window.addEventListener("pointercancel", onPointerUp, { passive: true });
     };
     const onPointerMove = (e: PointerEvent) => {
       if (!mouseActive || mode === "idle" || mode === "ignore") return;
@@ -333,9 +337,9 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
     };
 
     sheet.addEventListener("touchstart", onTouchStart, { passive: true });
-    sheet.addEventListener("touchend", onTouchEnd);
-    sheet.addEventListener("touchcancel", onTouchEnd);
-    sheet.addEventListener("pointerdown", onPointerDown);
+    sheet.addEventListener("touchend", onTouchEnd, { passive: true });
+    sheet.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    sheet.addEventListener("pointerdown", onPointerDown, { passive: true });
     sheet.addEventListener("click", onClickCapture, true);
 
     return () => {

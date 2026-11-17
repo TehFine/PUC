@@ -1,11 +1,18 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { OfflinePendingDiaryCards } from "@/components/ui/OfflineSyncBar";
+import { toast } from "@/components/ui/Toast";
 import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
-import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
+import {
+  clearWorkingFieldDraft,
+  type OfflineFieldDraft,
+  saveOfflineFieldDraft,
+  submitFieldRecordWithOfflineQueue,
+  useOfflineSyncState,
+} from "@/lib/offline-sync";
 import { daysUntil, JOURNAL_ACTIVITIES, todayIso, toNumber } from "@/lib/portal-labels";
 import { formatDate, formatDateTime } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
@@ -24,9 +31,12 @@ import {
   InlineError,
   LateDeclarationNotice,
   MultiPhotoField,
+  ProgressiveListFooter,
   StoredMediaGallery,
   useMultiPhotoPicker,
+  useProgressiveCount,
 } from "./shared/controls";
+import { RadialPngIcon } from "./RadialIcons";
 import type { PortalAction } from "./PortalSearch";
 import { EmptyState, Field, Sheet, StateBlock, useSheetClose } from "./ui";
 
@@ -68,37 +78,42 @@ function diffDaysFromToday(isoDate: string): number {
 const SPRAY_ACTIVITY_NAME = "Phun thuốc BVTV";
 
 function DiarySheetActionFooter({
+  formId = "pt-unified-diary-form",
+  submitLabel = "Lưu nhật ký",
+  busyLabel = "Đang lưu…",
   saving,
   canSubmit,
   hasFiles,
-  fallbackOnClose,
+  onCancel,
 }: {
+  formId?: string;
+  submitLabel?: string;
+  busyLabel?: string;
   saving: boolean;
   canSubmit: boolean;
   hasFiles: boolean;
-  fallbackOnClose: () => void;
+  onCancel: () => void;
 }) {
-  const sheetClose = useSheetClose();
   return (
     <>
       <button
         type="button"
         className="pt-diary-footer-btn pt-diary-footer-cancel"
-        onClick={sheetClose ?? fallbackOnClose}
+        onClick={onCancel}
         disabled={saving}
       >
         Hủy
       </button>
       <BusyButton
         type="submit"
-        form="pt-unified-diary-form"
+        form={formId}
         className="pt-diary-footer-btn pt-diary-footer-submit"
         busy={saving}
-        busyLabel="Đang lưu…"
+        busyLabel={busyLabel}
         disabled={!canSubmit}
         title={!hasFiles ? "Vui lòng chụp ảnh hiện trường trước khi lưu" : undefined}
       >
-        Lưu nhật ký
+        {submitLabel}
       </BusyButton>
     </>
   );
@@ -107,43 +122,166 @@ function DiarySheetActionFooter({
 function UnifiedDiaryForm({
   plotsList,
   initialActivity,
+  initialDraft,
   onDone,
   onClose,
 }: {
   plotsList: PortalPlot[];
   initialActivity?: string;
+  initialDraft?: OfflineFieldDraft | null;
   onDone: () => void;
   onClose: () => void;
 }) {
   const plotCodes = plotsList.map((p) => p.code);
-  const defaultPlotCode = plotCodes[0] ?? "";
-  const defaultPlotArea = plotsList[0]?.areaHa ? String(plotsList[0].areaHa) : "0.5";
+  const defaultPlotCode = initialDraft?.plotCode || plotCodes[0] || "";
+  const matchedInitialPlot = plotsList.find((p) => p.code === defaultPlotCode) ?? plotsList[0];
+  const defaultPlotArea = initialDraft?.areaHa || (matchedInitialPlot?.areaHa ? String(matchedInitialPlot.areaHa) : "0.5");
 
-  const [entryOn, setEntryOn] = useState(todayIso());
+  const today = todayIso();
+  const minBackdateIso = addIsoDays(today, -7) ?? today;
+  const [draftCapturedMeta] = useState(() => ({
+    capturedAtIso: initialDraft?.capturedAtIso,
+    capturedDateVn: initialDraft?.capturedDateVn,
+  }));
+  const hasDraftCaptureDate = Boolean(
+    draftCapturedMeta.capturedDateVn && /^\d{4}-\d{2}-\d{2}$/.test(draftCapturedMeta.capturedDateVn),
+  );
+  const maxEntryIso =
+    hasDraftCaptureDate && draftCapturedMeta.capturedDateVn! < today
+      ? draftCapturedMeta.capturedDateVn!
+      : today;
+
+  const rawInitialEntryDate = initialDraft?.entryOn || maxEntryIso;
+  const initialEntryDate = !/^\d{4}-\d{2}-\d{2}$/.test(rawInitialEntryDate)
+    ? maxEntryIso
+    : rawInitialEntryDate > maxEntryIso
+      ? maxEntryIso
+      : rawInitialEntryDate < minBackdateIso
+        ? minBackdateIso
+        : rawInitialEntryDate;
+
+  const autoLateDefault =
+    initialDraft && !initialDraft.lateReason && diffDaysFromToday(initialEntryDate) >= 1
+      ? `Đã chụp và giữ hình tại vườn ngày ${formatDate(initialEntryDate)}, hoàn tất chi tiết khi về nhà`
+      : (initialDraft?.lateReason ?? "");
+
+  const [entryOn, setEntryOn] = useState(initialEntryDate);
+  const [dateBoundNotice, setDateBoundNotice] = useState<string | null>(null);
   const [plotCode, setPlotCode] = useState(defaultPlotCode);
-  const [activity, setActivity] = useState(initialActivity ?? JOURNAL_ACTIVITIES[0]);
-  const [detail, setDetail] = useState("");
-  const [lateReason, setLateReason] = useState("");
+  const [activity, setActivity] = useState(initialDraft?.activity ?? initialActivity ?? JOURNAL_ACTIVITIES[0]);
+  const [detail, setDetail] = useState(initialDraft?.detail ?? "");
+  const [lateReason, setLateReason] = useState(autoLateDefault);
 
   const isSprayActivity = activity === SPRAY_ACTIVITY_NAME;
   const pesticides = useCatalog<PesticideDto>("pesticides", isSprayActivity);
-  const [pesticideId, setPesticideId] = useState("");
-  const [dose, setDose] = useState("");
+  const [pesticideId, setPesticideId] = useState(initialDraft?.pesticideId ?? "");
+  const [dose, setDose] = useState(initialDraft?.dose ?? "");
   const [areaHa, setAreaHa] = useState(defaultPlotArea);
-  const [areaTouched, setAreaTouched] = useState(false);
-  const [source, setSource] = useState("");
+  const [areaTouched, setAreaTouched] = useState(Boolean(initialDraft?.areaHa));
+  const [source, setSource] = useState(initialDraft?.source ?? "");
 
-  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(
+    initialDraft?.coords ?? null,
+  );
+  const [gpsStatus, setGpsStatus] = useState<string | null>(
+    initialDraft?.coords
+      ? `Đã định vị: ${initialDraft.coords.latitude.toFixed(5)}, ${initialDraft.coords.longitude.toFixed(5)}`
+      : null,
+  );
   const [locating, setLocating] = useState(false);
-  const media = useMultiPhotoPicker("journal", { maxFiles: 8, allowVideo: true });
+  const media = useMultiPhotoPicker("journal", {
+    maxFiles: 8,
+    allowVideo: true,
+    initialDraftSlots: initialDraft?.mediaSlots,
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const effectivePlot = plotCode || defaultPlotCode;
-  const minBackdateIso = addIsoDays(todayIso(), -7) ?? undefined;
+
+  // Tự động bảo vệ ngầm bản đang nhập xuống bộ nhớ máy (sau 500ms) ngay khi nông hộ chụp ảnh:
+  // nếu sóng yếu, trình duyệt bị đóng hoặc điện thoại thu hồi RAM lúc mở Máy ảnh, vào lại Ghi nhật ký vẫn còn nguyên hình.
+  useEffect(() => {
+    if (saving) return;
+    if (!media.hasFiles) return;
+    const timer = window.setTimeout(() => {
+      void saveOfflineFieldDraft({
+        isAutoWorkingDraft: true,
+        plotCode: effectivePlot.trim(),
+        entryOn,
+        activity,
+        detail,
+        lateReason,
+        pesticideId,
+        dose,
+        areaHa,
+        source,
+        coords,
+        capturedAtIso: draftCapturedMeta.capturedAtIso,
+        capturedDateVn: draftCapturedMeta.capturedDateVn,
+        items: media.items,
+      }).catch(() => undefined);
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [
+    saving,
+    draftCapturedMeta,
+    media.hasFiles,
+    media.items,
+    effectivePlot,
+    entryOn,
+    activity,
+    detail,
+    lateReason,
+    pesticideId,
+    dose,
+    areaHa,
+    source,
+    coords,
+  ]);
+
+  const handleDiscardAndCancel = () => {
+    void clearWorkingFieldDraft();
+    onClose();
+  };
   const selectedDelayDays = Math.max(0, diffDaysFromToday(entryOn));
   const isLateOver48h = selectedDelayDays > 2;
+  const isEntryDateValid =
+    /^\d{4}-\d{2}-\d{2}$/.test(entryOn) && entryOn <= maxEntryIso && entryOn >= minBackdateIso;
+
+  const handleEntryDateChange = (nextVal: string) => {
+    if (!nextVal) {
+      setEntryOn(maxEntryIso);
+      setDateBoundNotice(null);
+      return;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(nextVal) && Number(nextVal.slice(0, 4)) >= 2000) {
+      if (nextVal > maxEntryIso) {
+        setEntryOn(maxEntryIso);
+        setDateBoundNotice(
+          maxEntryIso < today
+            ? `Hình hiện trường chụp ngày ${formatDate(maxEntryIso)} nên ngày thực hiện không được vượt quá ${formatDate(maxEntryIso)}.`
+            : "Chỉ ghi nhật ký cho công việc đã thực hiện, không được khai trước ngày tương lai.",
+        );
+        return;
+      }
+      if (nextVal < minBackdateIso) {
+        setEntryOn(minBackdateIso);
+        setDateBoundNotice("Chỉ được ghi bổ sung trong vòng 7 ngày gần nhất. Quá 7 ngày vui lòng báo cán bộ xã lập biên bản.");
+        return;
+      }
+    }
+    setDateBoundNotice(null);
+    setEntryOn(nextVal);
+  };
+
+  const handleEntryDateBlur = () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entryOn) || entryOn > maxEntryIso) {
+      setEntryOn(maxEntryIso);
+    } else if (entryOn < minBackdateIso) {
+      setEntryOn(minBackdateIso);
+    }
+  };
 
   const chosenPesticide = isSprayActivity
     ? pesticides.rows.find((item) => String(item.id) === pesticideId)
@@ -190,12 +328,43 @@ function UnifiedDiaryForm({
     );
   };
 
+  const lateReasonOk = !isLateOver48h || lateReason.trim().length >= 5;
   const canSubmit = isSprayActivity
-    ? Boolean(effectivePlot.trim() && pesticideId && dose.trim() && Number(areaHa) > 0 && media.hasFiles)
-    : Boolean(effectivePlot.trim() && media.hasFiles);
+    ? Boolean(
+        isEntryDateValid &&
+          lateReasonOk &&
+          effectivePlot.trim() &&
+          pesticideId &&
+          dose.trim() &&
+          Number(areaHa) > 0 &&
+          media.hasFiles,
+      )
+    : Boolean(isEntryDateValid && lateReasonOk && effectivePlot.trim() && media.hasFiles);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const nowToday = todayIso();
+    const effectiveMaxDate =
+      hasDraftCaptureDate && draftCapturedMeta.capturedDateVn! < nowToday
+        ? draftCapturedMeta.capturedDateVn!
+        : nowToday;
+    const effectiveMinDate = addIsoDays(nowToday, -7) ?? nowToday;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entryOn) || entryOn > effectiveMaxDate) {
+      setError(
+        effectiveMaxDate < nowToday
+          ? `Hình hiện trường chụp ngày ${formatDate(effectiveMaxDate)}, không thể khai ngày thực hiện sau ngày chụp hình.`
+          : "Không được chọn ngày tương lai. Chỉ ghi nhật ký sau khi đã thực hiện công việc tại vườn.",
+      );
+      return;
+    }
+    if (entryOn < effectiveMinDate) {
+      setError("Không được ghi lùi nhật ký quá 7 ngày. Vui lòng liên hệ cán bộ kỹ thuật xã để ghi nhận bổ sung.");
+      return;
+    }
+    if (isLateOver48h && lateReason.trim().length < 5) {
+      setError(`Vui lòng nhập rõ lý do khai báo chậm ${selectedDelayDays} ngày (ít nhất 5 ký tự).`);
+      return;
+    }
     const finalPlot = effectivePlot.trim();
     if (!finalPlot) {
       setError("Vui lòng chọn hoặc nhập mã thửa đất.");
@@ -250,9 +419,15 @@ function UnifiedDiaryForm({
           ],
           portalKeysToInvalidate: ["journal", "spray", "violations", "overview"],
           onProgress: media.setUploadProgress,
+          capturedAtIso: draftCapturedMeta.capturedAtIso,
+          capturedDateVn: draftCapturedMeta.capturedDateVn,
         });
+        await clearWorkingFieldDraft();
         if (outcome.mode === "synced") {
           invalidatePortal("journal", "spray", "violations", "overview");
+          toast.success("Đã lưu nhật ký phun thuốc lên hệ thống.");
+        } else {
+          toast.success("Đã lưu trên điện thoại, hệ thống tự đồng bộ khi có sóng ổn định.");
         }
         onDone();
         return;
@@ -283,9 +458,15 @@ function UnifiedDiaryForm({
         ],
         portalKeysToInvalidate: ["journal", "spray", "violations", "overview"],
         onProgress: media.setUploadProgress,
+        capturedAtIso: draftCapturedMeta.capturedAtIso,
+        capturedDateVn: draftCapturedMeta.capturedDateVn,
       });
+      await clearWorkingFieldDraft();
       if (outcome.mode === "synced") {
         invalidatePortal("journal", "spray", "violations", "overview");
+        toast.success("Đã lưu nhật ký canh tác lên hệ thống.");
+      } else {
+        toast.success("Đã lưu trên điện thoại, hệ thống tự đồng bộ khi có sóng ổn định.");
       }
       onDone();
     } catch (err) {
@@ -301,10 +482,10 @@ function UnifiedDiaryForm({
       onClose={onClose}
       footer={
         <DiarySheetActionFooter
-          saving={saving}
-          canSubmit={canSubmit}
+          saving={saving || Boolean(media.compressing)}
+          canSubmit={canSubmit && !media.compressing}
           hasFiles={media.hasFiles}
-          fallbackOnClose={onClose}
+          onCancel={handleDiscardAndCancel}
         />
       }
     >
@@ -316,9 +497,10 @@ function UnifiedDiaryForm({
             type="date"
             className="pt-input-date"
             min={minBackdateIso}
-            max={todayIso()}
+            max={maxEntryIso}
             value={entryOn}
-            onChange={(e) => setEntryOn(e.target.value)}
+            onChange={(e) => handleEntryDateChange(e.target.value)}
+            onBlur={handleEntryDateBlur}
             required
           />
         </Field>
@@ -348,9 +530,15 @@ function UnifiedDiaryForm({
         </Field>
       </div>
 
+      {dateBoundNotice && (
+        <p className="pt-form-error" role="status" style={{ marginTop: -2, marginBottom: 4 }}>
+          {dateBoundNotice}
+        </p>
+      )}
+
       <LateDeclarationNotice
         selectedDate={entryOn}
-        todayDate={todayIso()}
+        todayDate={today}
         delayDays={selectedDelayDays}
       />
 
@@ -491,7 +679,7 @@ function UnifiedDiaryForm({
           placeholder={
             isSprayActivity
               ? "Ví dụ: Phun phòng rầy xanh trên cơi đọt 2 vào sáng sớm..."
-              : "Mô tả công việc (ví dụ: Bón phân hữu cơ vi sinh 5 kg/gốc, tưới ẩm, tỉa cành thông thoáng...)"
+              : "Mô tả công việc"
           }
           value={detail}
           onChange={(e) => setDetail(e.target.value)}
@@ -515,14 +703,7 @@ function UnifiedDiaryForm({
             disabled={locating || saving}
             title={coords ? `Đã định vị: ${coords.latitude}, ${coords.longitude}` : "Lấy vị trí định vị của vườn hiện tại"}
           >
-            <img
-              src="/location-pin.png"
-              alt=""
-              width={16}
-              height={16}
-              className="pt-gps-icon"
-              aria-hidden="true"
-            />
+            <RadialPngIcon src="/map-pin.png" size={16} className="pt-gps-icon" />
             <span>{locating ? "Đang lấy GPS…" : coords ? "Cập nhật GPS" : "Định vị vườn"}</span>
           </button>
         </div>
@@ -533,7 +714,7 @@ function UnifiedDiaryForm({
         label={isSprayActivity ? "Ảnh hiện trường phun thuốc hoặc nhãn chai thuốc" : "Ảnh và video hiện trường vườn"}
         picker={media}
         required
-        description="Tối đa 8 ảnh hoặc video dưới 90 giây."
+        description="Tối đa 8 ảnh hoặc video dưới 90 giây. Ảnh tự nén nhẹ và giữ ngay trên máy."
         cameraLabel="Chụp ảnh hiện trường"
         galleryLabel="Chọn nhiều ảnh"
         videoLabel="Quay hoặc chọn video"
@@ -583,7 +764,15 @@ function JournalDetailModal({
     <div className="pt-diary-detail-body">
       <div className="pt-detail-hero">
         <div className="pt-detail-hero-icon-box">
-          <img src="/note.png?v=2" alt="" width={28} height={28} className="pt-detail-hero-icon" />
+          <img
+            src="/note.png?v=2"
+            alt=""
+            width={28}
+            height={28}
+            loading="lazy"
+            decoding="async"
+            className="pt-detail-hero-icon"
+          />
         </div>
         <div className="pt-detail-hero-info">
           <h3 className="pt-detail-hero-title">{entry.activity}</h3>
@@ -638,6 +827,8 @@ function JournalDetailModal({
             alt=""
             width={18}
             height={18}
+            loading="lazy"
+            decoding="async"
             className="pt-detail-gps-icon"
             aria-hidden="true"
           />
@@ -758,7 +949,15 @@ function SprayDetailModal({
     <div className="pt-diary-detail-body">
       <div className="pt-detail-hero">
         <div className="pt-detail-hero-icon-box">
-          <img src="/note.png?v=2" alt="" width={28} height={28} className="pt-detail-hero-icon" />
+          <img
+            src="/note.png?v=2"
+            alt=""
+            width={28}
+            height={28}
+            loading="lazy"
+            decoding="async"
+            className="pt-detail-hero-icon"
+          />
         </div>
         <div className="pt-detail-hero-info">
           <h3 className="pt-detail-hero-title">{record.pesticide}</h3>
@@ -889,6 +1088,7 @@ type CombinedDiaryItem =
   | { kind: "spray"; key: string; date: string; recordedAt: number; record: PortalSprayRecord };
 
 export default function DiaryTab({ initialAction }: { initialAction?: PortalAction } = {}) {
+  const sync = useOfflineSyncState();
   const [formOpen, setFormOpen] = useState<boolean>(() =>
     initialAction === "journal-add" || initialAction === "spray-add",
   );
@@ -901,6 +1101,9 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
   const spray = usePortal<PortalList<PortalSprayRecord>>("spray");
   const plots = usePortal<PortalPlots>("plots");
   const plotsList = plots.data?.available ? plots.data.data : [];
+  const hasPendingOfflineItems = sync.items.some(
+    (it) => it.kind === "portal-journal" || it.kind === "portal-spray",
+  );
 
   const combinedItems = useMemo<CombinedDiaryItem[]>(() => {
     const out: CombinedDiaryItem[] = [];
@@ -934,6 +1137,8 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
   const isLoading = (journal.loading && !journal.data) || (spray.loading && !spray.data);
   const combinedError = !journal.data && !spray.data ? (journal.error ?? spray.error) : null;
   const hasLoadedOnce = Boolean(journal.data || spray.data);
+  const progressive = useProgressiveCount(combinedItems.length, 16, 16);
+  const visibleItems = combinedItems.slice(0, progressive.visibleCount);
 
   return (
     <div className="pt-stack">
@@ -959,31 +1164,78 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
             <OfflinePendingDiaryCards kinds={["portal-journal", "portal-spray"]} />
             <StateBlock loading={isLoading} error={combinedError} />
 
-            {hasLoadedOnce && combinedItems.length === 0 && (
+            {hasLoadedOnce && combinedItems.length === 0 && !hasPendingOfflineItems && (
               <EmptyState icon="empty">
                 Chưa có nhật ký nào. Bấm “Ghi nhật ký” để lưu công việc chăm sóc hoặc phun thuốc đầu tiên.
               </EmptyState>
             )}
 
             {combinedItems.length > 0 && (
-              <ul className="pt-widget-list pt-diary-widget-list" role="list">
-                {combinedItems.map((item) => {
-                  if (item.kind === "journal") {
-                    const entry = item.entry;
+              <>
+                <ul className="pt-widget-list pt-diary-widget-list" role="list">
+                  {visibleItems.map((item) => {
+                    if (item.kind === "journal") {
+                      const entry = item.entry;
+                      return (
+                        <li key={item.key}>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            className="pt-widget-item pt-diary-widget-item"
+                            onClick={() => setSelectedJournal(entry)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setSelectedJournal(entry);
+                              }
+                            }}
+                            title="Bấm để xem chi tiết nhật ký"
+                          >
+                            <img
+                              src="/note.png?v=2"
+                              alt=""
+                              width={20}
+                              height={20}
+                              loading="lazy"
+                              decoding="async"
+                              className="pt-widget-note-icon"
+                              aria-hidden="true"
+                            />
+                            <span className="pt-widget-item-text">
+                              {entry.activity}
+                              {entry.plotCode ? ` - ${entry.plotCode}` : ""}
+                            </span>
+                            <span className="pt-diary-item-date" style={{ fontVariantNumeric: "tabular-nums" }}>
+                              {formatDate(entry.entryOn)}
+                              {(entry.lateDeclarationDays ?? 0) > 0 ? ` (chậm ${entry.lateDeclarationDays}n)` : ""}
+                            </span>
+                            <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
+                          </div>
+                        </li>
+                      );
+                    }
+
+                    const record = item.record;
+                    const safeIso =
+                      record.isolationEndsOn ??
+                      (record.isolationDays > 0 ? addIsoDays(record.sprayedOn, record.isolationDays) : null);
+                    const remPhi = safeIso ? daysUntil(safeIso) : null;
+                    const inPhi = remPhi !== null && remPhi > 0;
+
                     return (
                       <li key={item.key}>
                         <div
                           role="button"
                           tabIndex={0}
                           className="pt-widget-item pt-diary-widget-item"
-                          onClick={() => setSelectedJournal(entry)}
+                          onClick={() => setSelectedSpray(record)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              setSelectedJournal(entry);
+                              setSelectedSpray(record);
                             }
                           }}
-                          title="Bấm để xem chi tiết nhật ký"
+                          title="Bấm để xem chi tiết lần phun thuốc"
                         >
                           <img
                             src="/note.png?v=2"
@@ -996,69 +1248,31 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                             aria-hidden="true"
                           />
                           <span className="pt-widget-item-text">
-                            {entry.activity}
-                            {entry.plotCode ? ` - ${entry.plotCode}` : ""}
+                            Phun thuốc: {record.pesticide}
+                            {record.plotCode ? ` - ${record.plotCode}` : ""}
                           </span>
                           <span className="pt-diary-item-date" style={{ fontVariantNumeric: "tabular-nums" }}>
-                            {formatDate(entry.entryOn)}
-                            {(entry.lateDeclarationDays ?? 0) > 0 ? ` (chậm ${entry.lateDeclarationDays}n)` : ""}
+                            {formatDate(record.sprayedOn)}
+                            {inPhi
+                              ? ` (cách ly ${remPhi}n)`
+                              : (record.lateDeclarationDays ?? 0) > 0
+                                ? ` (chậm ${record.lateDeclarationDays}n)`
+                                : ""}
                           </span>
                           <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
                         </div>
                       </li>
                     );
-                  }
-
-                  const record = item.record;
-                  const safeIso =
-                    record.isolationEndsOn ??
-                    (record.isolationDays > 0 ? addIsoDays(record.sprayedOn, record.isolationDays) : null);
-                  const remPhi = safeIso ? daysUntil(safeIso) : null;
-                  const inPhi = remPhi !== null && remPhi > 0;
-
-                  return (
-                    <li key={item.key}>
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        className="pt-widget-item pt-diary-widget-item"
-                        onClick={() => setSelectedSpray(record)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setSelectedSpray(record);
-                          }
-                        }}
-                        title="Bấm để xem chi tiết lần phun thuốc"
-                      >
-                        <img
-                          src="/note.png?v=2"
-                          alt=""
-                          width={20}
-                          height={20}
-                          loading="lazy"
-                          decoding="async"
-                          className="pt-widget-note-icon"
-                          aria-hidden="true"
-                        />
-                        <span className="pt-widget-item-text">
-                          Phun thuốc: {record.pesticide}
-                          {record.plotCode ? ` - ${record.plotCode}` : ""}
-                        </span>
-                        <span className="pt-diary-item-date" style={{ fontVariantNumeric: "tabular-nums" }}>
-                          {formatDate(record.sprayedOn)}
-                          {inPhi
-                            ? ` (cách ly ${remPhi}n)`
-                            : (record.lateDeclarationDays ?? 0) > 0
-                              ? ` (chậm ${record.lateDeclarationDays}n)`
-                              : ""}
-                        </span>
-                        <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                  })}
+                </ul>
+                <ProgressiveListFooter
+                  hasMore={progressive.hasMore}
+                  remainingCount={progressive.remainingCount}
+                  sentinelRef={progressive.sentinelRef}
+                  onShowMore={progressive.showMore}
+                  unitLabel="nhật ký"
+                />
+              </>
             )}
           </div>
         </section>
@@ -1067,8 +1281,13 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
         <UnifiedDiaryForm
           plotsList={plotsList}
           initialActivity={formInitialActivity}
-          onDone={() => setFormOpen(false)}
-          onClose={() => setFormOpen(false)}
+          initialDraft={sync.workingDraft}
+          onDone={() => {
+            setFormOpen(false);
+          }}
+          onClose={() => {
+            setFormOpen(false);
+          }}
         />
       )}
 

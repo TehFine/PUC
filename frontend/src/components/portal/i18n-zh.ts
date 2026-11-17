@@ -1,4 +1,4 @@
-import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
+import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, AUTH_SCOPE_CHANGED_EVENT } from "@/lib/api-client";
 import type { PortalLang } from "./i18n";
 
 /**
@@ -525,6 +525,7 @@ const EXACT_MAP: Record<string, string> = {
   "Nhập mã thửa đất": "输入或选择地块编号",
   "Công việc canh tác": "农事作业项目",
   "Ghi chú & Vật tư sử dụng": "作业备注与使用农资",
+  "Mô tả công việc": "作业内容描述",
   "Mô tả công việc (ví dụ: Bón phân hữu cơ vi sinh 5 kg/gốc, tưới ẩm, tỉa cành thông thoáng...)":
     "描述作业内容（例如：每株施用有机微生物肥 5 公斤、灌溉保湿、修剪通风枝条...）",
   "Tọa độ GPS vườn (tùy chọn)": "果园 GPS 坐标（选填）",
@@ -1473,6 +1474,7 @@ const EXACT_MAP: Record<string, string> = {
   "Chụp ảnh hoặc tải ảnh lên": "拍照或上传图片",
   "Bấm để mở máy ảnh hoặc chọn ảnh có sẵn": "点击打开相机或从相册选择照片",
   "* Bắt buộc": "* 必填",
+  "Bắt buộc *": "必填 *",
   "Không bắt buộc": "选填",
   "Xem trước ảnh đã chọn": "已选照片预览",
   "Ảnh đã chọn": "已选照片",
@@ -1637,6 +1639,7 @@ export function clearDynTranslationCache() {
 if (typeof window !== "undefined") {
   window.addEventListener(AUTH_LOGOUT_EVENT, clearDynTranslationCache);
   window.addEventListener(AUTH_EXPIRED_EVENT, clearDynTranslationCache);
+  window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, clearDynTranslationCache);
 }
 
 function ensureDynCacheLoaded() {

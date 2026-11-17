@@ -77,31 +77,31 @@ function SystemAlertBannerInner() {
             </span>
             <strong className="sys-alert-title">{runtimeIncident.title}</strong>
             <p className="sys-alert-desc">{runtimeIncident.message}</p>
-            <div className="sys-alert-actions">
-              {isChunk ? (
+          </div>
+          <div className="sys-alert-actions">
+            {isChunk ? (
+              <button
+                type="button"
+                className="sys-alert-btn is-solid"
+                onClick={() => window.location.reload()}
+              >
+                Tải lại trang
+              </button>
+            ) : (
+              <>
                 <button
                   type="button"
                   className="sys-alert-btn is-solid"
-                  onClick={() => window.location.reload()}
+                  disabled={checking}
+                  onClick={() => void checkSystemHealth()}
                 >
-                  Tải lại trang
+                  {checking ? "Đang thử lại…" : "Thử lại"}
                 </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="sys-alert-btn is-solid"
-                    disabled={checking}
-                    onClick={() => void checkSystemHealth()}
-                  >
-                    {checking ? "Đang thử lại…" : "Thử lại"}
-                  </button>
-                  <a href="tel:0366663778" className="sys-alert-btn is-ghost">
-                    Gọi hỗ trợ: 0366 663 778
-                  </a>
-                </>
-              )}
-            </div>
+                <a href="tel:0366663778" className="sys-alert-btn is-ghost">
+                  Gọi hỗ trợ: 0366 663 778
+                </a>
+              </>
+            )}
           </div>
         </div>
       );
@@ -136,14 +136,14 @@ function SystemAlertBannerInner() {
             </span>
             <strong className="sys-alert-title">{broadcastAlert.title}</strong>
             <p className="sys-alert-desc">{broadcastAlert.message}</p>
-            {isCritical && (
-              <div className="sys-alert-actions">
-                <a href="tel:0366663778" className="sys-alert-btn is-ghost">
-                  Gọi hỗ trợ: 0366 663 778
-                </a>
-              </div>
-            )}
           </div>
+          {isCritical && (
+            <div className="sys-alert-actions">
+              <a href="tel:0366663778" className="sys-alert-btn is-ghost">
+                Gọi hỗ trợ: 0366 663 778
+              </a>
+            </div>
+          )}
         </div>
       );
     }

@@ -342,51 +342,89 @@ function useCameraDialFade(
   containerRef?: React.RefObject<HTMLDivElement | null>,
 ) {
   const hasMountedRef = useRef(false);
+  const maxScrollRef = useRef<number | null>(null);
+  const lastFadeRef = useRef<{ over: boolean; l: string; r: string } | null>(null);
 
-  const syncOverflow = useCallback(() => {
+  const applyFadeValues = useCallback(
+    (el: HTMLDivElement, maxScroll: number) => {
+      const host = containerRef?.current ?? el;
+      const isOverflowing = maxScroll > 2;
+      let nextL = "0px";
+      let nextR = "0px";
+      if (isOverflowing) {
+        const scrollLeft = el.scrollLeft;
+        const leftRatio = Math.min(1, Math.max(0, scrollLeft) / 24);
+        const rightRatio = Math.min(1, Math.max(0, maxScroll - scrollLeft) / 24);
+        nextL = leftRatio >= 0.999 ? "var(--seg-fade)" : leftRatio <= 0.001 ? "0px" : `calc(var(--seg-fade) * ${leftRatio.toFixed(2)})`;
+        nextR = rightRatio >= 0.999 ? "var(--seg-fade)" : rightRatio <= 0.001 ? "0px" : `calc(var(--seg-fade) * ${rightRatio.toFixed(2)})`;
+      }
+      const prev = lastFadeRef.current;
+      if (!prev || prev.over !== isOverflowing) {
+        host.classList.toggle("has-edge-fade", isOverflowing);
+      }
+      if (!prev || prev.l !== nextL) {
+        host.style.setProperty("--seg-fade-l", nextL);
+      }
+      if (!prev || prev.r !== nextR) {
+        host.style.setProperty("--seg-fade-r", nextR);
+      }
+      lastFadeRef.current = { over: isOverflowing, l: nextL, r: nextR };
+    },
+    [containerRef],
+  );
+
+  const measureAndSync = useCallback(() => {
     const el = trackRef.current;
     if (!el) return;
-    const host = containerRef?.current ?? el;
     const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
-    const isOverflowing = maxScroll > 2;
-    host.classList.toggle("has-edge-fade", isOverflowing);
-    if (isOverflowing) {
-      const leftRatio = Math.min(1, Math.max(0, el.scrollLeft) / 24);
-      const rightRatio = Math.min(1, Math.max(0, maxScroll - el.scrollLeft) / 24);
-      host.style.setProperty("--seg-fade-l", `calc(var(--seg-fade) * ${leftRatio.toFixed(3)})`);
-      host.style.setProperty("--seg-fade-r", `calc(var(--seg-fade) * ${rightRatio.toFixed(3)})`);
-    } else {
-      host.style.setProperty("--seg-fade-l", "0px");
-      host.style.setProperty("--seg-fade-r", "0px");
-    }
-  }, [trackRef, containerRef]);
+    maxScrollRef.current = maxScroll;
+    applyFadeValues(el, maxScroll);
+  }, [trackRef, applyFadeValues]);
+
+  const syncScrollOnly = useCallback(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const maxScroll = maxScrollRef.current ?? Math.max(0, el.scrollWidth - el.clientWidth);
+    maxScrollRef.current = maxScroll;
+    applyFadeValues(el, maxScroll);
+  }, [trackRef, applyFadeValues]);
 
   useEffect(() => {
     const el = trackRef.current;
     if (!el) return;
 
-    let rafId = requestAnimationFrame(syncOverflow);
-    const scheduleSync = () => {
+    let rafId = requestAnimationFrame(measureAndSync);
+    const onScroll = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        syncScrollOnly();
+      });
+    };
+    const onResize = () => {
       if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(syncOverflow);
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        measureAndSync();
+      });
     };
 
-    el.addEventListener("scroll", scheduleSync, { passive: true });
+    el.addEventListener("scroll", onScroll, { passive: true });
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
-      ro = new ResizeObserver(scheduleSync);
+      ro = new ResizeObserver(onResize);
       ro.observe(el);
     } else {
-      window.addEventListener("resize", scheduleSync, { passive: true });
+      window.addEventListener("resize", onResize, { passive: true });
     }
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
-      el.removeEventListener("scroll", scheduleSync);
+      el.removeEventListener("scroll", onScroll);
       if (ro) ro.disconnect();
-      else window.removeEventListener("resize", scheduleSync);
+      else window.removeEventListener("resize", onResize);
     };
-  }, [trackRef, syncOverflow]);
+  }, [trackRef, measureAndSync, syncScrollOnly]);
 
   useEffect(() => {
     const el = trackRef.current;
@@ -400,7 +438,8 @@ function useCameraDialFade(
       if (!track) return;
       const scrollW = track.scrollWidth;
       const clientW = track.clientWidth;
-      const overflow = scrollW - clientW;
+      const overflow = Math.max(0, scrollW - clientW);
+      maxScrollRef.current = overflow;
 
       let scrollTarget: number | null = null;
       if (overflow > 2) {
@@ -414,16 +453,19 @@ function useCameraDialFade(
       }
 
       if (scrollTarget !== null && Math.abs(track.scrollLeft - scrollTarget) > 1) {
+        const preferInstant =
+          isFirst ||
+          (typeof document !== "undefined" && document.documentElement.dataset.perf === "lite");
         track.scrollTo({
           left: scrollTarget,
-          behavior: isFirst ? "auto" : "smooth",
+          behavior: preferInstant ? "auto" : "smooth",
         });
       }
-      syncOverflow();
+      applyFadeValues(track, overflow);
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [activeKey, trackRef, syncOverflow]);
+  }, [activeKey, trackRef, applyFadeValues]);
 }
 
 /** Thanh chứa các nút tab con với hiệu ứng mờ dần cố định ở 2 cạnh dock. */

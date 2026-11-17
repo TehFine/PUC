@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Download, QrCode } from "@/components/ui/PublicIcon";
-import QRCode from "qrcode";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
+import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, AUTH_SCOPE_CHANGED_EVENT } from "@/lib/api-client";
 import { formatKg, HARVEST_STATUS } from "@/lib/portal-labels";
 import { triggerDataUrlDownload } from "@/utils/download";
 import { formatDate } from "@/utils/format";
@@ -12,6 +12,16 @@ import { Sheet } from "../ui";
 
 const MAX_QR_CACHE = 64;
 const qrDataUrlCache = new Map<string, string>();
+
+const clearQrDataUrlCache = () => {
+  qrDataUrlCache.clear();
+};
+
+if (typeof window !== "undefined") {
+  window.addEventListener(AUTH_LOGOUT_EVENT, clearQrDataUrlCache);
+  window.addEventListener(AUTH_EXPIRED_EVENT, clearQrDataUrlCache);
+  window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, clearQrDataUrlCache);
+}
 
 function setQrCacheEntry(key: string, url: string) {
   if (qrDataUrlCache.has(key)) {
@@ -89,15 +99,18 @@ export function HarvestAssetTagCard({
         : "https://krongbuk.puc.vn";
     const targetUrl = `${origin}${routePrefix}${encodeURIComponent(tokenOrCode)}`;
 
-    QRCode.toDataURL(targetUrl, {
-      margin: 1,
-      width: 320,
-      color: {
-        dark: "#000000",
-        light: "#ffffff",
-      },
-      errorCorrectionLevel: "Q",
-    })
+    void import("qrcode")
+      .then((mod) =>
+        mod.default.toDataURL(targetUrl, {
+          margin: 1,
+          width: 320,
+          color: {
+            dark: "#000000",
+            light: "#ffffff",
+          },
+          errorCorrectionLevel: "Q",
+        }),
+      )
       .then((url) => {
         setQrCacheEntry(codeKey, url);
         if (active) setAsyncQr({ key: codeKey, url });
@@ -208,12 +221,15 @@ function TicketQrImage({
         : "https://krongbuk.puc.vn";
     const targetUrl = `${origin}${routePrefix}${encodeURIComponent(tokenOrCode)}`;
 
-    QRCode.toDataURL(targetUrl, {
-      margin: 1,
-      width: 320,
-      color: { dark: "#000000", light: "#ffffff" },
-      errorCorrectionLevel: "Q",
-    })
+    void import("qrcode")
+      .then((mod) =>
+        mod.default.toDataURL(targetUrl, {
+          margin: 1,
+          width: 320,
+          color: { dark: "#000000", light: "#ffffff" },
+          errorCorrectionLevel: "Q",
+        }),
+      )
       .then((url) => {
         setQrCacheEntry(codeKey, url);
         if (active) setSrc(url);
@@ -253,6 +269,8 @@ export function HarvestLotQrModal({
                   alt="Tem hợp lệ"
                   width={28}
                   height={28}
+                  loading="lazy"
+                  decoding="async"
                   className="pt-ticket-check-icon"
                 />
               </div>

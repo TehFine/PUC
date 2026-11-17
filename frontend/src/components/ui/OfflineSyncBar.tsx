@@ -11,6 +11,7 @@ import {
   triggerOfflineSyncNow,
   useOfflineSyncState,
 } from "@/lib/offline-sync";
+import { isSafeMediaUrl, isSafeRasterDataUrl } from "@/utils/url-safety";
 
 function formatSyncTimestamp(iso: string): string {
   try {
@@ -43,9 +44,18 @@ function LocalSlotPreview({ slot }: { slot: OfflineMediaSlot }) {
     };
   }, [blobUrl]);
 
-  const imgSrc = blobUrl ?? (!slot.isVideo && slot.uploadedUrl ? slot.uploadedUrl : null);
+  const imgSrc =
+    blobUrl ?? (!slot.isVideo && isSafeMediaUrl(slot.uploadedUrl) ? slot.uploadedUrl : null);
 
   if (slot.isVideo) {
+    if (isSafeRasterDataUrl(slot.posterDataUrl)) {
+      return (
+        <div className="offline-thumb-box" title={slot.fileName}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={slot.posterDataUrl} alt={slot.fileName} className="offline-thumb-img" loading="lazy" decoding="async" />
+        </div>
+      );
+    }
     return (
       <div className="offline-thumb-box is-video" title={slot.fileName}>
         <span>VIDEO</span>

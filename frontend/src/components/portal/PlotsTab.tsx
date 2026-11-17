@@ -4,11 +4,12 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { QrCode } from "@/components/ui/PublicIcon";
 import { usePortal } from "@/hooks/use-portal";
+import { lazyChunk } from "@/lib/lazy-chunk";
 import type { PortalOverview, PortalPlot, PortalPlots } from "@/types/portal";
 import { EmptyState, StateBlock } from "./ui";
 
-const GardenSignboardModal = dynamic(() => import("./GardenSignboardModal"), { ssr: false });
-const PlotMapModal = dynamic(() => import("./PlotMapModal"), { ssr: false });
+const GardenSignboardModal = dynamic(() => lazyChunk(() => import("./GardenSignboardModal")), { ssr: false });
+const PlotMapModal = dynamic(() => lazyChunk(() => import("./PlotMapModal")), { ssr: false });
 
 export default function PlotsTab() {
   const plots = usePortal<PortalPlots>("plots");
@@ -81,6 +82,8 @@ export default function PlotsTab() {
                     alt=""
                     width={26}
                     height={26}
+                    loading="lazy"
+                    decoding="async"
                     className="pt-plot-trifold-icon"
                     aria-hidden="true"
                   />

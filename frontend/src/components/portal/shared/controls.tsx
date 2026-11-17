@@ -3,19 +3,305 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 import { AppleSpinner } from "@/components/ui/Skeleton";
-import type { UploadPurpose } from "@/lib/api-client";
+import {
+  AUTH_EXPIRED_EVENT,
+  AUTH_LOGOUT_EVENT,
+  AUTH_SCOPE_CHANGED_EVENT,
+  api,
+  type UploadPurpose,
+} from "@/lib/api-client";
+import { getNetworkQualitySnapshot, isLowEndDevice } from "@/lib/network";
+import { isDeviceOfflineNow, type OfflineMediaSlot } from "@/lib/offline-sync";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 import {
+  ALLOWED_IMAGE_MIMES,
+  computeBlobSha256Hex,
+  encodedImageName,
   formatBytesCompact,
   inspectVideoFile,
+  isSupportedImageFile,
   isSupportedVideoFile,
   purposeAllowsVideo,
   uploadOptimizedFile,
-  uploadPortalFile,
   validatePickedFile,
 } from "./media";
 
 export { isSafeMediaUrl };
+
+let cachedControlsWebpSupport: boolean | null = null;
+
+function canEncodeWebp(): boolean {
+  if (cachedControlsWebpSupport !== null) return cachedControlsWebpSupport;
+  if (typeof document === "undefined") return false;
+  let probe: HTMLCanvasElement | null = null;
+  try {
+    probe = document.createElement("canvas");
+    probe.width = 2;
+    probe.height = 2;
+    const url = probe.toDataURL("image/webp", 0.75);
+    cachedControlsWebpSupport = url.startsWith("data:image/webp");
+    return cachedControlsWebpSupport;
+  } catch {
+    cachedControlsWebpSupport = false;
+    return false;
+  } finally {
+    if (probe) {
+      probe.width = 1;
+      probe.height = 1;
+      probe.width = 0;
+      probe.height = 0;
+    }
+  }
+}
+
+function canvasToBlobAsync(canvas: HTMLCanvasElement, mime: string, quality: number): Promise<Blob | null> {
+  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mime, quality));
+}
+
+async function decodeImageSingleLowRam(
+  file: Blob,
+  maxDimension: number,
+): Promise<{ source: CanvasImageSource; width: number; height: number; release: () => void }> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+      if (scale < 1) {
+        const targetW = Math.max(1, Math.round(bitmap.width * scale));
+        const targetH = Math.max(1, Math.round(bitmap.height * scale));
+        try {
+          const resized = await createImageBitmap(bitmap, {
+            resizeWidth: targetW,
+            resizeHeight: targetH,
+            resizeQuality: "medium",
+          });
+          bitmap.close?.();
+          return {
+            source: resized,
+            width: resized.width,
+            height: resized.height,
+            release: () => resized.close?.(),
+          };
+        } catch {
+          // Trình duyệt không hỗ trợ resizeWidth/resizeHeight: thu nhỏ trên canvas bên dưới rồi đóng bitmap ngay.
+        }
+      }
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        release: () => bitmap.close?.(),
+      };
+    } catch {
+      // Lùi về thẻ Image trên Android WebView / Safari đời cũ.
+    }
+  }
+
+  const tempUrl = URL.createObjectURL(file);
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      URL.revokeObjectURL(tempUrl);
+      resolve(img);
+    };
+    img.onerror = (err) => {
+      URL.revokeObjectURL(tempUrl);
+      reject(err);
+    };
+    img.src = tempUrl;
+  });
+
+  return {
+    source: image,
+    width: image.naturalWidth || image.width,
+    height: image.naturalHeight || image.height,
+    release: () => {
+      image.src = "";
+    },
+  };
+}
+
+/**
+ * Nén tuần tự 1 ảnh hiện trường với mức tiêu thụ RAM tối thiểu cho điện thoại 2–3 GB RAM:
+ * - Thiết bị yếu (`isLowEndDevice()`): cạnh dài tối đa 1280px, chất lượng 0.78.
+ * - Thiết bị khá: cạnh dài tối đa 1440px, chất lượng 0.80.
+ * - Thu hồi `blob:` URL ngay trong `onload`, đóng `ImageBitmap` ngay sau `drawImage`,
+ *   và thu nhỏ `<canvas>` về `1x1` rồi `0x0` ngay sau `toBlob()` để giải phóng bộ nhớ GPU tức thì.
+ */
+export async function compressImageLowRamSequential(file: File): Promise<File> {
+  if (!isSupportedImageFile(file)) return file;
+  const lowEnd = isLowEndDevice();
+  const weakNet = getNetworkQualitySnapshot() !== "good";
+  const maxDimension = weakNet ? 1080 : lowEnd ? 1280 : 1440;
+  const primaryQuality = weakNet ? 0.7 : lowEnd ? 0.78 : 0.8;
+  const secondPassThreshold = weakNet ? 190 * 1024 : lowEnd ? 240 * 1024 : 340 * 1024;
+  const secondPassQuality = weakNet ? 0.56 : lowEnd ? 0.62 : 0.66;
+  const targetMime = canEncodeWebp() ? "image/webp" : "image/jpeg";
+
+  let canvas: HTMLCanvasElement | null = null;
+  let ctx: CanvasRenderingContext2D | null = null;
+  try {
+    const { source, width, height, release } = await decodeImageSingleLowRam(file, maxDimension);
+    const scale = Math.min(1, maxDimension / Math.max(width || 1, height || 1));
+    const targetW = Math.max(1, Math.round((width || 1) * scale));
+    const targetH = Math.max(1, Math.round((height || 1) * scale));
+
+    canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) {
+      release();
+      return file;
+    }
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, targetW, targetH);
+    try {
+      ctx.drawImage(source, 0, 0, targetW, targetH);
+    } finally {
+      // Giải phóng bitmap giải mã ngay lập tức trước cả khi mã hóa sang WebP/JPEG
+      release();
+    }
+
+    let blob = await canvasToBlobAsync(canvas, targetMime, primaryQuality);
+    if (!blob || (targetMime === "image/webp" && blob.type !== "image/webp")) {
+      blob = await canvasToBlobAsync(canvas, "image/jpeg", primaryQuality);
+    }
+    if (!blob) return file;
+
+    if (blob.size > secondPassThreshold) {
+      const tighter = await canvasToBlobAsync(canvas, blob.type || "image/jpeg", secondPassQuality);
+      if (tighter && tighter.size < blob.size) {
+        blob = tighter;
+      }
+    }
+
+    if (blob.size >= file.size && ALLOWED_IMAGE_MIMES.has(file.type)) {
+      return file;
+    }
+
+    const nextMime = blob.type || "image/jpeg";
+    const nextName = encodedImageName(file.name, nextMime);
+    return new File([blob], nextName, {
+      type: nextMime,
+      lastModified: file.lastModified,
+    });
+  } catch {
+    return file;
+  } finally {
+    if (canvas) {
+      canvas.width = 1;
+      canvas.height = 1;
+      ctx?.clearRect(0, 0, 1, 1);
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+  }
+}
+
+/**
+ * Hook dựng dần (windowed progressive rendering) cho danh sách dài (thuốc BVTV, phân bón, sâu bệnh, nhật ký):
+ * - Lần đầu mở tab hoặc đổi bộ lọc chỉ gắn `initialBatch` (16) thẻ vào DOM (< 12ms trên máy cũ).
+ * - Khi người dùng cuộn gần cuối (`rootMargin: "320px"`), tự động nối thêm `step` (16) thẻ mượt mà.
+ * - Toàn bộ tìm kiếm và đếm số lượng vẫn chạy trên 100% tập dữ liệu trong bộ nhớ.
+ */
+export function useProgressiveCount(
+  totalCount: number,
+  initialBatch = 16,
+  step = 16,
+  resetKey = "",
+) {
+  const [windowState, setWindowState] = useState<{ key: string; count: number }>(() => ({
+    key: resetKey,
+    count: initialBatch,
+  }));
+
+  const rawCount = windowState.key === resetKey ? windowState.count : initialBatch;
+  const visibleCount = Math.min(totalCount, rawCount);
+  const hasMore = visibleCount < totalCount;
+  const remainingCount = Math.max(0, totalCount - visibleCount);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const showMore = useCallback(() => {
+    setWindowState((prev) => {
+      const base = prev.key === resetKey ? prev.count : initialBatch;
+      const next = Math.min(totalCount, base + step);
+      if (prev.key === resetKey && prev.count === next) return prev;
+      return { key: resetKey, count: next };
+    });
+  }, [initialBatch, resetKey, step, totalCount]);
+
+  useEffect(() => {
+    if (!hasMore) return;
+    const el = sentinelRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          showMore();
+        }
+      },
+      { rootMargin: "320px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, showMore, visibleCount]);
+
+  return {
+    visibleCount,
+    hasMore,
+    remainingCount,
+    sentinelRef,
+    showMore,
+  };
+}
+
+export function ProgressiveListFooter({
+  hasMore,
+  remainingCount,
+  sentinelRef,
+  onShowMore,
+  unitLabel = "mục",
+}: {
+  hasMore: boolean;
+  remainingCount: number;
+  sentinelRef: React.RefObject<HTMLDivElement | null>;
+  onShowMore: () => void;
+  unitLabel?: string;
+}) {
+  if (!hasMore) return null;
+  return (
+    <div
+      ref={sentinelRef}
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        padding: "10px 0 4px",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onShowMore}
+        style={{
+          minHeight: 38,
+          padding: "7px 16px",
+          borderRadius: 6,
+          border: "1px solid #d4d4d2",
+          background: "#ffffff",
+          color: "#14372f",
+          fontSize: 13,
+          fontWeight: 600,
+          fontVariantNumeric: "tabular-nums",
+          cursor: "pointer",
+        }}
+      >
+        Xem thêm (còn {remainingCount} {unitLabel})
+      </button>
+    </div>
+  );
+}
 
 export function isVideoMediaUrl(url: string): boolean {
   return /\.(mp4|webm|mov|m4v|3gp)(\?|$)/i.test(url);
@@ -162,6 +448,7 @@ export function usePhotoPicker(purpose: UploadPurpose) {
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const uploaded = useRef<{ file: File; id: number } | null>(null);
+  const precompressedRef = useRef<boolean>(false);
   const allowVideo = purposeAllowsVideo(purpose);
 
   useEffect(() => {
@@ -187,19 +474,24 @@ export function usePhotoPicker(purpose: UploadPurpose) {
             return;
           }
           setError(null);
+          precompressedRef.current = false;
           setFile(next);
           setPreview(meta.posterUrl ?? URL.createObjectURL(next));
         });
         return;
       }
-      setError(null);
-      setFile(next);
-      setPreview(URL.createObjectURL(next));
+      void compressImageLowRamSequential(next).then((compressedFile) => {
+        setError(null);
+        precompressedRef.current = true;
+        setFile(compressedFile);
+        setPreview(URL.createObjectURL(compressedFile));
+      });
     },
     [allowVideo],
   );
 
   const clear = useCallback(() => {
+    precompressedRef.current = false;
     setFile(null);
     setPreview(null);
     setError(null);
@@ -209,9 +501,11 @@ export function usePhotoPicker(purpose: UploadPurpose) {
   const ensureUploaded = useCallback(async (): Promise<number | undefined> => {
     if (!file) return undefined;
     if (uploaded.current?.file === file) return uploaded.current.id;
-    const id = await uploadPortalFile(file, purpose);
-    uploaded.current = { file, id };
-    return id;
+    const res = precompressedRef.current
+      ? await api.upload(file, purpose, file.name)
+      : await uploadOptimizedFile(file, purpose);
+    uploaded.current = { file, id: res.id };
+    return res.id;
   }, [file, purpose]);
 
   return { file, preview, error, pick, clear, ensureUploaded };
@@ -246,7 +540,7 @@ export function PhotoField({
           {label}
         </label>
         <span className={required ? "pt-journal-photo-required" : "pt-photo-optional"}>
-          {required ? "Bắt buộc" : "Không bắt buộc"}
+          {required ? "Bắt buộc *" : "Không bắt buộc"}
         </span>
       </div>
 
@@ -327,9 +621,14 @@ export interface MultiMediaItem {
   isVideo: boolean;
   sizeBytes?: number;
   durationSec?: number | null;
+  posterDataUrl?: string | null;
   previewUrl: string | null;
   revokeOnCleanup: boolean;
   file?: File;
+  blob?: Blob;
+  precompressed?: boolean;
+  sha256?: string;
+  bgStatus?: "local" | "uploading" | "uploaded";
   uploadedId?: number;
   uploadedUrl?: string;
 }
@@ -338,49 +637,181 @@ export interface UseMultiPhotoPickerOptions {
   maxFiles?: number;
   allowVideo?: boolean;
   initialItems?: Array<{ id: number; url: string }>;
+  initialDraftSlots?: OfflineMediaSlot[];
+  /** Tự động tải nền êm ái từng ảnh đã nén ngay khi người dùng còn đang điền biểu mẫu (mặc định bật). */
+  enableBackgroundUpload?: boolean;
+}
+
+function buildInitialPickerItems(options: UseMultiPhotoPickerOptions): MultiMediaItem[] {
+  if (options.initialDraftSlots && options.initialDraftSlots.length > 0) {
+    return options.initialDraftSlots.map((slot, idx) => {
+      let previewUrl: string | null = null;
+      let revokeOnCleanup = false;
+      if (slot.isVideo) {
+        previewUrl = slot.posterDataUrl ?? null;
+      } else if (slot.blob && typeof URL !== "undefined") {
+        previewUrl = URL.createObjectURL(slot.blob);
+        revokeOnCleanup = true;
+      } else if (slot.uploadedUrl && isSafeMediaUrl(slot.uploadedUrl)) {
+        previewUrl = slot.uploadedUrl;
+      }
+      const fileObj =
+        slot.blob && typeof File !== "undefined"
+          ? new File([slot.blob], slot.fileName || `anh-${idx + 1}.webp`, {
+              type: slot.mimeType || (slot.isVideo ? "video/mp4" : "image/webp"),
+            })
+          : undefined;
+      return {
+        key: `draft-slot-${idx}-${slot.sha256 ?? slot.fileName}-${Math.random().toString(36).slice(2, 6)}`,
+        name: slot.fileName || (slot.isVideo ? `Video hiện trường #${idx + 1}` : `Ảnh hiện trường #${idx + 1}`),
+        isVideo: slot.isVideo,
+        sizeBytes: slot.sizeBytes || slot.blob?.size,
+        durationSec: slot.durationSec ?? null,
+        posterDataUrl: slot.posterDataUrl ?? null,
+        previewUrl,
+        revokeOnCleanup,
+        file: fileObj,
+        blob: slot.blob,
+        precompressed: !slot.isVideo,
+        sha256: slot.sha256,
+        bgStatus: slot.uploadedId ? "uploaded" : "local",
+        uploadedId: slot.uploadedId,
+        uploadedUrl: slot.uploadedUrl,
+      };
+    });
+  }
+
+  return (options.initialItems ?? [])
+    .filter((it) => Number.isInteger(it.id) && it.id > 0 && isSafeMediaUrl(it.url))
+    .map((it, idx) => ({
+      key: `existing-${it.id}-${idx}`,
+      name: isVideoMediaUrl(it.url) ? `Video hiện trường #${idx + 1}` : `Ảnh hiện trường #${idx + 1}`,
+      isVideo: isVideoMediaUrl(it.url),
+      previewUrl: isVideoMediaUrl(it.url) ? null : it.url,
+      revokeOnCleanup: false,
+      bgStatus: "uploaded" as const,
+      uploadedId: it.id,
+      uploadedUrl: it.url,
+    }));
 }
 
 /**
  * Quản lý nhiều ảnh hiện trường (và tùy chọn video ngắn):
  * - Tách riêng nút "Chụp ảnh" (mở thẳng camera sau, bấm nhiều lần để chụp nhiều góc cây/trái)
  *   và nút "Chọn nhiều ảnh" (chọn hàng loạt từ thư viện điện thoại).
- * - Video tự động kiểm tra thời lượng <= 90s, trích 1 khung hình ~12 KB làm ảnh đại diện để không ngốn RAM.
- * - Khi lưu: nén WebP 2 bước và tải lên tối đa 2 luồng đồng thời, nhớ ID các tệp đã tải thành công nếu mạng chập chờn.
+ * - Ảnh được nén tuần tự từng tấm ngay khi chọn (không bao giờ giải mã hàng loạt ảnh 12MP–48MP song song),
+ *   giải phóng canvas 1x1 -> 0x0 và đóng ImageBitmap tức thì để điện thoại 2GB RAM không bao giờ văng ứng dụng.
+ * - Tự động tải trước từng ảnh lên máy chủ ở nền ngay trong lúc người dùng đang nhập thông tin; nếu ở ngoài rẫy
+ *   mất sóng thì giữ nguyên tệp WebP đã nén trong máy mà không bao giờ báo lỗi làm gián đoạn.
  */
 export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPhotoPickerOptions = {}) {
   const maxFiles = options.maxFiles ?? 8;
   const allowVideo = options.allowVideo ?? purposeAllowsVideo(purpose);
+  const enableBackgroundUpload = options.enableBackgroundUpload ?? true;
 
-  const [items, setItems] = useState<MultiMediaItem[]>(() =>
-    (options.initialItems ?? [])
-      .filter((it) => Number.isInteger(it.id) && it.id > 0 && isSafeMediaUrl(it.url))
-      .map((it, idx) => ({
-        key: `existing-${it.id}-${idx}`,
-        name: isVideoMediaUrl(it.url) ? `Video hiện trường #${idx + 1}` : `Ảnh hiện trường #${idx + 1}`,
-        isVideo: isVideoMediaUrl(it.url),
-        previewUrl: isVideoMediaUrl(it.url) ? null : it.url,
-        revokeOnCleanup: false,
-        uploadedId: it.id,
-        uploadedUrl: it.url,
-      })),
-  );
+  const [items, setItems] = useState<MultiMediaItem[]>(() => buildInitialPickerItems(options));
   const [error, setError] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState<{ done: number; total: number } | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const itemsRef = useRef<MultiMediaItem[]>(items);
+  const bgRunningRef = useRef(false);
+  const bgFailedKeysRef = useRef<Set<string>>(new Set());
+  const bgAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
 
+  const pumpBackgroundUpload = useCallback(async () => {
+    if (!enableBackgroundUpload || bgRunningRef.current || isDeviceOfflineNow()) return;
+    bgRunningRef.current = true;
+    try {
+      while (!isDeviceOfflineNow()) {
+        const candidate = itemsRef.current.find(
+          (it) =>
+            !it.uploadedId &&
+            !it.isVideo &&
+            Boolean(it.file) &&
+            !bgFailedKeysRef.current.has(it.key),
+        );
+        if (!candidate?.file) break;
+
+        const targetKey = candidate.key;
+        setItems((prev) =>
+          prev.map((it) => (it.key === targetKey && !it.uploadedId ? { ...it, bgStatus: "uploading" } : it)),
+        );
+
+        const controller = new AbortController();
+        bgAbortRef.current = controller;
+        const timer = window.setTimeout(() => controller.abort(), 14_000);
+        try {
+          const sha = candidate.sha256 ?? (await computeBlobSha256Hex(candidate.file));
+          const res = await api.upload(candidate.file, purpose, candidate.file.name, {
+            sha256: sha,
+            signal: controller.signal,
+          });
+          if (!itemsRef.current.some((it) => it.key === targetKey)) continue;
+          const nextList = itemsRef.current.map((it) =>
+            it.key === targetKey
+              ? {
+                  ...it,
+                  sha256: sha ?? it.sha256,
+                  uploadedId: res.id,
+                  uploadedUrl: res.url,
+                  bgStatus: "uploaded" as const,
+                }
+              : it,
+          );
+          itemsRef.current = nextList;
+          setItems(nextList);
+        } catch {
+          // Mạng ngoài rẫy yếu hoặc đứt quãng: lặng lẽ trả về trạng thái lưu trong máy, chờ bấm Lưu hoặc có sóng lại.
+          bgFailedKeysRef.current.add(targetKey);
+          if (itemsRef.current.some((it) => it.key === targetKey)) {
+            const resetList = itemsRef.current.map((it) =>
+              it.key === targetKey && !it.uploadedId ? { ...it, bgStatus: "local" as const } : it,
+            );
+            itemsRef.current = resetList;
+            setItems(resetList);
+          }
+          break;
+        } finally {
+          window.clearTimeout(timer);
+          if (bgAbortRef.current === controller) bgAbortRef.current = null;
+        }
+      }
+    } finally {
+      bgRunningRef.current = false;
+    }
+  }, [enableBackgroundUpload, purpose]);
+
   useEffect(() => {
+    const abortBg = () => {
+      bgAbortRef.current?.abort();
+      bgAbortRef.current = null;
+    };
+    const onOnline = () => {
+      bgFailedKeysRef.current.clear();
+      void pumpBackgroundUpload();
+    };
+    window.addEventListener("online", onOnline);
+    window.addEventListener(AUTH_LOGOUT_EVENT, abortBg);
+    window.addEventListener(AUTH_EXPIRED_EVENT, abortBg);
+    window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, abortBg);
+    void pumpBackgroundUpload();
     return () => {
+      abortBg();
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener(AUTH_LOGOUT_EVENT, abortBg);
+      window.removeEventListener(AUTH_EXPIRED_EVENT, abortBg);
+      window.removeEventListener(AUTH_SCOPE_CHANGED_EVENT, abortBg);
       for (const item of itemsRef.current) {
         if (item.revokeOnCleanup && item.previewUrl) {
           URL.revokeObjectURL(item.previewUrl);
         }
       }
     };
-  }, []);
+  }, [pumpBackgroundUpload]);
 
   const addFiles = useCallback(
     async (fileList: FileList | File[] | null | undefined) => {
@@ -395,58 +826,95 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
       }
 
       const remainingSlots = maxFiles - currentCount;
-      const accepted: MultiMediaItem[] = [];
+      const batch = incoming.slice(0, remainingSlots);
       let lastProblem: string | null = null;
 
       if (incoming.length > remainingSlots) {
         lastProblem = `Chỉ thêm được tối đa ${maxFiles} tệp (đã lấy ${remainingSlots} tệp đầu tiên).`;
       }
 
-      for (const file of incoming.slice(0, remainingSlots)) {
-        const problem = validatePickedFile(file, { allowVideo });
-        if (problem) {
-          lastProblem = `${file.name}: ${problem}`;
-          continue;
-        }
-        const video = isSupportedVideoFile(file);
-        if (video) {
-          const meta = await inspectVideoFile(file);
-          if (meta.error) {
-            lastProblem = `${file.name}: ${meta.error}`;
+      const totalBatch = batch.length;
+      if (totalBatch > 1) {
+        setCompressing({ done: 0, total: totalBatch });
+      }
+
+      try {
+        // Nén tuần tự từng tệp một (tuyệt đối không Promise.all) để giữ đỉnh bộ nhớ RAM thấp nhất trên điện thoại cũ
+        let processed = 0;
+        for (const rawFile of batch) {
+          const problem = validatePickedFile(rawFile, { allowVideo });
+          if (problem) {
+            lastProblem = `${rawFile.name}: ${problem}`;
+            processed += 1;
+            if (totalBatch > 1) setCompressing({ done: processed, total: totalBatch });
             continue;
           }
-          accepted.push({
-            key: `vid-${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
-            name: file.name,
-            isVideo: true,
-            sizeBytes: file.size,
-            durationSec: meta.durationSec,
-            previewUrl: meta.posterUrl,
-            revokeOnCleanup: false,
-            file,
-          });
-        } else {
-          const blobUrl = URL.createObjectURL(file);
-          accepted.push({
-            key: `img-${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
-            name: file.name,
-            isVideo: false,
-            sizeBytes: file.size,
-            previewUrl: blobUrl,
-            revokeOnCleanup: true,
-            file,
-          });
+
+          if (isSupportedVideoFile(rawFile)) {
+            const meta = await inspectVideoFile(rawFile);
+            if (meta.error) {
+              lastProblem = `${rawFile.name}: ${meta.error}`;
+              processed += 1;
+              if (totalBatch > 1) setCompressing({ done: processed, total: totalBatch });
+              continue;
+            }
+            const sha256 = rawFile.size <= 20 * 1024 * 1024 ? await computeBlobSha256Hex(rawFile) : undefined;
+            const nextItem: MultiMediaItem = {
+              key: `vid-${rawFile.name}-${rawFile.size}-${rawFile.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
+              name: rawFile.name,
+              isVideo: true,
+              sizeBytes: rawFile.size,
+              durationSec: meta.durationSec,
+              posterDataUrl: meta.posterUrl,
+              previewUrl: meta.posterUrl,
+              revokeOnCleanup: false,
+              file: rawFile,
+              blob: rawFile,
+              sha256,
+              bgStatus: "local",
+            };
+            if (itemsRef.current.length < maxFiles) {
+              const nextList = [...itemsRef.current, nextItem].slice(0, maxFiles);
+              itemsRef.current = nextList;
+              setItems(nextList);
+            }
+          } else {
+            const compressedFile = await compressImageLowRamSequential(rawFile);
+            const sha256 = await computeBlobSha256Hex(compressedFile);
+            const blobUrl = URL.createObjectURL(compressedFile);
+            const nextItem: MultiMediaItem = {
+              key: `img-${rawFile.name}-${rawFile.size}-${rawFile.lastModified}-${Math.random().toString(36).slice(2, 7)}`,
+              name: rawFile.name,
+              isVideo: false,
+              sizeBytes: compressedFile.size,
+              previewUrl: blobUrl,
+              revokeOnCleanup: true,
+              file: compressedFile,
+              blob: compressedFile,
+              precompressed: true,
+              sha256,
+              bgStatus: "local",
+            };
+            if (itemsRef.current.length < maxFiles) {
+              const nextList = [...itemsRef.current, nextItem].slice(0, maxFiles);
+              itemsRef.current = nextList;
+              setItems(nextList);
+              void pumpBackgroundUpload();
+            } else {
+              URL.revokeObjectURL(blobUrl);
+            }
+          }
+
+          processed += 1;
+          if (totalBatch > 1) setCompressing({ done: processed, total: totalBatch });
         }
+      } finally {
+        setCompressing(null);
       }
 
       setError(lastProblem);
-      if (accepted.length > 0) {
-        const nextList = [...itemsRef.current, ...accepted].slice(0, maxFiles);
-        itemsRef.current = nextList;
-        setItems(nextList);
-      }
     },
-    [allowVideo, maxFiles],
+    [allowVideo, maxFiles, pumpBackgroundUpload],
   );
 
   const removeKey = useCallback((key: string) => {
@@ -469,12 +937,13 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
     itemsRef.current = [];
     setItems([]);
     setError(null);
+    setCompressing(null);
     setProgress(null);
   }, []);
 
   /**
-   * Nén WebP + tải lên tuần tự/song song có kiểm soát (tối đa 2 luồng) cho các tệp chưa tải,
-   * trả về danh sách ID đã tải lên theo đúng thứ tự người dùng chọn.
+   * Tải lên tuần tự trên máy yếu / mạng chậm (hoặc tối đa 2 luồng mạng khi ảnh đã nén sẵn trên máy mạnh),
+   * không bao giờ giải mã đồng thời nhiều ảnh trên bộ nhớ.
    */
   const ensureUploadedAll = useCallback(async (): Promise<number[]> => {
     const snapshot = itemsRef.current;
@@ -497,6 +966,8 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
     setProgress({ done: 0, total });
 
     const uploadedByKey = new Map<string, { id: number; url: string }>();
+    const allPrecompressed = pendingIndices.every((i) => snapshot[i]?.precompressed || snapshot[i]?.isVideo);
+    const maxConcurrency = isLowEndDevice() || !allPrecompressed ? 1 : Math.min(2, pendingIndices.length);
 
     async function worker() {
       while (true) {
@@ -505,7 +976,17 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
         if (step >= pendingIndices.length) return;
         const item = snapshot[pendingIndices[step]];
         if (!item?.file) continue;
-        const res = await uploadOptimizedFile(item.file, purpose);
+        let res: { id: number; url: string };
+        if (item.precompressed || item.isVideo) {
+          const sha = item.sha256 ?? (await computeBlobSha256Hex(item.file));
+          res = await api.upload(item.file, purpose, item.file.name, { sha256: sha });
+        } else {
+          const compressed = isSupportedImageFile(item.file)
+            ? await compressImageLowRamSequential(item.file)
+            : item.file;
+          const sha = await computeBlobSha256Hex(compressed);
+          res = await api.upload(compressed, purpose, compressed.name, { sha256: sha });
+        }
         uploadedByKey.set(item.key, { id: res.id, url: res.url });
         done += 1;
         setProgress({ done, total });
@@ -513,7 +994,7 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
     }
 
     try {
-      const workers = Array.from({ length: Math.min(2, pendingIndices.length) }, () => worker());
+      const workers = Array.from({ length: maxConcurrency }, () => worker());
       await Promise.all(workers);
 
       const merged = snapshot.map((it) => {
@@ -547,6 +1028,7 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
     maxFiles,
     allowVideo,
     error,
+    compressing,
     progress,
     setUploadProgress: setProgress,
     addFiles,
@@ -598,7 +1080,7 @@ export function MultiPhotoField({
           {picker.count > 0
             ? `${picker.count}/${picker.maxFiles} tệp`
             : required
-              ? "Bắt buộc"
+              ? "Bắt buộc *"
               : "Không bắt buộc"}
         </span>
       </div>
@@ -639,12 +1121,14 @@ export function MultiPhotoField({
               <div className="pt-multi-media-foot">
                 <span className="pt-multi-media-meta" style={{ fontVariantNumeric: "tabular-nums" }}>
                   {item.uploadedId
-                    ? "Đã tải lên"
-                    : item.sizeBytes
-                      ? item.isVideo
-                        ? formatBytesCompact(item.sizeBytes)
-                        : `${formatBytesCompact(item.sizeBytes)} (tự nén)`
-                      : "Sẵn sàng"}
+                    ? "Đã tải sẵn"
+                    : item.bgStatus === "uploading"
+                      ? "Đang tải nền..."
+                      : item.sizeBytes
+                        ? item.isVideo
+                          ? `${formatBytesCompact(item.sizeBytes)}, lưu máy`
+                          : `${formatBytesCompact(item.sizeBytes)}, lưu máy`
+                        : "Lưu trong máy"}
                 </span>
                 <button
                   type="button"
@@ -708,6 +1192,12 @@ export function MultiPhotoField({
               <span>{videoLabel}</span>
             </label>
           )}
+        </div>
+      )}
+
+      {picker.compressing && !picker.progress && (
+        <div className="pt-multi-media-progress" role="status" style={{ fontVariantNumeric: "tabular-nums" }}>
+          Đang nén tuần tự ảnh {picker.compressing.done}/{picker.compressing.total} để tiết kiệm bộ nhớ...
         </div>
       )}
 

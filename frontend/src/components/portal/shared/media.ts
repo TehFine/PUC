@@ -1,7 +1,7 @@
 "use client";
 
 import { api, type UploadedFile, type UploadPurpose } from "@/lib/api-client";
-import { isLowEndDevice } from "@/lib/network";
+import { getNetworkQualitySnapshot, isLowEndDevice } from "@/lib/network";
 
 /** Tập định dạng ảnh raster an toàn được phép chọn và tải lên (chặn SVG, GIF, HTML giả mạo). */
 export const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -134,10 +134,11 @@ export async function compressImage(file: File): Promise<Blob> {
     throw new Error("Định dạng ảnh không được hỗ trợ. Chỉ nhận JPG, PNG hoặc WEBP.");
   }
   const lowEnd = isLowEndDevice();
-  const maxDimension = lowEnd ? LITE_MAX_DIMENSION : FULL_MAX_DIMENSION;
-  const primaryQuality = lowEnd ? LITE_PRIMARY_QUALITY : FULL_PRIMARY_QUALITY;
-  const secondPassThreshold = lowEnd ? LITE_SECOND_PASS_THRESHOLD : FULL_SECOND_PASS_THRESHOLD;
-  const secondPassQuality = lowEnd ? LITE_SECOND_PASS_QUALITY : FULL_SECOND_PASS_QUALITY;
+  const weakNet = getNetworkQualitySnapshot() !== "good";
+  const maxDimension = weakNet ? 1080 : lowEnd ? LITE_MAX_DIMENSION : FULL_MAX_DIMENSION;
+  const primaryQuality = weakNet ? 0.7 : lowEnd ? LITE_PRIMARY_QUALITY : FULL_PRIMARY_QUALITY;
+  const secondPassThreshold = weakNet ? 190 * 1024 : lowEnd ? LITE_SECOND_PASS_THRESHOLD : FULL_SECOND_PASS_THRESHOLD;
+  const secondPassQuality = weakNet ? 0.56 : lowEnd ? LITE_SECOND_PASS_QUALITY : FULL_SECOND_PASS_QUALITY;
   const targetMime = supportsWebpEncode() ? "image/webp" : "image/jpeg";
 
   let canvas: HTMLCanvasElement | null = null;
@@ -306,6 +307,27 @@ export function purposeAllowsVideo(purpose: UploadPurpose): boolean {
   );
 }
 
+/**
+ * Tính dấu vân tay SHA-256 của tệp nén ngay trên trình duyệt để:
+ * 1. Máy chủ kiểm tra toàn vẹn dữ liệu chống lỗi đứt quãng trên sóng 2G/3G ngoài rẫy.
+ * 2. Không bao giờ tải lại tệp đã có trên máy chủ khi thử đồng bộ lại.
+ */
+export async function computeBlobSha256Hex(blob: Blob): Promise<string | undefined> {
+  try {
+    if (typeof crypto === "undefined" || !crypto.subtle?.digest) return undefined;
+    const buf = await blob.arrayBuffer();
+    const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+    const bytes = new Uint8Array(hashBuf);
+    let hex = "";
+    for (let i = 0; i < bytes.length; i += 1) {
+      hex += bytes[i]!.toString(16).padStart(2, "0");
+    }
+    return hex;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Nén (nếu là ảnh) rồi tải lên `/api/uploads`, trả về thông tin tệp đầy đủ (`{ id, url, mimeType, sizeBytes }`). */
 export async function uploadOptimizedFile(file: File, purpose: UploadPurpose): Promise<UploadedFile> {
   const allowPdf = purpose === "approval" || purpose === "lab";
@@ -317,7 +339,8 @@ export async function uploadOptimizedFile(file: File, purpose: UploadPurpose): P
   const isImage = isSupportedImageFile(file);
   const blob = isImage ? await compressImage(file) : file;
   const name = isImage && blob !== file ? encodedImageName(file.name, blob.type || "image/jpeg") : file.name;
-  return api.upload(blob, purpose, name);
+  const sha256 = blob.size <= MAX_VIDEO_BYTES ? await computeBlobSha256Hex(blob) : undefined;
+  return api.upload(blob, purpose, name, { sha256 });
 }
 
 /** Bí danh chuẩn cho luồng kiểm tra MIME + nén + tải tệp phương tiện lên máy chủ. */

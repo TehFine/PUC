@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarCheck2 } from "@/components/ui/PublicIcon";
 import { usePortal } from "@/hooks/use-portal";
 import { formatDate } from "@/utils/format";
 import type {
@@ -48,14 +47,11 @@ export default function StampsTab({ overview, plots = [] }: Props) {
             <div className="pt-harvest-notice-list">
               {notices.map((item) => (
                 <article key={item.id} className="pt-harvest-notice-card">
-                  <div className="pt-harvest-notice-icon" aria-hidden="true">
-                    <CalendarCheck2 size={18} strokeWidth={2.1} />
-                  </div>
                   <div className="pt-harvest-notice-body">
                     <div className="pt-harvest-notice-top">
                       <h3 className="pt-harvest-notice-title">{item.title}</h3>
                       <span className="pt-harvest-notice-date">
-                        {item.createdAt ? formatDate(item.createdAt.slice(0, 10)) : "—"}
+                        {item.createdAt ? formatDate(item.createdAt.slice(0, 10)) : ""}
                       </span>
                     </div>
                     {item.body && <p className="pt-harvest-notice-desc">{item.body}</p>}
@@ -129,22 +125,11 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .pt-harvest-notice-card {
           display: flex;
           align-items: flex-start;
-          gap: 14px;
-          padding: 16px 18px;
-          border-radius: 20px;
+          gap: 12px;
+          padding: 14px 16px;
+          border-radius: 8px;
+          border: 1px solid #d4d4d2;
           background: #ffffff;
-          box-shadow: 0 4px 20px rgba(20, 55, 47, 0.045);
-        }
-        .pt-harvest-notice-icon {
-          width: 38px;
-          height: 38px;
-          border-radius: 12px;
-          background: #eefbf3;
-          color: #15803d;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
         }
         .pt-harvest-notice-body {
           flex: 1;
@@ -160,21 +145,22 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .pt-harvest-notice-title {
           margin: 0;
           font-size: 15px;
-          font-weight: 700;
-          color: #0f172a;
+          font-weight: 600;
+          color: #121212;
           line-height: 1.35;
         }
         .pt-harvest-notice-date {
           font-size: 12px;
           font-weight: 500;
-          color: #94a3b8;
+          color: #5f6d66;
           white-space: nowrap;
+          font-variant-numeric: tabular-nums;
         }
         .pt-harvest-notice-desc {
           margin: 5px 0 0;
           font-size: 13.5px;
           line-height: 1.5;
-          color: #475569;
+          color: #5f6d66;
         }
         .pt-harvest-rules-section {
           max-width: 720px;
@@ -191,7 +177,7 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .pt-harvest-rules-section .pt-schedule-title,
         .pt-harvest-lots-header .pt-schedule-title {
           font-size: 1.2rem;
-          font-weight: 750;
+          font-weight: 700;
           color: var(--ink);
           margin: 0;
           letter-spacing: -0.015em;
@@ -199,13 +185,15 @@ export default function StampsTab({ overview, plots = [] }: Props) {
         .pt-harvest-lots-count {
           display: inline-flex;
           align-items: center;
-          padding: 3.5px 10px;
-          border-radius: 999px;
-          background: rgba(20, 55, 47, 0.06);
+          padding: 3px 8px;
+          border-radius: 4px;
+          border: 1px solid #d4d4d2;
+          background: #f7f7f5;
           color: var(--text-secondary);
           font-size: 12px;
           font-weight: 600;
           line-height: 1.2;
+          font-variant-numeric: tabular-nums;
         }
         .pt-harvest-lots-section {
           width: 100%;
