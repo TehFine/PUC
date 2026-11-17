@@ -4,7 +4,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from "react
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { hasPendingServerLogout, useAuth } from "@/components/auth/AuthProvider";
 import { WORKSPACE_ACTIVE_SESSION_KEY } from "@/components/landing/AutoEnter";
 import Sidebar from "@/components/layout/Sidebar";
 import UserMenu from "@/components/layout/UserMenu";
@@ -13,9 +13,13 @@ import OfflineSyncBar from "@/components/ui/OfflineSyncBar";
 import ResponsiveTables from "@/components/ui/ResponsiveTables";
 import { PageSkeleton, SkeletonCards, SkeletonStats } from "@/components/ui/Skeleton";
 import {
+  ADMIN_LAST_URL_KEY,
   ensureRootEntryBeforeSubPage,
   PUC_URL_SYNC_EVENT,
   pushUrlNavigation,
+  readWorkspaceUrl,
+  replaceUrlPreservingState,
+  saveWorkspaceUrl,
 } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
 import { resolveValidAdminRoute, type SectionId } from "@/lib/route-validation";
@@ -90,12 +94,35 @@ function isSectionId(raw: string | null): raw is SectionId {
   return Boolean(raw && Object.prototype.hasOwnProperty.call(SECTION_TITLES, raw));
 }
 
+function resolveClientAdminSection(serverSection: SectionId, userId?: number | null): SectionId {
+  if (typeof window === "undefined") return serverSection;
+  const sp = new URLSearchParams(window.location.search);
+  const parsed = resolveValidAdminRoute(sp);
+  if (!parsed) return serverSection;
+  if (sp.has("section") || sp.has("sub") || sp.has("tab")) {
+    return parsed.section;
+  }
+  const savedUrl = readWorkspaceUrl(ADMIN_LAST_URL_KEY, userId);
+  if (savedUrl) {
+    const qIdx = savedUrl.indexOf("?");
+    const savedSearch = qIdx >= 0 ? savedUrl.slice(qIdx) : "";
+    const savedParsed = resolveValidAdminRoute(new URLSearchParams(savedSearch));
+    if (savedParsed) {
+      return savedParsed.section;
+    }
+  }
+  return parsed.section;
+}
+
 export default function AdminApp({ initialSection }: { initialSection: SectionId }) {
   const router = useRouter();
   const { status, session, can } = useAuth();
-  const [active, setActive] = useState<SectionId>(initialSection);
+  const [active, setActive] = useState<SectionId>(() =>
+    resolveClientAdminSection(initialSection, session?.user.id),
+  );
   const [lastNonZones, setLastNonZones] = useState<SectionId>(() => {
-    if (initialSection !== "zones") return initialSection;
+    const resolved = resolveClientAdminSection(initialSection, session?.user.id);
+    if (resolved !== "zones") return resolved;
     if (typeof window !== "undefined") {
       try {
         const saved = window.sessionStorage.getItem(LAST_NON_ZONES_SECTION_KEY);
@@ -113,6 +140,7 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
   );
   const activeRef = useRef<SectionId>(active);
   const lastNonZonesRef = useRef<SectionId>(lastNonZones);
+  const activeUserId = session?.user.id ?? null;
   const isFarmer = session?.user.role === "farmer";
 
   useEffect(() => {
@@ -128,8 +156,17 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
   }, [active]);
 
   useEffect(() => {
-    if (status === "anonymous") router.replace("/login");
-    else if (status === "authenticated" && isFarmer) router.replace("/portal");
+    if (status === "anonymous") {
+      if (typeof window !== "undefined" && !hasPendingServerLogout() && window.location.pathname.startsWith("/admin")) {
+        const directUrl = `${window.location.pathname}${window.location.search}`;
+        const targetNext = directUrl !== "/admin" ? directUrl : null;
+        router.replace(targetNext ? `/login?next=${encodeURIComponent(targetNext)}` : "/login");
+      } else {
+        router.replace("/login");
+      }
+    } else if (status === "authenticated" && isFarmer) {
+      router.replace("/portal");
+    }
   }, [status, isFarmer, router]);
 
   useEffect(() => {
@@ -140,14 +177,43 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
       // ignore
     }
 
-    const parsed = resolveValidAdminRoute(new URLSearchParams(window.location.search));
+    const sp = new URLSearchParams(window.location.search);
+    const parsed = resolveValidAdminRoute(sp);
     if (!parsed) {
       return;
     }
 
-    if (parsed.section !== "dashboard") {
-      const fullUrl = window.location.pathname + window.location.search + window.location.hash;
-      ensureRootEntryBeforeSubPage("/admin", fullUrl);
+    const hasExplicitRouteParam = sp.has("section") || sp.has("sub") || sp.has("tab");
+    let effectiveSection = parsed.section;
+    let effectiveUrl = window.location.pathname + window.location.search + window.location.hash;
+
+    if (!hasExplicitRouteParam) {
+      const savedUrl = readWorkspaceUrl(ADMIN_LAST_URL_KEY, activeUserId);
+      if (savedUrl) {
+        const qIdx = savedUrl.indexOf("?");
+        const savedSearch = qIdx >= 0 ? savedUrl.slice(qIdx) : "";
+        const savedParsed = resolveValidAdminRoute(new URLSearchParams(savedSearch));
+        if (savedParsed && (savedParsed.section !== "dashboard" || savedParsed.sub)) {
+          effectiveSection = savedParsed.section;
+          effectiveUrl = savedUrl;
+          replaceUrlPreservingState(savedUrl);
+        }
+      }
+    }
+
+    saveWorkspaceUrl(ADMIN_LAST_URL_KEY, effectiveUrl, activeUserId);
+
+    if (effectiveSection !== activeRef.current) {
+      startTransition(() => {
+        setActive(effectiveSection);
+        if (effectiveSection !== "zones") {
+          setLastNonZones(effectiveSection);
+        }
+      });
+    }
+
+    if (effectiveSection !== "dashboard") {
+      ensureRootEntryBeforeSubPage("/admin", effectiveUrl);
     }
 
     const onSync = () => {
@@ -156,6 +222,8 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
         setInvalidClientUrl(true);
         return;
       }
+      const syncedUrl = window.location.pathname + window.location.search + window.location.hash;
+      saveWorkspaceUrl(ADMIN_LAST_URL_KEY, syncedUrl, activeUserId);
       if (nextParsed.section !== activeRef.current) {
         startTransition(() => {
           setActive(nextParsed.section);
@@ -168,21 +236,27 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
     };
     window.addEventListener(PUC_URL_SYNC_EVENT, onSync);
     return () => window.removeEventListener(PUC_URL_SYNC_EVENT, onSync);
-  }, [status, isFarmer]);
+  }, [status, isFarmer, activeUserId]);
 
-  const navigate = useCallback((id: SectionId) => {
-    if (id !== activeRef.current) {
+  const navigate = useCallback(
+    (id: SectionId) => {
       const nextUrl = id === "dashboard" ? "/admin" : `/admin?section=${encodeURIComponent(id)}`;
-      pushUrlNavigation(nextUrl);
-    }
-    startTransition(() => {
-      setActive(id);
-      if (id !== "zones") {
-        setLastNonZones(id);
+      if (id !== activeRef.current) {
+        pushUrlNavigation(nextUrl);
+      } else {
+        replaceUrlPreservingState(nextUrl);
       }
-    });
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, []);
+      saveWorkspaceUrl(ADMIN_LAST_URL_KEY, nextUrl, activeUserId);
+      startTransition(() => {
+        setActive(id);
+        if (id !== "zones") {
+          setLastNonZones(id);
+        }
+      });
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    },
+    [activeUserId],
+  );
 
   const handleBackFromZones = useCallback(() => {
     const target = lastNonZonesRef.current !== "zones" ? lastNonZonesRef.current : "dashboard";

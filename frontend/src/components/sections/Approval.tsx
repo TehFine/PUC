@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApiList } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
-import { useUrlSubTab } from "@/lib/back-navigation";
+import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
 import BlockState from "@/components/admin/shared/BlockState";
 import { ADMIN_APPROVAL_TAB_EVENT, consumePendingApprovalTab } from "@/components/admin/shared/counts-events";
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
@@ -51,14 +51,18 @@ export default function Approval() {
   const canUpdateMinute = can("minutes", "update");
   const canDeleteMinute = can("minutes", "delete");
 
-  const [tab, setTab] = useState<Tab>(() => consumePendingApprovalTab() ?? "pending");
+  const isApprovalTab = (raw: string): raw is Tab =>
+    raw === "pending" || raw === "registrations" || raw === "schedule" || raw === "minutes";
+
+  const [tab, setTab] = useState<Tab>(
+    () => consumePendingApprovalTab() ?? readInitialUrlSubTab("sub", "pending", isApprovalTab, ADMIN_LAST_URL_KEY),
+  );
   const selectTab = useUrlSubTab<Tab>(
     "sub",
     tab,
     setTab,
     "pending",
-    (raw): raw is Tab =>
-      raw === "pending" || raw === "registrations" || raw === "schedule" || raw === "minutes",
+    isApprovalTab,
   );
   const [regCount, setRegCount] = useState<number>(0);
 
@@ -66,12 +70,12 @@ export default function Approval() {
     const handler = (event: Event) => {
       const nextTab = (event as CustomEvent<string>).detail ?? consumePendingApprovalTab();
       if (nextTab === "pending" || nextTab === "registrations" || nextTab === "schedule" || nextTab === "minutes") {
-        setTab(nextTab);
+        selectTab(nextTab);
       }
     };
     window.addEventListener(ADMIN_APPROVAL_TAB_EVENT, handler);
     return () => window.removeEventListener(ADMIN_APPROVAL_TAB_EVENT, handler);
-  }, []);
+  }, [selectTab]);
 
   useEffect(() => {
     if (!canReadRegistrations) return;

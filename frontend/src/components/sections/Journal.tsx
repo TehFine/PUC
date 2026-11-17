@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApi, useApiList } from "@/hooks/use-api";
-import { useUrlSubTab } from "@/lib/back-navigation";
+import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
   ADMIN_JOURNAL_TAB_EVENT,
@@ -51,35 +51,29 @@ export default function Journal() {
   const canUpdateSpray = can("spray", "update");
   const canDeleteSpray = can("spray", "delete");
 
-  const [tab, setTab] = useState<Tab>(() => {
-    const pending = consumePendingJournalTab();
-    if (pending) return pending;
-    if (typeof window !== "undefined") {
-      const sp = new URLSearchParams(window.location.search);
-      const qTab = sp.get("sub") ?? sp.get("tab");
-      if (qTab === "journal" || qTab === "violations" || qTab === "spray") {
-        return qTab;
-      }
-    }
-    return "journal";
-  });
+  const isJournalTab = (raw: string): raw is Tab =>
+    raw === "journal" || raw === "violations" || raw === "spray";
+
+  const [tab, setTab] = useState<Tab>(
+    () => consumePendingJournalTab() ?? readInitialUrlSubTab("sub", "journal", isJournalTab, ADMIN_LAST_URL_KEY),
+  );
 
   const selectTab = useUrlSubTab<Tab>(
     "sub",
     tab,
     setTab,
     "journal",
-    (raw): raw is Tab => raw === "journal" || raw === "violations" || raw === "spray",
+    isJournalTab,
   );
 
   useEffect(() => {
     const onTab = (event: Event) => {
       const next = (event as CustomEvent<Tab>).detail;
-      if (next) setTab(next);
+      if (next) selectTab(next);
     };
     window.addEventListener(ADMIN_JOURNAL_TAB_EVENT, onTab);
     return () => window.removeEventListener(ADMIN_JOURNAL_TAB_EVENT, onTab);
-  }, []);
+  }, [selectTab]);
 
   // Modals for Spray (khai báo sớm để chỉ tải danh mục thuốc BVTV khi cần mở biểu mẫu)
   const [viewingSpray, setViewingSpray] = useState<SprayRow | null>(null);

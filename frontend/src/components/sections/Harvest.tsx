@@ -15,7 +15,7 @@ import LotContributionsModal from "@/components/admin/harvest/LotContributionsMo
 import { StampAllocationModal, StampListModal } from "@/components/admin/harvest/StampModals";
 import { toast } from "@/components/ui/Toast";
 import { api, errorMessage } from "@/lib/api-client";
-import { useUrlSubTab } from "@/lib/back-navigation";
+import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
 
 const BatchQrModal = dynamic(() => import("@/components/harvest/BatchQrModal"), { ssr: false });
 const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
@@ -85,18 +85,22 @@ export default function Harvest() {
   const canCreateStamps = can("stamps", "create");
   const canUpdateStamps = can("stamps", "update");
 
-  const [tab, setTab] = useState<HarvestTab>("lots");
+  const isHarvestTab = (raw: string): raw is HarvestTab =>
+    raw === "lots" ||
+    raw === "plans" ||
+    raw === "stamps" ||
+    raw === "contracts" ||
+    raw === "enterprises";
+
+  const [tab, setTab] = useState<HarvestTab>(() =>
+    readInitialUrlSubTab("sub", "lots", isHarvestTab, ADMIN_LAST_URL_KEY),
+  );
   const selectTab = useUrlSubTab<HarvestTab>(
     "sub",
     tab,
     setTab,
     "lots",
-    (raw): raw is HarvestTab =>
-      raw === "lots" ||
-      raw === "plans" ||
-      raw === "stamps" ||
-      raw === "contracts" ||
-      raw === "enterprises",
+    isHarvestTab,
   );
 
   // 1. Lô thu hoạch

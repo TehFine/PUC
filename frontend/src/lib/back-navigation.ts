@@ -3,6 +3,76 @@
 import { useCallback, useEffect, useRef } from "react";
 
 export const PUC_URL_SYNC_EVENT = "puc:url-sync";
+export const ADMIN_LAST_URL_KEY = "puc:admin-active-url";
+export const PORTAL_LAST_URL_KEY = "puc:portal-active-url";
+
+interface StoredWorkspaceRoute {
+  url: string;
+  userId: number | null;
+}
+
+function resolveStorageKeyForPathname(pathname: string): string | null {
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return ADMIN_LAST_URL_KEY;
+  if (pathname === "/portal" || pathname.startsWith("/portal/")) return PORTAL_LAST_URL_KEY;
+  return null;
+}
+
+export function saveWorkspaceUrl(storageKey: string, url: string, userId?: number | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    let resolvedUserId: number | null =
+      typeof userId === "number" && Number.isInteger(userId) && userId > 0 ? userId : null;
+    if (resolvedUserId === null) {
+      const existingRaw = window.sessionStorage.getItem(storageKey);
+      if (existingRaw) {
+        const parsed = JSON.parse(existingRaw) as Partial<StoredWorkspaceRoute>;
+        if (typeof parsed?.userId === "number" && Number.isInteger(parsed.userId) && parsed.userId > 0) {
+          resolvedUserId = parsed.userId;
+        }
+      }
+    }
+    const payload: StoredWorkspaceRoute = { url, userId: resolvedUserId };
+    window.sessionStorage.setItem(storageKey, JSON.stringify(payload));
+  } catch {
+    // Bỏ qua nếu môi trường chặn sessionStorage
+  }
+}
+
+export function readWorkspaceUrl(storageKey: string, expectedUserId?: number | null): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredWorkspaceRoute>;
+    if (!parsed || typeof parsed.url !== "string" || !parsed.url.startsWith("/")) return null;
+    if (
+      typeof expectedUserId === "number" &&
+      Number.isInteger(expectedUserId) &&
+      expectedUserId > 0 &&
+      typeof parsed.userId === "number" &&
+      Number.isInteger(parsed.userId) &&
+      parsed.userId > 0 &&
+      parsed.userId !== expectedUserId
+    ) {
+      return null;
+    }
+    return parsed.url;
+  } catch {
+    return null;
+  }
+}
+
+function syncWorkspaceUrlFromHref(href: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const parsed = new URL(href, window.location.origin);
+    const key = resolveStorageKeyForPathname(parsed.pathname);
+    if (!key) return;
+    saveWorkspaceUrl(key, `${parsed.pathname}${parsed.search}${parsed.hash}`);
+  } catch {
+    // ignore
+  }
+}
 
 const SESSION_ID =
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -24,7 +94,7 @@ let pendingPushUrl: string | null = null;
 let syncQueued = false;
 let listenerInstalled = false;
 
-function buildCleanPageState(): Record<string, unknown> {
+function buildCleanPageState(markRootSeeded = false): Record<string, unknown> {
   const raw =
     typeof window !== "undefined" &&
     typeof window.history.state === "object" &&
@@ -34,11 +104,15 @@ function buildCleanPageState(): Record<string, unknown> {
   const clone: Record<string, unknown> = { ...raw };
   delete clone.__pucOverlaySession;
   delete clone.__pucOverlayDepth;
+  if (markRootSeeded) {
+    clone.__pucRootSeeded = true;
+  }
   return clone;
 }
 
 export function replaceUrlPreservingState(nextUrl: string): void {
   if (typeof window === "undefined") return;
+  syncWorkspaceUrlFromHref(nextUrl);
   try {
     const raw =
       typeof window.history.state === "object" && window.history.state !== null
@@ -66,8 +140,9 @@ function handleWindowPopState(event: PopStateEvent): void {
       if (pendingReplaceUrl !== null) {
         const targetUrl = pendingReplaceUrl;
         pendingReplaceUrl = null;
+        syncWorkspaceUrlFromHref(targetUrl);
         try {
-          window.history.replaceState(buildCleanPageState(), "", targetUrl);
+          window.history.replaceState(buildCleanPageState(targetUrl.includes("?")), "", targetUrl);
         } catch {
           // ignore
         }
@@ -75,8 +150,9 @@ function handleWindowPopState(event: PopStateEvent): void {
       } else if (pendingPushUrl !== null) {
         const targetUrl = pendingPushUrl;
         pendingPushUrl = null;
+        syncWorkspaceUrlFromHref(targetUrl);
         try {
-          window.history.pushState(buildCleanPageState(), "", targetUrl);
+          window.history.pushState(buildCleanPageState(targetUrl.includes("?")), "", targetUrl);
         } catch {
           // ignore
         }
@@ -106,6 +182,7 @@ function handleWindowPopState(event: PopStateEvent): void {
 
   // Không có popup nào chặn lại -> cho phép trang hoặc tab hiện tại lùi về bước trước đó
   pushedOverlayCount = Math.min(pushedOverlayCount, nextDepth);
+  syncWorkspaceUrlFromHref(window.location.pathname + window.location.search + window.location.hash);
   window.dispatchEvent(new CustomEvent(PUC_URL_SYNC_EVENT));
 }
 
@@ -217,14 +294,17 @@ export function pushUrlNavigation(nextUrl: string): void {
   ensurePopStateListener();
 
   const currentUrl = window.location.pathname + window.location.search + window.location.hash;
+  syncWorkspaceUrlFromHref(nextUrl);
   if (nextUrl === currentUrl && pushedOverlayCount === 0) return;
+
+  const markRootSeeded = nextUrl.includes("?");
 
   if (pushedOverlayCount > 0) {
     overlayStack.length = 0;
     if (pushedOverlayCount === 1 && pendingGoBacks === 0) {
       pushedOverlayCount = 0;
       try {
-        window.history.replaceState(buildCleanPageState(), "", nextUrl);
+        window.history.replaceState(buildCleanPageState(markRootSeeded), "", nextUrl);
       } catch {
         // ignore
       }
@@ -253,7 +333,7 @@ export function pushUrlNavigation(nextUrl: string): void {
   }
 
   try {
-    window.history.pushState(buildCleanPageState(), "", nextUrl);
+    window.history.pushState(buildCleanPageState(markRootSeeded), "", nextUrl);
   } catch {
     // ignore
   }
@@ -267,17 +347,77 @@ export function pushUrlNavigation(nextUrl: string): void {
 export function ensureRootEntryBeforeSubPage(rootUrl: string, currentSubUrl: string): void {
   if (typeof window === "undefined") return;
   ensurePopStateListener();
+  syncWorkspaceUrlFromHref(currentSubUrl);
   try {
     const raw =
       typeof window.history.state === "object" && window.history.state !== null
         ? (window.history.state as Record<string, unknown>)
         : {};
     if (raw.__pucRootSeeded) return;
-    window.history.replaceState({ ...buildCleanPageState(), __pucRootSeeded: true }, "", rootUrl);
-    window.history.pushState({ ...buildCleanPageState(), __pucRootSeeded: true }, "", currentSubUrl);
+    window.history.replaceState({ ...buildCleanPageState(true), __pucRootSeeded: true }, "", rootUrl);
+    window.history.pushState({ ...buildCleanPageState(true), __pucRootSeeded: true }, "", currentSubUrl);
   } catch {
     // ignore
   }
+}
+
+function buildEffectiveWorkspaceSearchParams(): URLSearchParams {
+  if (typeof window === "undefined") return new URLSearchParams();
+  const sp = new URLSearchParams(window.location.search);
+  const key = resolveStorageKeyForPathname(window.location.pathname);
+  if (!key) return sp;
+
+  if (key === ADMIN_LAST_URL_KEY && !sp.has("section")) {
+    const saved = readWorkspaceUrl(ADMIN_LAST_URL_KEY);
+    if (saved) {
+      const qIdx = saved.indexOf("?");
+      if (qIdx >= 0) {
+        const savedSp = new URLSearchParams(saved.slice(qIdx));
+        const savedSection = savedSp.get("section");
+        if (savedSection) sp.set("section", savedSection);
+      }
+    }
+  } else if (key === PORTAL_LAST_URL_KEY && !sp.has("tab")) {
+    const saved = readWorkspaceUrl(PORTAL_LAST_URL_KEY);
+    if (saved) {
+      const qIdx = saved.indexOf("?");
+      if (qIdx >= 0) {
+        const savedSp = new URLSearchParams(saved.slice(qIdx));
+        const savedTab = savedSp.get("tab");
+        if (savedTab) sp.set("tab", savedTab);
+      }
+    }
+  }
+  return sp;
+}
+
+/**
+ * Đọc đồng bộ tab con ban đầu từ tham số URL hiện tại (hoặc từ đường dẫn phiên làm việc đã lưu khi trình duyệt tải lại)
+ * để tránh nhấp nháy về tab mặc định trước khi `useEffect` chạy.
+ */
+export function readInitialUrlSubTab<T extends string>(
+  paramName: string,
+  defaultValue: T,
+  isValid: (raw: string) => raw is T,
+  fallbackStorageKey?: string,
+): T {
+  if (typeof window === "undefined") return defaultValue;
+  const sp = new URLSearchParams(window.location.search);
+  const direct = sp.get(paramName) ?? (paramName === "sub" ? sp.get("tab") ?? sp.get("view") : null);
+  if (direct && isValid(direct)) return direct;
+
+  if (fallbackStorageKey && !sp.has("section") && !sp.has("tab") && !sp.has(paramName)) {
+    const saved = readWorkspaceUrl(fallbackStorageKey);
+    if (saved) {
+      const qIdx = saved.indexOf("?");
+      if (qIdx >= 0) {
+        const savedSp = new URLSearchParams(saved.slice(qIdx));
+        const fromSaved = savedSp.get(paramName);
+        if (fromSaved && isValid(fromSaved)) return fromSaved;
+      }
+    }
+  }
+  return defaultValue;
 }
 
 /**
@@ -307,15 +447,14 @@ export function useUrlSubTab<T extends string>(
     if (typeof window === "undefined") return;
     ensurePopStateListener();
 
-    const sp = new URLSearchParams(window.location.search);
+    const sp = buildEffectiveWorkspaceSearchParams();
     const raw = sp.get(paramName);
     if (raw && isValidRef.current(raw) && raw !== valueRef.current) {
       setValueRef.current(raw);
     } else if (!raw && valueRef.current !== defaultValue) {
-      // Tab con được mở sẵn bởi intent / sự kiện nội bộ -> ghi nhẹ lên URL hiện tại
-      const nextSp = new URLSearchParams(window.location.search);
-      nextSp.set(paramName, valueRef.current);
-      const qs = nextSp.toString();
+      // Tab con được mở sẵn bởi intent / sự kiện nội bộ hoặc khôi phục từ phiên -> ghi nhẹ lên URL hiện tại
+      sp.set(paramName, valueRef.current);
+      const qs = sp.toString();
       replaceUrlPreservingState(`${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`);
     }
 
@@ -337,7 +476,7 @@ export function useUrlSubTab<T extends string>(
       if (next === valueRef.current) return;
       setValueRef.current(next);
       if (typeof window === "undefined") return;
-      const sp = new URLSearchParams(window.location.search);
+      const sp = buildEffectiveWorkspaceSearchParams();
       if (next === defaultValue) {
         sp.delete(paramName);
       } else {

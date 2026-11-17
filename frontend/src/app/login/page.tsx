@@ -151,14 +151,22 @@ export default function LoginPage() {
     }
   });
 
-  // Điều hướng nếu đã có phiên đăng nhập hợp lệ (ưu tiên quay lại trang quét QR nếu có ?next=)
+  // Điều hướng nếu đã có phiên đăng nhập hợp lệ (ưu tiên quay lại trang hoặc phân mục trước đó nếu phù hợp vai trò)
   useEffect(() => {
     if (status === "authenticated") {
       const fromQuery =
         typeof window !== "undefined"
           ? resolveSafeNextPath(new URLSearchParams(window.location.search).get("next"))
           : null;
-      router.replace(fromQuery ?? nextPath ?? homePathFor(session?.user.role));
+      const candidate = fromQuery ?? nextPath;
+      const isFarmer = session?.user.role === "farmer";
+      const roleCompatibleNext =
+        candidate &&
+        !(isFarmer && (candidate === "/admin" || candidate.startsWith("/admin/") || candidate.startsWith("/admin?"))) &&
+        !(!isFarmer && (candidate === "/portal" || candidate.startsWith("/portal/") || candidate.startsWith("/portal?")))
+          ? candidate
+          : null;
+      router.replace(roleCompatibleNext ?? homePathFor(session?.user.role));
     }
   }, [status, session, router, nextPath]);
 

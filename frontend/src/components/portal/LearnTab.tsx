@@ -3,7 +3,7 @@
 import { startTransition, useDeferredValue, useMemo, useState } from "react";
 import { invalidatePortal, useSharedQuery } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
-import { useUrlSubTab } from "@/lib/back-navigation";
+import { PORTAL_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
 import { formatClock, PESTICIDE_STATUS, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import { isSafeMediaUrl } from "@/utils/url-safety";
@@ -3257,24 +3257,30 @@ const LEARN_VIEW_BY_ACTION: Partial<Record<PortalAction, View>> = {
   "learn-diseases": "diseases",
 };
 
+const isLearnView = (raw: string): raw is View =>
+  raw === "protocol" ||
+  raw === "pesticides" ||
+  raw === "fertilizers" ||
+  raw === "varieties" ||
+  raw === "diseases";
+
 export default function LearnTab({
   initialAction,
 }: {
   initialAction?: PortalAction;
 } = {}) {
-  // Mở sẵn Quy trình chăm sóc chuẩn 2026-2027 làm mặc định (hoặc mở đúng mục từ thanh tìm kiếm)
-  const [view, setView] = useState<View>(() => (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) || "protocol");
+  // Mở sẵn Quy trình chăm sóc chuẩn 2026-2027 làm mặc định (hoặc khôi phục đúng mục đang xem / từ thanh tìm kiếm)
+  const [view, setView] = useState<View>(
+    () =>
+      (initialAction && LEARN_VIEW_BY_ACTION[initialAction]) ||
+      readInitialUrlSubTab("sub", "protocol", isLearnView, PORTAL_LAST_URL_KEY),
+  );
   const selectView = useUrlSubTab<View>(
     "sub",
     view,
     setView,
     "protocol",
-    (raw): raw is View =>
-      raw === "protocol" ||
-      raw === "pesticides" ||
-      raw === "fertilizers" ||
-      raw === "varieties" ||
-      raw === "diseases",
+    isLearnView,
   );
   const items: { id: View; label: string }[] = [
     { id: "protocol", label: "Quy trình chăm sóc" },

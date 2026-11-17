@@ -11,6 +11,11 @@ import {
   setAuthScopeUser,
 } from "@/lib/api-client";
 import {
+  ADMIN_LAST_URL_KEY,
+  PORTAL_LAST_URL_KEY,
+  readWorkspaceUrl,
+} from "@/lib/back-navigation";
+import {
   attachOfflineSyncEngine,
   clearAllOfflineReadSnapshots,
   clearOfflineAuthSession,
@@ -91,7 +96,7 @@ function clearPendingServerLogout(): void {
   }
 }
 
-function hasPendingServerLogout(): boolean {
+export function hasPendingServerLogout(): boolean {
   if (typeof window === "undefined") return false;
   try {
     return Boolean(window.localStorage.getItem(PENDING_LOGOUT_STORAGE_KEY));
@@ -191,6 +196,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearClientAuthState = useCallback(
     (options?: { redirectProtected?: boolean; broadcastLogout?: boolean }) => {
       const prevUserId = currentUserIdRef.current;
+      let preservedReturnUrl: string | null = null;
+      if (typeof window !== "undefined" && !hasPendingServerLogout() && isProtectedPath(window.location.pathname)) {
+        const directUrl = `${window.location.pathname}${window.location.search}`;
+        if (window.location.search) {
+          preservedReturnUrl = directUrl;
+        } else if (window.location.pathname.startsWith("/admin")) {
+          preservedReturnUrl = readWorkspaceUrl(ADMIN_LAST_URL_KEY, prevUserId);
+        } else if (window.location.pathname.startsWith("/portal")) {
+          preservedReturnUrl = readWorkspaceUrl(PORTAL_LAST_URL_KEY, prevUserId);
+        }
+      }
       currentUserIdRef.current = null;
       setAuthScopeUser(null);
       clearApiClientCaches();
@@ -208,7 +224,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (options?.broadcastLogout) {
           broadcastAuthMessage({ type: "logout" });
         }
-        if (options?.redirectProtected && isProtectedPath(window.location.pathname)) {
+        if (!hasPendingServerLogout() && isProtectedPath(window.location.pathname)) {
+          const targetLogin =
+            preservedReturnUrl && preservedReturnUrl !== "/admin" && preservedReturnUrl !== "/portal"
+              ? `/login?next=${encodeURIComponent(preservedReturnUrl)}`
+              : "/login";
+          router.replace(targetLogin);
+        } else if (options?.redirectProtected && isProtectedPath(window.location.pathname)) {
           router.replace("/login");
         }
       }

@@ -33,7 +33,7 @@ import "@/components/portal/portal.css";
 import { Sheet } from "@/components/portal/ui";
 import { Modal } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
-import { useUrlSubTab } from "@/lib/back-navigation";
+import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
 import type { FertilizerDto, PesticideDto, VarietyDto } from "@/types/api";
 import type { FertilizerRecord, PesticideRecord, VarietyRecord, VillageRecord } from "@/types/catalog";
 import { isSafeMediaUrl } from "@/utils/url-safety";
@@ -158,21 +158,25 @@ function toVarietyDto(v: VarietyRecord): VarietyDto {
   });
 }
 
+const isCatalogTab = (raw: string): raw is Tab =>
+  raw === "protocol" ||
+  raw === "pesticide" ||
+  raw === "fertilizer" ||
+  raw === "variety" ||
+  raw === "diseases" ||
+  raw === "village" ||
+  raw === "standards";
+
 export default function Catalog() {
-  const [tab, setTab] = useState<Tab>("pesticide");
+  const [tab, setTab] = useState<Tab>(() =>
+    readInitialUrlSubTab("sub", "pesticide", isCatalogTab, ADMIN_LAST_URL_KEY),
+  );
   const selectTab = useUrlSubTab<Tab>(
     "sub",
     tab,
     setTab,
     "pesticide",
-    (raw): raw is Tab =>
-      raw === "protocol" ||
-      raw === "pesticide" ||
-      raw === "fertilizer" ||
-      raw === "variety" ||
-      raw === "diseases" ||
-      raw === "village" ||
-      raw === "standards",
+    isCatalogTab,
   );
 
   // 1. Thuốc BVTV

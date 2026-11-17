@@ -12,7 +12,7 @@ import ZoneSourceCard from "@/components/zones/ZoneSourceCard";
 import ZonesOverviewCard from "@/components/zones/ZonesOverviewCard";
 import { buildZoneRows, summarizePlots } from "@/components/zones/zone-data";
 import { usePlots } from "@/hooks/use-plots";
-import { useBackLayer, useUrlSubTab } from "@/lib/back-navigation";
+import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useBackLayer, useUrlSubTab } from "@/lib/back-navigation";
 
 const MapView = dynamic(() => import("@/components/map/MapView"), {
   ssr: false,
@@ -21,10 +21,13 @@ const MapView = dynamic(() => import("@/components/map/MapView"), {
 
 type ZoneView = "map" | "list";
 type SheetMode = "overview" | "zone" | "list" | null;
+const isZoneView = (raw: string): raw is ZoneView => raw === "map" || raw === "list";
 
 export default function Zones() {
   const { plots, loading, error, refresh } = usePlots();
-  const [view, setView] = useState<ZoneView>("map");
+  const [view, setView] = useState<ZoneView>(() =>
+    readInitialUrlSubTab("sub", "map", isZoneView, ADMIN_LAST_URL_KEY),
+  );
   const [sheet, setSheet] = useState<SheetMode>(null);
   const [activeZone, setActiveZone] = useState<string | null>(null);
   const [pendingEditCode, setPendingEditCode] = useState<string | null>(null);

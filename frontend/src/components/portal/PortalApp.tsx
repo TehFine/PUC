@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from "@/components/ui/PublicIcon";
 import { type ChangeEvent, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { hasPendingServerLogout, useAuth } from "@/components/auth/AuthProvider";
 import { WORKSPACE_ACTIVE_SESSION_KEY } from "@/components/landing/AutoEnter";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { ConfirmDialog } from "@/components/ui/Modal";
@@ -40,8 +40,12 @@ import {
 } from "@/lib/api-client";
 import {
   ensureRootEntryBeforeSubPage,
+  PORTAL_LAST_URL_KEY,
   PUC_URL_SYNC_EVENT,
   pushUrlNavigation,
+  readWorkspaceUrl,
+  replaceUrlPreservingState,
+  saveWorkspaceUrl,
 } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
 import { resolveValidPortalRoute } from "@/lib/route-validation";
@@ -275,6 +279,26 @@ export default function PortalApp({ initialTab = "home" }: { initialTab?: Portal
   );
 }
 
+function resolveClientPortalTab(serverTab: PortalTabId, userId?: number | null): PortalTabId {
+  if (typeof window === "undefined") return serverTab;
+  const sp = new URLSearchParams(window.location.search);
+  const parsed = resolveValidPortalRoute(sp);
+  if (!parsed) return serverTab;
+  if (sp.has("tab") || sp.has("sub") || sp.has("view")) {
+    return parsed.tab;
+  }
+  const savedUrl = readWorkspaceUrl(PORTAL_LAST_URL_KEY, userId);
+  if (savedUrl) {
+    const qIdx = savedUrl.indexOf("?");
+    const savedSearch = qIdx >= 0 ? savedUrl.slice(qIdx) : "";
+    const savedParsed = resolveValidPortalRoute(new URLSearchParams(savedSearch));
+    if (savedParsed) {
+      return savedParsed.tab;
+    }
+  }
+  return parsed.tab;
+}
+
 function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const router = useRouter();
   const { lang, setLang, t } = usePortalLang();
@@ -285,7 +309,9 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     status === "authenticated" && session?.user.role === "farmer" ? NOTIFICATIONS_PATH : null,
   );
 
-  const [tab, setTab] = useState<PortalTabId>(initialTab);
+  const [tab, setTab] = useState<PortalTabId>(() =>
+    resolveClientPortalTab(initialTab, session?.user.id),
+  );
   const [invalidClientUrl, setInvalidClientUrl] = useState<boolean>(() =>
     typeof window !== "undefined"
       ? resolveValidPortalRoute(new URLSearchParams(window.location.search)) === null
@@ -401,13 +427,40 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     } catch {
       // ignore
     }
-    const initialParsed = resolveValidPortalRoute(new URLSearchParams(window.location.search));
+    const sp = new URLSearchParams(window.location.search);
+    const initialParsed = resolveValidPortalRoute(sp);
     if (!initialParsed) {
       return;
     }
-    if (initialParsed.tab !== "home") {
-      const fullUrl = window.location.pathname + window.location.search + window.location.hash;
-      ensureRootEntryBeforeSubPage("/portal", fullUrl);
+
+    const hasExplicitRouteParam = sp.has("tab") || sp.has("sub") || sp.has("view");
+    let effectiveTab: PortalTabId = initialParsed.tab;
+    let effectiveUrl = window.location.pathname + window.location.search + window.location.hash;
+
+    if (!hasExplicitRouteParam) {
+      const savedUrl = readWorkspaceUrl(PORTAL_LAST_URL_KEY, activeUserId);
+      if (savedUrl) {
+        const qIdx = savedUrl.indexOf("?");
+        const savedSearch = qIdx >= 0 ? savedUrl.slice(qIdx) : "";
+        const savedParsed = resolveValidPortalRoute(new URLSearchParams(savedSearch));
+        if (savedParsed && (savedParsed.tab !== "home" || savedParsed.sub)) {
+          effectiveTab = savedParsed.tab;
+          effectiveUrl = savedUrl;
+          replaceUrlPreservingState(savedUrl);
+        }
+      }
+    }
+
+    saveWorkspaceUrl(PORTAL_LAST_URL_KEY, effectiveUrl, activeUserId);
+
+    if (effectiveTab !== tabRef.current) {
+      startTransition(() => {
+        setTab(effectiveTab);
+      });
+    }
+
+    if (effectiveTab !== "home") {
+      ensureRootEntryBeforeSubPage("/portal", effectiveUrl);
     }
 
     const onSync = () => {
@@ -416,6 +469,8 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         setInvalidClientUrl(true);
         return;
       }
+      const syncedUrl = window.location.pathname + window.location.search + window.location.hash;
+      saveWorkspaceUrl(PORTAL_LAST_URL_KEY, syncedUrl, activeUserId);
       const resolved: PortalTabId = parsed.tab;
       if (resolved !== tabRef.current) {
         startTransition(() => {
@@ -427,12 +482,18 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
 
     window.addEventListener(PUC_URL_SYNC_EVENT, onSync);
     return () => window.removeEventListener(PUC_URL_SYNC_EVENT, onSync);
-  }, [status, session?.user.role]);
+  }, [status, session?.user.role, activeUserId]);
 
   const navigate = useCallback(
     (next: PortalTabId, action?: PortalAction) => {
       setNavWheelOpen(false);
-      pushUrlNavigation(buildPortalTabUrl(next, action));
+      const nextUrl = buildPortalTabUrl(next, action);
+      if (next !== tabRef.current || action) {
+        pushUrlNavigation(nextUrl);
+      } else {
+        replaceUrlPreservingState(nextUrl);
+      }
+      saveWorkspaceUrl(PORTAL_LAST_URL_KEY, nextUrl, activeUserId);
       setIntent((prev) =>
         action ? { action, nonce: prev.nonce + 1 } : prev.action ? { nonce: prev.nonce } : prev,
       );
@@ -441,7 +502,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       });
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     },
-    [buildPortalTabUrl],
+    [buildPortalTabUrl, activeUserId],
   );
 
   const handleSearchPick = useCallback(
@@ -454,14 +515,16 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         return;
       }
       setNavWheelOpen(false);
-      pushUrlNavigation(buildPortalTabUrl(target.tab, target.action));
+      const nextUrl = buildPortalTabUrl(target.tab, target.action);
+      pushUrlNavigation(nextUrl);
+      saveWorkspaceUrl(PORTAL_LAST_URL_KEY, nextUrl, activeUserId);
       setIntent((prev) => ({ action: target.action, nonce: prev.nonce + 1 }));
       startTransition(() => {
         setTab(target.tab);
       });
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     },
-    [buildPortalTabUrl],
+    [buildPortalTabUrl, activeUserId],
   );
 
   const closeProfile = useCallback(() => {
@@ -473,8 +536,17 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   }, []);
 
   useEffect(() => {
-    if (status === "anonymous") router.replace("/login");
-    else if (status === "authenticated" && session?.user.role !== "farmer") router.replace("/admin");
+    if (status === "anonymous") {
+      if (typeof window !== "undefined" && !hasPendingServerLogout() && window.location.pathname.startsWith("/portal")) {
+        const directUrl = `${window.location.pathname}${window.location.search}`;
+        const targetNext = directUrl !== "/portal" ? directUrl : null;
+        router.replace(targetNext ? `/login?next=${encodeURIComponent(targetNext)}` : "/login");
+      } else {
+        router.replace("/login");
+      }
+    } else if (status === "authenticated" && session?.user.role !== "farmer") {
+      router.replace("/admin");
+    }
   }, [status, session, router]);
 
   useEffect(() => {
