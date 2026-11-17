@@ -2308,8 +2308,8 @@ input[type="date"].filter-select {
   grid-template-columns: 1fr 1fr;
   gap: 3px;
   padding: 3px;
-  background: #f4f7f5;
-  border: 1px solid #d4d4d2;
+  background: #f2f4f3;
+  border: none;
   border-radius: 6px;
 }
 
@@ -2341,8 +2341,8 @@ input[type="date"].filter-select {
   gap: 6px;
   padding: 9px 10px;
   background: #f7f7f5;
+  border: none;
   border-radius: 6px;
-  border: 1px solid #e2e5e3;
   font-variant-numeric: tabular-nums;
 }
 .plotmap-hint-stat {
@@ -2377,7 +2377,7 @@ input[type="date"].filter-select {
 
 .plotmap-inline-alert {
   padding: 8px 10px;
-  border: 1px solid #d4d4d2;
+  border: none;
   border-radius: 6px;
   background: #f7f7f5;
   color: var(--text-secondary);
@@ -2424,7 +2424,7 @@ input[type="date"].filter-select {
   gap: 6px;
   padding: 8px;
   background: #f7f7f5;
-  border: 1px solid #d4d4d2;
+  border: none;
   border-radius: 6px;
 }
 .plotmap-coord-input {
@@ -2464,10 +2464,10 @@ input[type="date"].filter-select {
   display: flex;
   align-items: flex-start;
   gap: 7px;
-  padding: 7px 9px;
-  background: #f7f7f5;
-  border: 1px solid #e2e5e3;
-  border-radius: 6px;
+  padding: 2px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   cursor: pointer;
   font-size: 11.5px;
   line-height: 1.35;
@@ -2696,6 +2696,10 @@ input[type="date"].filter-select {
   color: var(--text-secondary);
 }
 
+.plotmap-panel-body .plotmap-note {
+  border: none;
+}
+
 .plotmap-note-ok { background: #eef8e3; }
 .plotmap-note-error { background: #fdf1ee; color: #b73c20; }
 .plotmap-note-info { background: var(--sky-soft); }
@@ -2768,8 +2772,8 @@ input[type="date"].filter-select {
 .pp-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 14px; }
 
 .pp-areas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-.pp-areas > div { padding: 12px 14px; border-radius: 6px; background: #f7f7f5; border: 1px solid #e2e5e3; font-variant-numeric: tabular-nums; }
-.pp-areas > div:first-child { background: #f3f7ee; border-color: rgba(20, 55, 47, 0.14); }
+.pp-areas > div { padding: 12px 14px; border-radius: 6px; background: #f7f7f5; border: none; font-variant-numeric: tabular-nums; }
+.pp-areas > div:first-child { background: #f3f7ee; }
 .pp-areas span { display: block; font-size: 11px; color: rgba(20, 55, 47, 0.72); margin-bottom: 3px; }
 .pp-areas strong {
   display: block;
