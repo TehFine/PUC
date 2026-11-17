@@ -95,6 +95,7 @@ const SUPPLY_CHAIN_READERS: Role[] = [
   "enterprise",
 ];
 const ADMIN: Role[] = ["admin", "htx_head", "support_specialist"];
+const PLOT_SHAPE_EDITORS: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist"];
 const ACCOUNTS_READERS: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist"];
 const AUDIT_READERS: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist"];
 const HTX: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist", "htx_officer"];
@@ -144,7 +145,7 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   villages: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   accounts: { read: ACCOUNTS_READERS, create: ADMIN, update: ADMIN, delete: ADMIN },
   "audit-log": { read: AUDIT_READERS },
-  plots: { read: STAFF, create: HTX, update: HTX },
+  plots: { read: STAFF, create: HTX, update: PLOT_SHAPE_EDITORS },
   "plot-measurements": { read: STAFF, create: HTX_OR_INSPECTOR },
   // Cổng hộ dân: chỉ tài khoản nông dân được xem/ghi dữ liệu của chính hộ mình (phạm vi áp dụng ở PortalService).
   portal: { read: FARMER, create: FARMER },

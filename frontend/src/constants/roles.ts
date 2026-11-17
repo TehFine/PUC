@@ -21,3 +21,13 @@ export function isCoopStaffRole(role?: Role | null): boolean {
     role === "htx_officer"
   );
 }
+
+/** Chỉ Quản trị hệ thống, Trưởng HTX, Phó HTX và Chuyên viên hỗ trợ hệ thống được sửa hoặc vẽ lại hình dạng ranh giới thửa đất. */
+export function canRedrawPlotShapeByRole(role?: Role | null): boolean {
+  return (
+    role === "admin" ||
+    role === "htx_head" ||
+    role === "htx_deputy" ||
+    role === "support_specialist"
+  );
+}
