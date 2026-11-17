@@ -140,18 +140,18 @@ export default function GlobalErrorPage({
           height: 42px;
           padding: 0 22px;
           border-radius: 6px;
-          border: 1px solid #45ad8e;
+          border: none;
+          outline: none;
           background: #48b293;
           color: #ffffff;
           font-family: inherit;
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
-          transition: background-color 160ms ease, border-color 160ms ease;
+          transition: background-color 160ms ease;
         }
         .puc-err-btn-primary:hover {
           background: #39997c;
-          border-color: #39997c;
         }
         .puc-err-btn-secondary {
           display: inline-flex;
@@ -160,18 +160,18 @@ export default function GlobalErrorPage({
           height: 40px;
           padding: 0 18px;
           border-radius: 6px;
-          border: 1px solid #d4d4d2;
-          background: #ffffff;
-          color: #374151;
+          border: none;
+          outline: none;
+          background: #f3f5f4;
+          color: #1f2937;
           font-family: inherit;
           font-size: 13.5px;
           font-weight: 500;
           text-decoration: none;
-          transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+          transition: background-color 160ms ease, color 160ms ease;
         }
         .puc-err-btn-secondary:hover {
-          background: #f7f7f5;
-          border-color: #b8b8b4;
+          background: #e7ece9;
           color: #121212;
         }
       `}</style>
@@ -179,7 +179,7 @@ export default function GlobalErrorPage({
       <div className="puc-err-inner">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/error-scene.svg"
+          src="/error-scene.svg?v=2"
           alt=""
           width={248}
           height={195}
