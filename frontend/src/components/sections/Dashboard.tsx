@@ -79,7 +79,6 @@ export default function Dashboard() {
   const totalAreaHa = counts.areaHa ?? 0;
   const qualifiedHouseholds = counts.qualifiedHouseholds ?? 0;
   const openViolations = counts.openViolations ?? 0;
-  const pendingApprovalsCount = counts.pendingApprovals ?? summary?.pendingApprovals?.length ?? 0;
   const pendingRegistrations = counts.pendingRegistrations ?? 0;
   const harvestTons = counts.harvestTons ?? summary?.harvest?.tons ?? 0;
   const harvestLots = summary?.harvest?.lots ?? 0;
@@ -159,7 +158,6 @@ export default function Dashboard() {
     return items.slice(0, 4);
   }, [pendingRegistrations, summary?.pendingApprovals, summary?.recentViolations]);
 
-  const totalActionCount = pendingApprovalsCount + pendingRegistrations + openViolations;
   const activeTickIndex = Math.min(
     RULER_TICKS - 1,
     Math.max(0, Math.round((labPassPct / 100) * (RULER_TICKS - 1))),
@@ -196,9 +194,8 @@ export default function Dashboard() {
             {/* 1. Hạng mục cần xử lý ngay */}
             <section className="dash-bento-card">
               <div className="dash-bento-body">
-                <header className="dash-bento-head">
+                <header className="dash-bento-head is-centered">
                   <h2 className="dash-bento-title">Cần xử lý</h2>
-                  <span className="dash-bento-count">{formatVn(totalActionCount)}</span>
                 </header>
 
                 {actionQueue.length === 0 ? (
@@ -256,18 +253,18 @@ export default function Dashboard() {
             {/* 2. Quy mô vùng trồng & phân bổ thôn */}
             <section className="dash-bento-card">
               <div className="dash-bento-body">
-                <header className="dash-bento-head">
+                <header className="dash-bento-head is-centered">
                   <h2 className="dash-bento-title">Quy mô vùng trồng</h2>
                 </header>
 
-                <div className="dash-bento-hero">
+                <div className="dash-bento-hero is-centered">
                   <div className="dash-bento-figure">
                     <span className="dash-bento-num">{formatVn(totalAreaHa, 1)}</span>
                     <span className="dash-bento-unit">ha</span>
                   </div>
                 </div>
 
-                <div className="dash-bento-inline-specs">
+                <div className="dash-bento-inline-specs is-centered">
                   <span>Hộ <strong>{formatVn(totalHouseholds)}</strong></span>
                   <span>Thửa <strong>{formatVn(totalPlots)}</strong></span>
                   <span>Thôn <strong>{formatVn((summary?.villages ?? []).length)}</strong></span>

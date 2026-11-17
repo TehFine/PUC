@@ -1093,6 +1093,11 @@ body {
   margin-bottom: 16px;
 }
 
+.dash-bento-head.is-centered {
+  justify-content: center;
+  text-align: center;
+}
+
 .dash-bento-title {
   margin: 0;
   font-size: 15.5px;
@@ -1174,6 +1179,11 @@ body {
   margin-bottom: 12px;
 }
 
+.dash-bento-hero.is-centered {
+  justify-content: center;
+  text-align: center;
+}
+
 .dash-bento-figure {
   display: inline-flex;
   align-items: baseline;
@@ -1234,6 +1244,11 @@ body {
   font-size: 13px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+.dash-bento-inline-specs.is-centered {
+  justify-content: center;
+  text-align: center;
 }
 
 .dash-bento-inline-specs strong {
