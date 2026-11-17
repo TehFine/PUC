@@ -129,7 +129,8 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
         const ran = await migrate(this.pool, {
           skip: (name) => !hasPostgis && name === "002_plots.sql",
           log: (msg) => this.logger.log(msg),
-          warn: (msg) => this.logger.warn(msg),
+          // Trên production, migration lỗi được báo ở mức error (không ghi nhận đã áp dụng, tạm dừng các file sau).
+          warn: (msg) => (this.isProduction ? this.logger.error(msg) : this.logger.warn(msg)),
           continueOnError: this.isProduction,
         });
         if (!this.isProduction && ran.length > 0) {

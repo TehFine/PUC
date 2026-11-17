@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Pool, types } from "pg";
 
 // Trả về kiểu JS tự nhiên thay vì chuỗi: BIGINT/NUMERIC -> number, DATE -> 'YYYY-MM-DD'.
@@ -5,15 +6,40 @@ types.setTypeParser(20, (value) => Number(value));
 types.setTypeParser(1700, (value) => Number.parseFloat(value));
 types.setTypeParser(1082, (value) => value);
 
-function stripConflictingSslParams(connUrl: string): string {
+interface SplitSslParams {
+  connectionString: string;
+  sslmode?: string;
+  sslrootcert?: string;
+}
+
+/**
+ * Tách các tham số SSL kiểu libpq khỏi DATABASE_URL (pg sẽ ghi đè cấu hình `ssl` tường minh nếu để lại),
+ * nhưng vẫn giữ lại `sslmode` và `sslrootcert` để không âm thầm hạ cấp `verify-full` / `verify-ca`.
+ */
+function splitSslParams(connUrl: string): SplitSslParams {
   const qIdx = connUrl.indexOf("?");
-  if (qIdx === -1) return connUrl;
+  if (qIdx === -1) return { connectionString: connUrl };
   const base = connUrl.slice(0, qIdx);
-  const kept = connUrl
-    .slice(qIdx + 1)
-    .split("&")
-    .filter((kv) => kv.length > 0 && !/^(?:sslmode|sslrootcert|sslcert|sslkey|uselibpqcompat)=/i.test(kv));
-  return kept.length > 0 ? `${base}?${kept.join("&")}` : base;
+  const kept: string[] = [];
+  let sslmode: string | undefined;
+  let sslrootcert: string | undefined;
+  for (const kv of connUrl.slice(qIdx + 1).split("&")) {
+    if (kv.length === 0) continue;
+    const eq = kv.indexOf("=");
+    const key = (eq === -1 ? kv : kv.slice(0, eq)).toLowerCase();
+    const rawValue = eq === -1 ? "" : kv.slice(eq + 1);
+    let value = rawValue;
+    try {
+      value = decodeURIComponent(rawValue);
+    } catch {
+      value = rawValue;
+    }
+    if (key === "sslmode") sslmode = value.toLowerCase();
+    else if (key === "sslrootcert") sslrootcert = value;
+    else if (key === "sslcert" || key === "sslkey" || key === "uselibpqcompat") continue;
+    else kept.push(kv);
+  }
+  return { connectionString: kept.length > 0 ? `${base}?${kept.join("&")}` : base, sslmode, sslrootcert };
 }
 
 export function createPool(options: {
@@ -23,18 +49,35 @@ export function createPool(options: {
   sslCa?: string;
 }): Pool {
   const poolMax = Number(process.env.DB_POOL_MAX) || 4;
+  const split: SplitSslParams = options.ssl ? splitSslParams(options.url) : { connectionString: options.url };
+
+  let ca = options.sslCa;
+  if (!ca && split.sslrootcert && split.sslrootcert !== "system") {
+    try {
+      ca = readFileSync(split.sslrootcert, "utf8");
+    } catch (err) {
+      throw new Error(
+        `Không đọc được tệp chứng chỉ CA (sslrootcert) của DATABASE_URL: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  const verifyRequestedByUrl = split.sslmode === "verify-full" || split.sslmode === "verify-ca";
   const strictSsl =
-    options.sslRejectUnauthorized ??
-    (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED
-      ? process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
-      : Boolean(options.sslCa));
-  const connectionString = options.ssl ? stripConflictingSslParams(options.url) : options.url;
+    verifyRequestedByUrl ||
+    (options.sslRejectUnauthorized ??
+      (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED
+        ? process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
+        : process.env.NODE_ENV === "production" || Boolean(ca)));
+
   const pool = new Pool({
-    connectionString,
+    connectionString: split.connectionString,
     ssl: options.ssl
       ? {
           rejectUnauthorized: strictSsl,
-          ...(options.sslCa ? { ca: options.sslCa } : {}),
+          ...(ca ? { ca } : {}),
+          // verify-ca theo chuẩn libpq: xác minh chuỗi CA nhưng không đối chiếu tên máy chủ.
+          ...(split.sslmode === "verify-ca" ? { checkServerIdentity: () => undefined } : {}),
         }
       : undefined,
     // Giới hạn tối đa 4 kết nối/tiến trình để khi chạy song song cả Render lẫn localhost

@@ -10,8 +10,13 @@ export interface MigrateOptions {
   skip?: (name: string) => boolean;
   log?: (message: string) => void;
   warn?: (message: string) => void;
-  /** Trên môi trường đám mây đã tạo bảng thủ công trước đó: không dừng cứng toàn server nếu 1 file cũ báo trùng đối tượng. */
+  /**
+   * Trên production: không dừng cứng toàn server khi một migration lỗi. File lỗi không bao giờ được ghi nhận
+   * là đã áp dụng và các file phía sau bị tạm dừng cho tới khi xử lý xong.
+   */
   continueOnError?: boolean;
+  /** Thư mục chứa các file .sql (mặc định db/migrations); dùng cho kiểm thử. */
+  dir?: string;
 }
 
 /** Chạy tuần tự các file db/migrations/*.sql chưa áp dụng, dùng khóa tư vấn theo giao dịch tương thích với mọi Connection Pooler. */
@@ -28,7 +33,8 @@ export async function migrate(pool: Pool, options: MigrateOptions = {}): Promise
   const initialApplied = new Set(
     (await pool.query<{ name: string }>("SELECT name FROM schema_migrations")).rows.map((row) => row.name),
   );
-  const files = readdirSync(MIGRATIONS_DIR).filter((file) => file.endsWith(".sql")).sort();
+  const migrationsDir = options.dir ?? MIGRATIONS_DIR;
+  const files = readdirSync(migrationsDir).filter((file) => file.endsWith(".sql")).sort();
   const pendingFiles = files.filter((file) => !initialApplied.has(file) && !options.skip?.(file));
   if (pendingFiles.length === 0) {
     return [];
@@ -38,7 +44,7 @@ export async function migrate(pool: Pool, options: MigrateOptions = {}): Promise
   const ran: string[] = [];
   try {
     for (const file of pendingFiles) {
-      const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
+      const sql = readFileSync(join(migrationsDir, file), "utf8");
       try {
         await client.query("BEGIN");
         await client.query("SET LOCAL lock_timeout = '15s'");
@@ -58,18 +64,18 @@ export async function migrate(pool: Pool, options: MigrateOptions = {}): Promise
         ran.push(file);
       } catch (error) {
         await client.query("ROLLBACK").catch(() => undefined);
-        const pgCode = (error as { code?: string })?.code;
         const msg = error instanceof Error ? error.message : String(error);
         if (options.continueOnError) {
-          if (pgCode === "42P07" || pgCode === "42710") {
-            await client
-              .query("INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", [file])
-              .catch(() => undefined);
-            warn(`Ghi nhận migration ${file} đã tồn tại trước đó trên CSDL (${msg})`);
-          } else {
-            warn(`Tạm bỏ qua migration ${file} trên production: ${msg}`);
-          }
-          continue;
+          // Mỗi file chạy trong 1 giao dịch nên lỗi giữa chừng đã được ROLLBACK toàn bộ: tuyệt đối không ghi nhận
+          // file vào schema_migrations (kể cả lỗi trùng đối tượng 42P07/42710), vì như vậy phần còn lại của file
+          // sẽ không bao giờ được áp dụng. Dừng luôn các file sau (có thể phụ thuộc file này) và giữ server chạy
+          // để quản trị viên xử lý thủ công rồi khởi động lại.
+          const remaining = pendingFiles.slice(pendingFiles.indexOf(file) + 1);
+          warn(
+            `Migration ${file} thất bại trên production và chưa được ghi nhận là đã áp dụng: ${msg}. ` +
+              (remaining.length > 0 ? `Tạm dừng ${remaining.length} migration phía sau: ${remaining.join(", ")}.` : ""),
+          );
+          break;
         }
         throw new Error(`Migration ${file} thất bại: ${msg}`);
       }
