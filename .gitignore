@@ -16,6 +16,7 @@ data_PUC/
 
 # Thư mục làm việc cục bộ, không thuộc mã nguồn
 uiux/
+/images/
 scratch/
 **/scratch/
 

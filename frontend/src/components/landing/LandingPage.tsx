@@ -6,6 +6,7 @@ import LandingFooter from "./LandingFooter";
 import "./landing.css";
 import "./swiss-landing.css";
 
+const CoopLegalSection = dynamic(() => import("./CoopLegalSection"));
 const TrainingGallery = dynamic(() => import("./TrainingGallery"));
 const News = dynamic(() => import("./News"));
 const Catalog = dynamic(() => import("./Catalog"));
@@ -435,6 +436,9 @@ export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean
             </div>
           </div>
         </section>
+
+        {/* ─── HỒ SƠ PHÁP NHÂN HỢP TÁC XÃ (Giấy chứng nhận ĐKHTX số 4007E00008) ─── */}
+        <CoopLegalSection />
 
         {/* ─── 03. TẬP HUẤN THỰC ĐỊA (Khung hình mở rộng + Ngăn chi tiết trượt từ cạnh phải) ─── */}
         <TrainingGallery />

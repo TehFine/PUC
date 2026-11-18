@@ -121,23 +121,34 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
             </li>
             <li>
               {fromTrace ? (
+                <Link href="/#phap-ly" className="sw-ft-link">
+                  <span>Giấy chứng nhận ĐKHTX</span>
+                </Link>
+              ) : (
+                <a href="#phap-ly" className="sw-ft-link">
+                  <span>Giấy chứng nhận ĐKHTX</span>
+                </a>
+              )}
+            </li>
+            <li>
+              {fromTrace ? (
                 <Link href="/#tap-huan" className="sw-ft-link">
-                  <span>Tập huấn &amp; Bản tin</span>
+                  <span>Tập huấn và Bản tin</span>
                 </Link>
               ) : (
                 <a href="#tap-huan" className="sw-ft-link">
-                  <span>Tập huấn &amp; Bản tin</span>
+                  <span>Tập huấn và Bản tin</span>
                 </a>
               )}
             </li>
             <li>
               {fromTrace ? (
                 <Link href="/#tra-cuu" className="sw-ft-link">
-                  <span>Thuốc BVTV &amp; Khuyến cáo</span>
+                  <span>Thuốc BVTV và Khuyến cáo</span>
                 </Link>
               ) : (
                 <a href="#tra-cuu" className="sw-ft-link">
-                  <span>Thuốc BVTV &amp; Khuyến cáo</span>
+                  <span>Thuốc BVTV và Khuyến cáo</span>
                 </a>
               )}
             </li>
@@ -159,7 +170,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
         <div className="sw-ft-col">
           <h3 className="sw-ft-heading">Về HTX Cư Né</h3>
           <p className="sw-ft-prose">
-            HTX Nông nghiệp Cư Né vận hành nền tảng quản lý vùng trồng số hóa tại thủ phủ sầu riêng Krông Búk, tỉnh Đắk Lắk. Chúng tôi tin rằng sự minh bạch từ gốc là nền tảng của nông nghiệp bền vững — chuẩn hóa từng khâu canh tác theo VietGAP và Nghị định thư GACC nhằm nâng tầm giá trị trái sầu riêng Tây Nguyên.
+            HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né (Mã số ĐKHTX: 4007E00008) vận hành nền tảng quản lý vùng trồng số hóa tại thủ phủ sầu riêng Krông Búk, tỉnh Đắk Lắk. Chúng tôi lấy sự minh bạch từ gốc làm nền tảng phát triển bền vững, chuẩn hóa từng khâu canh tác theo VietGAP và Nghị định thư GACC nhằm nâng tầm giá trị trái sầu riêng Tây Nguyên.
           </p>
         </div>
       </div>
