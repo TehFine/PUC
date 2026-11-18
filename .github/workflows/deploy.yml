@@ -1,0 +1,55 @@
+name: Auto Deploy to Cloud Server
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Xếp hàng tuần tự nếu push nhiều commit liên tiếp, tránh 2 tiến trình build chạy đè nhau trên máy chủ
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Restart Docker on Cloud Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Kiểm tra cấu hình GitHub Secrets
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          if [ -z "$SERVER_HOST" ] || [ -z "$SERVER_SSH_KEY" ]; then
+            echo "::error::Chưa cấu hình SERVER_HOST hoặc SERVER_SSH_KEY trong GitHub Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Kết nối SSH và cập nhật Docker Compose trên máy chủ
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          SERVER_PORT="${SERVER_PORT:-24700}"
+          SERVER_USER="${SERVER_USER:-deploy}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          ssh -i ~/.ssh/deploy_key -p "$SERVER_PORT" -o StrictHostKeyChecking=yes "${SERVER_USER}@${SERVER_HOST}" << 'EOF'
+            set -euo pipefail
+            cd /opt/puc
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --remove-orphans
+            docker image prune -f
+            docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+          EOF
+          rm -f ~/.ssh/deploy_key
+
