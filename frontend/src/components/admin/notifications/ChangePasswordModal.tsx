@@ -69,7 +69,7 @@ function ChangePasswordFormContent({
           required
         />
       </Field>
-      <Field label="Mật khẩu mới (ít nhất 8 ký tự)" htmlFor="admin-cp-new">
+      <Field label="Mật khẩu mới (tối thiểu 8 ký tự, gồm chữ và số)" htmlFor="admin-cp-new">
         <input
           id="admin-cp-new"
           type="password"

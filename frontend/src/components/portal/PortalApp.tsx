@@ -22,6 +22,7 @@ import { WORKSPACE_ACTIVE_SESSION_KEY } from "@/components/landing/AutoEnter";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { ConfirmDialog } from "@/components/ui/Modal";
 import OfflineSyncBar from "@/components/ui/OfflineSyncBar";
+import { toast } from "@/components/ui/Toast";
 import {
   invalidateQueries,
   NOTIFICATIONS_PATH,
@@ -197,6 +198,10 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
       setError("Mật khẩu mới phải có tối thiểu 8 ký tự.");
       return;
     }
+    if (!/[A-Za-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      setError("Mật khẩu mới cần bao gồm cả chữ cái và chữ số.");
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setError("Xác nhận mật khẩu mới chưa khớp.");
       return;
@@ -228,7 +233,7 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
           required
         />
       </Field>
-      <Field label="Mật khẩu mới (ít nhất 8 ký tự)" htmlFor="cp-new">
+      <Field label="Mật khẩu mới (tối thiểu 8 ký tự, gồm chữ và số)" htmlFor="cp-new">
         <input
           id="cp-new"
           type="password"
@@ -1486,6 +1491,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         >
           <ChangePasswordForm
             onSuccess={() => {
+              toast.success("Đã đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
               setPasswordOpen(false);
               void logout();
             }}
