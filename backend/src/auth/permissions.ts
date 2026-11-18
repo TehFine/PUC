@@ -14,6 +14,14 @@ export type Role = (typeof ROLES)[number];
 /** Nhóm vai trò có toàn quyền quản trị tài khoản, mở khóa và duyệt cấp lại mật khẩu cho mọi tài khoản. */
 export const ADMIN_PRIVILEGED_ROLES: readonly Role[] = ["admin", "htx_head", "support_specialist"];
 
+/** Nhóm vai trò Ban điều hành và Quản trị hệ thống (không cho phép khôi phục mật khẩu qua trang công khai). */
+export const MANAGEMENT_ROLES: readonly Role[] = [
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+];
+
 /** Nhóm vai trò thuộc ban điều hành, hỗ trợ hệ thống và cán bộ trung tâm của Hợp tác xã (phạm vi HTX-CUNE). */
 export const COOP_STAFF_ROLES: readonly Role[] = [
   "admin",
@@ -25,6 +33,10 @@ export const COOP_STAFF_ROLES: readonly Role[] = [
 
 export function isAdminPrivilegedRole(role?: string | null): boolean {
   return typeof role === "string" && (ADMIN_PRIVILEGED_ROLES as readonly string[]).includes(role);
+}
+
+export function isManagementRole(role?: string | null): boolean {
+  return typeof role === "string" && (MANAGEMENT_ROLES as readonly string[]).includes(role);
 }
 
 export function isCoopStaffRole(role?: string | null): boolean {

@@ -30,7 +30,7 @@ import type {
   UpdateProfileDto,
   VerifyOtpChallengeDto,
 } from "./dto/auth.dto";
-import { permissionsFor, type Action, type Role } from "./permissions";
+import { isManagementRole, permissionsFor, type Action, type Role } from "./permissions";
 import { TokensService } from "./tokens.service";
 
 const MAX_FAILED_LOGINS = 5;
@@ -1265,7 +1265,12 @@ export class AuthService {
     ]);
     const user = rows[0];
 
-    if (!user || user.status === "pending") {
+    if (
+      !user ||
+      user.status === "pending" ||
+      isManagementRole(user.role) ||
+      normalizePersonName(cleanFullName) !== normalizePersonName(user.full_name ?? "")
+    ) {
       return genericResponse;
     }
 

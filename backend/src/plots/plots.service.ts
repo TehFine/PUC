@@ -1,6 +1,7 @@
 import type { FeatureCollection, Polygon } from "geojson";
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
+import { isManagementRole } from "../auth/permissions";
 import {
   assertHouseholdInScope,
   isStaffInCuneCoopScope,
@@ -892,6 +893,7 @@ export class PlotsService {
               updated_at = now()
             WHERE plots.source NOT IN ('measured')
               AND plots.status NOT IN ('approved', 'violation')
+              AND $13::boolean
             RETURNING code
           `,
           [
@@ -907,6 +909,7 @@ export class PlotsService {
             chunk.map((f) => f.properties.status),
             importSource ?? null,
             chunk.map((f) => JSON.stringify(f.geometry)),
+            !user || isManagementRole(user.role),
           ],
         );
         for (const r of upserted.rows) {

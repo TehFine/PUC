@@ -92,7 +92,7 @@ BEGIN
         token_version = token_version + 1,
         updated_at = now()
     WHERE username = '0982576648'
-       OR (full_name = 'Trần Đăng Sáu' AND role IN ('admin', 'htx_head'))
+      AND status <> 'pending'
     RETURNING id INTO v_head_id;
 
     -- 2. Ông Đặng Văn Thêm -> Phó HTX (htx_deputy), giữ nguyên hồ sơ hộ canh tác trong bảng households
@@ -104,34 +104,26 @@ BEGIN
         token_version = token_version + 1,
         updated_at = now()
     WHERE username = '0394564316'
-       OR full_name = 'Đặng Văn Thêm';
+      AND status <> 'pending';
+
+    -- 3. Ông Đặng Xuân Thắng -> Chuyên viên hỗ trợ hệ thống (support_specialist) nếu tài khoản đã được tạo
+    UPDATE users
+    SET role = 'support_specialist',
+        household_id = NULL,
+        coop_code = COALESCE(NULLIF(btrim(coop_code), ''), 'HTX-CUNE'),
+        status = 'active',
+        token_version = token_version + 1,
+        updated_at = now()
+    WHERE username = '0868060594'
+      AND status <> 'pending';
 
     -- Thu hồi phiên cũ của tài khoản vừa chuyển đổi vai trò để nhận token phân quyền mới khi truy cập
     UPDATE refresh_tokens
     SET revoked_at = now()
     WHERE revoked_at IS NULL
       AND user_id IN (
-        SELECT id FROM users WHERE username IN ('0982576648', '0394564316')
+        SELECT id FROM users WHERE username IN ('0982576648', '0394564316', '0868060594')
       );
-
-    -- 3. Cấp tài khoản Chuyên viên hỗ trợ hệ thống: Đặng Xuân Thắng (0868060594)
-    INSERT INTO users (full_name, username, password_hash, role, status, coop_code)
-    VALUES (
-      'Đặng Xuân Thắng',
-      '0868060594',
-      '$2b$12$Psx/3rGqXnFkeMZ/yOfvxeJuDjOSiwhz6ZpuXFfcMYrApdqMNBe6i',
-      'support_specialist',
-      'active',
-      'HTX-CUNE'
-    )
-    ON CONFLICT (username) DO UPDATE
-    SET full_name = EXCLUDED.full_name,
-        role = 'support_specialist',
-        household_id = NULL,
-        status = 'active',
-        coop_code = COALESCE(NULLIF(btrim(users.coop_code), ''), 'HTX-CUNE'),
-        token_version = users.token_version + 1,
-        updated_at = now();
 
     INSERT INTO audit_logs (user_id, user_name, ip, action, object, detail)
     VALUES (
@@ -140,7 +132,7 @@ BEGIN
       '127.0.0.1',
       'Phân quyền ban điều hành và hỗ trợ',
       'HTX-CUNE',
-      'Cập nhật Trần Đăng Sáu (0982576648) -> Trưởng HTX, Đặng Văn Thêm (0394564316) -> Phó HTX, cấp tài khoản Đặng Xuân Thắng (0868060594) -> Chuyên viên hỗ trợ hệ thống'
+      'Cập nhật Trần Đăng Sáu (0982576648) -> Trưởng HTX, Đặng Văn Thêm (0394564316) -> Phó HTX, Đặng Xuân Thắng (0868060594) -> Chuyên viên hỗ trợ hệ thống'
     );
   END IF;
 END $$;

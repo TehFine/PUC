@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import type { AuthUser } from "../auth/auth-user";
-import { isAdminPrivilegedRole } from "../auth/permissions";
+import { isAdminPrivilegedRole, isManagementRole } from "../auth/permissions";
 import { AuditService } from "../audit/audit.service";
 import { isStaffInCuneCoopScope, isStaffInParcelScope } from "../common/crud/village-scope";
 import { AppException, forbidden, notFound } from "../common/errors/app.exception";
@@ -352,6 +352,12 @@ export class RegistrationsService {
       const targetUser = userRes.rows[0];
       if (!targetUser) {
         throw notFound("Tài khoản gắn với yêu cầu cấp lại mật khẩu không còn tồn tại.");
+      }
+
+      if (isManagementRole(targetUser.role)) {
+        throw forbidden(
+          "Tài khoản Ban điều hành và Quản trị hệ thống không được phép đặt lại mật khẩu qua yêu cầu công khai.",
+        );
       }
 
       if (!isAdminPrivilegedRole(user.role)) {

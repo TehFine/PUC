@@ -9,6 +9,24 @@ import { DatabaseService } from "../../database/database.service";
 
 const ADMIN_MUTATION_ADVISORY_LOCK = 73829104;
 
+function roleRank(role?: string | null): number {
+  if (role === "admin") return 3;
+  if (role === "htx_head") return 2;
+  if (role === "support_specialist" || role === "htx_deputy") return 1;
+  return 0;
+}
+
+function assertRoleHierarchy(actorRole: string, targetCurrentRole?: string | null, nextRole?: string | null) {
+  if (actorRole === "admin") return;
+  const actorRank = roleRank(actorRole);
+  if (targetCurrentRole && roleRank(targetCurrentRole) >= actorRank) {
+    throw forbidden("Bạn không có quyền chỉnh sửa hoặc thu hồi bảo mật của tài khoản ngang cấp hoặc cấp cao hơn.");
+  }
+  if (nextRole && roleRank(nextRole) >= actorRank) {
+    throw forbidden("Bạn không có quyền cấp vai trò ngang cấp hoặc cao hơn vai trò hiện tại của mình.");
+  }
+}
+
 @Injectable()
 export class AccountsService extends BaseCrudService {
   constructor(db: DatabaseService, audit: AuditService) {
@@ -68,6 +86,7 @@ export class AccountsService extends BaseCrudService {
     }
 
     const effRole = String(next.role ?? existing?.role ?? "");
+    assertRoleHierarchy(context.user.role, existing?.role ?? null, typeof next.role === "string" ? next.role : null);
     if (next.householdId !== undefined && next.householdId !== null && effRole !== "farmer") {
       throw badRequest("Chỉ tài khoản nông hộ mới được liên kết với hộ canh tác.");
     }
@@ -192,11 +211,14 @@ export class AccountsService extends BaseCrudService {
 
   /** Quản trị viên đăng xuất từ xa toàn bộ thiết bị đang đăng nhập của một tài khoản. */
   async revokeUserSessions(targetUserId: number, actor: AuthUser, ip?: string) {
-    const target = await this.db.query<{ id: number; username: string; full_name: string }>(
-      "SELECT id, username, full_name FROM users WHERE id = $1",
+    const target = await this.db.query<{ id: number; username: string; full_name: string; role: string }>(
+      "SELECT id, username, full_name, role FROM users WHERE id = $1",
       [targetUserId],
     );
     if (!target.rows[0]) throw notFound("Không tìm thấy tài khoản.");
+    if (Number(targetUserId) !== Number(actor.id)) {
+      assertRoleHierarchy(actor.role, target.rows[0].role, null);
+    }
 
     const [, revRes] = await Promise.all([
       this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [targetUserId]),
@@ -218,11 +240,14 @@ export class AccountsService extends BaseCrudService {
 
   /** Quản trị viên đặt lại xác thực 2 lớp khi cán bộ/đối tác mất thiết bị xác thực (sau khi đối chiếu). */
   async resetTwoFactor(targetUserId: number, actor: AuthUser, ip?: string) {
-    const target = await this.db.query<{ id: number; username: string; full_name: string }>(
-      "SELECT id, username, full_name FROM users WHERE id = $1",
+    const target = await this.db.query<{ id: number; username: string; full_name: string; role: string }>(
+      "SELECT id, username, full_name, role FROM users WHERE id = $1",
       [targetUserId],
     );
     if (!target.rows[0]) throw notFound("Không tìm thấy tài khoản.");
+    if (Number(targetUserId) !== Number(actor.id)) {
+      assertRoleHierarchy(actor.role, target.rows[0].role, null);
+    }
 
     await Promise.all([
       this.db.query(
@@ -252,6 +277,10 @@ export class AccountsService extends BaseCrudService {
 
   protected override async guardDelete(userId: number, user: AuthUser) {
     if (userId === user.id) throw forbidden("Không thể xóa chính tài khoản đang đăng nhập.");
+    const target = await this.db.query<{ role: string }>("SELECT role FROM users WHERE id = $1", [userId]);
+    if (target.rows[0]) {
+      assertRoleHierarchy(user.role, target.rows[0].role, null);
+    }
     await this.assertNotLastActiveAdmin(userId);
   }
 
