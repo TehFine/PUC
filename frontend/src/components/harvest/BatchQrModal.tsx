@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -9,6 +9,11 @@ import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import type { HarvestItem } from "@/types/entities";
 import { api, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, AUTH_SCOPE_CHANGED_EVENT } from "@/lib/api-client";
 import { useBackLayer } from "@/lib/back-navigation";
+import {
+  animatePopupExit,
+  resolvePopupExitKind,
+  spawnExitCloneIfNeeded,
+} from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
 
@@ -85,68 +90,68 @@ export default function BatchQrModal({ lot, onClose }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const dragZoneRef = useRef<HTMLDivElement>(null);
+  const backdropDownRef = useRef(false);
   const isClosingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const handleClose = useCallback(() => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
-    const sheet = sheetRef.current;
-    const backdrop = backdropRef.current;
-    const desktopNow = typeof window !== "undefined" && window.innerWidth >= 760;
-    const closeDuration = desktopNow ? 240 : 220;
-
-    if (sheet) {
-      sheet.style.animation = "none";
-      sheet.style.pointerEvents = "none";
-      if (desktopNow) {
-        sheet.style.transition = "transform 240ms cubic-bezier(0.32, 0.72, 0, 1)";
-        sheet.style.transform = "translate3d(100%, 0, 0)";
-      } else {
-        sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-        sheet.style.transform = "translate3d(0, 105%, 0)";
-      }
-    }
-    if (backdrop) {
-      backdrop.style.animation = "none";
-      backdrop.style.pointerEvents = "none";
-      backdrop.style.transition = "opacity 210ms ease-out";
-      backdrop.style.opacity = "0";
-    }
-    setTimeout(() => {
-      onClose();
+    const exitKind = resolvePopupExitKind("drawer", 760);
+    const closeDuration = animatePopupExit(sheetRef.current, backdropRef.current, exitKind);
+    window.setTimeout(() => {
+      onCloseRef.current();
     }, closeDuration);
-  }, [onClose]);
+  }, []);
+
+  useLayoutEffect(() => {
+    const backdropEl = backdropRef.current;
+    const sheetEl = sheetRef.current;
+    return () => {
+      if (!isClosingRef.current) {
+        spawnExitCloneIfNeeded(backdropEl, sheetEl, resolvePopupExitKind("drawer", 760));
+      }
+    };
+  }, []);
 
   useBackLayer(true, handleClose);
 
   useEffect(() => {
     const unlockScroll = lockRootScroll();
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        handleClose();
-      }
+      if (event.key !== "Escape") return;
+      const overlays = document.querySelectorAll(
+        ".pt-sheet-backdrop, .modal-overlay, .cert-modal-backdrop, .pt-radial-backdrop",
+      );
+      if (overlays.length > 0 && overlays[overlays.length - 1] !== backdropRef.current) return;
+      event.stopPropagation();
+      handleClose();
     };
-    window.addEventListener("keydown", handleKey);
+    document.addEventListener("keydown", handleKey);
     return () => {
-      window.removeEventListener("keydown", handleKey);
+      document.removeEventListener("keydown", handleKey);
       unlockScroll();
     };
   }, [handleClose]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (isClosingRef.current) return;
       if (sheetRef.current) {
-        sheetRef.current.style.animation = "none";
-        sheetRef.current.style.transform = "translate3d(0, 0, 0)";
+        sheetRef.current.style.setProperty("animation", "none", "important");
+        sheetRef.current.style.transform = "";
+        sheetRef.current.style.willChange = "auto";
       }
       if (backdropRef.current) {
-        backdropRef.current.style.animation = "none";
+        backdropRef.current.style.setProperty("animation", "none", "important");
         backdropRef.current.style.opacity = "1";
       }
-    }, 350);
-    return () => clearTimeout(timer);
+    }, 320);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useSheetSwipe({
@@ -310,8 +315,13 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     <div
       ref={backdropRef}
       className="batch-qr-overlay pt-sheet-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) handleClose();
+      onPointerDown={(e) => {
+        backdropDownRef.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        const startedOnBackdrop = backdropDownRef.current;
+        backdropDownRef.current = false;
+        if (startedOnBackdrop && e.target === e.currentTarget) handleClose();
       }}
     >
       <div
@@ -326,9 +336,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           <div className="bqr-mobile-grabber" aria-hidden="true" />
           <div className="batch-qr-header">
             <div className="batch-qr-head-copy">
-              <div className="batch-qr-subtitle">ĐỊNH DANH VÀ TRUY XUẤT NGUỒN GỐC</div>
               <h2 id={titleId} className="batch-qr-title">
-                Cấp và in tem lô {lot.code}
+                In tem lô {lot.code}
               </h2>
             </div>
             <button
@@ -350,7 +359,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         <div className="batch-qr-body">
           {/* Chuyển loại tem và xuất bản */}
           <div className="batch-qr-toolbar no-print">
-            <div className="batch-qr-type-switch" role="tablist" aria-label="Loại tem định danh">
+            <div className="batch-qr-type-switch" role="tablist" aria-label="Loại tem">
               <button
                 type="button"
                 role="tab"
@@ -367,7 +376,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                 className={`type-btn ${itemType === "fruit" ? "active" : ""}`}
                 onClick={() => handleTypeChange("fruit")}
               >
-                Tem từng quả ({fruitCount})
+                Tem quả ({fruitCount})
               </button>
             </div>
 
@@ -376,10 +385,10 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                 className="bqr-select bqr-ecc-select"
                 value={eccLevel}
                 onChange={(e) => setEccLevel(e.target.value as "Q" | "M")}
-                aria-label="Mức sửa lỗi mã QR"
+                aria-label="Độ nét mã QR"
               >
-                <option value="Q">Sửa lỗi mức Q (25%, kho lạnh)</option>
-                <option value="M">Sửa lỗi mức M (15%, tiêu chuẩn)</option>
+                <option value="Q">Mức Q (chống mờ kho lạnh)</option>
+                <option value="M">Mức M (tiêu chuẩn)</option>
               </select>
               <button
                 type="button"
@@ -395,7 +404,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                 onClick={handlePrint}
                 disabled={filteredItems.length === 0}
               >
-                In trang tem
+                In tem
               </button>
             </div>
           </div>
@@ -403,15 +412,11 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           {/* Khung tạo mới dải tem */}
           {canGenerate && (
             <div className="batch-qr-gen-panel no-print">
-              <div className="gen-panel-title">
-                {itemType === "box"
-                  ? `Cấp dải mã QR thùng cho lô ${lot.code}`
-                  : `Cấp dải mã QR từng quả cho lô ${lot.code}`}
-              </div>
+              <div className="gen-panel-title">Tạo tem mới</div>
 
               <div className="gen-panel-form">
                 <div className="gen-form-group gen-col-count">
-                  <label htmlFor={`${titleId}-count`}>Số lượng tem</label>
+                  <label htmlFor={`${titleId}-count`}>Số lượng</label>
                   <select
                     id={`${titleId}-count`}
                     className="bqr-select"
@@ -435,15 +440,13 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                     onChange={(e) => setGrade(e.target.value as "A" | "B" | "C")}
                   >
                     <option value="A">Hạng A (Xuất khẩu)</option>
-                    <option value="B">Hạng B (Loại 2)</option>
-                    <option value="C">Hạng C (Nội địa)</option>
+                    <option value="B">Hạng B</option>
+                    <option value="C">Hạng C</option>
                   </select>
                 </div>
 
                 <div className="gen-form-group gen-col-weight">
-                  <label htmlFor={`${titleId}-weight`}>
-                    {itemType === "fruit" ? "Khối lượng quả (kg)" : "Quy cách thùng (kg)"}
-                  </label>
+                  <label htmlFor={`${titleId}-weight`}>Khối lượng (kg)</label>
                   <input
                     id={`${titleId}-weight`}
                     type="number"
@@ -462,8 +465,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
                   disabled={generating}
                 >
                   {generating
-                    ? "Đang cấp mã..."
-                    : `Sinh ${count} tem ${itemType === "fruit" ? "quả" : "thùng"}`}
+                    ? "Đang tạo..."
+                    : `Tạo ${count} tem ${itemType === "fruit" ? "quả" : "thùng"}`}
                 </button>
               </div>
               {error && <div className="batch-qr-error">{error}</div>}
@@ -473,26 +476,20 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           {/* Khung xem trước và bản in tem */}
           <div className="batch-qr-preview-area">
             <div className="preview-header no-print">
-              <div className="preview-note">
-                <strong>Xem trước nhãn in ({filteredItems.length} tem)</strong>
-                <span>
-                  Kích thước QR tối thiểu {itemType === "fruit" ? "2,2 x 2,2 cm" : "2,8 x 2,8 cm"}, kèm mã chữ dự phòng
-                </span>
+              <div className="preview-head-row">
+                <strong>Xem trước ({filteredItems.length} tem)</strong>
+                <span className="preview-spec">Tương phản cao, mức {eccLevel}</span>
               </div>
-              {filteredItems.length > 0 && (
-                <span className="bqr-ecc-tag">Tương phản cao, mức {eccLevel}</span>
-              )}
-            </div>
-
-            <div className="bqr-material-note no-print">
-              <strong>Quy chuẩn in tem:</strong> Dùng decal nhựa chịu ẩm kho lạnh 12 đến 15 °C, keo chống bóc dán lại và quét thử trên thiết bị di động trước khi in hàng loạt.
+              <p className="preview-sub">
+                Cỡ QR tối thiểu {itemType === "fruit" ? "2,2 x 2,2 cm" : "2,8 x 2,8 cm"}, in decal nhựa chịu ẩm và quét thử trước khi in.
+              </p>
             </div>
 
             {loading ? (
-              <div className="batch-qr-loading no-print">Đang tải dải mã tem...</div>
+              <div className="batch-qr-loading no-print">Đang tải danh sách tem...</div>
             ) : filteredItems.length === 0 ? (
               <div className="batch-qr-empty no-print">
-                Chưa có tem {itemType === "fruit" ? "từng quả" : "thùng"} nào được cấp cho lô này. Chọn thông số phía trên và bấm <strong>Sinh tem</strong> để tạo mới.
+                Chưa có tem {itemType === "fruit" ? "quả" : "thùng"} nào. Chọn thông số ở trên và bấm <strong>Tạo tem</strong>.
               </div>
             ) : (
               <div className={`print-sheet print-sheet-${itemType}`}>
@@ -724,7 +721,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           flex-shrink: 0;
           background: #ffffff;
           border-bottom: 1px solid #e2e5e3;
-          touch-action: none;
+          touch-action: pinch-zoom;
         }
 
         .bqr-mobile-grabber {
@@ -761,20 +758,11 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           flex: 1;
         }
 
-        .batch-qr-subtitle {
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: 0.07em;
-          color: #5f6d66;
-          font-weight: 600;
-          line-height: 1.3;
-        }
-
         .batch-qr-title {
           font-size: 16.5px;
           font-weight: 700;
           color: #14372f;
-          margin: 3px 0 0 0;
+          margin: 0;
           line-height: 1.25;
           font-variant-numeric: tabular-nums;
         }
@@ -816,7 +804,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           overflow-x: hidden;
           -webkit-overflow-scrolling: touch;
           overscroll-behavior: contain;
-          touch-action: pan-y;
+          touch-action: pan-y pinch-zoom;
           display: flex;
           flex-direction: column;
           background: #f7f7f5;
@@ -1091,20 +1079,20 @@ export default function BatchQrModal({ lot, onClose }: Props) {
 
         .preview-header {
           display: flex;
-          align-items: flex-start;
+          flex-direction: column;
+          gap: 4px;
+          margin-bottom: 12px;
+        }
+
+        .preview-head-row {
+          display: flex;
+          align-items: baseline;
           justify-content: space-between;
           gap: 10px;
-          margin-bottom: 12px;
           flex-wrap: wrap;
         }
 
-        .preview-note {
-          min-width: 0;
-          flex: 1 1 240px;
-        }
-
-        .preview-note strong {
-          display: block;
+        .preview-head-row strong {
           font-size: 14px;
           font-weight: 700;
           color: #14372f;
@@ -1112,45 +1100,20 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           font-variant-numeric: tabular-nums;
         }
 
-        .preview-note span {
-          display: block;
-          margin-top: 2px;
-          font-size: 12px;
-          color: #5f6d66;
-          line-height: 1.4;
-          font-variant-numeric: tabular-nums;
-        }
-
-        .bqr-ecc-tag {
-          display: inline-flex;
-          align-items: center;
-          height: 26px;
-          padding: 0 8px;
-          border-radius: 4px;
-          border: 1px solid #bbf7d0;
-          background: #f0fdf4;
+        .preview-spec {
+          font-size: 12.5px;
+          font-weight: 600;
           color: #15803d;
-          font-size: 11.5px;
-          font-weight: 600;
           white-space: nowrap;
-          flex-shrink: 0;
-        }
-
-        .bqr-material-note {
-          margin-bottom: 14px;
-          padding: 10px 12px;
-          border-radius: 6px;
-          background: #ffffff;
-          border: 1px solid #e2e5e3;
-          font-size: 12px;
-          color: #5f6d66;
-          line-height: 1.5;
           font-variant-numeric: tabular-nums;
         }
 
-        .bqr-material-note strong {
-          color: #14372f;
-          font-weight: 600;
+        .preview-sub {
+          margin: 0;
+          font-size: 12px;
+          color: #5f6d66;
+          line-height: 1.45;
+          font-variant-numeric: tabular-nums;
         }
 
         .batch-qr-loading,
@@ -1227,13 +1190,12 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         }
 
         .fruit-stamp-grade {
-          background: #f0fdf4;
-          color: #15803d;
-          border: 1px solid #bbf7d0;
+          background: #14372f;
+          color: #ffffff;
           border-radius: 4px;
           font-size: 10px;
           font-weight: 700;
-          padding: 1px 6px;
+          padding: 2px 6px;
           white-space: nowrap;
         }
 

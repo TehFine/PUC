@@ -120,7 +120,7 @@ export default function LotContributionsModal({
 
   return (
     <Modal
-      title={`Quan hệ Lô và Thửa nguồn - Lô ${lot.code}`}
+      title={`Thửa nguồn lô ${lot.code}`}
       onClose={onClose}
       width={740}
       footer={
@@ -133,17 +133,15 @@ export default function LotContributionsModal({
         <div
           style={{
             marginBottom: 16,
-            padding: 14,
-            borderRadius: 6,
-            background: "var(--bg-input, #f6f8f5)",
-            border: "1px solid var(--border)",
+            paddingBottom: 16,
+            borderBottom: "1px solid rgba(20, 55, 47, 0.1)",
           }}
         >
-          <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
-            Ghi nhận hộ và thửa đất đóng góp sản lượng
+          <div style={{ fontWeight: 600, fontSize: 13.5, color: "#14372f", marginBottom: 2 }}>
+            Thêm hộ đóng góp
           </div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
-            Lưu chính xác quan hệ lô hàng và thửa nguồn giúp truy vết xuôi hoặc ngược tức thì khi mẫu kiểm nghiệm phát sinh sự cố.
+          <div style={{ fontSize: 12.5, color: "#5f6d66", marginBottom: 12 }}>
+            Chọn hộ dân, thửa vườn và khối lượng gom vào lô.
           </div>
           <FormGrid>
             <SelectField
@@ -159,7 +157,7 @@ export default function LotContributionsModal({
             />
             {plotOptions.length > 0 ? (
               <SelectField
-                label="Thửa đất nguồn (plotCode)"
+                label="Thửa đất"
                 value={plotCode}
                 onChange={setPlotCode}
                 options={plotOptions.map((p) => ({
@@ -169,15 +167,15 @@ export default function LotContributionsModal({
               />
             ) : (
               <TextField
-                label={loadingPlots ? "Đang tải danh sách thửa…" : "Mã thửa nguồn (plotCode)"}
+                label={loadingPlots ? "Đang tải thửa…" : "Mã thửa"}
                 value={plotCode}
                 onChange={setPlotCode}
-                placeholder="VD: TH1-001 (tự động chọn nếu để trống)"
+                placeholder="Tự chọn nếu để trống"
                 maxLength={50}
               />
             )}
             <NumberField
-              label="Khối lượng đóng góp (kg)"
+              label="Khối lượng (kg)"
               required
               value={weightKg}
               onChange={setWeightKg}
@@ -186,14 +184,14 @@ export default function LotContributionsModal({
               placeholder="VD: 1200"
             />
           </FormGrid>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
             <button
               type="button"
               className="btn btn-primary btn-sm"
               disabled={addMutation.pending}
               onClick={() => void handleAdd()}
             >
-              {addMutation.pending ? "Đang lưu…" : "Ghi nhận vào lô"}
+              {addMutation.pending ? "Đang lưu…" : "Thêm vào lô"}
             </button>
           </div>
           <FormError message={localError ?? addMutation.error ?? removeMutation.error} />
@@ -205,16 +203,18 @@ export default function LotContributionsModal({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          gap: 10,
+          flexWrap: "wrap",
           marginBottom: 8,
           fontSize: 13,
           fontVariantNumeric: "tabular-nums",
         }}
       >
         <span>
-          Tổng nguồn cung: <strong>{distinctHouseholds} hộ ({rows.length} thửa nguồn)</strong>
+          Nguồn thu mua: <strong>{distinctHouseholds} hộ ({rows.length} thửa)</strong>
         </span>
         <span>
-          Tổng khối lượng gom: <strong>{formatVn(totalKg, 1)} kg</strong>
+          Tổng cộng: <strong>{formatVn(totalKg, 1)} kg</strong>
         </span>
       </div>
 
@@ -224,9 +224,9 @@ export default function LotContributionsModal({
             <tr>
               <th>Mã hộ</th>
               <th>Chủ hộ</th>
-              <th>Thửa nguồn</th>
-              <th>Thôn hoặc tổ</th>
-              <th>Khối lượng (kg)</th>
+              <th>Mã thửa</th>
+              <th>Thôn</th>
+              <th>Khối lượng</th>
               {canEdit && <th>Thao tác</th>}
             </tr>
           </thead>
@@ -234,7 +234,7 @@ export default function LotContributionsModal({
             {contribState.loading ? (
               <tr>
                 <td colSpan={canEdit ? 6 : 5} className="empty-state">
-                  Đang tải danh sách thửa nguồn đóng góp…
+                  Đang tải danh sách…
                 </td>
               </tr>
             ) : contribState.error ? (
@@ -246,7 +246,7 @@ export default function LotContributionsModal({
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={canEdit ? 6 : 5} className="empty-state">
-                  Chưa có thửa nguồn nào được ghi nhận trong lô này.
+                  Chưa có hộ đóng góp nào trong lô này.
                 </td>
               </tr>
             ) : (

@@ -362,7 +362,7 @@ export default function MinuteFormModal({
             error={fieldErrors.location}
           />
           <TextField
-            label="Mã thửa đối chiếu GIS (nếu kiểm tra tại vườn)"
+            label="Mã thửa kiểm tra"
             value={plotCode}
             onChange={setPlotCode}
             placeholder="Ví dụ: CN-T1-01"
@@ -400,10 +400,6 @@ export default function MinuteFormModal({
 
         <div
           style={{
-            border: "1px solid #d4d4d2",
-            borderRadius: 6,
-            background: "#f0fdf4",
-            padding: "10px 12px",
             marginBottom: 14,
             display: "flex",
             justifyContent: "space-between",
@@ -412,21 +408,38 @@ export default function MinuteFormModal({
             flexWrap: "wrap",
           }}
         >
-          <div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#14532d" }}>
-              Định vị GPS thực địa (đối chiếu ranh giới đa giác GIS thửa vườn)
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: "#14372f", lineHeight: 1.35 }}>
+              Tọa độ GPS
             </div>
-            <div style={{ fontSize: 11.5, color: "#166534", fontVariantNumeric: "tabular-nums" }}>
+            <div
+              style={{
+                fontSize: 12.5,
+                color: latitude !== null && longitude !== null ? "#15803d" : "#5f6d66",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
               {latitude !== null && longitude !== null
                 ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
-                : gpsStatus || "Chưa gắn tọa độ kiểm tra thực địa"}
+                : gpsStatus || "Chưa định vị"}
             </div>
           </div>
           <button
             type="button"
-            className="btn btn-outline btn-sm"
             onClick={handleCaptureGps}
             disabled={locating || save.pending || busy}
+            style={{
+              height: 36,
+              padding: "0 14px",
+              borderRadius: 6,
+              border: "none",
+              background: "#e6f0ec",
+              color: "#14372f",
+              fontSize: 13.5,
+              fontWeight: 600,
+              cursor: locating || save.pending || busy ? "not-allowed" : "pointer",
+              opacity: locating || save.pending || busy ? 0.6 : 1,
+            }}
           >
             {locating ? "Đang lấy GPS..." : latitude !== null ? "Cập nhật GPS" : "Lấy tọa độ GPS"}
           </button>
@@ -435,12 +448,12 @@ export default function MinuteFormModal({
         <div style={{ marginBottom: 12 }}>
           <MultiPhotoField
             id="minute-field-photos"
-            label="Ảnh và video hiện trường kiểm tra tại vườn"
+            label="Ảnh, video hiện trường"
             picker={media}
-            description="Có thể đính kèm tối đa 8 ảnh thực địa hoặc video ngắn dưới 90 giây. Ảnh tự động nén nhẹ."
-            cameraLabel="Chụp ảnh kiểm tra"
+            description="Tối đa 8 ảnh hoặc video dưới 90 giây."
+            cameraLabel="Chụp ảnh"
             galleryLabel="Chọn nhiều ảnh"
-            videoLabel="Thêm video ngắn"
+            videoLabel="Thêm video"
             disabled={save.pending || busy}
           />
         </div>

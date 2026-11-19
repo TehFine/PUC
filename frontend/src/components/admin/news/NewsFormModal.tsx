@@ -14,7 +14,7 @@ import type { NewsCategory, NewsInput, NewsRecord } from "@/types/news";
 const DEFAULT_SAMPLE_IMAGES = [
   { label: "Lãnh đạo thăm vườn", src: "/landing/news-field-visit.jpg" },
   { label: "Tập huấn thực địa", src: "/landing/news-training.jpg" },
-  { label: "Thuốc & Sâu bệnh", src: "/landing/news-protection.jpg" },
+  { label: "Phòng trừ sâu bệnh", src: "/landing/news-protection.jpg" },
   { label: "Hoa sầu riêng nở", src: "/landing/durian-flower.jpg" },
   { label: "Cơm vàng sầu riêng", src: "/landing/durian-open.jpg" },
   { label: "Đồi sầu riêng Krông Búk", src: "/landing/durian-landscape-real.jpg" },

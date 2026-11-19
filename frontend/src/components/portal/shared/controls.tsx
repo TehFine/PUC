@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { ConfirmDialog, Modal } from "@/components/ui/Modal";
+import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
+import { ConfirmDialog } from "@/components/ui/Modal";
 import { AppleSpinner } from "@/components/ui/Skeleton";
 import {
   AUTH_EXPIRED_EVENT,
@@ -1051,7 +1052,7 @@ export function MultiPhotoField({
   description,
   cameraLabel = "Chụp ảnh",
   galleryLabel = "Chọn nhiều ảnh",
-  videoLabel = "Thêm video ngắn",
+  videoLabel = "Thêm video",
   disabled = false,
 }: {
   id: string;
@@ -1723,14 +1724,6 @@ export function StoredMediaGallery({
     dx: number;
     moved: boolean;
   }>({ active: false, startX: 0, startScrollLeft: 0, dx: 0, moved: false });
-  const stageInnerRef = useRef<HTMLDivElement | null>(null);
-  const swipeStateRef = useRef<{
-    active: boolean;
-    startX: number;
-    startY: number;
-    dx: number;
-    lockedAxis: "x" | "y" | null;
-  }>({ active: false, startX: 0, startY: 0, dx: 0, lockedAxis: null });
 
   const allImageCount = useMemo(
     () => safeUrls.filter((u) => !isVideoMediaUrl(u)).length,
@@ -1750,7 +1743,6 @@ export function StoredMediaGallery({
     viewerIndex !== null && mediaItems.length > 0
       ? Math.max(0, Math.min(viewerIndex, mediaItems.length - 1))
       : null;
-  const activeViewerItem = safeViewerIndex !== null ? mediaItems[safeViewerIndex] : null;
 
   const scrollToSlide = useCallback((idx: number) => {
     const track = carouselTrackRef.current;
@@ -1780,85 +1772,7 @@ export function StoredMediaGallery({
     };
   }, []);
 
-  useEffect(() => {
-    if (safeViewerIndex === null || mediaItems.length <= 1) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        setViewerIndex((prev) => {
-          if (prev === null || prev <= 0) return prev;
-          const next = prev - 1;
-          scrollToSlide(next);
-          return next;
-        });
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        setViewerIndex((prev) => {
-          if (prev === null || prev >= mediaItems.length - 1) return prev;
-          const next = prev + 1;
-          scrollToSlide(next);
-          return next;
-        });
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [safeViewerIndex, mediaItems.length, scrollToSlide]);
-
   if (safeUrls.length === 0) return null;
-
-  const resetStageTransform = (animate: boolean) => {
-    const el = stageInnerRef.current;
-    if (!el) return;
-    el.style.transition = animate ? "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)" : "none";
-    el.style.transform = "translate3d(0, 0, 0)";
-  };
-
-  const beginSwipe = (x: number, y: number) => {
-    if (mediaItems.length <= 1) return;
-    swipeStateRef.current = { active: true, startX: x, startY: y, dx: 0, lockedAxis: null };
-    resetStageTransform(false);
-  };
-
-  const moveSwipe = (x: number, y: number) => {
-    const st = swipeStateRef.current;
-    if (!st.active) return;
-    const dx = x - st.startX;
-    const dy = y - st.startY;
-    if (!st.lockedAxis) {
-      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-      st.lockedAxis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
-    }
-    if (st.lockedAxis !== "x") return;
-    st.dx = dx;
-    const atStart = (safeViewerIndex ?? 0) <= 0 && dx > 0;
-    const atEnd = (safeViewerIndex ?? 0) >= mediaItems.length - 1 && dx < 0;
-    const damped = atStart || atEnd ? dx * 0.25 : dx * 0.65;
-    if (stageInnerRef.current) {
-      stageInnerRef.current.style.transition = "none";
-      stageInnerRef.current.style.transform = `translate3d(${damped.toFixed(1)}px, 0, 0)`;
-    }
-  };
-
-  const endSwipe = () => {
-    const st = swipeStateRef.current;
-    if (!st.active) return;
-    st.active = false;
-    const dx = st.dx;
-    const axis = st.lockedAxis;
-    st.dx = 0;
-    st.lockedAxis = null;
-    resetStageTransform(true);
-
-    if (axis !== "x" || safeViewerIndex === null) return;
-    if (dx <= -42 && safeViewerIndex < mediaItems.length - 1) {
-      setViewerIndex(safeViewerIndex + 1);
-      scrollToSlide(safeViewerIndex + 1);
-    } else if (dx >= 42 && safeViewerIndex > 0) {
-      setViewerIndex(safeViewerIndex - 1);
-      scrollToSlide(safeViewerIndex - 1);
-    }
-  };
 
   return (
     <div className="pt-stored-gallery-wrap">
@@ -2090,116 +2004,15 @@ export function StoredMediaGallery({
         <div className="pt-stored-gallery-caption">{caption}</div>
       )}
 
-      {activeViewerItem && safeViewerIndex !== null && (
-        <Modal
-          title={`${altPrefix} (${safeViewerIndex + 1}/${mediaItems.length})`}
+      {safeViewerIndex !== null && (
+        <MediaBottomSheet
+          urls={mediaItems.map((m) => m.url)}
+          initialIndex={safeViewerIndex}
+          title={altPrefix}
+          subtitle={caption}
           onClose={() => setViewerIndex(null)}
-          width={760}
-          footer={
-            mediaItems.length > 1 ? (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  disabled={safeViewerIndex <= 0}
-                  onClick={() => {
-                    const next = Math.max(0, safeViewerIndex - 1);
-                    setViewerIndex(next);
-                    scrollToSlide(next);
-                  }}
-                >
-                  Trước
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  disabled={safeViewerIndex >= mediaItems.length - 1}
-                  onClick={() => {
-                    const next = Math.min(mediaItems.length - 1, safeViewerIndex + 1);
-                    setViewerIndex(next);
-                    scrollToSlide(next);
-                  }}
-                >
-                  Tiếp
-                </button>
-                <button type="button" className="btn btn-primary" onClick={() => setViewerIndex(null)}>
-                  Đóng
-                </button>
-              </>
-            ) : (
-              <button type="button" className="btn btn-primary" onClick={() => setViewerIndex(null)}>
-                Đóng
-              </button>
-            )
-          }
-        >
-          <div
-            className="pt-media-viewer-stage"
-            data-no-sheet-drag="true"
-            onTouchStart={(e) => {
-              if (e.touches.length !== 1) return;
-              const target = e.target as HTMLElement | null;
-              if (target?.tagName === "VIDEO") {
-                const rect = target.getBoundingClientRect();
-                if (e.touches[0].clientY > rect.bottom - 52) return;
-              }
-              beginSwipe(e.touches[0].clientX, e.touches[0].clientY);
-            }}
-            onTouchMove={(e) => {
-              if (e.touches.length === 1) {
-                moveSwipe(e.touches[0].clientX, e.touches[0].clientY);
-              }
-            }}
-            onTouchEnd={() => endSwipe()}
-            onTouchCancel={() => endSwipe()}
-            onPointerDown={(e) => {
-              if (e.pointerType === "mouse" && e.button === 0 && !(e.target as HTMLElement | null)?.closest("video")) {
-                e.currentTarget.setPointerCapture?.(e.pointerId);
-                beginSwipe(e.clientX, e.clientY);
-              }
-            }}
-            onPointerMove={(e) => {
-              if (e.pointerType === "mouse") {
-                moveSwipe(e.clientX, e.clientY);
-              }
-            }}
-            onPointerUp={(e) => {
-              if (e.pointerType === "mouse") endSwipe();
-            }}
-            onPointerCancel={(e) => {
-              if (e.pointerType === "mouse") endSwipe();
-            }}
-          >
-            <div ref={stageInnerRef} className="pt-media-viewer-inner">
-              {activeViewerItem.isVideo ? (
-                <video
-                  key={activeViewerItem.url}
-                  src={activeViewerItem.url}
-                  controls
-                  autoPlay
-                  playsInline
-                  preload="metadata"
-                  className="pt-media-viewer-content"
-                />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={activeViewerItem.url}
-                  src={activeViewerItem.url}
-                  alt={`${altPrefix} ${safeViewerIndex + 1}`}
-                  className="pt-media-viewer-content"
-                  draggable={false}
-                  decoding="async"
-                />
-              )}
-            </div>
-          </div>
-          {caption && (
-            <div className="pt-media-viewer-caption">
-              {caption}
-            </div>
-          )}
-        </Modal>
+          onIndexChange={(nextIdx) => scrollToSlide(nextIdx)}
+        />
       )}
     </div>
   );

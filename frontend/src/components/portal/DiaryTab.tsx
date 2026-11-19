@@ -84,6 +84,7 @@ function DiarySheetActionFooter({
   saving,
   canSubmit,
   hasFiles,
+  onBeforeCancel,
   onCancel,
 }: {
   formId?: string;
@@ -92,14 +93,20 @@ function DiarySheetActionFooter({
   saving: boolean;
   canSubmit: boolean;
   hasFiles: boolean;
+  onBeforeCancel?: () => void;
   onCancel: () => void;
 }) {
+  const sheetClose = useSheetClose();
   return (
     <>
       <button
         type="button"
         className="pt-diary-footer-btn pt-diary-footer-cancel"
-        onClick={onCancel}
+        onClick={() => {
+          onBeforeCancel?.();
+          if (sheetClose) sheetClose();
+          else onCancel();
+        }}
         disabled={saving}
       >
         Hủy
@@ -485,6 +492,9 @@ function UnifiedDiaryForm({
           saving={saving || Boolean(media.compressing)}
           canSubmit={canSubmit && !media.compressing}
           hasFiles={media.hasFiles}
+          onBeforeCancel={() => {
+            void clearWorkingFieldDraft();
+          }}
           onCancel={handleDiscardAndCancel}
         />
       }
@@ -711,13 +721,13 @@ function UnifiedDiaryForm({
 
       <MultiPhotoField
         id="pj-photo-input"
-        label={isSprayActivity ? "Ảnh hiện trường phun thuốc hoặc nhãn chai thuốc" : "Ảnh và video hiện trường vườn"}
+        label={isSprayActivity ? "Ảnh phun thuốc, nhãn thuốc" : "Ảnh, video hiện trường"}
         picker={media}
         required
-        description="Tối đa 8 ảnh hoặc video dưới 90 giây. Ảnh tự nén nhẹ và giữ ngay trên máy."
-        cameraLabel="Chụp ảnh hiện trường"
+        description="Tối đa 8 ảnh hoặc video dưới 90 giây."
+        cameraLabel="Chụp ảnh"
         galleryLabel="Chọn nhiều ảnh"
-        videoLabel="Quay hoặc chọn video"
+        videoLabel="Thêm video"
         disabled={saving}
       />
 

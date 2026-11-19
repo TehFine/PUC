@@ -56,22 +56,10 @@ export default function ImageUploadField({
   };
 
   return (
-    <div className="form-group">
+    <div className="form-group img-upload-field">
       <label htmlFor={inputId}>{label}</label>
-      <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div
-          style={{
-            width: 132,
-            height: 92,
-            borderRadius: 6,
-            overflow: "hidden",
-            border: "1px solid var(--border)",
-            background: "var(--bg-input, #f5f7f4)",
-            display: "grid",
-            placeItems: "center",
-            flexShrink: 0,
-          }}
-        >
+      <div className="img-upload-top">
+        <div className="img-upload-preview">
           {isSafeMediaUrl(value) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -79,13 +67,13 @@ export default function ImageUploadField({
               alt={alt || "Ảnh đã chọn"}
               loading="lazy"
               decoding="async"
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           ) : (
-            <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Chưa có ảnh</span>
+            <span className="img-upload-empty">Chưa có ảnh</span>
           )}
         </div>
-        <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", gap: 8 }}>
+
+        <div className="img-upload-controls">
           <input
             ref={inputRef}
             id={inputId}
@@ -94,51 +82,66 @@ export default function ImageUploadField({
             style={{ display: "none" }}
             onChange={(event) => void handleFile(event.target.files?.[0])}
           />
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" className="btn btn-outline btn-sm" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          <div className="img-upload-actions">
+            <button
+              type="button"
+              className="btn btn-outline img-upload-action-btn"
+              disabled={uploading}
+              onClick={() => inputRef.current?.click()}
+            >
               {uploading ? "Đang tải ảnh…" : value ? "Đổi ảnh" : "Tải ảnh lên"}
             </button>
             {value && (
-              <button type="button" className="btn btn-danger btn-sm" disabled={uploading} onClick={() => setConfirmRemove(true)}>
+              <button
+                type="button"
+                className="btn btn-danger img-upload-action-btn"
+                disabled={uploading}
+                onClick={() => setConfirmRemove(true)}
+              >
                 Xóa ảnh
               </button>
             )}
           </div>
-          {confirmRemove && (
-            <ConfirmDialog
-              title="Xóa ảnh đã chọn"
-              message="Xác nhận xóa ảnh hiện tại khỏi mục này?"
-              confirmLabel="Xóa ảnh"
-              danger
-              onConfirm={() => {
-                onChange(null);
-                setConfirmRemove(false);
-              }}
-              onClose={() => setConfirmRemove(false)}
-            />
-          )}
-          {presets && presets.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {presets.map((preset) => (
-                <button
-                  key={preset.src}
-                  type="button"
-                  className={`news-sample-chip ${value === preset.src ? "active" : ""}`}
-                  onClick={() => onChange(preset.src)}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          )}
-          {hint && !error && <small style={{ color: "var(--text-muted)", fontSize: 12 }}>{hint}</small>}
+          {hint && !error && <small className="img-upload-hint">{hint}</small>}
           {error && (
-            <small role="alert" style={{ color: "#b73c20", fontSize: 12 }}>
+            <small role="alert" className="img-upload-error">
               {error}
             </small>
           )}
         </div>
       </div>
+
+      {presets && presets.length > 0 && (
+        <div className="img-upload-presets-wrap">
+          <span className="img-upload-presets-label">Chọn nhanh ảnh mẫu</span>
+          <div className="img-upload-presets">
+            {presets.map((preset) => (
+              <button
+                key={preset.src}
+                type="button"
+                className={`news-sample-chip ${value === preset.src ? "active" : ""}`}
+                onClick={() => onChange(preset.src)}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Xóa ảnh đã chọn"
+          message="Xác nhận xóa ảnh hiện tại khỏi mục này?"
+          confirmLabel="Xóa ảnh"
+          danger
+          onConfirm={() => {
+            onChange(null);
+            setConfirmRemove(false);
+          }}
+          onClose={() => setConfirmRemove(false)}
+        />
+      )}
     </div>
   );
 }

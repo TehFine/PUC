@@ -3904,7 +3904,7 @@ body.pt-body {
   .pt-vietgap-timeline,
   .pt-vietgap-step,
   .pt-vietgap-segment {
-    touch-action: pan-y !important;
+    touch-action: pan-y pinch-zoom !important;
   }
 
   .pt-vietgap-step,
@@ -3926,7 +3926,7 @@ body.pt-body {
   }
 
   .pt-vietgap-card {
-    touch-action: pan-y !important;
+    touch-action: pan-y pinch-zoom !important;
     pointer-events: none !important; /* Xuyên thấu thao tác cảm ứng trực tiếp xuống trang, không chặn cử chỉ vuốt cuộn */
     transform: none !important;
     transition: none !important;
@@ -3938,7 +3938,7 @@ body.pt-body {
 
   .pt-vietgap-card * {
     pointer-events: none !important;
-    touch-action: pan-y !important;
+    touch-action: pan-y pinch-zoom !important;
     -webkit-user-select: none !important;
     user-select: none !important;
   }
@@ -6115,14 +6115,35 @@ body.pt-body {
   background: rgba(15, 23, 42, 0.48);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  animation: pt-sheet-backdrop-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  touch-action: none;
+  animation: pt-sheet-backdrop-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  touch-action: pinch-zoom;
   overscroll-behavior: none;
   overflow: hidden;
 }
 
+.pt-sheet-backdrop.is-confirm-overlay {
+  z-index: 1200;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.pt-sheet-backdrop.is-confirm-overlay > .pt-sheet {
+  width: 100%;
+  max-width: var(--modal-max-w, 460px);
+  height: auto;
+  min-height: 0;
+  max-height: calc(100dvh - 32px);
+  border-radius: 8px;
+  border: 1px solid #d4d4d2;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+  animation: pt-modal-pop-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 .pt-sheet-backdrop.is-closing {
-  animation: pt-sheet-backdrop-out 0.22s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: pt-sheet-backdrop-out 0.24s cubic-bezier(0.32, 0.72, 0, 1) forwards;
   pointer-events: none;
 }
 
@@ -6138,11 +6159,8 @@ body.pt-body {
   border-radius: 0;
   background: #ffffff;
   box-shadow: none;
-  animation: pt-sheet-slide-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  transform: translate3d(0, 0, 0);
-  will-change: transform;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
+  animation: pt-sheet-slide-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  touch-action: pan-x pan-y pinch-zoom;
   overflow: hidden;
 }
 
@@ -6159,7 +6177,7 @@ body.pt-body {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  touch-action: none;
+  touch-action: pinch-zoom;
   user-select: none;
   -webkit-user-select: none;
   cursor: grab;
@@ -6179,7 +6197,7 @@ body.pt-body {
   border-bottom: 1px solid rgba(20, 55, 47, 0.1);
   flex-shrink: 0;
   cursor: inherit;
-  touch-action: none;
+  touch-action: pinch-zoom;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -6250,7 +6268,7 @@ body.pt-body {
     border-radius: 8px;
     border: 1px solid rgba(20, 55, 47, 0.14);
     box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
-    animation: pt-modal-pop-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: pt-modal-pop-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
   .pt-sheet.is-closing {
     animation: pt-modal-pop-out 0.18s cubic-bezier(0.25, 1, 0.5, 1) forwards;
@@ -6340,7 +6358,7 @@ body.pt-body {
     border-radius: 0 !important;
     background: #ffffff;
     box-shadow: -16px 0 48px rgba(15, 23, 42, 0.16), -1px 0 0 rgba(15, 23, 42, 0.06) !important;
-    animation: pt-drawer-slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+    animation: pt-drawer-slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
   .pt-sheet.is-drawer .pt-sheet-topbar {
@@ -7100,14 +7118,14 @@ body.pt-body {
   background: rgba(15, 23, 42, 0.48);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  animation: pt-sheet-backdrop-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  touch-action: none;
+  animation: pt-sheet-backdrop-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  touch-action: pinch-zoom;
   overscroll-behavior: none;
   overflow: hidden;
 }
 
 .pt-radial-backdrop.is-closing {
-  animation: pt-radial-backdrop-out 0.22s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: pt-radial-backdrop-out 0.24s cubic-bezier(0.32, 0.72, 0, 1) forwards;
   pointer-events: none;
 }
 
@@ -7130,11 +7148,8 @@ body.pt-body {
   border-radius: 16px 16px 0 0;
   padding: 24px 20px calc(44px + env(safe-area-inset-bottom));
   box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.14);
-  animation: pt-sheet-slide-up 0.34s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  transform: translate3d(0, 0, 0);
-  will-change: transform;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
+  animation: pt-sheet-slide-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  touch-action: pan-x pan-y pinch-zoom;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -7150,7 +7165,7 @@ body.pt-body {
   flex-shrink: 0;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: none;
+  touch-action: pinch-zoom;
 }
 
 .pt-radial-sheet-title {
@@ -7962,7 +7977,7 @@ body.pt-body {
   inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
-  background: #1e293b;
+  background: #15221c;
 }
 
 .pt-mapmodal-loading-curtain {
@@ -8948,6 +8963,8 @@ body.pt-body {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text-secondary);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .pt-attach-field {
@@ -9809,7 +9826,7 @@ html[data-perf="lite"] .pt-bottom-nav {
   background: #ffffff !important;
 }
 
-html[data-perf="lite"] :is(.pt-sheet, .pt-sheet-backdrop, .pt-radial-sheet, .pt-radial-backdrop, .pt-tab-pane, .pt-tab, .pt-pest-filter-chip) {
+html[data-perf="lite"] :is(.pt-tab-pane, .pt-tab, .pt-pest-filter-chip) {
   animation-duration: 0.14s !important;
   transition-duration: 0.14s !important;
 }

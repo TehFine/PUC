@@ -339,12 +339,12 @@ export function JournalFormModal({
         <div style={{ marginBottom: 12 }}>
           <MultiPhotoField
             id="admin-journal-photos"
-            label={isEdit && existingHasMedia ? "Cập nhật ảnh hoặc video hiện trường mới" : "Ảnh và video hiện trường vườn"}
+            label={isEdit && existingHasMedia ? "Cập nhật ảnh, video" : "Ảnh, video hiện trường"}
             picker={media}
-            description="Ảnh được tự động nén nhẹ và lưu trữ bền vững trong cơ sở dữ liệu."
-            cameraLabel="Chụp ảnh hiện trường"
+            description="Tối đa 8 ảnh hoặc video dưới 90 giây."
+            cameraLabel="Chụp ảnh"
             galleryLabel="Chọn nhiều ảnh"
-            videoLabel="Thêm video ngắn"
+            videoLabel="Thêm video"
             disabled={save.pending}
           />
         </div>
