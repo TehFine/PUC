@@ -89,10 +89,61 @@ let nextOverlayId = 1;
 const overlayStack: OverlayEntry[] = [];
 let pushedOverlayCount = 0;
 let pendingGoBacks = 0;
+let pendingGoBackWatchdog: ReturnType<typeof setTimeout> | null = null;
 let pendingReplaceUrl: string | null = null;
 let pendingPushUrl: string | null = null;
 let syncQueued = false;
 let listenerInstalled = false;
+
+function clearPendingGoBackWatchdog(): void {
+  if (pendingGoBackWatchdog !== null) {
+    clearTimeout(pendingGoBackWatchdog);
+    pendingGoBackWatchdog = null;
+  }
+}
+
+function flushDeferredHistoryUrl(): void {
+  if (typeof window === "undefined") return;
+  if (pendingReplaceUrl !== null) {
+    const targetUrl = pendingReplaceUrl;
+    pendingReplaceUrl = null;
+    syncWorkspaceUrlFromHref(targetUrl);
+    try {
+      window.history.replaceState(buildCleanPageState(targetUrl.includes("?")), "", targetUrl);
+    } catch {
+      // ignore
+    }
+    window.dispatchEvent(new CustomEvent(PUC_URL_SYNC_EVENT));
+  } else if (pendingPushUrl !== null) {
+    const targetUrl = pendingPushUrl;
+    pendingPushUrl = null;
+    syncWorkspaceUrlFromHref(targetUrl);
+    try {
+      window.history.pushState(buildCleanPageState(targetUrl.includes("?")), "", targetUrl);
+    } catch {
+      // ignore
+    }
+    window.dispatchEvent(new CustomEvent(PUC_URL_SYNC_EVENT));
+  }
+}
+
+/**
+ * Bộ bảo vệ tự phục hồi: nếu trình duyệt di động hủy ngầm lệnh `history.go(-delta)`
+ * (do bấm liên tiếp cực nhanh hoặc điều hướng đồng thời khiến `popstate` không phát ra),
+ * tự động giải phóng `pendingGoBacks` sau 320ms để không bao giờ bị kẹt ở các lần bấm tiếp theo.
+ */
+function armPendingGoBackWatchdog(): void {
+  if (typeof window === "undefined") return;
+  clearPendingGoBackWatchdog();
+  if (pendingGoBacks <= 0) return;
+  pendingGoBackWatchdog = setTimeout(() => {
+    pendingGoBackWatchdog = null;
+    if (pendingGoBacks <= 0 || typeof window === "undefined") return;
+    pendingGoBacks = 0;
+    pushedOverlayCount = readCurrentOverlayDepth(window.history.state);
+    flushDeferredHistoryUrl();
+  }, 320);
+}
 
 function buildCleanPageState(markRootSeeded = false): Record<string, unknown> {
   const raw =
@@ -137,27 +188,10 @@ function handleWindowPopState(event: PopStateEvent): void {
   if (pendingGoBacks > 0) {
     pendingGoBacks -= 1;
     if (pendingGoBacks === 0) {
-      if (pendingReplaceUrl !== null) {
-        const targetUrl = pendingReplaceUrl;
-        pendingReplaceUrl = null;
-        syncWorkspaceUrlFromHref(targetUrl);
-        try {
-          window.history.replaceState(buildCleanPageState(targetUrl.includes("?")), "", targetUrl);
-        } catch {
-          // ignore
-        }
-        window.dispatchEvent(new CustomEvent(PUC_URL_SYNC_EVENT));
-      } else if (pendingPushUrl !== null) {
-        const targetUrl = pendingPushUrl;
-        pendingPushUrl = null;
-        syncWorkspaceUrlFromHref(targetUrl);
-        try {
-          window.history.pushState(buildCleanPageState(targetUrl.includes("?")), "", targetUrl);
-        } catch {
-          // ignore
-        }
-        window.dispatchEvent(new CustomEvent(PUC_URL_SYNC_EVENT));
-      }
+      clearPendingGoBackWatchdog();
+      flushDeferredHistoryUrl();
+    } else {
+      armPendingGoBackWatchdog();
     }
     event.stopImmediatePropagation();
     return;
@@ -237,10 +271,12 @@ function scheduleOverlaySync(): void {
       const delta = pushedOverlayCount - desired;
       pushedOverlayCount = desired;
       pendingGoBacks += delta;
+      armPendingGoBackWatchdog();
       try {
         window.history.go(-delta);
       } catch {
         pendingGoBacks = Math.max(0, pendingGoBacks - delta);
+        if (pendingGoBacks === 0) clearPendingGoBackWatchdog();
       }
     }
   });
@@ -285,6 +321,93 @@ export function useBackLayer(open: boolean, onClose: () => void): void {
 }
 
 /**
+ * Xóa tức thì toàn bộ ngăn xếp lịch sử ảo của các Sheet/Modal đang mở trước khi rời trang
+ * (ví dụ khi bấm Đăng xuất từ trong ngăn Hồ sơ cá nhân), ngăn `scheduleOverlaySync` gọi
+ * `window.history.go(-1)` làm hủy ngang lệnh `router.replace("/login")` của Next.js.
+ */
+export function resetOverlayHistoryOnRouteLeave(): void {
+  overlayStack.length = 0;
+  pushedOverlayCount = 0;
+  pendingGoBacks = 0;
+  pendingReplaceUrl = null;
+  pendingPushUrl = null;
+  clearPendingGoBackWatchdog();
+  if (typeof window === "undefined") return;
+  try {
+    if (readCurrentOverlayDepth(window.history.state) > 0) {
+      window.history.replaceState(
+        buildCleanPageState(),
+        "",
+        `${window.location.pathname}${window.location.search}${window.location.hash}`,
+      );
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Thu hồi êm mục lịch sử ảo của ngăn kéo / menu đang mở bằng `history.replaceState` tại chỗ
+ * thay vì gọi `history.go(-1)` (tránh trình duyệt di động kích hoạt History Scroll Restoration
+ * hủy ngang thao tác cuộn mượt `scrollTo` tới `#section` hoặc làm kẹt chuyển trang `<Link>`).
+ */
+export function consumeBackLayerForInPageTarget(nextUrl?: string): void {
+  if (typeof window === "undefined") return;
+  ensurePopStateListener();
+
+  const currentPath = window.location.pathname;
+  for (let i = overlayStack.length - 1; i >= 0; i -= 1) {
+    if (overlayStack[i].pathname === currentPath) {
+      overlayStack.splice(i, 1);
+    }
+  }
+
+  const resolvedUrl =
+    nextUrl ?? `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  syncWorkspaceUrlFromHref(resolvedUrl);
+  const markRootSeeded = resolvedUrl.includes("?");
+
+  if (pushedOverlayCount === 1 && pendingGoBacks === 0) {
+    pushedOverlayCount = 0;
+    try {
+      window.history.replaceState(buildCleanPageState(markRootSeeded), "", resolvedUrl);
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
+  if (pushedOverlayCount > 1) {
+    const extra = pushedOverlayCount - 1;
+    pushedOverlayCount = 0;
+    pendingReplaceUrl = resolvedUrl;
+    pendingGoBacks += extra;
+    armPendingGoBackWatchdog();
+    try {
+      window.history.go(-extra);
+    } catch {
+      pendingGoBacks = Math.max(0, pendingGoBacks - extra);
+      if (pendingGoBacks === 0) clearPendingGoBackWatchdog();
+      pendingReplaceUrl = null;
+    }
+    return;
+  }
+
+  if (pendingGoBacks > 0) {
+    pendingReplaceUrl = resolvedUrl;
+    return;
+  }
+
+  if (nextUrl !== undefined) {
+    try {
+      window.history.replaceState(buildCleanPageState(markRootSeeded), "", resolvedUrl);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
  * Đẩy một bước điều hướng trang / phân mục / tab con vào lịch sử trình duyệt một cách tuần tự.
  * Nếu thao tác điều hướng xuất phát từ bên trong một ngăn kéo menu / ô tìm kiếm đang mở,
  * tự động thay thế mục lịch sử của ngăn kéo đó để khi bấm Back sẽ lùi thẳng về trang trước đó.
@@ -317,10 +440,12 @@ export function pushUrlNavigation(nextUrl: string): void {
     if (extra > 0) {
       pendingReplaceUrl = nextUrl;
       pendingGoBacks += extra;
+      armPendingGoBackWatchdog();
       try {
         window.history.go(-extra);
       } catch {
         pendingGoBacks = Math.max(0, pendingGoBacks - extra);
+        if (pendingGoBacks === 0) clearPendingGoBackWatchdog();
         pendingReplaceUrl = null;
       }
       return;

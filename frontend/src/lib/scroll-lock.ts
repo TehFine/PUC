@@ -3,6 +3,7 @@ let lockedScrollX = 0;
 let lockedScrollY = 0;
 let lastTouchX = 0;
 let lastTouchY = 0;
+let multiTouchActiveUntil = 0;
 let cleanupListeners: (() => void) | null = null;
 
 const DIALOG_SELECTOR = '[role="dialog"], [aria-modal="true"], [data-scroll-lock-allow]';
@@ -12,6 +13,17 @@ const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home
 
 function isScrollableOverflow(value: string): boolean {
   return value === "auto" || value === "scroll" || value === "overlay";
+}
+
+/**
+ * Kiểm tra trình duyệt di động có đang ở trạng thái phóng to (pinch-zoom) hay không.
+ * Khi `visualViewport.scale > 1.01`, tuyệt đối KHÔNG được chặn `touchmove` hay gọi `window.scrollTo(...)`,
+ * vì `window.scrollTo` trên iOS Safari / Android Chrome sẽ ép `visualViewport.offsetTop = 0` làm nhảy về đầu trang và giật khung hình.
+ */
+function isPinchZoomed(): boolean {
+  if (typeof window === "undefined") return false;
+  const vv = window.visualViewport;
+  return Boolean(vv && vv.scale > 1.01);
 }
 
 /**
@@ -67,10 +79,11 @@ function hasScrollableAncestorInDialog(target: Element, dialogRoot: Element): bo
 function attachRootScrollLock(): () => void {
   lockedScrollX = window.scrollX;
   lockedScrollY = window.scrollY;
+  multiTouchActiveUntil = 0;
 
   const onWheel = (event: WheelEvent) => {
     // Cho phép tổ hợp phóng to / thu nhỏ trình duyệt (Ctrl/Cmd + lăn chuột hoặc chụm 2 ngón trên trackpad)
-    if (event.ctrlKey || event.metaKey) return;
+    if (event.ctrlKey || event.metaKey || isPinchZoomed()) return;
 
     const target = event.target instanceof Element ? event.target : null;
     if (!target) {
@@ -93,17 +106,32 @@ function attachRootScrollLock(): () => void {
   };
 
   const onTouchStart = (event: TouchEvent) => {
+    if (event.touches.length > 1) {
+      multiTouchActiveUntil = performance.now() + 450;
+      return;
+    }
     if (event.touches.length === 1) {
       lastTouchX = event.touches[0].clientX;
       lastTouchY = event.touches[0].clientY;
     }
   };
 
+  const onTouchEnd = (event: TouchEvent) => {
+    if (event.touches.length > 0) {
+      multiTouchActiveUntil = performance.now() + 450;
+    }
+  };
+
   const onTouchMove = (event: TouchEvent) => {
-    // Nếu useSheetSwipe hoặc thành phần con đã chủ động chặn cuộn để kéo popup thì giữ nguyên
     if (event.defaultPrevented) return;
-    // Cho phép thao tác đa điểm (chụm 2 ngón phóng to phiếu kiểm nghiệm / bản đồ)
-    if (event.touches.length > 1) return;
+    // Cho phép thao tác đa điểm (chụm 2 ngón phóng to) và di chuyển vùng nhìn khi đang zoom to (scale > 1)
+    if (event.touches.length > 1) {
+      multiTouchActiveUntil = performance.now() + 450;
+      return;
+    }
+    if (performance.now() < multiTouchActiveUntil || isPinchZoomed()) {
+      return;
+    }
 
     const touch = event.touches[0];
     if (!touch) return;
@@ -161,6 +189,19 @@ function attachRootScrollLock(): () => void {
     ) {
       return;
     }
+    // Tuyệt đối không cưỡng bức scrollTo khi người dùng đang chụm 2 ngón hoặc đang ở mức zoom > 1x
+    if (performance.now() < multiTouchActiveUntil || isPinchZoomed()) {
+      return;
+    }
+    if (window.scrollX !== lockedScrollX || window.scrollY !== lockedScrollY) {
+      window.scrollTo({ left: lockedScrollX, top: lockedScrollY, behavior: "instant" });
+    }
+  };
+
+  // Khi người dùng thu nhỏ hoàn toàn về lại mức 1.0x, trả vị trí cuộn nền về đúng mốc trước lúc mở popup
+  const vv = window.visualViewport;
+  const onVisualViewportResize = () => {
+    if (!vv || vv.scale > 1.01 || performance.now() < multiTouchActiveUntil) return;
     if (window.scrollX !== lockedScrollX || window.scrollY !== lockedScrollY) {
       window.scrollTo({ left: lockedScrollX, top: lockedScrollY, behavior: "instant" });
     }
@@ -168,25 +209,27 @@ function attachRootScrollLock(): () => void {
 
   window.addEventListener("wheel", onWheel, { passive: false });
   window.addEventListener("touchstart", onTouchStart, { passive: true });
+  window.addEventListener("touchend", onTouchEnd, { passive: true });
+  window.addEventListener("touchcancel", onTouchEnd, { passive: true });
   window.addEventListener("touchmove", onTouchMove, { passive: false });
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("scroll", onWindowScroll, { passive: true });
+  vv?.addEventListener("resize", onVisualViewportResize);
 
   return () => {
     window.removeEventListener("wheel", onWheel);
     window.removeEventListener("touchstart", onTouchStart);
+    window.removeEventListener("touchend", onTouchEnd);
+    window.removeEventListener("touchcancel", onTouchEnd);
     window.removeEventListener("touchmove", onTouchMove);
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("scroll", onWindowScroll);
+    vv?.removeEventListener("resize", onVisualViewportResize);
   };
 }
 
 /**
  * Khóa cuộn trang nền khi mở popup / sheet / modal mà KHÔNG gán `overflow: hidden` lên `<html>` hay `<body>`.
- *
- * Giữ thanh cuộn dọc của trình duyệt đứng yên 100%, không làm thay đổi `clientWidth` nên khung hình
- * phía sau và thanh điều hướng cố định (fixed topbar) tuyệt đối không bị giật ngang khi bật hoặc tắt popup,
- * đồng thời vẫn cho phép cuộn mượt bên trong nội dung của popup.
  */
 export function lockRootScroll(): () => void {
   if (typeof window === "undefined" || typeof document === "undefined") {

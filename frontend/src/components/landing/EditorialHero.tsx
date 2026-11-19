@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { replaceUrlPreservingState, useBackLayer } from "@/lib/back-navigation";
+import {
+  consumeBackLayerForInPageTarget,
+  replaceUrlPreservingState,
+  useBackLayer,
+} from "@/lib/back-navigation";
 import { homePathFor } from "@/lib/routes";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { NAV_LINKS } from "./data";
@@ -76,12 +80,151 @@ const INITIAL_RIGHT_LINKS = NAV_LINKS.slice(4);
 const fmt = (value: number, digits = 0) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: digits });
 
+interface HeroGridSectionProps {
+  householdsStr: string;
+  qualifiedStr: string;
+  areaStr: string;
+  plotsStr: string;
+  villagesStr: string;
+}
+
+const HeroGridSection = memo(function HeroGridSection({
+  householdsStr,
+  qualifiedStr,
+  areaStr,
+  plotsStr,
+  villagesStr,
+}: HeroGridSectionProps) {
+  return (
+    <section className="eh-hero" aria-labelledby="hero-title">
+      {/* Hàng 1: Tiêu đề chính căn giữa thoáng đãng xuyên suốt */}
+      <div className="eh-cell eh-cell-headline">
+        <h1 id="hero-title" className="eh-headline">
+          Sầu riêng minh bạch
+        </h1>
+      </div>
+
+      {/* Hàng 2 - Cột 1 và 2: Ảnh sầu riêng vùng trồng Cư Né lồng ghép bộ ảnh nghệ thuật sang trọng */}
+      <div className="eh-cell-media is-top-left">
+        <DwellSlideshow
+          slides={HERO_TOP_LEFT_SLIDES}
+          desktopLeadSrc="/landing/cune-orchard-village.jpg"
+          priorityFirst
+          staggerMs={0}
+          sizes="(max-width: 768px) calc(100vw - 44px), (max-width: 960px) 100vw, 50vw"
+        />
+      </div>
+
+      {/* Hàng 2 - Cột 3: Nội dung chính đi kèm ảnh Hàng 2 (trên di động hiển thị bảng số liệu 2x2 tinh gọn) */}
+      <div className="eh-cell eh-cell-feature">
+        <span className="eh-cell-tag eh-feature-desktop-tag">
+          Đạt chuẩn xuất khẩu - {qualifiedStr}/{householdsStr} hộ
+        </span>
+        <div>
+          <h2 className="eh-feature-title">Vùng trồng Cư Né</h2>
+          <p className="eh-feature-sub eh-feature-desktop-sub">
+            {areaStr} ha - {plotsStr} thửa - {villagesStr} thôn - Krông Búk, Đắk Lắk
+          </p>
+          <p className="eh-feature-mobile-lead">
+            Liên kết canh tác chuẩn VietGAP và xuất khẩu chính ngạch tại Krông Búk, Đắk Lắk.
+          </p>
+        </div>
+        <div className="eh-mobile-numbers" aria-label="Quy mô vùng trồng Cư Né">
+          <div className="eh-num-item">
+            <strong>{qualifiedStr}</strong>
+            <span>hộ thành viên đạt chuẩn</span>
+          </div>
+          <div className="eh-num-item">
+            <strong>{areaStr}</strong>
+            <span>ha diện tích canh tác</span>
+          </div>
+          <div className="eh-num-item">
+            <strong>{plotsStr}</strong>
+            <span>thửa vườn định danh</span>
+          </div>
+          <div className="eh-num-item">
+            <strong>{villagesStr}</strong>
+            <span>thôn liên kết Cư Né</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Hàng 2 - Cột 4: Khoảng thở trắng thoáng mắt */}
+      <div className="eh-cell eh-cell-empty is-row2-col4" aria-hidden="true" />
+
+      {/* Đường kẻ ngang mở đầu cụm tạp chí chia đôi trên di động */}
+      <div className="eh-mob-spread-rule" aria-hidden="true" />
+
+      {/* Hàng 3 - Cột 1: Khoảng thở trắng đối xứng */}
+      <div className="eh-cell eh-cell-empty is-row3-col1" aria-hidden="true" />
+
+      {/* Hàng 3 - Cột 2: Nội dung đi kèm ảnh Hàng 3 */}
+      <div className="eh-cell eh-cell-story">
+        <span className="eh-cell-tag">Truy xuất nguồn gốc</span>
+        <div className="eh-story-upper">
+          <h2 className="eh-feature-title">Từ vườn đến xuất khẩu</h2>
+          <p className="eh-story-sub-mob">Truy xuất - Nhật ký số</p>
+          <p className="eh-story-text">
+            <span className="eh-story-desktop">
+              Bà con ghi nhật ký mùa vụ, theo dõi mã vùng và kiểm nghiệm ngay trên điện thoại để minh bạch từng lô hàng.
+            </span>
+            <span className="eh-story-mobile">
+              Ghi nhật ký mùa vụ, theo dõi mã vùng và kiểm nghiệm an toàn ngay trên điện thoại.
+            </span>
+          </p>
+        </div>
+        <div className="eh-story-spread-note">
+          <p className="eh-story-spread-prose">
+            Bà con ghi chép lịch chăm bón, theo dõi mã số vùng trồng và đối chiếu kiểm nghiệm an toàn minh bạch cho từng lô thu hoạch.
+          </p>
+        </div>
+      </div>
+
+      {/* Hàng 3 - Cột 3 và 4: Ảnh nhật ký mùa vụ và tem QR */}
+      <div className="eh-cell-media is-bottom-right">
+        <DwellSlideshow
+          slides={HERO_BOTTOM_RIGHT_SLIDES}
+          mobileCollage={false}
+          staggerMs={650}
+          sizes="(max-width: 768px) 46vw, (max-width: 960px) 100vw, 50vw"
+        />
+      </div>
+    </section>
+  );
+});
+
+function computeSectionScrollTop(sectionId: string): number | null {
+  if (!sectionId || sectionId === "top") return 0;
+  const el = document.getElementById(sectionId);
+  if (!el) return null;
+  const headerEl = document.querySelector<HTMLElement>(".eh-sticky-bar");
+  const headerH = headerEl ? headerEl.getBoundingClientRect().height : 56;
+  const rawY = el.getBoundingClientRect().top + window.scrollY - headerH;
+  const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  return Math.max(0, Math.min(Math.round(rawY), maxY));
+}
+
 export default function EditorialHero() {
   const { status, session, logout } = useAuth();
   const { data } = usePublic<PublicOverview>("overview");
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const unlockScrollRef = useRef<(() => void) | null>(null);
+  const scrollAlignCleanupRef = useRef<(() => void) | null>(null);
+
+  const releaseMenuScrollLock = useCallback(() => {
+    if (unlockScrollRef.current) {
+      const fn = unlockScrollRef.current;
+      unlockScrollRef.current = null;
+      fn();
+    }
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    releaseMenuScrollLock();
+    setMenuOpen(false);
+  }, [releaseMenuScrollLock]);
+
   useBackLayer(menuOpen, closeMenu);
   const [showStickyHeader, setShowStickyHeader] = useState(false);
   const [activeHref, setActiveHref] = useState("");
@@ -90,16 +233,119 @@ export default function EditorialHero() {
   const authenticated = status === "authenticated";
   const workspaceHref = homePathFor(session?.user.role);
 
-  const householdsStr = data ? fmt(data.households) : "—";
-  const qualifiedStr = data ? fmt(data.qualifiedHouseholds) : "—";
-  const areaStr = data ? fmt(data.areaHa, 1) : "—";
-  const plotsStr = data ? fmt(data.plots) : "—";
-  const villagesStr = data ? fmt(data.villages) : "—";
+  const householdsStr = data ? fmt(data.households) : "-";
+  const qualifiedStr = data ? fmt(data.qualifiedHouseholds) : "-";
+  const areaStr = data ? fmt(data.areaHa, 1) : "-";
+  const plotsStr = data ? fmt(data.plots) : "-";
+  const villagesStr = data ? fmt(data.villages) : "-";
+
+  const cancelPendingScrollAlign = useCallback(() => {
+    if (scrollAlignCleanupRef.current) {
+      scrollAlignCleanupRef.current();
+      scrollAlignCleanupRef.current = null;
+    }
+  }, []);
 
   const handleSelectNav = useCallback((href: string) => {
     setActiveHref(href);
-    clickLockUntilRef.current = Date.now() + 850;
+    clickLockUntilRef.current = Date.now() + 950;
   }, []);
+
+  const navigateToSectionHref = useCallback(
+    (href: string, fromDrawer: boolean) => {
+      cancelPendingScrollAlign();
+      const cleanHref = href === "#top" ? "" : href;
+      handleSelectNav(cleanHref);
+
+      if (fromDrawer) {
+        releaseMenuScrollLock();
+        consumeBackLayerForInPageTarget(href);
+        setMenuOpen(false);
+      } else {
+        replaceUrlPreservingState(href);
+      }
+
+      const sectionId = href.startsWith("#") ? href.slice(1) : "";
+      const prefersReduced =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      let cancelled = false;
+      let rafId = 0;
+      let t1 = 0;
+      let t2 = 0;
+
+      const abortOnUserGesture = () => {
+        cancelled = true;
+        cleanup();
+      };
+
+      const cleanup = () => {
+        if (rafId) window.cancelAnimationFrame(rafId);
+        if (t1) window.clearTimeout(t1);
+        if (t2) window.clearTimeout(t2);
+        window.removeEventListener("touchstart", abortOnUserGesture);
+        window.removeEventListener("wheel", abortOnUserGesture);
+        if (scrollAlignCleanupRef.current === cleanup) {
+          scrollAlignCleanupRef.current = null;
+        }
+      };
+
+      scrollAlignCleanupRef.current = cleanup;
+      window.addEventListener("touchstart", abortOnUserGesture, { passive: true });
+      window.addEventListener("wheel", abortOnUserGesture, { passive: true });
+
+      const verifyAlignment = () => {
+        if (cancelled) return;
+        const correctedY = computeSectionScrollTop(sectionId);
+        if (correctedY === null) return;
+        if (Math.abs(window.scrollY - correctedY) > 6) {
+          window.scrollTo({
+            top: correctedY,
+            behavior: prefersReduced ? "auto" : "smooth",
+          });
+        }
+      };
+
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        if (cancelled) return;
+        const targetY = computeSectionScrollTop(sectionId);
+        if (targetY === null) {
+          cleanup();
+          return;
+        }
+        window.scrollTo({
+          top: targetY,
+          behavior: prefersReduced ? "auto" : "smooth",
+        });
+        if (sectionId && sectionId !== "top") {
+          t1 = window.setTimeout(verifyAlignment, 420);
+          t2 = window.setTimeout(() => {
+            verifyAlignment();
+            cleanup();
+          }, 780);
+        } else {
+          cleanup();
+        }
+      });
+    },
+    [cancelPendingScrollAlign, handleSelectNav, releaseMenuScrollLock],
+  );
+
+  const dismissDrawerForRouteChange = useCallback(() => {
+    cancelPendingScrollAlign();
+    releaseMenuScrollLock();
+    consumeBackLayerForInPageTarget();
+    setMenuOpen(false);
+  }, [cancelPendingScrollAlign, releaseMenuScrollLock]);
+
+  useEffect(() => {
+    return () => {
+      cancelPendingScrollAlign();
+    };
+  }, [cancelPendingScrollAlign]);
 
   useEffect(() => {
     let sectionTops: Array<{ href: string; top: number }> = [];
@@ -218,15 +464,22 @@ export default function EditorialHero() {
   useEffect(() => {
     if (!menuOpen) return;
     const unlock = lockRootScroll();
+    unlockScrollRef.current = unlock;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
+      if (e.key === "Escape") {
+        releaseMenuScrollLock();
+        setMenuOpen(false);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
+      if (unlockScrollRef.current === unlock) {
+        unlockScrollRef.current = null;
+      }
       unlock();
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [menuOpen]);
+  }, [menuOpen, releaseMenuScrollLock]);
 
   return (
     <>
@@ -246,7 +499,10 @@ export default function EditorialHero() {
                     href={link.href}
                     className={`eh-init-link ${isActive ? "is-active" : ""}`}
                     tabIndex={showStickyHeader ? -1 : 0}
-                    onClick={() => handleSelectNav(link.href)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigateToSectionHref(link.href, false);
+                    }}
                   >
                     {link.label}
                   </a>
@@ -278,9 +534,12 @@ export default function EditorialHero() {
             <a
               href="#top"
               className="eh-brand eh-init-brand"
-              aria-label="HTX Cư Né – Đắk Lắk"
+              aria-label="HTX Cư Né, Đắk Lắk"
               tabIndex={showStickyHeader ? -1 : 0}
-              onClick={() => handleSelectNav("")}
+              onClick={(e) => {
+                e.preventDefault();
+                navigateToSectionHref("#top", false);
+              }}
             >
               <span>HTX Cư Né</span>
             </a>
@@ -319,7 +578,10 @@ export default function EditorialHero() {
                     href={link.href}
                     className={`eh-init-link ${isActive ? "is-active" : ""}`}
                     tabIndex={showStickyHeader ? -1 : 0}
-                    onClick={() => handleSelectNav(link.href)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigateToSectionHref(link.href, false);
+                    }}
                   >
                     {link.label}
                   </a>
@@ -372,7 +634,10 @@ export default function EditorialHero() {
             href="#top"
             className="eh-brand"
             tabIndex={showStickyHeader ? 0 : -1}
-            onClick={() => handleSelectNav("")}
+            onClick={(e) => {
+              e.preventDefault();
+              navigateToSectionHref("#top", false);
+            }}
           >
             <span>HTX Cư Né</span>
           </a>
@@ -405,7 +670,10 @@ export default function EditorialHero() {
                   className={isActive ? "is-active" : undefined}
                   aria-current={isActive ? "location" : undefined}
                   tabIndex={showStickyHeader ? 0 : -1}
-                  onClick={() => handleSelectNav(link.href)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigateToSectionHref(link.href, false);
+                  }}
                 >
                   {link.label}
                 </a>
@@ -478,107 +746,19 @@ export default function EditorialHero() {
 
       <div className="eh-header-spacer" aria-hidden="true" />
 
-      {/* Phần đầu trang: Lưới 4 cột × 3 hàng đan xen 2 khung ảnh sầu riêng đối xứng chéo */}
-      <section className="eh-hero" aria-labelledby="hero-title">
-        {/* Hàng 1: Tiêu đề chính căn giữa thoáng đãng xuyên suốt */}
-        <div className="eh-cell eh-cell-headline">
-          <h1 id="hero-title" className="eh-headline">
-            Sầu riêng minh bạch
-          </h1>
-        </div>
-
-        {/* Hàng 2 – Cột 1 & 2: Ảnh sầu riêng vùng trồng Cư Né lồng ghép bộ ảnh nghệ thuật sang trọng */}
-        <div className="eh-cell-media is-top-left">
-          <DwellSlideshow
-            slides={HERO_TOP_LEFT_SLIDES}
-            desktopLeadSrc="/landing/cune-orchard-village.jpg"
-            priorityFirst
-            staggerMs={0}
-            sizes="(max-width: 768px) calc(100vw - 44px), (max-width: 960px) 100vw, 50vw"
-          />
-        </div>
-
-        {/* Hàng 2 – Cột 3: Nội dung chính đi kèm ảnh Hàng 2 (trên di động hiển thị bảng số liệu 2×2 tinh gọn) */}
-        <div className="eh-cell eh-cell-feature">
-          <span className="eh-cell-tag eh-feature-desktop-tag">
-            Đạt chuẩn xuất khẩu - {qualifiedStr}/{householdsStr} hộ
-          </span>
-          <div>
-            <h2 className="eh-feature-title">Vùng trồng Cư Né</h2>
-            <p className="eh-feature-sub eh-feature-desktop-sub">
-              {areaStr} ha - {plotsStr} thửa - {villagesStr} thôn - Krông Búk, Đắk Lắk
-            </p>
-            <p className="eh-feature-mobile-lead">
-              Liên kết canh tác chuẩn VietGAP &amp; xuất khẩu chính ngạch tại Krông Búk, Đắk Lắk.
-            </p>
-          </div>
-          <div className="eh-mobile-numbers" aria-label="Quy mô vùng trồng Cư Né">
-            <div className="eh-num-item">
-              <strong>{qualifiedStr}</strong>
-              <span>hộ thành viên đạt chuẩn</span>
-            </div>
-            <div className="eh-num-item">
-              <strong>{areaStr}</strong>
-              <span>ha diện tích canh tác</span>
-            </div>
-            <div className="eh-num-item">
-              <strong>{plotsStr}</strong>
-              <span>thửa vườn định danh</span>
-            </div>
-            <div className="eh-num-item">
-              <strong>{villagesStr}</strong>
-              <span>thôn liên kết Cư Né</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Hàng 2 – Cột 4: Khoảng thở trắng thoáng mắt */}
-        <div className="eh-cell eh-cell-empty is-row2-col4" aria-hidden="true" />
-
-        {/* Đường kẻ ngang mở đầu cụm tạp chí chia đôi trên di động */}
-        <div className="eh-mob-spread-rule" aria-hidden="true" />
-
-        {/* Hàng 3 – Cột 1: Khoảng thở trắng đối xứng */}
-        <div className="eh-cell eh-cell-empty is-row3-col1" aria-hidden="true" />
-
-        {/* Hàng 3 – Cột 2: Nội dung đi kèm ảnh Hàng 3 (trên di động tạo bố cục chữ 2 tầng đường kẻ chữ ├) */}
-        <div className="eh-cell eh-cell-story">
-          <span className="eh-cell-tag">Truy xuất nguồn gốc</span>
-          <div className="eh-story-upper">
-            <h2 className="eh-feature-title">Từ vườn đến xuất khẩu</h2>
-            <p className="eh-story-sub-mob">Truy xuất - Nhật ký số</p>
-            <p className="eh-story-text">
-              <span className="eh-story-desktop">
-                Bà con ghi nhật ký mùa vụ, theo dõi mã vùng và kiểm nghiệm ngay trên điện thoại để minh bạch từng lô hàng.
-              </span>
-              <span className="eh-story-mobile">
-                Ghi nhật ký mùa vụ, theo dõi mã vùng và kiểm nghiệm an toàn ngay trên điện thoại.
-              </span>
-            </p>
-          </div>
-          <div className="eh-story-spread-note">
-            <p className="eh-story-spread-prose">
-              Bà con ghi chép lịch chăm bón, theo dõi mã số vùng trồng và đối chiếu kiểm nghiệm an toàn minh bạch cho từng lô thu hoạch.
-            </p>
-          </div>
-        </div>
-
-        {/* Hàng 3 – Cột 3 & 4: Ảnh nhật ký mùa vụ & tem QR (trên di động là ảnh dọc cao bên trái đường kẻ dọc) */}
-        <div className="eh-cell-media is-bottom-right">
-          <DwellSlideshow
-            slides={HERO_BOTTOM_RIGHT_SLIDES}
-            mobileCollage={false}
-            staggerMs={650}
-            sizes="(max-width: 768px) 46vw, (max-width: 960px) 100vw, 50vw"
-          />
-        </div>
-      </section>
+      <HeroGridSection
+        householdsStr={householdsStr}
+        qualifiedStr={qualifiedStr}
+        areaStr={areaStr}
+        plotsStr={plotsStr}
+        villagesStr={villagesStr}
+      />
 
       {/* Ngăn kéo điều hướng khi bấm nút "=" ở đầu trang */}
       <div
         className={`eh-drawer-backdrop ${menuOpen ? "is-open" : ""}`}
         aria-hidden={!menuOpen}
-        onClick={() => setMenuOpen(false)}
+        onClick={closeMenu}
       >
         <aside
           className="eh-drawer"
@@ -589,7 +769,7 @@ export default function EditorialHero() {
             e.stopPropagation();
             const target = e.target as HTMLElement | null;
             if (!target?.closest("a, button, [data-drawer-keep]")) {
-              setMenuOpen(false);
+              closeMenu();
             }
           }}
         >
@@ -603,7 +783,7 @@ export default function EditorialHero() {
               aria-label="Đóng menu"
               onClick={(e) => {
                 e.stopPropagation();
-                setMenuOpen(false);
+                closeMenu();
               }}
             >
               <span />
@@ -620,16 +800,7 @@ export default function EditorialHero() {
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
-                    handleSelectNav(link.href);
-                    setMenuOpen(false);
-                    const id = link.href.startsWith("#") ? link.href.slice(1) : "";
-                    window.requestAnimationFrame(() => {
-                      const el = id ? document.getElementById(id) : null;
-                      if (el) {
-                        el.scrollIntoView({ behavior: "smooth", block: "start" });
-                        replaceUrlPreservingState(link.href);
-                      }
-                    });
+                    navigateToSectionHref(link.href, true);
                   }}
                 >
                   <span>{link.label}</span>
@@ -642,7 +813,7 @@ export default function EditorialHero() {
                 className="eh-drawer-link"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setMenuOpen(false);
+                  dismissDrawerForRouteChange();
                 }}
               >
                 <span>Tra cứu nguồn gốc QR</span>
@@ -658,7 +829,7 @@ export default function EditorialHero() {
                   className="eh-drawer-btn is-solid"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setMenuOpen(false);
+                    dismissDrawerForRouteChange();
                   }}
                 >
                   Vào hệ thống
@@ -669,7 +840,7 @@ export default function EditorialHero() {
                   className="eh-drawer-btn"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setMenuOpen(false);
+                    dismissDrawerForRouteChange();
                     void logout();
                   }}
                 >
@@ -683,7 +854,7 @@ export default function EditorialHero() {
                   className="eh-drawer-btn is-solid"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setMenuOpen(false);
+                    dismissDrawerForRouteChange();
                   }}
                 >
                   Đăng nhập hệ thống
@@ -694,7 +865,7 @@ export default function EditorialHero() {
                   className="eh-drawer-btn"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setMenuOpen(false);
+                    dismissDrawerForRouteChange();
                   }}
                 >
                   Đăng ký

@@ -36,6 +36,18 @@
   scroll-margin-top: 58px;
 }
 
+@media (max-width: 960px) {
+  .lp.sw-page section[id] {
+    scroll-margin-top: 56px;
+  }
+}
+
+@media (max-width: 768px) {
+  .lp.sw-page section[id] {
+    scroll-margin-top: 54px;
+  }
+}
+
 .sw-anchor-alias {
   display: block;
   position: relative;
@@ -2053,9 +2065,7 @@ html[data-perf="lite"] .sw-strip-dot-circle {
   transition: none !important;
 }
 
-html[data-perf="lite"] .sw-side-drawer,
-html[data-perf="lite"] .sw-side-backdrop {
-  animation: none !important;
+html[data-perf="lite"] .sw-side-drawer {
   box-shadow: none !important;
 }
 
@@ -3145,15 +3155,5 @@ html[data-perf="lite"] .sw-side-backdrop {
 
   .lp.sw-page .sw-tab-pill {
     font-size: 12.5px;
-  }
-}
-
-/* ── Ảo hóa bố cục phần dưới trang giới thiệu trên màn hình di động (<= 960px) ── */
-@media screen and (max-width: 960px) {
-  .sw-checker-row,
-  .sw-asymmetric-bento,
-  .sw-faq-item {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 340px;
   }
 }

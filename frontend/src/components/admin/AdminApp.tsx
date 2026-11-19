@@ -8,10 +8,17 @@ import { hasPendingServerLogout, useAuth } from "@/components/auth/AuthProvider"
 import { WORKSPACE_ACTIVE_SESSION_KEY } from "@/components/landing/AutoEnter";
 import Sidebar from "@/components/layout/Sidebar";
 import UserMenu from "@/components/layout/UserMenu";
+import {
+  isDataSaverNetwork,
+  MAP_CENTER,
+  preconnectMapTileOrigins,
+  warmSatelliteTilesAt,
+} from "@/components/map/map-layers";
 import Dashboard from "@/components/sections/Dashboard";
 import OfflineSyncBar from "@/components/ui/OfflineSyncBar";
 import ResponsiveTables from "@/components/ui/ResponsiveTables";
 import { PageSkeleton, SkeletonCards, SkeletonStats } from "@/components/ui/Skeleton";
+import { prefetchApi } from "@/hooks/use-api";
 import {
   ADMIN_LAST_URL_KEY,
   ensureRootEntryBeforeSubPage,
@@ -157,7 +164,8 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
 
   useEffect(() => {
     if (status === "anonymous") {
-      if (typeof window !== "undefined" && !hasPendingServerLogout() && window.location.pathname.startsWith("/admin")) {
+      if (hasPendingServerLogout()) return;
+      if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) {
         const directUrl = `${window.location.pathname}${window.location.search}`;
         const targetNext = directUrl !== "/admin" ? directUrl : null;
         router.replace(targetNext ? `/login?next=${encodeURIComponent(targetNext)}` : "/login");
@@ -263,6 +271,21 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
     navigate(target);
   }, [navigate]);
 
+  useEffect(() => {
+    if (status !== "authenticated" || isFarmer || typeof window === "undefined") return;
+    if (!can("plots", "read")) return;
+    preconnectMapTileOrigins();
+    if (isDataSaverNetwork()) return;
+
+    const timer = window.setTimeout(() => {
+      prefetchApi("/plots");
+      void import("@/components/sections/Zones");
+      void import("@/components/map/MapView");
+      warmSatelliteTilesAt(MAP_CENTER[0], MAP_CENTER[1], 13);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [status, isFarmer, can]);
+
   const renderSection = () => {
     const requiredResource = SECTION_RESOURCE[active];
     if (requiredResource && !can(requiredResource, "read")) {
@@ -325,8 +348,12 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
     notFound();
   }
 
-  if (status !== "authenticated" || isFarmer) {
+  if (status === "loading") {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
+  }
+
+  if (status !== "authenticated" || isFarmer) {
+    return null;
   }
 
   return (

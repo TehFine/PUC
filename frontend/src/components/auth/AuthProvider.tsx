@@ -14,6 +14,7 @@ import {
   ADMIN_LAST_URL_KEY,
   PORTAL_LAST_URL_KEY,
   readWorkspaceUrl,
+  resetOverlayHistoryOnRouteLeave,
 } from "@/lib/back-navigation";
 import {
   attachOfflineSyncEngine,
@@ -189,12 +190,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(result);
       setStatus("authenticated");
       attachOfflineSyncEngine(nextUserId);
+      router.prefetch("/login");
     },
-    [],
+    [router],
   );
 
   const clearClientAuthState = useCallback(
     (options?: { redirectProtected?: boolean; broadcastLogout?: boolean }) => {
+      if (
+        typeof window !== "undefined" &&
+        (options?.redirectProtected || options?.broadcastLogout || isProtectedPath(window.location.pathname))
+      ) {
+        resetOverlayHistoryOnRouteLeave();
+      }
       const prevUserId = currentUserIdRef.current;
       let preservedReturnUrl: string | null = null;
       if (typeof window !== "undefined" && !hasPendingServerLogout() && isProtectedPath(window.location.pathname)) {
@@ -490,10 +498,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    resetOverlayHistoryOnRouteLeave();
     markPendingServerLogout();
+    const serverLogoutPromise = flushPendingServerLogout();
     clearClientAuthState({ redirectProtected: false, broadcastLogout: true });
     router.replace("/login");
-    await flushPendingServerLogout();
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        if (window.location.pathname !== "/login") {
+          window.location.replace("/login");
+        }
+      }, 320);
+    }
+    await serverLogoutPromise;
   }, [clearClientAuthState, router]);
 
   const can = useCallback(

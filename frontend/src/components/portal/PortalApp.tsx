@@ -32,6 +32,7 @@ import {
   warmPortalEssentialOfflineCache,
 } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
+import { useRealtimeNotifications } from "@/lib/realtime-notifications";
 import {
   api,
   AUTH_EXPIRED_EVENT,
@@ -542,7 +543,8 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
 
   useEffect(() => {
     if (status === "anonymous") {
-      if (typeof window !== "undefined" && !hasPendingServerLogout() && window.location.pathname.startsWith("/portal")) {
+      if (hasPendingServerLogout()) return;
+      if (typeof window !== "undefined" && window.location.pathname.startsWith("/portal")) {
         const directUrl = `${window.location.pathname}${window.location.search}`;
         const targetNext = directUrl !== "/portal" ? directUrl : null;
         router.replace(targetNext ? `/login?next=${encodeURIComponent(targetNext)}` : "/login");
@@ -563,6 +565,8 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       document.body.classList.remove("pt-body");
     };
   }, []);
+
+  useRealtimeNotifications(status === "authenticated" && session?.user.role === "farmer");
 
   useEffect(() => {
     if (status !== "authenticated" || session?.user.role !== "farmer") return;
@@ -592,9 +596,10 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     // Trên máy yếu chỉ nạp sẵn 2 gói nhẹ thiết yếu khi đi rẫy (Nhật ký và Thửa đất) để mở được khi mất sóng;
     // máy mạnh nạp đủ các tab lúc nhàn rỗi.
     const loaders = lowEnd
-      ? [() => import("./DiaryTab"), () => import("./PlotsTab")]
+      ? [() => import("./DiaryTab"), () => import("./PlotsTab"), () => import("./PlotMapModal")]
       : [
           () => import("./PlotsTab"),
+          () => import("./PlotMapModal"),
           () => import("./DiaryTab"),
           () => import("./StampsTab"),
           () => import("./InspectionTab"),
@@ -645,16 +650,14 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     };
   }, [status, session?.user.role]);
 
-  const rawApiNotifItems = (notifications.data?.data ?? []).filter((n) => n.kind !== "training");
-  const apiNotifItems = useMemo<AppNotification[]>(
-    () =>
-      rawApiNotifItems.map((n) =>
-        n.readAt || !localReadKeys.includes(`api:${n.id}`)
-          ? n
-          : { ...n, readAt: new Date().toISOString() },
-      ),
-    [rawApiNotifItems, localReadKeys],
-  );
+  const apiNotifItems = useMemo<AppNotification[]>(() => {
+    const rawItems = notifications.data?.data ?? [];
+    return rawItems.map((n) =>
+      n.readAt || !localReadKeys.includes(`api:${n.id}`)
+        ? n
+        : { ...n, readAt: new Date().toISOString() },
+    );
+  }, [notifications.data?.data, localReadKeys]);
   const fallbackNotifItems = useMemo<Array<AppNotification & { _readKey: string }>>(() => {
     if (apiNotifItems.length > 0) return [];
     const reminders = (overview?.reminders ?? []).filter((r) => r.kind !== "training");
@@ -686,8 +689,12 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     notFound();
   }
 
-  if (status !== "authenticated" || session?.user.role !== "farmer") {
+  if (status === "loading") {
     return <PageSkeleton label="Đang kiểm tra phiên đăng nhập…" />;
+  }
+
+  if (status !== "authenticated" || session?.user.role !== "farmer") {
+    return null;
   }
 
   const profHousehold = profile?.household ?? overview?.household;
@@ -834,8 +841,18 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         }
       }
     }
+    const rawLink = (item.link || "").trim();
     if (item.kind === "system") {
       setNotifOpen(false);
+      if (rawLink.startsWith("/portal")) {
+        const target = resolveNotificationTarget(item);
+        navigate(target.tab, target.action);
+        return;
+      }
+      if (rawLink.startsWith("/#") || rawLink.startsWith("/gioi-thieu")) {
+        router.push(rawLink);
+        return;
+      }
       setSupportOpen(true);
       return;
     }

@@ -229,6 +229,8 @@ html:has(.lp) body {
   flex-shrink: 0;
   color: #0d0d0d;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .eh-menu-btn span {
@@ -782,13 +784,14 @@ html:has(.lp) body {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.24s ease, visibility 0.24s ease;
+  transition: opacity 0.22s ease-out, visibility 0s linear 0.24s;
 }
 
 .eh-drawer-backdrop.is-open {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+  transition: opacity 0.22s ease-out, visibility 0s linear 0s;
 }
 
 .eh-drawer {
@@ -801,12 +804,13 @@ html:has(.lp) body {
   border-left: 1px solid var(--eh-line);
   display: flex;
   flex-direction: column;
-  transform: translateX(100%);
-  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  contain: layout paint;
+  transform: translate3d(100%, 0, 0);
+  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .eh-drawer-backdrop.is-open .eh-drawer {
-  transform: translateX(0);
+  transform: translate3d(0, 0, 0);
 }
 
 .eh-drawer-head {
@@ -830,6 +834,9 @@ html:has(.lp) body {
   background: transparent;
   color: var(--eh-ink);
   flex-shrink: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .eh-close-btn span {
@@ -874,6 +881,8 @@ html:has(.lp) body {
   font-weight: 500;
   color: var(--eh-ink);
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: opacity 0.16s ease;
 }
 
@@ -917,6 +926,8 @@ html:has(.lp) body {
   font-weight: 500;
   line-height: 1;
   text-align: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: background 0.18s ease, border-color 0.18s ease;
 }
 
@@ -1035,8 +1046,7 @@ html:has(.lp) body {
 html[data-perf="lite"] .eh-cell-media img,
 html[data-perf="lite"] .eh-sticky-bar,
 html[data-perf="lite"] .eh-initial-inner,
-html[data-perf="lite"] .eh-sticky-inner,
-html[data-perf="lite"] .eh-drawer {
+html[data-perf="lite"] .eh-sticky-inner {
   transition: none !important;
 }
 
