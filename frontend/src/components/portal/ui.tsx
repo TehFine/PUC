@@ -1,12 +1,17 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight, CalendarDays, CircleCheck, FlaskConical, GraduationCap, Map, Microscope, NotebookPen, Package, Search, Send, TreePine } from "@/components/ui/PublicIcon";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
 import { useBackLayer } from "@/lib/back-navigation";
+import {
+  animatePopupExit,
+  resolvePopupExitKind,
+  spawnExitCloneIfNeeded,
+} from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { RadialPngIcon } from "./RadialIcons";
 import { useSheetSwipe } from "./use-sheet-swipe";
@@ -160,6 +165,8 @@ export function Sheet({
   children,
   footer,
   variant = "drawer",
+  closeOnBackdrop = true,
+  hideCloseButton = false,
   className = "",
 }: {
   title: string;
@@ -167,108 +174,127 @@ export function Sheet({
   children: ReactNode;
   footer?: ReactNode;
   variant?: "modal" | "drawer";
+  closeOnBackdrop?: boolean;
+  hideCloseButton?: boolean;
   className?: string;
 }) {
+  const titleId = useId();
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const dragZoneRef = useRef<HTMLDivElement>(null);
+  const backdropDownRef = useRef(false);
   const isClosingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  const variantRef = useRef(variant);
   const isDesktop = useIsDesktopViewport(760);
   const isDesktopDrawer = variant === "drawer" && isDesktop;
 
-  // Đóng dialog mượt mà trực tiếp từ vị trí hiện tại (không bật lại keyframe CSS làm nhảy về 0)
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    variantRef.current = variant;
+  }, [onClose, variant]);
+
+  // Đóng dialog mượt mà trực tiếp từ vị trí hiện tại đồng bộ hoàn toàn với Modal khu quản trị
   const handleClose = useCallback(() => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
 
-    const sheet = sheetRef.current;
-    const backdrop = backdropRef.current;
-    const desktopNow = typeof window !== "undefined" && window.innerWidth >= 760;
-    const closeDuration = desktopNow && variant === "drawer" ? 240 : 220;
+    const exitKind = resolvePopupExitKind(variantRef.current, 760);
+    const closeDuration = animatePopupExit(sheetRef.current, backdropRef.current, exitKind);
 
-    if (sheet) {
-      sheet.style.animation = "none";
-      sheet.style.pointerEvents = "none";
-      if (desktopNow && variant === "drawer") {
-        sheet.style.transition = "transform 240ms cubic-bezier(0.32, 0.72, 0, 1)";
-        sheet.style.transform = "translate3d(100%, 0, 0)";
-      } else if (desktopNow) {
-        sheet.style.transition = "transform 180ms cubic-bezier(0.25, 1, 0.5, 1), opacity 180ms ease-out";
-        sheet.style.transform = "translate3d(0, 12px, 0) scale(0.97)";
-        sheet.style.opacity = "0";
-      } else {
-        sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-        sheet.style.transform = "translate3d(0, 105%, 0)";
-      }
-    }
-    if (backdrop) {
-      backdrop.style.animation = "none";
-      backdrop.style.pointerEvents = "none";
-      backdrop.style.transition = "opacity 210ms ease-out";
-      backdrop.style.opacity = "0";
-    }
-
-    setTimeout(() => {
-      onClose();
+    window.setTimeout(() => {
+      onCloseRef.current();
     }, closeDuration);
-  }, [onClose, variant]);
+  }, []);
 
-  // Khóa cuộn ở tầng root (<html>) & lắng nghe phím ESC (chỉ đóng lớp hộp thoại trên cùng)
+  // Bảo toàn hiệu ứng thu gọn ngay cả khi thành phần cha đóng trực tiếp (setOpen(false))
+  useLayoutEffect(() => {
+    const backdropEl = backdropRef.current;
+    const sheetEl = sheetRef.current;
+    return () => {
+      if (!isClosingRef.current) {
+        spawnExitCloneIfNeeded(
+          backdropEl,
+          sheetEl,
+          resolvePopupExitKind(variantRef.current, 760),
+        );
+      }
+    };
+  }, []);
+
+  // Khóa cuộn ở tầng root (<html>), khôi phục focus & lắng nghe phím ESC (chỉ đóng lớp hộp thoại trên cùng)
   useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const unlockScroll = lockRootScroll();
+
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      const overlays = document.querySelectorAll(".pt-sheet-backdrop, .modal-overlay");
+      const overlays = document.querySelectorAll(
+        ".pt-sheet-backdrop, .modal-overlay, .cert-modal-backdrop, .pt-radial-backdrop",
+      );
       if (overlays.length > 0 && overlays[overlays.length - 1] !== backdropRef.current) return;
+      if (!closeOnBackdrop) return;
+      event.stopPropagation();
       handleClose();
     };
     document.addEventListener("keydown", onKey);
-    const unlockScroll = lockRootScroll();
     return () => {
       document.removeEventListener("keydown", onKey);
       unlockScroll();
+      previousFocus?.focus?.({ preventScroll: true });
     };
-  }, [handleClose]);
+  }, [handleClose, closeOnBackdrop]);
 
-  // Sau khi animation mở ban đầu kết thúc, khóa style animation = "none"
-  // để thao tác kéo transform trực tiếp trên GPU không bị xung đột với CSS fill-mode forwards
+  // Sau khi animation mở ban đầu kết thúc, gỡ hẳn animation và transform 3D
+  // để trình duyệt di động vẽ vector sắc nét (không rỗ pixel hay mất ô đệm GPU) khi người dùng zoom to
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (isClosingRef.current) return;
       if (sheetRef.current) {
-        sheetRef.current.style.animation = "none";
-        sheetRef.current.style.transform = "translate3d(0, 0, 0)";
+        sheetRef.current.style.setProperty("animation", "none", "important");
+        sheetRef.current.style.transform = "";
+        sheetRef.current.style.willChange = "auto";
       }
       if (backdropRef.current) {
-        backdropRef.current.style.animation = "none";
+        backdropRef.current.style.setProperty("animation", "none", "important");
         backdropRef.current.style.opacity = "1";
       }
-    }, 350);
-    return () => clearTimeout(timer);
+    }, 320);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useBackLayer(true, handleClose);
 
-  // Vuốt kiểu khung bình luận TikTok / Facebook trên mobile; tắt trên ngăn kéo dọc desktop
+  // Vuốt đóng trên mobile; tắt trên ngăn kéo dọc desktop và hộp thoại căn giữa
   useSheetSwipe({
     sheetRef,
     handleRef: dragZoneRef,
     onDismiss: handleClose,
-    enabled: !isDesktopDrawer,
+    enabled: variant === "drawer" && !isDesktopDrawer,
   });
 
   const sheetNode = (
     <SheetCloseContext.Provider value={handleClose}>
       <div
         ref={backdropRef}
-        className={`pt-sheet-backdrop ${variant === "drawer" ? "is-drawer" : ""}`.trim()}
-        onClick={(event) => event.target === event.currentTarget && handleClose()}
+        className={`pt-sheet-backdrop ${variant === "drawer" ? "is-drawer" : "is-confirm-overlay"}`.trim()}
+        onPointerDown={(event) => {
+          backdropDownRef.current = event.target === event.currentTarget;
+        }}
+        onClick={(event) => {
+          const startedOnBackdrop = backdropDownRef.current;
+          backdropDownRef.current = false;
+          if (closeOnBackdrop && startedOnBackdrop && event.target === event.currentTarget) {
+            handleClose();
+          }
+        }}
       >
         <div
           ref={sheetRef}
           className={`pt-sheet ${variant === "drawer" ? "is-drawer" : ""} ${className}`.trim()}
           role="dialog"
           aria-modal="true"
-          aria-label={title}
+          aria-labelledby={titleId}
           tabIndex={-1}
         >
           {/* Vùng tiêu đề (hỗ trợ kéo xuống để đóng) */}
@@ -289,32 +315,28 @@ export function Sheet({
                   <ArrowRight size={19} strokeWidth={2.2} aria-hidden="true" />
                 </button>
               )}
-              <h2>{title}</h2>
-              <button
-                type="button"
-                className="pt-icon-btn pt-sheet-close-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleClose();
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                aria-label="Đóng"
-              >
-                <CloseCircleIcon size={28} />
-              </button>
+              <h2 id={titleId}>{title}</h2>
+              {!hideCloseButton && (
+                <button
+                  type="button"
+                  className="pt-icon-btn pt-sheet-close-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleClose();
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  aria-label="Đóng"
+                >
+                  <CloseCircleIcon size={28} />
+                </button>
+              )}
               {variant === "drawer" && <span className="pt-drawer-head-spacer" aria-hidden="true" />}
             </header>
           </div>
 
-          <div className="pt-sheet-body">
-            {children}
-          </div>
+          <div className="pt-sheet-body">{children}</div>
 
-          {footer && (
-            <footer className="pt-sheet-footer">
-              {footer}
-            </footer>
-          )}
+          {footer && <footer className="pt-sheet-footer">{footer}</footer>}
         </div>
       </div>
     </SheetCloseContext.Provider>

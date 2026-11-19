@@ -4,6 +4,7 @@ import { useState } from "react";
 import FormModal from "@/components/admin/catalog/FormModal";
 import { toNumber, toText } from "@/components/admin/catalog/form-utils";
 import { FormGrid, NumberField, SelectField, TextAreaField, TextField } from "@/components/ui/form/fields";
+import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
 import { Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { useApi, useApiList, useMutation } from "@/hooks/use-api";
@@ -96,10 +97,11 @@ export function StampListModal({
   const stamps: FarmerStampRecord[] = Array.isArray(state.data)
     ? state.data
     : (state.data?.data ?? state.data?.stamps ?? []);
+  const [previewStamp, setPreviewStamp] = useState<FarmerStampRecord | null>(null);
 
   return (
     <Modal
-      title={`Danh sách tem – Đợt ${allocation.allocationCode}`}
+      title={`Danh sách tem - Đợt ${allocation.allocationCode}`}
       onClose={onClose}
       width={720}
       footer={
@@ -161,11 +163,15 @@ export function StampListModal({
                   <td style={{ fontSize: 12 }}>{s.activatedAt ? s.activatedAt.slice(0, 10) : "—"}</td>
                   <td>
                     {isSafeMediaUrl(s.photoUrl) ? (
-                      <a href={s.photoUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => setPreviewStamp(s)}
+                      >
                         Xem ảnh
-                      </a>
+                      </button>
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </td>
                   <td>
@@ -183,6 +189,14 @@ export function StampListModal({
           </tbody>
         </table>
       </div>
+      {previewStamp && isSafeMediaUrl(previewStamp.photoUrl) && (
+        <MediaBottomSheet
+          urls={[previewStamp.photoUrl]}
+          title={allocation.householdName || allocation.householdCode || previewStamp.serialCode}
+          subtitle={`Tem ${previewStamp.serialCode}${previewStamp.plotCode ? `, thửa ${previewStamp.plotCode}` : ""}`}
+          onClose={() => setPreviewStamp(null)}
+        />
+      )}
     </Modal>
   );
 }

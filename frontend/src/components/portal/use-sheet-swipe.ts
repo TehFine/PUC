@@ -85,8 +85,11 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
     let samples: { y: number; t: number }[] = [];
     let snapTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const isPinchZoomed = () =>
+      typeof window !== "undefined" && Boolean(window.visualViewport && window.visualViewport.scale > 1.02);
+
     const setTransform = (px: number) => {
-      sheet.style.transform = `translate3d(0, ${px}px, 0)`;
+      sheet.style.transform = px === 0 ? "" : `translate3d(0, ${px}px, 0)`;
     };
 
     const lockScroller = () => {
@@ -105,6 +108,21 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
       }
     };
 
+    const cancelActiveDragForZoom = () => {
+      if (snapTimer) {
+        clearTimeout(snapTimer);
+        snapTimer = null;
+      }
+      unlockScroller();
+      if (offset !== 0) {
+        sheet.style.transition = "";
+        sheet.style.transform = "";
+      }
+      offset = 0;
+      samples = [];
+      mode = "ignore";
+    };
+
     const startDrag = (y: number) => {
       if (snapTimer) {
         clearTimeout(snapTimer);
@@ -114,22 +132,19 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
       originY = y;
       offset = 0;
       samples = [{ y, t: performance.now() }];
-      sheet.style.animation = "none";
+      sheet.style.setProperty("animation", "none", "important");
       sheet.style.transition = "none";
       lockScroller();
     };
 
     const snapBack = () => {
-      const snapMs =
-        typeof document !== "undefined" && document.documentElement.dataset.perf === "lite"
-          ? 140
-          : SNAP_BACK_MS;
-      sheet.style.transition = `transform ${snapMs}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-      setTransform(0);
+      sheet.style.transition = `transform ${SNAP_BACK_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+      sheet.style.transform = "translate3d(0, 0, 0)";
       snapTimer = setTimeout(() => {
         sheet.style.transition = "";
+        sheet.style.transform = "";
         snapTimer = null;
-      }, snapMs + 20);
+      }, SNAP_BACK_MS + 20);
     };
 
     const finishDrag = (cancelled: boolean) => {
@@ -163,8 +178,8 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
 
     const onTouchStart = (e: TouchEvent) => {
       detachTouchMove();
-      if (e.touches.length !== 1 || sheet.style.pointerEvents === "none") {
-        mode = "ignore";
+      if (e.touches.length !== 1 || sheet.style.pointerEvents === "none" || isPinchZoomed()) {
+        cancelActiveDragForZoom();
         return;
       }
       const target = e.target as Element | null;
@@ -192,6 +207,11 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
 
     const onTouchMove = (e: TouchEvent) => {
       if (mode === "idle" || mode === "ignore") return;
+      if (e.touches.length > 1 || isPinchZoomed()) {
+        cancelActiveDragForZoom();
+        detachTouchMove();
+        return;
+      }
       const touch = e.touches[0];
       if (!touch) return;
       const y = touch.clientY;

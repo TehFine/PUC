@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, type FormEvent, type ReactNode } from "react";
-import { FormError, Modal } from "@/components/ui/Modal";
+import { FormError, Modal, ModalDismissButton } from "@/components/ui/Modal";
 
 /**
  * Hộp thoại biểu mẫu chuẩn: nội dung là <form>, chân hộp thoại có nút Hủy / Lưu (nút Lưu hiện trạng thái đang lưu).
@@ -42,9 +42,13 @@ export default function FormModal({
       closeOnBackdrop={!pending}
       footer={
         <>
-          <button type="button" className="btn btn-outline" onClick={onClose} disabled={pending}>
+          <ModalDismissButton
+            className="btn btn-outline"
+            onFallbackClose={onClose}
+            disabled={pending}
+          >
             Hủy
-          </button>
+          </ModalDismissButton>
           {extraActions}
           <button type="submit" form={formId} className="btn btn-primary" disabled={pending}>
             {pending ? "Đang lưu…" : submitLabel}

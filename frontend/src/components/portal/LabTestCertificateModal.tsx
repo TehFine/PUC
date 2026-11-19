@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Download, Printer } from "@/components/ui/PublicIcon";
@@ -8,6 +8,11 @@ import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { isLowEndDevice } from "@/lib/network";
 import { useBackLayer } from "@/lib/back-navigation";
+import {
+  animatePopupExit,
+  resolvePopupExitKind,
+  spawnExitCloneIfNeeded,
+} from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { triggerBlobDownload } from "@/utils/download";
 import { formatDate } from "@/utils/format";
@@ -243,39 +248,38 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const backdropDownRef = useRef<boolean>(false);
   const closingRef = useRef<boolean>(false);
+  const onCloseRef = useRef(onClose);
   const paperRef = useRef<HTMLDivElement>(null);
   const mobileStackRef = useRef<HTMLDivElement>(null);
   const [sheetScale, setSheetScale] = useState<number>(0.68);
   const isDesktop = useIsDesktopViewport(760);
 
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   const handleClose = useCallback(() => {
     if (closingRef.current) return;
     closingRef.current = true;
-    const container = containerRef.current;
-    const backdrop = backdropRef.current;
-    const desktopNow = typeof window !== "undefined" && window.innerWidth >= 760;
-    const closeDuration = desktopNow ? 240 : 220;
-
-    if (container) {
-      container.style.animation = "none";
-      container.style.pointerEvents = "none";
-      container.style.transition = desktopNow
-        ? "transform 240ms cubic-bezier(0.32, 0.72, 0, 1)"
-        : "transform 220ms cubic-bezier(0.25, 1, 0.5, 1)";
-      container.style.transform = desktopNow ? "translate3d(100%, 0, 0)" : "translate3d(0, 100%, 0)";
-    }
-    if (backdrop) {
-      backdrop.style.animation = "none";
-      backdrop.style.pointerEvents = "none";
-      backdrop.style.transition = "opacity 210ms ease-out";
-      backdrop.style.opacity = "0";
-    }
-    setTimeout(() => {
+    const exitKind = resolvePopupExitKind("drawer", 760);
+    const closeDuration = animatePopupExit(containerRef.current, backdropRef.current, exitKind);
+    window.setTimeout(() => {
       closingRef.current = false;
-      onClose();
+      onCloseRef.current();
     }, closeDuration);
-  }, [onClose]);
+  }, []);
+
+  useLayoutEffect(() => {
+    const backdropEl = backdropRef.current;
+    const containerEl = containerRef.current;
+    return () => {
+      if (!closingRef.current) {
+        spawnExitCloneIfNeeded(backdropEl, containerEl, resolvePopupExitKind("drawer", 760));
+      }
+    };
+  }, []);
 
   useSheetSwipe({
     sheetRef: containerRef,
@@ -288,8 +292,8 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
     const timer = setTimeout(() => {
       if (closingRef.current) return;
       if (containerRef.current) {
-        containerRef.current.style.animation = "none";
-        containerRef.current.style.transform = "translate3d(0, 0, 0)";
+        containerRef.current.style.setProperty("animation", "none", "important");
+        containerRef.current.style.transform = "";
         containerRef.current.style.willChange = "auto";
       }
       if (backdropRef.current) {
@@ -419,8 +423,13 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
     <div
       ref={backdropRef}
       className="cert-modal-backdrop cert-print-root"
+      onPointerDown={(e) => {
+        backdropDownRef.current = e.target === e.currentTarget;
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
+        const startedOnBackdrop = backdropDownRef.current;
+        backdropDownRef.current = false;
+        if (startedOnBackdrop && e.target === e.currentTarget) handleClose();
       }}
       role="dialog"
       aria-modal="true"
@@ -1109,12 +1118,17 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           display: flex;
           justify-content: center;
           align-items: flex-start;
-          animation: certFadeIn 0.2s ease-out;
+          animation: certFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         @keyframes certFadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
+        }
+
+        @keyframes certMobileSlideUp {
+          from { transform: translate3d(0, 100%, 0); }
+          to { transform: translate3d(0, 0, 0); }
         }
 
         .cert-modal-container {
@@ -1124,6 +1138,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           flex-direction: column;
           gap: 12px;
           margin: auto;
+          animation: certMobileSlideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
 
         /* ── Thanh điều khiển phía trên ── */

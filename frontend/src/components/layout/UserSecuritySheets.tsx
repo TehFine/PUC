@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { BusyButton, InlineError } from "@/components/portal/shared/controls";
 import { Field, Sheet } from "@/components/portal/ui";
-import { ConfirmDialog } from "@/components/ui/Modal";
+import { ConfirmDialog, ModalDismissButton } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { api, errorMessage } from "@/lib/api-client";
 import type { TwoFactorSetupResponse, UserSessionItem } from "@/types/api";
@@ -353,9 +353,13 @@ export function TwoFactorSecuritySheet({
             <InlineError message={err} />
 
             <div className="pt-form-actions">
-              <button type="button" className="pt-btn pt-btn-ghost" onClick={onClose} disabled={busy}>
+              <ModalDismissButton
+                className="pt-btn pt-btn-ghost"
+                onFallbackClose={onClose}
+                disabled={busy}
+              >
                 Đóng
-              </button>
+              </ModalDismissButton>
               <BusyButton
                 type="submit"
                 className="pt-btn pt-btn-primary"

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
 import { SkeletonCards } from "@/components/ui/Skeleton";
 import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { ROLE_LABELS } from "@/constants/roles";
@@ -580,6 +581,12 @@ function classifyDiaryVisual(entry: TraceDiaryEntry): {
 
 /** Khối Nhật ký canh tác & Phun thuốc BVTV dành riêng cho Cấp 3 (Cơ quan quản lý). */
 function AuthorityDiarySection({ diaries }: { diaries: TraceDiaryEntry[] }) {
+  const [previewMedia, setPreviewMedia] = useState<{
+    urls: string[];
+    title: string;
+    subtitle?: string;
+  } | null>(null);
+
   return (
     <section className="tr-card tr-puc-journal-card">
       <div className="tr-puc-journal-head">
@@ -626,14 +633,20 @@ function AuthorityDiarySection({ diaries }: { diaries: TraceDiaryEntry[] }) {
                     )}
                     {d.gpsVerified && <span className="tr-proof-safe-tag">Khớp GPS thửa</span>}
                     {isSafeMediaUrl(d.photoUrl) && (
-                      <a
-                        href={d.photoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
                         className="tr-inline-link"
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+                        onClick={() =>
+                          setPreviewMedia({
+                            urls: [d.photoUrl as string],
+                            title: d.householdName || "Ảnh hiện trường",
+                            subtitle: `${formatTraceDate(d.entryOn, "vi")}, ${d.activity}`,
+                          })
+                        }
                       >
                         Xem ảnh hiện trường
-                      </a>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -641,6 +654,14 @@ function AuthorityDiarySection({ diaries }: { diaries: TraceDiaryEntry[] }) {
             );
           })}
         </div>
+      )}
+      {previewMedia && (
+        <MediaBottomSheet
+          urls={previewMedia.urls}
+          title={previewMedia.title}
+          subtitle={previewMedia.subtitle}
+          onClose={() => setPreviewMedia(null)}
+        />
       )}
     </section>
   );
@@ -796,6 +817,11 @@ export default function TraceView() {
   };
 
   const [prevCode, setPrevCode] = useState(code);
+  const [tracePreviewMedia, setTracePreviewMedia] = useState<{
+    urls: string[];
+    title: string;
+    subtitle?: string;
+  } | null>(null);
   if (prevCode !== code) {
     setPrevCode(code);
     setData(null);
@@ -2718,14 +2744,20 @@ export default function TraceView() {
                                   <span className="tr-proof-safe-tag">Khớp GPS tại thửa</span>
                                 )}
                                 {isSafeMediaUrl(m.photoUrl) && (
-                                  <a
-                                    href={m.photoUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                  <button
+                                    type="button"
                                     className="tr-inline-link"
+                                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+                                    onClick={() =>
+                                      setTracePreviewMedia({
+                                        urls: [m.photoUrl as string],
+                                        title: m.code || "Ảnh biên bản hiện trường",
+                                        subtitle: m.location || undefined,
+                                      })
+                                    }
                                   >
                                     Xem ảnh biên bản hiện trường
-                                  </a>
+                                  </button>
                                 )}
                               </div>
                             )}
@@ -2831,6 +2863,15 @@ export default function TraceView() {
           plot={gisModalPlot.plot}
           householdName={gisModalPlot.householdName}
           onClose={() => setGisModalPlot(null)}
+        />
+      )}
+
+      {tracePreviewMedia && (
+        <MediaBottomSheet
+          urls={tracePreviewMedia.urls}
+          title={tracePreviewMedia.title}
+          subtitle={tracePreviewMedia.subtitle}
+          onClose={() => setTracePreviewMedia(null)}
         />
       )}
     </div>

@@ -26,6 +26,7 @@ import {
   ViolationFormModal,
   ViolationResolveModal,
 } from "@/components/admin/journal/ViolationModals";
+import { extractSafeMediaUrls, MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
 import { formatDate, formatDiaryEditor } from "@/utils/format";
 import type { DashboardSummary } from "@/types/dashboard";
 import type { JournalRow, SprayRow, ViolationRow } from "@/types/journal";
@@ -147,6 +148,11 @@ export default function Journal() {
   const [resolvingViolation, setResolvingViolation] = useState<ViolationRow | null>(null);
   const [editingViolation, setEditingViolation] = useState<ViolationRow | "new" | null>(null);
   const [deletingViolation, setDeletingViolation] = useState<ViolationRow | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<{
+    urls: string[];
+    title: string;
+    subtitle?: string;
+  } | null>(null);
 
   const tabs: TabItem<Tab>[] = [
     { id: "journal", label: "Nhật ký canh tác", badge: journalList.total },
@@ -278,18 +284,40 @@ export default function Journal() {
                         )}
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        {j.hasPhoto || j.photoUrl ? (
-                          <button
-                            type="button"
-                            className="badge badge-blue"
-                            style={{ cursor: "pointer" }}
-                            onClick={() => setViewingJournal(j)}
-                          >
-                            Có ảnh
-                          </button>
-                        ) : (
-                          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>-</span>
-                        )}
+                        {(() => {
+                          const rowUrls = extractSafeMediaUrls(j.photoUrls, j.photoUrl);
+                          if (rowUrls.length > 0) {
+                            return (
+                              <button
+                                type="button"
+                                className="badge badge-blue"
+                                style={{ cursor: "pointer", border: "none", fontFamily: "inherit" }}
+                                onClick={() =>
+                                  setPreviewMedia({
+                                    urls: rowUrls,
+                                    title: j.householdName,
+                                    subtitle: `${formatDate(j.entryOn)}, ${j.plotCode}, ${j.activity}`,
+                                  })
+                                }
+                              >
+                                {rowUrls.length > 1 ? `Xem ảnh (${rowUrls.length})` : "Xem ảnh"}
+                              </button>
+                            );
+                          }
+                          if (j.hasPhoto) {
+                            return (
+                              <button
+                                type="button"
+                                className="badge badge-blue"
+                                style={{ cursor: "pointer", border: "none", fontFamily: "inherit" }}
+                                onClick={() => setViewingJournal(j)}
+                              >
+                                Có ảnh
+                              </button>
+                            );
+                          }
+                          return <span style={{ color: "var(--text-muted)", fontSize: 12 }}>-</span>;
+                        })()}
                       </td>
                       <td>
                         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
@@ -395,18 +423,33 @@ export default function Journal() {
                         style={{
                           marginTop: 8,
                           padding: "8px 12px",
-                          borderRadius: 10,
-                          background: "#f0fdf4",
-                          border: "1px solid #bbf7d0",
+                          borderRadius: 6,
+                          background: "#f3f7ee",
+                          border: "1px solid #d4d4d2",
                           fontSize: 12.5,
                         }}
                       >
                         <strong>Giải trình của hộ:</strong> {v.farmerResponse}
-                        {v.farmerResponsePhotoUrl && (
-                          <span style={{ marginLeft: 8 }} className="badge badge-blue">
-                            Kèm ảnh giải trình
-                          </span>
-                        )}
+                        {(() => {
+                          const respUrls = extractSafeMediaUrls(v.farmerResponsePhotoUrls, v.farmerResponsePhotoUrl);
+                          if (respUrls.length === 0) return null;
+                          return (
+                            <button
+                              type="button"
+                              style={{ marginLeft: 8, cursor: "pointer", border: "none", fontFamily: "inherit" }}
+                              className="badge badge-blue"
+                              onClick={() =>
+                                setPreviewMedia({
+                                  urls: respUrls,
+                                  title: v.householdLabel,
+                                  subtitle: `Ảnh giải trình ngày ${formatDate(v.detectedOn)}`,
+                                })
+                              }
+                            >
+                              {respUrls.length > 1 ? `Xem ảnh (${respUrls.length})` : "Xem ảnh"}
+                            </button>
+                          );
+                        })()}
                       </div>
                     )}
                     {v.resolutionNotes && (
@@ -705,6 +748,15 @@ export default function Journal() {
           successMessage="Đã xóa nhật ký phun thuốc."
           onClose={() => setDeletingSpray(null)}
           onDeleted={() => void sprayList.refresh()}
+        />
+      )}
+
+      {previewMedia && (
+        <MediaBottomSheet
+          urls={previewMedia.urls}
+          title={previewMedia.title}
+          subtitle={previewMedia.subtitle}
+          onClose={() => setPreviewMedia(null)}
         />
       )}
     </>

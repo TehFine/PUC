@@ -1,17 +1,56 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight } from "@/components/ui/PublicIcon";
-import { SheetCloseContext, useIsDesktopViewport } from "@/components/portal/ui";
+import { SheetCloseContext, useIsDesktopViewport, useSheetClose } from "@/components/portal/ui";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { useBackLayer } from "@/lib/back-navigation";
+import {
+  animatePopupExit,
+  resolvePopupExitKind,
+  spawnExitCloneIfNeeded,
+} from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
+
+/** Nút đóng/hủy bên trong chân Modal/Sheet tự động kích hoạt hiệu ứng thu gọn trước khi đóng */
+export function ModalDismissButton({
+  onFallbackClose,
+  onClick,
+  children,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { onFallbackClose?: () => void }) {
+  const sheetClose = useSheetClose();
+  return (
+    <button
+      type="button"
+      {...rest}
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented) return;
+        if (sheetClose) sheetClose();
+        else onFallbackClose?.();
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 /**
  * Hộp thoại dùng chung cho khu quản trị — đồng bộ thiết kế ngăn kéo dọc cạnh phải trên màn hình lớn
- * (`variant="drawer"`) và thao tác vuốt đóng Bottom Sheet trên di động với Cổng hộ dân (`Sheet`).
+ * (`variant="drawer"`), hộp thoại thu phóng trung tâm (`variant="modal"`) và Bottom Sheet trên di động
+ * với Cổng hộ dân (`Sheet`).
  */
 export function Modal({
   title,
@@ -41,49 +80,42 @@ export function Modal({
   const backdropDownRef = useRef(false);
   const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
+  const variantRef = useRef(variant);
   const isDesktop = useIsDesktopViewport(760);
   const isDesktopDrawer = variant === "drawer" && isDesktop;
 
   useEffect(() => {
     onCloseRef.current = onClose;
-  }, [onClose]);
+    variantRef.current = variant;
+  }, [onClose, variant]);
 
   const handleClose = useCallback(() => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
 
-    const sheet = panelRef.current;
-    const backdrop = backdropRef.current;
-    const desktopNow = typeof window !== "undefined" && window.innerWidth >= 760;
-    const isCenteredModal = variant === "modal";
-    const closeDuration = isCenteredModal ? 170 : desktopNow && variant === "drawer" ? 240 : 220;
+    const exitKind = resolvePopupExitKind(variantRef.current, 760);
+    const closeDuration = animatePopupExit(panelRef.current, backdropRef.current, exitKind);
 
-    if (sheet) {
-      sheet.style.animation = "none";
-      sheet.style.pointerEvents = "none";
-      if (isCenteredModal || (desktopNow && variant !== "drawer")) {
-        sheet.style.transition = "transform 170ms cubic-bezier(0.25, 1, 0.5, 1), opacity 170ms ease-out";
-        sheet.style.transform = "translate3d(0, 8px, 0) scale(0.98)";
-        sheet.style.opacity = "0";
-      } else if (desktopNow && variant === "drawer") {
-        sheet.style.transition = "transform 240ms cubic-bezier(0.32, 0.72, 0, 1)";
-        sheet.style.transform = "translate3d(100%, 0, 0)";
-      } else {
-        sheet.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-        sheet.style.transform = "translate3d(0, 105%, 0)";
-      }
-    }
-    if (backdrop) {
-      backdrop.style.animation = "none";
-      backdrop.style.pointerEvents = "none";
-      backdrop.style.transition = "opacity 210ms ease-out";
-      backdrop.style.opacity = "0";
-    }
-
-    setTimeout(() => {
+    window.setTimeout(() => {
       onCloseRef.current();
     }, closeDuration);
-  }, [variant]);
+  }, []);
+
+  // Nếu thành phần cha đóng trực tiếp (ví dụ sau khi lưu biểu mẫu hoặc bấm nút Hủy/Đóng tùy biến),
+  // vẫn giữ hiệu ứng thu gọn mượt mà nhờ bản sao giao diện tĩnh trước khi tháo khỏi DOM.
+  useLayoutEffect(() => {
+    const backdropEl = backdropRef.current;
+    const panelEl = panelRef.current;
+    return () => {
+      if (!isClosingRef.current) {
+        spawnExitCloneIfNeeded(
+          backdropEl,
+          panelEl,
+          resolvePopupExitKind(variantRef.current, 760),
+        );
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -97,10 +129,9 @@ export function Modal({
         ) ?? [],
       );
 
-    // Trì hoãn focus sang frame kế tiếp để không chặn frame đầu tiên của hoạt ảnh mở;
-    // trên thiết bị cảm ứng không tự focus ô input để tránh bật bàn phím ảo gây giật khung hình khi đang trượt lên.
     const focusRaf = window.requestAnimationFrame(() => {
       if (isClosingRef.current) return;
+      if (window.visualViewport && window.visualViewport.scale > 1.01) return;
       const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
       if (isCoarsePointer) {
         panel?.focus({ preventScroll: true });
@@ -112,9 +143,12 @@ export function Modal({
     });
 
     const onKey = (event: KeyboardEvent) => {
-      const overlays = document.querySelectorAll(".pt-sheet-backdrop, .modal-overlay");
+      const overlays = document.querySelectorAll(
+        ".pt-sheet-backdrop, .modal-overlay, .cert-modal-backdrop, .pt-radial-backdrop",
+      );
       if (overlays.length > 0 && overlays[overlays.length - 1] !== backdropRef.current) return;
       if (event.key === "Escape") {
+        if (!closeOnBackdrop) return;
         event.stopPropagation();
         handleClose();
         return;
@@ -139,21 +173,22 @@ export function Modal({
       unlockScroll();
       previousFocus?.focus?.({ preventScroll: true });
     };
-  }, [handleClose]);
+  }, [handleClose, closeOnBackdrop]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (isClosingRef.current) return;
       if (panelRef.current) {
-        panelRef.current.style.animation = "none";
-        panelRef.current.style.transform = "translate3d(0, 0, 0)";
+        panelRef.current.style.setProperty("animation", "none", "important");
+        panelRef.current.style.transform = "";
+        panelRef.current.style.willChange = "auto";
       }
       if (backdropRef.current) {
-        backdropRef.current.style.animation = "none";
+        backdropRef.current.style.setProperty("animation", "none", "important");
         backdropRef.current.style.opacity = "1";
       }
-    }, 350);
-    return () => clearTimeout(timer);
+    }, 320);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useBackLayer(true, handleClose);
@@ -231,9 +266,7 @@ export function Modal({
             </header>
           </div>
 
-          <div className="modal-body pt-sheet-body">
-            {children}
-          </div>
+          <div className="modal-body pt-sheet-body">{children}</div>
           {footer && <div className="modal-footer">{footer}</div>}
         </div>
       </div>
@@ -269,15 +302,20 @@ export function ConfirmDialog({
     <Modal
       title={title}
       onClose={pending ? () => undefined : onClose}
+      closeOnBackdrop={!pending}
       width={420}
       variant="modal"
       hideCloseButton
       className="modal-confirm-sheet"
       footer={
         <>
-          <button type="button" className="btn btn-confirm-cancel" onClick={onClose} disabled={pending}>
+          <ModalDismissButton
+            className="btn btn-confirm-cancel"
+            onFallbackClose={onClose}
+            disabled={pending}
+          >
             Hủy
-          </button>
+          </ModalDismissButton>
           <button
             type="button"
             className={`btn ${danger ? "btn-danger" : "btn-confirm-primary"}`}

@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { onAdminNavigate } from "@/components/admin/shared/counts-events";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { useBackLayer } from "@/lib/back-navigation";
+import { animatePopupExit } from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
 
 interface NavItem {
@@ -33,8 +34,6 @@ interface Props {
   onNavigate: (id: SectionId) => void;
 }
 
-const CLOSE_DURATION_MS = 240;
-
 export default function Sidebar({ active, onNavigate }: Props) {
   const { can } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -43,6 +42,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
+  const backdropDownRef = useRef(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isClosingRef = useRef(false);
@@ -64,23 +64,12 @@ export default function Sidebar({ active, onNavigate }: Props) {
     }
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
 
-    if (sheetRef.current) {
-      sheetRef.current.style.animation = "none";
-      sheetRef.current.style.pointerEvents = "none";
-      sheetRef.current.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-      sheetRef.current.style.transform = "translate3d(0, 105%, 0)";
-    }
-    if (backdropRef.current) {
-      backdropRef.current.style.animation = "none";
-      backdropRef.current.style.pointerEvents = "none";
-      backdropRef.current.style.transition = "opacity 200ms ease-out";
-      backdropRef.current.style.opacity = "0";
-    }
+    const closeMs = animatePopupExit(sheetRef.current, backdropRef.current, "sheet");
 
     closeTimerRef.current = setTimeout(() => {
       setIsOpen(false);
       isClosingRef.current = false;
-    }, CLOSE_DURATION_MS);
+    }, closeMs);
   }, []);
 
   useBackLayer(isOpen, handleClose);
@@ -100,15 +89,15 @@ export default function Sidebar({ active, onNavigate }: Props) {
     const timer = setTimeout(() => {
       if (isClosingRef.current) return;
       if (sheetRef.current) {
-        sheetRef.current.style.animation = "none";
-        sheetRef.current.style.transform = "translate3d(0, 0, 0)";
+        sheetRef.current.style.setProperty("animation", "none", "important");
+        sheetRef.current.style.transform = "";
         sheetRef.current.style.willChange = "auto";
       }
       if (backdropRef.current) {
-        backdropRef.current.style.animation = "none";
+        backdropRef.current.style.setProperty("animation", "none", "important");
         backdropRef.current.style.opacity = "1";
       }
-    }, 350);
+    }, 320);
     return () => clearTimeout(timer);
   }, [isOpen]);
 
@@ -272,8 +261,13 @@ export default function Sidebar({ active, onNavigate }: Props) {
             id="admin-radial-drawer"
             ref={backdropRef}
             className="pt-radial-backdrop"
+            onPointerDown={(e) => {
+              backdropDownRef.current = e.target === e.currentTarget;
+            }}
             onClick={(e) => {
-              if (e.target === e.currentTarget) handleClose();
+              const startedOnBackdrop = backdropDownRef.current;
+              backdropDownRef.current = false;
+              if (startedOnBackdrop && e.target === e.currentTarget) handleClose();
             }}
             role="dialog"
             aria-modal="true"

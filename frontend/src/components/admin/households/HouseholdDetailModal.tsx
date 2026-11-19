@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { extractSafeMediaUrls, MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
 import { Modal } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
 import { usePlots } from "@/hooks/use-plots";
@@ -13,7 +14,6 @@ import { badgeOf, HOUSEHOLD_STATUS, LAB_RESULT, SEVERITY, VIOLATION_STATUS } fro
 import { getZoneColor } from "@/components/zones/zone-data";
 import { formatDate, formatDiaryEditor } from "@/utils/format";
 import { formatCoords, plotCenterCoords } from "@/utils/plot-utils";
-import { isSafeMediaUrl } from "@/utils/url-safety";
 import type { HouseholdRow } from "@/types/households";
 import type { JournalRow, ViolationRow } from "@/types/journal";
 import type { LabTestRow } from "@/types/testing";
@@ -32,6 +32,11 @@ export default function HouseholdDetailModal({
   const { can } = useAuth();
   const canReadViolations = can("violations", "read");
   const [tab, setTab] = useState<DetailTab>("plots");
+  const [previewMedia, setPreviewMedia] = useState<{
+    urls: string[];
+    title: string;
+    subtitle?: string;
+  } | null>(null);
 
   const { plots: allPlots, loading: plotsLoading, error: plotsError, refresh: refreshPlots } = usePlots();
   const householdPlots = useMemo(() => {
@@ -63,7 +68,7 @@ export default function HouseholdDetailModal({
 
   return (
     <Modal
-      title={`Hộ nông dân: ${household.name}`}
+      title={household.name}
       onClose={onClose}
       width={780}
       footer={
@@ -230,15 +235,31 @@ export default function HouseholdDetailModal({
                     )}
                   </td>
                   <td>
-                    {isSafeMediaUrl(j.photoUrl) ? (
-                      <a href={j.photoUrl} target="_blank" rel="noopener noreferrer" className="badge badge-blue">
-                        Xem ảnh
-                      </a>
-                    ) : j.hasPhoto ? (
-                      <span className="badge badge-blue">Có ảnh</span>
-                    ) : (
-                      <span style={{ color: "var(--text-muted)" }}>-</span>
-                    )}
+                    {(() => {
+                      const rowUrls = extractSafeMediaUrls(j.photoUrls, j.photoUrl);
+                      if (rowUrls.length > 0) {
+                        return (
+                          <button
+                            type="button"
+                            className="badge badge-blue"
+                            style={{ cursor: "pointer", border: "none", fontFamily: "inherit" }}
+                            onClick={() =>
+                              setPreviewMedia({
+                                urls: rowUrls,
+                                title: household.name,
+                                subtitle: `${formatDate(j.entryOn)}, ${j.plotCode}, ${j.activity}`,
+                              })
+                            }
+                          >
+                            {rowUrls.length > 1 ? `Xem ảnh (${rowUrls.length})` : "Xem ảnh"}
+                          </button>
+                        );
+                      }
+                      if (j.hasPhoto) {
+                        return <span className="badge badge-blue">Có ảnh</span>;
+                      }
+                      return <span style={{ color: "var(--text-muted)" }}>-</span>;
+                    })()}
                   </td>
                 </tr>
               ))}
@@ -282,6 +303,28 @@ export default function HouseholdDetailModal({
                       {v.description && (
                         <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>{v.description}</div>
                       )}
+                      {(() => {
+                        const respUrls = extractSafeMediaUrls(v.farmerResponsePhotoUrls, v.farmerResponsePhotoUrl);
+                        if (respUrls.length === 0) return null;
+                        return (
+                          <div style={{ marginTop: 6 }}>
+                            <button
+                              type="button"
+                              className="badge badge-blue"
+                              style={{ cursor: "pointer", border: "none", fontFamily: "inherit" }}
+                              onClick={() =>
+                                setPreviewMedia({
+                                  urls: respUrls,
+                                  title: household.name,
+                                  subtitle: `Ảnh giải trình ngày ${formatDate(v.detectedOn)}`,
+                                })
+                              }
+                            >
+                              {respUrls.length > 1 ? `Xem ảnh (${respUrls.length})` : "Xem ảnh"}
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{v.plotCode || "-"}</td>
                     <td>
@@ -341,6 +384,15 @@ export default function HouseholdDetailModal({
             </tbody>
           </table>
         </div>
+      )}
+
+      {previewMedia && (
+        <MediaBottomSheet
+          urls={previewMedia.urls}
+          title={previewMedia.title}
+          subtitle={previewMedia.subtitle}
+          onClose={() => setPreviewMedia(null)}
+        />
       )}
     </Modal>
   );

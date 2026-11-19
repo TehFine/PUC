@@ -12,6 +12,7 @@ import {
   Navigation,
   ShieldAlert,
 } from "@/components/ui/PublicIcon";
+import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
 import { TRACE_UI_COPY, type TraceLang } from "./trace-i18n";
 import { isSafeMediaUrl, isSafeTraceCode } from "@/utils/url-safety";
 
@@ -197,6 +198,11 @@ export default function FieldAuditGpsCheckCard({
 
   const [verifying, setVerifying] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [auditPreviewMedia, setAuditPreviewMedia] = useState<{
+    urls: string[];
+    title: string;
+    subtitle?: string;
+  } | null>(null);
   const [liveResult, setLiveResult] = useState<
     (GpsVerifyApiResponse & { userLat: number; userLng: number }) | null
   >(null);
@@ -807,14 +813,20 @@ export default function FieldAuditGpsCheckCard({
                       <span className="tr-seal-tag is-ok">{f.gpsVerifiedTag}</span>
                     )}
                     {isSafeMediaUrl(entry.photoUrl) && (
-                      <a
-                        href={entry.photoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
                         className="tr-inline-link"
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+                        onClick={() =>
+                          setAuditPreviewMedia({
+                            urls: [entry.photoUrl as string],
+                            title: plotProfile.ownerLabel || plotProfile.plotCode,
+                            subtitle: entry.activity,
+                          })
+                        }
                       >
                         {lang === "zh" ? "现场照片" : lang === "en" ? "Field Photo" : "Xem ảnh thực địa"}
-                      </a>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -855,14 +867,20 @@ export default function FieldAuditGpsCheckCard({
                     </span>
                     {m.gpsVerified && <span className="tr-seal-tag is-ok">{f.gpsVerifiedTag}</span>}
                     {isSafeMediaUrl(m.photoUrl) && (
-                      <a
-                        href={m.photoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
                         className="tr-inline-link"
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+                        onClick={() =>
+                          setAuditPreviewMedia({
+                            urls: [m.photoUrl as string],
+                            title: m.code || plotProfile.plotCode,
+                            subtitle: m.location || undefined,
+                          })
+                        }
                       >
                         {lang === "zh" ? "巡检实拍" : lang === "en" ? "Inspection Photo" : "Ảnh kiểm tra"}
-                      </a>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -871,6 +889,14 @@ export default function FieldAuditGpsCheckCard({
           )}
         </div>
       </div>
+      {auditPreviewMedia && (
+        <MediaBottomSheet
+          urls={auditPreviewMedia.urls}
+          title={auditPreviewMedia.title}
+          subtitle={auditPreviewMedia.subtitle}
+          onClose={() => setAuditPreviewMedia(null)}
+        />
+      )}
     </section>
   );
 }

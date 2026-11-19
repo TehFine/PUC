@@ -16,6 +16,7 @@ import { buildZoneRows, summarizePlots } from "@/components/zones/zone-data";
 import { canRedrawPlotShapeByRole } from "@/constants/roles";
 import { usePlots } from "@/hooks/use-plots";
 import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useBackLayer, useUrlSubTab } from "@/lib/back-navigation";
+import { animatePopupExit } from "@/lib/popup-motion";
 
 const MapView = dynamic(() => import("@/components/map/MapView"), {
   ssr: false,
@@ -38,25 +39,50 @@ export default function Zones() {
   const [pendingPlotAction, setPendingPlotAction] = useState<PendingPlotAction | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const sheetBackdropRef = useRef<HTMLDivElement>(null);
   const sheetHeadRef = useRef<HTMLDivElement>(null);
+  const backdropDownRef = useRef(false);
+  const isClosingSheetRef = useRef(false);
   const features = useMemo(() => plots?.features ?? [], [plots]);
 
   const closeSheet = useCallback(() => {
+    if (isClosingSheetRef.current) return;
     const el = sheetRef.current;
     if (el && isMobile) {
-      el.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
-      el.style.transform = "translate3d(0, calc(100% + 24px), 0)";
-      setTimeout(() => {
+      isClosingSheetRef.current = true;
+      const closeDuration = animatePopupExit(el, sheetBackdropRef.current, "sheet");
+      window.setTimeout(() => {
+        isClosingSheetRef.current = false;
         setSheet(null);
         if (sheetRef.current) {
-          sheetRef.current.style.transition = "";
-          sheetRef.current.style.transform = "";
+          sheetRef.current.style.removeProperty("animation");
+          sheetRef.current.style.removeProperty("transition");
+          sheetRef.current.style.removeProperty("transform");
+          sheetRef.current.style.removeProperty("pointer-events");
         }
-      }, 220);
+        if (sheetBackdropRef.current) {
+          sheetBackdropRef.current.style.removeProperty("animation");
+          sheetBackdropRef.current.style.removeProperty("transition");
+          sheetBackdropRef.current.style.removeProperty("opacity");
+          sheetBackdropRef.current.style.removeProperty("pointer-events");
+        }
+      }, closeDuration);
       return;
     }
     setSheet(null);
   }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile || !sheet) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        closeSheet();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isMobile, sheet, closeSheet]);
 
   const selectZoneView = useUrlSubTab<ZoneView>(
     "sub",
@@ -158,6 +184,23 @@ export default function Zones() {
 
       {view === "map" ? (
         <div className="zones-workspace">
+          {isMobile && sheet && (
+            <div
+              ref={sheetBackdropRef}
+              className="zones-sheet-backdrop"
+              aria-hidden="true"
+              onPointerDown={(e) => {
+                backdropDownRef.current = e.target === e.currentTarget;
+              }}
+              onClick={(e) => {
+                const startedOnBackdrop = backdropDownRef.current;
+                backdropDownRef.current = false;
+                if (startedOnBackdrop && e.target === e.currentTarget) {
+                  closeSheet();
+                }
+              }}
+            />
+          )}
           <div
             ref={sheetRef}
             className={`zones-left-col${sheet ? " sheet-open" : ""}`}
