@@ -46,7 +46,8 @@ export function apiCompressionMiddleware(req: Request, res: Response, next: Next
   if (
     req.path.startsWith("/api/auth") ||
     req.path.startsWith("/api/uploads") ||
-    req.path.startsWith("/api/public/files")
+    req.path.startsWith("/api/public/files") ||
+    req.path === "/api/notifications/stream"
   ) {
     next();
     return;

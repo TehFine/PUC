@@ -180,6 +180,21 @@ export class JournalService {
         detail: `${dto.activity} - ${plotCode} (làm ${entryOn}, khai báo ${today}, chậm ${Math.max(0, backdatedDays)} ngày)`,
       },
     );
+
+    const hhRes = await this.db.query<{ name: string }>(
+      "SELECT name FROM households WHERE id = $1",
+      [householdId],
+    );
+    const householdName = hhRes.rows[0]?.name || user.fullName;
+    const [ey, em, ed] = entryOn.split("-");
+    const detailSnippet = dto.detail?.trim() ? ` - ${dto.detail.trim().slice(0, 120)}` : "";
+    await this.notifications.notifyOversightForHousehold(householdId, {
+      kind: "protocol",
+      title: `Nhật ký mới: Hộ ${householdName} (${dto.activity})`,
+      body: `Thửa ${plotCode}, thực hiện ngày ${ed}/${em}/${ey}${detailSnippet}`,
+      link: ADMIN_LINKS.journal,
+    });
+
     const { rows } = await this.db.query(`SELECT ${JOURNAL_COLUMNS} FROM journal_entries j WHERE j.id = $1`, [id]);
     return camelRow(rows[0]);
   }
@@ -261,6 +276,18 @@ export class JournalService {
       { ip: context.ip, user },
       { action: "Hộ xóa nhật ký", object: `Nhật ký canh tác #${row.id}`, detail: `${row.activity} - ${row.plot_code}` },
     );
+
+    const hhRes = await this.db.query<{ name: string }>(
+      "SELECT name FROM households WHERE id = $1",
+      [householdId],
+    );
+    const householdName = hhRes.rows[0]?.name || user.fullName;
+    await this.notifications.notifyOversightForHousehold(householdId, {
+      kind: "protocol",
+      title: `Hộ ${householdName} vừa xóa bản ghi nhật ký trong 24h`,
+      body: `Công việc "${row.activity}" tại thửa ${row.plot_code}.`,
+      link: ADMIN_LINKS.journal,
+    });
     return { ok: true };
   }
 

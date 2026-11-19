@@ -1,10 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { badRequest, notFound } from "../../common/errors/app.exception";
 import { todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
+import { NotificationsService } from "../../notifications/notifications.service";
 import { TODAY_VN_SQL } from "../shared/state";
 
 export function slugifyVietnamese(text: string): string {
@@ -115,7 +116,11 @@ function validateNewsContent(content: unknown): string {
 
 @Injectable()
 export class NewsService extends BaseCrudService {
-  constructor(db: DatabaseService, audit: AuditService) {
+  constructor(
+    db: DatabaseService,
+    audit: AuditService,
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {
     super(db, audit, {
       resource: "news",
       label: "Bản tin",
@@ -127,11 +132,27 @@ export class NewsService extends BaseCrudService {
       orderBy: "COALESCE(t.published_on, t.created_at::date) DESC, t.id DESC",
       search: ["t.title", "t.excerpt", "t.author", "t.slug"],
       filters: { category: "t.category", status: "t.status" },
+      virtual: ["_notifyNews"],
     });
   }
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
     const out: Record<string, unknown> = { ...input };
+
+    let prevStatus: string | null = null;
+    let prevTitle = "";
+    let prevExcerpt = "";
+    if (context.method === "PATCH" && context.id !== undefined) {
+      const ex = await this.db.query<{ status: string; title: string; excerpt: string }>(
+        "SELECT status, title, excerpt FROM news_articles WHERE id = $1",
+        [context.id],
+      );
+      if (ex.rows[0]) {
+        prevStatus = ex.rows[0].status;
+        prevTitle = ex.rows[0].title;
+        prevExcerpt = ex.rows[0].excerpt;
+      }
+    }
 
     if (context.method === "POST") {
       out.createdBy = context.user.id;
@@ -149,15 +170,35 @@ export class NewsService extends BaseCrudService {
       out.content = validateNewsContent(out.content);
     }
 
+    const effectiveStatus = String(out.status ?? prevStatus ?? "draft");
+    if (effectiveStatus === "published") {
+      out._notifyNews = {
+        isNew: context.method === "POST" || prevStatus !== "published",
+        title: String(out.title ?? prevTitle).trim(),
+        excerpt: String(out.excerpt ?? prevExcerpt).trim(),
+      };
+    }
+
     return out;
   }
 
+  protected override async afterWrite(_id: number, input: Record<string, unknown>) {
+    const info = input._notifyNews as { isNew: boolean; title: string; excerpt: string } | undefined;
+    if (!info || !this.notifications || !info.title) return;
+    await this.notifications.notifyAllFarmers({
+      kind: "system",
+      title: info.isNew ? `Bản tin mới từ HTX: ${info.title}` : `Cập nhật bản tin HTX: ${info.title}`,
+      body: info.excerpt ? info.excerpt.slice(0, 220) : null,
+      link: "/#tin-tuc",
+    });
+  }
+
   async publish(id: number, user: AuthUser, ip?: string) {
-    const { rows } = await this.db.query<{ id: number; title: string }>(
+    const { rows } = await this.db.query<{ id: number; title: string; excerpt: string; was_published: boolean }>(
       `UPDATE news_articles
        SET status = 'published', published_on = COALESCE(published_on, ${TODAY_VN_SQL})
        WHERE id = $1
-       RETURNING id, title`,
+       RETURNING id, title, excerpt, (status = 'published') AS was_published`,
       [id],
     );
     if (rows.length === 0) throw notFound("Không tìm thấy bản tin.");
@@ -165,6 +206,14 @@ export class NewsService extends BaseCrudService {
       { ip, user },
       { action: "Xuất bản bản tin", object: `${this.config.label} #${id}`, detail: rows[0].title },
     );
+    if (this.notifications) {
+      await this.notifications.notifyAllFarmers({
+        kind: "system",
+        title: `Bản tin mới từ HTX: ${rows[0].title}`,
+        body: rows[0].excerpt ? rows[0].excerpt.slice(0, 220) : null,
+        link: "/#tin-tuc",
+      });
+    }
     return this.findOne(id, user);
   }
 

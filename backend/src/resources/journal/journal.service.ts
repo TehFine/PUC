@@ -63,7 +63,7 @@ export class JournalService extends BaseCrudService {
       search: ["h.name", "t.plot_code", "t.activity", "t.detail", "t.updated_by_name"],
       filters: { householdId: "t.household_id", activity: "t.activity" },
       scope: villageScope("h.village_id"),
-      virtual: ["_notifyHouseholdEdit"],
+      virtual: ["_notifyHouseholdEdit", "_notifyJournalChange"],
     });
   }
 
@@ -191,11 +191,29 @@ export class JournalService extends BaseCrudService {
       await this.assertNotExportLocked(effectiveHouseholdId, (out.plotCode as string | null | undefined) ?? existing.plot_code);
     }
 
-    if (context.method === "PATCH" && existing && context.user.role !== "farmer" && effectiveHouseholdId > 0) {
-      out._notifyHouseholdEdit = {
+    if (effectiveHouseholdId > 0) {
+      const activityName =
+        typeof out.activity === "string" && out.activity.trim()
+          ? out.activity.trim()
+          : (existing?.activity ?? "Chăm sóc vườn");
+      const resolvedPlotCode = (typeof out.plotCode === "string" ? out.plotCode : existing?.plot_code) ?? null;
+
+      if (context.method === "PATCH" && existing && context.user.role !== "farmer") {
+        out._notifyHouseholdEdit = {
+          householdId: effectiveHouseholdId,
+          activity: activityName,
+          plotCode: resolvedPlotCode,
+          actorName: context.user.fullName,
+          actorRole: context.user.role,
+        };
+      }
+
+      out._notifyJournalChange = {
+        method: context.method,
         householdId: effectiveHouseholdId,
-        activity: typeof out.activity === "string" && out.activity.trim() ? out.activity.trim() : existing.activity,
-        plotCode: (typeof out.plotCode === "string" ? out.plotCode : existing.plot_code) ?? null,
+        activity: activityName,
+        plotCode: resolvedPlotCode,
+        actorId: context.user.id,
         actorName: context.user.fullName,
         actorRole: context.user.role,
       };
@@ -214,16 +232,60 @@ export class JournalService extends BaseCrudService {
           actorRole: string;
         }
       | undefined;
-    if (!editInfo) return;
+    if (editInfo) {
+      const roleLabel = STAFF_ROLE_LABELS[editInfo.actorRole] ?? "Cán bộ";
+      const plotText = editInfo.plotCode ? ` tại thửa ${editInfo.plotCode}` : "";
+      await this.notifications.notifyHousehold(editInfo.householdId, {
+        kind: "protocol",
+        title: "Nhật ký canh tác đã được chỉnh sửa",
+        body: `Bản ghi "${editInfo.activity}"${plotText} đã được ${roleLabel} ${editInfo.actorName} cập nhật.`,
+        link: "/portal?tab=diary",
+      });
+    }
 
-    const roleLabel = STAFF_ROLE_LABELS[editInfo.actorRole] ?? "Cán bộ";
-    const plotText = editInfo.plotCode ? ` tại thửa ${editInfo.plotCode}` : "";
-    await this.notifications.notifyHousehold(editInfo.householdId, {
-      kind: "protocol",
-      title: "Nhật ký canh tác đã được chỉnh sửa",
-      body: `Bản ghi "${editInfo.activity}"${plotText} đã được ${roleLabel} ${editInfo.actorName} cập nhật.`,
-      link: "/portal?tab=diary",
-    });
+    const changeInfo = input._notifyJournalChange as
+      | {
+          method: "POST" | "PATCH";
+          householdId: number;
+          activity: string;
+          plotCode: string | null;
+          actorId: number;
+          actorName: string;
+          actorRole: string;
+        }
+      | undefined;
+    if (!changeInfo) return;
+
+    const hhRes = await this.db.query<{ name: string }>(
+      "SELECT name FROM households WHERE id = $1",
+      [changeInfo.householdId],
+    );
+    const householdName = hhRes.rows[0]?.name || `#${changeInfo.householdId}`;
+    const roleLabel = STAFF_ROLE_LABELS[changeInfo.actorRole] ?? "Cán bộ";
+    const plotText = changeInfo.plotCode ? ` tại thửa ${changeInfo.plotCode}` : "";
+
+    if (changeInfo.method === "POST" && changeInfo.actorRole !== "farmer") {
+      await this.notifications.notifyHousehold(changeInfo.householdId, {
+        kind: "protocol",
+        title: "Cán bộ vừa ghi nhận nhật ký canh tác mới",
+        body: `${roleLabel} ${changeInfo.actorName} đã ghi nhận "${changeInfo.activity}"${plotText} cho hộ của bạn.`,
+        link: "/portal?tab=diary",
+      });
+    }
+
+    await this.notifications.notifyOversightForHousehold(
+      changeInfo.householdId,
+      {
+        kind: "protocol",
+        title:
+          changeInfo.method === "POST"
+            ? `Nhật ký mới: Hộ ${householdName} (${changeInfo.activity})`
+            : `Cập nhật nhật ký: Hộ ${householdName} (${changeInfo.activity})`,
+        body: `${roleLabel} ${changeInfo.actorName} vừa ${changeInfo.method === "POST" ? "ghi nhận" : "chỉnh sửa"} bản ghi${plotText}.`,
+        link: "/admin?section=journal",
+      },
+      { excludeUserId: changeInfo.actorId },
+    );
   }
 
   protected override async guardDelete(id: number, user: AuthUser) {

@@ -6,6 +6,7 @@ import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { DatabaseService } from "../src/database/database.service";
+import { NotificationsService, type RealtimeStreamEvent } from "../src/notifications/notifications.service";
 import { TEST_PASSWORD } from "./constants";
 
 const USERS = {
@@ -1019,6 +1020,116 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
 
       await admin.delete(`/api/journal/${createdJournal.body.id}`);
       await admin.delete(`/api/spray/${createdSpray.body.id}`);
+    });
+
+    it("đồng bộ thông báo hai chiều thời gian thực giữa cập nhật nhật ký của hộ/cán bộ và thông báo/cập nhật từ Ban quản trị", async () => {
+      const an = await loggedIn(USERS.farmerAn);
+      const binh = await loggedIn(USERS.farmerBinh);
+      const admin = await loggedIn(USERS.admin);
+      const htx = await loggedIn(USERS.htx);
+      const inspector = await loggedIn(USERS.inspector);
+      const notifSvc = nest.get(NotificationsService);
+
+      const htxProfile = await htx.get("/api/auth/me");
+      const anProfile = await an.get("/api/auth/me");
+      const htxEvents: RealtimeStreamEvent[] = [];
+      const anEvents: RealtimeStreamEvent[] = [];
+
+      const unsubHtx = notifSvc.subscribeUserStream(htxProfile.body.user.id, "htx_officer", (ev) => {
+        htxEvents.push(ev);
+      });
+      const unsubAn = notifSvc.subscribeUserStream(anProfile.body.user.id, "farmer", (ev) => {
+        anEvents.push(ev);
+      });
+
+      try {
+        // 1. Nông hộ cập nhật nhật ký canh tác -> Cán bộ HTX, Kiểm tra viên, Quản trị viên đều nhận thông báo realtime
+        const plotsRes = await an.get("/api/portal/plots");
+        const plotCode: string = plotsRes.body.data[0]?.code ?? "TH1-001";
+        const photoId = await uploadFile(an, "journal");
+        const uniqueAct = `Tỉa cành thông thoáng realtime ${Date.now()}`;
+
+        const createdJ = await an.post("/api/portal/journal").send({
+          plotCode,
+          activity: uniqueAct,
+          detail: "Kiểm tra đồng bộ realtime tới các vai trò HTX",
+          photoIds: [photoId],
+        });
+        expect(createdJ.status).toBe(201);
+
+        expect(
+          htxEvents.some((e) => e.type === "notification" && e.item.title.includes(uniqueAct)),
+        ).toBe(true);
+
+        const [adminNotifs, htxNotifs, inspectorNotifs] = await Promise.all([
+          admin.get("/api/notifications"),
+          htx.get("/api/notifications"),
+          inspector.get("/api/notifications"),
+        ]);
+        for (const res of [adminNotifs, htxNotifs, inspectorNotifs]) {
+          expect(res.status).toBe(200);
+          expect(
+            res.body.data.some((n: { title?: string }) => typeof n.title === "string" && n.title.includes(uniqueAct)),
+          ).toBe(true);
+        }
+
+        // 2. Ban quản trị phát thông báo cập nhật hệ thống (severity: 'info') -> Từng hộ dân nhận realtime
+        const broadcastTitle = `Cập nhật hệ thống mùa vụ ${Date.now()}`;
+        const createdAlert = await admin.post("/api/system-alerts").send({
+          severity: "info",
+          audience: "farmer",
+          title: broadcastTitle,
+          message: "Đã bổ sung tính năng đồng bộ thông báo trực tiếp tới từng hộ dân.",
+        });
+        expect(createdAlert.status).toBe(201);
+        expect(createdAlert.body.severity).toBe("info");
+
+        expect(
+          anEvents.some((e) => e.type === "notification" && e.item.title.includes(broadcastTitle)),
+        ).toBe(true);
+        expect(anEvents.some((e) => e.type === "system-alert" && e.active === true)).toBe(true);
+
+        // 3. Ban quản trị đăng bản tin mới -> Từng hộ dân đều nhận thông báo realtime
+        const newsTitle = `Bản tin kỹ thuật sầu riêng ${Date.now()}`;
+        const createdNews = await htx.post("/api/news").send({
+          category: "farming",
+          title: newsTitle,
+          excerpt: "Hướng dẫn chăm sóc cơi đọt sau mưa lớn tại Cư Né.",
+          author: "Tổ kỹ thuật HTX",
+          readTime: "3 phút đọc",
+          status: "published",
+          content: {
+            lead: "Hướng dẫn chi tiết chăm sóc cơi đọt.",
+            sections: [{ heading: "Bước 1", paragraphs: ["Thoát nước rãnh kịp thời."] }],
+          },
+        });
+        expect(createdNews.status).toBe(201);
+
+        const [anNotifs, binhNotifs] = await Promise.all([
+          an.get("/api/notifications"),
+          binh.get("/api/notifications"),
+        ]);
+        for (const fRes of [anNotifs, binhNotifs]) {
+          expect(fRes.status).toBe(200);
+          expect(
+            fRes.body.data.some(
+              (n: { title?: string }) => typeof n.title === "string" && n.title.includes(broadcastTitle),
+            ),
+          ).toBe(true);
+          expect(
+            fRes.body.data.some(
+              (n: { title?: string }) => typeof n.title === "string" && n.title.includes(newsTitle),
+            ),
+          ).toBe(true);
+        }
+
+        await admin.post(`/api/system-alerts/${createdAlert.body.id}/resolve`).send({});
+        await htx.delete(`/api/news/${createdNews.body.id}`);
+        await admin.delete(`/api/journal/${createdJ.body.id}`);
+      } finally {
+        unsubHtx();
+        unsubAn();
+      }
     });
   });
 });

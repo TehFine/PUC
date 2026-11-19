@@ -1,7 +1,7 @@
 import { IsOptional } from "class-validator";
 import { OneOf, Text } from "../common/validation/fields";
 
-export const SYSTEM_ALERT_SEVERITIES = ["critical", "warning"] as const;
+export const SYSTEM_ALERT_SEVERITIES = ["critical", "warning", "info"] as const;
 export type SystemAlertSeverity = (typeof SYSTEM_ALERT_SEVERITIES)[number];
 
 export const SYSTEM_ALERT_AUDIENCES = ["all", "farmer", "staff"] as const;

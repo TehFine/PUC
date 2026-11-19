@@ -25,7 +25,7 @@ export interface NotificationList {
   unread: number;
 }
 
-export type SystemAlertSeverity = "critical" | "warning";
+export type SystemAlertSeverity = "critical" | "warning" | "info";
 export type SystemAlertAudience = "all" | "farmer" | "staff";
 
 export interface SystemAlertRecord {

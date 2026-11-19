@@ -7,7 +7,6 @@ import { badRequest } from "../../common/errors/app.exception";
 import { attachmentUrlSql, attachmentUrlsSql, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
-import { INSPECTION_ROLES } from "../../portal/common/admin-links";
 import { assertPlotOwned } from "../../portal/common/portal-context";
 import { UploadsService } from "../../uploads/uploads.service";
 
@@ -65,7 +64,7 @@ export class SprayService extends BaseCrudService {
       search: ["h.name", "p.name", "t.source", "t.plot_code", "t.updated_by_name"],
       filters: { householdId: "t.household_id", pesticideId: "t.pesticide_id", mrlStatus: "t.mrl_status" },
       scope: villageScope("h.village_id"),
-      virtual: ["_notifyAlert", "_notifyHouseholdEdit"],
+      virtual: ["_notifyAlert", "_notifyHouseholdEdit", "_notifySprayChange"],
     });
   }
 
@@ -224,11 +223,24 @@ export class SprayService extends BaseCrudService {
         }
       }
 
-      if (context.method === "PATCH" && existing && context.user.role !== "farmer" && effectiveHouseholdId > 0) {
-        out._notifyHouseholdEdit = {
+      if (effectiveHouseholdId > 0) {
+        const resolvedPlotCode = (out.plotCode as string | null | undefined) ?? existing?.plot_code ?? null;
+        if (context.method === "PATCH" && existing && context.user.role !== "farmer") {
+          out._notifyHouseholdEdit = {
+            householdId: effectiveHouseholdId,
+            pesticideName: pesticide.name,
+            plotCode: resolvedPlotCode,
+            actorName: context.user.fullName,
+            actorRole: context.user.role,
+          };
+        }
+        out._notifySprayChange = {
+          method: context.method,
           householdId: effectiveHouseholdId,
           pesticideName: pesticide.name,
-          plotCode: (out.plotCode as string | null | undefined) ?? existing.plot_code ?? null,
+          plotCode: resolvedPlotCode,
+          isHazardous,
+          actorId: context.user.id,
           actorName: context.user.fullName,
           actorRole: context.user.role,
         };
@@ -258,6 +270,53 @@ export class SprayService extends BaseCrudService {
       });
     }
 
+    const changeInfo = input._notifySprayChange as
+      | {
+          method: "POST" | "PATCH";
+          householdId: number;
+          pesticideName: string;
+          plotCode: string | null;
+          isHazardous: boolean;
+          actorId: number;
+          actorName: string;
+          actorRole: string;
+        }
+      | undefined;
+    if (changeInfo) {
+      const hhRes = await this.db.query<{ name: string }>(
+        "SELECT name FROM households WHERE id = $1",
+        [changeInfo.householdId],
+      );
+      const householdName = hhRes.rows[0]?.name || `#${changeInfo.householdId}`;
+      const roleLabel = STAFF_ROLE_LABELS[changeInfo.actorRole] ?? "Cán bộ";
+      const plotText = changeInfo.plotCode ? ` tại thửa ${changeInfo.plotCode}` : "";
+
+      if (changeInfo.method === "POST" && changeInfo.actorRole !== "farmer") {
+        await this.notifications.notifyHousehold(changeInfo.householdId, {
+          kind: "protocol",
+          title: "Cán bộ vừa ghi nhận nhật ký phun thuốc mới",
+          body: `${roleLabel} ${changeInfo.actorName} đã ghi nhận "${changeInfo.pesticideName}"${plotText} cho hộ của bạn.`,
+          link: "/portal?tab=diary",
+        });
+      }
+
+      if (!input._notifyAlert) {
+        await this.notifications.notifyOversightForHousehold(
+          changeInfo.householdId,
+          {
+            kind: "protocol",
+            title:
+              changeInfo.method === "POST"
+                ? `Nhật ký phun thuốc mới: Hộ ${householdName}`
+                : `Cập nhật nhật ký phun thuốc: Hộ ${householdName}`,
+            body: `${roleLabel} ${changeInfo.actorName} vừa ${changeInfo.method === "POST" ? "ghi nhận" : "chỉnh sửa"} "${changeInfo.pesticideName}"${plotText}.`,
+            link: "/admin?section=journal&sub=spray",
+          },
+          { excludeUserId: changeInfo.actorId },
+        );
+      }
+    }
+
     const alert = input._notifyAlert as
       | { pesticideName: string; pesticideStatus: string; householdId: number; plotCode: string | null }
       | undefined;
@@ -265,11 +324,11 @@ export class SprayService extends BaseCrudService {
 
     const statusLabel = alert.pesticideStatus === "banned" ? "cấm sử dụng" : "hạn chế sử dụng";
     const plotText = alert.plotCode ? `, thửa ${alert.plotCode}` : "";
-    await this.notifications.notifyRoles(INSPECTION_ROLES, {
+    await this.notifications.notifyOversightForHousehold(alert.householdId, {
       kind: "violation",
       title: `Cảnh báo ghi nhận thuốc BVTV ${statusLabel}: ${alert.pesticideName}`,
       body: `Bản ghi phun thuốc #${id} (hộ #${alert.householdId}${plotText}) sử dụng hoạt chất ${statusLabel}.`,
-      link: "/admin?section=spray",
+      link: "/admin?section=journal&sub=spray",
     });
   }
 

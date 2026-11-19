@@ -108,15 +108,26 @@ function SystemAlertBannerInner() {
     }
   }
 
-  // Ưu tiên 2: Thông báo khẩn / bảo trì do Quản trị viên HTX phát trên toàn hệ thống.
+  // Ưu tiên 2: Thông báo từ Ban quản trị / cập nhật / bảo trì / khẩn cấp do HTX phát trên toàn hệ thống.
   if (matchesBroadcastAudience && broadcastAlert) {
     const alertKey = `broadcast-${broadcastAlert.id}-${broadcastAlert.createdAt}`;
     if (dismissedKey !== alertKey) {
       const isCritical = broadcastAlert.severity === "critical";
+      const isInfo = broadcastAlert.severity === "info";
+      const bannerToneClass = isCritical
+        ? "is-critical"
+        : isInfo
+          ? "is-info"
+          : "is-warning";
+      const badgeLabel = isCritical
+        ? "THÔNG BÁO KHẨN TỪ HTX"
+        : isInfo
+          ? "THÔNG BÁO HỆ THỐNG"
+          : "BẢO TRÌ HỆ THỐNG";
       return (
         <div
-          className={`sys-alert-banner ${isCritical ? "is-critical" : "is-warning"}`}
-          role="alert"
+          className={`sys-alert-banner ${bannerToneClass}`}
+          role={isCritical ? "alert" : "status"}
           aria-live={isCritical ? "assertive" : "polite"}
         >
           <button
@@ -131,9 +142,7 @@ function SystemAlertBannerInner() {
             ×
           </button>
           <div className="sys-alert-main">
-            <span className="sys-alert-badge">
-              {isCritical ? "THÔNG BÁO TỪ HTX" : "BẢO TRÌ HỆ THỐNG"}
-            </span>
+            <span className="sys-alert-badge">{badgeLabel}</span>
             <strong className="sys-alert-title">{broadcastAlert.title}</strong>
             <p className="sys-alert-desc">{broadcastAlert.message}</p>
           </div>

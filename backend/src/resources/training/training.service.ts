@@ -41,7 +41,7 @@ export class TrainingService extends BaseCrudService {
     return out;
   }
 
-  protected override async afterWrite(_id: number, input: Record<string, unknown>) {
+  protected override async afterWrite(id: number, input: Record<string, unknown>) {
     if (input._method === "POST") {
       await this.notifications.notifyAllFarmers({
         kind: "training",
@@ -49,6 +49,21 @@ export class TrainingService extends BaseCrudService {
         body: input.location ? `Địa điểm: ${String(input.location)}` : null,
         link: "/portal?tab=learn",
       });
+      return;
+    }
+    if (input._method === "PATCH") {
+      const { rows } = await this.db.query<{ title: string; location: string | null }>(
+        "SELECT title, location FROM training_courses WHERE id = $1",
+        [id],
+      );
+      if (rows[0]) {
+        await this.notifications.notifyAllFarmers({
+          kind: "training",
+          title: `Cập nhật lớp tập huấn: ${rows[0].title}`,
+          body: rows[0].location ? `Địa điểm: ${rows[0].location}` : null,
+          link: "/portal?tab=learn",
+        });
+      }
     }
   }
 

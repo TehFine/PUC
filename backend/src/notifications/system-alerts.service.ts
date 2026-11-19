@@ -49,7 +49,7 @@ export class SystemAlertsService implements OnModuleInit {
       await this.db.query(`
         CREATE TABLE IF NOT EXISTS system_alerts (
           id BIGSERIAL PRIMARY KEY,
-          severity TEXT NOT NULL DEFAULT 'critical' CHECK (severity IN ('critical', 'warning')),
+          severity TEXT NOT NULL DEFAULT 'critical' CHECK (severity IN ('critical', 'warning', 'info')),
           title TEXT NOT NULL,
           message TEXT NOT NULL,
           audience TEXT NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'farmer', 'staff')),
@@ -60,6 +60,10 @@ export class SystemAlertsService implements OnModuleInit {
           resolved_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         );
+        ALTER TABLE system_alerts DROP CONSTRAINT IF EXISTS system_alerts_severity_check;
+        ALTER TABLE system_alerts
+          ADD CONSTRAINT system_alerts_severity_check
+          CHECK (severity IN ('critical', 'warning', 'info'));
         CREATE INDEX IF NOT EXISTS system_alerts_active_idx ON system_alerts (active, created_at DESC);
       `);
     } catch (error) {
@@ -81,7 +85,7 @@ export class SystemAlertsService implements OnModuleInit {
                 created_by, created_by_name, resolved_by, resolved_at, created_at
          FROM system_alerts
          WHERE active = true
-         ORDER BY CASE severity WHEN 'critical' THEN 0 ELSE 1 END, created_at DESC, id DESC
+         ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END, created_at DESC, id DESC
          LIMIT 1`,
       );
       const value = rows[0] ? (camelRow(rows[0]) as unknown as SystemAlertRecord) : null;
@@ -111,16 +115,19 @@ export class SystemAlertsService implements OnModuleInit {
     const severity: SystemAlertSeverity = dto.severity ?? "critical";
     const audience: SystemAlertAudience = dto.audience ?? "all";
 
-    // Tự động đóng cảnh báo cũ đang mở để trên toàn hệ thống chỉ hiển thị 1 dải thông báo khẩn rõ ràng nhất.
-    const prevActive = await this.db.query<{ id: number }>(
+    // Tự động đóng dải băng cũ đang mở để trên đầu màn hình chỉ hiển thị 1 dải thông báo rõ ràng nhất;
+    // riêng thông báo thường kỳ ('info') vẫn giữ nguyên trạng thái chưa đọc trong chuông của hộ dân.
+    const prevActive = await this.db.query<{ id: number; severity: string }>(
       `UPDATE system_alerts
        SET active = false, resolved_at = now(), resolved_by = $1
        WHERE active = true
-       RETURNING id`,
+       RETURNING id, severity`,
       [user.id],
     );
     for (const prev of prevActive.rows) {
-      await this.notifications.resolveByLink(`#system-alert-${prev.id}`);
+      if (prev.severity !== "info") {
+        await this.notifications.resolveByLink(`#system-alert-${prev.id}`);
+      }
     }
 
     const { rows } = await this.db.query(
@@ -133,7 +140,8 @@ export class SystemAlertsService implements OnModuleInit {
     const created = camelRow(rows[0]) as unknown as SystemAlertRecord;
     this.cachedActive = { value: created, expiresAt: Date.now() + SystemAlertsService.CACHE_TTL_MS };
 
-    const prefix = severity === "critical" ? "[KHẨN] " : "[BẢO TRÌ] ";
+    const prefix =
+      severity === "critical" ? "[KHẨN] " : severity === "warning" ? "[BẢO TRÌ] " : "[THÔNG BÁO] ";
     const notifTitle = dto.title.startsWith("[") ? dto.title : `${prefix}${dto.title}`;
     const notifInput = {
       kind: "system" as const,
@@ -150,11 +158,13 @@ export class SystemAlertsService implements OnModuleInit {
       await this.notifications.notifyAllUsers(notifInput);
     }
 
+    this.notifications.emitSystemAlert(audience, true);
+
     await this.audit.write(
       { user, ip },
       {
-        action: "Cảnh báo",
-        object: "Thông báo khẩn hệ thống",
+        action: severity === "info" ? "Thông báo" : "Cảnh báo",
+        object: "Thông báo hệ thống",
         detail: `${notifTitle} (${audience === "all" ? "Toàn hệ thống" : audience === "farmer" ? "Hộ nông dân" : "Cán bộ"})`,
       },
     );
@@ -171,18 +181,21 @@ export class SystemAlertsService implements OnModuleInit {
                  created_by, created_by_name, resolved_by, resolved_at, created_at`,
       [id, user.id],
     );
-    if (rows.length === 0) throw notFound("Không tìm thấy thông báo khẩn.");
+    if (rows.length === 0) throw notFound("Không tìm thấy thông báo hệ thống.");
 
     this.cachedActive = null;
-    await this.notifications.resolveByLink(`#system-alert-${id}`);
-
     const resolved = camelRow(rows[0]) as unknown as SystemAlertRecord;
+    if (resolved.severity !== "info") {
+      await this.notifications.resolveByLink(`#system-alert-${id}`);
+    }
+    this.notifications.emitSystemAlert(resolved.audience, false);
+
     await this.audit.write(
       { user, ip },
       {
         action: "Cập nhật",
-        object: "Thông báo khẩn hệ thống",
-        detail: `Đã đánh dấu khắc phục sự cố: ${resolved.title}`,
+        object: "Thông báo hệ thống",
+        detail: `Đã đóng hiển thị dải thông báo: ${resolved.title}`,
       },
     );
     return resolved;

@@ -1121,6 +1121,13 @@ export class CareProtocolService {
             : ADMIN_PROTOCOL_LINK,
         }),
       ]);
+    } else if (txResult.nextPlanStatus !== "completed") {
+      await this.notifications.notifyOversightForHousehold(householdId, {
+        kind: "protocol",
+        title: `Cập nhật quy trình: Hộ ${plan.household_name} (Thửa ${plotCode})`,
+        body: `Đã ghi nhận ${stageLabel} ngày ${formatIsoVn(performedOn)} đạt chuẩn quy trình.`,
+        link: ADMIN_PROTOCOL_LINK,
+      });
     }
 
     // 8. Thông báo giai đoạn / mốc tiếp theo & nhắc nhở khai báo đúng hạn nếu hộ vừa khai báo bù muộn

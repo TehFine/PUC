@@ -23,17 +23,98 @@ export interface NotificationInput {
   link?: string | null;
 }
 
+export interface RealtimeNotificationItem {
+  id: number;
+  kind: NotificationKind;
+  title: string;
+  body: string | null;
+  link: string | null;
+  readAt: null;
+  createdAt: string;
+}
+
+export type RealtimeStreamEvent =
+  | { type: "notification"; item: RealtimeNotificationItem }
+  | { type: "notifications-sync" }
+  | { type: "system-alert"; audience: "all" | "farmer" | "staff"; active: boolean };
+
+interface ActiveStreamSub {
+  role: Role;
+  send: (event: RealtimeStreamEvent) => void;
+}
+
 /**
- * Thông báo trong ứng dụng. Các nghiệp vụ gọi `notifyHousehold`/`notifyUsers` sau khi ghi dữ liệu;
- * lỗi gửi thông báo không được làm hỏng thao tác chính.
+ * Thông báo trong ứng dụng kèm kênh đẩy thời gian thực (SSE). Các nghiệp vụ gọi `notifyHousehold`/`notifyRoles`/`notifyOversightForHousehold`
+ * sau khi ghi dữ liệu; lỗi gửi thông báo không được làm hỏng thao tác chính.
  */
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
   private readonly lastSyncedAt = new Map<number, number>();
+  private readonly streamsByUser = new Map<number, Set<ActiveStreamSub>>();
   private static readonly SYNC_THROTTLE_MS = 15_000;
+  private static readonly MAX_STREAMS_PER_USER = 6;
 
   constructor(private readonly db: DatabaseService) {}
+
+  /** Đăng ký luồng nhận thông báo thời gian thực (SSE) cho đúng người dùng đang đăng nhập. */
+  subscribeUserStream(
+    userId: number,
+    role: Role,
+    send: (event: RealtimeStreamEvent) => void,
+  ): () => void {
+    let bucket = this.streamsByUser.get(userId);
+    if (!bucket) {
+      bucket = new Set<ActiveStreamSub>();
+      this.streamsByUser.set(userId, bucket);
+    }
+    if (bucket.size >= NotificationsService.MAX_STREAMS_PER_USER) {
+      const oldest = bucket.values().next().value;
+      if (oldest) bucket.delete(oldest);
+    }
+    const entry: ActiveStreamSub = { role, send };
+    bucket.add(entry);
+
+    return () => {
+      const current = this.streamsByUser.get(userId);
+      if (!current) return;
+      current.delete(entry);
+      if (current.size === 0) {
+        this.streamsByUser.delete(userId);
+      }
+    };
+  }
+
+  /** Đẩy sự kiện cảnh báo / thông báo hệ thống thời gian thực tới các luồng đang mở thuộc nhóm đối tượng nhận. */
+  emitSystemAlert(audience: "all" | "farmer" | "staff", active: boolean): void {
+    const event: RealtimeStreamEvent = { type: "system-alert", audience, active };
+    for (const subs of this.streamsByUser.values()) {
+      for (const sub of subs) {
+        const matches =
+          audience === "all" ||
+          (audience === "farmer" && sub.role === "farmer") ||
+          (audience === "staff" && sub.role !== "farmer");
+        if (!matches) continue;
+        try {
+          sub.send(event);
+        } catch {
+          // Bỏ qua nếu kết nối vừa đóng
+        }
+      }
+    }
+  }
+
+  private emitToUser(userId: number, event: RealtimeStreamEvent): void {
+    const subs = this.streamsByUser.get(userId);
+    if (!subs || subs.size === 0) return;
+    for (const sub of subs) {
+      try {
+        sub.send(event);
+      } catch {
+        // Bỏ qua nếu kết nối vừa đóng
+      }
+    }
+  }
 
   /** Gửi tới tài khoản (đang hoạt động) gắn với hộ. */
   async notifyHousehold(householdId: number | null | undefined, input: NotificationInput): Promise<void> {
@@ -91,10 +172,14 @@ export class NotificationsService {
   }
 
   /**
-   * Gửi cảnh báo tuân thủ quy trình tới Quản trị viên, Cán bộ HTX, Kiểm tra viên
-   * và Cán bộ thôn phụ trách đúng thôn của hộ dân (chỉ gửi cho vai trò có quyền đọc và thuộc phạm vi địa bàn/HTX).
+   * Gửi thông báo hoặc cảnh báo giám sát tới Quản trị viên, Trưởng HTX, Phó HTX, Chuyên viên hỗ trợ,
+   * Cán bộ kỹ thuật HTX, Kiểm tra viên và Cán bộ thôn phụ trách đúng thôn của hộ dân.
    */
-  async notifyOversightForHousehold(householdId: number, input: NotificationInput): Promise<void> {
+  async notifyOversightForHousehold(
+    householdId: number,
+    input: NotificationInput,
+    options?: { excludeUserId?: number },
+  ): Promise<void> {
     const globalCandidateRoles: Role[] = [
       "admin",
       "htx_head",
@@ -144,9 +229,11 @@ export class NotificationsService {
       const hh = hhRes.rows[0];
       if (!hh) return;
 
+      const excludedId = options?.excludeUserId;
       const recipientIds = staffRes.rows
-        .filter((u) =>
-          isStaffInParcelScope(
+        .filter((u) => {
+          if (excludedId !== undefined && Number(u.id) === excludedId) return false;
+          return isStaffInParcelScope(
             {
               id: Number(u.id),
               fullName: "",
@@ -160,8 +247,8 @@ export class NotificationsService {
             },
             { villageId: hh.village_id, villageName: hh.village_name },
             u.village_name,
-          ),
-        )
+          );
+        })
         .map((u) => Number(u.id));
       if (recipientIds.length === 0) return;
 
@@ -191,7 +278,14 @@ export class NotificationsService {
   async resolveByLink(link: string): Promise<void> {
     try {
       this.lastSyncedAt.clear();
-      await this.db.query("UPDATE notifications SET read_at = now() WHERE link = $1 AND read_at IS NULL", [link]);
+      const res = await this.db.query<{ user_id: number }>(
+        "UPDATE notifications SET read_at = now() WHERE link = $1 AND read_at IS NULL RETURNING user_id",
+        [link],
+      );
+      const uniqueUsers = new Set(res.rows.map((r) => Number(r.user_id)));
+      for (const uid of uniqueUsers) {
+        this.emitToUser(uid, { type: "notifications-sync" });
+      }
     } catch (error) {
       this.logger.error(`Không cập nhật được trạng thái thông báo sự cố: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -416,27 +510,55 @@ export class NotificationsService {
 
   async markRead(userId: number, id: number) {
     await this.db.query("UPDATE notifications SET read_at = now() WHERE id = $1 AND user_id = $2 AND read_at IS NULL", [id, userId]);
+    this.emitToUser(userId, { type: "notifications-sync" });
     return { ok: true };
   }
 
   async markAllRead(userId: number) {
     await this.db.query("UPDATE notifications SET read_at = now() WHERE user_id = $1 AND read_at IS NULL", [userId]);
+    this.emitToUser(userId, { type: "notifications-sync" });
     return { ok: true };
   }
 
   async clearRead(userId: number) {
     const res = await this.db.query("DELETE FROM notifications WHERE user_id = $1 AND read_at IS NOT NULL", [userId]);
+    this.emitToUser(userId, { type: "notifications-sync" });
     return { ok: true, deleted: res.rowCount ?? 0 };
   }
 
   private async insert(recipientsSql: string, params: unknown[]) {
     try {
       this.lastSyncedAt.clear();
-      await this.db.query(
+      const inserted = await this.db.query<{
+        user_id: number;
+        id: number;
+        kind: NotificationKind;
+        title: string;
+        body: string | null;
+        link: string | null;
+        created_at: Date | string;
+      }>(
         `INSERT INTO notifications (user_id, kind, title, body, link)
-         SELECT r.id, $1, $2, $3, $4 FROM (${recipientsSql}) r`,
+         SELECT DISTINCT r.id, $1, $2, $3, $4 FROM (${recipientsSql}) r
+         RETURNING user_id, id, kind, title, body, link, created_at`,
         params,
       );
+      for (const row of inserted.rows) {
+        const uid = Number(row.user_id);
+        this.emitToUser(uid, {
+          type: "notification",
+          item: {
+            id: Number(row.id),
+            kind: row.kind,
+            title: row.title,
+            body: row.body,
+            link: row.link,
+            readAt: null,
+            createdAt:
+              row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+          },
+        });
+      }
     } catch (error) {
       this.logger.error(`Không gửi được thông báo: ${error instanceof Error ? error.message : String(error)}`);
     }

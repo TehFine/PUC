@@ -13,7 +13,7 @@ type Tab = "accounts" | "roles" | "alerts" | "audit";
 const TABS: { id: Tab; label: string }[] = [
   { id: "accounts", label: "Tài khoản" },
   { id: "roles", label: "Phân quyền" },
-  { id: "alerts", label: "Thông báo khẩn" },
+  { id: "alerts", label: "Thông báo hệ thống" },
   { id: "audit", label: "Nhật ký thao tác" },
 ];
 

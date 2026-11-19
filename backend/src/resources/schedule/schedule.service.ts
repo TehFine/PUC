@@ -95,6 +95,28 @@ export class ScheduleService extends BaseCrudService {
         body: `Ngày ${suddenAlert.scheduledOn}, cán bộ phụ trách: ${suddenAlert.officer}`,
         link: "/admin?section=schedule",
       });
+      return;
+    }
+
+    if (input._method === "PATCH") {
+      const { rows } = await this.db.query<{
+        kind: string;
+        title: string;
+        scheduled_on: string;
+        officer: string;
+      }>(
+        "SELECT kind, title, scheduled_on::text AS scheduled_on, officer FROM inspection_schedule WHERE id = $1",
+        [id],
+      );
+      const cur = rows[0];
+      if (cur && cur.kind !== "sudden") {
+        await this.notifications.notifyAllFarmers({
+          kind: "schedule",
+          title: `Cập nhật lịch kiểm tra: ${cur.title}`,
+          body: `Ngày ${cur.scheduled_on}, cán bộ phụ trách: ${cur.officer}`,
+          link: `/portal?tab=inspection&scheduleId=${id}`,
+        });
+      }
     }
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, CheckCheck } from "@/components/ui/PublicIcon";
+import { Bell } from "@/components/ui/PublicIcon";
 import {
   notifyCountsChanged,
   requestAdminNavigate,
@@ -12,20 +12,34 @@ import { EmptyState, Pill, Sheet } from "@/components/portal/ui";
 import { invalidateQueries, NOTIFICATIONS_PATH, useSharedQuery } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
 import type { Tone } from "@/lib/portal-labels";
+import { useRealtimeNotifications } from "@/lib/realtime-notifications";
 import type { NotificationItem, NotificationList } from "@/types/notifications";
 import { formatDate } from "@/utils/format";
 
-function kindMeta(kind: string): { label: string; tone: Tone } {
-  if (kind === "violation") return { label: "Cảnh báo vi phạm", tone: "red" };
-  if (kind === "protocol") return { label: "Quy trình 2026-2027", tone: "gold" };
-  if (kind === "approval") return { label: "Hồ sơ chờ duyệt", tone: "blue" };
-  if (kind === "harvest") return { label: "Khai báo thu hoạch", tone: "green" };
-  if (kind === "lab" || kind === "schedule") return { label: "Kiểm nghiệm & Kiểm tra", tone: "blue" };
+function kindMeta(item: NotificationItem): { label: string; tone: Tone } {
+  const link = (item.link || "").toLowerCase();
+  if (item.kind === "violation") return { label: "Cảnh báo vi phạm", tone: "red" };
+  if (item.kind === "protocol") {
+    if (link.includes("sub=spray") || link.includes("section=spray")) {
+      return { label: "Nhật ký phun thuốc", tone: "green" };
+    }
+    if (link.includes("section=journal") && !link.includes("tab=protocol")) {
+      return { label: "Nhật ký canh tác", tone: "green" };
+    }
+    return { label: "Quy trình 2026-2027", tone: "gold" };
+  }
+  if (item.kind === "approval") return { label: "Hồ sơ chờ duyệt", tone: "blue" };
+  if (item.kind === "harvest") return { label: "Khai báo thu hoạch", tone: "green" };
+  if (item.kind === "lab" || item.kind === "schedule") return { label: "Kiểm nghiệm và Kiểm tra", tone: "blue" };
   return { label: "Hệ thống", tone: "gray" };
 }
 
 function navigateAdminNotification(item: NotificationItem) {
   const link = (item.link || "").toLowerCase();
+  if (link.includes("sub=spray") || link.includes("section=spray")) {
+    requestJournalTab("spray");
+    return;
+  }
   if (item.kind === "protocol" || link.includes("tab=protocol")) {
     requestJournalTab("journal");
     return;
@@ -48,7 +62,7 @@ function navigateAdminNotification(item: NotificationItem) {
     return;
   }
   if (link.includes("section=journal")) {
-    requestAdminNavigate("journal");
+    requestJournalTab("journal");
     return;
   }
   requestAdminNavigate("dashboard");
@@ -59,6 +73,7 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
   const [filter, setFilter] = useState<"unread" | "read">("unread");
   const [markingAll, setMarkingAll] = useState(false);
 
+  useRealtimeNotifications(enabled);
   const notifications = useSharedQuery<NotificationList>(enabled ? NOTIFICATIONS_PATH : null);
   const items = notifications.data?.data ?? [];
   const unreadItems = items.filter((n) => !n.readAt);
@@ -116,8 +131,8 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
       <button
         type="button"
         className="admin-notif-btn"
-        title="Thông báo giám sát quy trình, vi phạm và hồ sơ"
-        aria-label={unread > 0 ? `Thông báo quản trị (${unread} chưa đọc)` : "Thông báo quản trị"}
+        title="Thông báo"
+        aria-label={unread > 0 ? `Thông báo (${unread} chưa đọc)` : "Thông báo"}
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => {
@@ -136,7 +151,7 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
       {open && (
         <Sheet
           variant="drawer"
-          title="Thông báo & cảnh báo quy trình"
+          title="Thông báo"
           onClose={() => setOpen(false)}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -166,10 +181,8 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
                   className="btn btn-outline btn-sm"
                   onClick={() => void handleMarkAll()}
                   disabled={markingAll}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
                 >
-                  <CheckCheck size={14} />
-                  <span>{markingAll ? "Đang xử lý…" : "Đánh dấu đã đọc hết"}</span>
+                  {markingAll ? "Đang xử lý…" : "Đánh dấu đã đọc hết"}
                 </button>
               )}
             </div>
@@ -179,13 +192,13 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
                 {items.length === 0
                   ? "Chưa có thông báo nào."
                   : filter === "unread"
-                    ? "Không còn cảnh báo hay thông báo nào chưa đọc."
+                    ? "Chưa có thông báo mới."
                     : "Chưa có thông báo nào đã đọc."}
               </EmptyState>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {visibleItems.map((item) => {
-                  const meta = kindMeta(item.kind);
+                  const meta = kindMeta(item);
                   return (
                     <button
                       key={item.id}

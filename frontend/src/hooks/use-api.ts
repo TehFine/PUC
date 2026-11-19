@@ -28,6 +28,7 @@ const MAX_CACHE_ENTRIES = 120;
 const apiCache = new Map<string, CacheEntry>();
 const inflightRequests = new Map<string, Promise<unknown>>();
 const scopeResetListeners = new Set<(mode: "logout" | "scope") => void>();
+const liveRefreshListeners = new Set<(prefix?: string) => void>();
 let authEpoch = 0;
 
 function scopedApiKey(path: string): string {
@@ -135,6 +136,22 @@ function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
   return request;
 }
 
+/** Làm mới êm (không nháy skeleton) các màn hình quản trị đang mở khớp tiền tố đường dẫn khi có sự kiện thời gian thực. */
+export function refreshMountedApiQueries(prefix?: string): void {
+  invalidateApiCache(prefix);
+  for (const listener of liveRefreshListeners) {
+    listener(prefix);
+  }
+}
+
+/** Nạp sẵn dữ liệu API vào bộ nhớ đệm lúc nhàn rỗi để mở phân mục (như Bản đồ Vùng trồng) trong 0ms. */
+export function prefetchApi(path: string): void {
+  const cacheKey = scopedApiKey(path);
+  const cached = apiCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_FRESH_MS) return;
+  void fetchDeduped(path, false).catch(() => undefined);
+}
+
 /**
  * Tải dữ liệu thô (DTO) từ một đường dẫn API, kèm trạng thái tải/lỗi và `refresh()`.
  * Dùng cho các màn hình cần thao tác ghi (thêm/sửa/xóa) nên giữ nguyên `id` và kiểu số của backend.
@@ -233,6 +250,26 @@ export function useApi<T>(path: string | null) {
       scopeResetListeners.delete(onScopeReset);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    const onLiveRefresh = (prefix?: string) => {
+      const current = latest.current;
+      if (!current || getAuthScopeUserId() === null) return;
+      if (prefix && !current.startsWith(prefix)) return;
+      void fetchDeduped<T>(current, true)
+        .then((result) => {
+          if (latest.current === current) {
+            setData(result);
+            setError(null);
+          }
+        })
+        .catch(() => undefined);
+    };
+    liveRefreshListeners.add(onLiveRefresh);
+    return () => {
+      liveRefreshListeners.delete(onLiveRefresh);
+    };
+  }, []);
 
   const setCachedData = (next: T | null | ((prev: T | null) => T | null)) => {
     setData((prev) => {

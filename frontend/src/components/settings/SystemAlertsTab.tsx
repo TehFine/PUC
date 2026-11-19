@@ -22,6 +22,14 @@ const TEMPLATES: {
   message: string;
 }[] = [
   {
+    label: "Cập nhật hệ thống",
+    severity: "info",
+    audience: "farmer",
+    title: "Cập nhật tính năng và danh mục kỹ thuật trên hệ thống",
+    message:
+      "Ban quản trị HTX vừa cập nhật nội dung mới trên hệ thống. Bà con mở mục Kiến thức và Nhật ký để xem hướng dẫn chi tiết.",
+  },
+  {
     label: "Chậm đồng bộ tạm thời",
     severity: "critical",
     audience: "all",
@@ -53,11 +61,20 @@ const AUDIENCE_LABELS: Record<SystemAlertAudience, string> = {
   staff: "Cán bộ quản trị HTX",
 };
 
+const SEVERITY_META: Record<
+  SystemAlertSeverity,
+  { label: string; badgeClass: string; bg: string; color: string }
+> = {
+  info: { label: "Thông báo chung", badgeClass: "badge-green", bg: "#f3f7ee", color: "#14372f" },
+  warning: { label: "Bảo trì", badgeClass: "badge-amber", bg: "#fff7ed", color: "#9a6712" },
+  critical: { label: "Khẩn cấp", badgeClass: "badge-red", bg: "#fef2f2", color: "#b91c1c" },
+};
+
 export default function SystemAlertsTab() {
   const { data, loading, error, refresh } = useApi<SystemAlertListResponse>("/system-alerts");
   const health = useApi<HealthCheckResponse>("/health");
 
-  const [severity, setSeverity] = useState<SystemAlertSeverity>("critical");
+  const [severity, setSeverity] = useState<SystemAlertSeverity>("info");
   const [audience, setAudience] = useState<SystemAlertAudience>("all");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
@@ -71,7 +88,7 @@ export default function SystemAlertsTab() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !message.trim()) {
-      toast.error("Vui lòng nhập tiêu đề và nội dung thông báo khẩn.");
+      toast.error("Vui lòng nhập tiêu đề và nội dung thông báo.");
       return;
     }
     setSubmitting(true);
@@ -84,12 +101,12 @@ export default function SystemAlertsTab() {
       });
       setTitle("");
       setMessage("");
-      toast.success("Đã phát thông báo khẩn tới người dùng trên toàn hệ thống.");
+      toast.success("Đã phát thông báo tới người dùng theo thời gian thực.");
       await refresh();
       notifySystemAlertsChanged();
       notifyCountsChanged();
     } catch (err) {
-      toast.error(errorMessage(err, "Không thể phát thông báo khẩn."));
+      toast.error(errorMessage(err, "Không thể phát thông báo hệ thống."));
     } finally {
       setSubmitting(false);
     }
@@ -99,12 +116,12 @@ export default function SystemAlertsTab() {
     setResolvingId(id);
     try {
       await api.post(`/system-alerts/${id}/resolve`);
-      toast.success("Đã gỡ cảnh báo khẩn và đánh dấu sự cố đã khắc phục.");
+      toast.success("Đã đóng hiển thị dải thông báo trên đầu màn hình.");
       await refresh();
       notifySystemAlertsChanged();
       notifyCountsChanged();
     } catch (err) {
-      toast.error(errorMessage(err, "Không thể cập nhật trạng thái sự cố."));
+      toast.error(errorMessage(err, "Không thể cập nhật trạng thái thông báo."));
     } finally {
       setResolvingId(null);
     }
@@ -156,14 +173,14 @@ export default function SystemAlertsTab() {
         </footer>
       </div>
 
-      {/* Cảnh báo đang bật (nếu có) */}
+      {/* Cảnh báo / thông báo đang bật (nếu có) */}
       {activeAlert && (
         <div
           className="card"
           style={{
             padding: "18px 20px",
             border: "1px solid #d4d4d2",
-            background: activeAlert.severity === "critical" ? "#fef2f2" : "#fff7ed",
+            background: (SEVERITY_META[activeAlert.severity] ?? SEVERITY_META.info).bg,
             display: "flex",
             flexWrap: "wrap",
             alignItems: "center",
@@ -175,16 +192,16 @@ export default function SystemAlertsTab() {
             <div
               style={{
                 fontSize: 11.5,
-                fontWeight: 800,
+                fontWeight: 600,
                 textTransform: "uppercase",
-                letterSpacing: "0.05em",
-                color: activeAlert.severity === "critical" ? "#b91c1c" : "#c2410c",
+                letterSpacing: "0.06em",
+                color: (SEVERITY_META[activeAlert.severity] ?? SEVERITY_META.info).color,
                 marginBottom: 4,
               }}
             >
               ĐANG PHÁT TRÊN MÀN HÌNH NGƯỜI DÙNG - {AUDIENCE_LABELS[activeAlert.audience]}
             </div>
-            <div style={{ fontSize: 15.5, fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 600, color: "#14372f", marginBottom: 4 }}>
               {activeAlert.title}
             </div>
             <div style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.5 }}>{activeAlert.message}</div>
@@ -195,20 +212,24 @@ export default function SystemAlertsTab() {
             disabled={resolvingId === activeAlert.id}
             onClick={() => void handleResolve(activeAlert.id)}
           >
-            {resolvingId === activeAlert.id ? "Đang cập nhật…" : "Đánh dấu đã khắc phục"}
+            {resolvingId === activeAlert.id
+              ? "Đang cập nhật…"
+              : activeAlert.severity === "info"
+                ? "Đóng dải thông báo"
+                : "Đánh dấu đã khắc phục"}
           </button>
         </div>
       )}
 
-      {/* Biểu mẫu phát thông báo khẩn mới */}
+      {/* Biểu mẫu phát thông báo mới */}
       <form className="card" onSubmit={handleSubmit} style={{ padding: "20px", display: "grid", gap: 14 }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
-              Phát thông báo khẩn / bảo trì hệ thống
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#14372f" }}>
+              Phát thông báo Ban quản trị, cập nhật hoặc bảo trì hệ thống
             </h3>
-            <p style={{ margin: "3px 0 0", fontSize: 13, color: "#64748b" }}>
-              Hiển thị tức thời trên đầu màn hình mọi thiết bị đang truy cập và gửi đồng thời vào chuông Thông báo.
+            <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5f6d66" }}>
+              Gửi tức thời tới chuông Thông báo của từng hộ dân và cán bộ theo thời gian thực, đồng thời hiển thị trên đầu màn hình.
             </p>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -233,7 +254,7 @@ export default function SystemAlertsTab() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
           <div>
             <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-              Mức độ cảnh báo
+              Loại thông báo
             </label>
             <select
               className="filter-select"
@@ -241,8 +262,9 @@ export default function SystemAlertsTab() {
               value={severity}
               onChange={(e) => setSeverity(e.target.value as SystemAlertSeverity)}
             >
-              <option value="critical">Khẩn cấp, sự cố hệ thống (Đỏ)</option>
-              <option value="warning">Cảnh báo, bảo trì kỹ thuật (Cam)</option>
+              <option value="info">Thông báo Ban quản trị và cập nhật hệ thống</option>
+              <option value="warning">Cảnh báo, bảo trì kỹ thuật</option>
+              <option value="critical">Khẩn cấp, sự cố hệ thống</option>
             </select>
           </div>
 
@@ -256,7 +278,7 @@ export default function SystemAlertsTab() {
               value={audience}
               onChange={(e) => setAudience(e.target.value as SystemAlertAudience)}
             >
-              <option value="all">Toàn bộ người dùng (Nông dân & Cán bộ)</option>
+              <option value="all">Toàn bộ người dùng (Hộ nông dân và Cán bộ)</option>
               <option value="farmer">Tất cả hộ nông dân</option>
               <option value="staff">Chỉ cán bộ quản trị HTX</option>
             </select>
@@ -271,7 +293,7 @@ export default function SystemAlertsTab() {
             type="text"
             className="form-input"
             maxLength={160}
-            placeholder="Ví dụ: Hệ thống đang khắc phục sự cố đồng bộ dữ liệu"
+            placeholder="Ví dụ: Cập nhật quy trình chăm sóc và danh mục thuốc BVTV mới"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
@@ -280,13 +302,13 @@ export default function SystemAlertsTab() {
 
         <div>
           <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-            Nội dung hướng dẫn người dùng
+            Nội dung chi tiết gửi tới người dùng
           </label>
           <textarea
             className="form-input"
             rows={3}
             maxLength={600}
-            placeholder="Nhập nguyên nhân ngắn gọn, hướng dẫn tạm thời cho hộ dân/cán bộ và thời gian dự kiến khắc phục…"
+            placeholder="Nhập nội dung thông báo của Ban quản trị hoặc hướng dẫn cho từng hộ dân…"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             required
@@ -295,7 +317,7 @@ export default function SystemAlertsTab() {
 
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? "Đang phát thông báo…" : "Phát thông báo khẩn ngay"}
+            {submitting ? "Đang phát thông báo…" : "Phát thông báo ngay"}
           </button>
         </div>
       </form>
@@ -336,43 +358,48 @@ export default function SystemAlertsTab() {
                 </td>
               </tr>
             )}
-            {rows.map((item) => (
-              <tr key={item.id}>
-                <td>{formatDate(item.createdAt)}</td>
-                <td>
-                  <span className={`badge ${item.severity === "critical" ? "badge-red" : "badge-amber"}`}>
-                    {item.severity === "critical" ? "Khẩn cấp" : "Bảo trì"}
-                  </span>
-                </td>
-                <td>{AUDIENCE_LABELS[item.audience]}</td>
-                <td style={{ maxWidth: 360 }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.title}</div>
-                  <div style={{ fontSize: 12.5, color: "#475569", marginTop: 2 }}>{item.message}</div>
-                </td>
-                <td>{item.createdByName || "Hệ thống"}</td>
-                <td>
-                  {item.active ? (
-                    <span className="badge badge-red">Đang phát</span>
-                  ) : (
-                    <span className="badge badge-green">Đã khắc phục</span>
-                  )}
-                </td>
-                <td>
-                  {item.active ? (
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      disabled={resolvingId === item.id}
-                      onClick={() => void handleResolve(item.id)}
-                    >
-                      Đã khắc phục
-                    </button>
-                  ) : (
-                    <span style={{ fontSize: 12, color: "#94a3b8" }}>—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {rows.map((item) => {
+              const sevMeta = SEVERITY_META[item.severity] ?? SEVERITY_META.info;
+              return (
+                <tr key={item.id}>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{formatDate(item.createdAt)}</td>
+                  <td>
+                    <span className={`badge ${sevMeta.badgeClass}`}>{sevMeta.label}</span>
+                  </td>
+                  <td>{AUDIENCE_LABELS[item.audience]}</td>
+                  <td style={{ maxWidth: 360 }}>
+                    <div style={{ fontWeight: 600, color: "#14372f" }}>{item.title}</div>
+                    <div style={{ fontSize: 12.5, color: "#475569", marginTop: 2 }}>{item.message}</div>
+                  </td>
+                  <td>{item.createdByName || "Hệ thống"}</td>
+                  <td>
+                    {item.active ? (
+                      <span className={`badge ${item.severity === "info" ? "badge-green" : "badge-red"}`}>
+                        Đang phát
+                      </span>
+                    ) : (
+                      <span className="badge badge-green">
+                        {item.severity === "info" ? "Đã đóng" : "Đã khắc phục"}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {item.active ? (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={resolvingId === item.id}
+                        onClick={() => void handleResolve(item.id)}
+                      >
+                        {item.severity === "info" ? "Đóng hiển thị" : "Đã khắc phục"}
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "#8a968f" }}>-</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
