@@ -25,6 +25,9 @@ interface UsePlotLayersArgs {
   refs: PlotLayersRefs;
 }
 
+const MIN_PERM_LABEL_ZOOM = 16;
+const MAX_PERMANENT_LABELS = 28;
+
 /** Keeps Leaflet layers in sync with React state: plot polygons, zoom-adaptive LoD labels, selection style and base map. */
 export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: UsePlotLayersArgs) {
   const { leaflet, map: mapRef, plotGroup, plotLayers, baseLayers, mode, selectedCode: selectedRef, select } = refs;
@@ -56,10 +59,11 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
     const currentZoom = map.getZoom();
     const initialTier = plotLodTier(currentZoom);
     const initialAllowPerm =
-      currentZoom >= 15 && document.documentElement.dataset.perf !== "lite";
-    const initialViewBounds = initialAllowPerm ? map.getBounds().pad(0.25) : null;
+      currentZoom >= MIN_PERM_LABEL_ZOOM && document.documentElement.dataset.perf !== "lite";
+    const initialViewBounds = initialAllowPerm ? map.getBounds().pad(0.15) : null;
     lodTierRef.current = initialTier;
     permLabelsRef.current = initialAllowPerm;
+    let initialPermCount = 0;
 
     plots.features.forEach((feature, index) => {
       const labelOffset: [number, number] = [0, index % 2 === 0 ? -9 : 9];
@@ -76,10 +80,12 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
           const label = document.createElement("span");
           populatePlotTooltip(label, feature, initialTier);
           const layerBounds = (layer as Leaflet.Polygon).getBounds?.();
-          const isPerm = Boolean(
+          const inViewport = Boolean(
             initialViewBounds &&
               (!layerBounds || !layerBounds.isValid() || initialViewBounds.intersects(layerBounds)),
           );
+          const isPerm = inViewport && initialPermCount < MAX_PERMANENT_LABELS;
+          if (isPerm) initialPermCount += 1;
           labelNodesRef.current.set(feature.properties.code, {
             el: label,
             feature,
@@ -114,24 +120,36 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
     }
   }, [plots, ready, leaflet, mapRef, plotGroup, plotLayers, mode, selectedRef, select]);
 
-  // Tự động nâng cấp độ chi tiết nhãn, cắt tỉa nhãn cố định ngoài khung nhìn & tắt nhãn cố định trên máy yếu
+  // Trì hoãn cập nhật nhãn & độ dày nét cho tới khi thao tác phóng/lia dừng hẳn (140ms) để chống giật khung hình
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
 
+    let settleTimer: number | null = null;
+
+    const cancelPendingSync = () => {
+      if (settleTimer !== null) {
+        window.clearTimeout(settleTimer);
+        settleTimer = null;
+      }
+    };
+
     const syncViewportTooltips = (allowPerm: boolean) => {
       if (!allowPerm && !permLabelsRef.current) return;
       permLabelsRef.current = allowPerm;
-      const viewBounds = allowPerm ? map.getBounds().pad(0.25) : null;
+      const viewBounds = allowPerm ? map.getBounds().pad(0.15) : null;
+      let permCount = 0;
 
       plotLayers.current.forEach((layer, code) => {
         const entry = labelNodesRef.current.get(code);
         if (!entry) return;
         const layerBounds = (layer as Leaflet.Polygon).getBounds?.();
-        const shouldPerm = Boolean(
+        const inView = Boolean(
           viewBounds &&
             (!layerBounds || !layerBounds.isValid() || viewBounds.intersects(layerBounds)),
         );
+        const shouldPerm = inView && permCount < MAX_PERMANENT_LABELS;
+        if (shouldPerm) permCount += 1;
         if (shouldPerm === entry.perm) return;
         entry.perm = shouldPerm;
         layer.unbindTooltip();
@@ -145,11 +163,13 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
       });
     };
 
-    const syncZoomLod = () => {
+    const runDeferredSync = () => {
+      settleTimer = null;
+      if (!mapRef.current) return;
       const zoom = map.getZoom();
       const nextTier = plotLodTier(zoom);
       const isLite = document.documentElement.dataset.perf === "lite";
-      const allowPerm = !isLite && zoom >= 15;
+      const allowPerm = !isLite && zoom >= MIN_PERM_LABEL_ZOOM;
       const tierChanged = nextTier !== lodTierRef.current;
 
       if (tierChanged) {
@@ -175,17 +195,21 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
       syncViewportTooltips(allowPerm);
     };
 
-    const syncMoveTooltips = () => {
-      const isLite = document.documentElement.dataset.perf === "lite";
-      const allowPerm = !isLite && map.getZoom() >= 15;
-      syncViewportTooltips(allowPerm);
+    const scheduleSync = () => {
+      cancelPendingSync();
+      settleTimer = window.setTimeout(runDeferredSync, 140);
     };
 
-    map.on("zoomend", syncZoomLod);
-    map.on("moveend", syncMoveTooltips);
+    map.on("zoomstart", cancelPendingSync);
+    map.on("movestart", cancelPendingSync);
+    map.on("zoomend", scheduleSync);
+    map.on("moveend", scheduleSync);
     return () => {
-      map.off("zoomend", syncZoomLod);
-      map.off("moveend", syncMoveTooltips);
+      cancelPendingSync();
+      map.off("zoomstart", cancelPendingSync);
+      map.off("movestart", cancelPendingSync);
+      map.off("zoomend", scheduleSync);
+      map.off("moveend", scheduleSync);
     };
   }, [ready, mapRef, plotLayers, selectedRef]);
 

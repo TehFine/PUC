@@ -1,14 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
-import { SOURCE_BADGE, STATUS_BADGE } from "@/constants/plot-badges";
 import { getZoneColor } from "@/components/zones/zone-data";
-import type { PlotFeature } from "@/types/geo";
+import { animatePopupExit, spawnExitCloneIfNeeded } from "@/lib/popup-motion";
+import type { PlotFeature, PlotStatus } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
 import {
-  featureLabel,
   formatAreaSqm,
   formatCoords,
   formatHa,
@@ -27,8 +26,16 @@ interface PlotPopupProps {
   onClose: () => void;
 }
 
+const STATUS_TONE_CLASS: Record<PlotStatus, string> = {
+  approved: "is-approved",
+  improve: "is-warn",
+  pending: "is-warn",
+  violation: "is-danger",
+};
+
 /**
- * Bảng thông tin thửa đất nằm bên cạnh phải bản đồ (không làm mờ nền bản đồ phía sau).
+ * Bảng thông tin thửa đất nằm bên cạnh phải bản đồ trên máy tính
+ * và chuyển thành ngăn kéo đáy (bottom sheet) chia khu vực rõ ràng trên di động.
  */
 export default function PlotPopup({
   feature,
@@ -49,29 +56,44 @@ export default function PlotPopup({
     isClosingRef.current = true;
     const el = popupRef.current;
     if (el) {
-      el.style.animation = "none";
-      el.style.pointerEvents = "none";
-      el.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms ease";
-      el.style.transform = "translate3d(0, 105%, 0)";
-      el.style.opacity = "0";
-      setTimeout(() => {
+      const isMobileSheet = typeof window !== "undefined" && window.innerWidth <= 900;
+      const closeDuration = animatePopupExit(el, null, isMobileSheet ? "sheet" : "floating-card");
+      window.setTimeout(() => {
         isClosingRef.current = false;
         onClose();
-      }, 220);
+      }, closeDuration);
       return;
     }
     isClosingRef.current = false;
     onClose();
   }, [onClose]);
 
+  useLayoutEffect(() => {
+    const popupEl = popupRef.current;
+    return () => {
+      if (!isClosingRef.current) {
+        const isMobileSheet = typeof window !== "undefined" && window.innerWidth <= 900;
+        spawnExitCloneIfNeeded(popupEl, popupEl, isMobileSheet ? "sheet" : "floating-card");
+      }
+    };
+  }, []);
+
   useEffect(() => {
     isClosingRef.current = false;
-    if (popupRef.current) {
-      popupRef.current.style.transition = "";
+    const el = popupRef.current;
+    if (!el) return;
+    el.style.removeProperty("animation");
+    el.style.removeProperty("transition");
+    el.style.transform = "";
+    el.style.opacity = "";
+    el.style.pointerEvents = "";
+
+    const timer = window.setTimeout(() => {
+      if (isClosingRef.current || !popupRef.current) return;
+      popupRef.current.style.setProperty("animation", "none", "important");
       popupRef.current.style.transform = "";
-      popupRef.current.style.opacity = "";
-      popupRef.current.style.pointerEvents = "";
-    }
+    }, 300);
+    return () => window.clearTimeout(timer);
   }, [feature.properties.code]);
 
   useEffect(() => {
@@ -95,15 +117,10 @@ export default function PlotPopup({
       ? rawRing.length - 1
       : rawRing.length;
 
-  const facts: Array<{ label: string; value: string; wide?: boolean; isZone?: boolean }> = [
-    { label: "Số thửa / tờ bản đồ", value: `${props.parcel || "-"} / ${props.sheet || "-"}` },
-    { label: "Số đỉnh ranh giới", value: `${vertexCount} đỉnh` },
-    { label: "Mã vùng trồng", value: props.zone || "-", isZone: true },
-    { label: "Thôn / Tổ", value: props.village || "-" },
-    { label: "Giống cây", value: props.variety || "-", wide: true },
-    { label: "Định vị GPS", value: formatCoords(center?.lat, center?.lng), wide: true },
-    { label: "Chủ hộ", value: props.owner || "-", wide: true },
-  ];
+  const sheetParcelValue =
+    props.sheet || props.parcel
+      ? `Tờ ${props.sheet || "-"}, Thửa ${props.parcel || "-"}`
+      : "Chưa cập nhật";
 
   return (
     <section
@@ -111,93 +128,120 @@ export default function PlotPopup({
       className="plotmap-popup"
       role="dialog"
       aria-modal="false"
-      aria-label={`Thông tin thửa ${props.code}`}
+      aria-label={`Thông tin hộ ${props.owner || props.code}`}
       onClick={(event) => event.stopPropagation()}
     >
-      <div ref={headRef} className="pt-sheet-topbar">
+      {/* Phần đầu cố định: Chỉ hiển thị tên nông hộ và nút đóng */}
+      <div ref={headRef} className="pt-sheet-topbar pp-topbar">
+        <div className="pp-drag-bar" aria-hidden="true" />
         <header className="pp-head">
-          <div>
-            <div className="pp-kicker" style={{ color: zc.text }}>
-              Thửa {props.code}
-              {featureLabel(feature) ? `, tờ/thửa ${featureLabel(feature)}` : ""}
-            </div>
-            <h3 className="pp-title">{props.owner || `Thửa ${props.code}`}</h3>
-          </div>
+          <h3 className="pp-title">{props.owner || `Thửa ${props.code}`}</h3>
           <button type="button" className="pp-close" onClick={handleClose} aria-label="Đóng">
             <CloseCircleIcon size={28} strokeWidth={2.2} />
           </button>
         </header>
       </div>
 
-      <div className="pp-badges">
-        <span
-          className="badge"
-          style={{
-            color: zc.text,
-            fontWeight: 700,
-            fontFamily: "var(--font-num-stack)",
-            fontVariantNumeric: "tabular-nums",
-            letterSpacing: "0.01em",
-          }}
-        >
-          {props.zone || zc.zoneCode}
-        </span>
-        <span className={`badge ${STATUS_BADGE[props.status]}`}>{STATUS_LABELS[props.status]}</span>
-        <span className={`badge ${SOURCE_BADGE[props.source]}`}>{SOURCE_LABELS[props.source]}</span>
-      </div>
-
-      <div className="pp-areas">
-        <div>
-          <span>Diện tích hồ sơ</span>
-          <strong>{formatHa(props.areaHa)}</strong>
-          <small className="pp-area-sub">{formatAreaSqm(props.areaHa)}</small>
-        </div>
-        <div>
-          <span>Diện tích bản đồ</span>
-          <strong>{formatHa(mapAreaHa)}</strong>
-          <small className="pp-area-sub">{formatAreaSqm(mapAreaHa)}</small>
-        </div>
-      </div>
-
-      <dl className="pp-facts">
-        {facts.map((fact) => (
-          <div key={fact.label} className={fact.wide ? "wide" : undefined}>
-            <dt>{fact.label}</dt>
-            <dd
-              style={
-                fact.isZone
-                  ? {
-                      color: zc.text,
-                      fontWeight: 700,
-                      fontFamily: "var(--font-num-stack)",
-                      fontVariantNumeric: "tabular-nums",
-                      letterSpacing: "0.01em",
-                    }
-                  : undefined
-              }
-            >
-              {fact.value}
-            </dd>
+      {/* Thân cuộn chia thành các khu vực riêng biệt */}
+      <div className="pp-body">
+        {/* Khu vực 1: Diện tích */}
+        <div className="pp-section">
+          <div className="pp-sec-head">Diện tích đo đạc</div>
+          <div className="pp-areas">
+            <div>
+              <span>Diện tích hồ sơ</span>
+              <strong>{formatHa(props.areaHa)}</strong>
+              <small className="pp-area-sub">{formatAreaSqm(props.areaHa)}</small>
+            </div>
+            <div>
+              <span>Diện tích bản đồ</span>
+              <strong>{formatHa(mapAreaHa)}</strong>
+              <small className="pp-area-sub">{formatAreaSqm(mapAreaHa)}</small>
+            </div>
           </div>
-        ))}
-      </dl>
-
-      {overlaps.length > 0 ? (
-        <div className="pp-overlap danger">
-          <strong>Chồng lấn với {overlaps.length} thửa</strong>
-          <p>{overlaps.map((overlap) => `${overlap.code} (${formatHa(overlap.areaHa)})`).join(", ")}</p>
         </div>
-      ) : (
-        <div className="pp-overlap ok">
-          <strong>Không phát hiện chồng lấn</strong>
-          <p>Ranh giới thửa không giao cắt với các thửa đất khác trong hệ thống.</p>
+
+        {/* Khu vực 2: Định danh vùng trồng */}
+        <div className="pp-section">
+          <div className="pp-sec-head">Định danh vùng trồng</div>
+          <dl className="pp-grid">
+            <div className="pp-cell">
+              <dt>Mã thửa</dt>
+              <dd className="pp-code-val">{props.code || "-"}</dd>
+            </div>
+            <div className="pp-cell">
+              <dt>Trạng thái</dt>
+              <dd className={`pp-status-val ${STATUS_TONE_CLASS[props.status]}`}>
+                {STATUS_LABELS[props.status]}
+              </dd>
+            </div>
+            <div className="pp-cell is-wide">
+              <dt>Mã vùng trồng</dt>
+              <dd className="pp-zone-val" style={{ color: zc.text }}>
+                {props.zone || zc.zoneCode || "-"}
+              </dd>
+            </div>
+            <div className="pp-cell">
+              <dt>Khu vực</dt>
+              <dd>{props.village || "-"}</dd>
+            </div>
+            <div className="pp-cell">
+              <dt>Nguồn dữ liệu</dt>
+              <dd>{SOURCE_LABELS[props.source]}</dd>
+            </div>
+          </dl>
         </div>
-      )}
 
-      <p className="pp-privacy">
-        Số điện thoại, CCCD và tài liệu định danh cá nhân được bảo mật khỏi cửa sổ tra cứu nhanh.
-      </p>
+        {/* Khu vực 3: Địa chính và canh tác */}
+        <div className="pp-section">
+          <div className="pp-sec-head">Địa chính và canh tác</div>
+          <dl className="pp-grid">
+            <div className="pp-cell">
+              <dt>Tờ và số thửa</dt>
+              <dd>{sheetParcelValue}</dd>
+            </div>
+            <div className="pp-cell">
+              <dt>Số đỉnh ranh giới</dt>
+              <dd>{vertexCount} đỉnh</dd>
+            </div>
+            <div className="pp-cell is-wide">
+              <dt>Giống cây trồng</dt>
+              <dd>
+                {props.variety || "-"}
+                {props.year ? ` (Trồng năm ${props.year})` : ""}
+              </dd>
+            </div>
+            <div className="pp-cell is-wide">
+              <dt>Tọa độ tâm GPS</dt>
+              <dd>{formatCoords(center?.lat, center?.lng)}</dd>
+            </div>
+          </dl>
+        </div>
 
+        {/* Khu vực 4: Kiểm tra ranh giới */}
+        <div className="pp-section">
+          <div className="pp-sec-head">Kiểm tra ranh giới</div>
+          {overlaps.length > 0 ? (
+            <div className="pp-overlap danger">
+              <strong>Chồng lấn với {overlaps.length} thửa</strong>
+              <p>
+                {overlaps.map((overlap) => `${overlap.code} (${formatHa(overlap.areaHa)})`).join(", ")}
+              </p>
+            </div>
+          ) : (
+            <div className="pp-overlap ok">
+              <strong>Không phát hiện chồng lấn</strong>
+              <p>Ranh giới thửa không giao cắt với các thửa đất khác trong hệ thống.</p>
+            </div>
+          )}
+        </div>
+
+        <p className="pp-privacy">
+          Số điện thoại, CCCD và tài liệu định danh cá nhân được bảo mật khỏi cửa sổ tra cứu nhanh.
+        </p>
+      </div>
+
+      {/* Thanh nút hành động cố định dưới cùng */}
       <div className="pp-actions">
         {onRedrawShape && (
           <button

@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { preconnectMapTileOrigins, warmSatelliteTilesAt } from "@/components/map/map-layers";
 import { QrCode } from "@/components/ui/PublicIcon";
 import { usePortal } from "@/hooks/use-portal";
 import { lazyChunk } from "@/lib/lazy-chunk";
@@ -16,6 +17,19 @@ export default function PlotsTab() {
   const overview = usePortal<PortalOverview>("overview");
   const [signboardPlot, setSignboardPlot] = useState<PortalPlot | null>(null);
   const [mapViewPlot, setMapViewPlot] = useState<PortalPlot | null>(null);
+
+  useEffect(() => {
+    if (!plots.data?.available || plots.data.data.length === 0) return;
+    preconnectMapTileOrigins();
+    const first = plots.data.data[0];
+    const timer = window.setTimeout(() => {
+      void import("./PlotMapModal");
+      if (first) {
+        warmSatelliteTilesAt(first.lat ?? 13.125, first.lng ?? 108.185, 18);
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [plots.data]);
 
   return (
     <div className="pt-stack">
@@ -66,6 +80,12 @@ export default function PlotsTab() {
                   role="button"
                   tabIndex={0}
                   className="pt-plot-card pt-plot-reminder-card"
+                  onPointerEnter={() => {
+                    if (plot.lat && plot.lng) warmSatelliteTilesAt(plot.lat, plot.lng, 18);
+                  }}
+                  onTouchStart={() => {
+                    if (plot.lat && plot.lng) warmSatelliteTilesAt(plot.lat, plot.lng, 18);
+                  }}
                   onClick={() => setMapViewPlot(plot)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {

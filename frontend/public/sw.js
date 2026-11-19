@@ -9,7 +9,9 @@
 
 const STATIC_CACHE = "puc-static-v1";
 const SHELL_CACHE = "puc-portal-shell-v1";
+const TILE_CACHE = "puc-map-tiles-v1";
 const MAX_STATIC_ENTRIES = 180;
+const MAX_TILE_ENTRIES = 600;
 const NAV_TIMEOUT_MS = 3500;
 let shellPurgeEpoch = 0;
 
@@ -39,7 +41,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => k !== STATIC_CACHE && k !== SHELL_CACHE)
+            .filter((k) => k !== STATIC_CACHE && k !== SHELL_CACHE && k !== TILE_CACHE)
             .map((k) => caches.delete(k)),
         ),
       )
@@ -79,6 +81,20 @@ function isPortalNavigation(request, url) {
   return url.pathname === "/portal" || url.pathname === "/portal/";
 }
 
+function isMapTileUrl(url) {
+  if (/^mt[0-3]\.google\.com$/.test(url.hostname) && url.pathname.startsWith("/vt/")) {
+    return true;
+  }
+  if (
+    url.hostname === "server.arcgisonline.com" &&
+    url.pathname.startsWith("/ArcGIS/rest/services/Canvas/") &&
+    url.pathname.includes("/tile/")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -87,6 +103,27 @@ self.addEventListener("fetch", (event) => {
   try {
     url = new URL(request.url);
   } catch {
+    return;
+  }
+
+  if (isMapTileUrl(url)) {
+    event.respondWith(
+      caches.open(TILE_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        const response = await fetch(request);
+        if (
+          response &&
+          response.status === 200 &&
+          (response.type === "cors" || response.type === "basic")
+        ) {
+          cache
+            .put(request, response.clone())
+            .then(() => trimCache(TILE_CACHE, MAX_TILE_ENTRIES));
+        }
+        return response;
+      }),
+    );
     return;
   }
 

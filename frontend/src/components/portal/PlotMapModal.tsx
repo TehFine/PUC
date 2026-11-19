@@ -14,9 +14,13 @@ import {
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { renderCadastralDimensions } from "@/components/map/map-helpers";
 import {
+  attachSmoothMapZoom,
+  createCrispCanvasRenderer,
   createGoogleSatelliteLayer,
   createGoogleStreetsLayer,
   MAX_MAP_ZOOM,
+  preconnectMapTileOrigins,
+  type SmoothMapZoomHandle,
 } from "@/components/map/map-layers";
 import { isLowEndDevice } from "@/lib/network";
 import type { PortalPlot } from "@/types/portal";
@@ -33,6 +37,8 @@ interface Props {
 }
 
 type LayerMode = "satellite" | "streets";
+
+const leafletModulePromise = typeof window !== "undefined" ? import("leaflet") : null;
 
 const SOURCE_LABEL = {
   declared: "Tự khai báo",
@@ -129,7 +135,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     };
   }, []);
 
-  // Đóng modal êm ái với animation mượt mà (smooth graceful exit)
+  // Đóng modal êm ái với animation thu gọn đồng bộ (260ms)
   const handleRequestClose = useCallback(() => {
     if (isClosing) return;
     if (dragRafRef.current !== null) {
@@ -140,7 +146,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     setIsClosing(true);
     setTimeout(() => {
       onClose();
-    }, 320);
+    }, 260);
   }, [isClosing, onClose]);
 
   const startTouch = (source: "topbar" | "popup", e: React.TouchEvent) => {
@@ -331,10 +337,15 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     let disposed = false;
     let ro: ResizeObserver | null = null;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    let dimTimer: ReturnType<typeof setTimeout> | null = null;
+    let readyRaf: number | null = null;
+    let smoothZoom: SmoothMapZoomHandle | null = null;
+
+    preconnectMapTileOrigins();
 
     const init = async () => {
       try {
-        const imported = (await import("leaflet")) as unknown as {
+        const imported = (await (leafletModulePromise ?? import("leaflet"))) as unknown as {
           default?: typeof import("leaflet");
         };
         const L = imported.default ?? (imported as unknown as typeof import("leaflet"));
@@ -356,11 +367,17 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           attributionControl: false,
           minZoom: 10,
           maxZoom: MAX_MAP_ZOOM,
-          zoomSnap: lowEnd ? 0.5 : 0.25,
-          zoomDelta: lowEnd ? 1 : 0.5,
-          wheelPxPerZoomLevel: lowEnd ? 60 : 90,
-          fadeAnimation: !lowEnd,
+          zoomSnap: 0,
+          zoomDelta: 0.75,
+          scrollWheelZoom: false,
+          fadeAnimation: true,
+          zoomAnimation: true,
+          zoomAnimationThreshold: 10,
+          inertia: true,
+          inertiaDeceleration: 2800,
+          inertiaMaxSpeed: 2400,
           preferCanvas: true,
+          renderer: createCrispCanvasRenderer(L, 0.25),
         }).setView([lat, lng], 17.5);
 
         if (disposed) {
@@ -369,6 +386,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         }
 
         mapRef.current = map;
+        smoothZoom = attachSmoothMapZoom(L, map);
         L.control.scale({ imperial: false, metric: true, position: "bottomleft" }).addTo(map);
 
         // 1. Lớp vệ tinh Hybrid siêu nét (native Z21 tại Krông Búk, rõ từng tán cây sầu riêng & tên thôn/đường)
@@ -418,6 +436,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
             );
 
             const syncDimensions = () => {
+              if (disposed) return;
               const z = map.getZoom();
               poly.setStyle({
                 fillOpacity: z >= 18 ? 0.14 : 0.24,
@@ -430,6 +449,20 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               }
             };
 
+            const scheduleDimensions = () => {
+              if (dimTimer) clearTimeout(dimTimer);
+              dimTimer = setTimeout(() => {
+                dimTimer = null;
+                syncDimensions();
+              }, 110);
+            };
+            const cancelDimensions = () => {
+              if (dimTimer) {
+                clearTimeout(dimTimer);
+                dimTimer = null;
+              }
+            };
+
             const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
             map.fitBounds(poly.getBounds(), {
               paddingTopLeft: [isMobile ? 70 : 60, 20],
@@ -437,7 +470,8 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               maxZoom: 19,
             });
             syncDimensions();
-            map.on("zoomend", syncDimensions);
+            map.on("zoomstart", cancelDimensions);
+            map.on("zoomend", scheduleDimensions);
           } catch {
             // Bỏ qua lỗi json
           }
@@ -489,12 +523,13 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           ro.observe(containerRef.current);
         }
 
-        setTimeout(() => {
+        readyRaf = window.requestAnimationFrame(() => {
+          readyRaf = null;
           if (!disposed && mapRef.current) {
             mapRef.current.invalidateSize({ pan: false });
             setReady(true);
           }
-        }, 100);
+        });
       } catch (err) {
         console.error("PlotMapModal init error:", err);
         setReady(true);
@@ -505,7 +540,10 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
     return () => {
       disposed = true;
+      if (readyRaf !== null) window.cancelAnimationFrame(readyRaf);
       if (resizeTimer) clearTimeout(resizeTimer);
+      if (dimTimer) clearTimeout(dimTimer);
+      smoothZoom?.destroy();
       ro?.disconnect();
       if (mapRef.current) {
         mapRef.current.remove();
@@ -569,7 +607,10 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       aria-label={`Bản đồ thửa đất ${plot.code}`}
       style={{
         opacity: isClosing ? 0 : undefined,
-        transition: isClosing ? "opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1)" : undefined,
+        transform: isClosing ? "scale(0.97)" : undefined,
+        transition: isClosing
+          ? "transform 260ms cubic-bezier(0.32, 0.72, 0, 1), opacity 245ms ease-out"
+          : undefined,
       }}
     >
       {/* 1. TOÀN CẢNH BẢN ĐỒ TRÀN VIỀN (100% VIEWPORT) */}

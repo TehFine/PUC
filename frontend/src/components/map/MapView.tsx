@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
+import { animatePopupExit } from "@/lib/popup-motion";
 import {
   ADMIN_EDIT_PLOT_EVENT,
   consumePendingEditPlotCode,
@@ -44,7 +45,17 @@ import {
   previewFromLatLngs,
   renderCadastralDimensions,
 } from "./map-helpers";
-import { createBaseLayers, MAP_CENTER, MAX_MAP_ZOOM, type BaseLayers } from "./map-layers";
+import {
+  attachSmoothMapZoom,
+  createBaseLayers,
+  createCrispCanvasRenderer,
+  MAP_CENTER,
+  MAX_MAP_ZOOM,
+  preconnectMapTileOrigins,
+  warmSatelliteTilesAt,
+  type BaseLayers,
+  type SmoothMapZoomHandle,
+} from "./map-layers";
 import type {
   BaseLayer,
   ComparisonState,
@@ -79,6 +90,7 @@ interface MapViewProps {
 }
 
 const MAX_HISTORY_STEPS = 80;
+const leafletModulePromise = typeof window !== "undefined" ? import("leaflet") : null;
 
 function extractOpenRingLatLngs(L: typeof import("leaflet"), feature: PlotFeature): Leaflet.LatLng[] {
   const ring = feature.geometry.coordinates[0] ?? [];
@@ -208,7 +220,8 @@ export default function MapView({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hoverLatLngRef = useRef<Leaflet.LatLng | null>(null);
   const keyZoomHoldingRef = useRef(false);
-  const defaultZoomSnapRef = useRef(0.25);
+  const defaultZoomSnapRef = useRef(0);
+  const smoothZoomRef = useRef<SmoothMapZoomHandle | null>(null);
 
   const [ready, setReady] = useState(false);
   const [mode, setMode] = useState<Mode>("idle");
@@ -1033,6 +1046,10 @@ export default function MapView({
         });
         return;
       }
+      const firstPt = feature.geometry.coordinates[0]?.[0];
+      if (firstPt && firstPt.length >= 2) {
+        warmSatelliteTilesAt(firstPt[1], firstPt[0], 18);
+      }
       setSelectedCode(feature.properties.code);
       setMessage(null);
     },
@@ -1043,23 +1060,25 @@ export default function MapView({
     selectRef.current = handleSelect;
   }, [handleSelect]);
 
-  // Khởi tạo bản đồ Leaflet + bộ lắng nghe vẽ nét cong mượt (chuột & cảm ứng)
+  // Khởi tạo bản đồ Leaflet + bộ điều khiển thu phóng mượt 60-120 FPS
   useEffect(() => {
     let disposed = false;
     let resizeObserver: ResizeObserver | null = null;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    let cleanupFreehand: (() => void) | null = null;
+    let smoothZoom: SmoothMapZoomHandle | null = null;
+
+    preconnectMapTileOrigins();
+    warmSatelliteTilesAt(MAP_CENTER[0], MAP_CENTER[1], 13);
 
     const init = async () => {
-      const imported = (await import("leaflet")) as unknown as {
+      const imported = (await (leafletModulePromise ?? import("leaflet"))) as unknown as {
         default?: typeof import("leaflet");
       };
       const L = imported.default ?? (imported as unknown as typeof import("leaflet"));
       if (disposed || !mapElementRef.current) return;
 
       leafletRef.current = L;
-      const lowEnd = isLowEndDevice();
-      const initialZoomSnap = lowEnd ? 0.5 : 0.25;
+      const initialZoomSnap = 0;
       defaultZoomSnapRef.current = initialZoomSnap;
       const map = L.map(mapElementRef.current, {
         zoomControl: false,
@@ -1067,14 +1086,22 @@ export default function MapView({
         minZoom: 9,
         maxZoom: MAX_MAP_ZOOM,
         zoomSnap: initialZoomSnap,
-        zoomDelta: lowEnd ? 1 : 0.5,
-        wheelPxPerZoomLevel: lowEnd ? 60 : 90,
-        fadeAnimation: !lowEnd,
+        zoomDelta: 0.75,
+        scrollWheelZoom: false,
+        fadeAnimation: true,
+        zoomAnimation: true,
+        zoomAnimationThreshold: 10,
+        inertia: true,
+        inertiaDeceleration: 2800,
+        inertiaMaxSpeed: 2400,
         preferCanvas: true,
+        renderer: createCrispCanvasRenderer(L, 0.25),
         doubleClickZoom: false,
       }).setView(MAP_CENTER, 13);
 
       mapRef.current = map;
+      smoothZoom = attachSmoothMapZoom(L, map);
+      smoothZoomRef.current = smoothZoom;
       L.control.scale({ imperial: false, metric: true, position: "bottomleft" }).addTo(map);
       const layers = createBaseLayers(L);
       baseLayersRef.current = layers;
@@ -1087,7 +1114,8 @@ export default function MapView({
 
       const refreshActiveOverlay = () => {
         if (keyZoomHoldingRef.current) return;
-        setZoomLevel(map.getZoom());
+        const roundedZoom = Math.round(map.getZoom() * 10) / 10;
+        setZoomLevel((prev) => (Math.abs(prev - roundedZoom) >= 0.1 ? roundedZoom : prev));
         if (modeRef.current !== "idle" && verticesRef.current.length > 0) {
           redrawDraftRef.current(verticesRef.current);
         } else if (draftRef.current && draftVerticesRef.current.length > 0) {
@@ -1128,191 +1156,22 @@ export default function MapView({
         }
       });
 
-      // Hỗ trợ vẽ nét tự do (ôm sát đường cong suối, bờ lô uốn lượn) trên cả chuột và màn hình cảm ứng
-      const container = map.getContainer();
-      let strokeActive = false;
-      let strokePoints: Leaflet.LatLng[] = [];
-      let lastPx: Leaflet.Point | null = null;
-      let startPx: Leaflet.Point | null = null;
-      let tempStrokeLine: Leaflet.Polyline | null = null;
-
-      const cancelStroke = () => {
-        strokeActive = false;
-        strokePoints = [];
-        lastPx = null;
-        startPx = null;
-        if (tempStrokeLine) {
-          tempStrokeLine.remove();
-          tempStrokeLine = null;
-        }
-      };
-
-      const getClientPoint = (clientX: number, clientY: number): Leaflet.Point => {
-        const rect = container.getBoundingClientRect();
-        return L.point(clientX - rect.left, clientY - rect.top);
-      };
-
-      const beginStroke = (clientX: number, clientY: number, target: EventTarget | null) => {
-        if (modeRef.current === "idle" || drawStyleRef.current !== "freehand") return false;
-        const el = target as HTMLElement | null;
-        if (el?.closest(".leaflet-marker-icon, .leaflet-control")) return false;
-        const group = draftGroupRef.current;
-        if (!group) return false;
-
-        const pt = getClientPoint(clientX, clientY);
-        const latlng = map.containerPointToLatLng(pt);
-        strokeActive = true;
-        startPx = pt;
-        lastPx = pt;
-        strokePoints = [latlng];
-        tempStrokeLine = L.polyline([[latlng.lat, latlng.lng]], {
-          color: "#fef08a",
-          weight: 2.8,
-          opacity: 0.96,
-          interactive: false,
-        }).addTo(group);
-        return true;
-      };
-
-      const moveStroke = (clientX: number, clientY: number) => {
-        if (!strokeActive || !lastPx || !tempStrokeLine) return;
-        const pt = getClientPoint(clientX, clientY);
-        if (pt.distanceTo(lastPx) < 4) return;
-        const latlng = map.containerPointToLatLng(pt);
-        const prevLatLng = strokePoints[strokePoints.length - 1];
-        if (prevLatLng && wgs84DistanceMeters(prevLatLng.lat, prevLatLng.lng, latlng.lat, latlng.lng) < 0.45) {
-          return;
-        }
-        lastPx = pt;
-        strokePoints.push(latlng);
-        tempStrokeLine.addLatLng(latlng);
-      };
-
-      const finishStroke = (clientX?: number, clientY?: number) => {
-        if (!strokeActive) return;
-        const rawStroke = [...strokePoints];
-        const originPx = startPx;
-        const endPx =
-          clientX !== undefined && clientY !== undefined ? getClientPoint(clientX, clientY) : lastPx;
-        cancelStroke();
-
-        if (rawStroke.length === 0) return;
-
-        // Nếu chỉ chạm nhẹ tại một điểm (< 6px) thì thêm 1 đỉnh đơn lẻ
-        if (rawStroke.length < 2 || (originPx && endPx && originPx.distanceTo(endPx) < 6)) {
-          addVertexRef.current(rawStroke[0]);
-          return;
-        }
-
-        let simplified = simplifyTrackPoints(rawStroke, 0.35);
-        if (simplified.length < 2) {
-          addVertexRef.current(rawStroke[0]);
-          return;
-        }
-
-        const existing = verticesRef.current;
-        pushHistorySnapshot(existing);
-
-        if (modeRef.current === "edit" && existing.length >= 3) {
-          const merged = spliceCurveIntoClosedRing(existing, simplified);
-          verticesRef.current = merged;
-          syncSelectedVertex(null);
-          redrawDraftRef.current(merged);
-          setPreview(previewFromLatLngs(merged));
-          setMessage(null);
-          return;
-        }
-
-        // Nếu đang vẽ mới từ đầu trong 1 nét khép kín, tự cắt bỏ điểm đuôi trùng chéo lên điểm đầu
-        if (existing.length === 0 && simplified.length >= 5) {
-          const firstPx = map.latLngToContainerPoint(simplified[0]);
-          const tailPx = map.latLngToContainerPoint(simplified[simplified.length - 1]);
-          if (firstPx.distanceTo(tailPx) <= 18) {
-            simplified = simplified.slice(0, -1);
-          }
-        } else if (existing.length > 0) {
-          const lastExisting = existing[existing.length - 1];
-          if (
-            wgs84DistanceMeters(lastExisting.lat, lastExisting.lng, simplified[0].lat, simplified[0].lng) <
-            0.8
-          ) {
-            simplified = simplified.slice(1);
-          }
-        }
-
-        const combined = cleanLatLngPoints([...existing, ...simplified]);
-        verticesRef.current = combined;
-        syncSelectedVertex(combined.length > 0 ? combined.length - 1 : null);
-        redrawDraftRef.current(combined);
-        setPreview(previewFromLatLngs(combined));
-        setMessage(null);
-      };
-
-      const onMouseDown = (ev: MouseEvent) => {
-        if (ev.button !== 0) return;
-        if (beginStroke(ev.clientX, ev.clientY, ev.target)) {
-          ev.preventDefault();
-        }
-      };
-      const onMouseMove = (ev: MouseEvent) => {
-        if (!strokeActive) return;
-        ev.preventDefault();
-        moveStroke(ev.clientX, ev.clientY);
-      };
-      const onMouseUp = (ev: MouseEvent) => {
-        if (!strokeActive) return;
-        finishStroke(ev.clientX, ev.clientY);
-      };
-
-      const onTouchStart = (ev: TouchEvent) => {
-        if (ev.touches.length > 1) {
-          cancelStroke();
-          return;
-        }
-        const touch = ev.touches[0];
-        if (!touch) return;
-        if (beginStroke(touch.clientX, touch.clientY, ev.target) && ev.cancelable) {
-          ev.preventDefault();
-        }
-      };
-      const onTouchMove = (ev: TouchEvent) => {
-        if (ev.touches.length > 1) {
-          cancelStroke();
-          return;
-        }
-        if (!strokeActive) return;
-        const touch = ev.touches[0];
-        if (!touch) return;
-        if (ev.cancelable) ev.preventDefault();
-        moveStroke(touch.clientX, touch.clientY);
-      };
-      const onTouchEnd = (ev: TouchEvent) => {
-        if (!strokeActive) return;
-        const touch = ev.changedTouches[0];
-        finishStroke(touch?.clientX, touch?.clientY);
-      };
-
-      container.addEventListener("mousedown", onMouseDown);
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-      container.addEventListener("touchstart", onTouchStart, { passive: false });
-      container.addEventListener("touchmove", onTouchMove, { passive: false });
-      window.addEventListener("touchend", onTouchEnd);
-
-      cleanupFreehand = () => {
-        container.removeEventListener("mousedown", onMouseDown);
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
-        container.removeEventListener("touchstart", onTouchStart);
-        container.removeEventListener("touchmove", onTouchMove);
-        window.removeEventListener("touchend", onTouchEnd);
-      };
-
-      resizeObserver = new ResizeObserver(() => {
+      let lastW = mapElementRef.current.clientWidth;
+      let lastH = mapElementRef.current.clientHeight;
+      resizeObserver = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        const { width, height } = entry.contentRect;
+        if (Math.abs(width - lastW) < 2 && Math.abs(height - lastH) < 2) return;
+        lastW = width;
+        lastH = height;
         if (resizeTimer) clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
-          if (!disposed && mapRef.current) mapRef.current.invalidateSize({ pan: false });
-        }, 120);
+          const activeMap = mapRef.current;
+          if (!disposed && activeMap && !activeMap.getContainer().classList.contains("is-map-zooming")) {
+            activeMap.invalidateSize({ pan: false, animate: false });
+          }
+        }, 140);
       });
       resizeObserver.observe(mapElementRef.current);
       setReady(true);
@@ -1323,7 +1182,8 @@ export default function MapView({
     return () => {
       disposed = true;
       if (resizeTimer) clearTimeout(resizeTimer);
-      cleanupFreehand?.();
+      smoothZoom?.destroy();
+      smoothZoomRef.current = null;
       resizeObserver?.disconnect();
       if (mapRef.current) {
         mapRef.current.remove();
@@ -1335,7 +1195,193 @@ export default function MapView({
       compareGroupRef.current = null;
       setReady(false);
     };
-  }, [pushHistorySnapshot, syncSelectedVertex]);
+  }, []);
+
+  // Chỉ gắn bộ lắng nghe cảm ứng non-passive khi ĐANG BẬT chế độ vẽ nét cong tự do,
+  // giữ cho cử chỉ chụm 2 ngón thu phóng ở chế độ xem chạy thẳng trên luồng GPU không bị chặn.
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    if (!ready || !L || !map || mode === "idle" || drawStyle !== "freehand") return;
+
+    const container = map.getContainer();
+    let strokeActive = false;
+    let strokePoints: Leaflet.LatLng[] = [];
+    let lastPx: Leaflet.Point | null = null;
+    let startPx: Leaflet.Point | null = null;
+    let tempStrokeLine: Leaflet.Polyline | null = null;
+
+    const cancelStroke = () => {
+      strokeActive = false;
+      strokePoints = [];
+      lastPx = null;
+      startPx = null;
+      if (tempStrokeLine) {
+        tempStrokeLine.remove();
+        tempStrokeLine = null;
+      }
+    };
+
+    const getClientPoint = (clientX: number, clientY: number): Leaflet.Point => {
+      const rect = container.getBoundingClientRect();
+      return L.point(clientX - rect.left, clientY - rect.top);
+    };
+
+    const beginStroke = (clientX: number, clientY: number, target: EventTarget | null) => {
+      if (modeRef.current === "idle" || drawStyleRef.current !== "freehand") return false;
+      const el = target as HTMLElement | null;
+      if (el?.closest(".leaflet-marker-icon, .leaflet-control")) return false;
+      const group = draftGroupRef.current;
+      if (!group) return false;
+
+      const pt = getClientPoint(clientX, clientY);
+      const latlng = map.containerPointToLatLng(pt);
+      strokeActive = true;
+      startPx = pt;
+      lastPx = pt;
+      strokePoints = [latlng];
+      tempStrokeLine = L.polyline([[latlng.lat, latlng.lng]], {
+        color: "#fef08a",
+        weight: 2.8,
+        opacity: 0.96,
+        interactive: false,
+      }).addTo(group);
+      return true;
+    };
+
+    const moveStroke = (clientX: number, clientY: number) => {
+      if (!strokeActive || !lastPx || !tempStrokeLine) return;
+      const pt = getClientPoint(clientX, clientY);
+      if (pt.distanceTo(lastPx) < 4) return;
+      const latlng = map.containerPointToLatLng(pt);
+      const prevLatLng = strokePoints[strokePoints.length - 1];
+      if (prevLatLng && wgs84DistanceMeters(prevLatLng.lat, prevLatLng.lng, latlng.lat, latlng.lng) < 0.45) {
+        return;
+      }
+      lastPx = pt;
+      strokePoints.push(latlng);
+      tempStrokeLine.addLatLng(latlng);
+    };
+
+    const finishStroke = (clientX?: number, clientY?: number) => {
+      if (!strokeActive) return;
+      const rawStroke = [...strokePoints];
+      const originPx = startPx;
+      const endPx =
+        clientX !== undefined && clientY !== undefined ? getClientPoint(clientX, clientY) : lastPx;
+      cancelStroke();
+
+      if (rawStroke.length === 0) return;
+
+      if (rawStroke.length < 2 || (originPx && endPx && originPx.distanceTo(endPx) < 6)) {
+        addVertexRef.current(rawStroke[0]);
+        return;
+      }
+
+      let simplified = simplifyTrackPoints(rawStroke, 0.35);
+      if (simplified.length < 2) {
+        addVertexRef.current(rawStroke[0]);
+        return;
+      }
+
+      const existing = verticesRef.current;
+      pushHistorySnapshot(existing);
+
+      if (modeRef.current === "edit" && existing.length >= 3) {
+        const merged = spliceCurveIntoClosedRing(existing, simplified);
+        verticesRef.current = merged;
+        syncSelectedVertex(null);
+        redrawDraftRef.current(merged);
+        setPreview(previewFromLatLngs(merged));
+        setMessage(null);
+        return;
+      }
+
+      if (existing.length === 0 && simplified.length >= 5) {
+        const firstPx = map.latLngToContainerPoint(simplified[0]);
+        const tailPx = map.latLngToContainerPoint(simplified[simplified.length - 1]);
+        if (firstPx.distanceTo(tailPx) <= 18) {
+          simplified = simplified.slice(0, -1);
+        }
+      } else if (existing.length > 0) {
+        const lastExisting = existing[existing.length - 1];
+        if (
+          wgs84DistanceMeters(lastExisting.lat, lastExisting.lng, simplified[0].lat, simplified[0].lng) <
+          0.8
+        ) {
+          simplified = simplified.slice(1);
+        }
+      }
+
+      const combined = cleanLatLngPoints([...existing, ...simplified]);
+      verticesRef.current = combined;
+      syncSelectedVertex(combined.length > 0 ? combined.length - 1 : null);
+      redrawDraftRef.current(combined);
+      setPreview(previewFromLatLngs(combined));
+      setMessage(null);
+    };
+
+    const onMouseDown = (ev: MouseEvent) => {
+      if (ev.button !== 0) return;
+      if (beginStroke(ev.clientX, ev.clientY, ev.target)) {
+        ev.preventDefault();
+      }
+    };
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!strokeActive) return;
+      ev.preventDefault();
+      moveStroke(ev.clientX, ev.clientY);
+    };
+    const onMouseUp = (ev: MouseEvent) => {
+      if (!strokeActive) return;
+      finishStroke(ev.clientX, ev.clientY);
+    };
+
+    const onTouchStart = (ev: TouchEvent) => {
+      if (ev.touches.length > 1) {
+        cancelStroke();
+        return;
+      }
+      const touch = ev.touches[0];
+      if (!touch) return;
+      if (beginStroke(touch.clientX, touch.clientY, ev.target) && ev.cancelable) {
+        ev.preventDefault();
+      }
+    };
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length > 1) {
+        cancelStroke();
+        return;
+      }
+      if (!strokeActive) return;
+      const touch = ev.touches[0];
+      if (!touch) return;
+      if (ev.cancelable) ev.preventDefault();
+      moveStroke(touch.clientX, touch.clientY);
+    };
+    const onTouchEnd = (ev: TouchEvent) => {
+      if (!strokeActive) return;
+      const touch = ev.changedTouches[0];
+      finishStroke(touch?.clientX, touch?.clientY);
+    };
+
+    container.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    container.addEventListener("touchstart", onTouchStart, { passive: false });
+    container.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      cancelStroke();
+      container.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [ready, mode, drawStyle, pushHistorySnapshot, syncSelectedVertex]);
 
   // Phím tắt thao tác nhanh trên máy tính khi đang vẽ / chỉnh sửa thửa đất (F1 phóng to, F2 thu nhỏ, F3 hoàn tác)
   useEffect(() => {
@@ -1533,14 +1579,20 @@ export default function MapView({
   useEffect(() => {
     const L = leafletRef.current;
     const dimGroup = dimensionGroupRef.current;
-    const map = mapRef.current;
     if (!ready || !L || !dimGroup) return;
 
-    dimGroup.clearLayers();
     if (mode !== "idle" || draft || comparison || !selectedFeature || zoomLevel < 17) {
+      dimGroup.clearLayers();
       return;
     }
-    renderCadastralDimensions(L, dimGroup, selectedFeature.geometry, isLowEndDevice(), map);
+
+    const timer = window.setTimeout(() => {
+      if (!mapRef.current || !dimensionGroupRef.current) return;
+      dimensionGroupRef.current.clearLayers();
+      renderCadastralDimensions(L, dimensionGroupRef.current, selectedFeature.geometry, isLowEndDevice(), mapRef.current);
+    }, 110);
+
+    return () => window.clearTimeout(timer);
   }, [ready, selectedFeature, mode, draft, comparison, zoomLevel]);
 
   useEffect(() => {
@@ -1819,8 +1871,14 @@ export default function MapView({
     setSelectedCode(null);
   }, [cancelDraft]);
 
-  const zoomIn = () => mapRef.current?.zoomIn(1);
-  const zoomOut = () => mapRef.current?.zoomOut(1);
+  const zoomIn = () => {
+    if (smoothZoomRef.current) smoothZoomRef.current.zoomBy(0.85);
+    else mapRef.current?.zoomIn(0.85);
+  };
+  const zoomOut = () => {
+    if (smoothZoomRef.current) smoothZoomRef.current.zoomBy(-0.85);
+    else mapRef.current?.zoomOut(0.85);
+  };
 
   const focusSelectedPlot = useCallback(() => {
     const L = leafletRef.current;
@@ -1961,17 +2019,18 @@ export default function MapView({
   const handleDismissPanel = useCallback(() => {
     const el = panelRef.current;
     if (el) {
-      el.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms ease";
-      el.style.transform = "translate3d(0, 105%, 0)";
-      el.style.opacity = "0";
-      setTimeout(() => {
+      const isMobileSheet = typeof window !== "undefined" && window.innerWidth <= 900;
+      const closeDuration = animatePopupExit(el, null, isMobileSheet ? "sheet" : "floating-card");
+      window.setTimeout(() => {
         closePanel();
         if (panelRef.current) {
-          panelRef.current.style.transition = "";
-          panelRef.current.style.transform = "";
-          panelRef.current.style.opacity = "";
+          panelRef.current.style.removeProperty("animation");
+          panelRef.current.style.removeProperty("transition");
+          panelRef.current.style.removeProperty("transform");
+          panelRef.current.style.removeProperty("opacity");
+          panelRef.current.style.removeProperty("pointer-events");
         }
-      }, 220);
+      }, closeDuration);
       return;
     }
     closePanel();
