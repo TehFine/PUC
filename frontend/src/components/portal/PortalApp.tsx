@@ -48,6 +48,7 @@ import {
   readWorkspaceUrl,
   replaceUrlPreservingState,
   saveWorkspaceUrl,
+  usePersistedState,
 } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
 import { resolveValidPortalRoute } from "@/lib/route-validation";
@@ -323,15 +324,15 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       ? resolveValidPortalRoute(new URLSearchParams(window.location.search)) === null
       : false,
   );
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = usePersistedState("portal:profile-open", false);
   const isDesktopDrawer = useIsDesktopViewport(760);
-  const [supportOpen, setSupportOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = usePersistedState("portal:support-open", false);
+  const [searchOpen, setSearchOpen] = usePersistedState("portal:search-open", false);
   const pendingSearchTargetRef = useRef<PortalSearchTarget | null>(null);
-  const [navWheelOpen, setNavWheelOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [passwordOpen, setPasswordOpen] = useState(false);
-  const [editAccountOpen, setEditAccountOpen] = useState(false);
+  const [navWheelOpen, setNavWheelOpen] = usePersistedState("portal:nav-open", false);
+  const [notifOpen, setNotifOpen] = usePersistedState("portal:notif-open", false);
+  const [passwordOpen, setPasswordOpen] = usePersistedState("portal:password-open", false);
+  const [editAccountOpen, setEditAccountOpen] = usePersistedState("portal:edit-account-open", false);
   const [accountNameInput, setAccountNameInput] = useState("");
   const [accountEmailInput, setAccountEmailInput] = useState("");
   const [accountPasswordInput, setAccountPasswordInput] = useState("");
@@ -346,7 +347,11 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const [confirmRemoveAvatar, setConfirmRemoveAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
-  const [notifFilter, setNotifFilter] = useState<"unread" | "read">("unread");
+  const [notifFilter, setNotifFilter] = usePersistedState<"unread" | "read">(
+    "portal:notif-filter",
+    "unread",
+    (v): v is "unread" | "read" => v === "unread" || v === "read",
+  );
   const activeUserId = session?.user.id ?? null;
   const [readKeysState, setReadKeysState] = useState<{ userId: number | null; keys: string[] }>(() => ({
     userId: activeUserId,
@@ -397,8 +402,8 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     [activeUserId],
   );
 
-  const openSupport = useCallback(() => setSupportOpen(true), []);
-  const closeSupport = useCallback(() => setSupportOpen(false), []);
+  const openSupport = useCallback(() => setSupportOpen(true), [setSupportOpen]);
+  const closeSupport = useCallback(() => setSupportOpen(false), [setSupportOpen]);
 
   const currentTabItem = useMemo(() => TABS.find((t) => t.id === tab) || TABS[0], [tab]);
 
@@ -508,7 +513,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       });
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     },
-    [buildPortalTabUrl, activeUserId],
+    [buildPortalTabUrl, activeUserId, setNavWheelOpen],
   );
 
   const handleSearchPick = useCallback(
@@ -530,16 +535,16 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       });
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     },
-    [buildPortalTabUrl, activeUserId],
+    [buildPortalTabUrl, activeUserId, setNavWheelOpen, setNotifOpen, setPasswordOpen, setProfileOpen, setSupportOpen],
   );
 
   const closeProfile = useCallback(() => {
     setProfileOpen(false);
-  }, []);
+  }, [setProfileOpen]);
 
   const toggleProfile = useCallback(() => {
     setProfileOpen((prev) => !prev);
-  }, []);
+  }, [setProfileOpen]);
 
   useEffect(() => {
     if (status === "anonymous") {
@@ -931,7 +936,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               aria-expanded={notifOpen}
               aria-haspopup="dialog"
               aria-label={unreadCount > 0 ? `Thông báo (${unreadCount} chưa đọc)` : "Thông báo"}
-              title="Thông báo từ HTX"
+              title="Thông báo"
             >
               <RadialPngIcon src="/bell.png" size={18} />
               {unreadCount > 0 && (
@@ -1319,7 +1324,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       {notifOpen && (
         <Sheet
           variant="drawer"
-          title={t("Thông báo từ HTX")}
+          title={t("Thông báo")}
           onClose={() => setNotifOpen(false)}
           className="pt-notif-sheet"
           footer={
@@ -1349,14 +1354,16 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                 <div className="pt-notif-filter-group">
                   <button
                     type="button"
-                    className={`pt-btn pt-btn-sm ${notifFilter === "unread" ? "pt-btn-primary" : "pt-btn-ghost"}`}
+                    className={`pt-btn pt-btn-sm ${notifFilter === "unread" ? "pt-btn-primary is-active" : "pt-btn-ghost"}`}
+                    aria-pressed={notifFilter === "unread"}
                     onClick={() => setNotifFilter("unread")}
                   >
                     Chưa đọc ({unreadCount})
                   </button>
                   <button
                     type="button"
-                    className={`pt-btn pt-btn-sm ${notifFilter === "read" ? "pt-btn-primary" : "pt-btn-ghost"}`}
+                    className={`pt-btn pt-btn-sm ${notifFilter === "read" ? "pt-btn-primary is-active" : "pt-btn-ghost"}`}
+                    aria-pressed={notifFilter === "read"}
                     onClick={() => setNotifFilter("read")}
                   >
                     Đã đọc ({readCount})

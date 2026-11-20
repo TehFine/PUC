@@ -797,6 +797,38 @@ body {
   box-shadow: var(--shadow-card-sm) !important;
 }
 
+.btn.btn-filter-toggle {
+  background: #ffffff !important;
+  border: 1px solid rgba(20, 55, 47, 0.12) !important;
+  color: #5f6d66 !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.btn.btn-filter-toggle:hover:not(:disabled):not(.is-active) {
+  background: #f8fafc !important;
+  border-color: rgba(20, 55, 47, 0.24) !important;
+  color: #14372f !important;
+  box-shadow: none !important;
+}
+
+.btn.btn-filter-toggle.is-active {
+  background: #14372f !important;
+  border: 1px solid #14372f !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+}
+
+.btn.btn-filter-toggle.is-active:hover:not(:disabled) {
+  background: #0f2c25 !important;
+  border-color: #0f2c25 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
 .btn-sm {
   height: 32px;
   min-height: 32px;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ArrowLeftRight, QrCode, Search } from "@/components/ui/PublicIcon";
+import { QrCode, Search } from "@/components/ui/PublicIcon";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { api, errorMessage } from "@/lib/api-client";
@@ -161,24 +161,24 @@ export default function IncidentTraceModal({
         <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
           <button
             type="button"
-            className={`btn btn-sm ${mode === "plot" ? "btn-primary" : "btn-outline"}`}
+            className={`btn btn-sm btn-filter-toggle ${mode === "plot" ? "is-active" : ""}`}
+            aria-pressed={mode === "plot"}
             onClick={() => {
               setMode("plot");
               setError(null);
             }}
           >
-            <AlertTriangle size={14} />
             <span>Truy xuôi: Thửa nguồn sang Lô bị ảnh hưởng</span>
           </button>
           <button
             type="button"
-            className={`btn btn-sm ${mode === "lot" ? "btn-primary" : "btn-outline"}`}
+            className={`btn btn-sm btn-filter-toggle ${mode === "lot" ? "is-active" : ""}`}
+            aria-pressed={mode === "lot"}
             onClick={() => {
               setMode("lot");
               setError(null);
             }}
           >
-            <ArrowLeftRight size={14} />
             <span>Truy ngược: Lô / Thùng / Token sang Thửa nguồn</span>
           </button>
         </div>

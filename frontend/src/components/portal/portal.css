@@ -1767,9 +1767,9 @@ body.pt-body {
   align-items: center;
   gap: 4px;
   padding: 3px;
-  border-radius: 999px;
-  background: #e5e7eb;
-  border: none;
+  border-radius: 6px;
+  background: #eceef1;
+  border: 1px solid rgba(20, 55, 47, 0.08);
   flex-shrink: 0;
 }
 
@@ -1777,26 +1777,28 @@ body.pt-body {
   border: none;
   outline: none;
   background: transparent;
-  color: #0084ff;
+  color: #5f6d66;
   font-family: var(--font-body-stack);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   padding: 8px 13px;
-  border-radius: 999px;
+  border-radius: 4px;
   cursor: pointer;
   box-shadow: none;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition: background-color 0.16s ease, color 0.16s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
 .pt-lang-seg-btn:hover:not(.is-active) {
-  background: rgba(0, 132, 255, 0.08);
+  background: rgba(20, 55, 47, 0.06);
+  color: #14372f;
 }
 
 .pt-lang-seg-btn.is-active {
-  background: #dfe9f8;
-  color: #0084ff;
+  background: #14372f;
+  color: #ffffff;
+  font-weight: 700;
   box-shadow: none;
 }
 
@@ -2833,7 +2835,135 @@ body.pt-body {
   }
 }
 
-.pt-diary-widget-item .pt-widget-note-icon {
+/* ── Màn hình Nhật ký canh tác: tách nút Ghi nhật ký & gom thẻ theo từng ngày ── */
+.pt-diary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pt-diary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 0 2px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pt-diary-create-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 16px;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0084ff;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.06));
+  box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
+  font-family: var(--font-body-stack);
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.pt-diary-create-btn:hover {
+  background: #f5f7fa;
+  color: #006ee6;
+  border-color: rgba(0, 132, 255, 0.22);
+}
+
+.pt-diary-create-btn:focus-visible {
+  outline: 2px solid #0084ff;
+  outline-offset: 2px;
+}
+
+.pt-diary-day-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.pt-diary-day-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pt-diary-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  padding: 0 4px 7px;
+}
+
+.pt-diary-day-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6e6e73;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-diary-day-card {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pt-diary-day-card > li {
+  position: relative;
+}
+
+.pt-diary-day-card > li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50px;
+  right: 0;
+  height: 1px;
+  background: rgba(60, 60, 67, 0.11);
+  pointer-events: none;
+}
+
+.pt-diary-day-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s ease;
+}
+
+.pt-diary-day-row:hover {
+  background: rgba(60, 60, 67, 0.04);
+}
+
+.pt-diary-day-row:focus-visible {
+  outline: 2px solid var(--green-600);
+  outline-offset: -2px;
+}
+
+.pt-diary-day-row .pt-widget-note-icon {
   width: 20px;
   height: 20px;
   margin-top: 0;
@@ -2841,58 +2971,51 @@ body.pt-body {
 
 @media (hover: hover) and (pointer: fine) {
   html:not([data-perf="lite"]) .pt-widget-item:hover .pt-widget-note-icon,
-  html:not([data-perf="lite"]) .pt-diary-widget-item:hover .pt-widget-note-icon {
+  html:not([data-perf="lite"]) .pt-diary-day-row:hover .pt-widget-note-icon {
     opacity: 1;
   }
 }
 
-.pt-diary-widget-list {
-  gap: 6px;
-}
-
-.pt-diary-widget-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-radius: 6px;
-  border: 1px solid rgba(20, 55, 47, 0.08);
-  background: #ffffff;
-  width: 100%;
-  box-sizing: border-box;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease;
-}
-
-.pt-diary-widget-item:hover {
-  background: rgba(20, 55, 47, 0.025);
-  border-color: rgba(20, 55, 47, 0.18);
-}
-
-.pt-diary-widget-item .pt-widget-item-text {
-  font-size: 14.5px;
-  font-weight: 550;
-  color: var(--ink);
-  line-height: 1.4;
+.pt-diary-item-body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pt-diary-item-title {
+  font-size: 15px;
+  font-weight: 550;
+  color: var(--ink);
+  line-height: 1.38;
+  overflow-wrap: break-word;
   transition: color 0.15s ease;
 }
 
-.pt-diary-widget-item:hover .pt-widget-item-text {
+.pt-diary-day-row:hover .pt-diary-item-title {
   color: var(--green-700);
 }
 
-.pt-diary-widget-item .pt-diary-item-date {
-  font-size: 12.5px;
+.pt-diary-item-sub {
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  flex-shrink: 0;
+  color: #9a6712;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
 }
 
-.pt-diary-widget-item .pt-widget-item-arrow {
+.pt-diary-item-plot {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #6e6e73;
+  line-height: 1.3;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-diary-day-row .pt-widget-item-arrow {
   margin-top: 0;
   --detail-arrow-bg: #d4dae2;
   --detail-arrow-fg: #1e293b;
@@ -2901,11 +3024,52 @@ body.pt-body {
   transition: transform 0.18s ease, opacity 0.18s ease;
 }
 
-.pt-diary-widget-item:hover .pt-widget-item-arrow {
+.pt-diary-day-row:hover .pt-widget-item-arrow {
   --detail-arrow-bg: rgba(39, 122, 72, 0.16);
   --detail-arrow-fg: var(--green-700);
   opacity: 1;
   transform: translateX(3px);
+}
+
+@media (max-width: 640px) {
+  .pt-diary-section {
+    gap: 12px;
+  }
+
+  .pt-diary-create-btn {
+    min-height: 36px;
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .pt-diary-day-groups {
+    gap: 18px;
+  }
+
+  .pt-diary-day-head {
+    padding: 0 3px 6px;
+  }
+
+  .pt-diary-day-label {
+    font-size: 12.5px;
+  }
+
+  .pt-diary-day-card > li + li::before {
+    left: 46px;
+  }
+
+  .pt-diary-day-row {
+    gap: 12px;
+    padding: 13px 14px;
+  }
+
+  .pt-diary-item-title {
+    font-size: 14.5px;
+  }
+
+  .pt-diary-item-plot {
+    font-size: 13px;
+  }
 }
 
 /* ── Chi tiết nhật ký / phun thuốc (Popup Slide-up Sheet) ── */
@@ -3278,26 +3442,29 @@ body.pt-body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 8px;
 }
 
 .pt-detail-photo-tag {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #059669;
-  background: #ecfdf5;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(5, 150, 105, 0.2);
+  font-size: 12px;
+  font-weight: 600;
+  color: #b91c1c;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .pt-detail-photo-frame {
   position: relative;
   width: 100%;
-  border-radius: 16px;
+  border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
-  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: none;
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .pt-detail-photo-img {
@@ -3321,7 +3488,7 @@ body.pt-body {
 .pt-detail-no-photo {
   padding: 18px 14px;
   background: #f8fafc;
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1px dashed rgba(15, 23, 42, 0.12);
   color: #94a3b8;
   font-size: 13px;
@@ -8213,12 +8380,13 @@ body.pt-body {
 }
 
 .pt-mapmodal-popup-variety {
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 2px 7.5px;
-  border-radius: 4px;
-  background: #f1f5f9;
-  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #0f172a;
 }
 
 .pt-mapmodal-popup-owner {
@@ -8347,6 +8515,22 @@ body.pt-body {
   margin-top: 0;
   padding: 12px 16px 0;
   border-top: 1px solid rgba(60, 60, 67, 0.12);
+}
+
+.pt-mapmodal-stat-val.is-tone-green {
+  color: #15803d;
+}
+
+.pt-mapmodal-stat-val.is-tone-gold {
+  color: #9a6712;
+}
+
+.pt-mapmodal-stat-val.is-tone-red {
+  color: #b91c1c;
+}
+
+.pt-mapmodal-stat-val.is-tone-blue {
+  color: #1d4ed8;
 }
 
 .pt-mapmodal-popup-action-btn {
@@ -9208,7 +9392,7 @@ body.pt-body {
   padding: 9px 16px;
   font-size: 13px;
   line-height: 1.25;
-  border-radius: 7px;
+  border-radius: 6px;
 }
 
 .pt-notif-list {
@@ -9328,7 +9512,7 @@ body.pt-body {
     justify-content: center;
     padding: 9.5px 12px;
     font-size: 13px;
-    border-radius: 9px !important;
+    border-radius: 6px !important;
   }
   .pt-notif-item,
   .pt-list > li.pt-notif-item,
@@ -9676,9 +9860,9 @@ body.pt-body {
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* Bỏ qua tính toán layout & paint các mục danh sách nằm ngoài màn hình */
-.pt-diary-widget-item {
+.pt-diary-day-group {
   content-visibility: auto;
-  contain-intrinsic-size: auto 56px;
+  contain-intrinsic-size: auto 84px;
 }
 
 .pt-asset-card {
@@ -9692,7 +9876,7 @@ body.pt-body {
 }
 
 @media print {
-  .pt-diary-widget-item,
+  .pt-diary-day-group,
   .pt-asset-card,
   .pt-notif-item {
     content-visibility: visible !important;
@@ -9758,9 +9942,9 @@ body.pt-body {
   contain-intrinsic-size: auto 108px;
 }
 
-.pt-diary-widget-item {
+.pt-diary-day-group {
   content-visibility: auto;
-  contain-intrinsic-size: auto 60px;
+  contain-intrinsic-size: auto 84px;
 }
 
 .pt-notif-item {
@@ -9782,7 +9966,7 @@ body.pt-body {
 
 @media print {
   .pt-pest-card,
-  .pt-diary-widget-item,
+  .pt-diary-day-group,
   .pt-notif-item,
   .pt-training-clean-card,
   .pt-lab-test-row,
@@ -9831,7 +10015,7 @@ html[data-perf="lite"] :is(.pt-tab-pane, .pt-tab, .pt-pest-filter-chip) {
   transition-duration: 0.14s !important;
 }
 
-html[data-perf="lite"] :is(.pt-asset-card, .pt-card, .pt-pest-card, .pt-diary-widget-item, .pt-notif-item, .pt-training-clean-card, .pt-lab-test-row, .pt-plot-card) {
+html[data-perf="lite"] :is(.pt-asset-card, .pt-card, .pt-pest-card, .pt-diary-day-card, .pt-diary-create-btn, .pt-notif-item, .pt-training-clean-card, .pt-lab-test-row, .pt-plot-card) {
   box-shadow: none !important;
 }
 
@@ -11524,7 +11708,8 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
   box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
 }
 
-.pt-app .pt-lab-test-list {
+.pt-app .pt-lab-test-list,
+.pt-app .pt-diary-day-card {
   border-radius: 8px;
   padding: 2px 14px;
 }
@@ -11556,27 +11741,6 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
 
 .pt-app .pt-widget-sheet {
   background: #ffffff;
-}
-
-/* Mục nhật ký bên trong thẻ Nhật ký canh tác: nằm phẳng trên nền trắng, ngăn cách bằng line mảnh */
-.pt-app .pt-diary-widget-list {
-  gap: 0;
-}
-
-.pt-app .pt-diary-widget-list > li + li {
-  border-top: 1px solid rgba(60, 60, 67, 0.1);
-}
-
-.pt-app .pt-diary-widget-item {
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  padding: 14px 8px;
-  gap: 14px;
-}
-
-.pt-app .pt-diary-widget-item:hover {
-  background: rgba(60, 60, 67, 0.04);
 }
 
 /* Nhãn bộ lọc (Filter chips) trắng sáng trên nền xám */
@@ -11777,16 +11941,52 @@ body.pt-body .pt-drawer-cta-ghost {
   border: none !important;
 }
 
-html:has(.pt-app) .pt-notif-filter-group .pt-btn-ghost,
-body.pt-body .pt-notif-filter-group .pt-btn-ghost {
-  background: rgba(255, 255, 255, 0.56) !important;
-  color: #5f6368 !important;
+html:has(.pt-app) .pt-notif-filter-group .pt-btn.is-active,
+body.pt-body .pt-notif-filter-group .pt-btn.is-active {
+  background: #14372f !important;
+  color: #ffffff !important;
+  border: 1px solid #14372f !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
 }
 
-html:has(.pt-app) .pt-notif-filter-group .pt-btn-ghost:hover:not(:disabled),
-body.pt-body .pt-notif-filter-group .pt-btn-ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.86) !important;
-  color: #1c1c1e !important;
+html:has(.pt-app) .pt-notif-filter-group .pt-btn.is-active:hover:not(:disabled),
+body.pt-body .pt-notif-filter-group .pt-btn.is-active:hover:not(:disabled) {
+  background: #0f2c25 !important;
+  color: #ffffff !important;
+  border-color: #0f2c25 !important;
+}
+
+html:has(.pt-app) .pt-notif-filter-group .pt-btn:not(.is-active),
+body.pt-body .pt-notif-filter-group .pt-btn:not(.is-active) {
+  background: #ffffff !important;
+  color: #5f6d66 !important;
+  border: 1px solid rgba(20, 55, 47, 0.12) !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+html:has(.pt-app) .pt-notif-filter-group .pt-btn:not(.is-active):hover:not(:disabled),
+body.pt-body .pt-notif-filter-group .pt-btn:not(.is-active):hover:not(:disabled) {
+  background: #f8fafc !important;
+  color: #14372f !important;
+  border-color: rgba(20, 55, 47, 0.24) !important;
+}
+
+html:has(.pt-app) .pt-notif-markall-btn,
+body.pt-body .pt-notif-markall-btn {
+  background: #ffffff !important;
+  color: #14372f !important;
+  border: 1px solid rgba(20, 55, 47, 0.14) !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+html:has(.pt-app) .pt-notif-markall-btn:hover:not(:disabled),
+body.pt-body .pt-notif-markall-btn:hover:not(:disabled) {
+  background: #f8fafc !important;
+  color: #0f2c25 !important;
+  border-color: rgba(20, 55, 47, 0.26) !important;
 }
 
 html:has(.pt-app) .pt-btn-ghost:hover:not(:disabled),

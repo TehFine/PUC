@@ -6,6 +6,7 @@ import { OfflinePendingDiaryCards } from "@/components/ui/OfflineSyncBar";
 import { toast } from "@/components/ui/Toast";
 import { invalidatePortal, useCatalog, usePortal } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
+import { usePersistedRecordSelection, usePersistedState } from "@/lib/back-navigation";
 import {
   clearWorkingFieldDraft,
   type OfflineFieldDraft,
@@ -13,7 +14,7 @@ import {
   submitFieldRecordWithOfflineQueue,
   useOfflineSyncState,
 } from "@/lib/offline-sync";
-import { daysUntil, JOURNAL_ACTIVITIES, todayIso, toNumber } from "@/lib/portal-labels";
+import { daysSince, daysUntil, JOURNAL_ACTIVITIES, todayIso, toNumber } from "@/lib/portal-labels";
 import { formatDate, formatDateTime, formatDiaryEditor, formatDiaryRole } from "@/utils/format";
 import type { PesticideDto } from "@/types/api";
 import type {
@@ -1141,19 +1142,49 @@ type CombinedDiaryItem =
   | { kind: "journal"; key: string; date: string; recordedAt: number; entry: PortalJournalEntry }
   | { kind: "spray"; key: string; date: string; recordedAt: number; record: PortalSprayRecord };
 
+interface DiaryDayGroup {
+  date: string;
+  label: string;
+  items: CombinedDiaryItem[];
+}
+
+function formatDiaryDayHeading(isoDate: string): string {
+  const diff = daysSince(isoDate);
+  if (diff === 0) return "Hôm nay";
+  if (diff === 1) return "Hôm qua";
+  return formatDate(isoDate);
+}
+
 export default function DiaryTab({ initialAction }: { initialAction?: PortalAction } = {}) {
   const sync = useOfflineSyncState();
-  const [formOpen, setFormOpen] = useState<boolean>(() =>
-    initialAction === "journal-add" || initialAction === "spray-add",
-  );
-  const [formInitialActivity, setFormInitialActivity] = useState<string | undefined>(() =>
-    initialAction === "spray-add" ? SPRAY_ACTIVITY_NAME : undefined,
-  );
-  const [selectedJournal, setSelectedJournal] = useState<PortalJournalEntry | null>(null);
-  const [selectedSpray, setSelectedSpray] = useState<PortalSprayRecord | null>(null);
   const journal = usePortal<PortalList<PortalJournalEntry>>("journal");
   const spray = usePortal<PortalList<PortalSprayRecord>>("spray");
   const plots = usePortal<PortalPlots>("plots");
+  const [persistedFormOpen, setPersistedFormOpen] = usePersistedState("portal:diary:form-open", false);
+  const [persistedFormActivity, setPersistedFormActivity] = usePersistedState<string | null>(
+    "portal:diary:form-activity",
+    null,
+    (v): v is string | null => v === null || typeof v === "string",
+  );
+  const actionOpensForm = initialAction === "journal-add" || initialAction === "spray-add";
+  const formOpen = actionOpensForm || persistedFormOpen;
+  const formInitialActivity =
+    initialAction === "spray-add" ? SPRAY_ACTIVITY_NAME : (persistedFormActivity ?? undefined);
+  const setFormOpen = (next: boolean) => setPersistedFormOpen(next);
+  const setFormInitialActivity = (next: string | undefined) => setPersistedFormActivity(next ?? null);
+
+  const [selectedJournal, setSelectedJournal] = usePersistedRecordSelection(
+    "portal:diary:journal",
+    journal.data?.data,
+    (it) => it.id,
+    journal.loading && !journal.data,
+  );
+  const [selectedSpray, setSelectedSpray] = usePersistedRecordSelection(
+    "portal:diary:spray",
+    spray.data?.data,
+    (it) => it.id,
+    spray.loading && !spray.data,
+  );
   const plotsList = plots.data?.available ? plots.data.data : [];
   const hasPendingOfflineItems = sync.items.some(
     (it) => it.kind === "portal-journal" || it.kind === "portal-spray",
@@ -1192,58 +1223,147 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
   const combinedError = !journal.data && !spray.data ? (journal.error ?? spray.error) : null;
   const hasLoadedOnce = Boolean(journal.data || spray.data);
   const progressive = useProgressiveCount(combinedItems.length, 16, 16);
-  const visibleItems = combinedItems.slice(0, progressive.visibleCount);
+  const visibleItems = useMemo(
+    () => combinedItems.slice(0, progressive.visibleCount),
+    [combinedItems, progressive.visibleCount],
+  );
+
+  const dayGroups = useMemo<DiaryDayGroup[]>(() => {
+    const groups: DiaryDayGroup[] = [];
+    for (const item of visibleItems) {
+      const last = groups[groups.length - 1];
+      if (last && last.date === item.date) {
+        last.items.push(item);
+      } else {
+        groups.push({
+          date: item.date,
+          label: formatDiaryDayHeading(item.date),
+          items: [item],
+        });
+      }
+    }
+    return groups;
+  }, [visibleItems]);
 
   return (
     <div className="pt-stack">
-      <section className="pt-reminders-widget pt-diary-widget" aria-label="Nhật ký canh tác">
-          <div className="pt-widget-topbar">
-            <div className="pt-widget-topbar-info">
-              <h2 className="pt-widget-topbar-title">Nhật ký canh tác</h2>
-            </div>
-            <button
-              type="button"
-              className="pt-widget-topbar-btn is-primary"
-              onClick={() => {
-                setFormInitialActivity(undefined);
-                setFormOpen(true);
-              }}
-              title="Ghi công việc chăm sóc hoặc phun thuốc mới"
-            >
-              Ghi nhật ký
-            </button>
-          </div>
+      <section className="pt-diary-section" aria-labelledby="diary-heading">
+        <div className="pt-diary-header">
+          <h2 id="diary-heading" className="pt-plots-title">
+            Nhật ký canh tác
+          </h2>
+          <button
+            type="button"
+            className="pt-diary-create-btn"
+            onClick={() => {
+              setFormInitialActivity(undefined);
+              setFormOpen(true);
+            }}
+            title="Ghi công việc chăm sóc hoặc phun thuốc mới"
+          >
+            Ghi nhật ký
+          </button>
+        </div>
 
-          <div className="pt-widget-sheet">
-            <OfflinePendingDiaryCards kinds={["portal-journal", "portal-spray"]} />
-            <StateBlock loading={isLoading} error={combinedError} />
+        <OfflinePendingDiaryCards kinds={["portal-journal", "portal-spray"]} />
+        <StateBlock loading={isLoading} error={combinedError} />
 
-            {hasLoadedOnce && combinedItems.length === 0 && !hasPendingOfflineItems && (
-              <EmptyState icon="empty">
-                Chưa có nhật ký nào. Bấm “Ghi nhật ký” để lưu công việc chăm sóc hoặc phun thuốc đầu tiên.
-              </EmptyState>
-            )}
+        {hasLoadedOnce && combinedItems.length === 0 && !hasPendingOfflineItems && (
+          <EmptyState icon="empty">
+            Chưa có nhật ký nào. Bấm “Ghi nhật ký” để lưu công việc đầu tiên.
+          </EmptyState>
+        )}
 
-            {combinedItems.length > 0 && (
-              <>
-                <ul className="pt-widget-list pt-diary-widget-list" role="list">
-                  {visibleItems.map((item) => {
-                    if (item.kind === "journal") {
-                      const entry = item.entry;
+        {dayGroups.length > 0 && (
+          <>
+            <div className="pt-diary-day-groups">
+              {dayGroups.map((group) => (
+                <div key={group.date} className="pt-diary-day-group">
+                  <div className="pt-diary-day-head">
+                    <span className="pt-diary-day-label">{group.label}</span>
+                  </div>
+                  <ul className="pt-diary-day-card" role="list">
+                    {group.items.map((item) => {
+                      if (item.kind === "journal") {
+                        const entry = item.entry;
+                        const lateDays = entry.lateDeclarationDays ?? 0;
+                        const subNotes: string[] = [];
+                        if (lateDays > 0) subNotes.push(`Khai chậm ${lateDays} ngày`);
+                        if (entry.updatedByName) {
+                          subNotes.push(`Đã sửa bởi ${formatDiaryEditor(entry.updatedByName, entry.updatedByRole)}`);
+                        }
+
+                        return (
+                          <li key={item.key}>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              className="pt-widget-item pt-diary-day-row"
+                              onClick={() => setSelectedJournal(entry)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setSelectedJournal(entry);
+                                }
+                              }}
+                              title="Bấm để xem chi tiết nhật ký"
+                            >
+                              <img
+                                src="/note.png?v=2"
+                                alt=""
+                                width={20}
+                                height={20}
+                                loading="lazy"
+                                decoding="async"
+                                className="pt-widget-note-icon"
+                                aria-hidden="true"
+                              />
+                              <span className="pt-diary-item-body">
+                                <span className="pt-diary-item-title">{entry.activity}</span>
+                                {subNotes.length > 0 && (
+                                  <span className="pt-diary-item-sub">{subNotes.join(", ")}</span>
+                                )}
+                              </span>
+                              {entry.plotCode && (
+                                <span className="pt-diary-item-plot">Thửa {entry.plotCode}</span>
+                              )}
+                              <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
+                            </div>
+                          </li>
+                        );
+                      }
+
+                      const record = item.record;
+                      const safeIso =
+                        record.isolationEndsOn ??
+                        (record.isolationDays > 0 ? addIsoDays(record.sprayedOn, record.isolationDays) : null);
+                      const remPhi = safeIso ? daysUntil(safeIso) : null;
+                      const inPhi = remPhi !== null && remPhi > 0;
+                      const lateDays = record.lateDeclarationDays ?? 0;
+                      const subNotes: string[] = [];
+                      if (inPhi) {
+                        subNotes.push(`Cách ly còn ${remPhi} ngày`);
+                      } else if (lateDays > 0) {
+                        subNotes.push(`Khai chậm ${lateDays} ngày`);
+                      }
+                      if (record.updatedByName) {
+                        subNotes.push(`Đã sửa bởi ${formatDiaryEditor(record.updatedByName, record.updatedByRole)}`);
+                      }
+
                       return (
                         <li key={item.key}>
                           <div
                             role="button"
                             tabIndex={0}
-                            className="pt-widget-item pt-diary-widget-item"
-                            onClick={() => setSelectedJournal(entry)}
+                            className="pt-widget-item pt-diary-day-row"
+                            onClick={() => setSelectedSpray(record)}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" || e.key === " ") {
                                 e.preventDefault();
-                                setSelectedJournal(entry);
+                                setSelectedSpray(record);
                               }
                             }}
-                            title="Bấm để xem chi tiết nhật ký"
+                            title="Bấm để xem chi tiết lần phun thuốc"
                           >
                             <img
                               src="/note.png?v=2"
@@ -1255,111 +1375,34 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
                               className="pt-widget-note-icon"
                               aria-hidden="true"
                             />
-                            <span className="pt-widget-item-text">
-                              <span>
-                                {entry.activity}
-                                {entry.plotCode ? ` - ${entry.plotCode}` : ""}
-                              </span>
-                              {entry.updatedByName && (
-                                <span
-                                  style={{
-                                    display: "block",
-                                    fontSize: 12,
-                                    fontWeight: 500,
-                                    color: "#9a6712",
-                                    marginTop: 2,
-                                  }}
-                                >
-                                  Đã sửa bởi {formatDiaryEditor(entry.updatedByName, entry.updatedByRole)}
-                                </span>
+                            <span className="pt-diary-item-body">
+                              <span className="pt-diary-item-title">Phun thuốc: {record.pesticide}</span>
+                              {subNotes.length > 0 && (
+                                <span className="pt-diary-item-sub">{subNotes.join(", ")}</span>
                               )}
                             </span>
-                            <span className="pt-diary-item-date" style={{ fontVariantNumeric: "tabular-nums" }}>
-                              {formatDate(entry.entryOn)}
-                              {(entry.lateDeclarationDays ?? 0) > 0 ? ` (chậm ${entry.lateDeclarationDays}n)` : ""}
-                            </span>
+                            {record.plotCode && (
+                              <span className="pt-diary-item-plot">Thửa {record.plotCode}</span>
+                            )}
                             <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
                           </div>
                         </li>
                       );
-                    }
-
-                    const record = item.record;
-                    const safeIso =
-                      record.isolationEndsOn ??
-                      (record.isolationDays > 0 ? addIsoDays(record.sprayedOn, record.isolationDays) : null);
-                    const remPhi = safeIso ? daysUntil(safeIso) : null;
-                    const inPhi = remPhi !== null && remPhi > 0;
-
-                    return (
-                      <li key={item.key}>
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className="pt-widget-item pt-diary-widget-item"
-                          onClick={() => setSelectedSpray(record)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              setSelectedSpray(record);
-                            }
-                          }}
-                          title="Bấm để xem chi tiết lần phun thuốc"
-                        >
-                          <img
-                            src="/note.png?v=2"
-                            alt=""
-                            width={20}
-                            height={20}
-                            loading="lazy"
-                            decoding="async"
-                            className="pt-widget-note-icon"
-                            aria-hidden="true"
-                          />
-                          <span className="pt-widget-item-text">
-                            <span>
-                              Phun thuốc: {record.pesticide}
-                              {record.plotCode ? ` - ${record.plotCode}` : ""}
-                            </span>
-                            {record.updatedByName && (
-                              <span
-                                style={{
-                                  display: "block",
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  color: "#9a6712",
-                                  marginTop: 2,
-                                }}
-                              >
-                                Đã sửa bởi {formatDiaryEditor(record.updatedByName, record.updatedByRole)}
-                              </span>
-                            )}
-                          </span>
-                          <span className="pt-diary-item-date" style={{ fontVariantNumeric: "tabular-nums" }}>
-                            {formatDate(record.sprayedOn)}
-                            {inPhi
-                              ? ` (cách ly ${remPhi}n)`
-                              : (record.lateDeclarationDays ?? 0) > 0
-                                ? ` (chậm ${record.lateDeclarationDays}n)`
-                                : ""}
-                          </span>
-                          <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <ProgressiveListFooter
-                  hasMore={progressive.hasMore}
-                  remainingCount={progressive.remainingCount}
-                  sentinelRef={progressive.sentinelRef}
-                  onShowMore={progressive.showMore}
-                  unitLabel="nhật ký"
-                />
-              </>
-            )}
-          </div>
-        </section>
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <ProgressiveListFooter
+              hasMore={progressive.hasMore}
+              remainingCount={progressive.remainingCount}
+              sentinelRef={progressive.sentinelRef}
+              onShowMore={progressive.showMore}
+              unitLabel="nhật ký"
+            />
+          </>
+        )}
+      </section>
 
       {formOpen && (
         <UnifiedDiaryForm

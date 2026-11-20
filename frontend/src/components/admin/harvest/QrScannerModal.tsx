@@ -433,7 +433,8 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
           >
             <button
               type="button"
-              className={`btn btn-sm ${mode === "camera" ? "btn-primary" : "btn-outline"}`}
+              className={`btn btn-sm btn-filter-toggle ${mode === "camera" ? "is-active" : ""}`}
+              aria-pressed={mode === "camera"}
               style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 10px" }}
               onClick={() => {
                 setLookupError(null);
@@ -446,7 +447,8 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
             </button>
             <button
               type="button"
-              className={`btn btn-sm ${mode === "manual" ? "btn-primary" : "btn-outline"}`}
+              className={`btn btn-sm btn-filter-toggle ${mode === "manual" ? "is-active" : ""}`}
+              aria-pressed={mode === "manual"}
               style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 10px" }}
               onClick={() => {
                 stopCamera();
@@ -458,7 +460,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
             </button>
             <button
               type="button"
-              className="btn btn-sm btn-outline"
+              className="btn btn-sm btn-filter-toggle"
               style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 10px" }}
               onClick={() => fileInputRef.current?.click()}
             >

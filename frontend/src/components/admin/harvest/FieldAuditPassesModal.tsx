@@ -231,14 +231,16 @@ export default function FieldAuditPassesModal({
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button
           type="button"
-          className={`btn ${activeTab === "passes" ? "btn-primary" : "btn-outline"} btn-sm`}
+          className={`btn btn-sm btn-filter-toggle ${activeTab === "passes" ? "is-active" : ""}`}
+          aria-pressed={activeTab === "passes"}
           onClick={() => setActiveTab("passes")}
         >
           1. Cấp Thẻ Đoàn Thẩm định Thực địa (Đối tác / Tỉnh)
         </button>
         <button
           type="button"
-          className={`btn ${activeTab === "endorsement" ? "btn-primary" : "btn-outline"} btn-sm`}
+          className={`btn btn-sm btn-filter-toggle ${activeTab === "endorsement" ? "is-active" : ""}`}
+          aria-pressed={activeTab === "endorsement"}
           onClick={() => setActiveTab("endorsement")}
         >
           2. Cấu hình Bảo chứng UBND Xã &amp; Cổng Tỉnh

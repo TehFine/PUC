@@ -11,6 +11,7 @@ import {
 import { EmptyState, Pill, Sheet } from "@/components/portal/ui";
 import { invalidateQueries, NOTIFICATIONS_PATH, useSharedQuery } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
+import { usePersistedState } from "@/lib/back-navigation";
 import type { Tone } from "@/lib/portal-labels";
 import { useRealtimeNotifications } from "@/lib/realtime-notifications";
 import type { NotificationItem, NotificationList } from "@/types/notifications";
@@ -69,8 +70,12 @@ function navigateAdminNotification(item: NotificationItem) {
 }
 
 export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<"unread" | "read">("unread");
+  const [open, setOpen] = usePersistedState("admin:notif:open", false);
+  const [filter, setFilter] = usePersistedState<"unread" | "read">(
+    "admin:notif:filter",
+    "unread",
+    (v): v is "unread" | "read" => v === "unread" || v === "read",
+  );
   const [markingAll, setMarkingAll] = useState(false);
 
   useRealtimeNotifications(enabled);
@@ -156,20 +161,22 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(2, minmax(132px, 1fr))", gap: 8, fontVariantNumeric: "tabular-nums" }}>
+              <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(2, minmax(132px, 1fr))", gap: 8, width: "100%", fontVariantNumeric: "tabular-nums" }}>
                 <button
                   type="button"
-                  className={`btn btn-sm ${filter === "unread" ? "btn-primary" : "btn-outline"}`}
+                  className={`btn btn-sm btn-filter-toggle ${filter === "unread" ? "is-active" : ""}`}
+                  aria-pressed={filter === "unread"}
                   onClick={() => setFilter("unread")}
-                  style={{ justifyContent: "center" }}
+                  style={{ justifyContent: "center", minHeight: 36 }}
                 >
                   Chưa đọc ({unread})
                 </button>
                 <button
                   type="button"
-                  className={`btn btn-sm ${filter === "read" ? "btn-primary" : "btn-outline"}`}
+                  className={`btn btn-sm btn-filter-toggle ${filter === "read" ? "is-active" : ""}`}
+                  aria-pressed={filter === "read"}
                   onClick={() => setFilter("read")}
-                  style={{ justifyContent: "center" }}
+                  style={{ justifyContent: "center", minHeight: 36 }}
                 >
                   Đã đọc ({readItems.length})
                 </button>
@@ -178,11 +185,12 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
               {filter === "unread" && unread > 0 && (
                 <button
                   type="button"
-                  className="btn btn-outline btn-sm"
+                  className="btn btn-sm btn-filter-toggle"
                   onClick={() => void handleMarkAll()}
                   disabled={markingAll}
+                  style={{ width: "100%", justifyContent: "center", minHeight: 36, color: "#14372f" }}
                 >
-                  {markingAll ? "Đang xử lý…" : "Đánh dấu đã đọc hết"}
+                  {markingAll ? "Đang xử lý…" : "Đọc hết"}
                 </button>
               )}
             </div>

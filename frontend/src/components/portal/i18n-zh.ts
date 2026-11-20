@@ -439,6 +439,8 @@ const EXACT_MAP: Record<string, string> = {
 
   // ─── Tab Nhật ký (DiaryTab) ───
   "Canh tác": "农事作业",
+  "Chưa có nhật ký nào. Bấm “Ghi nhật ký” để lưu công việc đầu tiên.":
+    "暂无农事日志。点击“记农事日志”保存第一条作业记录。",
   "Mở mẫu Phun thuốc BVTV": "打开施药专用表单",
   "Diện tích phun (ha)": "施药面积（公顷）",
   "Nơi mua / Đại lý VTNN (không bắt buộc)": "购买渠道 / 农资经销商（选填）",
@@ -575,6 +577,7 @@ const EXACT_MAP: Record<string, string> = {
   "Mã ghi nhận": "记录编号",
   "Tọa độ GPS thực địa": "实地 GPS 坐标",
   "✓ Đã xác thực thực địa": "✓ 已通过实地坐标认证",
+  "Đã xác thực thực địa": "已通过实地坐标认证",
   "Nội dung công việc & vật tư sử dụng": "作业内容与使用农资",
   "Không có ghi chú thêm cho lần canh tác này.": "本次农事作业无补充备注。",
   "Xóa bản ghi này (trong 24h)": "删除此记录（24小时内）",
@@ -1542,6 +1545,10 @@ const PATTERN_RULES: Array<[RegExp, (...args: string[]) => string]> = [
   [/^Gần nhất:\s*(.+)$/i, (_, date) => `最近记录：${date.trim()}`],
   [/^Ngưng thu hái đến\s*(.+)$/i, (_, date) => `暂停采收至 ${date.trim()}`],
   [/^Cách ly thuốc:\s*(.+)$/i, (_, name) => `安全间隔期 (PHI)：${name.trim()}`],
+  [/^Phun thuốc:\s*(.+)$/i, (_, name) => `施药：${translateViToZh(name.trim())}`],
+  [/^Cách ly còn\s+(\d+)\s+ngày$/i, (_, d) => `安全间隔期剩余 ${d} 天`],
+  [/^Khai chậm\s+(\d+)\s+ngày$/i, (_, d) => `补录延迟 ${d} 天`],
+  [/^Đã sửa bởi\s+(.+)$/i, (_, editor) => `已由 ${editor.trim()} 修改`],
   [/^CB\s+(.+)$/i, (_, officer) => `干部 ${officer.trim()}`],
   [/^Phát hiện:\s*(.+?)(?:\s+(?:·|-)\s+Thửa\s+(.+))?$/i, (_, date, plot) =>
     plot ? `发现日期：${date.trim()} - 地块 ${plot.trim()}` : `发现日期：${date.trim()}`],
