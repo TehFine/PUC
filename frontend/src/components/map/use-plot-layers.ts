@@ -114,7 +114,7 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
     if (!fittedRef.current && plots.features.length > 0) {
       const bounds = group.getBounds();
       if (bounds.isValid()) {
-        map.fitBounds(bounds.pad(0.08));
+        map.fitBounds(bounds.pad(0.08), { animate: false });
         fittedRef.current = true;
       }
     }
@@ -237,21 +237,38 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
     const dark = baseLayers.current.map;
     const streets = baseLayers.current.streets;
     const satellite = baseLayers.current.satellite;
-    if (!ready || !map || !dark || !streets || !satellite) return;
+    const satelliteGoogle = baseLayers.current.satelliteGoogle;
+    if (!ready || !map || !dark || !streets || !satellite || !satelliteGoogle) return;
 
     const all: Array<[BaseLayer, Leaflet.Layer]> = [
       ["satellite", satellite],
+      ["satellite-google", satelliteGoogle],
       ["streets", streets],
       ["map", dark],
     ];
-    for (const [key, layer] of all) {
-      if (key !== baseLayer && map.hasLayer(layer)) {
-        map.removeLayer(layer);
-      }
-    }
-    const active = baseLayer === "satellite" ? satellite : baseLayer === "streets" ? streets : dark;
+
+    const active =
+      baseLayer === "satellite"
+        ? satellite
+        : baseLayer === "satellite-google"
+          ? satelliteGoogle
+          : baseLayer === "streets"
+            ? streets
+            : dark;
+
     if (!map.hasLayer(active)) {
       active.addTo(map);
     }
+
+    // Gỡ các lớp nền không dùng sau khi lớp mới đã gắn vào DOM để tránh chớp nền tối khi chuyển chế độ
+    const timer = window.setTimeout(() => {
+      for (const [key, layer] of all) {
+        if (key !== baseLayer && map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+      }
+    }, 180);
+
+    return () => window.clearTimeout(timer);
   }, [baseLayer, ready, mapRef, baseLayers]);
 }

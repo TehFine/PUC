@@ -4,7 +4,7 @@ import type { PlotComparison } from "@/utils/plot-utils";
 
 export type Mode = "idle" | "draw" | "gps" | "compare" | "edit";
 export type DrawStyle = "point" | "freehand";
-export type BaseLayer = "satellite" | "streets" | "map";
+export type BaseLayer = "satellite" | "satellite-google" | "streets" | "map";
 export type MessageTone = "ok" | "error" | "info";
 
 export interface DraftState {

@@ -18,16 +18,18 @@ import {
   createCrispCanvasRenderer,
   createGoogleSatelliteLayer,
   createGoogleStreetsLayer,
+  createLatestSatelliteLayer,
+  fetchSatelliteCaptureInfo,
   MAX_MAP_ZOOM,
   preconnectMapTileOrigins,
   type SmoothMapZoomHandle,
 } from "@/components/map/map-layers";
 import { isLowEndDevice } from "@/lib/network";
+import { attachSmoothSheetSettle } from "@/lib/popup-motion";
 import type { PortalPlot } from "@/types/portal";
 import { PLOT_STATUS } from "@/lib/portal-labels";
 import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
-import { Pill } from "./ui";
 
 interface Props {
   plot: PortalPlot;
@@ -36,7 +38,7 @@ interface Props {
   onOpenSignboard?: (plot: PortalPlot) => void;
 }
 
-type LayerMode = "satellite" | "streets";
+type LayerMode = "satellite" | "satellite-google" | "streets";
 
 const leafletModulePromise = typeof window !== "undefined" ? import("leaflet") : null;
 
@@ -62,10 +64,13 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   const mapRef = useRef<Leaflet.Map | null>(null);
   const streetLayerRef = useRef<Leaflet.Layer | null>(null);
   const satLayerRef = useRef<Leaflet.Layer | null>(null);
+  const satGoogleLayerRef = useRef<Leaflet.Layer | null>(null);
+  const layerCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const polygonLayerRef = useRef<Leaflet.GeoJSON | null>(null);
 
   const [layerMode, setLayerMode] = useState<LayerMode>("satellite");
   const layerModeRef = useRef<LayerMode>("satellite");
+  const [imageryDateLabel, setImageryDateLabel] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [infoExpanded, setInfoExpanded] = useState(() => {
     if (typeof window !== "undefined" && window.innerWidth <= 640) {
@@ -77,6 +82,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
   // Vuốt lên để mở rộng popup, vuốt xuống để thu gọn / tắt popup (cập nhật trực tiếp trên DOM qua rAF, không setState mỗi frame)
   const [isClosing, setIsClosing] = useState(false);
+  const isClosingRef = useRef(false);
   const touchStartRef = useRef<{
     y: number;
     x: number;
@@ -88,6 +94,8 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
   const topbarRef = useRef<HTMLDivElement>(null);
   const dragRafRef = useRef<number | null>(null);
   const pendingDragYRef = useRef(0);
+
+  useEffect(() => attachSmoothSheetSettle(popupRef.current, null, isClosingRef), []);
 
   const flushDragDom = useCallback(
     (y: number, dragging: boolean) => {
@@ -135,19 +143,26 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     };
   }, []);
 
-  // Đóng modal êm ái với animation thu gọn đồng bộ (260ms)
+  // Đóng modal êm ái với animation thu gọn đồng bộ (300ms)
   const handleRequestClose = useCallback(() => {
-    if (isClosing) return;
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
     if (dragRafRef.current !== null) {
       window.cancelAnimationFrame(dragRafRef.current);
       dragRafRef.current = null;
     }
-    popupRef.current?.classList.remove("is-dragging");
+    const popupEl = popupRef.current;
+    if (popupEl) {
+      popupEl.classList.remove("is-dragging");
+      popupEl.dataset.animating = "true";
+      popupEl.style.willChange = "transform";
+      popupEl.style.setProperty("animation", "none", "important");
+    }
     setIsClosing(true);
     setTimeout(() => {
       onClose();
-    }, 260);
-  }, [isClosing, onClose]);
+    }, 300);
+  }, [onClose]);
 
   const startTouch = (source: "topbar" | "popup", e: React.TouchEvent) => {
     if (isClosing) return;
@@ -342,6 +357,11 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     let smoothZoom: SmoothMapZoomHandle | null = null;
 
     preconnectMapTileOrigins();
+    void fetchSatelliteCaptureInfo(lat, lng).then((info) => {
+      if (!disposed && info?.dateLabel) {
+        setImageryDateLabel(info.dateLabel);
+      }
+    });
 
     const init = async () => {
       try {
@@ -362,8 +382,28 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
         const lowEnd = isLowEndDevice();
 
+        let parsedGeojson: unknown = null;
+        let prebuiltPoly: Leaflet.GeoJSON | null = null;
+        if (plot.geometryJson) {
+          try {
+            parsedGeojson = JSON.parse(plot.geometryJson);
+            prebuiltPoly = L.geoJSON(parsedGeojson as import("geojson").GeoJsonObject, {
+              style: {
+                color: "#10b981",
+                weight: 3.5,
+                opacity: 0.95,
+                fillColor: "#059669",
+                fillOpacity: 0.22,
+              },
+            });
+          } catch {
+            parsedGeojson = null;
+            prebuiltPoly = null;
+          }
+        }
+
         const map = L.map(containerRef.current, {
-          zoomControl: false, // Tự đặt controls hoặc dùng nút nổi
+          zoomControl: false,
           attributionControl: false,
           minZoom: 10,
           maxZoom: MAX_MAP_ZOOM,
@@ -377,8 +417,22 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
           inertiaDeceleration: 2800,
           inertiaMaxSpeed: 2400,
           preferCanvas: true,
-          renderer: createCrispCanvasRenderer(L, 0.25),
-        }).setView([lat, lng], 17.5);
+          renderer: createCrispCanvasRenderer(L, 0.65),
+        });
+
+        // Chốt khung nhìn ban đầu một lần duy nhất TRƯỚC KHI gắn lớp mảnh vệ tinh để không tải rồi hủy mảnh thừa
+        const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
+        const polyBounds = prebuiltPoly?.getBounds();
+        if (polyBounds && polyBounds.isValid()) {
+          map.fitBounds(polyBounds, {
+            paddingTopLeft: [isMobile ? 70 : 60, 20],
+            paddingBottomRight: [20, isMobile ? 80 : 60],
+            maxZoom: 18,
+            animate: false,
+          });
+        } else {
+          map.setView([lat, lng], 17.5, { animate: false });
+        }
 
         if (disposed) {
           map.remove();
@@ -389,40 +443,35 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         smoothZoom = attachSmoothMapZoom(L, map);
         L.control.scale({ imperial: false, metric: true, position: "bottomleft" }).addTo(map);
 
-        // 1. Lớp vệ tinh Hybrid siêu nét (native Z21 tại Krông Búk, rõ từng tán cây sầu riêng & tên thôn/đường)
-        const satellite = createGoogleSatelliteLayer(L, lowEnd, MAX_MAP_ZOOM);
+        // 1. Lớp vệ tinh mới nhất (Esri Maxar Vivid cập nhật mới nhất + nhãn đường tiếng Việt)
+        const satellite = createLatestSatelliteLayer(L, lowEnd, MAX_MAP_ZOOM);
         satLayerRef.current = satellite;
 
-        // 2. Lớp bản đồ địa hình & giao thông tiếng Việt (không bị nhà mạng chặn DNS như tile.openstreetmap.org)
+        // 2. Lớp vệ tinh Google Hybrid 512px (phóng sâu tới Z22 soi rõ tán cây)
+        const satelliteGoogle = createGoogleSatelliteLayer(L, lowEnd, MAX_MAP_ZOOM);
+        satGoogleLayerRef.current = satelliteGoogle;
+
+        // 3. Lớp bản đồ địa hình và giao thông tiếng Việt
         const streets = createGoogleStreetsLayer(L, lowEnd, MAX_MAP_ZOOM);
         streetLayerRef.current = streets;
 
-        // Mặc định nạp lớp theo layerMode hiện tại
         if (layerModeRef.current === "satellite") {
           satellite.addTo(map);
+        } else if (layerModeRef.current === "satellite-google") {
+          satelliteGoogle.addTo(map);
         } else {
           streets.addTo(map);
         }
 
         const dimensionGroup = L.layerGroup().addTo(map);
 
-        // 3. Vẽ ranh giới thửa đất kèm mốc đỉnh địa chính & chiều dài từng cạnh (mét) khi phóng sát
-        if (plot.geometryJson) {
-          try {
-            const geojson = JSON.parse(plot.geometryJson);
-            const poly = L.geoJSON(geojson, {
-              style: {
-                color: "#10b981",
-                weight: 3.5,
-                opacity: 0.95,
-                fillColor: "#059669",
-                fillOpacity: 0.22,
-              },
-            }).addTo(map);
-            polygonLayerRef.current = poly;
+        // 4. Vẽ ranh giới thửa đất kèm mốc đỉnh địa chính & chiều dài từng cạnh (mét) khi phóng sát
+        if (prebuiltPoly && parsedGeojson) {
+          const poly = prebuiltPoly.addTo(map);
+          polygonLayerRef.current = poly;
 
-            poly.bindPopup(
-              `
+          poly.bindPopup(
+            `
               <div class="pt-leaflet-card pt-leaflet-card-poly">
                 <div class="pt-leaflet-card-head">Thửa đất ${escapeHtml(plot.code)}</div>
                 <div class="pt-leaflet-card-rows">
@@ -432,49 +481,46 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 </div>
               </div>
             `,
-              { className: "pt-balanced-popup", maxWidth: 280 },
-            );
+            { className: "pt-balanced-popup", maxWidth: 280 },
+          );
 
-            const syncDimensions = () => {
-              if (disposed) return;
-              const z = map.getZoom();
-              poly.setStyle({
-                fillOpacity: z >= 18 ? 0.14 : 0.24,
-                weight: z >= 18 ? 3.8 : 3.2,
-              });
-              if (z >= 17) {
-                renderCadastralDimensions(L, dimensionGroup, geojson, lowEnd, map);
-              } else {
-                dimensionGroup.clearLayers();
-              }
-            };
-
-            const scheduleDimensions = () => {
-              if (dimTimer) clearTimeout(dimTimer);
-              dimTimer = setTimeout(() => {
-                dimTimer = null;
-                syncDimensions();
-              }, 110);
-            };
-            const cancelDimensions = () => {
-              if (dimTimer) {
-                clearTimeout(dimTimer);
-                dimTimer = null;
-              }
-            };
-
-            const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
-            map.fitBounds(poly.getBounds(), {
-              paddingTopLeft: [isMobile ? 70 : 60, 20],
-              paddingBottomRight: [20, isMobile ? 80 : 60],
-              maxZoom: 19,
+          const syncDimensions = () => {
+            if (disposed) return;
+            const z = map.getZoom();
+            poly.setStyle({
+              fillOpacity: z >= 18 ? 0.14 : 0.24,
+              weight: z >= 18 ? 3.8 : 3.2,
             });
-            syncDimensions();
-            map.on("zoomstart", cancelDimensions);
-            map.on("zoomend", scheduleDimensions);
-          } catch {
-            // Bỏ qua lỗi json
-          }
+            if (z >= 17) {
+              renderCadastralDimensions(
+                L,
+                dimensionGroup,
+                parsedGeojson as import("geojson").GeoJsonObject,
+                lowEnd,
+                map,
+              );
+            } else {
+              dimensionGroup.clearLayers();
+            }
+          };
+
+          const scheduleDimensions = () => {
+            if (dimTimer) clearTimeout(dimTimer);
+            dimTimer = setTimeout(() => {
+              dimTimer = null;
+              syncDimensions();
+            }, 110);
+          };
+          const cancelDimensions = () => {
+            if (dimTimer) {
+              clearTimeout(dimTimer);
+              dimTimer = null;
+            }
+          };
+
+          syncDimensions();
+          map.on("zoomstart", cancelDimensions);
+          map.on("zoomend", scheduleDimensions);
         }
 
         // 4. Marker định vị tâm thửa đất với radar xung điện
@@ -543,6 +589,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       if (readyRaf !== null) window.cancelAnimationFrame(readyRaf);
       if (resizeTimer) clearTimeout(resizeTimer);
       if (dimTimer) clearTimeout(dimTimer);
+      if (layerCleanupTimerRef.current) clearTimeout(layerCleanupTimerRef.current);
       smoothZoom?.destroy();
       ro?.disconnect();
       if (mapRef.current) {
@@ -551,51 +598,63 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       }
       streetLayerRef.current = null;
       satLayerRef.current = null;
+      satGoogleLayerRef.current = null;
       polygonLayerRef.current = null;
     };
   }, [mounted, lat, lng, plot.code, plot.geometryJson, plot.areaHa, plot.variety, householdName]);
 
-  // Đổi lớp bản đồ mượt mà, chống lặp layer
+  // Đổi lớp bản đồ mượt mà: gắn lớp mới trước rồi mới gỡ lớp cũ sau 180ms để không chớp nền tối
   const switchLayer = (mode: LayerMode) => {
     if (mode === layerMode) return;
     const map = mapRef.current;
     const street = streetLayerRef.current;
     const sat = satLayerRef.current;
-    if (!map || !street || !sat) return;
+    const satGoogle = satGoogleLayerRef.current;
+    if (!map || !street || !sat || !satGoogle) return;
 
-    if (mode === "satellite") {
-      if (map.hasLayer(street)) map.removeLayer(street);
-      if (!map.hasLayer(sat)) sat.addTo(map);
-      if (map.getZoom() < 17.5) {
+    const target =
+      mode === "satellite" ? sat : mode === "satellite-google" ? satGoogle : street;
+    if (!map.hasLayer(target)) {
+      target.addTo(map);
+    }
+
+    if (layerCleanupTimerRef.current) {
+      clearTimeout(layerCleanupTimerRef.current);
+    }
+    layerCleanupTimerRef.current = setTimeout(() => {
+      layerCleanupTimerRef.current = null;
+      if (!mapRef.current) return;
+      const candidates: Array<[LayerMode, Leaflet.Layer]> = [
+        ["satellite", sat],
+        ["satellite-google", satGoogle],
+        ["streets", street],
+      ];
+      for (const [key, layer] of candidates) {
+        if (key !== mode && map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+      }
+    }, 180);
+
+    if (mode === "satellite" || mode === "satellite-google") {
+      if (map.getZoom() < 17) {
         if (polygonLayerRef.current) {
           const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
           map.fitBounds(polygonLayerRef.current.getBounds(), {
             paddingTopLeft: [isMobile ? 70 : 60, 20],
             paddingBottomRight: [20, isMobile ? 80 : 60],
-            maxZoom: 18.5,
+            maxZoom: mode === "satellite-google" ? 19 : 18,
           });
         } else {
           map.setZoom(18);
         }
       }
-    } else {
-      if (map.hasLayer(sat)) map.removeLayer(sat);
-      if (!map.hasLayer(street)) street.addTo(map);
-      // Khi chuyển sang Bản đồ đường xá/địa hình ở vùng rẫy nông thôn, thu phóng về Z16 để thấy ngay đường liên thôn & suối quanh thửa
-      if (map.getZoom() > 16) {
-        map.setView([lat, lng], 16, { animate: true });
-      }
+    } else if (map.getZoom() > 16) {
+      map.setView([lat, lng], 16, { animate: true });
     }
     layerModeRef.current = mode;
     setLayerMode(mode);
   };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      mapRef.current?.invalidateSize();
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [infoExpanded]);
 
   if (!mounted) return null;
 
@@ -607,10 +666,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       aria-label={`Bản đồ thửa đất ${plot.code}`}
       style={{
         opacity: isClosing ? 0 : undefined,
-        transform: isClosing ? "scale(0.97)" : undefined,
-        transition: isClosing
-          ? "transform 260ms cubic-bezier(0.32, 0.72, 0, 1), opacity 245ms ease-out"
-          : undefined,
+        transition: isClosing ? "opacity 285ms ease-out" : undefined,
       }}
     >
       {/* 1. TOÀN CẢNH BẢN ĐỒ TRÀN VIỀN (100% VIEWPORT) */}
@@ -645,9 +701,17 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               type="button"
               className={`pt-mapmodal-pill-btn ${layerMode === "satellite" ? "is-active" : ""}`}
               onClick={() => switchLayer("satellite")}
-              title="Chuyển chế độ xem ảnh vệ tinh độ nét cao"
+              title="Ảnh vệ tinh Maxar Vivid cập nhật mới nhất"
             >
-              Vệ tinh
+              Vệ tinh mới
+            </button>
+            <button
+              type="button"
+              className={`pt-mapmodal-pill-btn ${layerMode === "satellite-google" ? "is-active" : ""}`}
+              onClick={() => switchLayer("satellite-google")}
+              title="Ảnh vệ tinh Google hỗ trợ phóng sâu tới Z22"
+            >
+              Google HD
             </button>
             <button
               type="button"
@@ -675,13 +739,6 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       <div
         ref={popupRef}
         className={`pt-mapmodal-floating-popup ${infoExpanded ? "is-expanded" : "is-minimized"} ${isClosing ? "is-closing" : ""}`}
-        style={{
-          transform: isClosing ? "translateY(115%)" : undefined,
-          opacity: isClosing ? 0 : undefined,
-          transition: isClosing
-            ? "transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease"
-            : "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
         onTouchStart={handlePopupTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -747,7 +804,9 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                 <div className="pt-mapmodal-popup-stat">
                   <span className="pt-mapmodal-stat-label">Trạng thái</span>
                   <div className="pt-mapmodal-stat-right">
-                    <Pill tone={status.tone}>{status.label}</Pill>
+                    <strong className={`pt-mapmodal-stat-val is-tone-${status.tone}`}>
+                      {status.label}
+                    </strong>
                   </div>
                 </div>
 
@@ -755,7 +814,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                   <div className="pt-mapmodal-popup-stat">
                     <span className="pt-mapmodal-stat-label">Giống cây</span>
                     <div className="pt-mapmodal-stat-right">
-                      <span className="pt-mapmodal-popup-variety">{plot.variety}</span>
+                      <strong className="pt-mapmodal-stat-val">{plot.variety}</strong>
                     </div>
                   </div>
                 )}
@@ -802,7 +861,11 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
                     <strong className="pt-mapmodal-stat-val pt-mapmodal-coords-text">
                       {`${lat.toFixed(7).replace(/0+$/, "").replace(/\.(\d{0,4})$/, (_, d: string) => `.${d.padEnd(5, "0")}`)}, ${lng.toFixed(7).replace(/0+$/, "").replace(/\.(\d{0,4})$/, (_, d: string) => `.${d.padEnd(5, "0")}`)}`}
                     </strong>
-                    <span className="pt-mapmodal-stat-sub">Định vị vệ tinh GPS</span>
+                    <span className="pt-mapmodal-stat-sub">
+                      {imageryDateLabel && layerMode === "satellite"
+                        ? `Ảnh vệ tinh chụp ${imageryDateLabel}`
+                        : "Định vị vệ tinh GPS"}
+                    </span>
                   </div>
                 </div>
               </div>

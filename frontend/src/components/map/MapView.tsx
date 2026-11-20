@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
 import { animatePopupExit } from "@/lib/popup-motion";
+import { usePersistedState } from "@/lib/back-navigation";
 import {
   ADMIN_EDIT_PLOT_EVENT,
   consumePendingEditPlotCode,
@@ -49,6 +50,7 @@ import {
   attachSmoothMapZoom,
   createBaseLayers,
   createCrispCanvasRenderer,
+  fetchSatelliteCaptureInfo,
   MAP_CENTER,
   MAX_MAP_ZOOM,
   preconnectMapTileOrigins,
@@ -231,9 +233,23 @@ export default function MapView({
     undo: 0,
     redo: 0,
   });
-  const [baseLayer, setBaseLayer] = useState<BaseLayer>("satellite");
-  const [zoomLevel, setZoomLevel] = useState<number>(13);
-  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [baseLayer, setBaseLayer] = usePersistedState<BaseLayer>(
+    "admin:map:base-layer",
+    "satellite",
+    (v): v is BaseLayer =>
+      v === "satellite" || v === "satellite-google" || v === "streets" || v === "map",
+  );
+  const [zoomLevel, setZoomLevel] = useState<number>(15);
+  const [imageryDateLabel, setImageryDateLabel] = useState<string | null>(null);
+  const initialPlotsRef = useRef(plots);
+  useEffect(() => {
+    initialPlotsRef.current = plots;
+  }, [plots]);
+  const [selectedCode, setSelectedCode] = usePersistedState<string | null>(
+    "admin:map:selected-plot",
+    null,
+    (v): v is string | null => v === null || typeof v === "string",
+  );
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [comparison, setComparison] = useState<ComparisonState | null>(null);
   const [preview, setPreview] = useState<PreviewState>(EMPTY_PREVIEW);
@@ -919,7 +935,7 @@ export default function MapView({
           setSaving(false);
         });
     }
-  }, [changeMode, clearHistory, onChanged, stopGps, syncSelectedVertex, updateAreaOnEdit]);
+  }, [changeMode, clearHistory, onChanged, setSelectedCode, stopGps, syncSelectedVertex, updateAreaOnEdit]);
 
   useEffect(() => {
     finishDraftRef.current = finishDraft;
@@ -1053,7 +1069,7 @@ export default function MapView({
       setSelectedCode(feature.properties.code);
       setMessage(null);
     },
-    [comparison, draft],
+    [comparison, draft, setSelectedCode],
   );
 
   useEffect(() => {
@@ -1068,7 +1084,12 @@ export default function MapView({
     let smoothZoom: SmoothMapZoomHandle | null = null;
 
     preconnectMapTileOrigins();
-    warmSatelliteTilesAt(MAP_CENTER[0], MAP_CENTER[1], 13);
+    warmSatelliteTilesAt(MAP_CENTER[0], MAP_CENTER[1], 15);
+    void fetchSatelliteCaptureInfo(MAP_CENTER[0], MAP_CENTER[1]).then((info) => {
+      if (!disposed && info?.dateLabel) {
+        setImageryDateLabel(info.dateLabel);
+      }
+    });
 
     const init = async () => {
       const imported = (await (leafletModulePromise ?? import("leaflet"))) as unknown as {
@@ -1095,9 +1116,33 @@ export default function MapView({
         inertiaDeceleration: 2800,
         inertiaMaxSpeed: 2400,
         preferCanvas: true,
-        renderer: createCrispCanvasRenderer(L, 0.25),
+        renderer: createCrispCanvasRenderer(L, 0.65),
         doubleClickZoom: false,
-      }).setView(MAP_CENTER, 13);
+      });
+
+      // Chốt khung nhìn ban đầu một lần duy nhất TRƯỚC KHI gắn lớp ảnh vệ tinh để không tải rồi hủy mảnh thừa
+      const seedPlots = initialPlotsRef.current;
+      let initializedBounds = false;
+      if (seedPlots && seedPlots.features.length > 0) {
+        const bounds = L.latLngBounds([]);
+        for (const f of seedPlots.features) {
+          const ring = f.geometry?.coordinates?.[0];
+          if (!ring) continue;
+          for (const pt of ring) {
+            if (Array.isArray(pt) && pt.length >= 2 && Number.isFinite(pt[0]) && Number.isFinite(pt[1])) {
+              bounds.extend([pt[1], pt[0]]);
+            }
+          }
+        }
+        if (bounds.isValid()) {
+          map.fitBounds(bounds.pad(0.08), { animate: false });
+          initializedBounds = true;
+        }
+      }
+      if (!initializedBounds) {
+        map.setView(MAP_CENTER, 15, { animate: false });
+      }
+      setZoomLevel(Math.round(map.getZoom() * 10) / 10);
 
       mapRef.current = map;
       smoothZoom = attachSmoothMapZoom(L, map);
@@ -1195,7 +1240,7 @@ export default function MapView({
       compareGroupRef.current = null;
       setReady(false);
     };
-  }, []);
+  }, [setSelectedCode]);
 
   // Chỉ gắn bộ lắng nghe cảm ứng non-passive khi ĐANG BẬT chế độ vẽ nét cong tự do,
   // giữ cho cử chỉ chụm 2 ngón thu phóng ở chế độ xem chạy thẳng trên luồng GPU không bị chặn.
@@ -1434,7 +1479,8 @@ export default function MapView({
       const map = mapRef.current;
       if (!map || holdRafId) return;
       const dir = key === "F1" ? 1 : -1;
-      map.stop();
+      smoothZoomRef.current?.cancel();
+      (map as unknown as { _stop?: () => void })._stop?.();
       map.options.zoomSnap = 0;
       keyZoomHoldingRef.current = true;
       currentHoldZoom = map.getZoom();
@@ -1760,9 +1806,8 @@ export default function MapView({
         setPreview(EMPTY_PREVIEW);
         setMessage({
           tone: "info",
-          text: `Đang vẽ lại thửa ${feature.properties.code}${
-            feature.properties.owner ? ` (${feature.properties.owner})` : ""
-          }. Chấm từng góc vườn hoặc chọn Vẽ nét cong trên ảnh vệ tinh.`,
+          text: `Đang vẽ lại thửa ${feature.properties.code}${feature.properties.owner ? ` (${feature.properties.owner})` : ""
+            }. Chấm từng góc vườn hoặc chọn Vẽ nét cong trên ảnh vệ tinh.`,
         });
       } else {
         verticesRef.current = initialPoints;
@@ -1778,7 +1823,7 @@ export default function MapView({
         }
       }
     },
-    [canEditShape, changeDrawStyle, changeMode, pushHistorySnapshot, resetDraftState, selectedFeature],
+    [canEditShape, changeDrawStyle, changeMode, pushHistorySnapshot, resetDraftState, selectedFeature, setSelectedCode],
   );
 
   const inspectPlotOnMap = useCallback(
@@ -1799,7 +1844,7 @@ export default function MapView({
         }
       }
     },
-    [changeMode, resetDraftState],
+    [changeMode, resetDraftState, setSelectedCode],
   );
 
   useEffect(() => {
@@ -1869,7 +1914,7 @@ export default function MapView({
   const closePanel = useCallback(() => {
     cancelDraft();
     setSelectedCode(null);
-  }, [cancelDraft]);
+  }, [cancelDraft, setSelectedCode]);
 
   const zoomIn = () => {
     if (smoothZoomRef.current) smoothZoomRef.current.zoomBy(0.85);
@@ -1994,9 +2039,8 @@ export default function MapView({
 
       setMessage({
         tone: "ok",
-        text: `Đã nhập ${data.imported ?? 0} thửa từ ${file.name}${
-          data.persisted ? " vào PostGIS." : " (lưu tạm trong phiên này)."
-        }`,
+        text: `Đã nhập ${data.imported ?? 0} thửa từ ${file.name}${data.persisted ? " vào PostGIS." : " (lưu tạm trong phiên này)."
+          }`,
       });
       onChanged?.();
     } catch (error) {
@@ -2045,7 +2089,7 @@ export default function MapView({
 
   const closeSelectedPopup = useCallback(() => {
     setSelectedCode(null);
-  }, []);
+  }, [setSelectedCode]);
 
   useBackLayer(Boolean(showPopup && selectedFeature), closeSelectedPopup);
   useBackLayer(Boolean(draft || comparison), handleDismissPanel);
@@ -2064,9 +2108,8 @@ export default function MapView({
 
   return (
     <div
-      className={`plotmap-shell ${mode !== "idle" ? "drawing" : ""} ${
-        mode !== "idle" && drawStyle === "freehand" ? "is-freehand" : ""
-      }`}
+      className={`plotmap-shell ${mode !== "idle" ? "drawing" : ""} ${mode !== "idle" && drawStyle === "freehand" ? "is-freehand" : ""
+        }`}
     >
       <div ref={mapElementRef} className="plotmap-canvas" />
 
@@ -2091,6 +2134,9 @@ export default function MapView({
         onFit={fitPlots}
         onFocusSelected={selectedFeature && mode === "idle" ? focusSelectedPlot : undefined}
         zoomLevel={ready ? zoomLevel : undefined}
+        imageryDateLabel={
+          ready && baseLayer === "satellite" ? imageryDateLabel : null
+        }
         drawingActive={mode !== "idle"}
       />
 

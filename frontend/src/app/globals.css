@@ -3755,6 +3755,28 @@ input[type="date"].filter-select {
   border-color: rgba(251, 191, 36, 0.7);
 }
 
+.map-imagery-date {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
+  color: #14372f;
+  background: #ffffff;
+  border: 1px solid #d4d4d2;
+  border-radius: 4px;
+  user-select: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .map-imagery-date {
+    display: none;
+  }
+}
+
 .map-zoom-badge {
   display: inline-flex;
   align-items: center;
@@ -6006,14 +6028,24 @@ code {
   font-size: 13px;
 }
 
-/* Leaflet – keep it flat and subtle */
+/* Leaflet – khử xung đột transition CSS trên mảnh bản đồ để không bao giờ nháy mảng tối khi thu phóng */
 .leaflet-container {
   font-family: var(--font-inter), sans-serif !important;
   background-color: #15221c;
 }
 
+.leaflet-tile-container {
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.leaflet-tile,
 .leaflet-fade-anim .leaflet-tile {
-  transition: opacity 0.16s linear;
+  transition: none !important;
+  will-change: auto !important;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .leaflet-popup-content-wrapper {
@@ -6910,6 +6942,7 @@ code {
     padding: 2px 16px calc(18px + env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     border: none;
+    border-top: 1px solid rgba(20, 55, 47, 0.14);
     border-radius: 8px 8px 0 0;
     background: #ffffff;
     box-shadow: 0 -6px 20px rgba(15, 23, 42, 0.16);
@@ -6945,7 +6978,6 @@ code {
   .zones-left-col[data-sheet="list"]>.zones-sheet-list {
     display: flex;
   }
-    border-top: 1px solid rgba(20, 55, 47, 0.14);
 
   .zones-left-col .zones-sidebar,
   .zones-left-col .zone-source-card,

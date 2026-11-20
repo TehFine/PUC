@@ -50,7 +50,7 @@ export function buildContentSecurityPolicy(options: CspOptions): string {
     "font-src 'self' data:",
     "worker-src 'self'",
     "manifest-src 'self'",
-    `connect-src 'self'${options.enableOnlineTranslate ? " https://translate.googleapis.com" : ""} https://accounts.google.com https://oauth2.googleapis.com https://mt0.google.com https://mt1.google.com https://mt2.google.com https://mt3.google.com https://server.arcgisonline.com${options.isDev ? " ws: wss:" : ""}`,
+    `connect-src 'self'${options.enableOnlineTranslate ? " https://translate.googleapis.com" : ""} https://accounts.google.com https://oauth2.googleapis.com https://mt0.google.com https://mt1.google.com https://mt2.google.com https://mt3.google.com https://server.arcgisonline.com https://services.arcgisonline.com${options.isDev ? " ws: wss:" : ""}`,
     "frame-src https://accounts.google.com",
     "object-src 'none'",
     "base-uri 'self'",

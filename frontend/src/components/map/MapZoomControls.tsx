@@ -4,6 +4,7 @@ interface MapZoomControlsProps {
   onFit: () => void;
   onFocusSelected?: () => void;
   zoomLevel?: number;
+  imageryDateLabel?: string | null;
   drawingActive?: boolean;
 }
 
@@ -13,10 +14,19 @@ export default function MapZoomControls({
   onFit,
   onFocusSelected,
   zoomLevel,
+  imageryDateLabel,
   drawingActive = false,
 }: MapZoomControlsProps) {
   return (
     <div className="plotmap-zoom">
+      {imageryDateLabel && (
+        <span
+          className="map-imagery-date"
+          title="Ngày chụp thực tế của lớp ảnh vệ tinh Maxar Vivid tại khu vực đang xem"
+        >
+          Ảnh chụp {imageryDateLabel}
+        </span>
+      )}
       {typeof zoomLevel === "number" && (
         <span className="map-zoom-badge" title="Mức thu phóng hiện tại (tối đa Z22)">
           Z{zoomLevel.toFixed(1).replace(/\.0$/, "")}

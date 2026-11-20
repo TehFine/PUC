@@ -36,17 +36,25 @@ export default function MapToolbar({
           type="button"
           className={`map-tool ${baseLayer === "satellite" ? "active" : ""}`}
           onClick={() => onBaseLayerChange("satellite")}
-          title="Ảnh vệ tinh độ nét cao kèm mạng lưới đường liên thôn và ranh giới"
+          title="Ảnh vệ tinh Maxar Vivid cập nhật mới nhất kèm tên đường và thôn buôn tiếng Việt"
         >
-          Vệ tinh HD
+          Vệ tinh mới
+        </button>
+        <button
+          type="button"
+          className={`map-tool ${baseLayer === "satellite-google" ? "active" : ""}`}
+          onClick={() => onBaseLayerChange("satellite-google")}
+          title="Ảnh vệ tinh Google hỗ trợ phóng sâu tới Z22 soi rõ tán cây"
+        >
+          Google HD
         </button>
         <button
           type="button"
           className={`map-tool ${baseLayer === "streets" ? "active" : ""}`}
           onClick={() => onBaseLayerChange("streets")}
-          title="Bản đồ giao thông & địa hình chi tiết OpenStreetMap"
+          title="Bản đồ giao thông và địa hình chi tiết"
         >
-          Đường phố
+          Giao thông
         </button>
         <button
           type="button"
