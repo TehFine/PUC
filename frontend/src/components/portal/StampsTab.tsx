@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { usePortal } from "@/hooks/use-portal";
+import { usePersistedRecordSelection } from "@/lib/back-navigation";
 import { formatDate } from "@/utils/format";
 import type {
   PortalHarvest,
@@ -30,7 +30,12 @@ export default function StampsTab({ overview, plots = [] }: Props) {
     (overview?.household?.code ? overview.household.code.replace(/-(?:H|T)\d+$/i, "") : "66-PUC-SR0001-00728");
 
   const notices = noticesQuery.data?.data ?? [];
-  const [selectedLotForQr, setSelectedLotForQr] = useState<PortalHarvest | null>(null);
+  const [selectedLotForQr, setSelectedLotForQr] = usePersistedRecordSelection(
+    "portal:stamps:lot-qr",
+    harvest.data?.data,
+    (lot) => lot.id,
+    harvest.loading && !harvest.data,
+  );
 
   return (
     <div className="portal-tab-content">

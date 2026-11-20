@@ -3,7 +3,13 @@
 import { startTransition, useDeferredValue, useMemo, useState } from "react";
 import { invalidatePortal, useSharedQuery } from "@/hooks/use-portal";
 import { api, errorMessage } from "@/lib/api-client";
-import { PORTAL_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
+import {
+  PORTAL_LAST_URL_KEY,
+  readInitialUrlSubTab,
+  usePersistedRecordSelection,
+  usePersistedState,
+  useUrlSubTab,
+} from "@/lib/back-navigation";
 import { formatClock, PESTICIDE_STATUS, TRAINING_MY_STATUS } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import { isSafeMediaUrl } from "@/utils/url-safety";
@@ -365,7 +371,11 @@ export function TrainingDetailModal({
 
 export function TrainingList() {
   const { data, loading, error } = usePortalTrainings();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = usePersistedState<number | null>(
+    "learn:training-id",
+    null,
+    (v): v is number | null => v === null || typeof v === "number",
+  );
   const selectedTraining = useMemo(
     () => (selectedId !== null ? (data.find((d) => d.id === selectedId) ?? null) : null),
     [data, selectedId],
@@ -1340,8 +1350,12 @@ function PesticideList() {
   }, [apiData]);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [selectedPesticide, setSelectedPesticide] = useState<PesticideDto | null>(null);
+  const [statusFilter, setStatusFilter] = usePersistedState<StatusFilter>("learn:pest:status", "all");
+  const [selectedPesticide, setSelectedPesticide] = usePersistedRecordSelection(
+    "learn:pest:selected",
+    data,
+    (it) => it.id,
+  );
 
   const counts = useMemo(() => {
     return {
@@ -1892,8 +1906,12 @@ function FertilizerList() {
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [categoryFilter, setCategoryFilter] = useState<FertilizerFilter>("all");
-  const [selectedFertilizer, setSelectedFertilizer] = useState<FertilizerDto | null>(null);
+  const [categoryFilter, setCategoryFilter] = usePersistedState<FertilizerFilter>("learn:fert:category", "all");
+  const [selectedFertilizer, setSelectedFertilizer] = usePersistedRecordSelection(
+    "learn:fert:selected",
+    fertilizers,
+    (it) => it.id,
+  );
 
   const counts = useMemo(() => {
     return {
@@ -2414,8 +2432,12 @@ function VarietyList() {
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [categoryFilter, setCategoryFilter] = useState<VarietyFilter>("all");
-  const [selectedVariety, setSelectedVariety] = useState<VarietyDto | null>(null);
+  const [categoryFilter, setCategoryFilter] = usePersistedState<VarietyFilter>("learn:var:category", "all");
+  const [selectedVariety, setSelectedVariety] = usePersistedRecordSelection(
+    "learn:var:selected",
+    varieties,
+    (it) => it.id,
+  );
 
   const counts = useMemo(() => {
     return {
@@ -2732,8 +2754,15 @@ const INDEXED_DISEASES_2026 = DISEASES_AND_PESTS_2026.map((item) => ({
 export function DiseaseAndIpmList() {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [kindFilter, setKindFilter] = useState<"all" | "disease" | "pest" | "care">("all");
-  const [selectedItem, setSelectedItem] = useState<DiseaseOrPestItem | null>(null);
+  const [kindFilter, setKindFilter] = usePersistedState<"all" | "disease" | "pest" | "care">(
+    "learn:disease:kind",
+    "all",
+  );
+  const [selectedItem, setSelectedItem] = usePersistedRecordSelection(
+    "learn:disease:selected",
+    DISEASES_AND_PESTS_2026,
+    (it) => it.name,
+  );
 
   const counts = useMemo(
     () => ({
@@ -3049,8 +3078,12 @@ const INDEXED_PROTOCOL_2026 = DURIAN_PROTOCOL_2026_2027.map((stage) => {
 export function CareProtocol2026List() {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [groupFilter, setGroupFilter] = useState<"all" | ProtocolGroup>("all");
-  const [selectedStage, setSelectedStage] = useState<DurianProtocolStage | null>(null);
+  const [groupFilter, setGroupFilter] = usePersistedState<"all" | ProtocolGroup>("learn:protocol:group", "all");
+  const [selectedStage, setSelectedStage] = usePersistedRecordSelection(
+    "learn:protocol:stage",
+    DURIAN_PROTOCOL_2026_2027,
+    (it) => it.order,
+  );
 
   const counts = useMemo(
     () => ({

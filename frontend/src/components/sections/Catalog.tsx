@@ -33,7 +33,14 @@ import "@/components/portal/portal.css";
 import { Sheet } from "@/components/portal/ui";
 import { Modal } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
-import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
+import {
+  ADMIN_LAST_URL_KEY,
+  readInitialUrlSubTab,
+  usePersistedEditableSelection,
+  usePersistedRecordSelection,
+  usePersistedState,
+  useUrlSubTab,
+} from "@/lib/back-navigation";
 import type { FertilizerDto, PesticideDto, VarietyDto } from "@/types/api";
 import type { FertilizerRecord, PesticideRecord, VarietyRecord, VillageRecord } from "@/types/catalog";
 import { isSafeMediaUrl } from "@/utils/url-safety";
@@ -182,10 +189,23 @@ export default function Catalog() {
   // 1. Thuốc BVTV
   const [pestQ, setPestQ] = useState("");
   const debouncedPestQ = useDebounced(pestQ, 120);
-  const [pestStatus, setPestStatus] = useState<"all" | "allowed" | "restricted" | "banned">("all");
+  const [pestStatus, setPestStatus] = usePersistedState<"all" | "allowed" | "restricted" | "banned">(
+    "admin:catalog:pest-status",
+    "all",
+  );
   const pesticides = useApiList<PesticideRecord>("pesticides", {});
-  const [selectedPesticide, setSelectedPesticide] = useState<PesticideDto | null>(null);
-  const [editingPesticide, setEditingPesticide] = useState<PesticideRecord | "new" | null>(null);
+  const [selectedPesticide, setSelectedPesticide] = usePersistedRecordSelection<PesticideDto>(
+    "admin:catalog:pest-view",
+    pesticides.rows,
+    (r) => r.id,
+    pesticides.loading,
+  );
+  const [editingPesticide, setEditingPesticide] = usePersistedEditableSelection(
+    "admin:catalog:pest-edit",
+    pesticides.rows,
+    (r) => r.id,
+    pesticides.loading,
+  );
   const [deletingPesticide, setDeletingPesticide] = useState<PesticideRecord | null>(null);
 
   const pestCounts = useMemo(
@@ -211,10 +231,24 @@ export default function Catalog() {
   // 2. Phân bón
   const [fertQ, setFertQ] = useState("");
   const debouncedFertQ = useDebounced(fertQ, 120);
-  const [fertCategory, setFertCategory] = useState<"all" | "organic" | "npk" | "foliar" | "microbial" | "restricted">("all");
+  const [fertCategory, setFertCategory] = usePersistedState<"all" | "organic" | "npk" | "foliar" | "microbial" | "restricted">(
+    "admin:catalog:fert-cat",
+    "all",
+  );
   const fertilizers = useApiList<FertilizerRecord>("fertilizers", {});
-  const [selectedFertilizer, setSelectedFertilizer] = useState<FertilizerDto | null>(null);
-  const [editingFertilizer, setEditingFertilizer] = useState<FertilizerRecord | "new" | null>(null);
+  const fertilizerDtos = useMemo(() => fertilizers.rows.map(toFertilizerDto), [fertilizers.rows]);
+  const [selectedFertilizer, setSelectedFertilizer] = usePersistedRecordSelection<FertilizerDto>(
+    "admin:catalog:fert-view",
+    fertilizerDtos,
+    (r) => r.id,
+    fertilizers.loading,
+  );
+  const [editingFertilizer, setEditingFertilizer] = usePersistedEditableSelection(
+    "admin:catalog:fert-edit",
+    fertilizers.rows,
+    (r) => r.id,
+    fertilizers.loading,
+  );
   const [deletingFertilizer, setDeletingFertilizer] = useState<FertilizerRecord | null>(null);
 
   const fertCounts = useMemo(
@@ -245,10 +279,24 @@ export default function Catalog() {
   // 3. Giống sầu riêng
   const [varQ, setVarQ] = useState("");
   const debouncedVarQ = useDebounced(varQ, 120);
-  const [varCategory, setVarCategory] = useState<"all" | "export" | "native" | "premium" | "new">("all");
+  const [varCategory, setVarCategory] = usePersistedState<"all" | "export" | "native" | "premium" | "new">(
+    "admin:catalog:var-cat",
+    "all",
+  );
   const varieties = useApiList<VarietyRecord>("varieties", {});
-  const [selectedVariety, setSelectedVariety] = useState<VarietyDto | null>(null);
-  const [editingVariety, setEditingVariety] = useState<VarietyRecord | "new" | null>(null);
+  const varietyDtos = useMemo(() => varieties.rows.map(toVarietyDto), [varieties.rows]);
+  const [selectedVariety, setSelectedVariety] = usePersistedRecordSelection<VarietyDto>(
+    "admin:catalog:var-view",
+    varietyDtos,
+    (r) => r.id,
+    varieties.loading,
+  );
+  const [editingVariety, setEditingVariety] = usePersistedEditableSelection(
+    "admin:catalog:var-edit",
+    varieties.rows,
+    (r) => r.id,
+    varieties.loading,
+  );
   const [deletingVariety, setDeletingVariety] = useState<VarietyRecord | null>(null);
 
   const varCounts = useMemo(
@@ -280,7 +328,12 @@ export default function Catalog() {
   const [vilQ, setVilQ] = useState("");
   const debouncedVilQ = useDebounced(vilQ, 120);
   const villages = useApiList<VillageRecord>("villages", {});
-  const [editingVillage, setEditingVillage] = useState<VillageRecord | "new" | null>(null);
+  const [editingVillage, setEditingVillage] = usePersistedEditableSelection(
+    "admin:catalog:vil-edit",
+    villages.rows,
+    (r) => r.id,
+    villages.loading,
+  );
   const [deletingVillage, setDeletingVillage] = useState<VillageRecord | null>(null);
 
   const shownVillages = useMemo(() => {
@@ -291,7 +344,11 @@ export default function Catalog() {
   }, [villages.rows, debouncedVilQ]);
 
   // 5. Tiêu chuẩn
-  const [viewingStandard, setViewingStandard] = useState<StandardDoc | null>(null);
+  const [viewingStandard, setViewingStandard] = usePersistedRecordSelection(
+    "admin:catalog:standard-view",
+    STANDARDS,
+    (r) => r.title,
+  );
 
   const pestProgressive = useProgressiveCount(shownPesticides.length, 16, 16, `${debouncedPestQ}|${pestStatus}`);
   const visiblePesticides = shownPesticides.slice(0, pestProgressive.visibleCount);

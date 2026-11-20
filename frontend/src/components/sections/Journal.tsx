@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApi, useApiList } from "@/hooks/use-api";
-import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
+import {
+  ADMIN_LAST_URL_KEY,
+  readInitialUrlSubTab,
+  usePersistedEditableSelection,
+  usePersistedRecordSelection,
+  usePersistedState,
+  useUrlSubTab,
+} from "@/lib/back-navigation";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
   ADMIN_JOURNAL_TAB_EVENT,
@@ -76,36 +83,24 @@ export default function Journal() {
     return () => window.removeEventListener(ADMIN_JOURNAL_TAB_EVENT, onTab);
   }, [selectTab]);
 
-  // Modals for Spray (khai báo sớm để chỉ tải danh mục thuốc BVTV khi cần mở biểu mẫu)
-  const [viewingSpray, setViewingSpray] = useState<SprayRow | null>(null);
-  const [editingSpray, setEditingSpray] = useState<SprayRow | null>(null);
-  const [deletingSpray, setDeletingSpray] = useState<SprayRow | null>(null);
-
-  // Options for selectors
-  const { households, options: householdOptions } = useHouseholdOptions();
-  const { pesticides, options: pesticideOptions } = usePesticideOptions(Boolean(editingSpray));
-
-  // Dashboard summary
-  const { data: summary, refresh: refreshSummary } = useApi<DashboardSummary>("/dashboard/summary");
-
   // Filters & pagination for Journal
   const [jSearch, setJSearch] = useState("");
   const debouncedJSearch = useDebounced(jSearch);
-  const [jHouseholdId, setJHouseholdId] = useState("");
-  const [jPage, setJPage] = useState(1);
+  const [jHouseholdId, setJHouseholdId] = usePersistedState("admin:journal:hh", "");
+  const [jPage, setJPage] = usePersistedState("admin:journal:page", 1);
 
   // Filters & pagination for Violations
   const [vSearch, setVSearch] = useState("");
   const debouncedVSearch = useDebounced(vSearch);
-  const [vSeverity, setVSeverity] = useState("");
-  const [vStatus, setVStatus] = useState("");
-  const [vPage, setVPage] = useState(1);
+  const [vSeverity, setVSeverity] = usePersistedState("admin:violations:severity", "");
+  const [vStatus, setVStatus] = usePersistedState("admin:violations:status", "");
+  const [vPage, setVPage] = usePersistedState("admin:violations:page", 1);
 
   // Filters & pagination for Spray
   const [sSearch, setSSearch] = useState("");
   const debouncedSSearch = useDebounced(sSearch);
-  const [sMrl, setSMrl] = useState("");
-  const [sPage, setSPage] = useState(1);
+  const [sMrl, setSMrl] = usePersistedState("admin:spray:mrl", "");
+  const [sPage, setSPage] = usePersistedState("admin:spray:page", 1);
 
   const journalList = useApiList<JournalRow>("journal", {
     q: debouncedJSearch || undefined,
@@ -129,6 +124,28 @@ export default function Journal() {
     pageSize: PAGE_SIZE,
   });
 
+  // Modals for Spray (chỉ tải danh mục thuốc BVTV khi cần mở biểu mẫu)
+  const [viewingSpray, setViewingSpray] = usePersistedRecordSelection(
+    "admin:spray:view",
+    sprayList.rows,
+    (r) => r.id,
+    sprayList.loading,
+  );
+  const [editingSpray, setEditingSpray] = usePersistedRecordSelection(
+    "admin:spray:edit",
+    sprayList.rows,
+    (r) => r.id,
+    sprayList.loading,
+  );
+  const [deletingSpray, setDeletingSpray] = useState<SprayRow | null>(null);
+
+  // Options for selectors
+  const { households, options: householdOptions } = useHouseholdOptions();
+  const { pesticides, options: pesticideOptions } = usePesticideOptions(Boolean(editingSpray));
+
+  // Dashboard summary
+  const { data: summary, refresh: refreshSummary } = useApi<DashboardSummary>("/dashboard/summary");
+
   // Compute real KPIs from summary & loaded lists (no hardcoded numbers)
   const qualifiedHouseholds =
     summary?.counts?.qualifiedHouseholds ?? households.filter((h) => h.status === "qualified").length;
@@ -139,20 +156,50 @@ export default function Journal() {
   const journalRecent = summary?.counts?.journalLast30Days ?? journalList.total;
 
   // Modals for Journal
-  const [viewingJournal, setViewingJournal] = useState<JournalRow | null>(null);
-  const [editingJournal, setEditingJournal] = useState<JournalRow | null>(null);
+  const [viewingJournal, setViewingJournal] = usePersistedRecordSelection(
+    "admin:journal:view",
+    journalList.rows,
+    (r) => r.id,
+    journalList.loading,
+  );
+  const [editingJournal, setEditingJournal] = usePersistedRecordSelection(
+    "admin:journal:edit",
+    journalList.rows,
+    (r) => r.id,
+    journalList.loading,
+  );
   const [deletingJournal, setDeletingJournal] = useState<JournalRow | null>(null);
 
   // Modals for Violations
-  const [viewingViolation, setViewingViolation] = useState<ViolationRow | null>(null);
-  const [resolvingViolation, setResolvingViolation] = useState<ViolationRow | null>(null);
-  const [editingViolation, setEditingViolation] = useState<ViolationRow | "new" | null>(null);
+  const [viewingViolation, setViewingViolation] = usePersistedRecordSelection(
+    "admin:violations:view",
+    violationsList.rows,
+    (r) => r.id,
+    violationsList.loading,
+  );
+  const [resolvingViolation, setResolvingViolation] = usePersistedRecordSelection(
+    "admin:violations:resolve",
+    violationsList.rows,
+    (r) => r.id,
+    violationsList.loading,
+  );
+  const [editingViolation, setEditingViolation] = usePersistedEditableSelection(
+    "admin:violations:edit",
+    violationsList.rows,
+    (r) => r.id,
+    violationsList.loading,
+  );
   const [deletingViolation, setDeletingViolation] = useState<ViolationRow | null>(null);
-  const [previewMedia, setPreviewMedia] = useState<{
+  const [previewMedia, setPreviewMedia] = usePersistedState<{
     urls: string[];
     title: string;
     subtitle?: string;
-  } | null>(null);
+  } | null>(
+    "admin:journal:preview-media",
+    null,
+    (v): v is { urls: string[]; title: string; subtitle?: string } | null =>
+      v === null || (typeof v === "object" && v !== null && Array.isArray((v as { urls?: unknown }).urls)),
+  );
 
   const tabs: TabItem<Tab>[] = [
     { id: "journal", label: "Nhật ký canh tác", badge: journalList.total },

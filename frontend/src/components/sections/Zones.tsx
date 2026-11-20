@@ -15,7 +15,7 @@ import ZonesOverviewCard from "@/components/zones/ZonesOverviewCard";
 import { buildZoneRows, summarizePlots } from "@/components/zones/zone-data";
 import { canRedrawPlotShapeByRole } from "@/constants/roles";
 import { usePlots } from "@/hooks/use-plots";
-import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useBackLayer, useUrlSubTab } from "@/lib/back-navigation";
+import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useBackLayer, usePersistedState, useUrlSubTab } from "@/lib/back-navigation";
 import { animatePopupExit } from "@/lib/popup-motion";
 
 const MapView = dynamic(() => import("@/components/map/MapView"), {
@@ -34,8 +34,16 @@ export default function Zones() {
   const [view, setView] = useState<ZoneView>(() =>
     readInitialUrlSubTab("sub", "map", isZoneView, ADMIN_LAST_URL_KEY),
   );
-  const [sheet, setSheet] = useState<SheetMode>(null);
-  const [activeZone, setActiveZone] = useState<string | null>(null);
+  const [sheet, setSheet] = usePersistedState<SheetMode>(
+    "admin:zones:sheet",
+    null,
+    (v): v is SheetMode => v === null || v === "overview" || v === "zone" || v === "list",
+  );
+  const [activeZone, setActiveZone] = usePersistedState<string | null>(
+    "admin:zones:active-zone",
+    null,
+    (v): v is string | null => v === null || typeof v === "string",
+  );
   const [pendingPlotAction, setPendingPlotAction] = useState<PendingPlotAction | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -70,7 +78,7 @@ export default function Zones() {
       return;
     }
     setSheet(null);
-  }, [isMobile]);
+  }, [isMobile, setSheet]);
 
   useEffect(() => {
     if (!isMobile || !sheet) return;
@@ -144,7 +152,7 @@ export default function Zones() {
         selectZoneView("map");
       }
     },
-    [selectZoneView, view],
+    [selectZoneView, setSheet, view],
   );
 
   return (

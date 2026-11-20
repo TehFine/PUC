@@ -11,6 +11,11 @@ import { NEWS_CATEGORIES } from "@/components/landing/news-data";
 import { toast } from "@/components/ui/Toast";
 import { useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
+import {
+  usePersistedEditableSelection,
+  usePersistedRecordSelection,
+  usePersistedState,
+} from "@/lib/back-navigation";
 import { formatVnDate, NEWS_CATEGORY_META } from "@/lib/news-store";
 import type { NewsRecord } from "@/types/news";
 import { isSafeMediaUrl } from "@/utils/url-safety";
@@ -21,8 +26,8 @@ export default function NewsAdmin() {
   const canUpdateNews = can("news", "update");
   const canDeleteNews = can("news", "delete");
   const [search, setSearch] = useState("");
-  const [selectedCat, setSelectedCat] = useState<string>("");
-  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [selectedCat, setSelectedCat] = usePersistedState<string>("admin:news:cat", "");
+  const [selectedStatus, setSelectedStatus] = usePersistedState<string>("admin:news:status", "");
   const debouncedSearch = useDebounced(search);
 
   const newsList = useApiList<NewsRecord>("news", {
@@ -31,8 +36,18 @@ export default function NewsAdmin() {
     status: selectedStatus,
   });
 
-  const [editingArticle, setEditingArticle] = useState<NewsRecord | "new" | null>(null);
-  const [previewArticle, setPreviewArticle] = useState<NewsRecord | null>(null);
+  const [editingArticle, setEditingArticle] = usePersistedEditableSelection(
+    "admin:news:edit",
+    newsList.rows,
+    (r) => r.id,
+    newsList.loading,
+  );
+  const [previewArticle, setPreviewArticle] = usePersistedRecordSelection(
+    "admin:news:preview",
+    newsList.rows,
+    (r) => r.id,
+    newsList.loading,
+  );
   const [deletingArticle, setDeletingArticle] = useState<NewsRecord | null>(null);
 
   const togglePublish = useMutation(async (article: NewsRecord) => {

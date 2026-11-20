@@ -19,7 +19,6 @@ export default function AutoEnter() {
     if (typeof window === "undefined") return false;
     try {
       if (window.sessionStorage.getItem(WORKSPACE_ACTIVE_SESSION_KEY) === "1") {
-        window.sessionStorage.removeItem(WORKSPACE_ACTIVE_SESSION_KEY);
         return true;
       }
     } catch {

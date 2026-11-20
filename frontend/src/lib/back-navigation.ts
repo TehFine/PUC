@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AUTH_EXPIRED_EVENT,
+  AUTH_LOGOUT_EVENT,
+  AUTH_SCOPE_CHANGED_EVENT,
+  getAuthScopeUser,
+} from "@/lib/api-client";
 
 export const PUC_URL_SYNC_EVENT = "puc:url-sync";
 export const ADMIN_LAST_URL_KEY = "puc:admin-active-url";
@@ -481,6 +487,10 @@ export function ensureRootEntryBeforeSubPage(rootUrl: string, currentSubUrl: str
     if (raw.__pucRootSeeded) return;
     window.history.replaceState({ ...buildCleanPageState(true), __pucRootSeeded: true }, "", rootUrl);
     window.history.pushState({ ...buildCleanPageState(true), __pucRootSeeded: true }, "", currentSubUrl);
+    if (overlayStack.length > 0) {
+      pushedOverlayCount = 0;
+      scheduleOverlaySync();
+    }
   } catch {
     // ignore
   }
@@ -612,4 +622,241 @@ export function useUrlSubTab<T extends string>(
     },
     [paramName, defaultValue],
   );
+}
+
+const UI_STATE_PREFIX = "puc:ui:";
+
+interface StoredUiState<T> {
+  u: number | null;
+  v: T;
+}
+
+function readPersistedUiValue<T>(
+  storageKey: string,
+  defaultValue: T,
+  isValid?: (raw: unknown) => raw is T,
+): T {
+  if (typeof window === "undefined") return defaultValue;
+  try {
+    const raw = window.sessionStorage.getItem(`${UI_STATE_PREFIX}${storageKey}`);
+    if (!raw) return defaultValue;
+    const parsed = JSON.parse(raw) as Partial<StoredUiState<T>>;
+    if (!parsed || typeof parsed !== "object" || !("v" in parsed)) return defaultValue;
+    const activeUser = getAuthScopeUser();
+    if (
+      activeUser !== null &&
+      typeof parsed.u === "number" &&
+      Number.isInteger(parsed.u) &&
+      parsed.u > 0 &&
+      parsed.u !== activeUser
+    ) {
+      return defaultValue;
+    }
+    const candidate = parsed.v as unknown;
+    if (isValid) {
+      return isValid(candidate) ? candidate : defaultValue;
+    }
+    if (defaultValue !== null && typeof defaultValue !== "undefined" && typeof candidate !== typeof defaultValue) {
+      return defaultValue;
+    }
+    return candidate as T;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function writePersistedUiValue<T>(storageKey: string, value: T, defaultValue: T): void {
+  if (typeof window === "undefined") return;
+  const fullKey = `${UI_STATE_PREFIX}${storageKey}`;
+  try {
+    if (Object.is(value, defaultValue)) {
+      window.sessionStorage.removeItem(fullKey);
+      return;
+    }
+    const payload: StoredUiState<T> = { u: getAuthScopeUser(), v: value };
+    window.sessionStorage.setItem(fullKey, JSON.stringify(payload));
+  } catch {
+    // Bỏ qua nếu trình duyệt hạn chế sessionStorage
+  }
+}
+
+function removePersistedUiValue(storageKey: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(`${UI_STATE_PREFIX}${storageKey}`);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Lưu trữ bền vững trạng thái màn hình / ngăn kéo / hộp thoại / bộ lọc qua thao tác tải lại trang (F5 / Reload),
+ * cô lập theo tab trình duyệt và tự động xóa sạch khi đăng xuất hoặc đổi tài khoản.
+ */
+export function usePersistedState<T>(
+  storageKey: string,
+  defaultValue: T,
+  isValid?: (raw: unknown) => raw is T,
+): [T, Dispatch<SetStateAction<T>>] {
+  const [state, setState] = useState<T>(() => readPersistedUiValue(storageKey, defaultValue, isValid));
+  const defaultRef = useRef(defaultValue);
+
+  useEffect(() => {
+    defaultRef.current = defaultValue;
+  }, [defaultValue]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const reset = () => {
+      removePersistedUiValue(storageKey);
+      setState(defaultRef.current);
+    };
+    const onScopeChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ previous?: number | null; next?: number | null }>).detail;
+      if (!detail || detail.previous !== detail.next) {
+        reset();
+      }
+    };
+    window.addEventListener(AUTH_LOGOUT_EVENT, reset);
+    window.addEventListener(AUTH_EXPIRED_EVENT, reset);
+    window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, onScopeChange);
+    return () => {
+      window.removeEventListener(AUTH_LOGOUT_EVENT, reset);
+      window.removeEventListener(AUTH_EXPIRED_EVENT, reset);
+      window.removeEventListener(AUTH_SCOPE_CHANGED_EVENT, onScopeChange);
+    };
+  }, [storageKey]);
+
+  const setPersisted = useCallback<Dispatch<SetStateAction<T>>>(
+    (action) => {
+      setState((prev) => {
+        const next = typeof action === "function" ? (action as (p: T) => T)(prev) : action;
+        writePersistedUiValue(storageKey, next, defaultRef.current);
+        return next;
+      });
+    },
+    [storageKey],
+  );
+
+  return [state, setPersisted];
+}
+
+const isNullableRecordKey = (raw: unknown): raw is string | number | null =>
+  raw === null || typeof raw === "string" || typeof raw === "number";
+
+/**
+ * Giữ nguyên hộp thoại / ngăn chi tiết đang mở của một bản ghi qua thao tác tải lại trang (F5 / Reload).
+ * Chỉ lưu khóa định danh nhẹ (`id` / `code`) trong `sessionStorage` và tự khớp lại bản ghi mới nhất từ API.
+ */
+export function usePersistedRecordSelection<T>(
+  storageKey: string,
+  items: readonly T[] | undefined,
+  getKey: (item: T) => string | number,
+  loading = false,
+): [T | null, (next: T | null) => void] {
+  const keyStorageName = `${storageKey}:key`;
+  const [selectedKey, setSelectedKey] = usePersistedState<string | number | null>(
+    keyStorageName,
+    null,
+    isNullableRecordKey,
+  );
+  const [cachedItem, setCachedItem] = useState<T | null>(null);
+
+  const resolvedItem = useMemo<T | null>(() => {
+    if (selectedKey === null) return null;
+    const keyStr = String(selectedKey);
+    if (items !== undefined) {
+      const matched = items.find((item) => String(getKey(item)) === keyStr);
+      if (matched !== undefined) return matched;
+    }
+    if (cachedItem !== null && String(getKey(cachedItem)) === keyStr) {
+      return cachedItem;
+    }
+    return null;
+  }, [selectedKey, items, cachedItem, getKey]);
+
+  useEffect(() => {
+    if (selectedKey !== null && items !== undefined && !loading && resolvedItem === null) {
+      removePersistedUiValue(keyStorageName);
+    }
+  }, [selectedKey, items, loading, resolvedItem, keyStorageName]);
+
+  const select = useCallback(
+    (next: T | null) => {
+      if (next === null) {
+        setCachedItem(null);
+        setSelectedKey(null);
+      } else {
+        setCachedItem(next);
+        setSelectedKey(getKey(next));
+      }
+    },
+    [getKey, setSelectedKey],
+  );
+
+  return [resolvedItem, select];
+}
+
+const NEW_RECORD_SENTINEL = "__puc_new__";
+
+/**
+ * Giữ nguyên hộp thoại thêm mới (`"new"`) hoặc chỉnh sửa bản ghi (`T`) qua thao tác tải lại trang (F5 / Reload).
+ */
+export function usePersistedEditableSelection<T>(
+  storageKey: string,
+  items: readonly T[] | undefined,
+  getKey: (item: T) => string | number,
+  loading = false,
+): [T | "new" | null, (next: T | "new" | null) => void] {
+  const keyStorageName = `${storageKey}:edit`;
+  const [selectedKey, setSelectedKey] = usePersistedState<string | number | null>(
+    keyStorageName,
+    null,
+    isNullableRecordKey,
+  );
+  const [cachedItem, setCachedItem] = useState<T | null>(null);
+
+  const resolved = useMemo<T | "new" | null>(() => {
+    if (selectedKey === null) return null;
+    if (selectedKey === NEW_RECORD_SENTINEL) return "new";
+    const keyStr = String(selectedKey);
+    if (items !== undefined) {
+      const matched = items.find((item) => String(getKey(item)) === keyStr);
+      if (matched !== undefined) return matched;
+    }
+    if (cachedItem !== null && String(getKey(cachedItem)) === keyStr) {
+      return cachedItem;
+    }
+    return null;
+  }, [selectedKey, items, cachedItem, getKey]);
+
+  useEffect(() => {
+    if (
+      selectedKey !== null &&
+      selectedKey !== NEW_RECORD_SENTINEL &&
+      items !== undefined &&
+      !loading &&
+      resolved === null
+    ) {
+      removePersistedUiValue(keyStorageName);
+    }
+  }, [selectedKey, items, loading, resolved, keyStorageName]);
+
+  const select = useCallback(
+    (next: T | "new" | null) => {
+      if (next === null) {
+        setCachedItem(null);
+        setSelectedKey(null);
+      } else if (next === "new") {
+        setCachedItem(null);
+        setSelectedKey(NEW_RECORD_SENTINEL);
+      } else {
+        setCachedItem(next);
+        setSelectedKey(getKey(next));
+      }
+    },
+    [getKey, setSelectedKey],
+  );
+
+  return [resolved, select];
 }

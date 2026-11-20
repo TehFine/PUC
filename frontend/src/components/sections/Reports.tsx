@@ -9,6 +9,7 @@ import { toast } from "@/components/ui/Toast";
 import { isCoopStaffRole } from "@/constants/roles";
 import { useApiList } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
+import { usePersistedRecordSelection, usePersistedState } from "@/lib/back-navigation";
 import type { VillageRecord } from "@/types/catalog";
 import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
 
@@ -430,11 +431,19 @@ export default function Reports() {
   const { session } = useAuth();
   const canExportAudit = isCoopStaffRole(session?.user.role);
   const villages = useApiList<VillageRecord>("villages");
-  const [selectedReport, setSelectedReport] = useState<ReportSpec | null>(null);
-  const [from, setFrom] = useState<string>("");
-  const [to, setTo] = useState<string>(todayIso);
-  const [villageId, setVillageId] = useState<string>("");
-  const [format, setFormat] = useState<"CSV" | "PDF">("CSV");
+  const [selectedReport, setSelectedReport] = usePersistedRecordSelection(
+    "admin:reports:selected",
+    REPORTS,
+    (r) => r.id,
+  );
+  const [from, setFrom] = usePersistedState<string>("admin:reports:from", "");
+  const [to, setTo] = usePersistedState<string>("admin:reports:to", todayIso());
+  const [villageId, setVillageId] = usePersistedState<string>("admin:reports:village", "");
+  const [format, setFormat] = usePersistedState<"CSV" | "PDF">(
+    "admin:reports:format",
+    "CSV",
+    (v): v is "CSV" | "PDF" => v === "CSV" || v === "PDF",
+  );
   const [downloading, setDownloading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewData, setPreviewData] = useState<ReportDataPayload | null>(null);

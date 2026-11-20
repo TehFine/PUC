@@ -1,9 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortal } from "@/hooks/use-portal";
+import { usePersistedRecordSelection } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
 import { relativeDayLabel } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
@@ -22,7 +22,12 @@ const ROUTE_THEMES = [
 export default function InspectionTab() {
   const schedule = usePortal<PortalList<PortalScheduleItem>>("schedule");
   const tests = usePortal<PortalList<PortalLabTest>>("lab-tests");
-  const [selectedTest, setSelectedTest] = useState<PortalLabTest | null>(null);
+  const [selectedTest, setSelectedTest] = usePersistedRecordSelection(
+    "portal:inspection:test",
+    tests.data?.data,
+    (t) => t.id,
+    tests.loading && !tests.data,
+  );
 
   return (
     <div className="pt-stack">

@@ -182,6 +182,10 @@ export function clearApiClientCaches(): void {
  * Cập nhật tài khoản đang hoạt động. Khi chuyển giữa các tài khoản (hoặc đăng xuất),
  * xóa bộ nhớ đệm ETag và phát `AUTH_SCOPE_CHANGED_EVENT` đồng bộ để các bộ nhớ đệm khác tự dọn ngay lập tức.
  */
+export function getAuthScopeUser(): number | null {
+  return authScopeUserId;
+}
+
 export function setAuthScopeUser(userId: number | null | undefined): void {
   const next = typeof userId === "number" && Number.isInteger(userId) && userId > 0 ? userId : null;
   if (next === authScopeUserId) return;

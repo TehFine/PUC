@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/Toast";
 import { isCoopStaffRole } from "@/constants/roles";
 import { useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
+import { usePersistedEditableSelection, usePersistedState } from "@/lib/back-navigation";
 import type { AccountRecord } from "@/types/accounts";
 import AccountFormModal from "./AccountFormModal";
 import { ROLE_LABELS } from "./settings-data";
@@ -46,9 +47,9 @@ export default function AccountsTab({
   const canUpdateAccount = can("accounts", "update");
   const canDeleteAccount = can("accounts", "delete");
   const [q, setQ] = useState("");
-  const [role, setRole] = useState("");
-  const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
+  const [role, setRole] = usePersistedState("admin:accounts:role", "");
+  const [status, setStatus] = usePersistedState("admin:accounts:status", "");
+  const [page, setPage] = usePersistedState("admin:accounts:page", 1);
   const debouncedQ = useDebounced(q);
 
   const list = useApiList<AccountRecord>("accounts", {
@@ -59,7 +60,12 @@ export default function AccountsTab({
     pageSize: PAGE_SIZE,
   });
 
-  const [editing, setEditing] = useState<AccountRecord | "new" | null>(null);
+  const [editing, setEditing] = usePersistedEditableSelection(
+    "admin:accounts:edit",
+    list.rows,
+    (r) => r.id,
+    list.loading,
+  );
   const [deleting, setDeleting] = useState<AccountRecord | null>(null);
   const [revokingAccount, setRevokingAccount] = useState<AccountRecord | null>(null);
   const [resetting2faAccount, setResetting2faAccount] = useState<AccountRecord | null>(null);

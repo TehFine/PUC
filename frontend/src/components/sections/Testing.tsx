@@ -14,6 +14,11 @@ import {
   ReferenceLine,
 } from "recharts";
 import { useAuth } from "@/components/auth/AuthProvider";
+import {
+  usePersistedEditableSelection,
+  usePersistedRecordSelection,
+  usePersistedState,
+} from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
 
 const LabTestCertificateModal = dynamic(
@@ -51,11 +56,9 @@ export default function Testing() {
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounced(search);
-  const [resultFilter, setResultFilter] = useState("");
-  const [page, setPage] = useState(1);
+  const [resultFilter, setResultFilter] = usePersistedState("admin:testing:result", "");
+  const [page, setPage] = usePersistedState("admin:testing:page", 1);
 
-  const [selectedTest, setSelectedTest] = useState<LabTestRecord | null>(null);
-  const [editing, setEditing] = useState<LabTestRecord | "new" | null>(null);
   const [deleting, setDeleting] = useState<LabTestRecord | null>(null);
   const [chartsReady, setChartsReady] = useState(false);
 
@@ -73,13 +76,25 @@ export default function Testing() {
     };
   }, [perfTier]);
 
-  const { options: householdOptions } = useHouseholdOptions(Boolean(editing) && (canCreate || canUpdate));
   const list = useApiList<LabTestRecord>("testing", {
     q: debouncedSearch || undefined,
     result: resultFilter || undefined,
     page,
     pageSize: PAGE_SIZE,
   });
+  const [selectedTest, setSelectedTest] = usePersistedRecordSelection(
+    "admin:testing:selected",
+    list.rows,
+    (r) => r.id,
+    list.loading,
+  );
+  const [editing, setEditing] = usePersistedEditableSelection(
+    "admin:testing:edit",
+    list.rows,
+    (r) => r.id,
+    list.loading,
+  );
+  const { options: householdOptions } = useHouseholdOptions(Boolean(editing) && (canCreate || canUpdate));
 
   const cdData = useMemo(
     () =>

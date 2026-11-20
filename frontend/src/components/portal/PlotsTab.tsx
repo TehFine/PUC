@@ -1,12 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { preconnectMapTileOrigins, warmSatelliteTilesAt } from "@/components/map/map-layers";
 import { QrCode } from "@/components/ui/PublicIcon";
 import { usePortal } from "@/hooks/use-portal";
+import { usePersistedRecordSelection } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
-import type { PortalOverview, PortalPlot, PortalPlots } from "@/types/portal";
+import type { PortalOverview, PortalPlots } from "@/types/portal";
 import { EmptyState, StateBlock } from "./ui";
 
 const GardenSignboardModal = dynamic(() => lazyChunk(() => import("./GardenSignboardModal")), { ssr: false });
@@ -15,8 +16,19 @@ const PlotMapModal = dynamic(() => lazyChunk(() => import("./PlotMapModal")), { 
 export default function PlotsTab() {
   const plots = usePortal<PortalPlots>("plots");
   const overview = usePortal<PortalOverview>("overview");
-  const [signboardPlot, setSignboardPlot] = useState<PortalPlot | null>(null);
-  const [mapViewPlot, setMapViewPlot] = useState<PortalPlot | null>(null);
+  const plotRows = plots.data?.available ? plots.data.data : undefined;
+  const [signboardPlot, setSignboardPlot] = usePersistedRecordSelection(
+    "portal:plots:signboard",
+    plotRows,
+    (p) => p.code,
+    plots.loading && !plots.data,
+  );
+  const [mapViewPlot, setMapViewPlot] = usePersistedRecordSelection(
+    "portal:plots:map",
+    plotRows,
+    (p) => p.code,
+    plots.loading && !plots.data,
+  );
 
   useEffect(() => {
     if (!plots.data?.available || plots.data.data.length === 0) return;

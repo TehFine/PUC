@@ -16,7 +16,14 @@ import { StampAllocationModal, StampListModal } from "@/components/admin/harvest
 import { toast } from "@/components/ui/Toast";
 import { isCoopStaffRole } from "@/constants/roles";
 import { api, errorMessage } from "@/lib/api-client";
-import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
+import {
+  ADMIN_LAST_URL_KEY,
+  readInitialUrlSubTab,
+  usePersistedEditableSelection,
+  usePersistedRecordSelection,
+  usePersistedState,
+  useUrlSubTab,
+} from "@/lib/back-navigation";
 
 const BatchQrModal = dynamic(() => import("@/components/harvest/BatchQrModal"), { ssr: false });
 const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
@@ -105,8 +112,8 @@ export default function Harvest() {
 
   // 1. Lô thu hoạch
   const [lotQ, setLotQ] = useState("");
-  const [lotMarket, setLotMarket] = useState("");
-  const [lotStatus, setLotStatus] = useState("");
+  const [lotMarket, setLotMarket] = usePersistedState("admin:harvest:market", "");
+  const [lotStatus, setLotStatus] = usePersistedState("admin:harvest:status", "");
   const debouncedLotQ = useDebounced(lotQ);
   const hasLotFilter = Boolean(debouncedLotQ || lotMarket || lotStatus);
   const allLots = useApiList<HarvestLotRecord>("harvest");
@@ -116,33 +123,62 @@ export default function Harvest() {
     status: lotStatus,
   });
   const lots = hasLotFilter ? filteredLots : allLots;
-  const [editingLot, setEditingLot] = useState<HarvestLotRecord | "new" | null>(null);
+  const [editingLot, setEditingLot] = usePersistedEditableSelection(
+    "admin:harvest:edit-lot",
+    allLots.rows,
+    (r) => r.id,
+    allLots.loading,
+  );
   const [deletingLot, setDeletingLot] = useState<HarvestLotRecord | null>(null);
-  const [contribLot, setContribLot] = useState<HarvestLotRecord | null>(null);
-  const [printingLot, setPrintingLot] = useState<HarvestLotRecord | null>(null);
-  const [incidentLotCode, setIncidentLotCode] = useState<string | null>(null);
-  const [scanningQr, setScanningQr] = useState(false);
-  const [viewingTraceLogs, setViewingTraceLogs] = useState(false);
-  const [viewingPlotQuotas, setViewingPlotQuotas] = useState(false);
-  const [viewingFieldPasses, setViewingFieldPasses] = useState(false);
+  const [contribLot, setContribLot] = usePersistedRecordSelection(
+    "admin:harvest:contrib-lot",
+    allLots.rows,
+    (r) => r.id,
+    allLots.loading,
+  );
+  const [printingLot, setPrintingLot] = usePersistedRecordSelection(
+    "admin:harvest:print-lot",
+    allLots.rows,
+    (r) => r.id,
+    allLots.loading,
+  );
+  const [incidentLotCode, setIncidentLotCode] = usePersistedState<string | null>(
+    "admin:harvest:incident-code",
+    null,
+    (v): v is string | null => v === null || typeof v === "string",
+  );
+  const [scanningQr, setScanningQr] = usePersistedState("admin:harvest:scan-qr", false);
+  const [viewingTraceLogs, setViewingTraceLogs] = usePersistedState("admin:harvest:trace-logs", false);
+  const [viewingPlotQuotas, setViewingPlotQuotas] = usePersistedState("admin:harvest:plot-quotas", false);
+  const [viewingFieldPasses, setViewingFieldPasses] = usePersistedState("admin:harvest:field-passes", false);
 
   // 2. Dự báo & tính lịch thu hoạch từ nhật ký chăm sóc
   const [planQ, setPlanQ] = useState("");
-  const [planStatus, setPlanStatus] = useState("");
+  const [planStatus, setPlanStatus] = usePersistedState("admin:harvest:plan-status", "");
   const debouncedPlanQ = useDebounced(planQ);
   const harvestPlans = useApiList<HarvestPlanRecord>(canReadHouseholds ? "harvest-plan" : null, {
     q: debouncedPlanQ,
     status: planStatus,
   });
-  const [notifyingPlan, setNotifyingPlan] = useState<HarvestPlanRecord | null>(null);
+  const [notifyingPlan, setNotifyingPlan] = usePersistedRecordSelection(
+    "admin:harvest:notify-plan",
+    harvestPlans.rows,
+    (r) => r.householdId,
+    harvestPlans.loading,
+  );
 
   // 3. Cấp phát tem nông hộ
   const [stampQ, setStampQ] = useState("");
   const debouncedStampQ = useDebounced(stampQ);
   const stampAllocations = useApiList<StampAllocationRecord>(canReadStamps ? "stamp-allocations" : null, { q: debouncedStampQ });
-  const [creatingStampAllocation, setCreatingStampAllocation] = useState(false);
+  const [creatingStampAllocation, setCreatingStampAllocation] = usePersistedState("admin:harvest:create-stamp", false);
   const [revokingAllocation, setRevokingAllocation] = useState<StampAllocationRecord | null>(null);
-  const [viewingStampsAllocation, setViewingStampsAllocation] = useState<StampAllocationRecord | null>(null);
+  const [viewingStampsAllocation, setViewingStampsAllocation] = usePersistedRecordSelection(
+    "admin:harvest:view-stamp",
+    stampAllocations.rows,
+    (r) => r.id,
+    stampAllocations.loading,
+  );
 
   // 4. Hợp đồng & Doanh nghiệp
   const [contractQ, setContractQ] = useState("");
@@ -150,7 +186,12 @@ export default function Harvest() {
   const contracts = useApiList<ContractRecord>(canReadContracts ? "contracts" : null, {
     q: debouncedContractQ,
   });
-  const [editingContract, setEditingContract] = useState<ContractRecord | "new" | null>(null);
+  const [editingContract, setEditingContract] = usePersistedEditableSelection(
+    "admin:harvest:edit-contract",
+    contracts.rows,
+    (r) => r.id,
+    contracts.loading,
+  );
   const [deletingContract, setDeletingContract] = useState<ContractRecord | null>(null);
 
   const [entQ, setEntQ] = useState("");
@@ -158,7 +199,12 @@ export default function Harvest() {
   const enterprises = useApiList<EnterpriseRecord>(canReadEnterprises ? "enterprises" : null, {
     q: debouncedEntQ,
   });
-  const [editingEnterprise, setEditingEnterprise] = useState<EnterpriseRecord | "new" | null>(null);
+  const [editingEnterprise, setEditingEnterprise] = usePersistedEditableSelection(
+    "admin:harvest:edit-enterprise",
+    enterprises.rows,
+    (r) => r.id,
+    enterprises.loading,
+  );
   const [deletingEnterprise, setDeletingEnterprise] = useState<EnterpriseRecord | null>(null);
   const growingZones = useApi<{ data?: GrowingZoneRow[] }>(
     tab === "enterprises" && canReadEnterprises ? "/growing-zones" : null,

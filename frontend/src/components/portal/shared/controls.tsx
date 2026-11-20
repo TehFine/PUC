@@ -12,6 +12,7 @@ import {
   type UploadPurpose,
 } from "@/lib/api-client";
 import { getNetworkQualitySnapshot, isLowEndDevice } from "@/lib/network";
+import { usePersistedState } from "@/lib/back-navigation";
 import { isDeviceOfflineNow, type OfflineMediaSlot } from "@/lib/offline-sync";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 import {
@@ -1711,9 +1712,16 @@ export function StoredMediaGallery({
     return unique;
   }, [urls, fallbackUrl]);
 
+  const galleryStorageKey = `media-viewer:${safeUrls[0] ?? altPrefix}`;
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
   const [activeSlide, setActiveSlide] = useState(0);
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [rawViewerIndex, setViewerIndex] = usePersistedState<number | null>(
+    galleryStorageKey,
+    null,
+    (v): v is number | null => v === null || (typeof v === "number" && Number.isInteger(v) && v >= 0),
+  );
+  const viewerIndex =
+    rawViewerIndex !== null && rawViewerIndex >= 0 && rawViewerIndex < safeUrls.length ? rawViewerIndex : null;
   const carouselTrackRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number>(0);
   const didCarouselDragRef = useRef(false);

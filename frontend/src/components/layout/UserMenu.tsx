@@ -15,6 +15,7 @@ import { Field, Sheet } from "@/components/portal/ui";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { ROLE_LABELS } from "@/constants/roles";
 import { errorMessage } from "@/lib/api-client";
+import { usePersistedState } from "@/lib/back-navigation";
 import { INTRO_PATH } from "@/lib/routes";
 
 const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
@@ -38,12 +39,12 @@ export default function UserMenu({
   backTitle?: string;
 } = {}) {
   const { session, logout, updateProfile, refreshSession } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [scanningQr, setScanningQr] = useState(false);
-  const [managing2fa, setManaging2fa] = useState(false);
-  const [managingSessions, setManagingSessions] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [editingProfile, setEditingProfile] = useState(false);
+  const [open, setOpen] = usePersistedState("admin:usermenu:open", false);
+  const [scanningQr, setScanningQr] = usePersistedState("admin:usermenu:qr", false);
+  const [managing2fa, setManaging2fa] = usePersistedState("admin:usermenu:2fa", false);
+  const [managingSessions, setManagingSessions] = usePersistedState("admin:usermenu:sessions", false);
+  const [changingPassword, setChangingPassword] = usePersistedState("admin:usermenu:password", false);
+  const [editingProfile, setEditingProfile] = usePersistedState("admin:usermenu:edit-profile", false);
   const [fullNameInput, setFullNameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [profilePasswordInput, setProfilePasswordInput] = useState("");

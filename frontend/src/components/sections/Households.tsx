@@ -12,6 +12,11 @@ import { badgeOf, HOUSEHOLD_STATUS, optionsOf } from "@/components/admin/shared/
 import { useVillageOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
 import { getZoneColor, KNOWN_ZONES } from "@/components/zones/zone-data";
+import {
+  usePersistedEditableSelection,
+  usePersistedRecordSelection,
+  usePersistedState,
+} from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
 import type { HouseholdRecord } from "@/types/households";
 
@@ -30,11 +35,11 @@ export default function Households() {
   const canDelete = can("households", "delete");
 
   const [search, setSearch] = useState("");
-  const [zoneFilter, setZoneFilter] = useState("");
+  const [zoneFilter, setZoneFilter] = usePersistedState("admin:households:zone", "");
   const debouncedSearch = useDebounced(search);
-  const [villageId, setVillageId] = useState("");
-  const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
+  const [villageId, setVillageId] = usePersistedState("admin:households:village", "");
+  const [status, setStatus] = usePersistedState("admin:households:status", "");
+  const [page, setPage] = usePersistedState("admin:households:page", 1);
 
   const { villages, options: villageOptions } = useVillageOptions();
   const effectiveQuery = [debouncedSearch.trim(), zoneFilter].filter(Boolean).join(" ") || undefined;
@@ -46,11 +51,26 @@ export default function Households() {
     pageSize: PAGE_SIZE,
   });
 
-  const [viewing, setViewing] = useState<HouseholdRecord | null>(null);
-  const [editing, setEditing] = useState<HouseholdRecord | "new" | null>(null);
-  const [issuingAccount, setIssuingAccount] = useState<HouseholdRecord | null>(null);
+  const [viewing, setViewing] = usePersistedRecordSelection(
+    "admin:households:view",
+    list.rows,
+    (r) => r.id,
+    list.loading,
+  );
+  const [editing, setEditing] = usePersistedEditableSelection(
+    "admin:households:edit",
+    list.rows,
+    (r) => r.id,
+    list.loading,
+  );
+  const [issuingAccount, setIssuingAccount] = usePersistedRecordSelection(
+    "admin:households:account",
+    list.rows,
+    (r) => r.id,
+    list.loading,
+  );
   const [deleting, setDeleting] = useState<HouseholdRecord | null>(null);
-  const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = usePersistedState("admin:households:import", false);
 
   return (
     <>

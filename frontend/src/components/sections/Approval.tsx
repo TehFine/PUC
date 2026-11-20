@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApiList } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
-import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useUrlSubTab } from "@/lib/back-navigation";
+import {
+  ADMIN_LAST_URL_KEY,
+  readInitialUrlSubTab,
+  usePersistedEditableSelection,
+  usePersistedRecordSelection,
+  usePersistedState,
+  useUrlSubTab,
+} from "@/lib/back-navigation";
 import BlockState from "@/components/admin/shared/BlockState";
 import { ADMIN_APPROVAL_TAB_EVENT, consumePendingApprovalTab } from "@/components/admin/shared/counts-events";
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
@@ -96,21 +103,21 @@ export default function Approval() {
   // Filters & pagination for Approvals
   const [appSearch, setAppSearch] = useState("");
   const debouncedAppSearch = useDebounced(appSearch);
-  const [appStatus, setAppStatus] = useState("");
-  const [appPriority, setAppPriority] = useState("");
-  const [appPage, setAppPage] = useState(1);
+  const [appStatus, setAppStatus] = usePersistedState("admin:approval:status", "");
+  const [appPriority, setAppPriority] = usePersistedState("admin:approval:priority", "");
+  const [appPage, setAppPage] = usePersistedState("admin:approval:page", 1);
 
   // Filters & pagination for Schedule
   const [schedSearch, setSchedSearch] = useState("");
   const debouncedSchedSearch = useDebounced(schedSearch);
-  const [schedKind, setSchedKind] = useState("");
-  const [schedPage, setSchedPage] = useState(1);
+  const [schedKind, setSchedKind] = usePersistedState("admin:schedule:kind", "");
+  const [schedPage, setSchedPage] = usePersistedState("admin:schedule:page", 1);
 
   // Filters & pagination for Minutes
   const [minSearch, setMinSearch] = useState("");
   const debouncedMinSearch = useDebounced(minSearch);
-  const [minResult, setMinResult] = useState("");
-  const [minPage, setMinPage] = useState(1);
+  const [minResult, setMinResult] = usePersistedState("admin:minutes:result", "");
+  const [minPage, setMinPage] = usePersistedState("admin:minutes:page", 1);
 
   const approvals = useApiList<ApprovalRow>("approvals", {
     q: debouncedAppSearch || undefined,
@@ -135,18 +142,43 @@ export default function Approval() {
   });
 
   // Modals for Approvals
-  const [viewingApproval, setViewingApproval] = useState<ApprovalRow | null>(null);
-  const [editingApproval, setEditingApproval] = useState<ApprovalRow | "new" | null>(null);
+  const [viewingApproval, setViewingApproval] = usePersistedRecordSelection(
+    "admin:approval:view",
+    approvals.rows,
+    (r) => r.id,
+    approvals.loading,
+  );
+  const [editingApproval, setEditingApproval] = usePersistedEditableSelection(
+    "admin:approval:edit",
+    approvals.rows,
+    (r) => r.id,
+    approvals.loading,
+  );
   const [decisionTarget, setDecisionTarget] = useState<{ row: ApprovalRow; mode: "approve" | "reject" } | null>(null);
   const [deletingApproval, setDeletingApproval] = useState<ApprovalRow | null>(null);
 
   // Modals for Schedule
-  const [editingSchedule, setEditingSchedule] = useState<ScheduleRow | "new" | null>(null);
+  const [editingSchedule, setEditingSchedule] = usePersistedEditableSelection(
+    "admin:schedule:edit",
+    schedules.rows,
+    (r) => r.id,
+    schedules.loading,
+  );
   const [deletingSchedule, setDeletingSchedule] = useState<ScheduleRow | null>(null);
 
   // Modals for Minutes
-  const [viewingMinute, setViewingMinute] = useState<MinuteRow | null>(null);
-  const [editingMinute, setEditingMinute] = useState<MinuteRow | "new" | null>(null);
+  const [viewingMinute, setViewingMinute] = usePersistedRecordSelection(
+    "admin:minutes:view",
+    minutes.rows,
+    (r) => r.id,
+    minutes.loading,
+  );
+  const [editingMinute, setEditingMinute] = usePersistedEditableSelection(
+    "admin:minutes:edit",
+    minutes.rows,
+    (r) => r.id,
+    minutes.loading,
+  );
   const [deletingMinute, setDeletingMinute] = useState<MinuteRow | null>(null);
 
   const tabs: TabItem<Tab>[] = [
