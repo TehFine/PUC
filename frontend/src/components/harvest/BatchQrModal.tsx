@@ -11,6 +11,7 @@ import { api, AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, AUTH_SCOPE_CHANGED_EVENT } 
 import { useBackLayer } from "@/lib/back-navigation";
 import {
   animatePopupExit,
+  attachSmoothSheetSettle,
   resolvePopupExitKind,
   spawnExitCloneIfNeeded,
 } from "@/lib/popup-motion";
@@ -138,21 +139,10 @@ export default function BatchQrModal({ lot, onClose }: Props) {
     };
   }, [handleClose]);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (isClosingRef.current) return;
-      if (sheetRef.current) {
-        sheetRef.current.style.setProperty("animation", "none", "important");
-        sheetRef.current.style.transform = "";
-        sheetRef.current.style.willChange = "auto";
-      }
-      if (backdropRef.current) {
-        backdropRef.current.style.setProperty("animation", "none", "important");
-        backdropRef.current.style.opacity = "1";
-      }
-    }, 320);
-    return () => window.clearTimeout(timer);
-  }, []);
+  useEffect(
+    () => attachSmoothSheetSettle(sheetRef.current, backdropRef.current, isClosingRef),
+    [],
+  );
 
   useSheetSwipe({
     sheetRef,
@@ -688,9 +678,11 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           flex-direction: column;
           border-radius: 8px 8px 0 0;
           border-top: 1px solid rgba(20, 55, 47, 0.14);
-          box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.16);
+          box-shadow: 0 -6px 20px rgba(15, 23, 42, 0.14);
           overflow: hidden;
-          animation: bqr-sheet-slide-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
+          animation: bqr-sheet-slide-up 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
 
         @media screen and (min-width: 760px) {

@@ -4,7 +4,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { getZoneColor } from "@/components/zones/zone-data";
-import { animatePopupExit, spawnExitCloneIfNeeded } from "@/lib/popup-motion";
+import {
+  animatePopupExit,
+  attachSmoothSheetSettle,
+  spawnExitCloneIfNeeded,
+} from "@/lib/popup-motion";
 import type { PlotFeature, PlotStatus } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
 import {
@@ -88,12 +92,7 @@ export default function PlotPopup({
     el.style.opacity = "";
     el.style.pointerEvents = "";
 
-    const timer = window.setTimeout(() => {
-      if (isClosingRef.current || !popupRef.current) return;
-      popupRef.current.style.setProperty("animation", "none", "important");
-      popupRef.current.style.transform = "";
-    }, 300);
-    return () => window.clearTimeout(timer);
+    return attachSmoothSheetSettle(el, null, isClosingRef);
   }, [feature.properties.code]);
 
   useEffect(() => {

@@ -1206,7 +1206,7 @@ body.pt-body {
     min-height: 100dvh !important;
     max-height: 100dvh !important;
     border-radius: 0 !important;
-    animation: pt-sheet-slide-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: pt-sheet-slide-up 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 }
 
@@ -6282,7 +6282,7 @@ body.pt-body {
   background: rgba(15, 23, 42, 0.48);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  animation: pt-sheet-backdrop-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: pt-sheet-backdrop-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   touch-action: pinch-zoom;
   overscroll-behavior: none;
   overflow: hidden;
@@ -6290,27 +6290,46 @@ body.pt-body {
 
 .pt-sheet-backdrop.is-confirm-overlay {
   z-index: 1200;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  padding: 16px;
+  padding: 0;
   box-sizing: border-box;
   background: rgba(15, 23, 42, 0.48);
 }
 
 .pt-sheet-backdrop.is-confirm-overlay > .pt-sheet {
   width: 100%;
-  max-width: var(--modal-max-w, 460px);
+  max-width: 100%;
   height: auto;
   min-height: 0;
-  max-height: calc(100dvh - 32px);
-  border-radius: 8px;
-  border: 1px solid #d4d4d2;
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
-  animation: pt-modal-pop-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  max-height: calc(100dvh - 24px);
+  border-radius: 8px 8px 0 0;
+  border-top: 1px solid #d4d4d2;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  box-shadow: 0 -6px 20px rgba(15, 23, 42, 0.14);
+  animation: pt-sheet-slide-up 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (min-width: 760px) {
+  .pt-sheet-backdrop.is-confirm-overlay {
+    align-items: center;
+    padding: 16px;
+  }
+
+  .pt-sheet-backdrop.is-confirm-overlay > .pt-sheet {
+    max-width: var(--modal-max-w, 460px);
+    max-height: calc(100dvh - 32px);
+    border-radius: 8px;
+    border: 1px solid #d4d4d2;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+    animation: pt-modal-pop-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
 }
 
 .pt-sheet-backdrop.is-closing {
-  animation: pt-sheet-backdrop-out 0.24s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  animation: pt-sheet-backdrop-out 0.28s cubic-bezier(0.32, 0.72, 0, 1) forwards;
   pointer-events: none;
 }
 
@@ -6326,13 +6345,15 @@ body.pt-body {
   border-radius: 0;
   background: #ffffff;
   box-shadow: none;
-  animation: pt-sheet-slide-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  animation: pt-sheet-slide-up 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
   touch-action: pan-x pan-y pinch-zoom;
   overflow: hidden;
 }
 
 .pt-sheet.is-closing {
-  animation: pt-sheet-slide-down 0.22s cubic-bezier(0.32, 0, 0.67, 0) forwards;
+  animation: pt-sheet-slide-down 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
   pointer-events: none;
 }
 
@@ -7312,17 +7333,20 @@ body.pt-body {
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border-radius: 16px 16px 0 0;
+  border-radius: 8px 8px 0 0;
+  border-top: 1px solid rgba(20, 55, 47, 0.14);
   padding: 24px 20px calc(44px + env(safe-area-inset-bottom));
-  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.14);
-  animation: pt-sheet-slide-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  box-shadow: 0 -6px 20px rgba(15, 23, 42, 0.14);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  animation: pt-sheet-slide-up 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
   touch-action: pan-x pan-y pinch-zoom;
   box-sizing: border-box;
   overflow: hidden;
 }
 
 .pt-radial-sheet.is-closing {
-  animation: pt-sheet-slide-down 0.22s cubic-bezier(0.32, 0, 0.67, 0) forwards;
+  animation: pt-sheet-slide-down 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
   pointer-events: none;
 }
 
@@ -8308,7 +8332,7 @@ body.pt-body {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
   overflow-x: hidden;
   overflow-y: auto;
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease, max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   touch-action: pan-y;
 }
 
@@ -8318,10 +8342,10 @@ body.pt-body {
 }
 
 .pt-mapmodal-floating-popup.is-closing {
-  transform: translateY(115%) !important;
+  transform: translate3d(0, 105%, 0) !important;
   opacity: 0 !important;
   pointer-events: none !important;
-  transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease !important;
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.26s ease-out !important;
 }
 
 .pt-mapmodal-popup-header {
@@ -8493,6 +8517,22 @@ body.pt-body {
   font-variant-numeric: tabular-nums;
 }
 
+.pt-mapmodal-stat-val.is-tone-green {
+  color: #15803d;
+}
+
+.pt-mapmodal-stat-val.is-tone-gold {
+  color: #9a6712;
+}
+
+.pt-mapmodal-stat-val.is-tone-red {
+  color: #b91c1c;
+}
+
+.pt-mapmodal-stat-val.is-tone-blue {
+  color: #1d4ed8;
+}
+
 .pt-mapmodal-stat-sub {
   font-size: 11px;
   color: #94a3b8;
@@ -8515,22 +8555,6 @@ body.pt-body {
   margin-top: 0;
   padding: 12px 16px 0;
   border-top: 1px solid rgba(60, 60, 67, 0.12);
-}
-
-.pt-mapmodal-stat-val.is-tone-green {
-  color: #15803d;
-}
-
-.pt-mapmodal-stat-val.is-tone-gold {
-  color: #9a6712;
-}
-
-.pt-mapmodal-stat-val.is-tone-red {
-  color: #b91c1c;
-}
-
-.pt-mapmodal-stat-val.is-tone-blue {
-  color: #1d4ed8;
 }
 
 .pt-mapmodal-popup-action-btn {
@@ -8814,12 +8838,21 @@ body.pt-body {
     border-left: none;
     border-right: none;
     border-bottom: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.9);
-    box-shadow: 0 56px 0 0 #fcfdfc, 0 -8px 36px rgba(0, 0, 0, 0.28);
+    border-top: 1px solid rgba(20, 55, 47, 0.14);
+    box-shadow: 0 56px 0 0 #fcfdfc, 0 -6px 24px rgba(15, 23, 42, 0.2);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
-    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    animation: pt-sheet-slide-up 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
+    transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .pt-mapmodal-floating-popup.is-closing {
+    transform: translate3d(0, 105%, 0) !important;
+    opacity: 1 !important;
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1) !important;
   }
 
   .pt-mapmodal-floating-popup.is-minimized {
@@ -11696,7 +11729,8 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
 .pt-app .pt-transit-content,
 .pt-app .pt-harvest-notice-card,
 .pt-app .pt-vietgap-card,
-.pt-app .pt-lab-test-list {
+.pt-app .pt-lab-test-list,
+.pt-app .pt-diary-day-card {
   background: #ffffff;
   border: 1px solid var(--card-border-soft, rgba(15, 23, 42, 0.055));
   box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.055));
@@ -11708,8 +11742,7 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-footer {
   box-shadow: var(--shadow-card-sm, 0 1px 3px rgba(15, 23, 42, 0.03), 0 4px 12px -2px rgba(15, 23, 42, 0.045));
 }
 
-.pt-app .pt-lab-test-list,
-.pt-app .pt-diary-day-card {
+.pt-app .pt-lab-test-list {
   border-radius: 8px;
   padding: 2px 14px;
 }

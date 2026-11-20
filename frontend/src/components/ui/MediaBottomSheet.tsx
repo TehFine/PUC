@@ -13,7 +13,11 @@ import { createPortal } from "react-dom";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { useBackLayer } from "@/lib/back-navigation";
-import { animatePopupExit, spawnExitCloneIfNeeded } from "@/lib/popup-motion";
+import {
+  animatePopupExit,
+  attachSmoothSheetSettle,
+  spawnExitCloneIfNeeded,
+} from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { isSafeMediaUrl } from "@/utils/url-safety";
 
@@ -149,20 +153,13 @@ export function MediaBottomSheet({
     enabled: true,
   });
 
+  useEffect(
+    () => attachSmoothSheetSettle(panelRef.current, backdropRef.current, isClosingRef),
+    [],
+  );
+
   useEffect(() => {
     const unlockScroll = lockRootScroll();
-    const timer = window.setTimeout(() => {
-      if (isClosingRef.current) return;
-      if (panelRef.current) {
-        panelRef.current.style.setProperty("animation", "none", "important");
-        panelRef.current.style.transform = "";
-        panelRef.current.style.willChange = "auto";
-      }
-      if (backdropRef.current) {
-        backdropRef.current.style.setProperty("animation", "none", "important");
-        backdropRef.current.style.opacity = "1";
-      }
-    }, 320);
 
     const onKeyDown = (ev: KeyboardEvent) => {
       const overlays = document.querySelectorAll(
@@ -184,7 +181,6 @@ export function MediaBottomSheet({
 
     document.addEventListener("keydown", onKeyDown);
     return () => {
-      window.clearTimeout(timer);
       document.removeEventListener("keydown", onKeyDown);
       unlockScroll();
     };

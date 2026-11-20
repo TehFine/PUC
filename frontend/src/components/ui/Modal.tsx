@@ -18,6 +18,7 @@ import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { useBackLayer } from "@/lib/back-navigation";
 import {
   animatePopupExit,
+  attachSmoothSheetSettle,
   resolvePopupExitKind,
   spawnExitCloneIfNeeded,
 } from "@/lib/popup-motion";
@@ -133,10 +134,8 @@ export function Modal({
       if (isClosingRef.current) return;
       if (window.visualViewport && window.visualViewport.scale > 1.01) return;
       const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
-      if (isCoarsePointer) {
-        panel?.focus({ preventScroll: true });
-        return;
-      }
+      // Trên thiết bị cảm ứng, dời focus sang thời điểm popup đã trượt dừng hẳn để tránh khựng frame đầu
+      if (isCoarsePointer) return;
       const items = focusable();
       const initial = items.find((el) => el.tagName !== "BUTTON") ?? items[0] ?? panel;
       initial?.focus({ preventScroll: true });
@@ -175,21 +174,16 @@ export function Modal({
     };
   }, [handleClose, closeOnBackdrop]);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (isClosingRef.current) return;
-      if (panelRef.current) {
-        panelRef.current.style.setProperty("animation", "none", "important");
-        panelRef.current.style.transform = "";
-        panelRef.current.style.willChange = "auto";
-      }
-      if (backdropRef.current) {
-        backdropRef.current.style.setProperty("animation", "none", "important");
-        backdropRef.current.style.opacity = "1";
-      }
-    }, 320);
-    return () => window.clearTimeout(timer);
-  }, []);
+  useEffect(
+    () =>
+      attachSmoothSheetSettle(panelRef.current, backdropRef.current, isClosingRef, () => {
+        if (window.visualViewport && window.visualViewport.scale > 1.01) return;
+        if (window.matchMedia("(pointer: coarse)").matches) {
+          panelRef.current?.focus({ preventScroll: true });
+        }
+      }),
+    [],
+  );
 
   useBackLayer(true, handleClose);
 
@@ -197,7 +191,7 @@ export function Modal({
     sheetRef: panelRef,
     handleRef: dragZoneRef,
     onDismiss: handleClose,
-    enabled: variant === "drawer" && !isDesktopDrawer,
+    enabled: !isDesktop && !isDesktopDrawer,
   });
 
   const modalNode = (

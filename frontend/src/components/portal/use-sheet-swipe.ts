@@ -35,7 +35,8 @@ const NO_DRAG_SELECTOR =
   "input, textarea, select, [contenteditable='true'], .leaflet-container, [data-no-sheet-drag]";
 
 const START_SLOP = 6; // px: ngưỡng phân biệt chạm nhẹ với vuốt
-const SNAP_BACK_MS = 260;
+const SNAP_BACK_MS = 360;
+const SNAP_BACK_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 
 const KNOWN_SCROLL_CLASSES = ["pt-sheet-body", "pt-radial-card-list", "pt-search-scroll", "zones-left-col"];
 
@@ -114,6 +115,8 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
         snapTimer = null;
       }
       unlockScroller();
+      delete sheet.dataset.dragging;
+      sheet.style.willChange = "auto";
       if (offset !== 0) {
         sheet.style.transition = "";
         sheet.style.transform = "";
@@ -132,15 +135,20 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
       originY = y;
       offset = 0;
       samples = [{ y, t: performance.now() }];
+      delete sheet.dataset.animating;
+      sheet.dataset.dragging = "true";
+      sheet.style.willChange = "transform";
       sheet.style.setProperty("animation", "none", "important");
       sheet.style.transition = "none";
       lockScroller();
     };
 
     const snapBack = () => {
-      sheet.style.transition = `transform ${SNAP_BACK_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+      sheet.style.transition = `transform ${SNAP_BACK_MS}ms ${SNAP_BACK_EASE}`;
       sheet.style.transform = "translate3d(0, 0, 0)";
       snapTimer = setTimeout(() => {
+        delete sheet.dataset.dragging;
+        sheet.style.willChange = "auto";
         sheet.style.transition = "";
         sheet.style.transform = "";
         snapTimer = null;
@@ -158,10 +166,13 @@ export function useSheetSwipe({ sheetRef, handleRef, onDismiss, enabled = true }
       const distanceThreshold = Math.min(140, sheet.offsetHeight * 0.28);
 
       if (!cancelled && (offset > distanceThreshold || (velocity > 0.45 && offset > 16))) {
+        delete sheet.dataset.dragging;
         dismissRef.current();
       } else if (offset !== 0) {
         snapBack();
       } else {
+        delete sheet.dataset.dragging;
+        sheet.style.willChange = "auto";
         sheet.style.transition = "";
       }
       offset = 0;

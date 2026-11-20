@@ -1,19 +1,79 @@
 export type PopupExitKind = "modal" | "drawer" | "sheet" | "floating-card";
 
+/** Đường cong giảm tốc mượt dần khi gần tới điểm dừng (Quintic Ease-Out) */
+export const POPUP_OPEN_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
+export const POPUP_OPEN_MS = 440;
 export const POPUP_CLOSE_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 
 export function resolvePopupExitKind(
   variant: "drawer" | "modal",
   desktopBreakpoint = 760,
 ): PopupExitKind {
-  if (variant === "modal") return "modal";
   const isDesktop = typeof window !== "undefined" && window.innerWidth >= desktopBreakpoint;
-  return isDesktop ? "drawer" : "sheet";
+  if (!isDesktop) return "sheet";
+  return variant === "modal" ? "modal" : "drawer";
 }
 
 /**
- * Thực thi hiệu ứng thu gọn mượt mà cho popup / ngăn kéo / bottom sheet (240ms–260ms, vừa mắt).
- * Dùng `setProperty("animation", "none", "important")` để luôn thắng mọi quy tắc CSS `forwards`.
+ * Giữ lớp ghép phần cứng GPU (`data-animating="true"`) suốt quá trình popup trượt từ cạnh dưới lên,
+ * và chỉ gỡ `animation` / `transform` sau khi sự kiện `animationend` hoàn tất trọn vẹn pha giảm tốc cuối
+ * (tránh cắt cụt chuyển động giữa chừng trên máy di động).
+ */
+export function attachSmoothSheetSettle(
+  panel: HTMLElement | null,
+  backdrop: HTMLElement | null,
+  isClosingRef?: { current: boolean },
+  onSettled?: () => void,
+): () => void {
+  if (!panel || typeof window === "undefined") {
+    return () => {};
+  }
+
+  let settled = false;
+  panel.dataset.animating = "true";
+
+  const settle = () => {
+    if (settled) return;
+    settled = true;
+    panel.removeEventListener("animationend", handleAnimationEnd);
+    window.clearTimeout(fallbackTimer);
+    delete panel.dataset.animating;
+
+    if (isClosingRef?.current || panel.dataset.dragging === "true") {
+      return;
+    }
+
+    panel.style.setProperty("animation", "none", "important");
+    panel.style.transform = "";
+    panel.style.willChange = "auto";
+
+    if (backdrop) {
+      backdrop.style.setProperty("animation", "none", "important");
+      backdrop.style.opacity = "1";
+    }
+
+    onSettled?.();
+  };
+
+  const handleAnimationEnd = (event: AnimationEvent) => {
+    if (event.target !== panel) return;
+    settle();
+  };
+
+  panel.addEventListener("animationend", handleAnimationEnd);
+  const fallbackTimer = window.setTimeout(settle, POPUP_OPEN_MS + 180);
+
+  return () => {
+    settled = true;
+    panel.removeEventListener("animationend", handleAnimationEnd);
+    window.clearTimeout(fallbackTimer);
+    delete panel.dataset.animating;
+  };
+}
+
+/**
+ * Thực thi hiệu ứng thu gọn mượt mà cho popup / ngăn kéo / bottom sheet.
+ * Dùng `setProperty("animation", "none", "important")` để luôn thắng mọi quy tắc CSS `forwards` / `both`.
  */
 export function animatePopupExit(
   panel: HTMLElement | null,
@@ -31,9 +91,12 @@ export function animatePopupExit(
     return 20;
   }
 
-  const durationMs = kind === "floating-card" ? 240 : kind === "modal" ? 250 : 260;
+  const durationMs =
+    kind === "sheet" ? 300 : kind === "floating-card" ? 240 : kind === "modal" ? 250 : 260;
 
   if (panel) {
+    panel.dataset.animating = "true";
+    panel.style.willChange = "transform";
     panel.style.setProperty("animation", "none", "important");
     panel.style.pointerEvents = "none";
     if (kind === "modal") {
@@ -42,7 +105,7 @@ export function animatePopupExit(
         `transform ${durationMs}ms ${POPUP_CLOSE_EASE}, opacity ${durationMs - 15}ms ease-out`,
         "important",
       );
-      panel.style.transform = "translate3d(0, 10px, 0) scale(0.94)";
+      panel.style.transform = "translate3d(0, 10px, 0) scale(0.96)";
       panel.style.opacity = "0";
     } else if (kind === "drawer") {
       panel.style.setProperty("transition", `transform ${durationMs}ms ${POPUP_CLOSE_EASE}`, "important");
@@ -53,11 +116,11 @@ export function animatePopupExit(
         `transform ${durationMs}ms ${POPUP_CLOSE_EASE}, opacity ${durationMs - 15}ms ease-out`,
         "important",
       );
-      panel.style.transform = "translate3d(8px, 0, 0) scale(0.95)";
+      panel.style.transform = "translate3d(8px, 0, 0) scale(0.96)";
       panel.style.opacity = "0";
     } else {
       panel.style.setProperty("transition", `transform ${durationMs}ms ${POPUP_CLOSE_EASE}`, "important");
-      panel.style.transform = "translate3d(0, 104%, 0)";
+      panel.style.transform = "translate3d(0, 102%, 0)";
     }
   }
 

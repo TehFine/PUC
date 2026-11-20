@@ -10,6 +10,7 @@ import { isLowEndDevice } from "@/lib/network";
 import { useBackLayer } from "@/lib/back-navigation";
 import {
   animatePopupExit,
+  attachSmoothSheetSettle,
   resolvePopupExitKind,
   spawnExitCloneIfNeeded,
 } from "@/lib/popup-motion";
@@ -288,21 +289,10 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
     enabled: !isDesktop,
   });
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (closingRef.current) return;
-      if (containerRef.current) {
-        containerRef.current.style.setProperty("animation", "none", "important");
-        containerRef.current.style.transform = "";
-        containerRef.current.style.willChange = "auto";
-      }
-      if (backdropRef.current) {
-        backdropRef.current.style.animation = "none";
-        backdropRef.current.style.opacity = "1";
-      }
-    }, 350);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(
+    () => attachSmoothSheetSettle(containerRef.current, backdropRef.current, closingRef),
+    [],
+  );
 
   const isPass = test.result === "pass" || test.result === "Đạt";
   const householdName = test.householdName || "Chưa cập nhật";
@@ -1118,7 +1108,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           display: flex;
           justify-content: center;
           align-items: flex-start;
-          animation: certFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+          animation: certFadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         @keyframes certFadeIn {
@@ -1138,7 +1128,9 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           flex-direction: column;
           gap: 12px;
           margin: auto;
-          animation: certMobileSlideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
+          animation: certMobileSlideUp 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
 
         /* ── Thanh điều khiển phía trên ── */

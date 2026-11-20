@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { onAdminNavigate } from "@/components/admin/shared/counts-events";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { useBackLayer } from "@/lib/back-navigation";
-import { animatePopupExit } from "@/lib/popup-motion";
+import { animatePopupExit, attachSmoothSheetSettle } from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
 
 interface NavItem {
@@ -86,19 +86,7 @@ export default function Sidebar({ active, onNavigate }: Props) {
 
   useEffect(() => {
     if (!isOpen) return;
-    const timer = setTimeout(() => {
-      if (isClosingRef.current) return;
-      if (sheetRef.current) {
-        sheetRef.current.style.setProperty("animation", "none", "important");
-        sheetRef.current.style.transform = "";
-        sheetRef.current.style.willChange = "auto";
-      }
-      if (backdropRef.current) {
-        backdropRef.current.style.setProperty("animation", "none", "important");
-        backdropRef.current.style.opacity = "1";
-      }
-    }, 320);
-    return () => clearTimeout(timer);
+    return attachSmoothSheetSettle(sheetRef.current, backdropRef.current, isClosingRef);
   }, [isOpen]);
 
   useEffect(() => {

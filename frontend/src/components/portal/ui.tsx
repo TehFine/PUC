@@ -9,6 +9,7 @@ import type { Tone } from "@/lib/portal-labels";
 import { useBackLayer } from "@/lib/back-navigation";
 import {
   animatePopupExit,
+  attachSmoothSheetSettle,
   resolvePopupExitKind,
   spawnExitCloneIfNeeded,
 } from "@/lib/popup-motion";
@@ -245,32 +246,21 @@ export function Sheet({
     };
   }, [handleClose, closeOnBackdrop]);
 
-  // Sau khi animation mở ban đầu kết thúc, gỡ hẳn animation và transform 3D
-  // để trình duyệt di động vẽ vector sắc nét (không rỗ pixel hay mất ô đệm GPU) khi người dùng zoom to
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (isClosingRef.current) return;
-      if (sheetRef.current) {
-        sheetRef.current.style.setProperty("animation", "none", "important");
-        sheetRef.current.style.transform = "";
-        sheetRef.current.style.willChange = "auto";
-      }
-      if (backdropRef.current) {
-        backdropRef.current.style.setProperty("animation", "none", "important");
-        backdropRef.current.style.opacity = "1";
-      }
-    }, 320);
-    return () => window.clearTimeout(timer);
-  }, []);
+  // Chỉ gỡ animation & transform sau khi sự kiện `animationend` hoàn tất trọn vẹn pha giảm tốc
+  // để popup trượt mượt hết hành trình trên di động và vẫn sắc nét khi người dùng zoom to
+  useEffect(
+    () => attachSmoothSheetSettle(sheetRef.current, backdropRef.current, isClosingRef),
+    [],
+  );
 
   useBackLayer(true, handleClose);
 
-  // Vuốt đóng trên mobile; tắt trên ngăn kéo dọc desktop và hộp thoại căn giữa
+  // Vuốt đóng trên mobile cho toàn bộ popup trượt từ cạnh dưới lên; tắt trên desktop
   useSheetSwipe({
     sheetRef,
     handleRef: dragZoneRef,
     onDismiss: handleClose,
-    enabled: variant === "drawer" && !isDesktopDrawer,
+    enabled: !isDesktop && !isDesktopDrawer,
   });
 
   const sheetNode = (
