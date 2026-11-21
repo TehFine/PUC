@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import FormModal from "@/components/admin/catalog/FormModal";
 import ImageUploadField from "@/components/admin/catalog/ImageUploadField";
 import { CheckboxField, FormGrid, SelectField, TextAreaField, TextField } from "@/components/ui/form/fields";
@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
+import { ensureFieldVisible } from "@/lib/keyboard-scroll";
 import { NEWS_CATEGORY_META } from "@/lib/news-store";
 import type { NewsCategory, NewsInput, NewsRecord } from "@/types/news";
 
@@ -50,7 +51,7 @@ export default function NewsFormModal({
   const [slug, setSlug] = useState(initial?.slug ?? "");
   const [slugTouched, setSlugTouched] = useState(Boolean(initial?.slug));
   const [category, setCategory] = useState<NewsCategory>(initial?.category ?? "visit");
-  const [author, setAuthor] = useState(initial?.author ?? "Ban Kỹ thuật & Truyền thông HTX");
+  const [author, setAuthor] = useState(initial?.author ?? "Ban Kỹ thuật và Truyền thông HTX");
   const [readTime, setReadTime] = useState(initial?.readTime ?? "4 phút đọc");
   const [excerpt, setExcerpt] = useState(initial?.excerpt ?? "");
   const [lead, setLead] = useState(initial?.content?.lead ?? "");
@@ -80,10 +81,25 @@ export default function NewsFormModal({
   };
 
   const [removingSectionIdx, setRemovingSectionIdx] = useState<number | null>(null);
+  const sectionsContainerRef = useRef<HTMLDivElement>(null);
+  const pendingFocusSectionRef = useRef<number | null>(null);
 
   const handleAddSection = () => {
+    pendingFocusSectionRef.current = sections.length;
     setSections((prev) => [...prev, { heading: "", contentText: "", bulletsText: "" }]);
   };
+
+  useEffect(() => {
+    const targetIdx = pendingFocusSectionRef.current;
+    if (targetIdx === null) return;
+    pendingFocusSectionRef.current = null;
+    const card = sectionsContainerRef.current?.querySelectorAll<HTMLElement>("[data-news-section]")[targetIdx];
+    const firstInput = card?.querySelector<HTMLElement>("input, textarea");
+    if (firstInput) {
+      firstInput.focus({ preventScroll: true });
+      ensureFieldVisible(firstInput, { mode: "focus" });
+    }
+  }, [sections.length]);
 
   const handleRemoveSection = (idx: number) => {
     if (sections.length <= 1) return;
@@ -98,7 +114,7 @@ export default function NewsFormModal({
       category,
       title: title.trim(),
       excerpt: excerpt.trim(),
-      author: author.trim() || "Ban Kỹ thuật & Truyền thông HTX",
+      author: author.trim() || "Ban Kỹ thuật và Truyền thông HTX",
       readTime: readTime.trim() || "4 phút đọc",
       imageUrl: imageUrl || "/landing/news-field-visit.jpg",
       imageAlt: imageAlt.trim() || title.trim(),
@@ -157,7 +173,7 @@ export default function NewsFormModal({
       onSubmit={() => void submit()}
       pending={pending}
       error={localError ?? error}
-      submitLabel={publishNow ? "Lưu & Xuất bản" : "Lưu bản nháp"}
+      submitLabel={publishNow ? "Lưu và xuất bản" : "Lưu bản nháp"}
       width={780}
     >
       <FormGrid>
@@ -167,7 +183,7 @@ export default function NewsFormModal({
           value={title}
           onChange={handleTitleChange}
           maxLength={250}
-          placeholder="VD: Cảnh báo nấm bệnh mùa mưa & danh mục thuốc sinh học..."
+          placeholder="VD: Cảnh báo nấm bệnh mùa mưa và danh mục thuốc sinh học..."
         />
         <TextField
           label="Đường dẫn tĩnh (slug)"
@@ -190,9 +206,9 @@ export default function NewsFormModal({
             label: info.label,
           }))}
         />
-        <TextField label="Tác giả / Nguồn phát hành" value={author} onChange={setAuthor} maxLength={120} />
+        <TextField label="Tác giả hoặc nguồn phát hành" value={author} onChange={setAuthor} maxLength={120} />
         <TextField label="Thời gian đọc dự kiến" value={readTime} onChange={setReadTime} maxLength={40} placeholder="VD: 4 phút đọc" />
-        <TextField label="Chú thích ảnh (Alt / Caption)" value={imageAlt} onChange={setImageAlt} maxLength={200} />
+        <TextField label="Chú thích ảnh minh họa" value={imageAlt} onChange={setImageAlt} maxLength={200} />
       </FormGrid>
 
       <FormGrid>
@@ -214,23 +230,23 @@ export default function NewsFormModal({
       />
 
       <TextAreaField
-        label="Tóm tắt ngắn (Hiển thị trên thẻ bài báo ngoài trang chủ)"
+        label="Tóm tắt ngắn (hiển thị trên thẻ bài báo ngoài trang chủ)"
         required
         value={excerpt}
         onChange={setExcerpt}
-        rows={2}
+        rows={3}
         maxLength={600}
       />
 
       <TextAreaField
-        label="Lời dẫn mở đầu bài viết (Lead paragraph)"
+        label="Lời dẫn mở đầu bài viết"
         value={lead}
         onChange={setLead}
-        rows={2}
+        rows={3}
         maxLength={1000}
       />
 
-      <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+      <div ref={sectionsContainerRef} style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           <strong style={{ fontSize: 13.5 }}>Nội dung chi tiết từng phân đoạn</strong>
           <button type="button" className="btn btn-outline btn-sm" onClick={handleAddSection}>
@@ -241,6 +257,7 @@ export default function NewsFormModal({
         {sections.map((sec, idx) => (
           <div
             key={idx}
+            data-news-section=""
             style={{
               background: "var(--bg-input, #f7f9f6)",
               border: "1px solid var(--border)",
@@ -250,7 +267,7 @@ export default function NewsFormModal({
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--green-700)" }}>Phần {idx + 1}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--green-700)", fontVariantNumeric: "tabular-nums" }}>Phần {idx + 1}</span>
               {sections.length > 1 && (
                 <button
                   type="button"
@@ -271,23 +288,23 @@ export default function NewsFormModal({
               label="Nội dung diễn giải (các đoạn văn cách nhau 1 dòng trống)"
               value={sec.contentText}
               onChange={(val) => setSections((prev) => prev.map((s, i) => (i === idx ? { ...s, contentText: val } : s)))}
-              rows={3}
+              rows={5}
             />
             <TextAreaField
               label="Các gạch đầu dòng kỹ thuật (mỗi dòng 1 ý)"
               value={sec.bulletsText}
               onChange={(val) => setSections((prev) => prev.map((s, i) => (i === idx ? { ...s, bulletsText: val } : s)))}
-              rows={2}
+              rows={3}
             />
           </div>
         ))}
       </div>
 
       <TextAreaField
-        label="Khuyến cáo nhà nông (Khung vàng nhấn mạnh cuối bài)"
+        label="Khuyến cáo nhà nông (khung nhấn mạnh cuối bài)"
         value={takeaway}
         onChange={setTakeaway}
-        rows={2}
+        rows={3}
         maxLength={600}
       />
 

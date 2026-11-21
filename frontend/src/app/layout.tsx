@@ -6,6 +6,7 @@ import { AuthProvider } from "@/components/auth/AuthProvider";
 import NetworkStatus from "@/components/ui/NetworkStatus";
 import SystemAlertBanner from "@/components/ui/SystemAlertBanner";
 import { Toaster } from "@/components/ui/Toast";
+import { KeyboardScrollGuard } from "@/lib/keyboard-scroll";
 import { PERF_BOOTSTRAP_SCRIPT } from "@/lib/perf-bootstrap";
 
 const baiJamjuree = Bai_Jamjuree({
@@ -53,6 +54,7 @@ export default async function RootLayout({
       </head>
       <body className={`${baiJamjuree.variable} ${baiJamjuree.className} font-sans antialiased`}>
         <NetworkStatus />
+        <KeyboardScrollGuard />
         <AuthProvider>
           <SystemAlertBanner />
           {children}

@@ -12307,7 +12307,8 @@ body.pt-body .pt-form-actions .pt-btn {
 
 /* 7. Thanh nút Hủy | Lưu nhật ký ghim cố định ở cạnh đáy màn hình Ghi nhật ký canh tác */
 .pt-sheet.pt-diary-form-sheet > .pt-sheet-body {
-  padding-bottom: 24px !important;
+  scroll-padding-bottom: 148px;
+  padding-bottom: clamp(140px, 32vh, 240px) !important;
 }
 
 .pt-sheet.pt-diary-form-sheet > .pt-sheet-footer {
@@ -12791,6 +12792,47 @@ body.pt-body .pt-form-actions .pt-btn {
   font-weight: 600;
   color: #14372f;
 }
+
+/* ── Đồng bộ chiều cao bàn phím ảo (visualViewport) và hành trình cuộn cho Cổng hộ dân ── */
+.pt-sheet-backdrop[data-kb-open="true"] {
+  top: var(--vv-top, 0px) !important;
+  bottom: auto !important;
+  height: var(--vv-height, 100dvh) !important;
+  max-height: var(--vv-height, 100dvh) !important;
+}
+
+.pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.modal-confirm-sheet) {
+  height: var(--vv-height, 100dvh) !important;
+  min-height: 0 !important;
+  max-height: var(--vv-height, 100dvh) !important;
+}
+
+@media screen and (min-width: 760px) {
+  .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: calc(var(--vv-height, 100dvh) - 24px) !important;
+  }
+}
+
+.pt-sheet-backdrop[data-kb-open="true"] .pt-sheet-footer {
+  padding-bottom: 0 !important;
+}
+
+html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+  scroll-padding-top: 16px;
+  scroll-padding-bottom: 148px;
+  padding-bottom: clamp(132px, 30vh, 230px) !important;
+}
+
+@media (max-width: 900px), (pointer: coarse) {
+  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:focus-within {
+    padding-bottom: max(46vh, 320px) !important;
+  }
+}
+
 
 
 

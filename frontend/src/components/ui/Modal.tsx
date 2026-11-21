@@ -16,6 +16,7 @@ import { SheetCloseContext, useIsDesktopViewport, useSheetClose } from "@/compon
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { useBackLayer } from "@/lib/back-navigation";
+import { useDialogKeyboardViewport } from "@/lib/keyboard-scroll";
 import {
   animatePopupExit,
   attachSmoothSheetSettle,
@@ -186,6 +187,7 @@ export function Modal({
   );
 
   useBackLayer(true, handleClose);
+  useDialogKeyboardViewport(backdropRef, panelRef, isClosingRef);
 
   useSheetSwipe({
     sheetRef: panelRef,

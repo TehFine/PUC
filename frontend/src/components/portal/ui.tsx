@@ -7,6 +7,7 @@ import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { SkeletonCards, SkeletonRows, SkeletonStats } from "@/components/ui/Skeleton";
 import type { Tone } from "@/lib/portal-labels";
 import { useBackLayer } from "@/lib/back-navigation";
+import { useDialogKeyboardViewport } from "@/lib/keyboard-scroll";
 import {
   animatePopupExit,
   attachSmoothSheetSettle,
@@ -254,6 +255,7 @@ export function Sheet({
   );
 
   useBackLayer(true, handleClose);
+  useDialogKeyboardViewport(backdropRef, sheetRef, isClosingRef);
 
   // Vuốt đóng trên mobile cho toàn bộ popup trượt từ cạnh dưới lên; tắt trên desktop
   useSheetSwipe({

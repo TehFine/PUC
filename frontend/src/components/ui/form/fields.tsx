@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, type ReactNode } from "react";
 
 /** Các ô nhập dùng class `.form-group` / `.form-input` của khu quản trị. */
 
@@ -154,6 +154,7 @@ export function TextAreaField({
   rows = 3,
   maxLength,
   placeholder,
+  autoGrow = true,
   ...base
 }: BaseProps & {
   value: string;
@@ -161,11 +162,30 @@ export function TextAreaField({
   rows?: number;
   maxLength?: number;
   placeholder?: string;
+  autoGrow?: boolean;
 }) {
   const id = useId();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const syncHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el || !autoGrow) return;
+    const minHeight = Math.max(76, rows * 24 + 22);
+    const maxHeight = 340;
+    el.style.height = "auto";
+    const nextHeight = Math.min(maxHeight, Math.max(minHeight, el.scrollHeight));
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [autoGrow, rows]);
+
+  useLayoutEffect(() => {
+    syncHeight();
+  }, [value, syncHeight]);
+
   return (
     <Wrap id={id} {...base}>
       <textarea
+        ref={textareaRef}
         id={id}
         className="form-input"
         rows={rows}
