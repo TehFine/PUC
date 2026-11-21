@@ -162,20 +162,7 @@ export async function seedSupplyChain(pool: Pool, options?: { log?: (msg: string
       }
     }
 
-    // 6. Bổ sung mã đối chiếu chéo Phòng kiểm nghiệm độc lập ISO/IEC 17025 cho các phiếu kiểm nghiệm mẫu
-    const hasLabVerifyCol = (
-      await client.query<{ ok: number }>(
-        `SELECT 1 AS ok FROM information_schema.columns WHERE table_name = 'lab_tests' AND column_name = 'external_verify_code'`,
-      )
-    ).rowCount;
-    if (hasLabVerifyCol) {
-      await client.query(`
-        UPDATE lab_tests
-        SET external_verify_code = 'ISO17025-' || upper(regexp_replace(code, '[^A-Za-z0-9-]', '', 'g')),
-            external_verify_url = 'https://kiemnghiem.quatest3.com.vn/tra-cuu?code=' || upper(regexp_replace(code, '[^A-Za-z0-9-]', '', 'g'))
-        WHERE external_verify_code IS NULL
-      `);
-    }
+    // 6. Không tự sinh mã đối chiếu hay URL giả lập cho bảng lab_tests (chỉ lưu dữ liệu kiểm nghiệm thực tế)
 
     // 7. Khởi tạo Bảng QR Thửa Đất (plot_signboard_tokens), Hạn ngạch sản lượng đầu vụ (plot_season_quotas) & Thẻ Đoàn Thẩm định
     const hasSignboardTable = (

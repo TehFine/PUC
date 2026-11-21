@@ -263,8 +263,9 @@ export class TestingService extends BaseCrudService {
     if (out.externalVerifyCode !== undefined && typeof out.externalVerifyCode === "string" && !out.externalVerifyCode.trim()) {
       out.externalVerifyCode = null;
     }
-    if (out.labAccreditationCode !== undefined && typeof out.labAccreditationCode === "string" && !out.labAccreditationCode.trim()) {
-      out.labAccreditationCode = "VILAS 356 - ISO/IEC 17025 (GACC chỉ định)";
+    if (out.labAccreditationCode !== undefined) {
+      out.labAccreditationCode =
+        typeof out.labAccreditationCode === "string" ? out.labAccreditationCode.trim() : "";
     }
     if (out.scanAttachmentId !== undefined) {
       if (out.scanAttachmentId === null) {
@@ -277,12 +278,6 @@ export class TestingService extends BaseCrudService {
           effHouseholdId > 0 ? effHouseholdId : null,
         );
         out.scanAttachmentId = validId ?? null;
-      }
-    }
-    if (context.method === "POST" && out.code && !out.externalVerifyCode) {
-      const safeCode = String(out.code).replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
-      if (safeCode) {
-        out.externalVerifyCode = `ISO17025-${safeCode}`;
       }
     }
     return { ...out, _method: context.method };

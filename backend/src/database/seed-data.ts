@@ -58,13 +58,18 @@ export const sprayData = [
   { date: "19/10/2024", household: "Hoàng Văn Em", pesticide: "Imidacloprid 70WG", source: "ĐL An Khang – Buôn Ma Thuột", dose: "0.2 kg/ha", area: "1.5 ha", isolation: "14 ngày", mrl: "Đạt", mrlType: "green" },
 ];
 
-export const testingData = [
-  { code: "MK-2024-089", household: "Nguyễn Văn An – TH1-001", sampleDate: "15/10/2024", cd: "0.02", yellowO: "Âm tính", residue: "0.03", chlorpyrifos: "KPH", result: "Đạt", resultType: "green", lab: "Vinacontrol" },
-  { code: "MK-2024-090", household: "Trần Thị Bình – TH2-001", sampleDate: "15/10/2024", cd: "0.04", yellowO: "Âm tính", residue: "0.05", chlorpyrifos: "KPH", result: "Đạt", resultType: "green", lab: "Quatest 3" },
-  { code: "MK-2024-091", household: "Lê Văn Cường – TH3-001", sampleDate: "20/10/2024", cd: "0.03", yellowO: "Âm tính", residue: "0.12", chlorpyrifos: "0.08", result: "Không đạt", resultType: "red", lab: "Vinacontrol" },
-  { code: "MK-2024-092", household: "Hoàng Văn Em – TH4-001", sampleDate: "20/10/2024", cd: "0.01", yellowO: "Âm tính", residue: "0.02", chlorpyrifos: "KPH", result: "Đạt", resultType: "green", lab: "Quatest 3" },
-  { code: "MK-2024-093", household: "Đặng Văn Giang – TH5-001", sampleDate: "22/10/2024", cd: "0.05", yellowO: "Dương tính", residue: "0.08", chlorpyrifos: "KPH", result: "Không đạt", resultType: "red", lab: "TTKTCL Đắk Lắk" },
-];
+export const testingData: Array<{
+  code: string;
+  household: string;
+  sampleDate: string;
+  cd: string;
+  yellowO: string;
+  residue: string;
+  chlorpyrifos: string;
+  result: string;
+  resultType: string;
+  lab: string;
+}> = [];
 
 export const harvestData = [
   { code: "LH-2024-038", date: "20/10/2024", weight: "8.200", households: 12, buyer: "Cty TNHH Vĩnh Phát", market: "Trung Quốc", qr: "QR-038", status: "Đã xuất", statusType: "green" },

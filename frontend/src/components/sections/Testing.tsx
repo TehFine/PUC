@@ -131,10 +131,13 @@ export default function Testing() {
     () =>
       list.rows.reduce<{ code: string; val: number }>(
         (best, r) => (Number(r.residueMgKg) > best.val ? { code: r.plotCode || r.code, val: Number(r.residueMgKg) } : best),
-        { code: "—", val: 0 },
+        { code: "-", val: 0 },
       ),
     [list.rows],
   );
+
+  const hasAnyFilter = Boolean(debouncedSearch || resultFilter);
+  const isCompletelyEmpty = !list.loading && !list.error && list.total === 0 && !hasAnyFilter;
 
   return (
     <>
@@ -148,206 +151,201 @@ export default function Testing() {
         </div>
       )}
 
-      <div className="charts-row-3">
-        <div className="chart-card">
-          <div className="chart-title">Cadmium (Cd) – mg/kg</div>
-          {chartsReady ? (
-            <ResponsiveContainer width="100%" height={180} debounce={120}>
-              <BarChart data={cdData} margin={{ left: -20, right: 12, top: 8, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="cdOkGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#48bb78" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#2f855a" stopOpacity={0.88} />
-                  </linearGradient>
-                  <linearGradient id="cdBadGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f87171" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#e0674a" stopOpacity={0.92} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
-                <XAxis dataKey="plot" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-                <YAxis
-                  domain={[0, 0.06]}
-                  ticks={[0, 0.015, 0.03, 0.045, 0.06]}
-                  tick={AXIS_TICK}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(val) => (val === 0 ? "0" : String(val))}
-                />
-                <Tooltip
-                  contentStyle={TOOLTIP_STYLE}
-                  cursor={{ fill: "rgba(20, 55, 47, 0.04)", radius: 6 }}
-                  formatter={(val: unknown) => [`${val} mg/kg`, "Hàm lượng Cd"]}
-                  labelFormatter={(lbl) => `Khu vực: ${lbl}`}
-                />
-                <ReferenceLine
-                  y={0.05}
-                  stroke="#e0674a"
-                  strokeDasharray="3 3"
-                  strokeWidth={1.2}
-                  strokeOpacity={0.75}
-                />
-                <Bar
-                  dataKey="cd"
-                  name="Cd (mg/kg)"
-                  barSize={14}
-                  radius={[7, 7, 0, 0]}
-                  background={{ fill: "rgba(20, 55, 47, 0.04)", radius: 7 }}
-                  isAnimationActive={perfTier !== "lite"}
-                >
-                  {cdData.map((e, i) => (
-                    <Cell key={i} fill={e.cd > 0.05 ? "url(#cdBadGrad)" : "url(#cdOkGrad)"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ height: 180 }} aria-hidden="true" />
-          )}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexWrap: "wrap",
-              gap: 10,
-              fontSize: 10.5,
-              color: "var(--text-muted)",
-              marginTop: 8,
-            }}
-          >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#38a169", display: "inline-block" }} />
-              Đạt chuẩn (&le; 0.05)
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#e0674a", display: "inline-block" }} />
-              Vượt chuẩn (&gt; 0.05)
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#c0392b", fontWeight: 500 }}>
-              <span style={{ width: 12, height: 0, borderTop: "1.5px dashed #e0674a", display: "inline-block" }} />
-              GACC: 0.05 mg/kg
-            </span>
+      {list.rows.length > 0 && (
+        <div className="charts-row-3">
+          <div className="chart-card">
+            <div className="chart-title">Cadmium (Cd), mg/kg</div>
+            {chartsReady ? (
+              <ResponsiveContainer width="100%" height={180} debounce={120}>
+                <BarChart data={cdData} margin={{ left: -20, right: 12, top: 8, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="cdOkGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#48bb78" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#2f855a" stopOpacity={0.88} />
+                    </linearGradient>
+                    <linearGradient id="cdBadGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#f87171" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#e0674a" stopOpacity={0.92} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+                  <XAxis dataKey="plot" tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                  <YAxis
+                    domain={[0, 0.06]}
+                    ticks={[0, 0.015, 0.03, 0.045, 0.06]}
+                    tick={AXIS_TICK}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(val) => (val === 0 ? "0" : String(val))}
+                  />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    cursor={{ fill: "rgba(20, 55, 47, 0.04)", radius: 6 }}
+                    formatter={(val: unknown) => [`${val} mg/kg`, "Hàm lượng Cd"]}
+                    labelFormatter={(lbl) => `Khu vực: ${lbl}`}
+                  />
+                  <ReferenceLine
+                    y={0.05}
+                    stroke="#e0674a"
+                    strokeDasharray="3 3"
+                    strokeWidth={1.2}
+                    strokeOpacity={0.75}
+                  />
+                  <Bar
+                    dataKey="cd"
+                    name="Cd (mg/kg)"
+                    barSize={14}
+                    radius={[4, 4, 0, 0]}
+                    background={{ fill: "rgba(20, 55, 47, 0.04)", radius: 4 }}
+                    isAnimationActive={perfTier !== "lite"}
+                  >
+                    {cdData.map((e, i) => (
+                      <Cell key={i} fill={e.cd > 0.05 ? "url(#cdBadGrad)" : "url(#cdOkGrad)"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ height: 180 }} aria-hidden="true" />
+            )}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexWrap: "wrap",
+                gap: 12,
+                fontSize: 10.5,
+                color: "var(--text-muted)",
+                marginTop: 8,
+              }}
+            >
+              <span style={{ color: "#15803d", fontWeight: 500 }}>Đạt chuẩn (&le; 0.05)</span>
+              <span style={{ color: "#b91c1c", fontWeight: 500 }}>Vượt chuẩn (&gt; 0.05)</span>
+              <span style={{ color: "#9a6712", fontWeight: 500 }}>Ngưỡng GACC: 0.05 mg/kg</span>
+            </div>
           </div>
-        </div>
 
-        <div className="chart-card">
-          <div className="chart-title">Dư lượng thuốc BVTV – ppm</div>
-          {chartsReady ? (
-            <AreaTrend
-              data={residuePoints}
-              unit=" ppm"
-              formatValue={(v) => v.toFixed(2)}
-              highlight="max"
-              height={190}
-              caption={
-                maxResidue.val > 0
-                  ? `Mức cao nhất tại ${maxResidue.code}: ${maxResidue.val.toFixed(2)} ppm`
-                  : "Chưa có dữ liệu mẫu"
-              }
-              ariaLabel="Dư lượng thuốc BVTV theo mẫu"
-            />
-          ) : (
-            <div style={{ height: 190 }} aria-hidden="true" />
-          )}
-        </div>
-
-        <div className="chart-card">
-          <div className="chart-title">Tỷ lệ mẫu đạt / không đạt</div>
-          {chartsReady ? (
-            <CapsuleDonutChart data={passData} unit=" mẫu" ariaLabel="Tỷ lệ mẫu kiểm nghiệm đạt chuẩn xuất khẩu" />
-          ) : (
-            <div style={{ height: 156 }} aria-hidden="true" />
-          )}
-          <div style={{ fontSize: 12, color: "#277a48", textAlign: "center", fontWeight: 600, marginTop: 8 }}>
-            {formatVn(passRate, 1)}% mẫu đạt tiêu chuẩn xuất khẩu
-          </div>
-        </div>
-      </div>
-
-      <div className="filter-bar">
-        <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
-          <input
-            type="text"
-            className="filter-input"
-            placeholder="Tìm theo mã mẫu, tên hộ, mã thửa, phòng lab…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
-        </div>
-        <select
-          className="filter-select"
-          value={resultFilter}
-          aria-label="Lọc theo kết quả kiểm nghiệm"
-          onChange={(e) => {
-            setResultFilter(e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="">Mọi kết quả</option>
-          {RESULT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <div className="card-header-left">Kết quả kiểm nghiệm gần đây</div>
-          <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{list.total} mẫu kiểm nghiệm</span>
-        </div>
-        <div className="table-wrap" style={{ border: "none", borderRadius: 0, boxShadow: "none" }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Mã mẫu</th>
-                <th>Hộ / Thửa</th>
-                <th>Ngày lấy mẫu</th>
-                <th>Cd (mg/kg)</th>
-                <th>Vàng O</th>
-                <th>Dư lượng TBV</th>
-                <th>Chlorpyrifos</th>
-                <th>Kết quả</th>
-                <th>Đơn vị lab</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              <TableState
-                colSpan={10}
-                loading={list.loading}
-                error={list.error}
-                empty={list.rows.length === 0}
-                emptyText="Không tìm thấy phiếu kiểm nghiệm nào"
-                onRetry={() => void list.refresh()}
+          <div className="chart-card">
+            <div className="chart-title">Dư lượng thuốc BVTV, ppm</div>
+            {chartsReady ? (
+              <AreaTrend
+                data={residuePoints}
+                unit=" ppm"
+                formatValue={(v) => v.toFixed(2)}
+                highlight="max"
+                height={190}
+                caption={
+                  maxResidue.val > 0
+                    ? `Mức cao nhất tại ${maxResidue.code}: ${maxResidue.val.toFixed(2)} ppm`
+                    : ""
+                }
+                ariaLabel="Dư lượng thuốc BVTV theo mẫu"
               />
-              {list.rows.map((t) => {
-                const resBadge = badgeOf(LAB_RESULT, t.result);
-                const chlorAbsent = t.chlorpyrifosMgKg === null || t.chlorpyrifosMgKg === undefined || Number(t.chlorpyrifosMgKg) === 0;
-                return (
-                  <tr key={t.id}>
-                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 600 }}>{t.code}</td>
-                    <td style={{ fontSize: 12.5 }}>
-                      <strong>{t.householdName}</strong> - <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{t.plotCode}</span>
-                    </td>
-                    <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(t.sampledOn)}</td>
-                    <td
-                      style={{
-                        textAlign: "center",
-                        color: Number(t.cdMgKg) > 0.05 ? "#c0392b" : "#256b45",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {formatVn(t.cdMgKg, 3)}
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className={`badge ${!t.yellowOPositive ? "badge-green" : "badge-red"}`}>
-                        {t.yellowOPositive ? "Dương tính" : "Âm tính"}
+            ) : (
+              <div style={{ height: 190 }} aria-hidden="true" />
+            )}
+          </div>
+
+          <div className="chart-card">
+            <div className="chart-title">Tỷ lệ mẫu đạt và không đạt</div>
+            {chartsReady ? (
+              <CapsuleDonutChart data={passData} unit=" mẫu" ariaLabel="Tỷ lệ mẫu kiểm nghiệm đạt chuẩn xuất khẩu" />
+            ) : (
+              <div style={{ height: 156 }} aria-hidden="true" />
+            )}
+            <div style={{ fontSize: 12, color: "#15803d", textAlign: "center", fontWeight: 600, marginTop: 8 }}>
+              {formatVn(passRate, 1)}% mẫu đạt tiêu chuẩn xuất khẩu
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isCompletelyEmpty && (
+        <>
+          <div className="filter-bar">
+            <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+              <input
+                type="text"
+                className="filter-input"
+                placeholder="Tìm theo mã mẫu, tên hộ, mã thửa, phòng lab…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <select
+              className="filter-select"
+              value={resultFilter}
+              aria-label="Lọc theo kết quả kiểm nghiệm"
+              onChange={(e) => {
+                setResultFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Mọi kết quả</option>
+              {RESULT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-header-left">Kết quả kiểm nghiệm gần đây</div>
+              <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{list.total} mẫu kiểm nghiệm</span>
+            </div>
+            <div className="table-wrap" style={{ border: "none", borderRadius: 0, boxShadow: "none" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mã mẫu</th>
+                    <th>Hộ / Thửa</th>
+                    <th>Ngày lấy mẫu</th>
+                    <th>Cd (mg/kg)</th>
+                    <th>Vàng O</th>
+                    <th>Dư lượng TBV</th>
+                    <th>Chlorpyrifos</th>
+                    <th>Kết quả</th>
+                    <th>Đơn vị lab</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <TableState
+                    colSpan={10}
+                    loading={list.loading}
+                    error={list.error}
+                    empty={list.rows.length === 0}
+                    emptyText="Không tìm thấy phiếu kiểm nghiệm nào"
+                    onRetry={() => void list.refresh()}
+                  />
+                  {list.rows.map((t) => {
+                    const resBadge = badgeOf(LAB_RESULT, t.result);
+                    const chlorAbsent = t.chlorpyrifosMgKg === null || t.chlorpyrifosMgKg === undefined || Number(t.chlorpyrifosMgKg) === 0;
+                    return (
+                      <tr key={t.id}>
+                        <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 600 }}>{t.code}</td>
+                        <td style={{ fontSize: 12.5 }}>
+                          <strong>{t.householdName}</strong> - <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{t.plotCode}</span>
+                        </td>
+                        <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(t.sampledOn)}</td>
+                        <td
+                          style={{
+                            textAlign: "center",
+                            color: Number(t.cdMgKg) > 0.05 ? "#c0392b" : "#256b45",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {formatVn(t.cdMgKg, 3)}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className={`badge ${!t.yellowOPositive ? "badge-green" : "badge-red"}`}>
+                            {t.yellowOPositive ? "Dương tính" : "Âm tính"}
                       </span>
                     </td>
                     <td
@@ -419,10 +417,12 @@ export default function Testing() {
                 );
               })}
             </tbody>
-          </table>
-          <Pagination page={page} pageSize={PAGE_SIZE} total={list.total} unit="mẫu" onChange={setPage} />
-        </div>
-      </div>
+              </table>
+              <Pagination page={page} pageSize={PAGE_SIZE} total={list.total} unit="mẫu" onChange={setPage} />
+            </div>
+          </div>
+        </>
+      )}
 
       {selectedTest && <LabTestCertificateModal test={selectedTest} onClose={() => setSelectedTest(null)} />}
 

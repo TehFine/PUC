@@ -38,15 +38,15 @@ export default function LabTestFormModal({
   );
   const [plotCode, setPlotCode] = useState(initial?.plotCode ?? "");
   const [sampledOn, setSampledOn] = useState(dateText(initial?.sampledOn) || todayIso());
-  const [cdMgKg, setCdMgKg] = useState(numberText(initial?.cdMgKg ?? 0.02));
-  const [residueMgKg, setResidueMgKg] = useState(numberText(initial?.residueMgKg ?? 0.03));
+  const [cdMgKg, setCdMgKg] = useState(initial ? numberText(initial.cdMgKg) : "");
+  const [residueMgKg, setResidueMgKg] = useState(initial ? numberText(initial.residueMgKg) : "");
   const [chlorpyrifosMgKg, setChlorpyrifosMgKg] = useState(numberText(initial?.chlorpyrifosMgKg));
   const [yellowOPositive, setYellowOPositive] = useState(Boolean(initial?.yellowOPositive));
   const [result, setResult] = useState<LabResult>(initial?.result ?? "pass");
   const [recordStatus, setRecordStatus] = useState<LabRecordStatus>(initial?.recordStatus ?? "verified");
-  const [lab, setLab] = useState(initial?.lab ?? "Trung tâm Kiểm nghiệm Vùng Tây Nguyên");
+  const [lab, setLab] = useState(initial?.lab ?? "");
   const [labAccreditationCode, setLabAccreditationCode] = useState(
-    initial?.labAccreditationCode ?? "ISO/IEC 17025:2017 - VILAS 238",
+    initial?.labAccreditationCode ?? "",
   );
   const [scanAttachmentId, setScanAttachmentId] = useState<number | null>(initial?.scanAttachmentId ?? null);
   const [scanUrl, setScanUrl] = useState<string | null>(initial?.scanUrl ?? null);
