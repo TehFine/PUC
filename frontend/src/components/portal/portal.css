@@ -12528,24 +12528,35 @@ body.pt-body .pt-form-actions .pt-btn {
   max-width: 100% !important;
   height: auto !important;
   min-height: 0 !important;
-  max-height: min(560px, calc(100dvh - 28px)) !important;
+  max-height: min(540px, calc(100dvh - 28px)) !important;
   border-radius: 8px 8px 0 0 !important;
   border-top: 1px solid #d4d4d2 !important;
-  box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.18) !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.16) !important;
+  animation: pt-sheet-slide-up 0.34s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+}
+
+.pt-sheet-backdrop:has(.pt-visual-picker-sheet) > .pt-sheet.pt-visual-picker-sheet.is-closing {
+  animation: pt-sheet-slide-down 0.24s cubic-bezier(0.32, 0.72, 0, 1) forwards !important;
 }
 
 @media screen and (min-width: 760px) {
   .pt-sheet-backdrop:has(.pt-visual-picker-sheet) {
-    align-items: center !important;
-    padding: 20px !important;
+    align-items: flex-end !important;
+    padding: 0 20px !important;
   }
 
   .pt-sheet-backdrop:has(.pt-visual-picker-sheet) > .pt-sheet.pt-visual-picker-sheet {
     max-width: 680px !important;
-    max-height: calc(100dvh - 48px) !important;
-    border-radius: 8px !important;
-    border: 1px solid rgba(20, 55, 47, 0.16) !important;
-    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.2) !important;
+    max-height: min(540px, calc(100dvh - 40px)) !important;
+    border-radius: 8px 8px 0 0 !important;
+    border-top: 1px solid rgba(20, 55, 47, 0.16) !important;
+    border-left: 1px solid rgba(20, 55, 47, 0.16) !important;
+    border-right: 1px solid rgba(20, 55, 47, 0.16) !important;
+    border-bottom: none !important;
+    box-shadow: 0 -12px 36px rgba(15, 23, 42, 0.18) !important;
   }
 }
 
@@ -12801,14 +12812,20 @@ body.pt-body .pt-form-actions .pt-btn {
   max-height: var(--vv-height, 100dvh) !important;
 }
 
-.pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.modal-confirm-sheet) {
+.pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) {
   height: var(--vv-height, 100dvh) !important;
   min-height: 0 !important;
   max-height: var(--vv-height, 100dvh) !important;
 }
 
+.pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet.pt-visual-picker-sheet {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: min(540px, calc(var(--vv-height, 100dvh) - 12px)) !important;
+}
+
 @media screen and (min-width: 760px) {
-  .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet) {
+  .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) {
     height: auto !important;
     min-height: 0 !important;
     max-height: calc(var(--vv-height, 100dvh) - 24px) !important;
@@ -12819,16 +12836,16 @@ body.pt-body .pt-form-actions .pt-btn {
   padding-bottom: 0 !important;
 }
 
-html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
-html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
-body.pt-body .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+body.pt-body .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
   scroll-padding-top: 16px;
   scroll-padding-bottom: 148px;
   padding-bottom: clamp(132px, 30vh, 230px) !important;
 }
 
 @media (max-width: 900px), (pointer: coarse) {
-  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:focus-within {
+  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:focus-within {
     padding-bottom: max(46vh, 320px) !important;
   }
 }

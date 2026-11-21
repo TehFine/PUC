@@ -11836,16 +11836,16 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   max-height: var(--vv-height, 100dvh) !important;
 }
 
-.pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.modal-confirm-sheet),
-.modal-overlay[data-kb-open="true"] > .modal:not(.modal-confirm-sheet) {
+.pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet),
+.modal-overlay[data-kb-open="true"] > .modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) {
   height: var(--vv-height, 100dvh) !important;
   min-height: 0 !important;
   max-height: var(--vv-height, 100dvh) !important;
 }
 
 @media screen and (min-width: 760px) {
-  .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet),
-  .modal-overlay[data-kb-open="true"] > .modal:not(.is-drawer):not(.modal-confirm-sheet) {
+  .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet),
+  .modal-overlay[data-kb-open="true"] > .modal:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) {
     height: auto !important;
     min-height: 0 !important;
     max-height: calc(var(--vv-height, 100dvh) - 24px) !important;
@@ -11853,7 +11853,8 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 }
 
 .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet.modal-confirm-sheet,
-.modal-overlay[data-kb-open="true"] > .modal.modal-confirm-sheet {
+.modal-overlay[data-kb-open="true"] > .modal.modal-confirm-sheet,
+.pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet.pt-visual-picker-sheet {
   max-height: calc(var(--vv-height, 100dvh) - 12px) !important;
 }
 
@@ -11870,23 +11871,23 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 }
 
 /* Đệm cuộn dư bên dưới biểu mẫu trong Modal / Drawer / Sheet để ô cuối cùng luôn kéo được lên ngang tầm mắt */
-.modal:not(.modal-confirm-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
-.pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+.modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+.pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
   scroll-padding-top: 16px;
   scroll-padding-bottom: 132px;
   padding-bottom: clamp(120px, 26vh, 210px) !important;
 }
 
 @media (max-width: 900px), (pointer: coarse) {
-  .modal:not(.modal-confirm-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
-  .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+  .modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+  .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
     scroll-padding-bottom: 160px;
     padding-bottom: clamp(150px, 34vh, 260px) !important;
   }
 
   /* Dự phòng cho WebView không cập nhật visualViewport: mở rộng hành trình cuộn khi đang gõ chữ */
-  .modal-overlay:not([data-kb-open="true"]) .modal:not(.modal-confirm-sheet) .modal-body:focus-within,
-  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:focus-within {
+  .modal-overlay:not([data-kb-open="true"]) .modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .modal-body:focus-within,
+  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:focus-within {
     padding-bottom: max(46vh, 320px) !important;
   }
 

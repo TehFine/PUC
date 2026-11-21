@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
@@ -138,15 +138,16 @@ function VisualCatalogPickerBody({
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
   };
 
-  useEffect(() => {
-    const raf = window.requestAnimationFrame(() => {
-      if (selectedCardRef.current) {
-        selectedCardRef.current.scrollIntoView({ inline: "center", block: "nearest", behavior: "instant" as ScrollBehavior });
-      }
-      syncScrollButtons();
-    });
-    return () => window.cancelAnimationFrame(raf);
-  }, [filtered.length]);
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    const card = selectedCardRef.current;
+    if (track && card) {
+      const targetLeft = card.offsetLeft - (track.clientWidth - card.offsetWidth) / 2;
+      const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
+      track.scrollLeft = Math.max(0, Math.min(maxScroll, targetLeft));
+    }
+    syncScrollButtons();
+  }, [filtered.length, selectedId]);
 
   const scrollByStep = (dir: -1 | 1) => {
     const el = trackRef.current;
