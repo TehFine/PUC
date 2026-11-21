@@ -36,6 +36,12 @@ export interface DashboardTrendPoint {
   count: number;
 }
 
+export interface DashboardDailyActivityPoint {
+  date: string;
+  label: string;
+  count: number;
+}
+
 export interface DashboardViolation {
   id: number;
   severity: "critical" | "warning";
@@ -69,6 +75,7 @@ export interface DashboardSummary {
   householdStatus?: DashboardHouseholdStatus[] | Partial<Record<HouseholdStatus, number>>;
   villages?: DashboardVillage[];
   journalTrend?: DashboardTrendPoint[];
+  dailyActivity?: DashboardDailyActivityPoint[];
   labTests?: { total?: number; pass?: number; fail?: number };
   recentViolations?: DashboardViolation[];
   pendingApprovals?: DashboardPendingApproval[];

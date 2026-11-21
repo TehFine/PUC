@@ -52,6 +52,7 @@ export class DashboardService {
     const canReadRegistrations = can(user.role, "registrations", "read");
     const canReadHarvest = can(user.role, "harvest", "read");
     const canReadJournal = can(user.role, "journal", "read");
+    const canReadSpray = can(user.role, "spray", "read");
     const canReadLabTests = can(user.role, "testing", "read");
     const canReadTraining = can(user.role, "training", "read");
     const canReadSchedule = can(user.role, "schedule", "read");
@@ -333,13 +334,18 @@ export class DashboardService {
     const trendHhCond = canReadJournal ? villageScope("h.village_id")(user, trendParams) : null;
     const trendHhWhere = trendHhCond ? `WHERE ${trendHhCond}` : "";
 
+    const dailyParams: unknown[] = [];
+    const dailyHhCond =
+      canReadJournal || canReadSpray ? villageScope("h.village_id")(user, dailyParams) : null;
+    const dailyHhWhere = dailyHhCond ? `WHERE ${dailyHhCond}` : "";
+
     const listsParams: unknown[] = [];
     const listsHhCond =
       canReadViolations || canReadApprovals ? villageScope("h.village_id")(user, listsParams) : null;
     const listsViolWhere = listsHhCond ? `AND v.household_id IN (SELECT h.id FROM households h WHERE ${listsHhCond})` : "";
     const listsApprWhere = listsHhCond ? `AND a.household_id IN (SELECT h.id FROM households h WHERE ${listsHhCond})` : "";
 
-    const [countsRes, villagesRes, trendRes, listsRes] = await Promise.all([
+    const [countsRes, villagesRes, trendRes, dailyRes, listsRes] = await Promise.all([
       countsQuery,
       this.db.query(
         hasPlots
@@ -408,6 +414,49 @@ export class DashboardService {
              ) AS m(month_start)
              ORDER BY m.month_start ASC`,
         trendParams,
+      ),
+      this.db.query(
+        canReadJournal || canReadSpray
+          ? `WITH scoped_hh AS (
+               SELECT h.id
+               FROM households h
+               ${dailyHhWhere}
+             )
+             SELECT to_char(d.day_start, 'YYYY-MM-DD') AS date,
+                    to_char(d.day_start, 'DD/MM') AS label,
+                    (${canReadJournal ? "COALESCE(j.cnt, 0)" : "0"} + ${canReadSpray ? "COALESCE(s.cnt, 0)" : "0"})::int AS count
+             FROM generate_series(
+               ${TODAY_VN_SQL} - 6,
+               ${TODAY_VN_SQL},
+               interval '1 day'
+             ) AS d(day_start)
+             LEFT JOIN (
+               SELECT je.entry_on AS day_on, count(*)::int AS cnt
+               FROM journal_entries je
+               JOIN scoped_hh ON scoped_hh.id = je.household_id
+               WHERE je.entry_on >= ${TODAY_VN_SQL} - 6
+                 AND je.entry_on <= ${TODAY_VN_SQL}
+               GROUP BY je.entry_on
+             ) j ON j.day_on = d.day_start::date
+             LEFT JOIN (
+               SELECT sr.sprayed_on AS day_on, count(*)::int AS cnt
+               FROM spray_records sr
+               JOIN scoped_hh ON scoped_hh.id = sr.household_id
+               WHERE sr.sprayed_on >= ${TODAY_VN_SQL} - 6
+                 AND sr.sprayed_on <= ${TODAY_VN_SQL}
+               GROUP BY sr.sprayed_on
+             ) s ON s.day_on = d.day_start::date
+             ORDER BY d.day_start ASC`
+          : `SELECT to_char(d.day_start, 'YYYY-MM-DD') AS date,
+                    to_char(d.day_start, 'DD/MM') AS label,
+                    0 AS count
+             FROM generate_series(
+               ${TODAY_VN_SQL} - 6,
+               ${TODAY_VN_SQL},
+               interval '1 day'
+             ) AS d(day_start)
+             ORDER BY d.day_start ASC`,
+        dailyParams,
       ),
       this.db.query<{
         recent_violations: Record<string, unknown>[];
@@ -524,6 +573,7 @@ export class DashboardService {
       householdStatus,
       villages: camelRows(villagesRes.rows),
       journalTrend: camelRows(trendRes.rows),
+      dailyActivity: camelRows(dailyRes.rows),
       labTests: {
         total: counts.labTests,
         pass: counts.labTestsPassed,

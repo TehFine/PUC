@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import InsightLineChart, { type InsightPoint } from "@/components/ui/charts/InsightLineChart";
 import { AppleLoadingPill, SkeletonCards, SkeletonStats } from "@/components/ui/Skeleton";
 import { useApi } from "@/hooks/use-api";
 import BlockState from "@/components/admin/shared/BlockState";
@@ -42,9 +44,22 @@ interface ActionQueueItem {
   tone?: "danger" | "warn" | "default";
 }
 
-const RULER_TICKS = 32;
+function buildFallbackSevenDays(): InsightPoint[] {
+  const out: InsightPoint[] = [];
+  const base = new Date();
+  for (let offset = 6; offset >= 0; offset--) {
+    const d = new Date(base);
+    d.setDate(base.getDate() - offset);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    out.push({ label: `${dd}/${mm}`, value: 0 });
+  }
+  return out;
+}
 
 export default function Dashboard() {
+  const { can } = useAuth();
+  const canViewActivityChart = can("journal", "read") || can("spray", "read");
   const [dateStr, setDateStr] = useState("");
   const [fullDateStr, setFullDateStr] = useState("");
   const { data: summary, loading, error, refresh } = useApi<DashboardSummary>("/dashboard/summary");
@@ -86,41 +101,35 @@ export default function Dashboard() {
   const labPassed = counts.labTestsPassed ?? summary?.labTests?.pass ?? 0;
 
   const qualifiedPct = totalHouseholds > 0 ? Math.round(percent(qualifiedHouseholds, totalHouseholds)) : 0;
-  const labPassPct = labTotal > 0 ? Math.round(percent(labPassed, labTotal)) : 100;
+  const labPassPct = labTotal > 0 ? Math.round(percent(labPassed, labTotal)) : null;
 
   const statusCounts = useMemo(
     () => readStatusCounts(summary?.householdStatus, qualifiedHouseholds),
     [summary?.householdStatus, qualifiedHouseholds],
   );
 
-  const statusColumns = useMemo(() => {
-    const raw = [
-      { key: "qualified", label: "Đủ chuẩn", shortLabel: "Đủ chuẩn", count: statusCounts.qualified, tone: "ok" as const },
-      { key: "pending", label: "Chờ duyệt", shortLabel: "Chờ duyệt", count: statusCounts.pending, tone: "neutral" as const },
-      { key: "improve", label: "Khắc phục", shortLabel: "Khắc phục", count: statusCounts.improve, tone: "warn" as const },
-      { key: "violation", label: "Vi phạm", shortLabel: "Vi phạm", count: statusCounts.violation, tone: "danger" as const },
-    ];
-    const maxCount = Math.max(1, ...raw.map((r) => r.count));
-    return raw.map((item) => ({
-      ...item,
-      ratio: Math.max(0.08, item.count / maxCount),
-    }));
-  }, [statusCounts]);
+  const activitySeries = useMemo<InsightPoint[]>(() => {
+    const raw = summary?.dailyActivity;
+    if (raw && raw.length >= 2) {
+      return raw.map((item) => ({
+        label: item.label,
+        value: Number(item.count) || 0,
+      }));
+    }
+    return buildFallbackSevenDays();
+  }, [summary?.dailyActivity]);
 
   const topVillages = useMemo(() => {
     const list = [...(summary?.villages ?? [])];
     list.sort((a, b) => (Number(b.plots ?? b.households) || 0) - (Number(a.plots ?? a.households) || 0));
     const top = list.slice(0, 4);
-    const maxVal = Math.max(1, ...top.map((v) => Number(v.plots ?? v.households) || 0));
     return top.map((v) => {
       const plots = Number(v.plots ?? 0);
       const households = Number(v.households ?? 0);
-      const metric = plots > 0 ? plots : households;
       return {
         id: v.id,
         name: v.name,
         metricLabel: plots > 0 ? `${formatVn(plots)} thửa` : `${formatVn(households)} hộ`,
-        pct: Math.max(6, Math.round((metric / maxVal) * 100)),
       };
     });
   }, [summary?.villages]);
@@ -158,11 +167,6 @@ export default function Dashboard() {
     return items.slice(0, 4);
   }, [pendingRegistrations, summary?.pendingApprovals, summary?.recentViolations]);
 
-  const activeTickIndex = Math.min(
-    RULER_TICKS - 1,
-    Math.max(0, Math.round((labPassPct / 100) * (RULER_TICKS - 1))),
-  );
-
   return (
     <>
       {((loading && summary) || dateStr) && (
@@ -189,6 +193,22 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="dash-bento">
+          {/* BIỂU ĐỒ XU HƯỚNG HOẠT ĐỘNG CANH TÁC 7 NGÀY GẦN NHẤT */}
+          {canViewActivityChart && (
+            <section className="dash-bento-card dash-insight-card">
+              <div className="dash-insight-body">
+                <header className="dash-insight-head">
+                  <h2 className="dash-insight-title">Nhật ký canh tác</h2>
+                </header>
+                <InsightLineChart
+                  data={activitySeries}
+                  metricLabel="Lượt ghi nhận"
+                  ariaLabel="Biểu đồ lượt ghi nhận nhật ký canh tác 7 ngày gần nhất"
+                />
+              </div>
+            </section>
+          )}
+
           {/* HÀNG 1: 3 THẺ TRỌNG TÂM (HÀNH ĐỘNG CẦN XỬ LÝ - QUY MÔ VÙNG TRỒNG - CHUẨN XUẤT KHẨU) */}
           <div className="dash-bento-top">
             {/* 1. Hạng mục cần xử lý ngay */}
@@ -270,17 +290,14 @@ export default function Dashboard() {
                   <span>Thôn <strong>{formatVn((summary?.villages ?? []).length)}</strong></span>
                 </div>
 
-                <div className="dash-bento-bars">
+                <div className="dash-bento-clean-list">
                   {topVillages.length === 0 ? (
                     <p className="dash-bento-footnote">Chưa có dữ liệu phân bổ theo thôn.</p>
                   ) : (
                     topVillages.map((v) => (
-                      <div key={v.id} className="dash-bento-bar-row">
-                        <span className="dash-bento-bar-name">{v.name}</span>
-                        <div className="dash-bento-bar-track" aria-hidden="true">
-                          <div className="dash-bento-bar-fill" style={{ width: `${v.pct}%` }} />
-                        </div>
-                        <span className="dash-bento-bar-val">{v.metricLabel}</span>
+                      <div key={v.id} className="dash-bento-clean-row">
+                        <span>{v.name}</span>
+                        <strong>{v.metricLabel}</strong>
                       </div>
                     ))
                   )}
@@ -315,19 +332,25 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="dash-bento-stems" role="list" aria-label="Phân bổ trạng thái nông hộ">
-                  {statusColumns.map((col) => (
-                    <div key={col.key} className="dash-bento-stem-col" role="listitem">
-                      <span className="dash-bento-stem-val">{formatVn(col.count)}</span>
-                      <div className="dash-bento-stem-track" aria-hidden="true">
-                        <div
-                          className={`dash-bento-stem-fill is-${col.tone}`}
-                          style={{ height: `${Math.round(col.ratio * 100)}%` }}
-                        />
-                      </div>
-                      <span className="dash-bento-stem-label">{col.shortLabel}</span>
-                    </div>
-                  ))}
+                <div className="dash-bento-clean-list" aria-label="Phân bổ trạng thái nông hộ">
+                  <div className="dash-bento-clean-row">
+                    <span>Đủ chuẩn</span>
+                    <strong>{formatVn(statusCounts.qualified)}</strong>
+                  </div>
+                  <div className="dash-bento-clean-row">
+                    <span>Chờ duyệt</span>
+                    <strong>{formatVn(statusCounts.pending)}</strong>
+                  </div>
+                  <div className="dash-bento-clean-row">
+                    <span>Khắc phục</span>
+                    <strong>{formatVn(statusCounts.improve)}</strong>
+                  </div>
+                  <div className="dash-bento-clean-row">
+                    <span>Vi phạm</span>
+                    <strong className={statusCounts.violation > 0 ? "is-danger" : ""}>
+                      {formatVn(statusCounts.violation)}
+                    </strong>
+                  </div>
                 </div>
               </div>
 
@@ -352,7 +375,7 @@ export default function Dashboard() {
                   <h2 className="dash-bento-title">Sản lượng và kiểm nghiệm</h2>
                 </header>
 
-                <div className="dash-bento-wide-mid">
+                <div className="dash-bento-wide-mid" style={{ marginBottom: 14 }}>
                   <div className="dash-bento-wide-main">
                     <div className="dash-bento-figure">
                       <span className="dash-bento-num">{formatVn(harvestTons, 1)}</span>
@@ -360,38 +383,23 @@ export default function Dashboard() {
                     </div>
                     <div className="dash-bento-wide-sub">
                       <span>Tổng hợp {formatVn(harvestLots)} lô thu hoạch</span>
-                      <span>Tỷ lệ mẫu đạt ngưỡng MRL: {labPassPct}%</span>
-                    </div>
-                  </div>
-
-                  <div className="dash-bento-kv-pair">
-                    <div className="dash-bento-kv">
-                      <span>Mẫu đạt</span>
-                      <strong>{formatVn(labPassed)}/{formatVn(labTotal)}</strong>
-                    </div>
-                    <div className="dash-bento-kv">
-                      <span>Vi phạm mở</span>
-                      <strong className={openViolations > 0 ? "is-danger" : ""}>{formatVn(openViolations)}</strong>
+                      <span>
+                        {labPassPct !== null
+                          ? `Tỷ lệ mẫu đạt ngưỡng MRL: ${labPassPct}%`
+                          : "Kiểm nghiệm: chưa có phiếu"}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="dash-bento-ruler-wrap">
-                  <div className="dash-bento-ruler-caption">
-                    <span>Thước kiểm soát an toàn mẫu kiểm nghiệm</span>
-                    <strong>{labPassPct}% đạt</strong>
+                <div className="dash-bento-clean-list">
+                  <div className="dash-bento-clean-row">
+                    <span>Phiếu kiểm nghiệm đạt</span>
+                    <strong>{labTotal > 0 ? `${formatVn(labPassed)}/${formatVn(labTotal)}` : "0"}</strong>
                   </div>
-                  <div className="dash-bento-ruler" aria-hidden="true">
-                    {Array.from({ length: RULER_TICKS }, (_, idx) => {
-                      const isPassedZone = idx <= activeTickIndex;
-                      const isMarker = idx === activeTickIndex;
-                      return (
-                        <span
-                          key={idx}
-                          className={`dash-bento-tick${isPassedZone ? " is-filled" : ""}${isMarker ? " is-marker" : ""}`}
-                        />
-                      );
-                    })}
+                  <div className="dash-bento-clean-row">
+                    <span>Vi phạm mở</span>
+                    <strong className={openViolations > 0 ? "is-danger" : ""}>{formatVn(openViolations)}</strong>
                   </div>
                 </div>
               </div>
