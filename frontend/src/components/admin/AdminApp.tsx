@@ -86,11 +86,11 @@ const ALL_SECTIONS: SectionId[] = [
   "households",
   "zones",
   "journal",
-  "approval",
+  "reports",
   "testing",
   "harvest",
   "news",
-  "reports",
+  "approval",
   "catalog",
   "system",
 ];

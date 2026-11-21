@@ -186,6 +186,7 @@ export default function DrawHint({
         <div className="plotmap-drawstyle-switch" role="group" aria-label="Phương thức vẽ ranh giới">
           <button
             type="button"
+            aria-pressed={drawStyle === "point"}
             className={`plotmap-drawstyle-btn ${drawStyle === "point" ? "is-active" : ""}`}
             onClick={() => onDrawStyleChange("point")}
             disabled={saving}
@@ -194,6 +195,7 @@ export default function DrawHint({
           </button>
           <button
             type="button"
+            aria-pressed={drawStyle === "freehand"}
             className={`plotmap-drawstyle-btn ${drawStyle === "freehand" ? "is-active" : ""}`}
             onClick={() => onDrawStyleChange("freehand")}
             disabled={saving}

@@ -4,13 +4,13 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApiList } from "@/hooks/use-api";
+import BlockState from "@/components/admin/shared/BlockState";
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
 import Pagination from "@/components/admin/shared/Pagination";
-import TableState from "@/components/admin/shared/TableState";
-import { formatVn } from "@/components/admin/shared/form-utils";
-import { badgeOf, HOUSEHOLD_STATUS, optionsOf } from "@/components/admin/shared/labels";
+import { HOUSEHOLD_STATUS, optionsOf } from "@/components/admin/shared/labels";
 import { useVillageOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
+import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { getZoneColor, KNOWN_ZONES } from "@/components/zones/zone-data";
 import {
   usePersistedEditableSelection,
@@ -27,6 +27,11 @@ const HouseholdImportModal = dynamic(() => lazyChunk(() => import("@/components/
 
 const PAGE_SIZE = 25;
 const STATUS_OPTIONS = optionsOf(HOUSEHOLD_STATUS);
+
+function formatAreaLabel(villageName?: string | null, villageId?: number | null): string {
+  const raw = (villageName || (villageId != null ? `Thôn #${villageId}` : "Chưa rõ địa bàn")).trim();
+  return raw.replace(/\s*[—–]\s*/g, ", ");
+}
 
 export default function Households() {
   const { can } = useAuth();
@@ -109,10 +114,10 @@ export default function Households() {
             setPage(1);
           }}
         >
-          <option value="">Tất cả thôn</option>
+          <option value="">Tất cả địa bàn</option>
           {villageOptions.map((v) => (
             <option key={v.value} value={v.value}>
-              {v.label}
+              {v.label.replace(/\s*[—–]\s*/g, ", ")}
             </option>
           ))}
         </select>
@@ -180,109 +185,44 @@ export default function Households() {
         </div>
       </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>STT</th>
-              <th>Họ &amp; Tên</th>
-              <th>CCCD</th>
-              <th>Số ĐT</th>
-              <th>Thôn / Tổ</th>
-              <th>Số thửa</th>
-              <th>Diện tích</th>
-              <th>Mã vùng trồng / Mã hộ</th>
-              <th>Trạng thái</th>
-              <th>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            <TableState
-              colSpan={10}
-              loading={list.loading}
-              error={list.error}
-              empty={list.rows.length === 0}
-              emptyText="Không tìm thấy hộ nông dân phù hợp"
-              onRetry={() => void list.refresh()}
-            />
-            {list.rows.map((h, i) => {
-              const st = badgeOf(HOUSEHOLD_STATUS, h.status);
+      <BlockState
+        loading={list.loading}
+        error={list.error}
+        empty={list.rows.length === 0}
+        emptyText="Không tìm thấy hộ nông dân phù hợp."
+        onRetry={() => void list.refresh()}
+      />
+
+      {list.rows.length > 0 && (
+        <>
+          <ul className="admin-diary-day-card admin-hh-list" role="list" aria-label="Danh sách hộ nông dân">
+            {list.rows.map((h) => {
               const zc = getZoneColor(h.code);
+              const areaLabel = formatAreaLabel(h.villageName, h.villageId);
               return (
-                <tr key={h.id} style={{ background: zc.rowTint }}>
-                  <td style={{ color: "var(--text-muted)", fontSize: 12 }}>{(page - 1) * PAGE_SIZE + i + 1}</td>
-                  <td style={{ fontWeight: 600 }}>{h.name}</td>
-                  <td
-                    style={{
-                      fontFamily: "var(--font-num-stack)",
-                      fontVariantNumeric: "tabular-nums",
-                      fontSize: 13.5,
-                      fontWeight: 500,
-                      letterSpacing: "0.015em",
-                      color: "var(--text-primary)",
-                    }}
+                <li key={h.id}>
+                  <button
+                    type="button"
+                    className="admin-diary-row admin-hh-row"
+                    onClick={() => setViewing(h)}
                   >
-                    {h.cccd}
-                  </td>
-                  <td style={{ color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{h.phone}</td>
-                  <td>{h.villageName || `Thôn #${h.villageId}`}</td>
-                  <td style={{ textAlign: "center", fontWeight: 600 }}>{h.plotCount}</td>
-                  <td style={{ fontWeight: 500 }}>{formatVn(h.areaHa, 2)} ha</td>
-                  <td>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-num-stack)",
-                        fontVariantNumeric: "tabular-nums",
-                        fontSize: 13,
-                        letterSpacing: "0.015em",
-                        color: zc.text,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {h.code}
+                    <strong className="admin-diary-hh">{h.name}</strong>
+                    <span className="admin-diary-right admin-hh-right">
+                      <span className="admin-hh-area" style={{ color: zc.text }}>
+                        {areaLabel}
+                      </span>
+                      <DetailArrowIcon className="admin-diary-arrow" size={20} />
                     </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${st.badge}`}>{st.label}</span>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewing(h)}>
-                        Xem
-                      </button>
-                      {canUpdate && (
-                        <>
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(h)}>
-                            Sửa
-                          </button>
-                          <button
-                            type="button"
-                            className={`btn btn-sm ${h.accountId ? "btn-outline" : "btn-primary"}`}
-                            onClick={() => setIssuingAccount(h)}
-                            title={
-                              h.accountId
-                                ? `Tài khoản đã cấp: ${h.accountUsername}. Bấm để cấp lại mật khẩu.`
-                                : "Ban hành tài khoản đăng nhập cho hộ nông dân này"
-                            }
-                          >
-                            {h.accountId ? "Cấp lại TK" : "Ban hành TK"}
-                          </button>
-                        </>
-                      )}
-                      {canDelete && (
-                        <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeleting(h)}>
-                          Xóa
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                  </button>
+                </li>
               );
             })}
-          </tbody>
-        </table>
-        <Pagination page={page} pageSize={PAGE_SIZE} total={list.total} unit="hộ" onChange={setPage} />
-      </div>
+          </ul>
+          <div className="admin-diary-pagination">
+            <Pagination page={page} pageSize={PAGE_SIZE} total={list.total} unit="hộ" onChange={setPage} />
+          </div>
+        </>
+      )}
 
       {viewing && (
         <HouseholdDetailModal
@@ -294,6 +234,24 @@ export default function Households() {
                   const target = viewing;
                   setViewing(null);
                   setEditing(target);
+                }
+              : undefined
+          }
+          onIssueAccount={
+            canUpdate
+              ? () => {
+                  const target = viewing;
+                  setViewing(null);
+                  setIssuingAccount(target);
+                }
+              : undefined
+          }
+          onDelete={
+            canDelete
+              ? () => {
+                  const target = viewing;
+                  setViewing(null);
+                  setDeleting(target);
                 }
               : undefined
           }

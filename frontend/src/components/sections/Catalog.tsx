@@ -128,6 +128,20 @@ const STANDARDS: StandardDoc[] = [
   },
 ];
 
+function getStandardTagClass(tag: string): string {
+  if (tag === "Bắt buộc") return "std-item-tag is-mandatory";
+  if (tag === "Tự nguyện") return "std-item-tag is-voluntary";
+  if (
+    tag.includes("2026") ||
+    tag.includes("VietGAP") ||
+    tag.includes("GACC") ||
+    tag.includes("giá cao")
+  ) {
+    return "std-item-tag is-highlight";
+  }
+  return "std-item-tag";
+}
+
 function toFertilizerDto(f: FertilizerRecord): FertilizerDto {
   return {
     id: f.id,
@@ -1056,9 +1070,10 @@ export default function Catalog() {
                 <div className="std-item-title">{s.title}</div>
                 <div className="std-item-desc">{s.desc}</div>
                 <div className="std-item-tags">
-                  {s.tags.map((t) => (
-                    <span key={t} className="std-item-tag">
+                  {s.tags.map((t, tagIdx) => (
+                    <span key={t} className={getStandardTagClass(t)}>
                       {t}
+                      {tagIdx < s.tags.length - 1 ? "," : ""}
                     </span>
                   ))}
                 </div>
@@ -1222,10 +1237,11 @@ export default function Catalog() {
           }
         >
           <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6, marginTop: 0 }}>{viewingStandard.desc}</p>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-            {viewingStandard.tags.map((tag) => (
-              <span key={tag} className="std-item-tag">
+          <div className="std-item-tags" style={{ marginTop: 0, marginBottom: 14 }}>
+            {viewingStandard.tags.map((tag, tagIdx) => (
+              <span key={tag} className={getStandardTagClass(tag)}>
                 {tag}
+                {tagIdx < viewingStandard.tags.length - 1 ? "," : ""}
               </span>
             ))}
           </div>

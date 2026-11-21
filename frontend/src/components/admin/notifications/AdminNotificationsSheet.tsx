@@ -8,7 +8,7 @@ import {
   requestApprovalTab,
   requestJournalTab,
 } from "@/components/admin/shared/counts-events";
-import { EmptyState, Pill, Sheet } from "@/components/portal/ui";
+import { EmptyState, Sheet } from "@/components/portal/ui";
 import { invalidateQueries, NOTIFICATIONS_PATH, useSharedQuery } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
 import { usePersistedState } from "@/lib/back-navigation";
@@ -226,7 +226,24 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                        <Pill tone={meta.tone}>{meta.label}</Pill>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color:
+                              meta.tone === "red"
+                                ? "#b91c1c"
+                                : meta.tone === "gold"
+                                  ? "#9a6712"
+                                  : meta.tone === "green"
+                                    ? "#15803d"
+                                    : meta.tone === "blue"
+                                      ? "#007aff"
+                                      : "#5f6d66",
+                          }}
+                        >
+                          {meta.label}
+                        </span>
                         <span style={{ fontSize: 11.5, color: "#60736c", fontVariantNumeric: "tabular-nums" }}>
                           {formatDate(item.createdAt)}
                         </span>

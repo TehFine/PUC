@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { extractSafeMediaUrls, MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
-import { Modal } from "@/components/ui/Modal";
+import { Modal, ModalDismissButton } from "@/components/ui/Modal";
 import { useApiList } from "@/hooks/use-api";
 import { usePlots } from "@/hooks/use-plots";
 import TabBar, { type TabItem } from "@/components/admin/shared/TabBar";
@@ -24,10 +24,14 @@ export default function HouseholdDetailModal({
   household,
   onClose,
   onEdit,
+  onIssueAccount,
+  onDelete,
 }: {
   household: HouseholdRow;
   onClose: () => void;
   onEdit?: () => void;
+  onIssueAccount?: () => void;
+  onDelete?: () => void;
 }) {
   const { can } = useAuth();
   const canReadViolations = can("violations", "read");
@@ -58,6 +62,7 @@ export default function HouseholdDetailModal({
 
   const statusBadge = badgeOf(HOUSEHOLD_STATUS, household.status);
   const zc = getZoneColor(household.code);
+  const areaLabel = (household.villageName || `Thôn #${household.villageId}`).replace(/\s*[—–]\s*/g, ", ");
 
   const tabs: TabItem<DetailTab>[] = [
     { id: "plots", label: "Thửa đất", badge: householdPlots.length },
@@ -73,14 +78,19 @@ export default function HouseholdDetailModal({
       width={780}
       footer={
         <>
-          {onEdit && (
-            <button type="button" className="btn btn-outline" onClick={onEdit}>
-              Sửa thông tin hộ
+          {onDelete && (
+            <button type="button" className="btn btn-danger" onClick={onDelete}>
+              Xóa
             </button>
           )}
-          <button type="button" className="btn btn-primary" onClick={onClose}>
+          {onEdit && (
+            <button type="button" className="btn btn-outline" onClick={onEdit}>
+              Sửa
+            </button>
+          )}
+          <ModalDismissButton className="btn btn-primary" onFallbackClose={onClose}>
             Đóng
-          </button>
+          </ModalDismissButton>
         </>
       }
     >
@@ -92,6 +102,7 @@ export default function HouseholdDetailModal({
             style={{
               fontWeight: 700,
               fontFamily: "var(--font-num-stack)",
+              fontVariantNumeric: "tabular-nums",
               letterSpacing: "0.015em",
               color: zc.text,
             }}
@@ -101,22 +112,53 @@ export default function HouseholdDetailModal({
         </div>
         <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Số CCCD</span>
-          <div className="admin-detail-list-value" style={{ fontFamily: "var(--font-num-stack)", letterSpacing: "0.015em" }}>
+          <div
+            className="admin-detail-list-value"
+            style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.015em" }}
+          >
             {household.cccd}
           </div>
         </div>
         <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Số điện thoại</span>
-          <div className="admin-detail-list-value">{household.phone}</div>
+          <div className="admin-detail-list-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+            {household.phone}
+          </div>
         </div>
         <div className="admin-detail-list-row">
-          <span className="admin-detail-list-label">Thôn, tổ</span>
-          <div className="admin-detail-list-value">{household.villageName || `Thôn #${household.villageId}`}</div>
+          <span className="admin-detail-list-label">Địa bàn</span>
+          <div className="admin-detail-list-value">{areaLabel}</div>
         </div>
         <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Quy mô canh tác</span>
-          <div className="admin-detail-list-value">
-            {household.plotCount} thửa - {formatVn(household.areaHa, 2)} ha
+          <div className="admin-detail-list-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+            {household.plotCount} thửa, {formatVn(household.areaHa, 2)} ha
+          </div>
+        </div>
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Tài khoản hộ dân</span>
+          <div
+            className="admin-detail-list-value"
+            style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}
+          >
+            <span
+              style={{
+                fontVariantNumeric: "tabular-nums",
+                color: household.accountId ? "#14372f" : "#9a6712",
+                fontWeight: 600,
+              }}
+            >
+              {household.accountId ? household.accountUsername || "Đã cấp tài khoản" : "Chưa cấp tài khoản"}
+            </span>
+            {onIssueAccount && (
+              <button
+                type="button"
+                className={`btn btn-sm ${household.accountId ? "btn-outline" : "btn-primary"}`}
+                onClick={onIssueAccount}
+              >
+                {household.accountId ? "Cấp lại TK" : "Ban hành TK"}
+              </button>
+            )}
           </div>
         </div>
         <div className="admin-detail-list-row">

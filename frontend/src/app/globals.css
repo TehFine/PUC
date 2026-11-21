@@ -2961,13 +2961,17 @@ input[type="date"].filter-select {
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-.plotmap-drawstyle-btn:hover:not(:disabled) {
+.plotmap-drawstyle-btn:not(.is-active):hover:not(:disabled) {
+  background: rgba(20, 55, 47, 0.06);
   color: var(--ink);
 }
 
-.plotmap-drawstyle-btn.is-active {
+.plotmap-drawstyle-btn.is-active,
+.plotmap-drawstyle-btn.is-active:hover:not(:disabled),
+.plotmap-drawstyle-btn.is-active:focus-visible,
+.plotmap-drawstyle-btn.is-active:active:not(:disabled) {
   background: #14372f;
-  color: #ffffff;
+  color: #ffffff !important;
 }
 
 .plotmap-hint-stats {
@@ -3057,9 +3061,11 @@ input[type="date"].filter-select {
   flex: 1 1 auto;
 }
 
-.plotmap-hint-subtools .btn.is-toggled {
-  background: #f3f7ee;
-  color: #14372f;
+.plotmap-hint-subtools .btn.is-toggled,
+.plotmap-hint-subtools .btn.is-toggled:hover:not(:disabled) {
+  background: #14372f !important;
+  border-color: #14372f !important;
+  color: #ffffff !important;
 }
 
 .plotmap-coord-box {
@@ -5341,19 +5347,34 @@ input[type="date"].filter-select {
 
 .std-item-tags {
   display: flex;
-  gap: 5px;
+  align-items: baseline;
+  gap: 4px 8px;
   margin-top: 8px;
   flex-wrap: wrap;
 }
 
 .std-item-tag {
-  padding: 2px 9px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
   font-weight: 600;
-  background: rgba(20, 55, 47, 0.08);
-  color: var(--ink);
+  line-height: 1.45;
+  color: #14372f;
   font-variant-numeric: tabular-nums;
+}
+
+.std-item-tag.is-mandatory {
+  color: #b91c1c;
+}
+
+.std-item-tag.is-voluntary {
+  color: #9a6712;
+}
+
+.std-item-tag.is-highlight {
+  color: #15803d;
 }
 
 /* ─── SCHEDULE ────────────────────────────────── */
@@ -9320,17 +9341,16 @@ code {
 }
 
 #section-catalog .std-item-tags {
-  gap: 8px;
-  margin-top: 12px;
+  gap: 4px 8px;
+  margin-top: 10px;
 }
 
 #section-catalog .std-item-tag {
-  padding: 3px 10px;
-  border-radius: 4px;
-  font-size: 11.5px;
-  background: #f5f7f6;
-  border: 1px solid rgba(20, 55, 47, 0.12);
-  color: #14372f;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+  background: transparent;
+  border: none;
 }
 
 @media (max-width: 768px) {
@@ -10445,6 +10465,7 @@ html[data-net="slow"] .kpi-card svg rect {
 }
 
 .pt-media-carousel-track {
+  position: relative;
   display: flex;
   align-items: stretch;
   overflow-x: auto;
@@ -10543,6 +10564,7 @@ html[data-net="slow"] .kpi-card svg rect {
 }
 
 .pt-media-thumb-strip {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -11515,6 +11537,7 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 .media-bs-stage {
   position: relative;
   width: 100%;
+  height: min(56dvh, 460px);
   min-height: 220px;
   border-radius: 6px;
   border: 1px solid #d4d4d2;
@@ -11558,12 +11581,19 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 }
 
 .media-bs-thumbs {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   min-width: 0;
   flex: 1;
+}
+
+.media-bs-thumbs::-webkit-scrollbar {
+  display: none;
 }
 
 .media-bs-thumb {
@@ -11773,6 +11803,101 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
     font-size: 13px;
   }
 }
+
+.admin-hh-right {
+  min-width: 0;
+  max-width: 55%;
+}
+
+.admin-hh-area {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 680px) {
+  .admin-hh-right {
+    max-width: 52%;
+  }
+
+  .admin-hh-area {
+    font-size: 13px;
+  }
+}
+
+/* ── Đồng bộ chiều cao bàn phím ảo (visualViewport) và hành trình cuộn cho ô nhập liệu cuối biểu mẫu ── */
+.pt-sheet-backdrop[data-kb-open="true"],
+.modal-overlay[data-kb-open="true"] {
+  top: var(--vv-top, 0px) !important;
+  bottom: auto !important;
+  height: var(--vv-height, 100dvh) !important;
+  max-height: var(--vv-height, 100dvh) !important;
+}
+
+.pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.modal-confirm-sheet),
+.modal-overlay[data-kb-open="true"] > .modal:not(.modal-confirm-sheet) {
+  height: var(--vv-height, 100dvh) !important;
+  min-height: 0 !important;
+  max-height: var(--vv-height, 100dvh) !important;
+}
+
+@media screen and (min-width: 760px) {
+  .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet),
+  .modal-overlay[data-kb-open="true"] > .modal:not(.is-drawer):not(.modal-confirm-sheet) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: calc(var(--vv-height, 100dvh) - 24px) !important;
+  }
+}
+
+.pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet.modal-confirm-sheet,
+.modal-overlay[data-kb-open="true"] > .modal.modal-confirm-sheet {
+  max-height: calc(var(--vv-height, 100dvh) - 12px) !important;
+}
+
+.pt-sheet-backdrop[data-kb-open="true"] .modal-footer,
+.modal-overlay[data-kb-open="true"] .modal-footer,
+.pt-sheet-backdrop[data-kb-open="true"] .pt-sheet-footer,
+.modal-overlay[data-kb-open="true"] .pt-sheet-footer {
+  padding-bottom: 0 !important;
+}
+
+.pt-sheet-backdrop[data-kb-open="true"] .modal-footer:has(> div),
+.modal-overlay[data-kb-open="true"] .modal-footer:has(> div) {
+  padding-bottom: 10px !important;
+}
+
+/* Đệm cuộn dư bên dưới biểu mẫu trong Modal / Drawer / Sheet để ô cuối cùng luôn kéo được lên ngang tầm mắt */
+.modal:not(.modal-confirm-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+.pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+  scroll-padding-top: 16px;
+  scroll-padding-bottom: 132px;
+  padding-bottom: clamp(120px, 26vh, 210px) !important;
+}
+
+@media (max-width: 900px), (pointer: coarse) {
+  .modal:not(.modal-confirm-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+  .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+    scroll-padding-bottom: 160px;
+    padding-bottom: clamp(150px, 34vh, 260px) !important;
+  }
+
+  /* Dự phòng cho WebView không cập nhật visualViewport: mở rộng hành trình cuộn khi đang gõ chữ */
+  .modal-overlay:not([data-kb-open="true"]) .modal:not(.modal-confirm-sheet) .modal-body:focus-within,
+  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-body:focus-within {
+    padding-bottom: max(46vh, 320px) !important;
+  }
+
+  /* Biểu mẫu nằm trực tiếp ở cuối trang chính (Cảnh báo hệ thống, Đăng nhập, Đăng ký...) */
+  .content-area:has(textarea:focus, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):focus, select:focus),
+  .pt-main:has(textarea:focus, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):focus, select:focus) {
+    scroll-padding-bottom: 160px;
+    padding-bottom: max(46vh, 320px) !important;
+  }
+}
+
 
 
 
