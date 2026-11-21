@@ -2997,12 +2997,28 @@ body.pt-body {
   color: var(--green-700);
 }
 
+.pt-diary-day-row.is-static {
+  cursor: default;
+}
+
+.pt-diary-day-row.is-static:hover {
+  background: transparent;
+}
+
+.pt-diary-day-row.is-static:hover .pt-diary-item-title {
+  color: var(--ink);
+}
+
 .pt-diary-item-sub {
   font-size: 12px;
   font-weight: 500;
   color: #9a6712;
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
+}
+
+.pt-diary-item-sub.is-neutral {
+  color: var(--text-secondary, #5f6d66);
 }
 
 .pt-diary-item-plot {

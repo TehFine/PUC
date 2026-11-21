@@ -132,6 +132,23 @@ export function relativeDayLabel(iso: string | null | undefined): string {
   return "Đã diễn ra";
 }
 
+/** Chuẩn hóa chuỗi ngày từ máy chủ (`YYYY-MM-DD` hoặc ISO) về `YYYY-MM-DD`; mặc định hôm nay nếu rỗng. */
+export function normalizePortalDayIso(raw: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw ?? "");
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : todayIso();
+}
+
+/** Tiêu đề ngày đặt phía trên nhóm thẻ (Hôm nay, Ngày mai, Hôm qua hoặc DD/MM/YYYY). */
+export function formatPortalDayHeading(isoDate: string): string {
+  const clean = normalizePortalDayIso(isoDate);
+  const diff = daysSince(clean);
+  if (diff === 0) return "Hôm nay";
+  if (diff === -1) return "Ngày mai";
+  if (diff === 1) return "Hôm qua";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(clean);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : clean;
+}
+
 /** Chuyển giá trị số có thể là chuỗi (NUMERIC của PostgreSQL) sang number; null nếu rỗng. */
 export const toNumber = (value: number | string | null | undefined): number | null => {
   if (value === null || value === undefined || value === "") return null;

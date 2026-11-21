@@ -3,8 +3,14 @@
 import { useMemo } from "react";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { usePortal } from "@/hooks/use-portal";
-import { daysSince, HOUSEHOLD_STATUS, relativeDayLabel, SCHEDULE_KIND } from "@/lib/portal-labels";
-import { formatDate } from "@/utils/format";
+import {
+  daysSince,
+  formatPortalDayHeading,
+  HOUSEHOLD_STATUS,
+  normalizePortalDayIso,
+  SCHEDULE_KIND,
+  todayIso,
+} from "@/lib/portal-labels";
 import type { PortalList, PortalOverview, PortalReminder, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
 import type { PortalAction } from "./PortalSearch";
@@ -36,10 +42,60 @@ function getConciseScheduleTitle(title: string): string {
 
 interface ActionItem {
   id: string;
+  date: string;
   title: string;
   detail?: string | null;
+  plotLabel?: string | null;
+  isAlert?: boolean;
   to: PortalTabId;
   action?: PortalAction;
+}
+
+interface DayGroup<T> {
+  date: string;
+  label: string;
+  items: T[];
+}
+
+function groupByIsoDate<T>(items: ReadonlyArray<T>, getDate: (item: T) => string): DayGroup<T>[] {
+  const map = new Map<string, DayGroup<T>>();
+  for (const item of items) {
+    const date = normalizePortalDayIso(getDate(item));
+    const existing = map.get(date);
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      map.set(date, {
+        date,
+        label: formatPortalDayHeading(date),
+        items: [item],
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
+function parseReminderDetail(raw?: string | null): { detail: string | null; plotLabel: string | null } {
+  if (!raw) return { detail: null, plotLabel: null };
+  let cleaned = raw.trim().replace(/^\d{2}\/\d{2}\/\d{4}\s*-\s*/, "").trim();
+  let plotLabel: string | null = null;
+
+  const trailingPlot = /^(.*?)\s*-\s*(Thửa\s+[^\s-]+.*)$/i.exec(cleaned);
+  if (trailingPlot) {
+    cleaned = trailingPlot[1].trim();
+    plotLabel = trailingPlot[2].trim();
+  } else {
+    const leadingPlot = /^(Thửa\s+[^\s-]+)\s*-\s*(.+)$/i.exec(cleaned);
+    if (leadingPlot) {
+      plotLabel = leadingPlot[1].trim();
+      cleaned = leadingPlot[2].trim();
+    }
+  }
+
+  return {
+    detail: cleaned || null,
+    plotLabel,
+  };
 }
 
 function getConciseViolationTitle(v?: PortalViolation | null, count = 1, isDiaryIdle = false): string {
@@ -107,6 +163,8 @@ function getConciseReminderTitle(rem: PortalReminder): string {
 }
 
 function buildActionItems(overview: PortalOverview, firstViolation?: PortalViolation | null): ActionItem[] {
+  const today = todayIso();
+
   if (Array.isArray(overview.reminders)) {
     let hasDiaryReminder = false;
     return overview.reminders
@@ -123,15 +181,25 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
         }
         return true;
       })
-      .map((rem, idx) => ({
-        id: `${rem.kind}-${idx}`,
-        title: getConciseReminderTitle(rem),
-        detail: rem.detail,
-        to:
-          rem.kind === "violation" || rem.kind === "journal" || rem.kind === "isolation"
-            ? "diary"
-            : normalizeReminderTab(rem.tab),
-      }));
+      .map((rem, idx) => {
+        const parsed = parseReminderDetail(rem.detail);
+        const itemDate =
+          rem.kind === "journal" || rem.kind === "isolation"
+            ? today
+            : normalizePortalDayIso(rem.date);
+        const isAlert =
+          rem.kind === "violation" || rem.kind === "journal" || rem.kind === "isolation";
+
+        return {
+          id: `${rem.kind}-${idx}`,
+          date: itemDate,
+          title: getConciseReminderTitle(rem),
+          detail: parsed.detail,
+          plotLabel: parsed.plotLabel,
+          isAlert,
+          to: isAlert ? "diary" : normalizeReminderTab(rem.tab),
+        };
+      });
   }
 
   const { stats, lastTest } = overview;
@@ -148,7 +216,10 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
   if (isDiaryIdle || hasDiaryViolation) {
     items.push({
       id: "diary",
+      date: today,
       title: "Chưa ghi nhật ký",
+      plotLabel: firstViolation?.plotCode ? `Thửa ${firstViolation.plotCode}` : null,
+      isAlert: true,
       to: "diary",
     });
   }
@@ -157,7 +228,10 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
   if (stats.openViolations > 0 && isNonDiaryViolation) {
     items.push({
       id: "violations",
+      date: normalizePortalDayIso(firstViolation?.detectedOn),
       title: getConciseViolationTitle(firstViolation, stats.openViolations),
+      plotLabel: firstViolation?.plotCode ? `Thửa ${firstViolation.plotCode}` : null,
+      isAlert: true,
       to: "diary",
     });
   }
@@ -165,7 +239,10 @@ function buildActionItems(overview: PortalOverview, firstViolation?: PortalViola
   if (lastTest?.result === "fail") {
     items.push({
       id: "test-fail",
+      date: normalizePortalDayIso(lastTest.sampledOn),
       title: "Mẫu kiểm nghiệm chưa đạt",
+      plotLabel: lastTest.plotCode ? `Thửa ${lastTest.plotCode}` : null,
+      isAlert: true,
       to: "inspection",
     });
   }
@@ -191,6 +268,16 @@ export default function HomeTab({
     return buildActionItems(overview.data, openViolationsList[0]);
   }, [overview.data, openViolationsList]);
 
+  const reminderGroups = useMemo(
+    () => groupByIsoDate(actionItems, (item) => item.date),
+    [actionItems],
+  );
+
+  const scheduleGroups = useMemo(
+    () => groupByIsoDate((schedule.data?.data ?? []).slice(0, 4), (item) => item.scheduledOn),
+    [schedule.data],
+  );
+
   if (overview.loading || overview.error || !overview.data || !overview.data.household || !overview.data.stats) {
     return <StateBlock loading={overview.loading} error={overview.error} />;
   }
@@ -208,7 +295,7 @@ export default function HomeTab({
           num: stats.harvestTotalKg.toLocaleString("vi-VN", { maximumFractionDigits: 1 }),
           unit: "kg",
         };
-  const pucCode = household.code ? household.code.replace(/-(?:H|T)\d+$/i, "") : "—";
+  const pucCode = household.code ? household.code.replace(/-(?:H|T)\d+$/i, "") : "-";
 
   const handleActionClick = (target: PortalTabId, action?: PortalAction) => {
     onNavigate(target, action);
@@ -314,70 +401,80 @@ export default function HomeTab({
 
       <SectionDivider />
 
-      {/* Widget Nhắc nhở */}
-      <section className="pt-reminders-widget pt-home-reminders-widget" aria-label="Nhắc nhở và nhiệm vụ hôm nay">
-        <div className="pt-widget-topbar">
-          <div className="pt-widget-topbar-info">
-            <h2 className="pt-widget-topbar-title">Nhắc nhở</h2>
-          </div>
+      {/* Nhắc nhở */}
+      <section className="pt-diary-section" aria-labelledby="reminders-heading">
+        <div className="pt-diary-header">
+          <h2 id="reminders-heading" className="pt-plots-title">
+            Nhắc nhở
+          </h2>
         </div>
 
-        <div className="pt-widget-sheet">
-          {actionItems.length === 0 ? (
-            <p className="pt-muted" style={{ padding: "4px 2px 14px", margin: 0 }}>
-              Mọi thứ đều ổn. Hiện chưa có việc cần làm ngay.
-            </p>
-          ) : (
-            <ul className="pt-widget-list" role="list">
-              {actionItems.map((item) => (
-                <li key={item.id}>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    className="pt-widget-item pt-reminder-item"
-                    onClick={() => handleActionClick(item.to, item.action)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        handleActionClick(item.to, item.action);
-                      }
-                    }}
-                  >
-                    <img
-                      src="/note.png?v=2"
-                      alt=""
-                      width={20}
-                      height={20}
-                      loading="lazy"
-                      decoding="async"
-                      className="pt-widget-note-icon"
-                      aria-hidden="true"
-                    />
-                    <div className="pt-reminder-item-content">
-                      <span className="pt-widget-item-text pt-reminder-item-title">
-                        {item.title}
-                      </span>
-                      {item.detail && (
-                        <span className="pt-reminder-item-detail">
-                          {item.detail}
+        {reminderGroups.length === 0 ? (
+          <p className="pt-muted pt-schedule-empty">
+            Mọi thứ đều ổn. Hiện chưa có việc cần làm ngay.
+          </p>
+        ) : (
+          <div className="pt-diary-day-groups">
+            {reminderGroups.map((group) => (
+              <div key={group.date} className="pt-diary-day-group">
+                <div className="pt-diary-day-head">
+                  <span className="pt-diary-day-label">{group.label}</span>
+                </div>
+                <ul className="pt-diary-day-card" role="list">
+                  {group.items.map((item) => (
+                    <li key={item.id}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="pt-widget-item pt-diary-day-row"
+                        onClick={() => handleActionClick(item.to, item.action)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleActionClick(item.to, item.action);
+                          }
+                        }}
+                      >
+                        <img
+                          src="/note.png?v=2"
+                          alt=""
+                          width={20}
+                          height={20}
+                          loading="lazy"
+                          decoding="async"
+                          className="pt-widget-note-icon"
+                          aria-hidden="true"
+                        />
+                        <span className="pt-diary-item-body">
+                          <span className="pt-diary-item-title">{item.title}</span>
+                          {item.detail && (
+                            <span
+                              className={`pt-diary-item-sub ${item.isAlert ? "" : "is-neutral"}`.trim()}
+                            >
+                              {item.detail}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </div>
-                    <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                        {item.plotLabel && (
+                          <span className="pt-diary-item-plot">{item.plotLabel}</span>
+                        )}
+                        <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <SectionDivider />
 
       {/* Lịch kiểm tra */}
-      <section className="pt-schedule-section" aria-labelledby="schedule-heading">
-        <div className="pt-schedule-header">
-          <h2 id="schedule-heading" className="pt-schedule-title">
+      <section className="pt-diary-section" aria-labelledby="schedule-heading">
+        <div className="pt-diary-header">
+          <h2 id="schedule-heading" className="pt-plots-title">
             Lịch kiểm tra
           </h2>
           {schedule.data && schedule.data.data.length > 0 && (
@@ -392,45 +489,60 @@ export default function HomeTab({
           )}
         </div>
 
-        {!schedule.data || schedule.data.data.length === 0 ? (
+        {scheduleGroups.length === 0 ? (
           <p className="pt-muted pt-schedule-empty">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
         ) : (
-          <div className="pt-vietgap-timeline" role="list">
-            {schedule.data.data.slice(0, 4).map((item) => {
-              const kicker = getScheduleKicker(item);
-              const conciseTitle = getConciseScheduleTitle(item.title);
-              const relNote = relativeDayLabel(item.scheduledOn);
-              const formattedDate = formatDate(item.scheduledOn);
-
-              return (
-                <div key={item.id} className="pt-vietgap-step" role="listitem">
-                  <div className="pt-vietgap-segment">
-                    <div
-                      className="pt-training-clean-card"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onNavigate("inspection")}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          onNavigate("inspection");
-                        }
-                      }}
-                      title="Nhấn để xem chi tiết đợt kiểm tra trong tab riêng"
-                    >
-                      <div className="pt-timeline-content">
-                        <span className="pt-timeline-kicker">{kicker}</span>
-                        <h3 className="pt-timeline-title">{conciseTitle}</h3>
-                      </div>
-                      <div className="pt-timeline-meta">
-                        <span className="pt-timeline-date">{formattedDate}</span>
-                        {relNote && <span className="pt-timeline-rel">({relNote})</span>}
-                      </div>
-                    </div>
-                  </div>
+          <div className="pt-diary-day-groups">
+            {scheduleGroups.map((group) => (
+              <div key={group.date} className="pt-diary-day-group">
+                <div className="pt-diary-day-head">
+                  <span className="pt-diary-day-label">{group.label}</span>
                 </div>
-              );
-            })}
+                <ul className="pt-diary-day-card" role="list">
+                  {group.items.map((item) => {
+                    const kicker = getScheduleKicker(item);
+                    return (
+                      <li key={item.id}>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className="pt-widget-item pt-diary-day-row"
+                          onClick={() => onNavigate("inspection")}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onNavigate("inspection");
+                            }
+                          }}
+                          title="Bấm để xem chi tiết đợt kiểm tra"
+                        >
+                          <img
+                            src="/note.png?v=2"
+                            alt=""
+                            width={20}
+                            height={20}
+                            loading="lazy"
+                            decoding="async"
+                            className="pt-widget-note-icon"
+                            aria-hidden="true"
+                          />
+                          <span className="pt-diary-item-body">
+                            <span className="pt-diary-item-title">{item.title}</span>
+                            {item.officer && (
+                              <span className="pt-diary-item-sub is-neutral">
+                                Cán bộ: {item.officer}
+                              </span>
+                            )}
+                          </span>
+                          <span className="pt-diary-item-plot">{kicker}</span>
+                          <DetailArrowIcon className="pt-widget-item-arrow" size={22} />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
       </section>
