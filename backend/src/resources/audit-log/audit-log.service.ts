@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { AuditService } from "../../audit/audit.service";
+import { AuditService, redactAuditDetailText, redactAuditObjectLabel } from "../../audit/audit.service";
+import type { AuthUser } from "../../auth/auth-user";
 import { BaseCrudService } from "../../common/crud/base-crud.service";
+import type { ListQueryDto } from "../../common/crud/list-query.dto";
 import { DatabaseService } from "../../database/database.service";
 
 @Injectable()
@@ -16,5 +18,26 @@ export class AuditLogService extends BaseCrudService {
       search: ["t.user_name", "t.action", "t.object", "t.detail"],
       filters: { action: "t.action", userId: "t.user_id" },
     });
+  }
+
+  override async list(user: AuthUser, query: ListQueryDto & Record<string, unknown>) {
+    const res = await super.list(user, query);
+    return {
+      ...res,
+      data: res.data.map((row) => ({
+        ...row,
+        object: redactAuditObjectLabel(typeof row.object === "string" ? row.object : ""),
+        detail: redactAuditDetailText(typeof row.detail === "string" ? row.detail : null),
+      })),
+    };
+  }
+
+  override async findOne(id: number, user: AuthUser) {
+    const row = await super.findOne(id, user);
+    return {
+      ...row,
+      object: redactAuditObjectLabel(typeof row.object === "string" ? row.object : ""),
+      detail: redactAuditDetailText(typeof row.detail === "string" ? row.detail : null),
+    };
   }
 }

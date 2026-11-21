@@ -49,6 +49,31 @@ function toCsv(headers: string[], rows: unknown[][]): string {
   return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
 
+const REPORT_LABELS_VN: Record<ReportType, string> = {
+  households: "Báo cáo hộ nông dân",
+  journal: "Báo cáo nhật ký canh tác",
+  spray: "Báo cáo nhật ký phun thuốc",
+  "lab-tests": "Báo cáo kiểm nghiệm",
+  violations: "Báo cáo vi phạm",
+  harvest: "Báo cáo thu hoạch",
+  "training-registrations": "Báo cáo tập huấn",
+};
+
+function describeReportFilter(filter: ReportFilter): string {
+  const parts: string[] = [];
+  if (filter.from && filter.to) {
+    parts.push(`Từ ${filter.from} đến ${filter.to}`);
+  } else if (filter.from) {
+    parts.push(`Từ ngày ${filter.from}`);
+  } else if (filter.to) {
+    parts.push(`Đến ngày ${filter.to}`);
+  }
+  if (filter.villageId !== undefined) {
+    parts.push("Lọc theo địa bàn thôn");
+  }
+  return parts.length > 0 ? parts.join(", ") : "Toàn bộ phạm vi quản lý";
+}
+
 const HOUSEHOLD_STATUS_VN: Record<string, string> = {
   qualified: "Đạt chuẩn",
   improve: "Cần cải thiện",
@@ -134,7 +159,7 @@ export class ReportsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
-  ) {}
+  ) { }
 
   async getReportData(
     type: string,
@@ -162,24 +187,27 @@ export class ReportsService {
       rowLimit,
     );
 
+    const reportLabel = REPORT_LABELS_VN[type as ReportType] ?? "Báo cáo tổng hợp";
+    const filterSummary = describeReportFilter(filter);
+
     if (wantUnmaskedAudit) {
       await this.audit.write(
         { ip, user },
         {
-          action: "Xuất báo cáo kiểm toán (đầy đủ CCCD)",
-          object: `Báo cáo ${type}`,
-          detail: `Xuất dữ liệu PII/CCCD không che - bộ lọc: ${JSON.stringify(filter)}`,
+          action: "Xuất báo cáo kiểm toán",
+          object: reportLabel,
+          detail: `Bản kiểm toán đầy đủ (${filterSummary})`,
         },
       );
     } else if (recordAudit) {
       await this.audit.write(
         { ip, user },
-        { action: "Xuất báo cáo", object: `Báo cáo ${type}`, detail: JSON.stringify(filter) },
+        { action: "Xuất báo cáo", object: reportLabel, detail: filterSummary },
       );
     } else if (rawQuery.preview !== "1" && rawQuery.preview !== "true") {
       await this.audit.write(
         { ip, user },
-        { action: "Xem trước báo cáo", object: `Báo cáo ${type}`, detail: JSON.stringify(filter) },
+        { action: "Xem trước báo cáo", object: reportLabel, detail: filterSummary },
       );
     }
 
@@ -590,7 +618,7 @@ export class ReportsService {
 
 @Controller("reports")
 export class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(private readonly reports: ReportsService) { }
 
   @Get(":type")
   @Throttle(RateLimitTier.REPORT_EXPORT)
@@ -623,4 +651,4 @@ export class ReportsController {
   controllers: [ReportsController],
   providers: [ReportsService],
 })
-export class ReportsModule {}
+export class ReportsModule { }

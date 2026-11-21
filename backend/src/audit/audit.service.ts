@@ -19,6 +19,71 @@ const MAX_ACTOR_OR_OBJECT_LEN = 160;
 const MAX_DETAIL_LEN = 500;
 const ANONYMOUS_ACTOR_LABEL = "Khách (chưa xác thực)";
 
+const RAW_REPORT_OBJECT_MAP: Record<string, string> = {
+  "Báo cáo households": "Báo cáo hộ nông dân",
+  "Báo cáo journal": "Báo cáo nhật ký canh tác",
+  "Báo cáo spray": "Báo cáo nhật ký phun thuốc",
+  "Báo cáo lab-tests": "Báo cáo kiểm nghiệm",
+  "Báo cáo violations": "Báo cáo vi phạm",
+  "Báo cáo harvest": "Báo cáo thu hoạch",
+  "Báo cáo training-registrations": "Báo cáo tập huấn",
+};
+
+/**
+ * Ẩn tên trường kỹ thuật (camelCase/snake_case), cấu trúc JSON bộ lọc hoặc thông số MIME nội bộ
+ * khỏi nội dung nhật ký thao tác để không lộ lược đồ dữ liệu ra giao diện quản trị hay API.
+ */
+export function redactAuditObjectLabel(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const trimmed = raw.trim();
+  if (RAW_REPORT_OBJECT_MAP[trimmed]) return RAW_REPORT_OBJECT_MAP[trimmed];
+  const fileMatch = /^Tệp #(\d+)\s*\([a-z_-]+\)$/i.exec(trimmed);
+  if (fileMatch) return `Tệp đính kèm #${fileMatch[1]}`;
+  return trimmed;
+}
+
+export function redactAuditDetailText(raw: string | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  if (/^Trường\s*:/i.test(trimmed)) {
+    return "Đã cập nhật thông tin hồ sơ";
+  }
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(trimmed) as { from?: unknown; to?: unknown; villageId?: unknown };
+      const parts: string[] = [];
+      if (typeof parsed.from === "string" && typeof parsed.to === "string") {
+        parts.push(`Từ ${parsed.from} đến ${parsed.to}`);
+      } else if (typeof parsed.from === "string") {
+        parts.push(`Từ ngày ${parsed.from}`);
+      } else if (typeof parsed.to === "string") {
+        parts.push(`Đến ngày ${parsed.to}`);
+      }
+      if (parsed.villageId !== undefined) {
+        parts.push("Lọc theo địa bàn thôn");
+      }
+      return parts.length > 0 ? parts.join(", ") : "Toàn bộ phạm vi quản lý";
+    } catch {
+      return "Đã áp dụng bộ lọc tra cứu";
+    }
+  }
+
+  if (/bộ lọc:\s*\{.*\}$/i.test(trimmed)) {
+    return "Bản kiểm toán đầy đủ theo phạm vi quản lý";
+  }
+
+  const mimeBytesMatch = /^[a-z0-9.+-]+\/[a-z0-9.+-]+\s*\((\d+)\s*bytes\)$/i.exec(trimmed);
+  if (mimeBytesMatch) {
+    const kb = Math.max(1, Math.round(Number(mimeBytesMatch[1]) / 1024));
+    return `Đã lưu tệp minh chứng (${kb} KB)`;
+  }
+
+  return trimmed;
+}
+
 function sanitizeAuditText(value: string, maxLen: number): string {
   const cleaned = value
     .normalize("NFC")
@@ -103,9 +168,10 @@ export class AuditService {
     }
 
     const cleanAction = sanitizeAuditText(entry.action, MAX_ACTOR_OR_OBJECT_LEN);
-    const cleanObject = sanitizeAuditText(entry.object, MAX_ACTOR_OR_OBJECT_LEN);
+    const cleanObject = sanitizeAuditText(redactAuditObjectLabel(entry.object), MAX_ACTOR_OR_OBJECT_LEN);
+    const redactedDetail = redactAuditDetailText(entry.detail);
     const cleanDetail =
-      entry.detail !== undefined && entry.detail !== null ? sanitizeAuditText(entry.detail, MAX_DETAIL_LEN) : null;
+      redactedDetail !== null ? sanitizeAuditText(redactedDetail, MAX_DETAIL_LEN) : null;
 
     try {
       await this.db.query(

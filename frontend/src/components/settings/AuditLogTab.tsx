@@ -6,9 +6,26 @@ import Pager from "@/components/admin/catalog/Pager";
 import { useDebounced } from "@/components/admin/catalog/use-debounced";
 import { useApiList } from "@/hooks/use-api";
 import type { AuditLogRecord } from "@/types/accounts";
-import { ACTION_COLORS } from "./settings-data";
 
 const PAGE_SIZE = 20;
+
+function resolveActionTone(action: string): string {
+  if (/thất bại|cảnh báo|khóa|xóa|từ chối|thu hồi/i.test(action)) return "#b91c1c";
+  if (/duyệt|tạo mới|bật|kích hoạt|mở/i.test(action)) return "#15803d";
+  if (/cập nhật|đổi|đặt lại/i.test(action)) return "#14372f";
+  return "#5f6d66";
+}
+
+function formatSafeAuditDetail(detail: string | null | undefined): string {
+  if (!detail) return "-";
+  const trimmed = detail.trim();
+  if (!trimmed) return "-";
+  if (/^Trường\s*:/i.test(trimmed)) return "Đã cập nhật thông tin hồ sơ";
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) return "Theo bộ lọc phạm vi quản lý";
+  if (/bộ lọc:\s*\{.*\}$/i.test(trimmed)) return "Bản kiểm toán theo phạm vi quản lý";
+  if (/^[a-z0-9.+-]+\/[a-z0-9.+-]+\s*\(\d+\s*bytes\)$/i.test(trimmed)) return "Đã lưu tệp minh chứng";
+  return trimmed;
+}
 
 export default function AuditLogTab() {
   const [q, setQ] = useState("");
@@ -80,15 +97,17 @@ export default function AuditLogTab() {
             {list.rows.map((log) => (
               <tr key={log.id}>
                 <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                  {log.occurredAt ? new Date(log.occurredAt).toLocaleString("vi-VN") : "—"}
+                  {log.occurredAt ? new Date(log.occurredAt).toLocaleString("vi-VN") : "-"}
                 </td>
                 <td style={{ fontWeight: 500 }}>{log.userName || "Hệ thống"}</td>
-                <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "var(--text-muted)" }}>{log.ip || "—"}</td>
+                <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "var(--text-muted)" }}>{log.ip || "-"}</td>
                 <td>
-                  <span className={`badge ${ACTION_COLORS[log.action] || "badge-gray"}`}>{log.action}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: resolveActionTone(log.action) }}>
+                    {log.action}
+                  </span>
                 </td>
-                <td style={{ fontSize: 12.5, color: "#256b45", fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{log.object || "—"}</td>
-                <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{log.detail || "—"}</td>
+                <td style={{ fontSize: 12.5, color: "#256b45", fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{log.object || "-"}</td>
+                <td style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>{formatSafeAuditDetail(log.detail)}</td>
               </tr>
             ))}
           </tbody>

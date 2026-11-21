@@ -186,13 +186,16 @@ export abstract class BaseCrudService {
     );
     await this.afterWrite(id, input);
 
-    const changed = entries.map(([key]) => key).filter((key) => key !== "passwordHash");
+    const summaryDetail =
+      input.passwordHash !== undefined
+        ? "Đã cập nhật thông tin và đặt lại mật khẩu"
+        : "Đã cập nhật thông tin hồ sơ";
     await this.audit.write(
       { ip, user },
       {
         action: this.auditAction("PATCH", input) ?? "Cập nhật",
         object: `${this.config.label} #${id}`,
-        detail: `Trường: ${changed.join(", ")}`,
+        detail: summaryDetail,
       },
     );
     return this.loadOne(id, user);

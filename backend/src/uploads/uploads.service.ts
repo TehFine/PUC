@@ -517,12 +517,13 @@ export class UploadsService implements OnModuleInit {
         recordedAt: now,
       }).catch(() => undefined);
       if (this.audit) {
+        const sizeKb = Math.max(1, Math.round(actualBytes / 1024));
         await this.audit.write(
           { user },
           {
             action: "Tải tệp",
-            object: `Tệp #${id} (${purpose})`,
-            detail: `${type.mime} (${actualBytes} bytes)`,
+            object: `Tệp đính kèm #${id}`,
+            detail: `Đã lưu tệp minh chứng (${sizeKb} KB)`,
           },
         );
       }

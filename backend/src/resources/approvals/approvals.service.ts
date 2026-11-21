@@ -68,7 +68,7 @@ export class ApprovalsService extends BaseCrudService {
     await this.findOne(id, user);
 
     const virtual = new Set(this.config.virtual ?? []);
-    const { input, changed } = await withTransaction(this.db, async (client) => {
+    const { input } = await withTransaction(this.db, async (client) => {
       const locked = await client.query<{ status: string; household_id: number | null }>(
         "SELECT status, household_id FROM approvals WHERE id = $1 FOR UPDATE",
         [id],
@@ -99,7 +99,7 @@ export class ApprovalsService extends BaseCrudService {
       if (upd.rowCount === 0) {
         throw conflict(FINALIZED_APPROVAL_ERR);
       }
-      return { input: prepared, changed: entries.map(([key]) => key) };
+      return { input: prepared };
     });
 
     await this.afterWrite(id, input);
@@ -108,7 +108,7 @@ export class ApprovalsService extends BaseCrudService {
       {
         action: this.auditAction("PATCH", input) ?? "Cập nhật",
         object: `${this.config.label} #${id}`,
-        detail: `Trường: ${changed.join(", ")}`,
+        detail: "Đã cập nhật nội dung hồ sơ đề nghị",
       },
     );
     return this.findOne(id, user);
