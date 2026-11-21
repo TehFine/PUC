@@ -1072,7 +1072,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               <div className="pt-profile-head-split">
                 <div className="pt-profile-head-cell">
                   <span className="pt-profile-kicker" data-no-translate={profHousehold?.code ? "true" : undefined}>
-                    {profHousehold?.code ? `MÃ: ${profHousehold.code}` : "HỘ THÀNH VIÊN"}
+                    {profHousehold?.code || "HỘ THÀNH VIÊN"}
                   </span>
                 </div>
                 <div className="pt-profile-head-cell">
@@ -1100,7 +1100,6 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                     onClick={() => avatarInputRef.current?.click()}
                     disabled={uploadingAvatar}
                   >
-                    <RadialPngIcon src="/up-loading.png" size={15} />
                     <span>
                       {uploadingAvatar
                         ? t("Đang tải ảnh…")
@@ -1252,6 +1251,14 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                     aria-pressed={lang === "vi"}
                   >
                     Tiếng Việt
+                  </button>
+                  <button
+                    type="button"
+                    className={`pt-lang-seg-btn ${lang === "en" ? "is-active" : ""}`}
+                    onClick={() => setLang("en")}
+                    aria-pressed={lang === "en"}
+                  >
+                    English
                   </button>
                   <button
                     type="button"

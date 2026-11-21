@@ -11,15 +11,24 @@ import {
   type ReactNode,
 } from "react";
 import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT } from "@/lib/api-client";
+import {
+  applyDomTranslation,
+  observeDomTranslation,
+  setActiveDomLang,
+  type PortalLang,
+} from "./i18n-engine";
 
-export type PortalLang = "vi" | "zh";
+export type { PortalLang };
 
 const STORAGE_KEY = "puc-portal-lang";
 
 type ZhModule = typeof import("./i18n-zh");
+type EnModule = typeof import("./i18n-en");
 
 let cachedZhModule: ZhModule | null = null;
 let inflightZhModule: Promise<ZhModule> | null = null;
+let cachedEnModule: EnModule | null = null;
+let inflightEnModule: Promise<EnModule> | null = null;
 
 function loadZhModule(): Promise<ZhModule> {
   if (cachedZhModule) return Promise.resolve(cachedZhModule);
@@ -30,17 +39,39 @@ function loadZhModule(): Promise<ZhModule> {
   return inflightZhModule;
 }
 
+function loadEnModule(): Promise<EnModule> {
+  if (cachedEnModule) return Promise.resolve(cachedEnModule);
+  inflightEnModule ??= import("./i18n-en").then((mod) => {
+    cachedEnModule = mod;
+    return mod;
+  });
+  return inflightEnModule;
+}
+
+function readInitialLang(): PortalLang {
+  if (typeof window === "undefined") return "vi";
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === "zh" || stored === "en") return stored;
+    return "vi";
+  } catch {
+    return "vi";
+  }
+}
+
 interface PortalLangContextValue {
   lang: PortalLang;
   setLang: (next: PortalLang) => void;
   isZh: boolean;
-  t: (vi: string, zh?: string) => string;
+  isEn: boolean;
+  t: (vi: string, zh?: string, en?: string) => string;
 }
 
 const PortalLangContext = createContext<PortalLangContextValue>({
   lang: "vi",
   setLang: () => {},
   isZh: false,
+  isEn: false,
   t: (vi) => vi,
 });
 
@@ -49,16 +80,10 @@ export function usePortalLang() {
 }
 
 export function PortalLangProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<PortalLang>(() => {
-    if (typeof window === "undefined") return "vi";
-    try {
-      return window.localStorage.getItem(STORAGE_KEY) === "zh" ? "zh" : "vi";
-    } catch {
-      return "vi";
-    }
-  });
+  const [lang, setLangState] = useState<PortalLang>(readInitialLang);
   const [zhMod, setZhMod] = useState<ZhModule | null>(() => cachedZhModule);
-  const hasTranslatedZhRef = useRef(false);
+  const [enMod, setEnMod] = useState<EnModule | null>(() => cachedEnModule);
+  const hasTranslatedNonViRef = useRef(false);
 
   const setLang = useCallback((next: PortalLang) => {
     setLangState(next);
@@ -88,22 +113,26 @@ export function PortalLangProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (vi: string, zh?: string) => {
+    (vi: string, zh?: string, en?: string) => {
       if (lang === "vi") return vi;
-      if (zh) return zh;
-      return zhMod ? zhMod.translateViToZh(vi) : vi;
+      if (lang === "zh") {
+        if (zh) return zh;
+        return zhMod ? zhMod.translateViToZh(vi) : vi;
+      }
+      if (en) return en;
+      return enMod ? enMod.translateViToEn(vi) : vi;
     },
-    [lang, zhMod],
+    [lang, zhMod, enMod],
   );
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.documentElement.lang = lang === "zh" ? "zh-CN" : "vi";
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : lang === "en" ? "en" : "vi";
+    setActiveDomLang(lang);
 
-    // Nếu đang ở Tiếng Việt và chưa từng bật Tiếng Trung thì không cần tải gói từ điển 94KB hay quét DOM (0ms CPU, 0KB RAM thêm)
     if (lang === "vi") {
-      if (hasTranslatedZhRef.current && cachedZhModule) {
-        cachedZhModule.applyDomTranslation(document.body, "vi");
+      if (hasTranslatedNonViRef.current && document.body) {
+        applyDomTranslation(document.body, "vi");
       }
       return;
     }
@@ -111,13 +140,27 @@ export function PortalLangProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let stopObserving: (() => void) | null = null;
 
-    void loadZhModule().then((mod) => {
-      if (cancelled) return;
-      setZhMod(mod);
-      hasTranslatedZhRef.current = true;
-      mod.applyDomTranslation(document.body, "zh");
-      stopObserving = mod.observeDomTranslation();
-    });
+    if (lang === "zh") {
+      void loadZhModule().then((mod) => {
+        if (cancelled) return;
+        setZhMod(mod);
+        hasTranslatedNonViRef.current = true;
+        if (document.body) {
+          applyDomTranslation(document.body, "zh");
+        }
+        stopObserving = observeDomTranslation("zh");
+      });
+    } else {
+      void loadEnModule().then((mod) => {
+        if (cancelled) return;
+        setEnMod(mod);
+        hasTranslatedNonViRef.current = true;
+        if (document.body) {
+          applyDomTranslation(document.body, "en");
+        }
+        stopObserving = observeDomTranslation("en");
+      });
+    }
 
     return () => {
       cancelled = true;
@@ -130,6 +173,7 @@ export function PortalLangProvider({ children }: { children: ReactNode }) {
       lang,
       setLang,
       isZh: lang === "zh",
+      isEn: lang === "en",
       t,
     }),
     [lang, setLang, t],

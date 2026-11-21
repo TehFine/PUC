@@ -1,5 +1,11 @@
-import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, AUTH_SCOPE_CHANGED_EVENT } from "@/lib/api-client";
-import type { PortalLang } from "./i18n";
+import {
+  applyDomTranslation,
+  buildCompositionalPhraseRules,
+  clearDynTranslationCache,
+  observeDomTranslation as observeEngineDomTranslation,
+  registerLangPack,
+  translateText,
+} from "./i18n-engine";
 
 /**
  * Từ điển đối chiếu toàn diện Tiếng Việt → Tiếng Trung (Giản thể) cho toàn bộ Cổng Xã viên,
@@ -1492,6 +1498,319 @@ const EXACT_MAP: Record<string, string> = {
   "Ảnh quá lớn (tối đa 15MB).": "图片文件过大（最大 15MB）。",
   "Không xử lý được yêu cầu.": "无法处理该请求。",
   "Không kết nối được máy chủ. Vui lòng kiểm tra mạng và thử lại.": "无法连接服务器，请检查网络后重试。",
+
+  // ─── Bổ sung diện rộng: Tài khoản Google, Hiển thị QR, Nhật ký mới, Kiểm nghiệm, IPM 2026 & Quy trình 2026–2027 ───
+  "English": "English",
+  "Đổi ngôn ngữ (Tiếng Việt / English / 中文)": "切换语言 (Tiếng Việt / English / 中文)",
+  "Cập nhật Email Google & Tài khoản": "更新 Google 邮箱与账户",
+  "Email liên kết Google": "已关联 Google 邮箱",
+  "Chưa liên kết": "未关联",
+  "Tên hiển thị tài khoản": "账户显示名称",
+  "Email liên kết đăng nhập Google": "关联登录的 Google 邮箱",
+  "Mật khẩu hiện tại (xác nhận đổi email)": "当前密码（修改邮箱需验证）",
+  "Nhập mật khẩu hiện tại của bạn": "请输入您的当前密码",
+  "Tiếp tục với Google": "使用 Google 继续",
+  "Tên hiển thị không được để trống.": "显示名称不能为空。",
+  "Vui lòng nhập mật khẩu hiện tại để xác nhận thay đổi địa chỉ email liên kết.":
+    "请输入当前密码以确认修改关联邮箱。",
+  "Không thể cập nhật thông tin tài khoản.": "无法更新账户信息。",
+  "Hiển thị tên hộ trên QR công khai": "在公开溯源二维码上显示农户姓名",
+  "Đang bật - Người tiêu dùng quét QR thấy tên hộ cùng HTX Cư Né":
+    "已开启 - 消费者扫码可见农户姓名与居内合作社",
+  "Đang tắt - Mặc định bảo mật, chỉ hiển thị tên HTX Cư Né":
+    "已关闭 - 默认隐私保护，仅显示居内合作社名称",
+  "Đồng ý hiển thị": "同意公开显示",
+  "Tắt hiển thị": "关闭公开显示",
+  "Không thể cập nhật tùy chọn hiển thị tên trên QR.": "无法更新二维码姓名显示设置。",
+  "Tải lên hoặc đổi ảnh đại diện hộ": "上传或更换农户头像",
+  "Mật khẩu mới cần bao gồm cả chữ cái và chữ số.": "新密码必须同时包含字母和数字。",
+  "Mật khẩu mới (tối thiểu 8 ký tự, gồm chữ và số)": "新密码（至少8位，含字母与数字）",
+  "Đã đổi mật khẩu thành công. Vui lòng đăng nhập lại.": "密码修改成功，请重新登录。",
+  "Lưu thay đổi": "保存修改",
+  "Đọc hết": "全部已读",
+  "Thu gọn bảng": "收起表格",
+  "Thu gọn": "收起",
+  "Trạng thái": "状态",
+  "Đăng ký vùng trồng mới": "申请注册新种植区",
+  "Đăng ký thêm thửa đất": "申请新增地块",
+  "Cấp lại mã vùng trồng": "申请补发种植区代码",
+  "Đề nghị kiểm tra, phúc tra": "申请现场核查或复查",
+  "Tra cứu thuốc BVTV, phân bón và giống cây.": "查询植保农药、推荐肥料与榴莲品种。",
+  "Ghi phun thuốc bảo vệ thực vật": "记录植保农药施用",
+  "Xem nhật ký đã ghi & thời gian cách ly": "查看已记日志与安全间隔期 (PHI)",
+  "Tổng quan hộ canh tác": "农户种植总览",
+  "tấn": "吨",
+  "Đến lịch chăm sóc theo quy trình": "按规程到期的管护节点",
+  "Xem khuyến nghị quy trình chăm sóc sầu riêng chuẩn 2026–2027 để đảm bảo thu mua đúng giá, giá cao":
+    "查看 2026–2027 标准榴莲养护规程，保障合作社优质优价收购",
+  "Chưa có việc cần làm ngay.": "目前暂无紧急待办事项。",
+  "Chưa có lịch kiểm tra sắp tới.": "近期暂无巡检安排。",
+  "Bấm để xem chi tiết đợt kiểm tra": "点击查看本次巡检详情",
+  "Chưa có kết quả kiểm nghiệm.": "暂无实验室检测结果。",
+  "Chỉ ghi nhật ký cho công việc đã thực hiện, không được khai trước ngày tương lai.":
+    "仅限记录已完成的农事作业，不得填报未来日期。",
+  "Chỉ được ghi bổ sung trong vòng 7 ngày gần nhất. Quá 7 ngày vui lòng báo cán bộ xã lập biên bản.":
+    "仅允许补录最近 7 天内的作业；超过 7 天请联系乡技术员备案。",
+  "Không được chọn ngày tương lai. Chỉ ghi nhật ký sau khi đã thực hiện công việc tại vườn.":
+    "不能选择未来日期，请在果园作业完成后如实记录。",
+  "Không được ghi lùi nhật ký quá 7 ngày. Vui lòng liên hệ cán bộ kỹ thuật xã để ghi nhận bổ sung.":
+    "不得补录超过 7 天前的日志，请联系乡技术员协助补录。",
+  "Vui lòng chụp hoặc chọn ít nhất 1 ảnh hiện trường trước khi lưu.":
+    "保存前请至少拍摄或选择 1 张果园现场照片。",
+  "Vui lòng chọn loại thuốc bảo vệ thực vật đã sử dụng.": "请选择所使用的植保农药。",
+  "Vui lòng nhập liều lượng pha phun.": "请输入稀释与喷施剂量。",
+  "Vui lòng nhập diện tích phun hợp lệ.": "请输入有效的施药面积。",
+  "Đã lưu nhật ký phun thuốc lên hệ thống.": "施药日志已保存至系统。",
+  "Đã lưu trên điện thoại, hệ thống tự đồng bộ khi có sóng ổn định.":
+    "已保存在手机本地，网络恢复稳定后将自动同步。",
+  "Đã lưu nhật ký canh tác lên hệ thống.": "农事作业日志已保存至系统。",
+  "Ví dụ: Vườn xa mất sóng 4G nên về nhà mới tải ảnh lên...":
+    "例如：果园偏远无 4G 信号，返家后补充上传照片...",
+  "Công việc thực hiện": "执行作业项目",
+  "Loại thuốc bảo vệ thực vật sử dụng": "使用的植保农药",
+  "Loại phân bón sử dụng": "使用的肥料种类",
+  "Chọn thuốc bảo vệ thực vật": "选择植保农药",
+  "Chọn loại phân bón": "选择肥料种类",
+  "Bấm để chọn thuốc bằng hình ảnh": "点击看图选择农药",
+  "Bấm để chọn phân bón bằng hình ảnh": "点击看图选择肥料",
+  "Đang tải danh mục phân bón…": "正在加载肥料名录…",
+  "Vuốt sang ngang và chạm vào đúng hình chai hoặc gói thuốc đã dùng": "左右滑动并点击您实际使用的农药瓶或包装袋图片",
+  "Vuốt sang ngang và chạm vào đúng hình bao hoặc chai phân bón đã dùng": "左右滑动并点击您实际使用的肥料袋或瓶装图片",
+  "Tìm nhanh tên thuốc hoặc hoạt chất...": "快速搜索农药名称或有效成分...",
+  "Tìm nhanh tên phân bón hoặc công thức...": "快速搜索肥料名称或配方...",
+  "Đổi loại": "更换",
+  "Đang chọn": "已选择",
+  "Liều lượng bón thực tế (không bắt buộc)": "实际施肥用量（选填）",
+  "Ví dụ: 5 kg/gốc hoặc 1 kg/cây": "例如：5 公斤/株 或 1 公斤/棵",
+  "Vui lòng chọn loại phân bón đã sử dụng.": "请选择实际使用的肥料种类。",
+  "Đang tải danh mục thuốc…": "正在加载农药名录…",
+  "Chọn loại thuốc đã phun": "选择已喷施的农药",
+  "(HẠN CHẾ)": "（限制使用）",
+  "Liều lượng pha phun": "稀释喷施剂量",
+  "Ví dụ: 100 ml / bình 20L": "例如：100 毫升 / 20升喷雾器",
+  "Cửa hàng / Đại lý cung cấp thuốc (không bắt buộc)": "农药购买门店 / 经销商（选填）",
+  "Tên đại lý vật tư nông nghiệp": "农资经销店名称",
+  "Ghi chú tình trạng sâu bệnh (không bắt buộc)": "病虫害情况备注（选填）",
+  "Ghi chú công việc và vật tư": "作业内容与农资备注",
+  "Ví dụ: Phun phòng rầy xanh trên cơi đọt 2 vào sáng sớm...":
+    "例如：清晨对第2次新梢喷药预防小绿叶蝉...",
+  "Ảnh phun thuốc, nhãn thuốc": "施药现场与农药标签照片",
+  "Ảnh, video hiện trường": "现场照片与短视频",
+  "Tối đa 8 ảnh hoặc video dưới 90 giây.": "最多 8 张照片或 90 秒以内的短视频。",
+  "Chụp ảnh": "拍照",
+  "Chụp thêm ảnh": "继续拍照",
+  "Chọn nhiều ảnh": "选择多张照片",
+  "Thêm video": "添加视频",
+  "Ngày thực hiện tại vườn": "果园实际作业日期",
+  "Ngày thực hiện muốn khai báo": "申报作业日期",
+  "Thời điểm khai báo thực tế": "系统实际填报时间",
+  "Độ trễ khai báo": "填报延迟",
+  "Khai báo đúng trong ngày": "当日及时填报",
+  "Người ghi ban đầu": "初始记录人",
+  "Người chỉnh sửa": "修改人",
+  "Đã chỉnh sửa": "已修改",
+  "Thời điểm chỉnh sửa": "最后修改时间",
+  "- Khớp ranh giới GIS thửa vườn": "- 匹配地块 GIS 边界",
+  "Khai báo bổ sung sau thời điểm thực hiện": "作业后延迟补录",
+  "Lý do ghi bổ sung": "补录原因",
+  "Lý do khai báo bổ sung": "补录原因说明",
+  "Minh chứng hiện trường vườn": "果园现场凭证",
+  "Minh chứng hiện trường": "现场影像凭证",
+  "Xóa nhật ký canh tác": "删除农事日志",
+  "Xác nhận xóa bản ghi nhật ký canh tác này? Thao tác không thể hoàn tác.":
+    "确认删除该条农事日志吗？此操作无法撤销。",
+  "Không xóa được bản ghi phun thuốc.": "无法删除该条施药记录。",
+  "Ngày phun tại vườn": "果园施药日期",
+  "- Toàn vườn": "- 全园",
+  "Nguồn gốc và ghi chú": "农资来源与备注",
+  "Hoạt chất nằm trong danh mục cấm sử dụng. Thông tin đã được chuyển tới cán bộ kỹ thuật HTX để hỗ trợ khoanh vùng xử lý.":
+    "该有效成分属于禁用名录，信息已同步至合作社技术员以协助隔离处置。",
+  "Xóa nhật ký phun thuốc": "删除施药记录",
+  "Xác nhận xóa bản ghi phun thuốc nhập nhầm này? Thao tác không thể hoàn tác.":
+    "确认删除该条误填的施药记录吗？此操作无法撤销。",
+  "Ghi công việc chăm sóc hoặc phun thuốc mới": "记录新的农事管护或施药作业",
+  "Bấm để xem chi tiết lần phun thuốc": "点击查看本次施药详情",
+  "nhật ký": "条日志",
+  "Không khởi tạo được bộ vẽ ảnh.": "无法初始化图像绘制器。",
+  "Không xuất được tệp ảnh PNG.": "无法导出 PNG 图片文件。",
+  "UBND XÃ CƯ NÉ - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK":
+    "居内乡人民委员会 - 多乐省农产品溯源示范点",
+  "HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - KRÔNG BÚK, ĐẮK LẮK":
+    "多乐省克容布县居内综合经营服务合作社",
+  "BIỂN ĐỊNH DANH THỬA VƯỜN SẦU RIÊNG": "榴莲果园地块溯源标识牌",
+  "Theo biên bản thẩm định đầu vụ": "依据季初实地核定记录",
+  "Liên thông dữ liệu vùng trồng Xã Cư Né - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)":
+    "居内乡种植区数据互通平台 - 支持实地核查证 (VI / 中文 / EN)",
+  "NGHIÊM CẤM TỰ Ý DI DỜI BIỂN ĐỊNH DANH THỬA VƯỜN": "严禁擅自移动果园地块标识牌",
+  "VietGAP và GACC": "VietGAP 与 GACC",
+  "Ảnh vệ tinh Maxar Vivid cập nhật mới nhất": "最新更新的 Maxar Vivid 卫星影像",
+  "Ảnh vệ tinh Google hỗ trợ phóng sâu tới Z22": "支持放大至 Z22 级的 Google 卫星影像",
+  "Chuyển chế độ xem bản đồ giao thông chi tiết": "切换至详细道路地图视图",
+  "Xã Cư Né": "居内乡 (Cư Né)",
+  "Xã Ea Khăl": "伊卡乡 (Ea Khăl)",
+  "Xã Ea Khăl, Đắk Lắk": "多乐省伊卡乡 (Ea Khăl, Đắk Lắk)",
+  "Khảo sát thực địa": "实地测绘核查",
+  "HTX NÔNG NGHIỆP CƯ NÉ": "居内农业合作社",
+  "BẢN TRÍCH XUẤT HỆ THỐNG": "系统提取件",
+  "ĐỐI CHIẾU BẢN SCAN LAB": "核对实验室扫描原件",
+  "HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC": "PUC 种植区管理与溯源系统",
+  "HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - HUYỆN KRÔNG BÚK, TỈNH ĐẮK LẮK":
+    "多乐省克容布县居内农业合作社",
+  "Chuẩn ISO/IEC 17025": "ISO/IEC 17025 标准",
+  "Số hồ sơ:": "档案编号：",
+  "Mã hồ sơ:": "档案编码：",
+  "Mã QR tra cứu truy xuất": "溯源查询二维码",
+  "Quét tra cứu thửa": "扫码查询地块",
+  "PHIẾU TRÍCH XUẤT KẾT QUẢ KIỂM NGHIỆM": "实验室检测结果提取单",
+  "Tên chủ hộ sản xuất:": "生产户主姓名：",
+  "Mã số vùng trồng (PUC) và Thửa:": "注册果园代码 (PUC) 与地块：",
+  "Mã vùng trồng và Thửa:": "注册果园代码与地块：",
+  "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk": "多乐省克容布县居内乡",
+  "Đơn vị quản lý gửi mẫu:": "送检管理单位：",
+  "Ban Kiểm soát Kỹ thuật HTX Nông nghiệp Cư Né": "居内农业合作社技术品控委员会",
+  "Mã nhận diện mẫu thử:": "样品识别编码：",
+  "Chỉ tiêu theo dõi:": "监测指标：",
+  "Kim loại nặng Cadimi (Cd), Tổng dư lượng BVTV, Hoạt chất cấm Chlorpyrifos, Phẩm nhuộm Vàng O (Auramine O).":
+    "重金属镉 (Cd)、植保农药总残留、禁用成分毒死蜱 (Chlorpyrifos)、工业染料碱性嫩黄 (Auramine O)。",
+  "Phương pháp phân tích tham chiếu:": "参比检测分析方法：",
+  "Sắc ký khí và lỏng khối phổ (GC-MS/MS, LC-MS/MS), Quang phổ hấp thụ nguyên tử AAS (AOAC 2007.01, TCVN 7602:2007).":
+    "气相与液相色谱-串联质谱法 (GC-MS/MS, LC-MS/MS)、原子吸收光谱法 AAS (AOAC 2007.01, TCVN 7602:2007)。",
+  "KẾT LUẬN ĐỐI CHIẾU NGƯỠNG:": "限量比对结论：",
+  "Ghi chú:": "备注：",
+  "Ngày lấy mẫu ghi nhận:": "记录采样日期：",
+  "Đơn vị thử nghiệm thực hiện:": "承检实验室：",
+  "Ngày lấy mẫu kiểm định:": "检验采样日期：",
+  "Mã đối chiếu phòng Lab:": "实验室核对编号：",
+  "Đối chiếu theo số phiếu gốc": "按原始检测报告编号核对",
+  "HTX Nông nghiệp Cư Né - Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk":
+    "居内农业合作社 - 多乐省克容布县居内乡",
+  "Độ chín và sinh lý mẫu quả:": "样品果实成熟度与生理指标：",
+  "Ngoại quan vỏ và cuống quả:": "果壳与果柄外观：",
+  "Đồng bộ nhật ký điện tử vùng trồng PUC": "已同步 PUC 种植区电子农事日志",
+  "Chọn 'Quên mật khẩu?' tại màn hình đăng nhập để đặt lại ngay bằng số CCCD 12 số hoặc gửi yêu cầu nhờ cán bộ HTX phê duyệt.":
+    "在登录界面点击“忘记密码？”，即可凭12位身份证号重置密码，或提交申请由合作社管理员审批。",
+  "Bấm để gọi trực tiếp Hotline kỹ thuật HTX": "点击直接拨打合作社技术热线",
+  "Hủy đăng ký tập huấn": "取消培训报名",
+  "Sâu bệnh & IPM": "病虫害与 IPM",
+  "Quy trình chăm sóc chuẩn 2026-2027": "2026-2027 标准养护规程",
+  "Bệnh hại sầu riêng": "榴莲病害",
+  "Sâu hại sầu riêng": "榴莲虫害",
+  "Tổng quan mức độ nguy hại": "危害等级概述",
+  "Bộ phận bị hại chính:": "主要受害部位：",
+  "Thời điểm bùng phát mạnh:": "高发时期：",
+  "Triệu chứng nhận diện thực địa": "田间识别症状",
+  "Thuốc & Chế phẩm khuyến cáo trong danh mục": "名录内推荐生物制剂与药剂",
+  "Tìm bệnh xì mủ, héo ngọn, rệp sáp, rầy nhảy, hoạt chất...":
+    "搜索流胶病、枯梢病、粉蚧、木虱、有效成分...",
+  "Tìm kiếm sâu bệnh hại và quy trình IPM": "搜索病虫害与 IPM 防治规程",
+  "Lọc theo nhóm sâu bệnh và quy trình": "按病虫害类别筛选",
+  "4 nguyên tắc phòng trừ dịch hại (IPM)": "有害生物综合治理 (IPM) 四大原则",
+  "4 nguyên tắc IPM": "IPM 四大原则",
+  "Quy trình chăm sóc và vệ sinh vườn": "果园管护与清园日历",
+  "Bấm để xem triệu chứng và phác đồ xử lý IPM 2026": "点击查看识别症状与 IPM 2026 防治方案",
+  "mục sâu bệnh": "项病虫害",
+  "Không tìm thấy sâu bệnh hại phù hợp với từ khóa.": "未找到匹配的病虫害条目。",
+  "Phác đồ Quản lý Dịch hại Tổng hợp (IPM 2026)": "有害生物综合治理方案 (IPM 2026)",
+  "Trồng cây khỏe": "培育健壮果树",
+  "Bảo vệ thiên địch": "保护有益天敌",
+  "Thăm vườn định kỳ": "定期巡查果园",
+  "Canh tác chủ động": "科学精准施药",
+  "Bước 1": "步骤 1",
+  "Bước 2": "步骤 2",
+  "Bước 3": "步骤 3",
+  "Bước 4": "步骤 4",
+  "Bước 5": "步骤 5",
+  "Kiến thiết vườn": "建园与排水",
+  "Chọn giống và thoát nước": "优选无病苗木与深沟排水",
+  "Ủ phân vi sinh đầu mưa": "雨季初微生物腐熟有机肥",
+  "Cắt tỉa sau thu hoạch": "采后修剪通风树冠",
+  "Phòng héo ngọn và tỉa hoa": "预防枯梢病与疏花",
+  "Bảo vệ hoa và quả non": "花期与幼果期综合防护",
+  "Bệnh xì mủ sầu riêng": "榴莲疫霉流胶病",
+  "Bệnh héo ngọn (Chết ngược cành)": "榴莲枯梢病（枝条回枯）",
+  "Bệnh đốm lá sầu riêng": "榴莲叶斑病",
+  "Bệnh thán thư lá sầu riêng": "榴莲叶炭疽病",
+  "Bệnh thối quả (Thối nâu quả)": "榴莲疫霉褐腐果病",
+  "Bệnh đốm rong (Tảo đỏ)": "榴莲藻斑病（红锈藻）",
+  "Bệnh tàn rụi (Cháy lá chết ngọn)": "榴莲疫霉叶枯病",
+  "Bệnh thối đen quả": "榴莲黑腐果病",
+  "Bệnh vàng lá thối rễ": "榴莲黄叶根腐病",
+  "Bệnh nấm hồng hại cành": "榴莲枝干粉红病",
+  "Rầy nhảy hại sầu riêng": "榴莲木虱",
+  "Rệp sáp bột hai tua dài & Rệp sáp mềm": "长尾粉蚧与软粉蚧（检疫性害虫）",
+  "Sâu đục quả sầu riêng": "榴莲蛀果螟",
+  "Nhện đỏ hại sầu riêng": "榴莲红蜘蛛（叶螨）",
+  "Nhóm Sâu đục thân, Mọt đục cành, Bọ trĩ & Sâu ăn bông": "天牛、枝小蠹、蓟马与食花虫类",
+  "Phụ lục kỹ thuật 2026-2027": "2026-2027 技术附录",
+  "Mục tiêu kỹ thuật giai đoạn": "本阶段核心技术目标",
+  "Tỷ lệ pha SenPro theo từng trạng thái đọt non": "按新梢形态的 SenPro 稀释比例",
+  "Lịch trình thực hành trên vườn (Ngày dự kiến - Trạng thái - Sản phẩm)":
+    "田间实操日程（预计天数 - 树体物候 - 使用方案）",
+  "Tìm giai đoạn, trạng thái (trứng gà, cái chén...), số ngày, Brixup, Kali Bo, SenPro...":
+    "搜索物候阶段、幼果大小、天数、Brixup、钙硼、SenPro...",
+  "Tìm kiếm trong quy trình chăm sóc sầu riêng 2026–2027": "在 2026–2027 榴莲标准养护规程中搜索",
+  "Lọc theo giai đoạn sinh trưởng sầu riêng": "按榴莲生长阶段筛选",
+  "giai đoạn": "个阶段",
+  "Bảng tra cứu nhanh: Dùng SenPro điều tiết & chặn đọt non (2026–2027)":
+    "速查表：使用 SenPro 调控与老熟新梢 (2026–2027)",
+  "Tỷ lệ pha SenPro": "SenPro 稀释比例",
+  "Đọt Mũi giáo": "矛尖期新梢",
+  "Đọt Hạt gạo": "米粒期新梢",
+  "Đọt Đuôi tôm": "虾尾期新梢",
+  "Tỷ lệ 1/400": "比例 1/400",
+  "Tỷ lệ 1/800": "比例 1/800",
+  "Tỷ lệ 1/300": "比例 1/300",
+  "Già lá 7–10 ngày (chặn đọt 7–10 ngày)": "7–10 天叶片老熟（控梢 7–10 天）",
+  "Rụng trong 3 ngày": "3 天内脱除嫩梢",
+  "Tiêu chuẩn bắt buộc HTX Cư Né - Niên vụ 2026-2027": "居内合作社必修标准 - 2026-2027 产季",
+  "Tuân thủ quy trình chuẩn 2026-2027 để bảo chứng thu mua đúng giá, giá cao":
+    "严格执行 2026-2027 标准规程，保障合作社按质优价保底收购",
+  "Đúng phác đồ kỹ thuật": "符合技术规程",
+  "Đủ nhật ký điện tử": "完整电子农事日志",
+  "Cam kết thu mua giá cao": "优质优价保底收购",
+  "Chuẩn bị vườn": "清园与土壤准备",
+  "Cơi đọt 1": "第一次抽梢期",
+  "Cơi đọt 2": "第二次抽梢期",
+  "Tạo mầm hoa": "控水促花芽分化",
+  "Nuôi bông": "壮花与保蕾期",
+  "Nuôi trái": "幼果发育与保果期",
+  "Nuôi trái – Kéo cơi theo bông": "膨果与叶果平衡期",
+  "Làm cơm": "果肉转色与增糖期",
+  "Quản lý đọt SenPro": "SenPro 新梢调控方案",
+  "Xác nhận xóa": "确认删除",
+  "Xóa": "删除",
+  "Chụp ảnh hoặc chọn ảnh từ máy": "拍照或从手机相册选择",
+  "Ảnh tự động nén nhẹ để tải nhanh trên mạng di động": "照片将自动优化压缩，在移动网络下快速上传",
+  "Xem trước tệp đã chọn": "已选文件预览",
+  "Tệp đã chọn": "已选文件",
+  "Đã đính kèm": "已添加附件",
+  "Xóa tệp đã chọn": "移除已选文件",
+  "đang chọn": "已选择",
+  "Xóa tệp": "移除文件",
+  "Video hiện trường": "现场视频",
+  "Ảnh đính kèm": "附加照片",
+  "Đã tải sẵn": "已预上传",
+  "Đang tải nền...": "后台上传中...",
+  "Lưu trong máy": "保存在本机",
+  "Xóa tệp minh chứng": "移除证明文件",
+  "Thêm ảnh giấy tờ, video ngắn hoặc tệp PDF": "添加证明照片、短视频或 PDF 文件",
+  "Xóa tệp đính kèm": "移除附件",
+  "Phát video minh chứng hiện trường": "播放现场证明视频",
+  "Video minh chứng hiện trường": "现场证明视频",
+  "Bấm để xem ảnh cỡ lớn": "点击查看大图",
+  "Ảnh": "照片",
+  "Định dạng ảnh không được hỗ trợ. Chỉ nhận JPG, PNG hoặc WEBP.":
+    "不支持该图片格式，仅支持 JPG、PNG 或 WEBP。",
+  "Chỉ nhận ảnh (JPG, PNG, WEBP), video ngắn (MP4, WebM, MOV) hoặc tệp PDF.":
+    "仅支持图片（JPG、PNG、WEBP）、短视频（MP4、WebM、MOV）或 PDF 文件。",
+  "Chỉ nhận ảnh (JPG, PNG, WEBP) hoặc tệp PDF.": "仅支持图片（JPG、PNG、WEBP）或 PDF 文件。",
+  "Chỉ nhận ảnh (JPG, PNG, WEBP) hoặc video hiện trường (MP4, WebM, MOV).":
+    "仅支持图片（JPG、PNG、WEBP）或现场视频（MP4、WebM、MOV）。",
+  "Vui lòng chọn tệp ảnh (JPG, PNG, WEBP).": "请选择图片文件（JPG、PNG、WEBP）。",
+  "Tệp PDF không được vượt quá 10 MB.": "PDF 文件不能超过 10 MB。",
+  "Video không được vượt quá 20 MB. Vui lòng quay đoạn ngắn dưới 90 giây.":
+    "视频不能超过 20 MB，请录制 90 秒以内的短视频。",
+  "Ảnh gốc vượt quá 20 MB.": "原始图片超过 20 MB。",
 };
 
 /** Bản đồ chữ thường giúp tra cứu không phân biệt hoa/thường (ví dụ "ĐỦ CHUẨN XUẤT KHẨU"). */
@@ -1602,138 +1921,62 @@ const PATTERN_RULES: Array<[RegExp, (...args: string[]) => string]> = [
   [/^([\d.,]+\s*[–-]\s*[\d.,]+)\s*kg\/trái$/i, (_, r) => `${r} 公斤/果`],
   [/^([\d.,]+\s*[–-]\s*[\d.,]+)\s*tấn\/ha$/i, (_, r) => `${r} 吨/公顷`],
   [/^(\d+\s*[–-]\s*\d+)\s*ngày\s*\(Từ xả nhụy\)$/i, (_, r) => `${r} 天（从谢花起算）`],
+  [/^Chưa đọc\s*\((\d+)\)$/i, (_, n) => `未读 (${n})`],
+  [/^Đã đọc\s*\((\d+)\)$/i, (_, n) => `已读 (${n})`],
+  [/^(.+),\s*Xã Ea Khăl,\s*Đắk Lắk$/i, (_, village) => `多乐省伊卡乡 - ${translateViToZh(village.trim())}`],
+  [/^(.+),\s*Xã Cư Né,\s*Đắk Lắk$/i, (_, village) => `多乐省居内乡 - ${translateViToZh(village.trim())}`],
+  [/^\(được phép thu hái từ ngày\s+(.+)\)$/i, (_, date) => `（自 ${date.trim()} 起允许采收）`],
+  [/^Đang trong thời gian cách ly PHI\s*\(còn\s+(\d+)\s+ngày\)$/i, (_, d) => `处于安全间隔期 PHI（剩余 ${d} 天）`],
+  [/^Tuyệt đối chưa thu hái hoặc kích hoạt tem quả trên thửa này trước ngày\s+(.+)\.$/i, (_, d) =>
+    `在 ${d.trim()} 之前严禁采收或激活该地块的溯源封签。`],
+  [/^Đã đảm bảo thời gian cách ly tối thiểu\s+(\d+)\s+ngày trước thu hoạch\.$/i, (_, d) =>
+    `已满足采收前至少 ${d} 天的安全间隔期要求。`],
+  [/^Khai báo chậm\s+(\d+)\s+ngày$/i, (_, d) => `延迟 ${d} 天补录`],
+  [/^Lý do ghi bổ sung chậm\s+(\d+)\s+ngày\s*\(bắt buộc\)$/i, (_, d) => `延迟 ${d} 天补录原因（必填）`],
+  [/^Ghi chú lý do khai báo chậm\s+(\d+)\s+ngày\s*\(không bắt buộc\)$/i, (_, d) => `延迟 ${d} 天填报说明（选填）`],
+  [/^Vui lòng nhập rõ lý do khai báo chậm\s+(\d+)\s+ngày\s*\(ít nhất 5 ký tự\)\.$/i, (_, d) =>
+    `请说明延迟 ${d} 天补录的具体原因（至少 5 个字符）。`],
+  [/^Đã định vị:\s*(.+)$/i, (_, coords) => `已定位：${coords.trim()}`],
+  [/^\((\d+)\s*lần\)$/i, (_, n) => `（${n} 次修改）`],
+  [/^\(cách ranh giới\s+([\d.,]+)\s*m\)$/i, (_, m) => `（距边界 ${m} 米）`],
+  [/^Đại lý cung cấp:\s*(.+)$/i, (_, dealer) => `供应经销商：${dealer.trim()}`],
+  [/^Lịch kiểm tra:\s*(.+)$/i, (_, title) => `巡检计划：${translateViToZh(title.trim())}`],
+  [/^Bản đồ thửa đất\s+(.+)$/i, (_, code) => `地块地图 ${code}`],
+  [/^Trồng năm\s+(\d+)$/i, (_, y) => `${y} 年定植`],
+  [/^Năm trồng\s+(\d+)$/i, (_, y) => `${y} 年定植`],
+  [/^Ảnh vệ tinh chụp\s+(.+)$/i, (_, d) => `卫星影像拍摄于 ${d}`],
+  [/^Biển cắm vườn 3 ngôn ngữ\s*-\s*(.+)$/i, (_, code) => `三语果园标识牌 - ${code}`],
+  [/^Bấm vào mã QR để mở trang truy xuất nguồn gốc thửa\s+(.+)$/i, (_, code) =>
+    `点击二维码打开地块 ${code} 的溯源档案页`],
+  [/^Bấm vào mã QR để xem trang truy xuất lô\s+(.+)$/i, (_, code) =>
+    `点击二维码查看批次 ${code} 的溯源档案`],
+  [/^Mã QR tra cứu nguồn gốc lô\s+(.+?)\s*-\s*Bấm để mở tem chi tiết$/i, (_, code) =>
+    `批次 ${code} 溯源二维码 - 点击打开标签详情`],
+  [/^Mã QR tra cứu nguồn gốc lô\s+(.+)$/i, (_, code) => `批次 ${code} 溯源二维码`],
+  [/^Mã QR\s+(.+)$/i, (_, code) => `二维码 ${code}`],
+  [/^Thửa\s+([^,]+),\s*Tờ\s+(.+)$/i, (_, p, s) => `地块号 ${p}，图幅 ${s}`],
+  [/^Giai đoạn\s+(\d+)\s*\/\s*(\d+)\s*-\s*(.+)$/i, (_, a, b, dur) =>
+    `阶段 ${a} / ${b} - ${translateViToZh(dur.trim())}`],
+  [/^Bấm để xem định lượng chi tiết\s+(.+)$/i, (_, name) =>
+    `点击查看 ${translateViToZh(name.trim())} 详细定量方案`],
+  [/^(\d+)\/(\d+)\s*tệp$/i, (_, a, b) => `${a}/${b} 个文件`],
+  [/^Tối đa\s+(\d+)\s*tệp đính kèm\.$/i, (_, n) => `最多添加 ${n} 个附件。`],
+  [/^Đã đạt giới hạn tối đa\s+(\d+)\s*tệp cho mục này\.$/i, (_, n) => `已达到最多 ${n} 个文件的上限。`],
+  [/^Chỉ thêm được tối đa\s+(\d+)\s*tệp\s*\(đã lấy\s+(\d+)\s*tệp đầu tiên\)\.$/i, (_, m, r) =>
+    `最多允许添加 ${m} 个文件（已保留前 ${r} 个）。`],
+  [/^Video hiện trường\s*#(\d+)$/i, (_, n) => `现场视频 #${n}`],
+  [/^Ảnh hiện trường\s*#(\d+)$/i, (_, n) => `现场照片 #${n}`],
+  [/^Ảnh\s+(\d+)$/i, (_, n) => `照片 ${n}`],
+  [/^Ảnh\s+(\d+\/\d+)$/i, (_, r) => `照片 ${r}`],
+  [/^Video\s+(\d+\/\d+)$/i, (_, r) => `视频 ${r}`],
+  [/^Bấm để phóng to\s*\((\d+\/\d+)\)$/i, (_, r) => `点击放大 (${r})`],
+  [/^(.+),\s*lưu máy$/i, (_, sz) => `${sz}，保存在本机`],
+  [/^Xóa tệp\s+(.+)$/i, (_, name) => `移除文件 ${name}`],
+  [/^([\d.,]+)\s*kg\s*\/\s*vụ$/i, (_, n) => `${n} 公斤 / 产季`],
 ];
 
-// ─── TẦNG 2 & 3 & 4: DỊCH TỰ ĐỘNG & BỘ NHỚ ĐỆM CHO DỮ LIỆU MỚI PHÁT SINH ───
+// ─── TỪ ĐIỂN GHÉP CỤM NÔNG NGHIỆP & ĐĂNG KÝ VÀO BỘ DỊCH ĐA NGÔN NGỮ CHUNG (i18n-engine) ───
 
-const DYN_CACHE_STORAGE_KEY = "puc_portal_dyn_zh_cache_v1";
-const MAX_DYN_CACHE_ENTRIES = 1000;
-const ONLINE_TRANSLATE_ENABLED = process.env.NEXT_PUBLIC_ENABLE_ONLINE_TRANSLATE === "true";
-const dynamicZhCache = new Map<string, string>();
-const pendingAutoTranslate = new Set<string>();
-const failedAutoTranslate = new Map<string, number>();
-const autoTranslateQueue: string[] = [];
-let translationEpoch = 0;
-let dynCacheLoaded = false;
-let dynSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let domRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-export function clearDynTranslationCache() {
-  translationEpoch += 1;
-  autoTranslateQueue.length = 0;
-  if (dynSaveTimer) {
-    clearTimeout(dynSaveTimer);
-    dynSaveTimer = null;
-  }
-  if (domRefreshTimer) {
-    clearTimeout(domRefreshTimer);
-    domRefreshTimer = null;
-  }
-  dynamicZhCache.clear();
-  pendingAutoTranslate.clear();
-  failedAutoTranslate.clear();
-  dynCacheLoaded = false;
-  if (typeof window !== "undefined") {
-    try {
-      window.sessionStorage.removeItem(DYN_CACHE_STORAGE_KEY);
-      window.localStorage.removeItem(DYN_CACHE_STORAGE_KEY);
-    } catch {
-      // Ignore storage access errors
-    }
-  }
-}
-
-if (typeof window !== "undefined") {
-  window.addEventListener(AUTH_LOGOUT_EVENT, clearDynTranslationCache);
-  window.addEventListener(AUTH_EXPIRED_EVENT, clearDynTranslationCache);
-  window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, clearDynTranslationCache);
-}
-
-function ensureDynCacheLoaded() {
-  if (dynCacheLoaded || typeof window === "undefined") return;
-  dynCacheLoaded = true;
-  try {
-    // Xóa khóa cũ từng lưu trong localStorage để không lưu văn bản hộ nông dân lâu dài trên thiết bị dùng chung.
-    window.localStorage.removeItem(DYN_CACHE_STORAGE_KEY);
-    const raw = window.sessionStorage.getItem(DYN_CACHE_STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
-    for (const [k, v] of Object.entries(parsed)) {
-      if (
-        typeof k === "string" &&
-        typeof v === "string" &&
-        k.length > 0 &&
-        v.length > 0 &&
-        k !== "__proto__" &&
-        k !== "constructor" &&
-        k !== "prototype"
-      ) {
-        dynamicZhCache.set(k, v);
-      }
-    }
-  } catch {
-    // Ignore storage parse errors
-  }
-}
-
-function scheduleSaveDynCache() {
-  if (typeof window === "undefined" || dynSaveTimer) return;
-  dynSaveTimer = setTimeout(() => {
-    dynSaveTimer = null;
-    try {
-      const entries = Array.from(dynamicZhCache.entries());
-      const sliced =
-        entries.length > MAX_DYN_CACHE_ENTRIES
-          ? entries.slice(entries.length - MAX_DYN_CACHE_ENTRIES)
-          : entries;
-      const obj: Record<string, string> = {};
-      for (const [k, v] of sliced) {
-        obj[k] = v;
-      }
-      window.sessionStorage.setItem(DYN_CACHE_STORAGE_KEY, JSON.stringify(obj));
-    } catch {
-      // Ignore quota errors
-    }
-  }, 400);
-}
-
-function scheduleDomRefresh() {
-  if (typeof document === "undefined" || domRefreshTimer) return;
-  domRefreshTimer = setTimeout(() => {
-    domRefreshTimer = null;
-    if (document.documentElement.lang === "zh-CN") {
-      applyDomTranslation(document.body, "zh");
-    }
-  }, 80);
-}
-
-/** Nhận diện dấu Tiếng Việt để chỉ kích hoạt dịch tự động đối với văn bản Tiếng Việt. */
-const VI_DIACRITIC_RE =
-  /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗợơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
-
-/** Danh sách họ người Việt phổ biến để giữ nguyên tên riêng của nông hộ / cán bộ / giảng viên. */
-const VN_SURNAMES = new Set([
-  "nguyễn", "trần", "lê", "phạm", "hoàng", "huỳnh", "phan", "vũ", "võ",
-  "đặng", "bùi", "đỗ", "hồ", "ngô", "dương", "lý", "đinh", "đoàn", "trương",
-  "bạch", "mai", "lâm", "tô", "hà", "lưu", "lương", "châu", "tạ", "phùng",
-  "trịnh", "vương", "cao", "đào", "tống", "thái", "kiều", "nông", "vi",
-  "lò", "điểu", "ksor", "rơ", "h'", "y", "y'", "ama", "ami",
-]);
-
-function isLikelyPersonName(text: string): boolean {
-  const words = text.trim().split(/\s+/);
-  if (words.length < 2 || words.length > 5) return false;
-  const firstLower = words[0].toLowerCase().replace(/[^a-zà-ỹ']/g, "");
-  if (!VN_SURNAMES.has(firstLower) && !(firstLower.startsWith("y'") && VN_SURNAMES.has("y'"))) return false;
-  // Tất cả các từ trong tên người đều viết hoa chữ cái đầu và không chứa dấu câu
-  return words.every((w) => /^[A-ZÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ][a-zA-Zà-ỹÀ-Ỹ']*$/.test(w));
-}
-
-/**
- * Từ điển cụm từ & từ vựng nông nghiệp dùng cho bộ dịch ghép câu thông minh (Offline Compositional Fallback)
- * khi dữ liệu văn bản tự do mới chưa kịp tải từ API hoặc khi thiết bị ngoại tuyến.
- */
 const COMPOSITIONAL_PHRASES: Array<[string, string]> = [
   // Cụm hành động canh tác & nhật ký
   ["tưới nước nhỏ giọt", "滴灌浇水"],
@@ -1885,13 +2128,6 @@ const COMPOSITIONAL_PHRASES: Array<[string, string]> = [
   ["thửa đất", "地块"],
 ];
 
-const COMPOSITIONAL_PHRASE_RULES: Array<[RegExp, string]> = COMPOSITIONAL_PHRASES.map(
-  ([viPhrase, zhPhrase]) => {
-    const escaped = viPhrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return [new RegExp(`(^|[^a-zA-ZÀ-ỹ])(${escaped})(?=$|[^a-zA-ZÀ-ỹ])`, "gi"), zhPhrase];
-  },
-);
-
 const COMPOSITIONAL_UNIT_RULES: Array<[RegExp, string]> = [
   [/(\d+(?:[.,]\d+)?)\s*lít\/ha\b/gi, "$1 升/公顷"],
   [/(\d+(?:[.,]\d+)?)\s*kg\/ha\b/gi, "$1 公斤/公顷"],
@@ -1914,350 +2150,20 @@ const COMPOSITIONAL_UNIT_RULES: Array<[RegExp, string]> = [
   [/(\d+)\s*lần\b/gi, "$1 次"],
 ];
 
-function translateCompositionalViToZh(text: string): string {
-  if (!VI_DIACRITIC_RE.test(text) || isLikelyPersonName(text)) {
-    return text;
-  }
+registerLangPack("zh", {
+  exactMap: EXACT_MAP,
+  lowerMap: LOWER_MAP,
+  patternRules: PATTERN_RULES,
+  compositionalPhrases: buildCompositionalPhraseRules(COMPOSITIONAL_PHRASES),
+  compositionalUnits: COMPOSITIONAL_UNIT_RULES,
+});
 
-  let result = text;
-  let replacedAny = false;
-
-  for (const [regex, zhPhrase] of COMPOSITIONAL_PHRASE_RULES) {
-    regex.lastIndex = 0;
-    if (regex.test(result)) {
-      regex.lastIndex = 0;
-      result = result.replace(regex, (_, prefix: string) => `${prefix}${zhPhrase}`);
-      replacedAny = true;
-    }
-  }
-
-  for (const [uRegex, uReplace] of COMPOSITIONAL_UNIT_RULES) {
-    uRegex.lastIndex = 0;
-    if (uRegex.test(result)) {
-      uRegex.lastIndex = 0;
-      result = result.replace(uRegex, uReplace);
-      replacedAny = true;
-    }
-  }
-
-  return replacedAny ? result : text;
-}
-
-/**
- * Tầng 4: Tự động gọi API dịch sang Tiếng Trung (zh-CN) cho dữ liệu văn bản tự do mới phát sinh
- * và lưu vào bộ nhớ đệm (localStorage) để các lần hiển thị sau tức thì 0ms.
- */
-/** Ngắt mạch: endpoint nào lỗi / bị giới hạn (429) thì tạm bỏ qua trong 10 phút để không gửi yêu cầu vô ích. */
-const ENDPOINT_COOLDOWN_MS = 10 * 60 * 1000;
-const endpointDisabledUntil = { google: 0 };
-
-async function fetchOnlineViToZh(text: string): Promise<string | null> {
-  if (!ONLINE_TRANSLATE_ENABLED) return null;
-  const now = Date.now();
-  // Chỉ dùng Google Translate GTX (HTTPS) khi biến môi trường cho phép rõ ràng
-  if (now >= endpointDisabledUntil.google) try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl=zh-CN&dt=t&q=${encodeURIComponent(text)}`;
-    const res = await fetch(url, { method: "GET" });
-    if (!res.ok) endpointDisabledUntil.google = Date.now() + ENDPOINT_COOLDOWN_MS;
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && Array.isArray(data[0])) {
-        const joined = data[0]
-          .map((seg: unknown) => (Array.isArray(seg) && typeof seg[0] === "string" ? seg[0] : ""))
-          .join("")
-          .trim();
-        if (joined && joined !== text) {
-          return joined;
-        }
-      }
-    }
-  } catch {
-    endpointDisabledUntil.google = Date.now() + ENDPOINT_COOLDOWN_MS;
-  }
-
-  return null;
-}
-
-const MAX_CONCURRENT_AUTO_TRANSLATE = 2;
-let activeAutoTranslate = 0;
-
-function pumpAutoTranslateQueue() {
-  if (!ONLINE_TRANSLATE_ENABLED) {
-    autoTranslateQueue.length = 0;
-    pendingAutoTranslate.clear();
-    return;
-  }
-  while (activeAutoTranslate < MAX_CONCURRENT_AUTO_TRANSLATE && autoTranslateQueue.length > 0) {
-    const text = autoTranslateQueue.shift()!;
-    const epoch = translationEpoch;
-    activeAutoTranslate += 1;
-    void fetchOnlineViToZh(text)
-      .then((zh) => {
-        if (epoch !== translationEpoch) return;
-        if (zh) {
-          dynamicZhCache.set(text, zh);
-          failedAutoTranslate.delete(text);
-          scheduleSaveDynCache();
-          scheduleDomRefresh();
-        } else {
-          failedAutoTranslate.set(text, Date.now() + ENDPOINT_COOLDOWN_MS);
-        }
-      })
-      .catch(() => {
-        if (epoch !== translationEpoch) return;
-        failedAutoTranslate.set(text, Date.now() + ENDPOINT_COOLDOWN_MS);
-      })
-      .finally(() => {
-        activeAutoTranslate = Math.max(0, activeAutoTranslate - 1);
-        if (epoch === translationEpoch) {
-          pendingAutoTranslate.delete(text);
-          pumpAutoTranslateQueue();
-        }
-      });
-  }
-}
-
-function queueAutoTranslateViToZh(trimmed: string) {
-  if (!ONLINE_TRANSLATE_ENABLED || typeof window === "undefined") return;
-  if (pendingAutoTranslate.has(trimmed) || dynamicZhCache.has(trimmed)) return;
-  if (!VI_DIACRITIC_RE.test(trimmed) || isLikelyPersonName(trimmed)) return;
-  // Không gửi chuỗi chứa dãy số dài (CCCD, số điện thoại, mã định danh) ra ngoài
-  if (/\d{6,}/.test(trimmed)) return;
-  if (trimmed.length < 2 || trimmed.length > 480) return;
-  const retryAt = failedAutoTranslate.get(trimmed);
-  if (retryAt !== undefined && Date.now() < retryAt) return;
-
-  pendingAutoTranslate.add(trimmed);
-  autoTranslateQueue.push(trimmed);
-  pumpAutoTranslateQueue();
-}
-
-function translateSingleSegment(trimmed: string): string {
-  if (!trimmed) return trimmed;
-
-  // Tầng 1: Từ điển chuẩn & Mẫu quy tắc động (0ms)
-  const exact = EXACT_MAP[trimmed] ?? LOWER_MAP[trimmed.toLowerCase()];
-  if (exact) return exact;
-
-  for (const [regex, replacer] of PATTERN_RULES) {
-    const match = regex.exec(trimmed);
-    if (match) {
-      return replacer(...match);
-    }
-  }
-
-  // Không dịch tên riêng của người (ví dụ: Nguyễn Văn Phú)
-  if (isLikelyPersonName(trimmed)) {
-    return trimmed;
-  }
-
-  // Tầng 2: Bộ nhớ đệm dữ liệu mới đã dịch trước đó (0ms)
-  ensureDynCacheLoaded();
-  const cached = dynamicZhCache.get(trimmed);
-  if (cached) return cached;
-
-  // Nếu chuỗi có dấu Tiếng Việt (dữ liệu mới phát sinh chưa có trong từ điển tĩnh):
-  if (VI_DIACRITIC_RE.test(trimmed)) {
-    // Tầng 4 (Bất đồng bộ): Xếp hàng gọi API dịch tự động câu mới và cập nhật DOM khi hoàn tất
-    queueAutoTranslateViToZh(trimmed);
-    // Tầng 3 (Tức thì - 0ms): Dịch ghép cụm từ nông nghiệp trong lúc chờ hoặc khi ngoại tuyến.
-    // Chỉ dùng khi đã dịch được TRỌN VẸN câu; nếu còn sót chữ Việt thì giữ nguyên bản gốc
-    // để tránh câu lai Việt–Trung khó đọc (ví dụ "Sáng nay mưa to làm đổ 2 榴莲树 ở 果园角落").
-    const composed = translateCompositionalViToZh(trimmed);
-    return VI_DIACRITIC_RE.test(composed) ? trimmed : composed;
-  }
-
-  return trimmed;
-}
-
-/** Dịch một chuỗi Tiếng Việt sang Tiếng Trung (giữ nguyên khoảng trắng hai đầu và hỗ trợ chuỗi ghép có " - ", " · ", " – ", " — "). */
 export function translateViToZh(raw: string): string {
-  if (!raw) return raw;
-  const trimmed = raw.trim();
-  if (!trimmed) return raw;
-
-  // Ưu tiên kiểm tra khớp chính xác toàn chuỗi trước
-  const exactFull = EXACT_MAP[trimmed] ?? LOWER_MAP[trimmed.toLowerCase()];
-  if (exactFull) {
-    const lead = raw.slice(0, raw.indexOf(trimmed));
-    const tail = raw.slice(raw.indexOf(trimmed) + trimmed.length);
-    return `${lead}${exactFull}${tail}`;
-  }
-
-  // Hỗ trợ chuỗi nhiều vế ngăn cách bởi " - ", " · ", " – ", " — "
-  const multiPartSeps: Array<[string, RegExp, string]> = [
-    [" - ", /\s+-\s+/, " - "],
-    [" · ", /\s*·\s*/, " - "],
-    [" – ", /\s*–\s*/, " – "],
-    [" — ", /\s*—\s*/, " — "],
-  ];
-  for (const [sep, splitRe, joinSep] of multiPartSeps) {
-    if (trimmed.includes(sep)) {
-      const parts = trimmed.split(splitRe);
-      let changed = false;
-      const translatedParts = parts.map((part) => {
-        const tp = translateSingleSegment(part);
-        if (tp !== part) changed = true;
-        return tp;
-      });
-      if (changed) {
-        const joined = translatedParts.join(joinSep);
-        const lead = raw.slice(0, raw.indexOf(trimmed));
-        const tail = raw.slice(raw.indexOf(trimmed) + trimmed.length);
-        return `${lead}${joined}${tail}`;
-      }
-    }
-  }
-
-  const direct = translateSingleSegment(trimmed);
-  if (direct !== trimmed) {
-    const lead = raw.slice(0, raw.indexOf(trimmed));
-    const tail = raw.slice(raw.indexOf(trimmed) + trimmed.length);
-    return `${lead}${direct}${tail}`;
-  }
-
-  return raw;
+  return translateText(raw, "zh");
 }
-
-const originalTextMap = new WeakMap<Text, string>();
-const appliedZhTextMap = new WeakMap<Text, string>();
-const originalAttrMap = new WeakMap<Element, Map<string, string>>();
-const appliedZhAttrMap = new WeakMap<Element, Map<string, string>>();
-const TRANSLATABLE_ATTRS = ["placeholder", "title", "aria-label"] as const;
-
-function translateTextNode(textNode: Text, lang: PortalLang) {
-  const parentEl = textNode.parentElement;
-  const parentTag = parentEl?.tagName;
-  if (
-    parentTag === "SCRIPT" ||
-    parentTag === "STYLE" ||
-    parentTag === "TEXTAREA" ||
-    parentTag === "CODE" ||
-    parentTag === "PRE" ||
-    parentEl?.isContentEditable ||
-    parentEl?.closest("[data-no-translate], [translate='no']")
-  ) {
-    return;
-  }
-
-  const currentVal = textNode.nodeValue ?? "";
-  if (!currentVal.trim()) return;
-
-  if (lang === "zh") {
-    const savedOrig = originalTextMap.get(textNode);
-    const lastAppliedZh = appliedZhTextMap.get(textNode);
-    const isStillSaved =
-      savedOrig !== undefined && (currentVal === savedOrig || currentVal === lastAppliedZh);
-    const source = isStillSaved ? savedOrig! : currentVal;
-    const translated = translateViToZh(source);
-    originalTextMap.set(textNode, source);
-    if (translated !== source) {
-      appliedZhTextMap.set(textNode, translated);
-      if (currentVal !== translated) {
-        textNode.nodeValue = translated;
-      }
-    }
-  } else {
-    const savedOrig = originalTextMap.get(textNode);
-    const lastAppliedZh = appliedZhTextMap.get(textNode);
-    if (savedOrig !== undefined && currentVal === lastAppliedZh && currentVal !== savedOrig) {
-      textNode.nodeValue = savedOrig;
-    }
-  }
-}
-
-function translateElementAttrs(el: Element, lang: PortalLang) {
-  if (el.closest("[data-no-translate], [translate='no']")) return;
-  for (const attr of TRANSLATABLE_ATTRS) {
-    const val = el.getAttribute(attr);
-    if (!val) continue;
-    let attrStore = originalAttrMap.get(el);
-    let zhAttrStore = appliedZhAttrMap.get(el);
-    if (lang === "zh") {
-      const savedOrig = attrStore?.get(attr);
-      const lastAppliedZh = zhAttrStore?.get(attr);
-      const isStillSaved =
-        savedOrig !== undefined && (val === savedOrig || val === lastAppliedZh);
-      const source = isStillSaved ? savedOrig! : val;
-      const translated = translateViToZh(source);
-      if (!attrStore) {
-        attrStore = new Map();
-        originalAttrMap.set(el, attrStore);
-      }
-      attrStore.set(attr, source);
-      if (translated !== source) {
-        if (!zhAttrStore) {
-          zhAttrStore = new Map();
-          appliedZhAttrMap.set(el, zhAttrStore);
-        }
-        zhAttrStore.set(attr, translated);
-        if (val !== translated) el.setAttribute(attr, translated);
-      }
-    } else if (attrStore?.has(attr)) {
-      const savedOrig = attrStore.get(attr)!;
-      const lastAppliedZh = zhAttrStore?.get(attr);
-      if (val === lastAppliedZh && val !== savedOrig) {
-        el.setAttribute(attr, savedOrig);
-      }
-    }
-  }
-}
-
-let isApplyingDom = false;
-
-export function applyDomTranslation(root: Node, lang: PortalLang) {
-  isApplyingDom = true;
-  try {
-    if (root.nodeType === 3 /* Node.TEXT_NODE */) {
-      translateTextNode(root as Text, lang);
-      return;
-    }
-    if (root.nodeType === 1 /* Node.ELEMENT_NODE */) {
-      translateElementAttrs(root as Element, lang);
-    }
-    if (typeof document === "undefined" || typeof document.createTreeWalker !== "function") {
-      return;
-    }
-    const walker = document.createTreeWalker(root, 5 /* SHOW_ELEMENT | SHOW_TEXT */);
-    let current: Node | null = walker.nextNode();
-    while (current) {
-      if (current.nodeType === 3) {
-        translateTextNode(current as Text, lang);
-      } else if (current.nodeType === 1) {
-        translateElementAttrs(current as Element, lang);
-      }
-      current = walker.nextNode();
-    }
-  } finally {
-    isApplyingDom = false;
-  }
-}
-
 
 export function observeDomTranslation(): () => void {
-  const rafId = requestAnimationFrame(() => {
-    applyDomTranslation(document.body, "zh");
-  });
-
-  const observer = new MutationObserver((mutations) => {
-    if (isApplyingDom) return;
-    for (const m of mutations) {
-      if (m.type === "childList") {
-        m.addedNodes.forEach((node) => applyDomTranslation(node, "zh"));
-      } else if (m.type === "characterData" && m.target) {
-        translateTextNode(m.target as Text, "zh");
-      }
-    }
-  });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    characterData: true,
-  });
-
-  return () => {
-    cancelAnimationFrame(rafId);
-    observer.disconnect();
-  };
+  return observeEngineDomTranslation("zh");
 }
+
+export { applyDomTranslation, clearDynTranslationCache };

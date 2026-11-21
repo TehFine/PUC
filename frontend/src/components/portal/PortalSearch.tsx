@@ -175,9 +175,9 @@ const ENTRIES: SearchEntry[] = [
   },
   {
     id: "language",
-    title: "Đổi ngôn ngữ (Tiếng Việt / 中文)",
+    title: "Đổi ngôn ngữ (Tiếng Việt / English / 中文)",
     where: "Tài khoản",
-    keywords: "doi ngon ngu tieng trung tieng viet chinese zhongwen yuyan 中文 语言 切换语言",
+    keywords: "doi ngon ngu tieng trung tieng anh tieng viet english chinese zhongwen yuyan language 中文 语言 切换语言",
     target: { kind: "global", action: "profile" },
   },
   {
@@ -212,11 +212,11 @@ const VI_INDEX: IndexedEntry[] = ENTRIES.map((entry) => {
   return { entry, haystack, words: haystack.split(" ") };
 });
 
-function buildZhIndex(translate: (vi: string) => string): IndexedEntry[] {
+function buildTranslatedIndex(translate: (vi: string) => string): IndexedEntry[] {
   return ENTRIES.map((entry) => {
-    const zhTitle = translate(entry.title);
-    const zhWhere = translate(entry.where);
-    const haystack = normalize(`${entry.title} ${entry.where} ${zhTitle} ${zhWhere} ${entry.keywords}`);
+    const transTitle = translate(entry.title);
+    const transWhere = translate(entry.where);
+    const haystack = normalize(`${entry.title} ${entry.where} ${transTitle} ${transWhere} ${entry.keywords}`);
     return { entry, haystack, words: haystack.split(" ") };
   });
 }
@@ -286,7 +286,7 @@ function SearchPanel({
   onPick: (target: PortalSearchTarget) => void;
 }) {
   const close = useSheetClose();
-  const { isZh, t } = usePortalLang();
+  const { isZh, isEn, t } = usePortalLang();
   const inputRef = useRef<HTMLInputElement>(null);
   const touchStartY = useRef<number | null>(null);
   const hasQuery = query.trim().length > 0;
@@ -371,6 +371,10 @@ function SearchPanel({
             <>
               未找到与“<strong>{query.trim()}</strong>”匹配的功能。请尝试其他关键词，或从下方推荐中选择：
             </>
+          ) : isEn ? (
+            <>
+              No feature matched “<strong>{query.trim()}</strong>”. Try another keyword or pick a suggestion below:
+            </>
           ) : (
             <>
               Chưa tìm thấy “<strong>{query.trim()}</strong>”. Bà con thử gõ chữ khác, hoặc chọn gợi ý bên dưới:
@@ -447,10 +451,13 @@ export function PortalSearchDialog({
   onClose: () => void;
   onPick: (target: PortalSearchTarget) => void;
 }) {
-  const { isZh, t } = usePortalLang();
+  const { lang, t } = usePortalLang();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const activeIndex = useMemo(() => (isZh ? buildZhIndex(t) : VI_INDEX), [isZh, t]);
+  const activeIndex = useMemo(
+    () => (lang !== "vi" ? buildTranslatedIndex(t) : VI_INDEX),
+    [lang, t],
+  );
   const results = useMemo(() => searchEntries(deferredQuery, activeIndex), [deferredQuery, activeIndex]);
 
   return (

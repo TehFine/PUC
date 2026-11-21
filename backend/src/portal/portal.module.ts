@@ -9,6 +9,7 @@ import { PortalRequestsModule } from "./requests/requests.module";
 import { PortalSprayModule } from "./spray/spray.module";
 import { PortalStampsModule } from "./stamps/stamps.module";
 import { PortalTrainingModule } from "./training/training.module";
+import { PortalTranslateModule } from "./translate/translate.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { PortalTrainingModule } from "./training/training.module";
     PortalStampsModule,
     PortalRequestsModule,
     PortalTrainingModule,
+    PortalTranslateModule,
   ],
 })
 export class PortalModule {}
