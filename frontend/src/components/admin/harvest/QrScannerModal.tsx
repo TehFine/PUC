@@ -13,6 +13,14 @@ import { isSafeTraceCode, safeDecodeURIComponent } from "@/utils/url-safety";
 
 interface ScopedTraceResponse {
   verifiedAt: string;
+  isPlotSignboard?: boolean;
+  plotSignboard?: {
+    plotCode: string;
+    qrToken?: string | null;
+    zoneCode: string;
+    areaHa: number;
+    treeCount: number;
+  };
   accessControl: {
     viewerTier: "public" | "enterprise" | "authority";
     actualTier: "public" | "enterprise" | "authority";
@@ -32,7 +40,11 @@ interface ScopedTraceResponse {
       lotCode: string;
       qrToken?: string | null;
       scannedCode: string;
+      traceUnit?: "lot" | "box" | "fruit" | "puc_zone" | string;
+      traceUnitLabel?: string;
       weightTons: number;
+      itemWeightKg?: number | null;
+      itemGrade?: string | null;
       market: string;
       status: string;
       statusLabel: string;
@@ -308,30 +320,56 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
     const objectUrl = URL.createObjectURL(file);
     const img = new window.Image();
     img.onload = () => {
-      try {
-        const canvas = canvasRef.current ?? document.createElement("canvas");
-        const maxDim = 1200;
-        const ratio = Math.min(1, maxDim / Math.max(img.width, img.height, 1));
-        const w = Math.max(1, Math.round(img.width * ratio));
-        const h = Math.max(1, Math.round(img.height * ratio));
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          setLookupError("Không khởi tạo được bộ đọc ảnh QR.");
-          return;
+      void (async () => {
+        try {
+          if (typeof window !== "undefined" && "BarcodeDetector" in window) {
+            try {
+              const Ctor = (
+                window as unknown as {
+                  BarcodeDetector: new (opts: { formats: string[] }) => BarcodeDetectorLike;
+                }
+              ).BarcodeDetector;
+              const detector = new Ctor({ formats: ["qr_code"] });
+              const detected = await detector.detect(img);
+              const nativeVal = detected[0]?.rawValue?.trim();
+              if (nativeVal) {
+                void fetchAuthenticatedTrace(nativeVal);
+                return;
+              }
+            } catch {
+              // Dự phòng sang jsQR đa tỷ lệ bên dưới
+            }
+          }
+
+          const canvas = canvasRef.current ?? document.createElement("canvas");
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) {
+            setLookupError("Không khởi tạo được bộ đọc ảnh QR.");
+            return;
+          }
+
+          for (const maxDim of [1600, 1000, 640]) {
+            const ratio = Math.min(1, maxDim / Math.max(img.width, img.height, 1));
+            const w = Math.max(1, Math.round(img.width * ratio));
+            const h = Math.max(1, Math.round(img.height * ratio));
+            canvas.width = w;
+            canvas.height = h;
+            ctx.drawImage(img, 0, 0, w, h);
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const decoded = jsQR(imageData.data, w, h, { inversionAttempts: "attemptBoth" });
+            if (decoded?.data?.trim()) {
+              void fetchAuthenticatedTrace(decoded.data);
+              return;
+            }
+          }
+
+          setLookupError(
+            "Không tìm thấy mã QR rõ nét trong bức ảnh đã chọn. Vui lòng chọn ảnh rõ hơn hoặc nhập mã trực tiếp.",
+          );
+        } finally {
+          URL.revokeObjectURL(objectUrl);
         }
-        ctx.drawImage(img, 0, 0, w, h);
-        const imageData = ctx.getImageData(0, 0, w, h);
-        const decoded = jsQR(imageData.data, w, h, { inversionAttempts: "attemptBoth" });
-        if (!decoded?.data?.trim()) {
-          setLookupError("Không tìm thấy mã QR rõ nét trong bức ảnh đã chọn. Vui lòng chụp gần hơn hoặc nhập mã lô in trên nhãn.");
-          return;
-        }
-        void fetchAuthenticatedTrace(decoded.data);
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
+      })();
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -363,13 +401,25 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
       ? "Trình duyệt hoặc kết nối hiện tại không hỗ trợ mở camera trực tiếp. Bạn có thể chọn ảnh chụp mã QR hoặc nhập mã thủ công."
       : null);
 
+  const resolvedQrToken = result?.publicData.lotIdentity.qrToken ?? result?.plotSignboard?.qrToken ?? null;
+  const resolvedFallbackCode = result?.isPlotSignboard
+    ? result.plotSignboard?.plotCode ?? result.publicData.lotIdentity.scannedCode
+    : result?.publicData.lotIdentity.lotCode ?? null;
+
   const fullDossierHref = result
-    ? isSafeTraceCode(result.publicData.lotIdentity.qrToken)
-      ? `/t/${encodeURIComponent(result.publicData.lotIdentity.qrToken.trim())}`
-      : isSafeTraceCode(result.publicData.lotIdentity.lotCode)
-        ? `/trace/${encodeURIComponent(result.publicData.lotIdentity.lotCode.trim())}`
+    ? isSafeTraceCode(resolvedQrToken)
+      ? `/t/${encodeURIComponent(resolvedQrToken.trim())}`
+      : isSafeTraceCode(resolvedFallbackCode)
+        ? `/trace/${encodeURIComponent(resolvedFallbackCode.trim())}`
         : null
     : null;
+
+  const statusToneColor =
+    result?.publicData.lotIdentity.status === "revoked"
+      ? "#b91c1c"
+      : result?.publicData.lotIdentity.status === "valid"
+        ? "#15803d"
+        : "#9a6712";
 
   return (
     <Modal
@@ -416,7 +466,6 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
         ref={fileInputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
-        capture="environment"
         style={{ display: "none" }}
         onChange={handleImageFile}
       />
@@ -647,11 +696,11 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 Đã mở khóa <strong>{result.accessControl.viewerTierLabel}</strong> cho{" "}
                 <strong>{result.accessControl.viewerName}</strong>
               </div>
-              <span className="badge badge-green">Đúng phạm vi quản lý</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#15803d" }}>Đúng phạm vi quản lý</span>
             </div>
           )}
 
-          {/* Thông tin nhận diện lô & PUC/PHC thời gian thực */}
+          {/* Thông tin nhận diện lô, tem hoặc thửa vườn theo thời gian thực */}
           <div
             style={{
               padding: "14px 16px",
@@ -662,15 +711,31 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
               <div>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                  Mã lô: <strong>{result.publicData.lotIdentity.lotCode}</strong>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-secondary)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {result.isPlotSignboard && result.plotSignboard ? (
+                    <>
+                      Mã thửa vườn: <strong>{result.plotSignboard.plotCode}</strong>
+                    </>
+                  ) : (
+                    <>
+                      Mã định danh: <strong>{result.publicData.lotIdentity.lotCode}</strong>
+                    </>
+                  )}
                 </div>
                 <strong style={{ fontSize: 15.5 }}>{result.publicData.lotIdentity.productName}</strong>
               </div>
               <span
-                className={`badge ${
-                  result.publicData.lotIdentity.status === "revoked" ? "badge-red" : "badge-green"
-                }`}
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: statusToneColor,
+                }}
               >
                 {result.publicData.lotIdentity.statusLabel}
               </span>
@@ -682,18 +747,37 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                 gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
                 gap: "8px 14px",
                 fontSize: 12.5,
+                fontVariantNumeric: "tabular-nums",
               }}
             >
               <div>
                 <span style={{ color: "var(--text-secondary)" }}>Giống: </span>
                 <strong>{result.publicData.lotIdentity.variety}</strong>
               </div>
-              <div>
-                <span style={{ color: "var(--text-secondary)" }}>Quy mô / Thị trường: </span>
-                <strong>
-                  {formatVn(result.publicData.lotIdentity.weightTons, 1)} tấn ({result.publicData.lotIdentity.market})
-                </strong>
-              </div>
+              {result.isPlotSignboard && result.plotSignboard ? (
+                <div>
+                  <span style={{ color: "var(--text-secondary)" }}>Quy mô thửa: </span>
+                  <strong>
+                    {formatVn(result.plotSignboard.areaHa, 2)} ha
+                    {result.plotSignboard.treeCount > 0 ? ` (${result.plotSignboard.treeCount} cây)` : ""}
+                  </strong>
+                </div>
+              ) : result.publicData.lotIdentity.itemWeightKg ? (
+                <div>
+                  <span style={{ color: "var(--text-secondary)" }}>Quy cách tem: </span>
+                  <strong>
+                    {formatVn(result.publicData.lotIdentity.itemWeightKg, 1)} kg
+                    {result.publicData.lotIdentity.itemGrade ? `, Hạng ${result.publicData.lotIdentity.itemGrade}` : ""}
+                  </strong>
+                </div>
+              ) : (
+                <div>
+                  <span style={{ color: "var(--text-secondary)" }}>Quy mô và thị trường: </span>
+                  <strong>
+                    {formatVn(result.publicData.lotIdentity.weightTons, 1)} tấn ({result.publicData.lotIdentity.market})
+                  </strong>
+                </div>
+              )}
               <div>
                 <span style={{ color: "var(--text-secondary)" }}>Mã vùng PUC: </span>
                 <strong>{result.publicData.growingZone.pucCode}</strong> ({result.publicData.growingZone.statusLabel})
