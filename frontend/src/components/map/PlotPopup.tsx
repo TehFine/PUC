@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import { getZoneColor } from "@/components/zones/zone-data";
 import {
   animatePopupExit,
   attachSmoothSheetSettle,
-  spawnExitCloneIfNeeded,
 } from "@/lib/popup-motion";
 import type { PlotFeature, PlotStatus } from "@/types/geo";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/types/geo";
@@ -60,32 +59,24 @@ export default function PlotPopup({
     isClosingRef.current = true;
     const el = popupRef.current;
     if (el) {
-      const isMobileSheet = typeof window !== "undefined" && window.innerWidth <= 900;
-      const closeDuration = animatePopupExit(el, null, isMobileSheet ? "sheet" : "floating-card");
+      const closeDuration = animatePopupExit(el, null, "sheet");
+      if (closeDuration <= 0) {
+        onClose();
+        return;
+      }
       window.setTimeout(() => {
-        isClosingRef.current = false;
         onClose();
       }, closeDuration);
       return;
     }
-    isClosingRef.current = false;
     onClose();
   }, [onClose]);
-
-  useLayoutEffect(() => {
-    const popupEl = popupRef.current;
-    return () => {
-      if (!isClosingRef.current) {
-        const isMobileSheet = typeof window !== "undefined" && window.innerWidth <= 900;
-        spawnExitCloneIfNeeded(popupEl, popupEl, isMobileSheet ? "sheet" : "floating-card");
-      }
-    };
-  }, []);
 
   useEffect(() => {
     isClosingRef.current = false;
     const el = popupRef.current;
     if (!el) return;
+    delete el.dataset.closing;
     el.style.removeProperty("animation");
     el.style.removeProperty("transition");
     el.style.transform = "";
@@ -111,8 +102,8 @@ export default function PlotPopup({
   const rawRing = feature.geometry?.coordinates?.[0] ?? [];
   const vertexCount =
     rawRing.length > 1 &&
-    rawRing[0][0] === rawRing[rawRing.length - 1][0] &&
-    rawRing[0][1] === rawRing[rawRing.length - 1][1]
+      rawRing[0][0] === rawRing[rawRing.length - 1][0] &&
+      rawRing[0][1] === rawRing[rawRing.length - 1][1]
       ? rawRing.length - 1
       : rawRing.length;
 

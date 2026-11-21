@@ -635,15 +635,6 @@ export default function BatchQrModal({ lot, onClose }: Props) {
       </div>
 
       <style jsx global>{`
-        @keyframes bqr-drawer-slide-in {
-          from {
-            transform: translate3d(100%, 0, 0);
-          }
-          to {
-            transform: translate3d(0, 0, 0);
-          }
-        }
-
         @keyframes bqr-sheet-slide-up {
           from {
             transform: translate3d(0, 100%, 0);
@@ -653,7 +644,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           }
         }
 
-        /* ─── Lớp phủ và khung ngăn kéo (Mobile: Bottom Sheet, Desktop: Right Drawer) ─── */
+        /* ─── Lớp phủ và khung ngăn kéo (bật thẳng từ cạnh dưới lên) ─── */
         .batch-qr-overlay.pt-sheet-backdrop {
           position: fixed;
           inset: 0;
@@ -663,6 +654,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           justify-content: center;
           padding: 0;
           background: rgba(15, 23, 42, 0.48);
+          animation: none;
           touch-action: auto;
           overflow: hidden;
         }
@@ -681,7 +673,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           overflow: hidden;
           backface-visibility: hidden;
           -webkit-backface-visibility: hidden;
-          animation: bqr-sheet-slide-up 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
+          animation: bqr-sheet-slide-up 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
 
         @media screen and (min-width: 760px) {
@@ -703,7 +695,7 @@ export default function BatchQrModal({ lot, onClose }: Props) {
             border: none;
             border-left: 1px solid rgba(20, 55, 47, 0.14);
             box-shadow: -16px 0 40px rgba(15, 23, 42, 0.14);
-            animation: bqr-drawer-slide-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation: bqr-sheet-slide-up 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
           }
         }
 
@@ -717,9 +709,9 @@ export default function BatchQrModal({ lot, onClose }: Props) {
 
         .batch-qr-header {
           padding: 14px 16px;
-          display: flex;
+          display: grid;
+          grid-template-columns: 36px minmax(0, 1fr) 36px;
           align-items: center;
-          justify-content: space-between;
           gap: 12px;
           background: #ffffff;
         }
@@ -731,8 +723,9 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         }
 
         .batch-qr-head-copy {
+          grid-column: 2;
           min-width: 0;
-          flex: 1;
+          text-align: center;
         }
 
         .batch-qr-title {
@@ -751,6 +744,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
         }
 
         .batch-qr-close {
+          grid-column: 3;
+          justify-self: end;
           width: 34px;
           height: 34px;
           padding: 0;

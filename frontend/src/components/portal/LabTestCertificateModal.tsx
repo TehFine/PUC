@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Download, Printer } from "@/components/ui/PublicIcon";
@@ -12,7 +12,6 @@ import {
   animatePopupExit,
   attachSmoothSheetSettle,
   resolvePopupExitKind,
-  spawnExitCloneIfNeeded,
 } from "@/lib/popup-motion";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import { triggerBlobDownload } from "@/utils/download";
@@ -266,20 +265,13 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
     closingRef.current = true;
     const exitKind = resolvePopupExitKind("drawer", 760);
     const closeDuration = animatePopupExit(containerRef.current, backdropRef.current, exitKind);
+    if (closeDuration <= 0) {
+      onCloseRef.current();
+      return;
+    }
     window.setTimeout(() => {
-      closingRef.current = false;
       onCloseRef.current();
     }, closeDuration);
-  }, []);
-
-  useLayoutEffect(() => {
-    const backdropEl = backdropRef.current;
-    const containerEl = containerRef.current;
-    return () => {
-      if (!closingRef.current) {
-        spawnExitCloneIfNeeded(backdropEl, containerEl, resolvePopupExitKind("drawer", 760));
-      }
-    };
   }, []);
 
   useSheetSwipe({
@@ -313,7 +305,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
         color: { dark: "#0f2942", light: "#ffffff" },
       })
         .then(setQrDataUrl)
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [test.plotCode, test.code]);
 
@@ -760,334 +752,334 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                (Không mount trên Desktop để tiết kiệm 2x cây DOM + SVG Watermark)
             ═══════════════════════════════════════════════════════════════════════ */}
         {!isDesktop && (
-        <div
-          ref={mobileStackRef}
-          className="cert-mobile-a4-stack no-print"
-          style={{ "--sheet-scale": sheetScale } as React.CSSProperties}
-        >
-          {/* ─── TỜ A4 SỐ 1 / 2: TIÊU ĐỀ, THÔNG TIN MẪU & BẢNG KẾT QUẢ 6 CỘT ─── */}
-          <div className="cert-mobile-a4-frame">
-            <div className="cert-mobile-a4-canvas">
-              <div className="cert-watermark" aria-hidden="true">
-                <WatermarkStamp
-                  topText="HTX NÔNG NGHIỆP CƯ NÉ"
-                  centerText={test.result === "fail" ? "KHÔNG ĐẠT CHUẨN" : "BẢN TRÍCH XUẤT HỆ THỐNG"}
-                  bottomText="ĐỐI CHIẾU BẢN SCAN LAB"
-                />
-              </div>
+          <div
+            ref={mobileStackRef}
+            className="cert-mobile-a4-stack no-print"
+            style={{ "--sheet-scale": sheetScale } as React.CSSProperties}
+          >
+            {/* ─── TỜ A4 SỐ 1 / 2: TIÊU ĐỀ, THÔNG TIN MẪU & BẢNG KẾT QUẢ 6 CỘT ─── */}
+            <div className="cert-mobile-a4-frame">
+              <div className="cert-mobile-a4-canvas">
+                <div className="cert-watermark" aria-hidden="true">
+                  <WatermarkStamp
+                    topText="HTX NÔNG NGHIỆP CƯ NÉ"
+                    centerText={test.result === "fail" ? "KHÔNG ĐẠT CHUẨN" : "BẢN TRÍCH XUẤT HỆ THỐNG"}
+                    bottomText="ĐỐI CHIẾU BẢN SCAN LAB"
+                  />
+                </div>
 
-              <div className="cert-m-top-group">
-                <div className="cert-m-header">
-                  <div className="cert-m-org">
-                    <div className="cert-m-org-text">
-                      <div className="cert-m-ministry">HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC</div>
-                      <div className="cert-m-center">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - HUYỆN KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
-                      <div className="cert-m-branch">
-                        Đơn vị thử nghiệm thực hiện: {test.lab}, {test.labAccreditationCode || "Chuẩn ISO/IEC 17025"}
+                <div className="cert-m-top-group">
+                  <div className="cert-m-header">
+                    <div className="cert-m-org">
+                      <div className="cert-m-org-text">
+                        <div className="cert-m-ministry">HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC</div>
+                        <div className="cert-m-center">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - HUYỆN KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
+                        <div className="cert-m-branch">
+                          Đơn vị thử nghiệm thực hiện: {test.lab}, {test.labAccreditationCode || "Chuẩn ISO/IEC 17025"}
+                        </div>
                       </div>
                     </div>
+
+                    <div className="cert-m-meta">
+                      <div className="cert-m-doc">
+                        <span>Số hồ sơ: </span>
+                        <strong>LAB-{test.code}/PKN-{year}</strong>
+                      </div>
+                      <div className="cert-m-doc">
+                        <span>Mã PUC: </span>
+                        <strong>VN-DLOR-0086</strong>
+                      </div>
+                      {qrDataUrl && (
+                        <a
+                          href={`/trace/${encodeURIComponent(plotCode)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="cert-m-qr"
+                          style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
+                          title={`Bấm vào mã QR để mở trang truy xuất nguồn gốc thửa ${plotCode}`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={qrDataUrl} alt="Mã QR tra cứu truy xuất" />
+                          <span>Quét tra cứu thửa</span>
+                        </a>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="cert-m-meta">
-                    <div className="cert-m-doc">
-                      <span>Số hồ sơ: </span>
-                      <strong>LAB-{test.code}/PKN-{year}</strong>
+                  <div className="cert-m-divider" />
+
+                  <div className="cert-m-title-box">
+                    <div className="cert-m-main-title">PHIẾU TRÍCH XUẤT KẾT QUẢ KIỂM NGHIỆM</div>
+                    <div className="cert-m-sub-title">CHẤT LƯỢNG NÔNG SẢN VÀ DƯ LƯỢNG THUỐC BVTV</div>
+                    <div className="cert-m-protocol">
+                      (Theo Nghị định thư GACC Lệnh 248/249 và Quy chuẩn Kỹ thuật Quốc gia VietGAP)
                     </div>
-                    <div className="cert-m-doc">
-                      <span>Mã PUC: </span>
-                      <strong>VN-DLOR-0086</strong>
+                  </div>
+                </div>
+
+                {/* Thông tin mẫu thử 2 cột chuẩn A4 */}
+                <div className="cert-m-info-grid">
+                  <div className="cert-m-info-item">
+                    <span className="cert-m-lbl">Tên chủ hộ sản xuất:</span>
+                    <strong className="cert-m-val">{householdName}</strong>
+                  </div>
+                  <div className="cert-m-info-item">
+                    <span className="cert-m-lbl">Mã vùng trồng và Thửa:</span>
+                    <strong className="cert-m-val">VN-DLOR-0086 - Thửa {plotCode}</strong>
+                  </div>
+
+                  <div className="cert-m-info-item">
+                    <span className="cert-m-lbl">Địa chỉ canh tác:</span>
+                    <span className="cert-m-val">Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk</span>
+                  </div>
+                  <div className="cert-m-info-item">
+                    <span className="cert-m-lbl">Đối tượng mẫu thử:</span>
+                    <span className="cert-m-val">Sầu riêng tươi (<em>Durio zibethinus</em> - Monthong, Ri6)</span>
+                  </div>
+
+                  <div className="cert-m-info-item">
+                    <span className="cert-m-lbl">Đơn vị quản lý gửi mẫu:</span>
+                    <span className="cert-m-val">Ban Kiểm soát Kỹ thuật HTX Nông nghiệp Cư Né</span>
+                  </div>
+                  <div className="cert-m-info-item">
+                    <span className="cert-m-lbl">Ngày lấy mẫu:</span>
+                    <strong className="cert-m-val">{formatDate(test.sampledOn)}</strong>
+                  </div>
+
+                  <div className="cert-m-info-item">
+                    <span className="cert-m-lbl">Đơn vị kiểm nghiệm (Lab):</span>
+                    <span className="cert-m-val">{test.lab}</span>
+                  </div>
+                  <div className="cert-m-info-item">
+                    <span className="cert-m-lbl">Mã nhận diện mẫu thử:</span>
+                    <span className="cert-m-val">Mẫu đại diện nguyên quả, mã hồ sơ {test.code}</span>
+                  </div>
+
+                  <div className="cert-m-info-item cert-m-full">
+                    <span className="cert-m-lbl">Chỉ tiêu theo dõi:</span>
+                    <span className="cert-m-val">Kim loại nặng Cadimi (Cd), Tổng dư lượng BVTV, Hoạt chất cấm Chlorpyrifos, Phẩm nhuộm Vàng O (Auramine O).</span>
+                  </div>
+
+                  <div className="cert-m-info-item cert-m-full">
+                    <span className="cert-m-lbl">Phương pháp phân tích tham chiếu:</span>
+                    <span className="cert-m-val">Sắc ký khí và lỏng khối phổ (GC-MS/MS, LC-MS/MS), Quang phổ hấp thụ nguyên tử AAS (AOAC 2007.01, TCVN 7602:2007).</span>
+                  </div>
+                </div>
+
+                {/* Bảng kết quả đủ 6 cột chuẩn A4 */}
+                <div className="cert-m-table-wrap">
+                  <div className="cert-m-sec-heading">KẾT QUẢ THỬ NGHIỆM:</div>
+                  <table className="cert-m-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "6%" }}>STT</th>
+                        <th style={{ width: "31%" }}>TÊN CHỈ TIÊU KIỂM NGHIỆM</th>
+                        <th style={{ width: "22%" }}>PHƯƠNG PHÁP THỬ</th>
+                        <th style={{ width: "10%" }}>ĐƠN VỊ</th>
+                        <th style={{ width: "14%" }}>KẾT QUẢ</th>
+                        <th style={{ width: "17%" }}>NGƯỠNG CHO PHÉP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="text-center">01</td>
+                        <td>
+                          <strong>Hàm lượng Cadimi (Cd)</strong>
+                          <div className="cert-m-note">Kim loại nặng theo Lệnh 248/249</div>
+                        </td>
+                        <td>TCVN 7602:2007 (F-AAS)</td>
+                        <td className="text-center">mg/kg</td>
+                        <td className="text-center font-bold">
+                          <span className={test.cdMgKg <= 0.05 ? "val-ok" : "val-exceed"}>{test.cdMgKg}</span>
+                        </td>
+                        <td className="text-center">
+                          &le; 0.05 mg/kg
+                          <div className="cert-tag-pass">&le; GACC</div>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td className="text-center">02</td>
+                        <td>
+                          <strong>Tổng dư lượng hóa chất BVTV</strong>
+                          <div className="cert-m-note">Nhóm Phospho &amp; Cúc tổng hợp</div>
+                        </td>
+                        <td>AOAC 2007.01 (LC-MS/MS)</td>
+                        <td className="text-center">mg/kg</td>
+                        <td className="text-center font-bold">
+                          <span className={test.residueMgKg <= 0.1 ? "val-ok" : "val-exceed"}>{test.residueMgKg}</span>
+                        </td>
+                        <td className="text-center">
+                          &le; 0.10 mg/kg
+                          <div className="cert-tag-pass">VietGAP</div>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td className="text-center">03</td>
+                        <td>
+                          <strong>Hoạt chất Chlorpyrifos Ethyl</strong>
+                          <div className="cert-m-note">Danh mục cấm theo TT 10/2024</div>
+                        </td>
+                        <td>TCVN 8938:2011 (GC-MS)</td>
+                        <td className="text-center">mg/kg</td>
+                        <td className="text-center font-bold">
+                          <span className={isChlorpyrifosPass ? "val-ok" : "val-exceed"}>{chlorpyrifosDisplay}</span>
+                        </td>
+                        <td className="text-center">
+                          KPH (Cấm tuyệt đối)
+                          <div className="cert-tag-zero">LOD: 0.01</div>
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td className="text-center">04</td>
+                        <td>
+                          <strong>Chất cấm Vàng O (Auramine O)</strong>
+                          <div className="cert-m-note">Phẩm nhuộm công nghiệp cấm</div>
+                        </td>
+                        <td>Phương pháp LC-MS/MS</td>
+                        <td className="text-center">Định tính</td>
+                        <td className="text-center font-bold">
+                          <span className={!test.yellowOPositive ? "val-ok" : "val-exceed"}>
+                            {test.yellowOPositive ? "Dương tính" : "Âm tính"}
+                          </span>
+                        </td>
+                        <td className="text-center">
+                          Âm tính (Cấm tuyệt đối)
+                          <div className="cert-tag-zero">Zero-tolerance</div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Chân trang Tờ 1 */}
+                <div className="cert-m-sheet-footer">
+                  <span>Hồ sơ trích xuất: LAB-{test.code}/PKN-{year} - Xem tiếp kết luận và đối chiếu hồ sơ gốc tại Trang 02</span>
+                  <strong>Trang 01 / 02</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* ─── TỜ A4 SỐ 2 / 2: ĐÁNH GIÁ KIỂM DỊCH, KẾT LUẬN & ĐỐI CHIẾU HỒ SƠ GỐC ─── */}
+            <div className="cert-mobile-a4-frame">
+              <div className="cert-mobile-a4-canvas is-continuation">
+                <div className="cert-watermark" aria-hidden="true">
+                  <WatermarkStamp
+                    topText="HTX NÔNG NGHIỆP CƯ NÉ"
+                    centerText={test.result === "fail" ? "KHÔNG ĐẠT CHUẨN" : "BẢN TRÍCH XUẤT HỆ THỐNG"}
+                    bottomText="ĐỐI CHIẾU BẢN SCAN LAB"
+                  />
+                </div>
+
+                {/* Running Header gọn gàng nối tiếp từ Trang 1 */}
+                <div className="cert-m-running-header">
+                  <span className="cert-m-running-title">
+                    PHIẾU TRÍCH XUẤT KẾT QUẢ KIỂM NGHIỆM <em>(Tiếp theo Trang 01)</em>
+                  </span>
+                  <span className="cert-m-running-code">
+                    Số hồ sơ: <strong>LAB-{test.code}/PKN-{year}</strong> - Mã PUC: <strong>VN-DLOR-0086</strong>
+                  </span>
+                </div>
+
+                {/* Bảng đánh giá cảm quan & kiểm dịch thực vật SPS/GACC */}
+                <div className="cert-m-sps-section">
+                  <div className="cert-m-sec-heading">
+                    GHI NHẬN KIỂM SOÁT NỘI BỘ VÙNG TRỒNG (SPS VÀ LỆNH 248 GACC):
+                  </div>
+                  <div className="cert-m-sps-grid">
+                    <div className="cert-m-sps-cell">
+                      <span className="cert-m-sps-lbl">Độ chín và sinh lý mẫu quả:</span>
+                      <strong className="cert-m-sps-val val-ok">Đạt chuẩn thu hoạch (Chất khô &ge; 32%)</strong>
                     </div>
-                    {qrDataUrl && (
-                      <a
-                        href={`/trace/${encodeURIComponent(plotCode)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="cert-m-qr"
-                        style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
-                        title={`Bấm vào mã QR để mở trang truy xuất nguồn gốc thửa ${plotCode}`}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={qrDataUrl} alt="Mã QR tra cứu truy xuất" />
-                        <span>Quét tra cứu thửa</span>
-                      </a>
+                    <div className="cert-m-sps-cell">
+                      <span className="cert-m-sps-lbl">Kiểm dịch sinh vật gây hại:</span>
+                      <strong className="cert-m-sps-val val-ok">KPH (Không có rệp sáp, sâu đục hạt)</strong>
+                    </div>
+                    <div className="cert-m-sps-cell">
+                      <span className="cert-m-sps-lbl">Ngoại quan vỏ và cuống quả:</span>
+                      <strong className="cert-m-sps-val">Nguyên vẹn, gai đều, không nấm mốc</strong>
+                    </div>
+                    <div className="cert-m-sps-cell">
+                      <span className="cert-m-sps-lbl">Truy xuất nhật ký canh tác:</span>
+                      <strong className="cert-m-sps-val">Đồng bộ nhật ký điện tử vùng trồng PUC</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Khối Kết luận & Đối chiếu Quy chuẩn */}
+                <div className="cert-m-conclusion-box">
+                  <div className="cert-m-concl-line">
+                    <span className="cert-concl-title">KẾT LUẬN ĐỐI CHIẾU NGƯỠNG: </span>
+                    {isPass ? (
+                      <strong className="cert-concl-pass">
+                        Mẫu sầu riêng ĐẠT NGƯỠNG AN TOÀN VỆ SINH THỰC PHẨM theo tiêu chí theo dõi vùng trồng xuất khẩu sang thị trường Trung Quốc (Lệnh 248/249 GACC và tiêu chuẩn VietGAP).
+                      </strong>
+                    ) : (
+                      <strong className="cert-concl-fail">
+                        MẪU KIỂM NGHIỆM KHÔNG ĐẠT NGƯỠNG AN TOÀN. Tồn tại chỉ số vượt mức cho phép, tạm dừng thu hoạch tại thửa {plotCode} để xử lý khoanh vùng.
+                      </strong>
                     )}
                   </div>
-                </div>
 
-                <div className="cert-m-divider" />
+                  <div className="cert-m-notes">
+                    <strong>Ghi chú: </strong>
+                    <em>
+                      (1) KPH: Không phát hiện (dưới giới hạn định lượng LOD = 0.01 mg/kg). (2) Số liệu trên được trích xuất nguyên trạng từ hồ sơ mẫu {test.code} ghi nhận trên hệ thống PUC của HTX Nông nghiệp Cư Né.
+                    </em>
+                  </div>
 
-                <div className="cert-m-title-box">
-                  <div className="cert-m-main-title">PHIẾU TRÍCH XUẤT KẾT QUẢ KIỂM NGHIỆM</div>
-                  <div className="cert-m-sub-title">CHẤT LƯỢNG NÔNG SẢN VÀ DƯ LƯỢNG THUỐC BVTV</div>
-                  <div className="cert-m-protocol">
-                    (Theo Nghị định thư GACC Lệnh 248/249 và Quy chuẩn Kỹ thuật Quốc gia VietGAP)
+                  <div className="cert-m-dispatch">
+                    <span>Ngày lấy mẫu ghi nhận: </span>
+                    <strong>{formatDate(test.sampledOn)} - Chủ hộ: {householdName} (Thửa {plotCode})</strong>
                   </div>
                 </div>
-              </div>
 
-              {/* Thông tin mẫu thử 2 cột chuẩn A4 */}
-              <div className="cert-m-info-grid">
-                <div className="cert-m-info-item">
-                  <span className="cert-m-lbl">Tên chủ hộ sản xuất:</span>
-                  <strong className="cert-m-val">{householdName}</strong>
-                </div>
-                <div className="cert-m-info-item">
-                  <span className="cert-m-lbl">Mã vùng trồng và Thửa:</span>
-                  <strong className="cert-m-val">VN-DLOR-0086 - Thửa {plotCode}</strong>
-                </div>
-
-                <div className="cert-m-info-item">
-                  <span className="cert-m-lbl">Địa chỉ canh tác:</span>
-                  <span className="cert-m-val">Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk</span>
-                </div>
-                <div className="cert-m-info-item">
-                  <span className="cert-m-lbl">Đối tượng mẫu thử:</span>
-                  <span className="cert-m-val">Sầu riêng tươi (<em>Durio zibethinus</em> - Monthong, Ri6)</span>
-                </div>
-
-                <div className="cert-m-info-item">
-                  <span className="cert-m-lbl">Đơn vị quản lý gửi mẫu:</span>
-                  <span className="cert-m-val">Ban Kiểm soát Kỹ thuật HTX Nông nghiệp Cư Né</span>
-                </div>
-                <div className="cert-m-info-item">
-                  <span className="cert-m-lbl">Ngày lấy mẫu:</span>
-                  <strong className="cert-m-val">{formatDate(test.sampledOn)}</strong>
-                </div>
-
-                <div className="cert-m-info-item">
-                  <span className="cert-m-lbl">Đơn vị kiểm nghiệm (Lab):</span>
-                  <span className="cert-m-val">{test.lab}</span>
-                </div>
-                <div className="cert-m-info-item">
-                  <span className="cert-m-lbl">Mã nhận diện mẫu thử:</span>
-                  <span className="cert-m-val">Mẫu đại diện nguyên quả, mã hồ sơ {test.code}</span>
-                </div>
-
-                <div className="cert-m-info-item cert-m-full">
-                  <span className="cert-m-lbl">Chỉ tiêu theo dõi:</span>
-                  <span className="cert-m-val">Kim loại nặng Cadimi (Cd), Tổng dư lượng BVTV, Hoạt chất cấm Chlorpyrifos, Phẩm nhuộm Vàng O (Auramine O).</span>
-                </div>
-
-                <div className="cert-m-info-item cert-m-full">
-                  <span className="cert-m-lbl">Phương pháp phân tích tham chiếu:</span>
-                  <span className="cert-m-val">Sắc ký khí và lỏng khối phổ (GC-MS/MS, LC-MS/MS), Quang phổ hấp thụ nguyên tử AAS (AOAC 2007.01, TCVN 7602:2007).</span>
-                </div>
-              </div>
-
-              {/* Bảng kết quả đủ 6 cột chuẩn A4 */}
-              <div className="cert-m-table-wrap">
-                <div className="cert-m-sec-heading">KẾT QUẢ THỬ NGHIỆM:</div>
-                <table className="cert-m-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: "6%" }}>STT</th>
-                      <th style={{ width: "31%" }}>TÊN CHỈ TIÊU KIỂM NGHIỆM</th>
-                      <th style={{ width: "22%" }}>PHƯƠNG PHÁP THỬ</th>
-                      <th style={{ width: "10%" }}>ĐƠN VỊ</th>
-                      <th style={{ width: "14%" }}>KẾT QUẢ</th>
-                      <th style={{ width: "17%" }}>NGƯỠNG CHO PHÉP</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td className="text-center">01</td>
-                      <td>
-                        <strong>Hàm lượng Cadimi (Cd)</strong>
-                        <div className="cert-m-note">Kim loại nặng theo Lệnh 248/249</div>
-                      </td>
-                      <td>TCVN 7602:2007 (F-AAS)</td>
-                      <td className="text-center">mg/kg</td>
-                      <td className="text-center font-bold">
-                        <span className={test.cdMgKg <= 0.05 ? "val-ok" : "val-exceed"}>{test.cdMgKg}</span>
-                      </td>
-                      <td className="text-center">
-                        &le; 0.05 mg/kg
-                        <div className="cert-tag-pass">&le; GACC</div>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td className="text-center">02</td>
-                      <td>
-                        <strong>Tổng dư lượng hóa chất BVTV</strong>
-                        <div className="cert-m-note">Nhóm Phospho &amp; Cúc tổng hợp</div>
-                      </td>
-                      <td>AOAC 2007.01 (LC-MS/MS)</td>
-                      <td className="text-center">mg/kg</td>
-                      <td className="text-center font-bold">
-                        <span className={test.residueMgKg <= 0.1 ? "val-ok" : "val-exceed"}>{test.residueMgKg}</span>
-                      </td>
-                      <td className="text-center">
-                        &le; 0.10 mg/kg
-                        <div className="cert-tag-pass">VietGAP</div>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td className="text-center">03</td>
-                      <td>
-                        <strong>Hoạt chất Chlorpyrifos Ethyl</strong>
-                        <div className="cert-m-note">Danh mục cấm theo TT 10/2024</div>
-                      </td>
-                      <td>TCVN 8938:2011 (GC-MS)</td>
-                      <td className="text-center">mg/kg</td>
-                      <td className="text-center font-bold">
-                        <span className={isChlorpyrifosPass ? "val-ok" : "val-exceed"}>{chlorpyrifosDisplay}</span>
-                      </td>
-                      <td className="text-center">
-                        KPH (Cấm tuyệt đối)
-                        <div className="cert-tag-zero">LOD: 0.01</div>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td className="text-center">04</td>
-                      <td>
-                        <strong>Chất cấm Vàng O (Auramine O)</strong>
-                        <div className="cert-m-note">Phẩm nhuộm công nghiệp cấm</div>
-                      </td>
-                      <td>Phương pháp LC-MS/MS</td>
-                      <td className="text-center">Định tính</td>
-                      <td className="text-center font-bold">
-                        <span className={!test.yellowOPositive ? "val-ok" : "val-exceed"}>
-                          {test.yellowOPositive ? "Dương tính" : "Âm tính"}
-                        </span>
-                      </td>
-                      <td className="text-center">
-                        Âm tính (Cấm tuyệt đối)
-                        <div className="cert-tag-zero">Zero-tolerance</div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Chân trang Tờ 1 */}
-              <div className="cert-m-sheet-footer">
-                <span>Hồ sơ trích xuất: LAB-{test.code}/PKN-{year} - Xem tiếp kết luận và đối chiếu hồ sơ gốc tại Trang 02</span>
-                <strong>Trang 01 / 02</strong>
-              </div>
-            </div>
-          </div>
-
-          {/* ─── TỜ A4 SỐ 2 / 2: ĐÁNH GIÁ KIỂM DỊCH, KẾT LUẬN & ĐỐI CHIẾU HỒ SƠ GỐC ─── */}
-          <div className="cert-mobile-a4-frame">
-            <div className="cert-mobile-a4-canvas is-continuation">
-              <div className="cert-watermark" aria-hidden="true">
-                <WatermarkStamp
-                  topText="HTX NÔNG NGHIỆP CƯ NÉ"
-                  centerText={test.result === "fail" ? "KHÔNG ĐẠT CHUẨN" : "BẢN TRÍCH XUẤT HỆ THỐNG"}
-                  bottomText="ĐỐI CHIẾU BẢN SCAN LAB"
-                />
-              </div>
-
-              {/* Running Header gọn gàng nối tiếp từ Trang 1 */}
-              <div className="cert-m-running-header">
-                <span className="cert-m-running-title">
-                  PHIẾU TRÍCH XUẤT KẾT QUẢ KIỂM NGHIỆM <em>(Tiếp theo Trang 01)</em>
-                </span>
-                <span className="cert-m-running-code">
-                  Số hồ sơ: <strong>LAB-{test.code}/PKN-{year}</strong> - Mã PUC: <strong>VN-DLOR-0086</strong>
-                </span>
-              </div>
-
-              {/* Bảng đánh giá cảm quan & kiểm dịch thực vật SPS/GACC */}
-              <div className="cert-m-sps-section">
-                <div className="cert-m-sec-heading">
-                  GHI NHẬN KIỂM SOÁT NỘI BỘ VÙNG TRỒNG (SPS VÀ LỆNH 248 GACC):
-                </div>
-                <div className="cert-m-sps-grid">
-                  <div className="cert-m-sps-cell">
-                    <span className="cert-m-sps-lbl">Độ chín và sinh lý mẫu quả:</span>
-                    <strong className="cert-m-sps-val val-ok">Đạt chuẩn thu hoạch (Chất khô &ge; 32%)</strong>
+                {/* Khối xác thực hồ sơ gốc (không giả lập chữ ký và con dấu cơ quan nhà nước) */}
+                <div className="cert-verify-summary-box is-mobile">
+                  <div className="cert-verify-summary-head">
+                    THÔNG TIN ĐỐI CHIẾU PHIẾU KẾT QUẢ GỐC CỦA PHÒNG THỬ NGHIỆM
                   </div>
-                  <div className="cert-m-sps-cell">
-                    <span className="cert-m-sps-lbl">Kiểm dịch sinh vật gây hại:</span>
-                    <strong className="cert-m-sps-val val-ok">KPH (Không có rệp sáp, sâu đục hạt)</strong>
+                  <div className="cert-verify-summary-grid">
+                    <div className="cert-verify-summary-item">
+                      <span className="cert-verify-lbl">Đơn vị thử nghiệm thực hiện:</span>
+                      <strong className="cert-verify-val">
+                        {test.lab}, {test.labAccreditationCode || "ISO/IEC 17025"}
+                      </strong>
+                    </div>
+                    <div className="cert-verify-summary-item">
+                      <span className="cert-verify-lbl">Ngày lấy mẫu kiểm định:</span>
+                      <strong className="cert-verify-val">{formatDate(test.sampledOn)}</strong>
+                    </div>
+                    <div className="cert-verify-summary-item">
+                      <span className="cert-verify-lbl">Mã đối chiếu phòng Lab:</span>
+                      <strong className="cert-verify-val">
+                        {test.externalVerifyCode || "Đối chiếu theo số phiếu gốc"}
+                      </strong>
+                    </div>
                   </div>
-                  <div className="cert-m-sps-cell">
-                    <span className="cert-m-sps-lbl">Ngoại quan vỏ và cuống quả:</span>
-                    <strong className="cert-m-sps-val">Nguyên vẹn, gai đều, không nấm mốc</strong>
-                  </div>
-                  <div className="cert-m-sps-cell">
-                    <span className="cert-m-sps-lbl">Truy xuất nhật ký canh tác:</span>
-                    <strong className="cert-m-sps-val">Đồng bộ nhật ký điện tử vùng trồng PUC</strong>
+                  <div className="cert-verify-summary-note">
+                    Tài liệu này là bản trích xuất dữ liệu hệ thống của HTX Nông nghiệp Cư Né, không thay thế chữ ký và con dấu pháp nhân trên phiếu kết quả gốc. Vui lòng đối chiếu trực tiếp bản scan PDF gốc của phòng thử nghiệm ISO/IEC 17025 khi làm thủ tục kiểm dịch.
                   </div>
                 </div>
-              </div>
 
-              {/* Khối Kết luận & Đối chiếu Quy chuẩn */}
-              <div className="cert-m-conclusion-box">
-                <div className="cert-m-concl-line">
-                  <span className="cert-concl-title">KẾT LUẬN ĐỐI CHIẾU NGƯỠNG: </span>
-                  {isPass ? (
-                    <strong className="cert-concl-pass">
-                      Mẫu sầu riêng ĐẠT NGƯỠNG AN TOÀN VỆ SINH THỰC PHẨM theo tiêu chí theo dõi vùng trồng xuất khẩu sang thị trường Trung Quốc (Lệnh 248/249 GACC và tiêu chuẩn VietGAP).
-                    </strong>
-                  ) : (
-                    <strong className="cert-concl-fail">
-                      MẪU KIỂM NGHIỆM KHÔNG ĐẠT NGƯỠNG AN TOÀN. Tồn tại chỉ số vượt mức cho phép, tạm dừng thu hoạch tại thửa {plotCode} để xử lý khoanh vùng.
-                    </strong>
-                  )}
-                </div>
-
-                <div className="cert-m-notes">
-                  <strong>Ghi chú: </strong>
-                  <em>
-                    (1) KPH: Không phát hiện (dưới giới hạn định lượng LOD = 0.01 mg/kg). (2) Số liệu trên được trích xuất nguyên trạng từ hồ sơ mẫu {test.code} ghi nhận trên hệ thống PUC của HTX Nông nghiệp Cư Né.
-                  </em>
-                </div>
-
-                <div className="cert-m-dispatch">
-                  <span>Ngày lấy mẫu ghi nhận: </span>
-                  <strong>{formatDate(test.sampledOn)} - Chủ hộ: {householdName} (Thửa {plotCode})</strong>
-                </div>
-              </div>
-
-              {/* Khối xác thực hồ sơ gốc (không giả lập chữ ký và con dấu cơ quan nhà nước) */}
-              <div className="cert-verify-summary-box is-mobile">
-                <div className="cert-verify-summary-head">
-                  THÔNG TIN ĐỐI CHIẾU PHIẾU KẾT QUẢ GỐC CỦA PHÒNG THỬ NGHIỆM
-                </div>
-                <div className="cert-verify-summary-grid">
-                  <div className="cert-verify-summary-item">
-                    <span className="cert-verify-lbl">Đơn vị thử nghiệm thực hiện:</span>
-                    <strong className="cert-verify-val">
-                      {test.lab}, {test.labAccreditationCode || "ISO/IEC 17025"}
-                    </strong>
+                {/* Chân trang hệ thống Trang 2 */}
+                <div className="cert-m-footer">
+                  <div>
+                    HTX Nông nghiệp Cư Né - Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk
                   </div>
-                  <div className="cert-verify-summary-item">
-                    <span className="cert-verify-lbl">Ngày lấy mẫu kiểm định:</span>
-                    <strong className="cert-verify-val">{formatDate(test.sampledOn)}</strong>
-                  </div>
-                  <div className="cert-verify-summary-item">
-                    <span className="cert-verify-lbl">Mã đối chiếu phòng Lab:</span>
-                    <strong className="cert-verify-val">
-                      {test.externalVerifyCode || "Đối chiếu theo số phiếu gốc"}
-                    </strong>
-                  </div>
-                </div>
-                <div className="cert-verify-summary-note">
-                  Tài liệu này là bản trích xuất dữ liệu hệ thống của HTX Nông nghiệp Cư Né, không thay thế chữ ký và con dấu pháp nhân trên phiếu kết quả gốc. Vui lòng đối chiếu trực tiếp bản scan PDF gốc của phòng thử nghiệm ISO/IEC 17025 khi làm thủ tục kiểm dịch.
-                </div>
-              </div>
 
-              {/* Chân trang hệ thống Trang 2 */}
-              <div className="cert-m-footer">
-                <div>
-                  HTX Nông nghiệp Cư Né - Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk
-                </div>
-
-                <div className="cert-m-hash">
-                  <div className="cert-m-hash-bottom">
-                    <span>Mã hồ sơ: LAB-{test.code}/PKN-{year}</span>
-                    <strong>Trang 02 / 02</strong>
+                  <div className="cert-m-hash">
+                    <div className="cert-m-hash-bottom">
+                      <span>Mã hồ sơ: LAB-{test.code}/PKN-{year}</span>
+                      <strong>Trang 02 / 02</strong>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
         )}
       </div>
 
@@ -1108,12 +1100,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           display: flex;
           justify-content: center;
           align-items: flex-start;
-          animation: certFadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        @keyframes certFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
+          animation: none;
         }
 
         @keyframes certMobileSlideUp {
@@ -1130,7 +1117,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           margin: auto;
           backface-visibility: hidden;
           -webkit-backface-visibility: hidden;
-          animation: certMobileSlideUp 0.44s cubic-bezier(0.16, 1, 0.3, 1) both;
+          animation: certMobileSlideUp 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
 
         /* ── Thanh điều khiển phía trên ── */
@@ -1779,12 +1766,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           display: none;
         }
 
-        /* ── MÀN HÌNH LỚN / LAPTOP: NGĂN KÉO TRƯỢT DỌC TỪ CẠNH PHẢI ── */
-        @keyframes certDrawerSlideIn {
-          from { transform: translate3d(100%, 0, 0); }
-          to { transform: translate3d(0, 0, 0); }
-        }
-
+        /* ── MÀN HÌNH LỚN / LAPTOP: BẬT THẲNG TỪ DƯỚI LÊN ── */
         @media screen and (min-width: 760px) {
           .cert-modal-backdrop {
             padding: 0;
@@ -1806,7 +1788,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             background: #f1f5f9;
             box-shadow: -16px 0 48px rgba(15, 23, 42, 0.18), -1px 0 0 rgba(15, 23, 42, 0.06);
             overflow: hidden;
-            animation: certDrawerSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            animation: certMobileSlideUp 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
           }
 
           .cert-toolbar {
@@ -1849,7 +1831,6 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           }
 
           .cert-drawer-back-btn:active {
-            transform: scale(0.94);
             background: #dce0e8;
           }
 

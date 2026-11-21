@@ -956,8 +956,17 @@ select.auth-input {
   place-items: center;
   padding: 24px;
   background: rgba(18, 18, 18, 0.52);
-  backdrop-filter: blur(2px);
-  animation: auth-status-fade-in 0.18s ease-out both;
+  backdrop-filter: none;
+  animation: none;
+}
+
+@keyframes auth-dialog-slide-up {
+  from {
+    transform: translate3d(0, calc(50dvh + 50%), 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 .auth-google-dialog {
@@ -972,13 +981,16 @@ select.auth-input {
   color: var(--au-ink);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
   padding: 24px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  animation: auth-dialog-slide-up 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .auth-google-dialog-head {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
+  align-items: center;
+  text-align: center;
   gap: 6px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--au-line);

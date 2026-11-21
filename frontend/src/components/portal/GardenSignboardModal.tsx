@@ -592,7 +592,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
         }
 
         .plate-qr-link:active {
-          transform: scale(0.98);
+          opacity: 0.82;
         }
 
         .plate-qr-link:focus-visible {

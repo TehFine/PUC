@@ -2,22 +2,41 @@ export type PopupExitKind = "modal" | "drawer" | "sheet" | "floating-card";
 
 /** Đường cong giảm tốc mượt dần khi gần tới điểm dừng (Quintic Ease-Out) */
 export const POPUP_OPEN_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
-export const POPUP_OPEN_MS = 440;
-export const POPUP_CLOSE_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+export const POPUP_OPEN_MS = 380;
+export const POPUP_CLOSE_EASE = "cubic-bezier(0.25, 1, 0.5, 1)";
 
 export function resolvePopupExitKind(
-  variant: "drawer" | "modal",
-  desktopBreakpoint = 760,
+  _variant?: "drawer" | "modal",
+  _desktopBreakpoint = 760,
 ): PopupExitKind {
-  const isDesktop = typeof window !== "undefined" && window.innerWidth >= desktopBreakpoint;
-  if (!isDesktop) return "sheet";
-  return variant === "modal" ? "modal" : "drawer";
+  void _variant;
+  void _desktopBreakpoint;
+  return "sheet";
+}
+
+function readCurrentTranslateY(el: HTMLElement): number {
+  const raw = window.getComputedStyle(el).transform;
+  if (!raw || raw === "none") return 0;
+  try {
+    return new DOMMatrixReadOnly(raw).m42;
+  } catch {
+    const m3d = raw.match(/matrix3d\(([^)]+)\)/);
+    if (m3d) {
+      const parts = m3d[1].split(",").map((s) => parseFloat(s.trim()));
+      return Number.isFinite(parts[13]) ? parts[13] : 0;
+    }
+    const m2d = raw.match(/matrix\(([^)]+)\)/);
+    if (m2d) {
+      const parts = m2d[1].split(",").map((s) => parseFloat(s.trim()));
+      return Number.isFinite(parts[5]) ? parts[5] : 0;
+    }
+    return 0;
+  }
 }
 
 /**
  * Giữ lớp ghép phần cứng GPU (`data-animating="true"`) suốt quá trình popup trượt từ cạnh dưới lên,
- * và chỉ gỡ `animation` / `transform` sau khi sự kiện `animationend` hoàn tất trọn vẹn pha giảm tốc cuối
- * (tránh cắt cụt chuyển động giữa chừng trên máy di động).
+ * và chỉ gỡ `animation` / `transform` khi popup thực sự đang mở yên (tuyệt đối không can thiệp khi đang kéo hoặc đóng).
  */
 export function attachSmoothSheetSettle(
   panel: HTMLElement | null,
@@ -26,11 +45,17 @@ export function attachSmoothSheetSettle(
   onSettled?: () => void,
 ): () => void {
   if (!panel || typeof window === "undefined") {
-    return () => {};
+    return () => { };
   }
 
   let settled = false;
+  delete panel.dataset.closing;
   panel.dataset.animating = "true";
+
+  if (backdrop) {
+    backdrop.style.setProperty("animation", "none", "important");
+    backdrop.style.opacity = "1";
+  }
 
   const settle = () => {
     if (settled) return;
@@ -39,7 +64,11 @@ export function attachSmoothSheetSettle(
     window.clearTimeout(fallbackTimer);
     delete panel.dataset.animating;
 
-    if (isClosingRef?.current || panel.dataset.dragging === "true") {
+    if (
+      isClosingRef?.current ||
+      panel.dataset.dragging === "true" ||
+      panel.dataset.closing === "true"
+    ) {
       return;
     }
 
@@ -61,7 +90,7 @@ export function attachSmoothSheetSettle(
   };
 
   panel.addEventListener("animationend", handleAnimationEnd);
-  const fallbackTimer = window.setTimeout(settle, POPUP_OPEN_MS + 180);
+  const fallbackTimer = window.setTimeout(settle, POPUP_OPEN_MS + 160);
 
   return () => {
     settled = true;
@@ -72,62 +101,66 @@ export function attachSmoothSheetSettle(
 }
 
 /**
- * Thực thi hiệu ứng thu gọn mượt mà cho popup / ngăn kéo / bottom sheet.
- * Dùng `setProperty("animation", "none", "important")` để luôn thắng mọi quy tắc CSS `forwards` / `both`.
+ * Trượt thẳng popup xuống khỏi cạnh dưới từ đúng vị trí ngón tay hiện tại rồi đóng dứt khoát,
+ * tuyệt đối không nảy ngược, không nháy sáng hay sinh hoạt ảnh phụ.
  */
 export function animatePopupExit(
   panel: HTMLElement | null,
   backdrop: HTMLElement | null,
-  kind: PopupExitKind,
+  _kind?: PopupExitKind,
 ): number {
+  void _kind;
   const reducedMotion =
     typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  if (reducedMotion) {
+  if (reducedMotion || !panel || typeof window === "undefined") {
     if (panel) panel.style.opacity = "0";
     if (backdrop) backdrop.style.opacity = "0";
-    return 20;
+    return 0;
   }
 
-  const durationMs =
-    kind === "sheet" ? 300 : kind === "floating-card" ? 240 : kind === "modal" ? 250 : 260;
+  delete panel.dataset.animating;
+  delete panel.dataset.dragging;
+  panel.dataset.closing = "true";
+  panel.style.pointerEvents = "none";
+  panel.style.setProperty("animation", "none", "important");
 
-  if (panel) {
-    panel.dataset.animating = "true";
-    panel.style.willChange = "transform";
-    panel.style.setProperty("animation", "none", "important");
-    panel.style.pointerEvents = "none";
-    if (kind === "modal") {
-      panel.style.setProperty(
-        "transition",
-        `transform ${durationMs}ms ${POPUP_CLOSE_EASE}, opacity ${durationMs - 15}ms ease-out`,
-        "important",
-      );
-      panel.style.transform = "translate3d(0, 10px, 0) scale(0.96)";
-      panel.style.opacity = "0";
-    } else if (kind === "drawer") {
-      panel.style.setProperty("transition", `transform ${durationMs}ms ${POPUP_CLOSE_EASE}`, "important");
-      panel.style.transform = "translate3d(100%, 0, 0)";
-    } else if (kind === "floating-card") {
-      panel.style.setProperty(
-        "transition",
-        `transform ${durationMs}ms ${POPUP_CLOSE_EASE}, opacity ${durationMs - 15}ms ease-out`,
-        "important",
-      );
-      panel.style.transform = "translate3d(8px, 0, 0) scale(0.96)";
-      panel.style.opacity = "0";
-    } else {
-      panel.style.setProperty("transition", `transform ${durationMs}ms ${POPUP_CLOSE_EASE}`, "important");
-      panel.style.transform = "translate3d(0, 102%, 0)";
+  const currentY = readCurrentTranslateY(panel);
+  const rect = panel.getBoundingClientRect();
+  const viewportH = window.innerHeight || 900;
+  const remainingPx = viewportH - rect.top + 24;
+
+  // Nếu người dùng đã kéo popup tụt hẳn xuống dưới mép màn hình -> đóng tức thì không chờ
+  if (remainingPx <= 0) {
+    panel.style.transition = "none";
+    panel.style.opacity = "0";
+    if (backdrop) {
+      backdrop.style.setProperty("animation", "none", "important");
+      backdrop.style.transition = "none";
+      backdrop.style.opacity = "0";
     }
+    return 0;
   }
+
+  const baseHeight = Math.max(rect.height, 280);
+  const durationMs = Math.max(110, Math.min(230, Math.round((remainingPx / baseHeight) * 230)));
+  const targetY = Math.ceil(currentY + remainingPx);
+
+  // Khóa vị trí hiện tại trước khi gắn transition để không bao giờ giật ngược về 0
+  panel.style.transition = "none";
+  panel.style.transform = `translate3d(0, ${Math.round(currentY)}px, 0)`;
+  panel.style.willChange = "transform";
+  void panel.offsetWidth;
+
+  panel.style.setProperty("transition", `transform ${durationMs}ms ${POPUP_CLOSE_EASE}`, "important");
+  panel.style.transform = `translate3d(0, ${targetY}px, 0)`;
 
   if (backdrop) {
     backdrop.style.setProperty("animation", "none", "important");
     backdrop.style.pointerEvents = "none";
-    backdrop.style.setProperty("transition", `opacity ${durationMs - 15}ms ease-out`, "important");
+    backdrop.style.setProperty("transition", `opacity ${durationMs}ms linear`, "important");
     backdrop.style.opacity = "0";
   }
 
@@ -135,64 +168,15 @@ export function animatePopupExit(
 }
 
 /**
- * Dự phòng khi thành phần cha đóng popup trực tiếp (`setOpen(false)`) sau khi lưu biểu mẫu hoặc bấm nút tùy biến
- * mà chưa đi qua `handleClose`: nhân bản lớp giao diện tĩnh (`pointer-events: none`) trong `useLayoutEffect`
- * để vẫn hiển thị trọn vẹn hiệu ứng thu popup mượt mà trước khi biến mất.
+ * Đã vô hiệu hóa hoàn toàn cơ chế nhân bản DOM khi tháo popup để tránh hiện tượng
+ * nháy sáng bật ngược lên một lần nữa sau khi popup đã trượt đóng xong.
  */
 export function spawnExitCloneIfNeeded(
-  rootNode: HTMLElement | null,
-  panelNode: HTMLElement | null,
-  kind: PopupExitKind,
+  _rootNode: HTMLElement | null,
+  _panelNode: HTMLElement | null,
+  _kind?: PopupExitKind,
 ): void {
-  if (!rootNode || typeof window === "undefined" || typeof document === "undefined") return;
-  if (
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  ) {
-    return;
-  }
-  const host = rootNode.parentElement ?? document.body;
-  if (!host.isConnected) return;
-
-  const cloneRoot = rootNode.cloneNode(true) as HTMLElement;
-  cloneRoot.removeAttribute("id");
-  cloneRoot.setAttribute("aria-hidden", "true");
-  cloneRoot.setAttribute("inert", "");
-  cloneRoot.style.pointerEvents = "none";
-
-  const descendantsWithAttrs = cloneRoot.querySelectorAll("[id], [autofocus]");
-  for (const el of descendantsWithAttrs) {
-    el.removeAttribute("id");
-    el.removeAttribute("autofocus");
-  }
-
-  const isSameNode = rootNode === panelNode;
-  const clonePanel = isSameNode
-    ? cloneRoot
-    : ((panelNode
-        ? cloneRoot.querySelector<HTMLElement>('[role="dialog"], .pt-sheet, .modal, .batch-qr-modal, .cert-modal-container, .pt-radial-sheet')
-        : null) ?? (cloneRoot.firstElementChild as HTMLElement | null));
-
-  // Khóa vị trí khởi đầu hiện tại trước khi gắn transition thu gọn
-  if (clonePanel) {
-    clonePanel.style.setProperty("animation", "none", "important");
-    clonePanel.style.transition = "none";
-    clonePanel.style.transform = "translate3d(0, 0, 0) scale(1)";
-    clonePanel.style.opacity = "1";
-  }
-  if (!isSameNode) {
-    cloneRoot.style.setProperty("animation", "none", "important");
-    cloneRoot.style.transition = "none";
-    cloneRoot.style.opacity = "1";
-  }
-
-  host.appendChild(cloneRoot);
-  // Ép trình duyệt chốt frame ban đầu trước khi kích hoạt transition thu lại
-  void cloneRoot.offsetWidth;
-
-  const durationMs = animatePopupExit(clonePanel, isSameNode ? null : cloneRoot, kind);
-  window.setTimeout(() => {
-    cloneRoot.remove();
-  }, durationMs + 25);
+  void _rootNode;
+  void _panelNode;
+  void _kind;
 }
-
