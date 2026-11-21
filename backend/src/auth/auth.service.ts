@@ -1000,7 +1000,10 @@ export class AuthService {
     if (updated.rowCount === 0) {
       throw new AppException(429, "Tài khoản tạm khóa do nhập sai mật khẩu nhiều lần. Vui lòng thử lại sau.", "ACCOUNT_LOCKED");
     }
-    await this.revokeAllSessions(user.id);
+    await Promise.all([
+      this.revokeAllSessions(user.id),
+      this.db.query("DELETE FROM password_reset_requests WHERE user_id = $1 AND status = 'pending'", [user.id]),
+    ]);
     await this.audit.write({ ip, user }, { action: "Đổi mật khẩu", object: user.username });
   }
 
@@ -1639,36 +1642,14 @@ export class AuthService {
     }
 
     let confirmed = false;
-    if (dto.code && row.two_factor_secret) {
-      const opened = this.openTotpSecret(user.id, row.two_factor_secret);
-      const matchedStep = opened ? this.matchTotpStep(opened.secret, dto.code, 1) : null;
-      const lastUsedStep =
-        row.two_factor_last_used_step !== null && row.two_factor_last_used_step !== undefined
-          ? Number(row.two_factor_last_used_step)
-          : null;
-      if (matchedStep !== null && (lastUsedStep === null || matchedStep > lastUsedStep)) {
-        const claimed = await this.db.query(
-          `UPDATE users
-           SET two_factor_last_used_step = $2
-           WHERE id = $1 AND (two_factor_last_used_step IS NULL OR two_factor_last_used_step < $2)`,
-          [user.id, matchedStep],
-        );
-        if ((claimed.rowCount ?? 0) > 0) {
-          confirmed = true;
-        }
-      }
-      if (!confirmed) {
-        // Sai mã OTP khi tắt 2 lớp cũng cộng vào bộ đếm khóa cấp người dùng như bước đăng nhập.
-        const locked = await this.recordOtpFailure(user.id);
-        if (locked) {
-          await this.revokeAllSessions(user.id);
-        }
-      }
-    } else if (dto.currentPassword) {
-      const cleanCurrentPassword = normalizePasswordInput(dto.currentPassword);
+    const hasPasswordInput = Boolean(dto.currentPassword && dto.currentPassword.length > 0);
+    const cleanCode = dto.code ? dto.code.replace(/[\s-]/g, "").toUpperCase() : "";
+
+    if (hasPasswordInput) {
+      const cleanCurrentPassword = normalizePasswordInput(dto.currentPassword!);
       if (await bcrypt.compare(cleanCurrentPassword, row.password_hash)) {
         confirmed = true;
-      } else {
+      } else if (!cleanCode) {
         const { rows: failRows } = await this.db.query<{ locked: boolean }>(
           `UPDATE users
            SET failed_login_count = CASE WHEN failed_login_count + 1 >= $2 THEN 0 ELSE failed_login_count + 1 END,
@@ -1682,21 +1663,67 @@ export class AuthService {
         }
       }
     }
-    if (!confirmed) {
-      await this.audit.write({ ip, user }, { action: "Tắt xác thực 2 lớp thất bại", object: user.username });
-      throw badRequest("Vui lòng nhập đúng mật khẩu hiện tại hoặc mã OTP 6 chữ số chưa sử dụng để tắt xác thực 2 lớp.");
+
+    if (!confirmed && cleanCode && row.two_factor_secret) {
+      if (/^[0-9]{6}$/.test(cleanCode)) {
+        const opened = this.openTotpSecret(user.id, row.two_factor_secret);
+        const matchedStep = opened ? this.matchTotpStep(opened.secret, cleanCode, 1) : null;
+        const lastUsedStep =
+          row.two_factor_last_used_step !== null && row.two_factor_last_used_step !== undefined
+            ? Number(row.two_factor_last_used_step)
+            : null;
+        if (matchedStep !== null && (lastUsedStep === null || matchedStep > lastUsedStep)) {
+          const claimed = await this.db.query(
+            `UPDATE users
+             SET two_factor_last_used_step = $2
+             WHERE id = $1 AND (two_factor_last_used_step IS NULL OR two_factor_last_used_step < $2)`,
+            [user.id, matchedStep],
+          );
+          if ((claimed.rowCount ?? 0) > 0) {
+            confirmed = true;
+          }
+        }
+      } else if (/^[0-9A-Z]{8}$/.test(cleanCode)) {
+        const consumedBackup = await this.db.query(
+          `UPDATE users
+           SET two_factor_backup_codes = two_factor_backup_codes - $2::text[]
+           WHERE id = $1 AND two_factor_enabled = true AND two_factor_backup_codes ?| $2::text[]`,
+          [user.id, this.backupCodeCandidates(user.id, cleanCode)],
+        );
+        if ((consumedBackup.rowCount ?? 0) > 0) {
+          confirmed = true;
+        }
+      }
+
+      if (!confirmed) {
+        const locked = await this.recordOtpFailure(user.id);
+        if (locked) {
+          await this.revokeAllSessions(user.id);
+        }
+      }
     }
 
-    await this.db.query(
-      `UPDATE users
-       SET two_factor_enabled = false,
-           two_factor_secret = NULL,
-           two_factor_pending_secret = NULL,
-           two_factor_backup_codes = '[]'::jsonb,
-           two_factor_failed_count = 0
-       WHERE id = $1`,
-      [user.id],
-    );
+    if (!confirmed) {
+      await this.audit.write({ ip, user }, { action: "Tắt xác thực 2 lớp thất bại", object: user.username });
+      throw badRequest(
+        "Vui lòng nhập đúng mật khẩu hiện tại, mã OTP 6 chữ số chưa sử dụng hoặc mã dự phòng để tắt xác thực 2 lớp.",
+      );
+    }
+
+    await Promise.all([
+      this.db.query(
+        `UPDATE users
+         SET two_factor_enabled = false,
+             two_factor_secret = NULL,
+             two_factor_pending_secret = NULL,
+             two_factor_backup_codes = '[]'::jsonb,
+             two_factor_last_used_step = NULL,
+             two_factor_failed_count = 0
+         WHERE id = $1`,
+        [user.id],
+      ),
+      this.db.query("DELETE FROM auth_otp_challenges WHERE user_id = $1", [user.id]),
+    ]);
     await this.audit.write({ ip, user }, { action: "Tắt xác thực 2 lớp (OTP)", object: user.username });
     return { ok: true as const };
   }

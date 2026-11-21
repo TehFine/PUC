@@ -187,6 +187,12 @@ export default function Registrations({
     kind: "approve" | "reject";
     row: PasswordResetRequest;
   } | null>(null);
+  const [issuedTempPassword, setIssuedTempPassword] = useState<{
+    username: string;
+    fullName: string;
+    temporaryPassword: string;
+  } | null>(null);
+  const [copiedTempPassword, setCopiedTempPassword] = useState(false);
 
   const reject = async (row: Registration) => {
     setRejectingBusy(true);
@@ -206,9 +212,21 @@ export default function Registrations({
   const approvePasswordReset = async (row: PasswordResetRequest) => {
     setResetBusyId(row.id);
     try {
-      await api.post(`/registrations/password-resets/${row.id}/approve`);
-      toast.success(`Đã duyệt cấp lại mật khẩu cho tài khoản ${row.username}.`);
+      const res = await api.post<{
+        id: number;
+        userId: number;
+        status: string;
+        username: string;
+        temporaryPassword: string;
+      }>(`/registrations/password-resets/${row.id}/approve`);
       setConfirmResetAction(null);
+      setCopiedTempPassword(false);
+      setIssuedTempPassword({
+        username: res.username || row.username,
+        fullName: row.accountName || row.fullName,
+        temporaryPassword: res.temporaryPassword,
+      });
+      toast.success(`Đã cấp mật khẩu tạm thời cho tài khoản ${row.username}.`);
       notifyCountsChanged();
       await load();
     } catch (err) {
@@ -494,6 +512,69 @@ export default function Registrations({
             if (resetBusyId === null) setConfirmResetAction(null);
           }}
         />
+      )}
+
+      {issuedTempPassword && (
+        <Modal
+          title="Mật khẩu tạm thời một lần"
+          onClose={() => setIssuedTempPassword(null)}
+          width={460}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(issuedTempPassword.temporaryPassword)
+                    .then(() => {
+                      setCopiedTempPassword(true);
+                      window.setTimeout(() => setCopiedTempPassword(false), 2400);
+                    })
+                    .catch(() => undefined);
+                }}
+              >
+                {copiedTempPassword ? "Đã sao chép mật khẩu" : "Sao chép mật khẩu"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setIssuedTempPassword(null)}
+              >
+                Đã ghi lại, đóng
+              </button>
+            </>
+          }
+        >
+          <p style={{ fontSize: 13.5, color: "var(--text-secondary)", margin: "0 0 12px", lineHeight: 1.5 }}>
+            Cung cấp mật khẩu tạm thời dưới đây cho <strong>{issuedTempPassword.fullName}</strong> (tài khoản{" "}
+            <strong style={{ fontVariantNumeric: "tabular-nums" }}>{issuedTempPassword.username}</strong>) để đăng nhập và đổi sang mật khẩu riêng. Mật khẩu này chỉ hiển thị một lần.
+          </p>
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 6,
+              border: "1px solid #d4d4d2",
+              background: "#f7f7f5",
+              textAlign: "center",
+            }}
+          >
+            <code
+              data-no-translate="true"
+              translate="no"
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                color: "#14372f",
+                fontVariantNumeric: "tabular-nums",
+                userSelect: "all",
+              }}
+            >
+              {issuedTempPassword.temporaryPassword}
+            </code>
+          </div>
+        </Modal>
       )}
     </>
   );

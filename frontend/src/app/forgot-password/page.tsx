@@ -256,13 +256,20 @@ function ForgotPasswordContent() {
           )}
         </div>
 
-        <AuthField id="forgot-fullname" label="Họ và tên chủ hộ">
+        <AuthField
+          id="forgot-fullname"
+          label={mode === "cccd" ? "Họ và tên chủ hộ" : "Họ và tên đăng ký"}
+        >
           <input
             id="forgot-fullname"
             className={`auth-input${isFieldInvalid("name") ? " is-error" : ""}`}
             autoComplete="name"
             maxLength={120}
-            placeholder="Nhập đúng họ tên trên hồ sơ hộ (VD: Nguyễn Văn An)"
+            placeholder={
+              mode === "cccd"
+                ? "Nhập đúng họ tên trên hồ sơ hộ (VD: Nguyễn Văn An)"
+                : "Nhập đúng họ tên tài khoản đăng ký"
+            }
             value={form.fullName}
             disabled={submitting}
             onChange={set("fullName")}

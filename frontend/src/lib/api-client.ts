@@ -107,6 +107,7 @@ function refreshSession(): Promise<boolean> {
 // Các endpoint này tự xử lý 401 (sai mật khẩu, đăng nhập Google, quên mật khẩu…) nên không thử làm mới phiên.
 const NO_REFRESH_PATHS = [
   "/auth/login",
+  "/auth/verify-otp",
   "/auth/google",
   "/auth/register",
   "/auth/forgot-password",

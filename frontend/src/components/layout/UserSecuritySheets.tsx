@@ -107,8 +107,13 @@ export function TwoFactorSecuritySheet({
 
   const handleDisable = async (e: FormEvent) => {
     e.preventDefault();
-    if (!disablePassword.trim() && !disableOtp.trim()) {
-      setErr("Vui lòng nhập mật khẩu hiện tại hoặc mã OTP 6 chữ số để tắt xác thực 2 lớp.");
+    const cleanDisableOtp = disableOtp.replace(/[\s-]/g, "").toUpperCase();
+    if (!disablePassword.trim() && !cleanDisableOtp) {
+      setErr("Vui lòng nhập mật khẩu hiện tại, mã OTP 6 chữ số hoặc mã dự phòng 8 ký tự để tắt xác thực 2 lớp.");
+      return;
+    }
+    if (!disablePassword.trim() && !/^(?:[0-9]{6}|[0-9A-Z]{8})$/.test(cleanDisableOtp)) {
+      setErr("Mã xác nhận phải gồm 6 chữ số OTP hoặc 8 ký tự mã dự phòng.");
       return;
     }
     setBusy(true);
@@ -116,7 +121,7 @@ export function TwoFactorSecuritySheet({
     try {
       await api.post("/auth/2fa/disable", {
         ...(disablePassword.trim() ? { currentPassword: disablePassword } : {}),
-        ...(disableOtp.trim() ? { code: disableOtp.trim() } : {}),
+        ...(cleanDisableOtp ? { code: cleanDisableOtp } : {}),
       });
       setDisablePassword("");
       setDisableOtp("");
@@ -194,6 +199,8 @@ export function TwoFactorSecuritySheet({
               {backupCodes.map((c) => (
                 <code
                   key={c}
+                  data-no-translate="true"
+                  translate="no"
                   style={{
                     padding: "6px 8px",
                     background: "#ffffff",
@@ -210,9 +217,14 @@ export function TwoFactorSecuritySheet({
                 </code>
               ))}
             </div>
-            <button type="button" className="pt-btn pt-btn-ghost" onClick={() => void copyBackupCodes()}>
-              <span>{copiedCodes ? "Đã sao chép danh sách mã" : "Sao chép tất cả mã dự phòng"}</span>
-            </button>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+              <button type="button" className="pt-btn pt-btn-ghost" onClick={() => void copyBackupCodes()}>
+                <span>{copiedCodes ? "Đã sao chép danh sách mã" : "Sao chép mã dự phòng"}</span>
+              </button>
+              <ModalDismissButton className="pt-btn pt-btn-primary" onFallbackClose={onClose}>
+                Đã lưu mã, hoàn tất
+              </ModalDismissButton>
+            </div>
           </div>
         )}
 
@@ -248,6 +260,8 @@ export function TwoFactorSecuritySheet({
                 Quét mã QR bằng ứng dụng Authenticator hoặc nhập khóa thủ công:
               </div>
               <code
+                data-no-translate="true"
+                translate="no"
                 style={{
                   display: "inline-block",
                   padding: "4px 8px",
@@ -337,15 +351,19 @@ export function TwoFactorSecuritySheet({
                 onChange={(e) => setDisablePassword(e.target.value)}
               />
             </Field>
-            <Field label="Hoặc mã OTP 6 chữ số hiện tại" htmlFor="um-2fa-disable-code">
+            <Field label="Hoặc mã OTP 6 chữ số / mã dự phòng 8 ký tự" htmlFor="um-2fa-disable-code">
               <input
                 id="um-2fa-disable-code"
                 type="text"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder="123456"
+                inputMode="text"
+                autoComplete="one-time-code"
+                maxLength={12}
+                placeholder="123456 hoặc ABCD-2345"
                 value={disableOtp}
-                onChange={(e) => setDisableOtp(e.target.value)}
+                onChange={(e) => {
+                  setDisableOtp(e.target.value);
+                  if (err) setErr(null);
+                }}
                 style={{ fontVariantNumeric: "tabular-nums" }}
               />
             </Field>

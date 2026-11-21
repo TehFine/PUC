@@ -134,7 +134,7 @@ export class RegistrationsService {
     );
     const scopedResets = resetRes.rows.filter((row) => {
       if (row.role !== "farmer") {
-        return isStaffInCuneCoopScope(user, false);
+        return isStaffInCuneCoopScope(user, true);
       }
       return isStaffInParcelScope(user, { villageId: row.village_id, villageName: row.village_name }, officerVillageName);
     });
@@ -188,7 +188,7 @@ export class RegistrationsService {
 
     const scoped = rows.filter((row) => {
       if (row.role !== "farmer") {
-        return isStaffInCuneCoopScope(user, false);
+        return isStaffInCuneCoopScope(user, true);
       }
       return isStaffInParcelScope(user, { villageId: row.village_id, villageName: row.village_name }, officerVillageName);
     });
@@ -382,13 +382,15 @@ export class RegistrationsService {
           throw forbidden(OUT_OF_SCOPE_MSG);
         }
       } else {
-        if (!isStaffInCuneCoopScope(user, false)) {
+        if (!isStaffInCuneCoopScope(user, true)) {
           throw forbidden(OUT_OF_SCOPE_MSG);
         }
-        const targetCoop = (targetUser.coop_code || "HTX-CUNE").trim().toUpperCase();
-        const actorCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
-        if (targetCoop !== actorCoop) {
-          throw forbidden(OUT_OF_SCOPE_MSG);
+        if (targetUser.role !== "enterprise" && targetUser.role !== "inspector") {
+          const targetCoop = (targetUser.coop_code || "HTX-CUNE").trim().toUpperCase();
+          const actorCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
+          if (targetCoop !== actorCoop) {
+            throw forbidden(OUT_OF_SCOPE_MSG);
+          }
         }
       }
 
@@ -399,6 +401,7 @@ export class RegistrationsService {
              email = NULL,
              token_version = token_version + 1,
              failed_login_count = 0,
+             two_factor_failed_count = 0,
              locked_until = NULL,
              cccd_reset_failed_count = 0,
              cccd_reset_locked_until = NULL,
@@ -477,7 +480,7 @@ export class RegistrationsService {
       if (!isStaffInParcelScope(user, { villageId: target.village_id, villageName: target.village_name }, officerVillageName)) {
         throw forbidden(OUT_OF_SCOPE_MSG);
       }
-    } else if (!isStaffInCuneCoopScope(user, false)) {
+    } else if (!isStaffInCuneCoopScope(user, true)) {
       throw forbidden(OUT_OF_SCOPE_MSG);
     }
 

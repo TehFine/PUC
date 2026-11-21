@@ -19,6 +19,7 @@ import {
 import { type ChangeEvent, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasPendingServerLogout, useAuth } from "@/components/auth/AuthProvider";
 import { WORKSPACE_ACTIVE_SESSION_KEY } from "@/components/landing/AutoEnter";
+import { ActiveSessionsSheet, TwoFactorSecuritySheet } from "@/components/layout/UserSecuritySheets";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { ConfirmDialog } from "@/components/ui/Modal";
 import OfflineSyncBar from "@/components/ui/OfflineSyncBar";
@@ -187,29 +188,35 @@ function resolveNotificationTarget(item: AppNotification): { tab: PortalTabId; a
 }
 
 function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onClose: () => void }) {
+  const { t } = usePortalLang();
   const sheetClose = useSheetClose();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 8) {
-      setError("Mật khẩu mới phải có tối thiểu 8 ký tự.");
+      setError(t("Mật khẩu mới phải có tối thiểu 8 ký tự."));
       return;
     }
     if (!/[A-Za-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-      setError("Mật khẩu mới cần bao gồm cả chữ cái và chữ số.");
+      setError(t("Mật khẩu mới cần bao gồm cả chữ cái và chữ số."));
+      return;
+    }
+    if (new TextEncoder().encode(newPassword.normalize("NFC")).length > 72) {
+      setError(t("Mật khẩu mới tối đa 72 byte UTF-8."));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Xác nhận mật khẩu mới chưa khớp.");
+      setError(t("Xác nhận mật khẩu mới chưa khớp."));
       return;
     }
     if (newPassword === currentPassword) {
-      setError("Mật khẩu mới phải khác mật khẩu hiện tại.");
+      setError(t("Mật khẩu mới phải khác mật khẩu hiện tại."));
       return;
     }
     setSaving(true);
@@ -218,59 +225,90 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
       await api.post("/auth/change-password", { currentPassword, newPassword });
       onSuccess();
     } catch (err) {
-      setError(errorMessage(err, "Không đổi được mật khẩu. Vui lòng kiểm tra lại mật khẩu hiện tại."));
+      setError(errorMessage(err, t("Không đổi được mật khẩu. Vui lòng kiểm tra lại mật khẩu hiện tại.")));
       setSaving(false);
     }
   };
 
+  const inputType = showPassword ? "text" : "password";
+
   return (
-    <form className="pt-form" onSubmit={submit}>
-      <Field label="Mật khẩu hiện tại" htmlFor="cp-current">
+    <form className="pt-form" onSubmit={submit} noValidate>
+      <Field label={t("Mật khẩu hiện tại")} htmlFor="cp-current">
         <input
           id="cp-current"
-          type="password"
+          type={inputType}
           autoComplete="current-password"
           value={currentPassword}
-          onChange={(e) => setCurrentPassword(e.target.value)}
+          onChange={(e) => {
+            setCurrentPassword(e.target.value);
+            if (error) setError(null);
+          }}
           required
         />
       </Field>
-      <Field label="Mật khẩu mới (tối thiểu 8 ký tự, gồm chữ và số)" htmlFor="cp-new">
+      <Field label={t("Mật khẩu mới (tối thiểu 8 ký tự, gồm chữ và số)")} htmlFor="cp-new">
         <input
           id="cp-new"
-          type="password"
+          type={inputType}
           autoComplete="new-password"
           minLength={8}
           value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
+          onChange={(e) => {
+            setNewPassword(e.target.value);
+            if (error) setError(null);
+          }}
           required
         />
       </Field>
-      <Field label="Nhập lại mật khẩu mới" htmlFor="cp-confirm">
+      <Field label={t("Nhập lại mật khẩu mới")} htmlFor="cp-confirm">
         <input
           id="cp-confirm"
-          type="password"
+          type={inputType}
           autoComplete="new-password"
           minLength={8}
           value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
+          onChange={(e) => {
+            setConfirmPassword(e.target.value);
+            if (error) setError(null);
+          }}
           required
         />
       </Field>
-      <p className="pt-hint">Sau khi đổi mật khẩu thành công, hệ thống sẽ đăng xuất để bạn đăng nhập lại bằng mật khẩu mới.</p>
+      <label
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          fontSize: 13,
+          color: "#475569",
+          cursor: "pointer",
+          userSelect: "none",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={showPassword}
+          onChange={(e) => setShowPassword(e.target.checked)}
+        />
+        <span>{t("Hiện mật khẩu")}</span>
+      </label>
+      <p className="pt-hint">
+        {t("Sau khi đổi mật khẩu thành công, hệ thống sẽ đăng xuất để bạn đăng nhập lại bằng mật khẩu mới.")}
+      </p>
       <InlineError message={error} />
       <div className="pt-form-actions">
         <button type="button" className="pt-btn pt-btn-ghost" onClick={sheetClose ?? onClose} disabled={saving}>
-          Hủy
+          {t("Hủy")}
         </button>
         <BusyButton
           type="submit"
           className="pt-btn pt-btn-primary"
           busy={saving}
-          busyLabel="Đang cập nhật…"
+          busyLabel={t("Đang cập nhật…")}
           disabled={!currentPassword || !newPassword || !confirmPassword}
         >
-          Lưu mật khẩu mới
+          {t("Lưu mật khẩu mới")}
         </BusyButton>
       </div>
     </form>
@@ -309,7 +347,7 @@ function resolveClientPortalTab(serverTab: PortalTabId, userId?: number | null):
 function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const router = useRouter();
   const { lang, setLang, t } = usePortalLang();
-  const { status, session, logout, updateProfile } = useAuth();
+  const { status, session, logout, updateProfile, refreshSession } = useAuth();
   const { data: overview } = usePortal<PortalOverview>("overview");
   const { data: profile } = usePortal<PortalProfile>("profile");
   const notifications = useSharedQuery<NotificationList>(
@@ -332,6 +370,8 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const [navWheelOpen, setNavWheelOpen] = usePersistedState("portal:nav-open", false);
   const [notifOpen, setNotifOpen] = usePersistedState("portal:notif-open", false);
   const [passwordOpen, setPasswordOpen] = usePersistedState("portal:password-open", false);
+  const [twoFactorOpen, setTwoFactorOpen] = usePersistedState("portal:2fa-open", false);
+  const [sessionsOpen, setSessionsOpen] = usePersistedState("portal:sessions-open", false);
   const [editAccountOpen, setEditAccountOpen] = usePersistedState("portal:edit-account-open", false);
   const [accountNameInput, setAccountNameInput] = useState("");
   const [accountEmailInput, setAccountEmailInput] = useState("");
@@ -1274,6 +1314,38 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               <button
                 type="button"
                 className="pt-profile-intro-btn"
+                onClick={() => {
+                  closeProfile();
+                  setTwoFactorOpen(true);
+                }}
+              >
+                <span className="pt-profile-action-icon" aria-hidden="true">
+                  <RadialPngIcon src="/face-id.png" size={22} />
+                </span>
+                <span className="pt-profile-action-title">
+                  {session?.user.twoFactorEnabled ? t("Xác thực 2 lớp (OTP) - Đang bật") : t("Xác thực 2 lớp (OTP)")}
+                </span>
+                <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
+              </button>
+
+              <button
+                type="button"
+                className="pt-profile-intro-btn"
+                onClick={() => {
+                  closeProfile();
+                  setSessionsOpen(true);
+                }}
+              >
+                <span className="pt-profile-action-icon" aria-hidden="true">
+                  <RadialPngIcon src="/signal.png" size={22} />
+                </span>
+                <span className="pt-profile-action-title">{t("Phiên đăng nhập và đăng xuất từ xa")}</span>
+                <DetailArrowIcon size={22} className="pt-profile-intro-arrow" />
+              </button>
+
+              <button
+                type="button"
+                className="pt-profile-intro-btn"
                 onClick={openEditAccount}
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">
@@ -1513,6 +1585,21 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         </Sheet>
       )}
 
+      {twoFactorOpen && (
+        <TwoFactorSecuritySheet
+          enabled={Boolean(session?.user.twoFactorEnabled)}
+          onClose={() => setTwoFactorOpen(false)}
+          onChanged={refreshSession}
+        />
+      )}
+
+      {sessionsOpen && (
+        <ActiveSessionsSheet
+          onClose={() => setSessionsOpen(false)}
+          onRevokedCurrent={logout}
+        />
+      )}
+
       {passwordOpen && (
         <Sheet
           variant="drawer"
@@ -1522,7 +1609,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         >
           <ChangePasswordForm
             onSuccess={() => {
-              toast.success("Đã đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
+              toast.success(t("Đã đổi mật khẩu thành công. Vui lòng đăng nhập lại."));
               setPasswordOpen(false);
               void logout();
             }}

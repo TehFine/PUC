@@ -17,6 +17,7 @@ function ChangePasswordFormContent({
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +33,10 @@ function ChangePasswordFormContent({
     }
     if (!/[A-Za-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
       setError("Mật khẩu mới cần bao gồm cả chữ cái và chữ số.");
+      return;
+    }
+    if (new TextEncoder().encode(newPassword.normalize("NFC")).length > 72) {
+      setError("Mật khẩu mới tối đa 72 byte UTF-8.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -57,40 +62,69 @@ function ChangePasswordFormContent({
     }
   };
 
+  const inputType = showPassword ? "text" : "password";
+
   return (
     <form className="pt-form" onSubmit={(e) => void submit(e)} noValidate>
       <Field label="Mật khẩu hiện tại" htmlFor="admin-cp-current">
         <input
           id="admin-cp-current"
-          type="password"
+          type={inputType}
           autoComplete="current-password"
           value={currentPassword}
-          onChange={(e) => setCurrentPassword(e.target.value)}
+          onChange={(e) => {
+            setCurrentPassword(e.target.value);
+            if (error) setError(null);
+          }}
           required
         />
       </Field>
       <Field label="Mật khẩu mới (tối thiểu 8 ký tự, gồm chữ và số)" htmlFor="admin-cp-new">
         <input
           id="admin-cp-new"
-          type="password"
+          type={inputType}
           autoComplete="new-password"
           minLength={8}
           value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
+          onChange={(e) => {
+            setNewPassword(e.target.value);
+            if (error) setError(null);
+          }}
           required
         />
       </Field>
       <Field label="Nhập lại mật khẩu mới" htmlFor="admin-cp-confirm">
         <input
           id="admin-cp-confirm"
-          type="password"
+          type={inputType}
           autoComplete="new-password"
           minLength={8}
           value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
+          onChange={(e) => {
+            setConfirmPassword(e.target.value);
+            if (error) setError(null);
+          }}
           required
         />
       </Field>
+      <label
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          fontSize: 13,
+          color: "#475569",
+          cursor: "pointer",
+          userSelect: "none",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={showPassword}
+          onChange={(e) => setShowPassword(e.target.checked)}
+        />
+        <span>Hiện mật khẩu</span>
+      </label>
       <p className="pt-hint">
         Sau khi đổi mật khẩu thành công, hệ thống sẽ đăng xuất để bạn đăng nhập lại bằng mật khẩu mới.
       </p>

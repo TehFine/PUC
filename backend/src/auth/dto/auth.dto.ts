@@ -247,7 +247,7 @@ export class EnableTwoFactorDto {
   currentPassword!: string;
 }
 
-/** Tắt xác thực 2 lớp (yêu cầu mật khẩu hiện tại hoặc mã OTP 6 chữ số đang hiệu lực). */
+/** Tắt xác thực 2 lớp (yêu cầu mật khẩu hiện tại, mã OTP 6 chữ số hoặc mã dự phòng 8 ký tự). */
 export class DisableTwoFactorDto {
   @IsOptional()
   @NormalizePassword()
@@ -256,9 +256,13 @@ export class DisableTwoFactorDto {
   currentPassword?: string;
 
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.replace(/\s+/g, "") : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.replace(/[\s-]/g, "").toUpperCase() : value,
+  )
   @IsString()
-  @Matches(/^[0-9]{6}$/, { message: "Mã OTP gồm đúng 6 chữ số." })
+  @Matches(/^(?:[0-9]{6}|[0-9A-Z]{8})$/, {
+    message: "Vui lòng nhập mã OTP 6 chữ số hoặc mã dự phòng 8 ký tự.",
+  })
   code?: string;
 }
 

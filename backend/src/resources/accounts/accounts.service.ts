@@ -10,9 +10,10 @@ import { DatabaseService } from "../../database/database.service";
 const ADMIN_MUTATION_ADVISORY_LOCK = 73829104;
 
 function roleRank(role?: string | null): number {
-  if (role === "admin") return 3;
-  if (role === "htx_head") return 2;
-  if (role === "support_specialist" || role === "htx_deputy") return 1;
+  if (role === "admin") return 4;
+  if (role === "htx_head") return 3;
+  if (role === "support_specialist") return 2;
+  if (role === "htx_deputy") return 1;
   return 0;
 }
 
@@ -63,14 +64,19 @@ export class AccountsService extends BaseCrudService {
 
     let existing: { role: string; status: string; household_id: number | null } | undefined;
     if (context.method === "PATCH" && context.id !== undefined) {
-      if (context.id === context.user.id && (next.role !== undefined || next.status !== undefined)) {
-        throw forbidden("Không thể tự đổi vai trò hoặc khóa chính mình.");
-      }
       const curRes = await this.db.query<{ role: string; status: string; household_id: number | null }>(
         "SELECT role, status, household_id FROM users WHERE id = $1",
         [context.id],
       );
       existing = curRes.rows[0];
+      if (context.id === context.user.id && existing) {
+        if (
+          (next.role !== undefined && next.role !== existing.role) ||
+          (next.status !== undefined && next.status !== existing.status)
+        ) {
+          throw forbidden("Không thể tự đổi vai trò hoặc khóa chính mình.");
+        }
+      }
     }
 
     if (typeof next.username === "string") {
@@ -86,7 +92,10 @@ export class AccountsService extends BaseCrudService {
     }
 
     const effRole = String(next.role ?? existing?.role ?? "");
-    assertRoleHierarchy(context.user.role, existing?.role ?? null, typeof next.role === "string" ? next.role : null);
+    const isSelfPatch = context.method === "PATCH" && context.id !== undefined && Number(context.id) === Number(context.user.id);
+    if (!isSelfPatch) {
+      assertRoleHierarchy(context.user.role, existing?.role ?? null, typeof next.role === "string" ? next.role : null);
+    }
     if (next.householdId !== undefined && next.householdId !== null && effRole !== "farmer") {
       throw badRequest("Chỉ tài khoản nông hộ mới được liên kết với hộ canh tác.");
     }
@@ -188,6 +197,7 @@ export class AccountsService extends BaseCrudService {
   protected override async afterWrite(userId: number, input: Record<string, unknown>) {
     if (
       input.status === "locked" ||
+      input.status === "active" ||
       input.passwordHash !== undefined ||
       input.role !== undefined ||
       input.villageId !== undefined ||
@@ -199,13 +209,39 @@ export class AccountsService extends BaseCrudService {
       input.username !== undefined ||
       input.email !== undefined
     ) {
-      await Promise.all([
-        this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]),
-        this.db.query(
-          "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = $1 AND revoked_at IS NULL",
-          [userId],
-        ),
-      ]);
+      const shouldUnlockCounters = input.passwordHash !== undefined || input.status === "active";
+      const shouldRevokeSessions = input.status !== "active" || input.passwordHash !== undefined || input.role !== undefined || input.username !== undefined || input.email !== undefined || input.villageId !== undefined || input.householdId !== undefined || input.enterpriseId !== undefined || input.assignedCommune !== undefined || input.assignedRegion !== undefined || input.coopCode !== undefined;
+
+      const tasks: Promise<unknown>[] = [];
+      if (shouldUnlockCounters) {
+        tasks.push(
+          this.db.query(
+            `UPDATE users
+             SET failed_login_count = 0,
+                 locked_until = NULL,
+                 two_factor_failed_count = 0,
+                 cccd_reset_failed_count = 0,
+                 cccd_reset_locked_until = NULL
+             WHERE id = $1`,
+            [userId],
+          ),
+        );
+      }
+      if (input.passwordHash !== undefined) {
+        tasks.push(
+          this.db.query("DELETE FROM password_reset_requests WHERE user_id = $1 AND status = 'pending'", [userId]),
+        );
+      }
+      if (shouldRevokeSessions) {
+        tasks.push(
+          this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]),
+          this.db.query(
+            "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = $1 AND revoked_at IS NULL",
+            [userId],
+          ),
+        );
+      }
+      await Promise.all(tasks);
     }
   }
 
@@ -256,8 +292,16 @@ export class AccountsService extends BaseCrudService {
              two_factor_secret = NULL,
              two_factor_pending_secret = NULL,
              two_factor_backup_codes = '[]'::jsonb,
+             two_factor_last_used_step = NULL,
+             two_factor_failed_count = 0,
+             failed_login_count = 0,
+             locked_until = NULL,
              token_version = token_version + 1
          WHERE id = $1`,
+        [targetUserId],
+      ),
+      this.db.query(
+        "DELETE FROM auth_otp_challenges WHERE user_id = $1",
         [targetUserId],
       ),
       this.db.query(

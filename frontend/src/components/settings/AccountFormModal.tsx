@@ -39,6 +39,7 @@ export default function AccountFormModal({
   const [assignedCommune, setAssignedCommune] = useState(initial?.assignedCommune ?? "Xã Cư Né");
   const [assignedRegion, setAssignedRegion] = useState(initial?.assignedRegion ?? "Tỉnh Đắk Lắk");
   const [coopCode, setCoopCode] = useState(initial?.coopCode ?? "HTX-CUNE");
+  const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const { run, pending, error } = useMutation(async () => {
@@ -57,8 +58,8 @@ export default function AccountFormModal({
         role === "inspector" && assignedRegion.trim() ? assignedRegion.trim() : null,
       coopCode: coopCode.trim() ? coopCode.trim().toUpperCase() : "HTX-CUNE",
     };
-    if (password.trim()) {
-      body.password = password.trim();
+    if (password.length > 0) {
+      body.password = password;
     }
     return initial ? api.patch(`/accounts/${initial.id}`, body) : api.post("/accounts", body);
   });
@@ -68,14 +69,17 @@ export default function AccountFormModal({
       return setLocalError("Vui lòng nhập họ tên và tên đăng nhập.");
     }
     if (!/^[0-9A-Za-z._-]{3,64}$/.test(username.trim())) {
-      return setLocalError("Tên đăng nhập gồm 3–64 ký tự chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.");
+      return setLocalError("Tên đăng nhập gồm 3 đến 64 ký tự chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.");
     }
-    if (!initial && !password.trim()) {
+    if (!initial && password.length === 0) {
       return setLocalError("Vui lòng nhập mật khẩu khởi tạo cho tài khoản mới.");
     }
-    if (password.trim()) {
-      if (password.trim().length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    if (password.length > 0) {
+      if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
         return setLocalError("Mật khẩu cần tối thiểu 8 ký tự, bao gồm cả chữ cái và chữ số.");
+      }
+      if (new TextEncoder().encode(password.normalize("NFC")).length > 72) {
+        return setLocalError("Mật khẩu tối đa 72 byte UTF-8.");
       }
     }
     if (role === "enterprise" && !enterpriseId) {
@@ -117,15 +121,36 @@ export default function AccountFormModal({
           maxLength={120}
           placeholder="VD: tenban@gmail.com"
         />
-        <TextField
-          label={initial ? "Đặt lại mật khẩu (để trống nếu giữ nguyên)" : "Mật khẩu khởi tạo"}
-          type="password"
-          required={!initial}
-          value={password}
-          onChange={setPassword}
-          placeholder="Ít nhất 8 ký tự gồm chữ và số"
-          autoComplete="new-password"
-        />
+        <div>
+          <TextField
+            label={initial ? "Đặt lại mật khẩu (để trống nếu giữ nguyên)" : "Mật khẩu khởi tạo"}
+            type={showPassword ? "text" : "password"}
+            required={!initial}
+            value={password}
+            onChange={setPassword}
+            placeholder="Ít nhất 8 ký tự gồm chữ và số"
+            autoComplete="new-password"
+          />
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              marginTop: 5,
+              fontSize: 12,
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              userSelect: "none",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showPassword}
+              onChange={(e) => setShowPassword(e.target.checked)}
+            />
+            <span>Hiện mật khẩu</span>
+          </label>
+        </div>
         <SelectField
           label="Vai trò"
           required
