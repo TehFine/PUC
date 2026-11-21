@@ -660,8 +660,8 @@ function buildInitialPickerItems(options: UseMultiPhotoPickerOptions): MultiMedi
       const fileObj =
         slot.blob && typeof File !== "undefined"
           ? new File([slot.blob], slot.fileName || `anh-${idx + 1}.webp`, {
-              type: slot.mimeType || (slot.isVideo ? "video/mp4" : "image/webp"),
-            })
+            type: slot.mimeType || (slot.isVideo ? "video/mp4" : "image/webp"),
+          })
           : undefined;
       return {
         key: `draft-slot-${idx}-${slot.sha256 ?? slot.fileName}-${Math.random().toString(36).slice(2, 6)}`,
@@ -756,12 +756,12 @@ export function useMultiPhotoPicker(purpose: UploadPurpose, options: UseMultiPho
           const nextList = itemsRef.current.map((it) =>
             it.key === targetKey
               ? {
-                  ...it,
-                  sha256: sha ?? it.sha256,
-                  uploadedId: res.id,
-                  uploadedUrl: res.url,
-                  bgStatus: "uploaded" as const,
-                }
+                ...it,
+                sha256: sha ?? it.sha256,
+                uploadedId: res.id,
+                uploadedUrl: res.url,
+                bgStatus: "uploaded" as const,
+              }
               : it,
           );
           itemsRef.current = nextList;
@@ -1723,7 +1723,10 @@ export function StoredMediaGallery({
   const viewerIndex =
     rawViewerIndex !== null && rawViewerIndex >= 0 && rawViewerIndex < safeUrls.length ? rawViewerIndex : null;
   const carouselTrackRef = useRef<HTMLDivElement | null>(null);
+  const thumbStripRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number>(0);
+  const programmaticTargetRef = useRef<number | null>(null);
+  const programmaticTimerRef = useRef<number>(0);
   const didCarouselDragRef = useRef(false);
   const carouselDragRef = useRef<{
     active: boolean;
@@ -1752,16 +1755,79 @@ export function StoredMediaGallery({
       ? Math.max(0, Math.min(viewerIndex, mediaItems.length - 1))
       : null;
 
-  const scrollToSlide = useCallback((idx: number) => {
-    const track = carouselTrackRef.current;
-    if (!track) return;
-    const clamped = Math.max(0, Math.min(idx, mediaItems.length - 1));
-    setActiveSlide(clamped);
-    const width = track.clientWidth;
-    if (width > 0) {
-      track.scrollTo({ left: clamped * width, behavior: "smooth" });
+  const centerActiveThumb = useCallback((idx: number, instant = false) => {
+    const strip = thumbStripRef.current;
+    if (!strip || strip.scrollWidth <= strip.clientWidth) return;
+    const thumb = strip.children[idx] as HTMLElement | undefined;
+    if (!thumb) return;
+    const targetLeft = Math.max(
+      0,
+      Math.min(
+        strip.scrollWidth - strip.clientWidth,
+        thumb.offsetLeft - (strip.clientWidth - thumb.offsetWidth) / 2,
+      ),
+    );
+    strip.scrollTo({ left: targetLeft, behavior: instant ? "auto" : "smooth" });
+  }, []);
+
+  const resolveNearestSlideIndex = useCallback((track: HTMLDivElement): number => {
+    const count = track.children.length;
+    if (count === 0) return 0;
+    const scrollLeft = track.scrollLeft;
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < count; i++) {
+      const child = track.children[i] as HTMLElement;
+      const dist = Math.abs(child.offsetLeft - scrollLeft);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
     }
-  }, [mediaItems.length]);
+    return bestIdx;
+  }, []);
+
+  const scrollToSlide = useCallback(
+    (idx: number, instant = false) => {
+      if (mediaItems.length === 0) return;
+      const clamped = Math.max(0, Math.min(idx, mediaItems.length - 1));
+      setActiveSlide(clamped);
+      centerActiveThumb(clamped, instant);
+
+      const track = carouselTrackRef.current;
+      if (!track) return;
+      const slideEl = track.children[clamped] as HTMLElement | undefined;
+      const targetLeft = slideEl ? slideEl.offsetLeft : clamped * track.clientWidth;
+
+      if (programmaticTimerRef.current) {
+        window.clearTimeout(programmaticTimerRef.current);
+        programmaticTimerRef.current = 0;
+      }
+
+      if (instant || Math.abs(track.scrollLeft - targetLeft) < 2) {
+        programmaticTargetRef.current = null;
+        track.scrollTo({ left: targetLeft, behavior: "auto" });
+        return;
+      }
+
+      // Khóa đồng bộ ngược từ sự kiện onScroll trong lúc cuộn mượt để khung hình nhỏ bên dưới không bị nháy qua các hình trung gian.
+      programmaticTargetRef.current = clamped;
+      track.scrollTo({ left: targetLeft, behavior: "smooth" });
+      programmaticTimerRef.current = window.setTimeout(() => {
+        programmaticTargetRef.current = null;
+        programmaticTimerRef.current = 0;
+      }, 420);
+    },
+    [mediaItems.length, centerActiveThumb],
+  );
+
+  const stepSlide = useCallback(
+    (delta: number) => {
+      const base = programmaticTargetRef.current ?? safeSlide;
+      scrollToSlide(base + delta);
+    },
+    [safeSlide, scrollToSlide],
+  );
 
   const handleCarouselScroll = useCallback(() => {
     if (scrollRafRef.current) return;
@@ -1769,14 +1835,33 @@ export function StoredMediaGallery({
       scrollRafRef.current = 0;
       const track = carouselTrackRef.current;
       if (!track || track.clientWidth <= 0) return;
-      const idx = Math.round(track.scrollLeft / track.clientWidth);
-      setActiveSlide((prev) => (prev === idx ? prev : idx));
+
+      const lockedTarget = programmaticTargetRef.current;
+      if (lockedTarget !== null) {
+        const targetEl = track.children[lockedTarget] as HTMLElement | undefined;
+        if (targetEl && Math.abs(track.scrollLeft - targetEl.offsetLeft) <= 2) {
+          programmaticTargetRef.current = null;
+          if (programmaticTimerRef.current) {
+            window.clearTimeout(programmaticTimerRef.current);
+            programmaticTimerRef.current = 0;
+          }
+        }
+        return;
+      }
+
+      const idx = resolveNearestSlideIndex(track);
+      setActiveSlide((prev) => {
+        if (prev === idx) return prev;
+        centerActiveThumb(idx);
+        return idx;
+      });
     });
-  }, []);
+  }, [resolveNearestSlideIndex, centerActiveThumb]);
 
   useEffect(() => {
     return () => {
       if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+      if (programmaticTimerRef.current) window.clearTimeout(programmaticTimerRef.current);
     };
   }, []);
 
@@ -1872,9 +1957,7 @@ export function StoredMediaGallery({
                     ? safeSlide + 1
                     : st.dx >= 40
                       ? safeSlide - 1
-                      : track.clientWidth > 0
-                        ? Math.round(track.scrollLeft / track.clientWidth)
-                        : safeSlide;
+                      : resolveNearestSlideIndex(track);
                 scrollToSlide(target);
                 window.setTimeout(() => {
                   didCarouselDragRef.current = false;
@@ -1929,7 +2012,7 @@ export function StoredMediaGallery({
                 type="button"
                 className="pt-media-carousel-btn"
                 disabled={safeSlide <= 0}
-                onClick={() => scrollToSlide(safeSlide - 1)}
+                onClick={() => stepSlide(-1)}
               >
                 Trước
               </button>
@@ -1937,14 +2020,14 @@ export function StoredMediaGallery({
                 type="button"
                 className="pt-media-carousel-btn"
                 disabled={safeSlide >= mediaItems.length - 1}
-                onClick={() => scrollToSlide(safeSlide + 1)}
+                onClick={() => stepSlide(1)}
               >
                 Tiếp
               </button>
             </div>
           </div>
 
-          <div className="pt-media-thumb-strip" data-no-sheet-drag="true">
+          <div ref={thumbStripRef} className="pt-media-thumb-strip" data-no-sheet-drag="true">
             {mediaItems.map((item, idx) => (
               <button
                 key={item.url}
@@ -2019,7 +2102,7 @@ export function StoredMediaGallery({
           title={altPrefix}
           subtitle={caption}
           onClose={() => setViewerIndex(null)}
-          onIndexChange={(nextIdx) => scrollToSlide(nextIdx)}
+          onIndexChange={(nextIdx) => scrollToSlide(nextIdx, true)}
         />
       )}
     </div>

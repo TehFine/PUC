@@ -97,6 +97,7 @@ export function MediaBottomSheet({
   const backdropRef = useRef<HTMLDivElement>(null);
   const dragZoneRef = useRef<HTMLDivElement>(null);
   const stageInnerRef = useRef<HTMLDivElement>(null);
+  const thumbsRef = useRef<HTMLDivElement>(null);
   const backdropDownRef = useRef(false);
   const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
@@ -114,6 +115,33 @@ export function MediaBottomSheet({
 
   const safeIndex = items.length > 0 ? Math.max(0, Math.min(index, items.length - 1)) : 0;
   const activeItem = items[safeIndex] ?? null;
+
+  useEffect(() => {
+    const strip = thumbsRef.current;
+    if (strip && strip.scrollWidth > strip.clientWidth) {
+      const thumb = strip.children[safeIndex] as HTMLElement | undefined;
+      if (thumb) {
+        const targetLeft = Math.max(
+          0,
+          Math.min(
+            strip.scrollWidth - strip.clientWidth,
+            thumb.offsetLeft - (strip.clientWidth - thumb.offsetWidth) / 2,
+          ),
+        );
+        strip.scrollTo({ left: targetLeft, behavior: "smooth" });
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      for (const neighborIdx of [safeIndex - 1, safeIndex + 1]) {
+        const neighbor = items[neighborIdx];
+        if (neighbor && !neighbor.isVideo) {
+          const preloader = new window.Image();
+          preloader.src = neighbor.url;
+        }
+      }
+    }
+  }, [safeIndex, items]);
 
   const goTo = useCallback(
     (next: number) => {
@@ -361,7 +389,7 @@ export function MediaBottomSheet({
 
           {items.length > 1 && (
             <div className="media-bs-nav-row" data-no-sheet-drag="true">
-              <div className="media-bs-thumbs">
+              <div ref={thumbsRef} className="media-bs-thumbs">
                 {items.map((item, idx) => (
                   <button
                     key={item.url}
@@ -377,7 +405,6 @@ export function MediaBottomSheet({
                       <img
                         src={item.url}
                         alt=""
-                        loading="lazy"
                         decoding="async"
                       />
                     )}

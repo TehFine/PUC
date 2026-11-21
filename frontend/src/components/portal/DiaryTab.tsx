@@ -91,16 +91,7 @@ interface VisualPickerOption {
   searchText: string;
 }
 
-function VisualCatalogPickerSheet({
-  title,
-  hint,
-  searchPlaceholder,
-  options,
-  selectedId,
-  loading,
-  onSelect,
-  onClose,
-}: {
+interface VisualCatalogPickerProps {
   title: string;
   hint: string;
   searchPlaceholder: string;
@@ -109,7 +100,18 @@ function VisualCatalogPickerSheet({
   loading?: boolean;
   onSelect: (id: string) => void;
   onClose: () => void;
-}) {
+}
+
+function VisualCatalogPickerBody({
+  title,
+  hint,
+  searchPlaceholder,
+  options,
+  selectedId,
+  loading,
+  onSelect,
+  onClose,
+}: VisualCatalogPickerProps) {
   const sheetClose = useSheetClose();
   const [query, setQuery] = useState("");
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -154,142 +156,148 @@ function VisualCatalogPickerSheet({
   };
 
   return (
-    <Sheet title={title} className="pt-visual-picker-sheet" onClose={onClose}>
-      <div className="pt-vpicker-body">
-        <p className="pt-vpicker-hint">{hint}</p>
+    <div className="pt-vpicker-body">
+      <p className="pt-vpicker-hint">{hint}</p>
 
-        <div className="pt-vpicker-search-wrap">
-          <Search size={16} className="pt-vpicker-search-icon" aria-hidden="true" />
-          <input
-            type="search"
-            className="pt-vpicker-search-input"
-            placeholder={searchPlaceholder}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label={searchPlaceholder}
-          />
-          {query && (
-            <button
-              type="button"
-              className="pt-vpicker-search-clear"
-              onClick={() => setQuery("")}
-              aria-label="Xóa từ khóa tìm kiếm"
-            >
-              <CloseCircleIcon size={18} />
-            </button>
-          )}
-        </div>
-
-        {loading && options.length === 0 ? (
-          <div className="pt-vpicker-empty">Đang tải danh mục hình ảnh…</div>
-        ) : filtered.length === 0 ? (
-          <div className="pt-vpicker-empty">Không tìm thấy sản phẩm phù hợp với từ khóa.</div>
-        ) : (
-          <div className="pt-vpicker-carousel" data-no-sheet-drag="true">
-            <button
-              type="button"
-              className="pt-vpicker-nav is-prev"
-              onClick={() => scrollByStep(-1)}
-              disabled={!canScrollLeft}
-              aria-label="Cuộn sang trái"
-            >
-              <ChevronLeft size={18} strokeWidth={2.2} aria-hidden="true" />
-            </button>
-
-            <div
-              ref={trackRef}
-              className="pt-vpicker-track"
-              role="listbox"
-              aria-label={title}
-              data-no-sheet-drag="true"
-              onScroll={syncScrollButtons}
-              onWheel={(e) => {
-                const el = trackRef.current;
-                if (!el) return;
-                if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollWidth > el.clientWidth) {
-                  e.preventDefault();
-                  el.scrollLeft += e.deltaY;
-                }
-              }}
-              onMouseDown={(e) => {
-                const el = trackRef.current;
-                if (!el || e.button !== 0) return;
-                dragStateRef.current = {
-                  down: true,
-                  startX: e.clientX,
-                  scrollLeft: el.scrollLeft,
-                  moved: false,
-                };
-              }}
-              onMouseMove={(e) => {
-                const st = dragStateRef.current;
-                const el = trackRef.current;
-                if (!st.down || !el) return;
-                const dx = e.clientX - st.startX;
-                if (Math.abs(dx) > 6) st.moved = true;
-                if (st.moved) {
-                  el.scrollLeft = st.scrollLeft - dx;
-                }
-              }}
-              onMouseUp={() => {
-                dragStateRef.current.down = false;
-              }}
-              onMouseLeave={() => {
-                dragStateRef.current.down = false;
-              }}
-            >
-              {filtered.map((opt) => {
-                const isSelected = opt.id === selectedId;
-                return (
-                  <button
-                    key={opt.id}
-                    ref={isSelected ? selectedCardRef : undefined}
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    className={`pt-vpicker-card ${isSelected ? "is-selected" : ""}`}
-                    onClick={() => {
-                      if (dragStateRef.current.moved) {
-                        dragStateRef.current.moved = false;
-                        return;
-                      }
-                      onSelect(opt.id);
-                      if (sheetClose) sheetClose();
-                      else onClose();
-                    }}
-                  >
-                    <div className="pt-vpicker-img-frame">
-                      <img
-                        src={opt.imageSrc}
-                        alt={opt.name}
-                        loading="lazy"
-                        decoding="async"
-                        draggable={false}
-                        className="pt-vpicker-img"
-                      />
-                    </div>
-                    <div className="pt-vpicker-caption">
-                      <span className="pt-vpicker-name">{opt.name}</span>
-                      <span className={`pt-vpicker-meta tone-${opt.tone}`}>{opt.metaText}</span>
-                      {isSelected && <span className="pt-vpicker-selected-label">Đang chọn</span>}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              className="pt-vpicker-nav is-next"
-              onClick={() => scrollByStep(1)}
-              disabled={!canScrollRight}
-              aria-label="Cuộn sang phải"
-            >
-              <ChevronRight size={18} strokeWidth={2.2} aria-hidden="true" />
-            </button>
-          </div>
+      <div className="pt-vpicker-search-wrap">
+        <Search size={16} className="pt-vpicker-search-icon" aria-hidden="true" />
+        <input
+          type="search"
+          className="pt-vpicker-search-input"
+          placeholder={searchPlaceholder}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label={searchPlaceholder}
+        />
+        {query && (
+          <button
+            type="button"
+            className="pt-vpicker-search-clear"
+            onClick={() => setQuery("")}
+            aria-label="Xóa từ khóa tìm kiếm"
+          >
+            <CloseCircleIcon size={18} />
+          </button>
         )}
       </div>
+
+      {loading && options.length === 0 ? (
+        <div className="pt-vpicker-empty">Đang tải danh mục hình ảnh…</div>
+      ) : filtered.length === 0 ? (
+        <div className="pt-vpicker-empty">Không tìm thấy sản phẩm phù hợp với từ khóa.</div>
+      ) : (
+        <div className="pt-vpicker-carousel" data-no-sheet-drag="true">
+          <button
+            type="button"
+            className="pt-vpicker-nav is-prev"
+            onClick={() => scrollByStep(-1)}
+            disabled={!canScrollLeft}
+            aria-label="Cuộn sang trái"
+          >
+            <ChevronLeft size={18} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+
+          <div
+            ref={trackRef}
+            className="pt-vpicker-track"
+            role="listbox"
+            aria-label={title}
+            data-no-sheet-drag="true"
+            onScroll={syncScrollButtons}
+            onWheel={(e) => {
+              const el = trackRef.current;
+              if (!el) return;
+              if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollWidth > el.clientWidth) {
+                e.preventDefault();
+                el.scrollLeft += e.deltaY;
+              }
+            }}
+            onMouseDown={(e) => {
+              const el = trackRef.current;
+              if (!el || e.button !== 0) return;
+              dragStateRef.current = {
+                down: true,
+                startX: e.clientX,
+                scrollLeft: el.scrollLeft,
+                moved: false,
+              };
+            }}
+            onMouseMove={(e) => {
+              const st = dragStateRef.current;
+              const el = trackRef.current;
+              if (!st.down || !el) return;
+              const dx = e.clientX - st.startX;
+              if (Math.abs(dx) > 6) st.moved = true;
+              if (st.moved) {
+                el.scrollLeft = st.scrollLeft - dx;
+              }
+            }}
+            onMouseUp={() => {
+              dragStateRef.current.down = false;
+            }}
+            onMouseLeave={() => {
+              dragStateRef.current.down = false;
+            }}
+          >
+            {filtered.map((opt) => {
+              const isSelected = opt.id === selectedId;
+              return (
+                <button
+                  key={opt.id}
+                  ref={isSelected ? selectedCardRef : undefined}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  className={`pt-vpicker-card ${isSelected ? "is-selected" : ""}`}
+                  onClick={() => {
+                    if (dragStateRef.current.moved) {
+                      dragStateRef.current.moved = false;
+                      return;
+                    }
+                    onSelect(opt.id);
+                    if (sheetClose) sheetClose();
+                    else onClose();
+                  }}
+                >
+                  <div className="pt-vpicker-img-frame">
+                    <img
+                      src={opt.imageSrc}
+                      alt={opt.name}
+                      loading="lazy"
+                      decoding="async"
+                      draggable={false}
+                      className="pt-vpicker-img"
+                    />
+                  </div>
+                  <div className="pt-vpicker-caption">
+                    <span className="pt-vpicker-name">{opt.name}</span>
+                    <span className={`pt-vpicker-meta tone-${opt.tone}`}>{opt.metaText}</span>
+                    {isSelected && <span className="pt-vpicker-selected-label">Đang chọn</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            className="pt-vpicker-nav is-next"
+            onClick={() => scrollByStep(1)}
+            disabled={!canScrollRight}
+            aria-label="Cuộn sang phải"
+          >
+            <ChevronRight size={18} strokeWidth={2.2} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VisualCatalogPickerSheet(props: VisualCatalogPickerProps) {
+  return (
+    <Sheet title={props.title} className="pt-visual-picker-sheet" onClose={props.onClose}>
+      <VisualCatalogPickerBody {...props} />
     </Sheet>
   );
 }
