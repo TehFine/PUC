@@ -26,7 +26,8 @@ interface RealtimeNotificationPayload {
 type RealtimeStreamMessage =
   | { type: "notification"; item: RealtimeNotificationPayload }
   | { type: "notifications-sync" }
-  | { type: "system-alert"; audience: "all" | "farmer" | "staff"; active: boolean };
+  | { type: "system-alert"; audience: "all" | "farmer" | "staff"; active: boolean }
+  | { type: "data-sync"; tags: string[] };
 
 const STREAM_URL = "/api/notifications/stream";
 const SEEN_IDS_CAP = 120;
@@ -92,6 +93,7 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
 
   if (item.kind === "training" || link.includes("learn") || link.includes("training")) {
     refreshMountedApiQueries("/training");
+    refreshMountedApiQueries("/dashboard");
     invalidateQueries(
       portalPath("training"),
       portalPath("overview"),
@@ -105,6 +107,7 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
   if (item.kind === "schedule" || item.kind === "lab" || link.includes("inspection")) {
     refreshMountedApiQueries("/schedule");
     refreshMountedApiQueries("/testing");
+    refreshMountedApiQueries("/dashboard");
     invalidateQueries(
       portalPath("schedule"),
       portalPath("lab-tests"),
@@ -116,6 +119,7 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
   if (item.kind === "harvest" || link.includes("harvest") || link.includes("stamp")) {
     refreshMountedApiQueries("/harvest");
     refreshMountedApiQueries("/stamps");
+    refreshMountedApiQueries("/dashboard");
     invalidateQueries(
       portalPath("harvest"),
       portalPath("harvest-declarations"),
@@ -180,6 +184,37 @@ function handleStreamData(raw: string): void {
     notifySystemAlertsChanged();
     invalidateQueries(NOTIFICATIONS_PATH);
     refreshMountedApiQueries("/system-alerts");
+    return;
+  }
+
+  if (parsed.type === "data-sync" && Array.isArray(parsed.tags)) {
+    const tagSet = new Set(parsed.tags);
+    if (tagSet.has("dashboard")) {
+      refreshMountedApiQueries("/dashboard");
+      refreshMountedApiQueries("/journal");
+      refreshMountedApiQueries("/spray");
+      refreshMountedApiQueries("/violations");
+      refreshMountedApiQueries("/approvals");
+      refreshMountedApiQueries("/registrations");
+      refreshMountedApiQueries("/harvest");
+      refreshMountedApiQueries("/testing");
+      refreshMountedApiQueries("/schedule");
+      notifyCountsChanged();
+    }
+    if (tagSet.has("plots")) {
+      refreshMountedApiQueries("/plots");
+    }
+    if (tagSet.has("catalog")) {
+      refreshMountedApiQueries("/households");
+      refreshMountedApiQueries("/villages");
+      refreshMountedApiQueries("/pesticides");
+      refreshMountedApiQueries("/fertilizers");
+      refreshMountedApiQueries("/varieties");
+      refreshMountedApiQueries("/training");
+    }
+    if (tagSet.has("news")) {
+      refreshMountedApiQueries("/news");
+    }
   }
 }
 

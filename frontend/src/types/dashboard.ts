@@ -40,6 +40,9 @@ export interface DashboardDailyActivityPoint {
   date: string;
   label: string;
   count: number;
+  journalCount?: number;
+  sprayCount?: number;
+  householdCount?: number;
 }
 
 export interface DashboardViolation {

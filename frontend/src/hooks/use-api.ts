@@ -61,6 +61,21 @@ export function clearApiQueryCache(mode: "logout" | "scope" = "scope"): void {
   }
 }
 
+let mutationRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+const VISIBILITY_STALE_MS = 8_000;
+
+function scheduleLiveMutationRefresh() {
+  markAllApiCacheStale();
+  if (typeof window === "undefined") return;
+  if (mutationRefreshTimer) clearTimeout(mutationRefreshTimer);
+  mutationRefreshTimer = setTimeout(() => {
+    mutationRefreshTimer = null;
+    for (const listener of liveRefreshListeners) {
+      listener();
+    }
+  }, 90);
+}
+
 if (typeof window !== "undefined") {
   const onLogoutOrExpired = () => clearApiQueryCache("logout");
   const onScopeChanged = () => clearApiQueryCache("scope");
@@ -68,17 +83,34 @@ if (typeof window !== "undefined") {
   window.addEventListener(AUTH_EXPIRED_EVENT, onLogoutOrExpired);
   // Đổi tài khoản trong cùng tab (đồng bộ đăng nhập đa tab): dữ liệu của tài khoản cũ không được dùng lại.
   window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, onScopeChanged);
-  // Khi dữ liệu thay đổi: đánh dấu stale (timestamp = 0) thay vì xóa trắng để chuyển tab không nháy skeleton,
-  // đồng thời tự động đối chiếu lại ngay qua If-None-Match (304 Not Modified 0-byte nếu tab đó không đổi).
-  window.addEventListener(DATA_MUTATED_EVENT, markAllApiCacheStale);
+  // Khi dữ liệu thay đổi ở cùng tab hoặc tab khác: đánh dấu stale và làm mới êm mọi truy vấn đang hiển thị.
+  window.addEventListener(DATA_MUTATED_EVENT, scheduleLiveMutationRefresh);
   if (typeof BroadcastChannel !== "undefined") {
     try {
       const bc = new BroadcastChannel(DATA_SYNC_CHANNEL);
-      bc.addEventListener("message", markAllApiCacheStale);
+      bc.addEventListener("message", scheduleLiveMutationRefresh);
     } catch {
       // ignore
     }
   }
+  const onForegroundOrOnline = () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    const now = Date.now();
+    let hasStale = false;
+    for (const entry of apiCache.values()) {
+      if (now - entry.timestamp >= VISIBILITY_STALE_MS) {
+        hasStale = true;
+        break;
+      }
+    }
+    if (hasStale || apiCache.size === 0) {
+      for (const listener of liveRefreshListeners) {
+        listener();
+      }
+    }
+  };
+  document.addEventListener("visibilitychange", onForegroundOrOnline);
+  window.addEventListener("online", onForegroundOrOnline);
 }
 
 /** Xóa bộ nhớ đệm API (gọi tự động sau khi mutation thành công hoặc khi làm mới thủ công). */

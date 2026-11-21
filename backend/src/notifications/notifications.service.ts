@@ -1,6 +1,7 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
 import { can, type Role } from "../auth/permissions";
+import type { CacheTag } from "../common/cache/app-cache.service";
 import { isStaffInCuneCoopScope, isStaffInParcelScope, villageScope } from "../common/crud/village-scope";
 import { camelRows } from "../common/sql/rows";
 import { DatabaseService } from "../database/database.service";
@@ -36,7 +37,8 @@ export interface RealtimeNotificationItem {
 export type RealtimeStreamEvent =
   | { type: "notification"; item: RealtimeNotificationItem }
   | { type: "notifications-sync" }
-  | { type: "system-alert"; audience: "all" | "farmer" | "staff"; active: boolean };
+  | { type: "system-alert"; audience: "all" | "farmer" | "staff"; active: boolean }
+  | { type: "data-sync"; tags: CacheTag[] };
 
 interface ActiveStreamSub {
   role: Role;
@@ -48,14 +50,64 @@ interface ActiveStreamSub {
  * sau khi ghi dữ liệu; lỗi gửi thông báo không được làm hỏng thao tác chính.
  */
 @Injectable()
-export class NotificationsService {
+export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NotificationsService.name);
   private readonly lastSyncedAt = new Map<number, number>();
   private readonly streamsByUser = new Map<number, Set<ActiveStreamSub>>();
+  private unsubscribeCacheTags: (() => void) | null = null;
+  private pendingDataSyncTags = new Set<CacheTag>();
+  private dataSyncTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly SYNC_THROTTLE_MS = 15_000;
   private static readonly MAX_STREAMS_PER_USER = 6;
+  private static readonly DATA_SYNC_DEBOUNCE_MS = 100;
 
   constructor(private readonly db: DatabaseService) {}
+
+  onModuleInit(): void {
+    if (!this.db.cache) return;
+    this.unsubscribeCacheTags = this.db.cache.onTagsInvalidated((tags) => {
+      let hasLiveTag = false;
+      for (const tag of tags) {
+        if (tag === "dashboard" || tag === "plots" || tag === "catalog" || tag === "news") {
+          this.pendingDataSyncTags.add(tag);
+          hasLiveTag = true;
+        }
+      }
+      if (!hasLiveTag || this.streamsByUser.size === 0) return;
+      if (this.dataSyncTimer) return;
+      this.dataSyncTimer = setTimeout(() => {
+        this.dataSyncTimer = null;
+        if (this.pendingDataSyncTags.size === 0) return;
+        const batch = Array.from(this.pendingDataSyncTags);
+        this.pendingDataSyncTags.clear();
+        this.emitStaffDataSync(batch);
+      }, NotificationsService.DATA_SYNC_DEBOUNCE_MS);
+    });
+  }
+
+  onModuleDestroy(): void {
+    this.unsubscribeCacheTags?.();
+    this.unsubscribeCacheTags = null;
+    if (this.dataSyncTimer) {
+      clearTimeout(this.dataSyncTimer);
+      this.dataSyncTimer = null;
+    }
+    this.pendingDataSyncTags.clear();
+  }
+
+  private emitStaffDataSync(tags: CacheTag[]): void {
+    const event: RealtimeStreamEvent = { type: "data-sync", tags };
+    for (const subs of this.streamsByUser.values()) {
+      for (const sub of subs) {
+        if (sub.role === "farmer") continue;
+        try {
+          sub.send(event);
+        } catch {
+          // Bỏ qua nếu kết nối vừa đóng
+        }
+      }
+    }
+  }
 
   /** Đăng ký luồng nhận thông báo thời gian thực (SSE) cho đúng người dùng đang đăng nhập. */
   subscribeUserStream(

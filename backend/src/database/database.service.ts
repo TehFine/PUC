@@ -79,14 +79,16 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
             const p = origClientQuery(...qArgs) as Promise<unknown>;
             return p.then((out) => {
               if (trimmedUpper.startsWith("COMMIT")) {
-                if (client[TX_DIRTY_TAGS] && client[TX_DIRTY_TAGS].size > 0) {
-                  cache.invalidateTags(client[TX_DIRTY_TAGS]);
-                  client[TX_DIRTY_TAGS].clear();
+                const txTags = client[TX_DIRTY_TAGS];
+                client[TX_DIRTY_TAGS] = undefined;
+                if (txTags && txTags.size > 0) {
+                  cache.invalidateTags(txTags, true);
                 }
               } else if (trimmedUpper.startsWith("ROLLBACK")) {
-                client[TX_DIRTY_TAGS]?.clear();
+                client[TX_DIRTY_TAGS] = undefined;
               } else {
-                const tags = cache.onSqlMutation(sql);
+                const inTx = client[TX_DIRTY_TAGS] !== undefined;
+                const tags = cache.onSqlMutation(sql, !inTx);
                 if (tags.length > 0 && client[TX_DIRTY_TAGS]) {
                   for (const t of tags) client[TX_DIRTY_TAGS].add(t);
                 }

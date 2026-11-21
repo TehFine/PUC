@@ -118,7 +118,18 @@ export class DashboardService {
       : hasPlots
         ? !isVillageScoped
           ? `(
-               (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
+               (
+                 SELECT COALESCE(sum(
+                   CASE WHEN COALESCE(hp.p_cnt, 0) > 0 THEN hp.p_cnt ELSE hh.plot_count END
+                 ), 0)::int
+                 FROM hh
+                 LEFT JOIN (
+                   SELECT household_id, count(*)::int AS p_cnt
+                   FROM plots
+                   WHERE household_id IS NOT NULL
+                   GROUP BY household_id
+                 ) hp ON hp.household_id = hh.id
+               ) +
                (SELECT count(*)::int FROM plots WHERE household_id IS NULL) +
                (
                  SELECT COALESCE(sum(v.plot_count), 0)::int
@@ -133,7 +144,18 @@ export class DashboardService {
           : (() => {
               const v0Cond = bindVillage("v0.id");
               return `(
-               (SELECT COALESCE(sum(hh.plot_count), 0)::int FROM hh) +
+               (
+                 SELECT COALESCE(sum(
+                   CASE WHEN COALESCE(hp.p_cnt, 0) > 0 THEN hp.p_cnt ELSE hh.plot_count END
+                 ), 0)::int
+                 FROM hh
+                 LEFT JOIN (
+                   SELECT household_id, count(*)::int AS p_cnt
+                   FROM plots
+                   WHERE household_id IS NOT NULL
+                   GROUP BY household_id
+                 ) hp ON hp.household_id = hh.id
+               ) +
                (
                  SELECT count(*)::int
                  FROM plots p0
@@ -177,7 +199,18 @@ export class DashboardService {
         ? !isVillageScoped
           ? `ROUND(
                (
-                 (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+                 (
+                   SELECT COALESCE(sum(
+                     CASE WHEN COALESCE(hp.p_cnt, 0) > 0 THEN hp.p_area ELSE hh.area_ha END
+                   ), 0)::numeric
+                   FROM hh
+                   LEFT JOIN (
+                     SELECT household_id, count(*)::int AS p_cnt, COALESCE(sum(area_ha), 0)::numeric AS p_area
+                     FROM plots
+                     WHERE household_id IS NOT NULL
+                     GROUP BY household_id
+                   ) hp ON hp.household_id = hh.id
+                 ) +
                  (SELECT COALESCE(sum(area_ha), 0)::numeric FROM plots WHERE household_id IS NULL) +
                  (
                    SELECT COALESCE(sum(v.area_ha), 0)::numeric
@@ -195,7 +228,18 @@ export class DashboardService {
               const v0Cond = bindVillage("v0.id");
               return `ROUND(
                (
-                 (SELECT COALESCE(sum(hh.area_ha), 0)::numeric FROM hh) +
+                 (
+                   SELECT COALESCE(sum(
+                     CASE WHEN COALESCE(hp.p_cnt, 0) > 0 THEN hp.p_area ELSE hh.area_ha END
+                   ), 0)::numeric
+                   FROM hh
+                   LEFT JOIN (
+                     SELECT household_id, count(*)::int AS p_cnt, COALESCE(sum(area_ha), 0)::numeric AS p_area
+                     FROM plots
+                     WHERE household_id IS NOT NULL
+                     GROUP BY household_id
+                   ) hp ON hp.household_id = hh.id
+                 ) +
                  (
                    SELECT COALESCE(sum(p0.area_ha), 0)::numeric
                    FROM plots p0
@@ -286,9 +330,13 @@ export class DashboardService {
     const harvestLotsExpr = canReadHarvest
       ? `(SELECT count(*)::int FROM harvest_lots hl ${harvestLotScope})`
       : "0";
-    const journalLast30Expr = canReadJournal
-      ? `(SELECT count(*)::int FROM journal_entries je JOIN hh ON hh.id = je.household_id WHERE je.entry_on >= ${TODAY_VN_SQL} - 30)`
-      : "0";
+    const journalLast30Expr =
+      canReadJournal || canReadSpray
+        ? `(
+             ${canReadJournal ? `(SELECT count(*)::int FROM journal_entries je JOIN hh ON hh.id = je.household_id WHERE je.entry_on >= ${TODAY_VN_SQL} - 29)` : "0"} +
+             ${canReadSpray ? `(SELECT count(*)::int FROM spray_records sr JOIN hh ON hh.id = sr.household_id WHERE sr.sprayed_on >= ${TODAY_VN_SQL} - 29)` : "0"}
+           )`
+        : "0";
 
     const countsQuery = this.db.query(
       `WITH hh AS (
@@ -310,7 +358,7 @@ export class DashboardService {
          ${harvestTonsExpr} AS harvest_tons,
          ${harvestLotsExpr} AS harvest_lots,
          ${canReadTraining && (isEnterprise || inCoopScope) ? "(SELECT count(*)::int FROM training_courses)" : "0"} AS training_courses,
-         ${journalLast30Expr} AS journal_last_30_days,
+         ${journalLast30Expr} AS "journalLast30Days",
          ${
            canReadHouseholds
              ? `COALESCE(
@@ -330,14 +378,25 @@ export class DashboardService {
     const villagesWhereCond = canReadHouseholds ? villageScope("v.id")(user, villagesParams) : "false";
     const villagesWhere = villagesWhereCond ? `WHERE ${villagesWhereCond}` : "";
 
+    const buildActivityHhWhere = (params: unknown[]) => {
+      if (isEnterprise) {
+        if (!user.enterpriseId) return "WHERE 1 = 0";
+        params.push(user.enterpriseId);
+        return `WHERE EXISTS (
+          SELECT 1 FROM harvest_contributions hc
+          JOIN harvest_lots hl ON hl.id = hc.lot_id
+          WHERE hc.household_id = h.id AND hl.enterprise_id = $${params.length}
+        )`;
+      }
+      const cond = villageScope("h.village_id")(user, params);
+      return cond ? `WHERE ${cond}` : "";
+    };
+
     const trendParams: unknown[] = [];
-    const trendHhCond = canReadJournal ? villageScope("h.village_id")(user, trendParams) : null;
-    const trendHhWhere = trendHhCond ? `WHERE ${trendHhCond}` : "";
+    const trendHhWhere = canReadJournal || canReadSpray ? buildActivityHhWhere(trendParams) : "";
 
     const dailyParams: unknown[] = [];
-    const dailyHhCond =
-      canReadJournal || canReadSpray ? villageScope("h.village_id")(user, dailyParams) : null;
-    const dailyHhWhere = dailyHhCond ? `WHERE ${dailyHhCond}` : "";
+    const dailyHhWhere = canReadJournal || canReadSpray ? buildActivityHhWhere(dailyParams) : "";
 
     const listsParams: unknown[] = [];
     const listsHhCond =
@@ -349,7 +408,15 @@ export class DashboardService {
       countsQuery,
       this.db.query(
         hasPlots
-          ? `WITH up AS (
+          ? `WITH hp AS (
+               SELECT household_id,
+                      COUNT(id)::int AS p_cnt,
+                      COALESCE(SUM(area_ha), 0)::numeric AS p_area
+               FROM plots
+               WHERE household_id IS NOT NULL
+               GROUP BY household_id
+             ),
+             up AS (
                SELECT v0.id AS village_id,
                       COUNT(p.id)::int AS p_cnt,
                       COALESCE(SUM(p.area_ha), 0)::numeric AS p_area
@@ -362,16 +429,26 @@ export class DashboardService {
                     count(h.id) FILTER (WHERE h.status = 'qualified')::int AS qualified,
                     CASE
                       WHEN count(h.id) > 0 OR COALESCE(MAX(up.p_cnt), 0) > 0
-                        THEN (COALESCE(sum(h.plot_count), 0) + COALESCE(MAX(up.p_cnt), 0))::int
+                        THEN (
+                          COALESCE(sum(CASE WHEN COALESCE(hp.p_cnt, 0) > 0 THEN hp.p_cnt ELSE h.plot_count END), 0) +
+                          COALESCE(MAX(up.p_cnt), 0)
+                        )::int
                       ELSE v.plot_count
                     END AS plots,
                     CASE
                       WHEN count(h.id) > 0 OR COALESCE(MAX(up.p_cnt), 0) > 0
-                        THEN ROUND((COALESCE(sum(h.area_ha), 0) + COALESCE(MAX(up.p_area), 0))::numeric, 2)::float8
+                        THEN ROUND(
+                          (
+                            COALESCE(sum(CASE WHEN COALESCE(hp.p_cnt, 0) > 0 THEN hp.p_area ELSE h.area_ha END), 0) +
+                            COALESCE(MAX(up.p_area), 0)
+                          )::numeric,
+                          2
+                        )::float8
                       ELSE v.area_ha::float8
                     END AS area_ha
              FROM villages v
              LEFT JOIN households h ON h.village_id = v.id
+             LEFT JOIN hp ON hp.household_id = h.id
              LEFT JOIN up ON up.village_id = v.id
              ${villagesWhere}
              GROUP BY v.id, v.name, v.household_count, v.plot_count, v.area_ha
@@ -389,21 +466,33 @@ export class DashboardService {
         villagesParams,
       ),
       this.db.query(
-        canReadJournal
-          ? `SELECT to_char(m.month_start, 'YYYY-MM') AS month,
-                    count(j.id)::int AS count
+        canReadJournal || canReadSpray
+          ? `WITH scoped_hh AS (
+               SELECT h.id
+               FROM households h
+               ${trendHhWhere}
+             )
+             SELECT to_char(m.month_start, 'YYYY-MM') AS month,
+                    (${canReadJournal ? "COALESCE(j.cnt, 0)" : "0"} + ${canReadSpray ? "COALESCE(s.cnt, 0)" : "0"})::int AS count
              FROM generate_series(
                date_trunc('month', ${TODAY_VN_SQL}) - interval '5 months',
                date_trunc('month', ${TODAY_VN_SQL}),
                interval '1 month'
              ) AS m(month_start)
              LEFT JOIN (
-               SELECT je.id, je.entry_on
+               SELECT date_trunc('month', je.entry_on) AS m_start, count(*)::int AS cnt
                FROM journal_entries je
-               JOIN households h ON h.id = je.household_id
-               ${trendHhWhere}
-             ) j ON date_trunc('month', j.entry_on) = m.month_start
-             GROUP BY m.month_start
+               JOIN scoped_hh ON scoped_hh.id = je.household_id
+               WHERE je.entry_on >= date_trunc('month', ${TODAY_VN_SQL}) - interval '5 months'
+               GROUP BY 1
+             ) j ON j.m_start = m.month_start
+             LEFT JOIN (
+               SELECT date_trunc('month', sr.sprayed_on) AS m_start, count(*)::int AS cnt
+               FROM spray_records sr
+               JOIN scoped_hh ON scoped_hh.id = sr.household_id
+               WHERE sr.sprayed_on >= date_trunc('month', ${TODAY_VN_SQL}) - interval '5 months'
+               GROUP BY 1
+             ) s ON s.m_start = m.month_start
              ORDER BY m.month_start ASC`
           : `SELECT to_char(m.month_start, 'YYYY-MM') AS month,
                     0 AS count
@@ -421,37 +510,59 @@ export class DashboardService {
                SELECT h.id
                FROM households h
                ${dailyHhWhere}
+             ),
+             raw_events AS (
+               ${
+                 canReadJournal && canReadSpray
+                   ? `SELECT je.entry_on AS day_on, je.household_id, 1::int AS is_journal, 0::int AS is_spray
+                      FROM journal_entries je
+                      JOIN scoped_hh ON scoped_hh.id = je.household_id
+                      WHERE je.entry_on >= ${TODAY_VN_SQL} - 29 AND je.entry_on <= ${TODAY_VN_SQL}
+                      UNION ALL
+                      SELECT sr.sprayed_on AS day_on, sr.household_id, 0::int AS is_journal, 1::int AS is_spray
+                      FROM spray_records sr
+                      JOIN scoped_hh ON scoped_hh.id = sr.household_id
+                      WHERE sr.sprayed_on >= ${TODAY_VN_SQL} - 29 AND sr.sprayed_on <= ${TODAY_VN_SQL}`
+                   : canReadJournal
+                     ? `SELECT je.entry_on AS day_on, je.household_id, 1::int AS is_journal, 0::int AS is_spray
+                        FROM journal_entries je
+                        JOIN scoped_hh ON scoped_hh.id = je.household_id
+                        WHERE je.entry_on >= ${TODAY_VN_SQL} - 29 AND je.entry_on <= ${TODAY_VN_SQL}`
+                     : `SELECT sr.sprayed_on AS day_on, sr.household_id, 0::int AS is_journal, 1::int AS is_spray
+                        FROM spray_records sr
+                        JOIN scoped_hh ON scoped_hh.id = sr.household_id
+                        WHERE sr.sprayed_on >= ${TODAY_VN_SQL} - 29 AND sr.sprayed_on <= ${TODAY_VN_SQL}`
+               }
+             ),
+             agg AS (
+               SELECT day_on,
+                      SUM(is_journal)::int AS j_cnt,
+                      SUM(is_spray)::int AS s_cnt,
+                      COUNT(DISTINCT household_id)::int AS hh_cnt
+               FROM raw_events
+               GROUP BY day_on
              )
              SELECT to_char(d.day_start, 'YYYY-MM-DD') AS date,
                     to_char(d.day_start, 'DD/MM') AS label,
-                    (${canReadJournal ? "COALESCE(j.cnt, 0)" : "0"} + ${canReadSpray ? "COALESCE(s.cnt, 0)" : "0"})::int AS count
+                    (COALESCE(agg.j_cnt, 0) + COALESCE(agg.s_cnt, 0))::int AS count,
+                    COALESCE(agg.j_cnt, 0)::int AS journal_count,
+                    COALESCE(agg.s_cnt, 0)::int AS spray_count,
+                    COALESCE(agg.hh_cnt, 0)::int AS household_count
              FROM generate_series(
-               ${TODAY_VN_SQL} - 6,
+               ${TODAY_VN_SQL} - 29,
                ${TODAY_VN_SQL},
                interval '1 day'
              ) AS d(day_start)
-             LEFT JOIN (
-               SELECT je.entry_on AS day_on, count(*)::int AS cnt
-               FROM journal_entries je
-               JOIN scoped_hh ON scoped_hh.id = je.household_id
-               WHERE je.entry_on >= ${TODAY_VN_SQL} - 6
-                 AND je.entry_on <= ${TODAY_VN_SQL}
-               GROUP BY je.entry_on
-             ) j ON j.day_on = d.day_start::date
-             LEFT JOIN (
-               SELECT sr.sprayed_on AS day_on, count(*)::int AS cnt
-               FROM spray_records sr
-               JOIN scoped_hh ON scoped_hh.id = sr.household_id
-               WHERE sr.sprayed_on >= ${TODAY_VN_SQL} - 6
-                 AND sr.sprayed_on <= ${TODAY_VN_SQL}
-               GROUP BY sr.sprayed_on
-             ) s ON s.day_on = d.day_start::date
+             LEFT JOIN agg ON agg.day_on = d.day_start::date
              ORDER BY d.day_start ASC`
           : `SELECT to_char(d.day_start, 'YYYY-MM-DD') AS date,
                     to_char(d.day_start, 'DD/MM') AS label,
-                    0 AS count
+                    0 AS count,
+                    0 AS journal_count,
+                    0 AS spray_count,
+                    0 AS household_count
              FROM generate_series(
-               ${TODAY_VN_SQL} - 6,
+               ${TODAY_VN_SQL} - 29,
                ${TODAY_VN_SQL},
                interval '1 day'
              ) AS d(day_start)
@@ -481,7 +592,7 @@ export class DashboardService {
                       FROM (
                         SELECT v.id, v.severity, v.title, v.household_label, v.detected_on, v.status
                         FROM violations v
-                        WHERE 1=1 ${listsViolWhere}
+                        WHERE v.status = 'open' ${listsViolWhere}
                         ORDER BY v.detected_on DESC, v.id DESC
                         LIMIT 5
                       ) v

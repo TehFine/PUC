@@ -15,6 +15,10 @@ import {
 export interface InsightPoint {
   label: string;
   value: number;
+  dateIso?: string;
+  journalCount?: number;
+  sprayCount?: number;
+  householdCount?: number;
 }
 
 interface InsightLineChartProps {
@@ -28,9 +32,10 @@ const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffec
 
 const NICE_STEPS = [1, 2, 5, 10, 15, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
 const INTERVAL_COUNT = 7;
+const MORPH_DURATION_MS = 380;
 
 function buildScale(maxValue: number): { yMax: number; ticks: number[] } {
-  const targetTop = Math.max(maxValue * 1.42, INTERVAL_COUNT);
+  const targetTop = Math.max(maxValue * 1.35, INTERVAL_COUNT);
   let chosenStep = NICE_STEPS[NICE_STEPS.length - 1];
   for (const step of NICE_STEPS) {
     if (step * INTERVAL_COUNT >= targetTop) {
@@ -48,38 +53,155 @@ function buildScale(maxValue: number): { yMax: number; ticks: number[] } {
   return { yMax: chosenStep * INTERVAL_COUNT, ticks };
 }
 
+function samplePolyline(arr: readonly number[], t: number): number {
+  if (arr.length === 0) return 0;
+  if (arr.length === 1) return arr[0];
+  const clamped = Math.min(Math.max(t, 0), 1);
+  const pos = clamped * (arr.length - 1);
+  const idx = Math.floor(pos);
+  const frac = pos - idx;
+  if (idx >= arr.length - 1) return arr[arr.length - 1];
+  return arr[idx] + (arr[idx + 1] - arr[idx]) * frac;
+}
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 /**
- * Đường cong cubic Bezier mượt (Catmull-Rom kẹp biên [plotTop, plotBottom])
- * giữ đỉnh và đáy tròn tự nhiên như biểu đồ biên tập nhưng không vượt xuống dưới mức 0.
+ * Nội suy 60fps mượt mà cho tỷ lệ tung độ [0..1] của từng điểm trên đường cong
+ * (kể cả khi số lượng điểm thay đổi giữa 7 / 14 / 30 ngày hoặc khi dữ liệu mới vừa đổ về).
  */
-function buildSmoothCurvePath(
+function useAnimatedRatios(targetRatios: readonly number[]): { ratios: number[]; isMorphing: boolean } {
+  const [ratios, setRatios] = useState<number[]>(() => [...targetRatios]);
+  const [isMorphing, setIsMorphing] = useState(false);
+  const currentRef = useRef<number[]>([...targetRatios]);
+  const rafRef = useRef<number>(0);
+
+  const signature = targetRatios.map((r) => r.toFixed(5)).join("|");
+
+  useEffect(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const prev = currentRef.current;
+    const n = targetRatios.length;
+
+    const startRatios =
+      n === 0
+        ? []
+        : prev.length === 0
+          ? [...targetRatios]
+          : prev.length === n
+            ? [...prev]
+            : targetRatios.map((_, i) => samplePolyline(prev, n > 1 ? i / (n - 1) : 0));
+
+    const maxDiff =
+      n === 0
+        ? 0
+        : targetRatios.reduce(
+            (acc, target, i) => Math.max(acc, Math.abs(target - (startRatios[i] ?? target))),
+            0,
+          );
+    const skipAnim = n === 0 || maxDiff < 0.0005 || prefersReducedMotion();
+    const startAt = performance.now();
+
+    const step = (now: number) => {
+      if (skipAnim) {
+        rafRef.current = 0;
+        const exact = [...targetRatios];
+        currentRef.current = exact;
+        setRatios(exact);
+        setIsMorphing(false);
+        return;
+      }
+      if (now === startAt) {
+        setIsMorphing(true);
+      }
+      const elapsed = now - startAt;
+      const p = Math.min(Math.max(elapsed / MORPH_DURATION_MS, 0), 1);
+      // easeOutQuart: khởi đầu nhạy tức thì, hạ cánh êm không vọt lố
+      const eased = 1 - Math.pow(1 - p, 4);
+      const next = targetRatios.map((target, i) => {
+        const from = startRatios[i] ?? target;
+        return from + (target - from) * eased;
+      });
+      currentRef.current = next;
+      setRatios(next);
+
+      if (p < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        rafRef.current = 0;
+        const finalArr = [...targetRatios];
+        currentRef.current = finalArr;
+        setRatios(finalArr);
+        setIsMorphing(false);
+      }
+    };
+
+    rafRef.current = requestAnimationFrame((now) => {
+      if (!skipAnim) setIsMorphing(true);
+      step(now);
+    });
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
+
+  return {
+    ratios: ratios.length === targetRatios.length ? ratios : [...targetRatios],
+    isMorphing,
+  };
+}
+
+/**
+ * Đường cong đơn điệu Fritsch–Carlson (Monotone Cubic Hermite):
+ * đi chính xác qua mọi điểm dữ liệu thực tế, không bao giờ vọt quá đỉnh hoặc tụt xuống dưới 0.
+ */
+function buildMonotoneSplinePath(
   pts: { x: number; y: number }[],
   plotTop: number,
   plotBottom: number,
 ): string {
   const n = pts.length;
   if (n === 0) return "";
-  if (n === 1) return `M${pts[0].x},${pts[0].y}`;
+  if (n === 1) return `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
 
-  const slopes: number[] = new Array(n).fill(0);
-  for (let i = 0; i < n; i++) {
-    const isBaseline = pts[i].y >= plotBottom - 0.5;
-    if (isBaseline) {
-      slopes[i] = 0;
-      continue;
-    }
-    if (i === 0) {
-      slopes[i] = (pts[1].y - pts[0].y) / Math.max(pts[1].x - pts[0].x, 1);
-    } else if (i === n - 1) {
-      slopes[i] = (pts[n - 1].y - pts[n - 2].y) / Math.max(pts[n - 1].x - pts[n - 2].x, 1);
+  const dx: number[] = new Array(n - 1);
+  const secants: number[] = new Array(n - 1);
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = Math.max(pts[i + 1].x - pts[i].x, 0.0001);
+    secants[i] = (pts[i + 1].y - pts[i].y) / dx[i];
+  }
+
+  const tangents: number[] = new Array(n).fill(0);
+  tangents[0] = secants[0];
+  tangents[n - 1] = secants[n - 2];
+
+  for (let i = 1; i < n - 1; i++) {
+    if (secants[i - 1] * secants[i] <= 0) {
+      tangents[i] = 0;
     } else {
-      const prevDiff = pts[i].y - pts[i - 1].y;
-      const nextDiff = pts[i + 1].y - pts[i].y;
-      // Tại cực đại hoặc cực tiểu cục bộ, đặt tiếp tuyến ngang để đỉnh uốn tròn mượt mà và không vọt quá trị số thật
-      if (prevDiff * nextDiff <= 0) {
-        slopes[i] = 0;
-      } else {
-        slopes[i] = (pts[i + 1].y - pts[i - 1].y) / Math.max(pts[i + 1].x - pts[i - 1].x, 1);
+      tangents[i] = (secants[i - 1] + secants[i]) / 2;
+    }
+  }
+
+  for (let i = 0; i < n - 1; i++) {
+    if (Math.abs(secants[i]) < 1e-6) {
+      tangents[i] = 0;
+      tangents[i + 1] = 0;
+    } else {
+      const a = tangents[i] / secants[i];
+      const b = tangents[i + 1] / secants[i];
+      const normSq = a * a + b * b;
+      if (normSq > 9) {
+        const tau = 3 / Math.sqrt(normSq);
+        tangents[i] = tau * a * secants[i];
+        tangents[i + 1] = tau * b * secants[i];
       }
     }
   }
@@ -88,12 +210,11 @@ function buildSmoothCurvePath(
   for (let i = 0; i < n - 1; i++) {
     const p0 = pts[i];
     const p1 = pts[i + 1];
-    const dx = p1.x - p0.x;
-    const h = dx / 2.65;
+    const h = dx[i] / 3;
     const cp1x = p0.x + h;
     const cp2x = p1.x - h;
-    const cp1y = Math.min(plotBottom, Math.max(plotTop, p0.y + slopes[i] * h));
-    const cp2y = Math.min(plotBottom, Math.max(plotTop, p1.y - slopes[i + 1] * h));
+    const cp1y = Math.min(plotBottom, Math.max(plotTop, p0.y + tangents[i] * h));
+    const cp2y = Math.min(plotBottom, Math.max(plotTop, p1.y - tangents[i + 1] * h));
     d += ` C${cp1x.toFixed(2)},${cp1y.toFixed(2)} ${cp2x.toFixed(2)},${cp2y.toFixed(2)} ${p1.x.toFixed(2)},${p1.y.toFixed(2)}`;
   }
   return d;
@@ -101,16 +222,17 @@ function buildSmoothCurvePath(
 
 function pickDefaultActiveIndex(data: InsightPoint[]): number {
   if (data.length === 0) return 0;
-  let bestIdx = 0;
+  let bestIdx = data.length - 1;
   let bestVal = -Infinity;
   for (let i = 0; i < data.length; i++) {
-    if (data[i].value > bestVal) {
+    // Ưu tiên ngày gần nhất khi có cùng mức đỉnh (>=)
+    if (data[i].value >= bestVal) {
       bestVal = data[i].value;
       bestIdx = i;
     }
   }
   if (bestVal <= 0) {
-    return Math.min(Math.max(1, Math.floor(data.length / 3)), data.length - 1);
+    return data.length - 1;
   }
   return bestIdx;
 }
@@ -124,8 +246,12 @@ export default function InsightLineChart({
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const wrapRef = useRef<HTMLDivElement>(null);
   const cachedLeftRef = useRef<number | null>(null);
+  const prevValuesByDateRef = useRef<Map<string, number> | null>(null);
+  const prevLengthRef = useRef<number>(data.length);
+
   const [width, setWidth] = useState(0);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [liveFocusIdx, setLiveFocusIdx] = useState<number | null>(null);
 
   useIsomorphicLayoutEffect(() => {
     const el = wrapRef.current;
@@ -151,15 +277,63 @@ export default function InsightLineChart({
     };
   }, []);
 
+  // Khi có bản ghi mới vừa về trên cùng khung thời gian, tự động hướng điểm neo tới ngày vừa thay đổi
+  useEffect(() => {
+    const nextMap = new Map<string, number>();
+    data.forEach((pt, idx) => {
+      const key = pt.dateIso ?? `${idx}:${pt.label}`;
+      nextMap.set(key, Number(pt.value) || 0);
+    });
+
+    if (prevLengthRef.current !== data.length) {
+      prevLengthRef.current = data.length;
+      prevValuesByDateRef.current = nextMap;
+      const raf = requestAnimationFrame(() => {
+        setHoverIdx(null);
+        setLiveFocusIdx(null);
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+
+    const prevMap = prevValuesByDateRef.current;
+    prevValuesByDateRef.current = nextMap;
+    if (!prevMap) return;
+
+    let changedIdx: number | null = null;
+    for (let i = data.length - 1; i >= 0; i--) {
+      const key = data[i].dateIso ?? `${i}:${data[i].label}`;
+      const prevVal = prevMap.get(key);
+      const curVal = Number(data[i].value) || 0;
+      if (prevVal !== undefined && prevVal !== curVal) {
+        changedIdx = i;
+        break;
+      }
+    }
+    if (changedIdx !== null) {
+      const targetIdx = changedIdx;
+      const raf = requestAnimationFrame(() => {
+        setLiveFocusIdx(targetIdx);
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [data]);
+
   const defaultIdx = useMemo(() => pickDefaultActiveIndex(data), [data]);
   const n = data.length;
-  const activeIdx = n > 0 ? Math.min(Math.max(hoverIdx ?? defaultIdx, 0), n - 1) : 0;
+  const resolvedDefault = liveFocusIdx !== null && liveFocusIdx < n ? liveFocusIdx : defaultIdx;
+  const activeIdx = n > 0 ? Math.min(Math.max(hoverIdx ?? resolvedDefault, 0), n - 1) : 0;
 
   const maxValue = useMemo(
     () => data.reduce((m, item) => Math.max(m, Number(item.value) || 0), 0),
     [data],
   );
   const { yMax, ticks } = useMemo(() => buildScale(maxValue), [maxValue]);
+
+  const targetRatios = useMemo(
+    () => data.map((pt) => Math.min(Math.max((Number(pt.value) || 0) / Math.max(yMax, 1), 0), 1)),
+    [data, yMax],
+  );
+  const { ratios: animatedRatios, isMorphing } = useAnimatedRatios(targetRatios);
 
   const isMobile = width > 0 && width < 520;
   const svgHeight = isMobile ? Math.min(height, 236) : height;
@@ -170,24 +344,51 @@ export default function InsightLineChart({
   const gridLeft = isMobile ? 32 : 46;
   const gridRight = Math.max(gridLeft + 40, width - (isMobile ? 4 : 8));
   const gridSpan = gridRight - gridLeft;
-  const insetX = Math.round(gridSpan * (isMobile ? 0.05 : 0.065));
+  const insetX = Math.round(gridSpan * (n > 10 ? (isMobile ? 0.025 : 0.035) : isMobile ? 0.05 : 0.065));
   const plotLeft = gridLeft + insetX;
   const plotRight = Math.max(plotLeft + 20, gridRight - insetX);
   const stepX = n > 1 ? (plotRight - plotLeft) / (n - 1) : 0;
 
   const pts = useMemo(
     () =>
-      data.map((pt, i) => ({
+      data.map((_, i) => ({
         x: plotLeft + i * stepX,
-        y: plotBottom - ((Number(pt.value) || 0) / yMax) * plotHeight,
+        y: plotBottom - (animatedRatios[i] ?? 0) * plotHeight,
       })),
-    [data, plotLeft, stepX, plotBottom, yMax, plotHeight],
+    [data, animatedRatios, plotLeft, stepX, plotBottom, plotHeight],
   );
 
   const curvePath = useMemo(
-    () => buildSmoothCurvePath(pts, plotTop, plotBottom),
+    () => buildMonotoneSplinePath(pts, plotTop, plotBottom),
     [pts, plotTop, plotBottom],
   );
+  const areaPath = useMemo(() => {
+    if (pts.length < 2 || !curvePath) return "";
+    return `${curvePath} L${pts[pts.length - 1].x.toFixed(2)},${plotBottom.toFixed(2)} L${pts[0].x.toFixed(2)},${plotBottom.toFixed(2)} Z`;
+  }, [curvePath, pts, plotBottom]);
+
+  // Tính nhãn trục hoành không chồng lấn khi hiển thị 14 hoặc 30 ngày
+  const visibleXIndices = useMemo(() => {
+    const visible = new Set<number>();
+    if (n <= 8 || stepX <= 0) {
+      for (let i = 0; i < n; i++) visible.add(i);
+      return visible;
+    }
+    const minGapPx = isMobile ? 44 : 54;
+    const stride = Math.max(1, Math.ceil(minGapPx / stepX));
+    // Căn nhịp từ ngày cuối (Hôm nay) lùi về đầu để mốc Hôm nay luôn hiển thị rõ
+    for (let i = n - 1; i >= 0; i -= stride) {
+      visible.add(i);
+    }
+    visible.add(0);
+    // Nếu điểm đầu và điểm kế tiếp quá sát nhau thì ẩn điểm kế tiếp để giữ mốc đầu + mốc cuối
+    for (const idx of Array.from(visible)) {
+      if (idx !== 0 && idx !== n - 1 && idx * stepX < minGapPx * 0.72) {
+        visible.delete(idx);
+      }
+    }
+    return visible;
+  }, [n, stepX, isMobile]);
 
   if (n === 0) {
     return null;
@@ -195,12 +396,23 @@ export default function InsightLineChart({
 
   const activePoint = pts[activeIdx] ?? { x: plotLeft, y: plotBottom };
   const activeData = data[activeIdx];
-  const formattedVal = (Number(activeData?.value) || 0).toLocaleString("vi-VN");
+  const rawActiveVal = Number(activeData?.value) || 0;
+  const formattedVal = rawActiveVal.toLocaleString("vi-VN");
 
-  // Đặt nút tròn đen đúng trên đường lưới thứ 2 tính từ đỉnh (như mốc 30/35 trên mẫu tham chiếu), luôn cao hơn đường cong
+  const sprayCnt = Number(activeData?.sprayCount) || 0;
+  const journalCnt = Number(activeData?.journalCount) || 0;
+  const calloutHeader = n > 8 && activeData?.label ? `${activeData.label} - ${metricLabel}` : metricLabel;
+  const calloutSub =
+    sprayCnt > 0 && journalCnt > 0
+      ? `${journalCnt} canh tác, ${sprayCnt} phun thuốc`
+      : sprayCnt > 0 && journalCnt === 0
+        ? `${sprayCnt} lần phun thuốc`
+        : null;
+
+  // Neo hộp chú thích phía trên đường cong nhưng không bao giờ che khuất điểm dữ liệu thực
   const secondGridFromTopY = plotTop + plotHeight / INTERVAL_COUNT;
-  const pinY = Math.max(plotTop + 12, Math.min(secondGridFromTopY, activePoint.y - 22));
-  const flipCalloutLeft = width > 0 && activePoint.x + 148 > width;
+  const pinY = Math.max(plotTop + 12, Math.min(secondGridFromTopY, activePoint.y - 24));
+  const flipCalloutLeft = width > 0 && activePoint.x + (calloutSub ? 176 : 148) > width;
 
   const selectAtClientX = (el: HTMLDivElement, clientX: number, forceMeasure = false) => {
     if (n <= 1 || stepX <= 0) return;
@@ -243,7 +455,7 @@ export default function InsightLineChart({
   return (
     <div
       ref={wrapRef}
-      className="dash-insight-stage"
+      className={`dash-insight-stage${isMorphing ? " is-morphing" : ""}`}
       style={{ minHeight: svgHeight }}
       role="img"
       aria-label={`${ariaLabel}: ngày ${activeData?.label ?? ""}, ${formattedVal} ${metricLabel.toLowerCase()}`}
@@ -270,6 +482,10 @@ export default function InsightLineChart({
               <linearGradient id={`${uid}-dot`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#343438" />
                 <stop offset="100%" stopColor="#111113" />
+              </linearGradient>
+              <linearGradient id={`${uid}-area`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#18181b" stopOpacity="0.065" />
+                <stop offset="100%" stopColor="#18181b" stopOpacity="0.0" />
               </linearGradient>
             </defs>
 
@@ -300,6 +516,9 @@ export default function InsightLineChart({
               );
             })}
 
+            {/* Lớp nền bóng nhẹ dưới đường cong giúp đọc độ cao trực quan */}
+            {areaPath && <path d={areaPath} fill={`url(#${uid}-area)`} />}
+
             {/* Đường cong chính nét liền màu đen than */}
             <path
               d={curvePath}
@@ -319,19 +538,37 @@ export default function InsightLineChart({
               stroke="#18181b"
               strokeWidth={1.5}
               strokeDasharray="4 3"
+              className="dash-insight-guide"
             />
 
-            {/* Nút tròn đen có vòng tách nền trắng mảnh trên đường gióng dọc */}
-            <circle cx={activePoint.x} cy={pinY} r={8.5} fill="#ffffff" />
-            <circle cx={activePoint.x} cy={pinY} r={6.5} fill={`url(#${uid}-dot)`} />
+            {/* Điểm neo chính xác ngay trên đường cong tại giá trị thực tế */}
+            <circle
+              cx={activePoint.x}
+              cy={activePoint.y}
+              r={4.25}
+              fill="#ffffff"
+              stroke="#18181b"
+              strokeWidth={2.25}
+              className="dash-insight-curve-dot"
+            />
+
+            {/* Nút tròn đen đối chiếu hộp chú thích trên đường gióng dọc */}
+            <circle cx={activePoint.x} cy={pinY} r={8.5} fill="#ffffff" className="dash-insight-pin" />
+            <circle cx={activePoint.x} cy={pinY} r={6.5} fill={`url(#${uid}-dot)`} className="dash-insight-pin" />
 
             {/* Nhãn ngày tháng trục hoành */}
             {data.map((pt, i) => {
-              const x = pts[i]?.x ?? plotLeft;
               const isSelected = i === activeIdx;
+              if (!visibleXIndices.has(i) && !isSelected) return null;
+              // Khi đang trỏ vào ngày không nằm trên nhịp chia đều, tạm ẩn nhãn chia đều quá sát cạnh bên để không đè chữ
+              if (!isSelected && hoverIdx !== null && n > 8) {
+                const distPx = Math.abs((pts[i]?.x ?? 0) - activePoint.x);
+                if (distPx < (isMobile ? 34 : 40)) return null;
+              }
+              const x = pts[i]?.x ?? plotLeft;
               return (
                 <text
-                  key={`${pt.label}-${i}`}
+                  key={pt.dateIso ?? `${pt.label}-${i}`}
                   x={x}
                   y={plotBottom + (isMobile ? 22 : 25)}
                   textAnchor="middle"
@@ -352,12 +589,12 @@ export default function InsightLineChart({
             }}
             aria-hidden="true"
           >
-            <span className="dash-insight-callout-label">{metricLabel}</span>
+            <span className="dash-insight-callout-label">{calloutHeader}</span>
             <strong className="dash-insight-callout-val">{formattedVal}</strong>
+            {calloutSub && <span className="dash-insight-callout-sub">{calloutSub}</span>}
           </div>
         </>
       )}
     </div>
   );
 }
-

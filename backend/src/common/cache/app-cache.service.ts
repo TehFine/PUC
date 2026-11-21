@@ -38,10 +38,10 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   approval_attachments: ["uploads"],
 
   plots: ["plots", "dashboard", "portal", "public-overview", "trace"],
-  plot_measurements: ["plots"],
+  plot_measurements: ["plots", "dashboard"],
   plot_signboard_tokens: ["plots", "trace"],
   plot_season_quotas: ["plots", "trace"],
-  growing_zones: ["plots", "public-overview", "trace"],
+  growing_zones: ["plots", "dashboard", "public-overview", "trace"],
 
   villages: ["auth", "catalog", "plots", "dashboard", "portal", "public-overview", "trace"],
   households: ["auth", "catalog", "plots", "dashboard", "portal", "public-overview", "trace", "uploads"],
@@ -49,7 +49,7 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   fertilizers: ["catalog", "portal"],
   varieties: ["catalog", "portal"],
   training_courses: ["catalog", "dashboard", "portal"],
-  training_registrations: ["portal"],
+  training_registrations: ["dashboard", "portal"],
 
   news_articles: ["news"],
 
@@ -58,15 +58,15 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   inspection_minutes: ["dashboard", "portal", "uploads", "trace"],
   journal_entries: ["dashboard", "portal", "trace"],
   violations: ["dashboard", "portal", "trace"],
-  spray_records: ["portal", "trace"],
+  spray_records: ["dashboard", "portal", "trace"],
   lab_tests: ["dashboard", "portal", "uploads", "trace"],
 
   harvest_lots: ["dashboard", "portal", "uploads", "trace"],
-  harvest_items: ["trace"],
+  harvest_items: ["dashboard", "trace"],
   harvest_contributions: ["dashboard", "portal", "uploads", "trace"],
   harvest_declarations: ["dashboard", "portal", "uploads", "trace"],
-  farmer_stamp_allocations: ["portal", "trace"],
-  farmer_stamps: ["portal", "trace"],
+  farmer_stamp_allocations: ["dashboard", "portal", "trace"],
+  farmer_stamps: ["dashboard", "portal", "trace"],
   enterprises: ["auth", "uploads", "dashboard", "trace"],
   contracts: ["trace"],
   field_audit_passes: ["trace"],
@@ -265,11 +265,14 @@ export class AppCacheService implements OnApplicationShutdown {
     return promise;
   }
 
-  invalidateTags(tags: Iterable<CacheTag>): void {
-    let invalidatedAny = false;
+  invalidateTags(tags: Iterable<CacheTag>, notifyListeners = true): void {
+    const invalidated: CacheTag[] = [];
+    const seen = new Set<CacheTag>();
     for (const tag of tags) {
+      if (seen.has(tag)) continue;
+      seen.add(tag);
       this.tagEpochs.set(tag, (this.tagEpochs.get(tag) ?? 0) + 1);
-      invalidatedAny = true;
+      invalidated.push(tag);
       const keys = this.tagIndex.get(tag);
       if (!keys || keys.size === 0) continue;
       for (const key of Array.from(keys)) {
@@ -277,13 +280,32 @@ export class AppCacheService implements OnApplicationShutdown {
       }
       keys.clear();
     }
-    if (invalidatedAny) {
+    if (invalidated.length > 0) {
       this.invalidationCount += 1;
+      if (notifyListeners && this.invalidationListeners.size > 0) {
+        for (const listener of this.invalidationListeners) {
+          try {
+            listener(invalidated);
+          } catch {
+            // Listener errors must never disrupt cache operations
+          }
+        }
+      }
     }
   }
 
-  invalidateAll(): void {
-    this.invalidateTags(ALL_CACHE_TAGS);
+  private readonly invalidationListeners = new Set<(tags: readonly CacheTag[]) => void>();
+
+  /** Đăng ký lắng nghe sự kiện miền dữ liệu thay đổi (dùng để đẩy đồng bộ SSE thời gian thực). */
+  onTagsInvalidated(listener: (tags: readonly CacheTag[]) => void): () => void {
+    this.invalidationListeners.add(listener);
+    return () => {
+      this.invalidationListeners.delete(listener);
+    };
+  }
+
+  invalidateAll(notifyListeners = true): void {
+    this.invalidateTags(ALL_CACHE_TAGS, notifyListeners);
     this.store.clear();
   }
 
@@ -291,12 +313,12 @@ export class AppCacheService implements OnApplicationShutdown {
    * Phân tích siêu nhẹ câu lệnh SQL (< 5 micro-giây) để tự động làm mới đúng miền bộ nhớ đệm khi có thay đổi dữ liệu.
    * Trả về danh sách `CacheTag` đã bị ảnh hưởng (phục vụ giao dịch `BEGIN ... COMMIT`).
    */
-  onSqlMutation(sqlText: string): CacheTag[] {
+  onSqlMutation(sqlText: string, notifyListeners = true): CacheTag[] {
     if (!sqlText || !SQL_MUTATION_FAST_RE.test(sqlText)) {
       return [];
     }
     if (/\bTRUNCATE\b/i.test(sqlText)) {
-      this.invalidateAll();
+      this.invalidateAll(notifyListeners);
       return [...ALL_CACHE_TAGS];
     }
 
@@ -311,7 +333,7 @@ export class AppCacheService implements OnApplicationShutdown {
 
     // Nếu là CTE phức tạp hoặc câu lệnh ghi không khớp mẫu chuẩn, xóa toàn bộ đệm đọc để đảm bảo an toàn dữ liệu tuyệt đối.
     if (matchedTables.length === 0) {
-      this.invalidateAll();
+      this.invalidateAll(notifyListeners);
       return [...ALL_CACHE_TAGS];
     }
 
@@ -320,7 +342,7 @@ export class AppCacheService implements OnApplicationShutdown {
       const mapped = TABLE_TO_TAGS[tbl];
       if (mapped === undefined) {
         // Bảng mới chưa khai báo ánh xạ -> xóa toàn bộ đệm đọc để không bao giờ trả dữ liệu cũ.
-        this.invalidateAll();
+        this.invalidateAll(notifyListeners);
         return [...ALL_CACHE_TAGS];
       }
       for (const tag of mapped) {
@@ -332,7 +354,7 @@ export class AppCacheService implements OnApplicationShutdown {
       return [];
     }
     const tagList = Array.from(affected);
-    this.invalidateTags(tagList);
+    this.invalidateTags(tagList, notifyListeners);
     return tagList;
   }
 
