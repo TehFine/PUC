@@ -189,22 +189,26 @@ export function attachSmoothMapZoom(
     return map.project(center, zoom).subtract(viewHalf).add(rawMap._getMapPanePos());
   };
 
-  const markZoomingStart = () => {
+  const markZoomingStart = (enableSubpixel = false) => {
     if (clearZoomClassTimer !== null) {
       clearTimeout(clearZoomClassTimer);
       clearZoomClassTimer = null;
     }
-    subpixelActive = true;
+    if (enableSubpixel) {
+      subpixelActive = true;
+    }
     container.classList.add("is-map-zooming");
   };
 
+  // Phải gỡ "is-map-zooming" đồng bộ ngay trong pha zoomend (trước khi Leaflet phát moveend tới Canvas và TileLayer),
+  // tránh việc Canvas và TileLayer bỏ qua lần vẽ chốt cuối cùng khiến đa giác bị phóng đại nhòe mờ từ mức zoom cũ.
   const markZoomingEnd = () => {
     subpixelActive = false;
-    if (clearZoomClassTimer !== null) clearTimeout(clearZoomClassTimer);
-    clearZoomClassTimer = setTimeout(() => {
+    if (clearZoomClassTimer !== null) {
+      clearTimeout(clearZoomClassTimer);
       clearZoomClassTimer = null;
-      container.classList.remove("is-map-zooming");
-    }, 48);
+    }
+    container.classList.remove("is-map-zooming");
   };
 
   const computeAnchoredCenter = (zoom: number): Leaflet.LatLng => {
@@ -315,7 +319,7 @@ export function attachSmoothMapZoom(
       targetZoom = nextTarget;
       active = true;
       lastFrameMs = now;
-      markZoomingStart();
+      markZoomingStart(true);
       rawMap._moveStart(true, false);
       rafId = window.requestAnimationFrame(step);
       return;
@@ -367,11 +371,13 @@ export function attachSmoothMapZoom(
       cancel();
     }
     if ("touches" in ev && ev.touches.length >= 2) {
-      markZoomingStart();
+      markZoomingStart(true);
     }
   };
 
-  const onMapZoomStart = () => markZoomingStart();
+  const onMapZoomStart = () => {
+    if (active) markZoomingStart(true);
+  };
   const onMapZoomEnd = () => {
     if (!active) markZoomingEnd();
   };

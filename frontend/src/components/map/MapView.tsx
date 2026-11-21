@@ -1653,6 +1653,8 @@ export default function MapView({
     ready,
     plots,
     selectedCode,
+    editingCode: mode === "edit" ? selectedCode : null,
+    drawingActive: mode !== "idle",
     baseLayer,
     refs: {
       leaflet: leafletRef,
@@ -1785,18 +1787,30 @@ export default function MapView({
       changeDrawStyle("point");
       changeMode("edit");
 
-      // Làm mờ nền đa giác cũ để thấy rõ tán cây trên ảnh vệ tinh khi vẽ hoặc chỉnh lại ranh giới
+      // Ẩn nền màu đa giác cũ và đóng nhãn giữa thửa để nhìn rõ tán cây sầu riêng trên ảnh vệ tinh khi vẽ lại hoặc sửa
       const targetLayer = plotLayersRef.current.get(feature.properties.code);
       if (targetLayer) {
         targetLayer.setStyle({
-          fillOpacity: 0.04,
-          opacity: 0.48,
-          weight: 2,
+          fillOpacity: 0,
+          opacity: 0.42,
+          weight: 1.5,
           dashArray: "5 5",
         });
+        targetLayer.closeTooltip();
       }
 
       const initialPoints = extractOpenRingLatLngs(L, feature);
+      if (map && initialPoints.length > 0) {
+        const bounds = L.latLngBounds(initialPoints);
+        if (bounds.isValid()) {
+          const shouldAnimate = map.getZoom() >= 16.5;
+          map.fitBounds(bounds.pad(0.42), {
+            maxZoom: baseLayer === "satellite" ? 18.6 : 19.5,
+            animate: shouldAnimate,
+          });
+        }
+      }
+
       if (clearForRedraw) {
         if (initialPoints.length > 0) {
           pushHistorySnapshot(initialPoints);
@@ -1815,15 +1829,8 @@ export default function MapView({
         setPreview(previewFromLatLngs(initialPoints));
         setMessage(null);
       }
-
-      if (map && initialPoints.length > 0) {
-        const bounds = L.latLngBounds(initialPoints);
-        if (bounds.isValid()) {
-          map.fitBounds(bounds.pad(0.42), { maxZoom: 19.5 });
-        }
-      }
     },
-    [canEditShape, changeDrawStyle, changeMode, pushHistorySnapshot, resetDraftState, selectedFeature, setSelectedCode],
+    [baseLayer, canEditShape, changeDrawStyle, changeMode, pushHistorySnapshot, resetDraftState, selectedFeature, setSelectedCode],
   );
 
   const inspectPlotOnMap = useCallback(

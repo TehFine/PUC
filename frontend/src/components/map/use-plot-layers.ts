@@ -21,6 +21,8 @@ interface UsePlotLayersArgs {
   ready: boolean;
   plots: PlotCollection | null;
   selectedCode: string | null;
+  editingCode?: string | null;
+  drawingActive?: boolean;
   baseLayer: BaseLayer;
   refs: PlotLayersRefs;
 }
@@ -28,8 +30,53 @@ interface UsePlotLayersArgs {
 const MIN_PERM_LABEL_ZOOM = 16;
 const MAX_PERMANENT_LABELS = 28;
 
+function resolveEffectivePlotStyle(
+  feature: PlotFeature | undefined,
+  code: string,
+  selectedCode: string | null,
+  editingCode: string | null | undefined,
+  drawingActive: boolean,
+  zoom: number,
+  baseLayer: BaseLayer,
+): Leaflet.PathOptions {
+  const base = plotStyle(
+    feature?.properties.source ?? "demo",
+    code === selectedCode && code !== editingCode,
+    feature?.properties.zone || feature?.properties.code,
+    zoom,
+    baseLayer,
+  );
+  if (editingCode && code === editingCode) {
+    return {
+      ...base,
+      weight: 1.5,
+      opacity: 0.42,
+      fillOpacity: 0,
+      dashArray: "5 5",
+    };
+  }
+  if (drawingActive) {
+    return {
+      ...base,
+      weight: Math.min(Number(base.weight ?? 2), 1.8),
+      opacity: 0.72,
+      fillOpacity: 0.06,
+      dashArray: undefined,
+    };
+  }
+  return { ...base, dashArray: undefined };
+}
+
 /** Keeps Leaflet layers in sync with React state: plot polygons, zoom-adaptive LoD labels, selection style and base map. */
-export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: UsePlotLayersArgs) {
+export function usePlotLayers({
+  ready,
+  plots,
+  selectedCode,
+  editingCode = null,
+  drawingActive = false,
+  baseLayer,
+  refs,
+}: UsePlotLayersArgs) {
   const { leaflet, map: mapRef, plotGroup, plotLayers, baseLayers, mode, selectedCode: selectedRef, select } = refs;
 
   const fittedRef = useRef(false);
@@ -39,10 +86,14 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
   const lodTierRef = useRef<PlotLodTier>(0);
   const permLabelsRef = useRef<boolean>(false);
   const baseLayerRef = useRef<BaseLayer>(baseLayer);
+  const editingCodeRef = useRef<string | null>(editingCode);
+  const drawingActiveRef = useRef<boolean>(drawingActive);
 
   useEffect(() => {
     baseLayerRef.current = baseLayer;
-  }, [baseLayer]);
+    editingCodeRef.current = editingCode;
+    drawingActiveRef.current = drawingActive;
+  }, [baseLayer, editingCode, drawingActive]);
 
   useEffect(() => {
     const L = leaflet.current;
@@ -68,10 +119,12 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
     plots.features.forEach((feature, index) => {
       const labelOffset: [number, number] = [0, index % 2 === 0 ? -9 : 9];
       const geo = L.geoJSON(feature, {
-        style: plotStyle(
-          feature.properties.source,
-          feature.properties.code === selectedRef.current,
-          feature.properties.zone || feature.properties.code,
+        style: resolveEffectivePlotStyle(
+          feature,
+          feature.properties.code,
+          selectedRef.current,
+          editingCodeRef.current,
+          drawingActiveRef.current,
           currentZoom,
           baseLayerRef.current,
         ),
@@ -84,7 +137,10 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
             initialViewBounds &&
               (!layerBounds || !layerBounds.isValid() || initialViewBounds.intersects(layerBounds)),
           );
-          const isPerm = inViewport && initialPermCount < MAX_PERMANENT_LABELS;
+          const isPerm =
+            inViewport &&
+            initialPermCount < MAX_PERMANENT_LABELS &&
+            feature.properties.code !== editingCodeRef.current;
           if (isPerm) initialPermCount += 1;
           labelNodesRef.current.set(feature.properties.code, {
             el: label,
@@ -148,7 +204,10 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
           viewBounds &&
             (!layerBounds || !layerBounds.isValid() || viewBounds.intersects(layerBounds)),
         );
-        const shouldPerm = inView && permCount < MAX_PERMANENT_LABELS;
+        const shouldPerm =
+          inView &&
+          permCount < MAX_PERMANENT_LABELS &&
+          code !== editingCodeRef.current;
         if (shouldPerm) permCount += 1;
         if (shouldPerm === entry.perm) return;
         entry.perm = shouldPerm;
@@ -180,15 +239,17 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
         plotLayers.current.forEach((layer, code) => {
           const feature = labelNodesRef.current.get(code)?.feature;
           layer.setStyle(
-            plotStyle(
-              feature?.properties.source ?? "demo",
-              code === selectedRef.current,
-              feature?.properties.zone || feature?.properties.code,
+            resolveEffectivePlotStyle(
+              feature,
+              code,
+              selectedRef.current,
+              editingCodeRef.current,
+              drawingActiveRef.current,
               zoom,
               baseLayerRef.current,
             ),
           );
-          if (code === selectedRef.current) layer.bringToFront();
+          if (code === selectedRef.current && code !== editingCodeRef.current) layer.bringToFront();
         });
       }
 
@@ -216,21 +277,52 @@ export function usePlotLayers({ ready, plots, selectedCode, baseLayer, refs }: U
   useEffect(() => {
     const map = mapRef.current;
     const zoom = map ? map.getZoom() : 15;
+    const isLite = typeof document !== "undefined" && document.documentElement.dataset.perf === "lite";
+    const allowPerm = !isLite && zoom >= MIN_PERM_LABEL_ZOOM;
+    const viewBounds = map && allowPerm ? map.getBounds().pad(0.15) : null;
+    let permCount = 0;
+
     const features = new Map(plots?.features.map((feature) => [feature.properties.code, feature]));
     plotLayers.current.forEach((layer, code) => {
       const feature = features.get(code);
       layer.setStyle(
-        plotStyle(
-          feature?.properties.source ?? "demo",
-          code === selectedCode,
-          feature?.properties.zone || feature?.properties.code,
+        resolveEffectivePlotStyle(
+          feature,
+          code,
+          selectedCode,
+          editingCode,
+          drawingActive,
           zoom,
           baseLayer,
         ),
       );
-      if (code === selectedCode) layer.bringToFront();
+      if (code === selectedCode && code !== editingCode) layer.bringToFront();
+
+      const entry = labelNodesRef.current.get(code);
+      if (entry && map) {
+        const layerBounds = (layer as Leaflet.Polygon).getBounds?.();
+        const inView = Boolean(
+          viewBounds &&
+            (!layerBounds || !layerBounds.isValid() || viewBounds.intersects(layerBounds)),
+        );
+        const shouldPerm = inView && permCount < MAX_PERMANENT_LABELS && code !== editingCode;
+        if (shouldPerm) permCount += 1;
+        if (shouldPerm !== entry.perm) {
+          entry.perm = shouldPerm;
+          layer.unbindTooltip();
+          layer.bindTooltip(entry.el, {
+            permanent: shouldPerm,
+            direction: "center",
+            offset: entry.offset,
+            className: "plot-tooltip",
+            opacity: 1,
+          });
+        } else if (code === editingCode) {
+          layer.closeTooltip();
+        }
+      }
     });
-  }, [plots, selectedCode, baseLayer, plotLayers, mapRef]);
+  }, [plots, selectedCode, editingCode, drawingActive, baseLayer, plotLayers, mapRef]);
 
   useEffect(() => {
     const map = mapRef.current;
