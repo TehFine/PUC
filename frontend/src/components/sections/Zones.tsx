@@ -62,18 +62,6 @@ export default function Zones() {
       window.setTimeout(() => {
         isClosingSheetRef.current = false;
         setSheet(null);
-        if (sheetRef.current) {
-          sheetRef.current.style.removeProperty("animation");
-          sheetRef.current.style.removeProperty("transition");
-          sheetRef.current.style.removeProperty("transform");
-          sheetRef.current.style.removeProperty("pointer-events");
-        }
-        if (sheetBackdropRef.current) {
-          sheetBackdropRef.current.style.removeProperty("animation");
-          sheetBackdropRef.current.style.removeProperty("transition");
-          sheetBackdropRef.current.style.removeProperty("opacity");
-          sheetBackdropRef.current.style.removeProperty("pointer-events");
-        }
       }, closeDuration);
       return;
     }
@@ -102,10 +90,14 @@ export default function Zones() {
   useBackLayer(Boolean(isMobile && sheet), closeSheet);
 
   useEffect(() => {
-    if (sheet && sheetRef.current) {
-      sheetRef.current.style.transition = "";
-      sheetRef.current.style.transform = "";
-    }
+    const el = sheetRef.current;
+    if (!el) return;
+    delete el.dataset.closing;
+    el.style.removeProperty("animation");
+    el.style.removeProperty("transition");
+    el.style.removeProperty("transform");
+    el.style.removeProperty("opacity");
+    el.style.removeProperty("pointer-events");
   }, [sheet]);
 
   useSheetSwipe({

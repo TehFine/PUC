@@ -217,11 +217,11 @@ export function TwoFactorSecuritySheet({
         )}
 
         {!enabled && !setupData && (
-          <div style={{ marginTop: 8 }}>
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
             <InlineError message={err} />
             <BusyButton
               type="button"
-              className="pt-btn pt-btn-primary"
+              className="pt-btn pt-btn-danger pt-2fa-setup-btn"
               busy={busy}
               busyLabel="Đang tạo mã bảo mật…"
               onClick={() => void startSetup()}

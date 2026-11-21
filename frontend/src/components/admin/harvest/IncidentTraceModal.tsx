@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { QrCode, Search } from "@/components/ui/PublicIcon";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { api, errorMessage } from "@/lib/api-client";
@@ -140,7 +139,7 @@ export default function IncidentTraceModal({
 
   return (
     <Modal
-      title="Truy vết sự cố hai chiều: Lô hàng và Thửa nguồn"
+      title="Truy vết sự cố"
       onClose={onClose}
       width={840}
       footer={
@@ -149,61 +148,51 @@ export default function IncidentTraceModal({
         </button>
       }
     >
-      <div
-        style={{
-          padding: 14,
-          borderRadius: 12,
-          background: "var(--bg-input, #f6f8f5)",
-          border: "1px solid var(--border)",
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+      <div className="incident-trace-controls">
+        <div className="incident-trace-modes" role="group" aria-label="Chiều truy vết sự cố">
           <button
             type="button"
-            className={`btn btn-sm btn-filter-toggle ${mode === "plot" ? "is-active" : ""}`}
+            className={`btn btn-sm btn-filter-toggle incident-trace-mode-btn ${mode === "plot" ? "is-active" : ""}`}
             aria-pressed={mode === "plot"}
             onClick={() => {
               setMode("plot");
               setError(null);
             }}
           >
-            <span>Truy xuôi: Thửa nguồn sang Lô bị ảnh hưởng</span>
+            <span>Từ thửa sang lô hàng</span>
           </button>
           <button
             type="button"
-            className={`btn btn-sm btn-filter-toggle ${mode === "lot" ? "is-active" : ""}`}
+            className={`btn btn-sm btn-filter-toggle incident-trace-mode-btn ${mode === "lot" ? "is-active" : ""}`}
             aria-pressed={mode === "lot"}
             onClick={() => {
               setMode("lot");
               setError(null);
             }}
           >
-            <span>Truy ngược: Lô / Thùng / Token sang Thửa nguồn</span>
+            <span>Từ lô hàng về thửa</span>
           </button>
         </div>
 
         <form
+          className="incident-trace-form"
           onSubmit={(e) => {
             e.preventDefault();
             void runSearch();
           }}
-          style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
         >
           <input
             type="text"
-            className="filter-input"
-            style={{ flex: 1, minWidth: 240 }}
+            className="filter-input incident-trace-input"
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
             placeholder={
               mode === "plot"
-                ? "Nhập mã thửa phát hiện sự cố (VD: TH1-001, EK10-04)…"
-                : "Nhập mã lô, mã thùng hoặc token QR (VD: LH-2024-038)…"
+                ? "Nhập mã thửa (VD: EK10-01, TH1-001)"
+                : "Nhập mã lô, mã thùng hoặc mã QR"
             }
           />
-          <button type="submit" className="btn btn-primary" disabled={loading}>
-            <Search size={15} />
+          <button type="submit" className="btn btn-primary incident-trace-submit" disabled={loading}>
             <span>{loading ? "Đang truy vết…" : "Truy vết ngay"}</span>
           </button>
         </form>
@@ -261,7 +250,7 @@ export default function IncidentTraceModal({
                   plotResult.affectedLots.map((l) => (
                     <tr key={`${l.lotId}-${l.recordedPlotCode || ""}`}>
                       <td style={{ fontWeight: 700, color: "#14372f", fontFamily: "var(--font-num-stack)" }}>{l.lotCode}</td>
-                      <td>{l.harvestedOn ? String(l.harvestedOn).slice(0, 10) : "—"}</td>
+                      <td>{l.harvestedOn ? String(l.harvestedOn).slice(0, 10) : "-"}</td>
                       <td style={{ fontWeight: 600 }}>{formatVn(l.contributedKg, 1)} kg</td>
                       <td>{formatVn(l.weightTons, 2)} tấn</td>
                       <td>{l.market}</td>
@@ -291,10 +280,9 @@ export default function IncidentTraceModal({
                             target="_blank"
                             rel="noopener noreferrer"
                             className="btn btn-outline btn-sm"
-                            style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                            style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                           >
-                            <QrCode size={13} />
-                            <span>QR</span>
+                            <span>Xem QR</span>
                           </a>
                         </div>
                       </td>
@@ -364,7 +352,7 @@ export default function IncidentTraceModal({
                       <td style={{ fontSize: 12 }}>
                         {p.latestLabCode ? (
                           <span style={{ color: p.latestLabResult === "fail" ? "#b91c1c" : "#166534", fontWeight: 600 }}>
-                            Cd: {p.latestCdMgKg ?? "—"} mg/kg | Vàng O: {p.latestYellowO ? "Dương tính" : "Âm tính"} (
+                            Cd: {p.latestLabCode ? (p.latestCdMgKg ?? "-") : "-"} mg/kg, Vàng O: {p.latestYellowO ? "Dương tính" : "Âm tính"} (
                             {p.latestLabResult === "fail" ? "Không đạt" : "Đạt"})
                           </span>
                         ) : (

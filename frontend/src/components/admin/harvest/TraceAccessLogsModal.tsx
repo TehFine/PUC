@@ -31,7 +31,7 @@ export default function TraceAccessLogsModal({
 
   return (
     <Modal
-      title="Nhật ký minh bạch lượt xem chi tiết QR"
+      title="Nhật ký quét QR"
       onClose={onClose}
       width={860}
       footer={

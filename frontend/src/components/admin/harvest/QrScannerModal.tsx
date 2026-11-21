@@ -423,51 +423,6 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
 
       {!result && (
         <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 8,
-              marginBottom: 14,
-            }}
-          >
-            <button
-              type="button"
-              className={`btn btn-sm btn-filter-toggle ${mode === "camera" ? "is-active" : ""}`}
-              aria-pressed={mode === "camera"}
-              style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 10px" }}
-              onClick={() => {
-                setLookupError(null);
-                setCameraError(null);
-                setCameraReady(false);
-                setMode("camera");
-              }}
-            >
-              <span>Máy ảnh</span>
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm btn-filter-toggle ${mode === "manual" ? "is-active" : ""}`}
-              aria-pressed={mode === "manual"}
-              style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 10px" }}
-              onClick={() => {
-                stopCamera();
-                setLookupError(null);
-                setMode("manual");
-              }}
-            >
-              <span>Nhập mã</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-filter-toggle"
-              style={{ width: "100%", minHeight: 40, justifyContent: "center", padding: "0 10px" }}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <span>Tải ảnh QR</span>
-            </button>
-          </div>
-
           {mode === "camera" ? (
             <div
               style={{
@@ -591,6 +546,51 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
               </button>
             </form>
           )}
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 8,
+              marginTop: 14,
+            }}
+          >
+            <button
+              type="button"
+              className={`btn btn-sm btn-filter-toggle ${mode === "camera" ? "is-active" : ""}`}
+              aria-pressed={mode === "camera"}
+              style={{ width: "100%", minHeight: 42, justifyContent: "center", padding: "0 8px", whiteSpace: "nowrap" }}
+              onClick={() => {
+                setLookupError(null);
+                setCameraError(null);
+                setCameraReady(false);
+                setMode("camera");
+              }}
+            >
+              <span>Máy ảnh</span>
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm btn-filter-toggle ${mode === "manual" ? "is-active" : ""}`}
+              aria-pressed={mode === "manual"}
+              style={{ width: "100%", minHeight: 42, justifyContent: "center", padding: "0 8px", whiteSpace: "nowrap" }}
+              onClick={() => {
+                stopCamera();
+                setLookupError(null);
+                setMode("manual");
+              }}
+            >
+              <span>Nhập mã</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-filter-toggle"
+              style={{ width: "100%", minHeight: 42, justifyContent: "center", padding: "0 8px", whiteSpace: "nowrap" }}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <span>Tải ảnh QR</span>
+            </button>
+          </div>
         </>
       )}
 

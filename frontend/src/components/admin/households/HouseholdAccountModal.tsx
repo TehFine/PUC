@@ -156,30 +156,30 @@ export default function HouseholdAccountModal({
             fontSize: 13.5,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
             <span style={{ color: "var(--text-secondary)" }}>Chủ hộ thành viên:</span>
-            <strong>{household.name}</strong>
+            <strong style={{ overflowWrap: "anywhere" }}>{household.name}</strong>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
             <span style={{ color: "var(--text-secondary)" }}>Mã hộ / Vùng trồng:</span>
             <strong style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{household.code}</strong>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
             <span style={{ color: "var(--text-secondary)" }}>Tên đăng nhập (SĐT):</span>
             <strong style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", color: "var(--green-800)", fontSize: 15 }}>
               {issuedResult.username}
             </strong>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
             <span style={{ color: "var(--text-secondary)" }}>Mật khẩu đã ban hành:</span>
             <strong style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", color: "#b45309", fontSize: 15 }}>
               {issuedResult.password}
             </strong>
           </div>
           {issuedResult.email && (
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
               <span style={{ color: "var(--text-secondary)" }}>Email Google liên kết:</span>
-              <strong style={{ fontFamily: "var(--font-num-stack)" }}>{issuedResult.email}</strong>
+              <strong style={{ fontFamily: "var(--font-num-stack)", overflowWrap: "anywhere" }}>{issuedResult.email}</strong>
             </div>
           )}
         </div>

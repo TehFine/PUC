@@ -219,7 +219,7 @@ export default function FieldAuditPassesModal({
 
   return (
     <Modal
-      title="Thẻ Đoàn Thẩm định Thực địa & Bảo chứng Chính quyền Tỉnh / Xã"
+      title="Thẻ đoàn thẩm định"
       onClose={onClose}
       width={900}
       footer={

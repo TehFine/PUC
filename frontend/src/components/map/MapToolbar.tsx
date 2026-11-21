@@ -56,14 +56,6 @@ export default function MapToolbar({
         >
           Giao thông
         </button>
-        <button
-          type="button"
-          className={`map-tool ${baseLayer === "map" ? "active" : ""}`}
-          onClick={() => onBaseLayerChange("map")}
-          title="Bản đồ nền tối tương phản cao"
-        >
-          Nền tối
-        </button>
       </div>
       <div className="map-toolgroup map-toolgroup-col">
         {onEditShape && (

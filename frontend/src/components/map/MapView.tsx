@@ -237,7 +237,7 @@ export default function MapView({
     "admin:map:base-layer",
     "satellite",
     (v): v is BaseLayer =>
-      v === "satellite" || v === "satellite-google" || v === "streets" || v === "map",
+      v === "satellite" || v === "satellite-google" || v === "streets",
   );
   const [zoomLevel, setZoomLevel] = useState<number>(15);
   const [imageryDateLabel, setImageryDateLabel] = useState<string | null>(null);
@@ -2063,22 +2063,29 @@ export default function MapView({
   const handleDismissPanel = useCallback(() => {
     const el = panelRef.current;
     if (el) {
-      const isMobileSheet = typeof window !== "undefined" && window.innerWidth <= 900;
-      const closeDuration = animatePopupExit(el, null, isMobileSheet ? "sheet" : "floating-card");
+      const closeDuration = animatePopupExit(el, null, "sheet");
+      if (closeDuration <= 0) {
+        closePanel();
+        return;
+      }
       window.setTimeout(() => {
         closePanel();
-        if (panelRef.current) {
-          panelRef.current.style.removeProperty("animation");
-          panelRef.current.style.removeProperty("transition");
-          panelRef.current.style.removeProperty("transform");
-          panelRef.current.style.removeProperty("opacity");
-          panelRef.current.style.removeProperty("pointer-events");
-        }
       }, closeDuration);
       return;
     }
     closePanel();
   }, [closePanel]);
+
+  useEffect(() => {
+    if (!showPanel || !panelRef.current) return;
+    const el = panelRef.current;
+    delete el.dataset.closing;
+    el.style.removeProperty("animation");
+    el.style.removeProperty("transition");
+    el.style.removeProperty("transform");
+    el.style.removeProperty("opacity");
+    el.style.removeProperty("pointer-events");
+  }, [showPanel]);
 
   useSheetSwipe({
     sheetRef: panelRef,

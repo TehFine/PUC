@@ -275,27 +275,27 @@ export default function Harvest() {
           </button>
           {canReadHouseholds && (
             <button type="button" className="btn btn-outline" onClick={() => setViewingPlotQuotas(true)}>
-              <span>Hạn ngạch và Biển QR Vườn</span>
+              <span>Hạn ngạch vườn</span>
             </button>
           )}
           {canReadApprovals && (
             <button type="button" className="btn btn-outline" onClick={() => setViewingFieldPasses(true)}>
-              <span>Thẻ Đoàn và Bảo chứng Tỉnh</span>
+              <span>Thẻ thẩm định</span>
             </button>
           )}
           {canReadApprovals && (
             <button type="button" className="btn btn-outline" onClick={() => setViewingTraceLogs(true)}>
-              <span>Nhật ký xem chi tiết</span>
+              <span>Nhật ký quét QR</span>
             </button>
           )}
           {canReadHouseholds && (
             <button type="button" className="btn btn-outline" onClick={() => setIncidentLotCode("")}>
-              <span>Truy vết sự cố Lô - Vườn</span>
+              <span>Truy vết sự cố</span>
             </button>
           )}
           {tab === "lots" && lots.rows[0] && (
             <button type="button" className="btn btn-outline" onClick={() => setPrintingLot(lots.rows[0])}>
-              <span>In tem lô / thùng</span>
+              <span>In tem lô</span>
             </button>
           )}
           {((tab === "lots" && canCreateHarvest) ||
@@ -304,11 +304,11 @@ export default function Harvest() {
             (tab === "enterprises" && canCreateEnterprise)) && (
             <button type="button" className="btn btn-primary" onClick={handlePrimaryAction}>
               {tab === "lots"
-                ? "Tạo lô hàng mới"
+                ? "Tạo lô mới"
                 : tab === "stamps"
-                  ? "Cấp phát dải tem"
+                  ? "Cấp dải tem"
                   : tab === "contracts"
-                    ? "Thêm hợp đồng bao tiêu"
+                    ? "Thêm hợp đồng"
                     : "Thêm doanh nghiệp"}
             </button>
           )}

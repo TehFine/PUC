@@ -293,13 +293,7 @@ export default function LabTestFormModal({
               {uploadingScan ? "Đang tải tệp lên…" : "Tải tệp lên"}
             </button>
           ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isSafeMediaUrl(scanUrl) ? "repeat(3, minmax(0, 1fr))" : "repeat(2, minmax(0, 1fr))",
-                gap: 8,
-              }}
-            >
+            <div className={`admin-scan-actions ${isSafeMediaUrl(scanUrl) ? "has-view" : ""}`}>
               {isSafeMediaUrl(scanUrl) && (
                 <a
                   href={scanUrl}

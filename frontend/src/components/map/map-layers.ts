@@ -5,7 +5,8 @@ export const MAX_MAP_ZOOM = 22;
 
 const ESRI_HOSTS = ["services", "server"];
 const ESRI_REST = "https://services.arcgisonline.com/ArcGIS/rest/services";
-const DARK_ATTRIBUTION = "Tiles © Esri, HERE, Garmin";
+const CARTO_SUBDOMAINS = ["a", "b", "c", "d"];
+const DARK_ATTRIBUTION = "Bản đồ nền tối © OpenStreetMap, CARTO";
 const GOOGLE_SUBDOMAINS = ["0", "1", "2", "3"];
 const CUSTOM_SATELLITE_URL =
   typeof process !== "undefined"
@@ -460,6 +461,8 @@ export function preconnectMapTileOrigins(): void {
   const origins = [
     "https://services.arcgisonline.com",
     "https://server.arcgisonline.com",
+    "https://a.basemaps.cartocdn.com",
+    "https://b.basemaps.cartocdn.com",
     "https://mt0.google.com",
     "https://mt1.google.com",
     "https://mt2.google.com",
@@ -1002,30 +1005,33 @@ export function createGoogleStreetsLayer(
 export function createBaseLayers(L: typeof import("leaflet")): BaseLayers {
   const dataSaver = isDataSaverNetwork();
 
-  // 1. Nền tối tương phản cao (Esri Dark Gray Canvas)
-  const darkOpts: Leaflet.TileLayerOptions = {
-    ...buildTilePerfOptions(dataSaver, 16, MAX_MAP_ZOOM),
-    detectRetina: !dataSaver,
-  };
+  // 1. Nền tối tương phản cao: CARTO Dark Matter (@2x Retina tới Z19, không bao giờ lỗi "Map data not available"
+  // tại nông thôn Tây Nguyên) kết hợp lớp đường liên thôn và địa danh tiếng Việt sắc nét tới Z22.
+  const darkScaleSuffix = dataSaver ? "" : "@2x";
   const darkBase = enhanceSeamlessTileLayer(
     L,
     L.tileLayer(
-      "https://{s}.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+      `https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}${darkScaleSuffix}.png`,
       {
-        subdomains: ESRI_HOSTS,
+        subdomains: CARTO_SUBDOMAINS,
         attribution: DARK_ATTRIBUTION,
-        ...darkOpts,
+        ...buildTilePerfOptions(dataSaver, 19, MAX_MAP_ZOOM),
       },
     ),
+  );
+  const { scaleParam: darkLabelScale, tileOpts: darkLabelOpts } = buildGoogle512TileOptions(
+    dataSaver,
+    MAX_MAP_ZOOM,
   );
   const darkReference = enhanceSeamlessTileLayer(
     L,
     L.tileLayer(
-      "https://{s}.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+      `https://mt{s}.google.com/vt/lyrs=h&hl=vi&x={x}&y={y}&z={z}${darkLabelScale}`,
       {
-        subdomains: ESRI_HOSTS,
-        attribution: DARK_ATTRIBUTION,
-        ...darkOpts,
+        subdomains: GOOGLE_SUBDOMAINS,
+        attribution: "Nhãn địa danh © Google",
+        ...darkLabelOpts,
+        zIndex: 5,
       },
     ),
   );

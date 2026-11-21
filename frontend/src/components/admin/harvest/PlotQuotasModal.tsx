@@ -142,7 +142,7 @@ export default function PlotQuotasModal({
   return (
     <>
       <Modal
-        title="Hạn ngạch sản lượng đầu vụ (Mass-Balance) & Biển QR Thửa vườn"
+        title="Hạn ngạch và biển QR vườn"
         onClose={onClose}
         width={940}
         footer={

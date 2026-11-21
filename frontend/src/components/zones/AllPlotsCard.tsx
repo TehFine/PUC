@@ -36,12 +36,9 @@ export default function AllPlotsCard({ features, zoneCount, onSelectPlot }: AllP
 
   return (
     <aside className="card zones-sheet-card zones-sheet-list">
-      <div className="zones-sidebar-head">
-        <div>
-          <div className="zones-sidebar-kicker">Danh sách hộ và thửa đất</div>
-          <div className="zones-sidebar-title" style={{ fontVariantNumeric: "tabular-nums" }}>
-            {filtered.length}/{features.length} thửa
-          </div>
+      <div className="zones-sidebar-head" style={{ alignItems: "center" }}>
+        <div className="zones-sidebar-title" style={{ fontVariantNumeric: "tabular-nums" }}>
+          {filtered.length}/{features.length} thửa
         </div>
         <span className="badge badge-gray" style={{ fontVariantNumeric: "tabular-nums" }}>
           {zoneCount} mã vùng
