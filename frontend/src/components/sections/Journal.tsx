@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApi, useApiList } from "@/hooks/use-api";
 import {
@@ -11,6 +11,7 @@ import {
   usePersistedState,
   useUrlSubTab,
 } from "@/lib/back-navigation";
+import { daysSince } from "@/lib/portal-labels";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
   ADMIN_JOURNAL_TAB_EVENT,
@@ -20,7 +21,6 @@ import {
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
 import Pagination from "@/components/admin/shared/Pagination";
 import TabBar, { type TabItem } from "@/components/admin/shared/TabBar";
-import TableState from "@/components/admin/shared/TableState";
 import { formatVn } from "@/components/admin/shared/form-utils";
 import { badgeOf, MRL_STATUS, optionsOf, SEVERITY, VIOLATION_STATUS } from "@/components/admin/shared/labels";
 import { useHouseholdOptions, usePesticideOptions } from "@/components/admin/shared/options";
@@ -33,8 +33,9 @@ import {
   ViolationFormModal,
   ViolationResolveModal,
 } from "@/components/admin/journal/ViolationModals";
+import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { extractSafeMediaUrls, MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
-import { formatDate, formatDiaryEditor } from "@/utils/format";
+import { formatDate } from "@/utils/format";
 import type { DashboardSummary } from "@/types/dashboard";
 import type { JournalRow, SprayRow, ViolationRow } from "@/types/journal";
 
@@ -44,6 +45,54 @@ const PAGE_SIZE = 25;
 const SEVERITY_OPTIONS = optionsOf(SEVERITY);
 const VIOLATION_STATUS_OPTIONS = optionsOf(VIOLATION_STATUS);
 const MRL_OPTIONS = optionsOf(MRL_STATUS);
+
+interface AdminDiaryDayGroup<T> {
+  date: string;
+  label: string;
+  householdCount: number;
+  items: T[];
+}
+
+function normalizeDayKey(raw: string | null | undefined): string {
+  if (!raw) return "0000-00-00";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw.trim());
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : raw.trim();
+}
+
+function formatAdminDayLabel(isoDate: string): string {
+  if (isoDate === "0000-00-00") return "Chưa rõ ngày";
+  const formatted = formatDate(isoDate);
+  const diff = daysSince(isoDate);
+  if (diff === 0) return `Hôm nay, ${formatted}`;
+  if (diff === 1) return `Hôm qua, ${formatted}`;
+  return formatted;
+}
+
+function groupDiaryRowsByDay<T>(
+  rows: T[],
+  getDate: (row: T) => string,
+  getHouseholdKey: (row: T) => number | string,
+): AdminDiaryDayGroup<T>[] {
+  const buckets = new Map<string, { items: T[]; households: Set<number | string> }>();
+  for (const row of rows) {
+    const key = normalizeDayKey(getDate(row));
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { items: [], households: new Set() };
+      buckets.set(key, bucket);
+    }
+    bucket.items.push(row);
+    bucket.households.add(getHouseholdKey(row));
+  }
+  return Array.from(buckets.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([date, bucket]) => ({
+      date,
+      label: formatAdminDayLabel(date),
+      householdCount: bucket.households.size,
+      items: bucket.items,
+    }));
+}
 
 export default function Journal() {
   const { can } = useAuth();
@@ -211,6 +260,16 @@ export default function Journal() {
 
   const activeTab: Tab = !canReadViolations && tab === "violations" ? "journal" : tab;
 
+  const journalDayGroups = useMemo(
+    () => groupDiaryRowsByDay(journalList.rows, (r) => r.entryOn, (r) => r.householdId || r.householdName),
+    [journalList.rows],
+  );
+
+  const sprayDayGroups = useMemo(
+    () => groupDiaryRowsByDay(sprayList.rows, (r) => r.sprayedOn, (r) => r.householdId || r.householdName),
+    [sprayList.rows],
+  );
+
   return (
     <>
       {canReadViolations && canCreateViolation && (
@@ -277,119 +336,58 @@ export default function Journal() {
             </select>
           </div>
 
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Ngày</th>
-                  <th>Hộ</th>
-                  <th>Mã thửa</th>
-                  <th>Hoạt động</th>
-                  <th>Chi tiết</th>
-                  <th>Người ghi</th>
-                  <th>Ảnh</th>
-                  <th>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                <TableState
-                  colSpan={8}
-                  loading={journalList.loading}
-                  error={journalList.error}
-                  empty={journalList.rows.length === 0}
-                  emptyText="Chưa có nhật ký canh tác nào phù hợp"
-                  onRetry={() => void journalList.refresh()}
-                />
-                {journalList.rows.map((j) => {
-                  const zc = getZoneColor(j.plotCode);
-                  return (
-                    <tr key={j.id}>
-                      <td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{formatDate(j.entryOn)}</td>
-                      <td style={{ fontWeight: 500 }}>{j.householdName}</td>
-                      <td>
-                        <span
-                          style={{
-                            fontFamily: "var(--font-num-stack)",
-                            fontVariantNumeric: "tabular-nums",
-                            letterSpacing: "0.015em",
-                            fontSize: 13,
-                            color: zc.text,
-                            fontWeight: 700,
-                          }}
-                        >
-                          {j.plotCode}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: 500, color: "var(--ink)" }}>{j.activity}</td>
-                      <td style={{ fontSize: 12, color: "var(--text-secondary)", maxWidth: 220 }}>{j.detail || "-"}</td>
-                      <td style={{ fontSize: 12 }}>
-                        <div>{j.recorder}</div>
-                        {j.updatedByName && (
-                          <div style={{ fontSize: 11.5, color: "#9a6712", fontWeight: 500, marginTop: 2 }}>
-                            Đã sửa: {formatDiaryEditor(j.updatedByName, j.updatedByRole)}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        {(() => {
-                          const rowUrls = extractSafeMediaUrls(j.photoUrls, j.photoUrl);
-                          if (rowUrls.length > 0) {
-                            return (
-                              <button
-                                type="button"
-                                className="badge badge-blue"
-                                style={{ cursor: "pointer", border: "none", fontFamily: "inherit" }}
-                                onClick={() =>
-                                  setPreviewMedia({
-                                    urls: rowUrls,
-                                    title: j.householdName,
-                                    subtitle: `${formatDate(j.entryOn)}, ${j.plotCode}, ${j.activity}`,
-                                  })
-                                }
-                              >
-                                {rowUrls.length > 1 ? `Xem ảnh (${rowUrls.length})` : "Xem ảnh"}
-                              </button>
-                            );
-                          }
-                          if (j.hasPhoto) {
-                            return (
-                              <button
-                                type="button"
-                                className="badge badge-blue"
-                                style={{ cursor: "pointer", border: "none", fontFamily: "inherit" }}
-                                onClick={() => setViewingJournal(j)}
-                              >
-                                Có ảnh
-                              </button>
-                            );
-                          }
-                          return <span style={{ color: "var(--text-muted)", fontSize: 12 }}>-</span>;
-                        })()}
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewingJournal(j)}>
-                            Xem
-                          </button>
-                          {canUpdateJournal && (
-                            <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingJournal(j)}>
-                              Sửa
+          <BlockState
+            loading={journalList.loading}
+            error={journalList.error}
+            empty={journalList.rows.length === 0}
+            emptyText="Chưa có nhật ký canh tác nào phù hợp."
+            onRetry={() => void journalList.refresh()}
+          />
+
+          {journalDayGroups.length > 0 && (
+            <>
+              <div className="admin-diary-day-groups">
+                {journalDayGroups.map((group) => (
+                  <section key={group.date} className="admin-diary-day-group" aria-label={`Nhật ký ngày ${group.label}`}>
+                    <div className="admin-diary-day-head">
+                      <span className="admin-diary-day-label">{group.label}</span>
+                      <span className="admin-diary-day-count">
+                        {group.householdCount > 1
+                          ? `${group.householdCount} hộ, ${group.items.length} bản ghi`
+                          : `${group.items.length} bản ghi`}
+                      </span>
+                    </div>
+                    <ul className="admin-diary-day-card" role="list">
+                      {group.items.map((j) => {
+                        const zc = getZoneColor(j.plotCode);
+
+                        return (
+                          <li key={j.id}>
+                            <button
+                              type="button"
+                              className="admin-diary-row"
+                              onClick={() => setViewingJournal(j)}
+                            >
+                              <strong className="admin-diary-hh">{j.householdName}</strong>
+                              <span className="admin-diary-right">
+                                <span className="admin-diary-plot" style={{ color: zc.text }}>
+                                  Thửa {j.plotCode}
+                                </span>
+                                <DetailArrowIcon className="admin-diary-arrow" size={20} />
+                              </span>
                             </button>
-                          )}
-                          {canDeleteJournal && (
-                            <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingJournal(j)}>
-                              Xóa
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <Pagination page={jPage} pageSize={PAGE_SIZE} total={journalList.total} unit="bản ghi" onChange={setJPage} />
-          </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+              <div className="admin-diary-pagination">
+                <Pagination page={jPage} pageSize={PAGE_SIZE} total={journalList.total} unit="bản ghi" onChange={setJPage} />
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -507,7 +505,7 @@ export default function Journal() {
                     <div className="violation-meta">
                       <span>Hộ: {v.householdLabel}</span>
                       <span>Ngày: {formatDate(v.detectedOn)}</span>
-                      <span>Thửa: {v.plotCode || "—"}</span>
+                      <span>Thửa: {v.plotCode || "-"}</span>
                     </div>
                   </div>
                   <div className="violation-actions">
@@ -570,81 +568,65 @@ export default function Journal() {
             </select>
           </div>
 
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Ngày phun</th>
-                  <th>Hộ</th>
-                  <th>Mã thửa</th>
-                  <th>Loại thuốc</th>
-                  <th>Nguồn gốc</th>
-                  <th>Liều lượng</th>
-                  <th>Diện tích</th>
-                  <th>Ngày cách ly</th>
-                  <th>MRL</th>
-                  <th>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                <TableState
-                  colSpan={10}
-                  loading={sprayList.loading}
-                  error={sprayList.error}
-                  empty={sprayList.rows.length === 0}
-                  emptyText="Chưa có nhật ký phun thuốc nào"
-                  onRetry={() => void sprayList.refresh()}
-                />
-                {sprayList.rows.map((s) => {
-                  const mrl = badgeOf(MRL_STATUS, s.mrlStatus);
-                  return (
-                    <tr key={s.id}>
-                      <td style={{ whiteSpace: "nowrap" }}>{formatDate(s.sprayedOn)}</td>
-                      <td style={{ fontWeight: 500 }}>{s.householdName}</td>
-                      <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, color: "#256b45", fontWeight: 600 }}>
-                        {s.plotCode || "—"}
-                      </td>
-                      <td>
-                        <div>{s.pesticideName}</div>
-                        {s.updatedByName && (
-                          <div style={{ fontSize: 11.5, color: "#9a6712", fontWeight: 500, marginTop: 2 }}>
-                            Đã sửa: {formatDiaryEditor(s.updatedByName, s.updatedByRole)}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.source || "—"}</td>
-                      <td>{s.dose}</td>
-                      <td>{formatVn(s.areaHa, 2)} ha</td>
-                      <td style={{ color: "#8a6415", fontWeight: 500 }}>
-                        {s.isolationDays != null ? `${s.isolationDays} ngày` : "—"}
-                      </td>
-                      <td>
-                        <span className={`badge ${mrl.badge}`}>{mrl.label}</span>
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setViewingSpray(s)}>
-                            Chi tiết
-                          </button>
-                          {canUpdateSpray && (
-                            <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingSpray(s)}>
-                              Sửa
+          <BlockState
+            loading={sprayList.loading}
+            error={sprayList.error}
+            empty={sprayList.rows.length === 0}
+            emptyText="Chưa có nhật ký phun thuốc nào phù hợp."
+            onRetry={() => void sprayList.refresh()}
+          />
+
+          {sprayDayGroups.length > 0 && (
+            <>
+              <div className="admin-diary-day-groups">
+                {sprayDayGroups.map((group) => (
+                  <section
+                    key={group.date}
+                    className="admin-diary-day-group"
+                    aria-label={`Nhật ký phun thuốc ngày ${group.label}`}
+                  >
+                    <div className="admin-diary-day-head">
+                      <span className="admin-diary-day-label">{group.label}</span>
+                      <span className="admin-diary-day-count">
+                        {group.householdCount > 1
+                          ? `${group.householdCount} hộ, ${group.items.length} lần phun`
+                          : `${group.items.length} lần phun`}
+                      </span>
+                    </div>
+                    <ul className="admin-diary-day-card" role="list">
+                      {group.items.map((s) => {
+                        const zc = s.plotCode ? getZoneColor(s.plotCode) : null;
+
+                        return (
+                          <li key={s.id}>
+                            <button
+                              type="button"
+                              className="admin-diary-row"
+                              onClick={() => setViewingSpray(s)}
+                            >
+                              <strong className="admin-diary-hh">{s.householdName}</strong>
+                              <span className="admin-diary-right">
+                                <span
+                                  className="admin-diary-plot"
+                                  style={zc ? { color: zc.text } : undefined}
+                                >
+                                  {s.plotCode ? `Thửa ${s.plotCode}` : "Toàn vườn"}
+                                </span>
+                                <DetailArrowIcon className="admin-diary-arrow" size={20} />
+                              </span>
                             </button>
-                          )}
-                          {canDeleteSpray && (
-                            <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingSpray(s)}>
-                              Xóa
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <Pagination page={sPage} pageSize={PAGE_SIZE} total={sprayList.total} unit="lần phun" onChange={setSPage} />
-          </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+              <div className="admin-diary-pagination">
+                <Pagination page={sPage} pageSize={PAGE_SIZE} total={sprayList.total} unit="lần phun" onChange={setSPage} />
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -661,6 +643,15 @@ export default function Journal() {
               }
               : undefined
           }
+          onDelete={
+            canDeleteJournal
+              ? () => {
+                const row = viewingJournal;
+                setViewingJournal(null);
+                setDeletingJournal(row);
+              }
+              : undefined
+          }
         />
       )}
 
@@ -674,6 +665,15 @@ export default function Journal() {
                 const row = viewingSpray;
                 setViewingSpray(null);
                 setEditingSpray(row);
+              }
+              : undefined
+          }
+          onDelete={
+            canDeleteSpray
+              ? () => {
+                const row = viewingSpray;
+                setViewingSpray(null);
+                setDeletingSpray(row);
               }
               : undefined
           }

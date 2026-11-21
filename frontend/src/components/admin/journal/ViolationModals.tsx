@@ -146,7 +146,8 @@ function JournalEvidence({ violation }: { violation: ViolationRow }) {
     <div
       style={{
         padding: "10px 12px",
-        borderRadius: 12,
+        borderRadius: 6,
+        border: "1px solid #d4d4d2",
         fontSize: 12.5,
         lineHeight: 1.5,
         marginBottom: 14,
@@ -158,7 +159,7 @@ function JournalEvidence({ violation }: { violation: ViolationRow }) {
       {ok
         ? `Hộ đã ghi nhật ký mới ngày ${formatDate(last)}, sau ngày phát hiện vi phạm.`
         : last
-          ? `Lần ghi gần nhất ${formatDate(last)} — chưa có nhật ký mới kể từ ngày phát hiện (${formatDate(violation.detectedOn)}).`
+          ? `Lần ghi gần nhất ${formatDate(last)}, chưa có nhật ký mới kể từ ngày phát hiện (${formatDate(violation.detectedOn)}).`
           : "Hộ chưa có bản ghi nhật ký nào cho thửa này."}
     </div>
   );
@@ -219,7 +220,8 @@ export function ViolationResolveModal({
           <div
             style={{
               padding: "10px 12px",
-              borderRadius: 12,
+              borderRadius: 6,
+              border: "1px solid #d4d4d2",
               background: "var(--mist)",
               fontSize: 12.5,
               marginBottom: 14,
@@ -354,7 +356,7 @@ export function ViolationFormModal({
           value={householdId}
           onChange={handleHouseholdChange}
           options={householdOptions}
-          placeholder="— Chọn hộ từ danh sách —"
+          placeholder="Chọn hộ từ danh sách"
         />
 
         <FormGrid>

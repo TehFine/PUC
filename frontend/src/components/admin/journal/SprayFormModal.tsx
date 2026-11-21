@@ -21,10 +21,12 @@ export function SprayDetailModal({
   record,
   onClose,
   onEdit,
+  onDelete,
 }: {
   record: SprayRow;
   onClose: () => void;
   onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const mrl = badgeOf(MRL_STATUS, record.mrlStatus);
   const hasMedia = Boolean(record.photoUrls?.length || record.photoUrl);
@@ -36,9 +38,14 @@ export function SprayDetailModal({
       width={580}
       footer={
         <>
+          {onDelete && (
+            <button type="button" className="btn btn-danger" onClick={onDelete}>
+              Xóa
+            </button>
+          )}
           {onEdit && (
             <button type="button" className="btn btn-outline" onClick={onEdit}>
-              Sửa bản ghi
+              Sửa
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={onClose}>

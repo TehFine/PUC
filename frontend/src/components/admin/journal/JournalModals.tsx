@@ -18,10 +18,12 @@ export function JournalDetailModal({
   entry,
   onClose,
   onEdit,
+  onDelete,
 }: {
   entry: JournalRow;
   onClose: () => void;
   onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const hasMedia = Boolean(entry.photoUrls?.length || entry.photoUrl);
 
@@ -32,9 +34,14 @@ export function JournalDetailModal({
       width={580}
       footer={
         <>
+          {onDelete && (
+            <button type="button" className="btn btn-danger" onClick={onDelete}>
+              Xóa
+            </button>
+          )}
           {onEdit && (
             <button type="button" className="btn btn-outline" onClick={onEdit}>
-              Sửa nhật ký
+              Sửa
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={onClose}>
