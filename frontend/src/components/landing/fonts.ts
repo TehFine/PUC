@@ -1,28 +1,22 @@
-import { Noto_Serif_Display, Plus_Jakarta_Sans } from "next/font/google";
+import { Bai_Jamjuree } from "next/font/google";
 
 /**
- * Chữ tiêu đề serif tương phản cao, kiểu tạp chí (chỉ dùng trên trang giới thiệu, tắt preload toàn cục
- * để các trang làm việc /portal và /admin không tải thêm font serif vào RAM trên máy cấu hình yếu).
+ * Toàn hệ thống đồng bộ thống nhất phông chữ Bai Jamjuree hỗ trợ đầy đủ tiếng Việt.
  */
-export const display = Noto_Serif_Display({
+export const display = Bai_Jamjuree({
   subsets: ["latin", "vietnamese"],
-  weight: "variable",
-  style: ["normal"],
-  axes: ["wdth"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
   variable: "--font-display",
   display: "swap",
   preload: false,
 });
 
-/**
- * Font Sans-Serif hiện đại, nét đậm sắc nét (Bold / Extra Bold Sans) theo phong cách ảnh mẫu.
- * Hỗ trợ tiếng Việt đầy đủ, đường nét dứt khoát, cao cấp và tương phản mạnh mẽ.
- */
-export const heroSans = Plus_Jakarta_Sans({
+export const heroSans = Bai_Jamjuree({
   subsets: ["latin", "vietnamese"],
-  weight: "variable",
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
   variable: "--font-hero-sans",
   display: "swap",
   preload: false,
 });
-

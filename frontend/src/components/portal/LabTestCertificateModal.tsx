@@ -1272,7 +1272,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
           border-radius: 0;
           box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
           padding: 30px 38px 24px;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Times New Roman", serif;
+          font-family: var(--font-body-stack), "Bai Jamjuree", Arial, Helvetica, sans-serif;
           line-height: 1.42;
           overflow: hidden;
         }
@@ -1982,7 +1982,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
             padding: 22px 24px 16px;
             box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Times New Roman", serif;
+            font-family: var(--font-body-stack), "Bai Jamjuree", Arial, Helvetica, sans-serif;
             display: flex;
             flex-direction: column;
             justify-content: space-between;

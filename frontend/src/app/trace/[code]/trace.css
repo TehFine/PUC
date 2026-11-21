@@ -18,7 +18,7 @@
   min-height: 100dvh;
   background-color: #fafaf9;
   color: var(--tr-ink);
-  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-bai-jamjuree), "Bai Jamjuree", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", Arial, Helvetica, sans-serif;
   padding-bottom: 56px;
   -webkit-font-smoothing: antialiased;
   display: flex;

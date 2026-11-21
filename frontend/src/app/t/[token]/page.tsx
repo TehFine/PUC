@@ -45,7 +45,7 @@ export default function AntiCounterfeitQrTokenPage() {
             fontSize: 14.5,
             fontWeight: 500,
             fontFamily:
-              '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif',
+              'var(--font-bai-jamjuree), "Bai Jamjuree", "PingFang SC", "Microsoft YaHei", Arial, Helvetica, sans-serif',
           }}
         >
           Đang xác thực mã QR thời gian thực / Verifying QR / 正在实时核验溯源码…

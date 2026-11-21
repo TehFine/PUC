@@ -129,11 +129,33 @@ function formatIsoToVn(iso: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
 
+function collectSelfHostedFontCss(): string {
+  if (typeof document === "undefined" || typeof window === "undefined") return "";
+  const origin = window.location.origin;
+  const rulesOut: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    let cssRules: CSSRuleList;
+    try {
+      cssRules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    for (const rule of Array.from(cssRules)) {
+      if (!(rule instanceof CSSFontFaceRule)) continue;
+      let text = rule.cssText.replace(/font-family:\s*['"]?[^;'"]+['"]?/i, 'font-family: "Bai Jamjuree"');
+      text = text.replace(/url\(\s*(['"]?)(\/[^)'"]+)\1\s*\)/g, `url("${origin}$2")`);
+      rulesOut.push(text);
+    }
+  }
+  return rulesOut.join("\n");
+}
+
 function buildPrintableReportHtml(
   report: ReportSpec,
   data: ReportDataPayload,
   meta: { from: string; to: string; villageName: string },
 ): string {
+  const fontFaceCss = collectSelfHostedFontCss();
   const now = new Date();
   const day = String(now.getDate()).padStart(2, "0");
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -167,6 +189,7 @@ function buildPrintableReportHtml(
   <meta charset="utf-8" />
   <title>${escapeHtml(report.docTitle)} - HTX Cư Né</title>
   <style>
+    ${fontFaceCss}
     @page { size: A4 landscape; margin: 14mm; }
     * {
       box-sizing: border-box;
@@ -174,7 +197,7 @@ function buildPrintableReportHtml(
       print-color-adjust: exact;
     }
     body {
-      font-family: "Times New Roman", Times, serif;
+      font-family: "Bai Jamjuree", Arial, Helvetica, sans-serif;
       color: #0f172a;
       margin: 0;
       padding: 20px 24px;
@@ -189,7 +212,7 @@ function buildPrintableReportHtml(
       margin-bottom: 16px;
       padding-bottom: 12px;
       border-bottom: 1px dashed #cbd5e1;
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: "Bai Jamjuree", Arial, Helvetica, sans-serif;
     }
     .print-btn {
       padding: 8px 16px;
@@ -249,7 +272,7 @@ function buildPrintableReportHtml(
       width: 100%;
       border-collapse: collapse;
       margin-top: 12px;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: "Bai Jamjuree", Arial, Helvetica, sans-serif;
       font-size: 12px;
     }
     thead {
