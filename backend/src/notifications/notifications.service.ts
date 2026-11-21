@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
-import { can, type Role } from "../auth/permissions";
+import { can, isCoopStaffRole, type Role } from "../auth/permissions";
 import type { CacheTag } from "../common/cache/app-cache.service";
 import { isStaffInCuneCoopScope, isStaffInParcelScope, villageScope } from "../common/crud/village-scope";
 import { camelRows } from "../common/sql/rows";
@@ -285,18 +285,40 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       const recipientIds = staffRes.rows
         .filter((u) => {
           if (excludedId !== undefined && Number(u.id) === excludedId) return false;
+          const staffUser: AuthUser = {
+            id: Number(u.id),
+            fullName: "",
+            username: "",
+            role: u.role,
+            villageId: u.village_id !== null ? Number(u.village_id) : null,
+            householdId: null,
+            assignedCommune: u.assigned_commune,
+            assignedRegion: u.assigned_region,
+            coopCode: u.coop_code || "HTX-CUNE",
+          };
+          // Ban điều hành, quản trị viên, cán bộ kỹ thuật HTX và kiểm tra viên thuộc HTX-CUNE / Đắk Lắk
+          // giám sát toàn bộ vùng trồng liên kết (bao gồm cả Cư Né và Ea Khăl).
+          if (isCoopStaffRole(u.role) || u.role === "inspector") {
+            return isStaffInCuneCoopScope(staffUser, true);
+          }
+          if (u.role === "village_officer") {
+            if (!isStaffInCuneCoopScope(staffUser, true)) return false;
+            if (u.village_id !== null) {
+              if (hh.village_id !== null) {
+                return Number(u.village_id) === Number(hh.village_id);
+              }
+              const officerVillage = (u.village_name || "").trim().toLowerCase();
+              const targetVillage = (hh.village_name || "").trim().toLowerCase();
+              return Boolean(officerVillage && targetVillage && officerVillage === targetVillage);
+            }
+            return isStaffInParcelScope(
+              staffUser,
+              { villageId: hh.village_id, villageName: hh.village_name },
+              u.village_name,
+            );
+          }
           return isStaffInParcelScope(
-            {
-              id: Number(u.id),
-              fullName: "",
-              username: "",
-              role: u.role,
-              villageId: u.village_id !== null ? Number(u.village_id) : null,
-              householdId: null,
-              assignedCommune: u.assigned_commune,
-              assignedRegion: u.assigned_region,
-              coopCode: u.coop_code || "HTX-CUNE",
-            },
+            staffUser,
             { villageId: hh.village_id, villageName: hh.village_name },
             u.village_name,
           );

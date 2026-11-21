@@ -16,6 +16,11 @@ function diffCalendarDays(laterIso: string, earlierIso: string): number {
   return Math.round((a - b) / 86_400_000);
 }
 
+function shortFarmerName(raw: string | null | undefined, fallback: string): string {
+  const base = (raw || fallback || "").trim();
+  return base.replace(/^hộ\s+/i, "").trim() || base;
+}
+
 /** Điều kiện khớp thửa giữa bản ghi phun `s` và bản ghi nghiệp vụ khác (thửa rỗng ở một trong hai bên coi như cả hộ). */
 const plotMatchSql = (column: string) =>
   `(s.plot_code IS NULL OR btrim(s.plot_code) = '' OR ${column} IS NULL OR btrim(${column}) = '' OR upper(btrim(${column})) = upper(btrim(s.plot_code)))`;
@@ -203,7 +208,7 @@ export class SprayService {
       "SELECT name FROM households WHERE id = $1",
       [householdId],
     );
-    const householdName = hhRes.rows[0]?.name || user.fullName;
+    const farmerName = shortFarmerName(hhRes.rows[0]?.name, user.fullName);
     const [syFmt, smFmt, sdFmt] = sprayedOn.split("-");
 
     if (pesticide.status === "banned" || pesticide.status === "restricted") {
@@ -211,16 +216,16 @@ export class SprayService {
         kind: "violation",
         title:
           pesticide.status === "banned"
-            ? `CẢNH BÁO: Hộ ${householdName} khai báo dùng thuốc CẤM (${pesticide.name})`
-            : `Lưu ý giám sát: Hộ ${householdName} phun hoạt chất hạn chế (${pesticide.name})`,
-        body: `${plotCode ? `Thửa ${plotCode} - ` : ""}Liều lượng ${dto.dose}, ngày ${sdFmt}/${smFmt}/${syFmt}.`,
+            ? `Cảnh báo: ${farmerName} khai báo thuốc cấm`
+            : `Lưu ý: ${farmerName} phun thuốc hạn chế`,
+        body: `${pesticide.name}${plotCode ? `, thửa ${plotCode}` : ""}, liều ${dto.dose} (${sdFmt}/${smFmt}/${syFmt})`,
         link: `${ADMIN_LINKS.journal}&sub=spray`,
       });
     } else {
       await this.notifications.notifyOversightForHousehold(householdId, {
         kind: "protocol",
-        title: `Nhật ký phun thuốc mới: Hộ ${householdName}`,
-        body: `${pesticide.name}${plotCode ? ` tại thửa ${plotCode}` : ""}, liều ${dto.dose}, ngày ${sdFmt}/${smFmt}/${syFmt} (cách ly ${pesticide.isolation_days ?? 0} ngày).`,
+        title: `${farmerName} mới cập nhật nhật ký canh tác`,
+        body: `Phun thuốc ${pesticide.name}${plotCode ? `, thửa ${plotCode}` : ""} (${sdFmt}/${smFmt}/${syFmt})`,
         link: `${ADMIN_LINKS.journal}&sub=spray`,
       });
     }
@@ -287,11 +292,11 @@ export class SprayService {
       "SELECT name FROM households WHERE id = $1",
       [householdId],
     );
-    const householdName = hhRes.rows[0]?.name || user.fullName;
+    const farmerName = shortFarmerName(hhRes.rows[0]?.name, user.fullName);
     await this.notifications.notifyOversightForHousehold(householdId, {
       kind: "protocol",
-      title: `Hộ ${householdName} vừa xóa bản ghi phun thuốc trong 24h`,
-      body: `${row.pesticide}${row.plot_code ? ` tại thửa ${row.plot_code}` : ""}.`,
+      title: `${farmerName} vừa xóa nhật ký phun thuốc`,
+      body: `${row.pesticide}${row.plot_code ? `, thửa ${row.plot_code}` : ""}`,
       link: `${ADMIN_LINKS.journal}&sub=spray`,
     });
     return { ok: true };

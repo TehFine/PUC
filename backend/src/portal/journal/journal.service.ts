@@ -15,6 +15,11 @@ import type { CreatePortalJournalDto, ViolationResponseDto } from "./journal.dto
 /** Người ghi của bản ghi do hộ tự tạo trên cổng hộ dân. */
 export const FARMER_RECORDER = "Chủ hộ";
 
+function shortFarmerName(raw: string | null | undefined, fallback: string): string {
+  const base = (raw || fallback || "").trim();
+  return base.replace(/^hộ\s+/i, "").trim() || base;
+}
+
 function diffCalendarDays(laterIso: string, earlierIso: string): number {
   const a = new Date(`${laterIso}T00:00:00Z`).getTime();
   const b = new Date(`${earlierIso}T00:00:00Z`).getTime();
@@ -185,13 +190,12 @@ export class JournalService {
       "SELECT name FROM households WHERE id = $1",
       [householdId],
     );
-    const householdName = hhRes.rows[0]?.name || user.fullName;
+    const farmerName = shortFarmerName(hhRes.rows[0]?.name, user.fullName);
     const [ey, em, ed] = entryOn.split("-");
-    const detailSnippet = dto.detail?.trim() ? ` - ${dto.detail.trim().slice(0, 120)}` : "";
     await this.notifications.notifyOversightForHousehold(householdId, {
       kind: "protocol",
-      title: `Nhật ký mới: Hộ ${householdName} (${dto.activity})`,
-      body: `Thửa ${plotCode}, thực hiện ngày ${ed}/${em}/${ey}${detailSnippet}`,
+      title: `${farmerName} mới cập nhật nhật ký canh tác`,
+      body: `${dto.activity}, thửa ${plotCode} (${ed}/${em}/${ey})`,
       link: ADMIN_LINKS.journal,
     });
 
@@ -281,11 +285,11 @@ export class JournalService {
       "SELECT name FROM households WHERE id = $1",
       [householdId],
     );
-    const householdName = hhRes.rows[0]?.name || user.fullName;
+    const farmerName = shortFarmerName(hhRes.rows[0]?.name, user.fullName);
     await this.notifications.notifyOversightForHousehold(householdId, {
       kind: "protocol",
-      title: `Hộ ${householdName} vừa xóa bản ghi nhật ký trong 24h`,
-      body: `Công việc "${row.activity}" tại thửa ${row.plot_code}.`,
+      title: `${farmerName} vừa xóa nhật ký canh tác`,
+      body: `${row.activity}, thửa ${row.plot_code}`,
       link: ADMIN_LINKS.journal,
     });
     return { ok: true };

@@ -1122,10 +1122,11 @@ export class CareProtocolService {
         }),
       ]);
     } else if (txResult.nextPlanStatus !== "completed") {
+      const shortName = (plan.household_name || "").trim().replace(/^hộ\s+/i, "").trim() || plan.household_name;
       await this.notifications.notifyOversightForHousehold(householdId, {
         kind: "protocol",
-        title: `Cập nhật quy trình: Hộ ${plan.household_name} (Thửa ${plotCode})`,
-        body: `Đã ghi nhận ${stageLabel} ngày ${formatIsoVn(performedOn)} đạt chuẩn quy trình.`,
+        title: `${shortName} mới cập nhật nhật ký canh tác`,
+        body: `${stageLabel}, thửa ${plotCode} (${formatIsoVn(performedOn)})`,
         link: ADMIN_PROTOCOL_LINK,
       });
     }

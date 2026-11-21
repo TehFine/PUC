@@ -282,14 +282,18 @@ export class SprayService extends BaseCrudService {
           actorRole: string;
         }
       | undefined;
+    let resolvedFarmerName: string | null = null;
     if (changeInfo) {
       const hhRes = await this.db.query<{ name: string }>(
         "SELECT name FROM households WHERE id = $1",
         [changeInfo.householdId],
       );
-      const householdName = hhRes.rows[0]?.name || `#${changeInfo.householdId}`;
+      const rawName = (hhRes.rows[0]?.name || `#${changeInfo.householdId}`).trim();
+      const farmerName = rawName.replace(/^hộ\s+/i, "").trim() || rawName;
+      resolvedFarmerName = farmerName;
       const roleLabel = STAFF_ROLE_LABELS[changeInfo.actorRole] ?? "Cán bộ";
       const plotText = changeInfo.plotCode ? ` tại thửa ${changeInfo.plotCode}` : "";
+      const shortPlot = changeInfo.plotCode ? `, thửa ${changeInfo.plotCode}` : "";
 
       if (changeInfo.method === "POST" && changeInfo.actorRole !== "farmer") {
         await this.notifications.notifyHousehold(changeInfo.householdId, {
@@ -305,11 +309,11 @@ export class SprayService extends BaseCrudService {
           changeInfo.householdId,
           {
             kind: "protocol",
-            title:
-              changeInfo.method === "POST"
-                ? `Nhật ký phun thuốc mới: Hộ ${householdName}`
-                : `Cập nhật nhật ký phun thuốc: Hộ ${householdName}`,
-            body: `${roleLabel} ${changeInfo.actorName} vừa ${changeInfo.method === "POST" ? "ghi nhận" : "chỉnh sửa"} "${changeInfo.pesticideName}"${plotText}.`,
+            title: `${farmerName} mới cập nhật nhật ký canh tác`,
+            body:
+              changeInfo.actorRole === "farmer"
+                ? `Phun thuốc ${changeInfo.pesticideName}${shortPlot}`
+                : `Phun thuốc ${changeInfo.pesticideName}${shortPlot} (${roleLabel} ${changeInfo.actorName})`,
             link: "/admin?section=journal&sub=spray",
           },
           { excludeUserId: changeInfo.actorId },
@@ -322,12 +326,20 @@ export class SprayService extends BaseCrudService {
       | undefined;
     if (!alert) return;
 
-    const statusLabel = alert.pesticideStatus === "banned" ? "cấm sử dụng" : "hạn chế sử dụng";
+    if (!resolvedFarmerName) {
+      const hhRes = await this.db.query<{ name: string }>(
+        "SELECT name FROM households WHERE id = $1",
+        [alert.householdId],
+      );
+      const rawName = (hhRes.rows[0]?.name || `#${alert.householdId}`).trim();
+      resolvedFarmerName = rawName.replace(/^hộ\s+/i, "").trim() || rawName;
+    }
+    const statusLabel = alert.pesticideStatus === "banned" ? "cấm" : "hạn chế";
     const plotText = alert.plotCode ? `, thửa ${alert.plotCode}` : "";
     await this.notifications.notifyOversightForHousehold(alert.householdId, {
       kind: "violation",
-      title: `Cảnh báo ghi nhận thuốc BVTV ${statusLabel}: ${alert.pesticideName}`,
-      body: `Bản ghi phun thuốc #${id} (hộ #${alert.householdId}${plotText}) sử dụng hoạt chất ${statusLabel}.`,
+      title: `Cảnh báo: ${resolvedFarmerName} ghi nhận thuốc ${statusLabel}`,
+      body: `Phun thuốc ${alert.pesticideName}${plotText} (#${id})`,
       link: "/admin?section=journal&sub=spray",
     });
   }

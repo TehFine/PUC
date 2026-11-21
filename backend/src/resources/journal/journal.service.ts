@@ -260,9 +260,11 @@ export class JournalService extends BaseCrudService {
       "SELECT name FROM households WHERE id = $1",
       [changeInfo.householdId],
     );
-    const householdName = hhRes.rows[0]?.name || `#${changeInfo.householdId}`;
+    const rawName = (hhRes.rows[0]?.name || `#${changeInfo.householdId}`).trim();
+    const farmerName = rawName.replace(/^hộ\s+/i, "").trim() || rawName;
     const roleLabel = STAFF_ROLE_LABELS[changeInfo.actorRole] ?? "Cán bộ";
     const plotText = changeInfo.plotCode ? ` tại thửa ${changeInfo.plotCode}` : "";
+    const shortPlot = changeInfo.plotCode ? `, thửa ${changeInfo.plotCode}` : "";
 
     if (changeInfo.method === "POST" && changeInfo.actorRole !== "farmer") {
       await this.notifications.notifyHousehold(changeInfo.householdId, {
@@ -277,11 +279,11 @@ export class JournalService extends BaseCrudService {
       changeInfo.householdId,
       {
         kind: "protocol",
-        title:
-          changeInfo.method === "POST"
-            ? `Nhật ký mới: Hộ ${householdName} (${changeInfo.activity})`
-            : `Cập nhật nhật ký: Hộ ${householdName} (${changeInfo.activity})`,
-        body: `${roleLabel} ${changeInfo.actorName} vừa ${changeInfo.method === "POST" ? "ghi nhận" : "chỉnh sửa"} bản ghi${plotText}.`,
+        title: `${farmerName} mới cập nhật nhật ký canh tác`,
+        body:
+          changeInfo.actorRole === "farmer"
+            ? `${changeInfo.activity}${shortPlot}`
+            : `${changeInfo.activity}${shortPlot} (${roleLabel} ${changeInfo.actorName})`,
         link: "/admin?section=journal",
       },
       { excludeUserId: changeInfo.actorId },
