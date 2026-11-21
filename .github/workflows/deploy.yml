@@ -48,8 +48,24 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --remove-orphans
+            docker compose --env-file .env.prod -f docker-compose.prod.yml restart nginx
             docker image prune -f
+
+            ok=0
+            for i in $(seq 1 20); do
+              if curl -fsS http://127.0.0.1/api/health >/dev/null 2>&1 && curl -fsS -o /dev/null http://127.0.0.1/ 2>/dev/null; then
+                ok=1
+                break
+              fi
+              sleep 2
+            done
+
             docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::Trang giao diện hoặc API chưa phản hồi HTTP 200 sau khi khởi động lại."
+              docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=80 frontend backend nginx
+              exit 1
+            fi
           EOF
           rm -f ~/.ssh/deploy_key
 
