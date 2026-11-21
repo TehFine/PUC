@@ -50,5 +50,7 @@ export interface SystemAlertListResponse {
 export interface HealthCheckResponse {
   status: "ok" | "degraded";
   database: "up" | "down";
+  dbLatencyMs?: number | null;
+  checkedAt?: string;
   alert?: SystemAlertRecord | null;
 }

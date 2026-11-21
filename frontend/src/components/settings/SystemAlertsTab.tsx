@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { toast } from "@/components/ui/Toast";
 import { useApi } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
@@ -70,9 +71,140 @@ const SEVERITY_META: Record<
   critical: { label: "Khẩn cấp", badgeClass: "badge-red", bg: "#fef2f2", color: "#b91c1c" },
 };
 
+interface LiveHealthState {
+  phase: "checking" | "healthy" | "db_down" | "unreachable" | "offline";
+  apiLatencyMs: number | null;
+  dbLatencyMs: number | null;
+  checkedAt: string | null;
+}
+
 export default function SystemAlertsTab() {
+  const { can } = useAuth();
+  const canCreateAlert = can("accounts", "create");
+  const canResolveAlert = can("accounts", "update");
   const { data, loading, error, refresh } = useApi<SystemAlertListResponse>("/system-alerts");
-  const health = useApi<HealthCheckResponse>("/health");
+
+  const [liveHealth, setLiveHealth] = useState<LiveHealthState>({
+    phase: "checking",
+    apiLatencyMs: null,
+    dbLatencyMs: null,
+    checkedAt: null,
+  });
+  const checkingRef = useRef(false);
+
+  const runLiveHealthProbe = useCallback(async (manual: boolean) => {
+    if (checkingRef.current) return;
+    checkingRef.current = true;
+    if (manual) {
+      setLiveHealth((prev) => ({ ...prev, phase: "checking" }));
+    }
+
+    const startedAt = performance.now();
+    const minVisualDelay = manual ? new Promise<void>((r) => window.setTimeout(r, 260)) : Promise.resolve();
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        await minVisualDelay;
+        const nowIso = new Date().toISOString();
+        setLiveHealth({
+          phase: "offline",
+          apiLatencyMs: null,
+          dbLatencyMs: null,
+          checkedAt: nowIso,
+        });
+        if (manual) {
+          toast.error("Thiết bị hiện đang ngoại tuyến. Vui lòng kiểm tra kết nối mạng.");
+        }
+        return;
+      }
+
+      const signal =
+        typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+          ? AbortSignal.timeout(6000)
+          : undefined;
+      const res = await fetch("/api/health", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        signal,
+      });
+      const roundTripMs = Math.max(1, Math.round(performance.now() - startedAt));
+      const payload = (await res.json().catch(() => null)) as HealthCheckResponse | null;
+      await minVisualDelay;
+
+      const checkedAt = payload?.checkedAt ?? new Date().toISOString();
+
+      if (res.ok && payload?.status === "ok" && payload.database === "up") {
+        const dbMs = payload.dbLatencyMs ?? null;
+        setLiveHealth({
+          phase: "healthy",
+          apiLatencyMs: roundTripMs,
+          dbLatencyMs: dbMs,
+          checkedAt,
+        });
+        void checkSystemHealth();
+        if (manual) {
+          toast.success(
+            dbMs !== null
+              ? `Máy chủ (${roundTripMs} ms) và cơ sở dữ liệu (${dbMs} ms) hoạt động ổn định.`
+              : `Máy chủ và cơ sở dữ liệu phản hồi ổn định (${roundTripMs} ms).`,
+          );
+        }
+        return;
+      }
+
+      if (res.status === 503 || payload?.database === "down") {
+        setLiveHealth({
+          phase: "db_down",
+          apiLatencyMs: roundTripMs,
+          dbLatencyMs: null,
+          checkedAt,
+        });
+        void checkSystemHealth();
+        if (manual) {
+          toast.error("Máy chủ phản hồi nhưng kết nối cơ sở dữ liệu đang bị gián đoạn.");
+        }
+        return;
+      }
+
+      setLiveHealth({
+        phase: "unreachable",
+        apiLatencyMs: null,
+        dbLatencyMs: null,
+        checkedAt,
+      });
+      void checkSystemHealth();
+      if (manual) {
+        toast.error(`Máy chủ trả mã lỗi ${res.status}. Vui lòng kiểm tra lại dịch vụ.`);
+      }
+    } catch {
+      await minVisualDelay;
+      const isOfflineNow = typeof navigator !== "undefined" && navigator.onLine === false;
+      setLiveHealth({
+        phase: isOfflineNow ? "offline" : "unreachable",
+        apiLatencyMs: null,
+        dbLatencyMs: null,
+        checkedAt: new Date().toISOString(),
+      });
+      void checkSystemHealth();
+      if (manual) {
+        toast.error(
+          isOfflineNow
+            ? "Thiết bị hiện đang mất kết nối mạng."
+            : "Không kết nối được tới máy chủ ứng dụng.",
+        );
+      }
+    } finally {
+      checkingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void runLiveHealthProbe(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [runLiveHealthProbe]);
 
   const [severity, setSeverity] = useState<SystemAlertSeverity>("info");
   const [audience, setAudience] = useState<SystemAlertAudience>("all");
@@ -83,7 +215,8 @@ export default function SystemAlertsTab() {
 
   const activeAlert = data?.active ?? null;
   const rows = data?.data ?? [];
-  const isHealthy = health.data?.status === "ok" && health.data?.database === "up";
+  const isCheckingHealth = liveHealth.phase === "checking";
+  const isHealthy = liveHealth.phase === "healthy";
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -145,30 +278,71 @@ export default function SystemAlertsTab() {
               fontWeight: 700,
               fontSize: 15,
               lineHeight: 1.35,
-              color: health.loading ? "#0f172a" : isHealthy ? "#14372f" : "#b91c1c",
+              color: isCheckingHealth ? "#0f172a" : isHealthy ? "#14372f" : "#b91c1c",
             }}
           >
-            {health.loading
+            {isCheckingHealth
               ? "Đang kiểm tra kết nối máy chủ và cơ sở dữ liệu…"
               : isHealthy
                 ? "Máy chủ và cơ sở dữ liệu hoạt động ổn định"
-                : "Cảnh báo: Phát hiện gián đoạn kết nối máy chủ hoặc cơ sở dữ liệu"}
+                : liveHealth.phase === "db_down"
+                  ? "Cảnh báo: Máy chủ phản hồi nhưng mất kết nối cơ sở dữ liệu"
+                  : liveHealth.phase === "offline"
+                    ? "Thiết bị hiện đang mất kết nối mạng"
+                    : "Cảnh báo: Không kết nối được tới máy chủ ứng dụng"}
           </div>
           <div style={{ fontSize: 13, color: "#5f6d66", lineHeight: 1.5, marginTop: 4 }}>
             Khi máy chủ gặp lỗi 5xx hoặc mất kết nối, toàn bộ người dùng đang mở ứng dụng sẽ tự động nhận cảnh báo khẩn ngay trên đầu màn hình.
           </div>
+          {liveHealth.checkedAt && (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "4px 16px",
+                marginTop: 10,
+                paddingTop: 10,
+                borderTop: "1px solid #e5e7eb",
+                fontSize: 12.5,
+                color: "#5f6d66",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              <span>
+                Kiểm tra lúc:{" "}
+                <strong style={{ color: "#14372f" }}>
+                  {new Date(liveHealth.checkedAt).toLocaleTimeString("vi-VN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}{" "}
+                  ngày {formatDate(liveHealth.checkedAt)}
+                </strong>
+              </span>
+              {liveHealth.apiLatencyMs !== null && (
+                <span>
+                  Phản hồi máy chủ: <strong style={{ color: "#14372f" }}>{liveHealth.apiLatencyMs} ms</strong>
+                </span>
+              )}
+              {liveHealth.dbLatencyMs !== null && (
+                <span>
+                  Truy vấn CSDL: <strong style={{ color: "#14372f" }}>{liveHealth.dbLatencyMs} ms</strong>
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <footer className="dash-bento-footer">
           <button
             type="button"
             className="dash-bento-footer-btn"
-            disabled={health.loading}
+            disabled={isCheckingHealth}
             onClick={() => {
-              void health.refresh();
-              void checkSystemHealth();
+              void runLiveHealthProbe(true);
+              void refresh();
             }}
           >
-            {health.loading ? "Đang kiểm tra…" : "Kiểm tra lại ngay"}
+            {isCheckingHealth ? "Đang kiểm tra…" : "Kiểm tra lại ngay"}
           </button>
         </footer>
       </div>
@@ -206,22 +380,25 @@ export default function SystemAlertsTab() {
             </div>
             <div style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.5 }}>{activeAlert.message}</div>
           </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={resolvingId === activeAlert.id}
-            onClick={() => void handleResolve(activeAlert.id)}
-          >
-            {resolvingId === activeAlert.id
-              ? "Đang cập nhật…"
-              : activeAlert.severity === "info"
-                ? "Đóng dải thông báo"
-                : "Đánh dấu đã khắc phục"}
-          </button>
+          {canResolveAlert && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={resolvingId === activeAlert.id}
+              onClick={() => void handleResolve(activeAlert.id)}
+            >
+              {resolvingId === activeAlert.id
+                ? "Đang cập nhật…"
+                : activeAlert.severity === "info"
+                  ? "Đóng dải thông báo"
+                  : "Đánh dấu đã khắc phục"}
+            </button>
+          )}
         </div>
       )}
 
       {/* Biểu mẫu phát thông báo mới */}
+      {canCreateAlert && (
       <form className="card" onSubmit={handleSubmit} style={{ padding: "20px", display: "grid", gap: 14 }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <div>
@@ -321,6 +498,7 @@ export default function SystemAlertsTab() {
           </button>
         </div>
       </form>
+      )}
 
       {/* Lịch sử thông báo khẩn */}
       <div className="table-wrap">
@@ -364,7 +542,7 @@ export default function SystemAlertsTab() {
                 <tr key={item.id}>
                   <td style={{ fontVariantNumeric: "tabular-nums" }}>{formatDate(item.createdAt)}</td>
                   <td>
-                    <span className={`badge ${sevMeta.badgeClass}`}>{sevMeta.label}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: sevMeta.color }}>{sevMeta.label}</span>
                   </td>
                   <td>{AUDIENCE_LABELS[item.audience]}</td>
                   <td style={{ maxWidth: 360 }}>
@@ -374,17 +552,23 @@ export default function SystemAlertsTab() {
                   <td>{item.createdByName || "Hệ thống"}</td>
                   <td>
                     {item.active ? (
-                      <span className={`badge ${item.severity === "info" ? "badge-green" : "badge-red"}`}>
+                      <span
+                        style={{
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          color: item.severity === "info" ? "#15803d" : "#b91c1c",
+                        }}
+                      >
                         Đang phát
                       </span>
                     ) : (
-                      <span className="badge badge-green">
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: "#5f6d66" }}>
                         {item.severity === "info" ? "Đã đóng" : "Đã khắc phục"}
                       </span>
                     )}
                   </td>
                   <td>
-                    {item.active ? (
+                    {item.active && canResolveAlert ? (
                       <button
                         type="button"
                         className="btn btn-sm"

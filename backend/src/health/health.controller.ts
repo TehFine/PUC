@@ -19,8 +19,11 @@ export class HealthController {
   @Throttle(RateLimitTier.PUBLIC_READ)
   @Get()
   async check(@CurrentUser() user: AuthUser | undefined, @Res({ passthrough: true }) res: Response) {
+    const checkedAt = new Date().toISOString();
     try {
+      const dbStartedAt = performance.now();
       await this.db.query("SELECT 1");
+      const dbLatencyMs = Math.max(1, Math.round(performance.now() - dbStartedAt));
       const rawAlert = (await this.systemAlerts?.getActive()) ?? null;
       const visible =
         rawAlert &&
@@ -43,10 +46,10 @@ export class HealthController {
             createdAt: rawAlert.createdAt,
           }
         : null;
-      return { status: "ok", database: "up", alert };
+      return { status: "ok", database: "up", dbLatencyMs, checkedAt, alert };
     } catch {
       res.status(503);
-      return { status: "degraded", database: "down", alert: null };
+      return { status: "degraded", database: "down", dbLatencyMs: null, checkedAt, alert: null };
     }
   }
 }

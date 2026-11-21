@@ -128,8 +128,13 @@ export function invalidateApiCache(prefix?: string) {
   }
 }
 
+function isLiveProbePath(path: string): boolean {
+  return path === "/health" || path.startsWith("/health?");
+}
+
 function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
   const cacheKey = scopedApiKey(path);
+  const skipOfflineSnapshot = isLiveProbePath(path);
   if (forceRefresh) {
     apiCache.delete(cacheKey);
   }
@@ -142,12 +147,14 @@ function fetchDeduped<T>(path: string, forceRefresh = false): Promise<T> {
     .then((result) => {
       if (requestEpoch === authEpoch && scopedApiKey(path) === cacheKey) {
         setApiCacheEntry(cacheKey, result);
-        void saveOfflineReadSnapshot(path, result);
+        if (!skipOfflineSnapshot) {
+          void saveOfflineReadSnapshot(path, result);
+        }
       }
       return result;
     })
     .catch(async (err) => {
-      if (isTransientNetworkError(err)) {
+      if (!skipOfflineSnapshot && isTransientNetworkError(err)) {
         const snapshot = await loadOfflineReadSnapshot<T>(path);
         if (snapshot !== null && requestEpoch === authEpoch && scopedApiKey(path) === cacheKey) {
           setApiCacheEntry(cacheKey, snapshot);
