@@ -2,8 +2,20 @@ import { Injectable, OnModuleInit, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHash, randomUUID } from "node:crypto";
 import { constants as fsConstants, type ReadStream } from "node:fs";
-import { type FileHandle, mkdir, open as fsOpen, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import {
+  access,
+  appendFile,
+  type FileHandle,
+  mkdir,
+  open as fsOpen,
+  readdir,
+  readFile,
+  rename,
+  rmdir,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { can, type ResourceKey } from "../auth/permissions";
@@ -79,6 +91,87 @@ const ATTACHMENT_META_COLUMNS =
 interface DetectedType {
   mime: string;
   ext: string;
+}
+
+interface HouseholdStorageIdentity {
+  householdId: number;
+  householdCode: string;
+  householdName: string;
+  villageName: string | null;
+  folderKey: string;
+}
+
+interface ManifestRecord {
+  attachmentId: number;
+  file: string;
+  purpose: UploadPurpose;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string | null;
+  originalName: string | null;
+  householdId: number | null;
+  householdCode: string | null;
+  householdName: string | null;
+  uploadedByUserId: number | null;
+  uploadedByName: string | null;
+  recordedAt: string;
+}
+
+function extFromMime(mimeType: string, fallbackKey?: string): string {
+  switch (mimeType) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "application/pdf":
+      return "pdf";
+    case "video/mp4":
+      return "mp4";
+    case "video/webm":
+      return "webm";
+    default: {
+      const m = fallbackKey ? /\.([a-z0-9]{2,5})$/i.exec(fallbackKey) : null;
+      return m ? m[1].toLowerCase() : "bin";
+    }
+  }
+}
+
+/** Chuyển tên tiếng Việt sang nhãn thư mục ASCII không dấu, an toàn trên mọi hệ điều hành. */
+function toAsciiSlug(raw: string | null | undefined, fallback: string, maxLen = 36): string {
+  if (!raw) return fallback;
+  const slug = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLen)
+    .replace(/-+$/g, "");
+  return slug || fallback;
+}
+
+/** Làm sạch mã định danh vùng trồng / mã hộ để đưa vào tên thư mục mà không cho phép ký tự điều hướng đường dẫn. */
+function sanitizeCodeSegment(raw: string | null | undefined, maxLen = 44): string {
+  if (!raw) return "";
+  return raw
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLen)
+    .replace(/-+$/g, "");
+}
+
+/** Định dạng ngày YYYY-MM-DD theo múi giờ Việt Nam (UTC+7) ổn định trên mọi máy chủ. */
+function formatVnDateStamp(date: Date): string {
+  const vnTime = new Date(date.getTime() + 7 * 3600_000);
+  return vnTime.toISOString().slice(0, 10);
+}
+
+function isStructuredStorageKey(key: string): boolean {
+  return key.startsWith("households/") || key.startsWith("system/") || key.startsWith("staff-staging/");
 }
 
 /** Nhận diện loại tệp theo chữ ký nhị phân (không tin `Content-Type` do client gửi). */
@@ -161,8 +254,13 @@ export class UploadsService implements OnModuleInit {
     await mkdir(this.root, { recursive: true });
     await this.ensureMultiPhotoSchema().catch(() => undefined);
     if (process.env.NODE_ENV !== "test") {
-      void this.backfillLocalFilesToDb().catch(() => undefined);
+      void this.syncStructuredStorageInBackground().catch(() => undefined);
     }
+  }
+
+  private async syncStructuredStorageInBackground(): Promise<void> {
+    await this.backfillLocalFilesToDb().catch(() => undefined);
+    await this.organizeLegacyAttachments().catch(() => undefined);
   }
 
   /**
@@ -366,7 +464,17 @@ export class UploadsService implements OnModuleInit {
     }
 
     const now = new Date();
-    const key = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${randomUUID()}.${type.ext}`;
+    const initialHouseholdId = user.role === "farmer" ? user.householdId : null;
+    const hhIdentity =
+      initialHouseholdId !== null ? await this.resolveHouseholdStorageIdentity(initialHouseholdId) : null;
+    const key = this.buildStorageKey({
+      purpose,
+      ext: type.ext,
+      recordedAt: now,
+      ownerUserId: user.id,
+      uploaderName: user.fullName || user.username,
+      householdFolderKey: hhIdentity?.folderKey ?? null,
+    });
     const path = this.pathOf(key);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, file.buffer, { flag: "wx" });
@@ -383,7 +491,7 @@ export class UploadsService implements OnModuleInit {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, public_token`,
         [
           user.id,
-          user.role === "farmer" ? user.householdId : null,
+          initialHouseholdId,
           purpose,
           key,
           safeOriginalName,
@@ -393,8 +501,21 @@ export class UploadsService implements OnModuleInit {
           sha256Hex,
         ],
       );
-      const id = rows[0].id;
+      const id = Number(rows[0].id);
       const publicToken = rows[0].public_token;
+      await this.writeDiskRecoveryMetadata({
+        attachmentId: id,
+        storageKey: key,
+        purpose,
+        mimeType: type.mime,
+        sizeBytes: actualBytes,
+        sha256: sha256Hex,
+        originalName: safeOriginalName,
+        hhIdentity,
+        uploadedByUserId: user.id,
+        uploadedByName: user.fullName || user.username || null,
+        recordedAt: now,
+      }).catch(() => undefined);
       if (this.audit) {
         await this.audit.write(
           { user },
@@ -457,11 +578,21 @@ export class UploadsService implements OnModuleInit {
     const unique = [...new Set((ids ?? []).filter((id): id is number => id !== null && id !== undefined && Number.isInteger(id) && id > 0))];
     if (unique.length === 0) return { ids: [], primaryId: null };
     const targetHouseholdId = householdId ?? user.householdId ?? null;
-    const { rows } = await this.db.query<{ id: string | number; mime_type: string }>(
+    const { rows } = await this.db.query<{
+      id: string | number;
+      mime_type: string;
+      household_id: string | number | null;
+      storage_key: string;
+      original_name: string | null;
+      size_bytes: number;
+      sha256_hex: string | null;
+      created_at: Date | string | null;
+      owner_user_id: string | number | null;
+    }>(
       `UPDATE attachments
        SET household_id = COALESCE(household_id, $4)
        WHERE id = ANY($1::bigint[]) AND owner_user_id = $2 AND purpose = $3
-       RETURNING id, mime_type`,
+       RETURNING id, mime_type, household_id, storage_key, original_name, size_bytes, sha256_hex, created_at, owner_user_id`,
       [unique, user.id, purpose, targetHouseholdId],
     );
     if (rows.length !== unique.length) throw badRequest("Tệp đính kèm không hợp lệ hoặc không thuộc về bạn.");
@@ -472,6 +603,26 @@ export class UploadsService implements OnModuleInit {
     if (options?.requireAtLeastOneImage && !rows.some((r) => r.mime_type.startsWith("image/"))) {
       throw badRequest("Vui lòng đính kèm ít nhất 1 ảnh chụp hiện trường bên cạnh video.");
     }
+
+    for (const row of rows) {
+      const effHhId = row.household_id !== null ? Number(row.household_id) : null;
+      if (effHhId !== null && !row.storage_key.startsWith("households/")) {
+        await this.relocateSingleAttachmentToHousehold({
+          id: Number(row.id),
+          householdId: effHhId,
+          ownerUserId: row.owner_user_id !== null ? Number(row.owner_user_id) : user.id,
+          uploaderName: user.fullName || user.username || null,
+          purpose,
+          oldStorageKey: row.storage_key,
+          mimeType: row.mime_type,
+          sizeBytes: Number(row.size_bytes),
+          sha256Hex: row.sha256_hex,
+          originalName: row.original_name,
+          createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+        }).catch(() => undefined);
+      }
+    }
+
     const firstImageId = unique.find((id) => (mimeById.get(id) ?? "").startsWith("image/"));
     return {
       ids: unique,
@@ -716,23 +867,44 @@ export class UploadsService implements OnModuleInit {
 
   /**
    * Mở tệp nguyên tử với cờ `O_NOFOLLOW` chống tấn công symlink/TOCTOU và lấy kích thước thật từ file descriptor.
-   * Nếu tệp chưa có trên đĩa cục bộ, tự động khôi phục từ `attachments.file_data` trong PostgreSQL.
+   * Nếu tệp vừa được di chuyển sang thư mục định danh hộ hoặc chưa có trên đĩa cục bộ, tự động tra lại khóa mới nhất
+   * và khôi phục từ `attachments.file_data` trong PostgreSQL mà không làm gián đoạn luồng đọc.
    */
   async openFile(attachment: AttachmentRow): Promise<OpenedAttachmentFile> {
-    const path = this.pathOf(attachment.storage_key);
+    let activeKey = attachment.storage_key;
+    let path = this.pathOf(activeKey);
     const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0);
-    let handle: FileHandle;
+    let handle: FileHandle | undefined;
     try {
       handle = await fsOpen(path, flags);
     } catch {
-      const restored = await this.rehydrateFromDatabase(attachment.id, path).catch(() => false);
-      if (!restored) {
-        throw notFound();
+      const fresh = await this.db
+        .query<{ storage_key: string }>("SELECT storage_key FROM attachments WHERE id = $1 LIMIT 1", [attachment.id])
+        .catch(() => ({ rows: [] as { storage_key: string }[] }));
+      const latestKey = fresh.rows[0]?.storage_key;
+      if (latestKey && latestKey !== activeKey) {
+        activeKey = latestKey;
+        path = this.pathOf(activeKey);
+        this.db.cache?.invalidateTags(["uploads"]);
+        try {
+          handle = await fsOpen(path, flags);
+        } catch {
+          handle = undefined;
+        }
       }
-      try {
-        handle = await fsOpen(path, flags);
-      } catch {
-        throw notFound();
+      if (!handle) {
+        const restored = await this.rehydrateFromDatabase(attachment.id, path).catch(() => false);
+        if (!restored) {
+          throw notFound();
+        }
+        if (attachment.household_id !== null && activeKey.startsWith("households/")) {
+          void this.ensureHouseholdIdentityFileOnDisk(Number(attachment.household_id)).catch(() => undefined);
+        }
+        try {
+          handle = await fsOpen(path, flags);
+        } catch {
+          throw notFound();
+        }
       }
     }
 
@@ -765,6 +937,483 @@ export class UploadsService implements OnModuleInit {
     } catch (err) {
       await handle.close().catch(() => undefined);
       throw err;
+    }
+  }
+
+  private buildStorageKey(params: {
+    purpose: UploadPurpose;
+    ext: string;
+    recordedAt: Date;
+    ownerUserId: number | null;
+    uploaderName?: string | null;
+    householdFolderKey: string | null;
+    seedToken?: string;
+  }): string {
+    const dateStamp = formatVnDateStamp(params.recordedAt);
+    const userTag = params.ownerUserId ? `u${params.ownerUserId}` : "u0";
+    const cleanedSeed = (params.seedToken ?? "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    const uid =
+      cleanedSeed.length >= 12
+        ? cleanedSeed.slice(0, 16)
+        : randomUUID().replace(/-/g, "").toLowerCase().slice(0, 16);
+
+    if (params.householdFolderKey) {
+      return `${params.householdFolderKey}/${params.purpose}/${dateStamp}_${userTag}_${uid}.${params.ext}`;
+    }
+
+    const uploaderSlug = toAsciiSlug(params.uploaderName, "can-bo", 24);
+    const bucket = params.purpose === "news" || params.purpose === "catalog" ? "system" : "staff-staging";
+    return `${bucket}/${params.purpose}/${dateStamp}_${userTag}_${uploaderSlug}_${uid}.${params.ext}`;
+  }
+
+  private async resolveHouseholdStorageIdentity(householdId: number): Promise<HouseholdStorageIdentity | null> {
+    const { rows } = await this.db.query<{
+      id: number;
+      code: string | null;
+      name: string | null;
+      village_name: string | null;
+      existing_folder: string | null;
+    }>(
+      `SELECT h.id,
+              h.code,
+              h.name,
+              v.name AS village_name,
+              (
+                SELECT substring(a.storage_key FROM '^(households/[^/]+)/')
+                FROM attachments a
+                WHERE a.household_id = h.id
+                  AND a.storage_key LIKE 'households/HO-%/%'
+                ORDER BY a.id ASC
+                LIMIT 1
+              ) AS existing_folder
+       FROM households h
+       LEFT JOIN villages v ON v.id = h.village_id
+       WHERE h.id = $1
+       LIMIT 1`,
+      [householdId],
+    );
+    const hh = rows[0];
+    if (!hh) return null;
+
+    const idNum = Number(hh.id);
+    const idPrefix = `HO-${String(idNum).padStart(4, "0")}`;
+    let folderKey = hh.existing_folder?.trim() || "";
+
+    if (!folderKey) {
+      // Kiểm tra trên đĩa xem hộ này đã từng có thư mục `HO-xxxx_*` chưa để luôn giữ đúng 1 thư mục duy nhất cho mỗi hộ
+      const householdsRoot = join(this.root, "households");
+      const existingDirs = await readdir(householdsRoot).catch(() => [] as string[]);
+      const matchedDir = existingDirs.find((entry) => entry === idPrefix || entry.startsWith(`${idPrefix}_`));
+      if (matchedDir) {
+        folderKey = `households/${matchedDir}`;
+      }
+    }
+
+    if (!folderKey) {
+      const codeSeg = sanitizeCodeSegment(hh.code, 44);
+      const nameSeg = toAsciiSlug(hh.name, "ho-nong-dan", 36);
+      const dirName = codeSeg ? `${idPrefix}_${codeSeg}_${nameSeg}` : `${idPrefix}_${nameSeg}`;
+      folderKey = `households/${dirName}`;
+    }
+
+    return {
+      householdId: idNum,
+      householdCode: (hh.code ?? "").trim(),
+      householdName: (hh.name ?? "").trim(),
+      villageName: hh.village_name ? hh.village_name.trim() : null,
+      folderKey,
+    };
+  }
+
+  private async ensureHouseholdIdentityFileOnDisk(
+    householdIdOrIdentity: number | HouseholdStorageIdentity,
+  ): Promise<HouseholdStorageIdentity | null> {
+    const identity =
+      typeof householdIdOrIdentity === "number"
+        ? await this.resolveHouseholdStorageIdentity(householdIdOrIdentity)
+        : householdIdOrIdentity;
+    if (!identity) return null;
+
+    const infoPath = this.pathOf(`${identity.folderKey}/ho-so-dinh-danh.json`);
+    await mkdir(dirname(infoPath), { recursive: true });
+    const payload = JSON.stringify(
+      {
+        householdId: identity.householdId,
+        householdCode: identity.householdCode || null,
+        householdName: identity.householdName || null,
+        villageName: identity.villageName,
+        folder: identity.folderKey,
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    );
+    const tmpPath = `${infoPath}.tmp-${randomUUID()}`;
+    try {
+      await writeFile(tmpPath, `${payload}\n`, "utf8");
+      await rename(tmpPath, infoPath);
+    } catch {
+      await unlink(tmpPath).catch(() => undefined);
+    }
+    return identity;
+  }
+
+  private async writeDiskRecoveryMetadata(params: {
+    attachmentId: number;
+    storageKey: string;
+    purpose: UploadPurpose;
+    mimeType: string;
+    sizeBytes: number;
+    sha256: string | null;
+    originalName: string | null;
+    hhIdentity: HouseholdStorageIdentity | null;
+    uploadedByUserId: number | null;
+    uploadedByName: string | null;
+    recordedAt: Date;
+  }): Promise<void> {
+    let manifestRelPath: string;
+    let relativeFileInGroup: string;
+
+    if (params.hhIdentity && params.storageKey.startsWith(`${params.hhIdentity.folderKey}/`)) {
+      await this.ensureHouseholdIdentityFileOnDisk(params.hhIdentity);
+      manifestRelPath = `${params.hhIdentity.folderKey}/manifest.jsonl`;
+      relativeFileInGroup = params.storageKey.slice(params.hhIdentity.folderKey.length + 1);
+    } else if (params.storageKey.startsWith("system/")) {
+      const parts = params.storageKey.split("/");
+      if (parts.length < 3) return;
+      const groupPrefix = `${parts[0]}/${parts[1]}`;
+      manifestRelPath = `${groupPrefix}/manifest.jsonl`;
+      relativeFileInGroup = parts.slice(2).join("/");
+    } else {
+      return;
+    }
+
+    const record: ManifestRecord = {
+      attachmentId: params.attachmentId,
+      file: relativeFileInGroup,
+      purpose: params.purpose,
+      mimeType: params.mimeType,
+      sizeBytes: params.sizeBytes,
+      sha256: params.sha256,
+      originalName: params.originalName,
+      householdId: params.hhIdentity?.householdId ?? null,
+      householdCode: params.hhIdentity?.householdCode || null,
+      householdName: params.hhIdentity?.householdName || null,
+      uploadedByUserId: params.uploadedByUserId,
+      uploadedByName: params.uploadedByName,
+      recordedAt: params.recordedAt.toISOString(),
+    };
+
+    const manifestPath = this.pathOf(manifestRelPath);
+    await mkdir(dirname(manifestPath), { recursive: true });
+    await appendFile(manifestPath, `${JSON.stringify(record)}\n`, "utf8");
+  }
+
+  private async ensureBinaryAtTargetPath(
+    attachmentId: number,
+    oldStorageKey: string,
+    newPath: string,
+  ): Promise<boolean> {
+    try {
+      await access(newPath, fsConstants.R_OK);
+      return true;
+    } catch {
+      // Chưa tồn tại tại đích: sao chép từ đường dẫn cũ hoặc khôi phục từ cột nhị phân `file_data` trong PostgreSQL.
+    }
+
+    let oldBuf: Buffer | null = null;
+    try {
+      const oldPath = this.pathOf(oldStorageKey);
+      const read = await readFile(oldPath);
+      if (read.length > 0) oldBuf = read;
+    } catch {
+      oldBuf = null;
+    }
+
+    if (oldBuf) {
+      await mkdir(dirname(newPath), { recursive: true });
+      const tmpPath = `${newPath}.tmp-${randomUUID()}`;
+      try {
+        await writeFile(tmpPath, oldBuf, { flag: "wx" });
+        await rename(tmpPath, newPath);
+        return true;
+      } catch {
+        await unlink(tmpPath).catch(() => undefined);
+      }
+    }
+
+    return this.rehydrateFromDatabase(attachmentId, newPath).catch(() => false);
+  }
+
+  private async relocateSingleAttachmentToHousehold(params: {
+    id: number;
+    householdId: number;
+    ownerUserId: number | null;
+    uploaderName: string | null;
+    purpose: UploadPurpose;
+    oldStorageKey: string;
+    mimeType: string;
+    sizeBytes: number;
+    sha256Hex: string | null;
+    originalName: string | null;
+    createdAt: Date;
+  }): Promise<string | null> {
+    const hhIdentity = await this.resolveHouseholdStorageIdentity(params.householdId);
+    if (!hhIdentity) return null;
+
+    const ext = extFromMime(params.mimeType, params.oldStorageKey);
+    const oldStem = basename(params.oldStorageKey).replace(/\.[^.]+$/, "");
+    const seedToken = oldStem.split("_").pop() || oldStem;
+    const newKey = this.buildStorageKey({
+      purpose: params.purpose,
+      ext,
+      recordedAt: params.createdAt,
+      ownerUserId: params.ownerUserId,
+      uploaderName: params.uploaderName,
+      householdFolderKey: hhIdentity.folderKey,
+      seedToken,
+    });
+    if (newKey === params.oldStorageKey) return newKey;
+
+    const newPath = this.pathOf(newKey);
+    const copied = await this.ensureBinaryAtTargetPath(params.id, params.oldStorageKey, newPath);
+    if (!copied) return null;
+
+    const upd = await this.db.query(
+      "UPDATE attachments SET storage_key = $2 WHERE id = $1 AND storage_key = $3",
+      [params.id, newKey, params.oldStorageKey],
+    );
+    if ((upd.rowCount ?? 0) === 0) {
+      await unlink(newPath).catch(() => undefined);
+      return null;
+    }
+
+    this.db.cache?.invalidateTags(["uploads"]);
+
+    await this.writeDiskRecoveryMetadata({
+      attachmentId: params.id,
+      storageKey: newKey,
+      purpose: params.purpose,
+      mimeType: params.mimeType,
+      sizeBytes: params.sizeBytes,
+      sha256: params.sha256Hex,
+      originalName: params.originalName,
+      hhIdentity,
+      uploadedByUserId: params.ownerUserId,
+      uploadedByName: params.uploaderName,
+      recordedAt: params.createdAt,
+    }).catch(() => undefined);
+
+    const oldPath = this.pathOf(params.oldStorageKey);
+    if (oldPath !== newPath) {
+      await unlink(oldPath).catch(() => undefined);
+      await this.pruneEmptyParentDirs(dirname(oldPath)).catch(() => undefined);
+    }
+
+    return newKey;
+  }
+
+  /**
+   * Chuẩn hóa toàn bộ tệp cũ đang lưu theo cấu trúc `YYYY/MM/<uuid>` sang cây thư mục định danh riêng từng hộ
+   * (`households/HO-xxxx_<ma-ho>_<ten-chu-ho>/<muc-dich>/...`), đồng bộ tệp vật lý và sổ đối chiếu `manifest.jsonl`
+   * trên ổ đĩa mà không làm gián đoạn bất kỳ truy vấn đọc tệp nào đang diễn ra.
+   */
+  async organizeLegacyAttachments(): Promise<{ migratedKeys: number; syncedFiles: number }> {
+    // 1. Điền bổ sung `household_id` cho các bản ghi đính kèm cũ nếu đã gắn vào nhật ký, phun thuốc, hồ sơ hoặc kiểm nghiệm
+    await this.db
+      .query(`
+        UPDATE attachments a
+        SET household_id = COALESCE(
+          (SELECT u.household_id FROM users u WHERE u.id = a.owner_user_id AND u.household_id IS NOT NULL LIMIT 1),
+          (SELECT je.household_id FROM journal_entries je WHERE je.photo_id = a.id OR a.id = ANY(je.photo_ids) LIMIT 1),
+          (SELECT sr.household_id FROM spray_records sr WHERE sr.photo_id = a.id OR a.id = ANY(sr.photo_ids) LIMIT 1),
+          (SELECT hd.household_id FROM harvest_declarations hd WHERE hd.photo_id = a.id LIMIT 1),
+          (SELECT ap.household_id FROM approvals ap JOIN approval_attachments aa ON aa.approval_id = ap.id WHERE aa.attachment_id = a.id LIMIT 1),
+          (SELECT lt.household_id FROM lab_tests lt WHERE lt.scan_attachment_id = a.id LIMIT 1),
+          (SELECT h.id FROM households h WHERE h.avatar_id = a.id LIMIT 1)
+        )
+        WHERE a.household_id IS NULL
+      `)
+      .catch(() => undefined);
+
+    const { rows } = await this.db.query<{
+      id: string | number;
+      owner_user_id: string | number | null;
+      household_id: string | number | null;
+      purpose: UploadPurpose;
+      storage_key: string;
+      original_name: string | null;
+      mime_type: string;
+      size_bytes: number;
+      sha256_hex: string | null;
+      created_at: Date | string | null;
+      uploader_name: string | null;
+    }>(
+      `SELECT a.id,
+              a.owner_user_id,
+              a.household_id,
+              a.purpose,
+              a.storage_key,
+              a.original_name,
+              a.mime_type,
+              a.size_bytes,
+              a.sha256_hex,
+              a.created_at,
+              COALESCE(NULLIF(btrim(u.full_name), ''), u.username) AS uploader_name
+       FROM attachments a
+       LEFT JOIN users u ON u.id = a.owner_user_id
+       ORDER BY a.id ASC`,
+    );
+
+    const identityCache = new Map<number, HouseholdStorageIdentity | null>();
+    const manifestBuckets = new Map<string, ManifestRecord[]>();
+    let migratedKeys = 0;
+    let syncedFiles = 0;
+
+    for (const row of rows) {
+      const id = Number(row.id);
+      const hhId = row.household_id !== null ? Number(row.household_id) : null;
+      const ownerId = row.owner_user_id !== null ? Number(row.owner_user_id) : null;
+      const createdAt = row.created_at ? new Date(row.created_at) : new Date();
+
+      let hhIdentity: HouseholdStorageIdentity | null = null;
+      if (hhId !== null) {
+        if (identityCache.has(hhId)) {
+          hhIdentity = identityCache.get(hhId) ?? null;
+        } else {
+          hhIdentity = await this.resolveHouseholdStorageIdentity(hhId);
+          identityCache.set(hhId, hhIdentity);
+        }
+      }
+
+      let currentKey = row.storage_key;
+      const needsKeyMigration =
+        !isStructuredStorageKey(currentKey) ||
+        (hhIdentity !== null && !currentKey.startsWith(`${hhIdentity.folderKey}/`));
+
+      if (needsKeyMigration) {
+        const ext = extFromMime(row.mime_type, currentKey);
+        const oldStem = basename(currentKey).replace(/\.[^.]+$/, "");
+        const seedToken = oldStem.split("_").pop() || oldStem;
+        const nextKey = this.buildStorageKey({
+          purpose: row.purpose,
+          ext,
+          recordedAt: createdAt,
+          ownerUserId: ownerId,
+          uploaderName: row.uploader_name,
+          householdFolderKey: hhIdentity?.folderKey ?? null,
+          seedToken,
+        });
+
+        const nextPath = this.pathOf(nextKey);
+        const ready = await this.ensureBinaryAtTargetPath(id, currentKey, nextPath);
+        if (ready) {
+          const upd = await this.db.query(
+            "UPDATE attachments SET storage_key = $2 WHERE id = $1 AND storage_key = $3",
+            [id, nextKey, currentKey],
+          );
+          if ((upd.rowCount ?? 0) > 0) {
+            const oldPath = this.pathOf(currentKey);
+            currentKey = nextKey;
+            migratedKeys += 1;
+            syncedFiles += 1;
+            if (oldPath !== nextPath) {
+              await unlink(oldPath).catch(() => undefined);
+              await this.pruneEmptyParentDirs(dirname(oldPath)).catch(() => undefined);
+            }
+          }
+        }
+      } else {
+        const currentPath = this.pathOf(currentKey);
+        const exists = await access(currentPath, fsConstants.R_OK)
+          .then(() => true)
+          .catch(() => false);
+        if (!exists) {
+          const restored = await this.rehydrateFromDatabase(id, currentPath).catch(() => false);
+          if (restored) syncedFiles += 1;
+        }
+      }
+
+      if (hhIdentity && currentKey.startsWith(`${hhIdentity.folderKey}/`)) {
+        const manifestKey = `${hhIdentity.folderKey}/manifest.jsonl`;
+        const list = manifestBuckets.get(manifestKey) ?? [];
+        list.push({
+          attachmentId: id,
+          file: currentKey.slice(hhIdentity.folderKey.length + 1),
+          purpose: row.purpose,
+          mimeType: row.mime_type,
+          sizeBytes: Number(row.size_bytes),
+          sha256: row.sha256_hex,
+          originalName: row.original_name,
+          householdId: hhIdentity.householdId,
+          householdCode: hhIdentity.householdCode || null,
+          householdName: hhIdentity.householdName || null,
+          uploadedByUserId: ownerId,
+          uploadedByName: row.uploader_name,
+          recordedAt: createdAt.toISOString(),
+        });
+        manifestBuckets.set(manifestKey, list);
+      } else if (isStructuredStorageKey(currentKey)) {
+        const parts = currentKey.split("/");
+        if (parts.length >= 3) {
+          const groupPrefix = `${parts[0]}/${parts[1]}`;
+          const manifestKey = `${groupPrefix}/manifest.jsonl`;
+          const list = manifestBuckets.get(manifestKey) ?? [];
+          list.push({
+            attachmentId: id,
+            file: parts.slice(2).join("/"),
+            purpose: row.purpose,
+            mimeType: row.mime_type,
+            sizeBytes: Number(row.size_bytes),
+            sha256: row.sha256_hex,
+            originalName: row.original_name,
+            householdId: null,
+            householdCode: null,
+            householdName: null,
+            uploadedByUserId: ownerId,
+            uploadedByName: row.uploader_name,
+            recordedAt: createdAt.toISOString(),
+          });
+          manifestBuckets.set(manifestKey, list);
+        }
+      }
+    }
+
+    for (const identity of identityCache.values()) {
+      if (identity) {
+        await this.ensureHouseholdIdentityFileOnDisk(identity).catch(() => undefined);
+      }
+    }
+
+    for (const [manifestRelPath, records] of manifestBuckets.entries()) {
+      const manifestPath = this.pathOf(manifestRelPath);
+      await mkdir(dirname(manifestPath), { recursive: true });
+      const body = records.map((r) => JSON.stringify(r)).join("\n") + "\n";
+      const tmpPath = `${manifestPath}.tmp-${randomUUID()}`;
+      try {
+        await writeFile(tmpPath, body, "utf8");
+        await rename(tmpPath, manifestPath);
+      } catch {
+        await unlink(tmpPath).catch(() => undefined);
+      }
+    }
+
+    if (migratedKeys > 0) {
+      this.db.cache?.invalidateTags(["uploads"]);
+    }
+    return { migratedKeys, syncedFiles };
+  }
+
+  private async pruneEmptyParentDirs(startDir: string): Promise<void> {
+    let dir = resolve(startDir);
+    while (dir.startsWith(this.root + sep) && dir !== this.root) {
+      const entries = await readdir(dir).catch(() => ["__non_empty__"]);
+      if (entries.length > 0) break;
+      const removed = await rmdir(dir)
+        .then(() => true)
+        .catch(() => false);
+      if (!removed) break;
+      dir = dirname(dir);
     }
   }
 

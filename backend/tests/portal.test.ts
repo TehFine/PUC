@@ -1,12 +1,17 @@
 import type { INestApplication } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
+import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
+import { readFile } from "node:fs/promises";
 import type { Server } from "node:http";
+import { join, resolve } from "node:path";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
+import type { AppConfig } from "../src/config/configuration";
 import { DatabaseService } from "../src/database/database.service";
 import { NotificationsService, type RealtimeStreamEvent } from "../src/notifications/notifications.service";
+import { UploadsService } from "../src/uploads/uploads.service";
 import { TEST_PASSWORD } from "./constants";
 
 const USERS = {
@@ -1130,6 +1135,94 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
         unsubHtx();
         unsubAn();
       }
+    });
+  });
+
+  describe("lưu trữ vật lý phân tách riêng theo từng hộ dân", () => {
+    it("tách thư mục hộ, ghi ho-so-dinh-danh.json + manifest.jsonl, chuyển tệp cán bộ về thư mục hộ và di chuyển tệp cũ", async () => {
+      const an = await loggedIn(USERS.farmerAn);
+      const binh = await loggedIn(USERS.farmerBinh);
+      const htx = await loggedIn(USERS.htx);
+      const admin = await loggedIn(USERS.admin);
+      const config = nest.get<ConfigService<AppConfig, true>>(ConfigService);
+      const uploadsService = nest.get(UploadsService);
+      const uploadRoot = resolve(config.get("uploads", { infer: true }).dir);
+
+      // 1. Nông hộ tải lên trực tiếp: nằm trong thư mục riêng của hộ đó, không lẫn với hộ khác
+      const anFileId = await uploadFile(an, "journal", TINY_JPEG, "anh-vuon-an.jpg");
+      const binhFileId = await uploadFile(binh, "journal", TINY_JPEG, "anh-vuon-binh.jpg");
+
+      const { rows: directRows } = await db.query<{ id: string; household_id: string; storage_key: string }>(
+        "SELECT id, household_id, storage_key FROM attachments WHERE id = ANY($1::bigint[]) ORDER BY id ASC",
+        [[anFileId, binhFileId]],
+      );
+      const anRow = directRows.find((r) => Number(r.id) === anFileId)!;
+      const binhRow = directRows.find((r) => Number(r.id) === binhFileId)!;
+
+      expect(anRow.storage_key).toMatch(/^households\/HO-\d{4}_KB-VT-001-H001_nguyen-van-an\/journal\//);
+      expect(binhRow.storage_key).toMatch(/^households\/HO-\d{4}_.*_tran-thi-binh\/journal\//);
+
+      const anFolder = anRow.storage_key.split("/").slice(0, 2).join("/");
+      const identityRaw = JSON.parse(await readFile(join(uploadRoot, anFolder, "ho-so-dinh-danh.json"), "utf8"));
+      expect(identityRaw).toMatchObject({
+        householdId: Number(anRow.household_id),
+        householdCode: "KB-VT-001-H001",
+        householdName: "Nguyễn Văn An",
+      });
+      const manifestText = await readFile(join(uploadRoot, anFolder, "manifest.jsonl"), "utf8");
+      expect(manifestText).toContain(`"attachmentId":${anFileId}`);
+      expect(manifestText).not.toContain(`"attachmentId":${binhFileId}`);
+
+      // 2. Cán bộ HTX tải ảnh trước rồi gắn vào nhật ký của hộ An: tự động chuyển từ staff-staging về đúng thư mục hộ An
+      const staffFileId = await uploadFile(htx, "journal", TINY_JPEG, "can-bo-chup.jpg");
+      const { rows: beforeBind } = await db.query<{ storage_key: string }>(
+        "SELECT storage_key FROM attachments WHERE id = $1",
+        [staffFileId],
+      );
+      expect(beforeBind[0].storage_key).toMatch(/^staff-staging\/journal\//);
+
+      const anPlots = await an.get("/api/portal/plots");
+      const anPlotCode: string = anPlots.body.data?.[0]?.code ?? "CN-T1-01";
+      const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+
+      const createdStaffJ = await htx.post("/api/journal").send({
+        entryOn: todayStr,
+        householdId: Number(anRow.household_id),
+        plotCode: anPlotCode,
+        activity: "Kiểm tra cơi đọt",
+        recorder: "Cán bộ HTX",
+        photoIds: [staffFileId],
+        photoId: staffFileId,
+        hasPhoto: true,
+      });
+      expect(createdStaffJ.status).toBe(201);
+
+      const { rows: afterBind } = await db.query<{ storage_key: string }>(
+        "SELECT storage_key FROM attachments WHERE id = $1",
+        [staffFileId],
+      );
+      expect(afterBind[0].storage_key).toMatch(/^households\/HO-\d{4}_KB-VT-001-H001_nguyen-van-an\/journal\//);
+
+      const fetchRelocated = await an.get(`/api/uploads/${staffFileId}`);
+      expect(fetchRelocated.status).toBe(200);
+      expect(Buffer.from(fetchRelocated.body).equals(TINY_JPEG)).toBe(true);
+
+      // 3. Giả lập bản ghi cũ dạng 2026/11/<uuid>.jpg rồi chạy organizeLegacyAttachments()
+      const legacyKey = `2026/11/legacy-${Date.now()}.jpg`;
+      await db.query("UPDATE attachments SET storage_key = $2 WHERE id = $1", [binhFileId, legacyKey]);
+      const migResult = await uploadsService.organizeLegacyAttachments();
+      expect(migResult.migratedKeys).toBeGreaterThanOrEqual(1);
+
+      const { rows: afterMig } = await db.query<{ storage_key: string }>(
+        "SELECT storage_key FROM attachments WHERE id = $1",
+        [binhFileId],
+      );
+      expect(afterMig[0].storage_key).toMatch(/^households\/HO-\d{4}_.*_tran-thi-binh\/journal\//);
+      const fetchMigrated = await binh.get(`/api/uploads/${binhFileId}`);
+      expect(fetchMigrated.status).toBe(200);
+      expect(Buffer.from(fetchMigrated.body).equals(TINY_JPEG)).toBe(true);
+
+      await admin.delete(`/api/journal/${createdStaffJ.body.id}`);
     });
   });
 });
