@@ -132,7 +132,6 @@ export default function PlotPopup({
     >
       {/* Phần đầu cố định: Chỉ hiển thị tên nông hộ và nút đóng */}
       <div ref={headRef} className="pt-sheet-topbar pp-topbar">
-        <div className="pp-drag-bar" aria-hidden="true" />
         <header className="pp-head">
           <h3 className="pp-title">{props.owner || `Thửa ${props.code}`}</h3>
           <button type="button" className="pp-close" onClick={handleClose} aria-label="Đóng">

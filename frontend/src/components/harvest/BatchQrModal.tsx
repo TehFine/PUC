@@ -323,7 +323,6 @@ export default function BatchQrModal({ lot, onClose }: Props) {
       >
         {/* Thanh tiêu đề cố định */}
         <div ref={dragZoneRef} className="batch-qr-topbar no-print">
-          <div className="bqr-mobile-grabber" aria-hidden="true" />
           <div className="batch-qr-header">
             <div className="batch-qr-head-copy">
               <h2 id={titleId} className="batch-qr-title">
@@ -716,22 +715,8 @@ export default function BatchQrModal({ lot, onClose }: Props) {
           touch-action: pinch-zoom;
         }
 
-        .bqr-mobile-grabber {
-          width: 36px;
-          height: 4px;
-          border-radius: 2px;
-          background: #d4d4d2;
-          margin: 8px auto 0;
-        }
-
-        @media screen and (min-width: 760px) {
-          .bqr-mobile-grabber {
-            display: none;
-          }
-        }
-
         .batch-qr-header {
-          padding: 12px 16px 14px;
+          padding: 14px 16px;
           display: flex;
           align-items: center;
           justify-content: space-between;

@@ -260,7 +260,6 @@ export function MediaBottomSheet({
         tabIndex={-1}
       >
         <div ref={dragZoneRef} className="media-bs-topbar">
-          <div className="media-bs-grabber" aria-hidden="true" />
           <div className="media-bs-header">
             <div className="media-bs-head-copy">
               <div className="media-bs-title-row">

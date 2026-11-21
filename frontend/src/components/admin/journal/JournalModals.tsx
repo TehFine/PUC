@@ -27,7 +27,7 @@ export function JournalDetailModal({
 
   return (
     <Modal
-      title={`Nhật ký canh tác: ${entry.householdName}`}
+      title="Nhật ký canh tác"
       onClose={onClose}
       width={580}
       footer={
