@@ -9701,12 +9701,12 @@ html[data-net="slow"] .kpi-card svg rect {
 
 /* ─── BẢNG CHÚ GIẢI & LỌC NHANH THEO MÃ VÙNG TRỒNG (TRANG HỘ NÔNG DÂN) ─── */
 .zone-legend-card {
-  background: #ffffff;
-  border: 1px solid var(--card-border-soft);
-  border-radius: 8px;
-  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   margin-bottom: 16px;
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 .zone-legend-title {
@@ -9778,11 +9778,6 @@ html[data-net="slow"] .kpi-card svg rect {
 }
 
 @media (max-width: 640px) {
-  .zone-legend-card {
-    padding: 12px;
-    border-radius: 8px;
-  }
-
   .zone-legend-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
@@ -11834,6 +11829,35 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   bottom: auto !important;
   height: var(--vv-height, 100dvh) !important;
   max-height: var(--vv-height, 100dvh) !important;
+  overflow: visible !important;
+}
+
+/* Màn chắn giãn nền toàn phần trên di động khi đang mở bàn phím ảo:
+   che kín tuyệt đối cả vùng đệm phía trên và phía dưới bàn phím để không bao giờ lộ các bài báo/trang nền phía sau popup */
+@media (max-width: 759px) {
+  .modal-overlay[data-kb-open="true"]:not(.is-confirm-overlay):not(:has(.pt-visual-picker-sheet))::before,
+  .pt-sheet-backdrop[data-kb-open="true"]:not(.is-confirm-overlay):not(:has(.pt-visual-picker-sheet))::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: -100vh;
+    bottom: -100vh;
+    background: var(--surface-sheet, #f5f6f8);
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .modal-overlay[data-kb-open="true"] .modal:not(.modal-confirm-sheet) .modal-header,
+  .pt-sheet-backdrop[data-kb-open="true"] .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-head {
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    padding-bottom: 10px;
+  }
+
+  .modal-overlay[data-kb-open="true"] .modal-footer:not(:has(> div)) > :is(button, a, .btn) {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
 }
 
 .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet),

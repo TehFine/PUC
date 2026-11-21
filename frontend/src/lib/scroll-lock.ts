@@ -1,5 +1,3 @@
-import { isTextEntryElement } from "@/lib/keyboard-scroll";
-
 let lockCount = 0;
 let lockedScrollX = 0;
 let lockedScrollY = 0;
@@ -12,12 +10,6 @@ const DIALOG_SELECTOR = '[role="dialog"], [aria-modal="true"], [data-scroll-lock
 const INTERACTIVE_KEY_SELECTOR =
   'input, textarea, select, button, a, summary, [contenteditable="true"], [role="textbox"], [role="combobox"], [role="listbox"], [role="slider"], [role="tab"], [role="radio"]';
 const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
-
-function isTextInputFocusedInDialog(): boolean {
-  if (typeof document === "undefined") return false;
-  const active = document.activeElement;
-  return Boolean(isTextEntryElement(active) && active.closest(DIALOG_SELECTOR));
-}
 
 function isScrollableOverflow(value: string): boolean {
   return value === "auto" || value === "scroll" || value === "overlay";
@@ -197,8 +189,8 @@ function attachRootScrollLock(): () => void {
     ) {
       return;
     }
-    // Tuyệt đối không cưỡng bức scrollTo khi đang chụm 2 ngón, zoom > 1x, hoặc đang mở bàn phím ảo nhập liệu trong hộp thoại
-    if (performance.now() < multiTouchActiveUntil || isPinchZoomed() || isTextInputFocusedInDialog()) {
+    // Khóa cứng cuộn trang nền (trừ khi đang chụm 2 ngón phóng to > 1x) để bàn phím di động không đẩy trôi trang nền phía sau popup
+    if (performance.now() < multiTouchActiveUntil || isPinchZoomed()) {
       return;
     }
     if (window.scrollX !== lockedScrollX || window.scrollY !== lockedScrollY) {
@@ -206,10 +198,10 @@ function attachRootScrollLock(): () => void {
     }
   };
 
-  // Khi thu nhỏ về lại mức 1.0x và không còn focus ô nhập liệu, trả vị trí cuộn nền về đúng mốc trước lúc mở popup
+  // Khi thu nhỏ về lại mức 1.0x hoặc khi bàn phím ảo thay đổi kích thước, giữ cứng trang nền tại mốc cũ
   const vv = window.visualViewport;
   const onVisualViewportResize = () => {
-    if (!vv || vv.scale > 1.01 || performance.now() < multiTouchActiveUntil || isTextInputFocusedInDialog()) {
+    if (!vv || vv.scale > 1.01 || performance.now() < multiTouchActiveUntil) {
       return;
     }
     if (window.scrollX !== lockedScrollX || window.scrollY !== lockedScrollY) {

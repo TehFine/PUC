@@ -150,7 +150,7 @@ export default function Households() {
               setPage(1);
             }}
             style={{
-              background: zoneFilter === "" ? "#0f172a" : "#f1f5f9",
+              background: zoneFilter === "" ? "#0f172a" : "#ffffff",
               color: zoneFilter === "" ? "#ffffff" : "#1e293b",
             }}
           >

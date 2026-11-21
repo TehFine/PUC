@@ -12810,6 +12810,26 @@ body.pt-body .pt-form-actions .pt-btn {
   bottom: auto !important;
   height: var(--vv-height, 100dvh) !important;
   max-height: var(--vv-height, 100dvh) !important;
+  overflow: visible !important;
+}
+
+@media (max-width: 759px) {
+  .pt-sheet-backdrop[data-kb-open="true"]:not(.is-confirm-overlay):not(:has(.pt-visual-picker-sheet))::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: -100vh;
+    bottom: -100vh;
+    background: var(--surface-sheet, #f5f6f8);
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .pt-sheet-backdrop[data-kb-open="true"] .pt-sheet.pt-diary-form-sheet .pt-diary-footer-btn {
+    height: 44px;
+    min-height: 44px;
+  }
 }
 
 .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) {
