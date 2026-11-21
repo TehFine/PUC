@@ -13,7 +13,7 @@ import {
 } from "@/lib/portal-labels";
 import { formatDate } from "@/utils/format";
 import type { PortalLabTest, PortalList, PortalScheduleItem } from "@/types/portal";
-import { SectionDivider, StateBlock } from "./ui";
+import { EmptyState, SectionDivider, StateBlock } from "./ui";
 
 const LabTestCertificateModal = dynamic(() => lazyChunk(() => import("./LabTestCertificateModal")), { ssr: false });
 
@@ -62,6 +62,9 @@ export default function InspectionTab() {
           </h2>
         </div>
         <StateBlock loading={tests.loading} error={tests.error} />
+        {!tests.loading && !tests.error && tests.data && tests.data.data.length === 0 && (
+          <EmptyState icon="empty">Chưa có kết quả kiểm nghiệm.</EmptyState>
+        )}
         {tests.data && tests.data.data.length > 0 && (
           <ul className="pt-list pt-lab-test-list">
             {tests.data.data.map((test) => (
@@ -102,6 +105,9 @@ export default function InspectionTab() {
           </h2>
         </div>
         <StateBlock loading={schedule.loading} error={schedule.error} />
+        {!schedule.loading && !schedule.error && schedule.data && scheduleGroups.length === 0 && (
+          <EmptyState icon="empty">Chưa có lịch kiểm tra sắp tới.</EmptyState>
+        )}
         {scheduleGroups.length > 0 && (
           <div className="pt-diary-day-groups">
             {scheduleGroups.map((group) => (

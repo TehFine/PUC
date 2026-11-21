@@ -14,7 +14,7 @@ import {
 import type { PortalList, PortalOverview, PortalReminder, PortalScheduleItem, PortalViolation } from "@/types/portal";
 import type { PortalTabId } from "./PortalApp";
 import type { PortalAction } from "./PortalSearch";
-import { SectionDivider, StateBlock } from "./ui";
+import { EmptyState, SectionDivider, StateBlock } from "./ui";
 
 function getScheduleKicker(item: PortalScheduleItem): string {
   if (item.title && item.title.toLowerCase().startsWith("lấy mẫu")) {
@@ -410,9 +410,7 @@ export default function HomeTab({
         </div>
 
         {reminderGroups.length === 0 ? (
-          <p className="pt-muted pt-schedule-empty">
-            Mọi thứ đều ổn. Hiện chưa có việc cần làm ngay.
-          </p>
+          <EmptyState icon="empty">Chưa có việc cần làm ngay.</EmptyState>
         ) : (
           <div className="pt-diary-day-groups">
             {reminderGroups.map((group) => (
@@ -489,9 +487,11 @@ export default function HomeTab({
           )}
         </div>
 
-        {scheduleGroups.length === 0 ? (
-          <p className="pt-muted pt-schedule-empty">Hiện chưa có lịch kiểm tra hoặc lấy mẫu nào sắp tới.</p>
-        ) : (
+        <StateBlock loading={schedule.loading} error={schedule.error} />
+        {!schedule.loading && !schedule.error && scheduleGroups.length === 0 && (
+          <EmptyState icon="empty">Chưa có lịch kiểm tra sắp tới.</EmptyState>
+        )}
+        {scheduleGroups.length > 0 && (
           <div className="pt-diary-day-groups">
             {scheduleGroups.map((group) => (
               <div key={group.date} className="pt-diary-day-group">
