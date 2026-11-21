@@ -330,6 +330,7 @@ export function useCatalog<T>(resource: "pesticides" | "varieties" | "fertilizer
 const ESSENTIAL_ORCHARD_PATHS = [
   "/portal/plots",
   "/pesticides?pageSize=500",
+  "/fertilizers?pageSize=500",
   "/portal/journal",
   "/portal/spray",
 ] as const;

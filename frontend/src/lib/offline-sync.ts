@@ -93,6 +93,8 @@ export interface OfflineFieldDraft {
   detail: string;
   lateReason: string;
   pesticideId: string;
+  fertilizerId?: string;
+  fertDose?: string;
   dose: string;
   areaHa: string;
   source: string;
@@ -799,6 +801,8 @@ export interface SaveFieldDraftInput {
   detail?: string;
   lateReason?: string;
   pesticideId?: string;
+  fertilizerId?: string;
+  fertDose?: string;
   dose?: string;
   areaHa?: string;
   source?: string;
@@ -860,6 +864,8 @@ export async function saveOfflineFieldDraft(input: SaveFieldDraftInput): Promise
     detail: input.detail ?? "",
     lateReason: input.lateReason ?? "",
     pesticideId: input.pesticideId ?? "",
+    fertilizerId: input.fertilizerId ?? "",
+    fertDose: input.fertDose ?? "",
     dose: input.dose ?? "",
     areaHa: input.areaHa ?? "",
     source: input.source ?? "",

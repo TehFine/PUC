@@ -9,6 +9,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { getPesticideImage } from "@/components/portal/LearnTab";
 import { useBackLayer } from "@/lib/back-navigation";
 import { lockRootScroll } from "@/lib/scroll-lock";
 import {
@@ -360,37 +361,14 @@ function pickAllowedVisual(
   index: number,
   prevSrc: string,
 ): { src: string; fit: "studio-jpg" | "studio-png" } {
-  const hay = `${item.name} ${item.activeIngredient}`.toLowerCase();
-  let candidate: { src: string; fit: "studio-jpg" | "studio-png" };
-
-  if (item.status === "restricted") {
-    candidate = { src: "/pesticides/amber.png", fit: "studio-png" };
-  } else if (hay.includes("trichoderma") || hay.includes("streptomyces") || hay.includes("vi sinh")) {
-    candidate = { src: "/pesticides/cat-microbial-jar.jpg", fit: "studio-jpg" };
-  } else if (hay.includes("agri-fos") || hay.includes("phosphorous") || hay.includes("400sl")) {
-    candidate = { src: "/pesticides/cat-phosphonate-sl.jpg", fit: "studio-jpg" };
-  } else if (hay.includes("enspray") || hay.includes("dầu khoáng") || hay.includes("99ec")) {
-    candidate = { src: "/pesticides/cat-mineral-oil.jpg", fit: "studio-jpg" };
-  } else if (hay.includes("movento") || hay.includes("150od") || hay.includes("spirotetramat")) {
-    candidate = { src: "/pesticides/cat-systemic-od.jpg", fit: "studio-jpg" };
-  } else if (hay.includes("sinh học") || hay.includes("beauveria") || hay.includes("kurstaki")) {
-    candidate =
-      index % 2 === 0
-        ? { src: "/pesticides/cat-bio-wp.jpg", fit: "studio-jpg" }
-        : { src: "/pesticides/green.png", fit: "studio-png" };
-  } else if (hay.includes("wg") || hay.includes("mancozeb") || hay.includes("propineb")) {
-    candidate = { src: "/pesticides/cat-fungicide-wg.jpg", fit: "studio-jpg" };
-  } else if (hay.includes("sc") || hay.includes("hexaconazole")) {
-    candidate = { src: "/pesticides/blue.png", fit: "studio-png" };
-  } else {
-    candidate = STUDIO_POOL[index % STUDIO_POOL.length];
+  const dedicated = getPesticideImage(item);
+  const fit: "studio-jpg" | "studio-png" = dedicated.endsWith(".png") ? "studio-png" : "studio-jpg";
+  if (dedicated !== prevSrc) {
+    return { src: dedicated, fit };
   }
-
-  if (candidate.src === prevSrc) {
-    const alt = STUDIO_POOL[(index + 1) % STUDIO_POOL.length];
-    if (alt.src !== prevSrc) return alt;
-  }
-  return candidate;
+  const alt = STUDIO_POOL[(index + 1) % STUDIO_POOL.length];
+  if (alt.src !== prevSrc) return alt;
+  return { src: dedicated, fit };
 }
 
 function shouldSkipImageOpt(src: string): boolean {

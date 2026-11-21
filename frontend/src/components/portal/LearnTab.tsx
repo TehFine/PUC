@@ -509,30 +509,87 @@ export function TrainingList() {
   );
 }
 
+const FALLBACK_ALLOWED_PESTICIDE_IMAGES = [
+  "/pesticides/blue.png",
+  "/pesticides/green.png",
+  "/pesticides/cat-bio-wp.jpg",
+  "/pesticides/cat-fungicide-wg.jpg",
+  "/pesticides/cat-systemic-od.jpg",
+  "/pesticides/cat-phosphonate-sl.jpg",
+  "/pesticides/antracol-70wp.jpg",
+  "/pesticides/nativo-750wg.jpg",
+  "/pesticides/anvil-5sc.jpg",
+  "/pesticides/penalty-40wp.jpg",
+  "/pesticides/sida-20wp.jpg",
+  "/pesticides/ascend-20sp.jpg",
+] as const;
+
 export function getPesticideImage(item: {
   status: string;
   name?: string;
+  activeIngredient?: string | null;
   id?: number;
   image?: string | null;
   imageUrl?: string | null;
 }): string {
   if (isSafeMediaUrl(item.image)) return item.image;
   if (isSafeMediaUrl(item.imageUrl)) return item.imageUrl;
-  if (item.status === "banned") return "/pesticides/red.png";
-  if (item.status === "restricted") return "/pesticides/amber.png";
+
   const name = (item.name ?? "").toLowerCase();
-  if (
-    name.includes("buprofezin") ||
-    name.includes("imidacloprid") ||
-    name.includes("abt") ||
-    name.includes("trắng xanh") ||
-    name.includes("bitadin") ||
-    name.includes("trichoderma") ||
-    name.includes("sinh học")
-  ) {
+  const active = (item.activeIngredient ?? "").toLowerCase();
+  const hay = `${name} ${active}`;
+
+  if (item.status === "banned") {
+    if (hay.includes("auramine") || hay.includes("vàng o")) return "/pesticides/cat-banned-auramine.jpg";
+    if (hay.includes("cadimi") || hay.includes("cadmium")) return "/pesticides/cat-banned-cadmium.jpg";
+    return "/pesticides/red.png";
+  }
+  if (item.status === "restricted") return "/pesticides/amber.png";
+
+  // Đối chiếu 1-1 ảnh bao bì chuyên biệt cho từng sản phẩm trong danh mục
+  if (name.includes("abt 2wp")) return "/pesticides/cat-bio-wp.jpg";
+  if (name.includes("trắng xanh") || hay.includes("beauveria")) return "/pesticides/trang-xanh-wp.jpg";
+  if (name.includes("bitadin") || hay.includes("granulosis")) return "/pesticides/bitadin-wp.jpg";
+  if (hay.includes("trichoderma") || hay.includes("streptomyces") || name.includes("vi sinh")) {
+    return "/pesticides/cat-microbial-jar.jpg";
+  }
+  if (name.includes("acrobat") || hay.includes("dimethomorph")) return "/pesticides/acrobat-mz.jpg";
+  if (name.includes("agri-fos") || hay.includes("phosphorous")) return "/pesticides/cat-phosphonate-sl.jpg";
+  if (name.includes("ridomil") || hay.includes("metalaxyl")) return "/pesticides/ridomil-gold.jpg";
+  if (name.includes("anvil") || name.includes("huivil") || hay.includes("hexaconazole")) {
+    return "/pesticides/anvil-5sc.jpg";
+  }
+  if (name.includes("nativo") || hay.includes("trifloxystrobin")) return "/pesticides/nativo-750wg.jpg";
+  if (name.includes("antracol") || hay.includes("propineb")) return "/pesticides/antracol-70wp.jpg";
+  if (name.includes("movento") || hay.includes("spirotetramat")) return "/pesticides/cat-systemic-od.jpg";
+  if (name.includes("penalty")) return "/pesticides/penalty-40wp.jpg";
+  if (name.includes("sida") || hay.includes("dinotefuran")) return "/pesticides/sida-20wp.jpg";
+  if (name.includes("confidor") || name.includes("enspray") || hay.includes("dầu khoáng")) {
+    return "/pesticides/cat-mineral-oil.jpg";
+  }
+  if (name.includes("ascend")) return "/pesticides/ascend-20sp.jpg";
+  if (name.includes("acnipyram") || name.includes("nitensuper") || name.includes("applaud") || hay.includes("nitenpyram")) {
+    return "/pesticides/acnipyram-applaud.jpg";
+  }
+  if (name.includes("buprofezin 400sc") || (hay.includes("buprofezin") && !hay.includes("acetamiprid"))) {
     return "/pesticides/green.png";
   }
-  return "/pesticides/blue.png";
+  if (name.includes("abamectin 1.8") || (hay.includes("abamectin") && !hay.includes("kurstaki"))) {
+    return "/pesticides/abamectin-18ec.jpg";
+  }
+  if (name.includes("imidacloprid 70wg") || hay.includes("imidacloprid")) {
+    return "/pesticides/cat-fungicide-wg.jpg";
+  }
+  if (name.includes("emamectin") || hay.includes("emamectin")) {
+    return "/pesticides/emamectin-19ec.jpg";
+  }
+
+  // Dự phòng băm ổn định cho sản phẩm mới phát sinh để không trùng lặp 1 ảnh duy nhất
+  let hash = typeof item.id === "number" ? item.id : 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  return FALLBACK_ALLOWED_PESTICIDE_IMAGES[hash % FALLBACK_ALLOWED_PESTICIDE_IMAGES.length];
 }
 
 export interface PesticideEfficacy {
@@ -987,8 +1044,18 @@ export function PesticideDetailModal({
 
       {/* 2. Thông tin đưa ra ngoài và đặt ở bên dưới khung */}
       <div className="pt-pesticide-header-info">
-        <div className={`pt-pest-status-badge pt-pest-status-${item.status}`}>
-          <span>{status.label}</span>
+        <div className="pt-modal-meta-stack">
+          <span
+            className={`pt-modal-meta-line ${
+              item.status === "banned"
+                ? "is-danger"
+                : item.status === "restricted"
+                  ? "is-warn"
+                  : "is-ok"
+            }`}
+          >
+            {status.label}
+          </span>
         </div>
         <h3 className="pt-pesticide-modal-title">{item.name}</h3>
         <p className="pt-pesticide-modal-mfg">
@@ -1535,7 +1602,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     applicationMethod: "Bón vào đất vùng rễ theo hình chiếu tán cây hoặc giữa 2 hàng giao tán rồi phủ đất mặt",
     status: "encouraged",
     timing: "Trước mùa mưa (tháng 4 đến đầu tháng 5 hàng năm)",
-    image: "/fertilizers/organic.png",
+    image: "/fertilizers/compost-trichoderma.jpg",
     description:
       "Quản lý các bệnh hại trong đất, đặc biệt là bệnh xì mủ (Phytophthora palmivora) và vàng lá thối rễ (Phytopythium vexans); áp dụng cho cả vườn chưa có và đang có triệu chứng bệnh.",
   },
@@ -1549,7 +1616,7 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     applicationMethod: "Bón quanh vùng rễ tơ theo hình chiếu tán cây kết hợp lấp đất giữ ẩm",
     status: "encouraged",
     timing: "Sau thu hoạch & đầu mùa mưa",
-    image: "/fertilizers/humic.png",
+    image: "/fertilizers/mycorrhizae-root.jpg",
     description:
       "Diệt mầm bệnh trong đất, mở rộng hệ thống lông hút cộng sinh và tăng sức đề kháng tự nhiên giúp cây chống chịu bệnh đốm lá (Phomopsis durionis) và thán thư (Colletotrichum siamense).",
   },
@@ -1615,8 +1682,9 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     applicationMethod: "Bón gốc khi đất ẩm sau cơn mưa",
     status: "allowed",
     timing: "Giai đoạn bung cơi đọt & cơi lá mới",
-    image: "/fertilizers/npk.png",
-    description: "Cung cấp đạm và lân cao giúp cơi đọt bung mập khỏe, phiến lá dày bóng, tăng diện tích quang hợp nuôi cây sung mãn.",
+    image: "/fertilizers/dau-trau-20-20-15.jpg",
+    description:
+      "Cung cấp đạm và lân cao giúp cơi đọt bung mập khỏe, phiến lá dày bóng, tăng diện tích quang hợp nuôi cây sung mãn.",
   },
   {
     id: 8,
@@ -1628,13 +1696,27 @@ export const DEFAULT_FERTILIZERS: FertilizerDto[] = [
     applicationMethod: "CẤM SỬ DỤNG CHO CÂY SẦU RIÊNG",
     status: "warning",
     timing: "Nghiêm cấm tuyệt đối ở mọi thời điểm",
-    image: "/fertilizers/npk.png",
-    description: "Hàm lượng Clo cực cao gây sượng múi, nhão cơm, cháy chóp lá và tích tụ muối hại đất; bị cấm trong tiêu chuẩn VietGAP sầu riêng.",
+    image: "/fertilizers/kcl-restricted.jpg",
+    description:
+      "Hàm lượng Clo cực cao gây sượng múi, nhão cơm, cháy chóp lá và tích tụ muối hại đất; bị cấm trong tiêu chuẩn VietGAP sầu riêng.",
   },
 ];
 
 export function getFertilizerImage(item: FertilizerDto): string {
   if (isSafeMediaUrl(item.image)) return item.image;
+  const name = (item.name ?? "").toLowerCase();
+  if (name.includes("phân chuồng") || name.includes("streptomyces")) {
+    return "/fertilizers/compost-trichoderma.jpg";
+  }
+  if (name.includes("mycorrhizae") || name.includes("nấm rễ")) {
+    return "/fertilizers/mycorrhizae-root.jpg";
+  }
+  if (name.includes("20-20-15") || name.includes("đầu trâu")) {
+    return "/fertilizers/dau-trau-20-20-15.jpg";
+  }
+  if (name.includes("kali clorua") || name.includes("kcl") || name.includes("muối ớt") || item.category === "restricted") {
+    return "/fertilizers/kcl-restricted.jpg";
+  }
   if (item.category === "organic") return "/fertilizers/organic.png";
   if (item.category === "npk") return "/fertilizers/npk.png";
   if (item.category === "foliar") return "/fertilizers/foliar.png";
@@ -1767,11 +1849,11 @@ export function FertilizerDetailModal({
 
       {/* 2. Tiêu đề, phân loại & trạng thái */}
       <div className="pt-pesticide-header-info">
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
-          <span className={`pt-fert-status-badge pt-fert-status-${item.status}`}>
+        <div className="pt-modal-meta-stack">
+          <span className={`pt-modal-meta-line ${isWarning ? "is-danger" : "is-ok"}`}>
             {isEncouraged ? "Khuyến khích VietGAP" : isWarning ? "Cảnh báo: Không sử dụng" : "Được phép sử dụng"}
           </span>
-          <span className="pt-training-code-pill">
+          <span className="pt-modal-meta-sub">
             {item.category === "organic"
               ? "Hữu cơ vi sinh"
               : item.category === "npk"
@@ -2252,11 +2334,11 @@ export function VarietyDetailModal({
 
       {/* 2. Tiêu đề, phân loại & xuất xứ */}
       <div className="pt-pesticide-header-info">
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
-          <Pill tone={isExport ? "green" : isPremium ? "blue" : "gold"}>
+        <div className="pt-modal-meta-stack">
+          <span className={`pt-modal-meta-line ${isExport || isPremium ? "is-ok" : "is-warn"}`}>
             {isExport ? "Chuẩn xuất khẩu GACC & VietGAP" : "Khuyến khích mở rộng vùng trồng"}
-          </Pill>
-          <span className="pt-training-code-pill">
+          </span>
+          <span className="pt-modal-meta-sub">
             {item.category === "export"
               ? "Giống xuất khẩu chủ lực"
               : item.category === "native"
@@ -2651,11 +2733,11 @@ export function DiseaseDetailModal({
       )}
 
       <div className="pt-pesticide-header-info" style={{ paddingTop: 4 }}>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
-          <Pill tone={isVeryCommon ? "red" : "gold"}>
+        <div className="pt-modal-meta-stack">
+          <span className={`pt-modal-meta-line ${isVeryCommon ? "is-danger" : "is-warn"}`}>
             Mức độ: {item.prevalenceCode} ({item.prevalenceLabel})
-          </Pill>
-          <span className="pt-training-code-pill">
+          </span>
+          <span className="pt-modal-meta-sub">
             {isDisease ? "Bệnh hại sầu riêng" : "Sâu hại sầu riêng"}
           </span>
         </div>
@@ -2850,18 +2932,19 @@ export function DiseaseAndIpmList() {
         </FadeFilterBar>
 
         {(kindFilter === "all" || kindFilter === "care") && !query && (
-          <Card title="4 nguyên tắc phòng trừ dịch hại (IPM)">
-            <div className="pt-training-modules">
+          <section className="pt-ipm-inline-section" aria-labelledby="ipm-principles-heading">
+            <h3 id="ipm-principles-heading" className="pt-ipm-inline-title">
+              4 nguyên tắc IPM
+            </h3>
+            <div className="pt-ipm-inline-list">
               {IPM_2026_PRINCIPLES.map((p) => (
-                <div key={p.no} className="pt-training-module-item">
-                  <div className="pt-training-module-text">
-                    <strong>{p.title}</strong>
-                    <p>{p.desc}</p>
-                  </div>
+                <div key={p.no} className="pt-ipm-inline-item">
+                  <strong>{p.title}</strong>
+                  <p>{p.desc}</p>
                 </div>
               ))}
             </div>
-          </Card>
+          </section>
         )}
 
         {kindFilter === "care" && (
@@ -2987,11 +3070,11 @@ export function CareProtocolDetailModal({
       </div>
 
       <div className="pt-pesticide-modal-header">
-        <div className="pt-training-modal-badges" style={{ justifyContent: "center" }}>
-          <Pill tone="green">
+        <div className="pt-modal-meta-stack">
+          <span className="pt-modal-meta-line is-ok">
             {isSenPro ? "Phụ lục kỹ thuật 2026-2027" : `Giai đoạn ${stage.order} / 08 - ${stage.duration}`}
-          </Pill>
-          <span className="pt-training-code-pill">Bảo chứng thu mua giá cao</span>
+          </span>
+          <span className="pt-modal-meta-sub">Bảo chứng thu mua giá cao</span>
         </div>
         <h3 className="pt-pesticide-modal-title">
           {stage.order}. {stage.name}
@@ -3250,7 +3333,12 @@ export function CareProtocol2026List() {
         )}
 
         {(groupFilter === "all" || groupFilter === "senpro") && !query && (
-          <Card title="Bảng tra cứu nhanh: Dùng SenPro điều tiết & chặn đọt non (2026–2027)">
+          <section className="pt-diary-section" aria-labelledby="senpro-quick-heading">
+            <div className="pt-diary-header">
+              <h3 id="senpro-quick-heading" className="pt-plots-title">
+                Tỷ lệ pha SenPro
+              </h3>
+            </div>
             <div className="pt-senpro-grid">
               {SENPRO_SHOOT_PROTOCOL.map((rule) => (
                 <div key={rule.shootState} className="pt-senpro-box">
@@ -3262,7 +3350,7 @@ export function CareProtocol2026List() {
                 </div>
               ))}
             </div>
-          </Card>
+          </section>
         )}
 
         {selectedStage && (
