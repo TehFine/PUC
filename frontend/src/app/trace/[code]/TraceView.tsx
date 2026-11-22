@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
 import { SkeletonCards } from "@/components/ui/Skeleton";
-import { WatermarkStamp } from "@/components/ui/WatermarkStamp";
 import { ROLE_LABELS } from "@/constants/roles";
 import {
   PUC_URL_SYNC_EVENT,
@@ -26,20 +25,11 @@ import type { PlotStatus, PortalPlot } from "@/types/portal";
 import {
   ArrowLeft,
   Search,
-  Share2,
-  Printer,
-  Check,
-  CheckCircle2,
-  QrCode,
-  Clock,
   AlertTriangle,
   ShieldAlert,
-  FileText,
-  ExternalLink,
   Lock,
   ShieldCheck,
   MapPin,
-  Globe,
 } from "@/components/ui/PublicIcon";
 import type { FieldAuditDataPayload } from "./FieldAuditGpsCheckCard";
 import {
@@ -50,19 +40,21 @@ import {
   formatTraceDateTime,
   formatTraceNumber,
   localizeProductName,
+  localizeVariety,
   localizeTraceUnitLabel,
   localizeLotStatusLabel,
   localizeZoneStatusLabel,
   localizePackhouseStatusLabel,
   localizeMarket,
+  localizeAddress,
   localizeAdminLocation,
   localizeGrowingZoneName,
   localizeCoopName,
+  localizePackhouseName,
+  localizeLabName,
   localizeGroupName,
   localizeInspectionNote,
   localizeTimelineStep,
-  localizeGovernmentEndorsement,
-  localizeAttestationParty,
   type TraceLang,
 } from "./trace-i18n";
 import "./trace.css";
@@ -465,6 +457,327 @@ interface TraceData {
   fieldAuditData?: FieldAuditDataPayload;
 }
 
+const DOSSIER_SHEET_COPY: Record<
+  TraceLang,
+  {
+    docTitle: string;
+    verifiedDatePrefix: string;
+    originHeading: string;
+    destinationHeading: string;
+    farmersPrefix: string;
+    marketPrefix: string;
+    validUntilPrefix: string;
+    productMetaPrefix: string;
+    lotNoPrefix: string;
+    unitSerialPrefix: string;
+    colNo: string;
+    colStage: string;
+    colUnit: string;
+    colDate: string;
+    colResult: string;
+    lotScaleHeading: string;
+    unitWeightHeading: string;
+    tonsUnit: string;
+    rowHeavyMetalYellowO: string;
+    rowPesticideSafety: string;
+    rowFarmJournal: string;
+    rowYieldCheck: string;
+    rowPhytosanitary: string;
+    rowFinalStatus: string;
+    heavyMetalPassText: string;
+    heavyMetalFailText: string;
+    pesticidePassText: string;
+    pesticideFailText: string;
+    phiCompliantText: string;
+    journalVerifiedText: string;
+    journalReviewText: string;
+    withinQuotaText: string;
+    overQuotaText: string;
+    labReportLineFmt: (code: string, passed: boolean) => string;
+    viewLabScanLabel: string;
+    verifyLabPortalLabel: string;
+    certColHeading: string;
+    labUnitPrefix: string;
+    labCertPrefix: string;
+    supervisionPrefix: string;
+    showMapBtn: string;
+    hideMapBtn: string;
+    termsColHeading: string;
+    assuranceLine1: string;
+    assuranceLine2: string;
+    issuerHeading: string;
+    inquiryHeading: string;
+  }
+> = {
+  vi: {
+    docTitle: "HỒ SƠ LÔ HÀNG",
+    verifiedDatePrefix: "NGÀY XÁC THỰC:",
+    originHeading: "VÙNG TRỒNG NGUỒN",
+    destinationHeading: "ĐÓNG GÓI VÀ XUẤT KHẨU",
+    farmersPrefix: "Hộ tham gia",
+    marketPrefix: "Thị trường",
+    validUntilPrefix: "Hiệu lực đến",
+    productMetaPrefix: "SẢN PHẨM",
+    lotNoPrefix: "MÃ LÔ",
+    unitSerialPrefix: "MÃ ĐƠN VỊ",
+    colNo: "STT",
+    colStage: "HẠNG MỤC MINH BẠCH VÀ CHỨNG TỪ",
+    colUnit: "ĐƠN VỊ XÁC NHẬN",
+    colDate: "NGÀY",
+    colResult: "KẾT QUẢ",
+    lotScaleHeading: "KHỐI LƯỢNG LÔ HÀNG",
+    unitWeightHeading: "QUY CÁCH ĐƠN VỊ",
+    tonsUnit: "tấn",
+    rowHeavyMetalYellowO: "KIM LOẠI NẶNG VÀ VÀNG O:",
+    rowPesticideSafety: "DƯ LƯỢNG THUỐC BVTV:",
+    rowFarmJournal: "NHẬT KÝ CANH TÁC:",
+    rowYieldCheck: "SẢN LƯỢNG VÙNG TRỒNG:",
+    rowPhytosanitary: "KIỂM DỊCH THỰC VẬT:",
+    rowFinalStatus: "KẾT LUẬN XÁC THỰC:",
+    heavyMetalPassText: "Đạt chuẩn, Không Vàng O",
+    heavyMetalFailText: "Cần kiểm tra lại chỉ tiêu",
+    pesticidePassText: "Trong ngưỡng an toàn",
+    pesticideFailText: "Vượt ngưỡng cho phép",
+    phiCompliantText: "Đủ thời gian cách ly",
+    journalVerifiedText: "Đã kiểm tra đầy đủ",
+    journalReviewText: "Đang rà soát bổ sung",
+    withinQuotaText: "Đúng sản lượng vườn nguồn",
+    overQuotaText: "Cần đối chiếu sản lượng",
+    labReportLineFmt: (code, passed) =>
+      passed
+        ? `Phiếu ${code}: Đạt chuẩn kim loại nặng, không phát hiện Vàng O, dư lượng thuốc BVTV an toàn`
+        : `Phiếu ${code}: Phát hiện chỉ tiêu cần kiểm tra lại trước khi lưu thông`,
+    viewLabScanLabel: "Xem bản scan phiếu kiểm nghiệm",
+    verifyLabPortalLabel: "Đối chiếu tại đơn vị kiểm nghiệm",
+    certColHeading: "Hồ sơ Kiểm nghiệm và Vùng trồng:",
+    labUnitPrefix: "Đơn vị kiểm nghiệm",
+    labCertPrefix: "Mã phiếu",
+    supervisionPrefix: "Giám sát",
+    showMapBtn: "Xem bản đồ khái quát vùng trồng",
+    hideMapBtn: "Thu gọn bản đồ vùng trồng",
+    termsColHeading: "Cam kết Chất lượng và Xuất xứ:",
+    assuranceLine1:
+      "Sản phẩm thu hoạch đúng độ chín từ vùng trồng thành viên đã cấp mã số định danh, canh tác theo quy trình VietGAP và tuân thủ thời gian cách ly an toàn.",
+    assuranceLine2:
+      "Thông tin trên phiếu được công bố sau khi Hợp tác xã Cư Né đối chiếu nhật ký chăm sóc vườn, phiếu kiểm nghiệm an toàn thực phẩm và hồ sơ xuất xưởng.",
+    issuerHeading: "ĐƠN VỊ XÁC THỰC",
+    inquiryHeading: "Đối chiếu hồ sơ gốc?",
+  },
+  en: {
+    docTitle: "LOT DOSSIER",
+    verifiedDatePrefix: "VERIFIED.",
+    originHeading: "ORIGIN GROWING ZONE",
+    destinationHeading: "PACKHOUSE & DESTINATION",
+    farmersPrefix: "Consented growers",
+    marketPrefix: "Market",
+    validUntilPrefix: "Valid until",
+    productMetaPrefix: "PRODUCT",
+    lotNoPrefix: "LOT NO",
+    unitSerialPrefix: "UNIT ID",
+    colNo: "NO",
+    colStage: "TRANSPARENCY STAGE & EVIDENCE",
+    colUnit: "RESPONSIBLE UNIT",
+    colDate: "DATE",
+    colResult: "STATUS",
+    lotScaleHeading: "VERIFIED LOT VOLUME",
+    unitWeightHeading: "VERIFIED UNIT SPEC",
+    tonsUnit: "tons",
+    rowHeavyMetalYellowO: "HEAVY METALS & YELLOW O:",
+    rowPesticideSafety: "PESTICIDE SAFETY:",
+    rowFarmJournal: "CULTIVATION LOG:",
+    rowYieldCheck: "ORCHARD YIELD CHECK:",
+    rowPhytosanitary: "PHYTOSANITARY CERT:",
+    rowFinalStatus: "VERIFICATION STATUS:",
+    heavyMetalPassText: "Compliant, Yellow O free",
+    heavyMetalFailText: "Requires safety review",
+    pesticidePassText: "Within safe limit",
+    pesticideFailText: "Above safe limit",
+    phiCompliantText: "Safe withdrawal period",
+    journalVerifiedText: "Verified & complete",
+    journalReviewText: "Under review",
+    withinQuotaText: "Matches source orchard",
+    overQuotaText: "Yield review required",
+    labReportLineFmt: (code, passed) =>
+      passed
+        ? `Report ${code}: Heavy metals compliant, Yellow O not detected, pesticide residues safe`
+        : `Report ${code}: Safety parameter requires review before circulation`,
+    viewLabScanLabel: "View scanned lab certificate",
+    verifyLabPortalLabel: "Verify with testing lab",
+    certColHeading: "Testing & Zone Credentials:",
+    labUnitPrefix: "Testing facility",
+    labCertPrefix: "Certificate",
+    supervisionPrefix: "Oversight",
+    showMapBtn: "Show growing zone map",
+    hideMapBtn: "Hide growing zone map",
+    termsColHeading: "Origin & Quality Commitment:",
+    assuranceLine1:
+      "Harvested at proper maturity from registered member orchards cultivated under VietGAP standards and safe pre-harvest withdrawal periods.",
+    assuranceLine2:
+      "Information on this dossier is published after Cư Né Cooperative verifies orchard care logs, food safety test reports, and dispatch records.",
+    issuerHeading: "ISSUING COOPERATIVE",
+    inquiryHeading: "Verification Inquiry?",
+  },
+  zh: {
+    docTitle: "批次溯源单",
+    verifiedDatePrefix: "核验日期:",
+    originHeading: "原产种植区",
+    destinationHeading: "包装厂与出口市场",
+    farmersPrefix: "公开农户",
+    marketPrefix: "出口市场",
+    validUntilPrefix: "有效期至",
+    productMetaPrefix: "产品名称",
+    lotNoPrefix: "批次编号",
+    unitSerialPrefix: "单件编码",
+    colNo: "序号",
+    colStage: "透明溯源环节与凭证",
+    colUnit: "责任单位",
+    colDate: "记录日期",
+    colResult: "核验结论",
+    lotScaleHeading: "批次核定重量",
+    unitWeightHeading: "单件核定规格",
+    tonsUnit: "吨",
+    rowHeavyMetalYellowO: "重金属与碱性嫩黄O:",
+    rowPesticideSafety: "农药残留安全:",
+    rowFarmJournal: "果园农事记录:",
+    rowYieldCheck: "果园产量核对:",
+    rowPhytosanitary: "植物检疫证书:",
+    rowFinalStatus: "批次核验状态:",
+    heavyMetalPassText: "检测合格，未检出黄O",
+    heavyMetalFailText: "安全指标待复查",
+    pesticidePassText: "符合安全标准",
+    pesticideFailText: "超出安全标准",
+    phiCompliantText: "符合安全间隔期",
+    journalVerifiedText: "已完整核对",
+    journalReviewText: "正在复核",
+    withinQuotaText: "符合源头果园产量",
+    overQuotaText: "产量需人工核对",
+    labReportLineFmt: (code, passed) =>
+      passed
+        ? `报告 ${code}：重金属合格、未检出碱性嫩黄O、农药残留符合安全标准`
+        : `报告 ${code}：发现安全指标需重新复核`,
+    viewLabScanLabel: "查看检测报告扫描件",
+    verifyLabPortalLabel: "检测机构官网核实",
+    certColHeading: "检测机构与产区资质:",
+    labUnitPrefix: "检测机构",
+    labCertPrefix: "报告编号",
+    supervisionPrefix: "果园监管",
+    showMapBtn: "展开产区概略地图",
+    hideMapBtn: "收起产区地图",
+    termsColHeading: "原产地与品质承诺:",
+    assuranceLine1:
+      "采自已获注册编码的合作社成员果园，严格执行良好农业规范 (VietGAP) 与采前安全间隔期管理。",
+    assuranceLine2:
+      "本单所列信息均经 Cư Né 合作社核对果园管护台账、食品安全检测报告及出厂单证后正式发布。",
+    issuerHeading: "签发合作社",
+    inquiryHeading: "溯源档案核实联系",
+  },
+};
+
+const A4_SHEET_WIDTH_PX = 820;
+
+function A4DossierStage({
+  status,
+  children,
+}: {
+  status: string;
+  children: ReactNode;
+}) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLElement>(null);
+  const [layout, setLayout] = useState<{ scale: number; scaledHeight: number | null }>({
+    scale: 1,
+    scaledHeight: null,
+  });
+
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    const sheet = sheetRef.current;
+    if (!stage || !sheet) return;
+
+    let printing = false;
+
+    const measure = () => {
+      if (printing) return;
+      const availWidth = stage.clientWidth;
+      if (availWidth <= 0) return;
+
+      if (availWidth >= A4_SHEET_WIDTH_PX) {
+        setLayout((prev) =>
+          prev.scale === 1 && prev.scaledHeight === null
+            ? prev
+            : { scale: 1, scaledHeight: null },
+        );
+        return;
+      }
+
+      const nextScale = availWidth / A4_SHEET_WIDTH_PX;
+      const naturalHeight = sheet.offsetHeight;
+      const nextHeight = Math.ceil(naturalHeight * nextScale);
+
+      setLayout((prev) =>
+        Math.abs(prev.scale - nextScale) < 0.0004 && prev.scaledHeight === nextHeight
+          ? prev
+          : { scale: nextScale, scaledHeight: nextHeight },
+      );
+    };
+
+    const onBeforePrint = () => {
+      printing = true;
+      setLayout({ scale: 1, scaledHeight: null });
+    };
+
+    const onAfterPrint = () => {
+      printing = false;
+      measure();
+    };
+
+    measure();
+
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => measure())
+        : null;
+    ro?.observe(stage);
+    ro?.observe(sheet);
+    window.addEventListener("resize", measure);
+    window.addEventListener("beforeprint", onBeforePrint);
+    window.addEventListener("afterprint", onAfterPrint);
+
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("beforeprint", onBeforePrint);
+      window.removeEventListener("afterprint", onAfterPrint);
+    };
+  }, []);
+
+  const isScaled = layout.scale < 0.9995 && layout.scaledHeight !== null;
+
+  return (
+    <div
+      ref={stageRef}
+      className={`tr-doc-a4-stage${isScaled ? " is-scaled" : ""}`}
+      style={isScaled ? { height: `${layout.scaledHeight}px` } : undefined}
+    >
+      <article
+        ref={sheetRef}
+        className="tr-doc-sheet"
+        data-status={status}
+        style={
+          isScaled
+            ? {
+                transform: `scale(${layout.scale})`,
+                transformOrigin: "top left",
+              }
+            : undefined
+        }
+      >
+        {children}
+      </article>
+    </div>
+  );
+}
+
 function resolveSearchNavigationHref(rawInput: string): string | null {
   const trimmed = rawInput.trim();
   if (!trimmed || /^\.+$/.test(trimmed)) return null;
@@ -590,11 +903,11 @@ function AuthorityDiarySection({ diaries }: { diaries: TraceDiaryEntry[] }) {
   return (
     <section className="tr-card tr-puc-journal-card">
       <div className="tr-puc-journal-head">
-        <h3 className="tr-puc-journal-title">Nhật ký canh tác &amp; phun thuốc BVTV chi tiết</h3>
+        <h3 className="tr-puc-journal-title">Nhật ký canh tác và phun thuốc BVTV chi tiết</h3>
         {diaries.length > 0 && <span className="tr-count-badge">{diaries.length} bản ghi</span>}
       </div>
       <p className="tr-card-sub">
-        Lưu vết hoạt chất thuốc BVTV, liều lượng phun, thời gian cách ly PHI và người ghi chép thực tế tại hộ.
+        Lưu vết tên thuốc bảo vệ thực vật, liều lượng sử dụng, số ngày cách ly an toàn và người ghi chép thực tế tại hộ.
       </p>
 
       {diaries.length === 0 ? (
@@ -623,7 +936,7 @@ function AuthorityDiarySection({ diaries }: { diaries: TraceDiaryEntry[] }) {
                     {d.plotCode && <span>Mã lô vườn: {d.plotCode}</span>}
                     {d.mrlStatus && (
                       <span className={mrlFailed ? "tr-proof-warn-tag" : "tr-proof-safe-tag"}>
-                        {mrlFailed ? "Cảnh báo MRL" : "Đạt ngưỡng MRL"}
+                        {mrlFailed ? "Cảnh báo dư lượng" : "Đạt ngưỡng an toàn"}
                       </span>
                     )}
                     {d.isLateEntry ? (
@@ -817,6 +1130,7 @@ export default function TraceView() {
   };
 
   const [prevCode, setPrevCode] = useState(code);
+  const [showZoneMap, setShowZoneMap] = useState(false);
   const [tracePreviewMedia, setTracePreviewMedia] = useState<{
     urls: string[];
     title: string;
@@ -824,6 +1138,7 @@ export default function TraceView() {
   } | null>(null);
   if (prevCode !== code) {
     setPrevCode(code);
+    setShowZoneMap(false);
     setData(null);
     setQrSrc("");
     setLoading(Boolean(code));
@@ -1093,7 +1408,6 @@ export default function TraceView() {
         : null)
     : null;
 
-  const hasRealtimeAlert = Boolean(pub?.realtimeStatus?.hasSuspensionAlert);
   const returnNextPath =
     pathname ||
     (resolvedQrToken
@@ -1140,29 +1454,8 @@ export default function TraceView() {
       </header>
 
       <main className="tr-wrap tr-main">
-        {/* ─── Dải chuyển ngôn ngữ VI / EN / 简体中文 & Trạng thái PUC-PHC thời gian thực (4c, 4d) ─── */}
+        {/* ─── Dải chuyển ngôn ngữ VI / EN / 简体中文 & Nút đăng nhập Đối tác / Cơ quan quản lý ─── */}
         <div className="tr-lang-bar no-print">
-          <div className="tr-lang-live-pill">
-            {pub ? (
-              hasRealtimeAlert ? (
-                <span className="tr-live-status is-alert">
-                  <span className="tr-live-dot" aria-hidden="true" />
-                  <span>{t.langBar.liveAlertBadge}</span>
-                </span>
-              ) : (
-                <span className="tr-live-status is-ok">
-                  <span className="tr-live-dot" aria-hidden="true" />
-                  <span>{t.langBar.liveVerifiedBadge}</span>
-                </span>
-              )
-            ) : (
-              <span className="tr-live-status is-neutral">
-                <Globe size={13} strokeWidth={2} aria-hidden="true" />
-                <span>{t.langBar.label}</span>
-              </span>
-            )}
-          </div>
-
           <div className="tr-lang-switch" role="group" aria-label={t.langBar.label}>
             <button
               type="button"
@@ -1189,6 +1482,12 @@ export default function TraceView() {
               简体中文
             </button>
           </div>
+
+          {!loading && data && pub && ac && !ac.isAuthenticated && (
+            <Link href={loginWithNextHref} className="tr-partner-login-btn">
+              <span>{t.authHint.compactBtn}</span>
+            </Link>
+          )}
         </div>
 
         {loading ? (
@@ -1218,16 +1517,6 @@ export default function TraceView() {
           </div>
         ) : data && pub && ac ? (
           <>
-            {/* ─── Nút nhỏ gọn ở đầu trang dành cho Đối tác / Cơ quan quản lý khi quét chưa đăng nhập (Mục 5) ─── */}
-            {!ac.isAuthenticated && (
-              <div className="tr-partner-login-strip no-print">
-                <Link href={loginWithNextHref} className="tr-partner-login-btn">
-                  <Lock size={13} strokeWidth={2.1} aria-hidden="true" />
-                  <span>{t.authHint.compactBtn}</span>
-                </Link>
-              </div>
-            )}
-
             {/* ─── Trụ cột 3: Dải trạng thái Thẻ Đoàn Thẩm định Thực địa (Field Audit Pass) dành cho Đối tác / Đoàn Tỉnh ─── */}
             {ac.fieldAuditPass?.active && (
               <section className="tr-pass-banner is-active no-print" role="status">
@@ -1275,9 +1564,9 @@ export default function TraceView() {
               </section>
             )}
 
-            {!ac.fieldAuditPass?.active && (data.isPlotSignboard || !ac.isAuthenticated) && (
+            {!ac.fieldAuditPass?.active && data.isPlotSignboard && (
               <section
-                className={`tr-pass-prompt-card no-print ${data.isPlotSignboard ? "is-featured" : ""}`}
+                className="tr-pass-prompt-card no-print is-featured"
                 aria-label={t.fieldAudit.passPromptTitle}
               >
                 <div className="tr-pass-prompt-copy">
@@ -1386,7 +1675,7 @@ export default function TraceView() {
               </section>
             )}
 
-            {/* ─── 1. Cảnh báo Thu hồi Lô hàng (Mục 1) ─── */}
+            {/* ─── Cảnh báo Thu hồi / Tạm dừng / Chống giả (nếu có) ─── */}
             {pub.lotIdentity.status === "revoked" && (
               <section className="tr-alert-banner is-danger" role="alert">
                 <div className="tr-alert-banner-head">
@@ -1401,7 +1690,6 @@ export default function TraceView() {
               </section>
             )}
 
-            {/* ─── 2. Cảnh báo Trạng thái Thời gian thực PUC / PHC bị tạm dừng hoặc thu hồi (4c) ─── */}
             {pub.realtimeStatus?.hasSuspensionAlert && pub.lotIdentity.status !== "revoked" && (
               <section className="tr-alert-banner is-danger" role="alert">
                 <div className="tr-alert-banner-head">
@@ -1428,7 +1716,6 @@ export default function TraceView() {
               </section>
             )}
 
-            {/* ─── 3. Thông báo Bản nháp chưa kiểm chứng (4f) ─── */}
             {pub.lotIdentity.status === "unverified" && (
               <section className="tr-alert-banner is-warn" role="status">
                 <div className="tr-alert-banner-head">
@@ -1439,7 +1726,6 @@ export default function TraceView() {
               </section>
             )}
 
-            {/* ─── 4. Cảnh báo Chống giả: Quét từ nhiều quốc gia hoặc tần suất bất thường (4b) ─── */}
             {(pub.verification.warningReason === "multi_country" ||
               pub.verification.warningReason === "high_frequency") && (
               <section className="tr-alert-banner is-warn" role="alert">
@@ -1466,148 +1752,7 @@ export default function TraceView() {
               </section>
             )}
 
-            {/* ─── THẺ 1: NHẬN DIỆN LÔ & XÁC THỰC MÁY CHỦ (Mục 1 - Nhóm Nhận diện lô & Xác thực) ─── */}
-            <section className="tr-hero-dossier" data-status={pub.lotIdentity.status}>
-              <div className="tr-hero-dossier-main">
-                <div className="tr-asset-watermark" aria-hidden="true">
-                  <WatermarkStamp
-                    topText={t.watermark.top}
-                    centerText={
-                      pub.lotIdentity.status === "revoked"
-                        ? t.watermark.revoked
-                        : pub.lotIdentity.status === "unverified"
-                          ? t.watermark.unverified
-                          : pub.lotIdentity.status === "pending"
-                            ? t.watermark.pending
-                            : t.watermark.valid
-                    }
-                    bottomText={t.watermark.bottom}
-                  />
-                </div>
-
-                <div className="tr-hero-left">
-                  <div className="tr-hero-kicker-row">
-                    <span className="tr-hero-unit-tag">
-                      {localizeTraceUnitLabel(
-                        pub.lotIdentity.traceUnit,
-                        pub.lotIdentity.traceUnitLabel,
-                        lang,
-                      )}
-                    </span>
-                    <span
-                      className={
-                        pub.lotIdentity.status === "revoked"
-                          ? "tr-badge-red"
-                          : pub.lotIdentity.status === "pending" ||
-                              pub.lotIdentity.status === "unverified"
-                            ? "tr-badge-neutral"
-                            : "tr-badge-green"
-                      }
-                    >
-                      {localizeLotStatusLabel(
-                        pub.lotIdentity.status,
-                        pub.lotIdentity.statusLabel,
-                        lang,
-                      )}
-                    </span>
-                  </div>
-
-                  <h1 className="tr-hero-product-title">
-                    {localizeProductName(
-                      pub.lotIdentity.productName,
-                      pub.lotIdentity.traceUnit,
-                      lang,
-                    )}
-                  </h1>
-
-                  <div className="tr-hero-identity-grid">
-                    <div className="tr-hero-id-cell">
-                      <span className="tr-hero-id-lbl">{t.hero.lotCodeLabel}</span>
-                      <strong className="tr-hero-id-val">{pub.lotIdentity.lotCode}</strong>
-                    </div>
-
-                    <div className="tr-hero-id-cell">
-                      <span className="tr-hero-id-lbl">{t.hero.varietyLabel}</span>
-                      <strong className="tr-hero-id-val">{pub.lotIdentity.variety}</strong>
-                    </div>
-
-                    {fallbackUnitSerial &&
-                      fallbackUnitSerial.toUpperCase() !== pub.lotIdentity.lotCode.toUpperCase() && (
-                        <div className="tr-hero-id-cell">
-                          <span className="tr-hero-id-lbl">{t.hero.fallbackCodeLabel}</span>
-                          <strong className="tr-hero-id-val">{fallbackUnitSerial}</strong>
-                        </div>
-                      )}
-
-                    <div className="tr-hero-id-cell">
-                      <span className="tr-hero-id-lbl">
-                        {pub.lotIdentity.itemWeightKg !== null
-                          ? t.hero.unitSpecLabel
-                          : t.hero.lotScaleLabel}
-                      </span>
-                      <strong className="tr-hero-id-val">
-                        {pub.lotIdentity.itemWeightKg !== null
-                          ? `${formatTraceNumber(pub.lotIdentity.itemWeightKg, lang)} kg${
-                              pub.lotIdentity.itemGrade
-                                ? ` (${t.hero.gradeFmt(pub.lotIdentity.itemGrade)})`
-                                : ""
-                            }`
-                          : pub.lotIdentity.weightTons > 0
-                            ? t.hero.tonsFmt(
-                                formatTraceNumber(pub.lotIdentity.weightTons * 1000, lang),
-                                pub.lotIdentity.weightTons,
-                              )
-                            : localizeMarket(pub.lotIdentity.market, lang)}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="tr-asset-right">
-                  <div className="tr-asset-qr-box">
-                    {qrSrc ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={qrSrc}
-                        alt={t.hero.qrAlt(pub.lotIdentity.lotCode)}
-                        className="tr-asset-qr-img"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <div className="tr-asset-qr-loading" aria-hidden="true">
-                        <QrCode size={84} strokeWidth={1.8} />
-                      </div>
-                    )}
-                  </div>
-                  <span className="tr-qr-caption">{t.hero.qrCaption}</span>
-                </div>
-              </div>
-
-              {/* Dải Xác thực Lượt quét & Quốc gia quét (Mục 1 + 4b) */}
-              <div className="tr-hero-verify-bar">
-                <div className="tr-verify-stat">
-                  <CheckCircle2 size={15} strokeWidth={2.2} aria-hidden="true" />
-                  <span>
-                    {t.hero.scanStatFmt(
-                      formatTraceNumber(pub.verification.totalScans, lang),
-                      formatTraceNumber(pub.verification.scansLast24h, lang),
-                      pub.verification.countries24h && pub.verification.countries24h.length > 0
-                        ? t.hero.countriesSuffixFmt(pub.verification.countries24h.join(", "))
-                        : null,
-                    )}
-                  </span>
-                </div>
-                <div className="tr-verify-time">
-                  <Clock size={14} strokeWidth={2} aria-hidden="true" />
-                  <span>
-                    {t.hero.verifiedAtFmt(formatTraceDateTime(pub.verification.verifiedAt, lang))}
-                  </span>
-                </div>
-              </div>
-            </section>
-
-            {/* ─── TRỤ CỘT 3: HỒ SƠ THẨM ĐỊNH THỰC ĐỊA THỬA ĐẤT & ĐỐI CHỨNG GPS TẠI VƯỜN ─── */}
+            {/* ─── HỒ SƠ THẨM ĐỊNH THỰC ĐỊA THỬA ĐẤT & ĐỐI CHỨNG GPS TẠI VƯỜN (NẾU QUÉT BẢNG QR THỬA) ─── */}
             {data.fieldAuditData && (
               <FieldAuditGpsCheckCard
                 scannedCode={pub.lotIdentity.scannedCode || code}
@@ -1620,633 +1765,458 @@ export default function TraceView() {
               />
             )}
 
-            {/* ─── TRỤ CỘT 5: BẢO CHỨNG CHÍNH QUYỀN XÃ / TỈNH & CƠ CHẾ XÁC THỰC ĐỘC LẬP 3 BÊN ─── */}
-            {pub.governance && (() => {
-              const locGov = localizeGovernmentEndorsement(pub.governance.governmentEndorsement, lang);
-              const portalUrl = pub.governance.governmentEndorsement.officialPortalUrl;
-              const safePortalUrl = isSafeExternalHttpsUrl(portalUrl)
-                ? portalUrl.trim()
-                : null;
-              return (
-                <section className="tr-card tr-gov-card" aria-labelledby="gov-endorsement-heading">
-                  <div className="tr-gov-banner-top">
-                    <div className="tr-gov-banner-copy">
-                      <span className="tr-gov-kicker">
-                        <ShieldCheck size={14} strokeWidth={2.3} aria-hidden="true" />
-                        <span>{t.governance.kicker}</span>
-                      </span>
-                      <h2 id="gov-endorsement-heading" className="tr-gov-title">
-                        {locGov.programTitle}
-                      </h2>
-                      <p className="tr-gov-directive">{locGov.directiveNo}</p>
-                      <div className="tr-gov-meta-row">
-                        <span>{locGov.communeAuthority}</span>
-                        <span className="tr-gov-sep">/</span>
-                        <span>{locGov.provincialAuthority}</span>
-                        <span className="tr-gov-sep">/</span>
-                        <span>
-                          {t.governance.supervisoryLabel} <strong>{locGov.inspectionUnit}</strong>
-                        </span>
-                      </div>
-                    </div>
-
-                    {safePortalUrl && (
-                      <a
-                        href={safePortalUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        referrerPolicy="no-referrer"
-                        className="tr-gov-portal-btn no-print"
-                      >
-                        <Globe size={15} strokeWidth={2.1} aria-hidden="true" />
-                        <span>
-                          {t.governance.portalLinkLabel} ({pub.governance.governmentEndorsement.officialDomain})
-                        </span>
-                        <ExternalLink size={13} strokeWidth={2.1} aria-hidden="true" />
-                      </a>
-                    )}
-                  </div>
-
-                  {pub.governance.threePartyAttestation.length > 0 && (
-                    <div className="tr-attestation-wrap">
-                      <div className="tr-attestation-head">
-                        <h3 className="tr-attestation-title">{t.governance.attestationTitle}</h3>
-                        <span className="tr-count-badge">{t.governance.attestationBadge}</span>
-                      </div>
-
-                      <div className="tr-attestation-grid">
-                        {pub.governance.threePartyAttestation.map((party) => {
-                          const locParty = localizeAttestationParty(party, lang);
-                          const isVerified = party.status === "verified" || party.status === "active";
-                          const isWarn = party.status === "warning";
-                          const statusText = isVerified
-                            ? t.governance.partyStatusVerified
-                            : isWarn
-                              ? t.governance.partyStatusWarning
-                              : t.governance.partyStatusPending;
-                          return (
-                            <div key={party.partyKey} className="tr-attest-cell">
-                              <div className="tr-attest-cell-top">
-                                <span className="tr-attest-num">0{party.partyOrder}</span>
-                                <span
-                                  className={
-                                    isVerified
-                                      ? "tr-badge-green"
-                                      : isWarn
-                                        ? "tr-badge-red"
-                                        : "tr-badge-neutral"
-                                  }
-                                >
-                                  {statusText}
-                                </span>
-                              </div>
-                              <div className="tr-attest-role">{locParty.roleLabel}</div>
-                              <strong className="tr-attest-actor">{locParty.actorName}</strong>
-                              <p className="tr-attest-summary">{locParty.summary}</p>
-                              <div className="tr-attest-foot">
-                                <span className="tr-attest-evidence">{party.evidenceCode}</span>
-                                {party.verifiedOn && (
-                                  <span className="tr-attest-date">
-                                    {formatTraceDate(party.verifiedOn, lang)}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </section>
+            {/* ═══════════════════════════════════════════════════════════════════════════
+               PHIẾU HỒ SƠ MINH BẠCH LÔ HÀNG (BỐ CỤC CHỨNG TỪ / HÓA ĐƠN CHUẨN THỤY SĨ)
+               ═══════════════════════════════════════════════════════════════════════════ */}
+            {(() => {
+              const docCopy = DOSSIER_SHEET_COPY[lang];
+              const labs = pub.labTests;
+              const firstLab = labs[0] ?? null;
+              const anyLabFail = labs.some(
+                (lt) =>
+                  lt.result !== "pass" ||
+                  Number(lt.cdMgKg) > 0.05 ||
+                  lt.yellowOPositive ||
+                  (lt.chlorpyrifosMgKg ?? 0) > 0.01,
               );
-            })()}
+              const mb = pub.massBalanceSummary;
 
-            {/* ─── DÒNG THỜI GIAN TRỰC QUAN 5 BƯỚC: VƯỜN -> THU HOẠCH -> ĐÓNG GÓI -> KIỂM NGHIỆM -> XUẤT KHẨU ─── */}
-            <section className="tr-card tr-five-step-card" aria-labelledby="five-step-heading">
-              <div className="tr-card-header">
-                <h2 id="five-step-heading" className="tr-card-title">
-                  {t.timeline.title}
-                </h2>
-                <span className="tr-count-badge">{t.timeline.badge}</span>
-              </div>
-              <p className="tr-card-sub">{t.timeline.sub}</p>
+              const scaleDisplay =
+                pub.lotIdentity.itemWeightKg !== null
+                  ? `${formatTraceNumber(pub.lotIdentity.itemWeightKg, lang)} kg${
+                      pub.lotIdentity.itemGrade
+                        ? ` (${t.hero.gradeFmt(pub.lotIdentity.itemGrade)})`
+                        : ""
+                    }`
+                  : pub.lotIdentity.weightTons > 0
+                    ? `${formatTraceNumber(pub.lotIdentity.weightTons * 1000, lang)} kg`
+                    : localizeTraceUnitLabel(
+                        pub.lotIdentity.traceUnit,
+                        pub.lotIdentity.traceUnitLabel,
+                        lang,
+                      );
 
-              <ol className="tr-five-steps" aria-label={t.timeline.ariaLabel}>
-                {pub.timeline.map((st) => {
-                  const statusLabel =
-                    st.status === "completed"
-                      ? t.timeline.statusCompleted
-                      : st.status === "warning"
-                        ? t.timeline.statusWarning
-                        : st.status === "current"
-                          ? t.timeline.statusCurrent
-                          : t.timeline.statusUpcoming;
-                  const localizedStep = localizeTimelineStep(st, {
-                    pucCode: pub.growingZone.pucCode,
-                    packhouseCode: pub.packhouse.code,
-                    packhouseName: pub.packhouse.name,
-                    market: pub.lotIdentity.market,
-                    lang,
-                  });
-                  return (
-                    <li key={st.key} className={`tr-fstep-item is-${st.status}`}>
-                      <div className="tr-fstep-top">
-                        <span className="tr-fstep-num">0{st.step}</span>
-                        <span className={`tr-fstep-pill is-${st.status}`}>{statusLabel}</span>
+              const localizedVariety = localizeVariety(pub.lotIdentity.variety, lang);
+              const scaleSubline =
+                pub.lotIdentity.itemWeightKg === null && pub.lotIdentity.weightTons > 0
+                  ? `${formatTraceNumber(pub.lotIdentity.weightTons, lang)} ${docCopy.tonsUnit}, ${localizedVariety}`
+                  : localizedVariety;
+
+              const lotStatusTone =
+                pub.lotIdentity.status === "revoked"
+                  ? "is-danger"
+                  : pub.lotIdentity.status === "pending" || pub.lotIdentity.status === "unverified"
+                    ? "is-warn"
+                    : "is-ok";
+
+              return (
+                <>
+                  <A4DossierStage status={pub.lotIdentity.status}>
+                    {/* 1. ĐẦU CHỨNG TỪ: ĐƠN VỊ SẢN XUẤT (TRÁI) <-> TIÊU ĐỀ & NGÀY XÁC THỰC (PHẢI) */}
+                  <header className="tr-doc-head">
+                    <div className="tr-doc-brand">
+                      <div className="tr-doc-logo-box" aria-hidden="true">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src="/newlogo.png"
+                          alt=""
+                          width={28}
+                          height={28}
+                          className="tr-doc-logo-img"
+                          loading="lazy"
+                          decoding="async"
+                        />
                       </div>
-                      <h3 className="tr-fstep-title">{localizedStep.title}</h3>
-                      <div className="tr-fstep-date">{formatTraceDate(st.date, lang)}</div>
-                      <div className="tr-fstep-unit">
-                        <span className="tr-fstep-unit-lbl">{t.timeline.responsibleLabel}</span>
-                        <strong>{localizedStep.responsibleUnit}</strong>
+                      <div className="tr-doc-brand-copy">
+                        <strong className="tr-doc-org-name">
+                          {localizeCoopName(pub.producer.cooperativeName, lang)}
+                        </strong>
+                        <span className="tr-doc-org-sub">
+                          {localizeAdminLocation(pub.growingZone.adminLocation, lang)}
+                        </span>
                       </div>
-                      <p className="tr-fstep-detail">{localizedStep.detail}</p>
-                    </li>
-                  );
-                })}
-              </ol>
-            </section>
-
-            {/* ─── TRỤ CỘT 1 & 2: SỔ CÁI MẬT MÃ SHA-256 CHỐNG SỬA LÙI & ĐỐI SOÁT HẠN NGẠCH SẢN LƯỢNG (MASS-BALANCE) ─── */}
-            {(pub.integritySeal || pub.massBalanceSummary) && (
-              <div className="tr-integrity-mass-grid">
-                {pub.integritySeal && (
-                  <section className="tr-card tr-integrity-card">
-                    <div className="tr-card-header">
-                      <h2 className="tr-card-title">{t.integrity.title}</h2>
-                      <span
-                        className={
-                          pub.integritySeal.chainVerified ? "tr-badge-green" : "tr-badge-red"
-                        }
-                      >
-                        {pub.integritySeal.chainVerified
-                          ? t.integrity.badgeVerified
-                          : t.integrity.badgeAlert}
-                      </span>
                     </div>
-                    <p className="tr-card-sub">{t.integrity.sub}</p>
 
-                    <div className="tr-data-list">
-                      <div className="tr-data-row">
-                        <span className="tr-data-label">{t.integrity.sealedRecordsLabel}</span>
-                        <strong className="tr-data-val is-tabular">
-                          {t.integrity.sealedRecordsFmt(
-                            pub.integritySeal.totalSealedRecords,
-                            pub.integritySeal.journalCount ?? 0,
-                            pub.integritySeal.sprayCount ?? 0,
-                            pub.integritySeal.minuteCount ?? 0,
-                          )}
-                        </strong>
+                    <div className="tr-doc-title-block">
+                      <h1 className="tr-doc-main-title">{docCopy.docTitle}</h1>
+                      <div className="tr-doc-date-line">
+                        {docCopy.verifiedDatePrefix}{" "}
+                        <span>{formatTraceDate(pub.verification.verifiedAt, lang)}</span>
                       </div>
+                    </div>
+                  </header>
 
-                      <div className="tr-data-row">
-                        <span className="tr-data-label">{t.integrity.onTimeRateLabel}</span>
-                        <strong className="tr-data-val highlight is-tabular">
-                          {t.integrity.onTimeRateFmt(
-                            pub.integritySeal.onTimePct,
-                            pub.integritySeal.lateRecordCount,
+                  {/* 2. KHỐI NỀN XÁM 2 CỘT: VÙNG TRỒNG NGUỒN (TRÁI) | ĐÓNG GÓI VÀ XUẤT KHẨU (PHẢI) */}
+                  <section className="tr-doc-parties" aria-label={t.zone.title}>
+                    <div className="tr-doc-party-col">
+                      <span className="tr-doc-party-kicker">{docCopy.originHeading}</span>
+                      <strong className="tr-doc-party-name">
+                        {localizeGrowingZoneName(pub.growingZone.name, lang)}
+                      </strong>
+                      <div className="tr-doc-party-lines">
+                        <span>{localizeAdminLocation(pub.growingZone.adminLocation, lang)}</span>
+                        <span>
+                          {localizeGroupName(
+                            pub.producer.groupName,
+                            pub.producer.participatingHouseholdCount,
+                            lang,
                           )}
-                        </strong>
+                        </span>
+                        <span>
+                          {pub.producer.consentedHouseholds.length > 0
+                            ? `${docCopy.farmersPrefix}: ${pub.producer.consentedHouseholds.join(", ")}`
+                            : t.producerPackhouse.representedByCoop}
+                        </span>
+                        <span>
+                          {docCopy.validUntilPrefix}:{" "}
+                          {formatTraceDate(pub.growingZone.validUntil, lang)}
+                        </span>
                       </div>
+                      <div className="tr-doc-party-code">
+                        PUC: {pub.growingZone.pucCode}
+                        {pub.growingZone.additionalZoneCount > 0
+                          ? t.zone.linkedZonesSuffix(pub.growingZone.additionalZoneCount)
+                          : ""}{" "}
+                        (
+                        {localizeZoneStatusLabel(
+                          pub.growingZone.status,
+                          pub.growingZone.statusLabel,
+                          lang,
+                        )}
+                        )
+                      </div>
+                    </div>
 
-                      <div className="tr-data-row">
-                        <span className="tr-data-label">{t.integrity.gpsEvidenceLabel}</span>
-                        <strong className="tr-data-val is-tabular">
-                          {t.integrity.gpsEvidenceFmt(pub.integritySeal.gpsVerifiedRecords)}
-                        </strong>
+                    <div className="tr-doc-party-col">
+                      <span className="tr-doc-party-kicker">{docCopy.destinationHeading}</span>
+                      <strong className="tr-doc-party-name">
+                        {localizePackhouseName(pub.packhouse.name, lang)}
+                      </strong>
+                      <div className="tr-doc-party-lines">
+                        <span>{localizeAddress(pub.packhouse.address, lang)}</span>
+                        <span>
+                          {docCopy.marketPrefix}: {localizeMarket(pub.lotIdentity.market, lang)}
+                        </span>
+                        <span>
+                          {t.processPhyto.standardValue}
+                        </span>
+                      </div>
+                      <div className="tr-doc-party-code">
+                        PHC: {pub.packhouse.code} (
+                        {localizePackhouseStatusLabel(
+                          pub.packhouse.status,
+                          pub.packhouse.statusLabel,
+                          lang,
+                        )}
+                        )
                       </div>
                     </div>
                   </section>
-                )}
 
-                {pub.massBalanceSummary && (() => {
-                  const mb = pub.massBalanceSummary;
-                  const usedTons = Number((mb.cumulativeUsedKg / 1000).toFixed(2));
-                  const capTons = Number((mb.zoneMaxQuotaKg / 1000).toFixed(2));
-                  const remainTons = Number((mb.remainingQuotaKg / 1000).toFixed(2));
-                  const clampedPct = Math.min(100, Math.max(0, mb.utilizationPct));
-                  const barTone = !mb.withinQuota
-                    ? "is-danger"
-                    : mb.utilizationPct >= 85
-                      ? "is-warn"
-                      : "is-ok";
-                  return (
-                    <section className="tr-card tr-mass-card">
-                      <div className="tr-card-header">
-                        <h2 className="tr-card-title">{t.integrity.massBalanceTitle}</h2>
-                        <span className={mb.withinQuota ? "tr-badge-green" : "tr-badge-red"}>
-                          {mb.withinQuota
-                            ? t.integrity.massBalanceBadgeOk
-                            : t.integrity.massBalanceBadgeWarn}
-                        </span>
-                      </div>
-
-                      <div className="tr-mass-season-line">
-                        {t.integrity.massBalanceSeasonFmt(
-                          mb.seasonYear,
-                          mb.assessedPlotCount,
-                          mb.totalTreeCount,
-                        )}
-                      </div>
-
-                      <div className="tr-quota-bar-block">
-                        <div className="tr-quota-stats-row">
-                          <strong className="is-tabular">
-                            {t.integrity.massBalanceUsedFmt(usedTons, capTons, mb.utilizationPct)}
-                          </strong>
-                          <span className="is-tabular">
-                            {t.integrity.massBalanceRemainFmt(remainTons)}
-                          </span>
-                        </div>
-                        <div className="tr-quota-track" role="progressbar" aria-valuenow={mb.utilizationPct} aria-valuemin={0} aria-valuemax={100}>
-                          <div
-                            className={`tr-quota-fill ${barTone}`}
-                            style={{ width: `${clampedPct}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <p className="tr-privacy-footnote">{t.integrity.massBalanceNote}</p>
-                    </section>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* ─── BẢNG THÔNG TIN TRUY XUẤT CÔNG KHAI (MỤC 1 - ĐẦY ĐỦ CÁC NHÓM) ─── */}
-            <div className="tr-lot-grid">
-              <div className="tr-lot-col-main">
-                {/* 1. Nhóm Vùng trồng & Bản đồ vector khái quát (4c + 4e) */}
-                <section className="tr-card">
-                  <div className="tr-card-header">
-                    <h2 className="tr-card-title">{t.zone.title}</h2>
-                    <span
-                      className={
-                        pub.growingZone.status === "active"
-                          ? "tr-badge-green"
-                          : pub.growingZone.status === "suspended" ||
-                              pub.growingZone.status === "revoked"
-                            ? "tr-badge-red"
-                            : "tr-badge-neutral"
-                      }
-                    >
-                      {localizeZoneStatusLabel(
-                        pub.growingZone.status,
-                        pub.growingZone.statusLabel,
-                        lang,
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="tr-data-list">
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.zone.nameLabel}</span>
-                      <strong className="tr-data-val">
-                        {localizeGrowingZoneName(pub.growingZone.name, lang)}
-                      </strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.zone.pucLabel}</span>
-                      <strong className="tr-data-val highlight">
-                        {pub.growingZone.pucCode}
-                        {pub.growingZone.additionalZoneCount > 0
-                          ? t.zone.linkedZonesSuffix(pub.growingZone.additionalZoneCount)
+                  {/* 3. DÒNG ĐỊNH DANH SẢN PHẨM / MÃ LÔ & BẢNG SỔ CÁI MINH BẠCH 5 KHÂU */}
+                  <section className="tr-doc-ledger" aria-label={t.timeline.ariaLabel}>
+                    <div className="tr-doc-meta-strip">
+                      <span className="tr-doc-meta-left">
+                        {docCopy.productMetaPrefix}:{" "}
+                        {localizeProductName(
+                          pub.lotIdentity.productName,
+                          pub.lotIdentity.traceUnit,
+                          lang,
+                        )}{" "}
+                        ({localizedVariety})
+                      </span>
+                      <strong className="tr-doc-meta-right">
+                        {docCopy.lotNoPrefix}: {pub.lotIdentity.lotCode}
+                        {fallbackUnitSerial &&
+                        fallbackUnitSerial.toUpperCase() !== pub.lotIdentity.lotCode.toUpperCase()
+                          ? ` / ${docCopy.unitSerialPrefix}: ${fallbackUnitSerial}`
                           : ""}
                       </strong>
                     </div>
 
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.zone.adminLocationLabel}</span>
-                      <strong className="tr-data-val">
-                        {localizeAdminLocation(pub.growingZone.adminLocation, lang)}
-                      </strong>
-                    </div>
+                    <div className="tr-doc-table-wrap">
+                      <table className="tr-doc-table">
+                        <thead>
+                          <tr>
+                            <th className="col-no">{docCopy.colNo}</th>
+                            <th className="col-desc">{docCopy.colStage}</th>
+                            <th className="col-unit">{docCopy.colUnit}</th>
+                            <th className="col-date">{docCopy.colDate}</th>
+                            <th className="col-status">{docCopy.colResult}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pub.timeline.map((st) => {
+                            const statusLabel =
+                              st.status === "completed"
+                                ? t.timeline.statusCompleted
+                                : st.status === "warning"
+                                  ? t.timeline.statusWarning
+                                  : st.status === "current"
+                                    ? t.timeline.statusCurrent
+                                    : t.timeline.statusUpcoming;
+                            const statusTone =
+                              st.status === "completed"
+                                ? "is-ok"
+                                : st.status === "warning"
+                                  ? "is-danger"
+                                  : "is-muted";
+                            const localizedStep = localizeTimelineStep(st, {
+                              pucCode: pub.growingZone.pucCode,
+                              packhouseCode: pub.packhouse.code,
+                              packhouseName: pub.packhouse.name,
+                              market: pub.lotIdentity.market,
+                              lang,
+                            });
+                            const isLabStep = st.step === 4 || st.key.includes("lab") || st.key.includes("test");
+                            const isExportStep = st.step === 5 || st.key.includes("export") || st.key.includes("phyto");
 
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.zone.statusRowLabel}</span>
-                      <strong className="tr-data-val">
-                        {t.zone.validUntilFmt(
-                          localizeZoneStatusLabel(
-                            pub.growingZone.status,
-                            pub.growingZone.statusLabel,
-                            lang,
-                          ),
-                          formatTraceDate(pub.growingZone.validUntil, lang),
-                        )}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <CoarseZoneOverviewMap
-                    centerLat={pub.growingZone.coarseMap.centerLat}
-                    centerLng={pub.growingZone.coarseMap.centerLng}
-                    radiusMeters={pub.growingZone.coarseMap.radiusMeters}
-                    zoom={pub.growingZone.coarseMap.zoom}
-                    label={pub.growingZone.coarseMap.label}
-                    privacyNote={pub.growingZone.coarseMap.privacyNote}
-                    pucCode={pub.growingZone.pucCode}
-                    adminLocation={localizeAdminLocation(pub.growingZone.adminLocation, lang)}
-                    lang={lang}
-                  />
-                </section>
-
-                {/* 2. Nhóm Đơn vị sản xuất & Cơ sở đóng gói (Kèm trạng thái PHC thời gian thực - 4c) */}
-                <section className="tr-card">
-                  <div className="tr-card-header">
-                    <h2 className="tr-card-title">{t.producerPackhouse.title}</h2>
-                  </div>
-
-                  <div className="tr-data-list">
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.producerPackhouse.producerLabel}</span>
-                      <strong className="tr-data-val">
-                        {localizeCoopName(pub.producer.cooperativeName, lang)}
-                      </strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.producerPackhouse.groupLabel}</span>
-                      <strong className="tr-data-val">
-                        {localizeGroupName(
-                          pub.producer.groupName,
-                          pub.producer.participatingHouseholdCount,
-                          lang,
-                        )}
-                      </strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.producerPackhouse.householdsLabel}</span>
-                      <strong className="tr-data-val">
-                        {pub.producer.consentedHouseholds.length > 0
-                          ? pub.producer.consentedHouseholds.join(", ")
-                          : t.producerPackhouse.representedByCoop}
-                      </strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.producerPackhouse.packhouseNameLabel}</span>
-                      <strong className="tr-data-val">{pub.packhouse.name}</strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.producerPackhouse.packhouseCodeLabel}</span>
-                      <strong className="tr-data-val highlight">{pub.packhouse.code}</strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.producerPackhouse.packhouseStatusLabel}</span>
-                      <strong className="tr-data-val">
-                        <span
-                          className={
-                            !pub.packhouse.status || pub.packhouse.status === "active"
-                              ? "tr-badge-green"
-                              : "tr-badge-red"
-                          }
-                        >
-                          {localizePackhouseStatusLabel(
-                            pub.packhouse.status,
-                            pub.packhouse.statusLabel,
-                            lang,
-                          )}
-                        </span>
-                      </strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.producerPackhouse.packhouseAddressLabel}</span>
-                      <strong className="tr-data-val">{pub.packhouse.address}</strong>
-                    </div>
-                  </div>
-
-                  <p className="tr-privacy-footnote">
-                    {lang === "vi"
-                      ? pub.producer.consentNote
-                      : pub.producer.consentedHouseholds.length > 0
-                        ? t.producerPackhouse.consentNoteWithNames
-                        : t.producerPackhouse.consentNoteHidden}
-                  </p>
-                </section>
-              </div>
-
-              <div className="tr-lot-col-side">
-                {/* 3. Nhóm Kiểm nghiệm an toàn thực phẩm đã duyệt & Bản scan giấy kiểm nghiệm (4f) */}
-                {(() => {
-                  const labs = pub.labTests;
-                  const firstLab = labs[0] ?? null;
-                  const anyFail = labs.some(
-                    (lt) =>
-                      lt.result !== "pass" ||
-                      Number(lt.cdMgKg) > 0.05 ||
-                      lt.yellowOPositive ||
-                      (lt.chlorpyrifosMgKg ?? 0) > 0.01,
-                  );
-
-                  return (
-                    <section className="tr-card">
-                      <div className="tr-card-header">
-                        <h2 className="tr-card-title">{t.lab.title}</h2>
-                        <span
-                          className={
-                            !firstLab ? "tr-badge-neutral" : anyFail ? "tr-badge-red" : "tr-badge-green"
-                          }
-                        >
-                          {!firstLab
-                            ? t.lab.badgeUpdating
-                            : anyFail
-                              ? t.lab.badgeFail
-                              : t.lab.badgePass}
-                        </span>
-                      </div>
-
-                      {!firstLab ? (
-                        <div className="tr-farmer-empty">{t.lab.emptyNote}</div>
-                      ) : (
-                        <div className="tr-lab-stack">
-                          {labs.map((lt) => {
-                            const cdPass = Number(lt.cdMgKg) <= 0.05;
-                            const yoPass = !lt.yellowOPositive;
-                            const resPass =
-                              Number(lt.residueMgKg) <= 0.1 && (lt.chlorpyrifosMgKg ?? 0) <= 0.01;
                             return (
-                              <div key={lt.code} className="tr-lab-block">
-                                <div className="tr-lab-meta-head">
-                                  <div>
-                                    <span className="tr-lab-cert-lbl">{t.lab.certNoLabel}</span>
-                                    <strong className="tr-lab-cert-code">{lt.code}</strong>
-                                  </div>
-                                  <span className="tr-lab-date">
-                                    {t.lab.dateFmt(formatTraceDate(lt.sampledOn, lang))}
-                                  </span>
-                                </div>
-                                <div className="tr-lab-org">{t.lab.orgFmt(lt.lab)}</div>
-                                {(lt.labAccreditationCode || lt.externalVerifyCode) && (
-                                  <div className="tr-lab-iso-strip">
-                                    {lt.labAccreditationCode && (
-                                      <span className="tr-lab-iso-tag">
-                                        {t.lab.accreditationFmt(lt.labAccreditationCode)}
-                                      </span>
-                                    )}
-                                    {lt.externalVerifyCode && (
-                                      <span className="tr-lab-iso-code">
-                                        {t.lab.externalCodeFmt(lt.externalVerifyCode)}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
+                              <tr key={st.key}>
+                                <td className="col-no">{String(st.step).padStart(2, "0")}.</td>
+                                <td className="col-desc">
+                                  <strong className="tr-doc-item-title">{localizedStep.title}</strong>
+                                  <span className="tr-doc-item-sub">{localizedStep.detail}</span>
 
-                                <div className="tr-safety-list">
-                                  <div className="tr-safety-item">
-                                    <div className="tr-safety-info">
-                                      <strong className="tr-safety-name">{t.lab.cdName}</strong>
-                                      <span className="tr-safety-detail">
-                                        {t.lab.cdDetailFmt(lt.cdMgKg)}
-                                      </span>
+                                  {isLabStep && labs.length > 0 && (
+                                    <div className="tr-doc-lab-proofs">
+                                      {labs.map((lt) => {
+                                        const ltPassed =
+                                          lt.result === "pass" &&
+                                          !lt.yellowOPositive &&
+                                          Number(lt.cdMgKg) <= 0.05 &&
+                                          (lt.chlorpyrifosMgKg ?? 0) <= 0.01;
+                                        return (
+                                          <div key={lt.code} className="tr-doc-lab-line">
+                                            <span>{docCopy.labReportLineFmt(lt.code, ltPassed)}</span>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-                                    <span className={cdPass ? "tr-pass-pill" : "tr-fail-pill"}>
-                                      {cdPass ? t.lab.pillPass : t.lab.pillFail}
+                                  )}
+
+                                  {isExportStep && pub.phytosanitary.certNo && (
+                                    <span className="tr-doc-item-proof">
+                                      {t.processPhyto.phytoLabel}: {pub.phytosanitary.certNo}
+                                      {pub.phytosanitary.issuedOn
+                                        ? ` (${formatTraceDate(pub.phytosanitary.issuedOn, lang)})`
+                                        : ""}
                                     </span>
-                                  </div>
-
-                                  <div className="tr-safety-item">
-                                    <div className="tr-safety-info">
-                                      <strong className="tr-safety-name">{t.lab.yoName}</strong>
-                                      <span className="tr-safety-detail">
-                                        {lt.yellowOPositive ? t.lab.yoPositive : t.lab.yoNegative}
-                                      </span>
-                                    </div>
-                                    <span className={yoPass ? "tr-pass-pill" : "tr-fail-pill"}>
-                                      {yoPass ? t.lab.pillSafe : t.lab.pillUnsafe}
-                                    </span>
-                                  </div>
-
-                                  <div className="tr-safety-item">
-                                    <div className="tr-safety-info">
-                                      <strong className="tr-safety-name">{t.lab.resName}</strong>
-                                      <span className="tr-safety-detail">
-                                        {t.lab.resDetailFmt(lt.residueMgKg, lt.chlorpyrifosMgKg)}
-                                      </span>
-                                    </div>
-                                    <span className={resPass ? "tr-pass-pill" : "tr-fail-pill"}>
-                                      {resPass ? t.lab.pillPass : t.lab.pillFail}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {isSafeMediaUrl(lt.scanUrl) ? (
-                                  <a
-                                    href={lt.scanUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="tr-scan-doc-btn"
-                                  >
-                                    <FileText size={16} strokeWidth={2} aria-hidden="true" />
-                                    <span>{t.lab.viewScanFmt(lt.code)}</span>
-                                    <ExternalLink size={14} strokeWidth={2} aria-hidden="true" />
-                                  </a>
-                                ) : (
-                                  <div className="tr-scan-doc-muted">{t.lab.scanArchivedNote}</div>
-                                )}
-
-                                {isSafeExternalHttpsUrl(lt.externalVerifyUrl) && (
-                                  <a
-                                    href={lt.externalVerifyUrl.trim()}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    referrerPolicy="no-referrer"
-                                    className="tr-ext-verify-btn no-print"
-                                  >
-                                    <ShieldCheck size={15} strokeWidth={2.1} aria-hidden="true" />
-                                    <span>{t.lab.externalVerifyBtn}</span>
-                                    <ExternalLink size={13} strokeWidth={2} aria-hidden="true" />
-                                  </a>
-                                )}
-                              </div>
+                                  )}
+                                </td>
+                                <td className="col-unit">{localizedStep.responsibleUnit}</td>
+                                <td className="col-date">{formatTraceDate(st.date, lang)}</td>
+                                <td className={`col-status ${statusTone}`}>{statusLabel}</td>
+                              </tr>
                             );
                           })}
-                        </div>
-                      )}
-                    </section>
-                  );
-                })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
 
-                {/* 4. Nhóm Mốc thời gian, Quy trình sản xuất & Kiểm dịch thực vật */}
-                <section className="tr-card">
-                  <div className="tr-card-header">
-                    <h2 className="tr-card-title">{t.processPhyto.title}</h2>
-                  </div>
-
-                  <div className="tr-data-list">
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.processPhyto.harvestDateLabel}</span>
-                      <strong className="tr-data-val highlight">
-                        {formatTraceDate(pub.milestones.harvestedOn, lang)}
-                      </strong>
+                  {/* 4. KHỐI TỔNG KẾT CHỈ TIÊU AN TOÀN & KHỐI LƯỢNG (TRÁI Ô GẠCH CHÉO, PHẢI BẢNG ĐỐI SOÁT) */}
+                  <section className="tr-doc-summary-split">
+                    <div className="tr-doc-total-box">
+                      <span className="tr-doc-total-label">
+                        {pub.lotIdentity.itemWeightKg !== null
+                          ? docCopy.unitWeightHeading
+                          : docCopy.lotScaleHeading}
+                      </span>
+                      <div className="tr-doc-hatch-box">
+                        <strong className="tr-doc-hatch-val">{scaleDisplay}</strong>
+                        <span className="tr-doc-hatch-sub">{scaleSubline}</span>
+                      </div>
                     </div>
 
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.processPhyto.packDateLabel}</span>
-                      <strong className="tr-data-val highlight">
-                        {formatTraceDate(pub.milestones.packedOn, lang)}
-                      </strong>
-                    </div>
+                    <dl className="tr-doc-kv-totals">
+                      <div className="tr-doc-kv-row">
+                        <dt>{docCopy.rowHeavyMetalYellowO}</dt>
+                        <dd className={anyLabFail ? "is-danger" : ""}>
+                          {firstLab
+                            ? firstLab.yellowOPositive || Number(firstLab.cdMgKg) > 0.05
+                              ? docCopy.heavyMetalFailText
+                              : docCopy.heavyMetalPassText
+                            : t.lab.badgeUpdating}
+                        </dd>
+                      </div>
+                      <div className="tr-doc-kv-row">
+                        <dt>{docCopy.rowPesticideSafety}</dt>
+                        <dd className={anyLabFail ? "is-danger" : ""}>
+                          {firstLab
+                            ? firstLab.result !== "pass" || (firstLab.chlorpyrifosMgKg ?? 0) > 0.01
+                              ? docCopy.pesticideFailText
+                              : docCopy.pesticidePassText
+                            : docCopy.phiCompliantText}
+                        </dd>
+                      </div>
+                      <div className="tr-doc-kv-row">
+                        <dt>{docCopy.rowFarmJournal}</dt>
+                        <dd>
+                          {pub.integritySeal && !pub.integritySeal.chainVerified
+                            ? docCopy.journalReviewText
+                            : docCopy.journalVerifiedText}
+                        </dd>
+                      </div>
+                      <div className="tr-doc-kv-row">
+                        <dt>{docCopy.rowYieldCheck}</dt>
+                        <dd className={mb && !mb.withinQuota ? "is-danger" : ""}>
+                          {mb && !mb.withinQuota ? docCopy.overQuotaText : docCopy.withinQuotaText}
+                        </dd>
+                      </div>
+                      <div className="tr-doc-kv-row">
+                        <dt>{docCopy.rowPhytosanitary}</dt>
+                        <dd>
+                          {pub.phytosanitary.certNo ||
+                            (lang === "vi"
+                              ? pub.phytosanitary.statusLabel
+                              : t.processPhyto.phytoDefaultPending)}
+                        </dd>
+                      </div>
+                      <div className="tr-doc-kv-row is-grand">
+                        <dt>{docCopy.rowFinalStatus}</dt>
+                        <dd className={lotStatusTone}>
+                          {localizeLotStatusLabel(
+                            pub.lotIdentity.status,
+                            pub.lotIdentity.statusLabel,
+                            lang,
+                          )}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
 
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.processPhyto.exportDateLabel}</span>
-                      <strong className="tr-data-val highlight">
-                        {formatTraceDate(pub.milestones.exportedOn, lang)}
-                      </strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.processPhyto.standardLabel}</span>
-                      <strong className="tr-data-val">
-                        {lang === "vi" ? pub.farmingProcess.standard : t.processPhyto.standardValue}
-                      </strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.processPhyto.complianceLabel}</span>
-                      <strong className="tr-data-val">
-                        {pub.farmingProcess.complianceConfirmed
-                          ? t.processPhyto.complianceConfirmedText
-                          : t.processPhyto.complianceReviewingText}
-                      </strong>
-                    </div>
-
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.processPhyto.inspectionLabel}</span>
-                      <strong className="tr-data-val">
+                  {/* 5. BA CỘT CHỨNG THỰC CUỐI TRANG: KIỂM NGHIỆM | CAM KẾT XUẤT XỨ | MÃ QR & ĐƠN VỊ */}
+                  <section className="tr-doc-attest-grid">
+                    <div className="tr-doc-attest-col is-bordered">
+                      <strong className="tr-doc-attest-heading">{docCopy.certColHeading}</strong>
+                      <p>
+                        {docCopy.labUnitPrefix}:{" "}
+                        {firstLab ? localizeLabName(firstLab.lab, lang) : t.lab.badgeUpdating}
+                      </p>
+                      <p>
+                        {docCopy.labCertPrefix}: {firstLab ? firstLab.code : "-"}
+                      </p>
+                      <p>
+                        {docCopy.supervisionPrefix}:{" "}
                         {localizeInspectionNote(pub.farmingProcess.inspectionNote, lang)}
-                      </strong>
+                      </p>
                     </div>
 
-                    <div className="tr-data-row">
-                      <span className="tr-data-label">{t.processPhyto.phytoLabel}</span>
-                      <strong className="tr-data-val highlight">
-                        {pub.phytosanitary.certNo
-                          ? t.processPhyto.phytoIssuedFmt(
-                              pub.phytosanitary.certNo,
-                              pub.phytosanitary.issuedOn
-                                ? formatTraceDate(pub.phytosanitary.issuedOn, lang)
-                                : null,
-                            )
-                          : lang === "vi"
-                            ? pub.phytosanitary.statusLabel
-                            : t.processPhyto.phytoDefaultPending}
+                    <div className="tr-doc-attest-col">
+                      <strong className="tr-doc-attest-heading">{docCopy.termsColHeading}</strong>
+                      <p>{docCopy.assuranceLine1}</p>
+                      <p>{docCopy.assuranceLine2}</p>
+                    </div>
+
+                    <div className="tr-doc-sign-col">
+                      <span className="tr-doc-sign-kicker">{docCopy.issuerHeading}</span>
+                      <div className="tr-doc-qr-wrap">
+                        {qrSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={qrSrc}
+                            alt={t.hero.qrAlt(pub.lotIdentity.lotCode)}
+                            width={84}
+                            height={84}
+                            className="tr-doc-qr-img"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <div className="tr-doc-qr-placeholder" aria-hidden="true" />
+                        )}
+                      </div>
+                      <strong className="tr-doc-sign-org">
+                        {localizeCoopName(pub.producer.cooperativeName, lang)}
                       </strong>
+                      <span className="tr-doc-sign-code">{pub.lotIdentity.lotCode}</span>
+                    </div>
+                  </section>
+
+                  {/* 6. CHÂN PHIẾU: LIÊN HỆ ĐỐI CHIẾU & THỜI ĐIỂM TRA CỨU */}
+                  <footer className="tr-doc-footer">
+                    <div className="tr-doc-footer-top">
+                      <div className="tr-doc-inquiry">
+                        <strong>{docCopy.inquiryHeading}</strong>
+                        <p>{t.footer.line1}</p>
+                      </div>
+                    </div>
+
+                    <div className="tr-doc-footer-bar">
+                      <span>{t.footer.line2}</span>
+                      <span>
+                        {t.hero.verifiedAtFmt(
+                          formatTraceDateTime(pub.verification.verifiedAt, lang),
+                        )}
+                      </span>
+                    </div>
+                  </footer>
+                  </A4DossierStage>
+
+                  {/* THANH THAO TÁC NGOÀI TỜ A4 (NẰM TRONG KHUNG TRUY XUẤT, KHÔNG LÀM LỆCH BỐ CỤC CHỨNG TỪ A4) */}
+                  <div className="tr-doc-external-bar no-print">
+                    <div className="tr-doc-ext-group">
+                      <button
+                        type="button"
+                        className="tr-doc-act-btn"
+                        onClick={() => setShowZoneMap((v) => !v)}
+                      >
+                        {showZoneMap ? docCopy.hideMapBtn : docCopy.showMapBtn}
+                      </button>
+                      {firstLab && isSafeMediaUrl(firstLab.scanUrl) && (
+                        <a
+                          href={firstLab.scanUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tr-doc-act-btn"
+                        >
+                          {docCopy.viewLabScanLabel}
+                        </a>
+                      )}
+                      {firstLab &&
+                        !isSafeMediaUrl(firstLab.scanUrl) &&
+                        isSafeExternalHttpsUrl(firstLab.externalVerifyUrl) && (
+                          <a
+                            href={firstLab.externalVerifyUrl.trim()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            referrerPolicy="no-referrer"
+                            className="tr-doc-act-btn"
+                          >
+                            {docCopy.verifyLabPortalLabel}
+                          </a>
+                        )}
+                    </div>
+
+                    <div className="tr-doc-actions">
+                      <button type="button" className="tr-doc-act-btn" onClick={handlePrint}>
+                        {t.actions.print}
+                      </button>
+                      <button type="button" className="tr-doc-act-btn" onClick={handleShare}>
+                        {copied ? t.actions.copied : t.actions.share}
+                      </button>
                     </div>
                   </div>
 
-                  <p className="tr-privacy-footnote">
-                    {lang === "vi"
-                      ? pub.verification.nationalStandardNote
-                      : t.processPhyto.nationalStandardNote}
-                  </p>
-                </section>
-              </div>
-            </div>
+                  {showZoneMap && (
+                    <div className="tr-doc-external-map no-print">
+                      <CoarseZoneOverviewMap
+                        centerLat={pub.growingZone.coarseMap.centerLat}
+                        centerLng={pub.growingZone.coarseMap.centerLng}
+                        radiusMeters={pub.growingZone.coarseMap.radiusMeters}
+                        zoom={pub.growingZone.coarseMap.zoom}
+                        label={pub.growingZone.coarseMap.label}
+                        privacyNote={pub.growingZone.coarseMap.privacyNote}
+                        pucCode={pub.growingZone.pucCode}
+                        adminLocation={localizeAdminLocation(pub.growingZone.adminLocation, lang)}
+                        lang={lang}
+                      />
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             {/* ═══════════════════════════════════════════════════════════════════════════
                CẤP ĐỘ 2: HỒ SƠ MỞ RỘNG DOANH NGHIỆP / CƠ SỞ ĐÓNG GÓI (enterpriseData)
@@ -2292,7 +2262,7 @@ export default function TraceView() {
                             <td>{z.villageName}</td>
                             <td className="is-num">{z.householdCount} hộ</td>
                             <td className="is-num">
-                              {z.areaHa > 0 ? `${z.areaHa.toLocaleString("vi-VN")} ha` : "—"}
+                              {z.areaHa > 0 ? `${z.areaHa.toLocaleString("vi-VN")} ha` : "-"}
                             </td>
                             <td className="is-num">
                               <strong>{z.weightKg.toLocaleString("vi-VN")} kg</strong>
@@ -2327,10 +2297,10 @@ export default function TraceView() {
                     <div className="tr-card">
                       <div className="tr-card-header">
                         <h3 className="tr-card-title">
-                          Đối soát hạn ngạch sản lượng đầu vụ theo thửa (Mass-Balance Vụ {emb.seasonYear})
+                          Đối soát định mức sản lượng đầu vụ theo thửa (Vụ {emb.seasonYear})
                         </h3>
                         <span className={emb.withinQuota ? "tr-badge-green" : "tr-badge-red"}>
-                          {emb.withinQuota ? "Đạt trần hạn ngạch" : "Vượt trần hạn ngạch"}
+                          {emb.withinQuota ? "Trong định mức đầu vụ" : "Vượt định mức đầu vụ"}
                         </span>
                       </div>
 
@@ -2405,7 +2375,7 @@ export default function TraceView() {
                         </span>
                       </div>
                       <p className="tr-card-sub">
-                        Đối tác thu mua có thể mở từng thửa đất nguồn để xem ranh giới đa giác GIS và bấm đối chứng GPS trực tiếp khi đứng tại vườn sầu riêng.
+                        Đối tác thu mua có thể mở từng thửa đất nguồn để xem sơ đồ ranh giới thửa vườn và đối chiếu vị trí thực tế khi kiểm tra tại vườn.
                       </p>
                       <div className="tr-source-plots-grid">
                         {data.enterpriseData.fieldAuditSourcePlots.map((sp) => {
@@ -2672,7 +2642,7 @@ export default function TraceView() {
                                       </span>
                                       <span>-</span>
                                       <span>
-                                        Địa chính: Tờ {p.sheetNo || "—"} / Thửa {p.parcelNo || "—"}
+                                        Địa chính: Tờ {p.sheetNo || "-"} / Thửa {p.parcelNo || "-"}
                                       </span>
                                       <span>-</span>
                                       <span>
@@ -2807,55 +2777,38 @@ export default function TraceView() {
               </section>
             )}
 
-            {/* ─── Dải gợi ý đăng nhập dành cho Doanh nghiệp & Cơ quan quản lý khi quét chưa đăng nhập ─── */}
-            {!ac.isAuthenticated && (
-              <div className="tr-auth-hint-bar no-print">
-                <div className="tr-auth-hint-text">
-                  <Lock size={15} strokeWidth={2} aria-hidden="true" />
-                  <span>{t.authHint.text}</span>
+            {!ac.fieldAuditPass?.active && !data.isPlotSignboard && !ac.isAuthenticated && (
+              <section
+                className="tr-pass-prompt-card is-sheet-aligned no-print"
+                aria-label={t.fieldAudit.passPromptTitle}
+              >
+                <div className="tr-pass-prompt-copy">
+                  <strong className="tr-pass-prompt-title">{t.fieldAudit.passPromptTitle}</strong>
+                  <p className="tr-pass-prompt-desc">{t.fieldAudit.passPromptDesc}</p>
                 </div>
-                <Link href={loginWithNextHref} className="tr-auth-hint-link">
-                  {t.authHint.loginBtn}
-                </Link>
-              </div>
+                <form className="tr-pass-form" onSubmit={handleApplyAuditPass}>
+                  <input
+                    type="text"
+                    className="tr-pass-input"
+                    value={auditPassInput}
+                    onChange={(e) => setAuditPassInput(e.target.value)}
+                    placeholder={t.fieldAudit.passInputPlaceholder}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <button
+                    type="submit"
+                    className="tr-pass-submit-btn"
+                    disabled={switchingTier || !auditPassInput.trim()}
+                  >
+                    {t.fieldAudit.passApplyBtn}
+                  </button>
+                </form>
+              </section>
             )}
-
-            {/* ─── Thao tác nhanh: Trang chủ - In hồ sơ - Chia sẻ liên kết ─── */}
-            <div className="tr-actions no-print">
-              <Link href="/" className="tr-home-btn">
-                <ArrowLeft size={17} strokeWidth={2.3} aria-hidden="true" />
-                <span>{t.actions.home}</span>
-              </Link>
-              <button type="button" className="tr-print-btn" onClick={handlePrint}>
-                <Printer size={17} strokeWidth={2.2} aria-hidden="true" />
-                <span>{t.actions.print}</span>
-              </button>
-              <button type="button" className="tr-share-btn" onClick={handleShare}>
-                {copied ? (
-                  <>
-                    <Check size={17} strokeWidth={2.4} aria-hidden="true" />
-                    <span>{t.actions.copied}</span>
-                  </>
-                ) : (
-                  <>
-                    <Share2 size={17} strokeWidth={2.2} aria-hidden="true" />
-                    <span>{t.actions.share}</span>
-                  </>
-                )}
-              </button>
-            </div>
           </>
         ) : null}
       </main>
-
-      {/* ─── Chân trang ─── */}
-      <footer className="tr-footer">
-        <div className="tr-wrap tr-footer-inner">
-          <p className="tr-footer-text">{t.footer.line1}</p>
-          <p className="tr-footer-org">{t.footer.line2}</p>
-          <p className="tr-footer-meta">{t.footer.line3}</p>
-        </div>
-      </footer>
 
       {/* ─── Modal Bản Đồ Vệ Tinh Ranh Giới GIS Thửa Đất (Dành riêng Cấp 3 Cơ quan quản lý) ─── */}
       {gisModalPlot && (
