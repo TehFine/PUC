@@ -13,7 +13,13 @@ import {
   ShieldAlert,
 } from "@/components/ui/PublicIcon";
 import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
-import { TRACE_UI_COPY, type TraceLang } from "./trace-i18n";
+import {
+  TRACE_UI_COPY,
+  localizeAssessedBy,
+  localizeOwnerLabel,
+  localizeVariety,
+  type TraceLang,
+} from "./trace-i18n";
 import { isSafeMediaUrl, isSafeTraceCode } from "@/utils/url-safety";
 
 export interface FieldAuditPlotProfile {
@@ -575,7 +581,11 @@ export default function FieldAuditGpsCheckCard({
 
             <div className="tr-parcel-coord-bar">
               <span>
-                WGS84: {svgProjection.cLat.toFixed(5)}°N, {svgProjection.cLng.toFixed(5)}°E
+                {lang === "zh"
+                  ? `中心坐标：${svgProjection.cLat.toFixed(5)}°N, ${svgProjection.cLng.toFixed(5)}°E`
+                  : lang === "en"
+                    ? `Parcel center: ${svgProjection.cLat.toFixed(5)}°N, ${svgProjection.cLng.toFixed(5)}°E`
+                    : `Tọa độ tâm vườn: ${svgProjection.cLat.toFixed(5)}°B, ${svgProjection.cLng.toFixed(5)}°Đ`}
               </span>
               {plotProfile.sheetNo || plotProfile.parcelNo ? (
                 <span>
@@ -700,7 +710,7 @@ export default function FieldAuditGpsCheckCard({
           <div className="tr-data-list">
             <div className="tr-data-row">
               <span className="tr-data-label">{f.farmerRepLabel}</span>
-              <strong className="tr-data-val">{plotProfile.ownerLabel}</strong>
+              <strong className="tr-data-val">{localizeOwnerLabel(plotProfile.ownerLabel, lang)}</strong>
             </div>
             <div className="tr-data-row">
               <span className="tr-data-label">{f.pucZoneLabel}</span>
@@ -715,7 +725,7 @@ export default function FieldAuditGpsCheckCard({
             <div className="tr-data-row">
               <span className="tr-data-label">{f.varietyYearLabel}</span>
               <strong className="tr-data-val">
-                {plotProfile.variety}
+                {localizeVariety(plotProfile.variety, lang)}
                 {plotProfile.plantedYear ? ` (${plotProfile.plantedYear})` : ""}
               </strong>
             </div>
@@ -743,7 +753,7 @@ export default function FieldAuditGpsCheckCard({
               <div className="tr-quota-foot">
                 <span>
                   {f.quotaAssessedFmt(
-                    quota.assessedBy,
+                    localizeAssessedBy(quota.assessedBy, lang),
                     quota.assessedOn ? formatDate(quota.assessedOn, lang) : String(quota.seasonYear),
                   )}
                 </span>

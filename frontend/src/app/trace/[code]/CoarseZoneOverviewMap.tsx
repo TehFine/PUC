@@ -50,12 +50,12 @@ export default function CoarseZoneOverviewMap({
   const dirLng = lang === "vi" ? "Đ" : "E";
   const effectiveNote = lang === "vi" && privacyNote ? privacyNote : t.coarsePrivacyNote;
   const roadLabel =
-    lang === "zh" ? "14号国道走廊 (QL14)" : lang === "en" ? "NH14 Corridor (QL14)" : "Trục Quốc lộ 14";
+    lang === "zh" ? "14号国道走廊" : lang === "en" ? "National Highway 14 Corridor" : "Trục Quốc lộ 14";
   const plateauLabel =
     lang === "zh"
-      ? "多乐省红玄武岩高原产区 (560m)"
+      ? "Đắk Lắk 红玄武岩高原产区 (560m)"
       : lang === "en"
-        ? "Dak Lak Basalt Plateau (560m)"
+        ? "Đắk Lắk Basalt Plateau (560m)"
         : "Cao nguyên đất đỏ Bazan Đắk Lắk (560m)";
 
   return (
