@@ -398,26 +398,11 @@ export default function MinuteFormModal({
           />
         )}
 
-        <div
-          style={{
-            marginBottom: 14,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: "#14372f", lineHeight: 1.35 }}>
-              Tọa độ GPS
-            </div>
+        <div className="admin-gps-field-row">
+          <div className="admin-gps-field-info">
+            <div className="admin-gps-field-title">Tọa độ GPS</div>
             <div
-              style={{
-                fontSize: 12.5,
-                color: latitude !== null && longitude !== null ? "#15803d" : "#5f6d66",
-                fontVariantNumeric: "tabular-nums",
-              }}
+              className={`admin-gps-field-status ${latitude !== null && longitude !== null ? "has-coords" : ""}`}
             >
               {latitude !== null && longitude !== null
                 ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
@@ -426,26 +411,15 @@ export default function MinuteFormModal({
           </div>
           <button
             type="button"
+            className="admin-gps-field-btn"
             onClick={handleCaptureGps}
             disabled={locating || save.pending || busy}
-            style={{
-              height: 36,
-              padding: "0 14px",
-              borderRadius: 6,
-              border: "none",
-              background: "#e6f0ec",
-              color: "#14372f",
-              fontSize: 13.5,
-              fontWeight: 600,
-              cursor: locating || save.pending || busy ? "not-allowed" : "pointer",
-              opacity: locating || save.pending || busy ? 0.6 : 1,
-            }}
           >
             {locating ? "Đang lấy GPS..." : latitude !== null ? "Cập nhật GPS" : "Lấy tọa độ GPS"}
           </button>
         </div>
 
-        <div style={{ marginBottom: 12 }}>
+        <div className="admin-media-field-section">
           <MultiPhotoField
             id="minute-field-photos"
             label="Ảnh, video hiện trường"

@@ -413,31 +413,41 @@ export default function Approval() {
                 const kindBadge = badgeOf(SCHEDULE_KIND, s.kind);
                 return (
                   <div key={s.id} className="schedule-card">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                      <div className="schedule-card-date" style={{ marginBottom: 0 }}>
-                        {formatDate(s.scheduledOn)}
+                    <div className="schedule-card-body">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div className="schedule-card-date" style={{ marginBottom: 0 }}>
+                          {formatDate(s.scheduledOn)}
+                        </div>
+                        <span className={`badge ${kindBadge.badge}`}>{kindBadge.label}</span>
                       </div>
-                      <span className={`badge ${kindBadge.badge}`}>{kindBadge.label}</span>
-                    </div>
-                    <div className="schedule-card-title">{s.title}</div>
-                    <div className="schedule-card-meta">
-                      Cán bộ: <strong>{s.officer}</strong>
-                      <br />
-                      Quy mô: <strong>{s.plotCount} thửa</strong> cần kiểm tra
+                      <div className="schedule-card-title">{s.title}</div>
+                      <div className="schedule-card-meta">
+                        Cán bộ: <strong>{s.officer}</strong>
+                        <br />
+                        Quy mô: <strong>{s.plotCount} thửa</strong> cần kiểm tra
+                      </div>
                     </div>
                     {(canUpdateSchedule || canDeleteSchedule) && (
-                      <div style={{ marginTop: 14, display: "flex", gap: 6 }}>
+                      <footer className="dash-bento-footer schedule-card-footer">
                         {canUpdateSchedule && (
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingSchedule(s)}>
+                          <button
+                            type="button"
+                            className="dash-bento-footer-btn"
+                            onClick={() => setEditingSchedule(s)}
+                          >
                             Sửa
                           </button>
                         )}
                         {canDeleteSchedule && (
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingSchedule(s)}>
+                          <button
+                            type="button"
+                            className="dash-bento-footer-btn is-danger"
+                            onClick={() => setDeletingSchedule(s)}
+                          >
                             Xóa
                           </button>
                         )}
-                      </div>
+                      </footer>
                     )}
                   </div>
                 );
