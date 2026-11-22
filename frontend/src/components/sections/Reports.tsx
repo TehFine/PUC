@@ -49,7 +49,7 @@ const REPORTS: ReportSpec[] = [
     type: "households",
     title: "Hộ vùng trồng",
     docTitle: "Báo cáo danh sách hộ vùng trồng (VietGAP / GACC)",
-    desc: "Chủ hộ, thôn tổ, số thửa, diện tích và trạng thái chuẩn VietGAP, GACC.",
+    desc: "Danh sách chủ hộ, số thửa và diện tích.",
     formats: ["Xuất CSV", "In / PDF"],
   },
   {
@@ -59,7 +59,7 @@ const REPORTS: ReportSpec[] = [
     type: "journal",
     title: "Nhật ký canh tác",
     docTitle: "Báo cáo nhật ký canh tác điện tử",
-    desc: "Hoạt động chăm sóc, bón phân, tưới nước và tỉa cành theo hộ.",
+    desc: "Lịch sử chăm sóc, bón phân và tưới nước.",
     formats: ["Xuất CSV", "In / PDF"],
   },
   {
@@ -69,7 +69,7 @@ const REPORTS: ReportSpec[] = [
     type: "spray",
     title: "Nhật ký phun thuốc",
     docTitle: "Báo cáo nhật ký phun thuốc BVTV",
-    desc: "Hoạt chất sử dụng, liều pha, thời gian cách ly và ngưỡng MRL.",
+    desc: "Thuốc sử dụng, liều pha và ngày cách ly.",
     formats: ["Xuất CSV", "In / PDF"],
   },
   {
@@ -79,7 +79,7 @@ const REPORTS: ReportSpec[] = [
     type: "lab-tests",
     title: "Kiểm nghiệm mẫu",
     docTitle: "Báo cáo kết quả kiểm nghiệm an toàn thực phẩm",
-    desc: "Chỉ tiêu tồn dư thuốc BVTV, Cadimi và Vàng O theo đợt lấy mẫu.",
+    desc: "Kết quả tồn dư BVTV, Cadimi và Vàng O.",
     formats: ["Xuất CSV", "In / PDF"],
   },
   {
@@ -89,7 +89,7 @@ const REPORTS: ReportSpec[] = [
     type: "violations",
     title: "Vi phạm quy trình",
     docTitle: "Báo cáo vi phạm và kết quả khắc phục",
-    desc: "Cảnh báo sai phạm, phản hồi từ nông hộ và kết quả xử lý của HTX.",
+    desc: "Cảnh báo sai phạm và kết quả khắc phục.",
     formats: ["Xuất CSV", "In / PDF"],
   },
   {
@@ -99,7 +99,7 @@ const REPORTS: ReportSpec[] = [
     type: "harvest",
     title: "Lô hàng xuất khẩu",
     docTitle: "Báo cáo thống kê lô thu hoạch và xuất khẩu",
-    desc: "Sản lượng thu mua, đơn vị đóng gói, thị trường và trạng thái vận chuyển.",
+    desc: "Sản lượng thu mua, đóng gói và xuất khẩu.",
     formats: ["Xuất CSV", "In / PDF"],
   },
   {
@@ -109,7 +109,7 @@ const REPORTS: ReportSpec[] = [
     type: "training-registrations",
     title: "Điểm danh tập huấn",
     docTitle: "Báo cáo đăng ký và điểm danh lớp tập huấn",
-    desc: "Danh sách nông hộ đăng ký tham dự lớp kỹ thuật và kết quả điểm danh.",
+    desc: "Danh sách đăng ký và điểm danh tập huấn.",
     formats: ["Xuất CSV", "In / PDF"],
   },
 ];
@@ -692,17 +692,19 @@ export default function Reports() {
                 onClick={() => void handleExport(selectedReport, format)}
               >
                 {downloading
-                  ? "Đang xử lý…"
+                  ? "Đang xuất..."
                   : format === "PDF"
-                    ? `In báo cáo / Lưu PDF (${previewData?.total ?? 0})`
-                    : `Tải xuống CSV (${previewData?.total ?? 0})`}
+                    ? "Xuất PDF"
+                    : "Tải CSV"}
               </button>
             </>
           }
         >
-          <p style={{ marginTop: 0, fontSize: 13.5, color: "var(--text-secondary)" }}>{selectedReport.desc}</p>
+          <p style={{ marginTop: 0, marginBottom: 12, fontSize: 13, lineHeight: 1.45, color: "var(--text-secondary)" }}>
+            {selectedReport.desc}
+          </p>
           <FormGrid>
-            <TextField label="Từ ngày (để trống = tất cả)" type="date" value={from} onChange={setFrom} />
+            <TextField label="Từ ngày" type="date" value={from} onChange={setFrom} />
             <TextField label="Đến ngày" type="date" value={to} onChange={setTo} />
           </FormGrid>
           <SelectField
@@ -722,7 +724,7 @@ export default function Reports() {
                   className={`fmt-btn ${format === f ? "active" : ""}`}
                   onClick={() => setFormat(f)}
                 >
-                  {f === "CSV" ? "CSV (Excel UTF-8)" : "In / Xuất PDF (Mẫu A4 HTX Cư Né)"}
+                  {f === "CSV" ? "Tệp CSV" : "Bản in PDF"}
                 </button>
               ))}
             </div>

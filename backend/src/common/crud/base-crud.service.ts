@@ -53,7 +53,7 @@ export abstract class BaseCrudService {
     protected readonly db: DatabaseService,
     protected readonly audit: AuditService,
     protected readonly config: CrudConfig,
-  ) {}
+  ) { }
 
   // ---- hook cho lớp con ----------------------------------------------------------------
 
@@ -61,9 +61,9 @@ export abstract class BaseCrudService {
     return input;
   }
 
-  protected afterWrite(_id: number, _input: Input): Promise<void> | void {}
+  protected afterWrite(_id: number, _input: Input): Promise<void> | void { }
 
-  protected guardDelete(_id: number, _user: AuthUser): Promise<void> | void {}
+  protected guardDelete(_id: number, _user: AuthUser): Promise<void> | void { }
 
   protected auditAction(_method: "POST" | "PATCH", _input: Input): string | undefined {
     return undefined;

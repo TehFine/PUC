@@ -346,77 +346,77 @@ export default function Testing() {
                         <td style={{ textAlign: "center" }}>
                           <span className={`badge ${!t.yellowOPositive ? "badge-green" : "badge-red"}`}>
                             {t.yellowOPositive ? "Dương tính" : "Âm tính"}
-                      </span>
-                    </td>
-                    <td
-                      style={{
-                        textAlign: "center",
-                        color: Number(t.residueMgKg) > 0.1 ? "#c0392b" : "var(--text-primary)",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {formatVn(t.residueMgKg, 3)}
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className={`badge ${chlorAbsent ? "badge-green" : "badge-red"}`}>
-                        {chlorAbsent ? "KPH" : `${formatVn(t.chlorpyrifosMgKg, 3)}`}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${resBadge.badge}`}>{resBadge.label}</span>
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                      <div>{t.lab}</div>
-                      {t.labAccreditationCode && (
-                        <div
+                          </span>
+                        </td>
+                        <td
                           style={{
-                            fontSize: 10.5,
-                            color: "#166534",
-                            fontFamily: "var(--font-num-stack)",
-                            fontVariantNumeric: "tabular-nums",
-                            marginTop: 2,
+                            textAlign: "center",
+                            color: Number(t.residueMgKg) > 0.1 ? "#c0392b" : "var(--text-primary)",
+                            fontWeight: 500,
                           }}
                         >
-                          {t.labAccreditationCode}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <div className="table-actions">
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={() => setSelectedTest(t)}
-                        >
-                          Xem phiếu
-                        </button>
-                        {isSafeMediaUrl(t.scanUrl) && (
-                          <a
-                            href={t.scanUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-outline btn-sm"
-                            style={{ textDecoration: "none" }}
-                          >
-                            Bản scan
-                          </a>
-                        )}
-                        {canUpdate && (
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(t)}>
-                            Sửa
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeleting(t)}>
-                            Xóa
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
+                          {formatVn(t.residueMgKg, 3)}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className={`badge ${chlorAbsent ? "badge-green" : "badge-red"}`}>
+                            {chlorAbsent ? "KPH" : `${formatVn(t.chlorpyrifosMgKg, 3)}`}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`badge ${resBadge.badge}`}>{resBadge.label}</span>
+                        </td>
+                        <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                          <div>{t.lab}</div>
+                          {t.labAccreditationCode && (
+                            <div
+                              style={{
+                                fontSize: 10.5,
+                                color: "#166534",
+                                fontFamily: "var(--font-num-stack)",
+                                fontVariantNumeric: "tabular-nums",
+                                marginTop: 2,
+                              }}
+                            >
+                              {t.labAccreditationCode}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <div className="table-actions">
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              onClick={() => setSelectedTest(t)}
+                            >
+                              Xem phiếu
+                            </button>
+                            {isSafeMediaUrl(t.scanUrl) && (
+                              <a
+                                href={t.scanUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-outline btn-sm"
+                                style={{ textDecoration: "none" }}
+                              >
+                                Bản scan
+                              </a>
+                            )}
+                            {canUpdate && (
+                              <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditing(t)}>
+                                Sửa
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeleting(t)}>
+                                Xóa
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
               <Pagination page={page} pageSize={PAGE_SIZE} total={list.total} unit="mẫu" onChange={setPage} />
             </div>

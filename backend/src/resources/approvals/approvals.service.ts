@@ -261,12 +261,12 @@ export class ApprovalsService extends BaseCrudService {
   protected override async afterWrite(_id: number, input: Record<string, unknown>) {
     const notify = input._notifyReview as
       | {
-          householdId: number | null;
-          code: string;
-          requestType: string;
-          status: "approved" | "rejected";
-          reviewNote: string | null;
-        }
+        householdId: number | null;
+        code: string;
+        requestType: string;
+        status: "approved" | "rejected";
+        reviewNote: string | null;
+      }
       | undefined;
     if (!notify || !notify.householdId) return;
     await this.notifications.notifyHousehold(notify.householdId, {

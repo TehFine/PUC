@@ -27,8 +27,6 @@ import {
   PesticideDetailModal,
   VarietyDetailModal,
 } from "@/components/portal/LearnTab";
-import { DISEASES_AND_PESTS_2026 } from "@/components/portal/ipm-2026-data";
-import { DURIAN_PROTOCOL_2026_2027 } from "@/lib/durian-protocol-2026-2027";
 import "@/components/portal/portal.css";
 import { Sheet } from "@/components/portal/ui";
 import { Modal } from "@/components/ui/Modal";
@@ -377,40 +375,13 @@ export default function Catalog() {
     <div id="section-catalog" className="admin-catalog-section">
       <div className="tab-bar" role="tablist" aria-label="Danh mục hệ thống">
         {[
-          {
-            id: "protocol",
-            label: `Quy trình 2026-2027 (${DURIAN_PROTOCOL_2026_2027.length})`,
-          },
-          {
-            id: "pesticide",
-            label:
-              pesticides.loading && pesticides.total === 0
-                ? "Thuốc BVTV"
-                : `Thuốc BVTV (${pesticides.total})`,
-          },
-          {
-            id: "fertilizer",
-            label:
-              fertilizers.loading && fertilizers.total === 0
-                ? "Phân bón"
-                : `Phân bón (${fertilizers.total})`,
-          },
-          {
-            id: "variety",
-            label:
-              varieties.loading && varieties.total === 0
-                ? "Giống cây"
-                : `Giống cây (${varieties.total})`,
-          },
-          { id: "diseases", label: `Sâu bệnh và IPM (${DISEASES_AND_PESTS_2026.length})` },
-          {
-            id: "village",
-            label:
-              villages.loading && villages.total === 0
-                ? "Thôn / Tổ"
-                : `Thôn / Tổ (${villages.total})`,
-          },
-          { id: "standards", label: `Tiêu chuẩn (${STANDARDS.length})` },
+          { id: "protocol", label: "Quy trình 2026-2027" },
+          { id: "pesticide", label: "Thuốc BVTV" },
+          { id: "fertilizer", label: "Phân bón" },
+          { id: "variety", label: "Giống cây" },
+          { id: "diseases", label: "Sâu bệnh và IPM" },
+          { id: "village", label: "Thôn / Tổ" },
+          { id: "standards", label: "Tiêu chuẩn" },
         ].map(({ id, label }) => (
           <button
             key={id}

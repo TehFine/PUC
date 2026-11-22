@@ -333,7 +333,7 @@ export default function Harvest() {
       {/* Thanh chuyển tab quy trình chuỗi liên kết */}
       <div className="tab-bar" style={{ marginTop: 20, marginBottom: 16 }}>
         <button type="button" className={`tab-btn ${tab === "lots" ? "active" : ""}`} onClick={() => selectTab("lots")}>
-          Lô thu hoạch ({lots.total})
+          Lô thu hoạch
         </button>
         {canReadHouseholds && (
           <button
@@ -341,17 +341,17 @@ export default function Harvest() {
             className={`tab-btn ${tab === "plans" ? "active" : ""}`}
             onClick={() => selectTab("plans")}
           >
-            Tính lịch thu hoạch ({harvestPlans.total})
+            Tính lịch thu hoạch
           </button>
         )}
         {canReadStamps && (
           <button type="button" className={`tab-btn ${tab === "stamps" ? "active" : ""}`} onClick={() => selectTab("stamps")}>
-            Cấp phát tem ({stampAllocations.total})
+            Cấp phát tem
           </button>
         )}
         {canReadContracts && (
           <button type="button" className={`tab-btn ${tab === "contracts" ? "active" : ""}`} onClick={() => selectTab("contracts")}>
-            Hợp đồng bao tiêu ({contracts.total})
+            Hợp đồng bao tiêu
           </button>
         )}
         {canReadEnterprises && (
@@ -360,7 +360,7 @@ export default function Harvest() {
             className={`tab-btn ${tab === "enterprises" ? "active" : ""}`}
             onClick={() => selectTab("enterprises")}
           >
-            Doanh nghiệp &amp; PHC ({enterprises.total})
+            Doanh nghiệp và CSĐG
           </button>
         )}
       </div>
