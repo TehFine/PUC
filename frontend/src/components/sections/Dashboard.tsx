@@ -348,7 +348,7 @@ export default function Dashboard() {
             {/* 1. Hạng mục cần xử lý ngay */}
             <section className="dash-bento-card">
               <div className="dash-bento-body">
-                <header className="dash-bento-head is-centered">
+                <header className="dash-bento-head">
                   <h2 className="dash-bento-title">Cần xử lý</h2>
                 </header>
 
@@ -416,7 +416,7 @@ export default function Dashboard() {
             {/* 2. Quy mô vùng trồng & phân bổ thôn */}
             <section className="dash-bento-card">
               <div className="dash-bento-body">
-                <header className="dash-bento-head is-centered">
+                <header className="dash-bento-head">
                   <h2 className="dash-bento-title">Quy mô vùng trồng</h2>
                 </header>
 
@@ -468,7 +468,7 @@ export default function Dashboard() {
                   </span>
                 </header>
 
-                <div className="dash-bento-hero">
+                <div className="dash-bento-hero is-centered">
                   <div className="dash-bento-figure">
                     <span className="dash-bento-num">{smoothQualifiedPct}</span>
                     <span className="dash-bento-unit">%</span>
@@ -518,24 +518,22 @@ export default function Dashboard() {
                   <h2 className="dash-bento-title">Sản lượng và kiểm nghiệm</h2>
                 </header>
 
-                <div className="dash-bento-wide-mid" style={{ marginBottom: 14 }}>
-                  <div className="dash-bento-wide-main">
-                    <div className="dash-bento-figure">
-                      <span className="dash-bento-num">{formatVn(smoothHarvestTons, 1)}</span>
-                      <span className="dash-bento-unit">tấn</span>
-                    </div>
-                    <div className="dash-bento-wide-sub">
-                      <span>Tổng hợp {formatVn(harvestLots)} lô thu hoạch</span>
-                      <span>
-                        {labPassPct !== null
-                          ? `Tỷ lệ mẫu đạt ngưỡng MRL: ${labPassPct}%`
-                          : "Kiểm nghiệm: chưa có phiếu"}
-                      </span>
-                    </div>
+                <div className="dash-bento-hero is-centered">
+                  <div className="dash-bento-figure">
+                    <span className="dash-bento-num">{formatVn(smoothHarvestTons, 1)}</span>
+                    <span className="dash-bento-unit">tấn</span>
                   </div>
                 </div>
 
                 <div className="dash-bento-clean-list">
+                  <div className="dash-bento-clean-row">
+                    <span>Lô thu hoạch</span>
+                    <strong>{formatVn(harvestLots)} lô</strong>
+                  </div>
+                  <div className="dash-bento-clean-row">
+                    <span>Tỷ lệ mẫu đạt MRL</span>
+                    <strong>{labPassPct !== null ? `${labPassPct}%` : "Chưa có phiếu"}</strong>
+                  </div>
                   <div className="dash-bento-clean-row">
                     <span>Phiếu kiểm nghiệm đạt</span>
                     <strong>{labTotal > 0 ? `${formatVn(labPassed)}/${formatVn(labTotal)}` : "0"}</strong>
@@ -575,7 +573,7 @@ export default function Dashboard() {
                   </span>
                 </header>
 
-                <div className="dash-bento-hero">
+                <div className="dash-bento-hero is-centered">
                   <div className="dash-bento-figure">
                     <span className="dash-bento-num">{formatVn(upcomingSchedule.length)}</span>
                     <span className="dash-bento-unit">đợt</span>
