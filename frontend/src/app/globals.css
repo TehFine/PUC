@@ -11893,23 +11893,23 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 }
 
 /* Đệm cuộn dư bên dưới biểu mẫu trong Modal / Drawer / Sheet để ô cuối cùng luôn kéo được lên ngang tầm mắt */
-.modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
-.pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+.modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+.pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
   scroll-padding-top: 16px;
   scroll-padding-bottom: 132px;
   padding-bottom: clamp(120px, 26vh, 210px) !important;
 }
 
 @media (max-width: 900px), (pointer: coarse) {
-  .modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
-  .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+  .modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+  .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
     scroll-padding-bottom: 160px;
     padding-bottom: clamp(150px, 34vh, 260px) !important;
   }
 
   /* Dự phòng cho WebView không cập nhật visualViewport: mở rộng hành trình cuộn khi đang gõ chữ */
-  .modal-overlay:not([data-kb-open="true"]) .modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .modal-body:focus-within,
-  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:focus-within {
+  .modal-overlay:not([data-kb-open="true"]) .modal:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .modal-body:focus-within,
+  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:focus-within {
     padding-bottom: max(46vh, 320px) !important;
   }
 
@@ -11924,4 +11924,127 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 
 
 
+
+/* ─── NÚT CẤP LẠI / CẤP TÀI KHOẢN MỚI BÊN DƯỚI BẢNG TRONG HỒ SƠ CHI TIẾT HỘ DÂN ─── */
+.hh-detail-account-action {
+  margin-top: 16px;
+  display: flex;
+  width: 100%;
+}
+
+.hh-detail-account-btn {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 16px;
+  justify-content: center;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 6px !important;
+}
+
+/* ─── THẺ THÔNG BÁO TRONG NGĂN THÔNG BÁO QUẢN TRỊ VIÊN (KHÔNG OUTLINE, ĐỔ BÓNG CHUẨN) ─── */
+.admin-notif-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-notif-card {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: none !important;
+  outline: none !important;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: inherit;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.admin-notif-card:focus,
+.admin-notif-card:focus-visible {
+  outline: none !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .admin-notif-card:hover {
+    background: #fafcfb;
+  }
+}
+
+.admin-notif-card:active {
+  background: #f4f7f5;
+}
+
+html[data-perf="lite"] .admin-notif-card {
+  box-shadow: var(--shadow-card-sm);
+}
+
+/* ─── DÒNG TÓM TẮT NHẬT KÝ THAO TÁC (AUDIT LOG) TRONG THẺ THEO NGÀY ─── */
+.admin-audit-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.admin-audit-row-sub {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #5f6d66;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 680px) {
+  .admin-audit-row-sub {
+    font-size: 12px;
+  }
+}
+
+/* ─── CỤM NÚT BẢO MẬT & KHÓA TRONG HỘP THOẠI CHI TIẾT TÀI KHOẢN ─── */
+.account-detail-sec-actions {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.account-detail-sec-btn {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 14px;
+  justify-content: center;
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 6px !important;
+}
+
+/* ─── Ô CHỌN NGÀY / GIỜ: HIỂN THỊ CON TRỎ BẤM TRÊN TOÀN BỘ PHẠM VI Ô ─── */
+input[type="date"]:not(:disabled):not([readonly]),
+input[type="datetime-local"]:not(:disabled):not([readonly]),
+input[type="month"]:not(:disabled):not([readonly]),
+input[type="week"]:not(:disabled):not([readonly]),
+input[type="time"]:not(:disabled):not([readonly]) {
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="week"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
 

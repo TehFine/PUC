@@ -9685,7 +9685,10 @@ body.pt-body {
   }
 }
 
-.pt-search-sheet .pt-sheet-body {
+.pt-search-sheet .pt-sheet-body,
+html:has(.pt-app) .pt-sheet.pt-search-sheet > .pt-sheet-body,
+html:has(.app-shell) .pt-sheet.pt-search-sheet > .pt-sheet-body,
+body.pt-body .pt-sheet.pt-search-sheet > .pt-sheet-body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -9694,7 +9697,10 @@ body.pt-body {
 }
 
 @media (min-width: 760px) {
-  .pt-sheet.is-drawer.pt-search-sheet .pt-sheet-body {
+  .pt-sheet.is-drawer.pt-search-sheet .pt-sheet-body,
+  html:has(.pt-app) .pt-sheet.is-drawer.pt-search-sheet > .pt-sheet-body,
+  html:has(.app-shell) .pt-sheet.is-drawer.pt-search-sheet > .pt-sheet-body,
+  body.pt-body .pt-sheet.is-drawer.pt-search-sheet > .pt-sheet-body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -12847,16 +12853,16 @@ body.pt-body .pt-form-actions .pt-btn {
   padding-bottom: 0 !important;
 }
 
-html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
-html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
-body.pt-body .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+html:has(.pt-app) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+html:has(.app-shell) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+body.pt-body .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
   scroll-padding-top: 16px;
   scroll-padding-bottom: 148px;
   padding-bottom: clamp(132px, 30vh, 230px) !important;
 }
 
 @media (max-width: 900px), (pointer: coarse) {
-  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet) .pt-sheet-body:focus-within {
+  .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:focus-within {
     padding-bottom: max(46vh, 320px) !important;
   }
 }

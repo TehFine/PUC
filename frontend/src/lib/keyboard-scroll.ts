@@ -2,6 +2,14 @@
 
 import { useEffect, type RefObject } from "react";
 
+const PICKER_INPUT_TYPES = new Set([
+  "date",
+  "datetime-local",
+  "month",
+  "week",
+  "time",
+]);
+
 const NON_TEXT_INPUT_TYPES = new Set([
   "checkbox",
   "radio",
@@ -13,6 +21,7 @@ const NON_TEXT_INPUT_TYPES = new Set([
   "color",
   "hidden",
   "image",
+  ...PICKER_INPUT_TYPES,
 ]);
 
 /**
@@ -39,8 +48,7 @@ function findNearestScrollContainer(target: HTMLElement, boundary?: HTMLElement 
   let el: HTMLElement | null = target.parentElement;
   while (el && el !== document.body && el !== document.documentElement) {
     if (
-      el.classList.contains("modal-body") ||
-      el.classList.contains("pt-sheet-body") ||
+      ((el.classList.contains("modal-body") || el.classList.contains("pt-sheet-body")) && isScrollableY(el)) ||
       (isScrollableY(el) && el.scrollHeight > el.clientHeight + 1)
     ) {
       return el;
@@ -498,6 +506,31 @@ export function KeyboardScrollGuard() {
       }, 180);
     };
 
+    const onPickerInputClick = (event: MouseEvent) => {
+      if (event.defaultPrevented) return;
+      const rawTarget = event.target instanceof Element ? event.target : null;
+      const input = rawTarget?.closest("input") as HTMLInputElement | null;
+      if (!input || input.disabled || input.readOnly) return;
+      const inputType = (input.type || "").toLowerCase();
+      if (!PICKER_INPUT_TYPES.has(inputType)) return;
+      if (typeof input.showPicker !== "function") return;
+
+      // Khi bấm thẳng vào vùng icon lịch sát mép phải, trình duyệt đã tự mở/đóng lịch gốc.
+      if (event.detail > 0) {
+        const rect = input.getBoundingClientRect();
+        if (rect.width > 64 && event.clientX >= rect.right - 30) {
+          return;
+        }
+      }
+
+      try {
+        input.showPicker();
+      } catch {
+        // Bỏ qua nếu môi trường WebView không hỗ trợ showPicker()
+      }
+    };
+
+    document.addEventListener("click", onPickerInputClick);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
     document.addEventListener("input", onInput);
@@ -506,6 +539,7 @@ export function KeyboardScrollGuard() {
 
     return () => {
       clearTimers();
+      document.removeEventListener("click", onPickerInputClick);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
       document.removeEventListener("input", onInput);
