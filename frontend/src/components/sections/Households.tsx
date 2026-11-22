@@ -195,7 +195,7 @@ export default function Households() {
 
       {list.rows.length > 0 && (
         <>
-          <ul className="admin-diary-day-card admin-hh-list" role="list" aria-label="Danh sách hộ nông dân">
+          <ul className="admin-hh-list" role="list" aria-label="Danh sách hộ nông dân">
             {list.rows.map((h) => {
               const zc = getZoneColor(h.code);
               const areaLabel = formatAreaLabel(h.villageName, h.villageId);
@@ -218,7 +218,7 @@ export default function Households() {
               );
             })}
           </ul>
-          <div className="admin-diary-pagination">
+          <div className="admin-hh-pagination">
             <Pagination page={page} pageSize={PAGE_SIZE} total={list.total} unit="hộ" onChange={setPage} />
           </div>
         </>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Modal, FormError } from "@/components/ui/Modal";
+import { useMemo, useRef, useState } from "react";
+import { FormError, Modal, ModalDismissButton } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { triggerBlobDownload } from "@/utils/download";
 import { useMutation } from "@/hooks/use-api";
@@ -10,9 +10,9 @@ import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import type { VillageDto } from "@/types/api";
 import type { HouseholdImportResult, HouseholdInput, HouseholdStatus } from "@/types/households";
 
-const SAMPLE_CSV = `code,name,cccd,phone,villageId,plotCount,areaHa,status
-KB-250,Nguyễn Văn Minh,260123456780,0912345670,1,2,1.5,qualified
-KB-251,Trần Thị Lan,260123456781,0912345671,2,1,0.8,pending`;
+const SAMPLE_CSV = `Mã hộ,Họ tên,CCCD,Số ĐT,Địa bàn,Số thửa,Diện tích,Trạng thái
+KB-250,Nguyễn Văn Minh,260123456780,0912345670,1,2,1.5,Đủ chuẩn
+KB-251,Trần Thị Lan,260123456781,0912345671,2,1,0.8,Chờ duyệt`;
 
 function splitCsvLine(line: string, delimiter: string): string[] {
   const cells: string[] = [];
@@ -82,7 +82,7 @@ export function parseHouseholdsCsv(text: string, villages: VillageDto[]): Partia
   const nameIdx = idxOf("name", "hoten", "tenchuho", "ten", "hovaten");
   const cccdIdx = idxOf("cccd", "socccd", "cmnd");
   const phoneIdx = idxOf("phone", "sdt", "sodienthoai", "dienthoai", "sodt");
-  const villageIdx = idxOf("villageid", "village", "thon", "thonto", "mathon");
+  const villageIdx = idxOf("villageid", "village", "thon", "thonto", "mathon", "diaban");
   const plotIdx = idxOf("plotcount", "plots", "sothua");
   const areaIdx = idxOf("areaha", "area", "dientich", "dientichha");
   const statusIdx = idxOf("status", "trangthai");
@@ -146,6 +146,7 @@ export default function HouseholdImportModal({
   onClose: () => void;
   onImported: () => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [csvText, setCsvText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<HouseholdImportResult | null>(null);
@@ -199,103 +200,132 @@ export default function HouseholdImportModal({
 
   return (
     <Modal
-      title="Import danh sách hộ nông dân (CSV / Excel)"
+      title="Nhập danh sách hộ dân"
       onClose={uploader.pending ? () => undefined : onClose}
-      width={640}
+      width={600}
       footer={
         <>
-          <button type="button" className="btn btn-outline" onClick={downloadSample} disabled={uploader.pending}>
-            Tải file CSV mẫu
-          </button>
-          <button type="button" className="btn btn-outline" onClick={onClose} disabled={uploader.pending}>
-            Đóng
-          </button>
+          <ModalDismissButton
+            className="btn btn-outline"
+            onFallbackClose={onClose}
+            disabled={uploader.pending}
+          >
+            Hủy
+          </ModalDismissButton>
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => void runImport()}
             disabled={uploader.pending || parsedRows.length === 0}
           >
-            {uploader.pending ? "Đang nhập…" : `Nhập ${parsedRows.length} hộ`}
+            {uploader.pending
+              ? "Đang nhập…"
+              : parsedRows.length > 0
+                ? `Nhập ${parsedRows.length} hộ`
+                : "Nhập dữ liệu"}
           </button>
         </>
       }
     >
-      <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.55, marginBottom: 12 }}>
-        Hỗ trợ tệp <strong>.csv</strong> (xuất từ Excel với mã UTF-8). Cột bắt buộc:{" "}
-        <code>code, name, cccd, phone, villageId</code> (hoặc tên thôn). Nếu trùng <code>code</code> hệ thống sẽ cập nhật hộ đó.
+      <p className="hh-import-lead">
+        Hỗ trợ tệp CSV xuất từ Excel (mã UTF-8). Hộ trùng mã sẽ tự động cập nhật.
       </p>
 
       <div className="form-group">
-        <label htmlFor="household-csv-file">Chọn tệp CSV từ máy tính</label>
+        <label htmlFor="household-csv-file">Tệp dữ liệu CSV</label>
         <input
+          ref={fileInputRef}
           id="household-csv-file"
           type="file"
           accept=".csv,.txt,text/csv"
-          className="form-input"
+          hidden
           onChange={(e) => void handleFile(e)}
         />
-        {fileName && (
-          <small style={{ display: "block", marginTop: 4, color: "var(--text-secondary)" }}>
-            Đã tải: <strong>{fileName}</strong> ({parsedRows.length} dòng)
-          </small>
-        )}
-      </div>
-
-      <div className="form-group">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <label htmlFor="household-csv-text" style={{ margin: 0 }}>
-            Hoặc dán trực tiếp dữ liệu CSV
-          </label>
+        <div className="hh-import-file-box">
+          <span className={`hh-import-file-name ${fileName ? "has-file" : ""}`}>
+            {fileName ? `${fileName} (${parsedRows.length} hộ)` : "Chưa chọn tệp nào"}
+          </span>
           <button
             type="button"
-            className="btn btn-outline btn-sm"
-            style={{ padding: "4px 10px", fontSize: 11.5 }}
-            onClick={() => {
-              setCsvText(SAMPLE_CSV);
-              setResult(null);
-              setLocalError(null);
-            }}
+            className="hh-import-primary-btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploader.pending}
           >
-            Điền dữ liệu mẫu
+            Chọn tệp
           </button>
+        </div>
+      </div>
+
+      <div className="hh-import-tools">
+        <button
+          type="button"
+          className="hh-import-tool-btn"
+          onClick={downloadSample}
+          disabled={uploader.pending}
+        >
+          Tải tệp mẫu
+        </button>
+        <button
+          type="button"
+          className="hh-import-tool-btn"
+          onClick={() => {
+            setFileName(null);
+            setCsvText(SAMPLE_CSV);
+            setResult(null);
+            setLocalError(null);
+          }}
+          disabled={uploader.pending}
+        >
+          Điền dữ liệu mẫu
+        </button>
+      </div>
+
+      <div className="form-group" style={{ marginBottom: 0 }}>
+        <div className="hh-import-text-head">
+          <label htmlFor="household-csv-text">Dán trực tiếp dữ liệu CSV</label>
+          {csvText && (
+            <button
+              type="button"
+              className="hh-import-clear-btn"
+              onClick={() => {
+                setFileName(null);
+                setCsvText("");
+                setResult(null);
+                setLocalError(null);
+              }}
+              disabled={uploader.pending}
+            >
+              Xóa nội dung
+            </button>
+          )}
         </div>
         <textarea
           id="household-csv-text"
-          className="form-input mono"
-          rows={6}
+          className="form-input mono hh-import-textarea"
+          rows={5}
+          wrap="off"
           value={csvText}
           onChange={(e) => {
             setCsvText(e.target.value);
             setResult(null);
             setLocalError(null);
           }}
-          placeholder={SAMPLE_CSV}
+          placeholder={"Mã hộ, Họ tên, CCCD, Số ĐT, Địa bàn\nKB-250, Nguyễn Văn Minh, 260123456780, 0912345670, 1"}
         />
-        <small style={{ display: "block", marginTop: 4, color: "var(--text-muted)" }}>
-          Đã nhận diện: <strong>{parsedRows.length}</strong> dòng dữ liệu (tối đa {MAX_IMPORT_ROWS} dòng mỗi đợt nhập).
+        <small className="hh-import-count">
+          Nhận diện: <strong>{parsedRows.length}</strong> hộ hợp lệ (tối đa {MAX_IMPORT_ROWS.toLocaleString("vi-VN")} hộ mỗi lần).
         </small>
       </div>
 
       {result && (
-        <div
-          role="status"
-          style={{
-            marginTop: 12,
-            padding: "12px 16px",
-            borderRadius: 6,
-            background: result.errors.length > 0 ? "#fdf4e8" : "#eef8e3",
-            border: "1px solid var(--border)",
-            fontSize: 13,
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>
-            Kết quả nhập: Tạo mới <span style={{ color: "#277a48" }}>{result.created}</span> - Cập nhật{" "}
-            <span style={{ color: "#235f92" }}>{result.updated}</span> - Lỗi{" "}
-            <span style={{ color: result.errors.length > 0 ? "#b73c20" : "inherit" }}>{result.errors.length}</span>
+        <div role="status" className="hh-import-result">
+          <div className="hh-import-result-summary">
+            Kết quả: tạo mới <span className="is-ok">{result.created}</span>, cập nhật{" "}
+            <span className="is-info">{result.updated}</span>, lỗi{" "}
+            <span className={result.errors.length > 0 ? "is-err" : ""}>{result.errors.length}</span>
           </div>
           {result.errors.length > 0 && (
-            <ul style={{ margin: "6px 0 0 18px", maxHeight: 140, overflowY: "auto", color: "#9a2f17", fontSize: 12.5 }}>
+            <ul className="hh-import-result-errors">
               {result.errors.map((err, idx) => (
                 <li key={idx}>
                   Dòng {err.row}: {err.message}

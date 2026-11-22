@@ -139,26 +139,13 @@ export default function HouseholdDetailModal({
           <span className="admin-detail-list-label">Tài khoản hộ dân</span>
           <div
             className="admin-detail-list-value"
-            style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}
+            style={{
+              fontVariantNumeric: "tabular-nums",
+              color: household.accountId ? "#14372f" : "#9a6712",
+              fontWeight: 600,
+            }}
           >
-            <span
-              style={{
-                fontVariantNumeric: "tabular-nums",
-                color: household.accountId ? "#14372f" : "#9a6712",
-                fontWeight: 600,
-              }}
-            >
-              {household.accountId ? household.accountUsername || "Đã cấp tài khoản" : "Chưa cấp tài khoản"}
-            </span>
-            {onIssueAccount && (
-              <button
-                type="button"
-                className={`btn btn-sm ${household.accountId ? "btn-outline" : "btn-primary"}`}
-                onClick={onIssueAccount}
-              >
-                {household.accountId ? "Cấp lại TK" : "Ban hành TK"}
-              </button>
-            )}
+            {household.accountId ? household.accountUsername || "Đã cấp tài khoản" : "Chưa cấp tài khoản"}
           </div>
         </div>
         <div className="admin-detail-list-row">
@@ -425,6 +412,18 @@ export default function HouseholdDetailModal({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {onIssueAccount && (
+        <div className="hh-detail-account-action">
+          <button
+            type="button"
+            className={`btn ${household.accountId ? "btn-outline" : "btn-primary"} hh-detail-account-btn`}
+            onClick={onIssueAccount}
+          >
+            {household.accountId ? "Cấp lại tài khoản" : "Cấp tài khoản mới"}
+          </button>
         </div>
       )}
 

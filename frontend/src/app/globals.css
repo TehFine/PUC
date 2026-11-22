@@ -9726,7 +9726,7 @@ html[data-net="slow"] .kpi-card svg rect {
   border: none;
   border-radius: 0;
   padding: 0;
-  margin-bottom: 16px;
+  margin-bottom: 30px;
   box-shadow: none;
 }
 
@@ -9740,7 +9740,7 @@ html[data-net="slow"] .kpi-card svg rect {
 .zone-legend-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .zone-legend-item {
@@ -9750,21 +9750,37 @@ html[data-net="slow"] .kpi-card svg rect {
   justify-content: center;
   gap: 2px;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   border: none !important;
   outline: none !important;
   cursor: pointer;
   text-align: left;
   min-width: 0;
-  transition: box-shadow 150ms ease, filter 150ms ease;
+  transition: box-shadow 160ms ease, opacity 160ms ease, filter 160ms ease;
 }
 
-.zone-legend-item:hover {
-  filter: brightness(0.97);
+.zone-legend-item:focus,
+.zone-legend-item:focus-visible {
+  outline: none !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .zone-legend-item:hover {
+    filter: brightness(0.98);
+  }
 }
 
 .zone-legend-item.is-active {
-  box-shadow: inset 0 0 0 1.5px rgba(20, 55, 47, 0.45);
+  box-shadow: var(--shadow-card);
+}
+
+.zone-legend-grid:has(.zone-legend-item.is-active:not(:first-child)) .zone-legend-item:not(.is-active) {
+  opacity: 0.55;
+}
+
+html[data-perf="lite"] .zone-legend-item,
+html[data-perf="lite"] .zone-legend-item.is-active {
+  box-shadow: var(--shadow-card-sm);
 }
 
 .zone-legend-code {
@@ -9788,6 +9804,7 @@ html[data-net="slow"] .kpi-card svg rect {
   opacity: 0.85;
   white-space: nowrap;
   overflow: hidden;
+  box-shadow: var(--shadow-card);
   text-overflow: ellipsis;
   width: 100%;
 }
@@ -11869,6 +11886,38 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 
   .modal-overlay[data-kb-open="true"] .modal:not(.modal-confirm-sheet) .modal-header,
   .pt-sheet-backdrop[data-kb-open="true"] .pt-sheet:not(.modal-confirm-sheet) .pt-sheet-head {
+
+  .admin-diary-pagination > .table-footer {
+    padding: 12px 0 4px;
+  }
+}
+
+.admin-hh-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.admin-hh-list > li {
+  border-bottom: 1px solid rgba(20, 55, 47, 0.1);
+}
+
+.admin-diary-row.admin-hh-row {
+  padding: 14px 4px;
+  background: transparent;
+  border-radius: 6px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .admin-diary-row.admin-hh-row:hover {
+    background-color: rgba(20, 55, 47, 0.045);
+  }
+}
+
+.admin-diary-row.admin-hh-row:active {
+  background-color: rgba(20, 55, 47, 0.075);
     padding-top: calc(10px + env(safe-area-inset-top, 0px));
     padding-bottom: 10px;
   }
@@ -11884,7 +11933,23 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   height: var(--vv-height, 100dvh) !important;
   min-height: 0 !important;
   max-height: var(--vv-height, 100dvh) !important;
+.admin-hh-pagination {
+  margin-top: 4px;
+  background: transparent;
+  border: none;
 }
+
+.admin-hh-pagination > .table-footer {
+  background: transparent;
+  border-top: none;
+  padding: 12px 2px 4px;
+}
+
+}
+  .admin-diary-row.admin-hh-row {
+    padding: 13px 2px;
+  }
+
 
 @media screen and (min-width: 760px) {
   .pt-sheet-backdrop[data-kb-open="true"] > .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet),
@@ -11892,6 +11957,261 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
     height: auto !important;
     min-height: 0 !important;
     max-height: calc(var(--vv-height, 100dvh) - 24px) !important;
+
+  .admin-hh-pagination > .table-footer {
+    padding: 12px 0 4px;
+  }
+}
+
+/* ── Hộp thoại Nhập danh sách hộ dân từ CSV (đồng bộ màu nút, rút gọn cân đối trên di động) ── */
+.hh-import-lead {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.48;
+  color: #5f6d66;
+}
+
+.hh-import-file-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 6px 6px 12px;
+  background: #ffffff;
+  border: 1px solid #d4d4d2;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.hh-import-file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+  color: #8a968f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.hh-import-file-name.has-file {
+  color: #14372f;
+  font-weight: 600;
+}
+
+.hh-import-primary-btn {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
+  background: #14372f;
+  color: #ffffff;
+  border: 1px solid #14372f;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+
+.hh-import-primary-btn:hover:not(:disabled) {
+  background: #0e2822;
+}
+
+.hh-import-primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hh-import-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.hh-import-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #14372f;
+  border: 1px solid #d4d4d2;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.hh-import-tool-btn:hover:not(:disabled) {
+  background: #f7f7f5;
+  border-color: #14372f;
+}
+
+.hh-import-tool-btn:active:not(:disabled) {
+  background: #efefec;
+}
+
+.hh-import-tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hh-import-text-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.hh-import-text-head label {
+  margin: 0 !important;
+}
+
+.hh-import-clear-btn {
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  color: #b91c1c;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hh-import-textarea {
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+  white-space: pre;
+  overflow-x: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.hh-import-count {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #5f6d66;
+  font-variant-numeric: tabular-nums;
+}
+
+.hh-import-count strong {
+  color: #14372f;
+}
+
+.hh-import-result {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #d4d4d2;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hh-import-result-summary {
+  font-weight: 600;
+  color: #14372f;
+}
+
+.hh-import-result-summary .is-ok {
+  color: #15803d;
+}
+
+.hh-import-result-summary .is-info {
+  color: #14372f;
+}
+
+.hh-import-result-summary .is-err {
+  color: #b91c1c;
+}
+
+.hh-import-result-errors {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  max-height: 140px;
+  overflow-y: auto;
+  color: #b91c1c;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* ── Nhịp giãn cách thoáng đều giữa khối Tọa độ GPS và Ảnh, video hiện trường ── */
+.admin-gps-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  margin-bottom: 22px;
+  padding: 13px 14px;
+  background: #ffffff;
+  border: 1px solid #d4d4d2;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.admin-gps-field-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.admin-gps-field-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #14372f;
+  line-height: 1.35;
+}
+
+.admin-gps-field-status {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #5f6d66;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-gps-field-status.has-coords {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.admin-gps-field-btn {
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 5px;
+  border: 1px solid rgba(20, 55, 47, 0.16);
+  background: #e6f0ec;
+  color: #14372f;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+
+.admin-gps-field-btn:hover:not(:disabled) {
+  background: #d8e7e0;
+}
+
+.admin-gps-field-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.admin-media-field-section {
+  margin-top: 4px;
+  margin-bottom: 16px;
   }
 }
 
