@@ -204,26 +204,15 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
                     : "Chưa có thông báo nào đã đọc."}
               </EmptyState>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="admin-notif-card-list">
                 {visibleItems.map((item) => {
                   const meta = kindMeta(item);
                   return (
                     <button
                       key={item.id}
                       type="button"
+                      className={`admin-notif-card ${item.readAt ? "is-read" : "is-unread"}`}
                       onClick={() => void handleSelect(item)}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "12px 14px",
-                        borderRadius: 8,
-                        border: "1px solid #d4d4d2",
-                        background: item.readAt ? "#ffffff" : "#f3f9f5",
-                        cursor: "pointer",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 5,
-                      }}
                     >
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                         <span
