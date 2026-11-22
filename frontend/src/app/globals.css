@@ -11748,15 +11748,13 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 }
 
 .admin-diary-arrow {
-  --detail-arrow-bg: #e2e8f0;
-  --detail-arrow-fg: #1e293b;
-  transition: transform 150ms ease;
+  --detail-arrow-fg: #c5cbc8;
+  transition: transform 150ms ease, color 150ms ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .admin-diary-row:hover .admin-diary-arrow {
-    --detail-arrow-bg: rgba(39, 122, 72, 0.16);
-    --detail-arrow-fg: #15803d;
+    --detail-arrow-fg: #8a968f;
     transform: translateX(2px);
   }
 }

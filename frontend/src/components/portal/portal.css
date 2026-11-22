@@ -1688,15 +1688,13 @@ body.pt-body {
   color: #111827;
 }
 .pt-profile-intro-arrow {
-  --detail-arrow-bg: #d4dae2;
-  --detail-arrow-fg: #1e293b;
+  --detail-arrow-fg: #c5cbc8;
   margin-left: auto;
   flex-shrink: 0;
   transition: transform 0.18s ease;
 }
 .pt-profile-intro-btn:hover .pt-profile-intro-arrow {
-  --detail-arrow-bg: rgba(39, 122, 72, 0.16);
-  --detail-arrow-fg: var(--green-700);
+  --detail-arrow-fg: #8a968f;
   transform: translateX(3px);
 }
 
@@ -2680,8 +2678,7 @@ body.pt-body {
 }
 
 .pt-widget-item-arrow {
-  --detail-arrow-bg: #d4dae2;
-  --detail-arrow-fg: #1e293b;
+  --detail-arrow-fg: #c5cbc8;
   flex-shrink: 0;
   opacity: 1;
   transition: transform 0.18s ease, opacity 0.18s ease;
@@ -2691,8 +2688,7 @@ body.pt-body {
 .pt-lab-test-row:hover .pt-widget-item-arrow,
 .pt-pest-card:hover .pt-widget-item-arrow,
 .pt-training-done-row:hover .pt-widget-item-arrow {
-  --detail-arrow-bg: rgba(39, 122, 72, 0.16);
-  --detail-arrow-fg: var(--green-700);
+  --detail-arrow-fg: #8a968f;
   opacity: 1;
   transform: translateX(3px);
 }
@@ -2986,16 +2982,14 @@ body.pt-body {
 
 .pt-diary-day-row .pt-widget-item-arrow {
   margin-top: 0;
-  --detail-arrow-bg: #d4dae2;
-  --detail-arrow-fg: #1e293b;
+  --detail-arrow-fg: #c5cbc8;
   flex-shrink: 0;
   opacity: 1;
   transition: transform 0.18s ease, opacity 0.18s ease;
 }
 
 .pt-diary-day-row:hover .pt-widget-item-arrow {
-  --detail-arrow-bg: rgba(39, 122, 72, 0.16);
-  --detail-arrow-fg: var(--green-700);
+  --detail-arrow-fg: #8a968f;
   opacity: 1;
   transform: translateX(3px);
 }
@@ -3698,9 +3692,8 @@ body.pt-body {
 
 .pt-schedule-link-arrow {
   flex-shrink: 0;
-  --detail-arrow-bg: #d4dae2;
-  --detail-arrow-fg: #1e293b;
-  transition: transform 0.18s ease;
+  --detail-arrow-fg: #c5cbc8;
+  transition: transform 0.18s ease, color 0.18s ease;
 }
 
 .pt-schedule-link:hover {
@@ -3709,8 +3702,7 @@ body.pt-body {
 }
 
 .pt-schedule-link:hover .pt-schedule-link-arrow {
-  --detail-arrow-bg: rgba(0, 122, 255, 0.16);
-  --detail-arrow-fg: #0062cc;
+  --detail-arrow-fg: #8a968f;
   transform: translateX(2px);
 }
 
@@ -9900,8 +9892,7 @@ body.pt-body {
 
 .pt-search-result-arrow {
   flex-shrink: 0;
-  --detail-arrow-bg: #d4dae2;
-  --detail-arrow-fg: #1e293b;
+  --detail-arrow-fg: #c5cbc8;
 }
 
 .pt-search-empty {

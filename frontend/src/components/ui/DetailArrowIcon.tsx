@@ -6,11 +6,11 @@ export interface DetailArrowIconProps extends React.HTMLAttributes<HTMLSpanEleme
 }
 
 /**
- * Icon mũi tên tròn dẫn vào chi tiết từng mục (sử dụng `/icons/chevron-right.svg` từ `public/`).
+ * Icon mũi tên mảnh dẫn vào chi tiết từng mục (không khung tròn bao ngoài).
  */
 export function DetailArrowIcon({
-  size = 22,
-  strokeWidth: _strokeWidth,
+  size = 20,
+  strokeWidth = 2,
   className,
   style,
   ...props
@@ -27,36 +27,26 @@ export function DetailArrowIcon({
         width: pxSize,
         height: pxSize,
         flexShrink: 0,
-        position: "relative",
+        color: "var(--detail-arrow-fg, #c5cbc8)",
         ...style,
       }}
       {...props}
     >
-      <span
-        style={{
-          position: "absolute",
-          width: "87.5%",
-          height: "87.5%",
-          borderRadius: "50%",
-          backgroundColor: "var(--detail-arrow-bg, #d4dae2)",
-        }}
-      />
-      <span
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "100%",
-          backgroundColor: "var(--detail-arrow-fg, #1e293b)",
-          WebkitMaskImage: 'url("/icons/chevron-right.svg")',
-          maskImage: 'url("/icons/chevron-right.svg")',
-          WebkitMaskSize: "contain",
-          maskSize: "contain",
-          WebkitMaskRepeat: "no-repeat",
-          maskRepeat: "no-repeat",
-          WebkitMaskPosition: "center",
-          maskPosition: "center",
-        }}
-      />
+      <svg
+        width="100%"
+        height="100%"
+        viewBox="0 0 20 20"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M7.5 5L12.5 10L7.5 15"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     </span>
   );
 }
