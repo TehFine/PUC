@@ -397,8 +397,8 @@ export default function TraceLookupPage() {
                         setCode(e.target.value);
                         if (inputError) setInputError(null);
                       }}
-                      placeholder="Nhập token /t/..., mã lô chữ hoặc mã thùng..."
-                      aria-label="Token QR chống giả, mã lô hàng hoặc mã thùng đóng gói"
+                      placeholder="Nhập mã lô hàng, mã thùng hoặc mã trên tem truy xuất..."
+                      aria-label="Mã lô hàng, mã thùng đóng gói hoặc mã trên tem truy xuất"
                       className="sw-trace-input"
                       autoComplete="off"
                       spellCheck={false}
@@ -533,7 +533,7 @@ export default function TraceLookupPage() {
                   Phiên Thẩm định Thực địa đã kích hoạt trên trình duyệt này
                 </span>
                 <p className="sw-field-audit-desc">
-                  Khóa thẻ đoàn đã được lưu an toàn trong phiên làm việc tạm thời và ẩn khỏi thanh địa chỉ. Quý đoàn có thể chọn bất kỳ thửa vườn hoặc lô hàng bên dưới, hoặc quét trực tiếp Bảng QR đầu thửa vườn để đối chứng vị trí GPS.
+                  Thẻ đoàn công tác đã sẵn sàng. Quý đoàn có thể chọn bất kỳ thửa vườn hoặc lô hàng bên dưới, hoặc quét trực tiếp Bảng QR đầu thửa vườn để đối chiếu vị trí thực tế tại vườn.
                 </p>
               </div>
             </div>
@@ -623,9 +623,6 @@ export default function TraceLookupPage() {
                             <span>
                               Mã CSĐG: {lot.packhouseCode || "VN-DLPH-0089"} ({lot.market || "Xuất khẩu"})
                             </span>
-                            {lot.qrToken && (
-                              <span>Đường dẫn QR chống giả: /t/{lot.qrToken}</span>
-                            )}
                           </div>
                         </div>
 
@@ -670,11 +667,7 @@ export default function TraceLookupPage() {
                             <span>
                               Quy mô: {areaText}
                               {treesText}
-                              {pl.maxQuotaKg
-                                ? ` - Trần: ${Number(pl.maxQuotaKg).toLocaleString("vi-VN")} kg`
-                                : ""}
                             </span>
-                            {pl.qrToken && <span>Đường dẫn QR vườn: /t/{pl.qrToken}</span>}
                           </div>
                         </div>
 
@@ -723,9 +716,6 @@ export default function TraceLookupPage() {
                                 ? `Thuộc lô: ${stamp.lotCode}`
                                 : "Thương hiệu riêng HTX Cư Né"}
                             </span>
-                            {stamp.qrToken && (
-                              <span>Đường dẫn QR chống giả: /t/{stamp.qrToken}</span>
-                            )}
                           </div>
                         </div>
 
