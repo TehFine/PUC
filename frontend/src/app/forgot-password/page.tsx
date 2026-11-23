@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
@@ -22,12 +22,11 @@ const MAX_PASSWORD_UTF8_BYTES = 72;
 
 function ForgotPasswordContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { status, session } = useAuth();
 
   const [mode, setMode] = useState<RecoveryMode>("cccd");
   const [form, setForm] = useState(() => ({
-    username: searchParams.get("username")?.trim() ?? "",
+    username: "",
     cccd: "",
     fullName: "",
     note: "",
@@ -38,6 +37,17 @@ function ForgotPasswordContent() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [doneMode, setDoneMode] = useState<RecoveryMode | null>(null);
+
+  useEffect(() => {
+    const clearSensitive = () => {
+      setForm((prev) => ({ ...prev, cccd: "", newPassword: "", confirm: "" }));
+    };
+    window.addEventListener("pagehide", clearSensitive);
+    return () => {
+      window.removeEventListener("pagehide", clearSensitive);
+      clearSensitive();
+    };
+  }, []);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -112,6 +122,7 @@ function ForgotPasswordContent() {
           fullName: form.fullName.trim(),
           newPassword: form.newPassword,
         });
+        setForm((prev) => ({ ...prev, cccd: "", newPassword: "", confirm: "" }));
         setDoneMode("cccd");
       } else {
         await api.post("/auth/forgot-password/request", {
@@ -217,6 +228,8 @@ function ForgotPasswordContent() {
       <form
         className={`auth-form${submitting ? " is-processing" : ""}`}
         onSubmit={onSubmit}
+        autoComplete="off"
+        data-form-type="other"
         noValidate
         aria-busy={submitting}
       >
@@ -228,7 +241,10 @@ function ForgotPasswordContent() {
             <input
               id="forgot-username"
               className={`auth-input${isFieldInvalid("username") ? " is-error" : ""}`}
-              autoComplete="username"
+              autoComplete="off"
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
               placeholder="Ví dụ: 0905123456"
               value={form.username}
               disabled={submitting}
@@ -245,6 +261,12 @@ function ForgotPasswordContent() {
                 id="forgot-cccd"
                 className={`auth-input${isFieldInvalid("cccd") ? " is-error" : ""}`}
                 inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 maxLength={15}
                 placeholder="Nhập 12 chữ số CCCD"
                 value={form.cccd}
@@ -305,7 +327,7 @@ function ForgotPasswordContent() {
                   id="forgot-password"
                   className={isFieldInvalid("password") ? "is-error" : ""}
                   show={showPassword}
-                  autoComplete="new-password"
+                  autoComplete="off"
                   placeholder="Tối thiểu 8 ký tự chữ và số"
                   value={form.newPassword}
                   disabled={submitting}
@@ -318,7 +340,7 @@ function ForgotPasswordContent() {
                   id="forgot-confirm"
                   className={isFieldInvalid("password") ? "is-error" : ""}
                   show={showPassword}
-                  autoComplete="new-password"
+                  autoComplete="off"
                   placeholder="Nhập lại mật khẩu mới"
                   value={form.confirm}
                   disabled={submitting}

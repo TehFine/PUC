@@ -48,6 +48,15 @@ const SENSITIVE_SNAPSHOT_PREFIXES = [
   "/registrations",
   "/reports",
   "/contracts",
+  "/portal/profile",
+  "/field-audit-passes",
+  "/trace-requests",
+  "/deletion-requests",
+  "/violations",
+  "/minutes",
+  "/approvals",
+  "/system-alerts",
+  "/auth",
 ];
 /** Chỉ cho phép giả lập mạng qua `?net=` khi chạy môi trường phát triển. */
 const ALLOW_NET_SIMULATION = process.env.NODE_ENV === "development";
@@ -174,6 +183,12 @@ const EMPTY_SYNC_SNAPSHOT: OfflineSyncSnapshot = Object.freeze({
 export function saveOfflineAuthSession(session: AuthSession): void {
   if (typeof window === "undefined") return;
   try {
+    // Chỉ lưu bản chụp phiên ngoại tuyến cho tài khoản Nông dân đi rẫy mất sóng;
+    // tuyệt đối không lưu thông tin phiên của Quản trị viên / Thanh tra / Doanh nghiệp vào localStorage.
+    if (session?.user?.role !== "farmer") {
+      window.localStorage.removeItem(AUTH_SNAPSHOT_STORAGE_KEY);
+      return;
+    }
     window.localStorage.setItem(
       AUTH_SNAPSHOT_STORAGE_KEY,
       JSON.stringify({ session, savedAt: Date.now() }),
@@ -192,7 +207,7 @@ export function loadOfflineAuthSession(): AuthSession | null {
     const savedAt = parsed?.savedAt;
     if (
       !parsed?.session?.user?.id ||
-      typeof parsed.session.user.role !== "string" ||
+      parsed.session.user.role !== "farmer" ||
       typeof savedAt !== "number" ||
       savedAt > Date.now() + 5 * 60_000 ||
       Date.now() - savedAt > AUTH_SNAPSHOT_MAX_AGE_MS
@@ -708,12 +723,52 @@ async function putFieldDraftRecord(draft: OfflineFieldDraft): Promise<void> {
   void pruneExpiredAndExcessDrafts(draft.id);
 }
 
-/** Xóa bản nháp tự động đang điền dở (chứa tọa độ GPS vườn và ảnh chụp tạm) khi đăng xuất trên thiết bị dùng chung. */
+/** Xóa toàn bộ bản nháp ngoài rẫy và hàng đợi dữ liệu của người dùng khi đăng xuất trên thiết bị dùng chung. */
 export async function purgeUserWorkingDraftsOnLogout(userId: number | null): Promise<void> {
-  if (userId && Number.isInteger(userId) && userId > 0) {
-    await deleteFieldDraftRecordById(`working:${userId}`).catch(() => undefined);
+  const db = await openOfflineDb();
+  if (!db) return;
+  try {
+    if (db.objectStoreNames.contains(STORE_DRAFTS)) {
+      const tx = db.transaction(STORE_DRAFTS, "readwrite");
+      const store = tx.objectStore(STORE_DRAFTS);
+      if (!userId || userId <= 0) {
+        store.clear();
+      } else {
+        const req = store.openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) return;
+          const rec = cursor.value as OfflineFieldDraft | undefined;
+          if (!rec || rec.userId === userId || cursor.key === `working:${userId}`) {
+            cursor.delete();
+          }
+          cursor.continue();
+        };
+      }
+      await idbTxDone(tx).catch(() => undefined);
+    }
+    if (db.objectStoreNames.contains(STORE_OUTBOX)) {
+      const tx = db.transaction(STORE_OUTBOX, "readwrite");
+      const store = tx.objectStore(STORE_OUTBOX);
+      if (!userId || userId <= 0) {
+        store.clear();
+      } else {
+        const req = store.openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) return;
+          const rec = cursor.value as OfflineOutboxItem | undefined;
+          if (!rec || rec.userId === userId) {
+            cursor.delete();
+          }
+          cursor.continue();
+        };
+      }
+      await idbTxDone(tx).catch(() => undefined);
+    }
+  } catch {
+    // Bỏ qua nếu trình duyệt đóng kết nối IndexedDB đột ngột
   }
-  await pruneExpiredAndExcessDrafts();
 }
 
 async function deleteFieldDraftRecordById(id: string): Promise<void> {

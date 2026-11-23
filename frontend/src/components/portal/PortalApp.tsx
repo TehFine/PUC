@@ -19,7 +19,6 @@ import {
 import { type ChangeEvent, FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hasPendingServerLogout, useAuth } from "@/components/auth/AuthProvider";
 import { WORKSPACE_ACTIVE_SESSION_KEY } from "@/components/landing/AutoEnter";
-import { ActiveSessionsSheet, TwoFactorSecuritySheet } from "@/components/layout/UserSecuritySheets";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { ConfirmDialog } from "@/components/ui/Modal";
 import OfflineSyncBar from "@/components/ui/OfflineSyncBar";
@@ -28,12 +27,11 @@ import {
   invalidateQueries,
   NOTIFICATIONS_PATH,
   portalPath,
-  usePortal,
   useSharedQuery,
   warmPortalEssentialOfflineCache,
 } from "@/hooks/use-portal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
-import { useRealtimeNotifications } from "@/lib/realtime-notifications";
+import { isRealtimeStreamConnected, useRealtimeNotifications } from "@/lib/realtime-notifications";
 import {
   api,
   AUTH_EXPIRED_EVENT,
@@ -63,6 +61,15 @@ import dynamic from "next/dynamic";
 import "./portal.css";
 import HomeTab from "./HomeTab";
 import { PortalLangProvider, usePortalLang } from "./i18n";
+
+const ActiveSessionsSheet = dynamic(
+  () => import("@/components/layout/UserSecuritySheets").then((m) => m.ActiveSessionsSheet),
+  { ssr: false },
+);
+const TwoFactorSecuritySheet = dynamic(
+  () => import("@/components/layout/UserSecuritySheets").then((m) => m.TwoFactorSecuritySheet),
+  { ssr: false },
+);
 import type { PortalAction, PortalSearchTarget } from "./PortalSearch";
 import { RadialPngIcon } from "./RadialIcons";
 import RadialNavWheel from "./RadialNavWheel";
@@ -199,6 +206,10 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!currentPassword) {
+      setError(t("Vui lòng nhập mật khẩu hiện tại."));
+      return;
+    }
     if (newPassword.length < 8) {
       setError(t("Mật khẩu mới phải có tối thiểu 8 ký tự."));
       return;
@@ -223,6 +234,9 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
     setError(null);
     try {
       await api.post("/auth/change-password", { currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
       onSuccess();
     } catch (err) {
       setError(errorMessage(err, t("Không đổi được mật khẩu. Vui lòng kiểm tra lại mật khẩu hiện tại.")));
@@ -233,12 +247,17 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
   const inputType = showPassword ? "text" : "password";
 
   return (
-    <form className="pt-form" onSubmit={submit} noValidate>
+    <form className="pt-form" autoComplete="off" data-form-type="other" onSubmit={submit} noValidate>
       <Field label={t("Mật khẩu hiện tại")} htmlFor="cp-current">
         <input
           id="cp-current"
           type={inputType}
-          autoComplete="current-password"
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           value={currentPassword}
           onChange={(e) => {
             setCurrentPassword(e.target.value);
@@ -251,7 +270,12 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
         <input
           id="cp-new"
           type={inputType}
-          autoComplete="new-password"
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           minLength={8}
           value={newPassword}
           onChange={(e) => {
@@ -265,7 +289,12 @@ function ChangePasswordForm({ onSuccess, onClose }: { onSuccess: () => void; onC
         <input
           id="cp-confirm"
           type={inputType}
-          autoComplete="new-password"
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           minLength={8}
           value={confirmPassword}
           onChange={(e) => {
@@ -348,11 +377,10 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
   const router = useRouter();
   const { lang, setLang, t } = usePortalLang();
   const { status, session, logout, updateProfile, refreshSession } = useAuth();
-  const { data: overview } = usePortal<PortalOverview>("overview");
-  const { data: profile } = usePortal<PortalProfile>("profile");
-  const notifications = useSharedQuery<NotificationList>(
-    status === "authenticated" && session?.user.role === "farmer" ? NOTIFICATIONS_PATH : null,
-  );
+  const isFarmerAuth = status === "authenticated" && session?.user.role === "farmer";
+  const { data: overview } = useSharedQuery<PortalOverview>(isFarmerAuth ? portalPath("overview") : null);
+  const { data: profile } = useSharedQuery<PortalProfile>(isFarmerAuth ? portalPath("profile") : null);
+  const notifications = useSharedQuery<NotificationList>(isFarmerAuth ? NOTIFICATIONS_PATH : null);
 
   const [tab, setTab] = useState<PortalTabId>(() =>
     resolveClientPortalTab(initialTab, session?.user.id),
@@ -615,14 +643,17 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
 
   useEffect(() => {
     if (status !== "authenticated" || session?.user.role !== "farmer") return;
+    let lastTriggerAt = 0;
     const onFocusOrVisible = () => {
-      if (document.visibilityState === "visible") {
-        invalidateQueries(NOTIFICATIONS_PATH);
-      }
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastTriggerAt < 3_000) return;
+      lastTriggerAt = now;
+      invalidateQueries(NOTIFICATIONS_PATH);
     };
-    const pollMs = isLowEndDevice() ? 60000 : 30000;
+    const pollMs = isLowEndDevice() ? 90_000 : 60_000;
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && !isRealtimeStreamConnected()) {
         invalidateQueries(NOTIFICATIONS_PATH);
       }
     }, pollMs);
@@ -643,21 +674,21 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     const loaders = lowEnd
       ? [() => import("./DiaryTab"), () => import("./PlotsTab"), () => import("./PlotMapModal")]
       : [
-          () => import("./PlotsTab"),
-          () => import("./PlotMapModal"),
-          () => import("./DiaryTab"),
-          () => import("./StampsTab"),
-          () => import("./InspectionTab"),
-          () => import("./LearnTab"),
-          () => import("./PortalSearch"),
-        ];
+        () => import("./PlotsTab"),
+        () => import("./PlotMapModal"),
+        () => import("./DiaryTab"),
+        () => import("./StampsTab"),
+        () => import("./InspectionTab"),
+        () => import("./LearnTab"),
+        () => import("./PortalSearch"),
+      ];
     let cancelled = false;
     let timerId = 0;
     let idleId = 0;
     const ric =
       typeof window !== "undefined" && "requestIdleCallback" in window
         ? (window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number })
-            .requestIdleCallback
+          .requestIdleCallback
         : null;
     const cic =
       typeof window !== "undefined" && "cancelIdleCallback" in window
@@ -670,7 +701,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       const exec = () => {
         if (cancelled) return;
         loaders[idx]()
-          .catch(() => {})
+          .catch(() => { })
           .finally(() => {
             if (!cancelled) {
               timerId = window.setTimeout(() => runStep(idx + 1), lowEnd ? 1100 : 650);
@@ -1523,15 +1554,19 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       {editAccountOpen && (
         <Sheet
           variant="drawer"
-          title={t("Cập nhật Email Google & Tài khoản")}
-          onClose={() => setEditAccountOpen(false)}
+          title={t("Cập nhật Email Google và Tài khoản")}
+          onClose={() => {
+            setAccountPasswordInput("");
+            setEditAccountOpen(false);
+          }}
           className="pt-password-sheet"
         >
-          <form className="pt-form" onSubmit={handleSaveAccount}>
+          <form className="pt-form" autoComplete="off" data-form-type="other" onSubmit={handleSaveAccount}>
             <Field label="Tên hiển thị tài khoản" htmlFor="pt-acc-name">
               <input
                 id="pt-acc-name"
                 type="text"
+                autoComplete="off"
                 value={accountNameInput}
                 onChange={(e) => setAccountNameInput(e.target.value)}
                 required
@@ -1541,6 +1576,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               <input
                 id="pt-acc-email"
                 type="email"
+                autoComplete="off"
                 placeholder="vi-du@gmail.com"
                 value={accountEmailInput}
                 onChange={(e) => setAccountEmailInput(e.target.value)}
@@ -1551,7 +1587,12 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
                 <input
                   id="pt-acc-current-password"
                   type="password"
-                  autoComplete="current-password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   placeholder="Nhập mật khẩu hiện tại của bạn"
                   value={accountPasswordInput}
                   onChange={(e) => setAccountPasswordInput(e.target.value)}
@@ -1567,7 +1608,10 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               <button
                 type="button"
                 className="pt-btn pt-btn-ghost"
-                onClick={() => setEditAccountOpen(false)}
+                onClick={() => {
+                  setAccountPasswordInput("");
+                  setEditAccountOpen(false);
+                }}
                 disabled={savingAccount}
               >
                 Hủy

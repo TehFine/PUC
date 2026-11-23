@@ -170,13 +170,18 @@ export default function LoginPage() {
     }
   }, [status, session, router, nextPath]);
 
-  // Tải cấu hình Google Sign-In từ backend
+  // Tải cấu hình Google Sign-In từ backend (không nạp tài khoản mẫu ở bản production)
   useEffect(() => {
     let active = true;
     api
       .get<GoogleAuthConfig>("/auth/google/config")
       .then((cfg) => {
-        if (active) setGoogleConfig(cfg);
+        if (!active) return;
+        setGoogleConfig(
+          process.env.NODE_ENV === "development"
+            ? cfg
+            : { ...cfg, demoAccounts: [] },
+        );
       })
       .catch(() => undefined);
     return () => {
@@ -184,10 +189,17 @@ export default function LoginPage() {
     };
   }, []);
 
-  // Đảm bảo dọn dẹp khi trang login unmount
+  // Đảm bảo dọn dẹp mật khẩu ngay khi trang login unmount hoặc rời trang (pagehide)
   useEffect(() => {
     const form = formRef.current;
+    const onPageHide = () => {
+      setPassword("");
+      setOtpCode("");
+      form?.reset();
+    };
+    window.addEventListener("pagehide", onPageHide);
     return () => {
+      window.removeEventListener("pagehide", onPageHide);
       form?.reset();
     };
   }, []);
@@ -243,6 +255,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const challenge = await login(cleanUser, password);
+      setPassword("");
       if (challenge) {
         setMfaChallenge(challenge);
         setOtpCode("");
@@ -423,10 +436,15 @@ export default function LoginPage() {
           <AuthField id="login-otp" label="Mã OTP 6 chữ số hoặc mã dự phòng">
             <input
               id="login-otp"
-              name="otp"
               className={`auth-input${error ? " is-error" : ""}`}
               inputMode="text"
-              autoComplete="one-time-code"
+              autoComplete="off"
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-form-type="other"
               autoFocus
               maxLength={12}
               placeholder="Ví dụ: 123456 hoặc A1B2C3D4"
@@ -476,15 +494,22 @@ export default function LoginPage() {
         ref={formRef}
         className={`auth-form${isBusy ? " is-processing" : ""}`}
         onSubmit={onSubmit}
+        autoComplete="off"
+        data-form-type="other"
         noValidate
         aria-busy={isBusy}
       >
         <AuthField id="login-username" label="Tên đăng nhập hoặc Số điện thoại">
           <input
             id="login-username"
-            name="username"
             className={`auth-input${error ? " is-error" : ""}`}
-            autoComplete="username"
+            autoComplete="off"
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-form-type="other"
             placeholder="Ví dụ: admin hoặc 0912345678"
             value={username}
             disabled={isBusy}
@@ -498,10 +523,9 @@ export default function LoginPage() {
         <AuthField id="login-password" label="Mật khẩu">
           <PasswordInput
             id="login-password"
-            name="password"
             className={error ? "is-error" : ""}
             show={showPassword}
-            autoComplete="current-password"
+            autoComplete="off"
             placeholder="Nhập mật khẩu"
             value={password}
             disabled={isBusy}
@@ -514,10 +538,7 @@ export default function LoginPage() {
 
         <div className="auth-meta-row">
           <ShowPasswordCheck id="login-show-password" checked={showPassword} onChange={setShowPassword} />
-          <Link
-            href={username.trim() ? `/forgot-password?username=${encodeURIComponent(username.trim())}` : "/forgot-password"}
-            className="auth-forgot-link"
-          >
+          <Link href="/forgot-password" className="auth-forgot-link">
             Quên mật khẩu?
           </Link>
         </div>

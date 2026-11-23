@@ -36,6 +36,7 @@ export function TextField({
   autoComplete,
   inputMode,
   disabled,
+  spellCheck,
   ...base
 }: BaseProps & {
   value: string;
@@ -48,8 +49,10 @@ export function TextField({
   autoComplete?: string;
   inputMode?: "text" | "numeric" | "decimal" | "tel";
   disabled?: boolean;
+  spellCheck?: boolean;
 }) {
   const id = useId();
+  const isNoAutofill = type === "password" || autoComplete === "off";
   return (
     <Wrap id={id} {...base}>
       <input
@@ -63,7 +66,13 @@ export function TextField({
         max={max}
         disabled={disabled}
         required={base.required}
-        autoComplete={autoComplete}
+        autoComplete={autoComplete ?? (type === "password" ? "off" : undefined)}
+        spellCheck={spellCheck ?? (isNoAutofill ? false : undefined)}
+        autoCorrect={isNoAutofill ? "off" : undefined}
+        autoCapitalize={isNoAutofill ? "off" : undefined}
+        data-lpignore={isNoAutofill ? "true" : undefined}
+        data-1p-ignore={isNoAutofill ? "true" : undefined}
+        data-form-type={isNoAutofill ? "other" : undefined}
         inputMode={inputMode}
         aria-invalid={base.error ? true : undefined}
         onChange={(event) => onChange(event.target.value)}

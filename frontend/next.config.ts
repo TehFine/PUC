@@ -37,8 +37,11 @@ const nextConfig: NextConfig = {
   distDir: process.env.NODE_ENV === "development" ? ".next-dev" : ".next",
   devIndicators: false,
   poweredByHeader: false,
-  // Không phát hành tệp .map mã nguồn trên bản build production.
+  // Không phát hành tệp .map mã nguồn trên bản build production và dọn log console dư thừa.
   productionBrowserSourceMaps: false,
+  compiler: {
+    removeConsole: isDev ? false : { exclude: ["warn"] },
+  },
   env: {
     [CSP_SCRIPT_HASHES_ENV]: perfBootstrapHash,
   },
@@ -85,6 +88,11 @@ const nextConfig: NextConfig = {
         source: "/sw.js",
         headers: [
           ...commonHeaders,
+          {
+            key: "Content-Security-Policy",
+            value:
+              "default-src 'self'; script-src 'self'; connect-src 'self' https://mt0.google.com https://mt1.google.com https://mt2.google.com https://mt3.google.com https://server.arcgisonline.com https://services.arcgisonline.com; worker-src 'self'",
+          },
           { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
           { key: "Service-Worker-Allowed", value: "/" },
         ],

@@ -1,12 +1,12 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import QRCode from "qrcode";
 import { BusyButton, InlineError } from "@/components/portal/shared/controls";
 import { Field, Sheet } from "@/components/portal/ui";
 import { ConfirmDialog, ModalDismissButton } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { api, errorMessage } from "@/lib/api-client";
+import { copySensitiveWithAutoClear } from "@/lib/request-security";
 import type { TwoFactorSetupResponse, UserSessionItem } from "@/types/api";
 
 function summarizeUserAgent(ua: string | null | undefined): string {
@@ -59,8 +59,12 @@ export function TwoFactorSecuritySheet({
     setBusy(true);
     setErr(null);
     try {
-      const res = await api.post<TwoFactorSetupResponse>("/auth/2fa/setup");
+      const [res, qrMod] = await Promise.all([
+        api.post<TwoFactorSetupResponse>("/auth/2fa/setup"),
+        import("qrcode"),
+      ]);
       setSetupData(res);
+      const QRCode = qrMod.default ?? qrMod;
       const url = await QRCode.toDataURL(res.otpauthUrl, {
         width: 220,
         margin: 1,
@@ -137,13 +141,10 @@ export function TwoFactorSecuritySheet({
   };
 
   const copyBackupCodes = async () => {
-    if (!backupCodes?.length || typeof navigator === "undefined") return;
-    try {
-      await navigator.clipboard.writeText(backupCodes.join("\n"));
+    if (!backupCodes?.length) return;
+    if (await copySensitiveWithAutoClear(backupCodes.join("\n"))) {
       setCopiedCodes(true);
       setTimeout(() => setCopiedCodes(false), 2500);
-    } catch {
-      // Bỏ qua nếu không có quyền clipboard
     }
   };
 
@@ -283,7 +284,12 @@ export function TwoFactorSecuritySheet({
                 id="um-2fa-code"
                 type="text"
                 inputMode="numeric"
-                autoComplete="one-time-code"
+                autoComplete="off"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 maxLength={6}
                 placeholder="123456"
                 value={otpInput}
@@ -300,7 +306,12 @@ export function TwoFactorSecuritySheet({
               <input
                 id="um-2fa-enable-pw"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="off"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 placeholder="Nhập mật khẩu hiện tại để xác nhận"
                 value={enablePassword}
                 onChange={(e) => {
@@ -340,12 +351,17 @@ export function TwoFactorSecuritySheet({
         )}
 
         {enabled && !backupCodes && (
-          <form onSubmit={(e) => void handleDisable(e)} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <form autoComplete="off" data-form-type="other" onSubmit={(e) => void handleDisable(e)} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Field label="Mật khẩu hiện tại (để xác nhận tắt 2FA)" htmlFor="um-2fa-disable-pw">
               <input
                 id="um-2fa-disable-pw"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="off"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 placeholder="Nhập mật khẩu hiện tại"
                 value={disablePassword}
                 onChange={(e) => setDisablePassword(e.target.value)}
@@ -356,7 +372,12 @@ export function TwoFactorSecuritySheet({
                 id="um-2fa-disable-code"
                 type="text"
                 inputMode="text"
-                autoComplete="one-time-code"
+                autoComplete="off"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 maxLength={12}
                 placeholder="123456 hoặc ABCD-2345"
                 value={disableOtp}

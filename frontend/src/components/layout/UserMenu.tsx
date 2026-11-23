@@ -8,7 +8,6 @@ import { ArrowLeft, Mail, QrCode } from "@/components/ui/PublicIcon";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { AdminNotificationBell } from "@/components/admin/notifications/AdminNotificationsSheet";
 import ChangePasswordModal from "@/components/admin/notifications/ChangePasswordModal";
-import { ActiveSessionsSheet, TwoFactorSecuritySheet } from "@/components/layout/UserSecuritySheets";
 import { RadialPngIcon } from "@/components/portal/RadialIcons";
 import { BusyButton, InlineError } from "@/components/portal/shared/controls";
 import { Field, Sheet } from "@/components/portal/ui";
@@ -19,6 +18,14 @@ import { usePersistedState } from "@/lib/back-navigation";
 import { INTRO_PATH } from "@/lib/routes";
 
 const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
+const ActiveSessionsSheet = dynamic(
+  () => import("@/components/layout/UserSecuritySheets").then((m) => m.ActiveSessionsSheet),
+  { ssr: false },
+);
+const TwoFactorSecuritySheet = dynamic(
+  () => import("@/components/layout/UserSecuritySheets").then((m) => m.TwoFactorSecuritySheet),
+  { ssr: false },
+);
 
 const initials = (name: string | null | undefined) =>
   (name ?? "")
@@ -335,15 +342,19 @@ export default function UserMenu({
       {editingProfile && (
         <Sheet
           variant="drawer"
-          title="Cập nhật hồ sơ & Email Google"
-          onClose={() => setEditingProfile(false)}
+          title="Cập nhật hồ sơ và Email Google"
+          onClose={() => {
+            setProfilePasswordInput("");
+            setEditingProfile(false);
+          }}
           className="pt-password-sheet"
         >
-          <form className="pt-form" onSubmit={handleSaveProfile}>
+          <form className="pt-form" autoComplete="off" data-form-type="other" onSubmit={handleSaveProfile}>
             <Field label="Họ và tên hiển thị" htmlFor="um-fullname">
               <input
                 id="um-fullname"
                 type="text"
+                autoComplete="off"
                 value={fullNameInput}
                 onChange={(e) => setFullNameInput(e.target.value)}
                 required
@@ -353,6 +364,7 @@ export default function UserMenu({
               <input
                 id="um-email"
                 type="email"
+                autoComplete="off"
                 placeholder="vi-du@gmail.com"
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
@@ -363,7 +375,12 @@ export default function UserMenu({
                 <input
                   id="um-current-password"
                   type="password"
-                  autoComplete="current-password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   placeholder="Nhập mật khẩu hiện tại của bạn"
                   value={profilePasswordInput}
                   onChange={(e) => setProfilePasswordInput(e.target.value)}
@@ -379,7 +396,10 @@ export default function UserMenu({
               <button
                 type="button"
                 className="pt-btn pt-btn-ghost"
-                onClick={() => setEditingProfile(false)}
+                onClick={() => {
+                  setProfilePasswordInput("");
+                  setEditingProfile(false);
+                }}
                 disabled={savingProfile}
               >
                 Hủy

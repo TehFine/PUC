@@ -2,7 +2,9 @@ import {
   AUTH_EXPIRED_EVENT,
   AUTH_LOGOUT_EVENT,
   AUTH_SCOPE_CHANGED_EVENT,
+  getServerCalibratedDate,
 } from "@/lib/api-client";
+import { buildSignedSecurityHeaders } from "@/lib/request-security";
 
 export type TargetLang = "en" | "zh";
 export type PortalLang = "vi" | "en" | "zh";
@@ -262,15 +264,21 @@ async function postTranslateBatch(
         : undefined;
     // Gọi trực tiếp endpoint nội bộ '/api/portal/translate' (tuân thủ CSP connect-src 'self'
     // và không kích hoạt sự kiện DATA_MUTATED_EVENT làm tải lại dữ liệu các tab).
+    const bodyStr = JSON.stringify({ target, texts });
     const res = await fetch("/api/portal/translate", {
       method: "POST",
       credentials: "same-origin",
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
+        ...buildSignedSecurityHeaders(
+          "POST",
+          "/api/portal/translate",
+          bodyStr,
+          getServerCalibratedDate().getTime(),
+        ),
       },
-      body: JSON.stringify({ target, texts }),
+      body: bodyStr,
       signal,
     });
     if (!res.ok) return null;

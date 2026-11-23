@@ -159,7 +159,8 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
     let active = true;
     fetch(`/api/harvest/plot-signboards?q=${encodeURIComponent(plot.code)}`, {
-      credentials: "include",
+      credentials: "same-origin",
+      cache: "no-store",
     })
       .then((res) => (res.ok ? res.json() : null))
       .then(

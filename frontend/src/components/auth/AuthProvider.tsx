@@ -153,6 +153,7 @@ function purgeServiceWorkerAuthShell(): void {
   }
   if (typeof caches !== "undefined") {
     void caches.delete("puc-portal-shell-v1").catch(() => undefined);
+    void caches.delete("puc-map-tiles-v1").catch(() => undefined);
   }
 }
 
@@ -186,7 +187,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      saveOfflineAuthSession(result);
+      if (result.user.role === "farmer") {
+        saveOfflineAuthSession(result);
+      } else {
+        clearOfflineAuthSession();
+      }
       setSession(result);
       setStatus("authenticated");
       attachOfflineSyncEngine(nextUserId);

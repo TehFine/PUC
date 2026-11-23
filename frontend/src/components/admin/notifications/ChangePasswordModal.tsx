@@ -55,6 +55,9 @@ function ChangePasswordFormContent({
         currentPassword,
         newPassword,
       });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
       onSuccess();
     } catch (err) {
       setError(errorMessage(err, "Không đổi được mật khẩu. Vui lòng kiểm tra lại mật khẩu hiện tại."));
@@ -65,12 +68,17 @@ function ChangePasswordFormContent({
   const inputType = showPassword ? "text" : "password";
 
   return (
-    <form className="pt-form" onSubmit={(e) => void submit(e)} noValidate>
+    <form className="pt-form" autoComplete="off" data-form-type="other" onSubmit={(e) => void submit(e)} noValidate>
       <Field label="Mật khẩu hiện tại" htmlFor="admin-cp-current">
         <input
           id="admin-cp-current"
           type={inputType}
-          autoComplete="current-password"
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           value={currentPassword}
           onChange={(e) => {
             setCurrentPassword(e.target.value);
@@ -83,7 +91,12 @@ function ChangePasswordFormContent({
         <input
           id="admin-cp-new"
           type={inputType}
-          autoComplete="new-password"
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           minLength={8}
           value={newPassword}
           onChange={(e) => {
@@ -97,7 +110,12 @@ function ChangePasswordFormContent({
         <input
           id="admin-cp-confirm"
           type={inputType}
-          autoComplete="new-password"
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           minLength={8}
           value={confirmPassword}
           onChange={(e) => {

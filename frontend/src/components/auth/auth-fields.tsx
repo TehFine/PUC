@@ -89,10 +89,24 @@ export function PasswordInput({
   show,
   className,
   isError,
+  autoComplete = "off",
   ...props
 }: { show: boolean; isError?: boolean } & Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
   const fullClass = ["auth-input", isError ? "is-error" : "", className].filter(Boolean).join(" ");
-  return <input {...props} className={fullClass} type={show ? "text" : "password"} />;
+  return (
+    <input
+      {...props}
+      autoComplete={autoComplete}
+      spellCheck={false}
+      autoCorrect="off"
+      autoCapitalize="off"
+      data-lpignore="true"
+      data-1p-ignore="true"
+      data-form-type="other"
+      className={fullClass}
+      type={show ? "text" : "password"}
+    />
+  );
 }
 
 /** Ô tích "Hiện mật khẩu" góc vuông dễ quan sát cho bà con nông hộ. */

@@ -1,4 +1,5 @@
 import { getNetworkQualitySnapshot, reportRequestTime } from "@/lib/network";
+import { buildSignedSecurityHeaders } from "@/lib/request-security";
 import { reportServerFailure, reportServerHealthy } from "@/lib/system-alert";
 
 export class ApiError extends Error {
@@ -93,10 +94,19 @@ let refreshing: Promise<boolean> | null = null;
 function refreshSession(): Promise<boolean> {
   refreshing ??= fetch("/api/auth/refresh", {
     method: "POST",
+    cache: "no-store",
     credentials: "same-origin",
-    headers: { "X-Requested-With": "XMLHttpRequest" },
+    headers: buildSignedSecurityHeaders(
+      "POST",
+      "/api/auth/refresh",
+      undefined,
+      getServerCalibratedDate().getTime(),
+    ),
   })
-    .then((response) => response.ok)
+    .then((response) => {
+      syncServerClockFromHeader(response.headers.get("date"));
+      return response.ok;
+    })
     .catch(() => false)
     .finally(() => {
       refreshing = null;
@@ -217,7 +227,21 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     const rawHeaders = init?.headers as Record<string, string> | undefined;
     let headers: Record<string, string> | undefined = rawHeaders;
     if (isMutating) {
-      headers = { "X-Requested-With": "XMLHttpRequest", ...rawHeaders };
+      const isMultipart = typeof FormData !== "undefined" && init?.body instanceof FormData;
+      if (isMultipart) {
+        headers = { "X-Requested-With": "XMLHttpRequest", ...rawHeaders };
+      } else {
+        const bodyText = typeof init?.body === "string" ? init.body : undefined;
+        headers = {
+          ...buildSignedSecurityHeaders(
+            method,
+            `/api${path}`,
+            bodyText,
+            getServerCalibratedDate().getTime(),
+          ),
+          ...rawHeaders,
+        };
+      }
     } else if (cachedEtag && !rawHeaders?.["If-None-Match"]) {
       headers = { "If-None-Match": cachedEtag.etag, ...rawHeaders };
     }
@@ -292,8 +316,8 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       typeof body?.retryAfterSeconds === "number" && body.retryAfterSeconds > 0
         ? body.retryAfterSeconds
         : Number.isFinite(headerRetry) && headerRetry > 0
-        ? Math.ceil(headerRetry)
-        : undefined;
+          ? Math.ceil(headerRetry)
+          : undefined;
     const fallbackError =
       response.status === 429
         ? retryAfterSeconds
