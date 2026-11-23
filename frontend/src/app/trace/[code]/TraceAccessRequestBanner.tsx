@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, getServerCalibratedDate } from "@/lib/api-client";
+import { useBackLayer } from "@/lib/back-navigation";
 import { buildSignedSecurityHeaders } from "@/lib/request-security";
 import type { TraceLang } from "./trace-i18n";
 
@@ -21,6 +23,13 @@ interface TraceAccessRequestBannerProps {
   scannedCode: string;
   lang: TraceLang;
   actualTier: "public" | "enterprise" | "authority";
+  isAuthenticated: boolean;
+  fieldAuditPassActive: boolean;
+  loginHref: string;
+  auditPassInput: string;
+  onAuditPassInputChange: (val: string) => void;
+  onApplyAuditPass: (e: FormEvent) => void;
+  switchingTier: boolean;
   defaultRequesterName?: string | null;
   externalOpenTrigger?: number;
   onGrantActivated: (passToken: string, grantedTier: "enterprise" | "authority") => void;
@@ -29,9 +38,16 @@ interface TraceAccessRequestBannerProps {
 const COPY: Record<
   TraceLang,
   {
-    bannerTitle: string;
-    bannerDesc: string;
-    openBtn: string;
+    cardTitle: string;
+    cardDesc: string;
+    havePassLabel: string;
+    passPlaceholder: string;
+    passSubmitBtn: string;
+    noPassLabel: string;
+    requestBtn: string;
+    loginBtn: string;
+    upgradeTitle: string;
+    upgradeDesc: string;
     pendingTitleFmt: (code: string) => string;
     pendingDesc: string;
     rejectedTitleFmt: (code: string) => string;
@@ -57,99 +73,112 @@ const COPY: Record<
   }
 > = {
   vi: {
-    bannerTitle: "Đoàn công tác hoặc đơn vị thanh tra cần cấp quyền xem hồ sơ đánh giá?",
-    bannerDesc:
-      "Nếu đoàn kiểm tra hoặc đối tác xuống làm việc đột xuất chưa có lịch báo trước, gửi yêu cầu trực tiếp để Quản trị viên phê duyệt và mở quyền xem chi tiết ngay tức thời trên trang này.",
-    openBtn: "Yêu cầu cấp quyền xem hồ sơ",
-    pendingTitleFmt: (code) => `ĐANG CHỜ PHÊ DUYỆT CẤP QUYỀN (${code})`,
-    pendingDesc:
-      "Hệ thống đã phát thông báo thời gian thực tới Quản trị viên và Ban điều hành HTX. Trang này sẽ tự động mở khóa hồ sơ đánh giá ngay khi được phê duyệt.",
-    rejectedTitleFmt: (code) => `YÊU CẦU CẤP QUYỀN CHƯA ĐƯỢC CHẤP THUẬN (${code})`,
+    cardTitle: "Mở hồ sơ chi tiết cho Đoàn kiểm tra và Đối tác",
+    cardDesc:
+      "Nhập mã thẻ được cấp để xem ngay, hoặc gửi yêu cầu nếu đoàn làm việc đột xuất chưa có mã.",
+    havePassLabel: "Đã có mã thẻ thẩm định",
+    passPlaceholder: "Nhập mã thẻ được cấp...",
+    passSubmitBtn: "Mở hồ sơ",
+    noPassLabel: "Chưa có mã thẻ",
+    requestBtn: "Yêu cầu cấp quyền",
+    loginBtn: "Đăng nhập",
+    upgradeTitle: "Cần xem hồ sơ cấp cơ quan thanh tra?",
+    upgradeDesc: "Gửi yêu cầu để Quản trị viên mở quyền xem toàn diện ngay trên trang này.",
+    pendingTitleFmt: (code) => `Đang chờ duyệt (${code})`,
+    pendingDesc: "Trang sẽ tự động mở hồ sơ chi tiết ngay khi Quản trị viên phê duyệt.",
+    rejectedTitleFmt: (code) => `Chưa được duyệt (${code})`,
     rejectedDescFmt: (note) =>
-      note
-        ? `Phản hồi từ Ban quản trị: ${note}`
-        : "Yêu cầu chưa được phê duyệt. Quý đoàn có thể đối chiếu lại thông tin và gửi lại yêu cầu.",
+      note ? `Phản hồi: ${note}` : "Vui lòng kiểm tra lại thông tin và gửi lại yêu cầu.",
     retryBtn: "Gửi lại yêu cầu",
-    modalTitle: "Đề nghị cấp quyền xem hồ sơ đánh giá đột xuất",
+    modalTitle: "Yêu cầu quyền xem hồ sơ chi tiết",
     modalSub:
-      "Thông báo khẩn sẽ gửi tức thời tới Quản trị viên HTX. Màn hình đang mở sẽ tự động hiển thị hồ sơ mở rộng ngay sau khi được duyệt.",
+      "Quản trị viên HTX sẽ nhận thông báo ngay và trang này tự động mở hồ sơ khi được duyệt.",
     nameLabel: "Họ tên người đại diện",
-    namePh: "Nhập họ và tên trưởng đoàn hoặc cán bộ kiểm tra...",
-    orgLabel: "Đoàn công tác / Cơ quan / Công ty",
-    orgPh: "Ví dụ: Đoàn kiểm tra Chi cục TT và BVTV hoặc Công ty thu mua...",
-    phoneLabel: "Số điện thoại liên hệ trực tiếp",
-    phonePh: "Nhập số điện thoại để Quản trị viên đối chiếu khi cần...",
-    tierLabel: "Mức quyền hồ sơ đề nghị mở",
-    tierOptEnterprise: "Cấp 2 - Hồ sơ Đánh giá Đối tác và Thẩm định Thực địa vườn",
-    tierOptAuthority: "Cấp 3 - Hồ sơ Thanh tra Quản lý Nhà nước (Toàn diện)",
-    purposeLabel: "Nội dung làm việc / Lý do kiểm tra đột xuất",
-    purposePh: "Nêu ngắn gọn mục đích thẩm định vùng trồng, kiểm tra lô hàng hoặc truy vết...",
-    cancelBtn: "Đóng",
-    submitBtn: "Gửi yêu cầu phê duyệt ngay",
-    submittingBtn: "Đang gửi yêu cầu...",
+    namePh: "Nhập họ tên trưởng đoàn hoặc cán bộ...",
+    orgLabel: "Đơn vị công tác",
+    orgPh: "Tên đoàn kiểm tra, cơ quan hoặc công ty...",
+    phoneLabel: "Số điện thoại liên hệ",
+    phonePh: "Nhập số điện thoại đối chiếu...",
+    tierLabel: "Mức hồ sơ cần mở",
+    tierOptEnterprise: "Hồ sơ Đối tác và Kiểm tra tại vườn",
+    tierOptAuthority: "Hồ sơ Thanh tra cơ quan quản lý",
+    purposeLabel: "Lý do làm việc",
+    purposePh: "Nêu ngắn gọn mục đích thẩm định vùng trồng hoặc kiểm tra lô hàng...",
+    cancelBtn: "Hủy",
+    submitBtn: "Gửi yêu cầu",
+    submittingBtn: "Đang gửi...",
     defaultErr: "Chưa thể gửi yêu cầu lúc này. Vui lòng kiểm tra thông tin và thử lại.",
   },
   en: {
-    bannerTitle: "Visiting delegation or inspection team needing extended dossier access?",
-    bannerDesc:
-      "Unannounced buyer delegations or regulatory teams can send a live access request to Cooperative Administrators to unlock detailed assessment records right on this screen.",
-    openBtn: "Request Assessment Access",
-    pendingTitleFmt: (code) => `AWAITING ADMINISTRATOR APPROVAL (${code})`,
-    pendingDesc:
-      "A real-time alert has been sent to Cooperative Administrators. This page will automatically unlock the extended dossier the moment it is approved.",
-    rejectedTitleFmt: (code) => `ACCESS REQUEST DECLINED (${code})`,
+    cardTitle: "Extended Dossier for Inspectors and Partners",
+    cardDesc:
+      "Enter your issued pass code to view immediately, or send a request for unscheduled visits.",
+    havePassLabel: "Have an audit pass code",
+    passPlaceholder: "Enter issued pass code...",
+    passSubmitBtn: "Unlock",
+    noPassLabel: "No pass code yet",
+    requestBtn: "Request Access",
+    loginBtn: "Sign In",
+    upgradeTitle: "Need full regulatory inspection access?",
+    upgradeDesc: "Send a request for Administrators to unlock the full dossier on this page.",
+    pendingTitleFmt: (code) => `Awaiting approval (${code})`,
+    pendingDesc: "This page will automatically unlock the dossier once approved.",
+    rejectedTitleFmt: (code) => `Request declined (${code})`,
     rejectedDescFmt: (note) =>
-      note
-        ? `Administrator note: ${note}`
-        : "This request was declined. You may update your delegation details and submit again.",
-    retryBtn: "Submit New Request",
-    modalTitle: "Request On-Site Extended Traceability Access",
+      note ? `Note: ${note}` : "Please check your details and submit again.",
+    retryBtn: "Resubmit",
+    modalTitle: "Request Extended Dossier Access",
     modalSub:
-      "An instant notification will be delivered to Cooperative Administrators. Your screen will unlock automatically upon approval.",
-    nameLabel: "Representative Full Name",
+      "Administrators are notified immediately and this page unlocks automatically upon approval.",
+    nameLabel: "Representative Name",
     namePh: "Enter delegation lead or inspector name...",
-    orgLabel: "Delegation / Company / Agency",
-    orgPh: "e.g. Import Quality Audit Team or Regulatory Authority...",
-    phoneLabel: "Direct Contact Phone",
-    phonePh: "Phone number for quick verification...",
-    tierLabel: "Requested Access Tier",
-    tierOptEnterprise: "Tier 2 - Partner Assessment & On-Site Orchard Audit",
-    tierOptAuthority: "Tier 3 - Full Regulatory Inspection Dossier",
-    purposeLabel: "Inspection / Assessment Purpose",
-    purposePh: "Briefly state the purpose of this unscheduled audit or inspection...",
+    orgLabel: "Organization / Agency",
+    orgPh: "Inspection team, company, or authority...",
+    phoneLabel: "Contact Phone",
+    phonePh: "Direct phone number...",
+    tierLabel: "Requested Dossier Scope",
+    tierOptEnterprise: "Partner Assessment & Orchard Audit",
+    tierOptAuthority: "Regulatory Inspection Dossier",
+    purposeLabel: "Inspection Purpose",
+    purposePh: "Briefly state the purpose of this audit or inspection...",
     cancelBtn: "Cancel",
-    submitBtn: "Send Live Request",
+    submitBtn: "Send Request",
     submittingBtn: "Sending...",
     defaultErr: "Unable to submit request. Please check all fields and retry.",
   },
   zh: {
-    bannerTitle: "临时到访考察团或监管抽检组需申请查看评估档案？",
-    bannerDesc:
-      "如采购考察团或监管人员临时到访未提前预约，可直接向合作社管理员发送实时授权申请，审批通过后本页面将自动解锁详细评估档案。",
-    openBtn: "申请查看评估档案权限",
-    pendingTitleFmt: (code) => `正在等待管理员实时审批（${code}）`,
-    pendingDesc:
-      "系统已向合作社管理员发送实时通知。管理员批准后，当前页面将自动刷新并解锁扩展档案，无需手动操作。",
-    rejectedTitleFmt: (code) => `权限申请未获通过（${code}）`,
+    cardTitle: "考察团与合作方详细档案",
+    cardDesc: "输入已发放的通行码即可查看，临时到访无通行码可在线申请授权。",
+    havePassLabel: "已有核验通行码",
+    passPlaceholder: "输入已发放的通行码...",
+    passSubmitBtn: "立即开启",
+    noPassLabel: "暂无通行码",
+    requestBtn: "申请临时授权",
+    loginBtn: "账号登录",
+    upgradeTitle: "需要查看监管稽核完整档案？",
+    upgradeDesc: "向管理员发送实时申请，审批通过后本页将直接解锁完整档案。",
+    pendingTitleFmt: (code) => `等待审批（${code}）`,
+    pendingDesc: "管理员批准后，当前页面将自动解锁详细档案。",
+    rejectedTitleFmt: (code) => `申请未通过（${code}）`,
     rejectedDescFmt: (note) =>
-      note ? `管理员回复：${note}` : "当前申请未获通过，请核对单位与联系信息后重新提交。",
-    retryBtn: "重新提交申请",
-    modalTitle: "申请临时解锁扩展溯源与评估档案",
-    modalSub: "提交后将立即推送至合作社管理端，审批通过后当前页面自动生效。",
+      note ? `回复：${note}` : "请核对单位与联系信息后重新提交。",
+    retryBtn: "重新提交",
+    modalTitle: "申请查看详细档案权限",
+    modalSub: "提交后将实时通知合作社管理员，批准后本页自动生效。",
     nameLabel: "代表人姓名",
     namePh: "请输入考察团负责人或抽检人员姓名...",
-    orgLabel: "所属考察团 / 企业 / 监管单位",
-    orgPh: "例如：进口采购品控组 或 检疫监管部门...",
+    orgLabel: "所属单位",
+    orgPh: "考察团、采购企业或监管部门名称...",
     phoneLabel: "联系电话",
-    phonePh: "请输入便于核实的联系电话...",
-    tierLabel: "申请解锁级别",
-    tierOptEnterprise: "二级权限 - 采购商评估与果园实地核查档案",
-    tierOptAuthority: "三级权限 - 政府监管与全面稽核档案",
-    purposeLabel: "现场核查或评估事由",
-    purposePh: "请简要说明本次临时现场考察、验货或抽检事由...",
+    phonePh: "请输入联系电话...",
+    tierLabel: "申请查看范围",
+    tierOptEnterprise: "合作方评估与果园核查档案",
+    tierOptAuthority: "监管部门全面稽核档案",
+    purposeLabel: "核查事由",
+    purposePh: "请简要说明本次现场考察、验货或抽检事由...",
     cancelBtn: "取消",
-    submitBtn: "立即发送审批申请",
-    submittingBtn: "正在发送...",
+    submitBtn: "提交申请",
+    submittingBtn: "正在提交...",
     defaultErr: "暂时无法提交申请，请检查填写内容后重试。",
   },
 };
@@ -191,6 +220,13 @@ export default function TraceAccessRequestBanner({
   scannedCode,
   lang,
   actualTier,
+  isAuthenticated,
+  fieldAuditPassActive,
+  loginHref,
+  auditPassInput,
+  onAuditPassInputChange,
+  onApplyAuditPass,
+  switchingTier,
   defaultRequesterName,
   externalOpenTrigger = 0,
   onGrantActivated,
@@ -227,6 +263,26 @@ export default function TraceAccessRequestBanner({
       setModalOpen(true);
     }
   }
+
+  const closeModal = useCallback(() => {
+    if (!submitting) {
+      setModalOpen(false);
+    }
+  }, [submitting]);
+
+  useBackLayer(modalOpen, closeModal);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !submitting) {
+        e.stopPropagation();
+        setModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [modalOpen, submitting]);
 
   const openRequestModal = () => {
     setFormError(null);
@@ -396,6 +452,7 @@ export default function TraceAccessRequestBanner({
       };
       writeSavedReq(nextSession);
       setSavedReq(nextSession);
+      setPurpose("");
       setModalOpen(false);
     } catch {
       setFormError(c.defaultErr);
@@ -404,50 +461,129 @@ export default function TraceAccessRequestBanner({
     }
   };
 
+  const showPassInput = !fieldAuditPassActive && actualTier === "public" && !isAuthenticated;
+  const isApproved = savedReq?.status === "approved";
+
+  const renderRequestSection = () => {
+    if (savedReq?.status === "pending") {
+      return (
+        <div className="tr-uac-status" role="status">
+          <strong className="tr-uac-status-title is-pending">
+            {c.pendingTitleFmt(savedReq.requestCode)}
+          </strong>
+          <p className="tr-uac-status-note">{c.pendingDesc}</p>
+        </div>
+      );
+    }
+    if (savedReq?.status === "rejected") {
+      return (
+        <div className="tr-uac-status" role="status">
+          <strong className="tr-uac-status-title is-rejected">
+            {c.rejectedTitleFmt(savedReq.requestCode)}
+          </strong>
+          <p className="tr-uac-status-note">
+            {c.rejectedDescFmt(savedReq.reviewNote ?? null)}
+          </p>
+          <div className="tr-uac-actions">
+            <button
+              type="button"
+              className="tr-uac-btn-outline is-strong"
+              onClick={openRequestModal}
+            >
+              {c.retryBtn}
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <>
+        <span className="tr-uac-label">{c.noPassLabel}</span>
+        <div className="tr-uac-actions">
+          <button
+            type="button"
+            className="tr-uac-btn-outline is-strong"
+            onClick={openRequestModal}
+          >
+            {c.requestBtn}
+          </button>
+          {!isAuthenticated && (
+            <Link href={loginHref} className="tr-uac-btn-outline">
+              {c.loginBtn}
+            </Link>
+          )}
+        </div>
+      </>
+    );
+  };
+
   return (
     <>
-      {savedReq?.status === "pending" ? (
-        <section className="tr-access-req-card is-pending no-print" role="status">
-          <div className="tr-access-req-copy">
-            <strong className="tr-access-req-title">
-              {c.pendingTitleFmt(savedReq.requestCode)}
-            </strong>
-            <p className="tr-access-req-desc">{c.pendingDesc}</p>
-          </div>
-        </section>
-      ) : savedReq?.status === "rejected" ? (
-        <section className="tr-access-req-card is-rejected no-print" role="status">
-          <div className="tr-access-req-copy">
-            <strong className="tr-access-req-title">
-              {c.rejectedTitleFmt(savedReq.requestCode)}
-            </strong>
-            <p className="tr-access-req-desc">
-              {c.rejectedDescFmt(savedReq.reviewNote ?? null)}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="tr-access-req-btn"
-            onClick={openRequestModal}
-          >
-            {c.retryBtn}
-          </button>
-        </section>
-      ) : savedReq?.status !== "approved" ? (
-        <section className="tr-access-req-card no-print">
-          <div className="tr-access-req-copy">
-            <strong className="tr-access-req-title">{c.bannerTitle}</strong>
-            <p className="tr-access-req-desc">{c.bannerDesc}</p>
-          </div>
-          <button
-            type="button"
-            className="tr-access-req-btn"
-            onClick={openRequestModal}
-          >
-            {c.openBtn}
-          </button>
-        </section>
-      ) : null}
+      {!isApproved &&
+        (showPassInput ? (
+          <section className="tr-unified-access-card no-print" aria-label={c.cardTitle}>
+            <div className="tr-uac-head">
+              <strong className="tr-uac-title">{c.cardTitle}</strong>
+              <p className="tr-uac-desc">{c.cardDesc}</p>
+            </div>
+
+            <div className="tr-uac-body">
+              <div className="tr-uac-col">
+                <span className="tr-uac-label">{c.havePassLabel}</span>
+                <form
+                  className="tr-uac-pass-form"
+                  autoComplete="off"
+                  onSubmit={onApplyAuditPass}
+                >
+                  <input
+                    type="text"
+                    className="tr-uac-input"
+                    value={auditPassInput}
+                    onChange={(e) => onAuditPassInputChange(e.target.value)}
+                    placeholder={c.passPlaceholder}
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    spellCheck={false}
+                  />
+                  <button
+                    type="submit"
+                    className="tr-uac-btn-solid"
+                    disabled={switchingTier || !auditPassInput.trim()}
+                  >
+                    {c.passSubmitBtn}
+                  </button>
+                </form>
+              </div>
+
+              <div className="tr-uac-col">{renderRequestSection()}</div>
+            </div>
+          </section>
+        ) : (
+          <section className="tr-unified-access-card is-compact no-print" aria-label={c.upgradeTitle}>
+            {savedReq?.status === "pending" || savedReq?.status === "rejected" ? (
+              <div className="tr-uac-single">{renderRequestSection()}</div>
+            ) : (
+              <div className="tr-uac-single is-inline">
+                <div className="tr-uac-single-copy">
+                  <strong className="tr-uac-title">
+                    {actualTier === "enterprise" ? c.upgradeTitle : c.cardTitle}
+                  </strong>
+                  <p className="tr-uac-desc">
+                    {actualTier === "enterprise" ? c.upgradeDesc : c.cardDesc}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="tr-uac-btn-solid"
+                  onClick={openRequestModal}
+                >
+                  {c.requestBtn}
+                </button>
+              </div>
+            )}
+          </section>
+        ))}
 
       {modalOpen && (
         <div
@@ -474,13 +610,17 @@ export default function TraceAccessRequestBanner({
                 className="tr-req-modal-close"
                 aria-label={c.cancelBtn}
                 disabled={submitting}
-                onClick={() => setModalOpen(false)}
+                onClick={closeModal}
               >
                 ×
               </button>
             </div>
 
-            <form className="tr-req-modal-form" onSubmit={(e) => void handleSubmit(e)}>
+            <form
+              className="tr-req-modal-form"
+              autoComplete="off"
+              onSubmit={(e) => void handleSubmit(e)}
+            >
               {formError && (
                 <div className="tr-req-modal-error" role="alert">
                   {formError}
@@ -495,6 +635,7 @@ export default function TraceAccessRequestBanner({
                     required
                     minLength={2}
                     maxLength={120}
+                    autoComplete="off"
                     value={requesterName}
                     onChange={(e) => setRequesterName(e.target.value)}
                     placeholder={c.namePh}
@@ -508,6 +649,7 @@ export default function TraceAccessRequestBanner({
                     required
                     minLength={8}
                     maxLength={20}
+                    autoComplete="off"
                     value={contactPhone}
                     onChange={(e) => setContactPhone(e.target.value)}
                     placeholder={c.phonePh}
@@ -522,6 +664,7 @@ export default function TraceAccessRequestBanner({
                   required
                   minLength={2}
                   maxLength={160}
+                  autoComplete="off"
                   value={organization}
                   onChange={(e) => setOrganization(e.target.value)}
                   placeholder={c.orgPh}
@@ -550,6 +693,7 @@ export default function TraceAccessRequestBanner({
                   minLength={5}
                   maxLength={500}
                   rows={3}
+                  autoComplete="off"
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
                   placeholder={c.purposePh}
@@ -561,7 +705,7 @@ export default function TraceAccessRequestBanner({
                   type="button"
                   className="tr-req-btn-secondary"
                   disabled={submitting}
-                  onClick={() => setModalOpen(false)}
+                  onClick={closeModal}
                 >
                   {c.cancelBtn}
                 </button>

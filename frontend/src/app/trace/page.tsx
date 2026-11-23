@@ -54,28 +54,49 @@ interface SamplePlot {
   producerLabel?: string | null;
 }
 
-interface DemoAuditPass {
-  code: string;
-  passToken: string;
-  delegationName: string;
-  defaultLang?: string;
-  expiresAt?: string;
+function extractPreservedUrlSuffix(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl, "https://puc.local");
+    const qs = new URLSearchParams();
+    const lang = parsed.searchParams.get("lang");
+    if (lang === "vi" || lang === "en" || lang === "zh") {
+      qs.set("lang", lang);
+    }
+    const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+    const pass = hashParams.get("auditPass");
+    const safeHash =
+      pass && /^[A-Za-z0-9_-]{4,80}$/.test(pass.trim())
+        ? `#auditPass=${encodeURIComponent(pass.trim())}`
+        : "";
+    return `${qs.toString() ? `?${qs.toString()}` : ""}${safeHash}`;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeLookupCandidate(raw: string): string {
+  return safeDecodeURIComponent(raw)
+    .trim()
+    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(/\s+/g, "");
 }
 
 function resolveTraceInputHref(rawInput: string): string | null {
   const trimmed = rawInput.trim();
   if (!trimmed || /^\.+$/.test(trimmed)) return null;
 
+  const preservedSuffix = /[?#]/.test(trimmed) ? extractPreservedUrlSuffix(trimmed) : "";
+
   const tokenPathMatch = /(?:^|\/)t\/([A-Za-z0-9_-]{6,64})(?:[/?#]|$)/.exec(trimmed);
   if (tokenPathMatch?.[1]) {
     const candidate = safeDecodeURIComponent(tokenPathMatch[1]).trim();
-    return isSafeTraceCode(candidate) ? `/t/${encodeURIComponent(candidate)}` : null;
+    return isSafeTraceCode(candidate) ? `/t/${encodeURIComponent(candidate)}${preservedSuffix}` : null;
   }
 
   const tracePathMatch = /(?:^|\/)trace\/([^/?#\s]+)(?:[/?#]|$)/.exec(trimmed);
   if (tracePathMatch?.[1]) {
-    const extracted = safeDecodeURIComponent(tracePathMatch[1]).trim();
-    return isSafeTraceCode(extracted) ? `/trace/${encodeURIComponent(extracted)}` : null;
+    const extracted = normalizeLookupCandidate(tracePathMatch[1]);
+    return isSafeTraceCode(extracted) ? `/trace/${encodeURIComponent(extracted)}${preservedSuffix}` : null;
   }
 
   if (/^https?:\/\//i.test(trimmed)) {
@@ -84,18 +105,20 @@ function resolveTraceInputHref(rawInput: string): string | null {
       const parts = parsed.pathname.split("/").filter(Boolean);
       const last = parts[parts.length - 1];
       if (!last) return null;
-      const extracted = safeDecodeURIComponent(last).trim();
-      return isSafeTraceCode(extracted) ? `/trace/${encodeURIComponent(extracted)}` : null;
+      const extracted = normalizeLookupCandidate(last);
+      return isSafeTraceCode(extracted) ? `/trace/${encodeURIComponent(extracted)}${preservedSuffix}` : null;
     } catch {
       return null;
     }
   }
 
-  if (/^[A-Za-z0-9]{12,24}$/.test(trimmed) && /[a-z]/.test(trimmed) && /[A-Z0-9]/.test(trimmed)) {
-    return isSafeTraceCode(trimmed) ? `/t/${encodeURIComponent(trimmed)}` : null;
+  const candidate = normalizeLookupCandidate(trimmed);
+  if (!candidate) return null;
+
+  if (/^[A-Za-z0-9]{12,24}$/.test(candidate) && /[a-z]/.test(candidate) && /[A-Z0-9]/.test(candidate)) {
+    return isSafeTraceCode(candidate) ? `/t/${encodeURIComponent(candidate)}` : null;
   }
 
-  const candidate = safeDecodeURIComponent(trimmed).trim();
   if (!isSafeTraceCode(candidate)) return null;
   return `/trace/${encodeURIComponent(candidate)}`;
 }
@@ -104,7 +127,6 @@ interface TraceSamplesResponse {
   lots: SampleLot[];
   stamps: SampleStamp[];
   plots?: SamplePlot[];
-  demoAuditPass?: DemoAuditPass | null;
 }
 
 type SampleTab = "all" | "lots" | "plots" | "stamps";
@@ -310,7 +332,6 @@ export default function TraceLookupPage() {
   const lots = useMemo(() => samples?.lots ?? [], [samples]);
   const stamps = useMemo(() => samples?.stamps ?? [], [samples]);
   const plots = useMemo(() => samples?.plots ?? [], [samples]);
-  const demoAuditPass = samples?.demoAuditPass ?? null;
 
   useEffect(() => {
     for (const lot of lots) {
@@ -373,8 +394,6 @@ export default function TraceLookupPage() {
   const visibleLots = tab === "all" ? lots.slice(0, 4) : lots;
   const visiblePlots = tab === "all" ? plots.slice(0, 2) : plots;
   const visibleStamps = tab === "all" ? stamps.slice(0, 2) : stamps;
-  const totalCount = lots.length + plots.length + stamps.length;
-  const firstDemoPlot = plots[0] ?? null;
 
   return (
     <div className="lp sw-page sw-trace-page" id="top">
@@ -541,7 +560,7 @@ export default function TraceLookupPage() {
                 className={`sw-tab-pill ${tab === "all" ? "is-active" : ""}`}
                 onClick={() => setTab("all")}
               >
-                Tất cả {!loading && totalCount > 0 ? `(${totalCount})` : ""}
+                Tất cả
               </button>
               <button
                 type="button"
@@ -550,7 +569,7 @@ export default function TraceLookupPage() {
                 className={`sw-tab-pill ${tab === "lots" ? "is-active" : ""}`}
                 onClick={() => setTab("lots")}
               >
-                Lô xuất xưởng {!loading && lots.length > 0 ? `(${lots.length})` : ""}
+                Lô xuất xưởng
               </button>
               <button
                 type="button"
@@ -559,7 +578,7 @@ export default function TraceLookupPage() {
                 className={`sw-tab-pill ${tab === "plots" ? "is-active" : ""}`}
                 onClick={() => setTab("plots")}
               >
-                Bảng QR Thửa đất {!loading && plots.length > 0 ? `(${plots.length})` : ""}
+                Bảng QR Thửa đất
               </button>
               <button
                 type="button"
@@ -568,7 +587,7 @@ export default function TraceLookupPage() {
                 className={`sw-tab-pill ${tab === "stamps" ? "is-active" : ""}`}
                 onClick={() => setTab("stamps")}
               >
-                Thùng và Tem mẫu {!loading && stamps.length > 0 ? `(${stamps.length})` : ""}
+                Thùng và Tem mẫu
               </button>
             </div>
           </div>
@@ -582,42 +601,6 @@ export default function TraceLookupPage() {
                 <p className="sw-field-audit-desc">
                   Thẻ đoàn công tác đã sẵn sàng. Quý đoàn có thể chọn bất kỳ thửa vườn hoặc lô hàng bên dưới, hoặc quét trực tiếp Bảng QR đầu thửa vườn để đối chiếu vị trí thực tế tại vườn.
                 </p>
-              </div>
-            </div>
-          )}
-
-          {demoAuditPass && firstDemoPlot && (
-            <div className="sw-field-audit-callout">
-              <div className="sw-field-audit-copy">
-                <span className="sw-field-audit-kicker">
-                  Mô hình điểm Cấp Xã - Tỉnh Đắk Lắk / Chế độ Thẩm định Thực địa Tại Vườn
-                </span>
-                <p className="sw-field-audit-desc">
-                  Dành cho Đoàn công tác Tỉnh và Đối tác thu mua nước ngoài: Quét Bảng QR cắm tại thửa vườn kết hợp mã thẻ đoàn{" "}
-                  <strong>{demoAuditPass.code}</strong> để mở ranh giới đa giác GIS, trần sản lượng đầu vụ và bấm đối chứng vị trí GPS ngay tại vườn.
-                </p>
-              </div>
-              <div className="sw-field-audit-actions">
-                <Link
-                  prefetch={false}
-                  href={`${firstDemoPlot.qrToken
-                    ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
-                    : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
-                    }?lang=vi#auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}`}
-                  className="sw-field-audit-btn is-primary"
-                >
-                  Thử Thẻ Đoàn tại Thửa {firstDemoPlot.plotCode} (VI)
-                </Link>
-                <Link
-                  prefetch={false}
-                  href={`${firstDemoPlot.qrToken
-                    ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
-                    : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
-                    }?lang=zh#auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}`}
-                  className="sw-field-audit-btn"
-                >
-                  体验中国采购团果园核验 (中文)
-                </Link>
               </div>
             </div>
           )}

@@ -346,45 +346,12 @@
 
 .auth-aside-lead {
   margin: 0;
-  max-width: 48ch;
-  font-size: 13.75px;
+  max-width: 44ch;
+  font-size: 14px;
   font-weight: 400;
-  line-height: 1.62;
+  line-height: 1.6;
   color: #52524d;
   text-wrap: pretty;
-}
-
-.auth-points {
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-}
-
-.auth-points li {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 10px;
-  padding: 10px 0;
-  border-top: 1px solid var(--au-stone-line);
-  font-size: 13.25px;
-  font-weight: 450;
-  line-height: 1.48;
-  color: #242421;
-}
-
-.auth-points li:last-child {
-  padding-bottom: 0;
-}
-
-.auth-point-num {
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-  color: #7c7c76;
 }
 
 /* Khối tạp chí chia đôi dọc (├) chỉ hiển thị ở giao diện nhỏ <= 960px */
@@ -1378,10 +1345,6 @@ select.auth-input {
   .auth-aside-lead {
     font-size: 13px;
     line-height: 1.52;
-  }
-  .auth-points li {
-    padding: 8px 0;
-    font-size: 12.75px;
   }
   .auth-main {
     padding: 24px 36px;

@@ -1850,28 +1850,74 @@ const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
   );
 });
 
+function extractPreservedUrlSuffix(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl, "https://puc.local");
+    const qs = new URLSearchParams();
+    const lang = parsed.searchParams.get("lang");
+    if (lang === "vi" || lang === "en" || lang === "zh") {
+      qs.set("lang", lang);
+    }
+    const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+    const pass = hashParams.get("auditPass");
+    const safeHash =
+      pass && /^[A-Za-z0-9_-]{4,80}$/.test(pass.trim())
+        ? `#auditPass=${encodeURIComponent(pass.trim())}`
+        : "";
+    return `${qs.toString() ? `?${qs.toString()}` : ""}${safeHash}`;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeLookupCandidate(raw: string): string {
+  return safeDecodeURIComponent(raw)
+    .trim()
+    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(/\s+/g, "");
+}
+
 function resolveSearchNavigationHref(rawInput: string): string | null {
   const trimmed = rawInput.trim();
   if (!trimmed || /^\.+$/.test(trimmed)) return null;
 
+  const preservedSuffix = /[?#]/.test(trimmed) ? extractPreservedUrlSuffix(trimmed) : "";
+
   const tokenPathMatch = /(?:^|\/)t\/([A-Za-z0-9_-]{6,64})(?:[/?#]|$)/.exec(trimmed);
   if (tokenPathMatch?.[1] && !/^\.+$/.test(tokenPathMatch[1]) && isSafeTraceCode(tokenPathMatch[1])) {
-    return `/t/${encodeURIComponent(tokenPathMatch[1])}`;
+    return `/t/${encodeURIComponent(tokenPathMatch[1])}${preservedSuffix}`;
   }
 
   const tracePathMatch = /(?:^|\/)trace\/([^/?#\s]+)(?:[/?#]|$)/.exec(trimmed);
   if (tracePathMatch?.[1]) {
-    const extracted = safeDecodeURIComponent(tracePathMatch[1]).trim();
+    const extracted = normalizeLookupCandidate(tracePathMatch[1]);
     if (!extracted || /^\.+$/.test(extracted) || !isSafeTraceCode(extracted)) return null;
-    return `/trace/${encodeURIComponent(extracted)}`;
+    return `/trace/${encodeURIComponent(extracted)}${preservedSuffix}`;
   }
 
-  if (/^[A-Za-z0-9]{12,24}$/.test(trimmed) && /[a-z]/.test(trimmed) && /[A-Z0-9]/.test(trimmed)) {
-    return `/t/${encodeURIComponent(trimmed)}`;
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const last = parts[parts.length - 1];
+      if (!last) return null;
+      const extracted = normalizeLookupCandidate(last);
+      if (!extracted || /^\.+$/.test(extracted) || !isSafeTraceCode(extracted)) return null;
+      return `/trace/${encodeURIComponent(extracted)}${preservedSuffix}`;
+    } catch {
+      return null;
+    }
   }
 
-  if (!isSafeTraceCode(trimmed)) return null;
-  return `/trace/${encodeURIComponent(trimmed)}`;
+  const candidate = normalizeLookupCandidate(trimmed);
+  if (!candidate || /^\.+$/.test(candidate)) return null;
+
+  if (/^[A-Za-z0-9]{12,24}$/.test(candidate) && /[a-z]/.test(candidate) && /[A-Z0-9]/.test(candidate)) {
+    return isSafeTraceCode(candidate) ? `/t/${encodeURIComponent(candidate)}` : null;
+  }
+
+  if (!isSafeTraceCode(candidate)) return null;
+  return `/trace/${encodeURIComponent(candidate)}`;
 }
 
 const AUDIT_PASS_SESSION_KEY = "puc_audit_pass";
@@ -1954,6 +2000,7 @@ export default function TraceView() {
   const [data, setData] = useState<TraceData | null>(null);
   const [selectedView, setSelectedView] = useState<ViewerTier | null>(() => readInitialViewParam());
   const [auditPass, setAuditPass] = useState<string | null>(() => readInitialAuditPass());
+  const [suppressTempGrant, setSuppressTempGrant] = useState(false);
   const [auditPassInput, setAuditPassInput] = useState("");
   const [openAccessReqCount, setOpenAccessReqCount] = useState(0);
   const [loading, setLoading] = useState(() => Boolean(code));
@@ -1989,16 +2036,22 @@ export default function TraceView() {
       setGisModalPlot(null);
     };
 
+    const onPageHide = () => {
+      setAuditPassInput("");
+    };
+
     window.addEventListener(PUC_URL_SYNC_EVENT, syncFromUrl);
     window.addEventListener("hashchange", syncFromUrl);
     window.addEventListener(AUTH_LOGOUT_EVENT, onAuthEnded);
     window.addEventListener(AUTH_EXPIRED_EVENT, onAuthEnded);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       window.cancelAnimationFrame(rafId);
       window.removeEventListener(PUC_URL_SYNC_EVENT, syncFromUrl);
       window.removeEventListener("hashchange", syncFromUrl);
       window.removeEventListener(AUTH_LOGOUT_EVENT, onAuthEnded);
       window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthEnded);
+      window.removeEventListener("pagehide", onPageHide);
     };
   }, [pathname, code]);
 
@@ -2021,6 +2074,7 @@ export default function TraceView() {
       // Bỏ qua lỗi lưu sessionStorage
     }
     setSwitchingTier(true);
+    setSuppressTempGrant(false);
     setAuditPass(cleaned);
     setAuditPassInput("");
   };
@@ -2035,6 +2089,7 @@ export default function TraceView() {
       // Bỏ qua lỗi lưu sessionStorage
     }
     setSwitchingTier(true);
+    setSuppressTempGrant(false);
     setAuditPass(passToken);
     setSelectedView(grantedTier);
   };
@@ -2055,6 +2110,7 @@ export default function TraceView() {
       // Bỏ qua lỗi xóa sessionStorage
     }
     setSwitchingTier(true);
+    setSuppressTempGrant(true);
     setAuditPass(null);
     setSelectedView(null);
   };
@@ -2133,6 +2189,7 @@ export default function TraceView() {
 
     const qs = new URLSearchParams();
     if (selectedView) qs.set("view", selectedView);
+    if (suppressTempGrant) qs.set("noGrant", "1");
     const querySuffix = qs.toString() ? `?${qs.toString()}` : "";
     const encodedCode = encodeURIComponent(code);
     const preferAuthenticatedEndpoint = isAuthenticated || isAuthenticatedRef.current;
@@ -2211,7 +2268,7 @@ export default function TraceView() {
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [code, selectedView, auditPass, isAuthenticated]);
+  }, [code, selectedView, auditPass, suppressTempGrant, isAuthenticated]);
 
   // Đồng bộ ngầm thời gian thực (SSE + khi quay lại tab / có mạng + kiểm tra định kỳ an toàn):
   // Tự động nạp lại dữ liệu mới nhất khi lô hàng, kiểm nghiệm, vùng trồng hoặc nhật ký thay đổi mà không nháy trang hay mất vị trí cuộn.
@@ -2234,6 +2291,7 @@ export default function TraceView() {
 
       const qs = new URLSearchParams();
       if (selectedView) qs.set("view", selectedView);
+      if (suppressTempGrant) qs.set("noGrant", "1");
       qs.set("bg", "1");
       const querySuffix = `?${qs.toString()}`;
       const encodedCode = encodeURIComponent(code);
@@ -2328,7 +2386,7 @@ export default function TraceView() {
       window.removeEventListener("focus", handleVisibilityOrFocus);
       window.removeEventListener("online", handleOnline);
     };
-  }, [code, loading, selectedView, auditPass]);
+  }, [code, loading, selectedView, auditPass, suppressTempGrant]);
 
   const handleSelectTier = (tier: ViewerTier) => {
     if (!data) return;
@@ -2395,11 +2453,11 @@ export default function TraceView() {
   // Mã chữ dự phòng của đơn vị thùng / quả / thửa (để kiểm tra khi tem trầy xước - 4b)
   const fallbackUnitSerial = pub
     ? data?.item?.serialCode ||
-      data?.farmerStamp?.serialCode ||
-      (pub.lotIdentity.scannedCode.toUpperCase() !== pub.lotIdentity.lotCode.toUpperCase() &&
+    data?.farmerStamp?.serialCode ||
+    (pub.lotIdentity.scannedCode.toUpperCase() !== pub.lotIdentity.lotCode.toUpperCase() &&
       pub.lotIdentity.scannedCode !== pub.lotIdentity.qrToken
-        ? pub.lotIdentity.scannedCode
-        : null)
+      ? pub.lotIdentity.scannedCode
+      : null)
     : null;
 
   const activeKind: TraceTargetKind =
@@ -2407,8 +2465,8 @@ export default function TraceView() {
       ? data.isPlotSignboard || pub.lotIdentity.traceUnit === "puc_zone"
         ? "plot"
         : data.isFarmerStamp ||
-            pub.lotIdentity.traceUnit === "fruit" ||
-            data.item?.itemType === "fruit"
+          pub.lotIdentity.traceUnit === "fruit" ||
+          data.item?.itemType === "fruit"
           ? "fruit"
           : pub.lotIdentity.traceUnit === "box" || data.item?.itemType === "box"
             ? "box"
@@ -2712,36 +2770,6 @@ export default function TraceView() {
               </section>
             )}
 
-            {!ac.fieldAuditPass?.active && data.isPlotSignboard && (
-              <section
-                className="tr-pass-prompt-card no-print is-featured"
-                aria-label={t.fieldAudit.passPromptTitle}
-              >
-                <div className="tr-pass-prompt-copy">
-                  <strong className="tr-pass-prompt-title">{t.fieldAudit.passPromptTitle}</strong>
-                  <p className="tr-pass-prompt-desc">{t.fieldAudit.passPromptDesc}</p>
-                </div>
-                <form className="tr-pass-form" onSubmit={handleApplyAuditPass}>
-                  <input
-                    type="text"
-                    className="tr-pass-input"
-                    value={auditPassInput}
-                    onChange={(e) => setAuditPassInput(e.target.value)}
-                    placeholder={t.fieldAudit.passInputPlaceholder}
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  <button
-                    type="submit"
-                    className="tr-pass-submit-btn"
-                    disabled={switchingTier || !auditPassInput.trim()}
-                  >
-                    {t.fieldAudit.passApplyBtn}
-                  </button>
-                </form>
-              </section>
-            )}
-
             {/* ─── Thông báo từ chối chi tiết khi tài khoản đã đăng nhập nhưng hồ sơ nằm ngoài phạm vi quản lý (Mục 2 & Mục 5) ─── */}
             {ac.isAuthenticated && ac.scopeDenied && (() => {
               const scopeCopy = getScopeDeniedCopy(
@@ -2868,16 +2896,6 @@ export default function TraceView() {
                 </div>
               </section>
             )}
-
-            {/* ─── Khối Gửi yêu cầu cấp quyền xem hồ sơ đánh giá đột xuất (Thông báo thời gian thực tới Quản trị viên) ─── */}
-            <TraceAccessRequestBanner
-              scannedCode={pub.lotIdentity.scannedCode || code}
-              lang={lang}
-              actualTier={ac.actualTier}
-              defaultRequesterName={ac.viewerName}
-              externalOpenTrigger={openAccessReqCount}
-              onGrantActivated={handleGrantActivated}
-            />
 
             {/* ─── Cảnh báo Thu hồi / Tạm dừng / Chống giả (nếu có) ─── */}
             {pub.lotIdentity.status === "revoked" && (() => {
@@ -3077,8 +3095,8 @@ export default function TraceView() {
                   : pub.lotIdentity.lotCode);
               const hasDistinctParentLot = Boolean(
                 pub.lotIdentity.lotCode &&
-                  pub.lotIdentity.lotCode.toUpperCase() !== unitPrimaryCode.toUpperCase() &&
-                  pub.lotIdentity.lotCode.toUpperCase() !== pub.growingZone.pucCode.toUpperCase(),
+                pub.lotIdentity.lotCode.toUpperCase() !== unitPrimaryCode.toUpperCase() &&
+                pub.lotIdentity.lotCode.toUpperCase() !== pub.growingZone.pucCode.toUpperCase(),
               );
 
               const activeDocTitle = isPlotDossier
@@ -3170,14 +3188,14 @@ export default function TraceView() {
                   : [];
               const hasRealPackingSpecs = Boolean(
                 entData?.packingSpecs &&
-                  (entData.packingSpecs.gradeAPct !== null ||
-                    entData.packingSpecs.avgBrix !== null ||
-                    Boolean(entData.packingSpecs.treatmentMethod) ||
-                    Boolean(entData.packingSpecs.transporter) ||
-                    Boolean(entData.packingSpecs.vehiclePlate) ||
-                    entData.packingSpecs.temperatureC !== null ||
-                    Boolean(entData.packingSpecs.departedAt) ||
-                    Boolean(entData.packingSpecs.estimatedArrival)),
+                (entData.packingSpecs.gradeAPct !== null ||
+                  entData.packingSpecs.avgBrix !== null ||
+                  Boolean(entData.packingSpecs.treatmentMethod) ||
+                  Boolean(entData.packingSpecs.transporter) ||
+                  Boolean(entData.packingSpecs.vehiclePlate) ||
+                  entData.packingSpecs.temperatureC !== null ||
+                  Boolean(entData.packingSpecs.departedAt) ||
+                  Boolean(entData.packingSpecs.estimatedArrival)),
               );
 
               type AuthHhSlice = {
@@ -3232,23 +3250,23 @@ export default function TraceView() {
                 Boolean(qrSrc),
                 entData
                   ? [
-                      showEntZones ? entData.sourceZones.length : 0,
-                      entData.massBalance
-                        ? `${entData.massBalance.cumulativeUsedKg}:${entData.massBalance.plots.length}`
-                        : "no-mb",
-                      entData.detailedLabTests.map((l) => `${l.code}:${l.result}`).join(","),
-                      hasRealPackingSpecs && entData.packingSpecs
-                        ? `${entData.packingSpecs.gradeAPct}:${entData.packingSpecs.avgBrix}:${entData.packingSpecs.temperatureC}:${entData.packingSpecs.vehiclePlate}`
-                        : "no-pack",
-                    ].join(";")
+                    showEntZones ? entData.sourceZones.length : 0,
+                    entData.massBalance
+                      ? `${entData.massBalance.cumulativeUsedKg}:${entData.massBalance.plots.length}`
+                      : "no-mb",
+                    entData.detailedLabTests.map((l) => `${l.code}:${l.result}`).join(","),
+                    hasRealPackingSpecs && entData.packingSpecs
+                      ? `${entData.packingSpecs.gradeAPct}:${entData.packingSpecs.avgBrix}:${entData.packingSpecs.temperatureC}:${entData.packingSpecs.vehiclePlate}`
+                      : "no-pack",
+                  ].join(";")
                   : "no-ent",
                 authData
                   ? [
-                      authHhSlices.length,
-                      authData.cultivationDiaries.length,
-                      authData.inspectionMinutes.length,
-                      authData.internalViolations.length,
-                    ].join(";")
+                    authHhSlices.length,
+                    authData.cultivationDiaries.length,
+                    authData.inspectionMinutes.length,
+                    authData.internalViolations.length,
+                  ].join(";")
                   : "no-auth",
               ].join("|");
 
@@ -3488,9 +3506,9 @@ export default function TraceView() {
                                       : undefined;
                                   const hasAuthGis = Boolean(
                                     authPlotEntry &&
-                                      (authPlotEntry.plot.geometryJson ||
-                                        (authPlotEntry.plot.lat !== null &&
-                                          authPlotEntry.plot.lng !== null)),
+                                    (authPlotEntry.plot.geometryJson ||
+                                      (authPlotEntry.plot.lat !== null &&
+                                        authPlotEntry.plot.lng !== null)),
                                   );
 
                                   let primaryHhTitle: string;
@@ -3604,9 +3622,8 @@ export default function TraceView() {
                                         )}
                                       </td>
                                       <td
-                                        className={`col-status ${
-                                          isCompliant ? "is-ok" : "is-danger"
-                                        }`}
+                                        className={`col-status ${isCompliant ? "is-ok" : "is-danger"
+                                          }`}
                                       >
                                         {isCompliant
                                           ? contribCopy.statusValid
@@ -3641,18 +3658,16 @@ export default function TraceView() {
                           {isPlotDossier
                             ? `${plotCopy.plotCodePrefix}: ${plotCode} / PUC: ${pub.growingZone.pucCode}`
                             : isBoxDossier || isFruitDossier
-                              ? `${activePrimaryPrefix}: ${unitPrimaryCode}${
-                                  hasDistinctParentLot
-                                    ? ` / ${unitCopy.parentLotPrefix}: ${pub.lotIdentity.lotCode}`
-                                    : ""
-                                }`
-                              : `${docCopy.lotNoPrefix}: ${pub.lotIdentity.lotCode}${
-                                  fallbackUnitSerial &&
-                                  fallbackUnitSerial.toUpperCase() !==
-                                    pub.lotIdentity.lotCode.toUpperCase()
-                                    ? ` / ${docCopy.unitSerialPrefix}: ${fallbackUnitSerial}`
-                                    : ""
-                                }`}
+                              ? `${activePrimaryPrefix}: ${unitPrimaryCode}${hasDistinctParentLot
+                                ? ` / ${unitCopy.parentLotPrefix}: ${pub.lotIdentity.lotCode}`
+                                : ""
+                              }`
+                              : `${docCopy.lotNoPrefix}: ${pub.lotIdentity.lotCode}${fallbackUnitSerial &&
+                                fallbackUnitSerial.toUpperCase() !==
+                                pub.lotIdentity.lotCode.toUpperCase()
+                                ? ` / ${docCopy.unitSerialPrefix}: ${fallbackUnitSerial}`
+                                : ""
+                              }`}
                         </strong>
                       </div>
 
@@ -3913,759 +3928,759 @@ export default function TraceView() {
                 },
                 ...(entData
                   ? [
-                      ...entZoneChunks.map((zChunk, zIdx): A4DossierSectionItem => ({
-                        key: `ent-zones-${zIdx}`,
-                        content: (
-                          <section className="tr-doc-ledger tr-doc-ext-block">
-                            <div className="tr-doc-meta-strip">
-                              <span className="tr-doc-meta-left">
-                                {extCopy.zonesTitle}
-                                {entZoneChunks.length > 1
-                                  ? extCopy.partSuffixFmt(zIdx + 1, entZoneChunks.length)
-                                  : ""}
-                              </span>
-                              <strong className="tr-doc-meta-right">
-                                {extCopy.zonesTotalFmt(
-                                  formatTraceNumber(entData.totalSourceWeightKg, lang),
-                                )}
-                              </strong>
-                            </div>
-                            <div className="tr-doc-table-wrap">
-                              <table className="tr-doc-table is-ent-zones">
-                                <thead>
-                                  <tr>
-                                    <th className="col-no">{extCopy.colNo}</th>
-                                    <th className="col-puc">{extCopy.colPuc}</th>
-                                    <th className="col-area-name">{extCopy.colVillage}</th>
-                                    <th className="col-scale">{extCopy.colZoneScale}</th>
-                                    <th className="col-wt">{extCopy.colContribWeight}</th>
-                                    <th className="col-status">{extCopy.colStatus}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {zChunk.map((z, idx) => {
-                                    const rowNum = zIdx * 7 + idx + 1;
-                                    const isQual = z.status === "Đủ điều kiện";
-                                    return (
-                                      <tr key={`${z.zoneCode}-${rowNum}`}>
-                                        <td className="col-no">
-                                          {String(rowNum).padStart(2, "0")}.
+                    ...entZoneChunks.map((zChunk, zIdx): A4DossierSectionItem => ({
+                      key: `ent-zones-${zIdx}`,
+                      content: (
+                        <section className="tr-doc-ledger tr-doc-ext-block">
+                          <div className="tr-doc-meta-strip">
+                            <span className="tr-doc-meta-left">
+                              {extCopy.zonesTitle}
+                              {entZoneChunks.length > 1
+                                ? extCopy.partSuffixFmt(zIdx + 1, entZoneChunks.length)
+                                : ""}
+                            </span>
+                            <strong className="tr-doc-meta-right">
+                              {extCopy.zonesTotalFmt(
+                                formatTraceNumber(entData.totalSourceWeightKg, lang),
+                              )}
+                            </strong>
+                          </div>
+                          <div className="tr-doc-table-wrap">
+                            <table className="tr-doc-table is-ent-zones">
+                              <thead>
+                                <tr>
+                                  <th className="col-no">{extCopy.colNo}</th>
+                                  <th className="col-puc">{extCopy.colPuc}</th>
+                                  <th className="col-area-name">{extCopy.colVillage}</th>
+                                  <th className="col-scale">{extCopy.colZoneScale}</th>
+                                  <th className="col-wt">{extCopy.colContribWeight}</th>
+                                  <th className="col-status">{extCopy.colStatus}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {zChunk.map((z, idx) => {
+                                  const rowNum = zIdx * 7 + idx + 1;
+                                  const isQual = z.status === "Đủ điều kiện";
+                                  return (
+                                    <tr key={`${z.zoneCode}-${rowNum}`}>
+                                      <td className="col-no">
+                                        {String(rowNum).padStart(2, "0")}.
+                                      </td>
+                                      <td className="col-puc is-tabular">
+                                        <strong>{z.zoneCode}</strong>
+                                      </td>
+                                      <td className="col-area-name">
+                                        {localizeVillageLabel(z.villageName, lang)}
+                                      </td>
+                                      <td className="col-scale is-tabular">
+                                        {extCopy.zoneScaleFmt(
+                                          z.householdCount,
+                                          z.areaHa > 0 ? formatTraceNumber(z.areaHa, lang) : null,
+                                        )}
+                                      </td>
+                                      <td className="col-wt is-tabular">
+                                        <strong className="tr-doc-contrib-wt">
+                                          {formatTraceNumber(z.weightKg, lang)} kg
+                                        </strong>
+                                        <span className="tr-doc-item-sub">{z.sharePct}%</span>
+                                      </td>
+                                      <td
+                                        className={`col-status ${isQual ? "is-ok" : "is-danger"}`}
+                                      >
+                                        {isQual ? extCopy.statusQualified : extCopy.statusReview}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      ),
+                    })),
+                    ...(entData.massBalance
+                      ? entQuotaPlotChunks.map((qChunk, qIdx): A4DossierSectionItem => {
+                        const emb = entData.massBalance!;
+                        return {
+                          key: `ent-quota-${qIdx}`,
+                          content: (
+                            <section className="tr-doc-ledger tr-doc-ext-block">
+                              <div className="tr-doc-meta-strip">
+                                <span className="tr-doc-meta-left">
+                                  {extCopy.quotaTitleFmt(emb.seasonYear)}
+                                  {entQuotaPlotChunks.length > 1
+                                    ? extCopy.partSuffixFmt(
+                                      qIdx + 1,
+                                      entQuotaPlotChunks.length,
+                                    )
+                                    : ""}
+                                </span>
+                                <strong
+                                  className={`tr-doc-meta-right ${emb.withinQuota ? "is-ok-text" : "is-danger-text"}`}
+                                >
+                                  {emb.withinQuota ? extCopy.quotaWithin : extCopy.quotaOver}
+                                </strong>
+                              </div>
+
+                              <div className="tr-doc-table-wrap">
+                                <table className="tr-doc-table is-ent-quota">
+                                  <thead>
+                                    <tr>
+                                      <th className="col-plot-code">{extCopy.colPlotCode}</th>
+                                      <th className="col-orchard">{extCopy.colOrchardScale}</th>
+                                      <th className="col-cap">{extCopy.colMaxQuota}</th>
+                                      <th className="col-used">{extCopy.colUsed}</th>
+                                      <th className="col-remain">{extCopy.colRemain}</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {qChunk.length === 0 ? (
+                                      <tr>
+                                        <td className="col-plot-code is-tabular">
+                                          <strong>{pub.growingZone.pucCode}</strong>
                                         </td>
-                                        <td className="col-puc is-tabular">
-                                          <strong>{z.zoneCode}</strong>
+                                        <td className="col-orchard">
+                                          {extCopy.zoneTotalLabel}
                                         </td>
-                                        <td className="col-area-name">
-                                          {localizeVillageLabel(z.villageName, lang)}
+                                        <td className="col-cap is-tabular">
+                                          {formatTraceNumber(emb.zoneMaxQuotaKg, lang)} kg
                                         </td>
-                                        <td className="col-scale is-tabular">
-                                          {extCopy.zoneScaleFmt(
-                                            z.householdCount,
-                                            z.areaHa > 0 ? formatTraceNumber(z.areaHa, lang) : null,
-                                          )}
-                                        </td>
-                                        <td className="col-wt is-tabular">
-                                          <strong className="tr-doc-contrib-wt">
-                                            {formatTraceNumber(z.weightKg, lang)} kg
-                                          </strong>
-                                          <span className="tr-doc-item-sub">{z.sharePct}%</span>
+                                        <td className="col-used is-tabular">
+                                          <strong>
+                                            {formatTraceNumber(emb.cumulativeUsedKg, lang)} kg
+                                          </strong>{" "}
+                                          <span className="tr-doc-inline-pct">
+                                            ({emb.utilizationPct}%)
+                                          </span>
                                         </td>
                                         <td
-                                          className={`col-status ${isQual ? "is-ok" : "is-danger"}`}
+                                          className={`col-remain is-tabular ${emb.withinQuota ? "is-ok" : "is-danger"}`}
                                         >
-                                          {isQual ? extCopy.statusQualified : extCopy.statusReview}
+                                          {formatTraceNumber(emb.remainingQuotaKg, lang)} kg
                                         </td>
                                       </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </section>
-                        ),
-                      })),
-                      ...(entData.massBalance
-                        ? entQuotaPlotChunks.map((qChunk, qIdx): A4DossierSectionItem => {
-                            const emb = entData.massBalance!;
-                            return {
-                              key: `ent-quota-${qIdx}`,
-                              content: (
-                                <section className="tr-doc-ledger tr-doc-ext-block">
-                                  <div className="tr-doc-meta-strip">
-                                    <span className="tr-doc-meta-left">
-                                      {extCopy.quotaTitleFmt(emb.seasonYear)}
-                                      {entQuotaPlotChunks.length > 1
-                                        ? extCopy.partSuffixFmt(
-                                            qIdx + 1,
-                                            entQuotaPlotChunks.length,
-                                          )
-                                        : ""}
-                                    </span>
-                                    <strong
-                                      className={`tr-doc-meta-right ${emb.withinQuota ? "is-ok-text" : "is-danger-text"}`}
-                                    >
-                                      {emb.withinQuota ? extCopy.quotaWithin : extCopy.quotaOver}
-                                    </strong>
-                                  </div>
-
-                                  <div className="tr-doc-table-wrap">
-                                    <table className="tr-doc-table is-ent-quota">
-                                      <thead>
-                                        <tr>
-                                          <th className="col-plot-code">{extCopy.colPlotCode}</th>
-                                          <th className="col-orchard">{extCopy.colOrchardScale}</th>
-                                          <th className="col-cap">{extCopy.colMaxQuota}</th>
-                                          <th className="col-used">{extCopy.colUsed}</th>
-                                          <th className="col-remain">{extCopy.colRemain}</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {qChunk.length === 0 ? (
-                                          <tr>
+                                    ) : (
+                                      qChunk.map((pq) => {
+                                        const pLink = plotLinkByCode.get(
+                                          pq.plotCode.trim().toUpperCase(),
+                                        );
+                                        return (
+                                          <tr key={pq.plotCode}>
                                             <td className="col-plot-code is-tabular">
-                                              <strong>{pub.growingZone.pucCode}</strong>
+                                              {pLink && !isPlotDossier ? (
+                                                <Link
+                                                  href={pLink.href}
+                                                  className="tr-doc-inline-link"
+                                                  onClick={() => {
+                                                    rememberTraceKindHint(pq.plotCode, "plot");
+                                                    rememberTraceKindHint(
+                                                      pLink.qrToken,
+                                                      "plot",
+                                                    );
+                                                  }}
+                                                >
+                                                  {pq.plotCode}
+                                                </Link>
+                                              ) : (
+                                                <strong>{pq.plotCode}</strong>
+                                              )}
+                                              {showEntZones && (
+                                                <span className="tr-doc-item-sub">
+                                                  {pq.zoneCode}
+                                                </span>
+                                              )}
                                             </td>
-                                            <td className="col-orchard">
-                                              {extCopy.zoneTotalLabel}
+                                            <td className="col-orchard is-tabular">
+                                              {extCopy.orchardScaleFmt(
+                                                formatTraceNumber(pq.areaHa, lang),
+                                                formatTraceNumber(pq.treeCount, lang),
+                                              )}
                                             </td>
                                             <td className="col-cap is-tabular">
-                                              {formatTraceNumber(emb.zoneMaxQuotaKg, lang)} kg
+                                              {formatTraceNumber(pq.maxQuotaKg, lang)} kg
                                             </td>
                                             <td className="col-used is-tabular">
                                               <strong>
-                                                {formatTraceNumber(emb.cumulativeUsedKg, lang)} kg
+                                                {formatTraceNumber(pq.usedKg, lang)} kg
                                               </strong>{" "}
                                               <span className="tr-doc-inline-pct">
-                                                ({emb.utilizationPct}%)
+                                                ({pq.utilizationPct}%)
                                               </span>
                                             </td>
                                             <td
-                                              className={`col-remain is-tabular ${emb.withinQuota ? "is-ok" : "is-danger"}`}
+                                              className={`col-remain is-tabular ${pq.withinQuota ? "is-ok" : "is-danger"}`}
                                             >
-                                              {formatTraceNumber(emb.remainingQuotaKg, lang)} kg
+                                              {formatTraceNumber(pq.remainingKg, lang)} kg
                                             </td>
                                           </tr>
+                                        );
+                                      })
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </section>
+                          ),
+                        };
+                      })
+                      : []),
+                    ...entLabChunks.map((lChunk, lIdx): A4DossierSectionItem => ({
+                      key: `ent-labs-${lIdx}`,
+                      content: (
+                        <section className="tr-doc-ledger tr-doc-ext-block">
+                          <div className="tr-doc-meta-strip">
+                            <span className="tr-doc-meta-left">
+                              {extCopy.labsTitle}
+                              {entLabChunks.length > 1
+                                ? extCopy.partSuffixFmt(lIdx + 1, entLabChunks.length)
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="tr-doc-table-wrap">
+                            <table className="tr-doc-table is-ent-labs">
+                              <thead>
+                                <tr>
+                                  <th className="col-cert">{extCopy.colLabCert}</th>
+                                  <th className="col-date">{extCopy.colSampleDate}</th>
+                                  <th className="col-num">{extCopy.colCd}</th>
+                                  <th className="col-yo">{extCopy.colYellowO}</th>
+                                  <th className="col-res">{extCopy.colResidue}</th>
+                                  <th className="col-status">{docCopy.colResult}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {lChunk.map((lt) => {
+                                  const passed = lt.result === "pass" && !lt.yellowOPositive;
+                                  return (
+                                    <tr key={lt.code}>
+                                      <td className="col-cert is-tabular">
+                                        {isSafeMediaUrl(lt.scanUrl) ? (
+                                          <a
+                                            href={lt.scanUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="tr-doc-inline-link"
+                                          >
+                                            {lt.code}
+                                          </a>
                                         ) : (
-                                          qChunk.map((pq) => {
-                                            const pLink = plotLinkByCode.get(
-                                              pq.plotCode.trim().toUpperCase(),
-                                            );
-                                            return (
-                                              <tr key={pq.plotCode}>
-                                                <td className="col-plot-code is-tabular">
-                                                  {pLink && !isPlotDossier ? (
-                                                    <Link
-                                                      href={pLink.href}
-                                                      className="tr-doc-inline-link"
-                                                      onClick={() => {
-                                                        rememberTraceKindHint(pq.plotCode, "plot");
-                                                        rememberTraceKindHint(
-                                                          pLink.qrToken,
-                                                          "plot",
-                                                        );
-                                                      }}
-                                                    >
-                                                      {pq.plotCode}
-                                                    </Link>
-                                                  ) : (
-                                                    <strong>{pq.plotCode}</strong>
-                                                  )}
-                                                  {showEntZones && (
-                                                    <span className="tr-doc-item-sub">
-                                                      {pq.zoneCode}
-                                                    </span>
-                                                  )}
-                                                </td>
-                                                <td className="col-orchard is-tabular">
-                                                  {extCopy.orchardScaleFmt(
-                                                    formatTraceNumber(pq.areaHa, lang),
-                                                    formatTraceNumber(pq.treeCount, lang),
-                                                  )}
-                                                </td>
-                                                <td className="col-cap is-tabular">
-                                                  {formatTraceNumber(pq.maxQuotaKg, lang)} kg
-                                                </td>
-                                                <td className="col-used is-tabular">
-                                                  <strong>
-                                                    {formatTraceNumber(pq.usedKg, lang)} kg
-                                                  </strong>{" "}
-                                                  <span className="tr-doc-inline-pct">
-                                                    ({pq.utilizationPct}%)
-                                                  </span>
-                                                </td>
-                                                <td
-                                                  className={`col-remain is-tabular ${pq.withinQuota ? "is-ok" : "is-danger"}`}
-                                                >
-                                                  {formatTraceNumber(pq.remainingKg, lang)} kg
-                                                </td>
-                                              </tr>
-                                            );
-                                          })
+                                          <strong>{lt.code}</strong>
                                         )}
-                                      </tbody>
-                                    </table>
+                                        {isSafeExternalHttpsUrl(lt.externalVerifyUrl) && (
+                                          <a
+                                            href={lt.externalVerifyUrl.trim()}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            referrerPolicy="no-referrer"
+                                            className="tr-doc-sub-link"
+                                          >
+                                            {extCopy.labVerifySubLink}
+                                          </a>
+                                        )}
+                                      </td>
+                                      <td className="col-date is-tabular">
+                                        {formatTraceDate(lt.sampledOn, lang)}
+                                      </td>
+                                      <td className="col-num is-tabular">{lt.cdMgKg} mg/kg</td>
+                                      <td className="col-yo">
+                                        {lt.yellowOPositive
+                                          ? extCopy.yellowOPos
+                                          : extCopy.yellowONeg}
+                                      </td>
+                                      <td className="col-res is-tabular">
+                                        {lt.residueMgKg} mg/kg
+                                      </td>
+                                      <td
+                                        className={`col-status ${passed ? "is-ok" : "is-danger"}`}
+                                      >
+                                        {passed ? extCopy.labPass : extCopy.labFail}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      ),
+                    })),
+                    ...(hasRealPackingSpecs && entData.packingSpecs
+                      ? [
+                        {
+                          key: "ent-packing",
+                          content: (() => {
+                            const ps = entData.packingSpecs!;
+                            const scheduleParts = [
+                              ps.departedAt ? formatTraceDateTime(ps.departedAt, lang) : null,
+                              ps.estimatedArrival
+                                ? formatTraceDateTime(ps.estimatedArrival, lang)
+                                : null,
+                            ].filter(Boolean);
+                            return (
+                              <section className="tr-doc-ledger tr-doc-ext-block">
+                                <div className="tr-doc-meta-strip">
+                                  <span className="tr-doc-meta-left">
+                                    {extCopy.packingTitle}
+                                  </span>
+                                </div>
+                                <div className="tr-doc-spec-grid">
+                                  <div className="tr-doc-spec-cell">
+                                    <span>{extCopy.specGradeRatio}</span>
+                                    <strong className="is-tabular">
+                                      {ps.gradeAPct !== null
+                                        ? `${ps.gradeAPct}% / ${ps.gradeBPct ?? 0}% / ${ps.gradeCPct ?? 0}%`
+                                        : extCopy.notRecordedYet}
+                                    </strong>
                                   </div>
-                                </section>
-                              ),
-                            };
-                          })
-                        : []),
-                      ...entLabChunks.map((lChunk, lIdx): A4DossierSectionItem => ({
-                        key: `ent-labs-${lIdx}`,
-                        content: (
-                          <section className="tr-doc-ledger tr-doc-ext-block">
-                            <div className="tr-doc-meta-strip">
-                              <span className="tr-doc-meta-left">
-                                {extCopy.labsTitle}
-                                {entLabChunks.length > 1
-                                  ? extCopy.partSuffixFmt(lIdx + 1, entLabChunks.length)
-                                  : ""}
-                              </span>
-                            </div>
-                            <div className="tr-doc-table-wrap">
-                              <table className="tr-doc-table is-ent-labs">
-                                <thead>
-                                  <tr>
-                                    <th className="col-cert">{extCopy.colLabCert}</th>
-                                    <th className="col-date">{extCopy.colSampleDate}</th>
-                                    <th className="col-num">{extCopy.colCd}</th>
-                                    <th className="col-yo">{extCopy.colYellowO}</th>
-                                    <th className="col-res">{extCopy.colResidue}</th>
-                                    <th className="col-status">{docCopy.colResult}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {lChunk.map((lt) => {
-                                    const passed = lt.result === "pass" && !lt.yellowOPositive;
-                                    return (
-                                      <tr key={lt.code}>
-                                        <td className="col-cert is-tabular">
-                                          {isSafeMediaUrl(lt.scanUrl) ? (
-                                            <a
-                                              href={lt.scanUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="tr-doc-inline-link"
-                                            >
-                                              {lt.code}
-                                            </a>
-                                          ) : (
-                                            <strong>{lt.code}</strong>
-                                          )}
-                                          {isSafeExternalHttpsUrl(lt.externalVerifyUrl) && (
-                                            <a
-                                              href={lt.externalVerifyUrl.trim()}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              referrerPolicy="no-referrer"
-                                              className="tr-doc-sub-link"
-                                            >
-                                              {extCopy.labVerifySubLink}
-                                            </a>
-                                          )}
-                                        </td>
-                                        <td className="col-date is-tabular">
-                                          {formatTraceDate(lt.sampledOn, lang)}
-                                        </td>
-                                        <td className="col-num is-tabular">{lt.cdMgKg} mg/kg</td>
-                                        <td className="col-yo">
-                                          {lt.yellowOPositive
-                                            ? extCopy.yellowOPos
-                                            : extCopy.yellowONeg}
-                                        </td>
-                                        <td className="col-res is-tabular">
-                                          {lt.residueMgKg} mg/kg
-                                        </td>
-                                        <td
-                                          className={`col-status ${passed ? "is-ok" : "is-danger"}`}
-                                        >
-                                          {passed ? extCopy.labPass : extCopy.labFail}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </section>
-                        ),
-                      })),
-                      ...(hasRealPackingSpecs && entData.packingSpecs
-                        ? [
-                            {
-                              key: "ent-packing",
-                              content: (() => {
-                                const ps = entData.packingSpecs!;
-                                const scheduleParts = [
-                                  ps.departedAt ? formatTraceDateTime(ps.departedAt, lang) : null,
-                                  ps.estimatedArrival
-                                    ? formatTraceDateTime(ps.estimatedArrival, lang)
-                                    : null,
-                                ].filter(Boolean);
-                                return (
-                                  <section className="tr-doc-ledger tr-doc-ext-block">
-                                    <div className="tr-doc-meta-strip">
-                                      <span className="tr-doc-meta-left">
-                                        {extCopy.packingTitle}
-                                      </span>
-                                    </div>
-                                    <div className="tr-doc-spec-grid">
-                                      <div className="tr-doc-spec-cell">
-                                        <span>{extCopy.specGradeRatio}</span>
-                                        <strong className="is-tabular">
-                                          {ps.gradeAPct !== null
-                                            ? `${ps.gradeAPct}% / ${ps.gradeBPct ?? 0}% / ${ps.gradeCPct ?? 0}%`
-                                            : extCopy.notRecordedYet}
-                                        </strong>
-                                      </div>
-                                      <div className="tr-doc-spec-cell">
-                                        <span>{extCopy.specAvgBrix}</span>
-                                        <strong className="is-tabular">
-                                          {ps.avgBrix !== null
-                                            ? `${ps.avgBrix}° Brix`
-                                            : extCopy.notRecordedYet}
-                                        </strong>
-                                      </div>
-                                      <div className="tr-doc-spec-cell">
-                                        <span>{extCopy.specTreatment}</span>
-                                        <strong>
-                                          {ps.treatmentMethod || extCopy.notRecordedYet}
-                                        </strong>
-                                      </div>
-                                      <div className="tr-doc-spec-cell">
-                                        <span>{extCopy.specTransport}</span>
-                                        <strong className="is-tabular">
-                                          {ps.transporter || ps.vehiclePlate
-                                            ? `${ps.transporter || ""}${ps.transporter && ps.vehiclePlate ? " - " : ""}${ps.vehiclePlate || ""}`
-                                            : extCopy.notRecordedYet}
-                                        </strong>
-                                      </div>
-                                      <div className="tr-doc-spec-cell">
-                                        <span>{extCopy.specTemp}</span>
-                                        <strong className="is-tabular">
-                                          {ps.temperatureC !== null
-                                            ? `${ps.temperatureC}°C`
-                                            : extCopy.notRecordedYet}
-                                        </strong>
-                                      </div>
-                                      <div className="tr-doc-spec-cell">
-                                        <span>{extCopy.specSchedule}</span>
-                                        <strong className="is-tabular">
-                                          {scheduleParts.length > 0
-                                            ? scheduleParts.join(" / ")
-                                            : localizeLotStatusLabel(
-                                                pub.lotIdentity.status,
-                                                pub.lotIdentity.statusLabel,
-                                                lang,
-                                                activeKind,
-                                                pub.lotIdentity.rawLotStatus,
-                                              )}
-                                        </strong>
-                                      </div>
-                                    </div>
-                                  </section>
-                                );
-                              })(),
-                            } satisfies A4DossierSectionItem,
-                          ]
-                        : []),
-                    ]
+                                  <div className="tr-doc-spec-cell">
+                                    <span>{extCopy.specAvgBrix}</span>
+                                    <strong className="is-tabular">
+                                      {ps.avgBrix !== null
+                                        ? `${ps.avgBrix}° Brix`
+                                        : extCopy.notRecordedYet}
+                                    </strong>
+                                  </div>
+                                  <div className="tr-doc-spec-cell">
+                                    <span>{extCopy.specTreatment}</span>
+                                    <strong>
+                                      {ps.treatmentMethod || extCopy.notRecordedYet}
+                                    </strong>
+                                  </div>
+                                  <div className="tr-doc-spec-cell">
+                                    <span>{extCopy.specTransport}</span>
+                                    <strong className="is-tabular">
+                                      {ps.transporter || ps.vehiclePlate
+                                        ? `${ps.transporter || ""}${ps.transporter && ps.vehiclePlate ? " - " : ""}${ps.vehiclePlate || ""}`
+                                        : extCopy.notRecordedYet}
+                                    </strong>
+                                  </div>
+                                  <div className="tr-doc-spec-cell">
+                                    <span>{extCopy.specTemp}</span>
+                                    <strong className="is-tabular">
+                                      {ps.temperatureC !== null
+                                        ? `${ps.temperatureC}°C`
+                                        : extCopy.notRecordedYet}
+                                    </strong>
+                                  </div>
+                                  <div className="tr-doc-spec-cell">
+                                    <span>{extCopy.specSchedule}</span>
+                                    <strong className="is-tabular">
+                                      {scheduleParts.length > 0
+                                        ? scheduleParts.join(" / ")
+                                        : localizeLotStatusLabel(
+                                          pub.lotIdentity.status,
+                                          pub.lotIdentity.statusLabel,
+                                          lang,
+                                          activeKind,
+                                          pub.lotIdentity.rawLotStatus,
+                                        )}
+                                    </strong>
+                                  </div>
+                                </div>
+                              </section>
+                            );
+                          })(),
+                        } satisfies A4DossierSectionItem,
+                      ]
+                      : []),
+                  ]
                   : []),
                 ...(authData
                   ? [
-                      ...authHhChunks.map((hhChunk, hIdx): A4DossierSectionItem => ({
-                        key: `auth-hh-${hIdx}`,
-                        content: (
-                          <section className="tr-doc-ledger tr-doc-ext-block">
-                            <div className="tr-doc-meta-strip">
-                              <span className="tr-doc-meta-left">
-                                {extCopy.authHhTitlePlot}
-                                {authHhChunks.length > 1
-                                  ? extCopy.partSuffixFmt(hIdx + 1, authHhChunks.length)
-                                  : ""}
-                              </span>
-                            </div>
-                            <div className="tr-doc-table-wrap">
-                              <table className="tr-doc-table is-auth-hh">
-                                <thead>
+                    ...authHhChunks.map((hhChunk, hIdx): A4DossierSectionItem => ({
+                      key: `auth-hh-${hIdx}`,
+                      content: (
+                        <section className="tr-doc-ledger tr-doc-ext-block">
+                          <div className="tr-doc-meta-strip">
+                            <span className="tr-doc-meta-left">
+                              {extCopy.authHhTitlePlot}
+                              {authHhChunks.length > 1
+                                ? extCopy.partSuffixFmt(hIdx + 1, authHhChunks.length)
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="tr-doc-table-wrap">
+                            <table className="tr-doc-table is-auth-hh">
+                              <thead>
+                                <tr>
+                                  <th className="col-no">{extCopy.colNo}</th>
+                                  <th className="col-hh-id">{extCopy.colHhIdentity}</th>
+                                  <th className="col-gis">{extCopy.colCadastralGis}</th>
+                                  <th className="col-status">{extCopy.colStatus}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {hhChunk.length === 0 ? (
                                   <tr>
-                                    <th className="col-no">{extCopy.colNo}</th>
-                                    <th className="col-hh-id">{extCopy.colHhIdentity}</th>
-                                    <th className="col-gis">{extCopy.colCadastralGis}</th>
-                                    <th className="col-status">{extCopy.colStatus}</th>
+                                    <td colSpan={4} className="tr-doc-contrib-empty">
+                                      {extCopy.emptyAuthHh}
+                                    </td>
                                   </tr>
-                                </thead>
-                                <tbody>
-                                  {hhChunk.length === 0 ? (
-                                    <tr>
-                                      <td colSpan={4} className="tr-doc-contrib-empty">
-                                        {extCopy.emptyAuthHh}
-                                      </td>
-                                    </tr>
-                                  ) : (
-                                    hhChunk.map((slice, sIdx) => {
-                                      const { hh, hhNumber, plotsSlice, isContinuation } = slice;
-                                      const idMeta = [
-                                        `${extCopy.hhCodePrefix}: ${hh.householdCode}`,
-                                        hh.villageName
-                                          ? `${extCopy.areaLocPrefix}: ${localizeVillageLabel(hh.villageName, lang)}`
-                                          : null,
-                                        hh.phone ? `${extCopy.phonePrefix}: ${hh.phone}` : null,
-                                        hh.cccdMasked
-                                          ? `${extCopy.cccdPrefix}: ${hh.cccdMasked}`
-                                          : null,
-                                      ]
-                                        .filter(Boolean)
-                                        .join(", ");
-                                      return (
-                                        <tr
-                                          key={`${hh.householdCode}-${hhNumber}-${sIdx}`}
-                                        >
-                                          <td className="col-no">
-                                            {String(hhNumber).padStart(2, "0")}.
-                                          </td>
-                                          <td className="col-hh-id">
-                                            <strong className="tr-doc-item-title">
-                                              {hh.householdName}
-                                              {isContinuation ? " (tiếp)" : ""}
-                                            </strong>
-                                            <span className="tr-doc-item-sub is-tabular">
-                                              {idMeta}
-                                            </span>
-                                          </td>
-                                          <td className="col-gis">
-                                            {plotsSlice.length === 0 ? (
-                                              <span className="tr-doc-item-sub is-tabular">
-                                                {hh.contributedPlotCode
-                                                  ? `${extCopy.colPlotCode}: ${hh.contributedPlotCode}`
-                                                  : "-"}
-                                              </span>
-                                            ) : (
-                                              <div className="tr-doc-gis-plot-stack">
-                                                {plotsSlice.map((p) => {
-                                                  const hasGis = Boolean(
-                                                    p.geometryJson ||
-                                                      (p.lat !== null && p.lng !== null),
-                                                  );
-                                                  return (
-                                                    <div
-                                                      key={p.plotCode}
-                                                      className="tr-doc-gis-plot-line"
-                                                    >
-                                                      <span className="is-tabular">
-                                                        <strong>{p.plotCode}</strong> (
-                                                        {extCopy.cadastralFmt(
-                                                          p.sheetNo,
-                                                          p.parcelNo,
-                                                        )}
-                                                        , {formatTraceNumber(p.areaHa || 0, lang)}{" "}
-                                                        ha
-                                                        {p.lat !== null && p.lng !== null
-                                                          ? `, ${extCopy.coordFmt(
-                                                              Number(p.lat).toFixed(5),
-                                                              Number(p.lng).toFixed(5),
-                                                            )}`
-                                                          : ""}
-                                                        )
-                                                      </span>
-                                                      {hasGis && (
-                                                        <button
-                                                          type="button"
-                                                          className="tr-doc-gis-btn no-print"
-                                                          onClick={() =>
-                                                            openAuthorityPlotGis(hh, p)
-                                                          }
-                                                        >
-                                                          {extCopy.openGisBtn}
-                                                        </button>
-                                                      )}
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            )}
-                                          </td>
-                                          <td className="col-status is-ok">
-                                            {extCopy.statusQualified}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          </section>
-                        ),
-                      })),
-                      ...authDiaryChunks.map((dChunk, dIdx): A4DossierSectionItem => ({
-                        key: `auth-diaries-${dIdx}`,
-                        content: (
-                          <section className="tr-doc-ledger tr-doc-ext-block">
-                            <div className="tr-doc-meta-strip">
-                              <span className="tr-doc-meta-left">
-                                {extCopy.diariesTitle}
-                                {authDiaryChunks.length > 1
-                                  ? extCopy.partSuffixFmt(dIdx + 1, authDiaryChunks.length)
-                                  : ""}
-                              </span>
-                            </div>
-                            <div className="tr-doc-table-wrap">
-                              <table className="tr-doc-table is-auth-diary">
-                                <thead>
-                                  <tr>
-                                    <th className="col-date">{extCopy.colDate}</th>
-                                    <th className="col-hh-plot">{extCopy.colHhPlot}</th>
-                                    <th className="col-act">{extCopy.colDiaryActivity}</th>
-                                    <th className="col-status">{extCopy.colStatus}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {dChunk.length === 0 ? (
-                                    <tr>
-                                      <td colSpan={4} className="tr-doc-contrib-empty">
-                                        {extCopy.emptyDiaries}
-                                      </td>
-                                    </tr>
-                                  ) : (
-                                    dChunk.map((d, idx) => {
-                                      const mrlFailed = Boolean(
-                                        d.mrlStatus && d.mrlStatus !== "pass",
-                                      );
-                                      const compact = formatCompactDiaryEntry(
-                                        d.activity,
-                                        d.detail,
-                                        lang,
-                                      );
-                                      const hasDistinctRecorder = Boolean(
-                                        d.recorder &&
-                                          d.recorder.trim() &&
-                                          d.recorder.trim() !== (d.householdName || "").trim(),
-                                      );
-                                      const hhSubParts = [
-                                        d.plotCode ? extCopy.plotRefFmt(d.plotCode) : null,
-                                        hasDistinctRecorder
-                                          ? extCopy.recordedByFmt(d.recorder.trim())
-                                          : null,
-                                      ].filter(Boolean);
-                                      const statusTone = mrlFailed
-                                        ? "is-danger"
-                                        : d.isLateEntry
-                                          ? "is-warn"
-                                          : "is-ok";
-                                      const statusText = mrlFailed
-                                        ? extCopy.diaryWarn
-                                        : d.isLateEntry
-                                          ? extCopy.diaryLate
-                                          : extCopy.diaryValid;
-
-                                      return (
-                                        <tr key={`${d.entryOn}-${d.plotCode}-${idx}`}>
-                                          <td className="col-date is-tabular">
-                                            {formatTraceDate(d.entryOn, lang)}
-                                          </td>
-                                          <td className="col-hh-plot">
-                                            <strong className="tr-doc-item-title">
-                                              {d.householdName || d.recorder || "-"}
-                                            </strong>
-                                            {hhSubParts.length > 0 && (
-                                              <span className="tr-doc-item-sub is-tabular">
-                                                {hhSubParts.join(", ")}
-                                              </span>
-                                            )}
-                                          </td>
-                                          <td className="col-act">
-                                            <strong className="tr-doc-item-title">
-                                              {compact.title}
-                                            </strong>
-                                            {compact.subtitle && (
-                                              <span className="tr-doc-item-sub is-tabular">
-                                                {compact.subtitle}
-                                              </span>
-                                            )}
-                                            {isSafeMediaUrl(d.photoUrl) && (
-                                              <button
-                                                type="button"
-                                                className="tr-doc-sub-btn no-print"
-                                                onClick={() =>
-                                                  setTracePreviewMedia({
-                                                    urls: [d.photoUrl as string],
-                                                    title: d.householdName || extCopy.diariesTitle,
-                                                    subtitle: `${formatTraceDate(d.entryOn, lang)}, ${compact.title}`,
-                                                  })
-                                                }
-                                              >
-                                                {extCopy.viewFieldPhotoBtn}
-                                              </button>
-                                            )}
-                                          </td>
-                                          <td className={`col-status ${statusTone}`}>
-                                            <span>{statusText}</span>
-                                            {d.gpsVerified && (
-                                              <span className="tr-doc-status-sub">
-                                                {extCopy.gpsShort}
-                                              </span>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          </section>
-                        ),
-                      })),
-                      ...authMinuteChunks.map((mChunk, mIdx): A4DossierSectionItem => ({
-                        key: `auth-minutes-${mIdx}`,
-                        content: (
-                          <section className="tr-doc-ledger tr-doc-ext-block">
-                            <div className="tr-doc-meta-strip">
-                              <span className="tr-doc-meta-left">
-                                {extCopy.minutesTitle}
-                                {authMinuteChunks.length > 1
-                                  ? extCopy.partSuffixFmt(mIdx + 1, authMinuteChunks.length)
-                                  : ""}
-                              </span>
-                            </div>
-                            <div className="tr-doc-table-wrap">
-                              <table className="tr-doc-table is-auth-minutes">
-                                <thead>
-                                  <tr>
-                                    <th className="col-min-code">{extCopy.colMinuteCode}</th>
-                                    <th className="col-date">{extCopy.colDate}</th>
-                                    <th className="col-inspector">{extCopy.colInspectorLoc}</th>
-                                    <th className="col-plot-ref">{extCopy.colPlotCode}</th>
-                                    <th className="col-status">{extCopy.colResult}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {mChunk.length === 0 ? (
-                                    <tr>
-                                      <td colSpan={5} className="tr-doc-contrib-empty">
-                                        {extCopy.emptyMinutes}
-                                      </td>
-                                    </tr>
-                                  ) : (
-                                    mChunk.map((m) => {
-                                      const isFail =
-                                        m.result === "fail" ||
-                                        m.result.toLowerCase().includes("không đạt");
-                                      const locParts = [
-                                        m.location || null,
-                                        m.gpsVerified ? extCopy.gpsShort : null,
-                                      ].filter(Boolean);
-                                      return (
-                                        <tr key={m.code}>
-                                          <td className="col-min-code is-tabular">
-                                            <strong>{m.code}</strong>
-                                          </td>
-                                          <td className="col-date is-tabular">
-                                            {formatTraceDate(m.heldOn, lang)}
-                                          </td>
-                                          <td className="col-inspector">
-                                            <strong className="tr-doc-item-title">
-                                              {m.officer}
-                                            </strong>
-                                            {locParts.length > 0 && (
-                                              <span className="tr-doc-item-sub">
-                                                {locParts.join(", ")}
-                                              </span>
-                                            )}
-                                            {isSafeMediaUrl(m.photoUrl) && (
-                                              <button
-                                                type="button"
-                                                className="tr-doc-sub-btn no-print"
-                                                onClick={() =>
-                                                  setTracePreviewMedia({
-                                                    urls: [m.photoUrl as string],
-                                                    title: m.code,
-                                                    subtitle: m.location || undefined,
-                                                  })
-                                                }
-                                              >
-                                                {extCopy.viewMinutePhotoBtn}
-                                              </button>
-                                            )}
-                                          </td>
-                                          <td className="col-plot-ref is-tabular">
-                                            {m.plotCode || "-"}
-                                          </td>
-                                          <td
-                                            className={`col-status ${isFail ? "is-danger" : "is-ok"}`}
-                                          >
-                                            {m.result === "pass"
-                                              ? extCopy.labPass
-                                              : m.result === "fail"
-                                                ? extCopy.labFail
-                                                : m.result}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          </section>
-                        ),
-                      })),
-                      ...authViolationChunks.map((vChunk, vIdx): A4DossierSectionItem => ({
-                        key: `auth-violations-${vIdx}`,
-                        content: (
-                          <section className="tr-doc-ledger tr-doc-ext-block">
-                            <div className="tr-doc-meta-strip">
-                              <span className="tr-doc-meta-left">
-                                {extCopy.violationsTitle}
-                                {authViolationChunks.length > 1
-                                  ? extCopy.partSuffixFmt(vIdx + 1, authViolationChunks.length)
-                                  : ""}
-                              </span>
-                            </div>
-                            <div className="tr-doc-table-wrap">
-                              <table className="tr-doc-table is-auth-violations">
-                                <thead>
-                                  <tr>
-                                    <th className="col-date">{extCopy.colDate}</th>
-                                    <th className="col-vio-desc">{extCopy.colViolationDesc}</th>
-                                    <th className="col-plot-ref">{extCopy.colPlotCode}</th>
-                                    <th className="col-status">{extCopy.colSeverity}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {vChunk.map((v, idx) => {
-                                    const isCrit = v.severity === "critical";
+                                ) : (
+                                  hhChunk.map((slice, sIdx) => {
+                                    const { hh, hhNumber, plotsSlice, isContinuation } = slice;
+                                    const idMeta = [
+                                      `${extCopy.hhCodePrefix}: ${hh.householdCode}`,
+                                      hh.villageName
+                                        ? `${extCopy.areaLocPrefix}: ${localizeVillageLabel(hh.villageName, lang)}`
+                                        : null,
+                                      hh.phone ? `${extCopy.phonePrefix}: ${hh.phone}` : null,
+                                      hh.cccdMasked
+                                        ? `${extCopy.cccdPrefix}: ${hh.cccdMasked}`
+                                        : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(", ");
                                     return (
-                                      <tr key={`${v.detectedOn}-${idx}`}>
-                                        <td className="col-date is-tabular">
-                                          {formatTraceDate(v.detectedOn, lang)}
+                                      <tr
+                                        key={`${hh.householdCode}-${hhNumber}-${sIdx}`}
+                                      >
+                                        <td className="col-no">
+                                          {String(hhNumber).padStart(2, "0")}.
                                         </td>
-                                        <td className="col-vio-desc">
-                                          <strong className="tr-doc-item-title">{v.title}</strong>
-                                          {v.description && (
-                                            <span className="tr-doc-item-sub">
-                                              {v.description}
+                                        <td className="col-hh-id">
+                                          <strong className="tr-doc-item-title">
+                                            {hh.householdName}
+                                            {isContinuation ? " (tiếp)" : ""}
+                                          </strong>
+                                          <span className="tr-doc-item-sub is-tabular">
+                                            {idMeta}
+                                          </span>
+                                        </td>
+                                        <td className="col-gis">
+                                          {plotsSlice.length === 0 ? (
+                                            <span className="tr-doc-item-sub is-tabular">
+                                              {hh.contributedPlotCode
+                                                ? `${extCopy.colPlotCode}: ${hh.contributedPlotCode}`
+                                                : "-"}
                                             </span>
+                                          ) : (
+                                            <div className="tr-doc-gis-plot-stack">
+                                              {plotsSlice.map((p) => {
+                                                const hasGis = Boolean(
+                                                  p.geometryJson ||
+                                                  (p.lat !== null && p.lng !== null),
+                                                );
+                                                return (
+                                                  <div
+                                                    key={p.plotCode}
+                                                    className="tr-doc-gis-plot-line"
+                                                  >
+                                                    <span className="is-tabular">
+                                                      <strong>{p.plotCode}</strong> (
+                                                      {extCopy.cadastralFmt(
+                                                        p.sheetNo,
+                                                        p.parcelNo,
+                                                      )}
+                                                      , {formatTraceNumber(p.areaHa || 0, lang)}{" "}
+                                                      ha
+                                                      {p.lat !== null && p.lng !== null
+                                                        ? `, ${extCopy.coordFmt(
+                                                          Number(p.lat).toFixed(5),
+                                                          Number(p.lng).toFixed(5),
+                                                        )}`
+                                                        : ""}
+                                                      )
+                                                    </span>
+                                                    {hasGis && (
+                                                      <button
+                                                        type="button"
+                                                        className="tr-doc-gis-btn no-print"
+                                                        onClick={() =>
+                                                          openAuthorityPlotGis(hh, p)
+                                                        }
+                                                      >
+                                                        {extCopy.openGisBtn}
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
                                           )}
                                         </td>
-                                        <td className="col-plot-ref is-tabular">
-                                          {v.plotCode || v.householdLabel || "-"}
-                                        </td>
-                                        <td
-                                          className={`col-status ${isCrit ? "is-danger" : "is-muted"}`}
-                                        >
-                                          {isCrit ? extCopy.sevCritical : extCopy.sevWarning}
+                                        <td className="col-status is-ok">
+                                          {extCopy.statusQualified}
                                         </td>
                                       </tr>
                                     );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </section>
-                        ),
-                      })),
-                    ]
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      ),
+                    })),
+                    ...authDiaryChunks.map((dChunk, dIdx): A4DossierSectionItem => ({
+                      key: `auth-diaries-${dIdx}`,
+                      content: (
+                        <section className="tr-doc-ledger tr-doc-ext-block">
+                          <div className="tr-doc-meta-strip">
+                            <span className="tr-doc-meta-left">
+                              {extCopy.diariesTitle}
+                              {authDiaryChunks.length > 1
+                                ? extCopy.partSuffixFmt(dIdx + 1, authDiaryChunks.length)
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="tr-doc-table-wrap">
+                            <table className="tr-doc-table is-auth-diary">
+                              <thead>
+                                <tr>
+                                  <th className="col-date">{extCopy.colDate}</th>
+                                  <th className="col-hh-plot">{extCopy.colHhPlot}</th>
+                                  <th className="col-act">{extCopy.colDiaryActivity}</th>
+                                  <th className="col-status">{extCopy.colStatus}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {dChunk.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={4} className="tr-doc-contrib-empty">
+                                      {extCopy.emptyDiaries}
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  dChunk.map((d, idx) => {
+                                    const mrlFailed = Boolean(
+                                      d.mrlStatus && d.mrlStatus !== "pass",
+                                    );
+                                    const compact = formatCompactDiaryEntry(
+                                      d.activity,
+                                      d.detail,
+                                      lang,
+                                    );
+                                    const hasDistinctRecorder = Boolean(
+                                      d.recorder &&
+                                      d.recorder.trim() &&
+                                      d.recorder.trim() !== (d.householdName || "").trim(),
+                                    );
+                                    const hhSubParts = [
+                                      d.plotCode ? extCopy.plotRefFmt(d.plotCode) : null,
+                                      hasDistinctRecorder
+                                        ? extCopy.recordedByFmt(d.recorder.trim())
+                                        : null,
+                                    ].filter(Boolean);
+                                    const statusTone = mrlFailed
+                                      ? "is-danger"
+                                      : d.isLateEntry
+                                        ? "is-warn"
+                                        : "is-ok";
+                                    const statusText = mrlFailed
+                                      ? extCopy.diaryWarn
+                                      : d.isLateEntry
+                                        ? extCopy.diaryLate
+                                        : extCopy.diaryValid;
+
+                                    return (
+                                      <tr key={`${d.entryOn}-${d.plotCode}-${idx}`}>
+                                        <td className="col-date is-tabular">
+                                          {formatTraceDate(d.entryOn, lang)}
+                                        </td>
+                                        <td className="col-hh-plot">
+                                          <strong className="tr-doc-item-title">
+                                            {d.householdName || d.recorder || "-"}
+                                          </strong>
+                                          {hhSubParts.length > 0 && (
+                                            <span className="tr-doc-item-sub is-tabular">
+                                              {hhSubParts.join(", ")}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="col-act">
+                                          <strong className="tr-doc-item-title">
+                                            {compact.title}
+                                          </strong>
+                                          {compact.subtitle && (
+                                            <span className="tr-doc-item-sub is-tabular">
+                                              {compact.subtitle}
+                                            </span>
+                                          )}
+                                          {isSafeMediaUrl(d.photoUrl) && (
+                                            <button
+                                              type="button"
+                                              className="tr-doc-sub-btn no-print"
+                                              onClick={() =>
+                                                setTracePreviewMedia({
+                                                  urls: [d.photoUrl as string],
+                                                  title: d.householdName || extCopy.diariesTitle,
+                                                  subtitle: `${formatTraceDate(d.entryOn, lang)}, ${compact.title}`,
+                                                })
+                                              }
+                                            >
+                                              {extCopy.viewFieldPhotoBtn}
+                                            </button>
+                                          )}
+                                        </td>
+                                        <td className={`col-status ${statusTone}`}>
+                                          <span>{statusText}</span>
+                                          {d.gpsVerified && (
+                                            <span className="tr-doc-status-sub">
+                                              {extCopy.gpsShort}
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      ),
+                    })),
+                    ...authMinuteChunks.map((mChunk, mIdx): A4DossierSectionItem => ({
+                      key: `auth-minutes-${mIdx}`,
+                      content: (
+                        <section className="tr-doc-ledger tr-doc-ext-block">
+                          <div className="tr-doc-meta-strip">
+                            <span className="tr-doc-meta-left">
+                              {extCopy.minutesTitle}
+                              {authMinuteChunks.length > 1
+                                ? extCopy.partSuffixFmt(mIdx + 1, authMinuteChunks.length)
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="tr-doc-table-wrap">
+                            <table className="tr-doc-table is-auth-minutes">
+                              <thead>
+                                <tr>
+                                  <th className="col-min-code">{extCopy.colMinuteCode}</th>
+                                  <th className="col-date">{extCopy.colDate}</th>
+                                  <th className="col-inspector">{extCopy.colInspectorLoc}</th>
+                                  <th className="col-plot-ref">{extCopy.colPlotCode}</th>
+                                  <th className="col-status">{extCopy.colResult}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {mChunk.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={5} className="tr-doc-contrib-empty">
+                                      {extCopy.emptyMinutes}
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  mChunk.map((m) => {
+                                    const isFail =
+                                      m.result === "fail" ||
+                                      m.result.toLowerCase().includes("không đạt");
+                                    const locParts = [
+                                      m.location || null,
+                                      m.gpsVerified ? extCopy.gpsShort : null,
+                                    ].filter(Boolean);
+                                    return (
+                                      <tr key={m.code}>
+                                        <td className="col-min-code is-tabular">
+                                          <strong>{m.code}</strong>
+                                        </td>
+                                        <td className="col-date is-tabular">
+                                          {formatTraceDate(m.heldOn, lang)}
+                                        </td>
+                                        <td className="col-inspector">
+                                          <strong className="tr-doc-item-title">
+                                            {m.officer}
+                                          </strong>
+                                          {locParts.length > 0 && (
+                                            <span className="tr-doc-item-sub">
+                                              {locParts.join(", ")}
+                                            </span>
+                                          )}
+                                          {isSafeMediaUrl(m.photoUrl) && (
+                                            <button
+                                              type="button"
+                                              className="tr-doc-sub-btn no-print"
+                                              onClick={() =>
+                                                setTracePreviewMedia({
+                                                  urls: [m.photoUrl as string],
+                                                  title: m.code,
+                                                  subtitle: m.location || undefined,
+                                                })
+                                              }
+                                            >
+                                              {extCopy.viewMinutePhotoBtn}
+                                            </button>
+                                          )}
+                                        </td>
+                                        <td className="col-plot-ref is-tabular">
+                                          {m.plotCode || "-"}
+                                        </td>
+                                        <td
+                                          className={`col-status ${isFail ? "is-danger" : "is-ok"}`}
+                                        >
+                                          {m.result === "pass"
+                                            ? extCopy.labPass
+                                            : m.result === "fail"
+                                              ? extCopy.labFail
+                                              : m.result}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      ),
+                    })),
+                    ...authViolationChunks.map((vChunk, vIdx): A4DossierSectionItem => ({
+                      key: `auth-violations-${vIdx}`,
+                      content: (
+                        <section className="tr-doc-ledger tr-doc-ext-block">
+                          <div className="tr-doc-meta-strip">
+                            <span className="tr-doc-meta-left">
+                              {extCopy.violationsTitle}
+                              {authViolationChunks.length > 1
+                                ? extCopy.partSuffixFmt(vIdx + 1, authViolationChunks.length)
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="tr-doc-table-wrap">
+                            <table className="tr-doc-table is-auth-violations">
+                              <thead>
+                                <tr>
+                                  <th className="col-date">{extCopy.colDate}</th>
+                                  <th className="col-vio-desc">{extCopy.colViolationDesc}</th>
+                                  <th className="col-plot-ref">{extCopy.colPlotCode}</th>
+                                  <th className="col-status">{extCopy.colSeverity}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {vChunk.map((v, idx) => {
+                                  const isCrit = v.severity === "critical";
+                                  return (
+                                    <tr key={`${v.detectedOn}-${idx}`}>
+                                      <td className="col-date is-tabular">
+                                        {formatTraceDate(v.detectedOn, lang)}
+                                      </td>
+                                      <td className="col-vio-desc">
+                                        <strong className="tr-doc-item-title">{v.title}</strong>
+                                        {v.description && (
+                                          <span className="tr-doc-item-sub">
+                                            {v.description}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="col-plot-ref is-tabular">
+                                        {v.plotCode || v.householdLabel || "-"}
+                                      </td>
+                                      <td
+                                        className={`col-status ${isCrit ? "is-danger" : "is-muted"}`}
+                                      >
+                                        {isCrit ? extCopy.sevCritical : extCopy.sevWarning}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      ),
+                    })),
+                  ]
                   : []),
                 {
                   key: "attestation",
@@ -4855,35 +4870,21 @@ export default function TraceView() {
               );
             })()}
 
-            {!ac.fieldAuditPass?.active && !data.isPlotSignboard && !ac.isAuthenticated && (
-              <section
-                className="tr-pass-prompt-card is-sheet-aligned no-print"
-                aria-label={t.fieldAudit.passPromptTitle}
-              >
-                <div className="tr-pass-prompt-copy">
-                  <strong className="tr-pass-prompt-title">{t.fieldAudit.passPromptTitle}</strong>
-                  <p className="tr-pass-prompt-desc">{t.fieldAudit.passPromptDesc}</p>
-                </div>
-                <form className="tr-pass-form" onSubmit={handleApplyAuditPass}>
-                  <input
-                    type="text"
-                    className="tr-pass-input"
-                    value={auditPassInput}
-                    onChange={(e) => setAuditPassInput(e.target.value)}
-                    placeholder={t.fieldAudit.passInputPlaceholder}
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  <button
-                    type="submit"
-                    className="tr-pass-submit-btn"
-                    disabled={switchingTier || !auditPassInput.trim()}
-                  >
-                    {t.fieldAudit.passApplyBtn}
-                  </button>
-                </form>
-              </section>
-            )}
+            <TraceAccessRequestBanner
+              scannedCode={pub.lotIdentity.scannedCode || code}
+              lang={lang}
+              actualTier={ac.actualTier}
+              isAuthenticated={ac.isAuthenticated}
+              fieldAuditPassActive={Boolean(ac.fieldAuditPass?.active)}
+              loginHref={loginWithNextHref}
+              auditPassInput={auditPassInput}
+              onAuditPassInputChange={setAuditPassInput}
+              onApplyAuditPass={handleApplyAuditPass}
+              switchingTier={switchingTier}
+              defaultRequesterName={ac.viewerName}
+              externalOpenTrigger={openAccessReqCount}
+              onGrantActivated={handleGrantActivated}
+            />
           </>
         ) : null}
       </main>

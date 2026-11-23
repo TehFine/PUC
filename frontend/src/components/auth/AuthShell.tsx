@@ -16,7 +16,6 @@ interface AsideSpec {
   spreadProse: string;
   heading: string;
   lead: string;
-  points: readonly string[];
 }
 
 const ASIDE: Record<Variant, AsideSpec> = {
@@ -52,14 +51,9 @@ const ASIDE: Record<Variant, AsideSpec> = {
     },
     spreadTitle: "Nhật ký số vùng trồng",
     spreadProse:
-      "Ghi chép lịch bón phân, theo dõi thời gian cách ly và đối chiếu mã số vùng trồng minh bạch trước mỗi vụ thu hoạch.",
+      "Ghi nhật ký mùa vụ, tra cứu mã vùng trồng và theo dõi kết quả kiểm nghiệm minh bạch.",
     heading: "Sầu riêng minh bạch từ vườn đến thị trường",
-    lead: "Đăng nhập để ghi nhật ký chăm sóc điện tử, theo dõi ranh giới mã số vùng trồng và đối chiếu hồ sơ kiểm nghiệm trước mỗi vụ xuất khẩu.",
-    points: [
-      "Ghi nhật ký bón phân, phun thuốc và tưới tiêu ngay trên điện thoại",
-      "Tra cứu mã số vùng trồng (PUC) và bản đồ số từng thửa vườn",
-      "Theo dõi kết quả kiểm nghiệm an toàn dư lượng trước thu hoạch",
-    ],
+    lead: "Ghi nhật ký canh tác điện tử, tra cứu mã vùng trồng và theo dõi kết quả kiểm nghiệm trước thu hoạch.",
   },
   register: {
     indexLabel: "02 / Hồ sơ vùng trồng",
@@ -93,14 +87,9 @@ const ASIDE: Record<Variant, AsideSpec> = {
     },
     spreadTitle: "Chuẩn hồ sơ vùng trồng",
     spreadProse:
-      "Mỗi thửa vườn được cán bộ HTX khảo sát tọa độ thực địa, thẩm định giống cây và gắn mã định danh riêng trước khi cấp tài khoản.",
+      "Cán bộ HTX khảo sát tọa độ thực địa và gắn mã định danh riêng trước khi cấp tài khoản.",
     heading: "Quản trị chặt chẽ chuẩn hồ sơ xuất khẩu",
-    lead: "Mọi hồ sơ nông hộ và ranh giới thửa đất đều được Ban Quản trị HTX thẩm định thực địa, thiết lập chuẩn xác trước khi bàn giao tài khoản.",
-    points: [
-      "Cán bộ HTX và Trưởng thôn khảo sát thực địa, lập hồ sơ thửa đất",
-      "Quản trị viên cấp tài khoản gắn trực tiếp với mã vùng trồng định danh",
-      "Hộ thành viên nhận bàn giao tài khoản và cập nhật nhật ký mùa vụ",
-    ],
+    lead: "Cán bộ HTX thẩm định ranh giới thửa đất tại thực địa và thiết lập hồ sơ chuẩn xác trước khi bàn giao tài khoản.",
   },
   forgot: {
     indexLabel: "03 / Bảo mật tài khoản",
@@ -134,14 +123,9 @@ const ASIDE: Record<Variant, AsideSpec> = {
     },
     spreadTitle: "Bảo mật quyền truy cập",
     spreadProse:
-      "Đặt lại mật khẩu nhanh bằng số CCCD chủ hộ hoặc gửi yêu cầu để cán bộ HTX đối chiếu hồ sơ và phê duyệt an toàn.",
+      "Đặt lại mật khẩu bằng số CCCD chủ hộ hoặc gửi yêu cầu để cán bộ HTX phê duyệt.",
     heading: "Khôi phục mật khẩu nhanh chóng và an toàn",
-    lead: "Đặt lại mật khẩu tức thì bằng số Căn cước công dân (CCCD) đã đăng ký với HTX, hoặc gửi yêu cầu để cán bộ phụ trách đối chiếu và phê duyệt.",
-    points: [
-      "Xác minh số điện thoại cùng 12 chữ số CCCD chủ hộ để đổi ngay",
-      "Hoặc gửi yêu cầu trực tuyến để cán bộ HTX xác nhận và cấp duyệt",
-      "Mật khẩu mới được mã hóa an toàn, tự động thu hồi phiên cũ",
-    ],
+    lead: "Đặt lại mật khẩu ngay bằng số CCCD đã đăng ký hoặc gửi yêu cầu để cán bộ HTX xác nhận.",
   },
 };
 
@@ -226,16 +210,6 @@ export default function AuthShell({
               <span className="auth-aside-index">{aside.indexLabel}</span>
               <h2 className="auth-aside-heading">{aside.heading}</h2>
               <p className="auth-aside-lead">{aside.lead}</p>
-              <ul className="auth-points">
-                {aside.points.map((point, index) => (
-                  <li key={point}>
-                    <span className="auth-point-num" aria-hidden="true">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <span>{point}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
 
             {/* Khung tạp chí chia đôi dọc (├) ở cuối trang di động đồng bộ mẫu tham chiếu */}
