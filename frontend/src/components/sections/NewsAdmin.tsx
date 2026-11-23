@@ -88,28 +88,36 @@ export default function NewsAdmin() {
             <span className="news-summary-label">Tổng số bài viết</span>
             <span className="news-summary-sub">Trong hệ thống</span>
           </div>
-          <strong className="news-summary-val">{newsList.total}</strong>
+          <strong className="news-summary-val">
+            <span className="news-summary-num">{newsList.total}</span>
+          </strong>
         </div>
         <div className="news-summary-row">
           <div className="news-summary-meta">
             <span className="news-summary-label">Đã xuất bản</span>
             <span className="news-summary-sub">Hiển thị trang chủ</span>
           </div>
-          <strong className="news-summary-val">{publishedCount}</strong>
+          <strong className="news-summary-val">
+            <span className="news-summary-num">{publishedCount}</span>
+          </strong>
         </div>
         <div className="news-summary-row">
           <div className="news-summary-meta">
             <span className="news-summary-label">Bản nháp</span>
             <span className="news-summary-sub">Chờ duyệt đăng</span>
           </div>
-          <strong className="news-summary-val">{draftCount}</strong>
+          <strong className="news-summary-val">
+            <span className="news-summary-num">{draftCount}</span>
+          </strong>
         </div>
         <div className="news-summary-row">
           <div className="news-summary-meta">
             <span className="news-summary-label">Chuyên mục tin</span>
             <span className="news-summary-sub">4 nhóm chủ đề</span>
           </div>
-          <strong className="news-summary-val">4</strong>
+          <strong className="news-summary-val">
+            <span className="news-summary-num">4</span>
+          </strong>
         </div>
       </section>
 

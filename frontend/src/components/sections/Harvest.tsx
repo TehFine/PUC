@@ -323,7 +323,7 @@ export default function Harvest() {
               <span className="news-summary-sub">{sub}</span>
             </div>
             <strong className="news-summary-val">
-              {num}
+              <span className="news-summary-num">{num}</span>
               {unit && <span className="news-summary-unit">{unit}</span>}
             </strong>
           </div>

@@ -80,7 +80,7 @@ export default function BroadcastNoticeModal({
       footer={
         <>
           <ModalDismissButton
-            className="btn btn-outline broadcast-cancel-btn"
+            className="btn btn-outline"
             disabled={sendMut.pending}
             onFallbackClose={onClose}
           >
@@ -89,7 +89,7 @@ export default function BroadcastNoticeModal({
           <button
             type="submit"
             form="broadcast-household-notice-form"
-            className="btn btn-primary broadcast-submit-btn"
+            className="btn btn-primary"
             disabled={sendMut.pending}
           >
             {sendMut.pending ? "Đang gửi..." : "Gửi thông báo"}

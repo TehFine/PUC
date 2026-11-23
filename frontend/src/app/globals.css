@@ -2288,7 +2288,7 @@ input[type="date"].filter-select {
   box-shadow: var(--shadow-card);
   overflow: hidden;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(96px, max-content);
+  grid-template-columns: minmax(0, 1fr) minmax(112px, max-content);
 }
 
 .news-summary-row {
@@ -2323,12 +2323,13 @@ input[type="date"].filter-select {
 }
 
 .news-summary-val {
-  display: grid;
-  grid-auto-flow: column;
-  align-content: center;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: baseline;
   justify-content: center;
-  gap: 4px;
+  gap: 5px;
+  min-width: max-content;
   padding: 13px 18px;
   border-left: 1px solid #e5e7eb;
   font-family: var(--font-num-stack);
@@ -2336,20 +2337,34 @@ input[type="date"].filter-select {
   font-size: 20px;
   font-weight: 700;
   color: var(--ink, #14372f);
-  line-height: 1.1;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.news-summary-num {
+  flex: 0 0 auto;
+  display: inline-block;
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
   white-space: nowrap;
 }
 
 .news-summary-unit {
+  flex: 0 0 auto;
+  display: inline-block;
   font-family: var(--font-body-stack);
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: normal;
   color: var(--text-secondary, #5f6d66);
+  white-space: nowrap;
 }
 
 @media (max-width: 640px) {
   .news-summary-card {
-    grid-template-columns: minmax(0, 1fr) minmax(84px, max-content);
+    grid-template-columns: minmax(0, 1fr) minmax(102px, max-content);
   }
 
   .news-summary-meta {
@@ -2357,7 +2372,8 @@ input[type="date"].filter-select {
   }
 
   .news-summary-val {
-    padding: 12px 16px;
+    padding: 12px 14px;
+    gap: 5px;
     font-size: 18.5px;
   }
 }
@@ -4870,10 +4886,11 @@ input[type="date"].filter-select {
   gap: 16px;
   padding: 18px 22px;
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: none;
+  outline: none;
   border-radius: var(--r-lg);
   margin-bottom: 12px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.055), 0 8px 24px -4px rgba(15, 23, 42, 0.075);
 }
 
 .violation-body {
@@ -11768,8 +11785,10 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   gap: 0;
   min-width: 0;
   background: #ffffff;
-  border: 1px solid #d4d4d2;
+  border: none;
+  outline: none;
   border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.055), 0 8px 24px -4px rgba(15, 23, 42, 0.075);
   overflow: hidden;
 }
 
@@ -11780,7 +11799,7 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   gap: 12px;
   padding: 12px 16px 11px;
   background: #fafbf9;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #eef0f2;
 }
 
 .admin-diary-day-label {
@@ -11810,7 +11829,7 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 }
 
 .admin-diary-day-card>li+li {
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #eef0f2;
 }
 
 .admin-diary-row {
@@ -11822,6 +11841,7 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   padding: 13px 16px;
   width: 100%;
   border: none;
+  outline: none;
   border-radius: 0;
   background: transparent;
   font: inherit;
@@ -11843,8 +11863,8 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 }
 
 .admin-diary-row:focus-visible {
-  outline: 2px solid #15803d;
-  outline-offset: -2px;
+  outline: none;
+  background-color: #eff4f1;
 }
 
 .admin-diary-hh {
@@ -12551,7 +12571,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   }
 }
 
-/* ─── HỘP THOẠI SOẠN THÔNG BÁO TOÀN NÔNG HỘ (LAPTOP RỘNG RÃI, NÚT CÂN ĐỐI) ─── */
+/* ─── HỘP THOẠI SOẠN THÔNG BÁO TOÀN NÔNG HỘ (MOBILE TRÀN MÀN HÌNH, LAPTOP CĂN GIỮA RỘNG RÃI) ─── */
 .modal.pt-sheet.broadcast-notice-modal {
   background: #ffffff !important;
 }
@@ -12563,6 +12583,56 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 .modal.pt-sheet.broadcast-notice-modal .modal-body {
   background: #ffffff !important;
+}
+
+@media screen and (max-width: 759px) {
+  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay:has(> .broadcast-notice-modal) {
+    align-items: stretch !important;
+    padding: 0 !important;
+  }
+
+  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay:not([data-kb-open="true"]) > .modal.pt-sheet.broadcast-notice-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay[data-kb-open="true"]:has(> .broadcast-notice-modal)::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: -100vh;
+    bottom: -100vh;
+    background: #ffffff;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay[data-kb-open="true"] > .modal.pt-sheet.broadcast-notice-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: var(--vv-height, 100dvh) !important;
+    min-height: 0 !important;
+    max-height: var(--vv-height, 100dvh) !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .modal-header {
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 14px !important;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .modal-body {
+    padding: 16px 18px 22px !important;
+  }
 }
 
 @media screen and (min-width: 760px) {
@@ -12660,24 +12730,4 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 .modal.pt-sheet.broadcast-notice-modal .form-input:focus {
   border-color: #14372f !important;
-}
-
-.modal.pt-sheet.broadcast-notice-modal .modal-footer:not(:has(> div)) > .broadcast-cancel-btn {
-  color: #475569 !important;
-  font-weight: 500 !important;
-}
-
-.modal.pt-sheet.broadcast-notice-modal .modal-footer:not(:has(> div)) > .broadcast-cancel-btn:hover:not(:disabled) {
-  background: #f7f7f5 !important;
-  color: #14372f !important;
-}
-
-.modal.pt-sheet.broadcast-notice-modal .modal-footer:not(:has(> div)) > .broadcast-submit-btn {
-  color: #14372f !important;
-  font-weight: 700 !important;
-}
-
-.modal.pt-sheet.broadcast-notice-modal .modal-footer:not(:has(> div)) > .broadcast-submit-btn:hover:not(:disabled) {
-  background: #f3f7ee !important;
-  color: #14372f !important;
 }
