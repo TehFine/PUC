@@ -124,7 +124,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 SQL
 
   pg_restore --no-owner --no-privileges --section=pre-data -f - '$TMP_CONTAINER_DUMP' \
-    | sed -E 's/\bextensions\./public./g; /^CREATE EXTENSION/d; /^COMMENT ON EXTENSION/d' \
+    | sed -E 's/^CREATE SCHEMA public;/CREATE SCHEMA IF NOT EXISTS public;/; /^COMMENT ON SCHEMA public\b/d; /^CREATE EXTENSION\b/d; /^COMMENT ON EXTENSION\b/d; s/\bextensions\./public./g' \
     | psql -v ON_ERROR_STOP=1 -U '$PG_USER' -d '$PG_DB' >/dev/null
 
   pg_restore --no-owner --no-privileges --section=data --exit-on-error \
