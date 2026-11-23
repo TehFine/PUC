@@ -1878,7 +1878,8 @@ export default function MapView({
       }, 0);
       return () => window.clearTimeout(timer);
     }
-    const codeToEdit = pendingEditCode || consumePendingEditPlotCode();
+    const storedEditCode = consumePendingEditPlotCode();
+    const codeToEdit = pendingEditCode || storedEditCode;
     if (!codeToEdit) return;
     const target = plots.features.find((f) => f.properties.code === codeToEdit);
     if (!target) return;
@@ -1906,7 +1907,8 @@ export default function MapView({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onEditEvent = (event: Event) => {
-      const code = (event as CustomEvent<string>).detail || consumePendingEditPlotCode();
+      const storedEditCode = consumePendingEditPlotCode();
+      const code = (event as CustomEvent<string>).detail || storedEditCode;
       if (!code || !plots) return;
       const target = plots.features.find((f) => f.properties.code === code);
       if (target) {

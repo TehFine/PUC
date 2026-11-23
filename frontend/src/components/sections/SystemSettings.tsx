@@ -86,8 +86,8 @@ export default function SystemSettings() {
 
   useEffect(() => {
     const handler = (event: Event) => {
-      const nextTab =
-        (event as CustomEvent<string>).detail ?? consumePendingSystemTab();
+      const storedTab = consumePendingSystemTab();
+      const nextTab = (event as CustomEvent<string>).detail ?? storedTab;
       if (nextTab && isSystemTab(nextTab)) {
         selectTab(nextTab);
       }

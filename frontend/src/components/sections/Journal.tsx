@@ -125,7 +125,8 @@ export default function Journal() {
 
   useEffect(() => {
     const onTab = (event: Event) => {
-      const next = (event as CustomEvent<Tab>).detail;
+      const storedTab = consumePendingJournalTab();
+      const next = (event as CustomEvent<Tab>).detail ?? storedTab;
       if (next) selectTab(next);
     };
     window.addEventListener(ADMIN_JOURNAL_TAB_EVENT, onTab);

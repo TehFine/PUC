@@ -75,7 +75,8 @@ export default function Approval() {
 
   useEffect(() => {
     const handler = (event: Event) => {
-      const nextTab = (event as CustomEvent<string>).detail ?? consumePendingApprovalTab();
+      const storedTab = consumePendingApprovalTab();
+      const nextTab = (event as CustomEvent<string>).detail ?? storedTab;
       if (nextTab === "pending" || nextTab === "registrations" || nextTab === "schedule" || nextTab === "minutes") {
         selectTab(nextTab);
       }

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { ADMIN_EDIT_PLOT_EVENT, hasPendingEditPlotCode } from "@/components/admin/shared/counts-events";
 import type { PendingPlotAction } from "@/components/map/MapView";
 import { useSheetSwipe } from "@/components/portal/use-sheet-swipe";
 import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
@@ -15,7 +16,14 @@ import ZonesOverviewCard from "@/components/zones/ZonesOverviewCard";
 import { buildZoneRows, summarizePlots } from "@/components/zones/zone-data";
 import { canRedrawPlotShapeByRole } from "@/constants/roles";
 import { usePlots } from "@/hooks/use-plots";
-import { ADMIN_LAST_URL_KEY, readInitialUrlSubTab, useBackLayer, usePersistedState, useUrlSubTab } from "@/lib/back-navigation";
+import {
+  ADMIN_LAST_URL_KEY,
+  clearPersistedUiValue,
+  readInitialUrlSubTab,
+  useBackLayer,
+  usePersistedState,
+  useUrlSubTab,
+} from "@/lib/back-navigation";
 import { animatePopupExit } from "@/lib/popup-motion";
 
 const MapView = dynamic(() => import("@/components/map/MapView"), {
@@ -32,7 +40,7 @@ export default function Zones() {
   const canEditPlotShape = canRedrawPlotShapeByRole(session?.user.role) && can("plots", "update");
   const { plots, loading, error, refresh } = usePlots();
   const [view, setView] = useState<ZoneView>(() =>
-    readInitialUrlSubTab("sub", "map", isZoneView, ADMIN_LAST_URL_KEY),
+    hasPendingEditPlotCode() ? "map" : readInitialUrlSubTab("sub", "map", isZoneView, ADMIN_LAST_URL_KEY),
   );
   const [sheet, setSheet] = usePersistedState<SheetMode>(
     "admin:zones:sheet",
@@ -88,6 +96,18 @@ export default function Zones() {
     (raw): raw is ZoneView => raw === "map" || raw === "list",
   );
   useBackLayer(Boolean(isMobile && sheet), closeSheet);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onEditPlot = () => {
+      setSheet(null);
+      if (view !== "map") {
+        selectZoneView("map");
+      }
+    };
+    window.addEventListener(ADMIN_EDIT_PLOT_EVENT, onEditPlot);
+    return () => window.removeEventListener(ADMIN_EDIT_PLOT_EVENT, onEditPlot);
+  }, [selectZoneView, setSheet, view]);
 
   useEffect(() => {
     const el = sheetRef.current;
@@ -157,6 +177,7 @@ export default function Zones() {
             type="button"
             className={`zone-view-tab ${listActive ? "" : "active"}`}
             onClick={() => {
+              clearPersistedUiValue("admin:map:selected-plot");
               selectZoneView("map");
               setSheet(null);
             }}

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
 import { hasPendingServerLogout, useAuth } from "@/components/auth/AuthProvider";
+import { hasPendingEditPlotCode } from "@/components/admin/shared/counts-events";
 import { WORKSPACE_ACTIVE_SESSION_KEY } from "@/components/landing/AutoEnter";
 import Sidebar from "@/components/layout/Sidebar";
 import UserMenu from "@/components/layout/UserMenu";
@@ -21,6 +22,7 @@ import { PageSkeleton, SkeletonCards, SkeletonStats } from "@/components/ui/Skel
 import { prefetchApi } from "@/hooks/use-api";
 import {
   ADMIN_LAST_URL_KEY,
+  clearPersistedUiValue,
   ensureRootEntryBeforeSubPage,
   PUC_URL_SYNC_EVENT,
   pushUrlNavigation,
@@ -233,6 +235,14 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
       const syncedUrl = window.location.pathname + window.location.search + window.location.hash;
       saveWorkspaceUrl(ADMIN_LAST_URL_KEY, syncedUrl, activeUserId);
       if (nextParsed.section !== activeRef.current) {
+        if (
+          (activeRef.current === "zones" && nextParsed.section !== "zones") ||
+          (nextParsed.section === "zones" && !hasPendingEditPlotCode())
+        ) {
+          clearPersistedUiValue("admin:map:selected-plot");
+          clearPersistedUiValue("admin:zones:sheet");
+          clearPersistedUiValue("admin:zones:active-zone");
+        }
         startTransition(() => {
           setActive(nextParsed.section);
           if (nextParsed.section !== "zones") {
@@ -248,6 +258,14 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
 
   const navigate = useCallback(
     (id: SectionId) => {
+      if (
+        (activeRef.current === "zones" && id !== "zones") ||
+        (id === "zones" && !hasPendingEditPlotCode())
+      ) {
+        clearPersistedUiValue("admin:map:selected-plot");
+        clearPersistedUiValue("admin:zones:sheet");
+        clearPersistedUiValue("admin:zones:active-zone");
+      }
       const nextUrl = id === "dashboard" ? "/admin" : `/admin?section=${encodeURIComponent(id)}`;
       if (id !== activeRef.current) {
         pushUrlNavigation(nextUrl);

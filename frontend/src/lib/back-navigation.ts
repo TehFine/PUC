@@ -154,8 +154,8 @@ function armPendingGoBackWatchdog(): void {
 function buildCleanPageState(markRootSeeded = false): Record<string, unknown> {
   const raw =
     typeof window !== "undefined" &&
-    typeof window.history.state === "object" &&
-    window.history.state !== null
+      typeof window.history.state === "object" &&
+      window.history.state !== null
       ? (window.history.state as Record<string, unknown>)
       : {};
   const clone: Record<string, unknown> = { ...raw };
@@ -643,14 +643,15 @@ function readPersistedUiValue<T>(
     const parsed = JSON.parse(raw) as Partial<StoredUiState<T>>;
     if (!parsed || typeof parsed !== "object" || !("v" in parsed)) return defaultValue;
     const activeUser = getAuthScopeUser();
-    if (
-      activeUser !== null &&
-      typeof parsed.u === "number" &&
-      Number.isInteger(parsed.u) &&
-      parsed.u > 0 &&
-      parsed.u !== activeUser
-    ) {
-      return defaultValue;
+    if (activeUser !== null) {
+      if (
+        typeof parsed.u !== "number" ||
+        !Number.isInteger(parsed.u) ||
+        parsed.u <= 0 ||
+        parsed.u !== activeUser
+      ) {
+        return defaultValue;
+      }
     }
     const candidate = parsed.v as unknown;
     if (isValid) {
@@ -680,12 +681,21 @@ function writePersistedUiValue<T>(storageKey: string, value: T, defaultValue: T)
   }
 }
 
+const UI_STATE_CLEARED_EVENT = "puc:ui-state-cleared";
+
 function removePersistedUiValue(storageKey: string): void {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.removeItem(`${UI_STATE_PREFIX}${storageKey}`);
   } catch {
     // ignore
+  }
+}
+
+export function clearPersistedUiValue(storageKey: string): void {
+  removePersistedUiValue(storageKey);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent<string>(UI_STATE_CLEARED_EVENT, { detail: storageKey }));
   }
 }
 
@@ -717,13 +727,20 @@ export function usePersistedState<T>(
         reset();
       }
     };
+    const onCleared = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === storageKey) {
+        setState(defaultRef.current);
+      }
+    };
     window.addEventListener(AUTH_LOGOUT_EVENT, reset);
     window.addEventListener(AUTH_EXPIRED_EVENT, reset);
     window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, onScopeChange);
+    window.addEventListener(UI_STATE_CLEARED_EVENT, onCleared);
     return () => {
       window.removeEventListener(AUTH_LOGOUT_EVENT, reset);
       window.removeEventListener(AUTH_EXPIRED_EVENT, reset);
       window.removeEventListener(AUTH_SCOPE_CHANGED_EVENT, onScopeChange);
+      window.removeEventListener(UI_STATE_CLEARED_EVENT, onCleared);
     };
   }, [storageKey]);
 

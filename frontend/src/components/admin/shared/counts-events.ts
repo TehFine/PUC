@@ -1,5 +1,12 @@
 // Sự kiện nội bộ để các bộ đếm (badge thanh điều hướng, tổng quan) tải lại sau khi dữ liệu thay đổi.
 
+import {
+  AUTH_EXPIRED_EVENT,
+  AUTH_LOGOUT_EVENT,
+  AUTH_SCOPE_CHANGED_EVENT,
+  getAuthScopeUser,
+} from "@/lib/api-client";
+
 export const ADMIN_COUNTS_EVENT = "admin:counts-changed";
 
 /** Gọi sau mỗi thao tác ghi có thể làm thay đổi số hồ sơ chờ duyệt / vi phạm mở / đăng ký chờ. */
@@ -32,31 +39,80 @@ export function onAdminNavigate(listener: (section: string) => void): () => void
 }
 
 const EDIT_PLOT_STORAGE_KEY = "puc:pending-edit-plot-code";
+const PENDING_EDIT_PLOT_TTL_MS = 15_000;
 export const ADMIN_EDIT_PLOT_EVENT = "admin:edit-plot-shape";
+
+interface PendingEditPlotPayload {
+  code: string;
+  at: number;
+  u: number | null;
+}
+
+function readValidPendingEditPlotPayload(): PendingEditPlotPayload | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(EDIT_PLOT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingEditPlotPayload>;
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.code !== "string" ||
+      !parsed.code.trim() ||
+      typeof parsed.at !== "number" ||
+      !Number.isFinite(parsed.at) ||
+      Date.now() - parsed.at > PENDING_EDIT_PLOT_TTL_MS
+    ) {
+      window.sessionStorage.removeItem(EDIT_PLOT_STORAGE_KEY);
+      return null;
+    }
+    const activeUser = getAuthScopeUser();
+    if (activeUser !== null && parsed.u !== null && parsed.u !== activeUser) {
+      window.sessionStorage.removeItem(EDIT_PLOT_STORAGE_KEY);
+      return null;
+    }
+    return { code: parsed.code.trim(), at: parsed.at, u: parsed.u ?? null };
+  } catch {
+    try {
+      window.sessionStorage.removeItem(EDIT_PLOT_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+}
+
+export function hasPendingEditPlotCode(): boolean {
+  return readValidPendingEditPlotPayload() !== null;
+}
 
 export function requestEditPlotShape(plotCode: string): void {
   if (typeof window === "undefined") return;
+  const trimmed = plotCode.trim();
+  if (!trimmed) return;
   try {
-    window.sessionStorage.setItem(EDIT_PLOT_STORAGE_KEY, plotCode);
+    const payload: PendingEditPlotPayload = {
+      code: trimmed,
+      at: Date.now(),
+      u: getAuthScopeUser(),
+    };
+    window.sessionStorage.setItem(EDIT_PLOT_STORAGE_KEY, JSON.stringify(payload));
   } catch {
     // ignore storage errors
   }
   requestAdminNavigate("zones");
-  window.dispatchEvent(new CustomEvent<string>(ADMIN_EDIT_PLOT_EVENT, { detail: plotCode }));
+  window.dispatchEvent(new CustomEvent<string>(ADMIN_EDIT_PLOT_EVENT, { detail: trimmed }));
 }
 
 export function consumePendingEditPlotCode(): string | null {
   if (typeof window === "undefined") return null;
+  const payload = readValidPendingEditPlotPayload();
   try {
-    const code = window.sessionStorage.getItem(EDIT_PLOT_STORAGE_KEY);
-    if (code) {
-      window.sessionStorage.removeItem(EDIT_PLOT_STORAGE_KEY);
-      return code;
-    }
+    window.sessionStorage.removeItem(EDIT_PLOT_STORAGE_KEY);
   } catch {
     // ignore storage errors
   }
-  return null;
+  return payload ? payload.code : null;
 }
 
 const APPROVAL_TAB_STORAGE_KEY = "puc:pending-approval-tab";
@@ -195,4 +251,22 @@ export function consumePendingTraceRequestId(): number | null {
     // ignore storage errors
   }
   return null;
+}
+
+if (typeof window !== "undefined") {
+  const clearAllPendingIntents = () => {
+    try {
+      window.sessionStorage.removeItem(EDIT_PLOT_STORAGE_KEY);
+      window.sessionStorage.removeItem(APPROVAL_TAB_STORAGE_KEY);
+      window.sessionStorage.removeItem(JOURNAL_TAB_STORAGE_KEY);
+      window.sessionStorage.removeItem(SYSTEM_TAB_STORAGE_KEY);
+      window.sessionStorage.removeItem(DELETION_REQ_ID_STORAGE_KEY);
+      window.sessionStorage.removeItem(TRACE_REQ_ID_STORAGE_KEY);
+    } catch {
+      // ignore storage errors
+    }
+  };
+  window.addEventListener(AUTH_LOGOUT_EVENT, clearAllPendingIntents);
+  window.addEventListener(AUTH_EXPIRED_EVENT, clearAllPendingIntents);
+  window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, clearAllPendingIntents);
 }
