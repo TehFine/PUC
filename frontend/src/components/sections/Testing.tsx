@@ -148,8 +148,8 @@ export default function Testing() {
           <h2 className="admin-empty-stage-title">Chưa có phiếu kiểm nghiệm</h2>
           <p className="admin-empty-stage-desc">
             {canCreate
-              ? "Lưu kết quả phân tích Cadimi, Vàng O và dư lượng thuốc BVTV để đối chiếu điều kiện an toàn trước thu hoạch."
-              : "Kết quả phân tích Cadimi, Vàng O và dư lượng thuốc BVTV sẽ hiển thị tại đây ngay khi có mẫu kiểm nghiệm mới."}
+              ? "Lưu và theo dõi kết quả phân tích mẫu trước thu hoạch."
+              : "Kết quả phân tích mẫu sẽ hiển thị tại đây."}
           </p>
           {canCreate && (
             <div className="admin-empty-stage-actions">
