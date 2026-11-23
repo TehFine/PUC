@@ -482,7 +482,7 @@ describe("DOSSIER-CONTRIB: bảng kê hộ đóng góp trên hồ sơ lô hàng 
   it("che thông tin cá nhân ở chế độ công khai, giới hạn theo thôn cho cán bộ thôn và mở đầy đủ cho thanh tra", async () => {
     await db.query("UPDATE households SET public_trace_consent = true WHERE id = $1", [ids.hhA]);
     try {
-      // 1. Người tiêu dùng công khai: thấy đủ 2 hộ góp lô kèm tỷ trọng %, chỉ hiện tên hộ đã đồng ý (hhA), ẩn hoàn toàn hhB, mã thửa, kg, SĐT, CCCD
+      // 1. Người tiêu dùng công khai: thấy đủ 2 hộ góp lô kèm mã hộ tra cứu kỹ thuật và tỷ trọng %, chỉ hiện tên hộ đã đồng ý (hhA), ẩn hoàn toàn tên hhB, mã thửa, kg, SĐT, CCCD
       const pubRes = await request(app).get(`/api/public/trace/${FX.lot}`);
       expect(pubRes.status).toBe(200);
       const pubRows = pubRes.body.publicData.producer.dossierContributors as Array<Record<string, unknown>>;
@@ -491,12 +491,12 @@ describe("DOSSIER-CONTRIB: bảng kê hộ đóng góp trên hồ sơ lô hàng 
       const pubRowB = pubRows.find((r) => r.sharePct === 66.7)!;
       const pubRowA = pubRows.find((r) => r.sharePct === 33.3)!;
       expect(pubRowB.displayName).toBeNull();
-      expect(pubRowB.householdCode).toBeNull();
+      expect(pubRowB.householdCode).toBe(FX.hhB.code);
       expect(pubRowB.plotCode).toBeNull();
       expect(pubRowB.weightKg).toBeNull();
       expect(pubRowB.phone).toBeNull();
       expect(pubRowA.displayName).toBe(FX.hhA.name);
-      expect(pubRowA.householdCode).toBeNull();
+      expect(pubRowA.householdCode).toBe(FX.hhA.code);
       expect(pubRowA.plotCode).toBeNull();
       expect(pubRowA.weightKg).toBeNull();
 
@@ -506,7 +506,7 @@ describe("DOSSIER-CONTRIB: bảng kê hộ đóng góp trên hồ sơ lô hàng 
       expect(offRes.status).toBe(200);
       const offRows = offRes.body.publicData.producer.dossierContributors as Array<Record<string, unknown>>;
       const offRowA = offRows.find((r) => r.householdCode === FX.hhA.code)!;
-      const offRowB = offRows.find((r) => r.householdCode === null)!;
+      const offRowB = offRows.find((r) => r.householdCode === FX.hhB.code)!;
       expect(offRowA.visibilityLevel).toBe("authority");
       expect(offRowA.weightKg).toBe(100);
       expect(offRowA.plotCode).toBe(FX.hhA.plot);
@@ -915,6 +915,208 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
       if (extOfficerUsername) {
         await db.query("DELETE FROM users WHERE username = $1", [extOfficerUsername]);
       }
+    }
+  });
+});
+
+describe("HOUSEHOLD-TRACE & PHOTO-EVIDENCE: tra cứu mã hộ, ảnh profile, đóng góp lô xã và đa ảnh minh chứng 3 cấp", () => {
+  it("liên thông từ lô -> mã hộ & bảng cắm vườn, bảo vệ PII/ảnh chưa đồng ý ở Cấp 1, mở đa ảnh hiện trường (loại trừ hóa đơn) ở Cấp 2-3", async () => {
+    const htxOfficer = await loggedIn("0912345678");
+    const villageOfficer = await loggedIn(USERS.villageOfficer);
+
+    const tinyPng = Buffer.from(
+      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+      "hex",
+    );
+
+    const insertTestAttachment = async (purpose: "avatar" | "journal", name: string) => {
+      const r = await db.query<{ id: number; public_token: string }>(
+        `INSERT INTO attachments (owner_user_id, household_id, purpose, storage_key, original_name, mime_type, size_bytes, file_data)
+         VALUES ($1, $2, $3, $4, $5, 'image/png', $6, $7)
+         RETURNING id, public_token`,
+        [
+          ids.farmerUser,
+          ids.hhA,
+          purpose,
+          `system/test-hh-trace-${Date.now()}-${name}`,
+          name,
+          tinyPng.length,
+          tinyPng,
+        ],
+      );
+      return { id: Number(r.rows[0].id), publicToken: r.rows[0].public_token };
+    };
+
+    const [attAvatar, attField1, attField2, attSpray, attInvoice] = await Promise.all([
+      insertTestAttachment("avatar", "avatar.png"),
+      insertTestAttachment("journal", "care-1.png"),
+      insertTestAttachment("journal", "care-2.png"),
+      insertTestAttachment("journal", "spray-1.png"),
+      insertTestAttachment("journal", "invoice-secret.png"),
+    ]);
+    const avatarToken = attAvatar.publicToken;
+    const invoiceToken = attInvoice.publicToken;
+
+    await db.query("UPDATE households SET avatar_id = $2, public_trace_consent = false WHERE id = $1", [
+      ids.hhA,
+      attAvatar.id,
+    ]);
+
+    const pestRes = await db.query<{ id: number }>("SELECT id FROM pesticides WHERE status = 'allowed' LIMIT 1");
+    const pesticideId = Number(pestRes.rows[0].id);
+
+    const insertedJournal = await db.query<{ id: number }>(
+      `INSERT INTO journal_entries (entry_on, household_id, plot_code, activity, detail, recorder, has_photo, photo_id, photo_ids)
+       VALUES ('2020-01-06', $1, $2, 'Tỉa cành tạo tán', 'Ảnh minh chứng tỉa cành và hóa đơn đính nhầm', $3, true, $4, $5::bigint[])
+       RETURNING id`,
+      [
+        ids.hhA,
+        FX.hhA.plot,
+        FX.hhA.name,
+        attField1.id,
+        [attField1.id, attField2.id, attInvoice.id],
+      ],
+    );
+    const insertedSpray = await db.query<{ id: number }>(
+      `INSERT INTO spray_records (sprayed_on, household_id, plot_code, pesticide_id, dose, area_ha, isolation_days, mrl_status, photo_id, photo_ids)
+       VALUES ('2019-12-01', $1, $2, $3, '15ml / bình 16L', 1.0, 7, 'pass', $4, $5::bigint[])
+       RETURNING id`,
+      [ids.hhA, FX.hhA.plot, pesticideId, attSpray.id, [attSpray.id]],
+    );
+
+    let planId: number | null = null;
+    if (
+      (await db.query<{ reg: string | null }>("SELECT to_regclass('public.care_milestone_declarations') AS reg")).rows[0]
+        ?.reg
+    ) {
+      const planIns = await db.query<{ id: number }>(
+        `INSERT INTO plot_care_plans (household_id, plot_code, season, status)
+         VALUES ($1, $2, '2026-2027-HH-TRACE', 'active')
+         ON CONFLICT (household_id, plot_code, season) DO UPDATE SET updated_at = now()
+         RETURNING id`,
+        [ids.hhA, FX.hhA.plot],
+      );
+      planId = Number(planIns.rows[0].id);
+      await db.query(
+        `INSERT INTO care_milestone_declarations
+           (plan_id, household_id, plot_code, stage_code, milestone_code, performed_on,
+            expected_tree_state, actual_tree_state, actual_dosage,
+            field_photo_id, invoice_photo_id, invoice_photo_ids, compliance_status)
+         VALUES ($1, $2, $3, 'stage-1', 'cb-tiacanh-hh', CURRENT_DATE,
+                 'Khỏe', 'Khỏe', 'Đúng liều',
+                 $4, $5, $6::bigint[], 'compliant')`,
+        [planId, ids.hhA, FX.hhA.plot, attField1.id, attInvoice.id, [attInvoice.id]],
+      );
+    }
+
+    let hhReqCode = "";
+    try {
+      // 1. Cấp 1 công khai khi hộ CHƯA đồng ý: tra cứu Mã hộ (kể cả tiền tố "Mã hộ:") ẩn ảnh profile, họ tên, SĐT, CCCD, ảnh nhật ký, nhưng hiện chính xác lịch sử đóng góp lô xã
+      const pubHhUnconsented = await request(app).get(
+        `/api/public/trace/${encodeURIComponent(`Mã hộ: ${FX.hhA.code}`)}`,
+      );
+      expect(pubHhUnconsented.status).toBe(200);
+      expect(pubHhUnconsented.body.isHouseholdDossier).toBe(true);
+      expect(pubHhUnconsented.body.farmerProfile.householdCode).toBe(FX.hhA.code);
+      expect(pubHhUnconsented.body.farmerProfile.isAnonymized).toBe(true);
+      expect(pubHhUnconsented.body.farmerProfile.avatarUrl).toBeNull();
+      expect(pubHhUnconsented.body.communeLotContributions.totalLots).toBe(1);
+      expect(pubHhUnconsented.body.communeLotContributions.totalContributedKg).toBe(100);
+      expect(pubHhUnconsented.body.communeLotContributions.lots[0].lotCode).toBe(FX.lot);
+      expect(pubHhUnconsented.body.communeLotContributions.lots[0].sharePct).toBe(33.3);
+      expect(pubHhUnconsented.body).not.toHaveProperty("enterpriseData");
+      expect(pubHhUnconsented.body).not.toHaveProperty("authorityData");
+      const rawPubText = JSON.stringify(pubHhUnconsented.body);
+      expect(rawPubText).not.toContain(FX.hhA.name);
+      expect(rawPubText).not.toContain(FX.hhA.phone);
+      expect(rawPubText).not.toContain(FX.hhA.cccd);
+      expect(rawPubText).not.toContain(avatarToken);
+      expect(rawPubText).not.toContain(invoiceToken);
+
+      // Tương tự khi quét Bảng cắm ở vườn ở Cấp 1 khi hộ chưa đồng ý
+      const pubPlotUnconsented = await request(app).get(`/api/public/trace/${FX.hhA.plot}`);
+      expect(pubPlotUnconsented.status).toBe(200);
+      expect(pubPlotUnconsented.body.isPlotSignboard).toBe(true);
+      expect(pubPlotUnconsented.body.farmerProfile.avatarUrl).toBeNull();
+      expect(pubPlotUnconsented.body.communeLotContributions.totalContributedKg).toBe(100);
+
+      // 2. Cấp 1 công khai khi hộ ĐÃ đồng ý: hiện ảnh profile thật và tên chủ hộ trên tờ A4 của Mã hộ & Bảng cắm vườn, vẫn ẩn SĐT/CCCD/nhật ký nội bộ
+      await db.query("UPDATE households SET public_trace_consent = true WHERE id = $1", [ids.hhA]);
+      const pubHhConsented = await request(app).get(`/api/public/trace/${FX.hhA.code}`);
+      expect(pubHhConsented.status).toBe(200);
+      expect(pubHhConsented.body.farmerProfile.isAnonymized).toBe(false);
+      expect(pubHhConsented.body.farmerProfile.displayName).toBe(FX.hhA.name);
+      expect(pubHhConsented.body.farmerProfile.avatarUrl).toContain(avatarToken);
+      expect((await request(app).get(pubHhConsented.body.farmerProfile.avatarUrl)).status).toBe(200);
+      expect(JSON.stringify(pubHhConsented.body)).not.toContain(FX.hhA.phone);
+
+      await db.query("UPDATE households SET public_trace_consent = false WHERE id = $1", [ids.hhA]);
+
+      // 3. Cấp 2 (Cán bộ HTX / Đối tác): xem được evidenceLogs đa ảnh của cả nhật ký chăm sóc và phun BVTV, loại trừ hoàn toàn ảnh hóa đơn
+      const htxHhRes = await htxOfficer.get(`/api/trace/${FX.hhA.code}`);
+      expect(htxHhRes.status).toBe(200);
+      expect(htxHhRes.body.accessControl.viewerTier).toBe("enterprise");
+      const evLogs = htxHhRes.body.enterpriseData.evidenceLogs as Array<{
+        kind: string;
+        activity: string;
+        photoUrls: string[];
+      }>;
+      expect(Array.isArray(evLogs)).toBe(true);
+      const journalEv = evLogs.find((e) => e.activity === "Tỉa cành tạo tán")!;
+      const sprayEv = evLogs.find((e) => e.kind === "spray")!;
+      expect(journalEv).toBeDefined();
+      expect(journalEv.photoUrls).toHaveLength(2);
+      expect(JSON.stringify(journalEv.photoUrls)).not.toContain(invoiceToken);
+      expect(sprayEv).toBeDefined();
+      expect(sprayEv.photoUrls).toHaveLength(1);
+      expect((await request(app).get(sprayEv.photoUrls[0])).status).toBe(200);
+
+      // 4. Cấp 3 (Cán bộ thôn): đúng thôn (hhA) xem đủ ảnh profile & đa ảnh nhật ký; khác thôn (hhB) bị chặn scopeDenied về Cấp 1
+      const offOwnVillage = await villageOfficer.get(`/api/trace/${FX.hhA.code}`);
+      expect(offOwnVillage.status).toBe(200);
+      expect(offOwnVillage.body.accessControl.viewerTier).toBe("authority");
+      expect(offOwnVillage.body.farmerProfile.avatarUrl).toContain(avatarToken);
+      const authDiaries = offOwnVillage.body.authorityData.cultivationDiaries as Array<{
+        kind: string;
+        activity: string;
+        photoUrls: string[];
+      }>;
+      expect(authDiaries.find((d) => d.activity === "Tỉa cành tạo tán")!.photoUrls).toHaveLength(2);
+      expect(authDiaries.find((d) => d.kind === "spray")!.photoUrls).toHaveLength(1);
+      expect(JSON.stringify(authDiaries)).not.toContain(invoiceToken);
+
+      const offOtherVillage = await villageOfficer.get(`/api/trace/${FX.hhB.code}`);
+      expect(offOtherVillage.status).toBe(200);
+      expect(offOtherVillage.body.accessControl.scopeDenied).toBe(true);
+      expect(offOtherVillage.body.accessControl.viewerTier).toBe("public");
+      expect(offOtherVillage.body).not.toHaveProperty("authorityData");
+
+      // 5. Đoàn thanh tra đột xuất có thể gửi yêu cầu cấp quyền trực tiếp trên hồ sơ Mã hộ
+      const reqOnHh = await request(app)
+        .post("/api/public/trace-access-requests")
+        .send({
+          scannedCode: FX.hhA.code,
+          requesterName: "Đoàn Thanh tra Nông hộ",
+          organization: "Chi cục Trồng trọt và BVTV",
+          contactPhone: "0977112233",
+          purpose: "Đối chiếu hình ảnh minh chứng canh tác của hộ thành viên",
+          requestedTier: "authority",
+        });
+      expect(reqOnHh.status).toBe(201);
+      hhReqCode = reqOnHh.body.requestCode as string;
+    } finally {
+      if (hhReqCode) {
+        await db.query("DELETE FROM trace_access_requests WHERE request_code = $1", [hhReqCode]);
+      }
+      if (planId) {
+        await db.query("DELETE FROM plot_care_plans WHERE id = $1", [planId]);
+      }
+      await db.query("DELETE FROM spray_records WHERE id = $1", [insertedSpray.rows[0].id]);
+      await db.query("DELETE FROM journal_entries WHERE id = $1", [insertedJournal.rows[0].id]);
+      await db.query("UPDATE households SET avatar_id = NULL, public_trace_consent = false WHERE id = $1", [ids.hhA]);
+      await db.query("DELETE FROM attachments WHERE id = ANY($1::bigint[])", [
+        [attAvatar.id, attField1.id, attField2.id, attSpray.id, attInvoice.id],
+      ]);
     }
   });
 });

@@ -60,7 +60,7 @@ function generateAlphaNumToken(len: number): string {
 function normalizeScannedLookup(raw: string): string {
   return raw
     .trim()
-    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|hộ|ho|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
     .replace(/\s+/g, "");
 }
 
@@ -270,6 +270,48 @@ export class TraceRequestsService {
           pucCode: gzRes.rows[0].code.trim(),
         };
       }
+    }
+
+    // 6. Mã định danh nông hộ (households.code)
+    const hhRes = await this.db.query<{ id: number; code: string }>(
+      `SELECT id, code
+       FROM households
+       WHERE upper(btrim(code)) = upper(btrim($1))
+       LIMIT 1`,
+      [clean],
+    );
+    if (hhRes.rows[0]) {
+      const hhId = Number(hhRes.rows[0].id);
+      let resolvedZone: string | null = null;
+      if (hasPlots) {
+        const pz = await this.db.query<{ zone_code: string | null }>(
+          `SELECT zone_code FROM plots
+           WHERE household_id = $1 AND zone_code IS NOT NULL AND btrim(zone_code) <> ''
+           ORDER BY (status = 'approved') DESC, id ASC
+           LIMIT 1`,
+          [hhId],
+        );
+        if (pz.rows[0]?.zone_code) resolvedZone = pz.rows[0].zone_code.trim();
+      }
+      if (!resolvedZone && hasSignboards) {
+        const sz = await this.db.query<{ zone_code: string | null }>(
+          `SELECT zone_code FROM plot_signboard_tokens
+           WHERE household_id = $1 AND zone_code IS NOT NULL AND btrim(zone_code) <> ''
+           ORDER BY plot_code ASC
+           LIMIT 1`,
+          [hhId],
+        );
+        if (sz.rows[0]?.zone_code) resolvedZone = sz.rows[0].zone_code.trim();
+      }
+      const derivedZone = hhRes.rows[0].code.replace(/-(?:H|T)\d+$/i, "");
+      return {
+        canonicalDisplayCode: hhRes.rows[0].code,
+        targetKind: "plot",
+        resolvedLotCode: null,
+        pucCode:
+          resolvedZone ||
+          (derivedZone && derivedZone !== hhRes.rows[0].code ? derivedZone : "VN-DLOR-0086"),
+      };
     }
 
     throw notFound("Không tìm thấy hồ sơ truy xuất tương ứng với mã vừa quét.");

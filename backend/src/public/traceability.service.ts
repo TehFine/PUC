@@ -55,8 +55,71 @@ function maskFarmerPhone(raw: unknown): string | null {
 function normalizeTraceLookupCode(raw: string): string {
   return raw
     .trim()
-    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|hộ|ho|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
     .replace(/\s+/g, "");
+}
+
+/**
+ * Biểu thức SQL trả mảng JSON đường dẫn ảnh/video minh chứng hiện trường qua `public_token`,
+ * loại trừ cứng các mục đích nội bộ và ảnh hóa đơn mua vật tư (`care_milestone_declarations.invoice_photo_*`).
+ */
+function safeFieldPhotoUrlsSql(
+  idsColumn: string,
+  fallbackColumn: string,
+  hasMilestoneInvoices: boolean,
+): string {
+  const excludeInvoicesClause = hasMilestoneInvoices
+    ? `AND NOT EXISTS (
+         SELECT 1 FROM care_milestone_declarations cmd_inv
+         WHERE cmd_inv.invoice_photo_id = a_pub.id
+            OR a_pub.id = ANY(cmd_inv.invoice_photo_ids)
+       )`
+    : "";
+  return `COALESCE(
+    (
+      SELECT jsonb_agg(
+        CASE
+          WHEN a_pub.mime_type = 'video/webm' THEN '/api/public/files/' || a_pub.public_token || '/video.webm'
+          WHEN a_pub.mime_type LIKE 'video/%' THEN '/api/public/files/' || a_pub.public_token || '/video.mp4'
+          ELSE '/api/public/files/' || a_pub.public_token
+        END
+        ORDER BY u_pub.ord
+      )
+      FROM unnest(
+        CASE
+          WHEN cardinality(${idsColumn}) > 0 THEN ${idsColumn}
+          WHEN ${fallbackColumn} IS NOT NULL THEN ARRAY[${fallbackColumn}]
+          ELSE ARRAY[]::bigint[]
+        END
+      ) WITH ORDINALITY AS u_pub(att_id, ord)
+      JOIN attachments a_pub ON a_pub.id = u_pub.att_id
+      WHERE a_pub.purpose NOT IN ('approval', 'violation', 'harvest', 'stamp')
+        ${excludeInvoicesClause}
+    ),
+    '[]'::jsonb
+  )`;
+}
+
+function normalizeEvidenceMediaRows<T extends Record<string, unknown> = Record<string, unknown>>(
+  rows: Record<string, unknown>[],
+): T[] {
+  return rows.map((rawRow) => {
+    const converted = camelRow<Record<string, unknown>>(rawRow);
+    const rawUrls = Array.isArray(converted.photoUrls) ? converted.photoUrls : [];
+    const cleanUrls = rawUrls
+      .filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+      .map((u) => u.trim());
+    const fallbackSingle =
+      typeof converted.photoUrl === "string" && converted.photoUrl.trim().length > 0
+        ? converted.photoUrl.trim()
+        : null;
+    if (cleanUrls.length === 0 && fallbackSingle) {
+      cleanUrls.push(fallbackSingle);
+    }
+    converted.photoUrls = cleanUrls;
+    converted.photoUrl = cleanUrls[0] ?? null;
+    return converted as T;
+  });
 }
 
 export interface TraceRequestContext {
@@ -185,6 +248,7 @@ export interface DossierContributorEntry {
   visibilityLevel: "public" | "enterprise" | "authority";
   isAnonymized: boolean;
   displayName: string | null;
+  avatarUrl?: string | null;
   householdCode: string | null;
   villageName: string;
   pucCode: string;
@@ -197,6 +261,58 @@ export interface DossierContributorEntry {
   cccdMasked: string | null;
   cadastralLabel: string | null;
   publicConsent: boolean | null;
+}
+
+export interface TraceFarmerProfile {
+  displayName: string;
+  isAnonymized: boolean;
+  avatarUrl: string | null;
+  householdCode: string | null;
+  villageName: string;
+  adminLocation: string;
+  cooperativeName: string;
+  plotCount: number;
+  totalAreaHa: number;
+  totalTrees: number;
+  zoneCodes: string[];
+  varieties: string;
+  complianceStatus: "valid" | "review" | "unverified";
+  plots?: Array<{
+    plotCode: string;
+    qrToken: string | null;
+    zoneCode: string;
+    areaHa: number;
+    treeCount: number;
+    variety: string | null;
+    plantedYear: number | null;
+    status: string;
+  }>;
+}
+
+export interface CommuneLotContributionItem {
+  lotCode: string;
+  qrToken: string | null;
+  harvestedOn: string | null;
+  packedOn: string | null;
+  exportedOn: string | null;
+  plotCode: string | null;
+  contributedKg: number;
+  lotWeightTons: number;
+  sharePct: number;
+  packhouseName: string;
+  market: string;
+  status: string;
+}
+
+export interface CommuneLotContributionsSummary {
+  scopeLabel: "plot" | "household";
+  totalLots: number;
+  totalContributedKg: number;
+  currentSeasonYear: number;
+  currentSeasonKg: number;
+  householdTotalLots?: number;
+  householdTotalContributedKg?: number;
+  lots: CommuneLotContributionItem[];
 }
 
 export interface TraceRealtimeEvent {
@@ -2192,6 +2308,298 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Tổng hợp lịch sử đóng góp sản lượng của thửa vườn hoặc nông hộ trong các lô hàng đã ghi nhận trên địa bàn xã.
+   * Khi đối tác doanh nghiệp xem hồ sơ nông hộ/thửa vườn, ẩn tên cơ sở thu mua khác để bảo mật thương mại nhưng giữ nguyên số liệu sản lượng xã.
+   */
+  private async queryCommuneLotContributions(params: {
+    householdId: number | null;
+    plotCode?: string | null;
+    viewerUser?: AuthUser;
+    canSeePlotCodes: boolean;
+  }): Promise<CommuneLotContributionsSummary> {
+    const currentYear = new Date().getFullYear();
+    const cleanPlot = params.plotCode ? params.plotCode.trim() : null;
+    if (!params.householdId && !cleanPlot) {
+      return {
+        scopeLabel: cleanPlot ? "plot" : "household",
+        totalLots: 0,
+        totalContributedKg: 0,
+        currentSeasonYear: currentYear,
+        currentSeasonKg: 0,
+        lots: [],
+      };
+    }
+
+    const res = await this.db.query<{
+      lot_id: number;
+      lot_code: string;
+      qr_token: string | null;
+      enterprise_id: number | null;
+      harvested_on: unknown;
+      packed_on: unknown;
+      exported_on: unknown;
+      plot_code: string | null;
+      contributed_kg: number;
+      lot_weight_tons: number;
+      lot_contrib_total_kg: number;
+      packhouse_name: string | null;
+      market: string | null;
+      status: string | null;
+    }>(
+      cleanPlot
+        ? `SELECT hl.id AS lot_id,
+                  hl.code AS lot_code,
+                  hl.qr_token,
+                  hl.enterprise_id,
+                  hl.harvested_on,
+                  hl.packed_on,
+                  hl.exported_on,
+                  NULLIF(btrim(hc.plot_code), '') AS plot_code,
+                  hc.weight_kg::float8 AS contributed_kg,
+                  COALESCE(hl.weight_tons, 0)::float8 AS lot_weight_tons,
+                  (SELECT COALESCE(SUM(hc2.weight_kg), 0)::float8 FROM harvest_contributions hc2 WHERE hc2.lot_id = hl.id) AS lot_contrib_total_kg,
+                  COALESCE(hl.packhouse_name, e.name) AS packhouse_name,
+                  hl.market,
+                  hl.status
+           FROM harvest_contributions hc
+           JOIN harvest_lots hl ON hl.id = hc.lot_id
+           LEFT JOIN enterprises e ON e.id = hl.enterprise_id
+           WHERE hl.status <> 'revoked'
+             AND (
+               upper(btrim(COALESCE(hc.plot_code, ''))) = upper(btrim($2))
+               OR ($1::bigint IS NOT NULL AND hc.household_id = $1 AND COALESCE(btrim(hc.plot_code), '') = '')
+             )
+           ORDER BY hl.harvested_on DESC NULLS LAST, hl.id DESC
+           LIMIT 50`
+        : `SELECT hl.id AS lot_id,
+                  hl.code AS lot_code,
+                  hl.qr_token,
+                  hl.enterprise_id,
+                  hl.harvested_on,
+                  hl.packed_on,
+                  hl.exported_on,
+                  NULLIF(btrim(hc.plot_code), '') AS plot_code,
+                  hc.weight_kg::float8 AS contributed_kg,
+                  COALESCE(hl.weight_tons, 0)::float8 AS lot_weight_tons,
+                  (SELECT COALESCE(SUM(hc2.weight_kg), 0)::float8 FROM harvest_contributions hc2 WHERE hc2.lot_id = hl.id) AS lot_contrib_total_kg,
+                  COALESCE(hl.packhouse_name, e.name) AS packhouse_name,
+                  hl.market,
+                  hl.status
+           FROM harvest_contributions hc
+           JOIN harvest_lots hl ON hl.id = hc.lot_id
+           LEFT JOIN enterprises e ON e.id = hl.enterprise_id
+           WHERE hl.status <> 'revoked'
+             AND hc.household_id = $1
+           ORDER BY hl.harvested_on DESC NULLS LAST, hl.id DESC
+           LIMIT 50`,
+      cleanPlot ? [params.householdId, cleanPlot] : [params.householdId],
+    );
+
+    const distinctLotIds = new Set<number>();
+    let totalContributedKg = 0;
+    let currentSeasonKg = 0;
+    const viewerEntId =
+      params.viewerUser?.role === "enterprise" && params.viewerUser.enterpriseId
+        ? Number(params.viewerUser.enterpriseId)
+        : null;
+
+    const lots: CommuneLotContributionItem[] = res.rows.map((r) => {
+      distinctLotIds.add(Number(r.lot_id));
+      const contributedKg = Number(Number(r.contributed_kg || 0).toFixed(1));
+      totalContributedKg += contributedKg;
+      const harvestedOn = toIsoDateOnly(r.harvested_on);
+      if (harvestedOn && Number(harvestedOn.slice(0, 4)) === currentYear) {
+        currentSeasonKg += contributedKg;
+      }
+      const denomKg =
+        Number(r.lot_contrib_total_kg || 0) > 0
+          ? Number(r.lot_contrib_total_kg)
+          : Number(r.lot_weight_tons || 0) * 1000;
+      const sharePct =
+        denomKg > 0 ? Number(Math.min(100, (contributedKg / denomKg) * 100).toFixed(1)) : 100;
+      const isOtherEnterprise =
+        viewerEntId !== null && r.enterprise_id !== null && Number(r.enterprise_id) !== viewerEntId;
+      const packhouseName = isOtherEnterprise
+        ? "Cơ sở đóng gói liên kết trên địa bàn"
+        : String(r.packhouse_name || DEFAULT_PACKHOUSE_NAME);
+
+      return {
+        lotCode: r.lot_code,
+        qrToken: r.qr_token ? String(r.qr_token) : null,
+        harvestedOn,
+        packedOn: toIsoDateOnly(r.packed_on),
+        exportedOn: toIsoDateOnly(r.exported_on),
+        plotCode: params.canSeePlotCodes ? (r.plot_code ?? cleanPlot) : null,
+        contributedKg,
+        lotWeightTons:
+          Number(r.lot_weight_tons || 0) > 0
+            ? Number(r.lot_weight_tons)
+            : Number((denomKg / 1000).toFixed(3)),
+        sharePct,
+        packhouseName,
+        market: String(r.market || "Xuất khẩu chính ngạch"),
+        status: String(r.status || "exported"),
+      };
+    });
+
+    let householdTotalLots: number | undefined;
+    let householdTotalContributedKg: number | undefined;
+    if (cleanPlot && params.householdId) {
+      const hhTotalRes = await this.db.query<{ total_lots: number; total_kg: number }>(
+        `SELECT COUNT(DISTINCT hl.id)::int AS total_lots,
+                COALESCE(SUM(hc.weight_kg), 0)::float8 AS total_kg
+         FROM harvest_contributions hc
+         JOIN harvest_lots hl ON hl.id = hc.lot_id
+         WHERE hl.status <> 'revoked'
+           AND hc.household_id = $1`,
+        [params.householdId],
+      );
+      if (hhTotalRes.rows[0]) {
+        householdTotalLots = Number(hhTotalRes.rows[0].total_lots || 0);
+        householdTotalContributedKg = Number(Number(hhTotalRes.rows[0].total_kg || 0).toFixed(1));
+      }
+    }
+
+    return {
+      scopeLabel: cleanPlot ? "plot" : "household",
+      totalLots: distinctLotIds.size,
+      totalContributedKg: Number(totalContributedKg.toFixed(1)),
+      currentSeasonYear: currentYear,
+      currentSeasonKg: Number(currentSeasonKg.toFixed(1)),
+      ...(householdTotalLots !== undefined ? { householdTotalLots } : {}),
+      ...(householdTotalContributedKg !== undefined ? { householdTotalContributedKg } : {}),
+      lots,
+    };
+  }
+
+  /**
+   * Nhật ký canh tác và hình ảnh minh chứng hiện trường dành cho Cấp 2 (Doanh nghiệp thu mua, Cán bộ HTX,
+   * Đoàn thẩm định thực địa, Yêu cầu cấp quyền Cấp 2) và chính chủ hộ:
+   * - Hiển thị đầy đủ hoạt động chăm sóc, thuốc BVTV, thời gian cách ly PHI, đối chứng GPS và đa ảnh/video hiện trường (`photoUrls`).
+   * - Che tuyệt đối SĐT, CCCD, số tờ/thửa sổ đỏ, họ tên hộ chưa đồng ý công khai và ảnh hóa đơn mua vật tư nội bộ.
+   */
+  private async queryTier2CultivationEvidence(params: {
+    householdIds: number[];
+    plotCodes?: string[];
+    restrictToPlotCodes?: boolean;
+    canShowAllNames?: boolean;
+    limit?: number;
+  }) {
+    const cleanHhIds = [...new Set(params.householdIds.filter((id) => Number.isFinite(id) && id > 0))];
+    const cleanPlots = [
+      ...new Set((params.plotCodes ?? []).map((c) => c.trim().toUpperCase()).filter(Boolean)),
+    ];
+    if (cleanHhIds.length === 0 && cleanPlots.length === 0) {
+      return [];
+    }
+    const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+    const restrictPlots = Boolean(params.restrictToPlotCodes && cleanPlots.length > 0);
+    const limit = params.limit ?? 20;
+
+    const res = await this.db.query(
+      `SELECT entry_on,
+              plot_code,
+              household_code,
+              household_name,
+              recorder,
+              kind,
+              activity,
+              detail,
+              mrl_status,
+              isolation_days,
+              server_recorded_at,
+              is_late_entry,
+              record_hash,
+              gps_verified,
+              gps_distance_m::float8 AS gps_distance_m,
+              photo_urls
+       FROM (
+         SELECT to_char(sr.sprayed_on, 'YYYY-MM-DD') AS entry_on,
+                COALESCE(sr.plot_code, '') AS plot_code,
+                h.code AS household_code,
+                CASE
+                  WHEN $3::boolean OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
+                    THEN h.name
+                  ELSE ('Hộ thành viên ' || h.code)
+                END AS household_name,
+                CASE
+                  WHEN $3::boolean OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
+                    THEN h.name
+                  ELSE ('Hộ thành viên ' || h.code)
+                END AS recorder,
+                'spray'::text AS kind,
+                ('Phun thuốc BVTV: ' || p.name) AS activity,
+                ('Hoạt chất: ' || p.active_ingredient || ' | Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày') AS detail,
+                sr.mrl_status,
+                sr.isolation_days,
+                sr.server_recorded_at,
+                sr.is_late_entry,
+                sr.record_hash,
+                false AS gps_verified,
+                NULL::numeric AS gps_distance_m,
+                ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
+                sr.sprayed_on AS sort_date,
+                sr.id AS sort_id
+         FROM spray_records sr
+         JOIN pesticides p ON p.id = sr.pesticide_id
+         JOIN households h ON h.id = sr.household_id
+         WHERE (
+           (cardinality($1::bigint[]) > 0 AND sr.household_id = ANY($1::bigint[]))
+           OR (cardinality($2::text[]) > 0 AND upper(btrim(COALESCE(sr.plot_code, ''))) = ANY($2::text[]))
+         )
+         AND (
+           NOT $4::boolean
+           OR COALESCE(btrim(sr.plot_code), '') = ''
+           OR upper(btrim(sr.plot_code)) = ANY($2::text[])
+         )
+         UNION ALL
+         SELECT to_char(je.entry_on, 'YYYY-MM-DD') AS entry_on,
+                COALESCE(je.plot_code, '') AS plot_code,
+                h.code AS household_code,
+                CASE
+                  WHEN $3::boolean OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
+                    THEN h.name
+                  ELSE ('Hộ thành viên ' || h.code)
+                END AS household_name,
+                CASE
+                  WHEN $3::boolean OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
+                    THEN je.recorder
+                  ELSE 'Chủ hộ thành viên HTX'
+                END AS recorder,
+                'journal'::text AS kind,
+                je.activity,
+                je.detail,
+                NULL::text AS mrl_status,
+                NULL::int AS isolation_days,
+                je.server_recorded_at,
+                je.is_late_entry,
+                je.record_hash,
+                je.gps_verified,
+                je.gps_distance_m,
+                ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
+                je.entry_on AS sort_date,
+                je.id AS sort_id
+         FROM journal_entries je
+         JOIN households h ON h.id = je.household_id
+         WHERE (
+           (cardinality($1::bigint[]) > 0 AND je.household_id = ANY($1::bigint[]))
+           OR (cardinality($2::text[]) > 0 AND upper(btrim(COALESCE(je.plot_code, ''))) = ANY($2::text[]))
+         )
+         AND (
+           NOT $4::boolean
+           OR COALESCE(btrim(je.plot_code), '') = ''
+           OR upper(btrim(je.plot_code)) = ANY($2::text[])
+         )
+       ) combined
+       ORDER BY sort_date DESC, sort_id DESC
+       LIMIT $5`,
+      [cleanHhIds, cleanPlots, Boolean(params.canShowAllNames), restrictPlots, limit],
+    );
+
+    return normalizeEvidenceMediaRows(res.rows);
+  }
+
+  /**
    * Trụ cột 3: Hồ sơ Thẩm định Thực địa tại Vườn (Field Audit Mode) – đầy đủ đa giác GIS thửa đất,
    * hạn ngạch sản lượng, trạng thái cách ly PHI và sổ cái SHA-256 nhưng ẨN TUYỆT ĐỐI CCCD & SĐT cá nhân nông hộ.
    */
@@ -2233,6 +2641,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     };
   }) {
     const currentYear = new Date().getFullYear();
+    const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
     const [{ publicSummary: plotQuotaSummary, enterpriseBreakdown: plotQuotaDetail }, sprayPhiRes, ledgerRes, minutesRes, lotsRes, checkinsRes] =
       await Promise.all([
         params.precomputedMassBalance
@@ -2278,7 +2687,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                   record_hash,
                   gps_verified,
                   gps_distance_m::float8 AS gps_distance_m,
-                  photo_url
+                  photo_urls
            FROM (
              SELECT to_char(sr.sprayed_on, 'YYYY-MM-DD') AS entry_on,
                     'spray'::text AS kind,
@@ -2290,7 +2699,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                     sr.record_hash,
                     false AS gps_verified,
                     NULL::numeric AS gps_distance_m,
-                    NULL::text AS photo_url,
+                    ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
                     sr.sprayed_on AS sort_date,
                     sr.id AS sort_id
              FROM spray_records sr
@@ -2308,7 +2717,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                     je.record_hash,
                     je.gps_verified,
                     je.gps_distance_m,
-                    ${publicAttachmentUrlSql("je.photo_id")} AS photo_url,
+                    ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
                     je.entry_on AS sort_date,
                     je.id AS sort_id
              FROM journal_entries je
@@ -2328,7 +2737,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
            im.gps_verified,
            im.gps_distance_m::float8 AS gps_distance_m,
            im.record_hash,
-           ${publicAttachmentUrlSql("im.photo_id")} AS photo_url`,
+           ${safeFieldPhotoUrlsSql("im.photo_ids", "im.photo_id", false)} AS photo_urls`,
           params.householdId ? [params.householdId] : [],
           [params.plotCode],
           6,
@@ -2421,8 +2830,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         lastActiveIngredient: latestSpray?.active_ingredient ?? null,
         mrlAllPass,
       },
-      sealedLedger: camelRows(ledgerRes.rows),
-      inspectionHistory: camelRows(minutesRes),
+      sealedLedger: normalizeEvidenceMediaRows(ledgerRes.rows),
+      inspectionHistory: normalizeEvidenceMediaRows(minutesRes),
       linkedLots: camelRows(lotsRes.rows),
       recentGpsCheckins: camelRows(checkinsRes.rows),
     };
@@ -3068,7 +3477,38 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // ─── NHÁNH D: TRA CỨU TRỰC TIẾP THEO MÃ SỐ VÙNG TRỒNG PUC (growing_zones / zone_code) ───
+    // ─── NHÁNH D: TRA CỨU TRỰC TIẾP THEO MÃ ĐỊNH DANH NÔNG HỘ (households.code) ───
+    const hhLookupRes = await this.db.query(
+      `SELECT h.id,
+              h.code,
+              h.name,
+              h.phone,
+              ${CCCD_MASKED_SQL} AS cccd_masked,
+              h.status,
+              COALESCE(h.public_trace_consent, false) AS public_trace_consent,
+              h.village_id,
+              v.name AS village_name,
+              h.plot_count,
+              COALESCE(h.area_ha, 0)::float8 AS area_ha,
+              ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
+              h.created_at
+       FROM households h
+       LEFT JOIN villages v ON v.id = h.village_id
+       WHERE upper(btrim(h.code)) = upper(btrim($1))
+       LIMIT 1`,
+      [cleanCode],
+    );
+    if (hhLookupRes.rowCount && hhLookupRes.rows[0]) {
+      return this.buildHouseholdTraceResponse({
+        cleanCode,
+        rawHouseholdRow: hhLookupRes.rows[0],
+        hasPlots,
+        hasSignboards,
+        ctx,
+      });
+    }
+
+    // ─── NHÁNH E: TRA CỨU TRỰC TIẾP THEO MÃ SỐ VÙNG TRỒNG PUC (growing_zones / zone_code) ───
     let matchedZoneCode: string | null = null;
     if (hasGrowingZones) {
       const gzRes = await this.db.query<{ code: string }>(
@@ -3195,7 +3635,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    throw notFound(`Không tìm thấy hồ sơ truy xuất cho mã "${cleanCode}". Vui lòng kiểm tra lại mã thửa, mã lô hoặc tem QR.`);
+    throw notFound(`Không tìm thấy hồ sơ truy xuất cho mã "${cleanCode}". Vui lòng kiểm tra lại mã lô, mã thùng, tem QR, mã thửa hoặc mã hộ.`);
   }
 
   /** Xây dựng phản hồi 3 cấp cho Lô hàng / Thùng hàng / Tem con của lô. */
@@ -3231,6 +3671,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       village_id: number;
       village_name: string;
       area_ha: number;
+      avatar_url: string | null;
       weight_kg: number;
       plot_code: string | null;
     }>(
@@ -3238,6 +3679,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               h.phone, ${CCCD_MASKED_SQL} AS cccd_masked,
               h.status AS household_status, h.public_trace_consent,
               h.village_id, v.name AS village_name, h.area_ha::float8 AS area_ha,
+              ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
               hc.weight_kg::float8 AS weight_kg,
               NULLIF(hc.plot_code, '') AS plot_code
        FROM harvest_contributions hc
@@ -3657,6 +4099,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           visibilityLevel: "authority",
           isAnonymized: !canShowRawFarmerPii && !isConsentedQualified,
           displayName: safeAuthorityName,
+          avatarUrl: canShowRawFarmerPii || isConsentedQualified ? (h.avatar_url || null) : null,
           householdCode: h.household_code,
           villageName: h.village_name,
           pucCode: rowPucCode,
@@ -3673,11 +4116,14 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (hasEnterpriseView && inOfficerScope) {
+        const isHtxOfficerInScope = ctx.user?.role === "htx_officer" && !access.scopeDenied;
+        const canShowEntIdentity = isConsentedQualified || isHtxOfficerInScope;
         return {
           index: idx + 1,
           visibilityLevel: "enterprise",
-          isAnonymized: !isConsentedQualified,
-          displayName: isConsentedQualified ? h.household_name : null,
+          isAnonymized: !canShowEntIdentity,
+          displayName: canShowEntIdentity ? h.household_name : null,
+          avatarUrl: canShowEntIdentity ? (h.avatar_url || null) : null,
           householdCode: h.household_code,
           villageName: h.village_name,
           pucCode: rowPucCode,
@@ -3693,14 +4139,15 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         };
       }
 
-      // Cấp công khai (hoặc hộ nằm ngoài thôn phân công của cán bộ thôn): ẩn tuyệt đối định danh cá nhân chưa đồng ý
+      // Cấp công khai (hoặc hộ nằm ngoài thôn phân công của cán bộ thôn): cung cấp mã hộ kỹ thuật để đối chiếu minh bạch nhưng ẩn tuyệt đối PII cá nhân chưa đồng ý
       const allowPublicName = inOfficerScope && isConsentedQualified;
       return {
         index: idx + 1,
         visibilityLevel: "public",
         isAnonymized: !allowPublicName,
         displayName: allowPublicName ? h.household_name : null,
-        householdCode: null,
+        avatarUrl: allowPublicName ? (h.avatar_url || null) : null,
+        householdCode: h.household_code,
         villageName: h.village_name,
         pucCode: rowPucCode,
         sharePct,
@@ -3917,10 +4364,25 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         return true;
       });
 
+      const tier2EvidenceLogs =
+        viewerTier !== "authority"
+          ? await this.queryTier2CultivationEvidence({
+              householdIds: [...new Set(visibleContribHouseholds.map((h) => Number(h.household_id)))],
+              plotCodes: contribPlotCodes,
+              restrictToPlotCodes:
+                viewerTier === "enterprise" &&
+                contribPlotCodes.length > 0 &&
+                unpinnedContribHouseholdIds.length === 0,
+              canShowAllNames: ctx.user?.role === "htx_officer" && !access.scopeDenied,
+              limit: 20,
+            })
+          : undefined;
+
       enterpriseData = {
         sourceZones,
         totalSourceWeightKg: visibleTotalContribKg,
         massBalance: massBalance.enterpriseBreakdown,
+        ...(tier2EvidenceLogs ? { evidenceLogs: tier2EvidenceLogs } : {}),
         fieldAuditSourcePlots: effectivePlots.filter(isPlotInOfficerScope).slice(0, 12).map((p) => ({
           plotCode: p.code,
           qrToken: p.qr_token,
@@ -3967,12 +4429,13 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     // Dữ liệu Cấp 3 (Cơ quan quản lý: danh sách hộ/thửa nguồn kèm GIS, nhật ký canh tác & thuốc BVTV niêm phong SHA-256, biên bản kiểm tra)
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority") {
+      const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
       const [diariesRes, minutesRows, violationRows] = await Promise.all([
         scopedHouseholdIds.length > 0
           ? this.db.query(
             `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
-                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
+                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_urls
                FROM (
                  SELECT sr.sprayed_on AS entry_on,
                         COALESCE(sr.plot_code, '') AS plot_code,
@@ -3997,7 +4460,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         sr.record_hash,
                         false AS gps_verified,
                         NULL::numeric AS gps_distance_m,
-                        NULL::text AS photo_url,
+                        ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
                         sr.id AS sort_id
                  FROM spray_records sr
                  JOIN pesticides p ON p.id = sr.pesticide_id
@@ -4027,7 +4490,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         je.record_hash,
                         je.gps_verified,
                         je.gps_distance_m,
-                        ${publicAttachmentUrlSql("je.photo_id")} AS photo_url,
+                        ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
                         je.id AS sort_id
                  FROM journal_entries je
                  JOIN households h ON h.id = je.household_id
@@ -4043,7 +4506,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           `im.code, im.held_on, im.location, im.officer, im.result,
            im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
            im.record_hash, im.server_recorded_at,
-           ${publicAttachmentUrlSql("im.photo_id")} AS photo_url`,
+           ${safeFieldPhotoUrlsSql("im.photo_ids", "im.photo_id", false)} AS photo_urls`,
           scopedHouseholdIds,
           scopedPlotCodes,
           8,
@@ -4057,6 +4520,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           return {
             householdCode: h.household_code,
             householdName: isFullAuthorityStaff || isConsentedQualified ? h.household_name : `Hộ thành viên ${h.household_code}`,
+            avatarUrl: isFullAuthorityStaff || isConsentedQualified ? (h.avatar_url || null) : null,
             villageName: h.village_name,
             phone: isFullAuthorityStaff ? h.phone : maskFarmerPhone(h.phone),
             cccdMasked: h.cccd_masked,
@@ -4088,8 +4552,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               })),
           };
         }),
-        cultivationDiaries: camelRows(diariesRes.rows),
-        inspectionMinutes: camelRows(minutesRows),
+        cultivationDiaries: normalizeEvidenceMediaRows(diariesRes.rows),
+        inspectionMinutes: normalizeEvidenceMediaRows(minutesRows),
         internalViolations: violationRows,
       };
     }
@@ -4452,15 +4916,28 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       market: String(linkedLot?.market || "Dòng tuyển chọn cao cấp & Xuất khẩu"),
     });
 
-    // Dữ liệu Cấp 2 (Doanh nghiệp hoặc Đoàn Thẩm định có Thẻ hợp lệ)
+    // Dữ liệu Cấp 2 (Doanh nghiệp, Cán bộ HTX, Đoàn Thẩm định hoặc chính Chủ hộ đang xem tem của mình)
+    const isStampOwnerFarmer =
+      ctx.user?.role === "farmer" && Number(ctx.user.householdId) === householdId;
     let enterpriseData: Record<string, unknown> | undefined;
-    if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active) {
+    if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active || isStampOwnerFarmer) {
       const visibleStampLabs =
         viewerTier === "enterprise" && stampPlotCode
           ? rawLabs.filter(
             (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === stampPlotCode.toUpperCase(),
           )
           : rawLabs;
+      const tier2EvidenceLogs =
+        viewerTier !== "authority"
+          ? await this.queryTier2CultivationEvidence({
+              householdIds: [householdId],
+              plotCodes: stampPlotCode ? [stampPlotCode] : [],
+              restrictToPlotCodes: viewerTier === "enterprise" && Boolean(stampPlotCode),
+              canShowAllNames:
+                isStampOwnerFarmer || (ctx.user?.role === "htx_officer" && !access.scopeDenied),
+              limit: 20,
+            })
+          : undefined;
       enterpriseData = {
         sourceZones: [
           {
@@ -4475,6 +4952,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         ],
         totalSourceWeightKg: stampWeightKg ?? 0,
         massBalance: massBalance.enterpriseBreakdown,
+        ...(tier2EvidenceLogs ? { evidenceLogs: tier2EvidenceLogs } : {}),
         detailedLabTests: visibleStampLabs.map((lt) => ({
           code: lt.code,
           zoneCode: pucCode,
@@ -4527,6 +5005,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     // Dữ liệu Cấp 3 (Cơ quan quản lý)
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority") {
+      const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
       const officerFilter =
         temporaryGrant?.active && temporaryGrant.grantedTier === "authority"
           ? null
@@ -4548,7 +5027,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           ? this.db.query(
             `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
-                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
+                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_urls
                FROM (
                  SELECT sr.sprayed_on AS entry_on,
                         COALESCE(sr.plot_code, '') AS plot_code,
@@ -4565,7 +5044,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         sr.record_hash,
                         false AS gps_verified,
                         NULL::numeric AS gps_distance_m,
-                        NULL::text AS photo_url,
+                        ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
                         sr.id AS sort_id
                  FROM spray_records sr
                  JOIN pesticides p ON p.id = sr.pesticide_id
@@ -4586,7 +5065,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         je.record_hash,
                         je.gps_verified,
                         je.gps_distance_m,
-                        ${publicAttachmentUrlSql("je.photo_id")} AS photo_url,
+                        ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
                         je.id AS sort_id
                  FROM journal_entries je
                  WHERE je.household_id = $1
@@ -4600,7 +5079,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           `im.code, im.held_on, im.location, im.officer, im.result,
            im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
            im.record_hash, im.server_recorded_at,
-           ${publicAttachmentUrlSql("im.photo_id")} AS photo_url`,
+           ${safeFieldPhotoUrlsSql("im.photo_ids", "im.photo_id", false)} AS photo_urls`,
           scopedHouseholdIds,
           scopedPlotCodes,
           6,
@@ -4614,6 +5093,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             {
               householdCode: String(raw.householdCode),
               householdName: safeStampHouseholdName,
+              avatarUrl:
+                isFullAuthorityStaff || hasConsent
+                  ? (typeof raw.avatarUrl === "string" && raw.avatarUrl ? raw.avatarUrl : null)
+                  : null,
               villageName: String(raw.villageName || ""),
               phone: isFullAuthorityStaff ? String(raw.householdPhone || "") : maskFarmerPhone(raw.householdPhone),
               cccdMasked: String(raw.cccdMasked || ""),
@@ -4643,8 +5126,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             },
           ]
           : [],
-        cultivationDiaries: camelRows(diariesRes.rows),
-        inspectionMinutes: camelRows(minutesRows),
+        cultivationDiaries: normalizeEvidenceMediaRows(diariesRes.rows),
+        inspectionMinutes: normalizeEvidenceMediaRows(minutesRows),
         internalViolations: violationRows,
       };
     }
@@ -5029,6 +5512,23 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       ctx.user?.role === "farmer" &&
       plotHouseholdId !== null &&
       Number(ctx.user.householdId) === plotHouseholdId;
+    const isHtxOfficerInScope = ctx.user?.role === "htx_officer" && !access.scopeDenied;
+    const plotOfficerFilter =
+      temporaryGrant?.active && temporaryGrant.grantedTier === "authority"
+        ? null
+        : this.buildOfficerHouseholdFilter(ctx.user);
+    const plotHouseholdInOfficerScope =
+      !plotOfficerFilter ||
+      plotOfficerFilter({
+        villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
+        adminLocations: [adminLocation],
+      });
+    const canViewPlotFarmerIdentity =
+      hasConsent ||
+      isOwnerFarmer ||
+      isHtxOfficerInScope ||
+      (isFullAuthorityStaff && plotHouseholdInOfficerScope && !access.scopeDenied);
+
     const canViewFieldAudit =
       Boolean(fieldAuditPass?.active) ||
       Boolean(temporaryGrant?.active) ||
@@ -5041,7 +5541,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           qrToken: plotQrToken,
           householdId: plotHouseholdId,
           householdCode: raw.householdCode ? String(raw.householdCode) : null,
-          consentedOwnerName: hasConsent && raw.ownerName ? String(raw.ownerName) : null,
+          consentedOwnerName: canViewPlotFarmerIdentity && raw.ownerName ? String(raw.ownerName) : null,
           zoneCode: pucCode,
           villageName: String(raw.village || "Xã Cư Né"),
           adminLocation,
@@ -5059,14 +5559,31 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         })
       : Promise.resolve(undefined);
 
+    const communeLotContributionsPromise = this.queryCommuneLotContributions({
+      householdId: plotHouseholdId,
+      plotCode,
+      viewerUser: ctx.user,
+      canSeePlotCodes: true,
+    });
+
     let enterpriseData: Record<string, unknown> | undefined;
-    if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active) {
+    if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active || isOwnerFarmer) {
       const visiblePlotLabs =
         viewerTier === "enterprise"
           ? rawLabs.filter(
             (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === plotCode.toUpperCase(),
           )
           : rawLabs;
+      const tier2EvidenceLogs =
+        viewerTier !== "authority"
+          ? await this.queryTier2CultivationEvidence({
+              householdIds: plotHouseholdId ? [plotHouseholdId] : [],
+              plotCodes: [plotCode],
+              restrictToPlotCodes: true,
+              canShowAllNames: canViewPlotFarmerIdentity,
+              limit: 20,
+            })
+          : undefined;
       enterpriseData = {
         sourceZones: [
           {
@@ -5081,6 +5598,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         ],
         totalSourceWeightKg: contribKg,
         massBalance: massBalance.enterpriseBreakdown,
+        ...(tier2EvidenceLogs ? { evidenceLogs: tier2EvidenceLogs } : {}),
         detailedLabTests: visiblePlotLabs.map((lt) => ({
           code: lt.code,
           zoneCode: pucCode,
@@ -5133,20 +5651,12 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     let authorityData: Record<string, unknown> | undefined;
     const authorityPromise = (async () => {
       if (viewerTier !== "authority") return undefined;
-      const officerFilter =
-        temporaryGrant?.active && temporaryGrant.grantedTier === "authority"
-          ? null
-          : this.buildOfficerHouseholdFilter(ctx.user);
-      const householdVisible =
-        !officerFilter ||
-        officerFilter({
-          villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
-          adminLocations: [adminLocation],
-        });
+      const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+      const householdVisible = plotHouseholdInOfficerScope;
       const scopedHouseholdIds = householdVisible && plotHouseholdId ? [plotHouseholdId] : [];
       const scopedPlotCodes = householdVisible ? [plotCode] : [];
       // Cán bộ xã/thôn: nhật ký theo mã thửa chỉ lấy bản ghi của hộ thuộc địa bàn (không lấy bản ghi hộ khác trùng mã thửa).
-      const restrictToScopedHouseholds = officerFilter !== null;
+      const restrictToScopedHouseholds = plotOfficerFilter !== null;
       const safePlotOwnerName =
         isFullAuthorityStaff || hasConsent
           ? String(raw.ownerName || "Chưa cập nhật")
@@ -5156,7 +5666,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           ? this.db.query(
             `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
-                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
+                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_urls
                FROM (
                  SELECT sr.sprayed_on AS entry_on,
                         COALESCE(sr.plot_code, $1::text) AS plot_code,
@@ -5173,7 +5683,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         sr.record_hash,
                         false AS gps_verified,
                         NULL::numeric AS gps_distance_m,
-                        NULL::text AS photo_url,
+                        ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
                         sr.id AS sort_id
                  FROM spray_records sr
                  JOIN pesticides p ON p.id = sr.pesticide_id
@@ -5196,7 +5706,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         je.record_hash,
                         je.gps_verified,
                         je.gps_distance_m,
-                        ${publicAttachmentUrlSql("je.photo_id")} AS photo_url,
+                        ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
                         je.id AS sort_id
                  FROM journal_entries je
                  WHERE (upper(btrim(COALESCE(je.plot_code, ''))) = upper(btrim($1))
@@ -5212,7 +5722,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           `im.code, im.held_on, im.location, im.officer, im.result,
            im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
            im.record_hash, im.server_recorded_at,
-           ${publicAttachmentUrlSql("im.photo_id")} AS photo_url`,
+           ${safeFieldPhotoUrlsSql("im.photo_ids", "im.photo_id", false)} AS photo_urls`,
           scopedHouseholdIds,
           scopedPlotCodes,
           6,
@@ -5226,6 +5736,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             {
               householdCode: String(raw.householdCode || "Chưa gán mã hộ"),
               householdName: safePlotOwnerName,
+              avatarUrl:
+                isFullAuthorityStaff || hasConsent
+                  ? (typeof raw.avatarUrl === "string" && raw.avatarUrl ? raw.avatarUrl : null)
+                  : null,
               villageName: String(raw.village || ""),
               phone: isFullAuthorityStaff ? String(raw.householdPhone || "") : maskFarmerPhone(raw.householdPhone),
               cccdMasked: String(raw.cccdMasked || ""),
@@ -5253,21 +5767,51 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             },
           ]
           : [],
-        cultivationDiaries: camelRows(diariesRes.rows),
-        inspectionMinutes: camelRows(minutesRows),
+        cultivationDiaries: normalizeEvidenceMediaRows(diariesRes.rows),
+        inspectionMinutes: normalizeEvidenceMediaRows(minutesRows),
         internalViolations: violationRows,
       };
     })();
 
-    const [fieldAuditData, resolvedAuthorityData] = await Promise.all([fieldAuditPromise, authorityPromise]);
+    const [fieldAuditData, resolvedAuthorityData, communeLotContributions] = await Promise.all([
+      fieldAuditPromise,
+      authorityPromise,
+      communeLotContributionsPromise,
+    ]);
     authorityData = resolvedAuthorityData;
 
     const publicPlotStatus = isSuspended ? "revoked" : isDraftOrUnverified ? "unverified" : "valid";
     const resolvedQrToken = plotQrToken || (linkedLot?.qrToken ? String(linkedLot.qrToken) : null);
+    const householdCodeVal = raw.householdCode ? String(raw.householdCode) : null;
+    const farmerProfile: TraceFarmerProfile = {
+      displayName:
+        canViewPlotFarmerIdentity && raw.ownerName
+          ? String(raw.ownerName)
+          : householdCodeVal
+            ? `Hộ thành viên ${householdCodeVal}`
+            : "Hộ thành viên liên kết HTX Cư Né",
+      isAnonymized: !canViewPlotFarmerIdentity,
+      avatarUrl:
+        canViewPlotFarmerIdentity && typeof raw.avatarUrl === "string" && raw.avatarUrl
+          ? raw.avatarUrl
+          : null,
+      householdCode: householdCodeVal,
+      villageName: String(raw.village || "Xã Cư Né"),
+      adminLocation: live.pucAdminLocation || adminLocation,
+      cooperativeName: DEFAULT_COOP_NAME,
+      plotCount: 1,
+      totalAreaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
+      totalTrees: raw.treeCount !== null && raw.treeCount !== undefined ? Number(raw.treeCount) : 0,
+      zoneCodes: [pucCode],
+      varieties: String(raw.variety || "Ri6 & Monthong (Dona)"),
+      complianceStatus: isSuspended ? "review" : isDraftOrUnverified ? "unverified" : "valid",
+    };
 
     return {
       verifiedAt: verification.verifiedAt,
       isPlotSignboard: true,
+      farmerProfile,
+      communeLotContributions,
       plotSignboard: {
         plotCode,
         qrToken: plotQrToken,
@@ -5392,6 +5936,726 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         verification,
       },
       ...(fieldAuditData ? { fieldAuditData } : {}),
+      ...(enterpriseData ? { enterpriseData } : {}),
+      ...(authorityData ? { authorityData } : {}),
+    };
+  }
+
+  /**
+   * Xây dựng phản hồi 3 cấp cho Hồ sơ Nông hộ Liên kết khi tra cứu theo Mã hộ (`households.code`):
+   * - Hiển thị thẻ định danh nông hộ trên khổ A4 (kèm ảnh profile khi được phép), lịch sử đóng góp sản lượng
+   *   trong các lô hàng đã ghi nhận trên địa bàn xã, và hình ảnh minh chứng quá trình canh tác phân quyền theo 3 cấp.
+   */
+  private async buildHouseholdTraceResponse(params: {
+    cleanCode: string;
+    rawHouseholdRow: Record<string, unknown>;
+    hasPlots: boolean;
+    hasSignboards: boolean;
+    ctx: TraceRequestContext;
+  }) {
+    const { cleanCode, hasPlots, hasSignboards, ctx } = params;
+    const raw = camelRow<Record<string, unknown>>(params.rawHouseholdRow);
+    const householdId = Number(raw.id);
+    const householdCode = String(raw.code);
+    const householdStatus = String(raw.status || "pending");
+    const isSuspended = householdStatus === "violation";
+    const isDraftOrUnverified = householdStatus === "pending";
+    const hasConsent = Boolean(raw.publicTraceConsent) && householdStatus === "qualified";
+
+    let hhPlots: Array<{
+      code: string;
+      qr_token: string | null;
+      zone_code: string | null;
+      sheet_no: string | null;
+      parcel_no: string | null;
+      variety: string | null;
+      planted_year: number | null;
+      area_ha: number;
+      tree_count: number;
+      status: string;
+      source: string | null;
+      geometry_json: string | null;
+      lat: number | null;
+      lng: number | null;
+    }> = [];
+
+    if (hasPlots) {
+      hhPlots = (
+        await this.db.query<{
+          code: string;
+          qr_token: string | null;
+          zone_code: string | null;
+          sheet_no: string | null;
+          parcel_no: string | null;
+          variety: string | null;
+          planted_year: number | null;
+          area_ha: number;
+          tree_count: number;
+          status: string;
+          source: string | null;
+          geometry_json: string | null;
+          lat: number | null;
+          lng: number | null;
+        }>(
+          `SELECT p.code,
+                  ${hasSignboards ? "COALESCE(p.qr_token, pst.qr_token)" : "p.qr_token"} AS qr_token,
+                  ${hasSignboards ? "COALESCE(p.zone_code, pst.zone_code)" : "p.zone_code"} AS zone_code,
+                  p.sheet_no,
+                  p.parcel_no,
+                  ${hasSignboards ? "COALESCE(p.variety, pst.variety)" : "p.variety"} AS variety,
+                  ${hasSignboards ? "COALESCE(p.planted_year, pst.planted_year)" : "p.planted_year"} AS planted_year,
+                  COALESCE(p.area_ha, 0)::float8 AS area_ha,
+                  COALESCE(p.tree_count, GREATEST(30, ROUND(COALESCE(p.area_ha, 1.0) * 150)::int)) AS tree_count,
+                  p.status,
+                  p.source,
+                  ST_AsGeoJSON(p.geom) AS geometry_json,
+                  ST_Y(ST_Centroid(p.geom))::float8 AS lat,
+                  ST_X(ST_Centroid(p.geom))::float8 AS lng
+           FROM plots p
+           ${hasSignboards ? "LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)" : ""}
+           WHERE p.household_id = $1
+           ORDER BY (p.status = 'approved') DESC, p.id ASC`,
+          [householdId],
+        )
+      ).rows;
+    }
+
+    if (hhPlots.length === 0 && hasSignboards) {
+      hhPlots = (
+        await this.db.query<{
+          code: string;
+          qr_token: string | null;
+          zone_code: string | null;
+          sheet_no: string | null;
+          parcel_no: string | null;
+          variety: string | null;
+          planted_year: number | null;
+          area_ha: number;
+          tree_count: number;
+          status: string;
+          source: string | null;
+          geometry_json: string | null;
+          lat: number | null;
+          lng: number | null;
+        }>(
+          `SELECT pst.plot_code AS code,
+                  pst.qr_token,
+                  pst.zone_code,
+                  NULL::text AS sheet_no,
+                  NULL::text AS parcel_no,
+                  pst.variety,
+                  pst.planted_year,
+                  COALESCE(pst.area_ha, 0)::float8 AS area_ha,
+                  COALESCE(pst.tree_count, 150) AS tree_count,
+                  CASE
+                    WHEN $2::text = 'violation' THEN 'violation'
+                    WHEN $2::text = 'pending' THEN 'pending'
+                    ELSE 'approved'
+                  END AS status,
+                  'signboard'::text AS source,
+                  pst.geometry_json,
+                  pst.center_lat::float8 AS lat,
+                  pst.center_lng::float8 AS lng
+           FROM plot_signboard_tokens pst
+           WHERE pst.household_id = $1
+           ORDER BY pst.plot_code ASC`,
+          [householdId, householdStatus],
+        )
+      ).rows;
+    }
+
+    const hhPlotCodes = hhPlots.map((p) => p.code).filter(Boolean);
+    const hasPlotViolation = hhPlots.some((p) => p.status === "violation");
+    const effectiveSuspended = isSuspended || hasPlotViolation;
+    const distinctZones = [
+      ...new Set(hhPlots.map((p) => (p.zone_code ? p.zone_code.trim() : "")).filter(Boolean)),
+    ];
+    const derivedZone = householdCode.replace(/-(?:H|T)\d+$/i, "");
+    const primaryPucCode =
+      distinctZones[0] ||
+      (derivedZone && derivedZone !== householdCode ? derivedZone : "VN-DLOR-0086");
+    const villageName = String(raw.villageName || "Xã Cư Né");
+    const adminLocation = this.resolveAdminLocation(villageName, primaryPucCode);
+    const varietiesDisplay =
+      [...new Set(hhPlots.map((p) => (p.variety ? p.variety.trim() : "")).filter(Boolean))].join(", ") ||
+      "Ri6 & Monthong (Dona)";
+    const computedAreaHa =
+      hhPlots.length > 0
+        ? Number(hhPlots.reduce((sum, p) => sum + Number(p.area_ha || 0), 0).toFixed(2))
+        : Number(raw.areaHa || 0);
+    const computedTrees =
+      hhPlots.length > 0
+        ? hhPlots.reduce((sum, p) => sum + Number(p.tree_count || 0), 0)
+        : Math.max(0, Math.round(computedAreaHa * 150));
+    const computedPlotCount = Math.max(hhPlots.length, Number(raw.plotCount || 0));
+
+    const [latestLotRes, latestMinute] = await Promise.all([
+      this.db.query(
+        `SELECT hl.id, hl.code, hl.qr_token, hl.enterprise_id, hl.coop_code, hl.harvested_on, hl.packed_on, hl.exported_on,
+                hl.weight_tons::float8 AS weight_tons, hl.market, hl.status,
+                hl.packhouse_code, COALESCE(hl.packhouse_name, e.name) AS packhouse_name,
+                COALESCE(hl.packhouse_address, e.address) AS packhouse_address,
+                hl.phytosanitary_cert_no, hl.phytosanitary_issued_on,
+                hl.grade_a_pct::float8 AS grade_a_pct, hl.grade_b_pct::float8 AS grade_b_pct, hl.grade_c_pct::float8 AS grade_c_pct,
+                hl.avg_brix::float8 AS avg_brix, hl.treatment_method, hl.transporter, hl.vehicle_plate,
+                hl.temperature_c::float8 AS temperature_c, hl.departed_at, hl.estimated_arrival,
+                hc.weight_kg::float8 AS contributed_kg
+         FROM harvest_contributions hc
+         JOIN harvest_lots hl ON hl.id = hc.lot_id
+         LEFT JOIN enterprises e ON e.id = hl.enterprise_id
+         WHERE hl.status <> 'revoked'
+           AND hc.household_id = $1
+         ORDER BY hl.harvested_on DESC NULLS LAST, hc.id DESC
+         LIMIT 1`,
+        [householdId],
+      ),
+      this.queryLatestScopedMinute([householdId], hhPlotCodes),
+    ]);
+
+    const linkedLot = latestLotRes.rows[0] ? camelRow<Record<string, unknown>>(latestLotRes.rows[0]) : null;
+    const resolvedLinkedLotCode = linkedLot ? String(linkedLot.code) : null;
+    const effectiveEnterpriseId = await this.resolveEnterprisePlotOrStampScope({
+      user: ctx.user,
+      householdId,
+      plotCode: null,
+      linkedLotEnterpriseId: linkedLot?.enterpriseId ? Number(linkedLot.enterpriseId) : null,
+      pucCode: primaryPucCode,
+    });
+
+    const baseAccess = this.evaluateAccessAndScope(ctx, {
+      targetKind: "plot",
+      enterpriseId: effectiveEnterpriseId,
+      coopCode: linkedLot?.coopCode ? String(linkedLot.coopCode) : "HTX-CUNE",
+      villageIds: raw.villageId !== null && raw.villageId !== undefined ? [Number(raw.villageId)] : [],
+      adminLocations: [adminLocation],
+    });
+    const temporaryGrant = await this.resolveApprovedAccessGrant(
+      ctx,
+      {
+        scannedCode: cleanCode,
+        targetKind: "plot",
+        canonicalCodes: [householdCode, ...hhPlotCodes],
+        resolvedLotCode: resolvedLinkedLotCode,
+        pucCode: primaryPucCode,
+        distinctZoneCodes: distinctZones,
+      },
+      true,
+    );
+    const access = this.elevateAccessWithGrant(baseAccess, ctx, temporaryGrant);
+    const viewerTier = access.viewerTier;
+    const isFullAuthorityStaff = this.isAuthenticatedAuthorityStaff(ctx.user);
+    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(
+      viewerTier,
+      ctx.user,
+    );
+    const verifiedLabClause = canReadDraftLabs ? "" : "AND record_status = 'verified'";
+
+    const packhouseName = String(linkedLot?.packhouseName || DEFAULT_PACKHOUSE_NAME);
+    const packhouseCode = String(linkedLot?.packhouseCode || DEFAULT_PACKHOUSE_CODE);
+    const packhouseAddress = String(linkedLot?.packhouseAddress || DEFAULT_PACKHOUSE_ADDRESS);
+
+    const [labTestsRes, live, coarseMap] = await Promise.all([
+      this.db.query(
+        `SELECT code, plot_code, sampled_on, cd_mg_kg::float8 AS cd_mg_kg, yellow_o_positive,
+                residue_mg_kg::float8 AS residue_mg_kg, chlorpyrifos_mg_kg::float8 AS chlorpyrifos_mg_kg,
+                result, lab, lab_accreditation_code, external_verify_code, external_verify_url,
+                ${publicAttachmentUrlSql("scan_attachment_id")} AS scan_url
+         FROM lab_tests
+         WHERE household_id = $1
+         ${verifiedLabClause}
+         ORDER BY sampled_on DESC, id DESC
+         LIMIT 6`,
+        [householdId],
+      ),
+      this.resolveLiveZoneAndPackhouseStatus({
+        pucCode: primaryPucCode,
+        enterpriseId: linkedLot?.enterpriseId ? Number(linkedLot.enterpriseId) : null,
+        packhouseCode,
+        hasPlotOrHouseholdViolation: effectiveSuspended,
+        hasPendingSource: isDraftOrUnverified,
+      }),
+      this.resolveCoarseZoneMap(hasPlots, primaryPucCode, adminLocation),
+    ]);
+
+    const pucStatus = live.pucStatus;
+    const hasRealtimeSuspension =
+      live.pucStatus === "suspended" ||
+      live.pucStatus === "revoked" ||
+      live.packhouseStatus !== "active";
+
+    const [verification, fieldAuditPass] = await Promise.all([
+      this.recordScanAndVerify({
+        scannedCode: cleanCode,
+        canonicalKey: householdCode,
+        resolvedLotCode: resolvedLinkedLotCode,
+        traceUnit: "puc_zone",
+        isRevoked: effectiveSuspended,
+        hasRealtimeSuspension,
+        access,
+        ctx,
+      }),
+      temporaryGrant?.matchedViaToken
+        ? Promise.resolve(null)
+        : this.resolveFieldAuditPass(
+            ctx,
+            primaryPucCode,
+            cleanCode,
+            resolvedLinkedLotCode,
+            true,
+            distinctZones,
+          ),
+    ]);
+
+    const rawLabs = camelRows<{
+      code: string;
+      plotCode: string;
+      sampledOn: string;
+      cdMgKg: number;
+      yellowOPositive: boolean;
+      residueMgKg: number;
+      chlorpyrifosMgKg: number | null;
+      result: string;
+      lab: string;
+      labAccreditationCode: string | null;
+      externalVerifyCode: string | null;
+      externalVerifyUrl: string | null;
+      scanUrl: string | null;
+    }>(labTestsRes.rows);
+    const latestLab = rawLabs[0] ?? null;
+
+    const harvestedOn = toIsoDateOnly(linkedLot?.harvestedOn);
+    const packedOn = toIsoDateOnly(linkedLot?.packedOn);
+    const exportedOn = toIsoDateOnly(linkedLot?.exportedOn);
+    const lastInspectionOn = toIsoDateOnly(latestMinute?.held_on);
+    const latestMinuteCode = latestMinute?.code ?? null;
+    const latestMinuteOfficer = latestMinute?.officer ?? null;
+    const seasonYear = harvestedOn
+      ? Number(harvestedOn.slice(0, 4)) || new Date().getFullYear()
+      : new Date().getFullYear();
+
+    const isOwnerFarmer =
+      ctx.user?.role === "farmer" && Number(ctx.user.householdId) === householdId;
+    const isHtxOfficerInScope = ctx.user?.role === "htx_officer" && !access.scopeDenied;
+    const officerFilter =
+      temporaryGrant?.active && temporaryGrant.grantedTier === "authority"
+        ? null
+        : this.buildOfficerHouseholdFilter(ctx.user);
+    const householdVisibleToOfficer =
+      !officerFilter ||
+      officerFilter({
+        villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
+        adminLocations: [adminLocation],
+      });
+    const canViewFarmerIdentity =
+      hasConsent ||
+      isOwnerFarmer ||
+      isHtxOfficerInScope ||
+      (isFullAuthorityStaff && householdVisibleToOfficer && !access.scopeDenied);
+    const canSeePlotCodes =
+      TIER_RANK[viewerTier] >= TIER_RANK.enterprise ||
+      Boolean(fieldAuditPass?.active) ||
+      isOwnerFarmer ||
+      hasConsent;
+
+    const [integritySeal, massBalance, lastCareRes, communeLotContributions] = await Promise.all([
+      this.computeLedgerIntegritySummary([householdId], hhPlotCodes, harvestedOn),
+      this.computeMassBalanceSummary({
+        seasonYear,
+        pucCode: primaryPucCode,
+        lotId: linkedLot?.id ? Number(linkedLot.id) : null,
+        thisLotWeightKg: linkedLot?.contributedKg ? Number(linkedLot.contributedKg) : 0,
+        plotCodes: hhPlotCodes,
+        householdIds: [householdId],
+      }),
+      this.db.query<{ last_care_on: Date | string | null }>(
+        `SELECT GREATEST(
+           (SELECT MAX(je.entry_on) FROM journal_entries je WHERE je.household_id = $1),
+           (SELECT MAX(sr.sprayed_on) FROM spray_records sr WHERE sr.household_id = $1)
+         ) AS last_care_on`,
+        [householdId],
+      ),
+      this.queryCommuneLotContributions({
+        householdId,
+        plotCode: null,
+        viewerUser: ctx.user,
+        canSeePlotCodes,
+      }),
+    ]);
+    const lastCareOn = toIsoDateOnly(lastCareRes.rows[0]?.last_care_on);
+
+    const phytoCertNo = linkedLot?.phytosanitaryCertNo ? String(linkedLot.phytosanitaryCertNo) : null;
+    const governance = await this.buildGovernancePayload({
+      pucCode: primaryPucCode,
+      cooperativeName: DEFAULT_COOP_NAME,
+      participatingHouseholdCount: 1,
+      onTimePct: integritySeal.onTimePct,
+      chainVerified: integritySeal.chainVerified,
+      lastInspectionOn,
+      latestMinuteCode,
+      latestMinuteOfficer,
+      latestLab: latestLab
+        ? {
+            code: latestLab.code,
+            lab: latestLab.lab,
+            sampledOn: toIsoDateOnly(latestLab.sampledOn),
+            result: latestLab.result,
+            labAccreditationCode: latestLab.labAccreditationCode,
+          }
+        : null,
+      phytoCertNo,
+    });
+
+    const timeline = this.buildFiveStepTimeline({
+      pucCode: primaryPucCode,
+      pucStatus,
+      packhouseStatus: live.packhouseStatus,
+      lastFarmCheckOn: lastInspectionOn,
+      harvestedOn,
+      packedOn,
+      packhouseName,
+      packhouseCode,
+      latestLabOn: toIsoDateOnly(latestLab?.sampledOn),
+      latestLabName: latestLab?.lab ?? null,
+      latestLabResult: latestLab?.result ?? null,
+      exportedOn,
+      lotStatus: effectiveSuspended ? "revoked" : linkedLot ? String(linkedLot.status) : "sampling",
+      market: String(linkedLot?.market || "Xuất khẩu chính ngạch & Nội địa"),
+    });
+
+    let enterpriseData: Record<string, unknown> | undefined;
+    if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active || isOwnerFarmer) {
+      const tier2EvidenceLogs =
+        viewerTier !== "authority"
+          ? await this.queryTier2CultivationEvidence({
+              householdIds: [householdId],
+              plotCodes: hhPlotCodes,
+              restrictToPlotCodes: false,
+              canShowAllNames: canViewFarmerIdentity,
+              limit: 25,
+            })
+          : undefined;
+      enterpriseData = {
+        sourceZones: [
+          {
+            zoneCode: primaryPucCode,
+            villageName,
+            householdCount: 1,
+            areaHa: computedAreaHa,
+            weightKg: communeLotContributions.totalContributedKg,
+            sharePct: 100,
+            status: pucStatus === "active" ? "Đủ điều kiện" : "Cần rà soát",
+          },
+        ],
+        totalSourceWeightKg: communeLotContributions.totalContributedKg,
+        massBalance: massBalance.enterpriseBreakdown,
+        ...(tier2EvidenceLogs ? { evidenceLogs: tier2EvidenceLogs } : {}),
+        fieldAuditSourcePlots: hhPlots.slice(0, 12).map((p) => ({
+          plotCode: p.code,
+          qrToken: p.qr_token,
+          zoneCode: p.zone_code || primaryPucCode,
+          variety: p.variety || varietiesDisplay,
+          areaHa: p.area_ha,
+          status: p.status,
+        })),
+        detailedLabTests: rawLabs.map((lt) => ({
+          code: lt.code,
+          zoneCode: primaryPucCode,
+          sampledOn: toIsoDateOnly(lt.sampledOn) || lt.sampledOn,
+          lab: lt.lab,
+          labAccreditationCode: lt.labAccreditationCode,
+          externalVerifyCode: lt.externalVerifyCode,
+          externalVerifyUrl: lt.externalVerifyUrl,
+          cdMgKg: lt.cdMgKg,
+          cdThresholdMgKg: 0.05,
+          yellowOPositive: lt.yellowOPositive,
+          residueMgKg: lt.residueMgKg,
+          residueThresholdMgKg: 0.1,
+          chlorpyrifosMgKg: lt.chlorpyrifosMgKg,
+          result: lt.result,
+          scanUrl: lt.scanUrl,
+        })),
+        packingSpecs: null,
+      };
+    }
+
+    let authorityData: Record<string, unknown> | undefined;
+    if (viewerTier === "authority" && householdVisibleToOfficer) {
+      const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+      const safeHhName =
+        isFullAuthorityStaff || hasConsent
+          ? String(raw.name || "Chưa cập nhật")
+          : `Hộ thành viên ${householdCode}`;
+      const [diariesRes, minutesRows, violationRows] = await Promise.all([
+        this.db.query(
+          `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
+                    server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
+                    gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_urls
+             FROM (
+               SELECT sr.sprayed_on AS entry_on,
+                      COALESCE(sr.plot_code, '') AS plot_code,
+                      ('Phun thuốc BVTV: ' || p.name) AS activity,
+                      ('Hoạt chất: ' || p.active_ingredient || ' | Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày') AS detail,
+                      $2::text AS recorder,
+                      $2::text AS household_name,
+                      'spray'::text AS kind,
+                      sr.mrl_status,
+                      sr.isolation_days,
+                      sr.server_recorded_at,
+                      sr.entry_delay_hours,
+                      sr.is_late_entry,
+                      sr.record_hash,
+                      false AS gps_verified,
+                      NULL::numeric AS gps_distance_m,
+                      ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
+                      sr.id AS sort_id
+               FROM spray_records sr
+               JOIN pesticides p ON p.id = sr.pesticide_id
+               WHERE sr.household_id = $1
+               UNION ALL
+               SELECT je.entry_on,
+                      je.plot_code,
+                      je.activity,
+                      je.detail,
+                      CASE WHEN $3::boolean THEN je.recorder ELSE 'Chủ hộ thành viên HTX' END AS recorder,
+                      $2::text AS household_name,
+                      'journal'::text AS kind,
+                      NULL::text AS mrl_status,
+                      NULL::int AS isolation_days,
+                      je.server_recorded_at,
+                      je.entry_delay_hours,
+                      je.is_late_entry,
+                      je.record_hash,
+                      je.gps_verified,
+                      je.gps_distance_m,
+                      ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
+                      je.id AS sort_id
+               FROM journal_entries je
+               WHERE je.household_id = $1
+             ) combined
+             ORDER BY entry_on DESC, sort_id DESC
+             LIMIT 25`,
+          [householdId, safeHhName, isFullAuthorityStaff || hasConsent],
+        ),
+        this.queryScopedInspectionMinutes(
+          `im.code, im.held_on, im.location, im.officer, im.result,
+           im.plot_code, im.gps_verified, im.gps_distance_m::float8 AS gps_distance_m,
+           im.record_hash, im.server_recorded_at,
+           ${safeFieldPhotoUrlsSql("im.photo_ids", "im.photo_id", false)} AS photo_urls`,
+          [householdId],
+          hhPlotCodes,
+          8,
+        ),
+        canReadViolations ? this.queryScopedViolations([householdId], hhPlotCodes, 8) : Promise.resolve([]),
+      ]);
+
+      authorityData = {
+        sourceHouseholds: [
+          {
+            householdCode,
+            householdName: safeHhName,
+            avatarUrl:
+              isFullAuthorityStaff || hasConsent
+                ? (typeof raw.avatarUrl === "string" && raw.avatarUrl ? raw.avatarUrl : null)
+                : null,
+            villageName,
+            phone: isFullAuthorityStaff ? String(raw.phone || "") : maskFarmerPhone(raw.phone),
+            cccdMasked: String(raw.cccdMasked || ""),
+            status: householdStatus,
+            publicTraceConsent: Boolean(raw.publicTraceConsent),
+            contributedKg: communeLotContributions.totalContributedKg,
+            contributedPlotCode: hhPlotCodes[0] ?? null,
+            plots: hhPlots.map((p) => ({
+              plotCode: p.code,
+              qrToken: p.qr_token,
+              zoneCode: p.zone_code || primaryPucCode,
+              sheetNo: p.sheet_no,
+              parcelNo: p.parcel_no,
+              variety: p.variety,
+              plantedYear: p.planted_year,
+              areaHa: p.area_ha,
+              status: p.status,
+              source: p.source,
+              lat: p.lat,
+              lng: p.lng,
+              geometryJson: p.geometry_json,
+            })),
+          },
+        ],
+        cultivationDiaries: normalizeEvidenceMediaRows(diariesRes.rows),
+        inspectionMinutes: normalizeEvidenceMediaRows(minutesRows),
+        internalViolations: violationRows,
+      };
+    }
+
+    const publicHhStatus = effectiveSuspended ? "revoked" : isDraftOrUnverified ? "unverified" : "valid";
+    const farmerProfile: TraceFarmerProfile = {
+      displayName:
+        canViewFarmerIdentity && raw.name
+          ? String(raw.name)
+          : `Hộ thành viên ${householdCode}`,
+      isAnonymized: !canViewFarmerIdentity,
+      avatarUrl:
+        canViewFarmerIdentity && typeof raw.avatarUrl === "string" && raw.avatarUrl
+          ? raw.avatarUrl
+          : null,
+      householdCode,
+      villageName,
+      adminLocation: live.pucAdminLocation || adminLocation,
+      cooperativeName: DEFAULT_COOP_NAME,
+      plotCount: computedPlotCount,
+      totalAreaHa: computedAreaHa,
+      totalTrees: computedTrees,
+      zoneCodes: distinctZones.length > 0 ? distinctZones : [primaryPucCode],
+      varieties: varietiesDisplay,
+      complianceStatus: effectiveSuspended ? "review" : isDraftOrUnverified ? "unverified" : "valid",
+      ...(canSeePlotCodes && hhPlots.length > 0
+        ? {
+            plots: hhPlots.map((p) => ({
+              plotCode: p.code,
+              qrToken: p.qr_token,
+              zoneCode: p.zone_code || primaryPucCode,
+              areaHa: p.area_ha,
+              treeCount: p.tree_count,
+              variety: p.variety,
+              plantedYear: p.planted_year,
+              status: p.status,
+            })),
+          }
+        : {}),
+    };
+
+    return {
+      verifiedAt: verification.verifiedAt,
+      isHouseholdDossier: true,
+      farmerProfile,
+      communeLotContributions,
+      householdDossier: {
+        householdCode,
+        villageName,
+        zoneCode: primaryPucCode,
+        varieties: varietiesDisplay,
+        plotCount: computedPlotCount,
+        totalAreaHa: computedAreaHa,
+        totalTrees: computedTrees,
+        householdStatus,
+        lastCareOn,
+        lastInspectionOn,
+        latestMinuteCode,
+        latestMinuteOfficer,
+        linkedLotCode: resolvedLinkedLotCode,
+      },
+      accessControl: this.buildAccessControlPayload(access, ctx, fieldAuditPass, temporaryGrant),
+      publicData: {
+        lotIdentity: {
+          productName: "Sầu riêng vùng trồng liên kết hộ thành viên (Durio zibethinus)",
+          variety: varietiesDisplay,
+          lotCode: resolvedLinkedLotCode || primaryPucCode,
+          qrToken: linkedLot?.qrToken ? String(linkedLot.qrToken) : null,
+          scannedCode: cleanCode,
+          traceUnit: "puc_zone",
+          traceUnitLabel: `Hồ sơ Nông hộ ${householdCode} (Vùng trồng ${primaryPucCode})`,
+          weightTons: Number((communeLotContributions.totalContributedKg / 1000).toFixed(3)),
+          itemWeightKg: null,
+          itemGrade: null,
+          market: String(linkedLot?.market || "Xuất khẩu chính ngạch & Nội địa"),
+          status: publicHhStatus,
+          statusLabel: effectiveSuspended
+            ? "Tạm dừng liên kết thu hoạch để rà soát kỹ thuật"
+            : isDraftOrUnverified
+              ? "Chưa kiểm chứng - Hồ sơ hộ thành viên đang chờ duyệt"
+              : "Nông hộ liên kết đủ điều kiện",
+          revokedReason: effectiveSuspended
+            ? "Đang tạm dừng tiếp nhận nguyên liệu thương mại để rà soát kỹ thuật canh tác."
+            : null,
+        },
+        growingZone: {
+          name: live.pucName || "Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né",
+          pucCode: primaryPucCode,
+          additionalZoneCount: Math.max(0, distinctZones.length - 1),
+          adminLocation: live.pucAdminLocation || adminLocation,
+          status: pucStatus,
+          statusLabel: live.pucStatusLabel,
+          statusNote: live.pucNote,
+          validUntil: live.pucValidUntil,
+          coarseMap,
+        },
+        producer: {
+          cooperativeName: DEFAULT_COOP_NAME,
+          groupName: `Nhóm hộ liên kết ${villageName} - HTX Cư Né`,
+          participatingHouseholdCount: 1,
+          consentedHouseholds: hasConsent && raw.name ? [String(raw.name)] : [],
+          consentNote:
+            hasConsent && raw.name
+              ? "Hộ thành viên đã đồng ý công khai thông tin đại diện trên hồ sơ truy xuất."
+              : "Theo quy định bảo vệ dữ liệu cá nhân, số điện thoại, CCCD và tọa độ thửa riêng lẻ không hiển thị công khai.",
+        },
+        packhouse: {
+          name: packhouseName,
+          code: packhouseCode,
+          address: packhouseAddress,
+          status: live.packhouseStatus,
+          statusLabel: live.packhouseStatusLabel,
+        },
+        realtimeStatus: {
+          checkedAt: verification.verifiedAt,
+          allClear: !effectiveSuspended && !hasRealtimeSuspension && publicHhStatus === "valid",
+          hasSuspensionAlert: effectiveSuspended || hasRealtimeSuspension,
+          lotStatus: publicHhStatus,
+          pucCode: primaryPucCode,
+          pucStatus: live.pucStatus,
+          pucStatusLabel: live.pucStatusLabel,
+          pucNote: live.pucNote,
+          packhouseCode,
+          packhouseStatus: live.packhouseStatus,
+          packhouseStatusLabel: live.packhouseStatusLabel,
+        },
+        milestones: {
+          harvestedOn,
+          packedOn,
+          exportedOn,
+          sampledOn: toIsoDateOnly(latestLab?.sampledOn),
+        },
+        timeline,
+        farmingProcess: {
+          standard: "VietGAP & Nghị định thư Kiểm dịch thực vật Việt Nam - Trung Quốc (GACC)",
+          complianceConfirmed:
+            pucStatus === "active" &&
+            !isDraftOrUnverified &&
+            latestLab?.result !== "fail" &&
+            !integritySeal.phiViolatedBeforeHarvest,
+          complianceNote:
+            "Canh tác theo quy trình VietGAP thống nhất của HTX Cư Né, ghi nhật ký điện tử niêm phong SHA-256 và tuân thủ thời gian cách ly thuốc BVTV.",
+          inspectionNote: lastInspectionOn
+            ? `Vườn của hộ đã được kiểm tra thực địa định kỳ (đợt gần nhất: ${lastInspectionOn}).`
+            : "Vườn của hộ được Ban Kỹ thuật HTX Cư Né và Tổ Giám sát xã kiểm tra định kỳ.",
+        },
+        labTests: rawLabs.slice(0, 3).map((lt) => ({
+          code: lt.code,
+          sampledOn: toIsoDateOnly(lt.sampledOn) || lt.sampledOn,
+          lab: lt.lab,
+          labAccreditationCode: lt.labAccreditationCode,
+          externalVerifyCode: lt.externalVerifyCode,
+          externalVerifyUrl: lt.externalVerifyUrl,
+          cdMgKg: lt.cdMgKg,
+          yellowOPositive: lt.yellowOPositive,
+          residueMgKg: lt.residueMgKg,
+          chlorpyrifosMgKg: lt.chlorpyrifosMgKg,
+          result: lt.result,
+          scanUrl: lt.scanUrl,
+        })),
+        phytosanitary: {
+          certNo: phytoCertNo,
+          issuedOn: toIsoDateOnly(linkedLot?.phytosanitaryIssuedOn),
+          authority: "Chi cục Kiểm dịch Thực vật Vùng / Cục Bảo vệ Thực vật",
+          statusLabel: phytoCertNo
+            ? "Đã cấp giấy chứng nhận kiểm dịch thực vật theo lô xuất khẩu liên kết"
+            : "Cấp theo từng lô hàng xuất khẩu tại cơ sở đóng gói",
+        },
+        integritySeal,
+        massBalanceSummary: massBalance.publicSummary,
+        governance,
+        verification,
+      },
       ...(enterpriseData ? { enterpriseData } : {}),
       ...(authorityData ? { authorityData } : {}),
     };
