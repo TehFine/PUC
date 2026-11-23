@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -32,6 +32,11 @@ import {
   ShieldCheck,
 } from "@/components/ui/PublicIcon";
 import type { FieldAuditDataPayload } from "./FieldAuditGpsCheckCard";
+import {
+  PaginatedA4Dossier,
+  splitCoopHeaderLines,
+  type A4DossierSectionItem,
+} from "./PaginatedA4Dossier";
 import TraceAccessRequestBanner from "./TraceAccessRequestBanner";
 import {
   TRACE_UI_COPY,
@@ -63,7 +68,6 @@ import {
   localizeLabName,
   localizeGroupName,
   localizeVillageLabel,
-  localizeInspectionNote,
   localizeTimelineStep,
   type TraceLang,
   type TraceTargetKind,
@@ -202,6 +206,7 @@ interface TraceDossierContributor {
   visibilityLevel: "public" | "enterprise" | "authority";
   isAnonymized: boolean;
   displayName: string | null;
+  avatarUrl?: string | null;
   householdCode: string | null;
   villageName: string;
   pucCode: string;
@@ -371,6 +376,7 @@ interface TraceEnterpriseData {
   sourceZones: TraceEnterpriseSourceZone[];
   totalSourceWeightKg: number;
   massBalance?: TraceEnterpriseMassBalance | null;
+  evidenceLogs?: TraceDiaryEntry[];
   fieldAuditSourcePlots?: TraceFieldAuditSourcePlot[];
   detailedLabTests: TraceEnterpriseDetailedLab[];
   packingSpecs: {
@@ -405,6 +411,7 @@ interface TraceAuthorityPlot {
 interface TraceAuthorityHousehold {
   householdCode: string;
   householdName: string;
+  avatarUrl?: string | null;
   villageName: string;
   phone: string;
   cccdMasked: string;
@@ -419,6 +426,7 @@ interface TraceDiaryEntry {
   kind?: "spray" | "journal";
   entryOn: string;
   plotCode: string;
+  householdCode?: string | null;
   activity: string;
   detail: string | null;
   recorder: string;
@@ -432,6 +440,7 @@ interface TraceDiaryEntry {
   gpsVerified?: boolean;
   gpsDistanceM?: number | null;
   photoUrl?: string | null;
+  photoUrls?: string[] | null;
 }
 
 interface TraceInspectionMinute {
@@ -445,6 +454,7 @@ interface TraceInspectionMinute {
   gpsDistanceM?: number | null;
   recordHash?: string | null;
   photoUrl?: string | null;
+  photoUrls?: string[] | null;
 }
 
 interface TraceInternalViolation {
@@ -481,12 +491,84 @@ interface TracePlotSignboardInfo {
   linkedLotCode?: string | null;
 }
 
+interface TraceHouseholdDossierInfo {
+  householdCode: string;
+  villageName?: string | null;
+  zoneCode: string;
+  varieties?: string | null;
+  plotCount: number;
+  totalAreaHa: number;
+  totalTrees: number;
+  householdStatus?: "qualified" | "pending" | "violation" | string;
+  lastCareOn?: string | null;
+  lastInspectionOn?: string | null;
+  latestMinuteCode?: string | null;
+  latestMinuteOfficer?: string | null;
+  linkedLotCode?: string | null;
+}
+
+interface TraceFarmerProfile {
+  displayName: string;
+  isAnonymized: boolean;
+  avatarUrl: string | null;
+  householdCode: string | null;
+  villageName: string;
+  adminLocation: string;
+  cooperativeName: string;
+  plotCount: number;
+  totalAreaHa: number;
+  totalTrees: number;
+  zoneCodes: string[];
+  varieties: string;
+  complianceStatus: "valid" | "review" | "unverified" | string;
+  plots?: Array<{
+    plotCode: string;
+    qrToken: string | null;
+    zoneCode: string;
+    areaHa: number;
+    treeCount: number;
+    variety: string | null;
+    plantedYear: number | null;
+    status: string;
+  }>;
+}
+
+interface TraceCommuneLotItem {
+  lotCode: string;
+  qrToken: string | null;
+  harvestedOn: string | null;
+  packedOn: string | null;
+  exportedOn: string | null;
+  plotCode: string | null;
+  contributedKg: number;
+  lotWeightTons: number;
+  sharePct: number;
+  packhouseName: string;
+  market: string;
+  status: string;
+}
+
+interface TraceCommuneLotContributions {
+  scopeLabel: "plot" | "household";
+  totalLots: number;
+  totalContributedKg: number;
+  currentSeasonYear: number;
+  currentSeasonKg: number;
+  householdTotalLots?: number;
+  householdTotalContributedKg?: number;
+  lots: TraceCommuneLotItem[];
+}
+
 interface TraceData {
   verifiedAt: string;
   accessControl: TraceAccessControl;
   isFarmerStamp?: boolean;
   isPlotSignboard?: boolean;
+  isHouseholdDossier?: boolean;
   plotSignboard?: TracePlotSignboardInfo | null;
+  householdDossier?: TraceHouseholdDossierInfo | null;
+  farmerProfile?: TraceFarmerProfile | null;
+  communeLotContributions?: TraceCommuneLotContributions | null;
   item?: {
     serialCode?: string;
     itemType?: string;
@@ -604,9 +686,8 @@ const DOSSIER_SHEET_COPY: Record<
     hideMapBtn: "Thu gọn bản đồ vệ tinh",
     termsColHeading: "Cam kết Chất lượng và Xuất xứ:",
     assuranceLine1:
-      "Sản phẩm thu hoạch đúng độ chín từ vùng trồng thành viên đã cấp mã số định danh, canh tác theo quy trình VietGAP và tuân thủ thời gian cách ly an toàn.",
-    assuranceLine2:
-      "Thông tin trên phiếu được công bố sau khi Hợp tác xã Cư Né đối chiếu nhật ký chăm sóc vườn, phiếu kiểm nghiệm an toàn thực phẩm và hồ sơ xuất xưởng.",
+      "Thu hoạch từ vùng trồng thành viên đã cấp mã số định danh, canh tác theo quy trình VietGAP và đảm bảo thời gian cách ly an toàn.",
+    assuranceLine2: "",
     issuerHeading: "ĐƠN VỊ XÁC THỰC",
     continuedLabel: "Xem tiếp trang sau",
     pageIndicatorFmt: (cur, total) =>
@@ -660,9 +741,8 @@ const DOSSIER_SHEET_COPY: Record<
     hideMapBtn: "Hide satellite map",
     termsColHeading: "Origin & Quality Commitment:",
     assuranceLine1:
-      "Harvested at proper maturity from registered member orchards cultivated under VietGAP standards and safe pre-harvest withdrawal periods.",
-    assuranceLine2:
-      "Information on this dossier is published after Cư Né Cooperative verifies orchard care logs, food safety test reports, and dispatch records.",
+      "Harvested from registered member orchards cultivated under VietGAP standards and safe pre-harvest withdrawal periods.",
+    assuranceLine2: "",
     issuerHeading: "ISSUING COOPERATIVE",
     continuedLabel: "Continued on next page",
     pageIndicatorFmt: (cur, total) =>
@@ -717,8 +797,7 @@ const DOSSIER_SHEET_COPY: Record<
     termsColHeading: "原产地与品质承诺:",
     assuranceLine1:
       "采自已获注册编码的合作社成员果园，严格执行良好农业规范 (VietGAP) 与采前安全间隔期管理。",
-    assuranceLine2:
-      "本单所列信息均经 Cư Né 合作社核对果园管护台账、食品安全检测报告及出厂单证后正式发布。",
+    assuranceLine2: "",
     issuerHeading: "签发合作社",
     continuedLabel: "续见下页",
     pageIndicatorFmt: (cur, total) =>
@@ -787,6 +866,9 @@ const PLOT_DOSSIER_COPY: Record<
       isSuspended: boolean;
       isPending: boolean;
       journalOk: boolean;
+      journalCount?: number;
+      sprayCount?: number;
+      isHousehold?: boolean;
     }) => OrchardPlotStepCopy[];
   }
 > = {
@@ -817,69 +899,78 @@ const PLOT_DOSSIER_COPY: Record<
     fieldRecordPrefix: "Biên bản thực địa",
     fieldScheduleFallback: "Theo lịch giám sát định kỳ HTX",
     certColHeading: "Hồ sơ Giám sát và Kiểm nghiệm vườn:",
-    termsColHeading: "Cam kết Canh tác tại Thửa đất:",
+    termsColHeading: "Cam kết Canh tác:",
     assuranceLine1:
-      "Thửa đất nằm trong mạng lưới liên kết chính thức của Hợp tác xã Cư Né, canh tác theo quy trình VietGAP, tuân thủ danh mục vật tư được phép và thời gian cách ly an toàn.",
-    assuranceLine2:
-      "Mọi đợt thu hoạch thương mại từ thửa đất này đều được đối chiếu nhật ký chăm sóc và kiểm tra thực tế tại vườn trước khi đưa về cơ sở đóng gói.",
+      "Canh tác trong mạng lưới liên kết Hợp tác xã Cư Né theo quy trình VietGAP, đối chiếu nhật ký và thời gian cách ly an toàn trước thu hoạch.",
+    assuranceLine2: "",
     issuerHeading: "ĐƠN VỊ QUẢN LÝ VÙNG TRỒNG",
-    buildSteps: (ctx) => [
-      {
-        stepNo: "01.",
-        title: "Định danh thửa đất và ranh giới canh tác",
-        unit: ctx.coopName,
-        detail: `Thửa ${ctx.plotCode} thuộc mã vùng trồng ${ctx.pucCode}, quy mô ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""} đã đối chiếu hồ sơ vùng trồng`,
-        date: ctx.assessedOn,
-        statusLabel: ctx.isSuspended ? "Cảnh báo" : ctx.isPending ? "Chờ duyệt" : "Đã xác thực",
-        statusTone: ctx.isSuspended ? "is-danger" : ctx.isPending ? "is-muted" : "is-ok",
-      },
-      {
-        stepNo: "02.",
-        title: "Nhật ký chăm sóc và dinh dưỡng tại vườn",
-        unit: "Tổ kỹ thuật HTX Cư Né",
-        detail: `Theo dõi lịch tưới nước, tỉa cành và bón phân định kỳ trên thửa ${ctx.plotCode} theo quy trình VietGAP`,
-        date: ctx.lastCareOn || ctx.lastInspOn,
-        statusLabel: ctx.journalOk ? "Đã xác thực" : "Đang rà soát",
-        statusTone: ctx.journalOk ? "is-ok" : "is-muted",
-      },
-      {
-        stepNo: "03.",
-        title: "Kiểm soát thuốc BVTV và thời gian cách ly",
-        unit: "Ban giám sát nội bộ HTX Cư Né",
-        detail: ctx.isSuspended
-          ? "Đang tạm dừng để kiểm tra lại nhật ký bảo vệ thực vật tại vườn"
-          : "Sử dụng hoạt chất trong danh mục cho phép, đảm bảo thời gian cách ly an toàn trước thu hái",
-        date: ctx.lastCareOn || ctx.lastInspOn,
-        statusLabel: ctx.isSuspended ? "Cảnh báo" : "Đạt an toàn",
-        statusTone: ctx.isSuspended ? "is-danger" : "is-ok",
-      },
-      {
-        stepNo: "04.",
-        title: "Kiểm tra thực địa hiện trường thửa vườn",
-        unit: "Đoàn kiểm tra HTX và Cấp xã",
-        detail: ctx.minuteCode
-          ? `Biên bản kiểm tra thực địa ${ctx.minuteCode}${ctx.minuteOfficer ? `, cán bộ thực hiện: ${ctx.minuteOfficer}` : ""}`
-          : "Thực hiện giám sát thực địa định kỳ tại thửa vườn theo kế hoạch mùa vụ của HTX",
-        date: ctx.lastInspOn,
-        statusLabel: ctx.minuteCode || !ctx.isPending ? "Đã kiểm tra" : "Theo lịch",
-        statusTone: ctx.minuteCode || !ctx.isPending ? "is-ok" : "is-muted",
-      },
-      {
-        stepNo: "05.",
-        title: "Phân tích mẫu an toàn tại thửa vườn",
-        unit: ctx.firstLabName || "Phòng kiểm nghiệm độc lập chỉ định",
-        detail: ctx.firstLabCode
-          ? `Phiếu ${ctx.firstLabCode}: Phân tích chỉ tiêu kim loại nặng Cadimi, Vàng O và dư lượng thuốc BVTV`
-          : "Lấy mẫu phân tích an toàn thực phẩm định kỳ trước thời điểm mở cắt thu hoạch thương mại",
-        date: ctx.firstLabOn,
-        statusLabel: ctx.firstLabCode
-          ? ctx.anyLabFail
-            ? "Cảnh báo"
-            : "Đạt chuẩn"
-          : "Trước thu hoạch",
-        statusTone: ctx.firstLabCode ? (ctx.anyLabFail ? "is-danger" : "is-ok") : "is-muted",
-      },
-    ],
+    buildSteps: (ctx) => {
+      const rawSteps: Array<Omit<OrchardPlotStepCopy, "stepNo">> = [
+        {
+          title: ctx.isHousehold
+            ? "Định danh nông hộ và vùng trồng liên kết"
+            : "Định danh thửa đất và ranh giới canh tác",
+          unit: ctx.coopName,
+          detail: ctx.isHousehold
+            ? `Mã hộ ${ctx.plotCode} thuộc vùng trồng ${ctx.pucCode}, quy mô ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`
+            : `Thửa ${ctx.plotCode} thuộc mã vùng trồng ${ctx.pucCode}, quy mô ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`,
+          date: ctx.assessedOn,
+          statusLabel: ctx.isSuspended ? "Cảnh báo" : ctx.isPending ? "Chờ duyệt" : "Đã xác thực",
+          statusTone: ctx.isSuspended ? "is-danger" : ctx.isPending ? "is-muted" : "is-ok",
+        },
+      ];
+      if ((ctx.journalCount ?? 0) > 0 || ctx.lastCareOn) {
+        rawSteps.push({
+          title: "Nhật ký chăm sóc tại vườn",
+          unit: "Tổ kỹ thuật HTX Cư Né",
+          detail:
+            (ctx.journalCount ?? 0) > 0
+              ? `Đã ghi nhận ${ctx.journalCount} bản ghi chăm sóc điện tử trên hệ thống`
+              : `Cập nhật nhật ký chăm sóc gần nhất ngày ${ctx.lastCareOn}`,
+          date: ctx.lastCareOn,
+          statusLabel: ctx.journalOk ? "Đã xác thực" : "Đang rà soát",
+          statusTone: ctx.journalOk ? "is-ok" : "is-muted",
+        });
+      }
+      if ((ctx.sprayCount ?? 0) > 0 || ctx.isSuspended) {
+        rawSteps.push({
+          title: "Nhật ký bảo vệ thực vật và cách ly PHI",
+          unit: "Ban giám sát nội bộ HTX Cư Né",
+          detail: ctx.isSuspended
+            ? "Tạm dừng để rà soát nhật ký bảo vệ thực vật tại vườn"
+            : `Đã ghi nhận ${ctx.sprayCount} đợt sử dụng vật tư trong danh mục cho phép`,
+          date: ctx.lastCareOn,
+          statusLabel: ctx.isSuspended ? "Cảnh báo" : "Đạt an toàn",
+          statusTone: ctx.isSuspended ? "is-danger" : "is-ok",
+        });
+      }
+      if (ctx.minuteCode || ctx.lastInspOn) {
+        rawSteps.push({
+          title: "Kiểm tra thực địa hiện trường",
+          unit: "Đoàn kiểm tra HTX và Cấp xã",
+          detail: ctx.minuteCode
+            ? `Biên bản ${ctx.minuteCode}${ctx.minuteOfficer ? `, cán bộ: ${ctx.minuteOfficer}` : ""}`
+            : "Đã kiểm tra thực địa tại vườn",
+          date: ctx.lastInspOn,
+          statusLabel: "Đã kiểm tra",
+          statusTone: "is-ok",
+        });
+      }
+      if (ctx.firstLabCode) {
+        rawSteps.push({
+          title: "Phân tích mẫu an toàn thực phẩm",
+          unit: ctx.firstLabName || "Phòng kiểm nghiệm độc lập",
+          detail: `Phiếu ${ctx.firstLabCode}: Phân tích Cadimi, Vàng O và dư lượng thuốc BVTV`,
+          date: ctx.firstLabOn,
+          statusLabel: ctx.anyLabFail ? "Cảnh báo" : "Đạt chuẩn",
+          statusTone: ctx.anyLabFail ? "is-danger" : "is-ok",
+        });
+      }
+      return rawSteps.map((s, idx) => ({
+        ...s,
+        stepNo: `${String(idx + 1).padStart(2, "0")}.`,
+      }));
+    },
   },
   en: {
     docTitle: "PLOT DOSSIER",
@@ -908,69 +999,76 @@ const PLOT_DOSSIER_COPY: Record<
     fieldRecordPrefix: "Field inspection",
     fieldScheduleFallback: "Scheduled cooperative inspection",
     certColHeading: "Orchard Oversight & Lab Records:",
-    termsColHeading: "Orchard Cultivation Commitment:",
+    termsColHeading: "Cultivation Commitment:",
     assuranceLine1:
-      "This orchard plot belongs to the official member network of Cư Né Cooperative, cultivated under VietGAP standards, approved inputs, and safe withdrawal periods.",
-    assuranceLine2:
-      "Every commercial harvest from this plot is cross-checked against orchard care logs and on-site inspection records prior to packhouse delivery.",
+      "Cultivated within Cư Né Cooperative under VietGAP standards, with verified care logs and pre-harvest withdrawal compliance.",
+    assuranceLine2: "",
     issuerHeading: "MANAGING COOPERATIVE",
-    buildSteps: (ctx) => [
-      {
-        stepNo: "01.",
-        title: "Plot Registration & Boundary Verification",
-        unit: ctx.coopName,
-        detail: `Plot ${ctx.plotCode} registered under zone ${ctx.pucCode}, scale ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`,
-        date: ctx.assessedOn,
-        statusLabel: ctx.isSuspended ? "Warning" : ctx.isPending ? "Pending" : "Verified",
-        statusTone: ctx.isSuspended ? "is-danger" : ctx.isPending ? "is-muted" : "is-ok",
-      },
-      {
-        stepNo: "02.",
-        title: "Orchard Care & Nutrition Log",
-        unit: "Cư Né Cooperative Technical Team",
-        detail: `Scheduled irrigation, pruning, and fertilization tracked on plot ${ctx.plotCode} under VietGAP protocol`,
-        date: ctx.lastCareOn || ctx.lastInspOn,
-        statusLabel: ctx.journalOk ? "Verified" : "In Review",
-        statusTone: ctx.journalOk ? "is-ok" : "is-muted",
-      },
-      {
-        stepNo: "03.",
-        title: "Crop Protection & Pre-Harvest Withdrawal",
-        unit: "Cư Né Internal Supervisory Board",
-        detail: ctx.isSuspended
-          ? "Temporarily paused to review orchard crop protection records"
-          : "Approved crop protection inputs only, enforcing safe pre-harvest withdrawal intervals",
-        date: ctx.lastCareOn || ctx.lastInspOn,
-        statusLabel: ctx.isSuspended ? "Warning" : "Compliant",
-        statusTone: ctx.isSuspended ? "is-danger" : "is-ok",
-      },
-      {
-        stepNo: "04.",
-        title: "On-Site Orchard Field Inspection",
-        unit: "Cooperative & Commune Inspection Team",
-        detail: ctx.minuteCode
-          ? `Field inspection record ${ctx.minuteCode}${ctx.minuteOfficer ? `, inspector: ${ctx.minuteOfficer}` : ""}`
-          : "Periodic on-site orchard inspection conducted under seasonal cooperative schedule",
-        date: ctx.lastInspOn,
-        statusLabel: ctx.minuteCode || !ctx.isPending ? "Inspected" : "Scheduled",
-        statusTone: ctx.minuteCode || !ctx.isPending ? "is-ok" : "is-muted",
-      },
-      {
-        stepNo: "05.",
-        title: "Orchard Sample Safety Testing",
-        unit: ctx.firstLabName || "Designated Independent Testing Lab",
-        detail: ctx.firstLabCode
-          ? `Report ${ctx.firstLabCode}: Tested for heavy metal Cadmium, Yellow O, and pesticide residues`
-          : "Pre-harvest food safety sample testing scheduled prior to commercial harvest opening",
-        date: ctx.firstLabOn,
-        statusLabel: ctx.firstLabCode
-          ? ctx.anyLabFail
-            ? "Warning"
-            : "Compliant"
-          : "Pre-harvest",
-        statusTone: ctx.firstLabCode ? (ctx.anyLabFail ? "is-danger" : "is-ok") : "is-muted",
-      },
-    ],
+    buildSteps: (ctx) => {
+      const rawSteps: Array<Omit<OrchardPlotStepCopy, "stepNo">> = [
+        {
+          title: ctx.isHousehold
+            ? "Grower & Linked Zone Registration"
+            : "Plot Registration & Boundary Verification",
+          unit: ctx.coopName,
+          detail: `${ctx.isHousehold ? "Grower" : "Plot"} ${ctx.plotCode} under zone ${ctx.pucCode}, scale ${ctx.areaText}${ctx.treesText ? ` (${ctx.treesText})` : ""}`,
+          date: ctx.assessedOn,
+          statusLabel: ctx.isSuspended ? "Warning" : ctx.isPending ? "Pending" : "Verified",
+          statusTone: ctx.isSuspended ? "is-danger" : ctx.isPending ? "is-muted" : "is-ok",
+        },
+      ];
+      if ((ctx.journalCount ?? 0) > 0 || ctx.lastCareOn) {
+        rawSteps.push({
+          title: "Orchard Care Log",
+          unit: "Cư Né Cooperative Technical Team",
+          detail:
+            (ctx.journalCount ?? 0) > 0
+              ? `${ctx.journalCount} electronic care entries recorded`
+              : `Latest orchard care entry on ${ctx.lastCareOn}`,
+          date: ctx.lastCareOn,
+          statusLabel: ctx.journalOk ? "Verified" : "In Review",
+          statusTone: ctx.journalOk ? "is-ok" : "is-muted",
+        });
+      }
+      if ((ctx.sprayCount ?? 0) > 0 || ctx.isSuspended) {
+        rawSteps.push({
+          title: "Crop Protection & Withdrawal Log",
+          unit: "Cư Né Internal Supervisory Board",
+          detail: ctx.isSuspended
+            ? "Paused to review orchard crop protection records"
+            : `${ctx.sprayCount} approved crop protection applications recorded`,
+          date: ctx.lastCareOn,
+          statusLabel: ctx.isSuspended ? "Warning" : "Compliant",
+          statusTone: ctx.isSuspended ? "is-danger" : "is-ok",
+        });
+      }
+      if (ctx.minuteCode || ctx.lastInspOn) {
+        rawSteps.push({
+          title: "On-Site Field Inspection",
+          unit: "Cooperative & Commune Inspection Team",
+          detail: ctx.minuteCode
+            ? `Inspection minute ${ctx.minuteCode}${ctx.minuteOfficer ? `, inspector: ${ctx.minuteOfficer}` : ""}`
+            : "On-site orchard inspection completed",
+          date: ctx.lastInspOn,
+          statusLabel: "Inspected",
+          statusTone: "is-ok",
+        });
+      }
+      if (ctx.firstLabCode) {
+        rawSteps.push({
+          title: "Food Safety Sample Testing",
+          unit: ctx.firstLabName || "Independent Testing Lab",
+          detail: `Report ${ctx.firstLabCode}: Tested for Cadmium, Yellow O, and pesticide residues`,
+          date: ctx.firstLabOn,
+          statusLabel: ctx.anyLabFail ? "Warning" : "Compliant",
+          statusTone: ctx.anyLabFail ? "is-danger" : "is-ok",
+        });
+      }
+      return rawSteps.map((s, idx) => ({
+        ...s,
+        stepNo: `${String(idx + 1).padStart(2, "0")}.`,
+      }));
+    },
   },
   zh: {
     docTitle: "果园地块档案",
@@ -999,69 +1097,74 @@ const PLOT_DOSSIER_COPY: Record<
     fieldRecordPrefix: "实地巡检记录",
     fieldScheduleFallback: "按合作社产季计划巡检",
     certColHeading: "果园监管与检测凭证:",
-    termsColHeading: "果园种植质量承诺:",
+    termsColHeading: "种植质量承诺:",
     assuranceLine1:
-      "本地块隶属 Cư Né 合作社正式注册种植网络，严格按照良好农业规范 (VietGAP)、合规农资名录及采前安全间隔期进行管护。",
-    assuranceLine2:
-      "凡自本地块采收的商品果，均须核对果园管护台账并通过现场核验后方可运往包装厂。",
+      "隶属 Cư Né 合作社注册种植网络，严格执行 VietGAP 规范及采前安全间隔期核验。",
+    assuranceLine2: "",
     issuerHeading: "产区管理合作社",
-    buildSteps: (ctx) => [
-      {
-        stepNo: "01.",
-        title: "地块登记与种植边界核查",
-        unit: ctx.coopName,
-        detail: `地块 ${ctx.plotCode} 隶属注册产区 ${ctx.pucCode}，核定规模 ${ctx.areaText}${ctx.treesText ? `（${ctx.treesText}）` : ""}`,
-        date: ctx.assessedOn,
-        statusLabel: ctx.isSuspended ? "警示" : ctx.isPending ? "待审" : "已核验",
-        statusTone: ctx.isSuspended ? "is-danger" : ctx.isPending ? "is-muted" : "is-ok",
-      },
-      {
-        stepNo: "02.",
-        title: "果园日常管护与施肥台账",
-        unit: "Cư Né 合作社技术组",
-        detail: `按 VietGAP 规程全程记录地块 ${ctx.plotCode} 的灌溉、修剪及施肥作业`,
-        date: ctx.lastCareOn || ctx.lastInspOn,
-        statusLabel: ctx.journalOk ? "已核验" : "复核中",
-        statusTone: ctx.journalOk ? "is-ok" : "is-muted",
-      },
-      {
-        stepNo: "03.",
-        title: "植保用药与安全间隔期管控",
-        unit: "Cư Né 合作社内部监督组",
-        detail: ctx.isSuspended
-          ? "暂停待复查果园植保记录"
-          : "严格使用准用农资名录，确保采收前达到安全间隔期要求",
-        date: ctx.lastCareOn || ctx.lastInspOn,
-        statusLabel: ctx.isSuspended ? "警示" : "安全合规",
-        statusTone: ctx.isSuspended ? "is-danger" : "is-ok",
-      },
-      {
-        stepNo: "04.",
-        title: "果园现场巡检核验",
-        unit: "合作社与乡级联合巡检组",
-        detail: ctx.minuteCode
-          ? `现场巡检记录编号 ${ctx.minuteCode}${ctx.minuteOfficer ? `，核查人员：${ctx.minuteOfficer}` : ""}`
-          : "按合作社产季监管计划开展果园定期现场核查",
-        date: ctx.lastInspOn,
-        statusLabel: ctx.minuteCode || !ctx.isPending ? "已巡检" : "按计划",
-        statusTone: ctx.minuteCode || !ctx.isPending ? "is-ok" : "is-muted",
-      },
-      {
-        stepNo: "05.",
-        title: "果园样本食品安全检测",
-        unit: ctx.firstLabName || "指定独立检测实验室",
-        detail: ctx.firstLabCode
-          ? `报告 ${ctx.firstLabCode}：检测重金属镉 (Cd)、碱性嫩黄O及农药残留指标`
-          : "商业开园采收前按规程开展食品安全抽样检测",
-        date: ctx.firstLabOn,
-        statusLabel: ctx.firstLabCode
-          ? ctx.anyLabFail
-            ? "待复查"
-            : "检测合格"
-          : "采前抽检",
-        statusTone: ctx.firstLabCode ? (ctx.anyLabFail ? "is-danger" : "is-ok") : "is-muted",
-      },
-    ],
+    buildSteps: (ctx) => {
+      const rawSteps: Array<Omit<OrchardPlotStepCopy, "stepNo">> = [
+        {
+          title: ctx.isHousehold ? "成员农户与产区登记" : "地块登记与种植边界核查",
+          unit: ctx.coopName,
+          detail: `${ctx.isHousehold ? "农户" : "地块"} ${ctx.plotCode} 隶属注册产区 ${ctx.pucCode}，核定规模 ${ctx.areaText}${ctx.treesText ? `（${ctx.treesText}）` : ""}`,
+          date: ctx.assessedOn,
+          statusLabel: ctx.isSuspended ? "警示" : ctx.isPending ? "待审" : "已核验",
+          statusTone: ctx.isSuspended ? "is-danger" : ctx.isPending ? "is-muted" : "is-ok",
+        },
+      ];
+      if ((ctx.journalCount ?? 0) > 0 || ctx.lastCareOn) {
+        rawSteps.push({
+          title: "果园管护电子台账",
+          unit: "Cư Né 合作社技术组",
+          detail:
+            (ctx.journalCount ?? 0) > 0
+              ? `系统已记录 ${ctx.journalCount} 条电子农事管护记录`
+              : `最近管护记录日期 ${ctx.lastCareOn}`,
+          date: ctx.lastCareOn,
+          statusLabel: ctx.journalOk ? "已核验" : "复核中",
+          statusTone: ctx.journalOk ? "is-ok" : "is-muted",
+        });
+      }
+      if ((ctx.sprayCount ?? 0) > 0 || ctx.isSuspended) {
+        rawSteps.push({
+          title: "植保用药与间隔期记录",
+          unit: "Cư Né 合作社内部监督组",
+          detail: ctx.isSuspended
+            ? "暂停待复查果园植保记录"
+            : `系统已记录 ${ctx.sprayCount} 次合规农资施用`,
+          date: ctx.lastCareOn,
+          statusLabel: ctx.isSuspended ? "警示" : "安全合规",
+          statusTone: ctx.isSuspended ? "is-danger" : "is-ok",
+        });
+      }
+      if (ctx.minuteCode || ctx.lastInspOn) {
+        rawSteps.push({
+          title: "果园现场巡检核验",
+          unit: "合作社与乡级联合巡检组",
+          detail: ctx.minuteCode
+            ? `巡检笔录编号 ${ctx.minuteCode}${ctx.minuteOfficer ? `，核查员：${ctx.minuteOfficer}` : ""}`
+            : "已完成果园现场巡检",
+          date: ctx.lastInspOn,
+          statusLabel: "已巡检",
+          statusTone: "is-ok",
+        });
+      }
+      if (ctx.firstLabCode) {
+        rawSteps.push({
+          title: "食品安全采样检测",
+          unit: ctx.firstLabName || "独立检测实验室",
+          detail: `报告 ${ctx.firstLabCode}：检测重金属镉、碱性嫩黄O及农药残留`,
+          date: ctx.firstLabOn,
+          statusLabel: ctx.anyLabFail ? "待复查" : "检测合格",
+          statusTone: ctx.anyLabFail ? "is-danger" : "is-ok",
+        });
+      }
+      return rawSteps.map((s, idx) => ({
+        ...s,
+        stepNo: `${String(idx + 1).padStart(2, "0")}.`,
+      }));
+    },
   },
 };
 
@@ -1147,6 +1250,186 @@ const DOSSIER_CONTRIBUTORS_COPY: Record<
     statusValid: "合格",
     statusReview: "待复核",
     emptyContributors: "农户供货明细更新中。",
+  },
+};
+
+function extractSafeMediaUrls(
+  urls?: string[] | null,
+  fallbackSingle?: string | null,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of urls ?? []) {
+    if (isSafeMediaUrl(candidate) && !seen.has(candidate)) {
+      seen.add(candidate);
+      out.push(candidate);
+    }
+  }
+  if (out.length === 0 && isSafeMediaUrl(fallbackSingle)) {
+    out.push(fallbackSingle);
+  }
+  return out;
+}
+
+function computeFarmerMonogram(displayName: string, isAnonymized: boolean): string {
+  if (isAnonymized) return "HTX";
+  const words = displayName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length >= 2) {
+    const a = words[words.length - 2]?.[0] ?? "";
+    const b = words[words.length - 1]?.[0] ?? "";
+    const joined = `${a}${b}`.toUpperCase();
+    if (joined) return joined;
+  }
+  if (words.length === 1 && words[0]) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+  return "HTX";
+}
+
+const HOUSEHOLD_COMMUNE_COPY: Record<
+  TraceLang,
+  {
+    hhDocTitle: string;
+    hhProfileKicker: string;
+    hhCodePrefix: string;
+    hhScaleHeading: string;
+    hhStatusValid: string;
+    hhStatusPending: string;
+    hhStatusRevoked: string;
+    rowHhFinalStatus: string;
+    rowCommuneContrib: string;
+    portraitFallbackSub: string;
+    ownerPrefix: string;
+    hhScaleLineFmt: (plotCount: number, areaText: string, treesText: string | null) => string;
+    communeContribSectionTitle: string;
+    communeContribTotalFmt: (lots: number, kgText: string) => string;
+    communeHouseholdWideFmt: (lots: number, kgText: string) => string;
+    colLotAndPackhouse: string;
+    colPlotOrZone: string;
+    colHarvestDate: string;
+    colContributed: string;
+    colLotStatus: string;
+    shareOfLotFmt: (pct: number) => string;
+    emptyCommuneLots: string;
+    lotExported: string;
+    lotInTransit: string;
+    lotDelivered: string;
+    lotSampling: string;
+    tier2EvidenceTitle: string;
+    viewPhotosFmt: (count: number) => string;
+    hhLookupHintFmt: (code: string) => string;
+    colPackingItem: string;
+    colPackingValue: string;
+    sealedRecordsCountFmt: (count: number) => string;
+  }
+> = {
+  vi: {
+    hhDocTitle: "HỒ SƠ NÔNG HỘ",
+    hhProfileKicker: "HỒ SƠ NÔNG HỘ THÀNH VIÊN",
+    hhCodePrefix: "MÃ HỘ",
+    hhScaleHeading: "QUY MÔ VƯỜN LIÊN KẾT",
+    hhStatusValid: "Nông hộ liên kết đủ điều kiện",
+    hhStatusPending: "Hồ sơ hộ đang chờ duyệt",
+    hhStatusRevoked: "Tạm dừng để rà soát kỹ thuật",
+    rowHhFinalStatus: "TRẠNG THÁI NÔNG HỘ:",
+    rowCommuneContrib: "ĐÓNG GÓP LÔ XÃ:",
+    portraitFallbackSub: "THÀNH VIÊN",
+    ownerPrefix: "Chủ thể",
+    hhScaleLineFmt: (plots, area, trees) =>
+      trees ? `Quy mô: ${plots} thửa, ${area} ha (${trees})` : `Quy mô: ${plots} thửa, ${area} ha`,
+    communeContribSectionTitle: "ĐÓNG GÓP LÔ HÀNG TRÊN ĐỊA BÀN XÃ",
+    communeContribTotalFmt: (lots, kg) => `ĐÃ GHI NHẬN: ${lots} LÔ, ${kg} KG`,
+    communeHouseholdWideFmt: (lots, kg) => `Toàn hộ: ${lots} lô (${kg} kg)`,
+    colLotAndPackhouse: "LÔ HÀNG VÀ ĐƠN VỊ TIẾP NHẬN",
+    colPlotOrZone: "THỬA NGUỒN",
+    colHarvestDate: "THU HOẠCH",
+    colContributed: "ĐÓNG GÓP",
+    colLotStatus: "TRẠNG THÁI",
+    shareOfLotFmt: (pct) => `${pct}% lô`,
+    emptyCommuneLots: "Chưa ghi nhận đợt đóng góp lô hàng thương mại trên địa bàn xã.",
+    lotExported: "Đã xuất khẩu",
+    lotInTransit: "Đang vận chuyển",
+    lotDelivered: "Đã bàn giao",
+    lotSampling: "Đang kiểm định",
+    tier2EvidenceTitle: "NHẬT KÝ VÀ HÌNH ẢNH MINH CHỨNG CANH TÁC",
+    viewPhotosFmt: (count) => (count > 1 ? `Xem ${count} ảnh` : "Xem ảnh"),
+    hhLookupHintFmt: (c) => `Mã hộ: ${c}`,
+    colPackingItem: "HẠNG MỤC",
+    colPackingValue: "THÔNG SỐ GHI NHẬN",
+    sealedRecordsCountFmt: (c) => `${c} bản ghi đã xác thực`,
+  },
+  en: {
+    hhDocTitle: "GROWER DOSSIER",
+    hhProfileKicker: "MEMBER GROWER PROFILE",
+    hhCodePrefix: "GROWER ID",
+    hhScaleHeading: "LINKED ORCHARD SCALE",
+    hhStatusValid: "Verified Member Grower",
+    hhStatusPending: "Grower Dossier Pending Review",
+    hhStatusRevoked: "Paused for Technical Review",
+    rowHhFinalStatus: "GROWER STATUS:",
+    rowCommuneContrib: "COMMUNE LOTS:",
+    portraitFallbackSub: "MEMBER",
+    ownerPrefix: "Grower",
+    hhScaleLineFmt: (plots, area, trees) =>
+      trees ? `Scale: ${plots} plots, ${area} ha (${trees})` : `Scale: ${plots} plots, ${area} ha`,
+    communeContribSectionTitle: "RECORDED COMMUNE LOT CONTRIBUTIONS",
+    communeContribTotalFmt: (lots, kg) => `RECORDED: ${lots} LOTS, ${kg} KG`,
+    communeHouseholdWideFmt: (lots, kg) => `Household total: ${lots} lots (${kg} kg)`,
+    colLotAndPackhouse: "LOT & RECEIVING PACKHOUSE",
+    colPlotOrZone: "SOURCE PLOT",
+    colHarvestDate: "HARVESTED",
+    colContributed: "CONTRIBUTED",
+    colLotStatus: "STATUS",
+    shareOfLotFmt: (pct) => `${pct}% of lot`,
+    emptyCommuneLots: "No commercial commune lot contributions recorded yet.",
+    lotExported: "Exported",
+    lotInTransit: "In Transit",
+    lotDelivered: "Delivered",
+    lotSampling: "Sampling",
+    tier2EvidenceTitle: "CULTIVATION LOG & FIELD PHOTO EVIDENCE",
+    viewPhotosFmt: (count) => (count > 1 ? `View ${count} photos` : "View photo"),
+    hhLookupHintFmt: (c) => `Grower ID: ${c}`,
+    colPackingItem: "SPECIFICATION",
+    colPackingValue: "RECORDED VALUE",
+    sealedRecordsCountFmt: (c) => `${c} verified entries`,
+  },
+  zh: {
+    hhDocTitle: "成员农户档案",
+    hhProfileKicker: "合作社成员农户档案",
+    hhCodePrefix: "农户编码",
+    hhScaleHeading: "联营果园核定规模",
+    hhStatusValid: "合规联营成员农户",
+    hhStatusPending: "农户档案审核中",
+    hhStatusRevoked: "暂停待技术复核",
+    rowHhFinalStatus: "农户核验状态:",
+    rowCommuneContrib: "乡域出货累计:",
+    portraitFallbackSub: "成员户",
+    ownerPrefix: "种植主体",
+    hhScaleLineFmt: (plots, area, trees) =>
+      trees ? `规模：${plots} 个地块，${area} 公顷（${trees}）` : `规模：${plots} 个地块，${area} 公顷`,
+    communeContribSectionTitle: "乡域系统已登记出货批次供货记录",
+    communeContribTotalFmt: (lots, kg) => `累计登记：${lots} 批次，${kg} KG`,
+    communeHouseholdWideFmt: (lots, kg) => `全户累计：${lots} 批（${kg} kg）`,
+    colLotAndPackhouse: "批次编号与接收包装厂",
+    colPlotOrZone: "来源地块",
+    colHarvestDate: "采收日期",
+    colContributed: "供货量",
+    colLotStatus: "状态",
+    shareOfLotFmt: (pct) => `占批次 ${pct}%`,
+    emptyCommuneLots: "系统暂未登记该果园的商品批次供货记录。",
+    lotExported: "已出口",
+    lotInTransit: "运输中",
+    lotDelivered: "已交付",
+    lotSampling: "抽检中",
+    tier2EvidenceTitle: "果园农事记录与现场照片凭证",
+    viewPhotosFmt: (count) => (count > 1 ? `查看 ${count} 张照片` : "查看照片"),
+    hhLookupHintFmt: (c) => `户号：${c}`,
+    colPackingItem: "技术项目",
+    colPackingValue: "实测与登记参数",
+    sealedRecordsCountFmt: (c) => `已核验 ${c} 条记录`,
   },
 };
 
@@ -1605,251 +1888,6 @@ const DOSSIER_EXTENDED_COPY: Record<
   },
 };
 
-const A4_SHEET_WIDTH_PX = 820;
-
-function splitCoopHeaderLines(
-  coopText: string,
-  lang: TraceLang,
-): { line1: string; line2: string | null } {
-  const trimmed = coopText.trim();
-  if (lang === "vi") {
-    const m = /^(Hợp\s+tác\s+xã|HTX)\s+(.+)$/i.exec(trimmed);
-    if (m?.[1] && m[2]) {
-      return { line1: m[1].trim(), line2: m[2].trim() };
-    }
-  }
-  if (lang === "en") {
-    const m = /^(.+?)\s+((?:General\s+Business|Agricultural|Durian)\b.+)$/i.exec(trimmed);
-    if (m?.[1] && m[2]) {
-      return { line1: m[1].trim(), line2: m[2].trim() };
-    }
-  }
-  return { line1: trimmed, line2: null };
-}
-const A4_SHEET_HEIGHT_PX = 1160; // Chuẩn tỷ lệ ISO A4 210 : 297 (820 * 297 / 210 ≈ 1160)
-const A4_PAD_TOP_PX = 44;
-const A4_PAD_BOTTOM_PX = 36;
-const A4_INNER_HEIGHT_PX = A4_SHEET_HEIGHT_PX - A4_PAD_TOP_PX - A4_PAD_BOTTOM_PX; // 1080px
-const A4_HEADER_GAP_PX = 24;
-const A4_SECTION_GAP_PX = 30;
-const A4_FOOTER_GAP_PX = 24;
-
-interface A4DossierSectionItem {
-  key: string;
-  content: ReactNode;
-}
-
-const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
-  status,
-  measureKey,
-  headerFull,
-  headerContinuation,
-  sections,
-  renderFooter,
-}: {
-  status: string;
-  measureKey: string;
-  headerFull: ReactNode;
-  headerContinuation: ReactNode;
-  sections: A4DossierSectionItem[];
-  renderFooter: (pageIndex: number, totalPages: number) => ReactNode;
-}) {
-  const deckRef = useRef<HTMLDivElement>(null);
-  const sandboxRef = useRef<HTMLDivElement>(null);
-  const fullHeaderRef = useRef<HTMLDivElement>(null);
-  const contHeaderRef = useRef<HTMLDivElement>(null);
-  const lastFooterRef = useRef<HTMLDivElement>(null);
-  const midFooterRef = useRef<HTMLDivElement>(null);
-  const sectionRefs = useRef<Array<HTMLDivElement | null>>([]);
-
-  const sectionCount = sections.length;
-  const [scale, setScale] = useState<number>(1);
-  const [pages, setPages] = useState<number[][]>(() => [
-    Array.from({ length: sectionCount }, (_, idx) => idx),
-  ]);
-
-  useLayoutEffect(() => {
-    const deck = deckRef.current;
-    if (!deck) return;
-
-    let printing = false;
-
-    const updateScale = () => {
-      if (printing) return;
-      const availWidth = deck.clientWidth;
-      if (availWidth <= 0) return;
-      const nextScale =
-        availWidth >= A4_SHEET_WIDTH_PX
-          ? 1
-          : Number((availWidth / A4_SHEET_WIDTH_PX).toFixed(6));
-      setScale((prev) => (Math.abs(prev - nextScale) < 0.0002 ? prev : nextScale));
-    };
-
-    const recomputePages = () => {
-      const hFull = fullHeaderRef.current?.offsetHeight ?? 48;
-      const hCont = contHeaderRef.current?.offsetHeight ?? 32;
-      const hLastFoot = lastFooterRef.current?.offsetHeight ?? 78;
-      const hMidFoot = midFooterRef.current?.offsetHeight ?? 34;
-
-      const heights = Array.from(
-        { length: sectionCount },
-        (_, idx) => sectionRefs.current[idx]?.offsetHeight ?? 0,
-      );
-      if (heights.length === 0 || heights.every((h) => h === 0)) return;
-
-      const sumAll =
-        heights.reduce((acc, h) => acc + h, 0) +
-        Math.max(0, heights.length - 1) * A4_SECTION_GAP_PX;
-      const singlePageTotal =
-        hFull + A4_HEADER_GAP_PX + sumAll + A4_FOOTER_GAP_PX + hLastFoot;
-
-      let nextPages: number[][];
-      if (singlePageTotal <= A4_INNER_HEIGHT_PX) {
-        nextPages = [heights.map((_, i) => i)];
-      } else {
-        nextPages = [];
-        let curPage: number[] = [];
-        let usedH = 0;
-        const reservedFoot = Math.max(hLastFoot, hMidFoot);
-
-        for (let i = 0; i < heights.length; i += 1) {
-          const isFirstPage = nextPages.length === 0;
-          const headerH = isFirstPage ? hFull : hCont;
-          const budget =
-            A4_INNER_HEIGHT_PX - headerH - A4_HEADER_GAP_PX - A4_FOOTER_GAP_PX - reservedFoot;
-          const addH = (curPage.length > 0 ? A4_SECTION_GAP_PX : 0) + heights[i];
-
-          if (curPage.length > 0 && usedH + addH > budget) {
-            nextPages.push(curPage);
-            curPage = [i];
-            usedH = heights[i];
-          } else {
-            curPage.push(i);
-            usedH += addH;
-          }
-        }
-        if (curPage.length > 0) {
-          nextPages.push(curPage);
-        }
-      }
-
-      setPages((prev) => {
-        if (
-          prev.length === nextPages.length &&
-          prev.every(
-            (pg, pIdx) =>
-              pg.length === nextPages[pIdx]?.length &&
-              pg.every((v, iIdx) => v === nextPages[pIdx]?.[iIdx]),
-          )
-        ) {
-          return prev;
-        }
-        return nextPages;
-      });
-    };
-
-    const onBeforePrint = () => {
-      printing = true;
-      setScale(1);
-    };
-
-    const onAfterPrint = () => {
-      printing = false;
-      updateScale();
-    };
-
-    updateScale();
-    recomputePages();
-
-    const hasResizeObserver = typeof ResizeObserver !== "undefined";
-    const deckRo = hasResizeObserver ? new ResizeObserver(() => updateScale()) : null;
-    const sandboxRo = hasResizeObserver ? new ResizeObserver(() => recomputePages()) : null;
-    deckRo?.observe(deck);
-    if (sandboxRef.current) {
-      sandboxRo?.observe(sandboxRef.current);
-    }
-
-    if (typeof document !== "undefined" && document.fonts?.ready) {
-      void document.fonts.ready.then(() => {
-        recomputePages();
-      });
-    }
-
-    if (!deckRo) {
-      window.addEventListener("resize", updateScale);
-    }
-    window.addEventListener("beforeprint", onBeforePrint);
-    window.addEventListener("afterprint", onAfterPrint);
-
-    return () => {
-      deckRo?.disconnect();
-      sandboxRo?.disconnect();
-      if (!deckRo) {
-        window.removeEventListener("resize", updateScale);
-      }
-      window.removeEventListener("beforeprint", onBeforePrint);
-      window.removeEventListener("afterprint", onAfterPrint);
-    };
-  }, [measureKey, sectionCount]);
-
-  return (
-    <div
-      ref={deckRef}
-      className="tr-doc-a4-deck"
-      style={{ "--a4-scale": String(scale) } as React.CSSProperties}
-    >
-      {pages.map((sectionIndices, pageIdx) => (
-        <div key={`a4-sheet-${pageIdx}`} className="tr-doc-a4-page-frame">
-          <article className="tr-doc-sheet" data-status={status}>
-            {pageIdx === 0 ? headerFull : headerContinuation}
-
-            <div className="tr-doc-page-body">
-              {sectionIndices.map((secIdx) => {
-                const sec = sections[secIdx];
-                if (!sec) return null;
-                return (
-                  <div key={sec.key} className="tr-doc-page-block">
-                    {sec.content}
-                  </div>
-                );
-              })}
-            </div>
-
-            {renderFooter(pageIdx, pages.length)}
-          </article>
-        </div>
-      ))}
-
-      {/* Khung đo kích thước ẩn chuẩn chiều rộng lòng tờ A4 (716px) để tự động ngắt trang chính xác */}
-      <div ref={sandboxRef} className="tr-doc-measure-sandbox no-print" aria-hidden="true">
-        <div ref={fullHeaderRef} className="tr-doc-measure-item">
-          {headerFull}
-        </div>
-        <div ref={contHeaderRef} className="tr-doc-measure-item">
-          {headerContinuation}
-        </div>
-        <div ref={lastFooterRef} className="tr-doc-measure-item">
-          {renderFooter(0, 1)}
-        </div>
-        <div ref={midFooterRef} className="tr-doc-measure-item">
-          {renderFooter(0, 2)}
-        </div>
-        {sections.map((sec, idx) => (
-          <div
-            key={`measure-${sec.key}`}
-            ref={(el) => {
-              sectionRefs.current[idx] = el;
-            }}
-            className="tr-doc-measure-item"
-          >
-            {sec.content}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-});
-
 function extractPreservedUrlSuffix(rawUrl: string): string {
   try {
     const parsed = new URL(rawUrl, "https://puc.local");
@@ -1873,7 +1911,7 @@ function extractPreservedUrlSuffix(rawUrl: string): string {
 function normalizeLookupCandidate(raw: string): string {
   return safeDecodeURIComponent(raw)
     .trim()
-    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|hộ|ho|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
     .replace(/\s+/g, "");
 }
 
@@ -2462,15 +2500,17 @@ export default function TraceView() {
 
   const activeKind: TraceTargetKind =
     data && pub
-      ? data.isPlotSignboard || pub.lotIdentity.traceUnit === "puc_zone"
-        ? "plot"
-        : data.isFarmerStamp ||
-          pub.lotIdentity.traceUnit === "fruit" ||
-          data.item?.itemType === "fruit"
-          ? "fruit"
-          : pub.lotIdentity.traceUnit === "box" || data.item?.itemType === "box"
-            ? "box"
-            : "lot"
+      ? data.isHouseholdDossier
+        ? "household"
+        : data.isPlotSignboard || pub.lotIdentity.traceUnit === "puc_zone"
+          ? "plot"
+          : data.isFarmerStamp ||
+            pub.lotIdentity.traceUnit === "fruit" ||
+            data.item?.itemType === "fruit"
+            ? "fruit"
+            : pub.lotIdentity.traceUnit === "box" || data.item?.itemType === "box"
+              ? "box"
+              : "lot"
       : hintedKind ?? inferTraceKindFromCode(code);
 
   useEffect(() => {
@@ -2478,7 +2518,9 @@ export default function TraceView() {
     rememberTraceKindHint(code, activeKind);
     rememberTraceKindHint(pub.lotIdentity.qrToken, activeKind);
     rememberTraceKindHint(pub.lotIdentity.scannedCode, activeKind);
-    if (activeKind === "plot") {
+    if (activeKind === "household") {
+      rememberTraceKindHint(data.householdDossier?.householdCode, "household");
+    } else if (activeKind === "plot") {
       rememberTraceKindHint(data.plotSignboard?.plotCode, "plot");
     } else if (activeKind === "lot") {
       rememberTraceKindHint(pub.lotIdentity.lotCode, "lot");
@@ -2488,49 +2530,57 @@ export default function TraceView() {
   useEffect(() => {
     if (typeof document === "undefined" || !code) return;
     const displayRef =
-      activeKind === "plot"
-        ? data?.plotSignboard?.plotCode || fallbackUnitSerial || pub?.lotIdentity.scannedCode || code
-        : activeKind === "box" || activeKind === "fruit"
-          ? fallbackUnitSerial || pub?.lotIdentity.scannedCode || pub?.lotIdentity.lotCode || code
-          : pub?.lotIdentity.lotCode || code;
+      activeKind === "household"
+        ? data?.householdDossier?.householdCode || fallbackUnitSerial || pub?.lotIdentity.scannedCode || code
+        : activeKind === "plot"
+          ? data?.plotSignboard?.plotCode || fallbackUnitSerial || pub?.lotIdentity.scannedCode || code
+          : activeKind === "box" || activeKind === "fruit"
+            ? fallbackUnitSerial || pub?.lotIdentity.scannedCode || pub?.lotIdentity.lotCode || code
+            : pub?.lotIdentity.lotCode || code;
     if (lang === "zh") {
       const zhPrefix =
-        activeKind === "plot"
-          ? "果园地块溯源"
-          : activeKind === "box"
-            ? "包装箱溯源"
-            : activeKind === "fruit"
-              ? "单果溯源"
-              : activeKind === "lot"
-                ? "批次溯源"
-                : "产地溯源";
+        activeKind === "household"
+          ? "成员农户溯源"
+          : activeKind === "plot"
+            ? "果园地块溯源"
+            : activeKind === "box"
+              ? "包装箱溯源"
+              : activeKind === "fruit"
+                ? "单果溯源"
+                : activeKind === "lot"
+                  ? "批次溯源"
+                  : "产地溯源";
       document.title = `${zhPrefix} ${displayRef} | Cư Né 合作社`;
       return;
     }
     if (lang === "en") {
       const enPrefix =
-        activeKind === "plot"
-          ? "Orchard Plot"
-          : activeKind === "box"
-            ? "Carton Box"
-            : activeKind === "fruit"
-              ? "Durian Fruit"
-              : activeKind === "lot"
-                ? "Shipment Lot"
-                : "Traceability";
+        activeKind === "household"
+          ? "Grower Household"
+          : activeKind === "plot"
+            ? "Orchard Plot"
+            : activeKind === "box"
+              ? "Carton Box"
+              : activeKind === "fruit"
+                ? "Durian Fruit"
+                : activeKind === "lot"
+                  ? "Shipment Lot"
+                  : "Traceability";
       document.title = `${enPrefix} ${displayRef} | Cư Né Cooperative`;
       return;
     }
     const viPrefix =
-      activeKind === "plot"
-        ? "Truy xuất thửa đất"
-        : activeKind === "box"
-          ? "Truy xuất thùng đóng gói"
-          : activeKind === "fruit"
-            ? "Truy xuất trái sầu riêng"
-            : activeKind === "lot"
-              ? "Truy xuất lô hàng"
-              : "Truy xuất nguồn gốc";
+      activeKind === "household"
+        ? "Truy xuất nông hộ"
+        : activeKind === "plot"
+          ? "Truy xuất thửa đất"
+          : activeKind === "box"
+            ? "Truy xuất thùng đóng gói"
+            : activeKind === "fruit"
+              ? "Truy xuất trái sầu riêng"
+              : activeKind === "lot"
+                ? "Truy xuất lô hàng"
+                : "Truy xuất nguồn gốc";
     document.title = `${viPrefix} ${displayRef} | HTX Cư Né`;
   }, [activeKind, code, data, fallbackUnitSerial, lang, pub]);
 
@@ -2538,20 +2588,24 @@ export default function TraceView() {
     if (typeof window === "undefined") return;
     const prevTitle = document.title;
     const refLabel =
-      activeKind === "plot"
-        ? data?.plotSignboard?.plotCode || fallbackUnitSerial || pub?.lotIdentity.scannedCode || code || "PUC"
-        : activeKind === "box" || activeKind === "fruit"
-          ? fallbackUnitSerial || pub?.lotIdentity.scannedCode || pub?.lotIdentity.lotCode || code || "PUC"
-          : pub?.lotIdentity?.lotCode || code || "PUC";
+      activeKind === "household"
+        ? data?.householdDossier?.householdCode || fallbackUnitSerial || pub?.lotIdentity.scannedCode || code || "PUC"
+        : activeKind === "plot"
+          ? data?.plotSignboard?.plotCode || fallbackUnitSerial || pub?.lotIdentity.scannedCode || code || "PUC"
+          : activeKind === "box" || activeKind === "fruit"
+            ? fallbackUnitSerial || pub?.lotIdentity.scannedCode || pub?.lotIdentity.lotCode || code || "PUC"
+            : pub?.lotIdentity?.lotCode || code || "PUC";
     const safeCode = refLabel.replace(/[^a-zA-Z0-9_-]+/g, "-");
     const filePrefix =
-      activeKind === "plot"
-        ? "Ho-so-thua-dat"
-        : activeKind === "box"
-          ? "Ho-so-thung-dong-goi"
-          : activeKind === "fruit"
-            ? "Ho-so-trai-sau-rieng"
-            : "Ho-so-lo-hang";
+      activeKind === "household"
+        ? "Ho-so-nong-ho"
+        : activeKind === "plot"
+          ? "Ho-so-thua-dat"
+          : activeKind === "box"
+            ? "Ho-so-thung-dong-goi"
+            : activeKind === "fruit"
+              ? "Ho-so-trai-sau-rieng"
+              : "Ho-so-lo-hang";
     document.title = `${filePrefix}-${safeCode}`;
     const restore = () => {
       document.title = prevTitle;
@@ -2975,12 +3029,21 @@ export default function TraceView() {
             {(() => {
               const docCopy = DOSSIER_SHEET_COPY[lang];
               const plotCopy = PLOT_DOSSIER_COPY[lang];
+              const hhCommuneCopy = HOUSEHOLD_COMMUNE_COPY[lang];
               const unitCopy = UNIT_DOSSIER_OVERRIDES[lang];
               const extCopy = DOSSIER_EXTENDED_COPY[lang];
               const isPlotDossier = activeKind === "plot";
+              const isHouseholdDossier = activeKind === "household";
+              const isOrchardOrHousehold = isPlotDossier || isHouseholdDossier;
               const isBoxDossier = activeKind === "box";
               const isFruitDossier = activeKind === "fruit";
               const plotSb = data.plotSignboard ?? null;
+              const hhDossier = data.householdDossier ?? null;
+              const farmerProf = data.farmerProfile ?? null;
+              const communeContrib = data.communeLotContributions ?? null;
+              const safeFarmerAvatarUrl = isSafeMediaUrl(farmerProf?.avatarUrl)
+                ? (farmerProf!.avatarUrl as string)
+                : null;
               const labs = pub.labTests;
               const firstLab = labs[0] ?? null;
               const anyLabFail = labs.some(
@@ -2993,22 +3056,47 @@ export default function TraceView() {
               const mb = pub.massBalanceSummary;
 
               const localizedVariety = localizeVariety(
-                (isPlotDossier ? plotSb?.variety : null) || pub.lotIdentity.variety,
+                (isHouseholdDossier
+                  ? hhDossier?.varieties
+                  : isPlotDossier
+                    ? plotSb?.variety
+                    : null) || pub.lotIdentity.variety,
                 lang,
               );
 
-              const plotCode =
-                plotSb?.plotCode || fallbackUnitSerial || pub.lotIdentity.scannedCode;
-              const plotAreaHa =
-                plotSb && plotSb.areaHa > 0 ? plotSb.areaHa : (mb?.totalAreaHa ?? 0);
-              const plotTreeCount =
-                plotSb && plotSb.treeCount > 0 ? plotSb.treeCount : (mb?.totalTreeCount ?? 0);
-              const plotVillageText = plotSb?.villageName
-                ? localizeVillageLabel(plotSb.villageName, lang)
+              const householdCodeRef =
+                hhDossier?.householdCode ||
+                farmerProf?.householdCode ||
+                (isHouseholdDossier ? fallbackUnitSerial || pub.lotIdentity.scannedCode : null);
+              const plotCode = isHouseholdDossier
+                ? (householdCodeRef || pub.lotIdentity.scannedCode)
+                : plotSb?.plotCode || fallbackUnitSerial || pub.lotIdentity.scannedCode;
+              const plotAreaHa = isHouseholdDossier
+                ? hhDossier && hhDossier.totalAreaHa > 0
+                  ? hhDossier.totalAreaHa
+                  : (farmerProf?.totalAreaHa ?? mb?.totalAreaHa ?? 0)
+                : plotSb && plotSb.areaHa > 0
+                  ? plotSb.areaHa
+                  : (mb?.totalAreaHa ?? 0);
+              const plotTreeCount = isHouseholdDossier
+                ? hhDossier && hhDossier.totalTrees > 0
+                  ? hhDossier.totalTrees
+                  : (farmerProf?.totalTrees ?? mb?.totalTreeCount ?? 0)
+                : plotSb && plotSb.treeCount > 0
+                  ? plotSb.treeCount
+                  : (mb?.totalTreeCount ?? 0);
+              const hhPlotCount =
+                hhDossier?.plotCount ?? farmerProf?.plotCount ?? 1;
+              const rawVillageSource = isHouseholdDossier
+                ? hhDossier?.villageName || farmerProf?.villageName
+                : plotSb?.villageName || farmerProf?.villageName;
+              const plotVillageText = rawVillageSource
+                ? localizeVillageLabel(rawVillageSource, lang)
                 : "";
               const plotPlantedYear = plotSb?.plantedYear ?? null;
               const plotLinkedLotCode =
-                plotSb?.linkedLotCode ??
+                (isHouseholdDossier ? hhDossier?.linkedLotCode : plotSb?.linkedLotCode) ??
+                communeContrib?.lots[0]?.lotCode ??
                 (pub.lotIdentity.lotCode &&
                   pub.lotIdentity.lotCode.toUpperCase() !==
                   pub.growingZone.pucCode.toUpperCase()
@@ -3016,18 +3104,21 @@ export default function TraceView() {
                   : null);
 
               const isPlotSuspended =
-                pub.lotIdentity.status === "revoked" || plotSb?.plotStatus === "violation";
+                pub.lotIdentity.status === "revoked" ||
+                plotSb?.plotStatus === "violation" ||
+                hhDossier?.householdStatus === "violation";
               const isPlotPending =
                 pub.lotIdentity.status === "pending" ||
                 pub.lotIdentity.status === "unverified" ||
-                plotSb?.plotStatus === "pending";
+                plotSb?.plotStatus === "pending" ||
+                hhDossier?.householdStatus === "pending";
               const journalOk = !(pub.integritySeal && !pub.integritySeal.chainVerified);
 
-              const hasNumericScale = isPlotDossier
+              const hasNumericScale = isOrchardOrHousehold
                 ? plotAreaHa > 0
                 : pub.lotIdentity.itemWeightKg !== null || pub.lotIdentity.weightTons > 0;
 
-              const scaleDisplay = isPlotDossier
+              const scaleDisplay = isOrchardOrHousehold
                 ? plotAreaHa > 0
                   ? `${formatTraceNumber(plotAreaHa, lang)} ha`
                   : plotCode
@@ -3044,13 +3135,17 @@ export default function TraceView() {
                       lang,
                     );
 
-              const scaleSubline = isPlotDossier
+              const scaleSubline = isHouseholdDossier
                 ? plotTreeCount > 0
-                  ? `${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}, ${localizedVariety}`
+                  ? `${hhPlotCount} thửa, ${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}`
                   : localizedVariety
-                : pub.lotIdentity.itemWeightKg === null && pub.lotIdentity.weightTons > 0
-                  ? `${formatTraceNumber(pub.lotIdentity.weightTons, lang)} ${docCopy.tonsUnit}, ${localizedVariety}`
-                  : localizedVariety;
+                : isPlotDossier
+                  ? plotTreeCount > 0
+                    ? `${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}, ${localizedVariety}`
+                    : localizedVariety
+                  : pub.lotIdentity.itemWeightKg === null && pub.lotIdentity.weightTons > 0
+                    ? `${formatTraceNumber(pub.lotIdentity.weightTons, lang)} ${docCopy.tonsUnit}, ${localizedVariety}`
+                    : localizedVariety;
 
               const lotStatusTone =
                 pub.lotIdentity.status === "revoked"
@@ -3062,7 +3157,7 @@ export default function TraceView() {
               const coopDisplay = localizeCoopName(pub.producer.cooperativeName, lang);
               const coopLines = splitCoopHeaderLines(coopDisplay, lang);
 
-              const orchardSteps = isPlotDossier
+              const orchardSteps = isOrchardOrHousehold
                 ? plotCopy.buildSteps({
                   plotCode,
                   pucCode: pub.growingZone.pucCode,
@@ -3074,10 +3169,10 @@ export default function TraceView() {
                       ? `${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}`
                       : null,
                   assessedOn: mb?.assessedOn ?? pub.growingZone.validUntil ?? null,
-                  lastCareOn: plotSb?.lastCareOn ?? null,
-                  lastInspOn: plotSb?.lastInspectionOn ?? null,
-                  minuteCode: plotSb?.latestMinuteCode ?? null,
-                  minuteOfficer: plotSb?.latestMinuteOfficer ?? null,
+                  lastCareOn: (isHouseholdDossier ? hhDossier?.lastCareOn : plotSb?.lastCareOn) ?? null,
+                  lastInspOn: (isHouseholdDossier ? hhDossier?.lastInspectionOn : plotSb?.lastInspectionOn) ?? null,
+                  minuteCode: (isHouseholdDossier ? hhDossier?.latestMinuteCode : plotSb?.latestMinuteCode) ?? null,
+                  minuteOfficer: (isHouseholdDossier ? hhDossier?.latestMinuteOfficer : plotSb?.latestMinuteOfficer) ?? null,
                   firstLabCode: firstLab?.code ?? null,
                   firstLabName: firstLab ? localizeLabName(firstLab.lab, lang) : null,
                   firstLabOn: firstLab?.sampledOn ?? null,
@@ -3085,7 +3180,18 @@ export default function TraceView() {
                   isSuspended: isPlotSuspended,
                   isPending: isPlotPending,
                   journalOk,
+                  journalCount: pub.integritySeal?.journalCount ?? 0,
+                  sprayCount: pub.integritySeal?.sprayCount ?? 0,
+                  isHousehold: isHouseholdDossier,
                 })
+                : [];
+              const visibleLotTimelineSteps = !isOrchardOrHousehold
+                ? (() => {
+                  const recorded = pub.timeline.filter(
+                    (st) => Boolean(st.date) || st.status === "completed" || st.status === "warning",
+                  );
+                  return recorded.length > 0 ? recorded : pub.timeline.slice(0, 1);
+                })()
                 : [];
 
               const unitPrimaryCode =
@@ -3099,21 +3205,25 @@ export default function TraceView() {
                 pub.lotIdentity.lotCode.toUpperCase() !== pub.growingZone.pucCode.toUpperCase(),
               );
 
-              const activeDocTitle = isPlotDossier
-                ? plotCopy.docTitle
-                : isBoxDossier
-                  ? unitCopy.boxDocTitle
-                  : isFruitDossier
-                    ? unitCopy.fruitDocTitle
-                    : docCopy.docTitle;
-              const activePrimaryPrefix = isPlotDossier
-                ? plotCopy.plotCodePrefix
-                : isBoxDossier
-                  ? unitCopy.boxCodePrefix
-                  : isFruitDossier
-                    ? unitCopy.fruitCodePrefix
-                    : docCopy.lotNoPrefix;
-              const activePrimaryCode = isPlotDossier
+              const activeDocTitle = isHouseholdDossier
+                ? hhCommuneCopy.hhDocTitle
+                : isPlotDossier
+                  ? plotCopy.docTitle
+                  : isBoxDossier
+                    ? unitCopy.boxDocTitle
+                    : isFruitDossier
+                      ? unitCopy.fruitDocTitle
+                      : docCopy.docTitle;
+              const activePrimaryPrefix = isHouseholdDossier
+                ? hhCommuneCopy.hhCodePrefix
+                : isPlotDossier
+                  ? plotCopy.plotCodePrefix
+                  : isBoxDossier
+                    ? unitCopy.boxCodePrefix
+                    : isFruitDossier
+                      ? unitCopy.fruitCodePrefix
+                      : docCopy.lotNoPrefix;
+              const activePrimaryCode = isOrchardOrHousehold
                 ? plotCode
                 : isBoxDossier || isFruitDossier
                   ? unitPrimaryCode
@@ -3128,21 +3238,29 @@ export default function TraceView() {
                   : ac.viewerTier === "enterprise" || ac.fieldAuditPass?.active
                     ? "enterprise"
                     : "public");
-              const showContributorsTable = !isPlotDossier && !data.isFarmerStamp;
+              const showContributorsTable = !isOrchardOrHousehold && !data.isFarmerStamp;
               const CONTRIB_ROWS_PER_CHUNK = 8;
               const contribChunks: TraceDossierContributor[][] = [];
-              if (showContributorsTable) {
-                if (contribRows.length === 0) {
-                  contribChunks.push([]);
-                } else {
-                  for (let i = 0; i < contribRows.length; i += CONTRIB_ROWS_PER_CHUNK) {
-                    contribChunks.push(contribRows.slice(i, i + CONTRIB_ROWS_PER_CHUNK));
-                  }
+              if (showContributorsTable && contribRows.length > 0) {
+                for (let i = 0; i < contribRows.length; i += CONTRIB_ROWS_PER_CHUNK) {
+                  contribChunks.push(contribRows.slice(i, i + CONTRIB_ROWS_PER_CHUNK));
                 }
               }
 
               const entData = data.enterpriseData ?? null;
               const authData = data.authorityData ?? null;
+              const hasSeparateFieldAuditSheet = Boolean(isPlotDossier && data.fieldAuditData);
+              const communeLotChunks =
+                isOrchardOrHousehold && communeContrib && communeContrib.lots.length > 0
+                  ? chunkArray(communeContrib.lots, 6)
+                  : [];
+              const entDiaryChunks =
+                !hasSeparateFieldAuditSheet &&
+                  !authData &&
+                  entData?.evidenceLogs &&
+                  entData.evidenceLogs.length > 0
+                  ? chunkArray(entData.evidenceLogs, 6)
+                  : [];
 
               const plotLinkByCode = new Map<string, { href: string; qrToken: string | null }>();
               if (entData?.fieldAuditSourcePlots) {
@@ -3179,24 +3297,71 @@ export default function TraceView() {
               const showEntZones = Boolean(entData && entData.sourceZones.length > 1);
               const entZoneChunks =
                 showEntZones && entData ? chunkArray(entData.sourceZones, 7) : [];
-              const entQuotaPlotChunks = entData?.massBalance
-                ? chunkArray(entData.massBalance.plots, 6)
-                : [];
+              const entQuotaPlotChunks =
+                !hasSeparateFieldAuditSheet &&
+                  entData?.massBalance &&
+                  (entData.massBalance.plots.length > 0 || entData.massBalance.zoneMaxQuotaKg > 0)
+                  ? chunkArray(entData.massBalance.plots, 6)
+                  : [];
               const entLabChunks =
                 entData && entData.detailedLabTests.length > 0
                   ? chunkArray(entData.detailedLabTests, 6)
                   : [];
-              const hasRealPackingSpecs = Boolean(
-                entData?.packingSpecs &&
-                (entData.packingSpecs.gradeAPct !== null ||
-                  entData.packingSpecs.avgBrix !== null ||
-                  Boolean(entData.packingSpecs.treatmentMethod) ||
-                  Boolean(entData.packingSpecs.transporter) ||
-                  Boolean(entData.packingSpecs.vehiclePlate) ||
-                  entData.packingSpecs.temperatureC !== null ||
-                  Boolean(entData.packingSpecs.departedAt) ||
-                  Boolean(entData.packingSpecs.estimatedArrival)),
-              );
+              const packingSpecRows: Array<{ label: string; value: string; tabular?: boolean }> = [];
+              if (entData?.packingSpecs) {
+                const ps = entData.packingSpecs;
+                if (ps.gradeAPct !== null) {
+                  packingSpecRows.push({
+                    label: extCopy.specGradeRatio,
+                    value: `${ps.gradeAPct}% / ${ps.gradeBPct ?? 0}% / ${ps.gradeCPct ?? 0}%`,
+                    tabular: true,
+                  });
+                }
+                if (ps.avgBrix !== null) {
+                  packingSpecRows.push({
+                    label: extCopy.specAvgBrix,
+                    value: `${ps.avgBrix}° Brix`,
+                    tabular: true,
+                  });
+                }
+                if (ps.treatmentMethod && ps.treatmentMethod.trim()) {
+                  packingSpecRows.push({
+                    label: extCopy.specTreatment,
+                    value: sanitizeTraceTextConnectors(ps.treatmentMethod.trim()),
+                  });
+                }
+                if (
+                  (ps.transporter && ps.transporter.trim()) ||
+                  (ps.vehiclePlate && ps.vehiclePlate.trim())
+                ) {
+                  packingSpecRows.push({
+                    label: extCopy.specTransport,
+                    value: [ps.transporter?.trim(), ps.vehiclePlate?.trim()]
+                      .filter(Boolean)
+                      .join(" - "),
+                    tabular: true,
+                  });
+                }
+                if (ps.temperatureC !== null) {
+                  packingSpecRows.push({
+                    label: extCopy.specTemp,
+                    value: `${ps.temperatureC}°C`,
+                    tabular: true,
+                  });
+                }
+                const scheduleParts = [
+                  ps.departedAt ? formatTraceDateTime(ps.departedAt, lang) : null,
+                  ps.estimatedArrival ? formatTraceDateTime(ps.estimatedArrival, lang) : null,
+                ].filter(Boolean);
+                if (scheduleParts.length > 0) {
+                  packingSpecRows.push({
+                    label: extCopy.specSchedule,
+                    value: scheduleParts.join(" / "),
+                    tabular: true,
+                  });
+                }
+              }
+              const hasRealPackingSpecs = packingSpecRows.length > 0;
 
               type AuthHhSlice = {
                 hh: TraceAuthorityHousehold;
@@ -3227,8 +3392,18 @@ export default function TraceView() {
                 });
               }
               const authHhChunks = authHhSlices.length > 0 ? chunkArray(authHhSlices, 4) : [];
-              const authDiaryChunks = authData ? chunkArray(authData.cultivationDiaries, 6) : [];
-              const authMinuteChunks = authData ? chunkArray(authData.inspectionMinutes, 5) : [];
+              const authDiaryChunks =
+                !hasSeparateFieldAuditSheet &&
+                  authData &&
+                  authData.cultivationDiaries.length > 0
+                  ? chunkArray(authData.cultivationDiaries, 6)
+                  : [];
+              const authMinuteChunks =
+                !hasSeparateFieldAuditSheet &&
+                  authData &&
+                  authData.inspectionMinutes.length > 0
+                  ? chunkArray(authData.inspectionMinutes, 5)
+                  : [];
               const authViolationChunks =
                 authData && authData.internalViolations.length > 0
                   ? chunkArray(authData.internalViolations, 5)
@@ -3239,12 +3414,15 @@ export default function TraceView() {
                 activePrimaryCode,
                 lang,
                 ac.viewerTier,
-                isPlotDossier ? orchardSteps.length : pub.timeline.length,
-                pub.timeline.map((s) => `${s.status}:${s.detail.length}`).join(","),
+                hasSeparateFieldAuditSheet ? "split-audit-a4" : "single-deck",
+                isOrchardOrHousehold ? orchardSteps.length : visibleLotTimelineSteps.length,
+                visibleLotTimelineSteps.map((s) => `${s.status}:${s.detail.length}`).join(","),
                 labs.length,
                 contribTier,
                 contribRows.length,
-                contribRows.map((r) => `${r.index}:${r.visibilityLevel}:${r.sharePct}`).join(","),
+                contribRows.map((r) => `${r.index}:${r.visibilityLevel}:${r.sharePct}:${r.householdCode || ""}`).join(","),
+                communeContrib ? `${communeContrib.totalLots}:${communeContrib.lots.length}` : "no-cl",
+                Boolean(safeFarmerAvatarUrl),
                 pub.phytosanitary.certNo || "",
                 pub.lotIdentity.rawLotStatus || pub.lotIdentity.status,
                 Boolean(qrSrc),
@@ -3255,9 +3433,8 @@ export default function TraceView() {
                       ? `${entData.massBalance.cumulativeUsedKg}:${entData.massBalance.plots.length}`
                       : "no-mb",
                     entData.detailedLabTests.map((l) => `${l.code}:${l.result}`).join(","),
-                    hasRealPackingSpecs && entData.packingSpecs
-                      ? `${entData.packingSpecs.gradeAPct}:${entData.packingSpecs.avgBrix}:${entData.packingSpecs.temperatureC}:${entData.packingSpecs.vehiclePlate}`
-                      : "no-pack",
+                    entData.evidenceLogs?.length ?? 0,
+                    packingSpecRows.map((r) => `${r.label}:${r.value}`).join("|"),
                   ].join(";")
                   : "no-ent",
                 authData
@@ -3317,43 +3494,125 @@ export default function TraceView() {
                 </header>
               );
 
-              const plotFinalStatusText = isPlotSuspended
-                ? plotCopy.plotStatusRevoked
-                : isPlotPending
-                  ? plotCopy.plotStatusPending
-                  : plotCopy.plotStatusValid;
+              const plotFinalStatusText = isHouseholdDossier
+                ? isPlotSuspended
+                  ? hhCommuneCopy.hhStatusRevoked
+                  : isPlotPending
+                    ? hhCommuneCopy.hhStatusPending
+                    : hhCommuneCopy.hhStatusValid
+                : isPlotSuspended
+                  ? plotCopy.plotStatusRevoked
+                  : isPlotPending
+                    ? plotCopy.plotStatusPending
+                    : plotCopy.plotStatusValid;
+
+              const farmerDisplayTitle =
+                farmerProf?.displayName ||
+                (pub.producer.consentedHouseholds[0]
+                  ? pub.producer.consentedHouseholds[0]
+                  : householdCodeRef
+                    ? contribCopy.memberByCodeFmt(householdCodeRef)
+                    : t.producerPackhouse.representedByCoop);
+              const farmerMonogram = computeFarmerMonogram(
+                farmerDisplayTitle,
+                farmerProf?.isAnonymized ?? pub.producer.consentedHouseholds.length === 0,
+              );
 
               const dossierSections: A4DossierSectionItem[] = [
                 {
                   key: "parties",
-                  content: isPlotDossier ? (
+                  content: isOrchardOrHousehold ? (
                     <section className="tr-doc-parties" aria-label={t.zone.title}>
                       <div className="tr-doc-party-col">
-                        <span className="tr-doc-party-kicker">{plotCopy.plotProfileHeading}</span>
-                        <strong className="tr-doc-party-name">
-                          {plotCopy.plotTitleFmt(plotCode)}
-                        </strong>
-                        <div className="tr-doc-party-lines">
-                          <span>
-                            {plotVillageText ||
-                              localizeAdminLocation(pub.growingZone.adminLocation, lang)}
-                          </span>
-                          <span>
-                            {localizeGroupName(
-                              pub.producer.groupName,
-                              pub.producer.participatingHouseholdCount,
-                              lang,
+                        <div className="tr-doc-farmer-card">
+                          <div className="tr-doc-farmer-avatar-frame">
+                            {safeFarmerAvatarUrl ? (
+                              <button
+                                type="button"
+                                className="tr-doc-farmer-avatar-btn"
+                                onClick={() =>
+                                  setTracePreviewMedia({
+                                    urls: [safeFarmerAvatarUrl],
+                                    title: farmerDisplayTitle,
+                                    subtitle: householdCodeRef
+                                      ? `${hhCommuneCopy.hhCodePrefix}: ${householdCodeRef}`
+                                      : undefined,
+                                  })
+                                }
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={safeFarmerAvatarUrl}
+                                  alt={farmerDisplayTitle}
+                                  className="tr-doc-farmer-avatar-img"
+                                  loading="eager"
+                                  decoding="async"
+                                />
+                              </button>
+                            ) : (
+                              <div className="tr-doc-farmer-avatar-fallback" aria-hidden="true">
+                                <span className="tr-doc-farmer-monogram">{farmerMonogram}</span>
+                                <span className="tr-doc-farmer-monogram-sub">
+                                  {hhCommuneCopy.portraitFallbackSub}
+                                </span>
+                              </div>
                             )}
-                          </span>
-                          <span>
-                            {pub.producer.consentedHouseholds.length > 0
-                              ? `${docCopy.farmersPrefix}: ${pub.producer.consentedHouseholds.join(", ")}`
-                              : t.producerPackhouse.representedByCoop}
-                          </span>
-                          <span>{plotCopy.varietyYearFmt(localizedVariety, plotPlantedYear)}</span>
-                        </div>
-                        <div className="tr-doc-party-code">
-                          {plotCopy.plotCodePrefix}: {plotCode} ({plotFinalStatusText})
+                          </div>
+
+                          <div className="tr-doc-farmer-meta">
+                            <span className="tr-doc-party-kicker">
+                              {isHouseholdDossier
+                                ? hhCommuneCopy.hhProfileKicker
+                                : plotCopy.plotProfileHeading}
+                            </span>
+                            <strong className="tr-doc-party-name">
+                              {isHouseholdDossier
+                                ? farmerDisplayTitle
+                                : plotCopy.plotTitleFmt(plotCode)}
+                            </strong>
+                            <div className="tr-doc-party-lines">
+                              {!isHouseholdDossier && (
+                                <span>
+                                  {hhCommuneCopy.ownerPrefix}: {farmerDisplayTitle}
+                                </span>
+                              )}
+                              {householdCodeRef && !isHouseholdDossier && isSafeTraceCode(householdCodeRef) && (
+                                <span>
+                                  {extCopy.hhCodePrefix}:{" "}
+                                  <Link
+                                    href={`/trace/${encodeURIComponent(householdCodeRef)}`}
+                                    className="tr-doc-code-link"
+                                    onClick={() =>
+                                      rememberTraceKindHint(householdCodeRef, "household")
+                                    }
+                                  >
+                                    {householdCodeRef}
+                                  </Link>
+                                </span>
+                              )}
+                              <span>
+                                {plotVillageText ||
+                                  localizeAdminLocation(pub.growingZone.adminLocation, lang)}
+                              </span>
+                              {isHouseholdDossier ? (
+                                <span>
+                                  {hhCommuneCopy.hhScaleLineFmt(
+                                    hhPlotCount,
+                                    formatTraceNumber(plotAreaHa, lang),
+                                    plotTreeCount > 0
+                                      ? `${formatTraceNumber(plotTreeCount, lang)} ${plotCopy.treesUnit}`
+                                      : null,
+                                  )}
+                                </span>
+                              ) : null}
+                              <span>{plotCopy.varietyYearFmt(localizedVariety, plotPlantedYear)}</span>
+                            </div>
+                            <div className="tr-doc-party-code">
+                              {isHouseholdDossier
+                                ? `${hhCommuneCopy.hhCodePrefix}: ${plotCode} (${plotFinalStatusText})`
+                                : `${plotCopy.plotCodePrefix}: ${plotCode} (${plotFinalStatusText})`}
+                            </div>
+                          </div>
                         </div>
                       </div>
 
@@ -3365,14 +3624,23 @@ export default function TraceView() {
                         <div className="tr-doc-party-lines">
                           <span>{localizeAdminLocation(pub.growingZone.adminLocation, lang)}</span>
                           <span>{t.processPhyto.standardValue}</span>
-                          <span>
-                            {docCopy.validUntilPrefix}:{" "}
-                            {formatTraceDate(pub.growingZone.validUntil, lang)}
-                          </span>
-                          <span>
-                            {plotCopy.linkedLotPrefix}:{" "}
-                            {plotLinkedLotCode || plotCopy.noLinkedLotYet}
-                          </span>
+                          {pub.growingZone.validUntil && (
+                            <span>
+                              {docCopy.validUntilPrefix}:{" "}
+                              {formatTraceDate(pub.growingZone.validUntil, lang)}
+                            </span>
+                          )}
+                          {communeContrib && communeContrib.totalLots > 0 ? (
+                            <span>
+                              {hhCommuneCopy.rowCommuneContrib.replace(/:$/, "")}:{" "}
+                              {communeContrib.totalLots} lô (
+                              {formatTraceNumber(communeContrib.totalContributedKg, lang)} kg)
+                            </span>
+                          ) : plotLinkedLotCode ? (
+                            <span>
+                              {plotCopy.linkedLotPrefix}: {plotLinkedLotCode}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="tr-doc-party-code">
                           PUC: {pub.growingZone.pucCode} (
@@ -3550,6 +3818,10 @@ export default function TraceView() {
                                   const plotTitleLabel = row.plotCode
                                     ? contribCopy.plotAreaFmt(row.plotCode, areaText)
                                     : "";
+                                  const hhTraceHref =
+                                    row.householdCode && isSafeTraceCode(row.householdCode)
+                                      ? `/trace/${encodeURIComponent(row.householdCode)}`
+                                      : null;
 
                                   return (
                                     <tr key={`contrib-${row.index}`}>
@@ -3557,12 +3829,39 @@ export default function TraceView() {
                                         {String(row.index).padStart(2, "0")}.
                                       </td>
                                       <td className="col-hh">
-                                        <strong className="tr-doc-item-title">
-                                          {primaryHhTitle}
-                                        </strong>
-                                        {secondaryHhLine && (
-                                          <span className="tr-doc-item-sub">{secondaryHhLine}</span>
+                                        {hhTraceHref ? (
+                                          <Link
+                                            href={hhTraceHref}
+                                            className="tr-doc-item-title tr-doc-inline-link"
+                                            onClick={() =>
+                                              rememberTraceKindHint(row.householdCode, "household")
+                                            }
+                                          >
+                                            {primaryHhTitle}
+                                          </Link>
+                                        ) : (
+                                          <strong className="tr-doc-item-title">
+                                            {primaryHhTitle}
+                                          </strong>
                                         )}
+                                        {row.householdCode && contribTier === "public" && hhTraceHref && (
+                                          <span className="tr-doc-item-sub is-tabular">
+                                            <Link
+                                              href={hhTraceHref}
+                                              className="tr-doc-code-link"
+                                              onClick={() =>
+                                                rememberTraceKindHint(row.householdCode, "household")
+                                              }
+                                            >
+                                              {hhCommuneCopy.hhLookupHintFmt(row.householdCode)}
+                                            </Link>
+                                            {secondaryHhLine ? `, ${secondaryHhLine}` : ""}
+                                          </span>
+                                        )}
+                                        {(!row.householdCode || contribTier !== "public" || !hhTraceHref) &&
+                                          secondaryHhLine && (
+                                            <span className="tr-doc-item-sub">{secondaryHhLine}</span>
+                                          )}
                                       </td>
                                       <td className="col-plot">
                                         {contribTier === "public" || !row.plotCode ? (
@@ -3646,7 +3945,7 @@ export default function TraceView() {
                     <section className="tr-doc-ledger" aria-label={t.timeline.ariaLabel}>
                       <div className="tr-doc-meta-strip">
                         <span className="tr-doc-meta-left">
-                          {isPlotDossier
+                          {isOrchardOrHousehold
                             ? `${plotCopy.cropMetaPrefix}: ${plotCopy.cropName} (${localizedVariety})`
                             : `${docCopy.productMetaPrefix}: ${localizeProductName(
                               pub.lotIdentity.productName,
@@ -3655,8 +3954,8 @@ export default function TraceView() {
                             )} (${localizedVariety})`}
                         </span>
                         <strong className="tr-doc-meta-right">
-                          {isPlotDossier
-                            ? `${plotCopy.plotCodePrefix}: ${plotCode} / PUC: ${pub.growingZone.pucCode}`
+                          {isOrchardOrHousehold
+                            ? `${activePrimaryPrefix}: ${plotCode} / PUC: ${pub.growingZone.pucCode}`
                             : isBoxDossier || isFruitDossier
                               ? `${activePrimaryPrefix}: ${unitPrimaryCode}${hasDistinctParentLot
                                 ? ` / ${unitCopy.parentLotPrefix}: ${pub.lotIdentity.lotCode}`
@@ -3677,7 +3976,7 @@ export default function TraceView() {
                             <tr>
                               <th className="col-no">{docCopy.colNo}</th>
                               <th className="col-desc">
-                                {isPlotDossier ? plotCopy.colStage : docCopy.colStage}
+                                {isOrchardOrHousehold ? plotCopy.colStage : docCopy.colStage}
                               </th>
                               <th className="col-unit">{docCopy.colUnit}</th>
                               <th className="col-date">{docCopy.colDate}</th>
@@ -3685,7 +3984,7 @@ export default function TraceView() {
                             </tr>
                           </thead>
                           <tbody>
-                            {isPlotDossier
+                            {isOrchardOrHousehold
                               ? orchardSteps.map((st) => (
                                 <tr key={st.stepNo}>
                                   <td className="col-no">{st.stepNo}</td>
@@ -3700,7 +3999,7 @@ export default function TraceView() {
                                   </td>
                                 </tr>
                               ))
-                              : pub.timeline.map((st) => {
+                              : visibleLotTimelineSteps.map((st, stIdx) => {
                                 const statusLabel =
                                   st.status === "completed"
                                     ? t.timeline.statusCompleted
@@ -3741,7 +4040,7 @@ export default function TraceView() {
                                 return (
                                   <tr key={st.key}>
                                     <td className="col-no">
-                                      {String(st.step).padStart(2, "0")}.
+                                      {String(stIdx + 1).padStart(2, "0")}.
                                     </td>
                                     <td className="col-desc">
                                       <strong className="tr-doc-item-title">
@@ -3799,15 +4098,17 @@ export default function TraceView() {
                     <section className="tr-doc-summary-split">
                       <div className="tr-doc-total-box">
                         <span className="tr-doc-total-label">
-                          {isPlotDossier
-                            ? plotCopy.plotScaleHeading
-                            : isBoxDossier
-                              ? unitCopy.boxScaleHeading
-                              : isFruitDossier
-                                ? unitCopy.fruitScaleHeading
-                                : pub.lotIdentity.itemWeightKg !== null
-                                  ? docCopy.unitWeightHeading
-                                  : docCopy.lotScaleHeading}
+                          {isHouseholdDossier
+                            ? hhCommuneCopy.hhScaleHeading
+                            : isPlotDossier
+                              ? plotCopy.plotScaleHeading
+                              : isBoxDossier
+                                ? unitCopy.boxScaleHeading
+                                : isFruitDossier
+                                  ? unitCopy.fruitScaleHeading
+                                  : pub.lotIdentity.itemWeightKg !== null
+                                    ? docCopy.unitWeightHeading
+                                    : docCopy.lotScaleHeading}
                         </span>
                         <div className="tr-doc-hatch-box">
                           <strong
@@ -3819,90 +4120,106 @@ export default function TraceView() {
                         </div>
                       </div>
 
-                      {isPlotDossier ? (
+                      {isOrchardOrHousehold ? (
                         <dl className="tr-doc-kv-totals">
                           <div className="tr-doc-kv-row">
                             <dt>{plotCopy.rowPucCode}</dt>
                             <dd>{pub.growingZone.pucCode}</dd>
                           </div>
-                          <div className="tr-doc-kv-row">
-                            <dt>{plotCopy.rowCareJournal}</dt>
-                            <dd>
-                              {journalOk ? docCopy.journalVerifiedText : docCopy.journalReviewText}
-                            </dd>
-                          </div>
-                          <div className="tr-doc-kv-row">
-                            <dt>{plotCopy.rowPesticidePhi}</dt>
-                            <dd className={isPlotSuspended ? "is-danger" : ""}>
-                              {isPlotSuspended
-                                ? docCopy.heavyMetalFailText
-                                : docCopy.phiCompliantText}
-                            </dd>
-                          </div>
-                          <div className="tr-doc-kv-row">
-                            <dt>{plotCopy.rowPlotSampleTest}</dt>
-                            <dd className={anyLabFail ? "is-danger" : ""}>
-                              {firstLab
-                                ? anyLabFail
-                                  ? docCopy.heavyMetalFailText
-                                  : docCopy.heavyMetalPassText
-                                : plotCopy.preHarvestSamplePending}
-                            </dd>
-                          </div>
-                          <div className="tr-doc-kv-row">
-                            <dt>{plotCopy.rowLatestLot}</dt>
-                            <dd>{plotLinkedLotCode || plotCopy.noLinkedLotYet}</dd>
-                          </div>
+                          {(pub.integritySeal?.totalSealedRecords ?? 0) > 0 && (
+                            <div className="tr-doc-kv-row">
+                              <dt>{plotCopy.rowCareJournal}</dt>
+                              <dd>
+                                {journalOk
+                                  ? hhCommuneCopy.sealedRecordsCountFmt(
+                                    pub.integritySeal!.totalSealedRecords,
+                                  )
+                                  : docCopy.journalReviewText}
+                              </dd>
+                            </div>
+                          )}
+                          {firstLab && (
+                            <div className="tr-doc-kv-row">
+                              <dt>{plotCopy.rowPlotSampleTest}</dt>
+                              <dd className={anyLabFail ? "is-danger" : ""}>
+                                {anyLabFail
+                                  ? `${firstLab.code} (${docCopy.heavyMetalFailText})`
+                                  : `${firstLab.code} (${docCopy.heavyMetalPassText})`}
+                              </dd>
+                            </div>
+                          )}
+                          {communeContrib && communeContrib.totalLots > 0 ? (
+                            <div className="tr-doc-kv-row">
+                              <dt>{hhCommuneCopy.rowCommuneContrib}</dt>
+                              <dd>
+                                {communeContrib.totalLots} lô (
+                                {formatTraceNumber(communeContrib.totalContributedKg, lang)} kg)
+                              </dd>
+                            </div>
+                          ) : plotLinkedLotCode ? (
+                            <div className="tr-doc-kv-row">
+                              <dt>{plotCopy.rowLatestLot}</dt>
+                              <dd>{plotLinkedLotCode}</dd>
+                            </div>
+                          ) : null}
                           <div className="tr-doc-kv-row is-grand">
-                            <dt>{plotCopy.rowPlotFinalStatus}</dt>
+                            <dt>
+                              {isHouseholdDossier
+                                ? hhCommuneCopy.rowHhFinalStatus
+                                : plotCopy.rowPlotFinalStatus}
+                            </dt>
                             <dd className={lotStatusTone}>{plotFinalStatusText}</dd>
                           </div>
                         </dl>
                       ) : (
                         <dl className="tr-doc-kv-totals">
-                          <div className="tr-doc-kv-row">
-                            <dt>{docCopy.rowHeavyMetalYellowO}</dt>
-                            <dd className={anyLabFail ? "is-danger" : ""}>
-                              {firstLab
-                                ? firstLab.yellowOPositive || Number(firstLab.cdMgKg) > 0.05
-                                  ? docCopy.heavyMetalFailText
-                                  : docCopy.heavyMetalPassText
-                                : t.lab.badgeUpdating}
-                            </dd>
-                          </div>
-                          <div className="tr-doc-kv-row">
-                            <dt>{docCopy.rowPesticideSafety}</dt>
-                            <dd className={anyLabFail ? "is-danger" : ""}>
-                              {firstLab
-                                ? firstLab.result !== "pass" ||
-                                  (firstLab.chlorpyrifosMgKg ?? 0) > 0.01
-                                  ? docCopy.pesticideFailText
-                                  : docCopy.pesticidePassText
-                                : docCopy.phiCompliantText}
-                            </dd>
-                          </div>
-                          <div className="tr-doc-kv-row">
-                            <dt>{docCopy.rowFarmJournal}</dt>
-                            <dd>
-                              {pub.integritySeal && !pub.integritySeal.chainVerified
-                                ? docCopy.journalReviewText
-                                : docCopy.journalVerifiedText}
-                            </dd>
-                          </div>
-                          <div className="tr-doc-kv-row">
-                            <dt>{docCopy.rowYieldCheck}</dt>
-                            <dd className={mb && !mb.withinQuota ? "is-danger" : ""}>
-                              {mb && !mb.withinQuota
-                                ? docCopy.overQuotaText
-                                : docCopy.withinQuotaText}
-                            </dd>
-                          </div>
-                          <div className="tr-doc-kv-row">
-                            <dt>{docCopy.rowPhytosanitary}</dt>
-                            <dd>
-                              {pub.phytosanitary.certNo || t.processPhyto.phytoDefaultPending}
-                            </dd>
-                          </div>
+                          {firstLab && (
+                            <>
+                              <div className="tr-doc-kv-row">
+                                <dt>{docCopy.rowHeavyMetalYellowO}</dt>
+                                <dd className={anyLabFail ? "is-danger" : ""}>
+                                  {firstLab.yellowOPositive || Number(firstLab.cdMgKg) > 0.05
+                                    ? docCopy.heavyMetalFailText
+                                    : docCopy.heavyMetalPassText}
+                                </dd>
+                              </div>
+                              <div className="tr-doc-kv-row">
+                                <dt>{docCopy.rowPesticideSafety}</dt>
+                                <dd className={anyLabFail ? "is-danger" : ""}>
+                                  {firstLab.result !== "pass" ||
+                                    (firstLab.chlorpyrifosMgKg ?? 0) > 0.01
+                                    ? docCopy.pesticideFailText
+                                    : docCopy.pesticidePassText}
+                                </dd>
+                              </div>
+                            </>
+                          )}
+                          {(pub.integritySeal?.totalSealedRecords ?? 0) > 0 && (
+                            <div className="tr-doc-kv-row">
+                              <dt>{docCopy.rowFarmJournal}</dt>
+                              <dd>
+                                {!pub.integritySeal!.chainVerified
+                                  ? docCopy.journalReviewText
+                                  : hhCommuneCopy.sealedRecordsCountFmt(
+                                    pub.integritySeal!.totalSealedRecords,
+                                  )}
+                              </dd>
+                            </div>
+                          )}
+                          {mb && mb.zoneMaxQuotaKg > 0 && (
+                            <div className="tr-doc-kv-row">
+                              <dt>{docCopy.rowYieldCheck}</dt>
+                              <dd className={!mb.withinQuota ? "is-danger" : ""}>
+                                {!mb.withinQuota ? docCopy.overQuotaText : docCopy.withinQuotaText}
+                              </dd>
+                            </div>
+                          )}
+                          {pub.phytosanitary.certNo && (
+                            <div className="tr-doc-kv-row">
+                              <dt>{docCopy.rowPhytosanitary}</dt>
+                              <dd>{pub.phytosanitary.certNo}</dd>
+                            </div>
+                          )}
                           <div className="tr-doc-kv-row is-grand">
                             <dt>
                               {isBoxDossier
@@ -3926,6 +4243,162 @@ export default function TraceView() {
                     </section>
                   ),
                 },
+                ...(isOrchardOrHousehold && communeContrib
+                  ? communeLotChunks.map((clChunk, clIdx): A4DossierSectionItem => {
+                    const hasHhHigherTotal =
+                      isPlotDossier &&
+                      communeContrib.householdTotalContributedKg !== undefined &&
+                      communeContrib.householdTotalContributedKg >
+                      communeContrib.totalContributedKg;
+                    return {
+                      key: `commune-lots-${clIdx}`,
+                      content: (
+                        <section className="tr-doc-ledger tr-doc-ext-block">
+                          <div className="tr-doc-meta-strip">
+                            <span className="tr-doc-meta-left">
+                              {hhCommuneCopy.communeContribSectionTitle}
+                              {communeLotChunks.length > 1
+                                ? extCopy.partSuffixFmt(clIdx + 1, communeLotChunks.length)
+                                : ""}
+                            </span>
+                            <strong className="tr-doc-meta-right">
+                              {hhCommuneCopy.communeContribTotalFmt(
+                                communeContrib.totalLots,
+                                formatTraceNumber(communeContrib.totalContributedKg, lang),
+                              )}
+                              {hasHhHigherTotal && communeContrib.householdTotalLots
+                                ? ` / ${hhCommuneCopy.communeHouseholdWideFmt(
+                                  communeContrib.householdTotalLots,
+                                  formatTraceNumber(
+                                    communeContrib.householdTotalContributedKg!,
+                                    lang,
+                                  ),
+                                )}`
+                                : ""}
+                            </strong>
+                          </div>
+
+                          <div className="tr-doc-table-wrap">
+                            <table className="tr-doc-table is-commune-lots">
+                              <thead>
+                                <tr>
+                                  <th className="col-no">{extCopy.colNo}</th>
+                                  <th className="col-lot-ref">
+                                    {hhCommuneCopy.colLotAndPackhouse}
+                                  </th>
+                                  <th className="col-plot-src">{hhCommuneCopy.colPlotOrZone}</th>
+                                  <th className="col-date">{hhCommuneCopy.colHarvestDate}</th>
+                                  <th className="col-contrib-share">
+                                    {hhCommuneCopy.colContributed}
+                                  </th>
+                                  <th className="col-status">{hhCommuneCopy.colLotStatus}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {clChunk.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={6} className="tr-doc-contrib-empty">
+                                      {hhCommuneCopy.emptyCommuneLots}
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  clChunk.map((cl, idx) => {
+                                    const rowNum = clIdx * 6 + idx + 1;
+                                    const lotHref =
+                                      cl.qrToken && isSafeTraceCode(cl.qrToken)
+                                        ? `/t/${encodeURIComponent(cl.qrToken)}`
+                                        : isSafeTraceCode(cl.lotCode)
+                                          ? `/trace/${encodeURIComponent(cl.lotCode)}`
+                                          : null;
+                                    const plotHref =
+                                      isHouseholdDossier &&
+                                        cl.plotCode &&
+                                        isSafeTraceCode(cl.plotCode)
+                                        ? `/trace/${encodeURIComponent(cl.plotCode)}`
+                                        : null;
+                                    const lotStateLabel =
+                                      cl.status === "exported"
+                                        ? hhCommuneCopy.lotExported
+                                        : cl.status === "in_transit"
+                                          ? hhCommuneCopy.lotInTransit
+                                          : cl.status === "delivered"
+                                            ? hhCommuneCopy.lotDelivered
+                                            : hhCommuneCopy.lotSampling;
+                                    const lotStateTone =
+                                      cl.status === "sampling" ? "is-muted" : "is-ok";
+
+                                    return (
+                                      <tr key={`${cl.lotCode}-${rowNum}`}>
+                                        <td className="col-no">
+                                          {String(rowNum).padStart(2, "0")}.
+                                        </td>
+                                        <td className="col-lot-ref">
+                                          {lotHref ? (
+                                            <Link
+                                              href={lotHref}
+                                              className="tr-doc-item-title tr-doc-inline-link"
+                                              onClick={() => {
+                                                rememberTraceKindHint(cl.lotCode, "lot");
+                                                rememberTraceKindHint(cl.qrToken, "lot");
+                                              }}
+                                            >
+                                              {cl.lotCode}
+                                            </Link>
+                                          ) : (
+                                            <strong className="tr-doc-item-title">
+                                              {cl.lotCode}
+                                            </strong>
+                                          )}
+                                          <span className="tr-doc-item-sub">
+                                            {localizePackhouseName(cl.packhouseName, lang)} (
+                                            {localizeMarket(cl.market, lang)})
+                                          </span>
+                                        </td>
+                                        <td className="col-plot-src">
+                                          {cl.plotCode ? (
+                                            plotHref ? (
+                                              <Link
+                                                href={plotHref}
+                                                className="tr-doc-code-link"
+                                                onClick={() =>
+                                                  rememberTraceKindHint(cl.plotCode, "plot")
+                                                }
+                                              >
+                                                {cl.plotCode}
+                                              </Link>
+                                            ) : (
+                                              <strong>{cl.plotCode}</strong>
+                                            )
+                                          ) : (
+                                            <span>{pub.growingZone.pucCode}</span>
+                                          )}
+                                        </td>
+                                        <td className="col-date is-tabular">
+                                          {formatTraceDate(cl.harvestedOn, lang)}
+                                        </td>
+                                        <td className="col-contrib-share">
+                                          <strong className="tr-doc-contrib-wt">
+                                            {formatTraceNumber(cl.contributedKg, lang)} kg
+                                          </strong>
+                                          <span className="tr-doc-item-sub">
+                                            {hhCommuneCopy.shareOfLotFmt(cl.sharePct)}
+                                          </span>
+                                        </td>
+                                        <td className={`col-status ${lotStateTone}`}>
+                                          {lotStateLabel}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      ),
+                    };
+                  })
+                  : []),
                 ...(entData
                   ? [
                     ...entZoneChunks.map((zChunk, zIdx): A4DossierSectionItem => ({
@@ -4204,85 +4677,168 @@ export default function TraceView() {
                         </section>
                       ),
                     })),
-                    ...(hasRealPackingSpecs && entData.packingSpecs
+                    ...(hasRealPackingSpecs
                       ? [
                         {
                           key: "ent-packing",
-                          content: (() => {
-                            const ps = entData.packingSpecs!;
-                            const scheduleParts = [
-                              ps.departedAt ? formatTraceDateTime(ps.departedAt, lang) : null,
-                              ps.estimatedArrival
-                                ? formatTraceDateTime(ps.estimatedArrival, lang)
-                                : null,
-                            ].filter(Boolean);
-                            return (
-                              <section className="tr-doc-ledger tr-doc-ext-block">
-                                <div className="tr-doc-meta-strip">
-                                  <span className="tr-doc-meta-left">
-                                    {extCopy.packingTitle}
-                                  </span>
-                                </div>
-                                <div className="tr-doc-spec-grid">
-                                  <div className="tr-doc-spec-cell">
-                                    <span>{extCopy.specGradeRatio}</span>
-                                    <strong className="is-tabular">
-                                      {ps.gradeAPct !== null
-                                        ? `${ps.gradeAPct}% / ${ps.gradeBPct ?? 0}% / ${ps.gradeCPct ?? 0}%`
-                                        : extCopy.notRecordedYet}
-                                    </strong>
-                                  </div>
-                                  <div className="tr-doc-spec-cell">
-                                    <span>{extCopy.specAvgBrix}</span>
-                                    <strong className="is-tabular">
-                                      {ps.avgBrix !== null
-                                        ? `${ps.avgBrix}° Brix`
-                                        : extCopy.notRecordedYet}
-                                    </strong>
-                                  </div>
-                                  <div className="tr-doc-spec-cell">
-                                    <span>{extCopy.specTreatment}</span>
-                                    <strong>
-                                      {ps.treatmentMethod || extCopy.notRecordedYet}
-                                    </strong>
-                                  </div>
-                                  <div className="tr-doc-spec-cell">
-                                    <span>{extCopy.specTransport}</span>
-                                    <strong className="is-tabular">
-                                      {ps.transporter || ps.vehiclePlate
-                                        ? `${ps.transporter || ""}${ps.transporter && ps.vehiclePlate ? " - " : ""}${ps.vehiclePlate || ""}`
-                                        : extCopy.notRecordedYet}
-                                    </strong>
-                                  </div>
-                                  <div className="tr-doc-spec-cell">
-                                    <span>{extCopy.specTemp}</span>
-                                    <strong className="is-tabular">
-                                      {ps.temperatureC !== null
-                                        ? `${ps.temperatureC}°C`
-                                        : extCopy.notRecordedYet}
-                                    </strong>
-                                  </div>
-                                  <div className="tr-doc-spec-cell">
-                                    <span>{extCopy.specSchedule}</span>
-                                    <strong className="is-tabular">
-                                      {scheduleParts.length > 0
-                                        ? scheduleParts.join(" / ")
-                                        : localizeLotStatusLabel(
-                                          pub.lotIdentity.status,
-                                          pub.lotIdentity.statusLabel,
-                                          lang,
-                                          activeKind,
-                                          pub.lotIdentity.rawLotStatus,
-                                        )}
-                                    </strong>
-                                  </div>
-                                </div>
-                              </section>
-                            );
-                          })(),
+                          content: (
+                            <section className="tr-doc-ledger tr-doc-ext-block">
+                              <div className="tr-doc-meta-strip">
+                                <span className="tr-doc-meta-left">{extCopy.packingTitle}</span>
+                              </div>
+                              <div className="tr-doc-table-wrap">
+                                <table className="tr-doc-table is-packing-specs">
+                                  <thead>
+                                    <tr>
+                                      <th className="col-no">{extCopy.colNo}</th>
+                                      <th className="col-spec-name">
+                                        {hhCommuneCopy.colPackingItem}
+                                      </th>
+                                      <th className="col-spec-val">
+                                        {hhCommuneCopy.colPackingValue}
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {packingSpecRows.map((row, idx) => (
+                                      <tr key={row.label}>
+                                        <td className="col-no">
+                                          {String(idx + 1).padStart(2, "0")}.
+                                        </td>
+                                        <td className="col-spec-name">{row.label}</td>
+                                        <td
+                                          className={`col-spec-val${row.tabular ? " is-tabular" : ""}`}
+                                        >
+                                          {row.value}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </section>
+                          ),
                         } satisfies A4DossierSectionItem,
                       ]
                       : []),
+                    ...entDiaryChunks.map((dChunk, dIdx): A4DossierSectionItem => ({
+                      key: `ent-diaries-${dIdx}`,
+                      content: (
+                        <section className="tr-doc-ledger tr-doc-ext-block">
+                          <div className="tr-doc-meta-strip">
+                            <span className="tr-doc-meta-left">
+                              {hhCommuneCopy.tier2EvidenceTitle}
+                              {entDiaryChunks.length > 1
+                                ? extCopy.partSuffixFmt(dIdx + 1, entDiaryChunks.length)
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="tr-doc-table-wrap">
+                            <table className="tr-doc-table is-auth-diary">
+                              <thead>
+                                <tr>
+                                  <th className="col-date">{extCopy.colDate}</th>
+                                  <th className="col-hh-plot">{extCopy.colHhPlot}</th>
+                                  <th className="col-act">{extCopy.colDiaryActivity}</th>
+                                  <th className="col-status">{extCopy.colStatus}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {dChunk.map((d, idx) => {
+                                  const mrlFailed = Boolean(d.mrlStatus && d.mrlStatus !== "pass");
+                                  const compact = formatCompactDiaryEntry(
+                                    d.activity,
+                                    d.detail,
+                                    lang,
+                                  );
+                                  const mediaUrls = extractSafeMediaUrls(d.photoUrls, d.photoUrl);
+                                  const hhHref =
+                                    !isHouseholdDossier &&
+                                      d.householdCode &&
+                                      isSafeTraceCode(d.householdCode)
+                                      ? `/trace/${encodeURIComponent(d.householdCode)}`
+                                      : null;
+                                  const statusTone = mrlFailed
+                                    ? "is-danger"
+                                    : d.isLateEntry
+                                      ? "is-warn"
+                                      : "is-ok";
+                                  const statusText = mrlFailed
+                                    ? extCopy.diaryWarn
+                                    : d.isLateEntry
+                                      ? extCopy.diaryLate
+                                      : extCopy.diaryValid;
+
+                                  return (
+                                    <tr key={`ent-d-${d.entryOn}-${d.plotCode}-${idx}`}>
+                                      <td className="col-date is-tabular">
+                                        {formatTraceDate(d.entryOn, lang)}
+                                      </td>
+                                      <td className="col-hh-plot">
+                                        {hhHref ? (
+                                          <Link
+                                            href={hhHref}
+                                            className="tr-doc-item-title tr-doc-inline-link"
+                                            onClick={() =>
+                                              rememberTraceKindHint(d.householdCode, "household")
+                                            }
+                                          >
+                                            {d.householdName || d.recorder || "-"}
+                                          </Link>
+                                        ) : (
+                                          <strong className="tr-doc-item-title">
+                                            {d.householdName || d.recorder || "-"}
+                                          </strong>
+                                        )}
+                                        {d.plotCode && (
+                                          <span className="tr-doc-item-sub is-tabular">
+                                            {extCopy.plotRefFmt(d.plotCode)}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="col-act">
+                                        <strong className="tr-doc-item-title">
+                                          {compact.title}
+                                        </strong>
+                                        {compact.subtitle && (
+                                          <span className="tr-doc-item-sub is-tabular">
+                                            {compact.subtitle}
+                                          </span>
+                                        )}
+                                        {mediaUrls.length > 0 && (
+                                          <button
+                                            type="button"
+                                            className="tr-doc-sub-btn no-print"
+                                            onClick={() =>
+                                              setTracePreviewMedia({
+                                                urls: mediaUrls,
+                                                title:
+                                                  d.householdName || hhCommuneCopy.tier2EvidenceTitle,
+                                                subtitle: `${formatTraceDate(d.entryOn, lang)}, ${compact.title}`,
+                                              })
+                                            }
+                                          >
+                                            {hhCommuneCopy.viewPhotosFmt(mediaUrls.length)}
+                                          </button>
+                                        )}
+                                      </td>
+                                      <td className={`col-status ${statusTone}`}>
+                                        <span>{statusText}</span>
+                                        {d.gpsVerified && (
+                                          <span className="tr-doc-status-sub">
+                                            {extCopy.gpsShort}
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      ),
+                    })),
                   ]
                   : []),
                 ...(authData
@@ -4339,10 +4895,25 @@ export default function TraceView() {
                                           {String(hhNumber).padStart(2, "0")}.
                                         </td>
                                         <td className="col-hh-id">
-                                          <strong className="tr-doc-item-title">
-                                            {hh.householdName}
-                                            {isContinuation ? " (tiếp)" : ""}
-                                          </strong>
+                                          {!isHouseholdDossier &&
+                                            hh.householdCode &&
+                                            isSafeTraceCode(hh.householdCode) ? (
+                                            <Link
+                                              href={`/trace/${encodeURIComponent(hh.householdCode)}`}
+                                              className="tr-doc-item-title tr-doc-inline-link"
+                                              onClick={() =>
+                                                rememberTraceKindHint(hh.householdCode, "household")
+                                              }
+                                            >
+                                              {hh.householdName}
+                                              {isContinuation ? " (tiếp)" : ""}
+                                            </Link>
+                                          ) : (
+                                            <strong className="tr-doc-item-title">
+                                              {hh.householdName}
+                                              {isContinuation ? " (tiếp)" : ""}
+                                            </strong>
+                                          )}
                                           <span className="tr-doc-item-sub is-tabular">
                                             {idMeta}
                                           </span>
@@ -4497,21 +5068,28 @@ export default function TraceView() {
                                               {compact.subtitle}
                                             </span>
                                           )}
-                                          {isSafeMediaUrl(d.photoUrl) && (
-                                            <button
-                                              type="button"
-                                              className="tr-doc-sub-btn no-print"
-                                              onClick={() =>
-                                                setTracePreviewMedia({
-                                                  urls: [d.photoUrl as string],
-                                                  title: d.householdName || extCopy.diariesTitle,
-                                                  subtitle: `${formatTraceDate(d.entryOn, lang)}, ${compact.title}`,
-                                                })
-                                              }
-                                            >
-                                              {extCopy.viewFieldPhotoBtn}
-                                            </button>
-                                          )}
+                                          {(() => {
+                                            const mediaUrls = extractSafeMediaUrls(
+                                              d.photoUrls,
+                                              d.photoUrl,
+                                            );
+                                            if (mediaUrls.length === 0) return null;
+                                            return (
+                                              <button
+                                                type="button"
+                                                className="tr-doc-sub-btn no-print"
+                                                onClick={() =>
+                                                  setTracePreviewMedia({
+                                                    urls: mediaUrls,
+                                                    title: d.householdName || extCopy.diariesTitle,
+                                                    subtitle: `${formatTraceDate(d.entryOn, lang)}, ${compact.title}`,
+                                                  })
+                                                }
+                                              >
+                                                {hhCommuneCopy.viewPhotosFmt(mediaUrls.length)}
+                                              </button>
+                                            );
+                                          })()}
                                         </td>
                                         <td className={`col-status ${statusTone}`}>
                                           <span>{statusText}</span>
@@ -4570,6 +5148,10 @@ export default function TraceView() {
                                       m.location || null,
                                       m.gpsVerified ? extCopy.gpsShort : null,
                                     ].filter(Boolean);
+                                    const minuteMediaUrls = extractSafeMediaUrls(
+                                      m.photoUrls,
+                                      m.photoUrl,
+                                    );
                                     return (
                                       <tr key={m.code}>
                                         <td className="col-min-code is-tabular">
@@ -4587,19 +5169,19 @@ export default function TraceView() {
                                               {locParts.join(", ")}
                                             </span>
                                           )}
-                                          {isSafeMediaUrl(m.photoUrl) && (
+                                          {minuteMediaUrls.length > 0 && (
                                             <button
                                               type="button"
                                               className="tr-doc-sub-btn no-print"
                                               onClick={() =>
                                                 setTracePreviewMedia({
-                                                  urls: [m.photoUrl as string],
+                                                  urls: minuteMediaUrls,
                                                   title: m.code,
                                                   subtitle: m.location || undefined,
                                                 })
                                               }
                                             >
-                                              {extCopy.viewMinutePhotoBtn}
+                                              {hhCommuneCopy.viewPhotosFmt(minuteMediaUrls.length)}
                                             </button>
                                           )}
                                         </td>
@@ -4688,53 +5270,60 @@ export default function TraceView() {
                     <section className="tr-doc-attest-grid">
                       <div className="tr-doc-attest-col is-bordered">
                         <strong className="tr-doc-attest-heading">
-                          {isPlotDossier ? plotCopy.certColHeading : docCopy.certColHeading}
+                          {isOrchardOrHousehold ? plotCopy.certColHeading : docCopy.certColHeading}
                         </strong>
-                        {isPlotDossier ? (
+                        {isOrchardOrHousehold ? (
                           <>
-                            <p>
-                              {plotCopy.fieldRecordPrefix}:{" "}
-                              {plotSb?.latestMinuteCode || plotCopy.fieldScheduleFallback}
-                            </p>
-                            <p>
-                              {docCopy.labUnitPrefix}:{" "}
-                              {firstLab
-                                ? localizeLabName(firstLab.lab, lang)
-                                : plotCopy.preHarvestSamplePending}
-                            </p>
-                            <p>
-                              {docCopy.supervisionPrefix}:{" "}
-                              {localizeInspectionNote(pub.farmingProcess.inspectionNote, lang)}
-                            </p>
+                            <p>PUC: {pub.growingZone.pucCode}</p>
+                            {(isHouseholdDossier
+                              ? hhDossier?.latestMinuteCode
+                              : plotSb?.latestMinuteCode) && (
+                                <p>
+                                  {plotCopy.fieldRecordPrefix}:{" "}
+                                  {isHouseholdDossier
+                                    ? hhDossier?.latestMinuteCode
+                                    : plotSb?.latestMinuteCode}
+                                </p>
+                              )}
+                            {firstLab && (
+                              <p>
+                                {docCopy.labUnitPrefix}: {localizeLabName(firstLab.lab, lang)} (
+                                {firstLab.code})
+                              </p>
+                            )}
                           </>
                         ) : (
                           <>
                             <p>
-                              {docCopy.labUnitPrefix}:{" "}
-                              {firstLab ? localizeLabName(firstLab.lab, lang) : t.lab.badgeUpdating}
+                              PUC: {pub.growingZone.pucCode} / PHC: {pub.packhouse.code}
                             </p>
-                            <p>
-                              {docCopy.labCertPrefix}: {firstLab ? firstLab.code : "-"}
-                            </p>
-                            <p>
-                              {docCopy.supervisionPrefix}:{" "}
-                              {localizeInspectionNote(pub.farmingProcess.inspectionNote, lang)}
-                            </p>
+                            {firstLab && (
+                              <p>
+                                {docCopy.labUnitPrefix}: {localizeLabName(firstLab.lab, lang)} (
+                                {firstLab.code})
+                              </p>
+                            )}
+                            {pub.phytosanitary.certNo && (
+                              <p>
+                                {t.processPhyto.phytoLabel}: {pub.phytosanitary.certNo}
+                              </p>
+                            )}
                           </>
                         )}
                       </div>
 
                       <div className="tr-doc-attest-col">
                         <strong className="tr-doc-attest-heading">
-                          {isPlotDossier ? plotCopy.termsColHeading : docCopy.termsColHeading}
+                          {isOrchardOrHousehold ? plotCopy.termsColHeading : docCopy.termsColHeading}
                         </strong>
-                        <p>{isPlotDossier ? plotCopy.assuranceLine1 : docCopy.assuranceLine1}</p>
-                        <p>{isPlotDossier ? plotCopy.assuranceLine2 : docCopy.assuranceLine2}</p>
+                        <p>
+                          {isOrchardOrHousehold ? plotCopy.assuranceLine1 : docCopy.assuranceLine1}
+                        </p>
                       </div>
 
                       <div className="tr-doc-sign-col">
                         <span className="tr-doc-sign-kicker">
-                          {isPlotDossier ? plotCopy.issuerHeading : docCopy.issuerHeading}
+                          {isOrchardOrHousehold ? plotCopy.issuerHeading : docCopy.issuerHeading}
                         </span>
                         <div className="tr-doc-qr-wrap">
                           {qrSrc ? (
@@ -4854,10 +5443,11 @@ export default function TraceView() {
                   )}
 
                   {data.fieldAuditData && (
-                    <div className="tr-doc-external-audit no-print">
+                    <div className="tr-doc-external-audit">
                       <FieldAuditGpsCheckCard
                         scannedCode={pub.lotIdentity.scannedCode || code}
                         data={data.fieldAuditData}
+                        coopName={pub.producer.cooperativeName}
                         auditPass={auditPass}
                         isAuthenticated={ac.isAuthenticated}
                         lang={lang}
