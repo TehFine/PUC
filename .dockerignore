@@ -5,6 +5,9 @@ dist
 out
 coverage
 .local-db
+backups
+*.dump
+*.sql.gz
 uploads
 .env
 .env.*
