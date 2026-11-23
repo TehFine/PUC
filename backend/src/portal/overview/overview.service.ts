@@ -24,8 +24,8 @@ export class OverviewService {
 
   async overview(user: AuthUser) {
     const id = householdIdOf(user);
+    await this.notifications.syncFarmerNotifications(user);
     const loadOverview = async () => {
-      await this.notifications.syncFarmerNotifications(user);
       const [hhRes, statsRes, lastTestRes, reminders] = await Promise.all([
         this.db.query(
           `SELECT h.id, h.code, h.name, h.phone, h.plot_count, h.area_ha, h.status,

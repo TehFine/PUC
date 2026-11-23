@@ -5,7 +5,7 @@ import { badRequest, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql, camelRow, camelRows, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { UploadsService } from "../../uploads/uploads.service";
-import { assertPlotNotInIsolation, assertPlotOwned, type ClientContext, householdIdOf } from "../common/portal-context";
+import { assertPlotNotInIsolation, assertPlotOwned, type ClientContext, householdIdOf, plotsTableExists } from "../common/portal-context";
 import type { ActivatePortalStampDto } from "./stamps.dto";
 
 const STAMP_COLUMNS = `id, allocation_id, plot_code, serial_code, qr_token, status, activated_at, fruit_weight_kg, grade,
@@ -81,8 +81,7 @@ export class StampsService {
     }
 
     const cleanPlotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
-    const hasPlots =
-      (await this.db.query<{ t: string | null }>("SELECT to_regclass('public.plots') AS t")).rows[0]?.t !== null;
+    const hasPlots = await plotsTableExists(this.db);
     if (hasPlots) {
       const plotRes = await this.db.query<{ status: string }>(
         "SELECT status FROM plots WHERE household_id = $1 AND upper(code) = upper($2) LIMIT 1",

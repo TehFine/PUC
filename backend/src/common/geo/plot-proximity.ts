@@ -1,3 +1,4 @@
+import { hasPublicTable } from "../sql/schema-cache";
 import type { DatabaseService } from "../../database/database.service";
 
 const EARTH_RADIUS_M = 6_371_008.8;
@@ -212,8 +213,7 @@ export async function verifyPlotGpsProximity(
       : 45;
   const maxBufferMeters = Math.min(50, Math.max(25, requestedAccuracy));
 
-  const regPlots = await db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg");
-  if (regPlots.rows[0]?.reg) {
+  if (await hasPublicTable(db, "plots")) {
     const pgRes = await db.query<{
       inside: boolean;
       dist_m: number;
@@ -243,8 +243,7 @@ export async function verifyPlotGpsProximity(
     }
   }
 
-  const regSign = await db.query<{ reg: string | null }>("SELECT to_regclass('public.plot_signboard_tokens') AS reg");
-  if (regSign.rows[0]?.reg) {
+  if (await hasPublicTable(db, "plot_signboard_tokens")) {
     const sbRes = await db.query<{
       geometry_json: string | null;
       center_lat: number | null;

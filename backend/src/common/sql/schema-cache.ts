@@ -6,7 +6,7 @@ const tableCacheByDb = new WeakMap<object, Map<string, Promise<boolean>>>();
  * Kiểm tra sự tồn tại của bảng trong schema `public` với bộ nhớ đệm theo từng thực thể `DatabaseService`.
  * Cắt bỏ hoàn toàn các truy vấn `SELECT to_regclass(...)` lặp lại trên từng request mà vẫn tự giải phóng khi đóng kết nối.
  */
-export function hasPublicTable(db: DatabaseService, tableName: string): Promise<boolean> {
+export function hasPublicTable(db: Pick<DatabaseService, "query">, tableName: string): Promise<boolean> {
   let map = tableCacheByDb.get(db);
   if (!map) {
     map = new Map<string, Promise<boolean>>();

@@ -24,6 +24,17 @@ function extractSqlText(queryTextOrConfig: unknown): string | null {
   return null;
 }
 
+/**
+ * Câu lệnh INSERT ... ON CONFLICT DO NOTHING / UPDATE / DELETE đơn lẻ (không chứa CTE `WITH` hay `TRUNCATE`)
+ * khi trả về `rowCount === 0` không làm thay đổi dữ liệu nên bỏ qua bước xóa bộ nhớ đệm L1.
+ */
+function isZeroRowNoOpMutation(sql: string, out: unknown): boolean {
+  if (!out || typeof out !== "object" || !("rowCount" in out)) return false;
+  const rc = (out as { rowCount?: number | null }).rowCount;
+  if (rc !== 0) return false;
+  return !/\b(?:WITH|TRUNCATE)\b/i.test(sql);
+}
+
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
   readonly pool: Pool;
@@ -52,7 +63,9 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
       }
       const res = origPoolQuery(...args) as Promise<unknown>;
       return res.then((out) => {
-        cache.onSqlMutation(sql);
+        if (!isZeroRowNoOpMutation(sql, out)) {
+          cache.onSqlMutation(sql);
+        }
         return out;
       });
     };
@@ -86,7 +99,7 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
                 }
               } else if (trimmedUpper.startsWith("ROLLBACK")) {
                 client[TX_DIRTY_TAGS] = undefined;
-              } else {
+              } else if (!isZeroRowNoOpMutation(sql, out)) {
                 const inTx = client[TX_DIRTY_TAGS] !== undefined;
                 const tags = cache.onSqlMutation(sql, !inTx);
                 if (tags.length > 0 && client[TX_DIRTY_TAGS]) {

@@ -8,7 +8,8 @@ import {
   isStaffInParcelScope,
 } from "../common/crud/village-scope";
 import { AppException, badRequest, forbidden } from "../common/errors/app.exception";
-import { resolvePlotHouseholdId, syncHouseholdAndVillageStats } from "../common/sql/stats-sync";
+import { hasPublicTable } from "../common/sql/schema-cache";
+import { hasPlotsTable, resolvePlotHouseholdId, syncHouseholdAndVillageStats } from "../common/sql/stats-sync";
 import { DatabaseService } from "../database/database.service";
 import type {
   CreatedPlot,
@@ -263,35 +264,14 @@ function toProperties(input: CreatePlotInput, geometry: Polygon): PlotProperties
 
 @Injectable()
 export class PlotsService {
-  private plotsTableExists: Promise<boolean> | null = null;
-  private signboardTableExists: Promise<boolean> | null = null;
-
   constructor(private readonly db: DatabaseService) {}
 
   private hasPlotsTable(): Promise<boolean> {
-    if (!this.plotsTableExists) {
-      this.plotsTableExists = this.db
-        .query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")
-        .then((res) => res.rows[0]?.reg !== null)
-        .catch((err: unknown) => {
-          this.plotsTableExists = null;
-          throw err;
-        });
-    }
-    return this.plotsTableExists;
+    return hasPlotsTable(this.db);
   }
 
   private hasSignboardTable(): Promise<boolean> {
-    if (!this.signboardTableExists) {
-      this.signboardTableExists = this.db
-        .query<{ reg: string | null }>("SELECT to_regclass('public.plot_signboard_tokens') AS reg")
-        .then((res) => res.rows[0]?.reg !== null)
-        .catch((err: unknown) => {
-          this.signboardTableExists = null;
-          throw err;
-        });
-    }
-    return this.signboardTableExists;
+    return hasPublicTable(this.db, "plot_signboard_tokens");
   }
 
   /** Nếu là cán bộ thôn thì trả về tên thôn được phân công; các vai trò khác trả về null (không giới hạn thôn). */

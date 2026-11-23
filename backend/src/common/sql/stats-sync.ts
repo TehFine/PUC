@@ -1,4 +1,5 @@
 import type { QueryResult, QueryResultRow } from "pg";
+import { hasPublicTable } from "./schema-cache";
 
 export interface SqlQueryable {
   query<R extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<R>>;
@@ -12,9 +13,8 @@ export interface SystemScaleOverviewRow extends QueryResultRow {
   area_ha: number;
 }
 
-export async function hasPlotsTable(db: SqlQueryable): Promise<boolean> {
-  const res = await db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg");
-  return res.rows[0]?.reg !== null;
+export function hasPlotsTable(db: SqlQueryable): Promise<boolean> {
+  return hasPublicTable(db, "plots");
 }
 
 /**
