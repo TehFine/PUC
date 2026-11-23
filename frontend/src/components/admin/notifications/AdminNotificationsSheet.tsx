@@ -7,18 +7,37 @@ import {
   requestAdminNavigate,
   requestApprovalTab,
   requestJournalTab,
+  requestSystemTab,
 } from "@/components/admin/shared/counts-events";
 import { EmptyState, Sheet } from "@/components/portal/ui";
 import { invalidateQueries, NOTIFICATIONS_PATH, useSharedQuery } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
 import { usePersistedState } from "@/lib/back-navigation";
 import type { Tone } from "@/lib/portal-labels";
-import { useRealtimeNotifications } from "@/lib/realtime-notifications";
+import { isRealtimeStreamConnected, useRealtimeNotifications } from "@/lib/realtime-notifications";
 import type { NotificationItem, NotificationList } from "@/types/notifications";
 import { formatDate } from "@/utils/format";
 
 function kindMeta(item: NotificationItem): { label: string; tone: Tone } {
   const link = (item.link || "").toLowerCase();
+  if (link.includes("sub=trace-requests")) {
+    const isHandled =
+      item.title.startsWith("Đã duyệt") ||
+      item.title.startsWith("Đã cấp quyền") ||
+      item.title.startsWith("Từ chối") ||
+      item.title.startsWith("Đã thu hồi");
+    return { label: "Cấp quyền truy xuất QR", tone: isHandled ? "blue" : "gold" };
+  }
+  if (link.includes("sub=deletions")) {
+    const isResolved = item.title.startsWith("Đã duyệt") || item.title.startsWith("Từ chối");
+    return { label: "Duyệt xóa thành viên", tone: isResolved ? "blue" : "red" };
+  }
+  if (link.includes("sub=alerts") || link.startsWith("#system-alert-")) {
+    return { label: "Thông báo Ban điều hành", tone: "blue" };
+  }
+  if (link.includes("section=news")) {
+    return { label: "Bản tin HTX", tone: "green" };
+  }
   if (item.kind === "violation") return { label: "Cảnh báo vi phạm", tone: "red" };
   if (item.kind === "protocol") {
     if (link.includes("sub=spray") || link.includes("section=spray")) {
@@ -36,7 +55,31 @@ function kindMeta(item: NotificationItem): { label: string; tone: Tone } {
 }
 
 function navigateAdminNotification(item: NotificationItem) {
-  const link = (item.link || "").toLowerCase();
+  const rawLink = item.link || "";
+  const link = rawLink.toLowerCase();
+  if (
+    link.includes("sub=trace-requests") ||
+    link.includes("sub=deletions") ||
+    link.includes("section=system") ||
+    link.startsWith("#system-alert-")
+  ) {
+    const idMatch = /[?&]id=(\d+)/i.exec(rawLink);
+    const parsedId = idMatch?.[1] ? Number(idMatch[1]) : null;
+    if (link.includes("sub=trace-requests")) {
+      requestSystemTab("trace-requests", parsedId);
+    } else if (link.includes("sub=deletions")) {
+      requestSystemTab("deletions", parsedId);
+    } else if (link.includes("sub=alerts") || link.startsWith("#system-alert-")) {
+      requestSystemTab("alerts");
+    } else {
+      requestSystemTab("accounts");
+    }
+    return;
+  }
+  if (link.includes("section=news")) {
+    requestAdminNavigate("news");
+    return;
+  }
   if (link.includes("sub=spray") || link.includes("section=spray")) {
     requestJournalTab("spray");
     return;
@@ -88,12 +131,19 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
 
   useEffect(() => {
     if (!enabled) return;
+    let lastTriggerAt = 0;
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastTriggerAt < 3_000) return;
+      lastTriggerAt = now;
+      invalidateQueries(NOTIFICATIONS_PATH);
+    };
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible" && !isRealtimeStreamConnected()) {
         invalidateQueries(NOTIFICATIONS_PATH);
       }
-    };
-    const timer = window.setInterval(onVisible, 30_000);
+    }, 60_000);
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
     return () => {

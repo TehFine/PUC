@@ -1,12 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useApiList } from "@/hooks/use-api";
 import BlockState from "@/components/admin/shared/BlockState";
-import DeleteDialog from "@/components/admin/shared/DeleteDialog";
+import { requestSystemTab } from "@/components/admin/shared/counts-events";
 import Pagination from "@/components/admin/shared/Pagination";
+import DeletionRequestModal from "@/components/settings/DeletionRequestModal";
 import { HOUSEHOLD_STATUS, optionsOf } from "@/components/admin/shared/labels";
 import { useVillageOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
@@ -18,8 +19,13 @@ import {
   usePersistedState,
 } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
+import type { DeletionRequestRecord } from "@/types/accounts";
 import type { HouseholdRecord } from "@/types/households";
 
+const BroadcastNoticeModal = dynamic(
+  () => lazyChunk(() => import("@/components/admin/households/BroadcastNoticeModal")),
+  { ssr: false },
+);
 const HouseholdAccountModal = dynamic(() => lazyChunk(() => import("@/components/admin/households/HouseholdAccountModal")), { ssr: false });
 const HouseholdDetailModal = dynamic(() => lazyChunk(() => import("@/components/admin/households/HouseholdDetailModal")), { ssr: false });
 const HouseholdFormModal = dynamic(() => lazyChunk(() => import("@/components/admin/households/HouseholdFormModal")), { ssr: false });
@@ -38,6 +44,8 @@ export default function Households() {
   const canCreate = can("households", "create");
   const canUpdate = can("households", "update");
   const canDelete = can("households", "delete");
+  const canReadDeletionRequests = can("deletion-requests", "read");
+  const canBroadcastNotice = can("system-alerts", "create");
 
   const [search, setSearch] = useState("");
   const [zoneFilter, setZoneFilter] = usePersistedState("admin:households:zone", "");
@@ -76,18 +84,45 @@ export default function Households() {
   );
   const [deleting, setDeleting] = useState<HouseholdRecord | null>(null);
   const [importing, setImporting] = usePersistedState("admin:households:import", false);
+  const [broadcasting, setBroadcasting] = useState(false);
+
+  const pendingDelList = useApiList<DeletionRequestRecord>(
+    canReadDeletionRequests ? "deletion-requests" : null,
+    {
+      status: "pending",
+      targetType: "household",
+      pageSize: 200,
+    },
+  );
+
+  const pendingReqByHhId = useMemo(() => {
+    const map = new Map<number, DeletionRequestRecord>();
+    for (const r of pendingDelList.rows) {
+      map.set(Number(r.targetId), r);
+    }
+    return map;
+  }, [pendingDelList.rows]);
 
   return (
     <>
-      {canCreate && (
+      {(canCreate || canBroadcastNotice) && (
         <div className="page-header">
           <div className="header-actions">
-            <button type="button" className="btn btn-outline" onClick={() => setImporting(true)}>
-              Import CSV/Excel
-            </button>
-            <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
-              Thêm hộ mới
-            </button>
+            {canBroadcastNotice && (
+              <button type="button" className="btn btn-outline" onClick={() => setBroadcasting(true)}>
+                Thông báo toàn hộ
+              </button>
+            )}
+            {canCreate && (
+              <>
+                <button type="button" className="btn btn-outline" onClick={() => setImporting(true)}>
+                  Import CSV/Excel
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
+                  Thêm hộ mới
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -199,6 +234,7 @@ export default function Households() {
             {list.rows.map((h) => {
               const zc = getZoneColor(h.code);
               const areaLabel = formatAreaLabel(h.villageName, h.villageId);
+              const pendingDel = pendingReqByHhId.get(Number(h.id));
               return (
                 <li key={h.id}>
                   <button
@@ -206,7 +242,14 @@ export default function Households() {
                     className="admin-diary-row admin-hh-row"
                     onClick={() => setViewing(h)}
                   >
-                    <strong className="admin-diary-hh">{h.name}</strong>
+                    <strong className="admin-diary-hh">
+                      {h.name}
+                      {pendingDel ? (
+                        <span style={{ fontWeight: 500, fontSize: 12, color: "#9a6712", marginLeft: 6 }}>
+                          (Chờ Phó HTX duyệt xóa)
+                        </span>
+                      ) : null}
+                    </strong>
                     <span className="admin-diary-right admin-hh-right">
                       <span className="admin-hh-area" style={{ color: zc.text }}>
                         {areaLabel}
@@ -255,6 +298,16 @@ export default function Households() {
                 }
               : undefined
           }
+          hasPendingDeletion={pendingReqByHhId.has(Number(viewing.id))}
+          onViewPendingDeletion={
+            canReadDeletionRequests && pendingReqByHhId.has(Number(viewing.id))
+              ? () => {
+                  const req = pendingReqByHhId.get(Number(viewing.id));
+                  setViewing(null);
+                  requestSystemTab("deletions", req?.id ?? null);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -276,18 +329,17 @@ export default function Households() {
       )}
 
       {deleting && (
-        <DeleteDialog
-          title="Xóa hộ nông dân"
-          message={
-            <>
-              Bạn có chắc chắn muốn xóa hộ <strong>{deleting.name}</strong> (mã <code>{deleting.code}</code>)? Thao tác này không
-              thể hoàn tác.
-            </>
-          }
-          path={`/households/${deleting.id}`}
-          successMessage={`Đã xóa hộ ${deleting.name}.`}
+        <DeletionRequestModal
+          targetType="household"
+          targetId={deleting.id}
+          targetName={deleting.name}
+          targetCode={deleting.code}
           onClose={() => setDeleting(null)}
-          onDeleted={() => void list.refresh()}
+          onRequested={() => {
+            setDeleting(null);
+            void pendingDelList.refresh();
+            void list.refresh();
+          }}
         />
       )}
 
@@ -297,6 +349,10 @@ export default function Households() {
           onClose={() => setImporting(false)}
           onImported={() => void list.refresh()}
         />
+      )}
+
+      {broadcasting && (
+        <BroadcastNoticeModal onClose={() => setBroadcasting(false)} />
       )}
     </>
   );

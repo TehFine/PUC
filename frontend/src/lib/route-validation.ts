@@ -42,7 +42,7 @@ const ADMIN_SUBTABS_BY_SECTION: Partial<Record<SectionId, ReadonlySet<string>>> 
   journal: new Set(["protocol", "journal", "violations", "spray"]),
   harvest: new Set(["lots", "plans", "stamps", "contracts", "enterprises"]),
   catalog: new Set(["protocol", "pesticide", "fertilizer", "variety", "diseases", "village", "standards"]),
-  system: new Set(["accounts", "roles", "alerts", "audit"]),
+  system: new Set(["accounts", "deletions", "trace-requests", "roles", "alerts", "audit"]),
 };
 
 const PASSIVE_SYSTEM_QUERY_KEYS: ReadonlySet<string> = new Set([

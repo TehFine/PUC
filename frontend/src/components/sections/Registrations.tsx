@@ -7,6 +7,7 @@ import { ROLE_LABELS } from "@/components/settings/settings-data";
 import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { api } from "@/lib/api-client";
+import { copySensitiveWithAutoClear } from "@/lib/request-security";
 import type { Role } from "@/types/api";
 
 interface Registration {
@@ -525,13 +526,12 @@ export default function Registrations({
                 type="button"
                 className="btn btn-outline"
                 onClick={() => {
-                  void navigator.clipboard
-                    .writeText(issuedTempPassword.temporaryPassword)
-                    .then(() => {
+                  void copySensitiveWithAutoClear(issuedTempPassword.temporaryPassword).then((ok) => {
+                    if (ok) {
                       setCopiedTempPassword(true);
                       window.setTimeout(() => setCopiedTempPassword(false), 2400);
-                    })
-                    .catch(() => undefined);
+                    }
+                  });
                 }}
               >
                 {copiedTempPassword ? "Đã sao chép mật khẩu" : "Sao chép mật khẩu"}

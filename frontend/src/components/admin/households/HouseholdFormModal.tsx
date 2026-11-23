@@ -148,6 +148,7 @@ export default function HouseholdFormModal({
             placeholder="260123456789"
             maxLength={12}
             inputMode="numeric"
+            autoComplete="off"
             hint={isEdit && cccd.includes("*") ? "Giữ nguyên nếu không thay đổi CCCD." : undefined}
             error={fieldErrors.cccd}
           />
@@ -156,6 +157,7 @@ export default function HouseholdFormModal({
             required
             type="tel"
             inputMode="tel"
+            autoComplete="off"
             value={phone}
             onChange={setPhone}
             placeholder="0912345678"

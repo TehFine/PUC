@@ -89,6 +89,7 @@ export default function AccountFormModal({
     }
     setLocalError(null);
     if ((await run()) !== undefined) {
+      setPassword("");
       toast.success(initial ? "Đã cập nhật tài khoản." : "Đã tạo tài khoản mới.");
       onSaved();
     }
@@ -97,20 +98,24 @@ export default function AccountFormModal({
   return (
     <FormModal
       title={initial ? `Sửa tài khoản: ${initial.username}` : "Thêm tài khoản mới"}
-      onClose={onClose}
+      onClose={() => {
+        setPassword("");
+        onClose();
+      }}
       onSubmit={() => void submit()}
       pending={pending}
       error={localError ?? error}
       width={620}
     >
       <FormGrid>
-        <TextField label="Họ & Tên" required value={fullName} onChange={setFullName} maxLength={100} />
+        <TextField label="Họ và Tên" required value={fullName} onChange={setFullName} maxLength={100} autoComplete="off" />
         <TextField
           label="Tên đăng nhập / SĐT"
           required
           value={username}
           onChange={setUsername}
           maxLength={64}
+          autoComplete="off"
           placeholder="VD: 0912345678 hoặc cb_thon1"
         />
         <TextField
@@ -119,6 +124,7 @@ export default function AccountFormModal({
           value={email}
           onChange={setEmail}
           maxLength={120}
+          autoComplete="off"
           placeholder="VD: tenban@gmail.com"
         />
         <div>
@@ -129,7 +135,7 @@ export default function AccountFormModal({
             value={password}
             onChange={setPassword}
             placeholder="Ít nhất 8 ký tự gồm chữ và số"
-            autoComplete="new-password"
+            autoComplete="off"
           />
           <label
             style={{

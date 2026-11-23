@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
-import { useDebounced } from "@/components/admin/catalog/use-debounced";
+import { useDebounced } from "@/components/admin/shared/use-debounced";
 import BlockState from "@/components/admin/shared/BlockState";
+import { requestSystemTab } from "@/components/admin/shared/counts-events";
 import Pagination from "@/components/admin/shared/Pagination";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
@@ -13,8 +14,9 @@ import { isCoopStaffRole } from "@/constants/roles";
 import { useApiList, useMutation } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import { usePersistedEditableSelection, usePersistedState } from "@/lib/back-navigation";
-import type { AccountRecord } from "@/types/accounts";
+import type { AccountRecord, DeletionRequestRecord } from "@/types/accounts";
 import AccountFormModal from "./AccountFormModal";
+import DeletionRequestModal from "./DeletionRequestModal";
 import { ROLE_LABELS } from "./settings-data";
 
 const PAGE_SIZE = 20;
@@ -65,10 +67,12 @@ export default function AccountsTab({
 }: {
   createTrigger?: number;
 }) {
-  const { can } = useAuth();
+  const { session, can } = useAuth();
+  const currentUser = session?.user;
   const canCreateAccount = can("accounts", "create");
   const canUpdateAccount = can("accounts", "update");
   const canDeleteAccount = can("accounts", "delete");
+  const canReadDeletionRequests = can("deletion-requests", "read");
   const [q, setQ] = useState("");
   const [role, setRole] = usePersistedState("admin:accounts:role", "");
   const [status, setStatus] = usePersistedState("admin:accounts:status", "");
@@ -82,6 +86,23 @@ export default function AccountsTab({
     page,
     pageSize: PAGE_SIZE,
   });
+
+  const pendingDelList = useApiList<DeletionRequestRecord>(
+    canReadDeletionRequests ? "deletion-requests" : null,
+    {
+      status: "pending",
+      targetType: "account",
+      pageSize: 200,
+    },
+  );
+
+  const pendingReqByAccountId = useMemo(() => {
+    const map = new Map<number, DeletionRequestRecord>();
+    for (const r of pendingDelList.rows) {
+      map.set(Number(r.targetId), r);
+    }
+    return map;
+  }, [pendingDelList.rows]);
 
   const [viewingSnapshot, setViewingSnapshot] = useState<AccountRecord | null>(null);
   const viewing =
@@ -192,6 +213,7 @@ export default function AccountsTab({
           <ul className="admin-hh-list" role="list" aria-label="Danh sách tài khoản">
             {list.rows.map((a) => {
               const isLocked = a.status !== "active";
+              const pendingDel = pendingReqByAccountId.get(Number(a.id));
               return (
                 <li key={a.id}>
                   <button
@@ -204,6 +226,7 @@ export default function AccountsTab({
                       <span className="admin-audit-row-sub">
                         {a.username}
                         {isLocked ? " (Đã khóa)" : ""}
+                        {pendingDel ? " (Chờ Phó HTX duyệt xóa)" : ""}
                       </span>
                     </span>
                     <span className="admin-diary-right admin-hh-right">
@@ -239,18 +262,33 @@ export default function AccountsTab({
           width={560}
           footer={
             <>
-              {canDeleteAccount && (
+              {pendingReqByAccountId.has(Number(viewing.id)) ? (
                 <button
                   type="button"
-                  className="btn btn-danger"
+                  className="btn btn-outline"
                   onClick={() => {
-                    const target = viewing;
+                    const req = pendingReqByAccountId.get(Number(viewing.id));
                     setViewingSnapshot(null);
-                    setDeleting(target);
+                    requestSystemTab("deletions", req?.id ?? null);
                   }}
                 >
-                  Xóa
+                  Xem yêu cầu xóa
                 </button>
+              ) : (
+                canDeleteAccount &&
+                Number(viewing.id) !== Number(currentUser?.id) && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => {
+                      const target = viewing;
+                      setViewingSnapshot(null);
+                      setDeleting(target);
+                    }}
+                  >
+                    Yêu cầu xóa
+                  </button>
+                )
               )}
               {canUpdateAccount && (
                 <button
@@ -388,18 +426,15 @@ export default function AccountsTab({
       )}
 
       {deleting && (
-        <ConfirmAction
-          title="Xóa tài khoản"
-          message={
-            <>
-              Bạn có chắc chắn muốn xóa tài khoản <strong>{deleting.fullName}</strong> (<code>{deleting.username}</code>)?
-            </>
-          }
-          path={`/accounts/${deleting.id}`}
-          successMessage="Đã xóa tài khoản."
+        <DeletionRequestModal
+          targetType="account"
+          targetId={deleting.id}
+          targetName={deleting.fullName}
+          targetCode={deleting.username}
           onClose={() => setDeleting(null)}
-          onDone={() => {
+          onRequested={() => {
             setDeleting(null);
+            void pendingDelList.refresh();
             void list.refresh();
           }}
         />

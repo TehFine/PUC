@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { api } from "@/lib/api-client";
+import { copySensitiveWithAutoClear } from "@/lib/request-security";
 import type { HouseholdRecord } from "@/types/households";
 
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -16,16 +17,13 @@ function randomChar(charset: string, buf: Uint32Array, index: number): string {
   return charset[buf[index] % charset.length];
 }
 
-/** Sinh mật khẩu ngẫu nhiên mật mã học 12 ký tự (không phụ thuộc số điện thoại). */
+/** Sinh mật khẩu ngẫu nhiên mật mã học 12 ký tự (bắt buộc Web Crypto CSPRNG). */
 function generateSecurePassword(): string {
-  const randomValues = new Uint32Array(24);
-  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
-    crypto.getRandomValues(randomValues);
-  } else {
-    for (let i = 0; i < randomValues.length; i += 1) {
-      randomValues[i] = Math.floor(Math.random() * 0xffffffff);
-    }
+  if (typeof crypto === "undefined" || typeof crypto.getRandomValues !== "function") {
+    throw new Error("Trình duyệt không hỗ trợ bộ sinh số ngẫu nhiên mật mã học.");
   }
+  const randomValues = new Uint32Array(24);
+  crypto.getRandomValues(randomValues);
   const chars = [
     randomChar(UPPER, randomValues, 0),
     randomChar(LOWER, randomValues, 1),
@@ -58,6 +56,8 @@ export default function HouseholdAccountModal({
   const [username, setUsername] = useState(household.accountUsername || household.phone || "");
   const [email, setEmail] = useState(household.accountEmail || "");
   const [password, setPassword] = useState(() => generateSecurePassword());
+  const [showPassword, setShowPassword] = useState(false);
+  const [showIssuedPassword, setShowIssuedPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issuedResult, setIssuedResult] = useState<{
@@ -98,6 +98,7 @@ export default function HouseholdAccountModal({
         password: password.trim(),
         email: res.email,
       });
+      setPassword("");
       onIssued();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không ban hành được tài khoản cho hộ nông dân này.");
@@ -120,10 +121,9 @@ export default function HouseholdAccountModal({
       .filter(Boolean)
       .join("\n");
 
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success("Đã sao chép thông tin bàn giao tài khoản.");
-    } catch {
+    if (await copySensitiveWithAutoClear(text)) {
+      toast.success("Đã sao chép thông tin bàn giao (tự xóa bộ nhớ tạm sau 45 giây).");
+    } else {
       toast.error("Không sao chép tự động được.");
     }
   };
@@ -132,14 +132,24 @@ export default function HouseholdAccountModal({
     return (
       <Modal
         title="Phiếu bàn giao tài khoản hộ nông dân"
-        onClose={onClose}
+        onClose={() => {
+          setIssuedResult(null);
+          onClose();
+        }}
         width={520}
         footer={
           <>
             <button type="button" className="btn btn-outline" onClick={() => void copyCredentials()}>
               Sao chép phiếu bàn giao
             </button>
-            <button type="button" className="btn btn-primary" onClick={onClose}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setIssuedResult(null);
+                onClose();
+              }}
+            >
               Hoàn tất
             </button>
           </>
@@ -170,11 +180,21 @@ export default function HouseholdAccountModal({
               {issuedResult.username}
             </strong>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ color: "var(--text-secondary)" }}>Mật khẩu đã ban hành:</span>
-            <strong style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", color: "#b45309", fontSize: 15 }}>
-              {issuedResult.password}
-            </strong>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <strong style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", color: "#b45309", fontSize: 15 }}>
+                {showIssuedPassword ? issuedResult.password : "••••••••••••"}
+              </strong>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ padding: "2px 8px", fontSize: 11.5 }}
+                onClick={() => setShowIssuedPassword((v) => !v)}
+              >
+                {showIssuedPassword ? "Ẩn" : "Hiện"}
+              </button>
+            </span>
           </div>
           {issuedResult.email && (
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -216,6 +236,12 @@ export default function HouseholdAccountModal({
         <input
           id="issue-acc-username"
           className="form-input"
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           value={username}
           disabled={busy}
           onChange={(e) => setUsername(e.target.value)}
@@ -224,11 +250,17 @@ export default function HouseholdAccountModal({
       </div>
 
       <div className="form-group">
-        <label htmlFor="issue-acc-email">Email Google thực tế của chủ hộ (tùy chọn – để trống nếu chưa có)</label>
+        <label htmlFor="issue-acc-email">Email Google thực tế của chủ hộ (tùy chọn - để trống nếu chưa có)</label>
         <input
           id="issue-acc-email"
           type="email"
           className="form-input"
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           value={email}
           disabled={busy}
           onChange={(e) => setEmail(e.target.value)}
@@ -253,14 +285,40 @@ export default function HouseholdAccountModal({
         </div>
         <input
           id="issue-acc-password"
-          type="text"
+          type={showPassword ? "text" : "password"}
           className="form-input"
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-form-type="other"
           style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", fontWeight: 600 }}
           value={password}
           disabled={busy}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Mật khẩu khởi tạo ngẫu nhiên"
         />
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            marginTop: 6,
+            fontSize: 12,
+            color: "var(--text-secondary)",
+            cursor: "pointer",
+            userSelect: "none",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showPassword}
+            onChange={(e) => setShowPassword(e.target.checked)}
+          />
+          <span>Hiện mật khẩu ban hành</span>
+        </label>
       </div>
 
       <FormError message={error} />

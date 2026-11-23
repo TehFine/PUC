@@ -115,3 +115,84 @@ export function consumePendingJournalTab(): AdminJournalTabId | null {
   }
   return null;
 }
+
+export type AdminSystemTabId =
+  | "accounts"
+  | "deletions"
+  | "trace-requests"
+  | "roles"
+  | "alerts"
+  | "audit";
+const SYSTEM_TAB_STORAGE_KEY = "puc:pending-system-tab";
+const DELETION_REQ_ID_STORAGE_KEY = "puc:pending-deletion-req-id";
+const TRACE_REQ_ID_STORAGE_KEY = "puc:pending-trace-req-id";
+export const ADMIN_SYSTEM_TAB_EVENT = "admin:system-tab";
+
+export function requestSystemTab(tab: AdminSystemTabId, targetRequestId?: number | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SYSTEM_TAB_STORAGE_KEY, tab);
+    if (targetRequestId && Number.isFinite(targetRequestId) && targetRequestId > 0) {
+      if (tab === "trace-requests") {
+        window.sessionStorage.setItem(TRACE_REQ_ID_STORAGE_KEY, String(targetRequestId));
+      } else {
+        window.sessionStorage.setItem(DELETION_REQ_ID_STORAGE_KEY, String(targetRequestId));
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  requestAdminNavigate("system");
+  window.dispatchEvent(new CustomEvent<AdminSystemTabId>(ADMIN_SYSTEM_TAB_EVENT, { detail: tab }));
+}
+
+export function consumePendingSystemTab(): AdminSystemTabId | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const tab = window.sessionStorage.getItem(SYSTEM_TAB_STORAGE_KEY);
+    if (
+      tab === "accounts" ||
+      tab === "deletions" ||
+      tab === "trace-requests" ||
+      tab === "roles" ||
+      tab === "alerts" ||
+      tab === "audit"
+    ) {
+      window.sessionStorage.removeItem(SYSTEM_TAB_STORAGE_KEY);
+      return tab;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}
+
+export function consumePendingDeletionRequestId(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(DELETION_REQ_ID_STORAGE_KEY);
+    if (raw) {
+      window.sessionStorage.removeItem(DELETION_REQ_ID_STORAGE_KEY);
+      const num = Number(raw);
+      if (Number.isFinite(num) && num > 0) return num;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}
+
+export function consumePendingTraceRequestId(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(TRACE_REQ_ID_STORAGE_KEY);
+    if (raw) {
+      window.sessionStorage.removeItem(TRACE_REQ_ID_STORAGE_KEY);
+      const num = Number(raw);
+      if (Number.isFinite(num) && num > 0) return num;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}

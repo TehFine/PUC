@@ -51,3 +51,25 @@ export interface AuditLogRecord {
   object: string | null;
   detail: string | null;
 }
+
+export type DeletionTargetType = "account" | "household";
+export type DeletionRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export interface DeletionRequestRecord {
+  id: number;
+  targetType: DeletionTargetType;
+  targetId: number;
+  targetName: string;
+  targetCode: string;
+  targetRole: Role | null;
+  reason: string | null;
+  requestedBy: number;
+  requestedByName: string;
+  requestedByRole: Role;
+  status: DeletionRequestStatus;
+  reviewedBy: number | null;
+  reviewedByName: string | null;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}

@@ -26,12 +26,16 @@ export default function HouseholdDetailModal({
   onEdit,
   onIssueAccount,
   onDelete,
+  hasPendingDeletion = false,
+  onViewPendingDeletion,
 }: {
   household: HouseholdRow;
   onClose: () => void;
   onEdit?: () => void;
   onIssueAccount?: () => void;
   onDelete?: () => void;
+  hasPendingDeletion?: boolean;
+  onViewPendingDeletion?: () => void;
 }) {
   const { can } = useAuth();
   const canReadViolations = can("violations", "read");
@@ -78,10 +82,16 @@ export default function HouseholdDetailModal({
       width={780}
       footer={
         <>
-          {onDelete && (
-            <button type="button" className="btn btn-danger" onClick={onDelete}>
-              Xóa
+          {hasPendingDeletion && onViewPendingDeletion ? (
+            <button type="button" className="btn btn-outline" onClick={onViewPendingDeletion}>
+              Xem yêu cầu xóa
             </button>
+          ) : (
+            onDelete && (
+              <button type="button" className="btn btn-danger" onClick={onDelete}>
+                Yêu cầu xóa
+              </button>
+            )
           )}
           {onEdit && (
             <button type="button" className="btn btn-outline" onClick={onEdit}>

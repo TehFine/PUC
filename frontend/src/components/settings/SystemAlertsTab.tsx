@@ -58,7 +58,7 @@ const TEMPLATES: {
 
 const AUDIENCE_LABELS: Record<SystemAlertAudience, string> = {
   all: "Toàn bộ người dùng",
-  farmer: "Tất cả hộ nông dân",
+  farmer: "Toàn thể nông hộ và Ban điều hành HTX",
   staff: "Cán bộ quản trị HTX",
 };
 
@@ -80,8 +80,8 @@ interface LiveHealthState {
 
 export default function SystemAlertsTab() {
   const { can } = useAuth();
-  const canCreateAlert = can("accounts", "create");
-  const canResolveAlert = can("accounts", "update");
+  const canCreateAlert = can("system-alerts", "create");
+  const canResolveAlert = can("system-alerts", "update");
   const { data, loading, error, refresh } = useApi<SystemAlertListResponse>("/system-alerts");
 
   const [liveHealth, setLiveHealth] = useState<LiveHealthState>({
@@ -207,7 +207,7 @@ export default function SystemAlertsTab() {
   }, [runLiveHealthProbe]);
 
   const [severity, setSeverity] = useState<SystemAlertSeverity>("info");
-  const [audience, setAudience] = useState<SystemAlertAudience>("all");
+  const [audience, setAudience] = useState<SystemAlertAudience>("farmer");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -455,8 +455,8 @@ export default function SystemAlertsTab() {
               value={audience}
               onChange={(e) => setAudience(e.target.value as SystemAlertAudience)}
             >
+              <option value="farmer">Tất cả hộ nông dân (đồng gửi Trưởng HTX và Phó HTX)</option>
               <option value="all">Toàn bộ người dùng (Hộ nông dân và Cán bộ)</option>
-              <option value="farmer">Tất cả hộ nông dân</option>
               <option value="staff">Chỉ cán bộ quản trị HTX</option>
             </select>
           </div>
