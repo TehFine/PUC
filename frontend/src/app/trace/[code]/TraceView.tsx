@@ -45,6 +45,7 @@ import {
   getScanAnomalyAlertCopy,
   getScopeDeniedCopy,
   getTraceQrAlt,
+  inferTraceKindFromCode,
   rememberTraceKindHint,
   resolveInitialTraceKind,
   localizeProductName,
@@ -551,7 +552,6 @@ const DOSSIER_SHEET_COPY: Record<
     assuranceLine1: string;
     assuranceLine2: string;
     issuerHeading: string;
-    inquiryHeading: string;
     continuedLabel: string;
     pageIndicatorFmt: (cur: number, total: number) => string;
   }
@@ -568,8 +568,8 @@ const DOSSIER_SHEET_COPY: Record<
     lotNoPrefix: "MÃ LÔ",
     unitSerialPrefix: "MÃ ĐƠN VỊ",
     colNo: "STT",
-    colStage: "HẠNG MỤC MINH BẠCH VÀ CHỨNG TỪ",
-    colUnit: "ĐƠN VỊ XÁC NHẬN",
+    colStage: "QUY TRÌNH TRUY XUẤT",
+    colUnit: "ĐƠN VỊ",
     colDate: "NGÀY",
     colResult: "KẾT QUẢ",
     lotScaleHeading: "KHỐI LƯỢNG LÔ HÀNG",
@@ -592,8 +592,8 @@ const DOSSIER_SHEET_COPY: Record<
     overQuotaText: "Cần đối chiếu sản lượng",
     labReportLineFmt: (code, passed) =>
       passed
-        ? `Phiếu ${code}: Đạt chuẩn kim loại nặng, không phát hiện Vàng O, dư lượng thuốc BVTV an toàn`
-        : `Phiếu ${code}: Phát hiện chỉ tiêu cần kiểm tra lại trước khi lưu thông`,
+        ? `Phiếu ${code}: Đạt chuẩn Cadimi, Vàng O và dư lượng BVTV`
+        : `Phiếu ${code}: Cần kiểm tra lại chỉ tiêu an toàn`,
     viewLabScanLabel: "Xem bản scan phiếu kiểm nghiệm",
     verifyLabPortalLabel: "Đối chiếu tại đơn vị kiểm nghiệm",
     certColHeading: "Hồ sơ Kiểm nghiệm và Vùng trồng:",
@@ -608,7 +608,6 @@ const DOSSIER_SHEET_COPY: Record<
     assuranceLine2:
       "Thông tin trên phiếu được công bố sau khi Hợp tác xã Cư Né đối chiếu nhật ký chăm sóc vườn, phiếu kiểm nghiệm an toàn thực phẩm và hồ sơ xuất xưởng.",
     issuerHeading: "ĐƠN VỊ XÁC THỰC",
-    inquiryHeading: "Đối chiếu hồ sơ gốc?",
     continuedLabel: "Xem tiếp trang sau",
     pageIndicatorFmt: (cur, total) =>
       `Trang ${String(cur).padStart(2, "0")} / ${String(total).padStart(2, "0")}`,
@@ -625,8 +624,8 @@ const DOSSIER_SHEET_COPY: Record<
     lotNoPrefix: "LOT NO",
     unitSerialPrefix: "UNIT ID",
     colNo: "NO",
-    colStage: "TRANSPARENCY STAGE & EVIDENCE",
-    colUnit: "RESPONSIBLE UNIT",
+    colStage: "TRACEABILITY STAGE",
+    colUnit: "UNIT",
     colDate: "DATE",
     colResult: "STATUS",
     lotScaleHeading: "VERIFIED LOT VOLUME",
@@ -665,7 +664,6 @@ const DOSSIER_SHEET_COPY: Record<
     assuranceLine2:
       "Information on this dossier is published after Cư Né Cooperative verifies orchard care logs, food safety test reports, and dispatch records.",
     issuerHeading: "ISSUING COOPERATIVE",
-    inquiryHeading: "Verification Inquiry?",
     continuedLabel: "Continued on next page",
     pageIndicatorFmt: (cur, total) =>
       `Page ${String(cur).padStart(2, "0")} / ${String(total).padStart(2, "0")}`,
@@ -682,10 +680,10 @@ const DOSSIER_SHEET_COPY: Record<
     lotNoPrefix: "批次编号",
     unitSerialPrefix: "单件编码",
     colNo: "序号",
-    colStage: "透明溯源环节与凭证",
+    colStage: "溯源环节",
     colUnit: "责任单位",
-    colDate: "记录日期",
-    colResult: "核验结论",
+    colDate: "日期",
+    colResult: "结论",
     lotScaleHeading: "批次核定重量",
     unitWeightHeading: "单件核定规格",
     tonsUnit: "吨",
@@ -722,7 +720,6 @@ const DOSSIER_SHEET_COPY: Record<
     assuranceLine2:
       "本单所列信息均经 Cư Né 合作社核对果园管护台账、食品安全检测报告及出厂单证后正式发布。",
     issuerHeading: "签发合作社",
-    inquiryHeading: "溯源档案核实联系",
     continuedLabel: "续见下页",
     pageIndicatorFmt: (cur, total) =>
       `第 ${String(cur).padStart(2, "0")} / ${String(total).padStart(2, "0")} 页`,
@@ -802,7 +799,7 @@ const PLOT_DOSSIER_COPY: Record<
     plotCodePrefix: "MÃ THỬA",
     cropMetaPrefix: "CÂY TRỒNG CANH TÁC",
     cropName: "Sầu riêng tại vườn",
-    colStage: "HẠNG MỤC CANH TÁC VÀ GIÁM SÁT THỬA VƯỜN",
+    colStage: "QUY TRÌNH CANH TÁC",
     plotScaleHeading: "DIỆN TÍCH VÀ QUY MÔ THỬA",
     treesUnit: "cây",
     rowPucCode: "MÃ SỐ VÙNG TRỒNG:",
@@ -893,7 +890,7 @@ const PLOT_DOSSIER_COPY: Record<
     plotCodePrefix: "PLOT CODE",
     cropMetaPrefix: "CULTIVATED CROP",
     cropName: "Orchard Durian",
-    colStage: "ORCHARD CULTIVATION & INSPECTION RECORD",
+    colStage: "CULTIVATION STAGE",
     plotScaleHeading: "VERIFIED PLOT SCALE",
     treesUnit: "trees",
     rowPucCode: "GROWING ZONE CODE:",
@@ -1071,156 +1068,85 @@ const PLOT_DOSSIER_COPY: Record<
 const DOSSIER_CONTRIBUTORS_COPY: Record<
   TraceLang,
   {
-    sectionTitleFmt: (count: number) => string;
+    sectionTitle: string;
     continuedTitleFmt: (part: number, totalParts: number) => string;
-    tierLabelPublic: string;
-    tierLabelEnterprise: string;
-    tierLabelAuthority: string;
     colNo: string;
-    colHouseholdPublic: string;
-    colHouseholdEnterprise: string;
-    colHouseholdAuthority: string;
+    colHousehold: string;
     colZonePublic: string;
-    colPlotEnterprise: string;
-    colPlotAuthority: string;
+    colPlot: string;
     colSharePublic: string;
     colWeightShare: string;
     colCompliance: string;
-    colConsentQr: string;
     anonGrowerFmt: (idx: number) => string;
     memberByCodeFmt: (code: string) => string;
     outOfVillageFmt: (idx: number) => string;
-    consentedTag: string;
-    coopRepTag: string;
     plotAreaFmt: (plotCode: string, areaText: string | null) => string;
     phonePrefix: string;
     cccdPrefix: string;
     statusValid: string;
     statusReview: string;
-    qrShown: string;
-    qrHidden: string;
-    qrScoped: string;
     emptyContributors: string;
-    footPublic: string;
-    footEnterprise: string;
-    footAuthority: string;
   }
 > = {
   vi: {
-    sectionTitleFmt: (n) => `BẢNG KÊ HỘ THÀNH VIÊN ĐÓNG GÓP NGUYÊN LIỆU (${n} HỘ)`,
-    continuedTitleFmt: (p, total) => `BẢNG KÊ HỘ ĐÓNG GÓP (PHẦN ${p}/${total})`,
-    tierLabelPublic: "PHẠM VI XEM: CÔNG KHAI",
-    tierLabelEnterprise: "PHẠM VI XEM: ĐỐI TÁC THU MUA VÀ CSĐG",
-    tierLabelAuthority: "PHẠM VI XEM: CƠ QUAN QUẢN LÝ VÀ HTX",
+    sectionTitle: "HỘ THÀNH VIÊN ĐÓNG GÓP",
+    continuedTitleFmt: (p, total) => `HỘ THÀNH VIÊN ĐÓNG GÓP (PHẦN ${p}/${total})`,
     colNo: "STT",
-    colHouseholdPublic: "HỘ THÀNH VIÊN CANH TÁC",
-    colHouseholdEnterprise: "HỘ THÀNH VIÊN VÀ MÃ HỘ",
-    colHouseholdAuthority: "CHỦ HỘ VÀ ĐỊNH DANH QUẢN LÝ",
-    colZonePublic: "MÃ VÙNG TRỒNG (PUC)",
-    colPlotEnterprise: "THỬA ĐẤT NGUỒN VÀ PUC",
-    colPlotAuthority: "THỬA ĐẤT VÀ ĐỊA CHÍNH",
-    colSharePublic: "TỶ TRỌNG LÔ",
-    colWeightShare: "SẢN LƯỢNG GÓP",
-    colCompliance: "TUÂN THỦ",
-    colConsentQr: "HIỂN THỊ QR",
-    anonGrowerFmt: (idx) => `Hộ thành viên liên kết #${String(idx).padStart(2, "0")}`,
+    colHousehold: "HỘ CANH TÁC",
+    colZonePublic: "MÃ VÙNG (PUC)",
+    colPlot: "THỬA ĐẤT",
+    colSharePublic: "TỶ TRỌNG",
+    colWeightShare: "SẢN LƯỢNG",
+    colCompliance: "TRẠNG THÁI",
+    anonGrowerFmt: (idx) => `Hộ thành viên #${String(idx).padStart(2, "0")}`,
     memberByCodeFmt: (code) => `Hộ thành viên ${code}`,
-    outOfVillageFmt: (idx) => `Hộ ngoài địa bàn thôn (#${String(idx).padStart(2, "0")})`,
-    consentedTag: "Đồng ý công khai tên",
-    coopRepTag: "HTX đại diện bảo mật tên",
+    outOfVillageFmt: (idx) => `Hộ liên kết #${String(idx).padStart(2, "0")}`,
     plotAreaFmt: (pCode, area) => (area ? `Thửa ${pCode} (${area} ha)` : `Thửa ${pCode}`),
     phonePrefix: "SĐT",
     cccdPrefix: "CCCD",
     statusValid: "Đủ điều kiện",
     statusReview: "Cần rà soát",
-    qrShown: "Công khai tên",
-    qrHidden: "Ẩn tên cá nhân",
-    qrScoped: "Ngoài thôn",
-    emptyContributors:
-      "Lô hàng đang trong khâu tập kết và ghi nhận danh sách từng hộ đóng góp nguyên liệu từ vùng trồng.",
-    footPublic:
-      "Chế độ công khai chỉ hiển thị họ tên các hộ đã xác nhận đồng ý công khai; đối tác và cơ quan quản lý đăng nhập để xem mã hộ, thửa nguồn và sản lượng chi tiết.",
-    footEnterprise:
-      "Chế độ Doanh nghiệp hiển thị mã hộ, mã thửa nguồn và sản lượng đóng góp phục vụ đối soát thu mua; SĐT và CCCD chủ hộ được bảo mật.",
-    footAuthority:
-      "Chế độ Cơ quan quản lý hiển thị định danh hộ, thửa địa chính và sản lượng theo đúng địa bàn được phân công; mọi lượt xem đều ghi nhật ký kiểm toán.",
+    emptyContributors: "Đang cập nhật danh sách hộ đóng góp.",
   },
   en: {
-    sectionTitleFmt: (n) => `CONTRIBUTING MEMBER GROWERS MANIFEST (${n} HOUSEHOLDS)`,
+    sectionTitle: "CONTRIBUTING GROWERS",
     continuedTitleFmt: (p, total) => `CONTRIBUTING GROWERS (PART ${p}/${total})`,
-    tierLabelPublic: "VIEW TIER: PUBLIC",
-    tierLabelEnterprise: "VIEW TIER: PACKHOUSE & PARTNER",
-    tierLabelAuthority: "VIEW TIER: REGULATORY AUTHORITY",
     colNo: "NO",
-    colHouseholdPublic: "PARTICIPATING GROWER",
-    colHouseholdEnterprise: "GROWER & MEMBER ID",
-    colHouseholdAuthority: "HOUSEHOLD & REGULATORY ID",
-    colZonePublic: "GROWING ZONE (PUC)",
-    colPlotEnterprise: "SOURCE PLOT & PUC",
-    colPlotAuthority: "PLOT & CADASTRAL REF",
-    colSharePublic: "LOT SHARE",
-    colWeightShare: "CONTRIBUTED WT",
+    colHousehold: "GROWER",
+    colZonePublic: "ZONE (PUC)",
+    colPlot: "ORCHARD PLOT",
+    colSharePublic: "SHARE",
+    colWeightShare: "WEIGHT",
     colCompliance: "STATUS",
-    colConsentQr: "PUBLIC QR",
-    anonGrowerFmt: (idx) => `Linked Member Grower #${String(idx).padStart(2, "0")}`,
+    anonGrowerFmt: (idx) => `Member Grower #${String(idx).padStart(2, "0")}`,
     memberByCodeFmt: (code) => `Member Household ${code}`,
-    outOfVillageFmt: (idx) => `Out-of-jurisdiction Grower (#${String(idx).padStart(2, "0")})`,
-    consentedTag: "Public disclosure consented",
-    coopRepTag: "Identity protected by Cooperative",
+    outOfVillageFmt: (idx) => `Linked Grower #${String(idx).padStart(2, "0")}`,
     plotAreaFmt: (pCode, area) => (area ? `Plot ${pCode} (${area} ha)` : `Plot ${pCode}`),
     phonePrefix: "Tel",
     cccdPrefix: "ID",
     statusValid: "Compliant",
     statusReview: "In Review",
-    qrShown: "Name Shown",
-    qrHidden: "Name Masked",
-    qrScoped: "Scoped",
-    emptyContributors:
-      "Household contribution manifest is currently being recorded during orchard batch aggregation.",
-    footPublic:
-      "Public view only names growers who granted explicit disclosure consent; authorized partners and regulators may sign in for plot and weight breakdowns.",
-    footEnterprise:
-      "Partner view displays member codes, source plots, and contributed weights for batch reconciliation; personal phone and ID numbers remain protected.",
-    footAuthority:
-      "Authority view displays household identities, cadastral parcels, and contributed weights within assigned jurisdiction (audit-logged).",
+    emptyContributors: "Updating contributing growers list.",
   },
   zh: {
-    sectionTitleFmt: (n) => `批次原料供货成员农户明细表（共 ${n} 户）`,
-    continuedTitleFmt: (p, total) => `供货成员农户明细（第 ${p}/${total} 部分）`,
-    tierLabelPublic: "查看权限：公开",
-    tierLabelEnterprise: "查看权限：合作包装厂与采购商",
-    tierLabelAuthority: "查看权限：监管机构与合作社",
+    sectionTitle: "供货成员农户",
+    continuedTitleFmt: (p, total) => `供货成员农户（第 ${p}/${total} 部分）`,
     colNo: "序号",
-    colHouseholdPublic: "参建供货农户",
-    colHouseholdEnterprise: "成员农户与户号",
-    colHouseholdAuthority: "农户身份与监管登记",
-    colZonePublic: "注册产区编码 (PUC)",
-    colPlotEnterprise: "源头地块与产区编码",
-    colPlotAuthority: "地块编号与地籍档案",
-    colSharePublic: "批次占比",
-    colWeightShare: "供货净重",
-    colCompliance: "合规状态",
-    colConsentQr: "公开授权",
-    anonGrowerFmt: (idx) => `合作社联营农户 #${String(idx).padStart(2, "0")}`,
+    colHousehold: "种植农户",
+    colZonePublic: "产区编码",
+    colPlot: "果园地块",
+    colSharePublic: "占比",
+    colWeightShare: "供货量",
+    colCompliance: "状态",
+    anonGrowerFmt: (idx) => `合作社农户 #${String(idx).padStart(2, "0")}`,
     memberByCodeFmt: (code) => `成员户 ${code}`,
-    outOfVillageFmt: (idx) => `辖区外联营农户 (#${String(idx).padStart(2, "0")})`,
-    consentedTag: "已授权公开姓名",
-    coopRepTag: "合作社代管隐私保护",
+    outOfVillageFmt: (idx) => `联营农户 #${String(idx).padStart(2, "0")}`,
     plotAreaFmt: (pCode, area) => (area ? `地块 ${pCode}（${area} 公顷）` : `地块 ${pCode}`),
     phonePrefix: "电话",
     cccdPrefix: "证件",
-    statusValid: "核验合格",
+    statusValid: "合格",
     statusReview: "待复核",
-    qrShown: "公开姓名",
-    qrHidden: "隐藏姓名",
-    qrScoped: "按辖区",
-    emptyContributors: "当前批次正在果园集货登记阶段，农户供货明细同步更新中。",
-    footPublic:
-      "公开模式仅展示本人授权公开姓名的农户；合作包装厂与监管部门登录后可按权限查看地块编号及供货重量。",
-    footEnterprise:
-      "合作企业模式展示农户编号、源头地块及供货重量供批次核对；农户个人电话与证件号码受隐私保护。",
-    footAuthority:
-      "监管模式按管辖范围展示农户身份、地籍地块及供货重量明细，所有查阅均记录审计日志。",
+    emptyContributors: "农户供货明细更新中。",
   },
 };
 
@@ -1282,20 +1208,94 @@ function chunkArray<T>(items: readonly T[], size: number): T[][] {
   return out;
 }
 
+function sanitizeTraceTextConnectors(raw: string): string {
+  return raw
+    .replace(/\s*[–—]\s*/g, ", ")
+    .replace(/\s*\+\s*/g, ", ")
+    .replace(/\s*[•·]\s*/g, ", ")
+    .replace(/,\s*,+/g, ", ")
+    .trim();
+}
+
+function formatCompactDiaryEntry(
+  rawActivity: string,
+  rawDetail: string | null | undefined,
+  lang: TraceLang,
+): { title: string; subtitle: string } {
+  let title = sanitizeTraceTextConnectors(rawActivity || "");
+  if (lang === "vi") {
+    title = title
+      .replace(/^Phun thuốc BVTV:\s*Chế phẩm\s+/i, "Phun chế phẩm ")
+      .replace(/^Phun thuốc BVTV:\s*/i, "Phun thuốc: ");
+  }
+
+  if (!rawDetail) {
+    return { title, subtitle: "" };
+  }
+
+  const titleLower = title.toLowerCase();
+  const segments = rawDetail
+    .split(/\s*\|\s*|\s*,\s*(?=(?:Hoạt chất|Liều lượng|Cách ly)\b)/i)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const kept: string[] = [];
+  for (const seg of segments) {
+    const activeMatch = /^Hoạt chất:\s*(.+)$/i.exec(seg);
+    if (activeMatch) {
+      const cleanedActive = sanitizeTraceTextConnectors(activeMatch[1]).replace(/\bspp\./gi, "").replace(/\s{2,}/g, " ").trim();
+      const mainTokens = cleanedActive
+        .split(/[,\s/()-]+/)
+        .map((tk) => tk.trim().toLowerCase())
+        .filter((tk) => tk.length >= 5);
+      const isRedundantWithTitle =
+        mainTokens.length > 0 && mainTokens.every((tk) => titleLower.includes(tk));
+      if (!isRedundantWithTitle && cleanedActive) {
+        kept.push(lang === "vi" ? `Hoạt chất: ${cleanedActive}` : cleanedActive);
+      }
+      continue;
+    }
+
+    const doseMatch = /^Liều lượng:\s*(.+)$/i.exec(seg);
+    if (doseMatch) {
+      let cleanedDose = sanitizeTraceTextConnectors(doseMatch[1]);
+      cleanedDose = cleanedDose
+        .replace(/\s+(?:tưới quanh|phun ướt|phun đều|rải đều|bón quanh)\b.*$/i, "")
+        .trim();
+      if (cleanedDose) {
+        kept.push(lang === "vi" ? `Liều: ${cleanedDose}` : cleanedDose);
+      }
+      continue;
+    }
+
+    const phiMatch = /^Cách ly(?:\s*PHI)?:\s*(\d+)\s*ngày$/i.exec(seg);
+    if (phiMatch) {
+      const days = Number(phiMatch[1]);
+      if (days > 0) {
+        kept.push(
+          lang === "en"
+            ? `Withdrawal: ${days}d`
+            : lang === "zh"
+              ? `间隔期 ${days} 天`
+              : `Cách ly ${days} ngày`,
+        );
+      }
+      continue;
+    }
+
+    kept.push(sanitizeTraceTextConnectors(seg));
+  }
+
+  return {
+    title,
+    subtitle: kept.join(", "),
+  };
+}
+
 const DOSSIER_EXTENDED_COPY: Record<
   TraceLang,
   {
-    headerTier2: string;
-    headerTier3: string;
-    contTier2Short: string;
-    contTier3Short: string;
-    tier2BannerTitle: string;
-    tier2BannerBadge: string;
-    tier2BannerBadgeAuth: string;
-    zonesTitleLot: string;
-    zonesTitleBox: string;
-    zonesTitleFruit: string;
-    zonesTitlePlot: string;
+    zonesTitle: string;
     zonesTotalFmt: (kg: string) => string;
     partSuffixFmt: (cur: number, total: number) => string;
     colNo: string;
@@ -1310,26 +1310,14 @@ const DOSSIER_EXTENDED_COPY: Record<
     quotaTitleFmt: (year: number) => string;
     quotaWithin: string;
     quotaOver: string;
-    quotaLotUsedPrefix: string;
-    quotaPlotUsedPrefix: string;
-    quotaCumulativeFmt: (used: string, max: string, pct: number) => string;
-    quotaRemainFmt: (rem: string) => string;
+    zoneTotalLabel: string;
     colPlotCode: string;
     colOrchardScale: string;
     colMaxQuota: string;
-    colUsedRemain: string;
-    colUtilPct: string;
+    colUsed: string;
+    colRemain: string;
     orchardScaleFmt: (areaText: string, treesText: string) => string;
-    sourcePlotsTitleLot: string;
-    sourcePlotsTitlePlot: string;
-    sourcePlotsCountFmt: (n: number) => string;
-    sourcePlotOpenLabel: string;
-    sourcePlotsNote: string;
-    labsTitleLot: string;
-    labsTitleBox: string;
-    labsTitleFruit: string;
-    labsTitlePlot: string;
-    labsCountFmt: (n: number) => string;
+    labsTitle: string;
     colLabCert: string;
     colSampleDate: string;
     colCd: string;
@@ -1340,9 +1328,7 @@ const DOSSIER_EXTENDED_COPY: Record<
     yellowONeg: string;
     labPass: string;
     labFail: string;
-    emptyLabs: string;
     packingTitle: string;
-    packingLiveTag: string;
     specGradeRatio: string;
     specAvgBrix: string;
     specTreatment: string;
@@ -1350,14 +1336,9 @@ const DOSSIER_EXTENDED_COPY: Record<
     specTemp: string;
     specSchedule: string;
     notRecordedYet: string;
-    tier3BannerTitle: string;
-    tier3BannerBadge: string;
-    authHhTitleLot: string;
     authHhTitlePlot: string;
-    authHhCountFmt: (n: number) => string;
     colHhIdentity: string;
     colCadastralGis: string;
-    colLotQrConsent: string;
     hhCodePrefix: string;
     areaLocPrefix: string;
     phonePrefix: string;
@@ -1365,207 +1346,136 @@ const DOSSIER_EXTENDED_COPY: Record<
     cadastralFmt: (sheet: string | null, parcel: string | null) => string;
     coordFmt: (lat: string, lng: string) => string;
     openGisBtn: string;
-    qrConsentYes: string;
-    qrConsentNo: string;
     emptyAuthHh: string;
     diariesTitle: string;
-    diariesCountFmt: (n: number) => string;
     colDate: string;
     colHhPlot: string;
     colDiaryActivity: string;
-    colRecorder: string;
-    colAuditCheck: string;
-    mrlSafe: string;
-    mrlWarn: string;
-    entryOnTime: string;
-    entryLate: string;
-    gpsMatched: string;
+    plotRefFmt: (code: string) => string;
+    recordedByFmt: (name: string) => string;
+    diaryValid: string;
+    diaryLate: string;
+    diaryWarn: string;
+    gpsShort: string;
     viewFieldPhotoBtn: string;
     emptyDiaries: string;
     minutesTitle: string;
-    minutesCountFmt: (n: number) => string;
     colMinuteCode: string;
     colInspectorLoc: string;
     colResult: string;
-    inspectorPrefix: string;
-    locationPrefix: string;
     viewMinutePhotoBtn: string;
     emptyMinutes: string;
     violationsTitle: string;
-    violationsCountFmt: (n: number) => string;
     colViolationDesc: string;
     colSeverity: string;
     sevCritical: string;
     sevWarning: string;
-    emptyViolations: string;
   }
 > = {
   vi: {
-    headerTier2: "PHÂN LOẠI: HỒ SƠ CẤP 2 - ĐỐI TÁC VÀ CƠ SỞ ĐÓNG GÓI",
-    headerTier3: "PHÂN LOẠI: HỒ SƠ CẤP 3 - THANH TRA QUẢN LÝ NHÀ NƯỚC",
-    contTier2Short: "CẤP 2",
-    contTier3Short: "CẤP 3",
-    tier2BannerTitle: "PHỤ LỤC CẤP ĐỘ 2 - VÙNG NGUỒN, ĐỊNH MỨC ĐẦU VỤ VÀ KIỂM NGHIỆM CHI TIẾT",
-    tier2BannerBadge: "ĐÃ XÁC THỰC QUYỀN DOANH NGHIỆP",
-    tier2BannerBadgeAuth: "ĐÃ XÁC THỰC QUYỀN QUẢN LÝ",
-    zonesTitleLot: "PHÂN BỔ CÁC VÙNG NGUỒN ĐÓNG GÓP VÀO LÔ HÀNG",
-    zonesTitleBox: "PHÂN BỔ VÙNG NGUỒN CỦA LÔ ĐÓNG THÙNG",
-    zonesTitleFruit: "VÙNG TRỒNG NGUỒN CỦA TRÁI SẦU RIÊNG ĐỊNH DANH",
-    zonesTitlePlot: "VÙNG TRỒNG VÀ SẢN LƯỢNG THU HOẠCH CỦA THỬA ĐẤT",
-    zonesTotalFmt: (kg) => `TỔNG SẢN LƯỢNG: ${kg} KG`,
+    zonesTitle: "VÙNG TRỒNG THAM GIA",
+    zonesTotalFmt: (kg) => `TỔNG: ${kg} KG`,
     partSuffixFmt: (c, t) => ` (PHẦN ${c}/${t})`,
     colNo: "STT",
     colPuc: "MÃ VÙNG (PUC)",
-    colVillage: "KHU VỰC / THÔN",
-    colZoneScale: "QUY MÔ VÙNG",
-    colContribWeight: "SẢN LƯỢNG GÓP",
+    colVillage: "KHU VỰC",
+    colZoneScale: "QUY MÔ",
+    colContribWeight: "SẢN LƯỢNG",
     colStatus: "TRẠNG THÁI",
     zoneScaleFmt: (hh, area) => (area ? `${hh} hộ, ${area} ha` : `${hh} hộ`),
     statusQualified: "Đủ điều kiện",
     statusReview: "Cần rà soát",
-    quotaTitleFmt: (yr) => `ĐỐI SOÁT ĐỊNH MỨC SẢN LƯỢNG ĐẦU VỤ THEO THỬA (VỤ ${yr})`,
-    quotaWithin: "TRONG ĐỊNH MỨC ĐẦU VỤ",
-    quotaOver: "VƯỢT ĐỊNH MỨC ĐẦU VỤ",
-    quotaLotUsedPrefix: "Lô này sử dụng:",
-    quotaPlotUsedPrefix: "Đã xuất từ thửa:",
-    quotaCumulativeFmt: (used, max, pct) => `Lũy kế vùng: ${used} / ${max} kg (${pct}%)`,
-    quotaRemainFmt: (rem) => `Còn lại: ${rem} kg`,
-    colPlotCode: "MÃ THỬA",
-    colOrchardScale: "QUY MÔ VƯỜN",
-    colMaxQuota: "TRẦN ĐẦU VỤ",
-    colUsedRemain: "ĐÃ XUẤT / CÒN LẠI",
-    colUtilPct: "TỶ LỆ DÙNG",
+    quotaTitleFmt: (yr) => `ĐỊNH MỨC SẢN LƯỢNG VỤ ${yr}`,
+    quotaWithin: "ĐẠT ĐỊNH MỨC",
+    quotaOver: "VƯỢT ĐỊNH MỨC",
+    zoneTotalLabel: "Tổng vùng nguồn",
+    colPlotCode: "THỬA ĐẤT",
+    colOrchardScale: "QUY MÔ",
+    colMaxQuota: "TRẦN CẢ VỤ",
+    colUsed: "ĐÃ XUẤT",
+    colRemain: "CÒN LẠI",
     orchardScaleFmt: (area, trees) => `${area} ha, ${trees} cây`,
-    sourcePlotsTitleLot: "DANH MỤC BẢNG QR THỬA ĐẤT NGUỒN KIỂM TRA THỰC ĐỊA TẠI VƯỜN",
-    sourcePlotsTitlePlot: "BẢNG QR ĐỊNH DANH THỬA ĐẤT KIỂM TRA THỰC ĐỊA",
-    sourcePlotsCountFmt: (n) => `${n} THỬA ĐỊNH DANH`,
-    sourcePlotOpenLabel: "Mở hồ sơ thửa",
-    sourcePlotsNote:
-      "Chạm vào mã thửa để mở hồ sơ thửa đất tương ứng và đối chiếu ranh giới thực tế khi kiểm tra tại vườn.",
-    labsTitleLot: "TRẠNG THÁI KIỂM NGHIỆM CHI TIẾT CỦA LÔ HÀNG",
-    labsTitleBox: "TRẠNG THÁI KIỂM NGHIỆM CHI TIẾT CỦA THÙNG VÀ LÔ HÀNG",
-    labsTitleFruit: "TRẠNG THÁI KIỂM NGHIỆM CHI TIẾT CỦA VƯỜN NGUỒN",
-    labsTitlePlot: "TRẠNG THÁI KIỂM NGHIỆM CHI TIẾT CỦA THỬA ĐẤT",
-    labsCountFmt: (n) => `${n} PHIẾU`,
+    labsTitle: "KẾT QUẢ KIỂM NGHIỆM MẪU",
     colLabCert: "SỐ PHIẾU",
     colSampleDate: "NGÀY MẪU",
-    colCd: "CD (MG/KG)",
+    colCd: "CADIMI",
     colYellowO: "VÀNG O",
-    colResidue: "DƯ LƯỢNG",
+    colResidue: "DƯ LƯỢNG BVTV",
     labVerifySubLink: "Đối chiếu Lab",
     yellowOPos: "Dương tính",
     yellowONeg: "Âm tính",
     labPass: "Đạt",
     labFail: "Không đạt",
-    emptyLabs: "Chưa có phiếu kiểm nghiệm chi tiết được cập nhật cho hồ sơ này.",
-    packingTitle: "THÔNG SỐ SƠ CHẾ, ĐÓNG GÓI VÀ VẬN TẢI CHUỖI LẠNH",
-    packingLiveTag: "ĐỒNG BỘ TRỰC TIẾP TỪ HỆ THỐNG",
-    specGradeRatio: "Tỷ lệ phân hạng A / B / C",
+    packingTitle: "ĐÓNG GÓI VÀ VẬN CHUYỂN",
+    specGradeRatio: "Tỷ lệ hạng A / B / C",
     specAvgBrix: "Độ ngọt bình quân",
     specTreatment: "Phương pháp sơ chế",
-    specTransport: "Đơn vị vận tải và biển số",
-    specTemp: "Nhiệt độ bảo quản lạnh",
-    specSchedule: "Thời điểm xuất bến / dự kiến đến",
-    notRecordedYet: "Chưa ghi nhận",
-    tier3BannerTitle: "PHỤ LỤC CẤP ĐỘ 3 - ĐỊA CHÍNH GIS, NHẬT KÝ BVTV VÀ BIÊN BẢN THANH TRA",
-    tier3BannerBadge: "QUYỀN CƠ QUAN QUẢN LÝ (GHI LOG KIỂM TOÁN)",
-    authHhTitleLot: "DANH SÁCH ĐỊNH DANH HỘ THÀNH VIÊN, ĐỊA CHÍNH VÀ RANH GIỚI GIS THỬA NGUỒN",
-    authHhTitlePlot: "THÔNG TIN ĐỊNH DANH HỘ CANH TÁC VÀ RANH GIỚI GIS THỬA ĐẤT",
-    authHhCountFmt: (n) => `${n} HỘ NGUỒN`,
-    colHhIdentity: "CHỦ HỘ VÀ ĐỊNH DANH",
-    colCadastralGis: "THỬA ĐẤT, ĐỊA CHÍNH VÀ TỌA ĐỘ GIS",
-    colLotQrConsent: "GÓP LÔ / QR",
+    specTransport: "Đơn vị vận tải",
+    specTemp: "Nhiệt độ bảo quản",
+    specSchedule: "Lịch xuất / dự kiến đến",
+    notRecordedYet: "Chưa cập nhật",
+    authHhTitlePlot: "CHỦ HỘ VÀ ĐỊA CHÍNH THỬA ĐẤT",
+    colHhIdentity: "CHỦ HỘ",
+    colCadastralGis: "ĐỊA CHÍNH VÀ TỌA ĐỘ",
     hhCodePrefix: "Mã hộ",
     areaLocPrefix: "Khu vực",
     phonePrefix: "SĐT",
     cccdPrefix: "CCCD",
-    cadastralFmt: (s, p) => `Tờ ${s || "-"} / Thửa ${p || "-"}`,
+    cadastralFmt: (s, p) => `Tờ ${s || "-"}, Thửa ${p || "-"}`,
     coordFmt: (lat, lng) => `${lat}°B, ${lng}°Đ`,
     openGisBtn: "Bản đồ GIS",
-    qrConsentYes: "Hiện tên QR",
-    qrConsentNo: "Ẩn tên QR",
-    emptyAuthHh: "Chưa ghi nhận danh sách hộ canh tác trực tiếp trong phạm vi thẩm quyền này.",
-    diariesTitle: "NHẬT KÝ CANH TÁC VÀ PHUN THUỐC BVTV CHI TIẾT",
-    diariesCountFmt: (n) => `${n} BẢN GHI`,
+    emptyAuthHh: "Chưa có dữ liệu hộ canh tác.",
+    diariesTitle: "NHẬT KÝ CANH TÁC",
     colDate: "NGÀY",
     colHhPlot: "HỘ VÀ THỬA",
-    colDiaryActivity: "HOẠT ĐỘNG CANH TÁC, THUỐC BVTV VÀ LIỀU LƯỢNG",
-    colRecorder: "NGƯỜI GHI",
-    colAuditCheck: "ĐỐI CHỨNG",
-    mrlSafe: "Đạt MRL",
-    mrlWarn: "Cảnh báo MRL",
-    entryOnTime: "Đúng hạn",
-    entryLate: "Ghi muộn",
-    gpsMatched: "Khớp GPS",
-    viewFieldPhotoBtn: "Xem ảnh hiện trường",
-    emptyDiaries: "Chưa ghi nhận nhật ký canh tác hoặc đợt phun thuốc nào trong hồ sơ này.",
-    minutesTitle: "BIÊN BẢN KIỂM TRA VÙNG TRỒNG THỰC ĐỊA",
-    minutesCountFmt: (n) => `${n} BIÊN BẢN`,
+    colDiaryActivity: "CÔNG VIỆC CANH TÁC",
+    plotRefFmt: (c) => `Thửa ${c}`,
+    recordedByFmt: (name) => `Ghi hộ: ${name}`,
+    diaryValid: "Hợp lệ",
+    diaryLate: "Bổ sung sau",
+    diaryWarn: "Vượt ngưỡng",
+    gpsShort: "Tại vườn",
+    viewFieldPhotoBtn: "Xem ảnh",
+    emptyDiaries: "Chưa có nhật ký canh tác.",
+    minutesTitle: "BIÊN BẢN KIỂM TRA THỰC ĐỊA",
     colMinuteCode: "MÃ BIÊN BẢN",
-    colInspectorLoc: "CÁN BỘ KIỂM TRA VÀ ĐỊA ĐIỂM",
+    colInspectorLoc: "CÁN BỘ VÀ ĐỊA ĐIỂM",
     colResult: "KẾT LUẬN",
-    inspectorPrefix: "Cán bộ",
-    locationPrefix: "Địa điểm",
-    viewMinutePhotoBtn: "Xem ảnh biên bản",
-    emptyMinutes: "Chưa có biên bản kiểm tra thực địa được lưu trữ.",
-    violationsTitle: "HỒ SƠ CẢNH BÁO VÀ KỶ LUẬT NỘI BỘ",
-    violationsCountFmt: (n) => `${n} GHI NHẬN`,
-    colViolationDesc: "NỘI DUNG CẢNH BÁO VÀ MÔ TẢ",
+    viewMinutePhotoBtn: "Xem ảnh",
+    emptyMinutes: "Chưa có biên bản kiểm tra.",
+    violationsTitle: "CẢNH BÁO VI PHẠM",
+    colViolationDesc: "NỘI DUNG",
     colSeverity: "MỨC ĐỘ",
     sevCritical: "Nghiêm trọng",
     sevWarning: "Nhắc nhở",
-    emptyViolations: "Không có vi phạm hoặc cảnh cáo nội bộ nào đối với các hộ và thửa nguồn trong hồ sơ này.",
   },
   en: {
-    headerTier2: "CLEARANCE: TIER 2 - PARTNER & PACKHOUSE DOSSIER",
-    headerTier3: "CLEARANCE: TIER 3 - REGULATORY INSPECTION DOSSIER",
-    contTier2Short: "TIER 2",
-    contTier3Short: "TIER 3",
-    tier2BannerTitle: "TIER 2 APPENDIX - SOURCE ZONES, YIELD QUOTAS & DETAILED LAB TESTS",
-    tier2BannerBadge: "PARTNER ACCESS VERIFIED",
-    tier2BannerBadgeAuth: "AUTHORITY ACCESS VERIFIED",
-    zonesTitleLot: "SOURCE GROWING ZONES ALLOCATION FOR THIS LOT",
-    zonesTitleBox: "SOURCE ZONES FOR THIS PACKED CARTON",
-    zonesTitleFruit: "SOURCE GROWING ZONE FOR TAGGED FRUIT",
-    zonesTitlePlot: "GROWING ZONE & HARVEST OUTPUT OF ORCHARD PLOT",
-    zonesTotalFmt: (kg) => `TOTAL VOLUME: ${kg} KG`,
+    zonesTitle: "SOURCE GROWING ZONES",
+    zonesTotalFmt: (kg) => `TOTAL: ${kg} KG`,
     partSuffixFmt: (c, t) => ` (PART ${c}/${t})`,
     colNo: "NO",
-    colPuc: "ZONE CODE (PUC)",
-    colVillage: "AREA / VILLAGE",
-    colZoneScale: "ZONE SCALE",
-    colContribWeight: "CONTRIBUTED WT",
+    colPuc: "ZONE (PUC)",
+    colVillage: "AREA",
+    colZoneScale: "SCALE",
+    colContribWeight: "WEIGHT",
     colStatus: "STATUS",
     zoneScaleFmt: (hh, area) => (area ? `${hh} growers, ${area} ha` : `${hh} growers`),
     statusQualified: "Qualified",
     statusReview: "In Review",
-    quotaTitleFmt: (yr) => `PRE-SEASON PLOT YIELD QUOTA RECONCILIATION (SEASON ${yr})`,
-    quotaWithin: "WITHIN SEASONAL QUOTA",
-    quotaOver: "QUOTA EXCEEDED",
-    quotaLotUsedPrefix: "This lot uses:",
-    quotaPlotUsedPrefix: "Dispatched from plot:",
-    quotaCumulativeFmt: (used, max, pct) => `Zone cumulative: ${used} / ${max} kg (${pct}%)`,
-    quotaRemainFmt: (rem) => `Remaining: ${rem} kg`,
-    colPlotCode: "PLOT ID",
-    colOrchardScale: "ORCHARD SCALE",
+    quotaTitleFmt: (yr) => `SEASON ${yr} YIELD QUOTA`,
+    quotaWithin: "WITHIN QUOTA",
+    quotaOver: "OVER QUOTA",
+    zoneTotalLabel: "Source zone total",
+    colPlotCode: "PLOT",
+    colOrchardScale: "SCALE",
     colMaxQuota: "SEASON CAP",
-    colUsedRemain: "USED / REMAINING",
-    colUtilPct: "UTILIZATION",
+    colUsed: "USED",
+    colRemain: "REMAINING",
     orchardScaleFmt: (area, trees) => `${area} ha, ${trees} trees`,
-    sourcePlotsTitleLot: "SOURCE ORCHARD PLOT QR SIGNBOARDS FOR ON-SITE AUDIT",
-    sourcePlotsTitlePlot: "ORCHARD PLOT QR SIGNBOARD FOR ON-SITE AUDIT",
-    sourcePlotsCountFmt: (n) => `${n} REGISTERED PLOTS`,
-    sourcePlotOpenLabel: "Open plot dossier",
-    sourcePlotsNote:
-      "Select any plot code to open its dedicated orchard dossier and verify parcel boundaries on site.",
-    labsTitleLot: "DETAILED LAB TEST MATRIX FOR THIS LOT",
-    labsTitleBox: "DETAILED LAB TEST MATRIX FOR CARTON & LOT",
-    labsTitleFruit: "DETAILED LAB TEST MATRIX FOR SOURCE ORCHARD",
-    labsTitlePlot: "DETAILED LAB TEST MATRIX FOR ORCHARD PLOT",
-    labsCountFmt: (n) => `${n} REPORTS`,
+    labsTitle: "LAB TEST RESULTS",
     colLabCert: "REPORT NO",
     colSampleDate: "SAMPLED",
-    colCd: "CD (MG/KG)",
+    colCd: "CADMIUM",
     colYellowO: "YELLOW O",
     colResidue: "RESIDUE",
     labVerifySubLink: "Lab Portal",
@@ -1573,114 +1483,76 @@ const DOSSIER_EXTENDED_COPY: Record<
     yellowONeg: "Negative",
     labPass: "Pass",
     labFail: "Fail",
-    emptyLabs: "No detailed laboratory reports recorded for this dossier yet.",
-    packingTitle: "PACKHOUSE GRADING & COLD-CHAIN SPECIFICATIONS",
-    packingLiveTag: "LIVE SYSTEM TELEMETRY",
-    specGradeRatio: "Grade A / B / C ratio",
-    specAvgBrix: "Average sweetness (Brix)",
+    packingTitle: "PACKING & COLD CHAIN",
+    specGradeRatio: "Grade A / B / C",
+    specAvgBrix: "Average Brix",
     specTreatment: "Post-harvest treatment",
-    specTransport: "Cold-chain carrier & plate",
-    specTemp: "Storage temperature",
+    specTransport: "Carrier & plate",
+    specTemp: "Cold storage temp",
     specSchedule: "Departure / ETA",
-    notRecordedYet: "Not recorded yet",
-    tier3BannerTitle: "TIER 3 APPENDIX - CADASTRAL GIS, PESTICIDE LOGS & INSPECTION MINUTES",
-    tier3BannerBadge: "REGULATORY AUTHORITY (AUDIT-LOGGED)",
-    authHhTitleLot: "MEMBER HOUSEHOLD IDENTITIES, CADASTRAL REFS & GIS PARCELS",
-    authHhTitlePlot: "GROWER HOUSEHOLD IDENTITY & PLOT GIS PARCEL",
-    authHhCountFmt: (n) => `${n} HOUSEHOLDS`,
-    colHhIdentity: "HOUSEHOLD & REGULATORY ID",
-    colCadastralGis: "PLOT, CADASTRAL SHEET/PARCEL & GIS COORDS",
-    colLotQrConsent: "WEIGHT / QR",
+    notRecordedYet: "Not updated",
+    authHhTitlePlot: "GROWER & CADASTRAL GIS",
+    colHhIdentity: "GROWER",
+    colCadastralGis: "CADASTRAL & GIS",
     hhCodePrefix: "ID",
     areaLocPrefix: "Area",
     phonePrefix: "Tel",
     cccdPrefix: "Citizen ID",
-    cadastralFmt: (s, p) => `Sheet ${s || "-"} / Parcel ${p || "-"}`,
+    cadastralFmt: (s, p) => `Sheet ${s || "-"}, Parcel ${p || "-"}`,
     coordFmt: (lat, lng) => `${lat}°N, ${lng}°E`,
     openGisBtn: "GIS Map",
-    qrConsentYes: "QR Shown",
-    qrConsentNo: "QR Masked",
-    emptyAuthHh: "No directly assigned grower households recorded within this jurisdiction scope.",
-    diariesTitle: "DETAILED CULTIVATION & CROP PROTECTION (BVTV) LEDGER",
-    diariesCountFmt: (n) => `${n} ENTRIES`,
+    emptyAuthHh: "No grower records.",
+    diariesTitle: "CULTIVATION LOG",
     colDate: "DATE",
     colHhPlot: "GROWER & PLOT",
-    colDiaryActivity: "ACTIVITY, INPUTS, DOSE & WITHDRAWAL",
-    colRecorder: "RECORDER",
-    colAuditCheck: "VERIFICATION",
-    mrlSafe: "MRL Safe",
-    mrlWarn: "MRL Alert",
-    entryOnTime: "On-time",
-    entryLate: "Late entry",
-    gpsMatched: "GPS Match",
-    viewFieldPhotoBtn: "View field photo",
-    emptyDiaries: "No cultivation or pesticide application logs recorded in this dossier.",
-    minutesTitle: "ON-SITE FIELD INSPECTION MINUTES",
-    minutesCountFmt: (n) => `${n} MINUTES`,
-    colMinuteCode: "MINUTE CODE",
-    colInspectorLoc: "INSPECTOR & LOCATION",
-    colResult: "CONCLUSION",
-    inspectorPrefix: "Officer",
-    locationPrefix: "Site",
-    viewMinutePhotoBtn: "View minute photo",
-    emptyMinutes: "No field inspection minutes archived yet.",
-    violationsTitle: "INTERNAL COMPLIANCE WARNINGS & DISCIPLINARY LOG",
-    violationsCountFmt: (n) => `${n} RECORDS`,
-    colViolationDesc: "WARNING TITLE & DETAILS",
+    colDiaryActivity: "ACTIVITY",
+    plotRefFmt: (c) => `Plot ${c}`,
+    recordedByFmt: (name) => `By ${name}`,
+    diaryValid: "Verified",
+    diaryLate: "Logged later",
+    diaryWarn: "Over limit",
+    gpsShort: "On-site GPS",
+    viewFieldPhotoBtn: "View photo",
+    emptyDiaries: "No cultivation logs.",
+    minutesTitle: "FIELD INSPECTION MINUTES",
+    colMinuteCode: "MINUTE NO",
+    colInspectorLoc: "INSPECTOR & SITE",
+    colResult: "RESULT",
+    viewMinutePhotoBtn: "View photo",
+    emptyMinutes: "No inspection minutes.",
+    violationsTitle: "COMPLIANCE WARNINGS",
+    colViolationDesc: "DETAILS",
     colSeverity: "SEVERITY",
     sevCritical: "Critical",
     sevWarning: "Advisory",
-    emptyViolations: "Zero internal compliance warnings or violations recorded for source growers in this dossier.",
   },
   zh: {
-    headerTier2: "档案级别：二级 - 采购合作商与包装厂专享",
-    headerTier3: "档案级别：三级 - 政府监管与全面稽核档案",
-    contTier2Short: "二级",
-    contTier3Short: "三级",
-    tier2BannerTitle: "二级扩展附录 - 原料产区分配、产季定额与详细检测",
-    tier2BannerBadge: "企业权限已核验",
-    tier2BannerBadgeAuth: "监管权限已核验",
-    zonesTitleLot: "本批次各原产种植区供货分配明细",
-    zonesTitleBox: "本包装箱所属批次产区分配",
-    zonesTitleFruit: "单果所属原产种植区信息",
-    zonesTitlePlot: "果园地块所属产区与采收产量",
-    zonesTotalFmt: (kg) => `核定总重：${kg} KG`,
+    zonesTitle: "供货种植产区",
+    zonesTotalFmt: (kg) => `总重：${kg} KG`,
     partSuffixFmt: (c, t) => `（第 ${c}/${t} 部分）`,
     colNo: "序号",
-    colPuc: "产区编码 (PUC)",
+    colPuc: "产区编码",
     colVillage: "所属村组",
-    colZoneScale: "产区规模",
-    colContribWeight: "供货重量",
-    colStatus: "合规状态",
+    colZoneScale: "规模",
+    colContribWeight: "供货量",
+    colStatus: "状态",
     zoneScaleFmt: (hh, area) => (area ? `${hh} 户, ${area} 公顷` : `${hh} 户`),
-    statusQualified: "核验合格",
+    statusQualified: "合格",
     statusReview: "待复核",
-    quotaTitleFmt: (yr) => `各地块产季初核定产量定额对账（${yr} 产季）`,
-    quotaWithin: "符合产季初定额",
-    quotaOver: "超出产季定额",
-    quotaLotUsedPrefix: "本批使用：",
-    quotaPlotUsedPrefix: "地块已出货：",
-    quotaCumulativeFmt: (used, max, pct) => `产区累计：${used} / ${max} kg (${pct}%)`,
-    quotaRemainFmt: (rem) => `剩余额度：${rem} kg`,
-    colPlotCode: "地块编号",
-    colOrchardScale: "果园规模",
+    quotaTitleFmt: (yr) => `${yr} 产季产量定额`,
+    quotaWithin: "符合定额",
+    quotaOver: "超出定额",
+    zoneTotalLabel: "产区汇总",
+    colPlotCode: "地块",
+    colOrchardScale: "规模",
     colMaxQuota: "产季上限",
-    colUsedRemain: "已用 / 剩余",
-    colUtilPct: "使用率",
+    colUsed: "已出货",
+    colRemain: "剩余额度",
     orchardScaleFmt: (area, trees) => `${area} 公顷, ${trees} 株`,
-    sourcePlotsTitleLot: "供实地巡园核查的源头果园地块二维码名录",
-    sourcePlotsTitlePlot: "果园地块现场核查二维码标识",
-    sourcePlotsCountFmt: (n) => `${n} 个定标地块`,
-    sourcePlotOpenLabel: "打开地块单",
-    sourcePlotsNote: "点击任一地块编号即可打开对应果园地块档案并在果园现场核对边界。",
-    labsTitleLot: "本批次食品安全详细检测报告矩阵",
-    labsTitleBox: "包装箱与批次详细检测报告矩阵",
-    labsTitleFruit: "源头果园详细检测报告矩阵",
-    labsTitlePlot: "果园地块详细检测报告矩阵",
-    labsCountFmt: (n) => `${n} 份报告`,
+    labsTitle: "实验室检测结果",
     colLabCert: "报告编号",
     colSampleDate: "采样日期",
-    colCd: "镉 (MG/KG)",
+    colCd: "镉",
     colYellowO: "碱性嫩黄O",
     colResidue: "农残指标",
     labVerifySubLink: "机构核验",
@@ -1688,64 +1560,48 @@ const DOSSIER_EXTENDED_COPY: Record<
     yellowONeg: "未检出",
     labPass: "合格",
     labFail: "不合格",
-    emptyLabs: "当前档案暂无已录入的详细实验室检测分项报告。",
-    packingTitle: "初加工分级与冷链运输技术参数",
-    packingLiveTag: "系统实时同步",
-    specGradeRatio: "A / B / C 级果占比",
-    specAvgBrix: "平均糖度 (Brix)",
-    specTreatment: "采后处理工艺",
-    specTransport: "冷链承运商与车牌",
+    packingTitle: "分级包装与冷链运输",
+    specGradeRatio: "A / B / C 级占比",
+    specAvgBrix: "平均糖度",
+    specTreatment: "采后处理",
+    specTransport: "承运商与车牌",
     specTemp: "冷链温控",
     specSchedule: "发车 / 预计到达",
-    notRecordedYet: "暂未录入",
-    tier3BannerTitle: "三级扩展附录 - 地籍 GIS 边界、植保农事台账与巡检笔录",
-    tier3BannerBadge: "政府监管权限（记录审计日志）",
-    authHhTitleLot: "成员农户身份登记、地籍图号与源头地块 GIS 坐标",
-    authHhTitlePlot: "种植户身份登记与果园地块 GIS 边界",
-    authHhCountFmt: (n) => `${n} 户源头农户`,
-    colHhIdentity: "农户姓名与监管编号",
-    colCadastralGis: "地块编号、地籍图幅与 GIS 坐标",
-    colLotQrConsent: "供货 / 公开",
+    notRecordedYet: "未更新",
+    authHhTitlePlot: "种植户与地籍边界",
+    colHhIdentity: "农户",
+    colCadastralGis: "地籍与坐标",
     hhCodePrefix: "户号",
     areaLocPrefix: "村组",
     phonePrefix: "电话",
     cccdPrefix: "证件",
-    cadastralFmt: (s, p) => `图幅 ${s || "-"} / 地籍 ${p || "-"}`,
+    cadastralFmt: (s, p) => `图幅 ${s || "-"}, 地籍 ${p || "-"}`,
     coordFmt: (lat, lng) => `${lat}°N, ${lng}°E`,
     openGisBtn: "GIS 边界",
-    qrConsentYes: "公开姓名",
-    qrConsentNo: "隐藏姓名",
-    emptyAuthHh: "当前管辖范围内暂无直接关联农户记录。",
-    diariesTitle: "果园农事作业与植保用药详细台账",
-    diariesCountFmt: (n) => `${n} 条记录`,
+    emptyAuthHh: "暂无农户记录。",
+    diariesTitle: "果园农事台账",
     colDate: "日期",
     colHhPlot: "农户与地块",
-    colDiaryActivity: "农事活动、植保药剂与安全间隔期",
-    colRecorder: "记录人",
-    colAuditCheck: "核验标记",
-    mrlSafe: "农残合规",
-    mrlWarn: "农残预警",
-    entryOnTime: "按时记录",
-    entryLate: "补录",
-    gpsMatched: "GPS 吻合",
-    viewFieldPhotoBtn: "查看现场照片",
-    emptyDiaries: "当前档案暂无农事作业或植保施药记录。",
-    minutesTitle: "果园现场巡检核查笔录",
-    minutesCountFmt: (n) => `${n} 份笔录`,
+    colDiaryActivity: "农事内容",
+    plotRefFmt: (c) => `地块 ${c}`,
+    recordedByFmt: (name) => `代录：${name}`,
+    diaryValid: "合规",
+    diaryLate: "事后补录",
+    diaryWarn: "超标预警",
+    gpsShort: "果园定位",
+    viewFieldPhotoBtn: "查看照片",
+    emptyDiaries: "暂无农事记录。",
+    minutesTitle: "现场巡检笔录",
     colMinuteCode: "笔录编号",
-    colInspectorLoc: "巡检人员与地点",
-    colResult: "核查结论",
-    inspectorPrefix: "核查员",
-    locationPrefix: "地点",
-    viewMinutePhotoBtn: "查看笔录照片",
-    emptyMinutes: "暂无已归档的现场巡检笔录。",
-    violationsTitle: "内部合规预警与整改纪律档案",
-    violationsCountFmt: (n) => `${n} 条记录`,
-    colViolationDesc: "预警事项与整改说明",
+    colInspectorLoc: "核查员与地点",
+    colResult: "结论",
+    viewMinutePhotoBtn: "查看照片",
+    emptyMinutes: "暂无巡检笔录。",
+    violationsTitle: "合规预警记录",
+    colViolationDesc: "说明",
     colSeverity: "级别",
     sevCritical: "严重",
     sevWarning: "提示",
-    emptyViolations: "本档案关联农户与源头地块无任何内部违规或整改记录。",
   },
 };
 
@@ -1771,11 +1627,12 @@ function splitCoopHeaderLines(
   return { line1: trimmed, line2: null };
 }
 const A4_SHEET_HEIGHT_PX = 1160; // Chuẩn tỷ lệ ISO A4 210 : 297 (820 * 297 / 210 ≈ 1160)
-const A4_PAD_TOP_PX = 42;
-const A4_PAD_BOTTOM_PX = 34;
-const A4_INNER_HEIGHT_PX = A4_SHEET_HEIGHT_PX - A4_PAD_TOP_PX - A4_PAD_BOTTOM_PX; // 1084px
-const A4_SECTION_GAP_PX = 20;
-const A4_FOOTER_GAP_PX = 18;
+const A4_PAD_TOP_PX = 44;
+const A4_PAD_BOTTOM_PX = 36;
+const A4_INNER_HEIGHT_PX = A4_SHEET_HEIGHT_PX - A4_PAD_TOP_PX - A4_PAD_BOTTOM_PX; // 1080px
+const A4_HEADER_GAP_PX = 24;
+const A4_SECTION_GAP_PX = 30;
+const A4_FOOTER_GAP_PX = 24;
 
 interface A4DossierSectionItem {
   key: string;
@@ -1844,7 +1701,7 @@ const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
         heights.reduce((acc, h) => acc + h, 0) +
         Math.max(0, heights.length - 1) * A4_SECTION_GAP_PX;
       const singlePageTotal =
-        hFull + A4_SECTION_GAP_PX + sumAll + A4_FOOTER_GAP_PX + hLastFoot;
+        hFull + A4_HEADER_GAP_PX + sumAll + A4_FOOTER_GAP_PX + hLastFoot;
 
       let nextPages: number[][];
       if (singlePageTotal <= A4_INNER_HEIGHT_PX) {
@@ -1859,7 +1716,7 @@ const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
           const isFirstPage = nextPages.length === 0;
           const headerH = isFirstPage ? hFull : hCont;
           const budget =
-            A4_INNER_HEIGHT_PX - headerH - A4_SECTION_GAP_PX - A4_FOOTER_GAP_PX - reservedFoot;
+            A4_INNER_HEIGHT_PX - headerH - A4_HEADER_GAP_PX - A4_FOOTER_GAP_PX - reservedFoot;
           const addH = (curPage.length > 0 ? A4_SECTION_GAP_PX : 0) + heights[i];
 
           if (curPage.length > 0 && usedH + addH > budget) {
@@ -2093,6 +1950,7 @@ export default function TraceView() {
   const pathname = usePathname();
   const { status: authStatus, logout } = useAuth();
   const [lang, setLang] = useState<TraceLang>("vi");
+  const [hintedKind, setHintedKind] = useState<TraceTargetKind | null>(null);
   const [data, setData] = useState<TraceData | null>(null);
   const [selectedView, setSelectedView] = useState<ViewerTier | null>(() => readInitialViewParam());
   const [auditPass, setAuditPass] = useState<string | null>(() => readInitialAuditPass());
@@ -2114,6 +1972,8 @@ export default function TraceView() {
     const syncFromUrl = () => {
       const detectedLang = detectInitialTraceLang();
       setLang((prev) => (prev === detectedLang ? prev : detectedLang));
+      const nextKindHint = resolveInitialTraceKind(code);
+      setHintedKind((prev) => (prev === nextKindHint ? prev : nextKindHint));
       const pass = readInitialAuditPass();
       setAuditPass((prev) => (prev === pass ? prev : pass));
       const nextView = readInitialViewParam();
@@ -2140,7 +2000,7 @@ export default function TraceView() {
       window.removeEventListener(AUTH_LOGOUT_EVENT, onAuthEnded);
       window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthEnded);
     };
-  }, [pathname]);
+  }, [pathname, code]);
 
   const handleChangeLang = (nextLang: TraceLang) => {
     setLang(nextLang);
@@ -2208,6 +2068,7 @@ export default function TraceView() {
   } | null>(null);
   if (prevCode !== code) {
     setPrevCode(code);
+    setHintedKind(null);
     setShowZoneMap(false);
     setData(null);
     setQrSrc("");
@@ -2552,7 +2413,7 @@ export default function TraceView() {
           : pub.lotIdentity.traceUnit === "box" || data.item?.itemType === "box"
             ? "box"
             : "lot"
-      : resolveInitialTraceKind(code);
+      : hintedKind ?? inferTraceKindFromCode(code);
 
   useEffect(() => {
     if (!data || !pub || activeKind === "generic") return;
@@ -2925,28 +2786,24 @@ export default function TraceView() {
                   {ac.temporaryGrant?.active && (
                     <div className="tr-tier-role-line is-tabular">
                       <span>
-                        {ac.isAuthenticated ? "Quyền mở đột xuất: " : "Đoàn được cấp quyền: "}
-                        <strong>{ac.temporaryGrant.requesterName}</strong> ({ac.temporaryGrant.organization},{" "}
-                        {ac.temporaryGrant.grantedTier === "authority" ? "Thanh tra Cấp 3" : "Đối tác Cấp 2"}, mã{" "}
+                        {ac.isAuthenticated ? "Quyền tạm thời: " : "Đoàn kiểm tra: "}
+                        <strong>{ac.temporaryGrant.requesterName}</strong> ({ac.temporaryGrant.organization}, mã{" "}
                         {ac.temporaryGrant.requestCode})
                       </span>
                     </div>
                   )}
-                  <span className="tr-tier-audit-note is-tabular">
-                    {ac.temporaryGrant?.active
-                      ? `Hiệu lực cấp quyền đến ${formatTraceDateTime(ac.temporaryGrant.expiresAt, lang)}${ac.temporaryGrant.reviewedByName ? `, phê duyệt bởi ${ac.temporaryGrant.reviewedByName}` : ""}. Đã ghi nhật ký kiểm toán.`
-                      : ac.actualTier === "public"
-                        ? "Tài khoản đang xem ở mức Công khai (Cấp 1). Nếu đi đoàn kiểm tra hoặc thẩm định đột xuất, có thể gửi yêu cầu mở quyền bên cạnh."
-                        : ac.auditLogged
-                          ? "Lượt xem mở rộng này đã được ghi nhận vào nhật ký kiểm toán hệ thống."
-                          : "Đang xem ở chế độ giao diện công khai dành cho người tiêu dùng."}
-                  </span>
+                  {ac.temporaryGrant?.active && (
+                    <span className="tr-tier-audit-note is-tabular">
+                      Hiệu lực đến {formatTraceDateTime(ac.temporaryGrant.expiresAt, lang)}
+                      {ac.temporaryGrant.reviewedByName ? `, duyệt bởi ${ac.temporaryGrant.reviewedByName}` : ""}
+                    </span>
+                  )}
                 </div>
 
                 <div className="tr-tier-actions-right">
                   {ac.actualTier !== "public" ? (
                     <>
-                      <div className="tr-tier-switch" role="tablist" aria-label="Chọn cấp độ hiển thị">
+                      <div className="tr-tier-switch" role="tablist" aria-label="Chọn chế độ hiển thị">
                         <button
                           type="button"
                           role="tab"
@@ -2955,7 +2812,7 @@ export default function TraceView() {
                           className={`tr-tier-btn ${ac.viewerTier === "public" ? "is-active" : ""}`}
                           onClick={() => handleSelectTier("public")}
                         >
-                          1. Công khai
+                          Công khai
                         </button>
                         <button
                           type="button"
@@ -2965,7 +2822,7 @@ export default function TraceView() {
                           className={`tr-tier-btn ${ac.viewerTier === "enterprise" ? "is-active" : ""}`}
                           onClick={() => handleSelectTier("enterprise")}
                         >
-                          2. Doanh nghiệp
+                          Đối tác
                         </button>
                         {ac.actualTier === "authority" && (
                           <button
@@ -2976,7 +2833,7 @@ export default function TraceView() {
                             className={`tr-tier-btn ${ac.viewerTier === "authority" ? "is-active" : ""}`}
                             onClick={() => handleSelectTier("authority")}
                           >
-                            3. Cơ quan quản lý
+                            Quản lý
                           </button>
                         )}
                       </div>
@@ -3269,15 +3126,59 @@ export default function TraceView() {
               const entData = data.enterpriseData ?? null;
               const authData = data.authorityData ?? null;
 
-              const entZoneChunks = entData ? chunkArray(entData.sourceZones, 7) : [];
+              const plotLinkByCode = new Map<string, { href: string; qrToken: string | null }>();
+              if (entData?.fieldAuditSourcePlots) {
+                for (const sp of entData.fieldAuditSourcePlots) {
+                  const key = sp.plotCode.trim().toUpperCase();
+                  if (!key) continue;
+                  const href =
+                    sp.qrToken && !/^\.+$/.test(sp.qrToken) && isSafeTraceCode(sp.qrToken)
+                      ? `/t/${encodeURIComponent(sp.qrToken)}`
+                      : !/^\.+$/.test(sp.plotCode) && isSafeTraceCode(sp.plotCode)
+                        ? `/trace/${encodeURIComponent(sp.plotCode)}`
+                        : "";
+                  if (href) {
+                    plotLinkByCode.set(key, { href, qrToken: sp.qrToken ?? null });
+                  }
+                }
+              }
+
+              const authPlotByCode = new Map<
+                string,
+                { hh: TraceAuthorityHousehold; plot: TraceAuthorityPlot }
+              >();
+              if (authData) {
+                for (const hh of authData.sourceHouseholds) {
+                  for (const p of hh.plots) {
+                    const key = p.plotCode.trim().toUpperCase();
+                    if (key && !authPlotByCode.has(key)) {
+                      authPlotByCode.set(key, { hh, plot: p });
+                    }
+                  }
+                }
+              }
+
+              const showEntZones = Boolean(entData && entData.sourceZones.length > 1);
+              const entZoneChunks =
+                showEntZones && entData ? chunkArray(entData.sourceZones, 7) : [];
               const entQuotaPlotChunks = entData?.massBalance
                 ? chunkArray(entData.massBalance.plots, 6)
                 : [];
-              const entSourcePlotChunks =
-                entData?.fieldAuditSourcePlots && entData.fieldAuditSourcePlots.length > 0
-                  ? chunkArray(entData.fieldAuditSourcePlots, 9)
+              const entLabChunks =
+                entData && entData.detailedLabTests.length > 0
+                  ? chunkArray(entData.detailedLabTests, 6)
                   : [];
-              const entLabChunks = entData ? chunkArray(entData.detailedLabTests, 6) : [];
+              const hasRealPackingSpecs = Boolean(
+                entData?.packingSpecs &&
+                  (entData.packingSpecs.gradeAPct !== null ||
+                    entData.packingSpecs.avgBrix !== null ||
+                    Boolean(entData.packingSpecs.treatmentMethod) ||
+                    Boolean(entData.packingSpecs.transporter) ||
+                    Boolean(entData.packingSpecs.vehiclePlate) ||
+                    entData.packingSpecs.temperatureC !== null ||
+                    Boolean(entData.packingSpecs.departedAt) ||
+                    Boolean(entData.packingSpecs.estimatedArrival)),
+              );
 
               type AuthHhSlice = {
                 hh: TraceAuthorityHousehold;
@@ -3286,7 +3187,7 @@ export default function TraceView() {
                 isContinuation: boolean;
               };
               const authHhSlices: AuthHhSlice[] = [];
-              if (authData) {
+              if (authData && !showContributorsTable && authData.sourceHouseholds.length > 0) {
                 authData.sourceHouseholds.forEach((hh, idx) => {
                   if (hh.plots.length <= 3) {
                     authHhSlices.push({
@@ -3307,12 +3208,13 @@ export default function TraceView() {
                   }
                 });
               }
-              const authHhChunks = authData ? chunkArray(authHhSlices, 4) : [];
+              const authHhChunks = authHhSlices.length > 0 ? chunkArray(authHhSlices, 4) : [];
               const authDiaryChunks = authData ? chunkArray(authData.cultivationDiaries, 6) : [];
               const authMinuteChunks = authData ? chunkArray(authData.inspectionMinutes, 5) : [];
-              const authViolationChunks = authData
-                ? chunkArray(authData.internalViolations, 5)
-                : [];
+              const authViolationChunks =
+                authData && authData.internalViolations.length > 0
+                  ? chunkArray(authData.internalViolations, 5)
+                  : [];
 
               const dossierMeasureKey = [
                 activeKind,
@@ -3330,14 +3232,12 @@ export default function TraceView() {
                 Boolean(qrSrc),
                 entData
                   ? [
-                      entData.totalSourceWeightKg,
-                      entData.sourceZones.map((z) => `${z.zoneCode}:${z.weightKg}`).join(","),
+                      showEntZones ? entData.sourceZones.length : 0,
                       entData.massBalance
                         ? `${entData.massBalance.cumulativeUsedKg}:${entData.massBalance.plots.length}`
                         : "no-mb",
-                      entData.fieldAuditSourcePlots?.length ?? 0,
                       entData.detailedLabTests.map((l) => `${l.code}:${l.result}`).join(","),
-                      entData.packingSpecs
+                      hasRealPackingSpecs && entData.packingSpecs
                         ? `${entData.packingSpecs.gradeAPct}:${entData.packingSpecs.avgBrix}:${entData.packingSpecs.temperatureC}:${entData.packingSpecs.vehiclePlate}`
                         : "no-pack",
                     ].join(";")
@@ -3386,13 +3286,6 @@ export default function TraceView() {
                       {docCopy.verifiedDatePrefix}{" "}
                       <span>{formatTraceDate(pub.verification.verifiedAt, lang)}</span>
                     </div>
-                    {ac.viewerTier !== "public" && (
-                      <div className="tr-doc-clearance-line">
-                        {ac.viewerTier === "authority"
-                          ? extCopy.headerTier3
-                          : extCopy.headerTier2}
-                      </div>
-                    )}
                   </div>
                 </header>
               );
@@ -3402,11 +3295,6 @@ export default function TraceView() {
                   <strong className="tr-doc-cont-org">{coopDisplay}</strong>
                   <span className="tr-doc-cont-meta">
                     {activeDocTitle} / {activePrimaryPrefix}: {activePrimaryCode}
-                    {ac.viewerTier === "authority"
-                      ? ` / ${extCopy.contTier3Short}`
-                      : ac.viewerTier === "enterprise"
-                        ? ` / ${extCopy.contTier2Short}`
-                        : ""}
                   </span>
                 </header>
               );
@@ -3540,6 +3428,201 @@ export default function TraceView() {
                     </section>
                   ),
                 },
+                ...contribChunks.map((chunk, chunkIdx): A4DossierSectionItem => {
+                  const totalChunks = contribChunks.length;
+
+                  return {
+                    key: `contributors-${chunkIdx}`,
+                    content: (
+                      <section
+                        className="tr-doc-ledger tr-doc-contributors"
+                        aria-label={contribCopy.sectionTitle}
+                      >
+                        <div className="tr-doc-meta-strip">
+                          <span className="tr-doc-meta-left">
+                            {chunkIdx === 0
+                              ? contribCopy.sectionTitle
+                              : contribCopy.continuedTitleFmt(chunkIdx + 1, totalChunks)}
+                          </span>
+                        </div>
+
+                        <div className="tr-doc-table-wrap">
+                          <table className={`tr-doc-table is-contributors is-tier-${contribTier}`}>
+                            <thead>
+                              <tr>
+                                <th className="col-no">{contribCopy.colNo}</th>
+                                <th className="col-hh">{contribCopy.colHousehold}</th>
+                                <th className="col-plot">
+                                  {contribTier === "public"
+                                    ? contribCopy.colZonePublic
+                                    : contribCopy.colPlot}
+                                </th>
+                                <th className="col-share">
+                                  {contribTier === "public"
+                                    ? contribCopy.colSharePublic
+                                    : contribCopy.colWeightShare}
+                                </th>
+                                <th className="col-status">{contribCopy.colCompliance}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {chunk.length === 0 ? (
+                                <tr>
+                                  <td colSpan={5} className="tr-doc-contrib-empty">
+                                    {contribCopy.emptyContributors}
+                                  </td>
+                                </tr>
+                              ) : (
+                                chunk.map((row) => {
+                                  const villageText = localizeVillageLabel(row.villageName, lang);
+                                  const areaText =
+                                    row.areaHa !== null && row.areaHa > 0
+                                      ? formatTraceNumber(row.areaHa, lang)
+                                      : null;
+                                  const isCompliant = row.complianceStatus !== "review";
+                                  const plotKey = row.plotCode ? row.plotCode.trim().toUpperCase() : "";
+                                  const plotLink = plotKey ? plotLinkByCode.get(plotKey) : undefined;
+                                  const authPlotEntry =
+                                    contribTier === "authority" && plotKey
+                                      ? authPlotByCode.get(plotKey)
+                                      : undefined;
+                                  const hasAuthGis = Boolean(
+                                    authPlotEntry &&
+                                      (authPlotEntry.plot.geometryJson ||
+                                        (authPlotEntry.plot.lat !== null &&
+                                          authPlotEntry.plot.lng !== null)),
+                                  );
+
+                                  let primaryHhTitle: string;
+                                  let secondaryHhLine: string;
+
+                                  if (contribTier === "authority") {
+                                    if (row.visibilityLevel === "authority" && row.displayName) {
+                                      primaryHhTitle = row.householdCode
+                                        ? `${row.displayName} (${row.householdCode})`
+                                        : row.displayName;
+                                      const idParts = [
+                                        row.phone ? `${contribCopy.phonePrefix}: ${row.phone}` : null,
+                                        row.cccdMasked
+                                          ? `${contribCopy.cccdPrefix}: ${row.cccdMasked}`
+                                          : null,
+                                        villageText || null,
+                                      ].filter(Boolean);
+                                      secondaryHhLine = idParts.join(", ");
+                                    } else {
+                                      primaryHhTitle = contribCopy.outOfVillageFmt(row.index);
+                                      secondaryHhLine = villageText;
+                                    }
+                                  } else if (contribTier === "enterprise") {
+                                    if (row.displayName && row.householdCode) {
+                                      primaryHhTitle = `${row.displayName} (${row.householdCode})`;
+                                    } else if (row.householdCode) {
+                                      primaryHhTitle = contribCopy.memberByCodeFmt(row.householdCode);
+                                    } else {
+                                      primaryHhTitle =
+                                        row.displayName || contribCopy.anonGrowerFmt(row.index);
+                                    }
+                                    secondaryHhLine = villageText;
+                                  } else {
+                                    primaryHhTitle =
+                                      row.displayName || contribCopy.anonGrowerFmt(row.index);
+                                    secondaryHhLine = villageText;
+                                  }
+
+                                  const plotTitleLabel = row.plotCode
+                                    ? contribCopy.plotAreaFmt(row.plotCode, areaText)
+                                    : "";
+
+                                  return (
+                                    <tr key={`contrib-${row.index}`}>
+                                      <td className="col-no">
+                                        {String(row.index).padStart(2, "0")}.
+                                      </td>
+                                      <td className="col-hh">
+                                        <strong className="tr-doc-item-title">
+                                          {primaryHhTitle}
+                                        </strong>
+                                        {secondaryHhLine && (
+                                          <span className="tr-doc-item-sub">{secondaryHhLine}</span>
+                                        )}
+                                      </td>
+                                      <td className="col-plot">
+                                        {contribTier === "public" || !row.plotCode ? (
+                                          <span className="tr-doc-contrib-mono">{row.pucCode}</span>
+                                        ) : (
+                                          <>
+                                            {plotLink ? (
+                                              <Link
+                                                href={plotLink.href}
+                                                className="tr-doc-item-title tr-doc-inline-link"
+                                                onClick={() => {
+                                                  rememberTraceKindHint(row.plotCode, "plot");
+                                                  rememberTraceKindHint(plotLink.qrToken, "plot");
+                                                }}
+                                              >
+                                                {plotTitleLabel}
+                                              </Link>
+                                            ) : (
+                                              <strong className="tr-doc-item-title">
+                                                {plotTitleLabel}
+                                              </strong>
+                                            )}
+                                            <span className="tr-doc-item-sub">
+                                              {row.cadastralLabel
+                                                ? `${row.cadastralLabel}, PUC: ${row.pucCode}`
+                                                : `PUC: ${row.pucCode}`}
+                                            </span>
+                                            {hasAuthGis && authPlotEntry && (
+                                              <button
+                                                type="button"
+                                                className="tr-doc-sub-btn no-print"
+                                                onClick={() =>
+                                                  openAuthorityPlotGis(
+                                                    authPlotEntry.hh,
+                                                    authPlotEntry.plot,
+                                                  )
+                                                }
+                                              >
+                                                {extCopy.openGisBtn}
+                                              </button>
+                                            )}
+                                          </>
+                                        )}
+                                      </td>
+                                      <td className="col-share">
+                                        {row.weightKg !== null && contribTier !== "public" ? (
+                                          <>
+                                            <strong className="tr-doc-contrib-wt">
+                                              {formatTraceNumber(row.weightKg, lang)} kg
+                                            </strong>
+                                            <span className="tr-doc-item-sub">{row.sharePct}%</span>
+                                          </>
+                                        ) : (
+                                          <strong className="tr-doc-contrib-wt">
+                                            {row.sharePct}%
+                                          </strong>
+                                        )}
+                                      </td>
+                                      <td
+                                        className={`col-status ${
+                                          isCompliant ? "is-ok" : "is-danger"
+                                        }`}
+                                      >
+                                        {isCompliant
+                                          ? contribCopy.statusValid
+                                          : contribCopy.statusReview}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+                    ),
+                  };
+                }),
                 {
                   key: "ledger",
                   content: (
@@ -3695,211 +3778,6 @@ export default function TraceView() {
                     </section>
                   ),
                 },
-                ...contribChunks.map((chunk, chunkIdx): A4DossierSectionItem => {
-                  const totalChunks = contribChunks.length;
-                  const isLastChunk = chunkIdx === totalChunks - 1;
-                  const displayedCount =
-                    contribRows.length > 0
-                      ? contribRows.length
-                      : pub.producer.participatingHouseholdCount;
-                  const tierBadgeText =
-                    contribTier === "authority"
-                      ? contribCopy.tierLabelAuthority
-                      : contribTier === "enterprise"
-                        ? contribCopy.tierLabelEnterprise
-                        : contribCopy.tierLabelPublic;
-                  const footNoteText =
-                    contribTier === "authority"
-                      ? contribCopy.footAuthority
-                      : contribTier === "enterprise"
-                        ? contribCopy.footEnterprise
-                        : contribCopy.footPublic;
-
-                  return {
-                    key: `contributors-${chunkIdx}`,
-                    content: (
-                      <section
-                        className="tr-doc-ledger tr-doc-contributors"
-                        aria-label={contribCopy.sectionTitleFmt(displayedCount)}
-                      >
-                        <div className="tr-doc-meta-strip">
-                          <span className="tr-doc-meta-left">
-                            {chunkIdx === 0
-                              ? contribCopy.sectionTitleFmt(displayedCount)
-                              : contribCopy.continuedTitleFmt(chunkIdx + 1, totalChunks)}
-                          </span>
-                          <strong className="tr-doc-meta-right">{tierBadgeText}</strong>
-                        </div>
-
-                        <div className="tr-doc-table-wrap">
-                          <table className={`tr-doc-table is-contributors is-tier-${contribTier}`}>
-                            <thead>
-                              <tr>
-                                <th className="col-no">{contribCopy.colNo}</th>
-                                <th className="col-hh">
-                                  {contribTier === "authority"
-                                    ? contribCopy.colHouseholdAuthority
-                                    : contribTier === "enterprise"
-                                      ? contribCopy.colHouseholdEnterprise
-                                      : contribCopy.colHouseholdPublic}
-                                </th>
-                                <th className="col-plot">
-                                  {contribTier === "authority"
-                                    ? contribCopy.colPlotAuthority
-                                    : contribTier === "enterprise"
-                                      ? contribCopy.colPlotEnterprise
-                                      : contribCopy.colZonePublic}
-                                </th>
-                                <th className="col-share">
-                                  {contribTier === "public"
-                                    ? contribCopy.colSharePublic
-                                    : contribCopy.colWeightShare}
-                                </th>
-                                <th className="col-status">
-                                  {contribTier === "authority"
-                                    ? contribCopy.colConsentQr
-                                    : contribCopy.colCompliance}
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {chunk.length === 0 ? (
-                                <tr>
-                                  <td colSpan={5} className="tr-doc-contrib-empty">
-                                    {contribCopy.emptyContributors}
-                                  </td>
-                                </tr>
-                              ) : (
-                                chunk.map((row) => {
-                                  const villageText = localizeVillageLabel(row.villageName, lang);
-                                  const areaText =
-                                    row.areaHa !== null && row.areaHa > 0
-                                      ? formatTraceNumber(row.areaHa, lang)
-                                      : null;
-                                  const isCompliant = row.complianceStatus !== "review";
-
-                                  let primaryHhTitle: string;
-                                  let secondaryHhLine: string;
-
-                                  if (contribTier === "authority") {
-                                    if (row.visibilityLevel === "authority" && row.displayName) {
-                                      primaryHhTitle = row.householdCode
-                                        ? `${row.displayName} (${row.householdCode})`
-                                        : row.displayName;
-                                      const idParts = [
-                                        row.phone ? `${contribCopy.phonePrefix}: ${row.phone}` : null,
-                                        row.cccdMasked
-                                          ? `${contribCopy.cccdPrefix}: ${row.cccdMasked}`
-                                          : null,
-                                        villageText || null,
-                                      ].filter(Boolean);
-                                      secondaryHhLine = idParts.join(", ");
-                                    } else {
-                                      primaryHhTitle = contribCopy.outOfVillageFmt(row.index);
-                                      secondaryHhLine = villageText;
-                                    }
-                                  } else if (contribTier === "enterprise") {
-                                    if (row.displayName && row.householdCode) {
-                                      primaryHhTitle = `${row.displayName} (${row.householdCode})`;
-                                    } else if (row.householdCode) {
-                                      primaryHhTitle = contribCopy.memberByCodeFmt(row.householdCode);
-                                    } else {
-                                      primaryHhTitle =
-                                        row.displayName || contribCopy.anonGrowerFmt(row.index);
-                                    }
-                                    secondaryHhLine = villageText;
-                                  } else {
-                                    primaryHhTitle =
-                                      row.displayName || contribCopy.anonGrowerFmt(row.index);
-                                    secondaryHhLine = [
-                                      villageText || null,
-                                      row.displayName
-                                        ? contribCopy.consentedTag
-                                        : contribCopy.coopRepTag,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" - ");
-                                  }
-
-                                  return (
-                                    <tr key={`contrib-${row.index}`}>
-                                      <td className="col-no">
-                                        {String(row.index).padStart(2, "0")}.
-                                      </td>
-                                      <td className="col-hh">
-                                        <strong className="tr-doc-item-title">
-                                          {primaryHhTitle}
-                                        </strong>
-                                        {secondaryHhLine && (
-                                          <span className="tr-doc-item-sub">{secondaryHhLine}</span>
-                                        )}
-                                      </td>
-                                      <td className="col-plot">
-                                        {contribTier === "public" || !row.plotCode ? (
-                                          <span className="tr-doc-contrib-mono">{row.pucCode}</span>
-                                        ) : (
-                                          <>
-                                            <strong className="tr-doc-item-title">
-                                              {contribCopy.plotAreaFmt(row.plotCode, areaText)}
-                                            </strong>
-                                            <span className="tr-doc-item-sub">
-                                              {row.cadastralLabel
-                                                ? `${row.cadastralLabel}, PUC: ${row.pucCode}`
-                                                : `PUC: ${row.pucCode}`}
-                                            </span>
-                                          </>
-                                        )}
-                                      </td>
-                                      <td className="col-share">
-                                        {row.weightKg !== null && contribTier !== "public" ? (
-                                          <>
-                                            <strong className="tr-doc-contrib-wt">
-                                              {formatTraceNumber(row.weightKg, lang)} kg
-                                            </strong>
-                                            <span className="tr-doc-item-sub">{row.sharePct}%</span>
-                                          </>
-                                        ) : (
-                                          <strong className="tr-doc-contrib-wt">
-                                            {row.sharePct}%
-                                          </strong>
-                                        )}
-                                      </td>
-                                      <td
-                                        className={`col-status ${
-                                          contribTier === "authority"
-                                            ? row.publicConsent === true
-                                              ? "is-ok"
-                                              : "is-muted"
-                                            : isCompliant
-                                              ? "is-ok"
-                                              : "is-danger"
-                                        }`}
-                                      >
-                                        {contribTier === "authority"
-                                          ? row.publicConsent === true
-                                            ? contribCopy.qrShown
-                                            : row.publicConsent === false
-                                              ? contribCopy.qrHidden
-                                              : contribCopy.qrScoped
-                                          : isCompliant
-                                            ? contribCopy.statusValid
-                                            : contribCopy.statusReview}
-                                      </td>
-                                    </tr>
-                                  );
-                                })
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {isLastChunk && (
-                          <p className="tr-doc-contrib-foot">{footNoteText}</p>
-                        )}
-                      </section>
-                    ),
-                  };
-                }),
                 {
                   key: "summary",
                   content: (
@@ -4035,106 +3913,79 @@ export default function TraceView() {
                 },
                 ...(entData
                   ? [
-                      ...entZoneChunks.map((zChunk, zIdx): A4DossierSectionItem => {
-                        const zonesHeading = isPlotDossier
-                          ? extCopy.zonesTitlePlot
-                          : isBoxDossier
-                            ? extCopy.zonesTitleBox
-                            : isFruitDossier
-                              ? extCopy.zonesTitleFruit
-                              : extCopy.zonesTitleLot;
-                        return {
-                          key: `ent-zones-${zIdx}`,
-                          content: (
-                            <section className="tr-doc-ledger tr-doc-ext-block">
-                              {zIdx === 0 && (
-                                <div className="tr-doc-sec-banner">
-                                  <strong className="tr-doc-sec-banner-title">
-                                    {extCopy.tier2BannerTitle}
-                                  </strong>
-                                  <span className="tr-doc-sec-banner-tag">
-                                    {ac.viewerTier === "authority"
-                                      ? extCopy.tier2BannerBadgeAuth
-                                      : extCopy.tier2BannerBadge}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="tr-doc-meta-strip">
-                                <span className="tr-doc-meta-left">
-                                  {zonesHeading}
-                                  {entZoneChunks.length > 1
-                                    ? extCopy.partSuffixFmt(zIdx + 1, entZoneChunks.length)
-                                    : ""}
-                                </span>
-                                <strong className="tr-doc-meta-right">
-                                  {extCopy.zonesTotalFmt(
-                                    formatTraceNumber(entData.totalSourceWeightKg, lang),
-                                  )}
-                                </strong>
-                              </div>
-                              <div className="tr-doc-table-wrap">
-                                <table className="tr-doc-table is-ent-zones">
-                                  <thead>
-                                    <tr>
-                                      <th className="col-no">{extCopy.colNo}</th>
-                                      <th className="col-puc">{extCopy.colPuc}</th>
-                                      <th className="col-area-name">{extCopy.colVillage}</th>
-                                      <th className="col-scale">{extCopy.colZoneScale}</th>
-                                      <th className="col-wt">{extCopy.colContribWeight}</th>
-                                      <th className="col-status">{extCopy.colStatus}</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {zChunk.map((z, idx) => {
-                                      const rowNum = zIdx * 7 + idx + 1;
-                                      const isQual = z.status === "Đủ điều kiện";
-                                      return (
-                                        <tr key={`${z.zoneCode}-${rowNum}`}>
-                                          <td className="col-no">
-                                            {String(rowNum).padStart(2, "0")}.
-                                          </td>
-                                          <td className="col-puc is-tabular">
-                                            <strong>{z.zoneCode}</strong>
-                                          </td>
-                                          <td className="col-area-name">
-                                            {localizeVillageLabel(z.villageName, lang)}
-                                          </td>
-                                          <td className="col-scale is-tabular">
-                                            {extCopy.zoneScaleFmt(
-                                              z.householdCount,
-                                              z.areaHa > 0 ? formatTraceNumber(z.areaHa, lang) : null,
-                                            )}
-                                          </td>
-                                          <td className="col-wt is-tabular">
-                                            <strong className="tr-doc-contrib-wt">
-                                              {formatTraceNumber(z.weightKg, lang)} kg
-                                            </strong>
-                                            <span className="tr-doc-item-sub">{z.sharePct}%</span>
-                                          </td>
-                                          <td
-                                            className={`col-status ${isQual ? "is-ok" : "is-danger"}`}
-                                          >
-                                            {isQual ? extCopy.statusQualified : extCopy.statusReview}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </section>
-                          ),
-                        };
-                      }),
+                      ...entZoneChunks.map((zChunk, zIdx): A4DossierSectionItem => ({
+                        key: `ent-zones-${zIdx}`,
+                        content: (
+                          <section className="tr-doc-ledger tr-doc-ext-block">
+                            <div className="tr-doc-meta-strip">
+                              <span className="tr-doc-meta-left">
+                                {extCopy.zonesTitle}
+                                {entZoneChunks.length > 1
+                                  ? extCopy.partSuffixFmt(zIdx + 1, entZoneChunks.length)
+                                  : ""}
+                              </span>
+                              <strong className="tr-doc-meta-right">
+                                {extCopy.zonesTotalFmt(
+                                  formatTraceNumber(entData.totalSourceWeightKg, lang),
+                                )}
+                              </strong>
+                            </div>
+                            <div className="tr-doc-table-wrap">
+                              <table className="tr-doc-table is-ent-zones">
+                                <thead>
+                                  <tr>
+                                    <th className="col-no">{extCopy.colNo}</th>
+                                    <th className="col-puc">{extCopy.colPuc}</th>
+                                    <th className="col-area-name">{extCopy.colVillage}</th>
+                                    <th className="col-scale">{extCopy.colZoneScale}</th>
+                                    <th className="col-wt">{extCopy.colContribWeight}</th>
+                                    <th className="col-status">{extCopy.colStatus}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {zChunk.map((z, idx) => {
+                                    const rowNum = zIdx * 7 + idx + 1;
+                                    const isQual = z.status === "Đủ điều kiện";
+                                    return (
+                                      <tr key={`${z.zoneCode}-${rowNum}`}>
+                                        <td className="col-no">
+                                          {String(rowNum).padStart(2, "0")}.
+                                        </td>
+                                        <td className="col-puc is-tabular">
+                                          <strong>{z.zoneCode}</strong>
+                                        </td>
+                                        <td className="col-area-name">
+                                          {localizeVillageLabel(z.villageName, lang)}
+                                        </td>
+                                        <td className="col-scale is-tabular">
+                                          {extCopy.zoneScaleFmt(
+                                            z.householdCount,
+                                            z.areaHa > 0 ? formatTraceNumber(z.areaHa, lang) : null,
+                                          )}
+                                        </td>
+                                        <td className="col-wt is-tabular">
+                                          <strong className="tr-doc-contrib-wt">
+                                            {formatTraceNumber(z.weightKg, lang)} kg
+                                          </strong>
+                                          <span className="tr-doc-item-sub">{z.sharePct}%</span>
+                                        </td>
+                                        <td
+                                          className={`col-status ${isQual ? "is-ok" : "is-danger"}`}
+                                        >
+                                          {isQual ? extCopy.statusQualified : extCopy.statusReview}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </section>
+                        ),
+                      })),
                       ...(entData.massBalance
                         ? entQuotaPlotChunks.map((qChunk, qIdx): A4DossierSectionItem => {
                             const emb = entData.massBalance!;
-                            const clampedPct = Math.min(100, Math.max(0, emb.utilizationPct));
-                            const fillClass = !emb.withinQuota
-                              ? "is-danger"
-                              : emb.utilizationPct >= 85
-                                ? "is-warn"
-                                : "is-ok";
                             return {
                               key: `ent-quota-${qIdx}`,
                               content: (
@@ -4156,257 +4007,189 @@ export default function TraceView() {
                                     </strong>
                                   </div>
 
-                                  {qIdx === 0 && (
-                                    <div className="tr-doc-quota-box">
-                                      <div className="tr-doc-quota-line">
-                                        <span>
-                                          {isPlotDossier
-                                            ? extCopy.quotaPlotUsedPrefix
-                                            : extCopy.quotaLotUsedPrefix}{" "}
-                                          <strong>
-                                            {formatTraceNumber(emb.thisLotWeightKg, lang)} kg
-                                          </strong>{" "}
-                                          /{" "}
-                                          {extCopy.quotaCumulativeFmt(
-                                            formatTraceNumber(emb.cumulativeUsedKg, lang),
-                                            formatTraceNumber(emb.zoneMaxQuotaKg, lang),
-                                            emb.utilizationPct,
-                                          )}
-                                        </span>
-                                        <strong>
-                                          {extCopy.quotaRemainFmt(
-                                            formatTraceNumber(emb.remainingQuotaKg, lang),
-                                          )}
-                                        </strong>
-                                      </div>
-                                      <div
-                                        className="tr-doc-quota-track"
-                                        role="progressbar"
-                                        aria-valuenow={emb.utilizationPct}
-                                        aria-valuemin={0}
-                                        aria-valuemax={100}
-                                      >
-                                        <div
-                                          className={`tr-doc-quota-fill ${fillClass}`}
-                                          style={{ width: `${clampedPct}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {qChunk.length > 0 && (
-                                    <div className="tr-doc-table-wrap">
-                                      <table className="tr-doc-table is-ent-quota">
-                                        <thead>
+                                  <div className="tr-doc-table-wrap">
+                                    <table className="tr-doc-table is-ent-quota">
+                                      <thead>
+                                        <tr>
+                                          <th className="col-plot-code">{extCopy.colPlotCode}</th>
+                                          <th className="col-orchard">{extCopy.colOrchardScale}</th>
+                                          <th className="col-cap">{extCopy.colMaxQuota}</th>
+                                          <th className="col-used">{extCopy.colUsed}</th>
+                                          <th className="col-remain">{extCopy.colRemain}</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {qChunk.length === 0 ? (
                                           <tr>
-                                            <th className="col-plot-code">{extCopy.colPlotCode}</th>
-                                            <th className="col-puc">{extCopy.colPuc}</th>
-                                            <th className="col-orchard">
-                                              {extCopy.colOrchardScale}
-                                            </th>
-                                            <th className="col-cap">{extCopy.colMaxQuota}</th>
-                                            <th className="col-used">{extCopy.colUsedRemain}</th>
-                                            <th className="col-status">{extCopy.colUtilPct}</th>
+                                            <td className="col-plot-code is-tabular">
+                                              <strong>{pub.growingZone.pucCode}</strong>
+                                            </td>
+                                            <td className="col-orchard">
+                                              {extCopy.zoneTotalLabel}
+                                            </td>
+                                            <td className="col-cap is-tabular">
+                                              {formatTraceNumber(emb.zoneMaxQuotaKg, lang)} kg
+                                            </td>
+                                            <td className="col-used is-tabular">
+                                              <strong>
+                                                {formatTraceNumber(emb.cumulativeUsedKg, lang)} kg
+                                              </strong>{" "}
+                                              <span className="tr-doc-inline-pct">
+                                                ({emb.utilizationPct}%)
+                                              </span>
+                                            </td>
+                                            <td
+                                              className={`col-remain is-tabular ${emb.withinQuota ? "is-ok" : "is-danger"}`}
+                                            >
+                                              {formatTraceNumber(emb.remainingQuotaKg, lang)} kg
+                                            </td>
                                           </tr>
-                                        </thead>
-                                        <tbody>
-                                          {qChunk.map((pq) => (
-                                            <tr key={pq.plotCode}>
-                                              <td className="col-plot-code is-tabular">
-                                                <strong>{pq.plotCode}</strong>
-                                              </td>
-                                              <td className="col-puc is-tabular">{pq.zoneCode}</td>
-                                              <td className="col-orchard is-tabular">
-                                                {extCopy.orchardScaleFmt(
-                                                  formatTraceNumber(pq.areaHa, lang),
-                                                  formatTraceNumber(pq.treeCount, lang),
-                                                )}
-                                              </td>
-                                              <td className="col-cap is-tabular">
-                                                {formatTraceNumber(pq.maxQuotaKg, lang)} kg
-                                              </td>
-                                              <td className="col-used is-tabular">
-                                                <strong>
-                                                  {formatTraceNumber(pq.usedKg, lang)} kg
-                                                </strong>{" "}
-                                                / {formatTraceNumber(pq.remainingKg, lang)} kg
-                                              </td>
-                                              <td
-                                                className={`col-status is-tabular ${pq.withinQuota ? "is-ok" : "is-danger"}`}
-                                              >
-                                                {pq.utilizationPct}%
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  )}
+                                        ) : (
+                                          qChunk.map((pq) => {
+                                            const pLink = plotLinkByCode.get(
+                                              pq.plotCode.trim().toUpperCase(),
+                                            );
+                                            return (
+                                              <tr key={pq.plotCode}>
+                                                <td className="col-plot-code is-tabular">
+                                                  {pLink && !isPlotDossier ? (
+                                                    <Link
+                                                      href={pLink.href}
+                                                      className="tr-doc-inline-link"
+                                                      onClick={() => {
+                                                        rememberTraceKindHint(pq.plotCode, "plot");
+                                                        rememberTraceKindHint(
+                                                          pLink.qrToken,
+                                                          "plot",
+                                                        );
+                                                      }}
+                                                    >
+                                                      {pq.plotCode}
+                                                    </Link>
+                                                  ) : (
+                                                    <strong>{pq.plotCode}</strong>
+                                                  )}
+                                                  {showEntZones && (
+                                                    <span className="tr-doc-item-sub">
+                                                      {pq.zoneCode}
+                                                    </span>
+                                                  )}
+                                                </td>
+                                                <td className="col-orchard is-tabular">
+                                                  {extCopy.orchardScaleFmt(
+                                                    formatTraceNumber(pq.areaHa, lang),
+                                                    formatTraceNumber(pq.treeCount, lang),
+                                                  )}
+                                                </td>
+                                                <td className="col-cap is-tabular">
+                                                  {formatTraceNumber(pq.maxQuotaKg, lang)} kg
+                                                </td>
+                                                <td className="col-used is-tabular">
+                                                  <strong>
+                                                    {formatTraceNumber(pq.usedKg, lang)} kg
+                                                  </strong>{" "}
+                                                  <span className="tr-doc-inline-pct">
+                                                    ({pq.utilizationPct}%)
+                                                  </span>
+                                                </td>
+                                                <td
+                                                  className={`col-remain is-tabular ${pq.withinQuota ? "is-ok" : "is-danger"}`}
+                                                >
+                                                  {formatTraceNumber(pq.remainingKg, lang)} kg
+                                                </td>
+                                              </tr>
+                                            );
+                                          })
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </section>
                               ),
                             };
                           })
                         : []),
-                      ...entSourcePlotChunks.map((spChunk, spIdx): A4DossierSectionItem => ({
-                        key: `ent-source-plots-${spIdx}`,
+                      ...entLabChunks.map((lChunk, lIdx): A4DossierSectionItem => ({
+                        key: `ent-labs-${lIdx}`,
                         content: (
                           <section className="tr-doc-ledger tr-doc-ext-block">
                             <div className="tr-doc-meta-strip">
                               <span className="tr-doc-meta-left">
-                                {isPlotDossier
-                                  ? extCopy.sourcePlotsTitlePlot
-                                  : extCopy.sourcePlotsTitleLot}
-                                {entSourcePlotChunks.length > 1
-                                  ? extCopy.partSuffixFmt(spIdx + 1, entSourcePlotChunks.length)
+                                {extCopy.labsTitle}
+                                {entLabChunks.length > 1
+                                  ? extCopy.partSuffixFmt(lIdx + 1, entLabChunks.length)
                                   : ""}
                               </span>
-                              <strong className="tr-doc-meta-right">
-                                {extCopy.sourcePlotsCountFmt(
-                                  entData.fieldAuditSourcePlots?.length ?? 0,
-                                )}
-                              </strong>
                             </div>
-                            <div className="tr-doc-plot-links-grid">
-                              {spChunk.map((sp) => {
-                                const plotHref =
-                                  sp.qrToken &&
-                                  !/^\.+$/.test(sp.qrToken) &&
-                                  isSafeTraceCode(sp.qrToken)
-                                    ? `/t/${encodeURIComponent(sp.qrToken)}`
-                                    : !/^\.+$/.test(sp.plotCode) && isSafeTraceCode(sp.plotCode)
-                                      ? `/trace/${encodeURIComponent(sp.plotCode)}`
-                                      : "/trace";
-                                return (
-                                  <Link
-                                    key={sp.plotCode}
-                                    href={plotHref}
-                                    className="tr-doc-plot-link-cell"
-                                    onClick={() => {
-                                      rememberTraceKindHint(sp.plotCode, "plot");
-                                      rememberTraceKindHint(sp.qrToken, "plot");
-                                    }}
-                                  >
-                                    <div className="tr-doc-plot-link-top">
-                                      <strong className="is-tabular">{sp.plotCode}</strong>
-                                      <span>{extCopy.sourcePlotOpenLabel}</span>
-                                    </div>
-                                    <div className="tr-doc-plot-link-sub is-tabular">
-                                      PUC: {sp.zoneCode}, {formatTraceNumber(sp.areaHa, lang)} ha
-                                      {sp.variety ? `, ${localizeVariety(sp.variety, lang)}` : ""}
-                                    </div>
-                                  </Link>
-                                );
-                              })}
+                            <div className="tr-doc-table-wrap">
+                              <table className="tr-doc-table is-ent-labs">
+                                <thead>
+                                  <tr>
+                                    <th className="col-cert">{extCopy.colLabCert}</th>
+                                    <th className="col-date">{extCopy.colSampleDate}</th>
+                                    <th className="col-num">{extCopy.colCd}</th>
+                                    <th className="col-yo">{extCopy.colYellowO}</th>
+                                    <th className="col-res">{extCopy.colResidue}</th>
+                                    <th className="col-status">{docCopy.colResult}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {lChunk.map((lt) => {
+                                    const passed = lt.result === "pass" && !lt.yellowOPositive;
+                                    return (
+                                      <tr key={lt.code}>
+                                        <td className="col-cert is-tabular">
+                                          {isSafeMediaUrl(lt.scanUrl) ? (
+                                            <a
+                                              href={lt.scanUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="tr-doc-inline-link"
+                                            >
+                                              {lt.code}
+                                            </a>
+                                          ) : (
+                                            <strong>{lt.code}</strong>
+                                          )}
+                                          {isSafeExternalHttpsUrl(lt.externalVerifyUrl) && (
+                                            <a
+                                              href={lt.externalVerifyUrl.trim()}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              referrerPolicy="no-referrer"
+                                              className="tr-doc-sub-link"
+                                            >
+                                              {extCopy.labVerifySubLink}
+                                            </a>
+                                          )}
+                                        </td>
+                                        <td className="col-date is-tabular">
+                                          {formatTraceDate(lt.sampledOn, lang)}
+                                        </td>
+                                        <td className="col-num is-tabular">{lt.cdMgKg} mg/kg</td>
+                                        <td className="col-yo">
+                                          {lt.yellowOPositive
+                                            ? extCopy.yellowOPos
+                                            : extCopy.yellowONeg}
+                                        </td>
+                                        <td className="col-res is-tabular">
+                                          {lt.residueMgKg} mg/kg
+                                        </td>
+                                        <td
+                                          className={`col-status ${passed ? "is-ok" : "is-danger"}`}
+                                        >
+                                          {passed ? extCopy.labPass : extCopy.labFail}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
                             </div>
-                            {spIdx === entSourcePlotChunks.length - 1 && (
-                              <p className="tr-doc-contrib-foot">{extCopy.sourcePlotsNote}</p>
-                            )}
                           </section>
                         ),
                       })),
-                      ...entLabChunks.map((lChunk, lIdx): A4DossierSectionItem => {
-                        const labsTitle = isPlotDossier
-                          ? extCopy.labsTitlePlot
-                          : isBoxDossier
-                            ? extCopy.labsTitleBox
-                            : isFruitDossier
-                              ? extCopy.labsTitleFruit
-                              : extCopy.labsTitleLot;
-                        return {
-                          key: `ent-labs-${lIdx}`,
-                          content: (
-                            <section className="tr-doc-ledger tr-doc-ext-block">
-                              <div className="tr-doc-meta-strip">
-                                <span className="tr-doc-meta-left">
-                                  {labsTitle}
-                                  {entLabChunks.length > 1
-                                    ? extCopy.partSuffixFmt(lIdx + 1, entLabChunks.length)
-                                    : ""}
-                                </span>
-                                <strong className="tr-doc-meta-right">
-                                  {extCopy.labsCountFmt(entData.detailedLabTests.length)}
-                                </strong>
-                              </div>
-                              <div className="tr-doc-table-wrap">
-                                <table className="tr-doc-table is-ent-labs">
-                                  <thead>
-                                    <tr>
-                                      <th className="col-cert">{extCopy.colLabCert}</th>
-                                      <th className="col-puc">{extCopy.colPuc}</th>
-                                      <th className="col-date">{extCopy.colSampleDate}</th>
-                                      <th className="col-num">{extCopy.colCd}</th>
-                                      <th className="col-yo">{extCopy.colYellowO}</th>
-                                      <th className="col-res">{extCopy.colResidue}</th>
-                                      <th className="col-status">{docCopy.colResult}</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {lChunk.length === 0 ? (
-                                      <tr>
-                                        <td colSpan={7} className="tr-doc-contrib-empty">
-                                          {extCopy.emptyLabs}
-                                        </td>
-                                      </tr>
-                                    ) : (
-                                      lChunk.map((lt) => {
-                                        const passed = lt.result === "pass" && !lt.yellowOPositive;
-                                        return (
-                                          <tr key={lt.code}>
-                                            <td className="col-cert is-tabular">
-                                              {isSafeMediaUrl(lt.scanUrl) ? (
-                                                <a
-                                                  href={lt.scanUrl}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="tr-doc-inline-link"
-                                                >
-                                                  {lt.code}
-                                                </a>
-                                              ) : (
-                                                <strong>{lt.code}</strong>
-                                              )}
-                                              {isSafeExternalHttpsUrl(lt.externalVerifyUrl) && (
-                                                <a
-                                                  href={lt.externalVerifyUrl.trim()}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  referrerPolicy="no-referrer"
-                                                  className="tr-doc-sub-link"
-                                                >
-                                                  {extCopy.labVerifySubLink}
-                                                </a>
-                                              )}
-                                            </td>
-                                            <td className="col-puc is-tabular">{lt.zoneCode}</td>
-                                            <td className="col-date is-tabular">
-                                              {formatTraceDate(lt.sampledOn, lang)}
-                                            </td>
-                                            <td className="col-num is-tabular">{lt.cdMgKg}</td>
-                                            <td className="col-yo">
-                                              {lt.yellowOPositive
-                                                ? extCopy.yellowOPos
-                                                : extCopy.yellowONeg}
-                                            </td>
-                                            <td className="col-res is-tabular">
-                                              {lt.residueMgKg} mg/kg
-                                            </td>
-                                            <td
-                                              className={`col-status ${passed ? "is-ok" : "is-danger"}`}
-                                            >
-                                              {passed ? extCopy.labPass : extCopy.labFail}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </section>
-                          ),
-                        };
-                      }),
-                      ...(entData.packingSpecs
+                      ...(hasRealPackingSpecs && entData.packingSpecs
                         ? [
                             {
                               key: "ent-packing",
@@ -4424,9 +4207,6 @@ export default function TraceView() {
                                       <span className="tr-doc-meta-left">
                                         {extCopy.packingTitle}
                                       </span>
-                                      <strong className="tr-doc-meta-right">
-                                        {extCopy.packingLiveTag}
-                                      </strong>
                                     </div>
                                     <div className="tr-doc-spec-grid">
                                       <div className="tr-doc-spec-cell">
@@ -4496,26 +4276,13 @@ export default function TraceView() {
                         key: `auth-hh-${hIdx}`,
                         content: (
                           <section className="tr-doc-ledger tr-doc-ext-block">
-                            {hIdx === 0 && (
-                              <div className="tr-doc-sec-banner is-authority">
-                                <strong className="tr-doc-sec-banner-title">
-                                  {extCopy.tier3BannerTitle}
-                                </strong>
-                                <span className="tr-doc-sec-banner-tag">
-                                  {extCopy.tier3BannerBadge}
-                                </span>
-                              </div>
-                            )}
                             <div className="tr-doc-meta-strip">
                               <span className="tr-doc-meta-left">
-                                {isPlotDossier ? extCopy.authHhTitlePlot : extCopy.authHhTitleLot}
+                                {extCopy.authHhTitlePlot}
                                 {authHhChunks.length > 1
                                   ? extCopy.partSuffixFmt(hIdx + 1, authHhChunks.length)
                                   : ""}
                               </span>
-                              <strong className="tr-doc-meta-right">
-                                {extCopy.authHhCountFmt(authData.sourceHouseholds.length)}
-                              </strong>
                             </div>
                             <div className="tr-doc-table-wrap">
                               <table className="tr-doc-table is-auth-hh">
@@ -4524,7 +4291,7 @@ export default function TraceView() {
                                     <th className="col-no">{extCopy.colNo}</th>
                                     <th className="col-hh-id">{extCopy.colHhIdentity}</th>
                                     <th className="col-gis">{extCopy.colCadastralGis}</th>
-                                    <th className="col-status">{extCopy.colLotQrConsent}</th>
+                                    <th className="col-status">{extCopy.colStatus}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -4617,20 +4384,8 @@ export default function TraceView() {
                                               </div>
                                             )}
                                           </td>
-                                          <td className="col-status is-tabular">
-                                            {hh.contributedKg !== null &&
-                                              hh.contributedKg !== undefined && (
-                                                <strong className="tr-doc-contrib-wt">
-                                                  {formatTraceNumber(hh.contributedKg, lang)} kg
-                                                </strong>
-                                              )}
-                                            <span
-                                              className={`tr-doc-item-sub ${hh.publicTraceConsent ? "is-ok-text" : ""}`}
-                                            >
-                                              {hh.publicTraceConsent
-                                                ? extCopy.qrConsentYes
-                                                : extCopy.qrConsentNo}
-                                            </span>
+                                          <td className="col-status is-ok">
+                                            {extCopy.statusQualified}
                                           </td>
                                         </tr>
                                       );
@@ -4653,9 +4408,6 @@ export default function TraceView() {
                                   ? extCopy.partSuffixFmt(dIdx + 1, authDiaryChunks.length)
                                   : ""}
                               </span>
-                              <strong className="tr-doc-meta-right">
-                                {extCopy.diariesCountFmt(authData.cultivationDiaries.length)}
-                              </strong>
                             </div>
                             <div className="tr-doc-table-wrap">
                               <table className="tr-doc-table is-auth-diary">
@@ -4664,14 +4416,13 @@ export default function TraceView() {
                                     <th className="col-date">{extCopy.colDate}</th>
                                     <th className="col-hh-plot">{extCopy.colHhPlot}</th>
                                     <th className="col-act">{extCopy.colDiaryActivity}</th>
-                                    <th className="col-rec">{extCopy.colRecorder}</th>
-                                    <th className="col-status">{extCopy.colAuditCheck}</th>
+                                    <th className="col-status">{extCopy.colStatus}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {dChunk.length === 0 ? (
                                     <tr>
-                                      <td colSpan={5} className="tr-doc-contrib-empty">
+                                      <td colSpan={4} className="tr-doc-contrib-empty">
                                         {extCopy.emptyDiaries}
                                       </td>
                                     </tr>
@@ -4680,39 +4431,55 @@ export default function TraceView() {
                                       const mrlFailed = Boolean(
                                         d.mrlStatus && d.mrlStatus !== "pass",
                                       );
-                                      const flags = [
-                                        d.mrlStatus
-                                          ? mrlFailed
-                                            ? extCopy.mrlWarn
-                                            : extCopy.mrlSafe
+                                      const compact = formatCompactDiaryEntry(
+                                        d.activity,
+                                        d.detail,
+                                        lang,
+                                      );
+                                      const hasDistinctRecorder = Boolean(
+                                        d.recorder &&
+                                          d.recorder.trim() &&
+                                          d.recorder.trim() !== (d.householdName || "").trim(),
+                                      );
+                                      const hhSubParts = [
+                                        d.plotCode ? extCopy.plotRefFmt(d.plotCode) : null,
+                                        hasDistinctRecorder
+                                          ? extCopy.recordedByFmt(d.recorder.trim())
                                           : null,
-                                        d.isLateEntry ? extCopy.entryLate : extCopy.entryOnTime,
-                                        d.gpsVerified ? extCopy.gpsMatched : null,
                                       ].filter(Boolean);
+                                      const statusTone = mrlFailed
+                                        ? "is-danger"
+                                        : d.isLateEntry
+                                          ? "is-warn"
+                                          : "is-ok";
+                                      const statusText = mrlFailed
+                                        ? extCopy.diaryWarn
+                                        : d.isLateEntry
+                                          ? extCopy.diaryLate
+                                          : extCopy.diaryValid;
+
                                       return (
                                         <tr key={`${d.entryOn}-${d.plotCode}-${idx}`}>
                                           <td className="col-date is-tabular">
                                             {formatTraceDate(d.entryOn, lang)}
                                           </td>
                                           <td className="col-hh-plot">
-                                            {d.householdName && (
-                                              <strong className="tr-doc-item-title">
-                                                {d.householdName}
-                                              </strong>
-                                            )}
-                                            {d.plotCode && (
+                                            <strong className="tr-doc-item-title">
+                                              {d.householdName || d.recorder || "-"}
+                                            </strong>
+                                            {hhSubParts.length > 0 && (
                                               <span className="tr-doc-item-sub is-tabular">
-                                                {extCopy.colPlotCode}: {d.plotCode}
+                                                {hhSubParts.join(", ")}
                                               </span>
                                             )}
                                           </td>
                                           <td className="col-act">
                                             <strong className="tr-doc-item-title">
-                                              {d.activity}
+                                              {compact.title}
                                             </strong>
-                                            {d.detail && (
+                                            {compact.subtitle && (
                                               <span className="tr-doc-item-sub is-tabular">
-                                                {d.detail.replace(/\s*\|\s*/g, ", ")}
+                                                {compact.subtitle}
                                               </span>
                                             )}
                                             {isSafeMediaUrl(d.photoUrl) && (
@@ -4723,7 +4490,7 @@ export default function TraceView() {
                                                   setTracePreviewMedia({
                                                     urls: [d.photoUrl as string],
                                                     title: d.householdName || extCopy.diariesTitle,
-                                                    subtitle: `${formatTraceDate(d.entryOn, lang)}, ${d.activity}`,
+                                                    subtitle: `${formatTraceDate(d.entryOn, lang)}, ${compact.title}`,
                                                   })
                                                 }
                                               >
@@ -4731,13 +4498,13 @@ export default function TraceView() {
                                               </button>
                                             )}
                                           </td>
-                                          <td className="col-rec">{d.recorder}</td>
-                                          <td
-                                            className={`col-status ${mrlFailed || d.isLateEntry ? "is-danger" : "is-ok"}`}
-                                          >
-                                            <span className="tr-doc-audit-flags">
-                                              {flags.join(", ")}
-                                            </span>
+                                          <td className={`col-status ${statusTone}`}>
+                                            <span>{statusText}</span>
+                                            {d.gpsVerified && (
+                                              <span className="tr-doc-status-sub">
+                                                {extCopy.gpsShort}
+                                              </span>
+                                            )}
                                           </td>
                                         </tr>
                                       );
@@ -4760,9 +4527,6 @@ export default function TraceView() {
                                   ? extCopy.partSuffixFmt(mIdx + 1, authMinuteChunks.length)
                                   : ""}
                               </span>
-                              <strong className="tr-doc-meta-right">
-                                {extCopy.minutesCountFmt(authData.inspectionMinutes.length)}
-                              </strong>
                             </div>
                             <div className="tr-doc-table-wrap">
                               <table className="tr-doc-table is-auth-minutes">
@@ -4787,6 +4551,10 @@ export default function TraceView() {
                                       const isFail =
                                         m.result === "fail" ||
                                         m.result.toLowerCase().includes("không đạt");
+                                      const locParts = [
+                                        m.location || null,
+                                        m.gpsVerified ? extCopy.gpsShort : null,
+                                      ].filter(Boolean);
                                       return (
                                         <tr key={m.code}>
                                           <td className="col-min-code is-tabular">
@@ -4797,12 +4565,13 @@ export default function TraceView() {
                                           </td>
                                           <td className="col-inspector">
                                             <strong className="tr-doc-item-title">
-                                              {extCopy.inspectorPrefix}: {m.officer}
+                                              {m.officer}
                                             </strong>
-                                            <span className="tr-doc-item-sub">
-                                              {extCopy.locationPrefix}: {m.location}
-                                              {m.gpsVerified ? `, ${extCopy.gpsMatched}` : ""}
-                                            </span>
+                                            {locParts.length > 0 && (
+                                              <span className="tr-doc-item-sub">
+                                                {locParts.join(", ")}
+                                              </span>
+                                            )}
                                             {isSafeMediaUrl(m.photoUrl) && (
                                               <button
                                                 type="button"
@@ -4852,9 +4621,6 @@ export default function TraceView() {
                                   ? extCopy.partSuffixFmt(vIdx + 1, authViolationChunks.length)
                                   : ""}
                               </span>
-                              <strong className="tr-doc-meta-right">
-                                {extCopy.violationsCountFmt(authData.internalViolations.length)}
-                              </strong>
                             </div>
                             <div className="tr-doc-table-wrap">
                               <table className="tr-doc-table is-auth-violations">
@@ -4867,40 +4633,32 @@ export default function TraceView() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {vChunk.length === 0 ? (
-                                    <tr>
-                                      <td colSpan={4} className="tr-doc-contrib-empty">
-                                        {extCopy.emptyViolations}
-                                      </td>
-                                    </tr>
-                                  ) : (
-                                    vChunk.map((v, idx) => {
-                                      const isCrit = v.severity === "critical";
-                                      return (
-                                        <tr key={`${v.detectedOn}-${idx}`}>
-                                          <td className="col-date is-tabular">
-                                            {formatTraceDate(v.detectedOn, lang)}
-                                          </td>
-                                          <td className="col-vio-desc">
-                                            <strong className="tr-doc-item-title">{v.title}</strong>
-                                            {v.description && (
-                                              <span className="tr-doc-item-sub">
-                                                {v.description}
-                                              </span>
-                                            )}
-                                          </td>
-                                          <td className="col-plot-ref is-tabular">
-                                            {v.plotCode || v.householdLabel || "-"}
-                                          </td>
-                                          <td
-                                            className={`col-status ${isCrit ? "is-danger" : "is-muted"}`}
-                                          >
-                                            {isCrit ? extCopy.sevCritical : extCopy.sevWarning}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })
-                                  )}
+                                  {vChunk.map((v, idx) => {
+                                    const isCrit = v.severity === "critical";
+                                    return (
+                                      <tr key={`${v.detectedOn}-${idx}`}>
+                                        <td className="col-date is-tabular">
+                                          {formatTraceDate(v.detectedOn, lang)}
+                                        </td>
+                                        <td className="col-vio-desc">
+                                          <strong className="tr-doc-item-title">{v.title}</strong>
+                                          {v.description && (
+                                            <span className="tr-doc-item-sub">
+                                              {v.description}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="col-plot-ref is-tabular">
+                                          {v.plotCode || v.householdLabel || "-"}
+                                        </td>
+                                        <td
+                                          className={`col-status ${isCrit ? "is-danger" : "is-muted"}`}
+                                        >
+                                          {isCrit ? extCopy.sevCritical : extCopy.sevWarning}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
@@ -4991,15 +4749,6 @@ export default function TraceView() {
                 const isLastPage = pageIdx === totalPages - 1;
                 return (
                   <footer className="tr-doc-footer">
-                    {isLastPage && (
-                      <div className="tr-doc-footer-top">
-                        <div className="tr-doc-inquiry">
-                          <strong>{docCopy.inquiryHeading}</strong>
-                          <p>{t.footer.line1}</p>
-                        </div>
-                      </div>
-                    )}
-
                     <div className="tr-doc-footer-bar">
                       <span>{t.footer.line2}</span>
                       <span>
