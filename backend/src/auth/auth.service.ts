@@ -31,6 +31,7 @@ import type {
   VerifyOtpChallengeDto,
 } from "./dto/auth.dto";
 import { isManagementRole, permissionsFor, type Action, type Role } from "./permissions";
+import { computeSessionAgentFingerprint, isSessionAgentCompatible } from "./security-defense.service";
 import { TokensService } from "./tokens.service";
 
 const MAX_FAILED_LOGINS = 5;
@@ -600,6 +601,7 @@ export class AuthService {
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5_000);
+    timer.unref?.();
     try {
       const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(trimmed)}`;
       const res = await fetch(url, { method: "GET", signal: controller.signal });
@@ -861,6 +863,7 @@ export class AuthService {
       reuse_handled: boolean;
       family_started_at: Date;
       ip: string | null;
+      user_agent: string | null;
       status: string;
       role: Role;
       enterprise_id: number | null;
@@ -870,7 +873,7 @@ export class AuthService {
       username: string;
     }>(
       `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked_at, rt.revoked_reason,
-              rt.reuse_handled, rt.family_started_at, rt.ip,
+              rt.reuse_handled, rt.family_started_at, rt.ip, rt.user_agent,
               u.status, u.role, u.enterprise_id, ent.status AS enterprise_status,
               u.token_version, u.full_name, u.username
        FROM refresh_tokens rt
@@ -927,6 +930,27 @@ export class AuthService {
       row.status !== "active" ||
       (row.role === "enterprise" && row.enterprise_id !== null && row.enterprise_status !== "active")
     ) {
+      throw new RefreshRejected();
+    }
+
+    if (!isSessionAgentCompatible(row.user_agent, meta.userAgent)) {
+      await this.revokeAllSessions(row.user_id);
+      const actualFp = computeSessionAgentFingerprint(meta.userAgent);
+      await this.audit.write(
+        { ip: meta.ip },
+        {
+          action: "Chặn đánh cắp phiên đăng nhập",
+          object: row.username,
+          detail: `Thu hồi toàn bộ phiên do refresh token bị sử dụng từ công cụ hoặc thiết bị khác (${actualFp}).`,
+        },
+        { id: row.user_id, name: row.full_name },
+      );
+      await this.notifications.notifyRoles(["admin", "htx_head"], {
+        kind: "system",
+        title: "Cảnh báo bảo mật: Chặn nghi vấn đánh cắp refresh token",
+        body: `Tài khoản ${row.full_name} (${row.username}) vừa được thu hồi toàn bộ phiên do phát hiện làm mới phiên từ môi trường lạ (${actualFp}).`,
+        link: "/admin?section=system",
+      });
       throw new RefreshRejected();
     }
 
@@ -1111,10 +1135,6 @@ export class AuthService {
       fullName: nextName,
       email: nextEmail,
     });
-  }
-
-  async verifyCccdForReset(dto: ForgotPasswordCccdDto, meta: ClientMeta): Promise<{ ok: true; mode: "instant" }> {
-    return this.resetPasswordWithCccd(dto, meta);
   }
 
   /**

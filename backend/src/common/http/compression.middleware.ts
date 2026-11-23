@@ -57,6 +57,7 @@ export function apiCompressionMiddleware(req: Request, res: Response, next: Next
   res.send = function compressedSend(this: Response, body?: unknown): Response {
     if (!this.headersSent) {
       this.vary("Accept-Encoding");
+      this.vary("Cookie");
     }
 
     let preparedBuf: Buffer | null = null;

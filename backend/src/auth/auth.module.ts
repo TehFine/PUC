@@ -4,6 +4,7 @@ import { JwtModule } from "@nestjs/jwt";
 import type { AppConfig } from "../config/configuration";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { SecurityDefenseService } from "./security-defense.service";
 import { JWT_AUDIENCE, JWT_ISSUER, TokensService } from "./tokens.service";
 
 @Module({
@@ -30,7 +31,7 @@ import { JWT_AUDIENCE, JWT_ISSUER, TokensService } from "./tokens.service";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, TokensService],
-  exports: [TokensService, AuthService],
+  providers: [AuthService, TokensService, SecurityDefenseService],
+  exports: [TokensService, AuthService, SecurityDefenseService],
 })
 export class AuthModule {}

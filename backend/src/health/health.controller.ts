@@ -12,7 +12,7 @@ export class HealthController {
   constructor(
     private readonly db: DatabaseService,
     @Optional() private readonly systemAlerts?: SystemAlertsService,
-  ) {}
+  ) { }
 
   @Public()
   @OptionalAuth()
@@ -33,20 +33,26 @@ export class HealthController {
 
       const alert = visible
         ? {
-            id: rawAlert.id,
-            severity: rawAlert.severity,
-            title: rawAlert.title,
-            message: rawAlert.message,
-            audience: rawAlert.audience,
-            active: rawAlert.active,
-            createdBy: null,
-            createdByName: null,
-            resolvedBy: null,
-            resolvedAt: null,
-            createdAt: rawAlert.createdAt,
-          }
+          id: rawAlert.id,
+          severity: rawAlert.severity,
+          title: rawAlert.title,
+          message: rawAlert.message,
+          audience: rawAlert.audience,
+          active: rawAlert.active,
+          createdBy: null,
+          createdByName: null,
+          resolvedBy: null,
+          resolvedAt: null,
+          createdAt: rawAlert.createdAt,
+        }
         : null;
-      return { status: "ok", database: "up", dbLatencyMs, checkedAt, alert };
+      return {
+        status: "ok",
+        database: "up",
+        dbLatencyMs: user && user.role !== "farmer" ? dbLatencyMs : null,
+        checkedAt,
+        alert,
+      };
     } catch {
       res.status(503);
       return { status: "degraded", database: "down", dbLatencyMs: null, checkedAt, alert: null };

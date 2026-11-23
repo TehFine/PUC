@@ -45,7 +45,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private recentInternalErrors: number[] = [];
   private lastInternalAlertAt = 0;
 
-  constructor(@Optional() private readonly notifications?: NotificationsService) {}
+  constructor(@Optional() private readonly notifications?: NotificationsService) { }
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
@@ -152,19 +152,48 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
-    // Lỗi từ body-parser của Express.
+    // Lỗi URL mã hóa phần trăm sai hoặc lỗi 4xx từ tầng Express / body-parser (không đẩy nhầm thành 500).
+    if (exception instanceof URIError) {
+      return { status: 400, body: { error: "Đường dẫn yêu cầu không hợp lệ.", code: "BAD_REQUEST" } };
+    }
     const type = (exception as { type?: string })?.type;
     if (type === "entity.too.large") {
       return { status: 413, body: { error: "Dữ liệu gửi lên quá lớn.", code: "PAYLOAD_TOO_LARGE" } };
     }
-    if (type === "entity.parse.failed" || exception instanceof SyntaxError) {
-      return { status: 400, body: { error: "Dữ liệu JSON không hợp lệ.", code: "BAD_REQUEST" } };
+    if (
+      type === "entity.parse.failed" ||
+      type === "charset.unsupported" ||
+      type === "encoding.unsupported" ||
+      type === "request.aborted" ||
+      exception instanceof SyntaxError
+    ) {
+      return { status: 400, body: { error: "Dữ liệu gửi lên không hợp lệ.", code: "BAD_REQUEST" } };
+    }
+    const rawExpressStatus = Number(
+      (exception as { status?: number; statusCode?: number })?.status ??
+      (exception as { statusCode?: number })?.statusCode ??
+      0,
+    );
+    if (Number.isInteger(rawExpressStatus) && rawExpressStatus >= 400 && rawExpressStatus < 500) {
+      return {
+        status: rawExpressStatus,
+        body: {
+          error: "Yêu cầu không hợp lệ.",
+          code: STATUS_CODES[rawExpressStatus] ?? "BAD_REQUEST",
+        },
+      };
     }
 
     const pgCode = (exception as { code?: string })?.code;
     if (pgCode && PG_MESSAGES[pgCode]) {
       const { status, message } = PG_MESSAGES[pgCode];
-      return { status, body: { error: message, code: `DB_${pgCode}` } };
+      return {
+        status,
+        body: {
+          error: message,
+          code: status === 409 ? "CONFLICT" : STATUS_CODES[status] ?? "BAD_REQUEST",
+        },
+      };
     }
 
     this.logger.error(exception instanceof Error ? (exception.stack ?? exception.message) : String(exception));

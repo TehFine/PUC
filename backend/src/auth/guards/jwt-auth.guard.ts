@@ -1,7 +1,8 @@
 import { CanActivate, ExecutionContext, Injectable, Optional } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import type { Response } from "express";
 import { AppCacheService } from "../../common/cache/app-cache.service";
-import { unauthorized } from "../../common/errors/app.exception";
+import { AppException, unauthorized } from "../../common/errors/app.exception";
 import {
   type RequestWithVerifiedToken,
   VERIFIED_TOKEN_CACHE_KEY,
@@ -9,6 +10,7 @@ import {
 import { DatabaseService } from "../../database/database.service";
 import { IS_OPTIONAL_AUTH_KEY, IS_PUBLIC_KEY } from "../auth.decorators";
 import type { Role } from "../permissions";
+import { isSessionAgentCompatible, SecurityDefenseService } from "../security-defense.service";
 import { ACCESS_COOKIE, TokensService } from "../tokens.service";
 
 interface UserSessionSnapshot {
@@ -29,6 +31,7 @@ interface UserSessionSnapshot {
   token_version: number;
   session_active: boolean;
   session_expires_ms: number | null;
+  session_user_agent: string | null;
 }
 
 const AUTH_SESSION_CACHE_TTL_MS = 15_000;
@@ -36,8 +39,8 @@ const AUTH_SESSION_CACHE_TTL_MS = 15_000;
 /**
  * Yêu cầu đăng nhập cho mọi route trừ route gắn @Public().
  * Gộp truy vấn người dùng, trạng thái doanh nghiệp liên kết và trạng thái phiên (`refresh_tokens`) vào 1 câu SQL duy nhất,
- * kết hợp bộ nhớ đệm L1 trên RAM có Singleflight và tự động xóa tức thì qua `DatabaseService`
- * bất cứ khi nào bảng `users`, `enterprises` hoặc `refresh_tokens` có thay đổi (khóa tài khoản, đổi vai trò, thu hồi phiên từ xa).
+ * đối chiếu dấu hiệu thiết bị/trình duyệt (`Session Binding`) để chặn sao chép cookie sang công cụ bên ngoài,
+ * kết hợp bộ nhớ đệm L1 trên RAM tự động xóa tức thì khi bảng `users`, `enterprises` hoặc `refresh_tokens` thay đổi.
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -47,6 +50,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly tokens: TokensService,
     private readonly db: DatabaseService,
+    private readonly defense: SecurityDefenseService,
     @Optional() private readonly cache?: AppCacheService,
   ) {}
 
@@ -57,18 +61,13 @@ export class JwtAuthGuard implements CanActivate {
                 u.enterprise_id, ent.status AS enterprise_status,
                 u.assigned_commune, u.assigned_region, u.coop_code,
                 u.two_factor_enabled, u.token_version,
-                EXISTS (
-                  SELECT 1 FROM refresh_tokens rt
-                  WHERE rt.id = $2::bigint AND rt.user_id = u.id AND rt.revoked_at IS NULL AND rt.expires_at > now()
-                ) AS session_active,
-                (
-                  SELECT (EXTRACT(EPOCH FROM rt.expires_at) * 1000)::float8
-                  FROM refresh_tokens rt
-                  WHERE rt.id = $2::bigint AND rt.user_id = u.id AND rt.revoked_at IS NULL
-                  LIMIT 1
-                ) AS session_expires_ms
+                (rt.id IS NOT NULL) AS session_active,
+                (EXTRACT(EPOCH FROM rt.expires_at) * 1000)::float8 AS session_expires_ms,
+                rt.user_agent AS session_user_agent
          FROM users u
          LEFT JOIN enterprises ent ON ent.id = u.enterprise_id
+         LEFT JOIN refresh_tokens rt
+           ON rt.id = $2::bigint AND rt.user_id = u.id AND rt.revoked_at IS NULL AND rt.expires_at > now()
          WHERE u.id = $1`,
         [userId, sessionId],
       )
@@ -102,6 +101,7 @@ export class JwtAuthGuard implements CanActivate {
     if (isPublic && !isOptionalAuth) return true;
 
     const request = context.switchToHttp().getRequest<RequestWithVerifiedToken>();
+    const response = context.switchToHttp().getResponse<Response>();
     const cachedVerified = request[VERIFIED_TOKEN_CACHE_KEY];
     let verified = cachedVerified;
     if (verified === undefined) {
@@ -126,6 +126,26 @@ export class JwtAuthGuard implements CanActivate {
     if (!row.session_active || expiredNow) {
       if (isPublic || isOptionalAuth) return true;
       throw unauthorized();
+    }
+
+    const currentUa = request.get("user-agent") ?? null;
+    if (!isSessionAgentCompatible(row.session_user_agent, currentUa)) {
+      await this.defense.handleSessionBindingViolation({
+        userId: row.id,
+        username: row.username,
+        fullName: row.full_name,
+        sessionId: verified.sessionId,
+        ip: request.ip,
+        expectedUa: row.session_user_agent,
+        actualUa: currentUa,
+        res: response,
+      });
+      if (isPublic || isOptionalAuth) return true;
+      throw new AppException(
+        401,
+        "Phiên đăng nhập đã bị thu hồi do phát hiện dấu hiệu thiết bị bất thường. Vui lòng đăng nhập lại.",
+        "SESSION_BINDING_MISMATCH",
+      );
     }
 
     if (row.role === "enterprise" && row.enterprise_id !== null && row.enterprise_status !== "active") {

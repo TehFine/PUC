@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
@@ -7,6 +7,7 @@ import type { AppConfig } from "../config/configuration";
 
 export const ACCESS_COOKIE = "htx_access";
 export const REFRESH_COOKIE = "htx_refresh";
+export const CSRF_COOKIE = "htx_csrf";
 export const JWT_ISSUER = "puc-krongbuk-api";
 export const JWT_AUDIENCE = "puc-krongbuk-client";
 
@@ -82,25 +83,47 @@ export class TokensService {
     return createHash("sha256").update(token).digest("hex");
   }
 
+  /** Khóa ký HMAC gắn chặt với `(sessionId, userId)` dành riêng cho trình duyệt cùng nguồn (Same-Origin). */
+  deriveCsrfSigningKey(userId: number, sessionId: number): string {
+    return createHmac("sha256", this.jwtConfig.accessSecret)
+      .update(`csrf:v1:${sessionId}:${userId}`, "utf8")
+      .digest("hex");
+  }
+
   private baseCookie(): CookieOptions {
     return { httpOnly: true, secure: this.cookieSecure, sameSite: "lax" };
   }
 
+  private csrfCookieOptions(): CookieOptions {
+    return { httpOnly: false, secure: this.cookieSecure, sameSite: "lax", path: "/" };
+  }
+
   setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
+    const accessMaxAge = this.jwtConfig.accessTtlMin * 60 * 1000;
     res.cookie(ACCESS_COOKIE, accessToken, {
       ...this.baseCookie(),
       path: "/",
-      maxAge: this.jwtConfig.accessTtlMin * 60 * 1000,
+      maxAge: accessMaxAge,
     });
     res.cookie(REFRESH_COOKIE, refreshToken, {
       ...this.baseCookie(),
       path: "/api/auth",
       maxAge: this.jwtConfig.refreshTtlDays * 24 * 60 * 60 * 1000,
     });
+    const decoded = this.jwt.decode(accessToken) as { sub?: string; sid?: number } | null;
+    const uid = decoded?.sub ? Number(decoded.sub) : NaN;
+    const sid = decoded?.sid !== undefined ? Number(decoded.sid) : NaN;
+    if (Number.isInteger(uid) && uid > 0 && Number.isInteger(sid) && sid > 0) {
+      res.cookie(CSRF_COOKIE, this.deriveCsrfSigningKey(uid, sid), {
+        ...this.csrfCookieOptions(),
+        maxAge: accessMaxAge,
+      });
+    }
   }
 
   clearAuthCookies(res: Response): void {
     res.clearCookie(ACCESS_COOKIE, { ...this.baseCookie(), path: "/" });
     res.clearCookie(REFRESH_COOKIE, { ...this.baseCookie(), path: "/api/auth" });
+    res.clearCookie(CSRF_COOKIE, this.csrfCookieOptions());
   }
 }

@@ -4,8 +4,10 @@ import cookieParser from "cookie-parser";
 import { json, type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
 import { can, type Role } from "./auth/permissions";
+import { SecurityDefenseService } from "./auth/security-defense.service";
 import { ACCESS_COOKIE, TokensService } from "./auth/tokens.service";
 import { apiCompressionMiddleware } from "./common/http/compression.middleware";
+import { createSecurityShieldMiddleware } from "./common/http/security-shield.middleware";
 import type { AppConfig } from "./config/configuration";
 import { DatabaseService } from "./database/database.service";
 
@@ -63,6 +65,9 @@ function hasValidImportCsrfPrecondition(req: Request, allowedOrigins: readonly s
   if (isTest) {
     return true;
   }
+  if (req.headers.cookie) {
+    return false;
+  }
   return Boolean(req.headers["x-requested-with"]);
 }
 
@@ -100,6 +105,11 @@ export function configureApp(app: NestExpressApplication): void {
       "Accept",
       "X-Requested-With",
       "X-Audit-Pass",
+      "X-Trace-Req-Secret",
+      "X-PUC-Timestamp",
+      "X-PUC-Nonce",
+      "X-PUC-Payload-Hash",
+      "X-PUC-Signature",
       "X-Idempotency-Key",
       "If-None-Match",
       "X-Upload-Sha256",
@@ -110,6 +120,13 @@ export function configureApp(app: NestExpressApplication): void {
   });
 
   app.use(cookieParser());
+  let defense: SecurityDefenseService | null = null;
+  try {
+    defense = app.get(SecurityDefenseService, { strict: false });
+  } catch {
+    defense = null;
+  }
+  app.use(createSecurityShieldMiddleware(defense));
 
   // Nhập GeoJSON địa chính có thể lớn (giới hạn 10 MB) nhưng chỉ mở bộ đệm 10 MB cho đúng phương thức POST,
   // qua kiểm tra nguồn gửi CSRF, có phiên JWT `sid` đang hoạt động thuộc vai trò có quyền tạo thửa (`plots:create`)
@@ -222,7 +239,14 @@ export function configureApp(app: NestExpressApplication): void {
       plotsImportJson(req, res, next);
     })().catch(() => next());
   });
-  app.use(json({ limit: "1mb" }));
+  app.use(
+    json({
+      limit: "1mb",
+      verify: (req: Request & { rawBody?: string }, _res: Response, buf: Buffer) => {
+        req.rawBody = buf && buf.length > 0 ? buf.toString("utf8") : "";
+      },
+    }),
+  );
   app.use(apiCompressionMiddleware);
 
   // Mặc định không lưu bộ nhớ đệm cho các API có xác thực (các route tệp sẽ ghi đè khi cần).
@@ -232,11 +256,13 @@ export function configureApp(app: NestExpressApplication): void {
     next();
   });
 
-  // Đáp ứng kiểm tra sống còn (Health Check) mặc định của Render tại `/` hoặc `/health` ngoài `/api/health`.
+  // Đáp ứng kiểm tra sống còn (Health Check) mặc định tại `/` hoặc `/health` không lộ định danh dịch vụ nội bộ.
   const httpAdapter = app.getHttpAdapter();
   const expressApp = httpAdapter.getInstance();
   expressApp.get(["/", "/health"], (_req: Request, res: Response) => {
-    res.status(200).json({ status: "ok", service: "htx-backend" });
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+    res.status(200).json({ status: "ok" });
   });
 
   app.setGlobalPrefix("api");
