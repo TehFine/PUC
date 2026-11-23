@@ -11517,11 +11517,18 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 
 @media screen and (min-width: 760px) {
   .media-bottom-sheet {
-    width: min(720px, calc(100vw - 32px));
-    max-width: min(720px, calc(100vw - 32px));
-    max-height: min(88dvh, calc(100dvh - 28px));
+    width: min(960px, calc(100vw - 36px));
+    max-width: min(960px, calc(100vw - 36px));
+    max-height: calc(100dvh - 18px);
     border: 1px solid rgba(20, 55, 47, 0.14);
     border-bottom: none;
+  }
+}
+
+@media screen and (min-width: 1120px) {
+  .media-bottom-sheet {
+    width: min(1140px, calc(100vw - 48px));
+    max-width: min(1140px, calc(100vw - 48px));
   }
 }
 
@@ -11615,14 +11622,14 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 
 @media screen and (min-width: 760px) {
   .media-bs-body {
-    padding: 16px 20px 20px;
+    padding: 14px 18px 16px;
   }
 }
 
 .media-bs-stage {
   position: relative;
   width: 100%;
-  height: min(56dvh, 460px);
+  height: min(60dvh, 480px);
   min-height: 220px;
   border-radius: 6px;
   border: 1px solid #d4d4d2;
@@ -11636,6 +11643,7 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 
 .media-bs-stage-inner {
   width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11644,10 +11652,26 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 .media-bs-media {
   display: block;
   max-width: 100%;
-  max-height: min(64dvh, 560px);
+  max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
+}
+
+@media screen and (min-width: 760px) {
+  .media-bs-stage {
+    height: clamp(380px, calc(100dvh - 168px), 840px);
+  }
+
+  .media-bottom-sheet:not(:has(.media-bs-nav-row)) .media-bs-stage {
+    height: clamp(420px, calc(100dvh - 116px), 880px);
+  }
+
+  .media-bs-media {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
 }
 
 .media-bs-missing {
@@ -11696,6 +11720,13 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   justify-content: center;
   opacity: 0.68;
   transition: opacity 150ms ease, border-color 150ms ease;
+}
+
+@media screen and (min-width: 760px) {
+  .media-bs-thumb {
+    width: 56px;
+    height: 42px;
+  }
 }
 
 .media-bs-thumb.is-active {
