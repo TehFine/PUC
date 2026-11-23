@@ -37,9 +37,8 @@ PG_DB="${PG_DB:-puc_cune}"
 RAW_URL="${SUPABASE_DATABASE_URL:-${1:-}}"
 if [ -z "$RAW_URL" ]; then
   echo "Chuẩn bị kéo toàn bộ dữ liệu thực tế (bao gồm cả ảnh/video hiện trường trong bảng attachments) từ Supabase về VPS."
-  printf "Dán chuỗi DATABASE_URL của Supabase/Render (ký tự sẽ được ẩn để bảo mật) rồi nhấn Enter: "
-  read -rs RAW_URL
-  echo ""
+  printf "Dán chuỗi DATABASE_URL của Supabase/Render vào đây rồi nhấn Enter: "
+  read -r RAW_URL
 fi
 
 # Làm sạch khoảng trắng, dấu nháy bao ngoài và tiền tố DATABASE_URL= nếu người dùng copy cả dòng từ Render
