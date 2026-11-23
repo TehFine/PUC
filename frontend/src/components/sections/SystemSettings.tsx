@@ -121,7 +121,7 @@ export default function SystemSettings() {
       ]
       : []),
     { id: "roles", label: "Phân quyền" },
-    { id: "alerts", label: "Thông báo hệ thống" },
+    { id: "alerts", label: "Phát thông báo" },
     { id: "audit", label: "Nhật ký thao tác" },
   ];
 

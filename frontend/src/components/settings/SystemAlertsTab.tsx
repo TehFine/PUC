@@ -23,20 +23,20 @@ const TEMPLATES: {
   message: string;
 }[] = [
   {
+    label: "Lịch họp xã viên",
+    severity: "info",
+    audience: "farmer",
+    title: "Thông báo lịch họp toàn thể hộ thành viên HTX",
+    message:
+      "Mời đại diện các hộ vùng trồng tham dự buổi họp triển khai kế hoạch mùa vụ và phổ biến quy trình canh tác mới tại văn phòng HTX.",
+  },
+  {
     label: "Cập nhật hệ thống",
     severity: "info",
     audience: "farmer",
     title: "Cập nhật tính năng và danh mục kỹ thuật trên hệ thống",
     message:
       "Ban quản trị HTX vừa cập nhật nội dung mới trên hệ thống. Bà con mở mục Kiến thức và Nhật ký để xem hướng dẫn chi tiết.",
-  },
-  {
-    label: "Chậm đồng bộ tạm thời",
-    severity: "critical",
-    audience: "all",
-    title: "Hệ thống đang xử lý chậm hơn bình thường",
-    message:
-      "Kỹ thuật HTX đang khắc phục. Vui lòng giữ ảnh vừa chụp và thử lại sau ít phút.",
   },
   {
     label: "Bảo trì định kỳ",
@@ -262,6 +262,159 @@ export default function SystemAlertsTab() {
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
+      {/* Biểu mẫu soạn và phát thông báo đặt ngay trên đầu cho Trưởng HTX, Phó HTX và Quản trị viên */}
+      {canCreateAlert && (
+      <form className="card" autoComplete="off" onSubmit={handleSubmit} style={{ padding: "20px", display: "grid", gap: 14 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#14372f" }}>
+              Soạn thông báo gửi toàn thể nông hộ hoặc toàn hệ thống
+            </h3>
+            <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5f6d66" }}>
+              Trưởng HTX, Phó HTX và Quản trị viên gửi tức thời tới chuông Thông báo của từng nông hộ theo thời gian thực (đồng gửi bản sao giữa Trưởng và Phó HTX).
+            </p>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {TEMPLATES.map((tpl) => (
+              <button
+                key={tpl.label}
+                type="button"
+                className="btn btn-sm"
+                onClick={() => {
+                  setSeverity(tpl.severity);
+                  setAudience(tpl.audience);
+                  setTitle(tpl.title);
+                  setMessage(tpl.message);
+                }}
+              >
+                Mẫu: {tpl.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
+          <div>
+            <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+              Loại thông báo
+            </label>
+            <select
+              className="filter-select"
+              style={{ width: "100%" }}
+              value={severity}
+              onChange={(e) => setSeverity(e.target.value as SystemAlertSeverity)}
+            >
+              <option value="info">Thông báo Ban điều hành gửi nông hộ / cập nhật</option>
+              <option value="warning">Cảnh báo, bảo trì kỹ thuật</option>
+              <option value="critical">Khẩn cấp, sự cố hệ thống</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+              Đối tượng nhận thông báo
+            </label>
+            <select
+              className="filter-select"
+              style={{ width: "100%" }}
+              value={audience}
+              onChange={(e) => setAudience(e.target.value as SystemAlertAudience)}
+            >
+              <option value="farmer">Toàn thể nông hộ (đồng gửi Trưởng HTX và Phó HTX)</option>
+              <option value="all">Toàn bộ người dùng (Hộ nông dân và Cán bộ)</option>
+              <option value="staff">Chỉ cán bộ quản trị HTX</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+            Tiêu đề ngắn gọn
+          </label>
+          <input
+            type="text"
+            className="form-input"
+            maxLength={160}
+            placeholder="Ví dụ: Thông báo lịch họp xã viên hoặc hướng dẫn chăm sóc vụ mới"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+            Nội dung chi tiết gửi tới người dùng
+          </label>
+          <textarea
+            className="form-input"
+            rows={3}
+            maxLength={600}
+            placeholder="Nhập nội dung chi tiết gửi đến tất cả các hộ thành viên…"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            required
+          />
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button type="submit" className="btn btn-primary" disabled={submitting}>
+            {submitting ? "Đang phát thông báo…" : "Gửi thông báo ngay"}
+          </button>
+        </div>
+      </form>
+      )}
+
+      {/* Cảnh báo / thông báo đang bật (nếu có) */}
+      {activeAlert && (
+        <div
+          className="card"
+          style={{
+            padding: "18px 20px",
+            border: "1px solid #d4d4d2",
+            background: (SEVERITY_META[activeAlert.severity] ?? SEVERITY_META.info).bg,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 14,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div
+              style={{
+                fontSize: 11.5,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: (SEVERITY_META[activeAlert.severity] ?? SEVERITY_META.info).color,
+                marginBottom: 4,
+              }}
+            >
+              ĐANG PHÁT TRÊN MÀN HÌNH NGƯỜI DÙNG - {AUDIENCE_LABELS[activeAlert.audience]}
+            </div>
+            <div style={{ fontSize: 15.5, fontWeight: 600, color: "#14372f", marginBottom: 4 }}>
+              {activeAlert.title}
+            </div>
+            <div style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.5 }}>{activeAlert.message}</div>
+          </div>
+          {canResolveAlert && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={resolvingId === activeAlert.id}
+              onClick={() => void handleResolve(activeAlert.id)}
+            >
+              {resolvingId === activeAlert.id
+                ? "Đang cập nhật…"
+                : activeAlert.severity === "info"
+                  ? "Đóng dải thông báo"
+                  : "Đánh dấu đã khắc phục"}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Trạng thái sức khỏe tự động */}
       <div
         className="card"
@@ -347,160 +500,7 @@ export default function SystemAlertsTab() {
         </footer>
       </div>
 
-      {/* Cảnh báo / thông báo đang bật (nếu có) */}
-      {activeAlert && (
-        <div
-          className="card"
-          style={{
-            padding: "18px 20px",
-            border: "1px solid #d4d4d2",
-            background: (SEVERITY_META[activeAlert.severity] ?? SEVERITY_META.info).bg,
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 14,
-          }}
-        >
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <div
-              style={{
-                fontSize: 11.5,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                color: (SEVERITY_META[activeAlert.severity] ?? SEVERITY_META.info).color,
-                marginBottom: 4,
-              }}
-            >
-              ĐANG PHÁT TRÊN MÀN HÌNH NGƯỜI DÙNG - {AUDIENCE_LABELS[activeAlert.audience]}
-            </div>
-            <div style={{ fontSize: 15.5, fontWeight: 600, color: "#14372f", marginBottom: 4 }}>
-              {activeAlert.title}
-            </div>
-            <div style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.5 }}>{activeAlert.message}</div>
-          </div>
-          {canResolveAlert && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={resolvingId === activeAlert.id}
-              onClick={() => void handleResolve(activeAlert.id)}
-            >
-              {resolvingId === activeAlert.id
-                ? "Đang cập nhật…"
-                : activeAlert.severity === "info"
-                  ? "Đóng dải thông báo"
-                  : "Đánh dấu đã khắc phục"}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Biểu mẫu phát thông báo mới */}
-      {canCreateAlert && (
-      <form className="card" onSubmit={handleSubmit} style={{ padding: "20px", display: "grid", gap: 14 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#14372f" }}>
-              Phát thông báo Ban quản trị, cập nhật hoặc bảo trì hệ thống
-            </h3>
-            <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5f6d66" }}>
-              Gửi tức thời tới chuông Thông báo của từng hộ dân và cán bộ theo thời gian thực, đồng thời hiển thị trên đầu màn hình.
-            </p>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {TEMPLATES.map((tpl) => (
-              <button
-                key={tpl.label}
-                type="button"
-                className="btn btn-sm"
-                onClick={() => {
-                  setSeverity(tpl.severity);
-                  setAudience(tpl.audience);
-                  setTitle(tpl.title);
-                  setMessage(tpl.message);
-                }}
-              >
-                Mẫu: {tpl.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
-          <div>
-            <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-              Loại thông báo
-            </label>
-            <select
-              className="filter-select"
-              style={{ width: "100%" }}
-              value={severity}
-              onChange={(e) => setSeverity(e.target.value as SystemAlertSeverity)}
-            >
-              <option value="info">Thông báo Ban quản trị và cập nhật hệ thống</option>
-              <option value="warning">Cảnh báo, bảo trì kỹ thuật</option>
-              <option value="critical">Khẩn cấp, sự cố hệ thống</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-              Đối tượng nhận thông báo
-            </label>
-            <select
-              className="filter-select"
-              style={{ width: "100%" }}
-              value={audience}
-              onChange={(e) => setAudience(e.target.value as SystemAlertAudience)}
-            >
-              <option value="farmer">Tất cả hộ nông dân (đồng gửi Trưởng HTX và Phó HTX)</option>
-              <option value="all">Toàn bộ người dùng (Hộ nông dân và Cán bộ)</option>
-              <option value="staff">Chỉ cán bộ quản trị HTX</option>
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-            Tiêu đề ngắn gọn
-          </label>
-          <input
-            type="text"
-            className="form-input"
-            maxLength={160}
-            placeholder="Ví dụ: Cập nhật quy trình chăm sóc và danh mục thuốc BVTV mới"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
-        </div>
-
-        <div>
-          <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
-            Nội dung chi tiết gửi tới người dùng
-          </label>
-          <textarea
-            className="form-input"
-            rows={3}
-            maxLength={600}
-            placeholder="Nhập nội dung thông báo của Ban quản trị hoặc hướng dẫn cho từng hộ dân…"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            required
-          />
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? "Đang phát thông báo…" : "Phát thông báo ngay"}
-          </button>
-        </div>
-      </form>
-      )}
-
-      {/* Lịch sử thông báo khẩn */}
+      {/* Lịch sử thông báo */}
       <div className="table-wrap">
         <table>
           <thead>

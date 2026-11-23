@@ -1,6 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { Bell } from "@/components/ui/PublicIcon";
 import {
   notifyCountsChanged,
@@ -13,10 +15,16 @@ import { EmptyState, Sheet } from "@/components/portal/ui";
 import { invalidateQueries, NOTIFICATIONS_PATH, useSharedQuery } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
 import { usePersistedState } from "@/lib/back-navigation";
+import { lazyChunk } from "@/lib/lazy-chunk";
 import type { Tone } from "@/lib/portal-labels";
 import { isRealtimeStreamConnected, useRealtimeNotifications } from "@/lib/realtime-notifications";
 import type { NotificationItem, NotificationList } from "@/types/notifications";
 import { formatDate } from "@/utils/format";
+
+const BroadcastNoticeModal = dynamic(
+  () => lazyChunk(() => import("@/components/admin/households/BroadcastNoticeModal")),
+  { ssr: false },
+);
 
 function kindMeta(item: NotificationItem): { label: string; tone: Tone } {
   const link = (item.link || "").toLowerCase();
@@ -113,7 +121,10 @@ function navigateAdminNotification(item: NotificationItem) {
 }
 
 export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
+  const { can } = useAuth();
+  const canBroadcastNotice = can("system-alerts", "create");
   const [open, setOpen] = usePersistedState("admin:notif:open", false);
+  const [composingNotice, setComposingNotice] = useState(false);
   const [filter, setFilter] = usePersistedState<"unread" | "read">(
     "admin:notif:filter",
     "unread",
@@ -211,6 +222,20 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              {canBroadcastNotice && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setOpen(false);
+                    setComposingNotice(true);
+                  }}
+                  style={{ width: "100%", justifyContent: "center", minHeight: 38 }}
+                >
+                  Soạn thông báo gửi toàn nông hộ
+                </button>
+              )}
+
               <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(2, minmax(132px, 1fr))", gap: 8, width: "100%", fontVariantNumeric: "tabular-nums" }}>
                 <button
                   type="button"
@@ -302,6 +327,10 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
             )}
           </div>
         </Sheet>
+      )}
+
+      {composingNotice && (
+        <BroadcastNoticeModal onClose={() => setComposingNotice(false)} />
       )}
     </>
   );

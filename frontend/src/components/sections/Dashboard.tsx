@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import InsightLineChart, { type InsightPoint } from "@/components/ui/charts/InsightLineChart";
@@ -15,9 +16,15 @@ import {
 import { formatVn, percent } from "@/components/admin/shared/form-utils";
 import { badgeOf, SCHEDULE_KIND } from "@/components/admin/shared/labels";
 import { getServerCalibratedDate } from "@/lib/api-client";
+import { lazyChunk } from "@/lib/lazy-chunk";
 import { formatDate } from "@/utils/format";
 import type { DashboardSummary } from "@/types/dashboard";
 import type { HouseholdStatus } from "@/types/households";
+
+const BroadcastNoticeModal = dynamic(
+  () => lazyChunk(() => import("@/components/admin/households/BroadcastNoticeModal")),
+  { ssr: false },
+);
 
 type ActivityRangeDays = 7 | 14 | 30;
 
@@ -133,9 +140,11 @@ function useSmoothNumber(target: number, decimals = 0): number {
 export default function Dashboard() {
   const { can } = useAuth();
   const canViewActivityChart = can("journal", "read") || can("spray", "read");
+  const canBroadcastNotice = can("system-alerts", "create");
   const [rangeDays, setRangeDays] = useState<ActivityRangeDays>(7);
   const [dateStr, setDateStr] = useState("");
   const [fullDateStr, setFullDateStr] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
   const { data: summary, loading, error, refresh } = useApi<DashboardSummary>("/dashboard/summary");
 
   useEffect(() => {
@@ -287,12 +296,24 @@ export default function Dashboard() {
 
   return (
     <>
-      {dateStr && (
+      {(dateStr || canBroadcastNotice) && (
         <div className="page-header dash-header">
-          <div className="dash-header-meta" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-            <div className="dash-date-badge" title={fullDateStr || dateStr} suppressHydrationWarning>
-              <span>{dateStr}</span>
-            </div>
+          <div className="dash-header-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {canBroadcastNotice && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setBroadcasting(true)}
+                style={{ minHeight: 36 }}
+              >
+                Thông báo toàn hộ
+              </button>
+            )}
+            {dateStr && (
+              <div className="dash-date-badge" title={fullDateStr || dateStr} suppressHydrationWarning>
+                <span>{dateStr}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -621,6 +642,10 @@ export default function Dashboard() {
             </section>
           </div>
         </div>
+      )}
+
+      {broadcasting && (
+        <BroadcastNoticeModal onClose={() => setBroadcasting(false)} />
       )}
     </>
   );
