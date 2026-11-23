@@ -2274,12 +2274,22 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     });
     expect(deputyAlert.status).toBe(201);
 
-    const [farmerNotifs1, headNotifs1] = await Promise.all([
+    const [farmerNotifs1, farmerBinhNotifs1, headNotifs1] = await Promise.all([
       farmerAn.get("/api/notifications"),
+      (await loggedIn(USERS.farmerBinh)).get("/api/notifications"),
       headAgent.get("/api/notifications"),
     ]);
     expect(
       farmerNotifs1.body.data.some(
+        (n: { title?: string; body?: string }) =>
+          typeof n.title === "string" &&
+          n.title.includes(deputyBroadcastTitle) &&
+          typeof n.body === "string" &&
+          n.body.includes("Phó HTX"),
+      ),
+    ).toBe(true);
+    expect(
+      farmerBinhNotifs1.body.data.some(
         (n: { title?: string }) => typeof n.title === "string" && n.title.includes(deputyBroadcastTitle),
       ),
     ).toBe(true);

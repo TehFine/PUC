@@ -124,14 +124,14 @@ export class SystemAlertsService implements OnModuleInit {
     const severity: SystemAlertSeverity = dto.severity ?? "critical";
     const audience: SystemAlertAudience = dto.audience ?? "all";
 
-    // Tự động đóng dải băng cũ đang mở để trên đầu màn hình chỉ hiển thị 1 dải thông báo rõ ràng nhất;
+    // Tự động đóng dải băng cũ cùng cấp (không để thông báo thường kỳ 'info' tắt nhầm cảnh báo sự cố 'critical'/'warning');
     // riêng thông báo thường kỳ ('info') vẫn giữ nguyên trạng thái chưa đọc trong chuông của hộ dân.
     const prevActive = await this.db.query<{ id: number; severity: string }>(
       `UPDATE system_alerts
        SET active = false, resolved_at = now(), resolved_by = $1
-       WHERE active = true
+       WHERE active = true AND ($2::text <> 'info' OR severity = 'info')
        RETURNING id, severity`,
-      [user.id],
+      [user.id, severity],
     );
     for (const prev of prevActive.rows) {
       if (prev.severity !== "info") {
@@ -147,21 +147,25 @@ export class SystemAlertsService implements OnModuleInit {
       [severity, dto.title, dto.message, audience, user.id, user.fullName],
     );
     const created = camelRow(rows[0]) as unknown as SystemAlertRecord;
-    this.cachedActive = { value: created, expiresAt: Date.now() + SystemAlertsService.CACHE_TTL_MS };
+    this.cachedActive = null;
 
     const prefix =
       severity === "critical" ? "[KHẨN] " : severity === "warning" ? "[BẢO TRÌ] " : "[THÔNG BÁO] ";
     const notifTitle = dto.title.startsWith("[") ? dto.title : `${prefix}${dto.title}`;
+    const senderRoleLabel = ROLE_LABELS_VN[user.role] ?? "Ban điều hành HTX";
+    const farmerBody =
+      severity === "info" && (user.role === "htx_deputy" || user.role === "htx_head")
+        ? `${senderRoleLabel} ${user.fullName}: ${dto.message}`
+        : dto.message;
     const notifInput = {
       kind: "system" as const,
       title: notifTitle,
-      body: dto.message,
+      body: audience === "farmer" ? farmerBody : dto.message,
       link: `#system-alert-${created.id}`,
     };
 
     if (audience === "farmer") {
       await this.notifications.notifyAllFarmers(notifInput);
-      const senderRoleLabel = ROLE_LABELS_VN[user.role] ?? "Ban điều hành";
       await this.notifications.notifyRoles(
         COOP_EXECUTIVE_MIRROR_ROLES,
         {
