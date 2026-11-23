@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import type { AuthUser } from "../auth/auth-user";
 import { isAdminPrivilegedRole, isManagementRole } from "../auth/permissions";
 import { AuditService } from "../audit/audit.service";
-import { isStaffInCuneCoopScope, isStaffInParcelScope } from "../common/crud/village-scope";
+import { isStaffInCuneCoopScope, isStaffInParcelScope, villageScope } from "../common/crud/village-scope";
 import { AppException, forbidden, notFound } from "../common/errors/app.exception";
 import { DatabaseService } from "../database/database.service";
 
@@ -201,24 +201,30 @@ export class RegistrationsService {
       return { data: [] };
     }
     const term = query?.trim() ? `%${query.trim().replace(/[%_\\]/g, "\\$&")}%` : null;
-    const { rows } = await this.db.query<{
-      id: number;
-      code: string;
-      name: string;
-      phone: string;
-      village_id: number | null;
-      village_name: string;
-    }>(
-      `SELECT h.id, h.code, h.name, h.phone, h.village_id, v.name AS village_name
-       FROM households h
-       JOIN villages v ON v.id = h.village_id
-       WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.household_id = h.id)
-         AND ($1::text IS NULL OR h.name ILIKE $1 OR h.code ILIKE $1 OR h.phone ILIKE $1)
-       ORDER BY h.name
-       LIMIT 50`,
-      [term],
-    );
-    const officerVillageName = await this.resolveOfficerVillageName(user);
+    const params: unknown[] = [term];
+    const scopeClause = user ? villageScope("h.village_id")(user, params) : null;
+    const whereScope = scopeClause ? `AND (${scopeClause})` : "";
+    const [{ rows }, officerVillageName] = await Promise.all([
+      this.db.query<{
+        id: number;
+        code: string;
+        name: string;
+        phone: string;
+        village_id: number | null;
+        village_name: string;
+      }>(
+        `SELECT h.id, h.code, h.name, h.phone, h.village_id, v.name AS village_name
+         FROM households h
+         JOIN villages v ON v.id = h.village_id
+         WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.household_id = h.id)
+           AND ($1::text IS NULL OR h.name ILIKE $1 OR h.code ILIKE $1 OR h.phone ILIKE $1)
+           ${whereScope}
+         ORDER BY h.name
+         LIMIT 50`,
+        params,
+      ),
+      this.resolveOfficerVillageName(user),
+    ]);
     const scoped = user
       ? rows.filter((r) => isStaffInParcelScope(user, { villageId: r.village_id, villageName: r.village_name }, officerVillageName))
       : rows;

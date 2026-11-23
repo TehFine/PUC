@@ -3,6 +3,7 @@ import type { AuthUser } from "../../auth/auth-user";
 import { can, isCoopStaffRole } from "../../auth/permissions";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
+import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
 import { generateQrToken } from "../../common/crypto/qr-token";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { camelRow, camelRows, todayVn } from "../../common/sql/rows";
@@ -199,27 +200,62 @@ export class HarvestService extends BaseCrudService {
         }
         if (user.role === "inspector") {
           const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
-          if (!matchesJurisdiction(region, [CUNE_ADMIN_LOCATION])) return "1 = 0";
-          if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) return "1 = 0";
+          const allowedLocs = [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION];
+          if (!matchesJurisdiction(region, allowedLocs)) return "1 = 0";
+          if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, allowedLocs)) return "1 = 0";
+          const inCune = matchesJurisdiction(region, [CUNE_ADMIN_LOCATION]);
+          const inEaKhal = matchesJurisdiction(region, [EAKHAL_ADMIN_LOCATION]);
+          if (inEaKhal && !inCune) {
+            return `EXISTS (
+              SELECT 1 FROM harvest_contributions hc
+              JOIN households h ON h.id = hc.household_id
+              JOIN villages v ON v.id = h.village_id
+              WHERE hc.lot_id = t.id AND (v.name ~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]' OR hc.plot_code ~* '^66-PUC-SR0001-')
+            )`;
+          }
+          if (inCune && !inEaKhal) {
+            return `NOT EXISTS (
+              SELECT 1 FROM harvest_contributions hc
+              JOIN households h ON h.id = hc.household_id
+              JOIN villages v ON v.id = h.village_id
+              WHERE hc.lot_id = t.id AND (v.name ~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]' OR hc.plot_code ~* '^66-PUC-SR0001-')
+            )`;
+          }
           return null;
         }
         if (user.role === "village_officer") {
           const hasVillage = user.villageId !== null && user.villageId !== undefined;
           const hasCommune = Boolean(user.assignedCommune && user.assignedCommune.trim());
           if (!hasVillage && !hasCommune) return "1 = 0";
-          if (hasCommune && !matchesJurisdiction(user.assignedCommune!, [CUNE_ADMIN_LOCATION])) return "1 = 0";
+          if (hasCommune && !matchesJurisdiction(user.assignedCommune!, [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION])) {
+            return "1 = 0";
+          }
+          const vConds: string[] = [];
           if (hasVillage) {
             params.push(Number(user.villageId));
+            vConds.push(`h.village_id = $${params.length}`);
+          }
+          if (hasCommune) {
+            const inCune = matchesJurisdiction(user.assignedCommune!, [CUNE_ADMIN_LOCATION]);
+            const inEaKhal = matchesJurisdiction(user.assignedCommune!, [EAKHAL_ADMIN_LOCATION]);
+            if (inEaKhal && !inCune) {
+              vConds.push(`(v.name ~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]' OR hc.plot_code ~* '^66-PUC-SR0001-')`);
+            } else if (inCune && !inEaKhal) {
+              vConds.push(`v.name !~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]'`);
+            }
+          }
+          if (vConds.length > 0) {
             return `EXISTS (
               SELECT 1 FROM harvest_contributions hc
               JOIN households h ON h.id = hc.household_id
-              WHERE hc.lot_id = t.id AND h.village_id = $${params.length}
+              JOIN villages v ON v.id = h.village_id
+              WHERE hc.lot_id = t.id AND ${vConds.join(" AND ")}
             )`;
           }
           return null;
         }
         if (isCoopStaffRole(user.role)) {
-          if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
+          if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION])) {
             return "1 = 0";
           }
           params.push((user.coopCode || "HTX-CUNE").trim().toUpperCase());
@@ -253,10 +289,11 @@ export class HarvestService extends BaseCrudService {
     }
     if (user.role === "inspector") {
       const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
-      if (!matchesJurisdiction(region, [CUNE_ADMIN_LOCATION])) {
+      const allowedLocs = [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION];
+      if (!matchesJurisdiction(region, allowedLocs)) {
         throw notFound(notFoundMsg);
       }
-      if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
+      if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, allowedLocs)) {
         throw notFound(notFoundMsg);
       }
       return;
@@ -267,7 +304,7 @@ export class HarvestService extends BaseCrudService {
       if (!hasVillage && !hasCommune) {
         throw notFound(notFoundMsg);
       }
-      if (hasCommune && !matchesJurisdiction(user.assignedCommune!, [CUNE_ADMIN_LOCATION])) {
+      if (hasCommune && !matchesJurisdiction(user.assignedCommune!, [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION])) {
         throw notFound(notFoundMsg);
       }
       if (hasVillage) {
@@ -289,7 +326,7 @@ export class HarvestService extends BaseCrudService {
       return;
     }
     if (isCoopStaffRole(user.role)) {
-      if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
+      if (user.assignedCommune && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION])) {
         throw notFound(notFoundMsg);
       }
       const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
@@ -306,18 +343,18 @@ export class HarvestService extends BaseCrudService {
     }
     let existing:
       | {
-          id: number;
-          code: string;
-          status: string;
-          weight_tons: number;
-          harvested_on: string;
-          enterprise_id: number | null;
-          contract_id: number | null;
-          grade_a_pct: number | null;
-          grade_b_pct: number | null;
-          grade_c_pct: number | null;
-          coop_code: string | null;
-        }
+        id: number;
+        code: string;
+        status: string;
+        weight_tons: number;
+        harvested_on: string;
+        enterprise_id: number | null;
+        contract_id: number | null;
+        grade_a_pct: number | null;
+        grade_b_pct: number | null;
+        grade_c_pct: number | null;
+        coop_code: string | null;
+      }
       | undefined;
 
     if (context.method === "PATCH" && context.id !== undefined) {
@@ -628,11 +665,8 @@ export class HarvestService extends BaseCrudService {
 
     const hasPlots = await plotsTableExists(this.db);
     const params: unknown[] = [lotId];
-    let villageWhere = "";
-    if (user?.role === "village_officer") {
-      params.push(user.villageId ?? -1);
-      villageWhere = `AND h.village_id = $${params.length}`;
-    }
+    const scoped = user && user.role !== "enterprise" ? villageScope("h.village_id")(user, params) : null;
+    const villageWhere = scoped ? `AND (${scoped})` : "";
 
     const sql = hasPlots
       ? `SELECT hc.id, hc.lot_id, hc.household_id, NULLIF(hc.plot_code, '') AS plot_code,
@@ -695,14 +729,18 @@ export class HarvestService extends BaseCrudService {
       const lotHarvestedOn = String(lotRow.harvested_on).slice(0, 10);
       const seasonYear = Number(lotHarvestedOn.slice(0, 4)) || new Date().getFullYear();
 
-      const household = await client.query<{ id: number; status: string; village_id: number }>(
-        "SELECT id, status, village_id FROM households WHERE id = $1",
+      const household = await client.query<{ id: number; status: string; village_id: number; village_name: string | null }>(
+        `SELECT h.id, h.status, h.village_id, v.name AS village_name
+         FROM households h
+         LEFT JOIN villages v ON v.id = h.village_id
+         WHERE h.id = $1`,
         [dto.householdId],
       );
       if (household.rowCount === 0 || !household.rows[0]) throw badRequest("Hộ nông dân không tồn tại.");
       const hhRow = household.rows[0];
-      if (user.role === "village_officer" && Number(hhRow.village_id) !== Number(user.villageId ?? -1)) {
-        throw forbidden("Hộ nông dân không thuộc thôn hoặc buôn quản lý của bạn.");
+      const officerVillageName = await this.resolveOfficerVillageName(user);
+      if (!isStaffInParcelScope(user, { villageId: hhRow.village_id, villageName: hhRow.village_name }, officerVillageName)) {
+        throw forbidden("Hộ nông dân không thuộc thôn hoặc địa bàn quản lý của bạn.");
       }
       if (hhRow.status === "violation" || hhRow.status === "pending") {
         throw badRequest("Hộ nông dân đang chờ duyệt hoặc đang có vi phạm chưa khắc phục, không được đưa vào lô thu hoạch.");
@@ -765,12 +803,12 @@ export class HarvestService extends BaseCrudService {
       // Kiểm tra phiếu kiểm nghiệm đã xác thực gần nhất ở cấp hộ và thửa (luôn chạy ngay cả khi resolvedPlotCode === '')
       const labFail = resolvedPlotCode
         ? await client.query<{
-            code: string;
-            result: string;
-            yellow_o_positive: boolean;
-            cd_mg_kg: number;
-          }>(
-            `SELECT code, result, yellow_o_positive, cd_mg_kg::float8 AS cd_mg_kg
+          code: string;
+          result: string;
+          yellow_o_positive: boolean;
+          cd_mg_kg: number;
+        }>(
+          `SELECT code, result, yellow_o_positive, cd_mg_kg::float8 AS cd_mg_kg
              FROM lab_tests
              WHERE household_id = $1
                AND record_status = 'verified'
@@ -781,15 +819,15 @@ export class HarvestService extends BaseCrudService {
                )
              ORDER BY sampled_on DESC, id DESC
              LIMIT 1`,
-            [dto.householdId, resolvedPlotCode],
-          )
+          [dto.householdId, resolvedPlotCode],
+        )
         : await client.query<{
-            code: string;
-            result: string;
-            yellow_o_positive: boolean;
-            cd_mg_kg: number;
-          }>(
-            `SELECT code, result, yellow_o_positive, cd_mg_kg
+          code: string;
+          result: string;
+          yellow_o_positive: boolean;
+          cd_mg_kg: number;
+        }>(
+          `SELECT code, result, yellow_o_positive, cd_mg_kg
              FROM (
                SELECT DISTINCT ON (COALESCE(upper(NULLIF(btrim(plot_code), '')), ''))
                       code, result, yellow_o_positive, cd_mg_kg::float8 AS cd_mg_kg, sampled_on, id
@@ -803,8 +841,8 @@ export class HarvestService extends BaseCrudService {
                 OR COALESCE(cd_mg_kg, 0) > 0.05
              ORDER BY sampled_on DESC, id DESC
              LIMIT 1`,
-            [dto.householdId],
-          );
+          [dto.householdId],
+        );
       if (
         labFail.rows[0] &&
         (labFail.rows[0].result === "fail" ||
@@ -887,8 +925,8 @@ export class HarvestService extends BaseCrudService {
             const remainingKg = Math.max(0, Number((maxQuotaKg - usedOtherLotsKg).toFixed(1)));
             throw badRequest(
               `Vượt hạn ngạch sản lượng thẩm định đầu vụ của thửa "${resolvedPlotCode}" năm ${seasonYear} ` +
-                `(Trần tối đa: ${maxQuotaKg.toLocaleString("vi-VN")} kg, đã xuất các lô khác: ${usedOtherLotsKg.toLocaleString("vi-VN")} kg, ` +
-                `còn lại: ${remainingKg.toLocaleString("vi-VN")} kg). Hệ thống khóa tự động chống trộn hàng ngoài vùng!`,
+              `(Trần tối đa: ${maxQuotaKg.toLocaleString("vi-VN")} kg, đã xuất các lô khác: ${usedOtherLotsKg.toLocaleString("vi-VN")} kg, ` +
+              `còn lại: ${remainingKg.toLocaleString("vi-VN")} kg). Hệ thống khóa tự động chống trộn hàng ngoài vùng!`,
             );
           }
         }
@@ -978,6 +1016,17 @@ export class HarvestService extends BaseCrudService {
       if (sealedCheck.rows[0]?.sealed) {
         throw badRequest("Lô hàng đã giao hoặc đã xuất khẩu, không thể xóa đóng góp đã niêm phong.");
       }
+    }
+
+    const contribCheck = await this.db.query<{ household_id: number }>(
+      "SELECT household_id FROM harvest_contributions WHERE id = $1 AND lot_id = $2",
+      [contributionId, lotId],
+    );
+    if (contribCheck.rowCount === 0 || !contribCheck.rows[0]) {
+      throw notFound("Không tìm thấy đóng góp này.");
+    }
+    if (user.role !== "enterprise") {
+      await assertHouseholdInScope(this.db, { householdId: contribCheck.rows[0].household_id }, user);
     }
 
     const deleted = await this.db.query(
@@ -1082,7 +1131,6 @@ export class HarvestService extends BaseCrudService {
     }
 
     const hasPlots = await plotsTableExists(this.db);
-    const villageFilter = user.role === "village_officer" ? (user.villageId ?? -1) : null;
     const officerVillageName = await this.resolveOfficerVillageName(user);
     const canReadLabTests = can(user.role, "testing", "read");
     const canSeeDraftLabTests = canReadLabTests && can(user.role, "testing", "update");
@@ -1162,9 +1210,9 @@ export class HarvestService extends BaseCrudService {
       if (canReadLabTests) {
         const labParams: unknown[] = [cleanPlot];
         let labScopeSql = canSeeDraftLabTests ? "" : "AND lt.record_status = 'verified'";
-        if (villageFilter !== null) {
-          labParams.push(villageFilter);
-          labScopeSql += ` AND h.village_id = $${labParams.length}`;
+        if (user.role !== "enterprise") {
+          const vScoped = villageScope("h.village_id")(user, labParams);
+          if (vScoped) labScopeSql += ` AND (${vScoped})`;
         }
         if (user.role === "enterprise") {
           labParams.push(user.enterpriseId ?? -1);
@@ -1230,9 +1278,9 @@ export class HarvestService extends BaseCrudService {
 
       const lotParams: unknown[] = [cleanPlot, ownerHouseholdId];
       let lotScopeSql = "";
-      if (villageFilter !== null) {
-        lotParams.push(villageFilter);
-        lotScopeSql += ` AND h.village_id = $${lotParams.length}`;
+      if (user.role !== "enterprise") {
+        const vScoped = villageScope("h.village_id")(user, lotParams);
+        if (vScoped) lotScopeSql += ` AND (${vScoped})`;
       }
       if (user.role === "enterprise") {
         lotParams.push(user.enterpriseId ?? -1);
@@ -1251,15 +1299,22 @@ export class HarvestService extends BaseCrudService {
                 hc.weight_kg::float8 AS contributed_kg,
                 NULLIF(hc.plot_code, '') AS recorded_plot_code,
                 h.code AS household_code, h.name AS household_name, v.name AS village_name,
-                (SELECT count(*)::int FROM harvest_items hi WHERE hi.lot_id = hl.id AND hi.item_type = 'box') AS box_count,
-                (SELECT count(*)::int FROM harvest_items hi WHERE hi.lot_id = hl.id AND hi.item_type = 'fruit') AS fruit_stamp_count
+                COALESCE(hi_agg.box_count, 0) AS box_count,
+                COALESCE(hi_agg.fruit_stamp_count, 0) AS fruit_stamp_count
          FROM harvest_contributions hc
          JOIN harvest_lots hl ON hl.id = hc.lot_id
          JOIN households h ON h.id = hc.household_id
          JOIN villages v ON v.id = h.village_id
          LEFT JOIN enterprises e ON e.id = hl.enterprise_id
+         LEFT JOIN (
+           SELECT lot_id,
+                  count(*) FILTER (WHERE item_type = 'box')::int AS box_count,
+                  count(*) FILTER (WHERE item_type = 'fruit')::int AS fruit_stamp_count
+           FROM harvest_items
+           GROUP BY lot_id
+         ) hi_agg ON hi_agg.lot_id = hl.id
          WHERE (
-           upper(hc.plot_code) = upper($1)
+           upper(btrim(hc.plot_code)) = upper(btrim($1))
            OR (hc.plot_code = '' AND $2::bigint IS NOT NULL AND hc.household_id = $2)
          ) ${lotScopeSql}
          ORDER BY hl.harvested_on DESC, hl.id DESC`,
@@ -1309,9 +1364,9 @@ export class HarvestService extends BaseCrudService {
 
     const srcParams: unknown[] = [resolvedLotId];
     let srcVillageSql = "";
-    if (villageFilter !== null) {
-      srcParams.push(villageFilter);
-      srcVillageSql = `AND h.village_id = $${srcParams.length}`;
+    if (user.role !== "enterprise") {
+      const vScoped = villageScope("h.village_id")(user, srcParams);
+      if (vScoped) srcVillageSql = `AND (${vScoped})`;
     }
     const srcLabStatusSql = canSeeDraftLabTests ? "" : "AND lt.record_status = 'verified'";
     const srcLabJoinOn = canReadLabTests ? "true" : "false";
@@ -1475,8 +1530,7 @@ export class HarvestService extends BaseCrudService {
     if (!isStaffInCuneCoopScope(user, true)) {
       return { data: [], total: 0, page: 1, pageSize: 500 };
     }
-    const hasPlots =
-      (await this.db.query<{ reg: string | null }>("SELECT to_regclass('public.plots') AS reg")).rows[0]?.reg !== null;
+    const hasPlots = await plotsTableExists(this.db);
 
     const villageFilter =
       user.role === "village_officer" && user.villageId !== null && user.villageId !== undefined
@@ -1845,6 +1899,46 @@ export class HarvestService extends BaseCrudService {
       } else {
         if (!isStaffInCuneCoopScope(user, true)) {
           return { data: [] };
+        }
+        if (isCoopStaffRole(user.role)) {
+          values.push((user.coopCode || "HTX-CUNE").trim().toUpperCase());
+          conditions.push(
+            `(trace_detail_access_logs.lot_code IS NULL OR EXISTS (
+               SELECT 1 FROM harvest_lots hl
+               WHERE upper(hl.code) = upper(trace_detail_access_logs.lot_code)
+                 AND upper(COALESCE(hl.coop_code, 'HTX-CUNE')) = $${values.length}
+             ))`,
+          );
+        }
+        if (user.role === "inspector") {
+          const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
+          const inCune = matchesJurisdiction(region, [CUNE_ADMIN_LOCATION]);
+          const inEaKhal = matchesJurisdiction(region, [EAKHAL_ADMIN_LOCATION]);
+          if (inEaKhal && !inCune) {
+            conditions.push(
+              `EXISTS (
+                 SELECT 1
+                 FROM harvest_lots hl
+                 JOIN harvest_contributions hc ON hc.lot_id = hl.id
+                 JOIN households h ON h.id = hc.household_id
+                 JOIN villages v ON v.id = h.village_id
+                 WHERE upper(hl.code) = upper(COALESCE(trace_detail_access_logs.lot_code, ''))
+                   AND (v.name ~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]' OR hc.plot_code ~* '^66-PUC-SR0001-')
+               )`,
+            );
+          } else if (inCune && !inEaKhal) {
+            conditions.push(
+              `(trace_detail_access_logs.lot_code IS NULL OR NOT EXISTS (
+                 SELECT 1
+                 FROM harvest_lots hl
+                 JOIN harvest_contributions hc ON hc.lot_id = hl.id
+                 JOIN households h ON h.id = hc.household_id
+                 JOIN villages v ON v.id = h.village_id
+                 WHERE upper(hl.code) = upper(trace_detail_access_logs.lot_code)
+                   AND (v.name ~* 'ea\\s*kh[aă]l|ea\\s*k''?s[oô]' OR hc.plot_code ~* '^66-PUC-SR0001-')
+               ))`,
+            );
+          }
         }
         if (user.role === "village_officer") {
           if (user.villageId !== null && user.villageId !== undefined) {
@@ -2368,6 +2462,7 @@ export class HarvestService extends BaseCrudService {
       },
     );
 
+    this.db.cache?.invalidateTags(["trace"], true);
     return camelRow(rows[0]);
   }
 
@@ -2410,6 +2505,7 @@ export class HarvestService extends BaseCrudService {
       },
     );
 
+    this.db.cache?.invalidateTags(["trace"], true);
     return { ok: true, id: rows[0].id, code: rows[0].code, status: "revoked" };
   }
 

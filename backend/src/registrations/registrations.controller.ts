@@ -8,7 +8,7 @@ import { RegistrationsService } from "./registrations.service";
 /** Duyệt đăng ký hộ dân: `/api/registrations*` (quản trị viên và cán bộ HTX). */
 @Controller("registrations")
 export class RegistrationsController {
-  constructor(private readonly service: RegistrationsService) {}
+  constructor(private readonly service: RegistrationsService) { }
 
   @Get()
   @Authorize("registrations", "read")
@@ -18,8 +18,8 @@ export class RegistrationsController {
 
   @Get("households")
   @Authorize("registrations", "read")
-  households(@Query("q") q?: string) {
-    return this.service.availableHouseholds(typeof q === "string" ? q.slice(0, 100) : undefined);
+  households(@CurrentUser() user: AuthUser, @Query("q") q?: string) {
+    return this.service.availableHouseholds(typeof q === "string" ? q.slice(0, 100) : undefined, user);
   }
 
   @Post(":id/approve")

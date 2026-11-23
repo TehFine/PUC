@@ -73,9 +73,12 @@ export class DeletionRequestsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async list(query: ListDeletionRequestsQueryDto, _user: AuthUser) {
+  async list(query: ListDeletionRequestsQueryDto, user: AuthUser) {
     const safePage = Math.max(1, Number(query.page) || 1);
     const safePageSize = Math.min(200, Math.max(1, Number(query.pageSize) || 50));
+    if (!isStaffInCuneCoopScope(user, true)) {
+      return { data: [], total: 0, pendingCount: 0, page: safePage, pageSize: safePageSize };
+    }
     const offset = (safePage - 1) * safePageSize;
 
     const params: unknown[] = [];
@@ -319,7 +322,7 @@ export class DeletionRequestsService {
 
   /** Chỉ Phó HTX (`htx_deputy`) mới có quyền phê duyệt để thực thi xóa vĩnh viễn. */
   async approve(requestId: number, user: AuthUser, dto: ReviewDeletionRequestDto, ip?: string) {
-    if (user.role !== "htx_deputy") {
+    if (user.role !== "htx_deputy" || !isStaffInCuneCoopScope(user, true)) {
       throw forbidden("Chỉ Phó HTX mới có quyền phê duyệt yêu cầu xóa thành viên khỏi hệ thống.");
     }
     const cleanNote = typeof dto.note === "string" && dto.note.trim() ? dto.note.trim() : null;
@@ -477,7 +480,7 @@ export class DeletionRequestsService {
 
   /** Chỉ Phó HTX (`htx_deputy`) mới có quyền từ chối yêu cầu xóa. */
   async reject(requestId: number, user: AuthUser, dto: ReviewDeletionRequestDto, ip?: string) {
-    if (user.role !== "htx_deputy") {
+    if (user.role !== "htx_deputy" || !isStaffInCuneCoopScope(user, true)) {
       throw forbidden("Chỉ Phó HTX mới có quyền từ chối yêu cầu xóa thành viên.");
     }
     const cleanNote = typeof dto.note === "string" && dto.note.trim() ? dto.note.trim() : null;

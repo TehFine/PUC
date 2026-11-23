@@ -2,8 +2,8 @@ import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
-import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
-import { badRequest } from "../../common/errors/app.exception";
+import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
+import { badRequest, forbidden } from "../../common/errors/app.exception";
 import { attachmentUrlSql, attachmentUrlsSql, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -111,6 +111,9 @@ export class SprayService extends BaseCrudService {
   }
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (context.user.role !== "farmer" && !isStaffInCuneCoopScope(context.user, true)) {
+      throw forbidden("Bạn không có quyền thao tác nhật ký phun thuốc ngoài phạm vi quản lý.");
+    }
     await assertHouseholdInScope(this.db, input, context.user);
     const out: Record<string, unknown> = { ...input };
     delete out.updatedByUserId;
@@ -141,6 +144,7 @@ export class SprayService extends BaseCrudService {
       if (!existing) {
         return out;
       }
+      await assertHouseholdInScope(this.db, { householdId: existing.household_id }, context.user);
       await this.assertSprayEditable(existing);
       out.updatedByUserId = context.user.id;
       out.updatedByName = context.user.fullName;
@@ -344,13 +348,17 @@ export class SprayService extends BaseCrudService {
     });
   }
 
-  protected override async guardDelete(id: number, _user: AuthUser) {
+  protected override async guardDelete(id: number, user: AuthUser) {
+    if (user.role !== "farmer" && !isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền xóa nhật ký phun thuốc ngoài phạm vi quản lý.");
+    }
     const { rows } = await this.db.query<{
       server_recorded_at: Date | string | null;
       household_id: number;
       plot_code: string | null;
     }>("SELECT server_recorded_at, household_id, plot_code FROM spray_records WHERE id = $1", [id]);
     if (rows[0]) {
+      await assertHouseholdInScope(this.db, { householdId: rows[0].household_id }, user);
       await this.assertSprayEditable(rows[0]);
     }
   }

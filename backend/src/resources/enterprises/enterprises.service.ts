@@ -1,7 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
-import { BaseCrudService } from "../../common/crud/base-crud.service";
+import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
+import { isStaffInCuneCoopScope } from "../../common/crud/village-scope";
+import { forbidden } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
 
 /**
@@ -9,10 +11,15 @@ import { DatabaseService } from "../../database/database.service";
  * SĐT, người đại diện của đối thủ). Tài khoản doanh nghiệp chưa gắn `enterpriseId` không thấy gì.
  */
 export const enterpriseSelfScope = (column: string) => (user: AuthUser, params: unknown[]) => {
-  if (user.role !== "enterprise") return null;
-  if (!user.enterpriseId) return "1 = 0";
-  params.push(user.enterpriseId);
-  return `${column} = $${params.length}`;
+  if (user.role === "enterprise") {
+    if (!user.enterpriseId) return "1 = 0";
+    params.push(user.enterpriseId);
+    return `${column} = $${params.length}`;
+  }
+  if (!isStaffInCuneCoopScope(user, true)) {
+    return "1 = 0";
+  }
+  return null;
 };
 
 @Injectable()
@@ -31,6 +38,13 @@ export class EnterprisesService extends BaseCrudService {
     });
   }
 
+  protected override prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (!isStaffInCuneCoopScope(context.user, false)) {
+      throw forbidden("Bạn không có quyền cập nhật hồ sơ doanh nghiệp ngoài phạm vi quản lý.");
+    }
+    return input;
+  }
+
   /** Khi tạm ngưng hoặc chấm dứt hợp tác doanh nghiệp, thu hồi ngay mọi phiên đăng nhập của tài khoản thuộc doanh nghiệp đó. */
   protected override async afterWrite(id: number, input: Record<string, unknown>) {
     if (input.status !== undefined && input.status !== "active") {
@@ -47,6 +61,9 @@ export class EnterprisesService extends BaseCrudService {
   }
 
   override async remove(id: number, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, false)) {
+      throw forbidden("Bạn không có quyền xóa doanh nghiệp ngoài phạm vi quản lý.");
+    }
     const { rows } = await this.db.query<{ id: number }>("SELECT id FROM users WHERE enterprise_id = $1", [id]);
     const linkedUserIds = rows.map((r) => Number(r.id));
     const result = await super.remove(id, user, ip);

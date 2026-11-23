@@ -19,6 +19,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SkipThrottle, Throttle } from "@nestjs/throttler";
+import { createHash } from "node:crypto";
 import type { Request, Response } from "express";
 import { memoryStorage } from "multer";
 import { finalize, type Observable } from "rxjs";
@@ -79,7 +80,15 @@ const findOr404 = async (service: UploadsService, id: number) => {
   return attachment;
 };
 
-const applySafeFileHeaders = (res: Response, attachment: AttachmentRow, totalBytes: number) => {
+const buildAttachmentEtag = (attachment: AttachmentRow, totalBytes: number): string => {
+  const digest = createHash("sha256")
+    .update(`puc-att-etag-v1:${attachment.id}:${attachment.public_token}:${totalBytes}`)
+    .digest("hex")
+    .slice(0, 24);
+  return `"att-${digest}"`;
+};
+
+const applySafeFileHeaders = (res: Response, attachment: AttachmentRow, totalBytes: number, precomputedEtag?: string) => {
   res.setHeader("Content-Type", attachment.mime_type);
   if (attachment.mime_type === "application/pdf") {
     res.setHeader("Content-Disposition", 'attachment; filename="tai-lieu-ho-so.pdf"');
@@ -89,7 +98,7 @@ const applySafeFileHeaders = (res: Response, attachment: AttachmentRow, totalByt
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   res.setHeader("Accept-Ranges", "bytes");
-  res.setHeader("ETag", `"att-${attachment.public_token}-${totalBytes}"`);
+  res.setHeader("ETag", precomputedEtag ?? buildAttachmentEtag(attachment, totalBytes));
   res.setHeader(
     "Content-Security-Policy",
     "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox",
@@ -129,9 +138,9 @@ async function streamAttachment(
 ): Promise<StreamableFile> {
   const cachedDiskSize = uploads.getVerifiedDiskSize(attachment.id);
   if (cachedDiskSize !== undefined) {
-    const cachedEtag = `"att-${attachment.public_token}-${cachedDiskSize}"`;
+    const cachedEtag = buildAttachmentEtag(attachment, cachedDiskSize);
     if (req.headers["if-none-match"] === cachedEtag) {
-      applySafeFileHeaders(res, attachment, cachedDiskSize);
+      applySafeFileHeaders(res, attachment, cachedDiskSize, cachedEtag);
       res.status(304);
       return new StreamableFile(Buffer.alloc(0));
     }
@@ -140,9 +149,9 @@ async function streamAttachment(
   const opened = await uploads.openFile(attachment);
   try {
     const total = opened.totalBytes;
-    applySafeFileHeaders(res, attachment, total);
+    const etag = buildAttachmentEtag(attachment, total);
+    applySafeFileHeaders(res, attachment, total, etag);
 
-    const etag = `"att-${attachment.public_token}-${total}"`;
     if (req.headers["if-none-match"] === etag) {
       await opened.close();
       res.status(304);

@@ -3,9 +3,11 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { MANAGEMENT_ROLES } from "../../auth/permissions";
+import { isStaffInCuneCoopScope } from "../../common/crud/village-scope";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { camelRow } from "../../common/sql/rows";
 import { hasPublicTable } from "../../common/sql/schema-cache";
+import { RateLimitException } from "../../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import type {
@@ -53,6 +55,13 @@ function generateAlphaNumToken(len: number): string {
     out += alphabet[bytes[i]! % alphabet.length];
   }
   return out;
+}
+
+function normalizeScannedLookup(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(/\s+/g, "");
 }
 
 function generateRequestCode(): string {
@@ -119,9 +128,15 @@ export class TraceRequestsService {
     resolvedLotCode: string | null;
     pucCode: string | null;
   }> {
-    const clean = rawCode.trim();
-    const hasPlots = await this.hasTable("plots");
-    const hasSignboards = await this.hasTable("plot_signboard_tokens");
+    const clean = normalizeScannedLookup(rawCode);
+    if (!clean || clean.length > 128) {
+      throw notFound("Không tìm thấy hồ sơ truy xuất tương ứng với mã vừa quét.");
+    }
+    const [hasPlots, hasSignboards, hasGrowingZones] = await Promise.all([
+      this.hasTable("plots"),
+      this.hasTable("plot_signboard_tokens"),
+      this.hasTable("growing_zones"),
+    ]);
 
     // 1. Thùng / Quả của lô (harvest_items)
     const itemRes = await this.db.query<{
@@ -139,12 +154,11 @@ export class TraceRequestsService {
 
     if (itemRes.rows[0]) {
       const lotId = Number(itemRes.rows[0].lot_id);
-      const lotRes = await this.db.query<{ code: string }>(
-        "SELECT code FROM harvest_lots WHERE id = $1 LIMIT 1",
-        [lotId],
-      );
+      const [lotRes, pucCode] = await Promise.all([
+        this.db.query<{ code: string }>("SELECT code FROM harvest_lots WHERE id = $1 LIMIT 1", [lotId]),
+        this.resolveLotPrimaryPuc(lotId, hasPlots, hasSignboards),
+      ]);
       const lotCode = lotRes.rows[0]?.code ?? null;
-      const pucCode = await this.resolveLotPrimaryPuc(lotId, hasPlots, hasSignboards);
       return {
         canonicalDisplayCode: itemRes.rows[0].serial_code || lotCode || clean,
         targetKind: itemRes.rows[0].item_type === "fruit" ? "fruit" : "box",
@@ -157,7 +171,9 @@ export class TraceRequestsService {
     const lotRes = await this.db.query<{ id: number; code: string }>(
       `SELECT id, code
        FROM harvest_lots
-       WHERE qr_token = $1 OR upper(code) = upper($1) OR upper(COALESCE(qr_code, '')) = upper($1)
+       WHERE qr_token = $1
+          OR upper(code) = upper($1)
+          OR (qr_code IS NOT NULL AND btrim(qr_code) <> '' AND upper(btrim(qr_code)) = upper(btrim($1)))
        ORDER BY (qr_token = $1) DESC, id DESC
        LIMIT 1`,
       [clean],
@@ -236,6 +252,22 @@ export class TraceRequestsService {
           targetKind: "plot",
           resolvedLotCode: null,
           pucCode: sbRes.rows[0].zone_code?.trim() || "VN-DLOR-0086",
+        };
+      }
+    }
+
+    // 5. Mã số vùng trồng PUC (growing_zones)
+    if (hasGrowingZones) {
+      const gzRes = await this.db.query<{ code: string }>(
+        `SELECT code FROM growing_zones WHERE upper(code) = upper($1) LIMIT 1`,
+        [clean],
+      );
+      if (gzRes.rows[0]) {
+        return {
+          canonicalDisplayCode: gzRes.rows[0].code,
+          targetKind: "plot",
+          resolvedLotCode: null,
+          pucCode: gzRes.rows[0].code.trim(),
         };
       }
     }
@@ -337,7 +369,8 @@ export class TraceRequestsService {
     dto: CreateTraceAccessRequestDto,
     ctx: { user?: AuthUser; ip?: string; userAgent?: string },
   ) {
-    const target = await this.resolveScannedTarget(dto.scannedCode);
+    const cleanScanned = normalizeScannedLookup(dto.scannedCode);
+    const target = await this.resolveScannedTarget(cleanScanned);
     const requestedTier: TraceAccessTier = dto.requestedTier ?? "enterprise";
     const requesterName = dto.requesterName.trim();
     const organization = dto.organization.trim();
@@ -346,49 +379,99 @@ export class TraceRequestsService {
     const clientSecret = generateAlphaNumToken(32);
     const secretHash = hashSecret(clientSecret);
 
-    // Chống gửi trùng lặp liên tiếp cho cùng hồ sơ trong vòng 2 giờ
-    const existingPending = await this.db.query<RawTraceRequestRow>(
-      `SELECT *
-       FROM trace_access_requests
-       WHERE status = 'pending'
-         AND created_at >= now() - interval '2 hours'
-         AND upper(scanned_code) = upper($1)
-         AND (
-           ($2::bigint IS NOT NULL AND requester_user_id = $2)
-           OR ($2::bigint IS NULL AND contact_phone = $3 AND COALESCE(ip, '') = COALESCE($4::text, ''))
-         )
-       ORDER BY id DESC
-       LIMIT 1`,
-      [dto.scannedCode.trim(), ctx.user?.id ?? null, contactPhone, ctx.ip ?? null],
-    );
-
     let saved: RawTraceRequestRow;
-    let isDuplicateUpdate = false;
+    let shouldNotifyAdmin = true;
 
-    if (existingPending.rows[0]) {
-      isDuplicateUpdate = true;
-      const upd = await this.db.query<RawTraceRequestRow>(
-        `UPDATE trace_access_requests
-         SET request_secret_hash = $2,
-             requester_name = $3,
-             organization = $4,
-             contact_phone = $5,
-             purpose = $6,
-             requested_tier = $7
-         WHERE id = $1
-         RETURNING *`,
-        [
-          existingPending.rows[0].id,
-          secretHash,
-          requesterName,
-          organization,
-          contactPhone,
-          purpose,
-          requestedTier,
-        ],
+    // Chỉ gộp bản ghi pending khi chính tài khoản đang đăng nhập gửi lại; khách ẩn danh luôn tạo mã độc lập
+    // để người khác cùng mạng NAT không thể ghi đè `request_secret_hash` hoặc nâng cấp quyền ngầm.
+    if (ctx.user?.id) {
+      const existingPending = await this.db.query<RawTraceRequestRow>(
+        `SELECT *
+         FROM trace_access_requests
+         WHERE status = 'pending'
+           AND created_at >= now() - interval '2 hours'
+           AND upper(scanned_code) = upper($1)
+           AND requester_user_id = $2
+         ORDER BY id DESC
+         LIMIT 1`,
+        [cleanScanned, ctx.user.id],
       );
-      saved = upd.rows[0]!;
+      if (existingPending.rows[0]) {
+        const prevTier = existingPending.rows[0].requested_tier;
+        shouldNotifyAdmin = prevTier !== requestedTier;
+        const upd = await this.db.query<RawTraceRequestRow>(
+          `UPDATE trace_access_requests
+           SET request_secret_hash = $2,
+               requester_name = $3,
+               organization = $4,
+               contact_phone = $5,
+               purpose = $6,
+               requested_tier = $7
+           WHERE id = $1
+           RETURNING *`,
+          [
+            existingPending.rows[0].id,
+            secretHash,
+            requesterName,
+            organization,
+            contactPhone,
+            purpose,
+            requestedTier,
+          ],
+        );
+        saved = upd.rows[0]!;
+      } else {
+        const requestCode = generateRequestCode();
+        const ins = await this.db.query<RawTraceRequestRow>(
+          `INSERT INTO trace_access_requests (
+             request_code, request_secret_hash,
+             requester_user_id, requester_username, requester_role,
+             requester_name, organization, contact_phone, purpose,
+             scanned_code, target_kind, resolved_lot_code, puc_code,
+             requested_tier, scope_mode, duration_hours, status,
+             ip, user_agent
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'record', 24, 'pending', $15, $16)
+           RETURNING *`,
+          [
+            requestCode,
+            secretHash,
+            ctx.user.id,
+            ctx.user.username,
+            ctx.user.role,
+            requesterName,
+            organization,
+            contactPhone,
+            purpose,
+            cleanScanned,
+            target.targetKind,
+            target.resolvedLotCode,
+            target.pucCode,
+            requestedTier,
+            ctx.ip ?? null,
+            ctx.userAgent ? ctx.userAgent.slice(0, 250) : null,
+          ],
+        );
+        saved = ins.rows[0]!;
+      }
     } else {
+      const pendingByIp = await this.db.query<{ cnt: number }>(
+        `SELECT COUNT(*)::int AS cnt
+         FROM trace_access_requests
+         WHERE status = 'pending'
+           AND created_at >= now() - interval '2 hours'
+           AND upper(scanned_code) = upper($1)
+           AND requester_user_id IS NULL
+           AND COALESCE(ip, '') = COALESCE($2::text, '')`,
+        [cleanScanned, ctx.ip ?? null],
+      );
+      if ((pendingByIp.rows[0]?.cnt ?? 0) >= 4) {
+        throw new RateLimitException(
+          120,
+          "Đã có nhiều yêu cầu đang chờ phê duyệt cho hồ sơ này. Vui lòng đợi Ban quản trị xử lý.",
+        );
+      }
+
       const requestCode = generateRequestCode();
       const ins = await this.db.query<RawTraceRequestRow>(
         `INSERT INTO trace_access_requests (
@@ -399,19 +482,16 @@ export class TraceRequestsService {
            requested_tier, scope_mode, duration_hours, status,
            ip, user_agent
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'zone', 24, 'pending', $15, $16)
+         VALUES ($1, $2, NULL, NULL, NULL, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'record', 24, 'pending', $12, $13)
          RETURNING *`,
         [
           requestCode,
           secretHash,
-          ctx.user?.id ?? null,
-          ctx.user?.username ?? null,
-          ctx.user?.role ?? null,
           requesterName,
           organization,
           contactPhone,
           purpose,
-          dto.scannedCode.trim(),
+          cleanScanned,
           target.targetKind,
           target.resolvedLotCode,
           target.pucCode,
@@ -429,7 +509,7 @@ export class TraceRequestsService {
       ? ` [Tài khoản: ${ctx.user.fullName} - ${ROLE_LABELS_VN[ctx.user.role] || ctx.user.role}]`
       : " [Khách quét QR tại hiện trường]";
 
-    if (!isDuplicateUpdate) {
+    if (shouldNotifyAdmin) {
       await this.notifications.notifyRoles(
         [...MANAGEMENT_ROLES],
         {
@@ -525,9 +605,12 @@ export class TraceRequestsService {
   }
 
   /** Danh sách yêu cầu cấp quyền xem hồ sơ QR dành cho Ban quản trị HTX. */
-  async list(query: ListTraceAccessRequestsQueryDto, _user: AuthUser) {
+  async list(query: ListTraceAccessRequestsQueryDto, user: AuthUser) {
     const safePage = Math.max(1, Number(query.page) || 1);
     const safePageSize = Math.min(200, Math.max(1, Number(query.pageSize) || 20));
+    if (!isStaffInCuneCoopScope(user, true)) {
+      return { data: [], total: 0, pendingCount: 0, activeCount: 0, page: safePage, pageSize: safePageSize };
+    }
     const offset = (safePage - 1) * safePageSize;
 
     const params: unknown[] = [];
@@ -594,6 +677,9 @@ export class TraceRequestsService {
     dto: ApproveTraceAccessRequestDto,
     ip?: string,
   ) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền phê duyệt yêu cầu cấp quyền ngoài phạm vi đơn vị.");
+    }
     const existingRes = await this.db.query<RawTraceRequestRow>(
       "SELECT * FROM trace_access_requests WHERE id = $1 LIMIT 1",
       [id],
@@ -639,6 +725,7 @@ export class TraceRequestsService {
     );
     const updated = upd.rows[0];
     if (!updated) throw badRequest("Yêu cầu đã được người quản trị khác xử lý.");
+    this.db.cache?.invalidateTags(["trace"], true);
 
     const kindLabel = TARGET_KIND_VN[updated.target_kind] || "Hồ sơ";
     const targetRef = updated.resolved_lot_code || updated.scanned_code;
@@ -682,6 +769,9 @@ export class TraceRequestsService {
     dto: RejectOrRevokeTraceAccessRequestDto,
     ip?: string,
   ) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền từ chối yêu cầu cấp quyền ngoài phạm vi đơn vị.");
+    }
     const reviewNote = dto.note?.trim() || null;
     const upd = await this.db.query<RawTraceRequestRow>(
       `UPDATE trace_access_requests
@@ -699,6 +789,7 @@ export class TraceRequestsService {
     if (!updated) {
       throw badRequest("Không tìm thấy yêu cầu đang chờ duyệt tương ứng.");
     }
+    this.db.cache?.invalidateTags(["trace"], true);
 
     if (updated.requester_user_id) {
       await this.notifications.notifyUsers([Number(updated.requester_user_id)], {
@@ -728,6 +819,9 @@ export class TraceRequestsService {
     dto: RejectOrRevokeTraceAccessRequestDto,
     ip?: string,
   ) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền thu hồi yêu cầu cấp quyền ngoài phạm vi đơn vị.");
+    }
     const note = dto.note?.trim() || null;
     const upd = await this.db.query<RawTraceRequestRow>(
       `UPDATE trace_access_requests
@@ -746,6 +840,7 @@ export class TraceRequestsService {
     if (!updated) {
       throw badRequest("Yêu cầu này hiện không ở trạng thái đang cấp quyền.");
     }
+    this.db.cache?.invalidateTags(["trace"], true);
 
     if (updated.requester_user_id) {
       await this.notifications.notifyUsers([Number(updated.requester_user_id)], {

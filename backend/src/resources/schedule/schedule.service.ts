@@ -1,6 +1,9 @@
 import { Injectable } from "@nestjs/common";
+import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
+import { isStaffInCuneCoopScope } from "../../common/crud/village-scope";
+import { forbidden } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { INSPECTION_ROLES } from "../../portal/common/admin-links";
@@ -22,12 +25,18 @@ export class ScheduleService extends BaseCrudService {
       search: ["t.title", "t.officer"],
       filters: { kind: "t.kind" },
       // Lịch kiểm tra đột xuất chỉ hiển thị cho cán bộ HTX và kiểm tra viên; cán bộ thôn không được biết trước.
-      scope: (user) => (INSPECTION_ROLES.includes(user.role) ? null : "t.kind <> 'sudden'"),
+      scope: (user) => {
+        if (!isStaffInCuneCoopScope(user, true)) return "1 = 0";
+        return INSPECTION_ROLES.includes(user.role) ? null : "t.kind <> 'sudden'";
+      },
       virtual: ["_method", "_notifySudden"],
     });
   }
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (!isStaffInCuneCoopScope(context.user, true)) {
+      throw forbidden("Bạn không có quyền thao tác lịch kiểm tra ngoài phạm vi quản lý.");
+    }
     const out: Record<string, unknown> = { ...input, _method: context.method };
     if (context.method === "PATCH" && context.id !== undefined) {
       const exRes = await this.db.query<{

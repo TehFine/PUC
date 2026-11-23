@@ -21,6 +21,7 @@ import type { AuthUser } from "../auth/auth-user";
 import { can, type ResourceKey } from "../auth/permissions";
 import { isStaffInCuneCoopScope, isStaffInParcelScope } from "../common/crud/village-scope";
 import { badRequest, forbidden, notFound } from "../common/errors/app.exception";
+import { hasPublicTable } from "../common/sql/schema-cache";
 import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
 
@@ -678,11 +679,24 @@ export class UploadsService implements OnModuleInit {
         }
       }
 
+      if (attachment.purpose === "journal" && (await hasPublicTable(this.db, "care_milestone_declarations"))) {
+        const invCheck = await this.db.query<{ is_invoice: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM care_milestone_declarations cmd
+             WHERE cmd.invoice_photo_id = $1 OR $1::bigint = ANY(cmd.invoice_photo_ids)
+           ) AS is_invoice`,
+          [attachment.id],
+        );
+        if (invCheck.rows[0]?.is_invoice) {
+          return null;
+        }
+      }
+
       return attachment;
     };
 
     if (!this.db.cache) return queryPublic();
-    return this.db.cache.getOrLoad(`uploads:pub:${token}`, 60_000, ["uploads"], queryPublic);
+    return this.db.cache.getOrLoad(`uploads:pub:${token}`, 60_000, ["uploads", "portal"], queryPublic);
   }
 
   /** Quyền xem tệp trên `/api/uploads/:id`: hộ dân cùng hộ; cán bộ đúng phân quyền & phạm vi địa bàn. */

@@ -642,6 +642,18 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
       expect(unlockedTrace.body.authorityData).toBeDefined();
       expect(unlockedTrace.body.enterpriseData).toBeDefined();
 
+      // Bảo vệ tuyệt đối PII nông hộ khi mở khóa tạm thời không đăng nhập: che SĐT, ẩn tên chưa đồng ý và chặn lộ vi phạm nội bộ
+      const serializedGrantPayload = JSON.stringify(unlockedTrace.body);
+      expect(serializedGrantPayload).not.toContain(FX.hhA.phone);
+      expect(serializedGrantPayload).not.toContain(FX.hhB.phone);
+      expect(serializedGrantPayload).not.toContain(FX.hhA.name);
+      expect(serializedGrantPayload).not.toContain(FX.hhB.name);
+      expect(unlockedTrace.body.authorityData.internalViolations).toEqual([]);
+      for (const hh of unlockedTrace.body.authorityData.sourceHouseholds as Array<{ phone: string | null; householdName: string }>) {
+        expect(hh.phone).toMatch(/^\d{3}\*+\d{2}$/);
+        expect(hh.householdName).toMatch(/^Hộ thành viên /);
+      }
+
       // 5. Quản trị viên thu hồi quyền từ xa -> phiên xem trên trang QR hạ ngay về Công khai (Cấp 1)
       const revokeRes = await admin.post(`/api/trace-requests/${createdReqId}/revoke`).send({
         note: "Đoàn kiểm tra đã kết thúc buổi làm việc",
@@ -667,6 +679,241 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
           "DELETE FROM notifications WHERE link LIKE $1",
           [`%/admin?section=system&sub=trace-requests%`],
         );
+      }
+    }
+  });
+
+  it("chặn ghi đè clientSecret khi trùng IP, cô lập scope=record không nhảy sang biển vườn, chặn lộ nhật ký chéo thửa và không gây bão SSE khi dùng thẻ thẩm định", async () => {
+    const admin = await loggedIn("0901234567");
+    const farmer = await loggedIn(FX.farmerUsername);
+    const { TraceabilityService } = await import("../src/public/traceability.service");
+    const traceService = nest.get(TraceabilityService);
+    const sseEvents: Array<{ type: string; epoch: number }> = [];
+    const unsub = traceService.subscribeTraceStream("127.0.0.1", (ev) => sseEvents.push(ev));
+
+    const extraPlot = "SEC-T1-P02-ISOLATED";
+    const createdReqCodes: string[] = [];
+    let auditPassId = 0;
+    let extOfficerUsername = "";
+
+    try {
+      // 1. Hai khách ẩn danh cùng IP gửi yêu cầu cho cùng mã -> không ghi đè clientSecret của người đầu tiên
+      await db.query("DELETE FROM trace_access_requests WHERE contact_phone = '0977665544'");
+      const req1 = await request(app).post("/api/public/trace-access-requests").send({
+        scannedCode: FX.lot,
+        requesterName: "Đoàn 1",
+        organization: "Chi cục Kiểm tra 1",
+        contactPhone: "0977665544",
+        purpose: "Kiểm tra hồ sơ lô xuất khẩu đợt 1",
+        requestedTier: "enterprise",
+      });
+      expect(req1.status).toBe(201);
+      createdReqCodes.push(req1.body.requestCode as string);
+
+      const req2 = await request(app).post("/api/public/trace-access-requests").send({
+        scannedCode: FX.lot,
+        requesterName: "Đoàn 2 Giả Mạo",
+        organization: "Đơn vị khác cùng mạng",
+        contactPhone: "0977665544",
+        purpose: "Thử ghi đè bí mật phiên",
+        requestedTier: "authority",
+      });
+      expect(req2.status).toBe(201);
+      createdReqCodes.push(req2.body.requestCode as string);
+      expect(req2.body.requestCode).not.toBe(req1.body.requestCode);
+
+      // Người thứ nhất vẫn dùng được clientSecret của mình và giữ đúng mức enterprise đã xin
+      const st1 = await request(app)
+        .get(`/api/public/trace-access-requests/${req1.body.requestCode}/status`)
+        .set("x-trace-req-secret", req1.body.clientSecret as string);
+      expect(st1.status).toBe(200);
+      expect(st1.body.requestedTier).toBe("enterprise");
+
+      // 2. Cấp quyền scopeMode='record' trên Lô KHÔNG được phép dùng chéo sang Biển QR Thửa Đất để lấy đa giác GIS
+      const req1Row = await db.query<{ id: number }>(
+        "SELECT id FROM trace_access_requests WHERE request_code = $1",
+        [req1.body.requestCode],
+      );
+      const approveRecord = await admin.post(`/api/trace-requests/${req1Row.rows[0].id}/approve`).send({
+        grantedTier: "authority",
+        scopeMode: "record",
+        durationHours: 4,
+      });
+      expect(approveRecord.status).toBe(200);
+      const st1Approved = await request(app)
+        .get(`/api/public/trace-access-requests/${req1.body.requestCode}/status`)
+        .set("x-trace-req-secret", req1.body.clientSecret as string);
+      const recordLotToken = st1Approved.body.grantedPassToken as string;
+
+      const lotOk = await request(app)
+        .get(`/api/public/trace/${FX.lot}?bg=1`)
+        .set("x-audit-pass", recordLotToken);
+      expect(lotOk.status).toBe(200);
+      expect(lotOk.body.accessControl.viewerTier).toBe("authority");
+
+      const replayOnPlot = await request(app)
+        .get(`/api/public/trace/${FX.hhA.plot}?bg=1`)
+        .set("x-audit-pass", recordLotToken);
+      expect(replayOnPlot.status).toBe(200);
+      expect(replayOnPlot.body.accessControl.viewerTier).toBe("public");
+      expect(replayOnPlot.body.fieldAuditData).toBeUndefined();
+
+      // 3. Hồ sơ thẩm định thửa P01 không bị rò rỉ nhật ký của thửa P02 cùng chủ hộ
+      await db.query(
+        `INSERT INTO plot_signboard_tokens (plot_code, household_id, village_name, area_ha, tree_count, center_lat, center_lng)
+         VALUES ($1, $2, 'Thôn 1', 0.8, 120, $3, $4)`,
+        [extraPlot, ids.hhA, FX.centerLat, FX.centerLng],
+      );
+      await db.query(
+        `INSERT INTO journal_entries (entry_on, household_id, plot_code, activity, detail, recorder, has_photo)
+         VALUES ('2020-01-09', $1, $2, 'Tỉa cành', 'Bí mật riêng của thửa P02 không thuộc P01', 'Chủ hộ', false)`,
+        [ids.hhA, extraPlot],
+      );
+
+      const inspector = await loggedIn(USERS.inspector);
+      const p01Trace = await inspector.get(`/api/trace/${FX.hhA.plot}`);
+      expect(p01Trace.status).toBe(200);
+      expect(JSON.stringify(p01Trace.body.fieldAuditData?.sealedLedger ?? [])).not.toContain(
+        "Bí mật riêng của thửa P02 không thuộc P01",
+      );
+      expect(JSON.stringify(p01Trace.body.authorityData?.cultivationDiaries ?? [])).not.toContain(
+        "Bí mật riêng của thửa P02 không thuộc P01",
+      );
+
+      // 4. Thẻ Đoàn Thẩm định làm mới ngầm (?bg=1) không tăng access_count và không phát SSE trace-updated gây vòng lặp
+      const passRes = await admin.post("/api/field-audit-passes").send({
+        delegationName: "Đoàn Kiểm Thử Không Bão SSE",
+        organization: "Sở NN&MT",
+        durationHours: 24,
+      });
+      expect(passRes.status).toBe(201);
+      auditPassId = Number(passRes.body.id);
+      const auditToken = passRes.body.passToken as string;
+
+      await new Promise((r) => setTimeout(r, 180));
+      sseEvents.length = 0;
+
+      const initialScan = await request(app)
+        .get(`/api/public/trace/${FX.hhA.plot}`)
+        .set("x-audit-pass", auditToken);
+      expect(initialScan.status).toBe(200);
+      expect(initialScan.body.fieldAuditData).toBeDefined();
+
+      const countAfterFirst = Number(
+        (await db.query<{ access_count: number }>("SELECT access_count FROM field_audit_passes WHERE id = $1", [auditPassId]))
+          .rows[0].access_count,
+      );
+      expect(countAfterFirst).toBe(1);
+
+      const bgScan = await request(app)
+        .get(`/api/public/trace/${FX.hhA.plot}?bg=1`)
+        .set("x-audit-pass", auditToken);
+      expect(bgScan.status).toBe(200);
+      await new Promise((r) => setTimeout(r, 180));
+      expect(sseEvents).toHaveLength(0);
+
+      const countAfterBg = Number(
+        (await db.query<{ access_count: number }>("SELECT access_count FROM field_audit_passes WHERE id = $1", [auditPassId]))
+          .rows[0].access_count,
+      );
+      expect(countAfterBg).toBe(1);
+
+      // 5. Chuẩn hóa tra cứu tiền tố tiếng Việt ("Thửa ...", "Lô: ..."), mã vùng PUC và khối lượng tem mẫu
+      const prefixedPlot = await request(app).get(`/api/public/trace/${encodeURIComponent(`Thửa ${FX.hhA.plot}`)}`);
+      expect(prefixedPlot.status).toBe(200);
+      const prefixedLot = await request(app).get(`/api/public/trace/${encodeURIComponent(`Lô: ${FX.lot}`)}`);
+      expect(prefixedLot.status).toBe(200);
+      const pucLookup = await request(app).get("/api/public/trace/VN-DLOR-0086");
+      expect(pucLookup.status).toBe(200);
+      const samplesRes = await request(app).get("/api/public/trace-samples");
+      expect(samplesRes.status).toBe(200);
+      const fruitStamps = (samplesRes.body.stamps as Array<{ unitType?: string; weightKg?: number | null }>).filter(
+        (s) => s.unitType === "fruit",
+      );
+      for (const st of fruitStamps) {
+        expect(st).toHaveProperty("weightKg");
+      }
+
+      // 6. ETag tải tệp không lộ public_token & chặn truy cập công khai ảnh hóa đơn mua vật tư nông hộ
+      const tinyPng = Buffer.from(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+        "hex",
+      );
+      const upInvoice = await farmer.post("/api/uploads").field("purpose", "journal").attach("file", tinyPng, "invoice.png");
+      expect(upInvoice.status).toBe(201);
+      const attRow = (
+        await db.query<{ public_token: string }>("SELECT public_token FROM attachments WHERE id = $1", [upInvoice.body.id])
+      ).rows[0];
+      const dlInvoice = await farmer.get(`/api/uploads/${upInvoice.body.id}`);
+      expect(dlInvoice.status).toBe(200);
+      expect(String(dlInvoice.headers["etag"] || "")).not.toContain(attRow.public_token);
+
+      // Gắn tệp vào cột invoice_photo_id / invoice_photo_ids -> /api/public/files/:token phải từ chối 404
+      if (
+        (
+          await db.query<{ reg: string | null }>("SELECT to_regclass('public.care_milestone_declarations') AS reg")
+        ).rows[0]?.reg
+      ) {
+        const upField = await farmer.post("/api/uploads").field("purpose", "journal").attach("file", tinyPng, "field.png");
+        expect(upField.status).toBe(201);
+        const fieldAttRow = (
+          await db.query<{ public_token: string }>("SELECT public_token FROM attachments WHERE id = $1", [upField.body.id])
+        ).rows[0];
+
+        const planIns = await db.query<{ id: number }>(
+          `INSERT INTO plot_care_plans (household_id, plot_code, season, status)
+           VALUES ($1, $2, '2026-2027-TEST', 'active')
+           ON CONFLICT (household_id, plot_code, season) DO UPDATE SET updated_at = now()
+           RETURNING id`,
+          [ids.hhA, FX.hhA.plot],
+        );
+        const planId = Number(planIns.rows[0].id);
+        await db.query(
+          `INSERT INTO care_milestone_declarations
+             (plan_id, household_id, plot_code, stage_code, milestone_code, performed_on,
+              expected_tree_state, actual_tree_state, actual_dosage,
+              field_photo_id, invoice_photo_id, invoice_photo_ids, compliance_status)
+           VALUES ($1, $2, $3, 'stage-1', 'cb-rua-vuon', CURRENT_DATE,
+                   'Bình thường', 'Bình thường', 'Đúng liều',
+                   $4, $5, $6::bigint[], 'compliant')`,
+          [planId, ids.hhA, FX.hhA.plot, Number(upField.body.id), Number(upInvoice.body.id), [Number(upInvoice.body.id)]],
+        );
+        try {
+          const pubFieldOk = await request(app).get(`/api/public/files/${fieldAttRow.public_token}`);
+          expect(pubFieldOk.status).toBe(200);
+          const pubInvoiceAttempt = await request(app).get(`/api/public/files/${attRow.public_token}`);
+          expect(pubInvoiceAttempt.status).toBe(404);
+        } finally {
+          await db.query("DELETE FROM plot_care_plans WHERE id = $1", [planId]);
+        }
+      }
+
+      // 7. GET /api/registrations/households áp dụng đúng phạm vi coopCode (không lộ hộ dân Cư Né cho cán bộ HTX ngoài)
+      extOfficerUsername = `ext_reg_scope_${Date.now()}`;
+      const extAcc = await admin.post("/api/accounts").send({
+        fullName: "Cán bộ HTX Khác",
+        username: extOfficerUsername,
+        password: TEST_PASSWORD,
+        role: "htx_officer",
+        coopCode: "HTX-OTHER",
+      });
+      expect(extAcc.status).toBe(201);
+      const extAgent = await loggedIn(extOfficerUsername);
+      const regHhRes = await extAgent.get("/api/registrations/households");
+      expect(regHhRes.status).toBe(200);
+      expect(regHhRes.body.data).toEqual([]);
+    } finally {
+      unsub();
+      await db.query("DELETE FROM journal_entries WHERE plot_code = $1", [extraPlot]);
+      await db.query("DELETE FROM plot_signboard_tokens WHERE plot_code = $1", [extraPlot]);
+      if (createdReqCodes.length > 0) {
+        await db.query("DELETE FROM trace_access_requests WHERE request_code = ANY($1::text[])", [createdReqCodes]);
+      }
+      if (auditPassId) {
+        await db.query("DELETE FROM field_audit_passes WHERE id = $1", [auditPassId]);
+      }
+      if (extOfficerUsername) {
+        await db.query("DELETE FROM users WHERE username = $1", [extOfficerUsername]);
       }
     }
   });

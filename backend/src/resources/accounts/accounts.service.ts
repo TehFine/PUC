@@ -44,11 +44,17 @@ export class AccountsService extends BaseCrudService {
       v.name AS village_name, t.household_id, t.enterprise_id, e.name AS enterprise_name,
       e.packhouse_code AS enterprise_packhouse_code, t.assigned_commune, t.assigned_region,
       t.coop_code, t.two_factor_enabled,
-      (SELECT count(*)::int FROM refresh_tokens rt WHERE rt.user_id = t.id AND rt.revoked_at IS NULL AND rt.expires_at > now()) AS active_session_count,
+      COALESCE(rt_agg.active_cnt, 0) AS active_session_count,
       t.last_login_at, t.created_at`,
       from: `users t
              LEFT JOIN villages v ON v.id = t.village_id
-             LEFT JOIN enterprises e ON e.id = t.enterprise_id`,
+             LEFT JOIN enterprises e ON e.id = t.enterprise_id
+             LEFT JOIN (
+               SELECT user_id, count(*)::int AS active_cnt
+               FROM refresh_tokens
+               WHERE revoked_at IS NULL AND expires_at > now()
+               GROUP BY user_id
+             ) rt_agg ON rt_agg.user_id = t.id`,
       orderBy: "t.id",
       search: ["t.full_name", "t.username", "t.email", "e.name"],
       filters: { role: "t.role", status: "t.status" },

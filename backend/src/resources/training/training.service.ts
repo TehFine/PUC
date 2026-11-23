@@ -2,7 +2,8 @@ import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
-import { notFound } from "../../common/errors/app.exception";
+import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
+import { forbidden, notFound } from "../../common/errors/app.exception";
 import { camelRow, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -32,6 +33,9 @@ export class TrainingService extends BaseCrudService {
   }
 
   protected override prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (!isStaffInCuneCoopScope(context.user, false)) {
+      throw forbidden("Bạn không có quyền thao tác khóa đào tạo ngoài phạm vi quản lý.");
+    }
     const out: Record<string, unknown> = { ...input, _method: context.method };
     if (!context.id || context.method === "POST") {
       out.enrolled = 0;
@@ -67,16 +71,22 @@ export class TrainingService extends BaseCrudService {
     }
   }
 
+  protected override guardDelete(_id: number, user: AuthUser) {
+    if (!isStaffInCuneCoopScope(user, false)) {
+      throw forbidden("Bạn không có quyền xóa khóa đào tạo ngoài phạm vi quản lý.");
+    }
+  }
+
   async listRegistrations(courseId: number, user?: AuthUser) {
     const course = await this.db.query("SELECT 1 FROM training_courses WHERE id = $1", [courseId]);
     if (course.rowCount === 0) throw notFound("Không tìm thấy khóa đào tạo.");
+    if (user && !isStaffInCuneCoopScope(user, true)) {
+      return { data: [] };
+    }
 
     const params: unknown[] = [courseId];
-    let villageClause = "";
-    if (user?.role === "village_officer") {
-      params.push(user.villageId ?? -1);
-      villageClause = `AND h.village_id = $${params.length}`;
-    }
+    const scoped = user ? villageScope("h.village_id")(user, params) : null;
+    const villageClause = scoped ? `AND (${scoped})` : "";
 
     const { rows } = await this.db.query(
       `SELECT r.id, r.course_id, r.household_id, h.code AS household_code, h.name AS household_name,
@@ -98,6 +108,16 @@ export class TrainingService extends BaseCrudService {
     user: AuthUser,
     ip?: string,
   ) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền cập nhật điểm danh ngoài phạm vi quản lý.");
+    }
+    const preCheck = await this.db.query<{ household_id: number }>(
+      "SELECT household_id FROM training_registrations WHERE id = $1 AND course_id = $2",
+      [registrationId, courseId],
+    );
+    if (preCheck.rowCount === 0 || !preCheck.rows[0]) throw notFound("Không tìm thấy đăng ký tập huấn.");
+    await assertHouseholdInScope(this.db, { householdId: preCheck.rows[0].household_id }, user);
+
     const client = await this.db.pool.connect();
     try {
       await client.query("BEGIN");

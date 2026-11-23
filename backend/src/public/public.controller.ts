@@ -251,6 +251,7 @@ export class PublicController {
     @Query("view") view: string | undefined,
     @Query("auditPass") auditPass: string | undefined,
     @Query("bg") bg: string | undefined,
+    @Query("noGrant") noGrant: string | undefined,
     @OptionalCurrentUser() user: AuthUser | undefined,
     @Ip() ip: string,
     @Req() req: Request,
@@ -264,6 +265,7 @@ export class PublicController {
       auditPass: extractAuditPass(req, auditPass),
       countryCode: extractCountryCode(req),
       isBackgroundRefresh: bg === "1" || bg === "true",
+      suppressTemporaryGrant: noGrant === "1" || noGrant === "true",
     });
   }
 
@@ -310,6 +312,7 @@ export class AuthenticatedTraceController {
     @Query("view") view: string | undefined,
     @Query("auditPass") auditPass: string | undefined,
     @Query("bg") bg: string | undefined,
+    @Query("noGrant") noGrant: string | undefined,
     @CurrentUser() user: AuthUser,
     @Ip() ip: string,
     @Req() req: Request,
@@ -323,6 +326,7 @@ export class AuthenticatedTraceController {
       auditPass: extractAuditPass(req, auditPass),
       countryCode: extractCountryCode(req),
       isBackgroundRefresh: bg === "1" || bg === "true",
+      suppressTemporaryGrant: noGrant === "1" || noGrant === "true",
     });
   }
 
