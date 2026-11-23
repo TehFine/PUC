@@ -77,7 +77,7 @@ function extractPreservedUrlSuffix(rawUrl: string): string {
 function normalizeLookupCandidate(raw: string): string {
   return safeDecodeURIComponent(raw)
     .trim()
-    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|hộ|ho|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
     .replace(/\s+/g, "");
 }
 
@@ -322,7 +322,7 @@ export default function TraceLookupPage() {
     if (!code.trim()) return;
     const targetHref = resolveTraceInputHref(code);
     if (!targetHref) {
-      setInputError("Mã tra cứu không hợp lệ. Vui lòng nhập mã lô hàng, mã thùng, tem trái hoặc mã thửa đất.");
+      setInputError("Mã tra cứu không hợp lệ. Vui lòng nhập mã lô hàng, mã thùng, tem trái, mã thửa đất hoặc mã hộ.");
       return;
     }
     setInputError(null);
@@ -450,7 +450,7 @@ export default function TraceLookupPage() {
                   Tra cứu nguồn gốc mã QR
                 </h1>
                 <p className="sw-trace-lead">
-                  Nhập mã lô hàng, mã thùng đóng gói, tem trái hoặc mã thửa đất để đối chiếu hồ sơ vùng trồng, nhật ký canh tác và phiếu kiểm nghiệm.
+                  Nhập mã lô hàng, mã thùng đóng gói, tem trái, mã thửa đất hoặc mã hộ thành viên để đối chiếu hồ sơ vùng trồng, nhật ký canh tác và phiếu kiểm nghiệm.
                 </p>
 
                 <form onSubmit={handleSubmit} className="sw-trace-form" role="search">
@@ -463,8 +463,8 @@ export default function TraceLookupPage() {
                         setCode(e.target.value);
                         if (inputError) setInputError(null);
                       }}
-                      placeholder="Nhập mã lô hàng, mã thùng, tem trái hoặc mã thửa đất..."
-                      aria-label="Mã lô hàng, mã thùng đóng gói, tem trái hoặc mã thửa đất"
+                      placeholder="Nhập mã lô, mã thùng, tem trái, mã thửa hoặc mã hộ..."
+                      aria-label="Mã lô hàng, mã thùng đóng gói, tem trái, mã thửa đất hoặc mã hộ"
                       className="sw-trace-input"
                       autoComplete="off"
                       spellCheck={false}

@@ -1,5 +1,5 @@
 export type TraceLang = "vi" | "en" | "zh";
-export type TraceTargetKind = "lot" | "box" | "fruit" | "plot" | "generic";
+export type TraceTargetKind = "lot" | "box" | "fruit" | "plot" | "household" | "generic";
 
 const TRACE_LANG_STORAGE_KEY = "puc_trace_lang";
 const TRACE_KIND_HINTS_STORAGE_KEY = "puc_trace_kind_hints";
@@ -24,6 +24,9 @@ export function inferTraceKindFromCode(rawCode: string | null | undefined): Trac
   }
   if (/^(?:LH|LOT)-/i.test(cleaned)) {
     return "lot";
+  }
+  if (/^[A-Za-z0-9_-]+-H\d{2,5}$/i.test(cleaned) || /^HO-[A-Za-z0-9_-]+$/i.test(cleaned)) {
+    return "household";
   }
   if (/^(?:EK|CN|TH|KB|DL|VN-DLOR|\d{2}-PUC)[A-Za-z0-9_-]*$/i.test(cleaned)) {
     return "plot";
@@ -63,7 +66,13 @@ export function resolveInitialTraceKind(rawCode: string | null | undefined): Tra
       if (raw) {
         const parsed = JSON.parse(raw) as Record<string, string>;
         const saved = parsed[key];
-        if (saved === "lot" || saved === "box" || saved === "fruit" || saved === "plot") {
+        if (
+          saved === "lot" ||
+          saved === "box" ||
+          saved === "fruit" ||
+          saved === "plot" ||
+          saved === "household"
+        ) {
           memoryTraceKindHints.set(key, saved);
           return saved;
         }
@@ -78,6 +87,8 @@ export function resolveInitialTraceKind(rawCode: string | null | undefined): Tra
 export function getTraceLoadingLabel(kind: TraceTargetKind, lang: TraceLang): string {
   if (lang === "zh") {
     switch (kind) {
+      case "household":
+        return "正在加载成员农户溯源档案...";
       case "plot":
         return "正在加载果园地块溯源档案...";
       case "box":
@@ -92,6 +103,8 @@ export function getTraceLoadingLabel(kind: TraceTargetKind, lang: TraceLang): st
   }
   if (lang === "en") {
     switch (kind) {
+      case "household":
+        return "Loading member grower traceability dossier...";
       case "plot":
         return "Loading orchard plot traceability dossier...";
       case "box":
@@ -105,6 +118,8 @@ export function getTraceLoadingLabel(kind: TraceTargetKind, lang: TraceLang): st
     }
   }
   switch (kind) {
+    case "household":
+      return "Đang tải hồ sơ truy xuất nông hộ...";
     case "plot":
       return "Đang tải hồ sơ truy xuất thửa đất...";
     case "box":
@@ -122,6 +137,24 @@ export function getRevokedAlertCopy(
   kind: TraceTargetKind,
   lang: TraceLang,
 ): { title: string; desc: string } {
+  if (kind === "household") {
+    if (lang === "zh") {
+      return {
+        title: "成员农户暂停采收通知",
+        desc: "该农户果园当前由越南 Cư Né 合作社暂停商品果采收资格以进行技术复核。请联系合作社核实详情。",
+      };
+    }
+    if (lang === "en") {
+      return {
+        title: "GROWER HOUSEHOLD SUSPENSION NOTICE",
+        desc: "This member household is currently paused from commercial harvest intake by Cư Né Cooperative for technical review.",
+      };
+    }
+    return {
+      title: "THÔNG BÁO TẠM DỪNG LIÊN KẾT THU HOẠCH NÔNG HỘ",
+      desc: "Hộ thành viên này đang tạm dừng tiếp nhận thu hoạch thương mại theo quyết định của Hợp tác xã Cư Né để rà soát kỹ thuật.",
+    };
+  }
   if (kind === "plot") {
     if (lang === "zh") {
       return {
@@ -187,7 +220,7 @@ export function getScanAnomalyAlertCopy(
   kind: TraceTargetKind,
   lang: TraceLang,
 ): { title: string; desc: string } {
-  if (kind === "plot") {
+  if (kind === "plot" || kind === "household") {
     if (lang === "zh") {
       return reason === "multi_country"
         ? {
@@ -276,13 +309,15 @@ export function getScopeDeniedCopy(
 ): { title: string; desc: string } {
   if (lang === "zh") {
     const targetZh =
-      kind === "plot"
-        ? "该果园地块"
-        : kind === "box"
-          ? "该包装箱"
-          : kind === "fruit"
-            ? "该单果溯源签"
-            : "该批次";
+      kind === "household"
+        ? "该成员农户"
+        : kind === "plot"
+          ? "该果园地块"
+          : kind === "box"
+            ? "该包装箱"
+            : kind === "fruit"
+              ? "该单果溯源签"
+              : "该批次";
     return {
       title: `您无权查看${targetZh}的内部详细数据`,
       desc: `当前登录账号 ${viewerName}（${roleLabel}）不在${targetZh}所属企业或管辖范围内，系统仅显示公开溯源档案。`,
@@ -290,26 +325,30 @@ export function getScopeDeniedCopy(
   }
   if (lang === "en") {
     const targetEn =
-      kind === "plot"
-        ? "this orchard plot"
-        : kind === "box"
-          ? "this carton box"
-          : kind === "fruit"
-            ? "this fruit tag"
-            : "this shipment lot";
+      kind === "household"
+        ? "this grower household"
+        : kind === "plot"
+          ? "this orchard plot"
+          : kind === "box"
+            ? "this carton box"
+            : kind === "fruit"
+              ? "this fruit tag"
+              : "this shipment lot";
     return {
       title: `You do not have permission to view internal details for ${targetEn}`,
       desc: `Signed in as ${viewerName} (${roleLabel}), but ${targetEn} is outside your assigned company or regional scope. Showing the public dossier only.`,
     };
   }
   const targetVi =
-    kind === "plot"
-      ? "thửa đất này"
-      : kind === "box"
-        ? "thùng đóng gói này"
-        : kind === "fruit"
-          ? "tem trái sầu riêng này"
-          : "lô hàng này";
+    kind === "household"
+      ? "nông hộ này"
+      : kind === "plot"
+        ? "thửa đất này"
+        : kind === "box"
+          ? "thùng đóng gói này"
+          : kind === "fruit"
+            ? "tem trái sầu riêng này"
+            : "lô hàng này";
   return {
     title: `Bạn không có quyền xem chi tiết nội bộ của ${targetVi}`,
     desc: `Tài khoản ${viewerName} (${roleLabel}) đã đăng nhập nhưng ${targetVi} nằm ngoài phạm vi được phân quyền.${scopeReason ? ` Lý do: ${scopeReason}` : ""
@@ -320,6 +359,8 @@ export function getScopeDeniedCopy(
 export function getTraceQrAlt(code: string, kind: TraceTargetKind, lang: TraceLang): string {
   if (lang === "zh") {
     switch (kind) {
+      case "household":
+        return `成员农户 ${code} 溯源二维码`;
       case "plot":
         return `果园地块 ${code} 溯源二维码`;
       case "box":
@@ -332,6 +373,8 @@ export function getTraceQrAlt(code: string, kind: TraceTargetKind, lang: TraceLa
   }
   if (lang === "en") {
     switch (kind) {
+      case "household":
+        return `Traceability QR for member grower ${code}`;
       case "plot":
         return `Traceability QR for orchard plot ${code}`;
       case "box":
@@ -343,6 +386,8 @@ export function getTraceQrAlt(code: string, kind: TraceTargetKind, lang: TraceLa
     }
   }
   switch (kind) {
+    case "household":
+      return `Mã QR truy xuất nông hộ ${code}`;
     case "plot":
       return `Mã QR truy xuất thửa đất ${code}`;
     case "box":
@@ -719,12 +764,12 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
     errorState: {
       invalidCode: "Mã truy xuất không hợp lệ.",
       notFound: (code) =>
-        `Không tìm thấy hồ sơ cho mã "${code}". Quý khách vui lòng kiểm tra lại mã lô hàng, mã thùng, tem trái hoặc mã thửa đất.`,
+        `Không tìm thấy hồ sơ cho mã "${code}". Quý khách vui lòng kiểm tra lại mã lô hàng, mã thùng, tem trái, mã thửa đất hoặc mã hộ.`,
       serverError: "Chưa thể tải dữ liệu lúc này. Quý khách vui lòng thử lại sau.",
       timeoutError: "Kết nối mạng quá chậm hoặc gián đoạn. Quý khách vui lòng thử tải lại trang.",
       networkError: "Không thể kết nối mạng để tra cứu. Quý khách vui lòng kiểm tra kết nối và thử lại.",
       title: "Chưa tìm thấy thông tin",
-      inputPlaceholder: "Nhập mã lô hàng, mã thùng, tem trái hoặc mã thửa đất...",
+      inputPlaceholder: "Nhập mã lô, mã thùng, tem trái, mã thửa hoặc mã hộ...",
       searchBtn: "Tìm kiếm",
     },
     alerts: {
@@ -981,12 +1026,12 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
     errorState: {
       invalidCode: "Invalid traceability code.",
       notFound: (code) =>
-        `No traceability record found for "${code}". Please check the lot, carton, fruit tag, or orchard plot code.`,
+        `No traceability record found for "${code}". Please check the lot, carton, fruit tag, orchard plot, or household code.`,
       serverError: "Unable to load traceability records right now. Please try again shortly.",
       timeoutError: "Network connection is slow or interrupted. Please reload the page.",
       networkError: "Unable to connect. Please check your internet connection and try again.",
       title: "Record Not Found",
-      inputPlaceholder: "Enter lot, carton, fruit tag, or orchard plot code...",
+      inputPlaceholder: "Enter lot, carton, fruit tag, plot, or household code...",
       searchBtn: "Lookup",
     },
     alerts: {
@@ -1242,12 +1287,12 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
     errorState: {
       invalidCode: "溯源码无效。",
       notFound: (code) =>
-        `未找到与 "${code}" 对应的溯源档案。请核对批次号、箱标号、单果签或果园地块编码。`,
+        `未找到与 "${code}" 对应的溯源档案。请核对批次号、箱标号、单果签、地块编码或农户编码。`,
       serverError: "暂时无法加载溯源数据，请稍后重试。",
       timeoutError: "网络连接缓慢或中断，请刷新页面重试。",
       networkError: "无法连接网络，请检查网络设置后重试。",
       title: "未找到溯源记录",
-      inputPlaceholder: "输入批次、包装箱、单果签或地块编码...",
+      inputPlaceholder: "输入批次、包装箱、单果签、地块或农户编码...",
       searchBtn: "立即查询",
     },
     alerts: {
@@ -1566,6 +1611,10 @@ export function localizeLotStatusLabel(
   if (kind === "fruit") {
     if (lang === "vi") return "Tem trái hợp lệ, đủ điều kiện";
     return lang === "zh" ? "合格单果签，准予流通" : "Valid Fruit Tag, Cleared";
+  }
+  if (kind === "household") {
+    if (lang === "vi") return "Nông hộ liên kết đủ điều kiện";
+    return lang === "zh" ? "合规联营成员农户" : "Verified Active Member Grower";
   }
   if (kind === "plot") {
     if (lang === "vi") return "Thửa đất đủ điều kiện canh tác";
