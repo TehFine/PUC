@@ -78,8 +78,54 @@ function getDesktopViewportServerSnapshot(): boolean {
 const SCROLL_IDLE_MS = 560;
 const FIRST_DWELL_AFTER_STOP_MS = 760;
 const INITIAL_TOP_HOLD_MS = 1700;
+const INITIAL_HERO_HOLD_MS = 4200;
 const DEFAULT_INTERVAL_MS = 3400;
 const ACTIVE_VISIBLE_RATIO = 0.38;
+
+/* Chờ trang tải xong nhịp đầu (LCP hoàn tất) rồi mới nạp ngầm các ảnh lớp sau của slideshow */
+let initialLoadSettled = false;
+let initialLoadScheduled = false;
+const initialLoadListeners = new Set<() => void>();
+
+function markInitialLoadSettled() {
+  if (initialLoadSettled) return;
+  initialLoadSettled = true;
+  initialLoadListeners.forEach((fn) => fn());
+  initialLoadListeners.clear();
+}
+
+function ensureInitialLoadGate() {
+  if (initialLoadSettled || initialLoadScheduled || typeof window === "undefined") return;
+  initialLoadScheduled = true;
+
+  const scheduleAfterLoad = () => {
+    window.setTimeout(markInitialLoadSettled, 900);
+  };
+
+  if (document.readyState === "complete") {
+    scheduleAfterLoad();
+  } else {
+    window.addEventListener("load", scheduleAfterLoad, { once: true });
+    window.setTimeout(markInitialLoadSettled, 2400);
+  }
+}
+
+function subscribeInitialLoadSettled(listener: () => void): () => void {
+  ensureInitialLoadGate();
+  if (initialLoadSettled) return () => {};
+  initialLoadListeners.add(listener);
+  return () => {
+    initialLoadListeners.delete(listener);
+  };
+}
+
+function getInitialLoadSettledSnapshot(): boolean {
+  return initialLoadSettled;
+}
+
+function getInitialLoadSettledServerSnapshot(): boolean {
+  return false;
+}
 
 let globalScrollBound = false;
 let globalIsIdle = true;
@@ -255,6 +301,11 @@ export default function DwellSlideshow({
   });
   const [secondaryMounted, setSecondaryMounted] = useState(false);
   const [inView, setInView] = useState(false);
+  const isLoadSettled = useSyncExternalStore(
+    subscribeInitialLoadSettled,
+    getInitialLoadSettledSnapshot,
+    getInitialLoadSettledServerSnapshot,
+  );
   const isScrollIdle = useSyncExternalStore(
     subscribeIdle,
     getIdleSnapshot,
@@ -296,13 +347,13 @@ export default function DwellSlideshow({
   }, []);
 
   useEffect(() => {
-    if (disableAutoCycle || slideCount <= 1 || secondaryMounted) return;
+    if (disableAutoCycle || slideCount <= 1 || secondaryMounted || !isLoadSettled) return;
     const el = rootRef.current;
     if (!el) return;
     return observePrewarm(el, () => {
       setSecondaryMounted(true);
     });
-  }, [disableAutoCycle, slideCount, secondaryMounted]);
+  }, [disableAutoCycle, isLoadSettled, slideCount, secondaryMounted]);
 
   useEffect(() => {
     if (disableAutoCycle || slideCount <= 1) return;
@@ -310,13 +361,21 @@ export default function DwellSlideshow({
     if (!el) return;
     return observeActiveVisibility(el, (visible) => {
       setInView(visible);
-      if (visible) {
+      if (visible && initialLoadSettled) {
         setSecondaryMounted(true);
       }
     });
   }, [disableAutoCycle, slideCount]);
 
-  // Trên laptop/desktop: nếu có ảnh mở đầu đặc thù vùng trồng (desktopLeadSrc), chuyển mượt sang ngay khi ảnh tải xong
+  useEffect(() => {
+    if (isLoadSettled && inView && !disableAutoCycle && slideCount > 1) {
+      const id = window.requestAnimationFrame(() => setSecondaryMounted(true));
+      return () => window.cancelAnimationFrame(id);
+    }
+  }, [disableAutoCycle, inView, isLoadSettled, slideCount]);
+
+  // Trên laptop/desktop: nếu có ảnh mở đầu đặc thù vùng trồng (desktopLeadSrc),
+  // với khung Hero đầu trang (priorityFirst) giữ ảnh đầu ổn định qua nhịp đo LCP trước khi chuyển mượt.
   useEffect(() => {
     if (
       !isDesktopViewport ||
@@ -330,17 +389,19 @@ export default function DwellSlideshow({
     if (!loadedSrcsRef.current.has(desktopLeadSrc)) return;
 
     appliedDesktopLeadRef.current = true;
+    const leadDelayMs = priorityFirst ? 3600 : 80;
     const timer = window.setTimeout(() => {
+      if (manualInteractedRef.current) return;
       setSlideState((s) =>
         s.activeSrc === desktopLeadSrc
           ? s
           : { activeSrc: desktopLeadSrc, prevSrc: s.activeSrc },
       );
-    }, 80);
+    }, leadDelayMs);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [activeSlides, desktopLeadSrc, isDesktopViewport, loadedVersion]);
+  }, [activeSlides, desktopLeadSrc, isDesktopViewport, loadedVersion, priorityFirst]);
 
   const hasAdvancedInCurrentDwellRef = useRef(false);
 
@@ -366,9 +427,10 @@ export default function DwellSlideshow({
       return;
     }
 
+    const initialHold = priorityFirst ? INITIAL_HERO_HOLD_MS : INITIAL_TOP_HOLD_MS;
     const baseDelay = hasAdvancedInCurrentDwellRef.current
       ? intervalMs
-      : (globalHasScrolledOnce ? FIRST_DWELL_AFTER_STOP_MS : INITIAL_TOP_HOLD_MS) + staggerMs;
+      : (globalHasScrolledOnce ? FIRST_DWELL_AFTER_STOP_MS : initialHold) + staggerMs;
 
     const timer = window.setTimeout(() => {
       hasAdvancedInCurrentDwellRef.current = true;
@@ -392,6 +454,7 @@ export default function DwellSlideshow({
     isDesktopViewport,
     isScrollIdle,
     loadedVersion,
+    priorityFirst,
     resolvedActiveIdx,
     secondaryMounted,
     slideCount,
@@ -410,7 +473,7 @@ export default function DwellSlideshow({
         const isNeededInitially =
           (!isDesktopViewport && useTriptych && idx < 3) ||
           idx === 0 ||
-          (isDesktopViewport && desktopLeadSrc === slide.src);
+          (isDesktopViewport && !priorityFirst && isLoadSettled && desktopLeadSrc === slide.src);
         if (
           !isNeededInitially &&
           !secondaryMounted &&
@@ -447,8 +510,9 @@ export default function DwellSlideshow({
               src={slide.src}
               alt={slide.alt}
               fill
-              quality={perfTier === "lite" ? 62 : 75}
+              quality={isPriorityHero ? 75 : perfTier === "lite" ? 62 : 75}
               priority={isPriorityHero}
+              fetchPriority={isPriorityHero ? "high" : "auto"}
               loading={isPriorityHero ? undefined : "lazy"}
               decoding="async"
               sizes={effectiveSizes}

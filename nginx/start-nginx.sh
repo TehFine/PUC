@@ -5,7 +5,8 @@ DOMAIN="${SSL_DOMAIN:-htxcune.com}"
 CERT_FILE="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
 KEY_FILE="/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
 
-mkdir -p /var/www/certbot
+mkdir -p /var/www/certbot /var/cache/nginx/puc_cache
+chown -R nginx:nginx /var/cache/nginx/puc_cache 2>/dev/null || true
 
 if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
   echo "[puc-nginx] Đã tìm thấy chứng chỉ SSL cho ${DOMAIN}. Bật chế độ HTTPS (cổng 443) và tự động chuyển hướng HTTP -> HTTPS."
@@ -24,4 +25,3 @@ else
 fi
 
 exec nginx -g "daemon off;"
-
