@@ -82,6 +82,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         this.pendingDataSyncTags.clear();
         this.emitStaffDataSync(batch);
       }, NotificationsService.DATA_SYNC_DEBOUNCE_MS);
+      this.dataSyncTimer.unref?.();
     });
   }
 
@@ -177,8 +178,24 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /** Gửi trực tiếp tới danh sách ID người dùng xác định (đang hoạt động). */
+  async notifyUsers(userIds: number[], input: NotificationInput): Promise<void> {
+    const uniqueIds = Array.from(
+      new Set(userIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)),
+    );
+    if (uniqueIds.length === 0) return;
+    await this.insert(
+      `SELECT id FROM users WHERE id = ANY($5::bigint[]) AND status = 'active'`,
+      [input.kind, input.title, input.body ?? null, input.link ?? null, uniqueIds],
+    );
+  }
+
   /** Gửi tới mọi tài khoản đang hoạt động thuộc các vai trò cho trước (chỉ trong phạm vi HTX Cư Né / địa bàn cho phép). */
-  async notifyRoles(roles: string[], input: NotificationInput): Promise<void> {
+  async notifyRoles(
+    roles: string[],
+    input: NotificationInput,
+    options?: { excludeUserId?: number },
+  ): Promise<void> {
     if (roles.length === 0) return;
     try {
       const { rows } = await this.db.query<{
@@ -194,8 +211,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
          WHERE role = ANY($1::text[]) AND status = 'active'`,
         [roles],
       );
+      const excludedId = options?.excludeUserId;
       const recipientIds = rows
         .filter((r) => {
+          if (excludedId !== undefined && Number(r.id) === Number(excludedId)) return false;
           if (r.role === "farmer" || r.role === "enterprise") return true;
           return isStaffInCuneCoopScope(
             {
@@ -501,7 +520,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private async syncStaffNotifications(user: AuthUser): Promise<void> {
     const canReadApprovals = can(user.role, "approvals", "read");
     const canReadViolations = can(user.role, "violations", "read");
-    if (!canReadApprovals && !canReadViolations) return;
+    const isDeputyReviewer = user.role === "htx_deputy";
+    if (!canReadApprovals && !canReadViolations && !isDeputyReviewer) return;
 
     const now = Date.now();
     const lastSync = this.lastSyncedAt.get(user.id) ?? 0;
@@ -510,7 +530,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     this.lastSyncedAt.set(user.id, now);
 
     try {
-      const params: unknown[] = [user.id, canReadApprovals, canReadViolations];
+      const params: unknown[] = [user.id, canReadApprovals, canReadViolations, isDeputyReviewer];
       const hhScopeCond = villageScope("h.village_id")(user, params);
       const apprScope = hhScopeCond
         ? `AND a.household_id IN (SELECT h.id FROM households h WHERE ${hhScopeCond})`
@@ -519,7 +539,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         ? `AND v.household_id IN (SELECT h.id FROM households h WHERE ${hhScopeCond})`
         : "";
 
-      // Gộp 3 bước đồng bộ thông báo quản trị vào 1 câu lệnh CTE trên 1 kết nối CSDL duy nhất
+      // Gộp các bước đồng bộ thông báo quản trị vào 1 câu lệnh CTE trên 1 kết nối CSDL duy nhất
       await this.db.query(
         `WITH ins_appr AS (
            INSERT INTO notifications (user_id, kind, title, body, link, created_at)
@@ -556,6 +576,25 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
                WHERE n.user_id = $1 AND n.link = '/admin?section=journal&violationId=' || v.id
              )
            ORDER BY v.detected_on ASC, v.id ASC
+         ),
+         ins_del AS (
+           INSERT INTO notifications (user_id, kind, title, body, link, created_at)
+           SELECT
+             $1,
+             'approval',
+             'Yêu cầu xóa chờ duyệt: ' || d.target_name || ' (' || d.target_code || ')',
+             'Đề nghị bởi ' || d.requested_by_name || COALESCE(' - Lý do: ' || NULLIF(btrim(d.reason), ''), ''),
+             '/admin?section=system&sub=deletions&id=' || d.id,
+             d.created_at
+           FROM member_deletion_requests d
+           WHERE $4::boolean
+             AND d.status = 'pending'
+             AND d.requested_by <> $1
+             AND NOT EXISTS (
+               SELECT 1 FROM notifications n
+               WHERE n.user_id = $1 AND n.link = '/admin?section=system&sub=deletions&id=' || d.id
+             )
+           ORDER BY d.created_at ASC, d.id ASC
          )
          UPDATE notifications n
          SET read_at = now()
@@ -570,6 +609,11 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
              (n.link LIKE '/admin?section=journal&violationId=%' AND EXISTS (
                SELECT 1 FROM violations v
                WHERE '/admin?section=journal&violationId=' || v.id = n.link AND v.status <> 'open'
+             ))
+             OR
+             (n.link LIKE '/admin?section=system&sub=deletions&id=%' AND EXISTS (
+               SELECT 1 FROM member_deletion_requests d
+               WHERE '/admin?section=system&sub=deletions&id=' || d.id = n.link AND d.status <> 'pending'
              ))
            )`,
         params,
@@ -602,7 +646,6 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   private async insert(recipientsSql: string, params: unknown[]) {
     try {
-      this.lastSyncedAt.clear();
       const inserted = await this.db.query<{
         user_id: number;
         id: number;
@@ -619,6 +662,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       );
       for (const row of inserted.rows) {
         const uid = Number(row.user_id);
+        this.lastSyncedAt.delete(uid);
         this.emitToUser(uid, {
           type: "notification",
           item: {

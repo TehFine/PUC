@@ -11,20 +11,20 @@ import { SystemAlertsService } from "./system-alerts.service";
 export class SystemAlertsController {
   constructor(private readonly alerts: SystemAlertsService) {}
 
-  @Authorize("accounts", "read")
+  @Authorize("system-alerts", "read")
   @Get()
   list() {
     return this.alerts.listRecent();
   }
 
-  @Authorize("accounts", "create")
+  @Authorize("system-alerts", "create")
   @Throttle(RateLimitTier.BULK_MUTATION)
   @Post()
   create(@Body() dto: CreateSystemAlertDto, @CurrentUser() user: AuthUser, @Ip() ip: string) {
     return this.alerts.create(dto, user, ip);
   }
 
-  @Authorize("accounts", "update")
+  @Authorize("system-alerts", "update")
   @Post(":id/resolve")
   @HttpCode(200)
   resolve(@Param("id", ParseRecordIdPipe) id: number, @CurrentUser() user: AuthUser, @Ip() ip: string) {

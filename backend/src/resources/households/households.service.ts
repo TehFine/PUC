@@ -17,6 +17,7 @@ import { AppException, badRequest, forbidden, notFound } from "../../common/erro
 import { publicAttachmentUrlSql } from "../../common/sql/rows";
 import { hasPlotsTable, syncHouseholdAndVillageStats } from "../../common/sql/stats-sync";
 import { DatabaseService } from "../../database/database.service";
+import { DeletionRequestsService } from "../deletion-requests/deletion-requests.service";
 import { CreateHouseholdDto, IssueHouseholdAccountDto } from "./households.dto";
 
 /** Chỉ quản trị viên và cán bộ HTX (người duyệt hồ sơ) được xem/tìm theo số CCCD đầy đủ. */
@@ -59,7 +60,11 @@ const IMPORT_DB_ERRORS: Record<string, string> = {
 
 @Injectable()
 export class HouseholdsService extends BaseCrudService {
-  constructor(db: DatabaseService, audit: AuditService) {
+  constructor(
+    db: DatabaseService,
+    audit: AuditService,
+    private readonly deletionRequests: DeletionRequestsService,
+  ) {
     super(db, audit, {
       resource: "households",
       label: "Hộ nông dân",
@@ -200,65 +205,8 @@ export class HouseholdsService extends BaseCrudService {
     return redact(updated, user);
   }
 
-  protected override async guardDelete(id: number, user: AuthUser) {
-    if (!isStaffInCuneCoopScope(user, true)) {
-      throw forbidden("Bạn không có quyền xóa hộ nông dân ngoài phạm vi quản lý.");
-    }
-    const existing = await this.db.query("SELECT id FROM households WHERE id = $1", [id]);
-    if ((existing.rowCount ?? 0) === 0) {
-      return;
-    }
-    await assertHouseholdInScope(this.db, { householdId: id }, user);
-    const hasPlots = await hasPlotsTable(this.db);
-    const plotsCheckSql = hasPlots ? "OR EXISTS (SELECT 1 FROM plots WHERE household_id = $1)" : "";
-    const historyCheck = await this.db.query<{ has_history: boolean }>(
-      `SELECT (
-         EXISTS (SELECT 1 FROM lab_tests WHERE household_id = $1)
-         OR EXISTS (SELECT 1 FROM spray_records WHERE household_id = $1)
-         OR EXISTS (SELECT 1 FROM journal_entries WHERE household_id = $1)
-         OR EXISTS (SELECT 1 FROM farmer_stamps WHERE household_id = $1)
-         OR EXISTS (SELECT 1 FROM farmer_stamp_allocations WHERE household_id = $1)
-         OR EXISTS (SELECT 1 FROM harvest_contributions WHERE household_id = $1)
-         OR EXISTS (SELECT 1 FROM violations WHERE household_id = $1)
-         ${plotsCheckSql}
-       ) AS has_history`,
-      [id],
-    );
-    if (historyCheck.rows[0]?.has_history) {
-      throw badRequest("Hộ dân đã có lịch sử canh tác, kiểm nghiệm hoặc tem truy xuất nên không thể xóa.");
-    }
-  }
-
   override async remove(id: number, user: AuthUser, ip?: string) {
-    const prev = await this.db.query<{ village_id: number | string }>(
-      "SELECT village_id FROM households WHERE id = $1 LIMIT 1",
-      [id],
-    );
-    const oldVillageId = prev.rows[0]?.village_id ? Number(prev.rows[0].village_id) : undefined;
-    const hasPlots = await hasPlotsTable(this.db);
-    const linkedUsersRes = await this.db.query<{ id: number | string }>(
-      "SELECT id FROM users WHERE household_id = $1",
-      [id],
-    );
-    const linkedUserIds = linkedUsersRes.rows.map((r) => Number(r.id));
-
-    const result = await super.remove(id, user, ip);
-
-    if (linkedUserIds.length > 0) {
-      await this.db.query(
-        "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ANY($1::bigint[]) AND revoked_at IS NULL",
-        [linkedUserIds],
-      );
-      await this.db.query(
-        "UPDATE users SET status = 'locked', token_version = token_version + 1, household_id = NULL WHERE id = ANY($1::bigint[])",
-        [linkedUserIds],
-      );
-    }
-    await syncHouseholdAndVillageStats(this.db, {
-      forceZeroVillageIds: oldVillageId ? [oldVillageId] : [],
-      hasPlots,
-    });
-    return result;
+    return this.deletionRequests.requestDeletion({ targetType: "household", targetId: id }, user, ip);
   }
 
   /**
@@ -398,23 +346,25 @@ export class HouseholdsService extends BaseCrudService {
     if (!isStaffInCuneCoopScope(user, true)) {
       throw forbidden("Bạn không có quyền cấp tài khoản ngoài phạm vi quản lý.");
     }
-    const { rows: hhRows } = await this.db.query<{
-      id: number;
-      code: string;
-      name: string;
-      phone: string;
-      village_id: number;
-      village_name: string | null;
-    }>(
-      `SELECT h.id, h.code, h.name, h.phone, h.village_id, v.name AS village_name
-       FROM households h
-       LEFT JOIN villages v ON v.id = h.village_id
-       WHERE h.id = $1`,
-      [householdId],
-    );
+    const [{ rows: hhRows }, officerVillageName] = await Promise.all([
+      this.db.query<{
+        id: number;
+        code: string;
+        name: string;
+        phone: string;
+        village_id: number;
+        village_name: string | null;
+      }>(
+        `SELECT h.id, h.code, h.name, h.phone, h.village_id, v.name AS village_name
+         FROM households h
+         LEFT JOIN villages v ON v.id = h.village_id
+         WHERE h.id = $1`,
+        [householdId],
+      ),
+      this.resolveOfficerVillageName(user),
+    ]);
     const hh = hhRows[0];
     if (!hh) throw notFound("Không tìm thấy hồ sơ hộ nông dân này.");
-    const officerVillageName = await this.resolveOfficerVillageName(user);
     if (!isStaffInParcelScope(user, { villageId: hh.village_id, villageName: hh.village_name }, officerVillageName)) {
       throw forbidden("Hộ nông dân này không thuộc phạm vi quản lý của bạn.");
     }
@@ -428,21 +378,21 @@ export class HouseholdsService extends BaseCrudService {
     if (cleanEmail && /(?:^nongho\.[0-9]+@gmail\.com$|\.htxcune@gmail\.com$)/i.test(cleanEmail)) {
       throw badRequest("Không được gắn địa chỉ email giả định tự sinh. Vui lòng nhập email thực tế hoặc để trống.");
     }
-    const passwordHash = await bcrypt.hash(dto.password, 12);
 
-    const { rows: existingByHh } = await this.db.query<{ id: number; username: string; role: string }>(
-      "SELECT id, username, role FROM users WHERE household_id = $1 LIMIT 1",
-      [householdId],
-    );
+    const [{ rows: existingByHh }, { rows: existingByUsername }] = await Promise.all([
+      this.db.query<{ id: number; username: string; role: string }>(
+        "SELECT id, username, role FROM users WHERE household_id = $1 LIMIT 1",
+        [householdId],
+      ),
+      this.db.query<{
+        id: number;
+        role: string;
+        household_id: number | null;
+      }>("SELECT id, role, household_id FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1", [cleanUsername]),
+    ]);
     if (existingByHh[0] && existingByHh[0].role !== "farmer") {
       throw new AppException(409, "Hồ sơ hộ này đang liên kết với tài khoản không phải nông hộ.", "CONFLICT");
     }
-
-    const { rows: existingByUsername } = await this.db.query<{
-      id: number;
-      role: string;
-      household_id: number | null;
-    }>("SELECT id, role, household_id FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1", [cleanUsername]);
     if (
       existingByUsername[0] &&
       existingByUsername[0].id !== existingByHh[0]?.id &&
@@ -451,6 +401,8 @@ export class HouseholdsService extends BaseCrudService {
     ) {
       throw new AppException(409, `Tên đăng nhập "${cleanUsername}" đang thuộc về một tài khoản khác.`, "CONFLICT");
     }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
 
     if (cleanEmail) {
       await this.db.query("UPDATE users SET email = NULL WHERE status = 'pending' AND LOWER(email) = $1", [cleanEmail]);

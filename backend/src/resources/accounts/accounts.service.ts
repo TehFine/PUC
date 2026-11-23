@@ -6,6 +6,7 @@ import { ADMIN_PRIVILEGED_ROLES, isAdminPrivilegedRole } from "../../auth/permis
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { AppException, badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { DatabaseService } from "../../database/database.service";
+import { DeletionRequestsService } from "../deletion-requests/deletion-requests.service";
 
 const ADMIN_MUTATION_ADVISORY_LOCK = 73829104;
 
@@ -30,7 +31,11 @@ function assertRoleHierarchy(actorRole: string, targetCurrentRole?: string | nul
 
 @Injectable()
 export class AccountsService extends BaseCrudService {
-  constructor(db: DatabaseService, audit: AuditService) {
+  constructor(
+    db: DatabaseService,
+    audit: AuditService,
+    private readonly deletionRequests: DeletionRequestsService,
+  ) {
     super(db, audit, {
       resource: "accounts",
       label: "Tài khoản",
@@ -106,23 +111,27 @@ export class AccountsService extends BaseCrudService {
     if (
       context.method === "PATCH" &&
       context.id !== undefined &&
-      ((next.role !== undefined && !isAdminPrivilegedRole(String(next.role))) ||
+      existing?.role === "htx_deputy" &&
+      existing.status === "active" &&
+      ((next.role !== undefined && next.role !== "htx_deputy") ||
         (next.status !== undefined && next.status !== "active"))
     ) {
-      await this.assertNotLastActiveAdmin(context.id);
+      await this.assertNotLastActiveDeputy(context.id);
     }
-    if (next.villageId !== undefined && next.villageId !== null) {
-      const village = await this.db.query("SELECT 1 FROM villages WHERE id = $1", [next.villageId]);
-      if (village.rowCount === 0) throw badRequest("Thôn được chọn không tồn tại.");
-    }
-    if (next.householdId !== undefined && next.householdId !== null) {
-      const household = await this.db.query("SELECT 1 FROM households WHERE id = $1", [next.householdId]);
-      if (household.rowCount === 0) throw badRequest("Hộ nông dân được chọn không tồn tại.");
-    }
-    if (next.enterpriseId !== undefined && next.enterpriseId !== null) {
-      const ent = await this.db.query("SELECT 1 FROM enterprises WHERE id = $1", [next.enterpriseId]);
-      if (ent.rowCount === 0) throw badRequest("Doanh nghiệp hoặc cơ sở đóng gói được chọn không tồn tại.");
-    }
+    const [village, household, ent] = await Promise.all([
+      next.villageId !== undefined && next.villageId !== null
+        ? this.db.query("SELECT 1 FROM villages WHERE id = $1", [next.villageId])
+        : Promise.resolve(null),
+      next.householdId !== undefined && next.householdId !== null
+        ? this.db.query("SELECT 1 FROM households WHERE id = $1", [next.householdId])
+        : Promise.resolve(null),
+      next.enterpriseId !== undefined && next.enterpriseId !== null
+        ? this.db.query("SELECT 1 FROM enterprises WHERE id = $1", [next.enterpriseId])
+        : Promise.resolve(null),
+    ]);
+    if (village && village.rowCount === 0) throw badRequest("Thôn được chọn không tồn tại.");
+    if (household && household.rowCount === 0) throw badRequest("Hộ nông dân được chọn không tồn tại.");
+    if (ent && ent.rowCount === 0) throw badRequest("Doanh nghiệp hoặc cơ sở đóng gói được chọn không tồn tại.");
     if (context.method === "POST" && next.role === "inspector" && next.assignedRegion === undefined) {
       next.assignedRegion = "Tỉnh Đắk Lắk";
     }
@@ -190,7 +199,7 @@ export class AccountsService extends BaseCrudService {
 
   override async remove(id: number, user: AuthUser, ip?: string) {
     if (id === user.id) throw forbidden("Không thể xóa chính tài khoản đang đăng nhập.");
-    return this.withSerializedAdminGuard(id, true, () => super.remove(id, user, ip));
+    return this.deletionRequests.requestDeletion({ targetType: "account", targetId: id }, user, ip);
   }
 
   /** Khóa tài khoản, đổi mật khẩu, đổi email, đổi vai trò hoặc đổi bất kỳ phạm vi quản lý nào thì tăng token_version và thu hồi mọi phiên đăng nhập. */
@@ -213,7 +222,21 @@ export class AccountsService extends BaseCrudService {
       const shouldRevokeSessions = input.status !== "active" || input.passwordHash !== undefined || input.role !== undefined || input.username !== undefined || input.email !== undefined || input.villageId !== undefined || input.householdId !== undefined || input.enterpriseId !== undefined || input.assignedCommune !== undefined || input.assignedRegion !== undefined || input.coopCode !== undefined;
 
       const tasks: Promise<unknown>[] = [];
-      if (shouldUnlockCounters) {
+      if (shouldUnlockCounters && shouldRevokeSessions) {
+        tasks.push(
+          this.db.query(
+            `UPDATE users
+             SET failed_login_count = 0,
+                 locked_until = NULL,
+                 two_factor_failed_count = 0,
+                 cccd_reset_failed_count = 0,
+                 cccd_reset_locked_until = NULL,
+                 token_version = token_version + 1
+             WHERE id = $1`,
+            [userId],
+          ),
+        );
+      } else if (shouldUnlockCounters) {
         tasks.push(
           this.db.query(
             `UPDATE users
@@ -226,6 +249,8 @@ export class AccountsService extends BaseCrudService {
             [userId],
           ),
         );
+      } else if (shouldRevokeSessions) {
+        tasks.push(this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]));
       }
       if (input.passwordHash !== undefined) {
         tasks.push(
@@ -234,7 +259,6 @@ export class AccountsService extends BaseCrudService {
       }
       if (shouldRevokeSessions) {
         tasks.push(
-          this.db.query("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [userId]),
           this.db.query(
             "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = $1 AND revoked_at IS NULL",
             [userId],
@@ -319,16 +343,7 @@ export class AccountsService extends BaseCrudService {
     return { ok: true as const };
   }
 
-  protected override async guardDelete(userId: number, user: AuthUser) {
-    if (userId === user.id) throw forbidden("Không thể xóa chính tài khoản đang đăng nhập.");
-    const target = await this.db.query<{ role: string }>("SELECT role FROM users WHERE id = $1", [userId]);
-    if (target.rows[0]) {
-      assertRoleHierarchy(user.role, target.rows[0].role, null);
-    }
-    await this.assertNotLastActiveAdmin(userId);
-  }
-
-  private async assertNotLastActiveAdmin(userId: number) {
+  private async assertNotLastActiveDeputy(userId: number) {
     const client = await this.db.pool.connect();
     try {
       await client.query("BEGIN");
@@ -336,14 +351,13 @@ export class AccountsService extends BaseCrudService {
         "SELECT role, status FROM users WHERE id = $1 FOR UPDATE",
         [userId],
       );
-      if (isAdminPrivilegedRole(rows[0]?.role) && rows[0]?.status === "active") {
-        const admins = await client.query<{ id: number }>(
-          "SELECT id FROM users WHERE role = ANY($1::text[]) AND status = 'active' FOR UPDATE",
-          [ADMIN_PRIVILEGED_ROLES],
+      if (rows[0]?.role === "htx_deputy" && rows[0]?.status === "active") {
+        const deputies = await client.query<{ id: number }>(
+          "SELECT id FROM users WHERE role = 'htx_deputy' AND status = 'active' FOR UPDATE",
         );
-        const remaining = admins.rows.filter((r) => Number(r.id) !== Number(userId));
+        const remaining = deputies.rows.filter((r) => Number(r.id) !== Number(userId));
         if (remaining.length === 0) {
-          throw badRequest("Phải giữ lại ít nhất một tài khoản quản trị viên đang hoạt động.");
+          throw badRequest("Phải giữ lại ít nhất một tài khoản Phó HTX đang hoạt động để giám sát phê duyệt chéo.");
         }
       }
       await client.query("COMMIT");

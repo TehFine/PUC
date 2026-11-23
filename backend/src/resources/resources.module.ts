@@ -13,6 +13,8 @@ import { PesticidesModule } from "./pesticides/pesticides.module";
 import { VarietiesModule } from "./varieties/varieties.module";
 import { VillagesModule } from "./villages/villages.module";
 import { AccountsModule } from "./accounts/accounts.module";
+import { DeletionRequestsModule } from "./deletion-requests/deletion-requests.module";
+import { TraceRequestsModule } from "./trace-requests/trace-requests.module";
 import { AuditLogModule } from "./audit-log/audit-log.module";
 import { EnterprisesModule } from "./enterprises/enterprises.module";
 import { ContractsModule } from "./contracts/contracts.module";
@@ -40,6 +42,8 @@ import { ReportsModule } from "./reports/reports.module";
     VarietiesModule,
     VillagesModule,
     AccountsModule,
+    DeletionRequestsModule,
+    TraceRequestsModule,
     AuditLogModule,
     EnterprisesModule,
     ContractsModule,

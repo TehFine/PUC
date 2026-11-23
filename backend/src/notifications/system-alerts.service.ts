@@ -32,6 +32,15 @@ const STAFF_ROLES = [
   "enterprise",
 ];
 
+const COOP_EXECUTIVE_MIRROR_ROLES = ["htx_head", "htx_deputy", "admin"];
+
+const ROLE_LABELS_VN: Record<string, string> = {
+  admin: "Quản trị viên",
+  htx_head: "Trưởng HTX",
+  htx_deputy: "Phó HTX",
+  support_specialist: "Chuyên viên hỗ trợ",
+};
+
 @Injectable()
 export class SystemAlertsService implements OnModuleInit {
   private readonly logger = new Logger(SystemAlertsService.name);
@@ -152,6 +161,17 @@ export class SystemAlertsService implements OnModuleInit {
 
     if (audience === "farmer") {
       await this.notifications.notifyAllFarmers(notifInput);
+      const senderRoleLabel = ROLE_LABELS_VN[user.role] ?? "Ban điều hành";
+      await this.notifications.notifyRoles(
+        COOP_EXECUTIVE_MIRROR_ROLES,
+        {
+          kind: "system",
+          title: notifTitle,
+          body: `${senderRoleLabel} ${user.fullName} gửi toàn thể nông hộ: ${dto.message}`,
+          link: "/admin?section=system&sub=alerts",
+        },
+        { excludeUserId: user.id },
+      );
     } else if (audience === "staff") {
       await this.notifications.notifyRoles(STAFF_ROLES, notifInput);
     } else {

@@ -1,14 +1,36 @@
-/** Chuyển khóa snake_case (cột SQL) sang camelCase (JSON trả về client). */
-export const toCamel = (key: string) => key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+const CAMEL_KEY_CACHE = new Map<string, string>();
+const MAX_CAMEL_KEY_CACHE = 1024;
+const VN_ISO_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
 
-export const camelRow = <T = Record<string, unknown>>(row: Record<string, unknown>): T =>
-  Object.fromEntries(Object.entries(row).map(([key, value]) => [toCamel(key), value])) as T;
+/** Chuyển khóa snake_case (cột SQL) sang camelCase (JSON trả về client), có ghi nhớ tên cột để giảm cấp phát chuỗi. */
+export const toCamel = (key: string): string => {
+  const cached = CAMEL_KEY_CACHE.get(key);
+  if (cached !== undefined) return cached;
+  const converted = key.includes("_") ? key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()) : key;
+  if (CAMEL_KEY_CACHE.size < MAX_CAMEL_KEY_CACHE) {
+    CAMEL_KEY_CACHE.set(key, converted);
+  }
+  return converted;
+};
+
+export const camelRow = <T = Record<string, unknown>>(row: Record<string, unknown>): T => {
+  const out: Record<string, unknown> = {};
+  for (const key in row) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) {
+      out[toCamel(key)] = row[key];
+    }
+  }
+  return out as T;
+};
 
 export const camelRows = <T = Record<string, unknown>>(rows: Record<string, unknown>[]): T[] =>
   rows.map((row) => camelRow<T>(row));
 
+/** Định dạng đối tượng Date sang YYYY-MM-DD theo múi giờ Việt Nam (tái sử dụng bộ định dạng dùng chung). */
+export const formatDateIsoVn = (date: Date): string => VN_ISO_DATE_FORMATTER.format(date);
+
 /** Ngày hôm nay theo giờ Việt Nam, dạng YYYY-MM-DD. */
-export const todayVn = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+export const todayVn = () => VN_ISO_DATE_FORMATTER.format(new Date());
 
 /** Đường dẫn tải tệp đính kèm riêng tư (dùng trong cột SELECT: `attachmentUrlSql('j.photo_id')`). */
 export const attachmentUrlSql = (column: string) =>

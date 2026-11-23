@@ -61,6 +61,9 @@ export const RESOURCES = [
   "varieties",
   "villages",
   "accounts",
+  "deletion-requests",
+  "trace-requests",
+  "system-alerts",
   "audit-log",
   "plots",
   "plot-measurements",
@@ -107,6 +110,7 @@ const SUPPLY_CHAIN_READERS: Role[] = [
   "enterprise",
 ];
 const ADMIN: Role[] = ["admin", "htx_head", "support_specialist"];
+const DELETION_REVIEWERS: Role[] = ["htx_deputy"];
 const PLOT_SHAPE_EDITORS: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist"];
 const ACCOUNTS_READERS: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist"];
 const AUDIT_READERS: Role[] = ["admin", "htx_head", "htx_deputy", "support_specialist"];
@@ -156,6 +160,22 @@ export const POLICY: Record<ResourceKey, Partial<Record<Action, Role[]>>> = {
   varieties: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   villages: { read: ALL, create: HTX, update: HTX, delete: ADMIN },
   accounts: { read: ACCOUNTS_READERS, create: ADMIN, update: ADMIN, delete: ADMIN },
+  "deletion-requests": {
+    read: ACCOUNTS_READERS,
+    create: ADMIN,
+    update: DELETION_REVIEWERS,
+    delete: ADMIN,
+  },
+  "trace-requests": {
+    read: [...MANAGEMENT_ROLES],
+    update: [...MANAGEMENT_ROLES],
+    delete: [...MANAGEMENT_ROLES],
+  },
+  "system-alerts": {
+    read: ACCOUNTS_READERS,
+    create: [...MANAGEMENT_ROLES],
+    update: [...MANAGEMENT_ROLES],
+  },
   "audit-log": { read: AUDIT_READERS },
   plots: { read: STAFF, create: HTX, update: PLOT_SHAPE_EDITORS },
   "plot-measurements": { read: STAFF, create: HTX_OR_INSPECTOR },
