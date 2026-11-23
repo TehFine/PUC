@@ -7,7 +7,7 @@ import { CloseCircleIcon } from "@/components/ui/CloseCircleIcon";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import { FERTILIZER_CATEGORY, FERTILIZER_STATUS, PESTICIDE_STATUS, VARIETY_CATEGORY, VARIETY_STATUS } from "@/components/admin/catalog/labels";
-import { useDebounced } from "@/components/admin/catalog/use-debounced";
+import { useDebounced } from "@/components/admin/shared/use-debounced";
 import BlockState from "@/components/admin/shared/BlockState";
 import { ProgressiveListFooter, useProgressiveCount } from "@/components/portal/shared/controls";
 import { lazyChunk } from "@/lib/lazy-chunk";

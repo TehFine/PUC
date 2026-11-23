@@ -3,7 +3,7 @@
 import { useState } from "react";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
-import { useDebounced } from "@/components/admin/catalog/use-debounced";
+import { useDebounced } from "@/components/admin/shared/use-debounced";
 import NewsFormModal from "@/components/admin/news/NewsFormModal";
 import NewsPreviewModal from "@/components/admin/news/NewsPreviewModal";
 import { useAuth } from "@/components/auth/AuthProvider";

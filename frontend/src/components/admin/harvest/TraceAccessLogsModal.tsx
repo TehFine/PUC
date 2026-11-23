@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
-import { useDebounced } from "@/components/admin/catalog/use-debounced";
+import { useDebounced } from "@/components/admin/shared/use-debounced";
 import { Modal } from "@/components/ui/Modal";
 import { ROLE_LABELS } from "@/constants/roles";
 import { useApi } from "@/hooks/use-api";

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { ROLE_LABELS } from "@/constants/roles";
 import {
   consumeBackLayerForInPageTarget,
   replaceUrlPreservingState,
@@ -824,6 +825,24 @@ export default function EditorialHero() {
           <div className="eh-drawer-foot">
             {authenticated ? (
               <>
+                {session?.user && (
+                  <div
+                    data-drawer-keep=""
+                    style={{
+                      gridColumn: "1 / -1",
+                      padding: "9px 12px",
+                      border: "1px solid #d8d8d4",
+                      borderRadius: 0,
+                      background: "#fafaf8",
+                      color: "#14372f",
+                      fontSize: "12.5px",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Tài khoản: <strong>{session.user.fullName}</strong> (
+                    {ROLE_LABELS[session.user.role]})
+                  </div>
+                )}
                 <Link
                   href={workspaceHref}
                   className="eh-drawer-btn is-solid"

@@ -522,7 +522,7 @@ describe("bản tin, bảng điều khiển và xuất báo cáo CSV", () => {
     const beforeCount = Number(
       (
         await db.query<{ cnt: string }>(
-          `SELECT count(*)::text AS cnt FROM audit_logs WHERE action = 'Xuất báo cáo' AND object = 'Báo cáo training-registrations'`,
+          `SELECT count(*)::text AS cnt FROM audit_logs WHERE action = 'Xuất báo cáo' AND object = 'Báo cáo tập huấn'`,
         )
       ).rows[0].cnt,
     );
@@ -530,7 +530,7 @@ describe("bản tin, bảng điều khiển và xuất báo cáo CSV", () => {
     const afterPreviewCount = Number(
       (
         await db.query<{ cnt: string }>(
-          `SELECT count(*)::text AS cnt FROM audit_logs WHERE action = 'Xuất báo cáo' AND object = 'Báo cáo training-registrations'`,
+          `SELECT count(*)::text AS cnt FROM audit_logs WHERE action = 'Xuất báo cáo' AND object = 'Báo cáo tập huấn'`,
         )
       ).rows[0].cnt,
     );
@@ -545,7 +545,7 @@ describe("bản tin, bảng điều khiển và xuất báo cáo CSV", () => {
     expect(logs.status).toBe(200);
     expect(
       (logs.body.data as Array<{ action: string; object: string }>).some(
-        (l) => l.action === "Xuất báo cáo" && l.object === "Báo cáo training-registrations",
+        (l) => l.action === "Xuất báo cáo" && l.object === "Báo cáo tập huấn",
       ),
     ).toBe(true);
   });
@@ -1555,6 +1555,10 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     expect(setupRes.body.secret).toMatch(/^[A-Z2-7]{16,}$/);
     expect(setupRes.body.otpauthUrl).toContain("otpauth://totp/");
 
+    const remMsInWindow = 30_000 - (Date.now() % 30_000);
+    if (remMsInWindow < 2_500) {
+      await new Promise((resolve) => setTimeout(resolve, remMsInWindow + 100));
+    }
     const validTotp = generateTotpCode(setupRes.body.secret, Date.now() - 30_000);
     const enableRes = await mfaSetupAgent
       .post("/api/auth/2fa/enable")
@@ -2196,9 +2200,137 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
       ).status,
     ).toBe(403);
 
-    // Dọn tài khoản kiểm thử để không ảnh hưởng các ca sau
-    expect((await admin.delete(`/api/accounts/${deputyAcc.body.id}`)).status).toBe(200);
-    expect((await admin.delete(`/api/accounts/${supportAcc.body.id}`)).status).toBe(200);
-    expect((await admin.delete(`/api/accounts/${headAcc.body.id}`)).status).toBe(200);
+    // Không cho phép khóa hoặc hạ quyền Phó HTX duy nhất đang hoạt động (chống vô hiệu hóa chốt duyệt chéo)
+    expect(
+      (await admin.patch(`/api/accounts/${deputyAcc.body.id}`).send({ status: "locked" })).status,
+    ).toBe(400);
+
+    // 1. Khi Quản trị viên hoặc Trưởng HTX bấm xóa tài khoản, hệ thống KHÔNG xóa ngay mà tạo yêu cầu chờ Phó HTX duyệt
+    const delSupportReq = await admin.delete(`/api/accounts/${supportAcc.body.id}`);
+    expect(delSupportReq.status).toBe(200);
+    expect(delSupportReq.body.pendingApproval).toBe(true);
+    const supportReqId = delSupportReq.body.request.id;
+    expect(typeof supportReqId).toBe("number");
+
+    // Tài khoản vẫn còn nguyên khi Phó HTX chưa phê duyệt
+    expect((await admin.get(`/api/accounts/${supportAcc.body.id}`)).status).toBe(200);
+
+    // Phó HTX nhận được thông báo thời gian thực trong hộp thư thông báo
+    const deputyNotifs = await deputyAgent.get("/api/notifications");
+    expect(deputyNotifs.status).toBe(200);
+    expect(
+      deputyNotifs.body.data.some(
+        (n: { link?: string | null }) => n.link === `/admin?section=system&sub=deletions&id=${supportReqId}`,
+      ),
+    ).toBe(true);
+
+    // Quản trị viên và Trưởng HTX bị chặn (403) nếu cố tự phê duyệt hoặc từ chối yêu cầu xóa
+    expect((await admin.post(`/api/deletion-requests/${supportReqId}/approve`).send({})).status).toBe(403);
+    expect((await headAgent.post(`/api/deletion-requests/${supportReqId}/approve`).send({})).status).toBe(403);
+
+    // 2. Trưởng HTX yêu cầu xóa một hộ dân mới chưa có lịch sử -> Phó HTX từ chối -> hộ dân vẫn được giữ nguyên
+    const tempHh = await headAgent.post("/api/households").send({
+      code: "KB-VT-001-H998",
+      name: "Hộ Kiểm Thử Duyệt Chéo",
+      cccd: "260999888777",
+      phone: "0988777665",
+      villageId: 1,
+      plotCount: 0,
+      areaHa: 0,
+    });
+    expect(tempHh.status).toBe(201);
+
+    const hhDelReq = await headAgent.post("/api/deletion-requests").send({
+      targetType: "household",
+      targetId: tempHh.body.id,
+      reason: "Hộ xin rút khỏi danh sách liên kết thử nghiệm",
+    });
+    expect(hhDelReq.status).toBe(201);
+    const hhReqId = hhDelReq.body.request.id;
+
+    const rejectHh = await deputyAgent
+      .post(`/api/deletion-requests/${hhReqId}/reject`)
+      .send({ note: "Cần làm việc lại với chủ hộ trước khi xóa" });
+    expect(rejectHh.status).toBe(200);
+    expect((await headAgent.get(`/api/households/${tempHh.body.id}`)).status).toBe(200);
+
+    // Trưởng HTX gửi lại yêu cầu xóa hộ và Phó HTX phê duyệt -> hộ dân chính thức bị xóa
+    const hhDelReq2 = await headAgent.delete(`/api/households/${tempHh.body.id}`);
+    expect(hhDelReq2.status).toBe(200);
+    expect(hhDelReq2.body.pendingApproval).toBe(true);
+    expect(
+      (await deputyAgent.post(`/api/deletion-requests/${hhDelReq2.body.request.id}/approve`).send({})).status,
+    ).toBe(200);
+    expect((await headAgent.get(`/api/households/${tempHh.body.id}`)).status).toBe(404);
+
+    // 3. Phó HTX soạn thông báo gửi toàn thể nông hộ -> nông hộ VÀ Trưởng HTX đều nhận được; và ngược lại!
+    const farmerAn = await loggedIn(USERS.farmerAn);
+    const deputyBroadcastTitle = `Thông báo mùa vụ từ Phó HTX ${Date.now()}`;
+    const deputyAlert = await deputyAgent.post("/api/system-alerts").send({
+      severity: "info",
+      audience: "farmer",
+      title: deputyBroadcastTitle,
+      message: "Bà con chuẩn bị vệ sinh vườn trước đợt kiểm tra định kỳ.",
+    });
+    expect(deputyAlert.status).toBe(201);
+
+    const [farmerNotifs1, headNotifs1] = await Promise.all([
+      farmerAn.get("/api/notifications"),
+      headAgent.get("/api/notifications"),
+    ]);
+    expect(
+      farmerNotifs1.body.data.some(
+        (n: { title?: string }) => typeof n.title === "string" && n.title.includes(deputyBroadcastTitle),
+      ),
+    ).toBe(true);
+    expect(
+      headNotifs1.body.data.some(
+        (n: { title?: string }) => typeof n.title === "string" && n.title.includes(deputyBroadcastTitle),
+      ),
+    ).toBe(true);
+
+    // Chiều ngược lại: Trưởng HTX soạn thông báo gửi toàn thể nông hộ -> nông hộ VÀ Phó HTX đều nhận được
+    const headBroadcastTitle = `Thông báo điều hành từ Trưởng HTX ${Date.now()}`;
+    const headAlert = await headAgent.post("/api/system-alerts").send({
+      severity: "info",
+      audience: "farmer",
+      title: headBroadcastTitle,
+      message: "Toàn thể các hộ thành viên hoàn tất chốt sổ nhật ký tuần này.",
+    });
+    expect(headAlert.status).toBe(201);
+
+    const [farmerNotifs2, deputyNotifsAfterBroadcast] = await Promise.all([
+      farmerAn.get("/api/notifications"),
+      deputyAgent.get("/api/notifications"),
+    ]);
+    expect(
+      farmerNotifs2.body.data.some(
+        (n: { title?: string }) => typeof n.title === "string" && n.title.includes(headBroadcastTitle),
+      ),
+    ).toBe(true);
+    expect(
+      deputyNotifsAfterBroadcast.body.data.some(
+        (n: { title?: string }) => typeof n.title === "string" && n.title.includes(headBroadcastTitle),
+      ),
+    ).toBe(true);
+
+    await deputyAgent.post(`/api/system-alerts/${headAlert.body.id}/resolve`).send({});
+
+    // 4. Phó HTX phê duyệt xóa supportAcc và headAcc -> chính thức xóa khỏi hệ thống
+    expect((await deputyAgent.post(`/api/deletion-requests/${supportReqId}/approve`).send({})).status).toBe(200);
+    expect((await admin.get(`/api/accounts/${supportAcc.body.id}`)).status).toBe(404);
+
+    const delHeadReq = await admin.delete(`/api/accounts/${headAcc.body.id}`);
+    expect(delHeadReq.status).toBe(200);
+    expect(
+      (await deputyAgent.post(`/api/deletion-requests/${delHeadReq.body.request.id}/approve`).send({})).status,
+    ).toBe(200);
+    expect((await admin.get(`/api/accounts/${headAcc.body.id}`)).status).toBe(404);
+
+    // Dọn bản ghi kiểm thử Phó HTX trực tiếp trong CSDL sau khi kết thúc ca kiểm thử
+    await db.query("DELETE FROM member_deletion_requests WHERE requested_by = $1 OR reviewed_by = $1", [
+      deputyAcc.body.id,
+    ]);
+    await db.query("DELETE FROM users WHERE id = $1", [deputyAcc.body.id]);
   });
 });

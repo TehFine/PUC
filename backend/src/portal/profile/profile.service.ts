@@ -14,15 +14,13 @@ export class ProfileService {
     private readonly db: DatabaseService,
     private readonly uploads: UploadsService,
     private readonly audit: AuditService,
-  ) {}
+  ) { }
 
   async profile(user: AuthUser) {
     const householdId = householdIdOf(user);
-    const account = (
-      await this.db.query("SELECT full_name, username, email, last_login_at FROM users WHERE id = $1", [user.id])
-    ).rows[0];
-    const household = (
-      await this.db.query(
+    const [accountRes, hhRes] = await Promise.all([
+      this.db.query("SELECT full_name, username, email, last_login_at FROM users WHERE id = $1", [user.id]),
+      this.db.query(
         `SELECT h.code, h.name, h.phone,
                 CASE WHEN h.cccd IS NULL OR btrim(h.cccd) = '' THEN NULL ELSE '**********' || right(btrim(h.cccd), 2) END AS cccd_masked,
                 v.name AS village_name, v.leader AS village_leader, h.plot_count, h.area_ha, h.status,
@@ -30,8 +28,10 @@ export class ProfileService {
                 ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url
          FROM households h JOIN villages v ON v.id = h.village_id WHERE h.id = $1`,
         [householdId],
-      )
-    ).rows[0];
+      ),
+    ]);
+    const account = accountRes.rows[0];
+    const household = hhRes.rows[0];
     if (!account || !household) throw notFound("Không tìm thấy hộ của tài khoản này.");
     return { account: camelRow(account), household: camelRow(household) };
   }

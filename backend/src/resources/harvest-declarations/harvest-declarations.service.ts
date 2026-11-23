@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
-import { ReadOnlyCrudController } from "../../common/crud/crud-controller.factory";
 import { BaseCrudService } from "../../common/crud/base-crud.service";
 import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
 import { forbidden, notFound } from "../../common/errors/app.exception";
@@ -9,8 +8,6 @@ import { attachmentUrlSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { assertExists } from "../shared/state";
-
-void ReadOnlyCrudController;
 
 @Injectable()
 export class HarvestDeclarationsService extends BaseCrudService {

@@ -107,7 +107,7 @@ function subscribe(key: string, listener: Listener) {
   };
 }
 
-/** Yêu cầu mọi nơi đang dùng các khóa (đường dẫn API đầy đủ) tải lại. Khóa chưa ai dùng sẽ bị đánh dấu cũ để lần sau tải mới. */
+/** Yêu cầu mọi nơi đang dùng các khóa (đường dẫn API đầy đủ) tải lại. Giữ nguyên request đang bay để chống gọi trùng lặp khi focus và visibilitychange nổ sát nhau. */
 export function invalidateQueries(...keys: string[]) {
   for (const key of new Set(keys)) {
     const cacheKey = scopedPortalKey(key);
@@ -115,7 +115,6 @@ export function invalidateQueries(...keys: string[]) {
     if (existing) existing.timestamp = 0;
     const set = listeners.get(key);
     if (set && set.size > 0) {
-      inflight.delete(cacheKey);
       set.forEach((listener) => listener());
     } else {
       cache.delete(cacheKey);

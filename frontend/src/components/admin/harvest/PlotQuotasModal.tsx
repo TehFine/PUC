@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { QrCode } from "@/components/ui/PublicIcon";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
-import { useDebounced } from "@/components/admin/catalog/use-debounced";
+import { useDebounced } from "@/components/admin/shared/use-debounced";
 import { dateText, hasErrors, numberText, parseNumber, requireFields, todayIso } from "@/components/admin/shared/form-utils";
 import { useHouseholdOptions } from "@/components/admin/shared/options";
 import { Modal, FormError } from "@/components/ui/Modal";

@@ -1063,7 +1063,11 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
         expect(createdJ.status).toBe(201);
 
         expect(
-          htxEvents.some((e) => e.type === "notification" && e.item.title.includes(uniqueAct)),
+          htxEvents.some(
+            (e) =>
+              e.type === "notification" &&
+              (e.item.title.includes(uniqueAct) || (e.item.body ?? "").includes(uniqueAct)),
+          ),
         ).toBe(true);
 
         const [adminNotifs, htxNotifs, inspectorNotifs] = await Promise.all([
@@ -1074,7 +1078,11 @@ describe("cổng hộ dân mở rộng (/api/portal/*)", () => {
         for (const res of [adminNotifs, htxNotifs, inspectorNotifs]) {
           expect(res.status).toBe(200);
           expect(
-            res.body.data.some((n: { title?: string }) => typeof n.title === "string" && n.title.includes(uniqueAct)),
+            res.body.data.some(
+              (n: { title?: string; body?: string | null }) =>
+                (typeof n.title === "string" && n.title.includes(uniqueAct)) ||
+                (typeof n.body === "string" && n.body.includes(uniqueAct)),
+            ),
           ).toBe(true);
         }
 

@@ -147,8 +147,7 @@
 }
 
 .sw-checker-row,
-.sw-training-slide,
-.sw-faq-row {
+.sw-training-slide {
   contain: layout style;
 }
 
@@ -1407,9 +1406,45 @@ html[data-perf="lite"] .sw-dwell-dot {
 }
 
 /* ─── Hỏi đáp (FAQ) ──────────────────────────────── */
-.sw-faq-row .sw-cell {
+#hoi-dap .sw-sec-head {
+  border-bottom: none;
+}
+
+.sw-grid.sw-faq-row {
+  position: relative;
+  background: transparent;
+  border-bottom: none;
+}
+
+.sw-grid.sw-faq-row:first-child::before,
+.sw-grid.sw-faq-row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #d8d8d4;
+  transform: translateZ(0);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.sw-grid.sw-faq-row:first-child::before {
+  top: 0;
+}
+
+.sw-grid.sw-faq-row::after {
+  bottom: 0;
+}
+
+.sw-faq-row > .sw-cell {
+  background: transparent;
   padding-top: 22px;
   padding-bottom: 22px;
+}
+
+.sw-faq-row > .sw-col-1 {
+  border-right-color: #d8d8d4;
 }
 
 .sw-faq-idxcell {
@@ -1524,10 +1559,11 @@ html[data-perf="lite"] .sw-dwell-dot {
 
 .sw-faq-ans {
   margin-top: 16px;
+  margin-bottom: 4px;
   padding: 16px 20px;
   max-width: 72ch;
   background: #f8f8f6;
-  border: 1px solid var(--sw-line);
+  border: 1px solid #e2e2de;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2956,15 +2992,15 @@ html[data-perf="lite"] .sw-side-drawer {
   }
 
   /* 06 / Hỏi đáp: Bố cục đường kẻ mảnh trên/dưới + nút + xoay thành × theo đúng hình tham chiếu */
-  .sw-faq-row {
+  .sw-grid.sw-faq-row {
     display: block;
     width: auto;
     margin: 0 var(--sw-pad-x);
-    border-bottom: 1px solid #d8d8d4;
+    border-bottom: none;
   }
 
-  .sw-faq-row:first-child {
-    border-top: 1px solid #d8d8d4;
+  .sw-grid.sw-faq-row:first-child {
+    border-top: none;
   }
 
   .sw-faq-idxcell {

@@ -176,6 +176,8 @@ export class NewsService extends BaseCrudService {
         isNew: context.method === "POST" || prevStatus !== "published",
         title: String(out.title ?? prevTitle).trim(),
         excerpt: String(out.excerpt ?? prevExcerpt).trim(),
+        actorId: context.user.id,
+        actorName: context.user.fullName,
       };
     }
 
@@ -183,14 +185,34 @@ export class NewsService extends BaseCrudService {
   }
 
   protected override async afterWrite(_id: number, input: Record<string, unknown>) {
-    const info = input._notifyNews as { isNew: boolean; title: string; excerpt: string } | undefined;
+    const info = input._notifyNews as
+      | { isNew: boolean; title: string; excerpt: string; actorId?: number; actorName?: string }
+      | undefined;
     if (!info || !this.notifications || !info.title) return;
-    await this.notifications.notifyAllFarmers({
-      kind: "system",
-      title: info.isNew ? `Bản tin mới từ HTX: ${info.title}` : `Cập nhật bản tin HTX: ${info.title}`,
-      body: info.excerpt ? info.excerpt.slice(0, 220) : null,
-      link: "/#tin-tuc",
-    });
+    const notifTitle = info.isNew
+      ? `Bản tin mới từ HTX: ${info.title}`
+      : `Cập nhật bản tin HTX: ${info.title}`;
+    const cleanExcerpt = info.excerpt ? info.excerpt.slice(0, 220) : null;
+    await Promise.all([
+      this.notifications.notifyAllFarmers({
+        kind: "system",
+        title: notifTitle,
+        body: cleanExcerpt,
+        link: "/#tin-tuc",
+      }),
+      this.notifications.notifyRoles(
+        ["htx_head", "htx_deputy", "admin"],
+        {
+          kind: "system",
+          title: notifTitle,
+          body: info.actorName
+            ? `${info.actorName} đã đăng tải tới nông hộ${cleanExcerpt ? `: ${cleanExcerpt}` : ""}`
+            : cleanExcerpt,
+          link: "/admin?section=news",
+        },
+        { excludeUserId: info.actorId },
+      ),
+    ]);
   }
 
   async publish(id: number, user: AuthUser, ip?: string) {
@@ -202,18 +224,33 @@ export class NewsService extends BaseCrudService {
       [id],
     );
     if (rows.length === 0) throw notFound("Không tìm thấy bản tin.");
-    await this.audit.write(
-      { ip, user },
-      { action: "Xuất bản bản tin", object: `${this.config.label} #${id}`, detail: rows[0].title },
-    );
-    if (this.notifications) {
-      await this.notifications.notifyAllFarmers({
-        kind: "system",
-        title: `Bản tin mới từ HTX: ${rows[0].title}`,
-        body: rows[0].excerpt ? rows[0].excerpt.slice(0, 220) : null,
-        link: "/#tin-tuc",
-      });
-    }
+    const cleanExcerpt = rows[0].excerpt ? rows[0].excerpt.slice(0, 220) : null;
+    await Promise.all([
+      this.audit.write(
+        { ip, user },
+        { action: "Xuất bản bản tin", object: `${this.config.label} #${id}`, detail: rows[0].title },
+      ),
+      ...(this.notifications
+        ? [
+            this.notifications.notifyAllFarmers({
+              kind: "system",
+              title: `Bản tin mới từ HTX: ${rows[0].title}`,
+              body: cleanExcerpt,
+              link: "/#tin-tuc",
+            }),
+            this.notifications.notifyRoles(
+              ["htx_head", "htx_deputy", "admin"],
+              {
+                kind: "system",
+                title: `Bản tin mới từ HTX: ${rows[0].title}`,
+                body: `${user.fullName} đã xuất bản tới nông hộ${cleanExcerpt ? `: ${cleanExcerpt}` : ""}`,
+                link: "/admin?section=news",
+              },
+              { excludeUserId: user.id },
+            ),
+          ]
+        : []),
+    ]);
     return this.findOne(id, user);
   }
 
@@ -226,21 +263,29 @@ export class NewsService extends BaseCrudService {
       [id],
     );
     if (rows.length === 0) throw notFound("Không tìm thấy bản tin.");
-    await this.audit.write(
-      { ip, user },
-      { action: "Gỡ xuất bản bản tin", object: `${this.config.label} #${id}`, detail: rows[0].title },
-    );
-    return this.findOne(id, user);
+    const [, article] = await Promise.all([
+      this.audit.write(
+        { ip, user },
+        { action: "Gỡ xuất bản bản tin", object: `${this.config.label} #${id}`, detail: rows[0].title },
+      ),
+      this.findOne(id, user),
+    ]);
+    return article;
   }
 
   private async uniqueSlug(title: string): Promise<string> {
     const base = slugifyVietnamese(title);
-    const existing = await this.db.query("SELECT 1 FROM news_articles WHERE slug = $1", [base]);
+    const escapedBase = base.replace(/[\\%_]/g, "\\$&");
+    const existing = await this.db.query<{ slug: string }>(
+      "SELECT slug FROM news_articles WHERE slug = $1 OR slug LIKE $2 ESCAPE '\\'",
+      [base, `${escapedBase}-%`],
+    );
     if (existing.rowCount === 0) return base;
+    const taken = new Set(existing.rows.map((r) => r.slug));
+    if (!taken.has(base)) return base;
     for (let i = 2; i <= 50; i++) {
       const candidate = `${base}-${i}`;
-      const check = await this.db.query("SELECT 1 FROM news_articles WHERE slug = $1", [candidate]);
-      if (check.rowCount === 0) return candidate;
+      if (!taken.has(candidate)) return candidate;
     }
     return `${base}-${Date.now().toString(36)}`;
   }

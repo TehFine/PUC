@@ -295,6 +295,11 @@ function ensureLifecycleListeners(): void {
   document.addEventListener("visibilitychange", onVisibility);
 }
 
+/** Kiểm tra nhanh xem luồng SSE thời gian thực hiện đang kết nối mở (`OPEN`) hay không. */
+export function isRealtimeStreamConnected(): boolean {
+  return typeof EventSource !== "undefined" && eventSource !== null && eventSource.readyState === EventSource.OPEN;
+}
+
 /**
  * Kết nối kênh nhận thông báo thời gian thực (SSE `/api/notifications/stream`) dùng chung toàn tab.
  * Tự động đồng bộ chuông thông báo, dải băng hệ thống và làm mới bảng dữ liệu liên quan ngay khi có sự kiện mới.

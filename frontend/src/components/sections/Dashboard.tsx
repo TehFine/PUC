@@ -88,6 +88,10 @@ function useSmoothNumber(target: number, decimals = 0): number {
       (typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
+    if (skipAnim && currentRef.current === target) {
+      return;
+    }
+
     const startAt = performance.now();
     const duration = 320;
     const factor = Math.pow(10, decimals);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useDebounced } from "@/components/admin/catalog/use-debounced";
+import { useDebounced } from "@/components/admin/shared/use-debounced";
 import BlockState from "@/components/admin/shared/BlockState";
 import Pagination from "@/components/admin/shared/Pagination";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";

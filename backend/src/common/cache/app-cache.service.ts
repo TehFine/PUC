@@ -29,16 +29,16 @@ export const ALL_CACHE_TAGS: readonly CacheTag[] = [
  * được ánh xạ mảng rỗng `[]` để thao tác ghi log truy vết không làm trôi bộ nhớ đệm nghiệp vụ một cách vô ích.
  */
 const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
-  users: ["auth", "dashboard"],
+  users: ["auth", "dashboard", "trace"],
   refresh_tokens: ["auth"],
   auth_otp_challenges: ["auth"],
   password_reset_requests: ["dashboard"],
 
-  attachments: ["uploads"],
+  attachments: ["uploads", "trace"],
   approval_attachments: ["uploads"],
 
   plots: ["plots", "dashboard", "portal", "public-overview", "trace"],
-  plot_measurements: ["plots", "dashboard"],
+  plot_measurements: ["plots", "dashboard", "trace"],
   plot_signboard_tokens: ["plots", "trace"],
   plot_season_quotas: ["plots", "trace"],
   growing_zones: ["plots", "dashboard", "public-overview", "trace"],
@@ -70,6 +70,8 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   enterprises: ["auth", "uploads", "dashboard", "trace"],
   contracts: ["trace"],
   field_audit_passes: ["trace"],
+  trace_access_requests: ["dashboard", "trace"],
+  member_deletion_requests: ["dashboard"],
   commune_endorsement_config: ["trace"],
 
   notifications: ["portal"],
@@ -87,9 +89,9 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
 };
 
 const SQL_MUTATION_FAST_RE =
-  /\b(?:INSERT\s+INTO|UPDATE\s+(?:ONLY\s+)?(?:public\.)?"?[a-z_]|DELETE\s+FROM|TRUNCATE\b)/i;
+  /\b(?:INSERT\s+INTO|(?<!\bFOR\s+)UPDATE\s+(?:ONLY\s+)?(?:public\.)?"?[a-z_]|DELETE\s+FROM|TRUNCATE\b)/i;
 const SQL_TARGET_TABLE_RE =
-  /\b(?:INSERT\s+INTO|UPDATE(?:\s+ONLY)?|DELETE\s+FROM(?:\s+ONLY)?|TRUNCATE(?:\s+TABLE)?)\s+(?:public\.)?"?([a-z_][a-z0-9_]*)"?/gi;
+  /\b(?:INSERT\s+INTO|(?<!\bFOR\s+)UPDATE(?:\s+ONLY)?|DELETE\s+FROM(?:\s+ONLY)?|TRUNCATE(?:\s+TABLE)?)\s+(?:public\.)?"?([a-z_][a-z0-9_]*)"?/gi;
 
 interface CachedRecord {
   value: unknown;

@@ -257,12 +257,12 @@ export class MinutesService extends BaseCrudService {
           `SELECT COALESCE(h.village_id, v.id) AS village_id,
                   COALESCE(v_hh.name, p.village) AS village_name,
                   p.zone_code,
-                  COALESCE(to_jsonb(p)->>'code', to_jsonb(p)->>'plot_code') AS plot_code
+                  p.code AS plot_code
            FROM plots p
            LEFT JOIN households h ON h.id = p.household_id
            LEFT JOIN villages v_hh ON v_hh.id = h.village_id
            LEFT JOIN villages v ON lower(btrim(v.name)) = lower(btrim(p.village))
-           WHERE upper(btrim(COALESCE(to_jsonb(p)->>'code', to_jsonb(p)->>'plot_code', ''))) = upper(btrim($1))
+           WHERE upper(p.code) = upper(btrim($1))
            LIMIT 1`,
           [effPlot],
         );

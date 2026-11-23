@@ -125,7 +125,9 @@ export async function checkSystemHealth(): Promise<HealthCheckResponse | null> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
   if (inFlightCheck) return inFlightCheck;
 
-  setState({ checking: true });
+  if (state.runtimeIncident !== null && !state.checking) {
+    setState({ checking: true });
+  }
   inFlightCheck = (async () => {
     try {
       const res = await fetch("/api/health", {
@@ -155,12 +157,13 @@ export async function checkSystemHealth(): Promise<HealthCheckResponse | null> {
 
       const hadOutage =
         state.runtimeIncident !== null && state.runtimeIncident.kind !== "chunk_error";
+      const nextAlert = data.alert ?? null;
       if (hadOutage) {
         if (recoveredTimer) clearTimeout(recoveredTimer);
         const now = Date.now();
         setState({
           checking: false,
-          broadcastAlert: data.alert ?? null,
+          broadcastAlert: nextAlert,
           runtimeIncident: null,
           recoveredAt: now,
         });
@@ -170,19 +173,32 @@ export async function checkSystemHealth(): Promise<HealthCheckResponse | null> {
           }
         }, RECOVERED_BANNER_MS);
       } else {
-        setState({
-          checking: false,
-          broadcastAlert: data.alert ?? null,
-        });
+        const prevAlert = state.broadcastAlert;
+        const alertUnchanged =
+          (prevAlert === null && nextAlert === null) ||
+          (prevAlert !== null &&
+            nextAlert !== null &&
+            prevAlert.id === nextAlert.id &&
+            prevAlert.title === nextAlert.title &&
+            prevAlert.message === nextAlert.message &&
+            prevAlert.severity === nextAlert.severity);
+        if (state.checking || !alertUnchanged) {
+          setState({
+            checking: false,
+            broadcastAlert: nextAlert,
+          });
+        }
       }
 
-      scheduleNextPoll(data.alert ? 20_000 : HEALTH_POLL_NORMAL_MS);
+      scheduleNextPoll(nextAlert ? 20_000 : HEALTH_POLL_NORMAL_MS);
       return data;
     } catch {
       if (typeof navigator === "undefined" || navigator.onLine !== false) {
         reportServerFailure("unreachable");
       }
-      setState({ checking: false });
+      if (state.checking) {
+        setState({ checking: false });
+      }
       scheduleNextPoll(HEALTH_POLL_DEGRADED_MS);
       return null;
     } finally {

@@ -62,9 +62,11 @@ export function clearApiQueryCache(mode: "logout" | "scope" = "scope"): void {
 }
 
 let mutationRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let lastMutationAt = 0;
 const VISIBILITY_STALE_MS = 8_000;
 
 function scheduleLiveMutationRefresh() {
+  lastMutationAt = Date.now();
   markAllApiCacheStale();
   if (typeof window === "undefined") return;
   if (mutationRefreshTimer) clearTimeout(mutationRefreshTimer);
@@ -295,6 +297,12 @@ export function useApi<T>(path: string | null) {
       const current = latest.current;
       if (!current || getAuthScopeUserId() === null) return;
       if (prefix && !current.startsWith(prefix)) return;
+      const cacheKey = scopedApiKey(current);
+      if (inflightRequests.has(cacheKey)) return;
+      const cached = apiCache.get(cacheKey);
+      if (!prefix && cached && lastMutationAt > 0 && cached.timestamp >= lastMutationAt) {
+        return;
+      }
       void fetchDeduped<T>(current, true)
         .then((result) => {
           if (latest.current === current) {

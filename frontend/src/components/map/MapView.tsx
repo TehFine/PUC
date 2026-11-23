@@ -92,7 +92,13 @@ interface MapViewProps {
 }
 
 const MAX_HISTORY_STEPS = 80;
-const leafletModulePromise = typeof window !== "undefined" ? import("leaflet") : null;
+let leafletModulePromise: Promise<typeof import("leaflet")> | null = null;
+function loadLeaflet() {
+  if (!leafletModulePromise) {
+    leafletModulePromise = import("leaflet");
+  }
+  return leafletModulePromise;
+}
 
 function extractOpenRingLatLngs(L: typeof import("leaflet"), feature: PlotFeature): Leaflet.LatLng[] {
   const ring = feature.geometry.coordinates[0] ?? [];
@@ -1092,7 +1098,7 @@ export default function MapView({
     });
 
     const init = async () => {
-      const imported = (await (leafletModulePromise ?? import("leaflet"))) as unknown as {
+      const imported = (await loadLeaflet()) as unknown as {
         default?: typeof import("leaflet");
       };
       const L = imported.default ?? (imported as unknown as typeof import("leaflet"));

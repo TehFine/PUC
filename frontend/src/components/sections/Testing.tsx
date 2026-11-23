@@ -142,7 +142,7 @@ export default function Testing() {
   return (
     <>
       {canCreate && (
-        <div className="page-header">
+        <div className={`page-header${isCompletelyEmpty ? " is-empty-stage" : ""}`}>
           <div className="header-actions">
             <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
               Thêm phiếu kiểm nghiệm

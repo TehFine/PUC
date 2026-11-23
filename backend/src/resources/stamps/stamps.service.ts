@@ -5,6 +5,7 @@ import { BaseCrudService } from "../../common/crud/base-crud.service";
 import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql, camelRows } from "../../common/sql/rows";
+import { hasPublicTable } from "../../common/sql/schema-cache";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { assertPlotOwned } from "../../portal/common/portal-context";
@@ -83,9 +84,10 @@ export class StampsService extends BaseCrudService {
       throw badRequest("Hộ đang chờ duyệt hoặc đang có vi phạm chưa khắc phục, không thể cấp phát tem.");
     }
 
-    const plotCode = dto.plotCode ? await assertPlotOwned(this.db, household.id, dto.plotCode) : null;
-    const hasPlots =
-      (await this.db.query<{ t: string | null }>("SELECT to_regclass('public.plots') AS t")).rows[0]?.t !== null;
+    const [plotCode, hasPlots] = await Promise.all([
+      dto.plotCode ? assertPlotOwned(this.db, household.id, dto.plotCode) : Promise.resolve(null),
+      hasPublicTable(this.db, "plots"),
+    ]);
     let plotRow: { id: number; status: string; area_ha: number } | undefined;
     if (plotCode && hasPlots) {
       const plotRes = await this.db.query<{ id: number; status: string; area_ha: number }>(

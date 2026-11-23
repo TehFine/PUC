@@ -568,22 +568,34 @@ export class HarvestService extends BaseCrudService {
         }
       }
 
+      const serials: string[] = [];
+      const qrTokens: string[] = [];
+      const seenTokens = new Set<string>();
       for (let i = 0; i < dto.count; i++) {
         const num = (startIdx + i).toString().padStart(padLen, "0");
-        const serialCode = `${lot.code}-${prefix}${num}`;
-        const qrToken = generateQrToken(14);
-        const weight = dto.weightKg ?? (dto.itemType === "fruit" ? 3.5 : 18.0);
-        const grade = dto.grade ?? "A";
+        serials.push(`${lot.code}-${prefix}${num}`);
+        let tok = generateQrToken(14);
+        while (seenTokens.has(tok)) {
+          tok = generateQrToken(14);
+        }
+        seenTokens.add(tok);
+        qrTokens.push(tok);
+      }
+      const weight = dto.weightKg ?? (dto.itemType === "fruit" ? 3.5 : 18.0);
+      const grade = dto.grade ?? "A";
 
+      if (serials.length > 0) {
         const insRes = await client.query(
           `INSERT INTO harvest_items (lot_id, item_type, serial_code, qr_token, weight_kg, grade, printed_at, status)
-           VALUES ($1, $2, $3, $4, $5, $6, now(), 'active')
+           SELECT $1, $2, u.serial_code, u.qr_token, $3, $4, now(), 'active'
+           FROM UNNEST($5::text[], $6::text[]) WITH ORDINALITY AS u(serial_code, qr_token, ord)
+           ORDER BY u.ord
            ON CONFLICT (serial_code) DO NOTHING
            RETURNING id, lot_id, item_type, serial_code, qr_token, weight_kg, grade, printed_at, status, created_at`,
-          [lotId, dto.itemType, serialCode, qrToken, weight, grade],
+          [lotId, dto.itemType, weight, grade, serials, qrTokens],
         );
-        if (insRes.rowCount && insRes.rows[0]) {
-          createdItems.push({ ...camelRows(insRes.rows)[0], pucCode });
+        for (const row of camelRows(insRes.rows)) {
+          createdItems.push({ ...row, pucCode });
         }
       }
       await client.query("COMMIT");

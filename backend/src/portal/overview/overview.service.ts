@@ -26,18 +26,14 @@ export class OverviewService {
     const id = householdIdOf(user);
     const loadOverview = async () => {
       await this.notifications.syncFarmerNotifications(user);
-      const household = (
-        await this.db.query(
+      const [hhRes, statsRes, lastTestRes, reminders] = await Promise.all([
+        this.db.query(
           `SELECT h.id, h.code, h.name, h.phone, h.plot_count, h.area_ha, h.status,
                   v.name AS village_name, v.leader AS village_leader,
                   ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url
            FROM households h JOIN villages v ON v.id = h.village_id WHERE h.id = $1`,
           [id],
-        )
-      ).rows[0];
-      if (!household) throw notFound("Không tìm thấy hộ của tài khoản này.");
-
-      const [statsRes, lastTestRes, reminders] = await Promise.all([
+        ),
         this.db.query(
           `SELECT
              (SELECT count(*)::int FROM violations WHERE household_id = $1 AND status = 'open') AS open_violations,
@@ -65,6 +61,9 @@ export class OverviewService {
         ),
         this.reminders(id),
       ]);
+
+      const household = hhRes.rows[0];
+      if (!household) throw notFound("Không tìm thấy hộ của tài khoản này.");
 
       const stats = statsRes.rows[0];
       const lastTest = lastTestRes.rows[0];

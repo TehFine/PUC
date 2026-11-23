@@ -6,7 +6,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import { formatVn } from "@/components/admin/catalog/form-utils";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
-import { useDebounced } from "@/components/admin/catalog/use-debounced";
+import { useDebounced } from "@/components/admin/shared/use-debounced";
 import { ContractFormModal, EnterpriseFormModal } from "@/components/admin/harvest/EnterpriseContractModals";
 import HarvestLotFormModal, { LOT_STATUS_LABELS } from "@/components/admin/harvest/HarvestLotFormModal";
 import HarvestPlanNotifyModal from "@/components/admin/harvest/HarvestPlanNotifyModal";
@@ -302,16 +302,16 @@ export default function Harvest() {
             (tab === "stamps" && canCreateStamps) ||
             (tab === "contracts" && canCreateContract) ||
             (tab === "enterprises" && canCreateEnterprise)) && (
-            <button type="button" className="btn btn-primary" onClick={handlePrimaryAction}>
-              {tab === "lots"
-                ? "Tạo lô mới"
-                : tab === "stamps"
-                  ? "Cấp dải tem"
-                  : tab === "contracts"
-                    ? "Thêm hợp đồng"
-                    : "Thêm doanh nghiệp"}
-            </button>
-          )}
+              <button type="button" className="btn btn-primary" onClick={handlePrimaryAction}>
+                {tab === "lots"
+                  ? "Tạo lô mới"
+                  : tab === "stamps"
+                    ? "Cấp dải tem"
+                    : tab === "contracts"
+                      ? "Thêm hợp đồng"
+                      : "Thêm doanh nghiệp"}
+              </button>
+            )}
         </div>
       </div>
 
@@ -717,9 +717,8 @@ export default function Harvest() {
                     </td>
                     <td>
                       <span
-                        className={`badge ${
-                          s.status === "active" ? "badge-green" : s.status === "revoked" ? "badge-red" : "badge-blue"
-                        }`}
+                        className={`badge ${s.status === "active" ? "badge-green" : s.status === "revoked" ? "badge-red" : "badge-blue"
+                          }`}
                       >
                         {s.status === "active" ? "Đang hiệu lực" : s.status === "revoked" ? "Đã thu hồi" : "Hoàn tất"}
                       </span>
@@ -884,15 +883,14 @@ export default function Harvest() {
                         <td>{z.validUntil ? String(z.validUntil).slice(0, 10) : "2027-12-31"}</td>
                         <td>
                           <span
-                            className={`badge ${
-                              z.status === "active"
-                                ? "badge-green"
-                                : z.status === "suspended"
-                                  ? "badge-gold"
-                                  : z.status === "revoked"
-                                    ? "badge-red"
-                                    : "badge-gray"
-                            }`}
+                            className={`badge ${z.status === "active"
+                              ? "badge-green"
+                              : z.status === "suspended"
+                                ? "badge-gold"
+                                : z.status === "revoked"
+                                  ? "badge-red"
+                                  : "badge-gray"
+                              }`}
                           >
                             {z.status === "active"
                               ? "Còn hiệu lực"
@@ -929,88 +927,88 @@ export default function Harvest() {
           </div>
 
           <div className="card">
-          <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
-            <div className="card-header-left">Hồ sơ pháp lý Doanh nghiệp &amp; Cơ sở đóng gói (Packhouse)</div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                type="text"
-                className="filter-input"
-                style={{ width: 220 }}
-                placeholder="Tìm mã DN, tên doanh nghiệp…"
-                value={entQ}
-                onChange={(e) => setEntQ(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="table-wrap" style={{ border: "none", borderRadius: 0, boxShadow: "none" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Mã DN</th>
-                  <th>Tên Doanh nghiệp</th>
-                  <th>Mã số thuế</th>
-                  <th>Đại diện pháp luật</th>
-                  <th>Điện thoại</th>
-                  <th>Mã cơ sở đóng gói (PHC)</th>
-                  <th>Địa chỉ cơ sở</th>
-                  <th>Trạng thái</th>
-                  <th>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                <ListStatusRow
-                  colSpan={9}
-                  loading={enterprises.loading}
-                  error={enterprises.error}
-                  empty={enterprises.rows.length === 0}
-                  onRetry={enterprises.refresh}
+            <div className="card-header" style={{ flexWrap: "wrap", gap: 10 }}>
+              <div className="card-header-left">Hồ sơ pháp lý Doanh nghiệp &amp; Cơ sở đóng gói (Packhouse)</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="text"
+                  className="filter-input"
+                  style={{ width: 220 }}
+                  placeholder="Tìm mã DN, tên doanh nghiệp…"
+                  value={entQ}
+                  onChange={(e) => setEntQ(e.target.value)}
                 />
-                {enterprises.rows.map((e) => {
-                  const eb = ENTERPRISE_STATUS_BADGE[e.status] ?? ENTERPRISE_STATUS_BADGE.inactive;
-                  return (
-                  <tr key={e.id}>
-                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, color: "#166534" }}>{e.code}</td>
-                    <td>
-                      <strong style={{ color: "#14372f", fontSize: 13.5 }}>{e.name}</strong>
-                    </td>
-                    <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{e.taxCode || "—"}</td>
-                    <td>{e.representative || "—"}</td>
-                    <td>{e.phone || "—"}</td>
-                    <td
-                      style={{
-                        fontSize: 12.5,
-                        fontWeight: 700,
-                        color: "#065f46",
-                        fontFamily: "var(--font-num-stack)",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {e.packhouseCode || "VN-DLPH-0089"}
-                    </td>
-                    <td style={{ fontSize: 12, color: "#475569", maxWidth: 260 }}>{e.address || "—"}</td>
-                    <td>
-                      <span className={`badge ${eb.cls}`}>{eb.label}</span>
-                    </td>
-                    <td className="table-actions-cell">
-                      <div className="table-actions">
-                        {canUpdateEnterprise && (
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingEnterprise(e)}>
-                            Sửa
-                          </button>
-                        )}
-                        {canDeleteEnterprise && (
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingEnterprise(e)}>
-                            Xóa
-                          </button>
-                        )}
-                      </div>
-                    </td>
+              </div>
+            </div>
+            <div className="table-wrap" style={{ border: "none", borderRadius: 0, boxShadow: "none" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mã DN</th>
+                    <th>Tên Doanh nghiệp</th>
+                    <th>Mã số thuế</th>
+                    <th>Đại diện pháp luật</th>
+                    <th>Điện thoại</th>
+                    <th>Mã cơ sở đóng gói (PHC)</th>
+                    <th>Địa chỉ cơ sở</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
                   </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  <ListStatusRow
+                    colSpan={9}
+                    loading={enterprises.loading}
+                    error={enterprises.error}
+                    empty={enterprises.rows.length === 0}
+                    onRetry={enterprises.refresh}
+                  />
+                  {enterprises.rows.map((e) => {
+                    const eb = ENTERPRISE_STATUS_BADGE[e.status] ?? ENTERPRISE_STATUS_BADGE.inactive;
+                    return (
+                      <tr key={e.id}>
+                        <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5, fontWeight: 700, color: "#166534" }}>{e.code}</td>
+                        <td>
+                          <strong style={{ color: "#14372f", fontSize: 13.5 }}>{e.name}</strong>
+                        </td>
+                        <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}>{e.taxCode || "—"}</td>
+                        <td>{e.representative || "—"}</td>
+                        <td>{e.phone || "—"}</td>
+                        <td
+                          style={{
+                            fontSize: 12.5,
+                            fontWeight: 700,
+                            color: "#065f46",
+                            fontFamily: "var(--font-num-stack)",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {e.packhouseCode || "VN-DLPH-0089"}
+                        </td>
+                        <td style={{ fontSize: 12, color: "#475569", maxWidth: 260 }}>{e.address || "—"}</td>
+                        <td>
+                          <span className={`badge ${eb.cls}`}>{eb.label}</span>
+                        </td>
+                        <td className="table-actions-cell">
+                          <div className="table-actions">
+                            {canUpdateEnterprise && (
+                              <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingEnterprise(e)}>
+                                Sửa
+                              </button>
+                            )}
+                            {canDeleteEnterprise && (
+                              <button type="button" className="btn btn-danger btn-sm" onClick={() => setDeletingEnterprise(e)}>
+                                Xóa
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}

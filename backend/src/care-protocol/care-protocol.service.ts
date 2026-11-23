@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { can, isCoopStaffRole } from "../auth/permissions";
@@ -6,6 +6,7 @@ import { isStaffInCuneCoopScope } from "../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
 import { attachmentUrlSql, attachmentUrlsSql, camelRows, todayVn } from "../common/sql/rows";
+import { hasPublicTable } from "../common/sql/schema-cache";
 import { DatabaseService } from "../database/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ADMIN_LINKS, INSPECTION_ROLES } from "../portal/common/admin-links";
@@ -190,8 +191,10 @@ export type MilestoneTimelineState =
   | "upcoming";
 
 @Injectable()
-export class CareProtocolService {
+export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CareProtocolService.name);
+  private lastEnsuredAllAt = 0;
+  private unsubscribeCache: (() => void) | null = null;
 
   constructor(
     private readonly db: DatabaseService,
@@ -199,6 +202,20 @@ export class CareProtocolService {
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
   ) {}
+
+  onModuleInit(): void {
+    if (!this.db.cache) return;
+    this.unsubscribeCache = this.db.cache.onTagsInvalidated((tags) => {
+      if (tags.includes("plots") || tags.includes("dashboard") || tags.includes("portal")) {
+        this.lastEnsuredAllAt = 0;
+      }
+    });
+  }
+
+  onModuleDestroy(): void {
+    this.unsubscribeCache?.();
+    this.unsubscribeCache = null;
+  }
 
   /** Danh mục chuẩn cho giao diện hiển thị gợi ý mà không cần hardcode lặp lại. */
   getCatalog() {
@@ -225,10 +242,7 @@ export class CareProtocolService {
     }
 
     if (plotCodes.size === 0) {
-      const regSign = await this.db.query<{ reg: string | null }>(
-        "SELECT to_regclass('public.plot_signboard_tokens')::text AS reg",
-      );
-      if (regSign.rows[0]?.reg) {
+      if (await hasPublicTable(this.db, "plot_signboard_tokens")) {
         const sRes = await this.db.query<{ plot_code: string }>(
           "SELECT plot_code FROM plot_signboard_tokens WHERE household_id = $1 ORDER BY plot_code",
           [householdId],
@@ -280,6 +294,10 @@ export class CareProtocolService {
    * nông hộ chưa từng mở Cổng hộ dân.
    */
   async ensureAllHouseholdPlans(): Promise<void> {
+    const now = Date.now();
+    if (this.lastEnsuredAllAt > 0 && now - this.lastEnsuredAllAt < 30_000) {
+      return;
+    }
     const today = todayVn();
 
     if (await plotsTableExists(this.db)) {
@@ -300,10 +318,7 @@ export class CareProtocolService {
       );
     }
 
-    const regSign = await this.db.query<{ reg: string | null }>(
-      "SELECT to_regclass('public.plot_signboard_tokens')::text AS reg",
-    );
-    if (regSign.rows[0]?.reg) {
+    if (await hasPublicTable(this.db, "plot_signboard_tokens")) {
       await this.db.query(
         `INSERT INTO plot_care_plans (household_id, plot_code, season, cycle_start_on, start_milestone_seq, current_milestone_code)
          SELECT pst.household_id, upper(btrim(pst.plot_code)), $1, $2::date, 1, 'cb-rua-vuon'
@@ -349,6 +364,7 @@ export class CareProtocolService {
        ON CONFLICT (household_id, plot_code, season) DO NOTHING`,
       [PROTOCOL_SEASON, today],
     );
+    this.lastEnsuredAllAt = Date.now();
   }
 
   /** Cổng hộ dân: trả về toàn bộ Timeline 2026-2027 của các thửa thuộc hộ, kèm kiểm tra nhắc lịch tức thời. */
@@ -540,7 +556,6 @@ export class CareProtocolService {
       );
     }
 
-    const scheduledOn = addIsoDays(cycleStartOn, targetSpec.cycleDayStart);
     const dueOn = addIsoDays(cycleStartOn, targetSpec.cycleDayEnd);
 
     await this.notifications.notifyHousehold(householdId, {
@@ -1292,13 +1307,15 @@ export class CareProtocolService {
 
   /** Quản trị viên xem chi tiết toàn bộ 27 mốc + ảnh hiện trường + ảnh hóa đơn của 1 thửa vườn. */
   async adminGetPlanDetail(id: number, user: AuthUser) {
-    const [plan] = await this.loadPlanRows("WHERE pcp.id = $1", [id]);
+    const [[plan], declarations] = await Promise.all([
+      this.loadPlanRows("WHERE pcp.id = $1", [id]),
+      this.loadDeclarationsByPlanIds([id]),
+    ]);
     if (!plan) throw notFound("Không tìm thấy kế hoạch chăm sóc của thửa đất này.");
     if (!isStaffInPlanScope(user, plan)) {
       throw forbidden("Kế hoạch chăm sóc này không thuộc phạm vi quản lý của tài khoản.");
     }
 
-    const declarations = await this.loadDeclarationsByPlanIds([plan.id]);
     return this.buildDetailedPlanTimeline(plan, declarations.get(plan.id) ?? [], todayVn());
   }
 
@@ -1326,63 +1343,6 @@ export class CareProtocolService {
       [householdId],
     );
     return this.evaluateAndDispatchAlerts(plans);
-  }
-
-  /** Nhắc việc nhanh trên trang chủ Cổng hộ dân (`GET /portal/overview`) cho các mốc đến lịch hoặc trễ hạn. */
-  async getHouseholdActiveReminders(householdId: number): Promise<
-    Array<{
-      kind: "protocol";
-      title: string;
-      detail: string;
-      tab: string;
-      date: string | null;
-    }>
-  > {
-    const plans = await this.loadPlanRows(
-      "WHERE pcp.household_id = $1 AND pcp.status = 'active'",
-      [householdId],
-    );
-    const today = todayVn();
-    const out: Array<{
-      kind: "protocol";
-      title: string;
-      detail: string;
-      tab: string;
-      date: string | null;
-    }> = [];
-
-    for (const plan of plans) {
-      if (plan.current_milestone_code === "completed") continue;
-      const spec = getSequentialMilestone(plan.current_milestone_code);
-      if (!spec) continue;
-
-      const scheduledOn = addIsoDays(plan.cycle_start_on, spec.cycleDayStart);
-      const dueOn = addIsoDays(plan.cycle_start_on, spec.cycleDayEnd);
-      const leadDays = Math.max(1, Number(plan.reminder_lead_days ?? 1));
-
-      if (today > dueOn) {
-        const daysLate = diffIsoDays(today, dueOn);
-        out.push({
-          kind: "protocol",
-          title: `Trễ ${daysLate} ngày: ${spec.stageName} (${spec.dayLabel})`,
-          detail: `Thửa ${plan.plot_code} - ${spec.treeState}`,
-          tab: "diary",
-          date: dueOn,
-        });
-      } else if (today >= addIsoDays(scheduledOn, -leadDays)) {
-        const earlyNote =
-          leadDays > 1 ? ` - Nhắc sớm trước ${leadDays} ngày để khai báo đúng hạn` : "";
-        out.push({
-          kind: "protocol",
-          title: `Mốc chăm sóc: ${spec.stageName} (${spec.dayLabel})`,
-          detail: `Thửa ${plan.plot_code} - Hạn ${formatIsoVn(dueOn)}${earlyNote}`,
-          tab: "diary",
-          date: scheduledOn,
-        });
-      }
-    }
-
-    return out;
   }
 
   private async evaluateAndDispatchAlerts(plans: PlanRow[]) {

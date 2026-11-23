@@ -40,7 +40,13 @@ interface Props {
 
 type LayerMode = "satellite" | "satellite-google" | "streets";
 
-const leafletModulePromise = typeof window !== "undefined" ? import("leaflet") : null;
+let leafletModulePromise: Promise<typeof import("leaflet")> | null = null;
+function loadLeaflet() {
+  if (!leafletModulePromise) {
+    leafletModulePromise = import("leaflet");
+  }
+  return leafletModulePromise;
+}
 
 const SOURCE_LABEL = {
   declared: "Tự khai báo",
@@ -365,7 +371,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
     const init = async () => {
       try {
-        const imported = (await (leafletModulePromise ?? import("leaflet"))) as unknown as {
+        const imported = (await loadLeaflet()) as unknown as {
           default?: typeof import("leaflet");
         };
         const L = imported.default ?? (imported as unknown as typeof import("leaflet"));
