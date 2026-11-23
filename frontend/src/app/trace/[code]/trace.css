@@ -6161,52 +6161,47 @@ html[data-perf="lite"] .tr-search-btn {
   gap: 12px;
 }
 
-.tr-doc-audit-top-split {
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 28px;
-  align-items: start;
-}
-
-.tr-doc-audit-map-col,
-.tr-doc-audit-spec-col {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
 .tr-parcel-svg-frame.is-a4-sheet {
-  border: 1px solid #cfcfc9;
+  border: none;
   border-radius: 0;
-  background: #f7f7f4;
+  background: transparent;
+}
+
+.tr-parcel-svg-frame.is-a4-sheet .tr-parcel-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 716 / 330;
+  background: #1b281f;
+  overflow: hidden;
 }
 
 .tr-parcel-svg-frame.is-a4-sheet .tr-parcel-coord-bar {
-  padding: 6px 10px;
-  border-top: 1px solid #e4e4df;
+  padding: 7px 0;
+  border-top: none;
+  border-bottom: 1px solid #cfcfc9;
   background: #ffffff;
-  font-size: 10.5px;
+  font-size: 11px;
   color: #575752;
   font-variant-numeric: tabular-nums;
 }
 
-/* Bảng thông số định danh và định mức thửa (344px cột phải) */
+/* Bảng thông số định danh và định mức thửa trải rộng 716px ở khu vực trên */
 .tr-doc-table.is-audit-specs tbody td {
-  padding: 9px 6px;
+  padding: 9.5px 8px;
   vertical-align: baseline;
-  font-size: 11.5px;
-  line-height: 1.42;
+  font-size: 12px;
+  line-height: 1.44;
 }
 
 .tr-doc-table.is-audit-specs td.col-audit-k {
-  width: 132px;
+  width: 240px;
   color: #575752;
   font-weight: 500;
 }
 
 .tr-doc-table.is-audit-specs td.col-audit-v {
-  width: 212px;
+  width: 476px;
   text-align: right;
   color: #18181b;
   font-weight: 700;

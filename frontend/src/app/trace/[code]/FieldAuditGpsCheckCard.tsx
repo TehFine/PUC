@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { preconnectMapTileOrigins } from "@/components/map/map-layers";
 import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
 import { getServerCalibratedDate } from "@/lib/api-client";
 import { buildSignedSecurityHeaders } from "@/lib/request-security";
@@ -231,6 +232,67 @@ function extractOuterRings(
   ];
 }
 
+const ESRI_TILE_HOSTS = ["server.arcgisonline.com", "services.arcgisonline.com"] as const;
+
+function lngToWorldPx(lng: number, z: number): number {
+  return ((lng + 180) / 360) * 256 * 2 ** z;
+}
+
+function latToWorldPx(lat: number, z: number): number {
+  const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const rad = (clampedLat * Math.PI) / 180;
+  return ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 256 * 2 ** z;
+}
+
+interface ProjectedSatelliteTile {
+  key: string;
+  url: string;
+  x: number;
+  y: number;
+  size: number;
+}
+
+function buildProjectedTileGrid(
+  z: number,
+  centerLng: number,
+  centerLat: number,
+  effZoom: number,
+  width: number,
+  height: number,
+): ProjectedSatelliteTile[] {
+  const n = 2 ** z;
+  const tileScale = 2 ** (effZoom - z);
+  const centerWx = lngToWorldPx(centerLng, z);
+  const centerWy = latToWorldPx(centerLat, z);
+  const halfSpanWx = width / (2 * tileScale);
+  const halfSpanWy = height / (2 * tileScale);
+
+  const minTx = Math.floor((centerWx - halfSpanWx) / 256);
+  const maxTx = Math.floor((centerWx + halfSpanWx) / 256);
+  const minTy = Math.floor((centerWy - halfSpanWy) / 256);
+  const maxTy = Math.floor((centerWy + halfSpanWy) / 256);
+  const tileDrawSize = Number((256 * tileScale + 0.75).toFixed(2));
+
+  const tiles: ProjectedSatelliteTile[] = [];
+  for (let ty = minTy; ty <= maxTy; ty += 1) {
+    if (ty < 0 || ty >= n) continue;
+    for (let tx = minTx; tx <= maxTx; tx += 1) {
+      const wrappedTx = ((tx % n) + n) % n;
+      const host = ESRI_TILE_HOSTS[Math.abs(wrappedTx + ty) % ESRI_TILE_HOSTS.length];
+      const x = Number((width / 2 + (tx * 256 - centerWx) * tileScale).toFixed(2));
+      const y = Number((height / 2 + (ty * 256 - centerWy) * tileScale).toFixed(2));
+      tiles.push({
+        key: `${z}-${tx}-${ty}`,
+        url: `https://${host}/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${ty}/${wrappedTx}`,
+        x,
+        y,
+        size: tileDrawSize,
+      });
+    }
+  }
+  return tiles;
+}
+
 const AUDIT_A4_COPY: Record<
   TraceLang,
   {
@@ -242,6 +304,7 @@ const AUDIT_A4_COPY: Record<
     rowPuc: string;
     rowScale: string;
     rowVariety: string;
+    rowSheetParcel: string;
     rowPhiStatus: string;
     rowSeasonQuota: string;
     rowAssessedBy: string;
@@ -271,12 +334,13 @@ const AUDIT_A4_COPY: Record<
   vi: {
     docTitle: "HỒ SƠ THỰC ĐỊA",
     plotSubPrefix: "THỬA CANH TÁC:",
-    mapSectionHeading: "SƠ ĐỒ RANH GIỚI THỬA VƯỜN",
+    mapSectionHeading: "BẢN ĐỒ VỆ TINH RANH GIỚI THỬA VƯỜN",
     specsSectionHeading: "THÔNG SỐ ĐỊNH DANH VÀ ĐỊNH MỨC",
     rowOwner: "Chủ hộ canh tác",
     rowPuc: "Mã vùng trồng (PUC)",
     rowScale: "Quy mô thửa",
     rowVariety: "Giống canh tác",
+    rowSheetParcel: "Số tờ / Số thửa địa chính",
     rowPhiStatus: "Thời gian cách ly",
     rowSeasonQuota: "Định mức đầu vụ",
     rowAssessedBy: "Đơn vị thẩm định",
@@ -305,12 +369,13 @@ const AUDIT_A4_COPY: Record<
   en: {
     docTitle: "FIELD AUDIT",
     plotSubPrefix: "ORCHARD PLOT:",
-    mapSectionHeading: "PARCEL BOUNDARY DIAGRAM",
+    mapSectionHeading: "SATELLITE PARCEL BOUNDARY MAP",
     specsSectionHeading: "PLOT IDENTITY & SEASON QUOTA",
     rowOwner: "Member grower",
     rowPuc: "Growing zone (PUC)",
     rowScale: "Parcel scale",
     rowVariety: "Cultivated variety",
+    rowSheetParcel: "Cadastral sheet / parcel",
     rowPhiStatus: "Withdrawal status",
     rowSeasonQuota: "Seasonal quota",
     rowAssessedBy: "Assessed by",
@@ -339,12 +404,13 @@ const AUDIT_A4_COPY: Record<
   zh: {
     docTitle: "实地核验单",
     plotSubPrefix: "果园地块:",
-    mapSectionHeading: "果园地块边界示意图",
+    mapSectionHeading: "果园地块卫星边界图",
     specsSectionHeading: "地块身份与产季定额",
     rowOwner: "种植主体",
     rowPuc: "注册产区编码",
     rowScale: "核定规模",
     rowVariety: "栽培品种",
+    rowSheetParcel: "地籍图号 / 地块号",
     rowPhiStatus: "安全间隔期",
     rowSeasonQuota: "产季定额核销",
     rowAssessedBy: "核定单位",
@@ -401,6 +467,10 @@ export default function FieldAuditGpsCheckCard({
     () => data.recentGpsCheckins ?? [],
   );
 
+  useEffect(() => {
+    preconnectMapTileOrigins();
+  }, []);
+
   const svgProjection = useMemo(() => {
     const rings = extractOuterRings(
       plotProfile.geometryJson,
@@ -419,23 +489,30 @@ export default function FieldAuditGpsCheckCard({
       if (lat > maxLat) maxLat = lat;
     }
 
-    const spanLng = Math.max(maxLng - minLng, 0.0008);
-    const spanLat = Math.max(maxLat - minLat, 0.0008);
-    const padLng = spanLng * 0.34;
-    const padLat = spanLat * 0.34;
+    const W = 716;
+    const H = 330;
+    const midLng = (minLng + maxLng) / 2;
+    const midLat = (minLat + maxLat) / 2;
 
-    const boxMinLng = minLng - padLng;
-    const boxMaxLng = maxLng + padLng;
-    const boxMinLat = minLat - padLat;
-    const boxMaxLat = maxLat + padLat;
+    const dx18 = Math.max(lngToWorldPx(maxLng, 18) - lngToWorldPx(minLng, 18), 36);
+    const dy18 = Math.max(latToWorldPx(minLat, 18) - latToWorldPx(maxLat, 18), 36);
+    const idealScaleAt18 = Math.min((W * 0.56) / dx18, (H * 0.64) / dy18);
+    const effZoom = Math.max(14, Math.min(18.7, 18 + Math.log2(idealScaleAt18)));
+    const zTile = Math.min(18, Math.floor(effZoom));
+    const zFallback = Math.min(16, zTile);
+    const tileScale = 2 ** (effZoom - zTile);
 
-    const W = 560;
-    const H = 310;
+    const centerWx = lngToWorldPx(midLng, zTile);
+    const centerWy = latToWorldPx(midLat, zTile);
     const project = (lng: number, lat: number): [number, number] => {
-      const x = ((lng - boxMinLng) / (boxMaxLng - boxMinLng)) * W;
-      const y = H - ((lat - boxMinLat) / (boxMaxLat - boxMinLat)) * H;
+      const x = W / 2 + (lngToWorldPx(lng, zTile) - centerWx) * tileScale;
+      const y = H / 2 + (latToWorldPx(lat, zTile) - centerWy) * tileScale;
       return [Number(x.toFixed(1)), Number(y.toFixed(1))];
     };
+
+    const fallbackTiles = buildProjectedTileGrid(zFallback, midLng, midLat, effZoom, W, H);
+    const detailTiles =
+      zTile > zFallback ? buildProjectedTileGrid(zTile, midLng, midLat, effZoom, W, H) : [];
 
     const paths = rings.map((ring) => {
       return (
@@ -455,22 +532,35 @@ export default function FieldAuditGpsCheckCard({
         })
       : [];
 
-    const cLng = plotProfile.centerLng ?? (minLng + maxLng) / 2;
-    const cLat = plotProfile.centerLat ?? (minLat + maxLat) / 2;
+    const cLng = plotProfile.centerLng ?? midLng;
+    const cLat = plotProfile.centerLat ?? midLat;
     const [cx, cy] = project(cLng, cLat);
 
-    const metersPerDegLng = 111_320 * Math.cos((cLat * Math.PI) / 180);
-    const deg50m = 50 / Math.max(metersPerDegLng, 1);
-    const scalePx = Math.min(140, Math.max(36, (deg50m / (boxMaxLng - boxMinLng)) * W));
+    const metersPerSvgPx =
+      (156_543.03392 * Math.cos((cLat * Math.PI) / 180)) / Math.max(2 ** effZoom, 1);
+    let scaleMeters = 50;
+    if (50 / metersPerSvgPx > 150) {
+      scaleMeters = 25;
+    } else if (50 / metersPerSvgPx < 42) {
+      scaleMeters = 100;
+    }
+    const scalePx = Math.min(160, Math.max(40, scaleMeters / Math.max(metersPerSvgPx, 0.05)));
 
     let livePoint: { x: number; y: number; clamped: boolean } | null = null;
     if (liveResult) {
       const [rawX, rawY] = project(liveResult.userLng, liveResult.userLat);
-      const clampedX = Math.min(W - 18, Math.max(18, rawX));
-      const clampedY = Math.min(H - 18, Math.max(18, rawY));
+      const clampedX = Math.min(W - 24, Math.max(24, rawX));
+      let clampedY = Math.min(H - 26, Math.max(22, rawY));
+      // Tránh đè lên thước tỷ lệ góc dưới trái và kim chỉ Bắc góc trên phải
+      if (clampedX < scalePx + 42 && clampedY > H - 56) {
+        clampedY = H - 58;
+      }
+      if (clampedX > W - 64 && clampedY < 58) {
+        clampedY = 60;
+      }
       livePoint = {
-        x: clampedX,
-        y: clampedY,
+        x: Number(clampedX.toFixed(1)),
+        y: Number(clampedY.toFixed(1)),
         clamped: Math.abs(clampedX - rawX) > 2 || Math.abs(clampedY - rawY) > 2,
       };
     }
@@ -478,12 +568,15 @@ export default function FieldAuditGpsCheckCard({
     return {
       W,
       H,
+      fallbackTiles,
+      detailTiles,
       paths,
       vertices,
       cx,
       cy,
       cLat,
       cLng,
+      scaleMeters,
       scalePx: Number(scalePx.toFixed(1)),
       livePoint,
     };
@@ -681,6 +774,19 @@ export default function FieldAuditGpsCheckCard({
       label: acopy.rowVariety,
       value: `${localizeVariety(plotProfile.variety, lang)}${plotProfile.plantedYear ? ` (${plotProfile.plantedYear})` : ""}`,
     },
+    ...(plotProfile.sheetNo || plotProfile.parcelNo
+      ? [
+          {
+            label: acopy.rowSheetParcel,
+            value:
+              lang === "zh"
+                ? `第 ${plotProfile.sheetNo || "-"} 图 / 第 ${plotProfile.parcelNo || "-"} 号`
+                : lang === "en"
+                  ? `Sheet ${plotProfile.sheetNo || "-"} / Parcel ${plotProfile.parcelNo || "-"}`
+                  : `Tờ ${plotProfile.sheetNo || "-"} / Thửa ${plotProfile.parcelNo || "-"}`,
+          },
+        ]
+      : []),
     {
       label: acopy.rowPhiStatus,
       value: phiSafety.safeToHarvestToday
@@ -708,186 +814,247 @@ export default function FieldAuditGpsCheckCard({
     }
   }
 
+  const satelliteMapSection: A4DossierSectionItem = {
+    key: "audit-satellite-map",
+    content: (
+      <section className="tr-doc-ledger tr-doc-ext-block" aria-label={acopy.mapSectionHeading}>
+        <div className="tr-doc-meta-strip">
+          <span className="tr-doc-meta-left">{acopy.mapSectionHeading}</span>
+          <strong className="tr-doc-meta-right">{plotProfile.plotCode}</strong>
+        </div>
+
+        <div className="tr-parcel-svg-frame is-a4-sheet">
+          <svg
+            viewBox={`0 0 ${svgProjection.W} ${svgProjection.H}`}
+            width={svgProjection.W}
+            height={svgProjection.H}
+            className="tr-parcel-svg"
+            role="img"
+            aria-label={`${acopy.mapSectionHeading} - ${plotProfile.plotCode}`}
+          >
+            <rect width={svgProjection.W} height={svgProjection.H} fill="#1b281f" />
+
+            {svgProjection.fallbackTiles.map((tile) => (
+              <image
+                key={tile.key}
+                href={tile.url}
+                x={tile.x}
+                y={tile.y}
+                width={tile.size}
+                height={tile.size}
+                preserveAspectRatio="none"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            ))}
+
+            {svgProjection.detailTiles.map((tile) => (
+              <image
+                key={tile.key}
+                href={tile.url}
+                x={tile.x}
+                y={tile.y}
+                width={tile.size}
+                height={tile.size}
+                preserveAspectRatio="none"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            ))}
+
+            <rect
+              width={svgProjection.W}
+              height={svgProjection.H}
+              fill="rgba(8, 16, 11, 0.08)"
+            />
+
+            {svgProjection.paths.map((d, idx) => (
+              <g key={idx}>
+                <path
+                  d={d}
+                  fill="rgba(134, 239, 172, 0.14)"
+                  stroke="rgba(10, 18, 12, 0.72)"
+                  strokeWidth="4.2"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d={d}
+                  fill="none"
+                  stroke="#bef264"
+                  strokeWidth="2.2"
+                  strokeLinejoin="round"
+                />
+              </g>
+            ))}
+
+            {svgProjection.vertices.slice(0, 12).map((v, idx) => (
+              <rect
+                key={idx}
+                x={v.x - 3}
+                y={v.y - 3}
+                width="6"
+                height="6"
+                fill="#ffffff"
+                stroke="#14372f"
+                strokeWidth="1.5"
+              />
+            ))}
+
+            <g transform={`translate(${svgProjection.cx}, ${svgProjection.cy})`}>
+              <circle r="11" fill="rgba(190, 242, 100, 0.24)" />
+              <circle r="4.5" fill="#bef264" stroke="#121212" strokeWidth="1.6" />
+              <text
+                x="0"
+                y="-10"
+                textAnchor="middle"
+                fill="#ffffff"
+                stroke="rgba(10, 18, 12, 0.88)"
+                strokeWidth="3.4"
+                strokeLinejoin="round"
+                style={{ paintOrder: "stroke" }}
+                fontSize="12"
+                fontWeight="700"
+              >
+                {plotProfile.plotCode}
+              </text>
+            </g>
+
+            {svgProjection.livePoint && (
+              <g
+                transform={`translate(${svgProjection.livePoint.x}, ${svgProjection.livePoint.y})`}
+              >
+                <circle
+                  r="14"
+                  fill={
+                    liveResult?.verified
+                      ? "rgba(34, 197, 94, 0.34)"
+                      : "rgba(245, 158, 11, 0.36)"
+                  }
+                />
+                <circle
+                  r="5.5"
+                  fill={liveResult?.verified ? "#22c55e" : "#f59e0b"}
+                  stroke="#ffffff"
+                  strokeWidth="2"
+                />
+                <text
+                  x="0"
+                  y="17"
+                  textAnchor="middle"
+                  fill="#ffffff"
+                  stroke="rgba(10, 18, 12, 0.9)"
+                  strokeWidth="3.2"
+                  strokeLinejoin="round"
+                  style={{ paintOrder: "stroke" }}
+                  fontSize="10.5"
+                  fontWeight="700"
+                >
+                  GPS
+                </text>
+              </g>
+            )}
+
+            <g transform={`translate(${svgProjection.W - 32}, 28)`}>
+              <rect
+                x="-15"
+                y="-15"
+                width="30"
+                height="30"
+                fill="rgba(255, 255, 255, 0.92)"
+                stroke="rgba(18, 18, 18, 0.28)"
+                strokeWidth="1"
+              />
+              <path d="M0 -8 L4.5 5.5 L0 2.5 L-4.5 5.5 Z" fill="#121212" />
+              <text
+                x="0"
+                y="12.5"
+                textAnchor="middle"
+                fontSize="8"
+                fontWeight="700"
+                fill="#121212"
+              >
+                {t.zone.coarseCompassNorth}
+              </text>
+            </g>
+
+            <g transform={`translate(16, ${svgProjection.H - 18})`}>
+              <line
+                x1="0"
+                y1="0"
+                x2={svgProjection.scalePx}
+                y2="0"
+                stroke="rgba(10, 18, 12, 0.8)"
+                strokeWidth="3.8"
+              />
+              <line
+                x1="0"
+                y1="0"
+                x2={svgProjection.scalePx}
+                y2="0"
+                stroke="#ffffff"
+                strokeWidth="1.8"
+              />
+              <line x1="0" y1="-4.5" x2="0" y2="4.5" stroke="#ffffff" strokeWidth="1.8" />
+              <line
+                x1={svgProjection.scalePx}
+                y1="-4.5"
+                x2={svgProjection.scalePx}
+                y2="4.5"
+                stroke="#ffffff"
+                strokeWidth="1.8"
+              />
+              <text
+                x="0"
+                y="-7.5"
+                fontSize="10.5"
+                fontWeight="700"
+                fill="#ffffff"
+                stroke="rgba(10, 18, 12, 0.88)"
+                strokeWidth="3"
+                strokeLinejoin="round"
+                style={{ paintOrder: "stroke" }}
+              >
+                {svgProjection.scaleMeters} m
+              </text>
+            </g>
+          </svg>
+
+          <div className="tr-parcel-coord-bar">
+            <span>
+              {lang === "zh"
+                ? `地块中心坐标：${svgProjection.cLat.toFixed(5)}°N, ${svgProjection.cLng.toFixed(5)}°E`
+                : lang === "en"
+                  ? `Parcel center: ${svgProjection.cLat.toFixed(5)}°N, ${svgProjection.cLng.toFixed(5)}°E`
+                  : `Tâm vườn: ${svgProjection.cLat.toFixed(5)}°B, ${svgProjection.cLng.toFixed(5)}°Đ`}
+            </span>
+            {plotProfile.sheetNo || plotProfile.parcelNo ? (
+              <span>
+                {lang === "zh"
+                  ? `第 ${plotProfile.sheetNo || "-"} 图 / 第 ${plotProfile.parcelNo || "-"} 号`
+                  : lang === "en"
+                    ? `Sheet ${plotProfile.sheetNo || "-"} / Parcel ${plotProfile.parcelNo || "-"}`
+                    : `Tờ ${plotProfile.sheetNo || "-"} / Thửa ${plotProfile.parcelNo || "-"}`}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </section>
+    ),
+  };
+
   const sections: A4DossierSectionItem[] = [
     {
-      key: "audit-map-and-specs",
+      key: "audit-specs",
       content: (
-        <section className="tr-doc-audit-top-split" aria-label={acopy.mapSectionHeading}>
-          <div className="tr-doc-audit-map-col">
-            <div className="tr-doc-meta-strip">
-              <span className="tr-doc-meta-left">{acopy.mapSectionHeading}</span>
-              <strong className="tr-doc-meta-right">{plotProfile.plotCode}</strong>
-            </div>
-
-            <div className="tr-parcel-svg-frame is-a4-sheet">
-              <svg
-                viewBox={`0 0 ${svgProjection.W} ${svgProjection.H}`}
-                className="tr-parcel-svg"
-                role="img"
-                aria-label={`${acopy.mapSectionHeading} - ${plotProfile.plotCode}`}
-              >
-                <defs>
-                  <pattern
-                    id="pucParcelGridA4"
-                    width="40"
-                    height="40"
-                    patternUnits="userSpaceOnUse"
-                  >
-                    <path
-                      d="M 40 0 L 0 0 0 40"
-                      fill="none"
-                      stroke="#deded8"
-                      strokeWidth="0.75"
-                    />
-                  </pattern>
-                </defs>
-
-                <rect width={svgProjection.W} height={svgProjection.H} fill="#f7f7f4" />
-                <rect
-                  width={svgProjection.W}
-                  height={svgProjection.H}
-                  fill="url(#pucParcelGridA4)"
-                />
-
-                {svgProjection.paths.map((d, idx) => (
-                  <path
-                    key={idx}
-                    d={d}
-                    fill="rgba(28, 78, 48, 0.13)"
-                    stroke="#1c4e30"
-                    strokeWidth="2"
-                  />
-                ))}
-
-                {svgProjection.vertices.slice(0, 8).map((v, idx) => (
-                  <g key={idx}>
-                    <rect
-                      x={v.x - 3}
-                      y={v.y - 3}
-                      width="6"
-                      height="6"
-                      fill="#ffffff"
-                      stroke="#1c4e30"
-                      strokeWidth="1.5"
-                    />
-                  </g>
-                ))}
-
-                <g transform={`translate(${svgProjection.cx}, ${svgProjection.cy})`}>
-                  <circle r="12" fill="rgba(28, 78, 48, 0.12)" />
-                  <circle r="4" fill="#1c4e30" stroke="#ffffff" strokeWidth="1.5" />
-                  <text
-                    x="0"
-                    y="-10"
-                    textAnchor="middle"
-                    fill="#121212"
-                    fontSize="11"
-                    fontWeight="700"
-                  >
-                    {plotProfile.plotCode}
-                  </text>
-                </g>
-
-                {svgProjection.livePoint && (
-                  <g
-                    transform={`translate(${svgProjection.livePoint.x}, ${svgProjection.livePoint.y})`}
-                  >
-                    <circle
-                      r="15"
-                      fill={
-                        liveResult?.verified
-                          ? "rgba(22, 101, 52, 0.22)"
-                          : "rgba(180, 83, 9, 0.2)"
-                      }
-                    />
-                    <circle
-                      r="5.5"
-                      fill={liveResult?.verified ? "#15803d" : "#b45309"}
-                      stroke="#ffffff"
-                      strokeWidth="2"
-                    />
-                    <text
-                      x="0"
-                      y="18"
-                      textAnchor="middle"
-                      fill={liveResult?.verified ? "#14532d" : "#7c2d12"}
-                      fontSize="10.5"
-                      fontWeight="700"
-                    >
-                      GPS
-                    </text>
-                  </g>
-                )}
-
-                <g transform={`translate(${svgProjection.W - 34}, 30)`}>
-                  <rect
-                    x="-15"
-                    y="-15"
-                    width="30"
-                    height="30"
-                    fill="#ffffff"
-                    stroke="#cfcfc9"
-                    strokeWidth="1"
-                  />
-                  <path d="M0 -8 L4.5 5.5 L0 2.5 L-4.5 5.5 Z" fill="#121212" />
-                  <text
-                    x="0"
-                    y="12.5"
-                    textAnchor="middle"
-                    fontSize="8"
-                    fontWeight="700"
-                    fill="#121212"
-                  >
-                    {t.zone.coarseCompassNorth}
-                  </text>
-                </g>
-
-                <g transform={`translate(16, ${svgProjection.H - 20})`}>
-                  <line
-                    x1="0"
-                    y1="0"
-                    x2={svgProjection.scalePx}
-                    y2="0"
-                    stroke="#121212"
-                    strokeWidth="1.6"
-                  />
-                  <line x1="0" y1="-4" x2="0" y2="4" stroke="#121212" strokeWidth="1.4" />
-                  <line
-                    x1={svgProjection.scalePx}
-                    y1="-4"
-                    x2={svgProjection.scalePx}
-                    y2="4"
-                    stroke="#121212"
-                    strokeWidth="1.4"
-                  />
-                  <text x="0" y="-7" fontSize="10" fontWeight="600" fill="#121212">
-                    50 m
-                  </text>
-                </g>
-              </svg>
-
-              <div className="tr-parcel-coord-bar">
-                <span>
-                  {lang === "zh"
-                    ? `中心：${svgProjection.cLat.toFixed(5)}°N, ${svgProjection.cLng.toFixed(5)}°E`
-                    : lang === "en"
-                      ? `Center: ${svgProjection.cLat.toFixed(5)}°N, ${svgProjection.cLng.toFixed(5)}°E`
-                      : `Tâm vườn: ${svgProjection.cLat.toFixed(5)}°B, ${svgProjection.cLng.toFixed(5)}°Đ`}
-                </span>
-                {plotProfile.sheetNo || plotProfile.parcelNo ? (
-                  <span>
-                    Tờ {plotProfile.sheetNo || "-"} / Thửa {plotProfile.parcelNo || "-"}
-                  </span>
-                ) : null}
-              </div>
-            </div>
+        <section className="tr-doc-ledger tr-doc-ext-block" aria-label={acopy.specsSectionHeading}>
+          <div className="tr-doc-meta-strip">
+            <span className="tr-doc-meta-left">{acopy.specsSectionHeading}</span>
+            <strong className="tr-doc-meta-right">{plotProfile.plotCode}</strong>
           </div>
 
-          <div className="tr-doc-audit-spec-col">
-            <div className="tr-doc-meta-strip">
-              <span className="tr-doc-meta-left">{acopy.specsSectionHeading}</span>
-            </div>
-
+          <div className="tr-doc-table-wrap">
             <table className="tr-doc-table is-audit-specs">
               <tbody>
                 {specRows.map((sr) => (
@@ -1163,6 +1330,7 @@ export default function FieldAuditGpsCheckCard({
         </section>
       ),
     })),
+    satelliteMapSection,
   ];
 
   const renderFooter = (pageIdx: number, totalPages: number) => {
