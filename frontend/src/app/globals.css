@@ -12480,33 +12480,66 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
-/* ─── TRẠNG THÁI TRỐNG TRÊN LAPTOP/TABLET: CĂN GIỮA NÚT TẠO MỚI CHÍNH GIỮA MÀN HÌNH ─── */
-@media (min-width: 641px) {
-  .content-area:has(> .page-header.is-empty-stage) {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .page-header.is-empty-stage {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    margin-bottom: 0;
-    padding-bottom: 8px;
-  }
-
-  .page-header.is-empty-stage>.header-actions {
-    width: auto;
-    margin-inline: auto;
-    justify-content: center;
-  }
+/* ─── TRẠNG THÁI TRỐNG TRỰC TIẾP TRÊN NỀN TRANG QUẢN TRỊ (LAPTOP VÀ MOBILE) ─── */
+.content-area:has(> .admin-empty-stage) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
-@media (min-width: 901px) {
-  .page-header.is-empty-stage {
-    padding-bottom: 24px;
+.admin-empty-stage {
+  flex: 1;
+  min-height: min(420px, calc(100dvh - 180px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 28px 18px 48px;
+  gap: 8px;
+}
+
+.admin-empty-stage-icon {
+  color: rgba(20, 55, 47, 0.34);
+  margin-bottom: 4px;
+}
+
+.admin-empty-stage-title {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #14372f;
+  letter-spacing: -0.01em;
+}
+
+.admin-empty-stage-desc {
+  margin: 0;
+  max-width: 420px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #5f6d66;
+}
+
+.admin-empty-stage-actions {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .admin-empty-stage {
+    min-height: min(360px, calc(100dvh - 150px));
+    padding: 24px 14px 36px;
+  }
+
+  .admin-empty-stage-title {
+    font-size: 15.5px;
+  }
+
+  .admin-empty-stage-desc {
+    max-width: 310px;
+    font-size: 13px;
   }
 }
