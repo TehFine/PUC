@@ -12876,6 +12876,14 @@ body.pt-body .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):no
   padding-bottom: clamp(132px, 30vh, 230px) !important;
 }
 
+@media screen and (min-width: 760px) and (pointer: fine) {
+  html:has(.pt-app) .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+  html:has(.app-shell) .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+  body.pt-body .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+    padding-bottom: 22px !important;
+  }
+}
+
 @media (max-width: 900px), (pointer: coarse) {
   .pt-sheet-backdrop:not([data-kb-open="true"]) .pt-sheet:not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:focus-within {
     padding-bottom: max(46vh, 320px) !important;

@@ -23,20 +23,20 @@ const TEMPLATES: {
   message: string;
 }[] = [
   {
+    label: "Nhắc ghi nhật ký",
+    severity: "info",
+    audience: "farmer",
+    title: "Đề nghị cập nhật đầy đủ nhật ký canh tác và phun thuốc",
+    message:
+      "Đề nghị các hộ kiểm tra và cập nhật đầy đủ các đợt bón phân, tưới nước, phun thuốc BVTV trong tuần lên sổ nhật ký điện tử.",
+  },
+  {
     label: "Lịch họp xã viên",
     severity: "info",
     audience: "farmer",
     title: "Thông báo lịch họp toàn thể hộ thành viên HTX",
     message:
       "Mời đại diện các hộ vùng trồng tham dự buổi họp triển khai kế hoạch mùa vụ và phổ biến quy trình canh tác mới tại văn phòng HTX.",
-  },
-  {
-    label: "Cập nhật hệ thống",
-    severity: "info",
-    audience: "farmer",
-    title: "Cập nhật tính năng và danh mục kỹ thuật trên hệ thống",
-    message:
-      "Ban quản trị HTX vừa cập nhật nội dung mới trên hệ thống. Bà con mở mục Kiến thức và Nhật ký để xem hướng dẫn chi tiết.",
   },
   {
     label: "Bảo trì định kỳ",
@@ -266,14 +266,9 @@ export default function SystemAlertsTab() {
       {canCreateAlert && (
       <form className="card" autoComplete="off" onSubmit={handleSubmit} style={{ padding: "20px", display: "grid", gap: 14 }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#14372f" }}>
-              Soạn thông báo gửi toàn thể nông hộ hoặc toàn hệ thống
-            </h3>
-            <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5f6d66" }}>
-              Trưởng HTX, Phó HTX và Quản trị viên gửi tức thời tới chuông Thông báo của từng nông hộ theo thời gian thực (đồng gửi bản sao giữa Trưởng và Phó HTX).
-            </p>
-          </div>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#14372f" }}>
+            Soạn thông báo
+          </h3>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {TEMPLATES.map((tpl) => (
               <button
@@ -445,7 +440,7 @@ export default function SystemAlertsTab() {
                     : "Cảnh báo: Không kết nối được tới máy chủ ứng dụng"}
           </div>
           <div style={{ fontSize: 13, color: "#5f6d66", lineHeight: 1.5, marginTop: 4 }}>
-            Khi máy chủ gặp lỗi 5xx hoặc mất kết nối, toàn bộ người dùng đang mở ứng dụng sẽ tự động nhận cảnh báo khẩn ngay trên đầu màn hình.
+            Tự động hiện cảnh báo trên đầu màn hình khi máy chủ mất kết nối.
           </div>
           {liveHealth.checkedAt && (
             <div

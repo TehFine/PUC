@@ -12334,6 +12334,13 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   padding-bottom: clamp(120px, 26vh, 210px) !important;
 }
 
+@media screen and (min-width: 760px) and (pointer: fine) {
+  .modal:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
+  .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
+    padding-bottom: 22px !important;
+  }
+}
+
 @media (max-width: 900px),
 (pointer: coarse) {
 
@@ -12542,4 +12549,135 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     max-width: 310px;
     font-size: 13px;
   }
+}
+
+/* ─── HỘP THOẠI SOẠN THÔNG BÁO TOÀN NÔNG HỘ (LAPTOP RỘNG RÃI, NÚT CÂN ĐỐI) ─── */
+.modal.pt-sheet.broadcast-notice-modal {
+  background: #ffffff !important;
+}
+
+.modal.pt-sheet.broadcast-notice-modal .modal-header {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e5e3 !important;
+}
+
+.modal.pt-sheet.broadcast-notice-modal .modal-body {
+  background: #ffffff !important;
+}
+
+@media screen and (min-width: 760px) {
+  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay > .modal.pt-sheet.broadcast-notice-modal {
+    width: min(700px, calc(100vw - 40px)) !important;
+    max-width: min(700px, calc(100vw - 40px)) !important;
+    border-radius: 8px !important;
+    border: 1px solid #d4d4d2 !important;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16) !important;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .modal-header {
+    padding: 18px 26px !important;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .modal-body {
+    padding: 20px 26px 22px !important;
+  }
+}
+
+.broadcast-tpl-section {
+  margin-bottom: 16px;
+}
+
+.broadcast-tpl-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #14372f;
+}
+
+.broadcast-tpl-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+@media screen and (min-width: 600px) {
+  .broadcast-tpl-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.broadcast-tpl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #d4d4d2;
+  background: #ffffff;
+  color: #1f2937;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: center;
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.broadcast-tpl-btn:hover:not(:disabled) {
+  background: #f7f7f5;
+  border-color: #94a3b8;
+  color: #14372f;
+}
+
+.broadcast-tpl-btn.is-active {
+  background: #f3f7ee;
+  border-color: #14372f;
+  color: #14372f;
+  font-weight: 600;
+}
+
+.broadcast-tpl-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.modal.pt-sheet.broadcast-notice-modal .form-input {
+  border-radius: 6px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.modal.pt-sheet.broadcast-notice-modal .form-input:hover:not(:disabled):not(:focus) {
+  border-color: #94a3b8 !important;
+}
+
+.modal.pt-sheet.broadcast-notice-modal .form-input:focus {
+  border-color: #14372f !important;
+}
+
+.modal.pt-sheet.broadcast-notice-modal .modal-footer:not(:has(> div)) > .broadcast-cancel-btn {
+  color: #475569 !important;
+  font-weight: 500 !important;
+}
+
+.modal.pt-sheet.broadcast-notice-modal .modal-footer:not(:has(> div)) > .broadcast-cancel-btn:hover:not(:disabled) {
+  background: #f7f7f5 !important;
+  color: #14372f !important;
+}
+
+.modal.pt-sheet.broadcast-notice-modal .modal-footer:not(:has(> div)) > .broadcast-submit-btn {
+  color: #14372f !important;
+  font-weight: 700 !important;
+}
+
+.modal.pt-sheet.broadcast-notice-modal .modal-footer:not(:has(> div)) > .broadcast-submit-btn:hover:not(:disabled) {
+  background: #f3f7ee !important;
+  color: #14372f !important;
 }

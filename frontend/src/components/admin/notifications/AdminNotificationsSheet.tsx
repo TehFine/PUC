@@ -232,7 +232,7 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
                   }}
                   style={{ width: "100%", justifyContent: "center", minHeight: 38 }}
                 >
-                  Soạn thông báo gửi toàn nông hộ
+                  Soạn thông báo
                 </button>
               )}
 
