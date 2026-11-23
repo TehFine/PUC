@@ -13,6 +13,8 @@ import {
   ShieldAlert,
 } from "@/components/ui/PublicIcon";
 import { MediaBottomSheet } from "@/components/ui/MediaBottomSheet";
+import { getServerCalibratedDate } from "@/lib/api-client";
+import { buildSignedSecurityHeaders } from "@/lib/request-security";
 import {
   TRACE_UI_COPY,
   localizeAssessedBy,
@@ -322,9 +324,20 @@ export default function FieldAuditGpsCheckCard({
           ? `/api/trace/${encodeURIComponent(scannedCode)}/verify-gps`
           : `/api/public/trace/${encodeURIComponent(scannedCode)}/verify-gps`;
 
+      const bodyStr = JSON.stringify({
+        latitude: Number(latitude.toFixed(6)),
+        longitude: Number(longitude.toFixed(6)),
+        ...(accuracyMeters !== undefined ? { accuracyMeters: Math.round(accuracyMeters) } : {}),
+        ...(auditPass ? { auditPass } : {}),
+      });
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
+        ...buildSignedSecurityHeaders(
+          "POST",
+          endpoint,
+          bodyStr,
+          getServerCalibratedDate().getTime(),
+        ),
       };
       if (auditPass) {
         headers["x-audit-pass"] = auditPass;
@@ -332,14 +345,10 @@ export default function FieldAuditGpsCheckCard({
 
       const res = await fetch(endpoint, {
         method: "POST",
+        cache: "no-store",
         credentials: "same-origin",
         headers,
-        body: JSON.stringify({
-          latitude: Number(latitude.toFixed(6)),
-          longitude: Number(longitude.toFixed(6)),
-          ...(accuracyMeters !== undefined ? { accuracyMeters: Math.round(accuracyMeters) } : {}),
-          ...(auditPass ? { auditPass } : {}),
-        }),
+        body: bodyStr,
       });
 
       const body = (await res.json().catch(() => null)) as

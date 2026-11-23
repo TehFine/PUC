@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Header, HttpCode, Ip, Param, Post, Query, Req } from "@nestjs/common";
-import { Throttle } from "@nestjs/throttler";
+import { Body, Controller, Get, Header, HttpCode, Ip, Param, Post, Query, Req, Res } from "@nestjs/common";
+import { SkipThrottle, Throttle } from "@nestjs/throttler";
 import { Type } from "class-transformer";
 import { IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import type { AuthUser } from "../auth/auth-user";
 import { CurrentUser, OptionalAuth, OptionalCurrentUser, Public } from "../auth/auth.decorators";
 import { notFound } from "../common/errors/app.exception";
@@ -39,13 +39,13 @@ export class VerifyFieldGpsDto {
 }
 
 function extractAuditPass(req: Request, queryPass?: string): string | undefined {
-  if (typeof queryPass === "string" && queryPass.trim()) {
-    return queryPass.trim().slice(0, 80);
-  }
   const headerVal = req.headers["x-audit-pass"];
   const raw = Array.isArray(headerVal) ? headerVal[0] : headerVal;
   if (typeof raw === "string" && raw.trim()) {
     return raw.trim().slice(0, 80);
+  }
+  if (process.env.NODE_ENV !== "production" && typeof queryPass === "string" && queryPass.trim()) {
+    return queryPass.trim().slice(0, 80);
   }
   return undefined;
 }
@@ -195,16 +195,62 @@ export class PublicController {
     );
   }
 
+  /** Luồng SSE thời gian thực thông báo ngay khi dữ liệu lô hàng, vùng trồng, kiểm nghiệm hoặc nhật ký thay đổi. */
+  @Public()
+  @SkipThrottle()
+  @Get("trace-stream")
+  streamTraceUpdates(@Ip() ip: string, @Req() req: Request, @Res() res: Response): void {
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-store, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+    res.write(": connected\n\n");
+
+    let closed = false;
+    const heartbeat = setInterval(() => {
+      if (closed || res.writableEnded || res.destroyed) return;
+      res.write(": ping\n\n");
+    }, 25_000);
+    heartbeat.unref?.();
+
+    const unsubscribe = this.traceability.subscribeTraceStream(
+      ip,
+      (event) => {
+        if (closed || res.writableEnded || res.destroyed) return;
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      },
+      () => {
+        if (!closed && !res.writableEnded && !res.destroyed) {
+          res.end();
+        }
+      },
+    );
+
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      unsubscribe();
+    };
+
+    req.on("close", cleanup);
+    res.on("close", cleanup);
+  }
+
   /** API 1 (Công khai + tùy chọn phiên / Thẻ Đoàn Thẩm định): Tra cứu hồ sơ QR bằng token ngẫu nhiên (/t/:token), giới hạn tốc độ chống quét dò token. */
   @Public()
   @OptionalAuth()
   @Throttle(RateLimitTier.PUBLIC_TRACE)
   @Get("trace/:code")
-  @Header("Cache-Control", "no-store")
+  @Header("Cache-Control", "no-store, no-cache, must-revalidate")
+  @Header("Pragma", "no-cache")
   async trace(
     @Param("code") code: string,
     @Query("view") view: string | undefined,
     @Query("auditPass") auditPass: string | undefined,
+    @Query("bg") bg: string | undefined,
     @OptionalCurrentUser() user: AuthUser | undefined,
     @Ip() ip: string,
     @Req() req: Request,
@@ -217,6 +263,7 @@ export class PublicController {
       requestedView: view,
       auditPass: extractAuditPass(req, auditPass),
       countryCode: extractCountryCode(req),
+      isBackgroundRefresh: bg === "1" || bg === "true",
     });
   }
 
@@ -256,11 +303,13 @@ export class AuthenticatedTraceController {
 
   @Throttle(RateLimitTier.AUTH_TRACE)
   @Get(":code")
-  @Header("Cache-Control", "no-store")
+  @Header("Cache-Control", "no-store, no-cache, must-revalidate")
+  @Header("Pragma", "no-cache")
   async traceAuthenticated(
     @Param("code") code: string,
     @Query("view") view: string | undefined,
     @Query("auditPass") auditPass: string | undefined,
+    @Query("bg") bg: string | undefined,
     @CurrentUser() user: AuthUser,
     @Ip() ip: string,
     @Req() req: Request,
@@ -273,6 +322,7 @@ export class AuthenticatedTraceController {
       requestedView: view,
       auditPass: extractAuditPass(req, auditPass),
       countryCode: extractCountryCode(req),
+      isBackgroundRefresh: bg === "1" || bg === "true",
     });
   }
 

@@ -112,6 +112,29 @@
   flex-shrink: 0;
 }
 
+.sw-trace-role-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid #d4d4d0;
+  border-radius: 0;
+  background: #fafaf8;
+  color: var(--sw-ink);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 860px) {
+  .sw-trace-role-chip {
+    display: none;
+  }
+}
+
 .lp.sw-page .sw-trace-auth-btn {
   display: inline-flex;
   align-items: center;

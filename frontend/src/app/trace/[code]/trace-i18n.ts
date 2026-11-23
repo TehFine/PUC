@@ -1,6 +1,359 @@
 export type TraceLang = "vi" | "en" | "zh";
+export type TraceTargetKind = "lot" | "box" | "fruit" | "plot" | "generic";
 
 const TRACE_LANG_STORAGE_KEY = "puc_trace_lang";
+const TRACE_KIND_HINTS_STORAGE_KEY = "puc_trace_kind_hints";
+
+const memoryTraceKindHints = new Map<string, Exclude<TraceTargetKind, "generic">>();
+
+function normalizeHintKey(raw: string | null | undefined): string {
+  return String(raw || "").trim().toUpperCase();
+}
+
+export function inferTraceKindFromCode(rawCode: string | null | undefined): TraceTargetKind {
+  const cleaned = String(rawCode || "").trim();
+  if (!cleaned) return "generic";
+  if (/^(?:LH|LOT)-[A-Za-z0-9_-]*-T\d+$/i.test(cleaned) || /^(?:THUNG|BOX|CARTON)-/i.test(cleaned)) {
+    return "box";
+  }
+  if (
+    /^(?:LH|LOT)-[A-Za-z0-9_-]*-(?:Q|F)\d+$/i.test(cleaned) ||
+    /^(?:SR|TEM|FR|QUA)-/i.test(cleaned)
+  ) {
+    return "fruit";
+  }
+  if (/^(?:LH|LOT)-/i.test(cleaned)) {
+    return "lot";
+  }
+  if (/^(?:EK|CN|TH|KB|DL|VN-DLOR|\d{2}-PUC)[A-Za-z0-9_-]*$/i.test(cleaned)) {
+    return "plot";
+  }
+  return "generic";
+}
+
+export function rememberTraceKindHint(
+  codeOrToken: string | null | undefined,
+  kind: Exclude<TraceTargetKind, "generic">,
+): void {
+  const key = normalizeHintKey(codeOrToken);
+  if (!key) return;
+  memoryTraceKindHints.set(key, kind);
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.sessionStorage.getItem(TRACE_KIND_HINTS_STORAGE_KEY);
+    const parsed: Record<string, Exclude<TraceTargetKind, "generic">> = raw ? JSON.parse(raw) : {};
+    delete parsed[key];
+    parsed[key] = kind;
+    const entries = Object.entries(parsed);
+    const trimmed = entries.length > 120 ? Object.fromEntries(entries.slice(-120)) : parsed;
+    window.sessionStorage.setItem(TRACE_KIND_HINTS_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // Bỏ qua nếu trình duyệt chặn sessionStorage
+  }
+}
+
+export function resolveInitialTraceKind(rawCode: string | null | undefined): TraceTargetKind {
+  const key = normalizeHintKey(rawCode);
+  if (!key) return "generic";
+  const inMem = memoryTraceKindHints.get(key);
+  if (inMem) return inMem;
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.sessionStorage.getItem(TRACE_KIND_HINTS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, string>;
+        const saved = parsed[key];
+        if (saved === "lot" || saved === "box" || saved === "fruit" || saved === "plot") {
+          memoryTraceKindHints.set(key, saved);
+          return saved;
+        }
+      }
+    } catch {
+      // Bỏ qua nếu không đọc được sessionStorage
+    }
+  }
+  return inferTraceKindFromCode(rawCode);
+}
+
+export function getTraceLoadingLabel(kind: TraceTargetKind, lang: TraceLang): string {
+  if (lang === "zh") {
+    switch (kind) {
+      case "plot":
+        return "正在加载果园地块溯源档案...";
+      case "box":
+        return "正在加载包装箱溯源档案...";
+      case "fruit":
+        return "正在加载单果溯源档案...";
+      case "lot":
+        return "正在加载批次溯源档案...";
+      default:
+        return "正在加载溯源核验档案...";
+    }
+  }
+  if (lang === "en") {
+    switch (kind) {
+      case "plot":
+        return "Loading orchard plot traceability dossier...";
+      case "box":
+        return "Loading carton box traceability dossier...";
+      case "fruit":
+        return "Loading single-fruit traceability dossier...";
+      case "lot":
+        return "Loading shipment lot traceability dossier...";
+      default:
+        return "Loading origin traceability dossier...";
+    }
+  }
+  switch (kind) {
+    case "plot":
+      return "Đang tải hồ sơ truy xuất thửa đất...";
+    case "box":
+      return "Đang tải hồ sơ truy xuất thùng đóng gói...";
+    case "fruit":
+      return "Đang tải hồ sơ truy xuất trái sầu riêng...";
+    case "lot":
+      return "Đang tải hồ sơ truy xuất lô hàng...";
+    default:
+      return "Đang tải hồ sơ truy xuất nguồn gốc...";
+  }
+}
+
+export function getRevokedAlertCopy(
+  kind: TraceTargetKind,
+  lang: TraceLang,
+): { title: string; desc: string } {
+  if (kind === "plot") {
+    if (lang === "zh") {
+      return {
+        title: "果园地块暂停效用通知",
+        desc: "该果园地块当前由越南 Cư Né 合作社暂停采收出货资格以进行技术复核。请联系合作社核实详情。",
+      };
+    }
+    if (lang === "en") {
+      return {
+        title: "ORCHARD PLOT SUSPENSION NOTICE",
+        desc: "This orchard plot is currently suspended from commercial harvest by Cư Né Cooperative for technical review.",
+      };
+    }
+    return {
+      title: "THÔNG BÁO TẠM DỪNG HIỆU LỰC THỬA ĐẤT",
+      desc: "Thửa đất này đang tạm dừng thu hoạch thương mại theo quyết định của Hợp tác xã Cư Né để rà soát kỹ thuật. Đề nghị liên hệ Hợp tác xã để đối chiếu.",
+    };
+  }
+  if (kind === "box") {
+    if (lang === "zh") {
+      return {
+        title: "包装箱召回通知（停止流通）",
+        desc: "该包装箱或所属批次已由越南 Cư Né 合作社通知召回。请立即停止流通并联系合作社核实。",
+      };
+    }
+    if (lang === "en") {
+      return {
+        title: "CARTON BOX RECALL NOTICE",
+        desc: "This carton box or its parent lot has been recalled by Cư Né Cooperative. Please halt distribution immediately and contact the Cooperative.",
+      };
+    }
+    return {
+      title: "THÔNG BÁO THU HỒI THÙNG ĐÓNG GÓI",
+      desc: "Thùng đóng gói này hoặc lô hàng liên quan đã ngừng lưu thông theo quyết định của Hợp tác xã Cư Né. Đề nghị tạm dừng phân phối và liên hệ Hợp tác xã để đối chiếu.",
+    };
+  }
+  if (kind === "fruit") {
+    if (lang === "zh") {
+      return {
+        title: "单果溯源签召回通知",
+        desc: "该单果溯源签已由越南 Cư Né 合作社停用或召回。请暂停销售并联系合作社核实。",
+      };
+    }
+    if (lang === "en") {
+      return {
+        title: "FRUIT TAG RECALL NOTICE",
+        desc: "This single-fruit traceability tag has been recalled or deactivated by Cư Né Cooperative. Please halt sale and contact the Cooperative.",
+      };
+    }
+    return {
+      title: "THÔNG BÁO THU HỒI TEM TRÁI SẦU RIÊNG",
+      desc: "Tem định danh trái sầu riêng này đã ngừng hiệu lực theo quyết định của Hợp tác xã Cư Né. Đề nghị tạm dừng lưu thông và liên hệ Hợp tác xã để đối chiếu.",
+    };
+  }
+  return {
+    title: TRACE_UI_COPY[lang].alerts.revokedTitle,
+    desc: TRACE_UI_COPY[lang].alerts.revokedDefaultDesc,
+  };
+}
+
+export function getScanAnomalyAlertCopy(
+  reason: "multi_country" | "high_frequency",
+  kind: TraceTargetKind,
+  lang: TraceLang,
+): { title: string; desc: string } {
+  if (kind === "plot") {
+    if (lang === "zh") {
+      return reason === "multi_country"
+        ? {
+            title: "提示：该果园地块牌近期在多地被扫码查询",
+            desc: "系统记录到该地块二维码在多个地区同时被访问。如需开展现场核查，请结合乡政府或合作社签发的考察通行码进行GPS边界核对。",
+          }
+        : {
+            title: "提示：该果园地块二维码近期查询次数较多",
+            desc: "该果园地块牌近期出现高频查询。现场考察人员可启用考察通行码验证果园实时位置。",
+          };
+    }
+    if (lang === "en") {
+      return reason === "multi_country"
+        ? {
+            title: "NOTICE: ORCHARD PLOT QR QUERIED ACROSS REGIONS",
+            desc: "This orchard signboard code was queried across multiple regions simultaneously. Visiting delegations may activate an audit pass to verify live GPS parcel position.",
+          }
+        : {
+            title: "NOTICE: REPEATED QUERIES ON ORCHARD PLOT QR",
+            desc: "Frequent lookups were recorded on this orchard signboard code. Field inspectors may verify on-site parcel coordinates with an audit pass.",
+          };
+    }
+    return reason === "multi_country"
+      ? {
+          title: "LƯU Ý TRA CỨU BẢNG QR THỬA ĐẤT TỪ NHIỀU KHU VỰC",
+          desc: "Mã bảng QR thửa đất này được ghi nhận tra cứu đồng thời từ nhiều khu vực. Đoàn kiểm tra thực tế có thể nhập mã thẻ đoàn để đối chiếu tọa độ trực tiếp tại vườn.",
+        }
+      : {
+          title: "LƯU Ý TRA CỨU LẶP LẠI BẢNG QR THỬA ĐẤT",
+          desc: "Mã bảng QR thửa đất này đang có tần suất tra cứu cao. Đoàn công tác tại vườn có thể đối chiếu vị trí thực tế hoặc liên hệ Hợp tác xã Cư Né khi cần xác nhận.",
+        };
+  }
+
+  if (kind === "fruit") {
+    if (lang === "zh") {
+      return reason === "multi_country"
+        ? {
+            title: "提示：请核对单果溯源签完整性",
+            desc: "系统记录到该单果溯源码在多个地区同时被查询。请仔细检查果柄防伪溯源签是否完好无损。",
+          }
+        : {
+            title: "提示：该单果溯源码近期查询次数较多",
+            desc: "该单果溯源码近期出现多次重复查询。请检查果柄标签完整性，必要时联系授权门店或 Cư Né 合作社核实。",
+          };
+    }
+    if (lang === "en") {
+      return reason === "multi_country"
+        ? {
+            title: "NOTICE: PLEASE VERIFY FRUIT TAG INTEGRITY",
+            desc: "This single-fruit code was looked up across multiple regions simultaneously. Please inspect the physical stem tag for tampering.",
+          }
+        : {
+            title: "NOTICE: REPEATED FRUIT TAG LOOKUPS",
+            desc: "Frequent lookups were recorded for this single-fruit tag. Please verify the physical stem seal with your authorized retailer or Cư Né Cooperative.",
+          };
+    }
+    return reason === "multi_country"
+      ? {
+          title: "LƯU Ý KIỂM TRA TEM ĐỊNH DANH TRÊN TRÁI",
+          desc: "Mã tem trái này được ghi nhận tra cứu đồng thời từ nhiều khu vực khác nhau. Quý khách vui lòng kiểm tra tình trạng nguyên vẹn của tem gắn trên cuống trái.",
+        }
+      : {
+          title: "LƯU Ý TRA CỨU LẶP LẠI MÃ TEM TRÁI",
+          desc: "Mã tem trái này đang có nhiều lượt tra cứu bất thường. Quý khách vui lòng kiểm tra tem vật lý trên trái và liên hệ điểm phân phối chính thức khi cần xác nhận.",
+        };
+  }
+
+  return {
+    title:
+      reason === "multi_country"
+        ? TRACE_UI_COPY[lang].alerts.multiCountryTitle
+        : TRACE_UI_COPY[lang].alerts.highFreqTitle,
+    desc:
+      reason === "multi_country"
+        ? TRACE_UI_COPY[lang].alerts.multiCountryDesc(2, "")
+        : TRACE_UI_COPY[lang].alerts.highFreqDesc(1, 1),
+  };
+}
+
+export function getScopeDeniedCopy(
+  kind: TraceTargetKind,
+  lang: TraceLang,
+  viewerName: string,
+  roleLabel: string,
+  scopeReason: string | null,
+): { title: string; desc: string } {
+  if (lang === "zh") {
+    const targetZh =
+      kind === "plot"
+        ? "该果园地块"
+        : kind === "box"
+          ? "该包装箱"
+          : kind === "fruit"
+            ? "该单果溯源签"
+            : "该批次";
+    return {
+      title: `您无权查看${targetZh}的内部详细数据`,
+      desc: `当前登录账号 ${viewerName}（${roleLabel}）不在${targetZh}所属企业或管辖范围内，系统仅显示公开溯源档案。`,
+    };
+  }
+  if (lang === "en") {
+    const targetEn =
+      kind === "plot"
+        ? "this orchard plot"
+        : kind === "box"
+          ? "this carton box"
+          : kind === "fruit"
+            ? "this fruit tag"
+            : "this shipment lot";
+    return {
+      title: `You do not have permission to view internal details for ${targetEn}`,
+      desc: `Signed in as ${viewerName} (${roleLabel}), but ${targetEn} is outside your assigned company or regional scope. Showing the public dossier only.`,
+    };
+  }
+  const targetVi =
+    kind === "plot"
+      ? "thửa đất này"
+      : kind === "box"
+        ? "thùng đóng gói này"
+        : kind === "fruit"
+          ? "tem trái sầu riêng này"
+          : "lô hàng này";
+  return {
+    title: `Bạn không có quyền xem chi tiết nội bộ của ${targetVi}`,
+    desc: `Tài khoản ${viewerName} (${roleLabel}) đã đăng nhập nhưng ${targetVi} nằm ngoài phạm vi được phân quyền.${
+      scopeReason ? ` Lý do: ${scopeReason}` : ""
+    } Hệ thống chỉ hiển thị bản công khai.`,
+  };
+}
+
+export function getTraceQrAlt(code: string, kind: TraceTargetKind, lang: TraceLang): string {
+  if (lang === "zh") {
+    switch (kind) {
+      case "plot":
+        return `果园地块 ${code} 溯源二维码`;
+      case "box":
+        return `包装箱 ${code} 溯源二维码`;
+      case "fruit":
+        return `单果 ${code} 溯源二维码`;
+      default:
+        return `批次 ${code} 溯源二维码`;
+    }
+  }
+  if (lang === "en") {
+    switch (kind) {
+      case "plot":
+        return `Traceability QR for orchard plot ${code}`;
+      case "box":
+        return `Traceability QR for carton ${code}`;
+      case "fruit":
+        return `Traceability QR for fruit tag ${code}`;
+      default:
+        return `Traceability QR for lot ${code}`;
+    }
+  }
+  switch (kind) {
+    case "plot":
+      return `Mã QR truy xuất thửa đất ${code}`;
+    case "box":
+      return `Mã QR truy xuất thùng đóng gói ${code}`;
+    case "fruit":
+      return `Mã QR truy xuất trái sầu riêng ${code}`;
+    default:
+      return `Mã QR truy xuất lô hàng ${code}`;
+  }
+}
 
 export function detectInitialTraceLang(): TraceLang {
   if (typeof window === "undefined") return "vi";
@@ -331,6 +684,8 @@ export interface TraceUiCopy {
     nationalStandardNote: string;
   };
   authHint: {
+    audienceLabel: string;
+    actionLabel: string;
     compactBtn: string;
     text: string;
     loginBtn: string;
@@ -365,16 +720,16 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       lookupOther: "Tra cứu mã khác",
       home: "Trang chủ",
     },
-    loadingLabel: "Đang tải hồ sơ truy xuất nguồn gốc lô hàng...",
+    loadingLabel: "Đang tải hồ sơ truy xuất nguồn gốc...",
     errorState: {
       invalidCode: "Mã truy xuất không hợp lệ.",
       notFound: (code) =>
-        `Không tìm thấy hồ sơ cho mã "${code}". Quý khách vui lòng kiểm tra lại mã lô hoặc mã in trên nhãn thùng.`,
+        `Không tìm thấy hồ sơ cho mã "${code}". Quý khách vui lòng kiểm tra lại mã lô hàng, mã thùng, tem trái hoặc mã thửa đất.`,
       serverError: "Chưa thể tải dữ liệu lúc này. Quý khách vui lòng thử lại sau.",
       timeoutError: "Kết nối mạng quá chậm hoặc gián đoạn. Quý khách vui lòng thử tải lại trang.",
       networkError: "Không thể kết nối mạng để tra cứu. Quý khách vui lòng kiểm tra kết nối và thử lại.",
       title: "Chưa tìm thấy thông tin",
-      inputPlaceholder: "Nhập mã lô hàng hoặc mã in trên nhãn thùng...",
+      inputPlaceholder: "Nhập mã lô hàng, mã thùng, tem trái hoặc mã thửa đất...",
       searchBtn: "Tìm kiếm",
     },
     alerts: {
@@ -437,14 +792,14 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       adminLocationLabel: "Xã / Huyện / Tỉnh",
       statusRowLabel: "Trạng thái hiệu lực",
       validUntilFmt: (statusText, validUntil) => `${statusText} (Hiệu lực đến ${validUntil})`,
-      coarseMapTitle: (pucCode) => `Bản đồ vị trí khái quát vùng trồng (${pucCode})`,
-      coarseTabTerrain: "Địa hình vùng",
-      coarseTabGrid: "Khung tọa độ",
+      coarseMapTitle: (pucCode) => `Bản đồ vệ tinh vùng trồng (${pucCode})`,
+      coarseTabTerrain: "Vệ tinh",
+      coarseTabGrid: "Giao thông",
       coarseRadiusLabel: "Phạm vi vùng trồng khoảng 2.5 km",
       coarseCompassNorth: "B",
       coarseCenterTag: "Khu vực trung tâm vùng trồng",
       coarsePrivacyNote:
-        "Bản đồ minh họa phạm vi vùng trồng chung tại địa phương, không hiển thị ranh giới từng vườn cá nhân nhằm bảo mật thông tin nông hộ.",
+        "Ảnh vệ tinh thực địa khu vực vùng trồng đã đăng ký; không hiển thị ranh giới từng thửa đất cá nhân nhằm bảo mật thông tin nông hộ.",
     },
     producerPackhouse: {
       title: "Đơn vị sản xuất & Cơ sở đóng gói",
@@ -591,14 +946,16 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       phytoLabel: "Giấy kiểm dịch thực vật",
       phytoIssuedFmt: (certNo, dateText) =>
         dateText ? `${certNo} (Cấp ${dateText})` : certNo,
-      phytoDefaultPending: "Cấp theo từng lô hàng xuất khẩu tại cơ sở đóng gói",
+      phytoDefaultPending: "Cấp theo từng lô xuất khẩu",
       nationalStandardNote:
         "Chỉ hiển thị dữ liệu chính thức đã được Hợp tác xã Cư Né kiểm tra, đáp ứng yêu cầu truy xuất nguồn gốc nông sản xuất khẩu.",
     },
     authHint: {
-      compactBtn: "Dành cho đối tác / cơ quan quản lý: Đăng nhập",
+      audienceLabel: "Dành cho đối tác và cơ quan quản lý:",
+      actionLabel: "Đăng nhập",
+      compactBtn: "Dành cho đối tác và cơ quan quản lý: Đăng nhập",
       text: "Dành cho Cơ sở đóng gói, Nhà phân phối và Cơ quan quản lý: Đăng nhập để xem hồ sơ truy xuất mở rộng theo phạm vi quản lý (mọi lượt xem đều ghi nhật ký kiểm toán).",
-      loginBtn: "Dành cho đối tác / cơ quan quản lý: Đăng nhập",
+      loginBtn: "Dành cho đối tác và cơ quan quản lý: Đăng nhập",
     },
     scopeAccess: {
       deniedTitle: "Bạn không có quyền xem chi tiết lô này",
@@ -615,10 +972,10 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       share: "Sao chép đường dẫn QR",
     },
     footer: {
-      line1: "Hệ thống quản lý vùng trồng và truy xuất nguồn gốc sầu riêng theo lô",
+      line1: "Hệ thống quản lý vùng trồng và truy xuất nguồn gốc sầu riêng điện tử",
       line2: "Hợp Tác Xã Kinh Doanh - Dịch Vụ Tổng Hợp Cư Né (Tỉnh Đắk Lắk, Việt Nam)",
       line3:
-        "Hồ sơ truy xuất nguồn gốc nông sản theo lô xuất xưởng của Hợp tác xã Cư Né.",
+        "Hồ sơ truy xuất nguồn gốc chính thức do Hợp tác xã Cư Né kiểm chứng và phát hành.",
     },
   },
 
@@ -633,16 +990,16 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       lookupOther: "Lookup Code",
       home: "Home",
     },
-    loadingLabel: "Loading shipment lot traceability dossier...",
+    loadingLabel: "Loading origin traceability dossier...",
     errorState: {
       invalidCode: "Invalid traceability code.",
       notFound: (code) =>
-        `No shipment lot or carton record found for "${code}". Please check the lot code printed on the carton label.`,
+        `No traceability record found for "${code}". Please check the lot, carton, fruit tag, or orchard plot code.`,
       serverError: "Unable to load traceability records right now. Please try again shortly.",
       timeoutError: "Network connection is slow or interrupted. Please reload the page.",
       networkError: "Unable to connect. Please check your internet connection and try again.",
       title: "Record Not Found",
-      inputPlaceholder: "Enter lot code or code printed on carton label...",
+      inputPlaceholder: "Enter lot, carton, fruit tag, or orchard plot code...",
       searchBtn: "Lookup",
     },
     alerts: {
@@ -705,14 +1062,14 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       adminLocationLabel: "Commune / District / Province",
       statusRowLabel: "Validity Status",
       validUntilFmt: (statusText, validUntil) => `${statusText} (Valid until ${validUntil})`,
-      coarseMapTitle: (pucCode) => `Growing Zone General Location (${pucCode})`,
-      coarseTabTerrain: "Topographic",
-      coarseTabGrid: "Coordinate Grid",
+      coarseMapTitle: (pucCode) => `Growing Zone Satellite Map (${pucCode})`,
+      coarseTabTerrain: "Satellite",
+      coarseTabGrid: "Streets",
       coarseRadiusLabel: "General zone scope approx. 2.5 km",
       coarseCompassNorth: "N",
       coarseCenterTag: "Growing zone center",
       coarsePrivacyNote:
-        "Illustrates the general commune-level growing zone area without exposing individual household orchard boundaries.",
+        "Live satellite imagery of the registered growing zone area; individual household plot boundaries remain private.",
     },
     producerPackhouse: {
       title: "Producer & Registered Packhouse",
@@ -859,11 +1216,13 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       phytoLabel: "Phytosanitary Certificate",
       phytoIssuedFmt: (certNo, dateText) =>
         dateText ? `${certNo} (Issued ${dateText})` : certNo,
-      phytoDefaultPending: "Issued per export shipment lot at registered packhouse",
+      phytoDefaultPending: "Issued per export lot",
       nationalStandardNote:
         "Displays verified official records approved by Cư Né Cooperative in compliance with agricultural export traceability standards.",
     },
     authHint: {
+      audienceLabel: "For partners & authorities:",
+      actionLabel: "Sign in",
       compactBtn: "For partners / regulatory authorities: Sign in",
       text: "For Registered Packhouses, Distributors & Regulatory Inspectors: Sign in to view scoped extended traceability tiers (all views are audit-logged).",
       loginBtn: "For partners / regulatory authorities: Sign in",
@@ -881,10 +1240,10 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       share: "Copy QR Link",
     },
     footer: {
-      line1: "Durian Growing Zone & Batch Origin Traceability System",
+      line1: "Durian Growing Zone & Digital Origin Traceability System",
       line2: "Cư Né General Business & Service Cooperative (Đắk Lắk Province, Vietnam)",
       line3:
-        "Official batch origin traceability dossier published by Cư Né Cooperative.",
+        "Official origin traceability dossier verified and published by Cư Né Cooperative.",
     },
   },
 
@@ -896,19 +1255,19 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
     },
     topbar: {
       brand: "Cư Né 合作社",
-      lookupOther: "查询其他批次",
+      lookupOther: "查询其他编码",
       home: "首页",
     },
-    loadingLabel: "正在加载榴莲批次溯源档案…",
+    loadingLabel: "正在加载溯源核验档案...",
     errorState: {
       invalidCode: "溯源码无效。",
       notFound: (code) =>
-        `未找到与 "${code}" 对应的批次或包装箱记录。请核对包装箱标签上印刷的批次号。`,
+        `未找到与 "${code}" 对应的溯源档案。请核对批次号、箱标号、单果签或果园地块编码。`,
       serverError: "暂时无法加载溯源数据，请稍后重试。",
       timeoutError: "网络连接缓慢或中断，请刷新页面重试。",
       networkError: "无法连接网络，请检查网络设置后重试。",
       title: "未找到溯源记录",
-      inputPlaceholder: "输入批次编号或箱标编号...",
+      inputPlaceholder: "输入批次、包装箱、单果签或地块编码...",
       searchBtn: "立即查询",
     },
     alerts: {
@@ -971,14 +1330,14 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       adminLocationLabel: "所在乡 / 县 / 省",
       statusRowLabel: "资质有效状态",
       validUntilFmt: (statusText, validUntil) => `${statusText}（有效期至 ${validUntil}）`,
-      coarseMapTitle: (pucCode) => `注册种植区位置示意图 (${pucCode})`,
-      coarseTabTerrain: "产区地形概览",
-      coarseTabGrid: "经纬网格",
+      coarseMapTitle: (pucCode) => `注册种植区卫星地图 (${pucCode})`,
+      coarseTabTerrain: "卫星影像",
+      coarseTabGrid: "道路地图",
       coarseRadiusLabel: "产区概览范围约 2.5 公里",
       coarseCompassNorth: "北",
       coarseCenterTag: "种植区中心位置",
       coarsePrivacyNote:
-        "本图仅展示乡级种植区整体位置范围，不公开农户个人果园边界以保护农户隐私。",
+        "展示注册种植区实景卫星影像范围，不公开农户个人果园边界以保护农户隐私。",
     },
     producerPackhouse: {
       title: "生产合作社与注册包装厂",
@@ -1122,11 +1481,13 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       phytoLabel: "植物检疫证书编号",
       phytoIssuedFmt: (certNo, dateText) =>
         dateText ? `${certNo}（签发日期 ${dateText}）` : certNo,
-      phytoDefaultPending: "按出口发运批次由植物检疫机关签发",
+      phytoDefaultPending: "按出口批次签发",
       nationalStandardNote:
         "仅展示经 Cư Né 合作社审核确认的正式溯源信息，符合出口农产品产地溯源规范。",
     },
     authHint: {
+      audienceLabel: "合作企业与监管机构：",
+      actionLabel: "登录",
       compactBtn: "合作企业 / 监管机构入口：登录",
       text: "包装厂、进口分销商及监管机构人员：登录后可按授权范围查看二级/三级扩展溯源档案（所有查阅均记录审计日志）。",
       loginBtn: "合作企业 / 监管机构入口：登录",
@@ -1144,9 +1505,9 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       share: "复制溯源链接",
     },
     footer: {
-      line1: "越南鲜食榴莲种植区与批次全链路溯源系统",
+      line1: "越南鲜食榴莲种植区与数字化产地溯源系统",
       line2: "越南 Đắk Lắk 省 Cư Né 综合经营与服务合作社",
-      line3: "由 Cư Né 合作社审核发布的出口农产品批次溯源档案。",
+      line3: "由 Cư Né 合作社审核发布的官方产地溯源档案。",
     },
   },
 };
@@ -1206,21 +1567,51 @@ export function localizeTraceUnitLabel(traceUnit: string, rawLabel: string, lang
   return lang === "zh" ? "出口标准商品批次" : "Export Shipment Lot";
 }
 
-export function localizeLotStatusLabel(status: string, _rawLabel: string, lang: TraceLang): string {
-  if (status === "revoked") {
+export function localizeLotStatusLabel(
+  status: string,
+  _rawLabel: string,
+  lang: TraceLang,
+  kind: TraceTargetKind = "lot",
+  rawLotStatus?: string | null,
+): string {
+  if (status === "revoked" || rawLotStatus === "revoked") {
     if (lang === "vi") return "Đã thu hồi, ngừng lưu thông";
-    return lang === "zh" ? "已召回，停止流通" : "Recalled, Do Not Distribute";
+    return lang === "zh" ? "已召回，停止流通" : "Recalled, Halted";
   }
   if (status === "unverified") {
     if (lang === "vi") return "Đang chờ kiểm chứng";
     return lang === "zh" ? "待审核记录" : "Pending Verification";
   }
-  if (status === "pending") {
-    if (lang === "vi") return "Đang lấy mẫu kiểm định trước xuất";
-    return lang === "zh" ? "出货前采样检验中" : "Pre-dispatch Sampling & Inspection";
+  if (status === "pending" || rawLotStatus === "sampling") {
+    if (lang === "vi") return "Đang lấy mẫu kiểm định";
+    return lang === "zh" ? "出货前采样检验中" : "Pre-dispatch Inspection";
   }
-  if (lang === "vi") return "Lô hợp lệ, đủ điều kiện lưu thông";
-  return lang === "zh" ? "合格批次，准予流通" : "Valid Lot, Cleared for Distribution";
+  if (kind === "box") {
+    if (lang === "vi") return "Thùng hàng hợp lệ, đủ điều kiện";
+    return lang === "zh" ? "合格包装箱，准予流通" : "Valid Carton, Cleared";
+  }
+  if (kind === "fruit") {
+    if (lang === "vi") return "Tem trái hợp lệ, đủ điều kiện";
+    return lang === "zh" ? "合格单果签，准予流通" : "Valid Fruit Tag, Cleared";
+  }
+  if (kind === "plot") {
+    if (lang === "vi") return "Thửa đất đủ điều kiện canh tác";
+    return lang === "zh" ? "合规在产果园地块" : "Verified Active Orchard Plot";
+  }
+  if (rawLotStatus === "in_transit") {
+    if (lang === "vi") return "Lô hợp lệ, đang vận chuyển";
+    return lang === "zh" ? "合格批次，冷链运输中" : "Valid Lot, In Transit";
+  }
+  if (rawLotStatus === "delivered") {
+    if (lang === "vi") return "Lô hợp lệ, đã bàn giao";
+    return lang === "zh" ? "合格批次，已完成交付" : "Valid Lot, Delivered";
+  }
+  if (rawLotStatus === "exported") {
+    if (lang === "vi") return "Lô hợp lệ, đã xuất khẩu";
+    return lang === "zh" ? "合格批次，已检疫出口" : "Valid Lot, Exported";
+  }
+  if (lang === "vi") return "Lô hợp lệ, đủ điều kiện";
+  return lang === "zh" ? "合格批次，准予流通" : "Valid Lot, Cleared";
 }
 
 export function localizeZoneStatusLabel(status: string, rawLabel: string, lang: TraceLang): string {
@@ -1750,6 +2141,47 @@ export function localizeAssessedBy(rawUnit: string, lang: TraceLang): string {
   return trimmed;
 }
 
+export function localizeVillageLabel(rawVillage: string, lang: TraceLang): string {
+  const trimmed = (rawVillage || "").trim();
+  if (!trimmed) return "";
+  if (lang === "vi") return trimmed.replace(/\s*[—–-]\s*/g, ", ");
+
+  const parts = trimmed
+    .split(/\s*(?:,|—|–|-)\s*/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const mapped = parts.map((seg) => {
+    const hamletNum = /^Thôn\s+(\d+[A-Za-z]?)$/i.exec(seg);
+    if (hamletNum) {
+      return lang === "zh" ? `第 ${hamletNum[1]} 村` : `Hamlet ${hamletNum[1]}`;
+    }
+    const hamletProper = /^Thôn\s+(.+)$/i.exec(seg);
+    if (hamletProper) {
+      return lang === "zh" ? `${hamletProper[1]} 村` : `${hamletProper[1]} Hamlet`;
+    }
+    const buonMatch = /^Buôn\s+(.+)$/i.exec(seg);
+    if (buonMatch) {
+      return lang === "zh" ? `Buôn ${buonMatch[1]} 村` : `Buôn ${buonMatch[1]} Village`;
+    }
+    const communeMatch = /^Xã\s+(.+)$/i.exec(seg);
+    if (communeMatch) {
+      return lang === "zh" ? `${communeMatch[1]} 乡` : `${communeMatch[1]} Commune`;
+    }
+    const districtMatch = /^Huyện\s+(.+)$/i.exec(seg);
+    if (districtMatch) {
+      return lang === "zh" ? `${districtMatch[1]} 县` : `${districtMatch[1]} District`;
+    }
+    const provinceMatch = /^Tỉnh\s+(.+)$/i.exec(seg);
+    if (provinceMatch) {
+      return lang === "zh" ? `${provinceMatch[1]} 省` : `${provinceMatch[1]} Province`;
+    }
+    return seg;
+  });
+
+  return lang === "zh" ? [...mapped].reverse().join(" ") : mapped.join(", ");
+}
+
 export function localizeInspectionNote(rawNote: string, lang: TraceLang): string {
   const m = /(\d{4})-(\d{2})-(\d{2})/.exec(rawNote);
   if (m?.[1] && m[2] && m[3]) {
@@ -1782,78 +2214,100 @@ export function localizeTimelineStep(
     packhouseName: string;
     market: string;
     lang: TraceLang;
+    participatingHouseholdCount?: number;
+    weightTons?: number;
+    avgBrix?: number | null;
+    gradeAPct?: number | null;
+    vehiclePlate?: string | null;
+    temperatureC?: number | null;
+    rawLotStatus?: string | null;
   },
 ): { title: string; responsibleUnit: string; detail: string } {
-  const { lang, pucCode, packhouseCode, packhouseName, market } = context;
+  const {
+    lang,
+    pucCode,
+    packhouseCode,
+    packhouseName,
+    market,
+    participatingHouseholdCount,
+    weightTons,
+    avgBrix,
+    gradeAPct,
+    vehiclePlate,
+    temperatureC,
+    rawLotStatus,
+  } = context;
+
+  // Tiếng Việt: hiển thị trực tiếp 100% nội dung động thực tế từ máy chủ (không ghi đè cứng)
+  if (lang === "vi") {
+    return {
+      title: step.title.replace(/\s*&\s*/g, " và "),
+      responsibleUnit: step.responsibleUnit.replace(/\s*&\s*/g, " và "),
+      detail: step.detail.replace(/\s*&\s*/g, " và "),
+    };
+  }
+
   const isWarn = step.status === "warning";
   const isDone = step.status === "completed";
+  const isCurrent = step.status === "current";
   const localizedPhName = localizePackhouseName(packhouseName, lang);
 
   switch (step.key) {
-    case "orchard":
-      if (lang === "vi") {
-        return {
-          title: "Vườn trồng",
-          responsibleUnit: step.responsibleUnit.replace(/\s*&\s*/g, " và "),
-          detail: isWarn
-            ? `Cảnh báo: Mã vùng trồng ${pucCode} hiện đang tạm dừng hoặc rà soát hiệu lực`
-            : `Mã vùng trồng ${pucCode}, theo dõi nhật ký canh tác VietGAP và thời gian cách ly an toàn trước thu hoạch`,
-        };
-      }
+    case "orchard": {
+      const hhEn =
+        participatingHouseholdCount && participatingHouseholdCount > 0
+          ? `, ${participatingHouseholdCount} member growers`
+          : "";
+      const hhZh =
+        participatingHouseholdCount && participatingHouseholdCount > 0
+          ? `（${participatingHouseholdCount} 户联营果农）`
+          : "";
       return lang === "zh"
         ? {
             title: "果园管理",
             responsibleUnit: localizeCoopName(step.responsibleUnit, "zh") || "Cư Né 农业合作社",
             detail: isWarn
               ? `提示：果园注册编码 ${pucCode} 当前处于暂停或复核状态`
-              : `注册果园 ${pucCode}，全程执行 VietGAP 栽培规程与采前安全间隔期管理`,
+              : `注册果园 ${pucCode}${hhZh}，全程执行 VietGAP 栽培规程与采前安全间隔期管理`,
           }
         : {
             title: "Orchard",
             responsibleUnit: localizeCoopName(step.responsibleUnit, "en") || "Cư Né Agricultural Cooperative",
             detail: isWarn
               ? `Alert: Production Unit Code ${pucCode} is currently suspended or under review`
-              : `PUC ${pucCode}, monitored under VietGAP orchard care logs and pre-harvest withdrawal safety`,
+              : `PUC ${pucCode}${hhEn}, monitored under VietGAP orchard care logs and pre-harvest withdrawal safety`,
           };
+    }
 
-    case "harvest":
-      if (lang === "vi") {
-        return {
-          title: "Thu hoạch",
-          responsibleUnit: "Tổ thu hoạch và Kỹ thuật HTX Cư Né",
-          detail: isDone
-            ? "Thu hái đúng độ chín tự nhiên, phân loại sơ bộ và tập kết nguyên liệu tại vườn nguồn"
-            : "Chưa ghi nhận mốc thu hoạch lô thương phẩm",
-        };
-      }
+    case "harvest": {
+      const enMetrics = [
+        weightTons && weightTons > 0 ? `${Number(weightTons.toFixed(3))} t` : null,
+        avgBrix && avgBrix > 0 ? `avg ${avgBrix}° Brix` : null,
+      ].filter(Boolean);
+      const zhMetrics = [
+        weightTons && weightTons > 0 ? `${Number(weightTons.toFixed(3))} 吨` : null,
+        avgBrix && avgBrix > 0 ? `平均糖度 ${avgBrix}° Brix` : null,
+      ].filter(Boolean);
       return lang === "zh"
         ? {
             title: "成熟采收",
             responsibleUnit: "Cư Né 合作社采收与品控组",
             detail: isDone
-              ? "按自然成熟度标准采收，果园现场初筛并按源头果园归集批次"
+              ? `按自然成熟度标准采收，果园现场初筛归集批次${zhMetrics.length ? `（${zhMetrics.join("，")}）` : ""}`
               : "待记录本批次商业采收日期",
           }
         : {
             title: "Harvest",
             responsibleUnit: "Cư Né Cooperative Harvest & Quality Team",
             detail: isDone
-              ? "Harvested at natural maturity, field-sorted, and aggregated from registered member orchards"
+              ? `Harvested at natural maturity, field-sorted, and aggregated from member orchards${enMetrics.length ? ` (${enMetrics.join(", ")})` : ""}`
               : "Commercial harvest milestone pending registration",
           };
+    }
 
-    case "packing":
-      if (lang === "vi") {
-        return {
-          title: "Đóng gói",
-          responsibleUnit: `${packhouseName} (${packhouseCode})`,
-          detail: isWarn
-            ? `Cảnh báo: Cơ sở đóng gói ${packhouseCode} hiện đang tạm dừng hoạt động`
-            : isDone
-              ? "Làm sạch, phân hạng trái thương phẩm, đóng thùng định danh lô và dán tem truy xuất nguồn gốc"
-              : "Đang chờ tiếp nhận sơ chế và đóng thùng tại cơ sở đóng gói",
-        };
-      }
+    case "packing": {
+      const gradeEn = gradeAPct && gradeAPct > 0 ? ` (Grade A: ${gradeAPct}%)` : "";
+      const gradeZh = gradeAPct && gradeAPct > 0 ? `（A级果占比 ${gradeAPct}%）` : "";
       return lang === "zh"
         ? {
             title: "分级包装",
@@ -1861,7 +2315,7 @@ export function localizeTimelineStep(
             detail: isWarn
               ? `提示：注册包装厂 ${packhouseCode} 当前处于暂停运营状态`
               : isDone
-                ? "完成清洁吹扫、品质分级、标准箱装盒并加贴批次溯源标签"
+                ? `完成清洁吹扫、品质分级${gradeZh}、标准装箱并加贴批次溯源标签`
                 : "正在等待注册包装厂接收初加工与装箱",
           }
         : {
@@ -1870,22 +2324,12 @@ export function localizeTimelineStep(
             detail: isWarn
               ? `Alert: Registered Packhouse ${packhouseCode} is currently suspended or inactive`
               : isDone
-                ? "Cleaned, graded, packed into batch-identified cartons, and labeled with origin traceability seals"
+                ? `Cleaned, graded${gradeEn}, packed into batch-identified cartons, and labeled with origin traceability seals`
                 : "Awaiting sorting and carton packing at registered packhouse",
           };
+    }
 
     case "testing":
-      if (lang === "vi") {
-        return {
-          title: "Kiểm nghiệm",
-          responsibleUnit: step.responsibleUnit,
-          detail: isWarn
-            ? "Mẫu kiểm nghiệm phát hiện chỉ tiêu không đạt, tạm dừng xuất xưởng"
-            : isDone
-              ? "Đạt chuẩn an toàn kim loại nặng, không phát hiện chất Vàng O và dư lượng thuốc BVTV trong ngưỡng cho phép"
-              : "Đang chờ cập nhật phiếu kết quả phân tích mẫu của lô",
-        };
-      }
       return lang === "zh"
         ? {
             title: "安全检测",
@@ -1909,26 +2353,27 @@ export function localizeTimelineStep(
     case "export":
     default: {
       const mkt = localizeMarket(market, lang);
-      if (lang === "vi") {
-        return {
-          title: "Xuất xưởng / Lưu thông",
-          responsibleUnit: `${packhouseName} và Cơ quan Kiểm dịch thực vật`,
-          detail: isWarn
-            ? "Lô hàng đã thu hồi và ngừng lưu thông"
-            : isDone
-              ? `Hoàn tất kiểm tra hồ sơ kiểm dịch và xuất lô phục vụ thị trường: ${mkt}`
-              : "Đang hoàn tất thủ tục kiểm định trước khi xuất bến",
-        };
-      }
+      const enChain = [
+        vehiclePlate ? `vehicle ${vehiclePlate}` : null,
+        temperatureC !== null && temperatureC !== undefined ? `${temperatureC}°C` : null,
+      ].filter(Boolean);
+      const zhChain = [
+        vehiclePlate ? `车牌 ${vehiclePlate}` : null,
+        temperatureC !== null && temperatureC !== undefined ? `冷链 ${temperatureC}°C` : null,
+      ].filter(Boolean);
       return lang === "zh"
         ? {
             title: "检疫出厂",
-            responsibleUnit: `${localizedPhName} 与官方植物检疫机关`,
+            responsibleUnit: `${localizedPhName} 与植物检疫机关`,
             detail: isWarn
               ? "该批次已召回并停止流通"
               : isDone
-                ? `已完成植物检疫单证核验并发运出库，目标市场：${mkt}`
-                : "正在办理出厂前最终检疫核验手续",
+                ? rawLotStatus === "delivered"
+                  ? `已完成交付验收，目标市场：${mkt}${zhChain.length ? `（${zhChain.join("，")}）` : ""}`
+                  : `已完成植物检疫单证核验并发运出库，目标市场：${mkt}${zhChain.length ? `（${zhChain.join("，")}）` : ""}`
+                : isCurrent || rawLotStatus === "in_transit"
+                  ? `正在冷链发运途中，目标市场：${mkt}${zhChain.length ? `（${zhChain.join("，")}）` : ""}`
+                  : "正在办理出厂前最终检疫核验手续",
           }
         : {
             title: "Export / Dispatch",
@@ -1936,102 +2381,13 @@ export function localizeTimelineStep(
             detail: isWarn
               ? "Shipment lot has been recalled and halted from circulation"
               : isDone
-                ? `Completed phytosanitary clearance and dispatched for market: ${mkt}`
-                : "Completing final pre-dispatch quarantine verification",
+                ? rawLotStatus === "delivered"
+                  ? `Completed delivery for market: ${mkt}${enChain.length ? ` (${enChain.join(", ")})` : ""}`
+                  : `Completed phytosanitary clearance and dispatched for market: ${mkt}${enChain.length ? ` (${enChain.join(", ")})` : ""}`
+                : isCurrent || rawLotStatus === "in_transit"
+                  ? `In cold-chain transit for market: ${mkt}${enChain.length ? ` (${enChain.join(", ")})` : ""}`
+                  : "Completing final pre-dispatch quarantine verification",
           };
     }
   }
-}
-
-export function localizeGovernmentEndorsement(
-  gov: {
-    programTitle: string;
-    directiveNo: string;
-    communeAuthority: string;
-    provincialAuthority: string;
-    inspectionUnit: string;
-  },
-  lang: TraceLang,
-): {
-  programTitle: string;
-  directiveNo: string;
-  communeAuthority: string;
-  provincialAuthority: string;
-  inspectionUnit: string;
-} {
-  if (lang === "vi") return gov;
-  if (lang === "zh") {
-    return {
-      programTitle: "越南多乐省政府督办 - 乡级鲜食榴莲数字化全链路溯源先锋示范工程",
-      directiveNo: "多乐省农业数字化转型与输华注册果园编码 (PUC) 标准化督办计划",
-      communeAuthority: "越南多乐省克容布县居内乡人民政府 (UBND Xã Cư Né)",
-      provincialAuthority: "越南多乐省人民委员会 - 农业与环境厅",
-      inspectionUnit: "居内乡社区联合监督组与居内合作社技术委员会",
-    };
-  }
-  return {
-    programTitle: "Dak Lak Provincial Pioneer Commune-Level Durian Traceability Program",
-    directiveNo: "Dak Lak Agricultural Digital Transformation & Export PUC Standardization Initiative",
-    communeAuthority: "Cu Ne Commune People's Committee - Krong Buk District",
-    provincialAuthority: "Dak Lak Provincial People's Committee - Dept. of Agriculture & Environment",
-    inspectionUnit: "Cu Ne Commune Community Supervisory Board & Coop Technical Unit",
-  };
-}
-
-export function localizeAttestationParty(
-  party: {
-    partyKey: string;
-    roleLabel: string;
-    actorName: string;
-    summary: string;
-  },
-  lang: TraceLang,
-): { roleLabel: string; actorName: string; summary: string } {
-  if (lang === "vi") {
-    return {
-      roleLabel: party.roleLabel,
-      actorName: party.actorName,
-      summary: party.summary,
-    };
-  }
-
-  if (party.partyKey === "producer") {
-    return lang === "zh"
-      ? {
-          roleLabel: "第一方：注册农户与生产合作社",
-          actorName: localizeCoopName(party.actorName, "zh"),
-          summary: "全程记录电子农事与植保台账，系统自动锁定录入时间",
-        }
-      : {
-          roleLabel: "Party 1: Member Growers & Producer Coop",
-          actorName: localizeCoopName(party.actorName, "en"),
-          summary: "Electronic orchard and spray logs automatically recorded with server timestamps",
-        };
-  }
-
-  if (party.partyKey === "commune_gov") {
-    return lang === "zh"
-      ? {
-          roleLabel: "第二方：乡人民政府与社区监督组",
-          actorName: "居内乡人民政府 (UBND Xã Cư Né) 与社区监督组",
-          summary: "实地清点挂果树核定产季配额上限 (Mass-Balance)，开展不定期现场抽检与封签核验",
-        }
-      : {
-          roleLabel: "Party 2: Commune Government & Supervisory Board",
-          actorName: "Cu Ne Commune People's Committee & Supervisory Unit",
-          summary: "Pre-season tree count & yield quota assessment (Mass-Balance) with periodic field inspections",
-        };
-  }
-
-  return lang === "zh"
-    ? {
-        roleLabel: "第三方：ISO/IEC 17025 独立实验室与检疫机构",
-        actorName: party.actorName,
-        summary: "独立采样检测重金属镉 (Cd)、黄O及农残指标，支持外部实验室官网交叉核验与口岸植物检疫",
-      }
-    : {
-        roleLabel: "Party 3: ISO/IEC 17025 Lab & Plant Quarantine",
-        actorName: party.actorName,
-        summary: "Independent sampling for Cadmium (Cd), Auramine O & MRLs with external lab cross-verification",
-      };
 }

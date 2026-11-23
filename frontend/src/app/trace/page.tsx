@@ -8,11 +8,12 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import DwellSlideshow, { type DwellSlide } from "@/components/landing/DwellSlideshow";
 import LandingFooter from "@/components/landing/LandingFooter";
 import { Search } from "@/components/ui/PublicIcon";
+import { ROLE_LABELS } from "@/constants/roles";
 import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, api } from "@/lib/api-client";
 import { replaceUrlPreservingState } from "@/lib/back-navigation";
 import { homePathFor } from "@/lib/routes";
 import { isSafeTraceCode, safeDecodeURIComponent } from "@/utils/url-safety";
-import { persistTraceLang } from "./[code]/trace-i18n";
+import { persistTraceLang, rememberTraceKindHint } from "./[code]/trace-i18n";
 import "@/components/landing/landing.css";
 import "@/components/landing/swiss-landing.css";
 import "./swiss-trace.css";
@@ -182,9 +183,6 @@ function extractAuditPassFromLocation(): string | null {
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const fromHash = hashParams.get("auditPass")?.trim();
   if (fromHash && /^[A-Za-z0-9_-]{4,80}$/.test(fromHash)) return fromHash;
-  const searchParams = new URLSearchParams(window.location.search);
-  const fromQuery = searchParams.get("auditPass")?.trim();
-  if (fromQuery && /^[A-Za-z0-9_-]{4,80}$/.test(fromQuery)) return fromQuery;
   return null;
 }
 
@@ -254,20 +252,46 @@ export default function TraceLookupPage() {
   }, []);
 
   useEffect(() => {
-    if (cachedTraceSamples) return;
     let active = true;
-    api
-      .get<TraceSamplesResponse>("/public/trace-samples")
-      .then((res) => {
-        cachedTraceSamples = res;
-        if (active) setSamples(res);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const loadSamples = (silent: boolean) => {
+      if (!silent && cachedTraceSamples) return;
+      api
+        .get<TraceSamplesResponse>("/public/trace-samples")
+        .then((res) => {
+          cachedTraceSamples = res;
+          if (active) setSamples(res);
+        })
+        .catch(() => { })
+        .finally(() => {
+          if (active && !silent) setLoading(false);
+        });
+    };
+
+    loadSamples(Boolean(cachedTraceSamples));
+
+    let eventSource: EventSource | null = null;
+    if (typeof window !== "undefined" && "EventSource" in window) {
+      try {
+        eventSource = new EventSource("/api/public/trace-stream");
+        eventSource.onmessage = () => loadSamples(true);
+      } catch {
+        eventSource = null;
+      }
+    }
+
+    const handleWakeup = () => {
+      if (document.visibilityState === "visible") {
+        loadSamples(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleWakeup);
+    window.addEventListener("focus", handleWakeup);
+
     return () => {
       active = false;
+      eventSource?.close();
+      document.removeEventListener("visibilitychange", handleWakeup);
+      window.removeEventListener("focus", handleWakeup);
     };
   }, []);
 
@@ -276,7 +300,7 @@ export default function TraceLookupPage() {
     if (!code.trim()) return;
     const targetHref = resolveTraceInputHref(code);
     if (!targetHref) {
-      setInputError("Mã tra cứu không hợp lệ. Vui lòng nhập mã lô, mã thùng hoặc đường dẫn QR trên nhãn.");
+      setInputError("Mã tra cứu không hợp lệ. Vui lòng nhập mã lô hàng, mã thùng, tem trái hoặc mã thửa đất.");
       return;
     }
     setInputError(null);
@@ -287,6 +311,22 @@ export default function TraceLookupPage() {
   const stamps = useMemo(() => samples?.stamps ?? [], [samples]);
   const plots = useMemo(() => samples?.plots ?? [], [samples]);
   const demoAuditPass = samples?.demoAuditPass ?? null;
+
+  useEffect(() => {
+    for (const lot of lots) {
+      rememberTraceKindHint(lot.code, "lot");
+      rememberTraceKindHint(lot.qrToken, "lot");
+    }
+    for (const pl of plots) {
+      rememberTraceKindHint(pl.plotCode, "plot");
+      rememberTraceKindHint(pl.qrToken, "plot");
+    }
+    for (const st of stamps) {
+      const kind = st.unitType === "box" ? "box" : "fruit";
+      rememberTraceKindHint(st.code, kind);
+      rememberTraceKindHint(st.qrToken, kind);
+    }
+  }, [lots, plots, stamps]);
 
   const quickSamples = useMemo(() => {
     const picked: Array<{ label: string; href: string }> = [];
@@ -348,7 +388,7 @@ export default function TraceLookupPage() {
 
           <nav className="sw-trace-nav" aria-label="Điều hướng cổng truy xuất">
             <a href="#tra-cuu-ma">Tra cứu mã</a>
-            <a href="#ho-so-mau">Lô &amp; thùng mẫu</a>
+            <a href="#ho-so-mau">Hồ sơ mẫu</a>
             <a href="#tieu-chuan">Ba cấp truy xuất</a>
           </nav>
 
@@ -358,9 +398,16 @@ export default function TraceLookupPage() {
             </Link>
             <span className="sw-trace-top-sep" aria-hidden="true" />
             {authenticated ? (
-              <Link href={workspaceHref} className="sw-trace-auth-btn">
-                Vào hệ thống
-              </Link>
+              <>
+                {session?.user && (
+                  <span className="sw-trace-role-chip">
+                    {session.user.fullName} ({ROLE_LABELS[session.user.role]})
+                  </span>
+                )}
+                <Link href={workspaceHref} className="sw-trace-auth-btn">
+                  Vào hệ thống
+                </Link>
+              </>
             ) : (
               <Link href="/login" className="sw-trace-auth-btn">
                 Đăng nhập
@@ -376,15 +423,15 @@ export default function TraceLookupPage() {
           <div className="sw-grid sw-trace-hero-row">
             <div className="sw-cell sw-col-1-2 sw-trace-hero-panel">
               <div className="sw-trace-hero-head">
-                <span className="sw-trace-kicker">Truy xuất nguồn gốc theo lô - HTX Cư Né</span>
+                <span className="sw-trace-kicker">Cổng truy xuất nguồn gốc điện tử - HTX Cư Né</span>
               </div>
 
               <div className="sw-trace-hero-body">
                 <h1 id="trace-hero-title" className="sw-trace-title">
-                  Tra cứu mã lô &amp; thùng QR
+                  Tra cứu nguồn gốc mã QR
                 </h1>
                 <p className="sw-trace-lead">
-                  Nhập mã lô hàng, mã thùng đóng gói hoặc mã QR để xem vùng trồng, dòng thời gian 5 bước và phiếu kiểm nghiệm.
+                  Nhập mã lô hàng, mã thùng đóng gói, tem trái hoặc mã thửa đất để đối chiếu hồ sơ vùng trồng, nhật ký canh tác và phiếu kiểm nghiệm.
                 </p>
 
                 <form onSubmit={handleSubmit} className="sw-trace-form" role="search">
@@ -397,8 +444,8 @@ export default function TraceLookupPage() {
                         setCode(e.target.value);
                         if (inputError) setInputError(null);
                       }}
-                      placeholder="Nhập mã lô hàng, mã thùng hoặc mã trên tem truy xuất..."
-                      aria-label="Mã lô hàng, mã thùng đóng gói hoặc mã trên tem truy xuất"
+                      placeholder="Nhập mã lô hàng, mã thùng, tem trái hoặc mã thửa đất..."
+                      aria-label="Mã lô hàng, mã thùng đóng gói, tem trái hoặc mã thửa đất"
                       className="sw-trace-input"
                       autoComplete="off"
                       spellCheck={false}
@@ -479,7 +526,7 @@ export default function TraceLookupPage() {
             <div className="sw-cell sw-col-2-3 sw-head-main">
               <span className="sw-sec-index">01 / Hồ sơ xác thực</span>
               <h2 id="hosomau-title" className="sw-sec-title">
-                Lô xuất xưởng &amp; Thùng đóng gói gần đây
+                Lô xuất xưởng, Thửa đất và Tem định danh gần đây
               </h2>
             </div>
             <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
@@ -521,7 +568,7 @@ export default function TraceLookupPage() {
                 className={`sw-tab-pill ${tab === "stamps" ? "is-active" : ""}`}
                 onClick={() => setTab("stamps")}
               >
-                Thùng &amp; Tem mẫu {!loading && stamps.length > 0 ? `(${stamps.length})` : ""}
+                Thùng và Tem mẫu {!loading && stamps.length > 0 ? `(${stamps.length})` : ""}
               </button>
             </div>
           </div>
@@ -553,22 +600,20 @@ export default function TraceLookupPage() {
               <div className="sw-field-audit-actions">
                 <Link
                   prefetch={false}
-                  href={`${
-                    firstDemoPlot.qrToken
-                      ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
-                      : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
-                  }?lang=vi#auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}`}
+                  href={`${firstDemoPlot.qrToken
+                    ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
+                    : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
+                    }?lang=vi#auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}`}
                   className="sw-field-audit-btn is-primary"
                 >
                   Thử Thẻ Đoàn tại Thửa {firstDemoPlot.plotCode} (VI)
                 </Link>
                 <Link
                   prefetch={false}
-                  href={`${
-                    firstDemoPlot.qrToken
-                      ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
-                      : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
-                  }?lang=zh#auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}`}
+                  href={`${firstDemoPlot.qrToken
+                    ? `/t/${encodeURIComponent(firstDemoPlot.qrToken)}`
+                    : `/trace/${encodeURIComponent(firstDemoPlot.plotCode)}`
+                    }?lang=zh#auditPass=${encodeURIComponent(demoAuditPass.passToken || demoAuditPass.code)}`}
                   className="sw-field-audit-btn"
                 >
                   体验中国采购团果园核验 (中文)
@@ -579,13 +624,13 @@ export default function TraceLookupPage() {
 
           <div className="sw-trace-dossier-grid">
             {loading ? (
-              <div className="sw-trace-state">Đang tải danh sách lô hàng và thùng đóng gói gần đây…</div>
+              <div className="sw-trace-state">Đang tải danh sách hồ sơ truy xuất mẫu...</div>
             ) : (showLots ? visibleLots.length : 0) +
-                (showPlots ? visiblePlots.length : 0) +
-                (showStamps ? visibleStamps.length : 0) ===
+              (showPlots ? visiblePlots.length : 0) +
+              (showStamps ? visibleStamps.length : 0) ===
               0 ? (
               <div className="sw-trace-state">
-                Chưa có hồ sơ mẫu trong mục này. Quý khách có thể nhập trực tiếp mã lô hoặc mã thùng ở khung tra cứu phía trên.
+                Chưa có hồ sơ mẫu trong mục này. Quý khách có thể nhập trực tiếp mã lô hàng, mã thùng, tem trái hoặc mã thửa đất ở khung tra cứu phía trên.
               </div>
             ) : (
               <>
@@ -750,10 +795,10 @@ export default function TraceLookupPage() {
             <div className="sw-cell sw-col-1 sw-between">
               <span className="sw-micro">01 - Công khai</span>
               <div className="sw-caption-block">
-                <h3 className="sw-caption-title">Người tiêu dùng &amp; Nhà nhập khẩu</h3>
+                <h3 className="sw-caption-title">Người tiêu dùng và Nhà nhập khẩu</h3>
                 <p className="sw-caption-meta">
-                  <span>Nhận diện lô, mã vùng PUC, cơ sở đóng gói</span>
-                  <span>Dòng thời gian 5 bước &amp; bản scan kiểm nghiệm</span>
+                  <span>Định danh thửa vườn, lô hàng, mã vùng PUC, cơ sở đóng gói</span>
+                  <span>Đối chiếu quy trình canh tác và bản scan kiểm nghiệm</span>
                 </p>
               </div>
             </div>
@@ -761,10 +806,10 @@ export default function TraceLookupPage() {
             <div className="sw-cell sw-col-2 sw-between">
               <span className="sw-micro">02 - Doanh nghiệp</span>
               <div className="sw-caption-block">
-                <h3 className="sw-caption-title">Cơ sở đóng gói &amp; Nhà phân phối</h3>
+                <h3 className="sw-caption-title">Cơ sở đóng gói và Nhà phân phối</h3>
                 <p className="sw-caption-meta">
-                  <span>Các vùng nguồn tham gia lô &amp; sản lượng từng vùng</span>
-                  <span>Trạng thái kiểm nghiệm chi tiết &amp; chuỗi lạnh</span>
+                  <span>Các vùng nguồn tham gia và sản lượng định mức từng thửa</span>
+                  <span>Trạng thái kiểm nghiệm chi tiết và chuỗi lạnh</span>
                 </p>
               </div>
             </div>
@@ -772,10 +817,10 @@ export default function TraceLookupPage() {
             <div className="sw-cell sw-col-3 sw-between">
               <span className="sw-micro">03 - Cơ quan quản lý</span>
               <div className="sw-caption-block">
-                <h3 className="sw-caption-title">Chi cục, Cán bộ xã &amp; Thanh tra</h3>
+                <h3 className="sw-caption-title">Chi cục, Cán bộ xã và Thanh tra</h3>
                 <p className="sw-caption-meta">
-                  <span>Danh sách hộ, ranh giới thửa GIS &amp; nhật ký phun</span>
-                  <span>Biên bản kiểm tra - Ghi nhật ký mọi lượt xem</span>
+                  <span>Danh sách hộ, ranh giới thửa GIS và nhật ký BVTV</span>
+                  <span>Biên bản kiểm tra, ghi nhật ký mọi lượt xem</span>
                 </p>
               </div>
             </div>

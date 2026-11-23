@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
@@ -6,7 +6,8 @@ import { can, isCoopStaffRole } from "../auth/permissions";
 import { verifyOrderedChain, type VerifiableChainEntry } from "../common/crypto/integrity-chain";
 import { forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
-import { camelRow, camelRows, publicAttachmentUrlSql } from "../common/sql/rows";
+import { camelRow, camelRows, formatDateIsoVn, publicAttachmentUrlSql } from "../common/sql/rows";
+import { hasPublicTable } from "../common/sql/schema-cache";
 import { RateLimitException } from "../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../database/database.service";
 
@@ -49,6 +50,7 @@ export interface TraceRequestContext {
   requestedView?: string;
   auditPass?: string;
   countryCode?: string;
+  isBackgroundRefresh?: boolean;
 }
 
 export interface ResolvedFieldAuditPass {
@@ -63,6 +65,19 @@ export interface ResolvedFieldAuditPass {
   expiresAt?: string;
   issuedByName?: string;
   invalidReason?: string | null;
+}
+
+export interface ResolvedTemporaryTraceGrant {
+  active: boolean;
+  id: number;
+  requestCode: string;
+  requesterName: string;
+  organization: string;
+  grantedTier: "enterprise" | "authority";
+  scopeMode: "record" | "zone" | "coop";
+  expiresAt: string;
+  reviewedByName: string | null;
+  matchedViaToken: boolean;
 }
 
 export type ZoneLiveStatus = "active" | "suspended" | "revoked" | "pending";
@@ -82,19 +97,20 @@ function toIsoDateOnly(val: unknown): string | null {
   if (!val) return null;
   if (val instanceof Date) {
     if (Number.isNaN(val.getTime())) return null;
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(val);
+    return formatDateIsoVn(val);
   }
   const s = String(val).trim();
   const m = /^(\d{4}-\d{2}-\d{2})/.exec(s);
   if (m) return m[1];
   const parsed = new Date(s);
   if (!Number.isNaN(parsed.getTime())) {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(parsed);
+    return formatDateIsoVn(parsed);
   }
   return null;
 }
 
 export interface ResourceScopeTarget {
+  targetKind?: "lot" | "box" | "fruit" | "plot";
   enterpriseId: number | null;
   coopCode: string;
   villageIds: number[];
@@ -147,15 +163,143 @@ function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boo
   return false;
 }
 
+export interface DossierContributorEntry {
+  index: number;
+  visibilityLevel: "public" | "enterprise" | "authority";
+  isAnonymized: boolean;
+  displayName: string | null;
+  householdCode: string | null;
+  villageName: string;
+  pucCode: string;
+  sharePct: number;
+  complianceStatus: "valid" | "review";
+  plotCode: string | null;
+  areaHa: number | null;
+  weightKg: number | null;
+  phone: string | null;
+  cccdMasked: string | null;
+  cadastralLabel: string | null;
+  publicConsent: boolean | null;
+}
+
+export interface TraceRealtimeEvent {
+  type: "trace-updated";
+  epoch: number;
+  ts: string;
+}
+
+interface TraceStreamSubscriber {
+  ipKey: string;
+  send: (event: TraceRealtimeEvent) => void;
+  close?: () => void;
+}
+
+const MAX_TRACE_STREAMS_PER_IP = 12;
+const MAX_TOTAL_TRACE_STREAMS = 500;
+const TRACE_SYNC_DEBOUNCE_MS = 120;
+
 @Injectable()
-export class TraceabilityService {
+export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
   private readonly failedAuditPassByIp = new Map<string, number[]>();
   private minutesColsCache: { hasHouseholdId: boolean; hasPlotCode: boolean } | null = null;
+  private readonly traceSubscribers = new Set<TraceStreamSubscriber>();
+  private unsubscribeCacheTags: (() => void) | null = null;
+  private traceSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private traceEpoch = 0;
 
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
-  ) {}
+  ) { }
+
+  onModuleInit(): void {
+    if (!this.db.cache) return;
+    this.unsubscribeCacheTags = this.db.cache.onTagsInvalidated((tags) => {
+      if (!tags.includes("trace")) return;
+      this.traceEpoch += 1;
+      if (this.traceSubscribers.size === 0) return;
+      if (this.traceSyncTimer) return;
+      this.traceSyncTimer = setTimeout(() => {
+        this.traceSyncTimer = null;
+        this.broadcastTraceUpdate();
+      }, TRACE_SYNC_DEBOUNCE_MS);
+      this.traceSyncTimer.unref?.();
+    });
+  }
+
+  onModuleDestroy(): void {
+    this.unsubscribeCacheTags?.();
+    this.unsubscribeCacheTags = null;
+    if (this.traceSyncTimer) {
+      clearTimeout(this.traceSyncTimer);
+      this.traceSyncTimer = null;
+    }
+    for (const sub of this.traceSubscribers) {
+      try {
+        sub.close?.();
+      } catch {
+        // Bỏ qua lỗi khi đóng kết nối
+      }
+    }
+    this.traceSubscribers.clear();
+  }
+
+  private broadcastTraceUpdate(): void {
+    if (this.traceSubscribers.size === 0) return;
+    const event: TraceRealtimeEvent = {
+      type: "trace-updated",
+      epoch: this.traceEpoch,
+      ts: new Date().toISOString(),
+    };
+    for (const sub of this.traceSubscribers) {
+      try {
+        sub.send(event);
+      } catch {
+        // Bỏ qua nếu kết nối vừa ngắt
+      }
+    }
+  }
+
+  /** Đăng ký nhận sự kiện cập nhật dữ liệu truy xuất thời gian thực qua SSE. */
+  subscribeTraceStream(
+    ip: string | undefined,
+    send: (event: TraceRealtimeEvent) => void,
+    onEvict?: () => void,
+  ): () => void {
+    const ipKey = (ip || "local").trim() || "local";
+    const sameIpSubs: TraceStreamSubscriber[] = [];
+    for (const s of this.traceSubscribers) {
+      if (s.ipKey === ipKey) sameIpSubs.push(s);
+    }
+    while (sameIpSubs.length >= MAX_TRACE_STREAMS_PER_IP) {
+      const oldest = sameIpSubs.shift();
+      if (oldest) {
+        this.traceSubscribers.delete(oldest);
+        try {
+          oldest.close?.();
+        } catch {
+          // ignore
+        }
+      }
+    }
+    if (this.traceSubscribers.size >= MAX_TOTAL_TRACE_STREAMS) {
+      const oldestGlobal = this.traceSubscribers.values().next().value;
+      if (oldestGlobal) {
+        this.traceSubscribers.delete(oldestGlobal);
+        try {
+          oldestGlobal.close?.();
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const sub: TraceStreamSubscriber = { ipKey, send, close: onEvict };
+    this.traceSubscribers.add(sub);
+    return () => {
+      this.traceSubscribers.delete(sub);
+    };
+  }
 
   private checkAuditPassRateLimit(ip?: string) {
     const key = (ip || "local").trim() || "local";
@@ -252,6 +396,16 @@ export class TraceabilityService {
       };
     }
 
+    const kind = scope.targetKind ?? "lot";
+    const entityVi =
+      kind === "plot"
+        ? "thửa đất"
+        : kind === "box"
+          ? "thùng đóng gói"
+          : kind === "fruit"
+            ? "tem trái sầu riêng"
+            : "lô hàng";
+
     let inScope = false;
     let scopeReason = "";
 
@@ -260,8 +414,8 @@ export class TraceabilityService {
       const lotEntId = scope.enterpriseId !== null && scope.enterpriseId !== undefined ? Number(scope.enterpriseId) : null;
       inScope = userEntId !== null && lotEntId !== null && userEntId === lotEntId;
       scopeReason = inScope
-        ? "Thuộc cơ sở đóng gói / doanh nghiệp sở hữu lô"
-        : "Lô hàng không thuộc cơ sở đóng gói hoặc doanh nghiệp của tài khoản này";
+        ? `Thuộc cơ sở đóng gói hoặc doanh nghiệp phụ trách ${entityVi}`
+        : `Hồ sơ ${entityVi} không thuộc cơ sở đóng gói hoặc doanh nghiệp của tài khoản này`;
     } else if (isCoopStaffRole(user.role)) {
       const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
       const lotCoop = (scope.coopCode || "HTX-CUNE").trim().toUpperCase();
@@ -280,8 +434,8 @@ export class TraceabilityService {
         const communeOk = !hasCommuneRule || matchesJurisdiction(user.assignedCommune!, scope.adminLocations);
         inScope = villageOk && communeOk;
         scopeReason = inScope
-          ? "Lô có thửa nguồn thuộc địa bàn xã/thôn được phân công"
-          : "Lô hàng không có thửa nguồn thuộc xã/thôn được phân công quản lý";
+          ? `Hồ sơ ${entityVi} thuộc địa bàn xã/thôn được phân công`
+          : `Hồ sơ ${entityVi} không thuộc xã/thôn được phân công quản lý`;
       }
     } else if (user.role === "inspector") {
       const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
@@ -297,7 +451,10 @@ export class TraceabilityService {
         actualTier: "public",
         viewerTier: "public",
         scopeDenied: true,
-        scopeDeniedMessage: "Bạn không có quyền xem chi tiết lô này",
+        scopeDeniedMessage:
+          kind === "lot"
+            ? "Bạn không có quyền xem chi tiết lô này"
+            : `Bạn không có quyền xem chi tiết ${entityVi} này`,
         scopeReason,
       };
     }
@@ -341,11 +498,203 @@ export class TraceabilityService {
   }
 
   /** Quyền xem phiếu kiểm nghiệm nháp (chưa kiểm chứng) và vi phạm nội bộ theo ma trận quyền máy chủ. */
-  private resolveSensitiveTracePermissions(viewerTier: ViewerTier, user?: AuthUser) {
+  private resolveSensitiveTracePermissions(
+    viewerTier: ViewerTier,
+    user?: AuthUser,
+    hasTemporaryAuthorityGrant = false,
+  ) {
+    if (viewerTier === "authority" && hasTemporaryAuthorityGrant) {
+      return {
+        canReadDraftLabs: false,
+        canReadViolations: true,
+      };
+    }
     const isAuthority = viewerTier === "authority" && Boolean(user);
     return {
       canReadDraftLabs: isAuthority && can(user!.role, "testing", "read"),
       canReadViolations: isAuthority && can(user!.role, "violations", "read"),
+    };
+  }
+
+  /**
+   * Kiểm tra yêu cầu cấp quyền truy xuất đột xuất đã được Quản trị viên phê duyệt còn hiệu lực:
+   * - Khớp theo mã khóa phiên `x-audit-pass` (cho khách / đoàn công tác chưa có tài khoản)
+   * - Hoặc khớp theo `requester_user_id` của tài khoản đang đăng nhập.
+   */
+  private async resolveApprovedAccessGrant(
+    ctx: TraceRequestContext,
+    target: {
+      scannedCode: string;
+      resolvedLotCode: string | null;
+      pucCode: string;
+      distinctZoneCodes?: string[];
+    },
+    recordAccess = true,
+  ): Promise<ResolvedTemporaryTraceGrant | null> {
+    const rawToken = ctx.auditPass?.trim() || null;
+    const userId = ctx.user?.id ? Number(ctx.user.id) : null;
+    if (!rawToken && !userId) {
+      return null;
+    }
+
+    if (!(await this.hasTable("trace_access_requests"))) {
+      return null;
+    }
+
+    const res = await this.db.query<{
+      id: number;
+      request_code: string;
+      requester_user_id: number | null;
+      requester_name: string;
+      organization: string;
+      scanned_code: string;
+      resolved_lot_code: string | null;
+      puc_code: string | null;
+      granted_tier: "enterprise" | "authority" | null;
+      scope_mode: "record" | "zone" | "coop";
+      granted_pass_token: string | null;
+      expires_at: Date | string;
+      reviewed_by_name: string | null;
+    }>(
+      `SELECT id, request_code, requester_user_id, requester_name, organization,
+              scanned_code, resolved_lot_code, puc_code, granted_tier, scope_mode,
+              granted_pass_token, expires_at, reviewed_by_name
+       FROM trace_access_requests
+       WHERE status = 'approved'
+         AND expires_at > now()
+         AND (
+           ($1::text IS NOT NULL AND granted_pass_token = $1)
+           OR ($2::bigint IS NOT NULL AND requester_user_id = $2)
+         )
+       ORDER BY (CASE WHEN granted_tier = 'authority' THEN 0 ELSE 1 END), id DESC
+       LIMIT 8`,
+      [rawToken, userId],
+    );
+
+    if (res.rows.length === 0) return null;
+
+    const targetZones = (
+      target.distinctZoneCodes && target.distinctZoneCodes.length > 0
+        ? target.distinctZoneCodes
+        : target.pucCode
+          ? [target.pucCode]
+          : []
+    )
+      .map((z) => z.trim().toUpperCase())
+      .filter(Boolean);
+    const scannedUpper = target.scannedCode.trim().toUpperCase();
+    const lotUpper = target.resolvedLotCode ? target.resolvedLotCode.trim().toUpperCase() : null;
+
+    for (const row of res.rows) {
+      let matchedViaToken = false;
+      if (rawToken && row.granted_pass_token) {
+        const a = Buffer.from(rawToken, "utf8");
+        const b = Buffer.from(row.granted_pass_token, "utf8");
+        if (a.length === b.length && timingSafeEqual(a, b)) {
+          matchedViaToken = true;
+        }
+      }
+      const matchedViaUser =
+        userId !== null &&
+        row.requester_user_id !== null &&
+        Number(row.requester_user_id) === userId;
+      if (!matchedViaToken && !matchedViaUser) continue;
+
+      let scopeMatches = false;
+      const rowScannedUpper = row.scanned_code.trim().toUpperCase();
+      const rowLotUpper = row.resolved_lot_code ? row.resolved_lot_code.trim().toUpperCase() : null;
+      const rowPucUpper = row.puc_code ? row.puc_code.trim().toUpperCase() : null;
+
+      if (row.scope_mode === "coop") {
+        scopeMatches = true;
+      } else if (row.scope_mode === "zone") {
+        scopeMatches =
+          rowScannedUpper === scannedUpper ||
+          Boolean(lotUpper && rowLotUpper && lotUpper === rowLotUpper) ||
+          Boolean(rowPucUpper && targetZones.includes(rowPucUpper));
+      } else {
+        scopeMatches =
+          rowScannedUpper === scannedUpper ||
+          Boolean(lotUpper && rowLotUpper && lotUpper === rowLotUpper);
+      }
+
+      if (!scopeMatches) continue;
+
+      const grantedTier: "enterprise" | "authority" = row.granted_tier ?? "enterprise";
+      if (recordAccess && !ctx.isBackgroundRefresh) {
+        await this.db.query(
+          `UPDATE trace_access_requests
+           SET access_count = access_count + 1,
+               last_accessed_at = now()
+           WHERE id = $1`,
+          [row.id],
+        );
+
+        if (await this.hasTable("trace_detail_access_logs")) {
+          await this.db.query(
+            `INSERT INTO trace_detail_access_logs
+               (user_id, username, full_name, user_role, viewer_tier, scanned_code, lot_code, scope_granted, scope_reason, ip, user_agent)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10)`,
+            [
+              ctx.user?.id ?? null,
+              ctx.user?.username ?? row.request_code,
+              ctx.user?.fullName ?? `${row.requester_name} (${row.organization})`,
+              ctx.user?.role ?? "delegation_guest",
+              grantedTier,
+              target.scannedCode,
+              target.resolvedLotCode,
+              `Được phê duyệt yêu cầu cấp quyền đột xuất (${row.request_code})`,
+              ctx.ip ?? null,
+              ctx.userAgent ? ctx.userAgent.slice(0, 250) : null,
+            ],
+          );
+        }
+      }
+
+      return {
+        active: true,
+        id: Number(row.id),
+        requestCode: row.request_code,
+        requesterName: row.requester_name,
+        organization: row.organization,
+        grantedTier,
+        scopeMode: row.scope_mode,
+        expiresAt: new Date(row.expires_at).toISOString(),
+        reviewedByName: row.reviewed_by_name,
+        matchedViaToken,
+      };
+    }
+
+    return null;
+  }
+
+  private elevateAccessWithGrant(
+    baseAccess: EvaluatedTraceAccess,
+    ctx: TraceRequestContext,
+    grant: ResolvedTemporaryTraceGrant | null,
+  ): EvaluatedTraceAccess {
+    if (!grant || !grant.active) return baseAccess;
+    const elevatedActual: ViewerTier =
+      TIER_RANK[grant.grantedTier] > TIER_RANK[baseAccess.actualTier]
+        ? grant.grantedTier
+        : baseAccess.actualTier;
+    let viewerTier: ViewerTier = elevatedActual;
+    if (
+      ctx.requestedView === "public" ||
+      ctx.requestedView === "enterprise" ||
+      ctx.requestedView === "authority"
+    ) {
+      if (TIER_RANK[ctx.requestedView] <= TIER_RANK[elevatedActual]) {
+        viewerTier = ctx.requestedView;
+      }
+    }
+    return {
+      roleBaseTier: baseAccess.roleBaseTier,
+      actualTier: elevatedActual,
+      viewerTier,
+      scopeDenied: false,
+      scopeDeniedMessage: null,
+      scopeReason: `Được cấp quyền tạm thời theo mã phê duyệt ${grant.requestCode}`,
     };
   }
 
@@ -390,31 +739,8 @@ export class TraceabilityService {
     return "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
   }
 
-  private async resolveAdminLocationFromDb(village?: unknown, zoneCode?: unknown): Promise<string> {
-    const z = typeof zoneCode === "string" ? zoneCode.trim() : "";
-    if (z && (await this.hasTable("growing_zones"))) {
-      const gzRes = await this.db.query<{
-        commune: string | null;
-        district: string | null;
-        province: string | null;
-      }>(
-        `SELECT commune, district, province
-         FROM growing_zones
-         WHERE upper(code) = upper($1)
-         LIMIT 1`,
-        [z],
-      );
-      const gz = gzRes.rows[0];
-      if (gz?.commune && gz?.province) {
-        return [gz.commune.trim(), gz.district?.trim(), gz.province.trim()].filter(Boolean).join(", ");
-      }
-    }
-    return this.resolveAdminLocation(village, zoneCode);
-  }
-
-  private async hasTable(tableName: string): Promise<boolean> {
-    const res = await this.db.query<{ reg: string | null }>("SELECT to_regclass($1) AS reg", [`public.${tableName}`]);
-    return res.rows[0]?.reg !== null;
+  private hasTable(tableName: string): Promise<boolean> {
+    return hasPublicTable(this.db, tableName);
   }
 
   private async getMinutesScopeCols(): Promise<{ hasHouseholdId: boolean; hasPlotCode: boolean }> {
@@ -576,29 +902,79 @@ export class TraceabilityService {
     pucStatusLabel: string;
     pucValidUntil: string;
     pucNote: string | null;
+    pucName: string | null;
+    pucAdminLocation: string | null;
     packhouseStatus: PackhouseLiveStatus;
     packhouseStatusLabel: string;
+    enterpriseName: string | null;
+    enterpriseAddress: string | null;
+    enterprisePackhouseCode: string | null;
   }> {
     let dbZoneStatus: ZoneLiveStatus = "active";
     let pucValidUntil = "2027-12-31";
     let pucNote: string | null = null;
+    let pucName: string | null = null;
+    let pucAdminLocation: string | null = null;
 
-    if (await this.hasTable("growing_zones")) {
-      const zRes = await this.db.query<{
-        status: ZoneLiveStatus;
-        valid_until: unknown;
-        status_note: string | null;
-      }>(
-        `SELECT status, valid_until, status_note
-         FROM growing_zones
-         WHERE upper(code) = upper($1)
-         LIMIT 1`,
-        [params.pucCode],
-      );
-      if (zRes.rows[0]) {
-        dbZoneStatus = zRes.rows[0].status;
-        pucValidUntil = toIsoDateOnly(zRes.rows[0].valid_until) || "2027-12-31";
-        pucNote = zRes.rows[0].status_note ?? null;
+    const hasGrowingZones = await this.hasTable("growing_zones");
+    const [zRes, eRes] = await Promise.all([
+      hasGrowingZones
+        ? this.db.query<{
+            name: string | null;
+            commune: string | null;
+            district: string | null;
+            province: string | null;
+            status: ZoneLiveStatus;
+            valid_until: unknown;
+            status_note: string | null;
+          }>(
+            `SELECT name, commune, district, province, status, valid_until, status_note
+             FROM growing_zones
+             WHERE upper(code) = upper($1)
+             LIMIT 1`,
+            [params.pucCode],
+          )
+        : Promise.resolve(null),
+      params.enterpriseId
+        ? this.db.query<{
+            status: PackhouseLiveStatus;
+            name: string | null;
+            address: string | null;
+            packhouse_code: string | null;
+          }>(
+            `SELECT status, name, address, packhouse_code FROM enterprises WHERE id = $1 LIMIT 1`,
+            [params.enterpriseId],
+          )
+        : params.packhouseCode
+          ? this.db.query<{
+              status: PackhouseLiveStatus;
+              name: string | null;
+              address: string | null;
+              packhouse_code: string | null;
+            }>(
+              `SELECT status, name, address, packhouse_code
+               FROM enterprises
+               WHERE upper(COALESCE(packhouse_code, '')) = upper($1)
+               ORDER BY (status IN ('revoked', 'suspended', 'inactive')) DESC, id ASC
+               LIMIT 1`,
+              [params.packhouseCode],
+            )
+          : Promise.resolve(null),
+    ]);
+
+    if (zRes?.rows[0]) {
+      dbZoneStatus = zRes.rows[0].status;
+      pucValidUntil = toIsoDateOnly(zRes.rows[0].valid_until) || "2027-12-31";
+      pucNote = zRes.rows[0].status_note ?? null;
+      pucName = zRes.rows[0].name ? zRes.rows[0].name.trim() : null;
+      if (zRes.rows[0].commune && zRes.rows[0].province) {
+        pucAdminLocation = [
+          zRes.rows[0].commune.trim(),
+          zRes.rows[0].district?.trim(),
+          zRes.rows[0].province.trim(),
+        ]
+          .filter(Boolean)
+          .join(", ");
       }
     }
 
@@ -621,26 +997,14 @@ export class TraceabilityService {
             : "Đang thẩm định";
 
     let packhouseStatus: PackhouseLiveStatus = "active";
-    if (params.enterpriseId) {
-      const eRes = await this.db.query<{ status: PackhouseLiveStatus }>(
-        `SELECT status FROM enterprises WHERE id = $1 LIMIT 1`,
-        [params.enterpriseId],
-      );
-      if (eRes.rows[0]?.status) {
-        packhouseStatus = eRes.rows[0].status;
-      }
-    } else if (params.packhouseCode) {
-      const eByCode = await this.db.query<{ status: PackhouseLiveStatus }>(
-        `SELECT status
-         FROM enterprises
-         WHERE upper(COALESCE(packhouse_code, '')) = upper($1)
-         ORDER BY (status IN ('revoked', 'suspended', 'inactive')) DESC, id ASC
-         LIMIT 1`,
-        [params.packhouseCode],
-      );
-      if (eByCode.rows[0]?.status) {
-        packhouseStatus = eByCode.rows[0].status;
-      }
+    let enterpriseName: string | null = null;
+    let enterpriseAddress: string | null = null;
+    let enterprisePackhouseCode: string | null = null;
+    if (eRes?.rows[0]) {
+      if (eRes.rows[0].status) packhouseStatus = eRes.rows[0].status;
+      enterpriseName = eRes.rows[0].name?.trim() || null;
+      enterpriseAddress = eRes.rows[0].address?.trim() || null;
+      enterprisePackhouseCode = eRes.rows[0].packhouse_code?.trim() || null;
     }
 
     const packhouseStatusLabel =
@@ -657,8 +1021,13 @@ export class TraceabilityService {
       pucStatusLabel,
       pucValidUntil,
       pucNote,
+      pucName,
+      pucAdminLocation,
       packhouseStatus,
       packhouseStatusLabel,
+      enterpriseName,
+      enterpriseAddress,
+      enterprisePackhouseCode,
     };
   }
 
@@ -666,6 +1035,7 @@ export class TraceabilityService {
     access: EvaluatedTraceAccess,
     ctx: TraceRequestContext,
     fieldAuditPass?: ResolvedFieldAuditPass | null,
+    temporaryGrant?: ResolvedTemporaryTraceGrant | null,
   ) {
     return {
       viewerTier: access.viewerTier,
@@ -680,8 +1050,10 @@ export class TraceabilityService {
       scopeReason: access.scopeReason,
       auditLogged:
         (Boolean(ctx.user) && (access.viewerTier !== "public" || access.scopeDenied)) ||
-        Boolean(fieldAuditPass?.active),
+        Boolean(fieldAuditPass?.active) ||
+        Boolean(temporaryGrant?.active),
       fieldAuditPass: fieldAuditPass ?? null,
+      temporaryGrant: temporaryGrant ?? null,
     };
   }
 
@@ -708,19 +1080,18 @@ export class TraceabilityService {
       .slice(0, 24);
 
     const viewerTier = params.access.viewerTier;
+    const isBgRefresh = Boolean(params.ctx.isBackgroundRefresh);
 
-    if (params.ctx.user && (viewerTier !== "public" || params.access.scopeDenied)) {
+    if (!isBgRefresh && params.ctx.user && (viewerTier !== "public" || params.access.scopeDenied)) {
       const actionLabel = params.access.scopeDenied ? "Từ chối xem chi tiết QR (ngoài phạm vi)" : "Tra cứu QR mở rộng";
       await this.audit.write(
         { ip: params.ctx.ip, user: params.ctx.user },
         {
           action: actionLabel,
           object: `Mã QR ${params.resolvedLotCode || params.scannedCode}`,
-          detail: `Mã quét: ${params.scannedCode} - Cấp xem: ${TIER_LABELS[viewerTier]} (vai trò: ${params.ctx.user.role})${
-            params.access.scopeReason ? ` - Phạm vi: ${params.access.scopeReason}` : ""
-          }${
-            params.resolvedLotCode && params.resolvedLotCode !== params.scannedCode ? ` - Thuộc lô ${params.resolvedLotCode}` : ""
-          }`,
+          detail: `Mã quét: ${params.scannedCode} - Cấp xem: ${TIER_LABELS[viewerTier]} (vai trò: ${params.ctx.user.role})${params.access.scopeReason ? ` - Phạm vi: ${params.access.scopeReason}` : ""
+            }${params.resolvedLotCode && params.resolvedLotCode !== params.scannedCode ? ` - Thuộc lô ${params.resolvedLotCode}` : ""
+            }`,
         },
       );
 
@@ -753,19 +1124,21 @@ export class TraceabilityService {
     let countries24h: string[] = params.ctx.countryCode ? [params.ctx.countryCode] : [];
 
     if (hasScanTable) {
-      await this.db.query(
-        `INSERT INTO trace_scan_logs (scanned_code, resolved_lot_code, viewer_tier, user_id, ip_hash, user_agent, country_code)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          params.canonicalKey,
-          params.resolvedLotCode,
-          viewerTier,
-          params.ctx.user?.id ?? null,
-          ipHash,
-          params.ctx.userAgent ? params.ctx.userAgent.slice(0, 200) : null,
-          params.ctx.countryCode ?? null,
-        ],
-      );
+      if (!isBgRefresh) {
+        await this.db.query(
+          `INSERT INTO trace_scan_logs (scanned_code, resolved_lot_code, viewer_tier, user_id, ip_hash, user_agent, country_code)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            params.canonicalKey,
+            params.resolvedLotCode,
+            viewerTier,
+            params.ctx.user?.id ?? null,
+            ipHash,
+            params.ctx.userAgent ? params.ctx.userAgent.slice(0, 200) : null,
+            params.ctx.countryCode ?? null,
+          ],
+        );
+      }
 
       const statsRes = await this.db.query<{
         total_scans: number;
@@ -892,21 +1265,20 @@ export class TraceabilityService {
       ),
       hasSignboards
         ? this.db.query(
-            `SELECT pst.plot_code,
+          `SELECT pst.plot_code,
                     pst.qr_token,
                     pst.zone_code,
                     COALESCE(pst.village_name, v.name, 'Xã Cư Né') AS village_name,
                     COALESCE(pst.variety, 'Monthong (Dona) & Ri6') AS variety,
                     pst.area_ha::float8 AS area_ha,
                     pst.tree_count,
-                    ${
-                      hasQuotas
-                        ? `(SELECT q.max_quota_kg::float8 FROM plot_season_quotas q
+                    ${hasQuotas
+            ? `(SELECT q.max_quota_kg::float8 FROM plot_season_quotas q
                             WHERE upper(q.plot_code) = upper(pst.plot_code)
                               AND (pst.household_id IS NULL OR q.household_id = pst.household_id)
                             ORDER BY q.season_year DESC LIMIT 1)`
-                        : "NULL::float8"
-                    } AS max_quota_kg,
+            : "NULL::float8"
+          } AS max_quota_kg,
                     CASE
                       WHEN h.public_trace_consent = true AND h.status = 'qualified' THEN ('Vườn hộ ' || h.name || ' - HTX Cư Né')
                       ELSE $1::text
@@ -916,8 +1288,8 @@ export class TraceabilityService {
              LEFT JOIN villages v ON v.id = h.village_id
              ORDER BY pst.plot_code ASC
              LIMIT 6`,
-            [DEFAULT_COOP_NAME],
-          )
+          [DEFAULT_COOP_NAME],
+        )
         : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
     ]);
 
@@ -1078,19 +1450,19 @@ export class TraceabilityService {
     const [journalRes, sprayRes, matchedMinutes] = await Promise.all([
       effectiveHouseholdIds.length > 0
         ? this.db.query<{
-            household_id: number;
-            entry_on_iso: string;
-            plot_code: string | null;
-            activity: string;
-            recorder: string;
-            is_late_entry: boolean;
-            entry_delay_hours: number;
-            server_recorded_at: Date | string;
-            prev_hash: string | null;
-            record_hash: string | null;
-            gps_verified: boolean;
-          }>(
-            `SELECT household_id,
+          household_id: number;
+          entry_on_iso: string;
+          plot_code: string | null;
+          activity: string;
+          recorder: string;
+          is_late_entry: boolean;
+          entry_delay_hours: number;
+          server_recorded_at: Date | string;
+          prev_hash: string | null;
+          record_hash: string | null;
+          gps_verified: boolean;
+        }>(
+          `SELECT household_id,
                     to_char(entry_on, 'YYYY-MM-DD') AS entry_on_iso,
                     plot_code,
                     activity,
@@ -1104,25 +1476,25 @@ export class TraceabilityService {
              FROM journal_entries
              WHERE household_id = ANY($1::bigint[])
              ORDER BY household_id ASC, id ASC`,
-            [effectiveHouseholdIds],
-          )
+          [effectiveHouseholdIds],
+        )
         : Promise.resolve({ rows: [] }),
       effectiveHouseholdIds.length > 0
         ? this.db.query<{
-            household_id: number;
-            sprayed_on_iso: string;
-            plot_code: string | null;
-            pesticide_id: number | null;
-            dose: string;
-            isolation_days: number | null;
-            mrl_status: string;
-            is_late_entry: boolean;
-            entry_delay_hours: number;
-            server_recorded_at: Date | string;
-            prev_hash: string | null;
-            record_hash: string | null;
-          }>(
-            `SELECT household_id,
+          household_id: number;
+          sprayed_on_iso: string;
+          plot_code: string | null;
+          pesticide_id: number | null;
+          dose: string;
+          isolation_days: number | null;
+          mrl_status: string;
+          is_late_entry: boolean;
+          entry_delay_hours: number;
+          server_recorded_at: Date | string;
+          prev_hash: string | null;
+          record_hash: string | null;
+        }>(
+          `SELECT household_id,
                     to_char(sprayed_on, 'YYYY-MM-DD') AS sprayed_on_iso,
                     plot_code,
                     pesticide_id,
@@ -1137,8 +1509,8 @@ export class TraceabilityService {
              FROM spray_records
              WHERE household_id = ANY($1::bigint[])
              ORDER BY household_id ASC, id ASC`,
-            [effectiveHouseholdIds],
-          )
+          [effectiveHouseholdIds],
+        )
         : Promise.resolve({ rows: [] }),
       this.queryScopedInspectionMinutes<{
         id: number;
@@ -1533,10 +1905,10 @@ export class TraceabilityService {
 
     const scopedPlotsBreakdown = params.allowedPlotFilter
       ? annotatedPlots
-          .filter((entry) =>
-            params.allowedPlotFilter!({ householdId: entry.householdId, plotCode: entry.item.plotCode }),
-          )
-          .map((entry) => entry.item)
+        .filter((entry) =>
+          params.allowedPlotFilter!({ householdId: entry.householdId, plotCode: entry.item.plotCode }),
+        )
+        .map((entry) => entry.item)
       : plotsBreakdown;
 
     let enterpriseBreakdown: typeof publicSummary & {
@@ -1817,7 +2189,7 @@ export class TraceabilityService {
         ),
         params.householdId
           ? this.db.query(
-              `SELECT hl.code AS lot_code,
+            `SELECT hl.code AS lot_code,
                       hl.qr_token,
                       to_char(hl.harvested_on, 'YYYY-MM-DD') AS harvested_on,
                       hc.weight_kg::float8 AS contributed_kg,
@@ -1829,13 +2201,13 @@ export class TraceabilityService {
                   OR (hc.household_id = $2 AND hc.plot_code IS NULL)
                ORDER BY hl.harvested_on DESC, hl.id DESC
                LIMIT 5`,
-              [params.plotCode, params.householdId],
-            )
+            [params.plotCode, params.householdId],
+          )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         (await this.hasTable("field_gps_checkins"))
           ? this.db.query(
-              // Bản ghi cũ có thể đã lưu họ tên chủ hộ: luôn hiển thị nhãn trung tính khi hộ chưa đồng ý công khai.
-              `SELECT fc.checked_at,
+            // Bản ghi cũ có thể đã lưu họ tên chủ hộ: luôn hiển thị nhãn trung tính khi hộ chưa đồng ý công khai.
+            `SELECT fc.checked_at,
                       CASE
                         WHEN u.role = 'farmer'
                              AND fc.audit_pass_id IS NULL
@@ -1852,8 +2224,8 @@ export class TraceabilityService {
                WHERE upper(fc.plot_code) = upper($1)
                ORDER BY fc.checked_at DESC
                LIMIT 6`,
-              [params.plotCode, NEUTRAL_FARMER_ACTOR_LABEL],
-            )
+            [params.plotCode, NEUTRAL_FARMER_ACTOR_LABEL],
+          )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
       ]);
 
@@ -1885,15 +2257,15 @@ export class TraceabilityService {
       },
       quota: exactPlotQuota
         ? {
-            seasonYear: plotQuotaSummary?.seasonYear ?? currentYear,
-            maxQuotaKg: exactPlotQuota.maxQuotaKg,
-            usedKg: exactPlotQuota.usedKg,
-            remainingKg: exactPlotQuota.remainingKg,
-            utilizationPct: exactPlotQuota.utilizationPct,
-            withinQuota: exactPlotQuota.withinQuota,
-            assessedBy: plotQuotaSummary?.assessedBy ?? "Tổ Giám sát Kỹ thuật UBND Xã Cư Né",
-            assessedOn: exactPlotQuota.assessedOn,
-          }
+          seasonYear: plotQuotaSummary?.seasonYear ?? currentYear,
+          maxQuotaKg: exactPlotQuota.maxQuotaKg,
+          usedKg: exactPlotQuota.usedKg,
+          remainingKg: exactPlotQuota.remainingKg,
+          utilizationPct: exactPlotQuota.utilizationPct,
+          withinQuota: exactPlotQuota.withinQuota,
+          assessedBy: plotQuotaSummary?.assessedBy ?? "Tổ Giám sát Kỹ thuật UBND Xã Cư Né",
+          assessedOn: exactPlotQuota.assessedOn,
+        }
         : null,
       phiSafety: {
         safeToHarvestToday: !activeIsolated && mrlAllPass,
@@ -1996,13 +2368,25 @@ export class TraceabilityService {
     }
 
     const adminLocation = this.resolveAdminLocation(resolvedPlot.villageName, resolvedPlot.zoneCode);
-    const passCheck = await this.resolveFieldAuditPass(
-      { ...ctx, auditPass: dto.auditPass || ctx.auditPass },
-      resolvedPlot.zoneCode,
-      cleanCode,
-      null,
+    const effectivePassCtx = { ...ctx, auditPass: dto.auditPass || ctx.auditPass };
+    const tempGrant = await this.resolveApprovedAccessGrant(
+      effectivePassCtx,
+      {
+        scannedCode: cleanCode,
+        resolvedLotCode: null,
+        pucCode: resolvedPlot.zoneCode,
+      },
       false,
     );
+    const passCheck = tempGrant?.matchedViaToken
+      ? null
+      : await this.resolveFieldAuditPass(
+        effectivePassCtx,
+        resolvedPlot.zoneCode,
+        cleanCode,
+        null,
+        false,
+      );
 
     let linkedEnterpriseId: number | null = null;
     let linkedCoopCode = "HTX-CUNE";
@@ -2032,6 +2416,7 @@ export class TraceabilityService {
     }
 
     const roleAccess = this.evaluateAccessAndScope(ctx, {
+      targetKind: "plot",
       enterpriseId: linkedEnterpriseId,
       coopCode: linkedCoopCode,
       villageIds: resolvedPlot.villageId ? [resolvedPlot.villageId] : [],
@@ -2043,13 +2428,14 @@ export class TraceabilityService {
       Number(ctx.user.householdId) === Number(resolvedPlot.householdId);
     const authorized =
       Boolean(passCheck?.active) ||
+      Boolean(tempGrant?.active) ||
       (roleAccess.viewerTier !== "public" && !roleAccess.scopeDenied) ||
       isOwnerFarmer;
 
     if (!authorized) {
       throw forbidden(
         passCheck?.invalidReason ||
-          "Cần Thẻ Đoàn Thẩm định Thực địa đang hiệu lực hoặc tài khoản đối tác / cán bộ quản lý trong phạm vi để đối chứng tọa độ GPS thửa đất.",
+        "Cần Thẻ Đoàn Thẩm định Thực địa đang hiệu lực hoặc tài khoản đối tác / cán bộ quản lý trong phạm vi để đối chứng tọa độ GPS thửa đất.",
       );
     }
 
@@ -2126,21 +2512,88 @@ export class TraceabilityService {
     pucStatus: ZoneLiveStatus;
     packhouseStatus: PackhouseLiveStatus;
     lastFarmCheckOn: string | null;
+    latestMinuteCode?: string | null;
+    participatingHouseholdCount?: number;
     harvestedOn: string | null;
+    weightTons?: number | null;
+    avgBrix?: number | null;
     packedOn: string | null;
     packhouseName: string;
     packhouseCode: string;
+    gradeAPct?: number | null;
+    treatmentMethod?: string | null;
     latestLabOn: string | null;
     latestLabName: string | null;
     latestLabResult: string | null;
+    latestLabCode?: string | null;
+    latestLabCdMgKg?: number | null;
+    latestLabResidueMgKg?: number | null;
+    latestLabYellowO?: boolean | null;
     exportedOn: string | null;
     lotStatus: string;
     market: string;
+    revokedReason?: string | null;
+    phytoCertNo?: string | null;
+    transporter?: string | null;
+    vehiclePlate?: string | null;
+    temperatureC?: number | null;
   }) {
     const isRevoked = params.lotStatus === "revoked";
-    const isExported = params.lotStatus === "exported" || params.lotStatus === "delivered" || params.lotStatus === "in_transit";
+    const isExported = params.lotStatus === "exported";
+    const isDelivered = params.lotStatus === "delivered";
+    const isInTransit = params.lotStatus === "in_transit";
     const pucWarn = params.pucStatus === "suspended" || params.pucStatus === "revoked";
     const phcWarn = params.packhouseStatus !== "active";
+
+    const hhNote =
+      params.participatingHouseholdCount && params.participatingHouseholdCount > 0
+        ? `, liên kết ${params.participatingHouseholdCount} hộ thành viên`
+        : "";
+    const minuteNote = params.latestMinuteCode ? ` (Biên bản gần nhất: ${params.latestMinuteCode})` : "";
+
+    const harvestParts: string[] = [];
+    if (params.weightTons && params.weightTons > 0) {
+      harvestParts.push(`sản lượng ${Number(params.weightTons.toFixed(3))} tấn`);
+    }
+    if (params.avgBrix !== null && params.avgBrix !== undefined && Number(params.avgBrix) > 0) {
+      harvestParts.push(`độ ngọt bình quân ${params.avgBrix}° Brix`);
+    }
+    const harvestMetricsSuffix = harvestParts.length > 0 ? ` (${harvestParts.join(", ")})` : "";
+
+    const packingParts: string[] = [];
+    if (params.treatmentMethod && params.treatmentMethod.trim()) {
+      packingParts.push(params.treatmentMethod.trim());
+    } else {
+      packingParts.push("Làm sạch, phân hạng trái thương phẩm, đóng thùng định danh lô");
+    }
+    if (params.gradeAPct !== null && params.gradeAPct !== undefined && Number(params.gradeAPct) > 0) {
+      packingParts.push(`tỷ lệ Hạng A đạt ${params.gradeAPct}%`);
+    }
+
+    const labMetricsParts: string[] = [];
+    if (params.latestLabCdMgKg !== null && params.latestLabCdMgKg !== undefined) {
+      labMetricsParts.push(`Cd ${params.latestLabCdMgKg} mg/kg`);
+    }
+    if (params.latestLabYellowO !== null && params.latestLabYellowO !== undefined) {
+      labMetricsParts.push(params.latestLabYellowO ? "Phát hiện Vàng O" : "Không Vàng O");
+    }
+    if (params.latestLabResidueMgKg !== null && params.latestLabResidueMgKg !== undefined) {
+      labMetricsParts.push(`dư lượng BVTV ${params.latestLabResidueMgKg} mg/kg`);
+    }
+    const labMetricsText = labMetricsParts.length > 0 ? ` (${labMetricsParts.join(", ")})` : "";
+
+    const coldChainParts: string[] = [];
+    if (params.transporter) {
+      coldChainParts.push(
+        params.vehiclePlate ? `${params.transporter} (${params.vehiclePlate})` : params.transporter,
+      );
+    } else if (params.vehiclePlate) {
+      coldChainParts.push(`Xe ${params.vehiclePlate}`);
+    }
+    if (params.temperatureC !== null && params.temperatureC !== undefined) {
+      coldChainParts.push(`bảo quản ${params.temperatureC}°C`);
+    }
+    const coldChainSuffix = coldChainParts.length > 0 ? ` - Vận chuyển: ${coldChainParts.join(", ")}` : "";
 
     return [
       {
@@ -2150,8 +2603,8 @@ export class TraceabilityService {
         date: params.lastFarmCheckOn || addDaysIso(params.harvestedOn, -15),
         responsibleUnit: DEFAULT_COOP_NAME,
         detail: pucWarn
-          ? `Cảnh báo: Mã vùng trồng ${params.pucCode} hiện đang ở trạng thái tạm dừng / thu hồi hiệu lực`
-          : `Mã vùng trồng ${params.pucCode} - Giám sát nhật ký VietGAP & thời gian cách ly an toàn trước thu hoạch`,
+          ? `Cảnh báo: Mã vùng trồng ${params.pucCode} hiện đang ở trạng thái tạm dừng hoặc thu hồi hiệu lực`
+          : `Mã vùng trồng ${params.pucCode}${hhNote}, theo dõi nhật ký VietGAP và thời gian cách ly an toàn${minuteNote}`,
         status: pucWarn ? "warning" : "completed",
       },
       {
@@ -2159,9 +2612,9 @@ export class TraceabilityService {
         key: "harvest",
         title: "Thu hoạch",
         date: params.harvestedOn,
-        responsibleUnit: "Tổ thu hoạch & Kỹ thuật HTX Cư Né",
+        responsibleUnit: "Tổ thu hoạch và Kỹ thuật HTX Cư Né",
         detail: params.harvestedOn
-          ? "Thu hái đúng độ chín sinh lý (Brix đạt chuẩn), phân loại sơ bộ và gom lô nguyên liệu tại vườn"
+          ? `Thu hái đúng độ chín tự nhiên, phân loại sơ bộ và gom lô nguyên liệu tại vườn${harvestMetricsSuffix}`
           : "Chưa ghi nhận mốc thu hoạch lô thương phẩm",
         status: params.harvestedOn ? "completed" : "upcoming",
       },
@@ -2172,9 +2625,9 @@ export class TraceabilityService {
         date: params.packedOn,
         responsibleUnit: `${params.packhouseName} (${params.packhouseCode})`,
         detail: phcWarn
-          ? `Cảnh báo: Cơ sở đóng gói ${params.packhouseCode} hiện đang tạm dừng hoặc ngừng hiệu lực hoạt động`
+          ? `Cảnh báo: Cơ sở đóng gói ${params.packhouseCode} hiện đang tạm dừng hoặc ngừng hoạt động`
           : params.packedOn
-            ? "Làm sạch, phân hạng thương phẩm, đóng thùng định danh lô và niêm phong mã QR truy xuất"
+            ? `${packingParts.join(", ")} và dán tem mã QR truy xuất`
             : "Đang chờ tiếp nhận sơ chế và đóng thùng tại cơ sở đóng gói",
         status: phcWarn ? "warning" : params.packedOn ? "completed" : params.harvestedOn ? "current" : "upcoming",
       },
@@ -2183,11 +2636,11 @@ export class TraceabilityService {
         key: "testing",
         title: "Kiểm nghiệm",
         date: params.latestLabOn,
-        responsibleUnit: params.latestLabName || "Phòng kiểm nghiệm độc lập được chỉ định",
+        responsibleUnit: params.latestLabName || "Phòng kiểm nghiệm độc lập chỉ định",
         detail: params.latestLabResult
           ? params.latestLabResult === "pass"
-            ? "Đạt yêu cầu Cadimi (Cd), Âm tính Vàng O và dư lượng thuốc BVTV trong ngưỡng an toàn"
-            : "Mẫu kiểm nghiệm phát hiện chỉ tiêu vượt ngưỡng - Không đủ điều kiện xuất lô"
+            ? `Đạt chuẩn an toàn thực phẩm${labMetricsText}`
+            : `Mẫu kiểm nghiệm phát hiện chỉ tiêu không đạt${labMetricsText} - Tạm dừng xuất xưởng`
           : "Đang chờ cập nhật phiếu kết quả phân tích mẫu của lô",
         status:
           params.latestLabResult === "fail"
@@ -2201,15 +2654,27 @@ export class TraceabilityService {
       {
         step: 5,
         key: "export",
-        title: "Xuất khẩu / Lưu thông",
+        title: "Xuất xưởng / Lưu thông",
         date: params.exportedOn,
-        responsibleUnit: `${params.packhouseName} & Cơ quan Kiểm dịch thực vật`,
+        responsibleUnit: `${params.packhouseName} và Cơ quan Kiểm dịch thực vật`,
         detail: isRevoked
-          ? "Lô hàng đã bị thu hồi và khóa lưu thông trên hệ thống"
+          ? params.revokedReason
+            ? `Lô hàng đã thu hồi: ${params.revokedReason}`
+            : "Lô hàng đã thu hồi và ngừng lưu thông trên hệ thống"
           : isExported
-            ? `Hoàn tất kiểm tra hồ sơ kiểm dịch và xuất lô phục vụ thị trường: ${params.market}`
-            : "Đang hoàn tất thủ tục kiểm định trước khi xuất bến",
-        status: isRevoked ? "warning" : isExported ? "completed" : "upcoming",
+            ? `Hoàn tất kiểm dịch và thông quan xuất khẩu phục vụ thị trường: ${params.market}${coldChainSuffix}`
+            : isDelivered
+              ? `Đã bàn giao lô hàng hợp lệ phục vụ thị trường: ${params.market}${coldChainSuffix}`
+              : isInTransit
+                ? `Đang vận chuyển lưu thông phục vụ thị trường: ${params.market}${coldChainSuffix}`
+                : "Đang hoàn tất thủ tục kiểm định trước khi xuất xưởng",
+        status: isRevoked
+          ? "warning"
+          : isExported || isDelivered
+            ? "completed"
+            : isInTransit
+              ? "current"
+              : "upcoming",
       },
     ];
   }
@@ -2218,7 +2683,7 @@ export class TraceabilityService {
   async trace(rawCode: string, ctx: TraceRequestContext) {
     const cleanCode = rawCode.trim();
     if (!cleanCode || cleanCode.length > 80 || !/^[A-Za-z0-9._/-]+$/.test(cleanCode)) {
-      throw notFound(`Không tìm thấy hồ sơ lô hàng hoặc mã tem "${cleanCode.slice(0, 80)}". Vui lòng kiểm tra lại tem QR.`);
+      throw notFound(`Không tìm thấy hồ sơ truy xuất cho mã "${cleanCode.slice(0, 80)}". Vui lòng kiểm tra lại mã thửa, mã lô hoặc tem QR.`);
     }
 
     const hasPlots = await this.hasTable("plots");
@@ -2246,7 +2711,7 @@ export class TraceabilityService {
     const lotRes = await this.db.query(
       `SELECT l.id, l.code, l.qr_token, l.enterprise_id, l.coop_code, l.variety, l.qr_code, l.harvested_on, l.packed_on, l.exported_on,
               l.weight_tons::float8 AS weight_tons, l.household_count, l.market, l.status, l.revoked_reason,
-              e.name AS enterprise_name, e.address AS enterprise_address,
+              e.name AS enterprise_name, e.address AS enterprise_address, e.packhouse_code AS enterprise_packhouse_code,
               l.packhouse_code, l.packhouse_name, l.packhouse_address,
               l.phytosanitary_cert_no, l.phytosanitary_issued_on,
               l.grade_a_pct::float8 AS grade_a_pct, l.grade_b_pct::float8 AS grade_b_pct,
@@ -2254,7 +2719,7 @@ export class TraceabilityService {
               l.transporter, l.vehicle_plate, l.temperature_c::float8 AS temperature_c, l.departed_at, l.estimated_arrival
        FROM harvest_lots l
        LEFT JOIN enterprises e ON e.id = l.enterprise_id
-       WHERE ${lotId ? "l.id = $1" : "l.qr_token = $1 OR upper(l.code) = upper($1) OR upper(COALESCE(l.qr_code, '')) = upper($1)"}
+       WHERE ${lotId ? "l.id = $1" : "l.qr_token = $1 OR upper(l.code) = upper($1) OR (l.qr_code IS NOT NULL AND btrim(l.qr_code) <> '' AND upper(btrim(l.qr_code)) = upper(btrim($1)))"}
        ORDER BY ${lotId ? "l.id ASC" : "(l.qr_token = $1) DESC, l.id DESC"}
        LIMIT 1`,
       [lotId ?? cleanCode],
@@ -2435,7 +2900,7 @@ export class TraceabilityService {
       }
     }
 
-    throw notFound(`Không tìm thấy hồ sơ lô hàng hoặc mã tem "${cleanCode}". Vui lòng kiểm tra lại tem QR.`);
+    throw notFound(`Không tìm thấy hồ sơ truy xuất cho mã "${cleanCode}". Vui lòng kiểm tra lại mã thửa, mã lô hoặc tem QR.`);
   }
 
   /** Xây dựng phản hồi 3 cấp cho Lô hàng / Thùng hàng / Tem con của lô. */
@@ -2610,14 +3075,39 @@ export class TraceabilityService {
       allSourceAdminLocations.add(this.resolveAdminLocation(null, "VN-DLOR-0086"));
     }
 
-    const access = this.evaluateAccessAndScope(ctx, {
+    const candidateZones = [
+      ...new Set(
+        effectivePlots
+          .map((p) => (p.zone_code ? p.zone_code.trim() : ""))
+          .filter(Boolean),
+      ),
+    ];
+    const prelimPucCode = candidateZones[0] || "VN-DLOR-0086";
+
+    const baseAccess = this.evaluateAccessAndScope(ctx, {
+      targetKind: traceUnit,
       enterpriseId: lotRow.enterpriseId !== null && lotRow.enterpriseId !== undefined ? Number(lotRow.enterpriseId) : null,
       coopCode: String(lotRow.coopCode || "HTX-CUNE"),
       villageIds: contribVillageIds,
       adminLocations: [...allSourceAdminLocations],
     });
+    const temporaryGrant = await this.resolveApprovedAccessGrant(
+      ctx,
+      {
+        scannedCode: cleanCode,
+        resolvedLotCode: lotCode,
+        pucCode: prelimPucCode,
+        distinctZoneCodes: candidateZones,
+      },
+      true,
+    );
+    const access = this.elevateAccessWithGrant(baseAccess, ctx, temporaryGrant);
     const viewerTier = access.viewerTier;
-    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(viewerTier, ctx.user);
+    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(
+      viewerTier,
+      ctx.user,
+      Boolean(temporaryGrant?.active && temporaryGrant.grantedTier === "authority"),
+    );
 
     // (4f) Phiếu kiểm nghiệm nháp chỉ dành cho vai trò có quyền `testing:read`; còn lại chỉ lấy phiếu "đã kiểm chứng" (verified).
     // Lô chưa có hộ/thửa đóng góp: trả danh sách rỗng, không lấy bù phiếu của hộ không liên quan.
@@ -2625,7 +3115,7 @@ export class TraceabilityService {
     const labTestsRes =
       contribHouseholdIds.length > 0 || contribPlotCodes.length > 0
         ? await this.db.query(
-            `SELECT lt.household_id, lt.code, h.name AS household_name, h.code AS household_code, lt.plot_code, lt.sampled_on,
+          `SELECT lt.household_id, lt.code, h.name AS household_name, h.code AS household_code, lt.plot_code, lt.sampled_on,
                     lt.cd_mg_kg::float8 AS cd_mg_kg, lt.yellow_o_positive,
                     lt.residue_mg_kg::float8 AS residue_mg_kg, lt.chlorpyrifos_mg_kg::float8 AS chlorpyrifos_mg_kg,
                     lt.result, lt.lab, lt.record_status,
@@ -2641,8 +3131,8 @@ export class TraceabilityService {
              ORDER BY (CASE WHEN cardinality($2::text[]) > 0 AND upper(lt.plot_code) = ANY($2::text[]) THEN 0 ELSE 1 END),
                       lt.sampled_on DESC, lt.id DESC
              LIMIT 8`,
-            [contribHouseholdIds, contribPlotCodes],
-          )
+          [contribHouseholdIds, contribPlotCodes],
+        )
         : { rows: [] as Record<string, unknown>[] };
 
     const rawLabTests = camelRows<{
@@ -2682,28 +3172,34 @@ export class TraceabilityService {
     ];
     const primaryPucCode = distinctZoneCodes[0] || "VN-DLOR-0086";
     const primaryVillage = contribHouseholds[0]?.village_name || null;
-    const adminLocation = this.resolveAdminLocation(primaryVillage, primaryPucCode);
+    const fallbackAdminLocation = this.resolveAdminLocation(primaryVillage, primaryPucCode);
 
     const hasSuspendedPlot =
       effectivePlots.some((p) => p.status === "violation") ||
       contribHouseholds.some((h) => h.household_status === "violation");
 
-    const packhouseName = String(
-      lotRow.packhouseName || lotRow.enterpriseName || DEFAULT_PACKHOUSE_NAME,
-    );
-    const packhouseCode = String(lotRow.packhouseCode || DEFAULT_PACKHOUSE_CODE);
-    const packhouseAddress = String(
-      lotRow.packhouseAddress || lotRow.enterpriseAddress || DEFAULT_PACKHOUSE_ADDRESS,
+    const initialPackhouseCode = String(
+      lotRow.packhouseCode || lotRow.enterprisePackhouseCode || DEFAULT_PACKHOUSE_CODE,
     );
 
     // (4c) Kiểm tra trực tiếp trạng thái PUC & PHC thời gian thực tại thời điểm quét
     const live = await this.resolveLiveZoneAndPackhouseStatus({
       pucCode: primaryPucCode,
       enterpriseId: lotRow.enterpriseId ? Number(lotRow.enterpriseId) : null,
-      packhouseCode,
+      packhouseCode: initialPackhouseCode,
       hasPlotOrHouseholdViolation: hasSuspendedPlot,
       hasPendingSource: lotRow.status === "sampling",
     });
+    const adminLocation = live.pucAdminLocation || fallbackAdminLocation;
+    const packhouseName = String(
+      lotRow.packhouseName || live.enterpriseName || lotRow.enterpriseName || DEFAULT_PACKHOUSE_NAME,
+    );
+    const packhouseCode = String(
+      lotRow.packhouseCode || live.enterprisePackhouseCode || lotRow.enterprisePackhouseCode || DEFAULT_PACKHOUSE_CODE,
+    );
+    const packhouseAddress = String(
+      lotRow.packhouseAddress || live.enterpriseAddress || lotRow.enterpriseAddress || DEFAULT_PACKHOUSE_ADDRESS,
+    );
     const pucStatus = live.pucStatus;
     const hasRealtimeSuspension =
       live.pucStatus === "suspended" ||
@@ -2722,24 +3218,32 @@ export class TraceabilityService {
         access,
         ctx,
       }),
-      this.resolveFieldAuditPass(ctx, primaryPucCode, cleanCode, lotCode, true),
+      temporaryGrant?.matchedViaToken
+        ? Promise.resolve(null)
+        : this.resolveFieldAuditPass(ctx, primaryPucCode, cleanCode, lotCode, true),
     ]);
 
     const coarseMap = await this.resolveCoarseZoneMap(hasPlots, primaryPucCode, adminLocation);
 
+    const rawLotStatus = String(lotRow.status || "sampling");
+    const hasProgressedPastSampling =
+      rawLotStatus === "in_transit" || rawLotStatus === "delivered" || rawLotStatus === "exported";
     const harvestedOn = toIsoDateOnly(lotRow.harvestedOn);
-    const packedOn = toIsoDateOnly(lotRow.packedOn) || addDaysIso(harvestedOn, 1);
+    const packedOn =
+      toIsoDateOnly(lotRow.packedOn) || (hasProgressedPastSampling ? addDaysIso(harvestedOn, 1) : null);
     const exportedOn =
       toIsoDateOnly(lotRow.exportedOn) ||
       toIsoDateOnly(lotRow.departedAt) ||
-      (lotRow.status === "exported" || lotRow.status === "delivered" ? addDaysIso(harvestedOn, 2) : null);
+      (rawLotStatus === "exported" || rawLotStatus === "delivered"
+        ? addDaysIso(packedOn || harvestedOn, 1)
+        : null);
 
     const latestLab = rawLabTests[0] ?? null;
     const latestLabSampledOn = toIsoDateOnly(latestLab?.sampledOn);
     const varietyDisplay = String(
       lotRow.variety ||
-        [...new Set(displayPlots.map((p) => p.variety).filter(Boolean))].join(", ") ||
-        "Ri6 & Monthong (Dona)",
+      [...new Set(displayPlots.map((p) => p.variety).filter(Boolean))].join(", ") ||
+      "Ri6 & Monthong (Dona)",
     );
 
     // (Mục 1 + 4f) Chỉ hiển thị hộ ĐỒNG Ý công khai VÀ đã duyệt đủ điều kiện ("qualified")
@@ -2761,22 +3265,25 @@ export class TraceabilityService {
       Number(lotRow.weightTons || 0) * 1000;
     const seasonYear = harvestedOn ? Number(harvestedOn.slice(0, 4)) || new Date().getFullYear() : new Date().getFullYear();
 
-    // Cán bộ xã/thôn: chỉ thấy hộ và thửa nguồn thuộc địa bàn được phân công, kể cả khi lô ghép nhiều thôn.
-    const officerFilter = this.buildOfficerHouseholdFilter(ctx.user);
+    // Cán bộ xã/thôn: chỉ thấy hộ và thửa nguồn thuộc địa bàn được phân công, kể cả khi lô ghép nhiều thôn (trừ khi đã được duyệt cấp quyền đột xuất toàn diện).
+    const officerFilter =
+      temporaryGrant?.active && temporaryGrant.grantedTier === "authority"
+        ? null
+        : this.buildOfficerHouseholdFilter(ctx.user);
     const scopedContribHouseholds = officerFilter
       ? contribHouseholds.filter((h) => {
-          const hid = Number(h.household_id);
-          const hhPlots = sourcePlots.filter(
-            (p) =>
-              Number(p.household_id) === hid ||
-              (h.plot_code ? p.code.toUpperCase() === h.plot_code.toUpperCase() : false),
-          );
-          const adminLocations = [
-            this.resolveAdminLocation(h.village_name, null),
-            ...hhPlots.filter((p) => p.zone_code).map((p) => this.resolveAdminLocation(null, p.zone_code)),
-          ];
-          return officerFilter({ villageId: h.village_id !== null ? Number(h.village_id) : null, adminLocations });
-        })
+        const hid = Number(h.household_id);
+        const hhPlots = sourcePlots.filter(
+          (p) =>
+            Number(p.household_id) === hid ||
+            (h.plot_code ? p.code.toUpperCase() === h.plot_code.toUpperCase() : false),
+        );
+        const adminLocations = [
+          this.resolveAdminLocation(h.village_name, null),
+          ...hhPlots.filter((p) => p.zone_code).map((p) => this.resolveAdminLocation(null, p.zone_code)),
+        ];
+        return officerFilter({ villageId: h.village_id !== null ? Number(h.village_id) : null, adminLocations });
+      })
       : contribHouseholds;
     const scopedHouseholdIds = [...new Set(scopedContribHouseholds.map((h) => Number(h.household_id)))];
     const scopedHouseholdIdSet = new Set(scopedHouseholdIds);
@@ -2806,6 +3313,101 @@ export class TraceabilityService {
     const unpinnedContribHouseholdIdSet = new Set(unpinnedContribHouseholdIds);
     const contribPlotCodeSet = new Set(contribPlotCodes.map((c) => c.trim().toUpperCase()));
 
+    // Bảng hộ thành viên đóng góp vào lô trên tờ A4: phân tầng dữ liệu nghiêm ngặt theo vai trò & phạm vi trên máy chủ
+    const hasEnterpriseView =
+      TIER_RANK[viewerTier] >= TIER_RANK.enterprise || Boolean(fieldAuditPass?.active);
+    const hasAuthorityView = viewerTier === "authority";
+    const dossierContributors: DossierContributorEntry[] = contribHouseholds.map((h, idx) => {
+      const hid = Number(h.household_id);
+      const inOfficerScope = !officerFilter || scopedHouseholdIdSet.has(hid);
+      const hPlots = sourcePlots.filter((p) => Number(p.household_id) === hid);
+      const exactPlot = h.plot_code
+        ? sourcePlots.find((p) => p.code.toUpperCase() === h.plot_code!.toUpperCase())
+        : undefined;
+      const resolvedPlot = exactPlot ?? hPlots[0] ?? null;
+      const rowPucCode =
+        exactPlot?.zone_code || hPlots.find((p) => p.zone_code)?.zone_code || primaryPucCode;
+      const isConsentedQualified =
+        h.public_trace_consent === true && h.household_status === "qualified";
+      const hasViolation =
+        h.household_status === "violation" ||
+        Boolean(exactPlot && exactPlot.status === "violation") ||
+        (!exactPlot && hPlots.some((p) => p.status === "violation"));
+      const sharePct =
+        totalContribKg > 0
+          ? Number(((Number(h.weight_kg || 0) / totalContribKg) * 100).toFixed(1))
+          : contribHouseholds.length > 0
+            ? Number((100 / contribHouseholds.length).toFixed(1))
+            : 100;
+
+      if (hasAuthorityView && inOfficerScope) {
+        const cadastralLabel =
+          resolvedPlot?.sheet_no || resolvedPlot?.parcel_no
+            ? `Tờ ${resolvedPlot.sheet_no || "-"} / Thửa ${resolvedPlot.parcel_no || "-"}`
+            : null;
+        return {
+          index: idx + 1,
+          visibilityLevel: "authority",
+          isAnonymized: false,
+          displayName: h.household_name,
+          householdCode: h.household_code,
+          villageName: h.village_name,
+          pucCode: rowPucCode,
+          sharePct,
+          complianceStatus: hasViolation ? "review" : "valid",
+          plotCode: resolvedPlot?.code || h.plot_code || null,
+          areaHa: resolvedPlot ? Number(resolvedPlot.area_ha) : Number(h.area_ha || 0),
+          weightKg: Number(h.weight_kg || 0),
+          phone: h.phone || null,
+          cccdMasked: h.cccd_masked || null,
+          cadastralLabel,
+          publicConsent: Boolean(h.public_trace_consent),
+        };
+      }
+
+      if (hasEnterpriseView && inOfficerScope) {
+        return {
+          index: idx + 1,
+          visibilityLevel: "enterprise",
+          isAnonymized: !isConsentedQualified,
+          displayName: isConsentedQualified ? h.household_name : null,
+          householdCode: h.household_code,
+          villageName: h.village_name,
+          pucCode: rowPucCode,
+          sharePct,
+          complianceStatus: hasViolation ? "review" : "valid",
+          plotCode: resolvedPlot?.code || h.plot_code || null,
+          areaHa: resolvedPlot ? Number(resolvedPlot.area_ha) : Number(h.area_ha || 0),
+          weightKg: Number(h.weight_kg || 0),
+          phone: null,
+          cccdMasked: null,
+          cadastralLabel: null,
+          publicConsent: null,
+        };
+      }
+
+      // Cấp công khai (hoặc hộ nằm ngoài thôn phân công của cán bộ thôn): ẩn tuyệt đối định danh cá nhân chưa đồng ý
+      const allowPublicName = inOfficerScope && isConsentedQualified;
+      return {
+        index: idx + 1,
+        visibilityLevel: "public",
+        isAnonymized: !allowPublicName,
+        displayName: allowPublicName ? h.household_name : null,
+        householdCode: null,
+        villageName: h.village_name,
+        pucCode: rowPucCode,
+        sharePct,
+        complianceStatus: hasViolation ? "review" : "valid",
+        plotCode: null,
+        areaHa: null,
+        weightKg: null,
+        phone: null,
+        cccdMasked: null,
+        cadastralLabel: null,
+        publicConsent: null,
+      };
+    });
+
     const [integritySeal, massBalance] = await Promise.all([
       this.computeLedgerIntegritySummary(contribHouseholdIds, contribPlotCodes),
       this.computeMassBalanceSummary({
@@ -2821,8 +3423,8 @@ export class TraceabilityService {
         householdIds: unpinnedContribHouseholdIds,
         allowedPlotFilter: officerFilter
           ? (r) =>
-              scopedHouseholdIdSet.has(Number(r.householdId)) ||
-              (!Number(r.householdId) && scopedPlotCodeSet.has(r.plotCode.toUpperCase()))
+            scopedHouseholdIdSet.has(Number(r.householdId)) ||
+            (!Number(r.householdId) && scopedPlotCodeSet.has(r.plotCode.toUpperCase()))
           : undefined,
       }),
     ]);
@@ -2841,12 +3443,12 @@ export class TraceabilityService {
       latestMinuteOfficer,
       latestLab: latestLab
         ? {
-            code: latestLab.code,
-            lab: latestLab.lab,
-            sampledOn: latestLabSampledOn,
-            result: latestLab.result,
-            labAccreditationCode: latestLab.labAccreditationCode,
-          }
+          code: latestLab.code,
+          lab: latestLab.lab,
+          sampledOn: latestLabSampledOn,
+          result: latestLab.result,
+          labAccreditationCode: latestLab.labAccreditationCode,
+        }
         : null,
       phytoCertNo,
     });
@@ -2867,21 +3469,54 @@ export class TraceabilityService {
       scanUrl: lt.scanUrl,
     }));
 
+    const effectiveWeightTons =
+      Number(lotRow.weightTons || 0) > 0
+        ? Number(lotRow.weightTons)
+        : totalContribKg > 0
+          ? Number((totalContribKg / 1000).toFixed(3))
+          : 0;
+    const avgBrixVal =
+      lotRow.avgBrix !== null && lotRow.avgBrix !== undefined ? Number(lotRow.avgBrix) : null;
+    const gradeAPctVal =
+      lotRow.gradeAPct !== null && lotRow.gradeAPct !== undefined ? Number(lotRow.gradeAPct) : null;
+    const treatmentMethodVal = lotRow.treatmentMethod ? String(lotRow.treatmentMethod).trim() : null;
+    const transporterVal = lotRow.transporter ? String(lotRow.transporter).trim() : null;
+    const vehiclePlateVal = lotRow.vehiclePlate ? String(lotRow.vehiclePlate).trim() : null;
+    const temperatureCVal =
+      lotRow.temperatureC !== null && lotRow.temperatureC !== undefined
+        ? Number(lotRow.temperatureC)
+        : null;
+
     const timeline = this.buildFiveStepTimeline({
       pucCode: primaryPucCode,
       pucStatus,
       packhouseStatus: live.packhouseStatus,
       lastFarmCheckOn: lastInspectionOn,
+      latestMinuteCode,
+      participatingHouseholdCount,
       harvestedOn,
+      weightTons: effectiveWeightTons,
+      avgBrix: avgBrixVal,
       packedOn,
       packhouseName,
       packhouseCode,
+      gradeAPct: gradeAPctVal,
+      treatmentMethod: treatmentMethodVal,
       latestLabOn: latestLabSampledOn,
       latestLabName: latestLab?.lab ?? null,
       latestLabResult: latestLab?.result ?? null,
+      latestLabCode: latestLab?.code ?? null,
+      latestLabCdMgKg: latestLab?.cdMgKg ?? null,
+      latestLabResidueMgKg: latestLab?.residueMgKg ?? null,
+      latestLabYellowO: latestLab?.yellowOPositive ?? null,
       exportedOn,
-      lotStatus: isRevoked ? "revoked" : String(lotRow.status),
+      lotStatus: isRevoked ? "revoked" : rawLotStatus,
       market: String(lotRow.market || "Xuất khẩu chính ngạch"),
+      revokedReason: isRevoked && lotRow.revokedReason ? String(lotRow.revokedReason) : null,
+      phytoCertNo,
+      transporter: transporterVal,
+      vehiclePlate: vehiclePlateVal,
+      temperatureC: temperatureCVal,
     });
 
     // Kiểm tra tuân thủ cách ly PHI trên toàn bộ các hộ tham gia lô (chỉ xuất kết luận tổng quát ra công khai)
@@ -3040,7 +3675,7 @@ export class TraceabilityService {
       const [diariesRes, minutesRows, violationRows] = await Promise.all([
         scopedHouseholdIds.length > 0
           ? this.db.query(
-              `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
+            `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
                       gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
                FROM (
@@ -3089,8 +3724,8 @@ export class TraceabilityService {
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
                LIMIT 25`,
-              [scopedHouseholdIds],
-            )
+            [scopedHouseholdIds],
+          )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         // Biên bản kiểm tra chỉ trong phạm vi hộ/thửa nguồn được xem (không lấy bù biên bản của hộ khác).
         this.queryScopedInspectionMinutes(
@@ -3150,7 +3785,7 @@ export class TraceabilityService {
 
     return {
       verifiedAt: verification.verifiedAt,
-      accessControl: this.buildAccessControlPayload(access, ctx, fieldAuditPass),
+      accessControl: this.buildAccessControlPayload(access, ctx, fieldAuditPass, temporaryGrant),
       // Trường tương thích ngược đã khử hoàn toàn thông tin nhạy cảm
       lot: {
         code: lotCode,
@@ -3159,10 +3794,10 @@ export class TraceabilityService {
         harvestedOn,
         packedOn,
         exportedOn,
-        weightTons: Number(lotRow.weightTons || 0),
+        weightTons: effectiveWeightTons,
         householdCount: participatingHouseholdCount,
         market: String(lotRow.market || "Xuất khẩu chính ngạch"),
-        status: isRevoked ? "revoked" : String(lotRow.status),
+        status: isRevoked ? "revoked" : rawLotStatus,
         packhouseCode,
       },
       item: scannedItem,
@@ -3181,22 +3816,35 @@ export class TraceabilityService {
               : traceUnit === "fruit"
                 ? "Tem định danh quả (Dòng cao cấp)"
                 : "Lô hàng xuất xưởng / xuất khẩu",
-          weightTons: Number(lotRow.weightTons || 0),
+          weightTons: effectiveWeightTons,
           itemWeightKg: scannedItem?.weightKg !== undefined ? Number(scannedItem.weightKg) : null,
           itemGrade: scannedItem?.grade ? String(scannedItem.grade) : null,
           market: String(lotRow.market || "Xuất khẩu chính ngạch"),
           status: publicLotStatus,
+          rawLotStatus: isRevoked ? "revoked" : rawLotStatus,
+          avgBrix: avgBrixVal,
+          gradeAPct: gradeAPctVal,
+          treatmentMethod: treatmentMethodVal,
+          transporter: transporterVal,
+          vehiclePlate: vehiclePlateVal,
+          temperatureC: temperatureCVal,
           statusLabel: isRevoked
             ? "Đã thu hồi - Không lưu thông"
-            : lotRow.status === "sampling"
+            : rawLotStatus === "sampling"
               ? "Đang lấy mẫu kiểm định trước xuất"
-              : "Lô hợp lệ - Đủ điều kiện lưu thông",
+              : rawLotStatus === "in_transit"
+                ? "Lô hợp lệ - Đang vận chuyển lưu thông"
+                : rawLotStatus === "delivered"
+                  ? "Lô hợp lệ - Đã bàn giao phân phối"
+                  : rawLotStatus === "exported"
+                    ? "Lô hợp lệ - Đã thông quan xuất khẩu"
+                    : "Lô hợp lệ - Đủ điều kiện lưu thông",
           revokedReason: isRevoked
             ? String(lotRow.revokedReason || "Thu hồi theo quyết định kiểm soát chất lượng của đơn vị quản lý.")
             : null,
         },
         growingZone: {
-          name: `Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né`,
+          name: live.pucName || "Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né",
           pucCode: primaryPucCode,
           additionalZoneCount: Math.max(0, distinctZoneCodes.length - 1),
           adminLocation,
@@ -3211,6 +3859,12 @@ export class TraceabilityService {
           groupName: `Liên tổ sản xuất sầu riêng VietGAP xã Cư Né (${participatingHouseholdCount} hộ thành viên liên kết)`,
           participatingHouseholdCount,
           consentedHouseholds: consentedHouseholdNames,
+          dossierContributorsTier: hasAuthorityView
+            ? "authority"
+            : hasEnterpriseView
+              ? "enterprise"
+              : "public",
+          dossierContributors,
           consentNote:
             consentedHouseholdNames.length > 0
               ? "Chỉ hiển thị tên các hộ thành viên đã xác nhận đồng ý công khai thông tin trên mã QR."
@@ -3296,7 +3950,10 @@ export class TraceabilityService {
         `SELECT hl.id, hl.code, hl.qr_token, hl.enterprise_id, hl.coop_code, hl.packed_on, hl.exported_on, hl.market, hl.status,
                 hl.packhouse_code, COALESCE(hl.packhouse_name, e.name) AS packhouse_name,
                 COALESCE(hl.packhouse_address, e.address) AS packhouse_address,
-                hl.phytosanitary_cert_no, hl.phytosanitary_issued_on
+                hl.phytosanitary_cert_no, hl.phytosanitary_issued_on,
+                hl.grade_a_pct::float8 AS grade_a_pct, hl.grade_b_pct::float8 AS grade_b_pct, hl.grade_c_pct::float8 AS grade_c_pct,
+                hl.avg_brix::float8 AS avg_brix, hl.treatment_method, hl.transporter, hl.vehicle_plate,
+                hl.temperature_c::float8 AS temperature_c, hl.departed_at, hl.estimated_arrival
          FROM harvest_contributions hc
          JOIN harvest_lots hl ON hl.id = hc.lot_id
          LEFT JOIN enterprises e ON e.id = hl.enterprise_id
@@ -3317,15 +3974,31 @@ export class TraceabilityService {
     );
     const adminLocation = this.resolveAdminLocation(raw.villageName, pucCode);
     const linkedLot = latestLotRes.rows[0] ? camelRow<Record<string, unknown>>(latestLotRes.rows[0]) : null;
+    const resolvedLinkedLotCode = linkedLot ? String(linkedLot.code) : null;
 
-    const access = this.evaluateAccessAndScope(ctx, {
+    const baseAccess = this.evaluateAccessAndScope(ctx, {
+      targetKind: "fruit",
       enterpriseId: linkedLot?.enterpriseId ? Number(linkedLot.enterpriseId) : null,
       coopCode: linkedLot?.coopCode ? String(linkedLot.coopCode) : "HTX-CUNE",
       villageIds: raw.villageId !== null && raw.villageId !== undefined ? [Number(raw.villageId)] : [],
       adminLocations: [adminLocation],
     });
+    const temporaryGrant = await this.resolveApprovedAccessGrant(
+      ctx,
+      {
+        scannedCode: cleanCode,
+        resolvedLotCode: resolvedLinkedLotCode,
+        pucCode,
+      },
+      true,
+    );
+    const access = this.elevateAccessWithGrant(baseAccess, ctx, temporaryGrant);
     const viewerTier = access.viewerTier;
-    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(viewerTier, ctx.user);
+    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(
+      viewerTier,
+      ctx.user,
+      Boolean(temporaryGrant?.active && temporaryGrant.grantedTier === "authority"),
+    );
     const verifiedLabClause = canReadDraftLabs ? "" : "AND record_status = 'verified'";
 
     const labTestsRes = await this.db.query(
@@ -3359,7 +4032,6 @@ export class TraceabilityService {
       live.packhouseStatus !== "active";
 
     const canonicalKey = String(raw.qrToken || raw.serialCode);
-    const resolvedLinkedLotCode = linkedLot ? String(linkedLot.code) : null;
     const [verification, fieldAuditPass] = await Promise.all([
       this.recordScanAndVerify({
         scannedCode: cleanCode,
@@ -3371,7 +4043,9 @@ export class TraceabilityService {
         access,
         ctx,
       }),
-      this.resolveFieldAuditPass(ctx, pucCode, cleanCode, resolvedLinkedLotCode, true),
+      temporaryGrant?.matchedViaToken
+        ? Promise.resolve(null)
+        : this.resolveFieldAuditPass(ctx, pucCode, cleanCode, resolvedLinkedLotCode, true),
     ]);
 
     const coarseMap = await this.resolveCoarseZoneMap(hasPlots, pucCode, adminLocation);
@@ -3428,12 +4102,12 @@ export class TraceabilityService {
       latestMinuteOfficer,
       latestLab: latestLab
         ? {
-            code: latestLab.code,
-            lab: latestLab.lab,
-            sampledOn: toIsoDateOnly(latestLab.sampledOn),
-            result: latestLab.result,
-            labAccreditationCode: latestLab.labAccreditationCode,
-          }
+          code: latestLab.code,
+          lab: latestLab.lab,
+          sampledOn: toIsoDateOnly(latestLab.sampledOn),
+          result: latestLab.result,
+          labAccreditationCode: latestLab.labAccreditationCode,
+        }
         : null,
       phytoCertNo,
     });
@@ -3461,8 +4135,8 @@ export class TraceabilityService {
       const visibleStampLabs =
         viewerTier === "enterprise" && stampPlotCode
           ? rawLabs.filter(
-              (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === stampPlotCode.toUpperCase(),
-            )
+            (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === stampPlotCode.toUpperCase(),
+          )
           : rawLabs;
       enterpriseData = {
         sourceZones: [
@@ -3495,7 +4169,35 @@ export class TraceabilityService {
           result: lt.result,
           scanUrl: lt.scanUrl,
         })),
-        packingSpecs: null,
+        packingSpecs: linkedLot
+          ? {
+              gradeAPct:
+                linkedLot.gradeAPct !== null && linkedLot.gradeAPct !== undefined
+                  ? Number(linkedLot.gradeAPct)
+                  : null,
+              gradeBPct:
+                linkedLot.gradeBPct !== null && linkedLot.gradeBPct !== undefined
+                  ? Number(linkedLot.gradeBPct)
+                  : null,
+              gradeCPct:
+                linkedLot.gradeCPct !== null && linkedLot.gradeCPct !== undefined
+                  ? Number(linkedLot.gradeCPct)
+                  : null,
+              avgBrix:
+                linkedLot.avgBrix !== null && linkedLot.avgBrix !== undefined
+                  ? Number(linkedLot.avgBrix)
+                  : null,
+              treatmentMethod: linkedLot.treatmentMethod ? String(linkedLot.treatmentMethod) : null,
+              transporter: linkedLot.transporter ? String(linkedLot.transporter) : null,
+              vehiclePlate: linkedLot.vehiclePlate ? String(linkedLot.vehiclePlate) : null,
+              temperatureC:
+                linkedLot.temperatureC !== null && linkedLot.temperatureC !== undefined
+                  ? Number(linkedLot.temperatureC)
+                  : null,
+              departedAt: linkedLot.departedAt ? String(linkedLot.departedAt) : null,
+              estimatedArrival: linkedLot.estimatedArrival ? String(linkedLot.estimatedArrival) : null,
+            }
+          : null,
       };
     }
 
@@ -3514,7 +4216,7 @@ export class TraceabilityService {
       const [diariesRes, minutesRows, violationRows] = await Promise.all([
         householdVisible
           ? this.db.query(
-              `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
+            `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
                       gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
                FROM (
@@ -3562,8 +4264,8 @@ export class TraceabilityService {
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
                LIMIT 20`,
-              [householdId, String(raw.householdName || "")],
-            )
+            [householdId, String(raw.householdName || "")],
+          )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         this.queryScopedInspectionMinutes(
           `im.code, im.held_on, im.location, im.officer, im.result,
@@ -3580,37 +4282,37 @@ export class TraceabilityService {
       authorityData = {
         sourceHouseholds: householdVisible
           ? [
-              {
-                householdCode: String(raw.householdCode),
-                householdName: String(raw.householdName),
-                villageName: String(raw.villageName || ""),
-                phone: String(raw.householdPhone || ""),
-                cccdMasked: String(raw.cccdMasked || ""),
-                status: String(raw.householdStatus || "qualified"),
-                publicTraceConsent: Boolean(raw.publicTraceConsent),
-                contributedKg: stampWeightKg,
-                contributedPlotCode: stampPlotCode,
-                plots: stampPlotCode
-                  ? [
-                      {
-                        plotCode: stampPlotCode,
-                        zoneCode: pucCode,
-                        sheetNo: (raw.sheetNo as string | null) ?? null,
-                        parcelNo: (raw.parcelNo as string | null) ?? null,
-                        variety: (raw.variety as string | null) ?? null,
-                        plantedYear:
-                          raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
-                        areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
-                        status: String(raw.plotStatus || "approved"),
-                        source: (raw.plotSource as string | null) ?? null,
-                        lat: raw.lat !== null && raw.lat !== undefined ? Number(raw.lat) : null,
-                        lng: raw.lng !== null && raw.lng !== undefined ? Number(raw.lng) : null,
-                        geometryJson: (raw.geometryJson as string | null) ?? null,
-                      },
-                    ]
-                  : [],
-              },
-            ]
+            {
+              householdCode: String(raw.householdCode),
+              householdName: String(raw.householdName),
+              villageName: String(raw.villageName || ""),
+              phone: String(raw.householdPhone || ""),
+              cccdMasked: String(raw.cccdMasked || ""),
+              status: String(raw.householdStatus || "qualified"),
+              publicTraceConsent: Boolean(raw.publicTraceConsent),
+              contributedKg: stampWeightKg,
+              contributedPlotCode: stampPlotCode,
+              plots: stampPlotCode
+                ? [
+                  {
+                    plotCode: stampPlotCode,
+                    zoneCode: pucCode,
+                    sheetNo: (raw.sheetNo as string | null) ?? null,
+                    parcelNo: (raw.parcelNo as string | null) ?? null,
+                    variety: (raw.variety as string | null) ?? null,
+                    plantedYear:
+                      raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
+                    areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
+                    status: String(raw.plotStatus || "approved"),
+                    source: (raw.plotSource as string | null) ?? null,
+                    lat: raw.lat !== null && raw.lat !== undefined ? Number(raw.lat) : null,
+                    lng: raw.lng !== null && raw.lng !== undefined ? Number(raw.lng) : null,
+                    geometryJson: (raw.geometryJson as string | null) ?? null,
+                  },
+                ]
+                : [],
+            },
+          ]
           : [],
         cultivationDiaries: camelRows(diariesRes.rows),
         inspectionMinutes: camelRows(minutesRows),
@@ -3650,7 +4352,7 @@ export class TraceabilityService {
         status: isRevoked ? "revoked" : raw.status === "activated" ? "exported" : "sampling",
         packhouseCode,
       },
-      accessControl: this.buildAccessControlPayload(access, ctx, fieldAuditPass),
+      accessControl: this.buildAccessControlPayload(access, ctx, fieldAuditPass, temporaryGrant),
       publicData: {
         lotIdentity: {
           productName: "Sầu riêng tuyển chọn thương hiệu HTX Cư Né",
@@ -3673,10 +4375,10 @@ export class TraceabilityService {
           revokedReason: isRevoked ? "Tem đã bị thu hồi trên hệ thống quản lý của Hợp tác xã." : null,
         },
         growingZone: {
-          name: `Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né`,
+          name: live.pucName || "Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né",
           pucCode,
           additionalZoneCount: 0,
-          adminLocation,
+          adminLocation: live.pucAdminLocation || adminLocation,
           status: pucStatus,
           statusLabel: live.pucStatusLabel,
           statusNote: live.pucNote,
@@ -3793,13 +4495,16 @@ export class TraceabilityService {
     const viewerEnterpriseId =
       ctx.user?.role === "enterprise" && ctx.user.enterpriseId ? Number(ctx.user.enterpriseId) : null;
 
-    const [latestLotRes, latestMinute] = await Promise.all([
+    const [latestLotRes, latestMinute, lastCareRes] = await Promise.all([
       this.db.query(
         `SELECT hl.id, hl.code, hl.qr_token, hl.enterprise_id, hl.coop_code, hl.harvested_on, hl.packed_on, hl.exported_on,
                 hl.weight_tons::float8 AS weight_tons, hl.market, hl.status,
                 hl.packhouse_code, COALESCE(hl.packhouse_name, e.name) AS packhouse_name,
                 COALESCE(hl.packhouse_address, e.address) AS packhouse_address,
                 hl.phytosanitary_cert_no, hl.phytosanitary_issued_on,
+                hl.grade_a_pct::float8 AS grade_a_pct, hl.grade_b_pct::float8 AS grade_b_pct, hl.grade_c_pct::float8 AS grade_c_pct,
+                hl.avg_brix::float8 AS avg_brix, hl.treatment_method, hl.transporter, hl.vehicle_plate,
+                hl.temperature_c::float8 AS temperature_c, hl.departed_at, hl.estimated_arrival,
                 hc.weight_kg::float8 AS contributed_kg
          FROM harvest_contributions hc
          JOIN harvest_lots hl ON hl.id = hc.lot_id
@@ -3815,17 +4520,44 @@ export class TraceabilityService {
         [plotHouseholdId, plotCode, viewerEnterpriseId],
       ),
       this.queryLatestScopedMinute(plotHouseholdId ? [plotHouseholdId] : [], [plotCode]),
+      this.db.query<{ last_care_on: Date | string | null }>(
+        `SELECT GREATEST(
+           (SELECT MAX(je.entry_on) FROM journal_entries je
+            WHERE upper(btrim(COALESCE(je.plot_code, ''))) = upper($2)
+               OR ($1::bigint IS NOT NULL AND je.household_id = $1)),
+           (SELECT MAX(sr.sprayed_on) FROM spray_records sr
+            WHERE upper(btrim(COALESCE(sr.plot_code, ''))) = upper($2)
+               OR ($1::bigint IS NOT NULL AND sr.household_id = $1))
+         ) AS last_care_on`,
+        [plotHouseholdId, plotCode],
+      ),
     ]);
 
     const linkedLot = latestLotRes.rows[0] ? camelRow<Record<string, unknown>>(latestLotRes.rows[0]) : null;
-    const access = this.evaluateAccessAndScope(ctx, {
+    const resolvedLinkedLotCode = linkedLot ? String(linkedLot.code) : null;
+    const baseAccess = this.evaluateAccessAndScope(ctx, {
+      targetKind: "plot",
       enterpriseId: linkedLot?.enterpriseId ? Number(linkedLot.enterpriseId) : null,
       coopCode: linkedLot?.coopCode ? String(linkedLot.coopCode) : "HTX-CUNE",
       villageIds: raw.villageId !== null && raw.villageId !== undefined ? [Number(raw.villageId)] : [],
       adminLocations: [adminLocation],
     });
+    const temporaryGrant = await this.resolveApprovedAccessGrant(
+      ctx,
+      {
+        scannedCode: cleanCode,
+        resolvedLotCode: resolvedLinkedLotCode,
+        pucCode,
+      },
+      true,
+    );
+    const access = this.elevateAccessWithGrant(baseAccess, ctx, temporaryGrant);
     const viewerTier = access.viewerTier;
-    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(viewerTier, ctx.user);
+    const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(
+      viewerTier,
+      ctx.user,
+      Boolean(temporaryGrant?.active && temporaryGrant.grantedTier === "authority"),
+    );
     const verifiedLabClause = canReadDraftLabs ? "" : "AND record_status = 'verified'";
 
     const labTestsRes = await this.db.query(
@@ -3861,7 +4593,6 @@ export class TraceabilityService {
       live.pucStatus === "revoked" ||
       live.packhouseStatus !== "active";
 
-    const resolvedLinkedLotCode = linkedLot ? String(linkedLot.code) : null;
     const [verification, fieldAuditPass] = await Promise.all([
       this.recordScanAndVerify({
         scannedCode: cleanCode,
@@ -3873,7 +4604,9 @@ export class TraceabilityService {
         access,
         ctx,
       }),
-      this.resolveFieldAuditPass(ctx, pucCode, cleanCode, resolvedLinkedLotCode, true),
+      temporaryGrant?.matchedViaToken
+        ? Promise.resolve(null)
+        : this.resolveFieldAuditPass(ctx, pucCode, cleanCode, resolvedLinkedLotCode, true),
     ]);
 
     const coarseMap = await this.resolveCoarseZoneMap(hasPlots, pucCode, adminLocation);
@@ -3899,6 +4632,7 @@ export class TraceabilityService {
     const packedOn = toIsoDateOnly(linkedLot?.packedOn);
     const exportedOn = toIsoDateOnly(linkedLot?.exportedOn);
     const lastInspectionOn = toIsoDateOnly(latestMinute?.held_on);
+    const lastCareOn = toIsoDateOnly(lastCareRes.rows[0]?.last_care_on);
     const latestMinuteCode = latestMinute?.code ?? null;
     const latestMinuteOfficer = latestMinute?.officer ?? null;
 
@@ -3929,12 +4663,12 @@ export class TraceabilityService {
       latestMinuteOfficer,
       latestLab: latestLab
         ? {
-            code: latestLab.code,
-            lab: latestLab.lab,
-            sampledOn: toIsoDateOnly(latestLab.sampledOn),
-            result: latestLab.result,
-            labAccreditationCode: latestLab.labAccreditationCode,
-          }
+          code: latestLab.code,
+          lab: latestLab.lab,
+          sampledOn: toIsoDateOnly(latestLab.sampledOn),
+          result: latestLab.result,
+          labAccreditationCode: latestLab.labAccreditationCode,
+        }
         : null,
       phytoCertNo,
     });
@@ -3962,6 +4696,7 @@ export class TraceabilityService {
       Number(ctx.user.householdId) === plotHouseholdId;
     const canViewFieldAudit =
       Boolean(fieldAuditPass?.active) ||
+      Boolean(temporaryGrant?.active) ||
       (viewerTier === "authority" && !access.scopeDenied) ||
       isOwnerFarmer;
 
@@ -3994,8 +4729,8 @@ export class TraceabilityService {
       const visiblePlotLabs =
         viewerTier === "enterprise"
           ? rawLabs.filter(
-              (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === plotCode.toUpperCase(),
-            )
+            (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === plotCode.toUpperCase(),
+          )
           : rawLabs;
       enterpriseData = {
         sourceZones: [
@@ -4028,7 +4763,35 @@ export class TraceabilityService {
           result: lt.result,
           scanUrl: lt.scanUrl,
         })),
-        packingSpecs: null,
+        packingSpecs: linkedLot
+          ? {
+              gradeAPct:
+                linkedLot.gradeAPct !== null && linkedLot.gradeAPct !== undefined
+                  ? Number(linkedLot.gradeAPct)
+                  : null,
+              gradeBPct:
+                linkedLot.gradeBPct !== null && linkedLot.gradeBPct !== undefined
+                  ? Number(linkedLot.gradeBPct)
+                  : null,
+              gradeCPct:
+                linkedLot.gradeCPct !== null && linkedLot.gradeCPct !== undefined
+                  ? Number(linkedLot.gradeCPct)
+                  : null,
+              avgBrix:
+                linkedLot.avgBrix !== null && linkedLot.avgBrix !== undefined
+                  ? Number(linkedLot.avgBrix)
+                  : null,
+              treatmentMethod: linkedLot.treatmentMethod ? String(linkedLot.treatmentMethod) : null,
+              transporter: linkedLot.transporter ? String(linkedLot.transporter) : null,
+              vehiclePlate: linkedLot.vehiclePlate ? String(linkedLot.vehiclePlate) : null,
+              temperatureC:
+                linkedLot.temperatureC !== null && linkedLot.temperatureC !== undefined
+                  ? Number(linkedLot.temperatureC)
+                  : null,
+              departedAt: linkedLot.departedAt ? String(linkedLot.departedAt) : null,
+              estimatedArrival: linkedLot.estimatedArrival ? String(linkedLot.estimatedArrival) : null,
+            }
+          : null,
       };
     }
 
@@ -4048,7 +4811,7 @@ export class TraceabilityService {
       const [diariesRes, minutesRows, violationRows] = await Promise.all([
         householdVisible
           ? this.db.query(
-              `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
+            `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
                       gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_url
                FROM (
@@ -4099,8 +4862,8 @@ export class TraceabilityService {
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
                LIMIT 20`,
-              [plotCode, plotHouseholdId, String(raw.ownerName || ""), restrictToScopedHouseholds, scopedHouseholdIds],
-            )
+            [plotCode, plotHouseholdId, String(raw.ownerName || ""), restrictToScopedHouseholds, scopedHouseholdIds],
+          )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         this.queryScopedInspectionMinutes(
           `im.code, im.held_on, im.location, im.officer, im.result,
@@ -4117,35 +4880,35 @@ export class TraceabilityService {
       authorityData = {
         sourceHouseholds: householdVisible
           ? [
-              {
-                householdCode: String(raw.householdCode || "Chưa gán mã hộ"),
-                householdName: String(raw.ownerName || "Chưa cập nhật"),
-                villageName: String(raw.village || ""),
-                phone: String(raw.householdPhone || ""),
-                cccdMasked: String(raw.cccdMasked || ""),
-                status: String(raw.householdStatus || raw.status || "pending"),
-                publicTraceConsent: Boolean(raw.publicTraceConsent),
-                contributedKg: linkedLot?.contributedKg ? Number(linkedLot.contributedKg) : null,
-                contributedPlotCode: plotCode,
-                plots: [
-                  {
-                    plotCode,
-                    qrToken: plotQrToken,
-                    zoneCode: pucCode,
-                    sheetNo: (raw.sheetNo as string | null) ?? null,
-                    parcelNo: (raw.parcelNo as string | null) ?? null,
-                    variety: (raw.variety as string | null) ?? null,
-                    plantedYear: raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
-                    areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
-                    status: String(raw.status || "pending"),
-                    source: (raw.source as string | null) ?? null,
-                    lat: raw.lat !== null && raw.lat !== undefined ? Number(raw.lat) : null,
-                    lng: raw.lng !== null && raw.lng !== undefined ? Number(raw.lng) : null,
-                    geometryJson: (raw.geometryJson as string | null) ?? null,
-                  },
-                ],
-              },
-            ]
+            {
+              householdCode: String(raw.householdCode || "Chưa gán mã hộ"),
+              householdName: String(raw.ownerName || "Chưa cập nhật"),
+              villageName: String(raw.village || ""),
+              phone: String(raw.householdPhone || ""),
+              cccdMasked: String(raw.cccdMasked || ""),
+              status: String(raw.householdStatus || raw.status || "pending"),
+              publicTraceConsent: Boolean(raw.publicTraceConsent),
+              contributedKg: linkedLot?.contributedKg ? Number(linkedLot.contributedKg) : null,
+              contributedPlotCode: plotCode,
+              plots: [
+                {
+                  plotCode,
+                  qrToken: plotQrToken,
+                  zoneCode: pucCode,
+                  sheetNo: (raw.sheetNo as string | null) ?? null,
+                  parcelNo: (raw.parcelNo as string | null) ?? null,
+                  variety: (raw.variety as string | null) ?? null,
+                  plantedYear: raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
+                  areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
+                  status: String(raw.status || "pending"),
+                  source: (raw.source as string | null) ?? null,
+                  lat: raw.lat !== null && raw.lat !== undefined ? Number(raw.lat) : null,
+                  lng: raw.lng !== null && raw.lng !== undefined ? Number(raw.lng) : null,
+                  geometryJson: (raw.geometryJson as string | null) ?? null,
+                },
+              ],
+            },
+          ]
           : [],
         cultivationDiaries: camelRows(diariesRes.rows),
         inspectionMinutes: camelRows(minutesRows),
@@ -4163,10 +4926,20 @@ export class TraceabilityService {
         plotCode,
         qrToken: plotQrToken,
         zoneCode: pucCode,
+        villageName: String(raw.village || "Xã Cư Né"),
+        variety: String(raw.variety || "Ri6 & Monthong (Dona)"),
+        plantedYear:
+          raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
         areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
         treeCount: raw.treeCount !== null && raw.treeCount !== undefined ? Number(raw.treeCount) : 0,
+        plotStatus: String(raw.status || "approved"),
+        lastCareOn,
+        lastInspectionOn,
+        latestMinuteCode,
+        latestMinuteOfficer,
+        linkedLotCode: resolvedLinkedLotCode,
       },
-      accessControl: this.buildAccessControlPayload(access, ctx, fieldAuditPass),
+      accessControl: this.buildAccessControlPayload(access, ctx, fieldAuditPass, temporaryGrant),
       publicData: {
         lotIdentity: {
           productName: "Sầu riêng vùng trồng định danh (Durio zibethinus)",
@@ -4189,10 +4962,10 @@ export class TraceabilityService {
           revokedReason: isSuspended ? "Đang tạm dừng hiệu lực để rà soát kỹ thuật canh tác." : null,
         },
         growingZone: {
-          name: `Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né`,
+          name: live.pucName || "Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né",
           pucCode,
           additionalZoneCount: 0,
-          adminLocation,
+          adminLocation: live.pucAdminLocation || adminLocation,
           status: pucStatus,
           statusLabel: live.pucStatusLabel,
           statusNote: live.pucNote,

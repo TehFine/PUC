@@ -2,17 +2,29 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { safeDecodeURIComponent } from "@/utils/url-safety";
+import { getTraceLoadingLabel, inferTraceKindFromCode } from "./trace-i18n";
 import TraceView from "./TraceView";
 
 export async function generateMetadata({ params }: { params: Promise<{ code: string }> }): Promise<Metadata> {
   const { code } = await params;
   const decoded = safeDecodeURIComponent(code);
+  const kind = inferTraceKindFromCode(decoded);
+  const entityLabel =
+    kind === "plot"
+      ? `thửa đất ${decoded}`
+      : kind === "box"
+        ? `thùng đóng gói ${decoded}`
+        : kind === "fruit"
+          ? `trái sầu riêng ${decoded}`
+          : kind === "lot"
+            ? `lô hàng ${decoded}`
+            : `mã ${decoded}`;
   return {
-    title: `Truy xuất nguồn gốc ${decoded} | HTX Sầu Riêng Cư Né`,
-    description: `Hồ sơ truy xuất nguồn gốc ${decoded}: mã số vùng trồng PUC, cơ sở đóng gói, dòng thời gian 5 bước và kết quả kiểm nghiệm Cadimi, Vàng O.`,
+    title: `Truy xuất ${entityLabel} | HTX Cư Né`,
+    description: `Hồ sơ truy xuất nguồn gốc ${entityLabel}: mã số vùng trồng PUC, nhật ký canh tác, đơn vị chịu trách nhiệm và kết quả kiểm nghiệm an toàn thực phẩm.`,
     openGraph: {
-      title: `Chứng thực nguồn gốc sầu riêng ${decoded} - HTX Cư Né`,
-      description: "Quét mã QR truy xuất nguồn gốc theo lô/thùng chuẩn VietGAP, GACC và Cổng Truy xuất Quốc gia.",
+      title: `Hồ sơ truy xuất ${entityLabel} - HTX Cư Né`,
+      description: "Cổng truy xuất nguồn gốc điện tử cho thửa vườn, lô hàng, thùng đóng gói và tem trái sầu riêng của HTX Cư Né.",
     },
   };
 }
@@ -37,7 +49,7 @@ export default function TracePage() {
             fontWeight: 500,
           }}
         >
-          Đang nạp hồ sơ xác thực truy xuất nguồn gốc…
+          {getTraceLoadingLabel("generic", "vi")}
         </div>
       }
     >

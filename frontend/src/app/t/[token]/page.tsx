@@ -11,17 +11,17 @@ export async function generateMetadata({
   const { token } = await params;
   const shortRef = (token || "").slice(0, 18);
   return {
-    title: `Xác thực QR ${shortRef} | Durian Traceability - HTX Cư Né`,
+    title: `Xác thực QR ${shortRef} | HTX Cư Né`,
     description:
-      "Cổng xác thực nguồn gốc sầu riêng theo lô/thùng thời gian thực (Tiếng Việt / English / 简体中文) - HTX Cư Né, Đắk Lắk.",
+      "Cổng xác thực nguồn gốc sầu riêng điện tử cho thửa đất, lô hàng, thùng đóng gói và tem trái (Tiếng Việt / English / 简体中文) - HTX Cư Né, Đắk Lắk.",
     robots: {
       index: false,
       follow: false,
     },
     openGraph: {
-      title: "Xác thực nguồn gốc sầu riêng - HTX Cư Né (Durian Traceability)",
+      title: "Xác thực nguồn gốc sầu riêng - HTX Cư Né",
       description:
-        "Kiểm tra trực tiếp trạng thái mã số vùng trồng PUC, cơ sở đóng gói PHC và phiếu kiểm nghiệm an toàn thực phẩm.",
+        "Kiểm tra trực tiếp hồ sơ vùng trồng PUC, thửa đất canh tác, cơ sở đóng gói PHC và phiếu kiểm nghiệm an toàn thực phẩm.",
     },
   };
 }
@@ -48,7 +48,7 @@ export default function AntiCounterfeitQrTokenPage() {
               'var(--font-bai-jamjuree), "Bai Jamjuree", "PingFang SC", "Microsoft YaHei", Arial, Helvetica, sans-serif',
           }}
         >
-          Đang xác thực mã QR thời gian thực / Verifying QR / 正在实时核验溯源码…
+          Đang tải hồ sơ truy xuất nguồn gốc... / Loading traceability dossier... / 正在加载溯源核验档案...
         </div>
       }
     >
