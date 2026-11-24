@@ -10,36 +10,39 @@ export default function ZoneSourceCard({
   zoneRows?: ZoneRowData[];
 }) {
   return (
-    <aside className="card zone-source-card">
+    <aside className="card zone-source-card" aria-label="Thống kê mã vùng và nguồn dữ liệu thửa">
       {zoneRows && zoneRows.length > 0 && (
-        <div className="zone-source-list" style={{ marginBottom: 8 }}>
+        <div className="zone-source-list zone-source-zones">
           {zoneRows.map((zone) => {
             const zc = getZoneColor(zone.code);
             return (
-              <span
-                className="zone-source-item"
+              <div
+                className="zone-source-row"
                 key={zone.code}
                 title={`${zone.code} (${zone.village})`}
-                style={{
-                  background: "transparent",
-                  color: zc.text,
-                  padding: 0,
-                  border: "none",
-                }}
               >
-                <span style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em", fontSize: 11.5, fontWeight: 700 }}>{zone.code}</span>{" "}
-                <strong>{zone.count}</strong>
-              </span>
+                <span className="zone-source-code" style={{ color: zc.text }}>
+                  {zone.code}
+                </span>
+                <strong className="zone-source-count">{zone.count}</strong>
+              </div>
             );
           })}
         </div>
       )}
-      <div className="zone-source-list">
+      <div className="zone-source-list zone-source-origins">
         {(Object.keys(SOURCE_LABELS) as PlotSource[]).map((source) => (
-          <span className="zone-source-item" key={source}>
-            <i style={{ background: SOURCE_COLORS[source] }} />
-            {SOURCE_LABELS[source]} <strong>{sources[source] ?? 0}</strong>
-          </span>
+          <div className="zone-source-row" key={source}>
+            <span className="zone-source-label">
+              <i
+                className="zone-source-swatch"
+                style={{ background: SOURCE_COLORS[source] }}
+                aria-hidden="true"
+              />
+              <span>{SOURCE_LABELS[source]}</span>
+            </span>
+            <strong className="zone-source-count">{sources[source] ?? 0}</strong>
+          </div>
         ))}
       </div>
     </aside>
