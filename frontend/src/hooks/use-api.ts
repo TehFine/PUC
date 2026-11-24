@@ -298,7 +298,21 @@ export function useApi<T>(path: string | null) {
       if (!current || getAuthScopeUserId() === null) return;
       if (prefix && !current.startsWith(prefix)) return;
       const cacheKey = scopedApiKey(current);
-      if (inflightRequests.has(cacheKey)) return;
+      const existingInflight = inflightRequests.get(cacheKey);
+      if (existingInflight) {
+        void existingInflight.finally(() => {
+          if (latest.current !== current || getAuthScopeUserId() === null) return;
+          void fetchDeduped<T>(current, true)
+            .then((result) => {
+              if (latest.current === current) {
+                setData(result);
+                setError(null);
+              }
+            })
+            .catch(() => undefined);
+        });
+        return;
+      }
       const cached = apiCache.get(cacheKey);
       if (!prefix && cached && lastMutationAt > 0 && cached.timestamp >= lastMutationAt) {
         return;
@@ -340,7 +354,10 @@ export function useApi<T>(path: string | null) {
 const EMPTY_ROWS: never[] = [];
 
 /** Danh sách phân trang chuẩn `{ data, total, page, pageSize }` của backend. */
-export function useApiList<T>(resource: string | null, params: Record<string, string | number | undefined | null> = {}) {
+export function useApiList<T, TExtra extends object = Record<string, unknown>>(
+  resource: string | null,
+  params: Record<string, string | number | undefined | null> = {},
+) {
   const query = new URLSearchParams();
   query.set("pageSize", String(params.pageSize ?? 500));
   for (const [key, value] of Object.entries(params)) {
@@ -348,10 +365,11 @@ export function useApiList<T>(resource: string | null, params: Record<string, st
     query.set(key, String(value));
   }
   const path = resource === null ? null : `/${resource}?${query.toString()}`;
-  const state = useApi<ListResponse<T>>(path);
+  const state = useApi<ListResponse<T> & TExtra>(path);
   return {
     rows: state.data?.data ?? (EMPTY_ROWS as T[]),
     total: state.data?.total ?? 0,
+    raw: state.data,
     loading: state.loading,
     error: state.error,
     refresh: state.refresh,

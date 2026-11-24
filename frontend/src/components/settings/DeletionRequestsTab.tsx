@@ -7,6 +7,7 @@ import {
   ADMIN_SYSTEM_TAB_EVENT,
   consumePendingDeletionRequestId,
   notifyCountsChanged,
+  onCountsChanged,
 } from "@/components/admin/shared/counts-events";
 import Pagination from "@/components/admin/shared/Pagination";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -14,7 +15,7 @@ import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { FormError, Modal, ModalDismissButton } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { TextAreaField } from "@/components/ui/form/fields";
-import { useApiList, useMutation } from "@/hooks/use-api";
+import { refreshMountedApiQueries, useApiList, useMutation } from "@/hooks/use-api";
 import { invalidateQueries, NOTIFICATIONS_PATH } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
 import { usePersistedState } from "@/lib/back-navigation";
@@ -82,17 +83,28 @@ export default function DeletionRequestsTab({
   const [reviewNote, setReviewNote] = useState("");
 
   useEffect(() => {
+    return onCountsChanged(() => {
+      refreshMountedApiQueries("/deletion-requests");
+    });
+  }, []);
+
+  useEffect(() => {
     const onTabSwitch = () => {
       const nextId = consumePendingDeletionRequestId();
       if (nextId) {
+        setQ("");
+        setStatusFilter("");
+        setTargetTypeFilter("");
+        setPage(1);
         setReviewNote("");
         setViewingSnapshot(null);
         setPendingTargetId(nextId);
+        refreshMountedApiQueries("/deletion-requests");
       }
     };
     window.addEventListener(ADMIN_SYSTEM_TAB_EVENT, onTabSwitch);
     return () => window.removeEventListener(ADMIN_SYSTEM_TAB_EVENT, onTabSwitch);
-  }, []);
+  }, [setPage, setStatusFilter, setTargetTypeFilter]);
 
   const viewing =
     viewingSnapshot != null

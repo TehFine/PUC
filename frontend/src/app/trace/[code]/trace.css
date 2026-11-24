@@ -5673,6 +5673,48 @@ html[data-perf="lite"] .tr-req-modal-close {
   color: #b91c1c;
   font-size: 12.5px;
   line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-req-modal-error.is-warn {
+  background: #fdf8ee;
+  color: #9a6712;
+}
+
+.tr-uac-warn-inline {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #d4d4d2;
+  background: #fdf8ee;
+  color: #9a6712;
+  font-size: 12px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-block-countdown {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto 20px;
+  padding: 10px 18px;
+  border: 1px solid var(--tr-line-strong);
+  background: #fcf5f5;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-block-countdown-label {
+  font-size: 13px;
+  color: var(--tr-muted);
+}
+
+.tr-block-countdown-value {
+  font-size: 19px;
+  font-weight: 700;
+  color: #b91c1c;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .tr-req-field-row {

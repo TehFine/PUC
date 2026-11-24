@@ -86,7 +86,7 @@ const FieldAuditGpsCheckCard = dynamic(() => import("./FieldAuditGpsCheckCard"),
 });
 
 type ViewerTier = "public" | "enterprise" | "authority";
-type ErrorKind = "invalid" | "not_found" | "server" | "timeout" | "network";
+type ErrorKind = "invalid" | "not_found" | "server" | "timeout" | "network" | "blocked";
 
 interface TraceFieldAuditPassStatus {
   active: boolean;
@@ -2370,6 +2370,9 @@ export default function TraceView() {
   const [loading, setLoading] = useState(() => Boolean(code));
   const [switchingTier, setSwitchingTier] = useState(false);
   const [errorKind, setErrorKind] = useState<ErrorKind | null>(() => (code ? null : "invalid"));
+  const [blockedUntilMs, setBlockedUntilMs] = useState<number | null>(null);
+  const [nowTickMs, setNowTickMs] = useState<number>(() => Date.now());
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [searchCode, setSearchCode] = useState(code);
   const [copied, setCopied] = useState(false);
   const [qrSrc, setQrSrc] = useState<string>("");
@@ -2449,6 +2452,35 @@ export default function TraceView() {
     setAuditPass(cleaned);
     setAuditPassInput("");
   };
+
+  const handleDeviceBlocked = (retryAfterSeconds: number, blockedUntil?: string | null) => {
+    const parsedUntil = blockedUntil ? new Date(blockedUntil).getTime() : Number.NaN;
+    const targetMs = !Number.isNaN(parsedUntil)
+      ? parsedUntil
+      : Date.now() + Math.max(1, retryAfterSeconds) * 1000;
+    setNowTickMs(Date.now());
+    setBlockedUntilMs(targetMs);
+    setData(null);
+    setErrorKind("blocked");
+  };
+
+  useEffect(() => {
+    if (blockedUntilMs === null) return;
+    const timer = window.setInterval(() => {
+      const current = Date.now();
+      setNowTickMs(current);
+      if (current >= blockedUntilMs) {
+        window.clearInterval(timer);
+        setBlockedUntilMs(null);
+        setErrorKind(null);
+        if (code) {
+          setLoading(true);
+          setReloadNonce((n) => n + 1);
+        }
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [blockedUntilMs, code]);
 
   const handleGrantActivated = (
     passToken: string,
@@ -2588,9 +2620,23 @@ export default function TraceView() {
         }
         return res;
       })
-      .then((res) => {
+      .then(async (res) => {
         reportRequestTime(performance.now() - start);
         if (!res.ok) {
+          if (res.status === 429) {
+            const errJson = (await res.json().catch(() => null)) as {
+              code?: string;
+              retryAfterSeconds?: number;
+              blockedUntil?: string;
+            } | null;
+            const headerRetry = Number(res.headers.get("retry-after") || "0");
+            const retrySec = errJson?.retryAfterSeconds || (headerRetry > 0 ? headerRetry : 300);
+            const parsedUntil = errJson?.blockedUntil ? new Date(errJson.blockedUntil).getTime() : Number.NaN;
+            const untilMs = !Number.isNaN(parsedUntil) ? parsedUntil : Date.now() + retrySec * 1000;
+            const blockedErr = new Error(`blocked:${untilMs}`);
+            blockedErr.name = "TraceBlockedError";
+            throw blockedErr;
+          }
           const httpErr = new Error(res.status === 404 ? "not_found" : "server");
           httpErr.name = "TraceHttpError";
           throw httpErr;
@@ -2602,6 +2648,7 @@ export default function TraceView() {
           lastStableSigRef.current = buildStableTraceSignature(payload);
           setData(payload);
           setErrorKind(null);
+          setBlockedUntilMs(null);
           const passInfo = payload.accessControl?.fieldAuditPass;
           const tempGrantInfo = payload.accessControl?.temporaryGrant;
           if (auditPass && !passInfo?.active && !tempGrantInfo?.active) {
@@ -2627,7 +2674,13 @@ export default function TraceView() {
       })
       .catch((err: unknown) => {
         if (!active) return;
-        if (err instanceof Error && err.name === "TraceHttpError") {
+        if (err instanceof Error && err.name === "TraceBlockedError") {
+          const untilMs = Number(err.message.split(":")[1]) || Date.now() + 300_000;
+          setNowTickMs(Date.now());
+          setBlockedUntilMs(untilMs);
+          setData(null);
+          setErrorKind("blocked");
+        } else if (err instanceof Error && err.name === "TraceHttpError") {
           setErrorKind(err.message === "not_found" ? "not_found" : "server");
         } else if (err instanceof Error && err.name === "AbortError") {
           setErrorKind("timeout");
@@ -2648,7 +2701,7 @@ export default function TraceView() {
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [code, selectedView, auditPass, suppressTempGrant, isAuthenticated]);
+  }, [code, selectedView, auditPass, suppressTempGrant, isAuthenticated, reloadNonce]);
 
   // Đồng bộ ngầm thời gian thực (SSE + khi quay lại tab / có mạng + kiểm tra định kỳ an toàn):
   // Tự động nạp lại dữ liệu mới nhất khi lô hàng, kiểm nghiệm, vùng trồng hoặc nhật ký thay đổi mà không nháy trang hay mất vị trí cuộn.
@@ -2700,7 +2753,29 @@ export default function TraceView() {
           }
           return res;
         })
-        .then((res) => (res.ok ? (res.json() as Promise<TraceData>) : null))
+        .then(async (res) => {
+          if (res.status === 429) {
+            const errJson = (await res.json().catch(() => null)) as {
+              code?: string;
+              retryAfterSeconds?: number;
+              blockedUntil?: string;
+            } | null;
+            if (errJson?.code === "TRACE_DEVICE_BLOCKED") {
+              const parsedUntil = errJson.blockedUntil ? new Date(errJson.blockedUntil).getTime() : Number.NaN;
+              const untilMs = !Number.isNaN(parsedUntil)
+                ? parsedUntil
+                : Date.now() + (errJson.retryAfterSeconds || 300) * 1000;
+              if (!disposed) {
+                setNowTickMs(Date.now());
+                setBlockedUntilMs(untilMs);
+                setData(null);
+                setErrorKind("blocked");
+              }
+            }
+            return null;
+          }
+          return res.ok ? ((await res.json()) as TraceData) : null;
+        })
         .then((nextPayload) => {
           if (disposed || !nextPayload) return;
           if (
@@ -3007,16 +3082,26 @@ export default function TraceView() {
     });
   };
 
+  const blockedRemainingSec =
+    errorKind === "blocked" && blockedUntilMs !== null
+      ? Math.max(0, Math.ceil((blockedUntilMs - nowTickMs) / 1000))
+      : 0;
+  const blockedCountdownText = `${String(Math.floor(blockedRemainingSec / 60)).padStart(2, "0")}:${String(
+    blockedRemainingSec % 60,
+  ).padStart(2, "0")}`;
+
   const errorMessage = errorKind
-    ? errorKind === "invalid"
-      ? t.errorState.invalidCode
-      : errorKind === "not_found"
-        ? t.errorState.notFound(code)
-        : errorKind === "timeout"
-          ? t.errorState.timeoutError
-          : errorKind === "network"
-            ? t.errorState.networkError
-            : t.errorState.serverError
+    ? errorKind === "blocked"
+      ? t.errorState.blockedDesc
+      : errorKind === "invalid"
+        ? t.errorState.invalidCode
+        : errorKind === "not_found"
+          ? t.errorState.notFound(code)
+          : errorKind === "timeout"
+            ? t.errorState.timeoutError
+            : errorKind === "network"
+              ? t.errorState.networkError
+              : t.errorState.serverError
     : null;
 
   const returnNextPath =
@@ -3109,6 +3194,36 @@ export default function TraceView() {
 
         {loading ? (
           <SkeletonCards count={3} label={getTraceLoadingLabel(activeKind, lang)} />
+        ) : errorKind === "blocked" ? (
+          <div className="tr-card tr-error-card tr-blocked-card" role="alert">
+            <h2 className="tr-error-title">{t.errorState.blockedTitle}</h2>
+            <p className="tr-error-desc">{t.errorState.blockedDesc}</p>
+            <div className="tr-block-countdown">
+              <span className="tr-block-countdown-label">{t.errorState.blockedTimerLabel}</span>
+              <strong className="tr-block-countdown-value">{blockedCountdownText}</strong>
+            </div>
+            <div className="tr-error-actions">
+              {blockedRemainingSec <= 0 && code ? (
+                <button
+                  type="button"
+                  className="tr-home-btn"
+                  onClick={() => {
+                    setBlockedUntilMs(null);
+                    setErrorKind(null);
+                    setLoading(true);
+                    setReloadNonce((n) => n + 1);
+                  }}
+                >
+                  <span>{t.errorState.blockedRetryBtn}</span>
+                </button>
+              ) : (
+                <Link href={INTRO_PATH} className="tr-home-btn">
+                  <ArrowLeft size={17} strokeWidth={2.3} aria-hidden="true" />
+                  <span>{t.actions.home}</span>
+                </Link>
+              )}
+            </div>
+          </div>
         ) : errorMessage ? (
           <div className="tr-card tr-error-card">
             <h2 className="tr-error-title">{t.errorState.title}</h2>
@@ -6013,6 +6128,7 @@ export default function TraceView() {
               }
               externalOpenTrigger={openAccessReqCount}
               onGrantActivated={handleGrantActivated}
+              onDeviceBlocked={handleDeviceBlocked}
             />
           </>
         ) : null}

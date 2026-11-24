@@ -7,13 +7,14 @@ import {
   ADMIN_SYSTEM_TAB_EVENT,
   consumePendingTraceRequestId,
   notifyCountsChanged,
+  onCountsChanged,
 } from "@/components/admin/shared/counts-events";
 import Pagination from "@/components/admin/shared/Pagination";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { FormError, Modal, ModalDismissButton } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { SelectField, TextAreaField } from "@/components/ui/form/fields";
-import { useApiList, useMutation } from "@/hooks/use-api";
+import { refreshMountedApiQueries, useApiList, useMutation } from "@/hooks/use-api";
 import { invalidateQueries, NOTIFICATIONS_PATH } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
 import { usePersistedState } from "@/lib/back-navigation";
@@ -82,8 +83,10 @@ function resolveStatusMeta(row: TraceAccessRequestRecord): {
 
 export default function TraceAccessRequestsTab({
   onReviewed,
+  onPendingCountSync,
 }: {
   onReviewed?: () => void;
+  onPendingCountSync?: (count: number) => void;
 }) {
   const [q, setQ] = useState("");
   const debouncedQ = useDebounced(q);
@@ -91,13 +94,30 @@ export default function TraceAccessRequestsTab({
   const [tierFilter, setTierFilter] = usePersistedState("admin:tracereq:tier", "");
   const [page, setPage] = usePersistedState("admin:tracereq:page", 1);
 
-  const list = useApiList<TraceAccessRequestRecord>("trace-requests", {
+  const list = useApiList<
+    TraceAccessRequestRecord,
+    { pendingCount?: number; activeCount?: number }
+  >("trace-requests", {
     q: debouncedQ || undefined,
     status: statusFilter || undefined,
     requestedTier: tierFilter || undefined,
     page,
     pageSize: PAGE_SIZE,
   });
+
+  const livePendingCount = list.raw?.pendingCount;
+
+  useEffect(() => {
+    if (typeof livePendingCount === "number") {
+      onPendingCountSync?.(livePendingCount);
+    }
+  }, [livePendingCount, onPendingCountSync]);
+
+  useEffect(() => {
+    return onCountsChanged(() => {
+      refreshMountedApiQueries("/trace-requests");
+    });
+  }, []);
 
   const [viewingSnapshot, setViewingSnapshot] = useState<TraceAccessRequestRecord | null>(null);
   const [pendingTargetId, setPendingTargetId] = useState<number | null>(() => {
@@ -121,15 +141,20 @@ export default function TraceAccessRequestsTab({
     const onTabSwitch = () => {
       const nextId = consumePendingTraceRequestId();
       if (nextId) {
+        setQ("");
+        setStatusFilter("");
+        setTierFilter("");
+        setPage(1);
         setReviewNote("");
         setConfirmingRevoke(false);
         setViewingSnapshot(null);
         setPendingTargetId(nextId);
+        refreshMountedApiQueries("/trace-requests");
       }
     };
     window.addEventListener(ADMIN_SYSTEM_TAB_EVENT, onTabSwitch);
     return () => window.removeEventListener(ADMIN_SYSTEM_TAB_EVENT, onTabSwitch);
-  }, []);
+  }, [setPage, setStatusFilter, setTierFilter]);
 
   const viewing =
     viewingSnapshot != null
@@ -263,6 +288,47 @@ export default function TraceAccessRequestsTab({
           <option value="authority">Cấp 3 - Thanh tra</option>
         </select>
       </div>
+
+      {typeof livePendingCount === "number" &&
+        livePendingCount > 0 &&
+        ((statusFilter !== "" && statusFilter !== "pending") ||
+          page > 1 ||
+          Boolean(debouncedQ) ||
+          Boolean(tierFilter)) &&
+        !list.rows.some((r) => r.status === "pending") && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              padding: "10px 14px",
+              marginBottom: 12,
+              background: "#ffffff",
+              border: "1px solid #d4d4d2",
+              borderRadius: 6,
+              fontSize: 13,
+              color: "#14372f",
+            }}
+          >
+            <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+              Có {livePendingCount} yêu cầu mới đang chờ phê duyệt ngoài bộ lọc hiện tại.
+            </span>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                setQ("");
+                setStatusFilter("");
+                setTierFilter("");
+                setPage(1);
+              }}
+            >
+              Xem ngay
+            </button>
+          </div>
+        )}
 
       <BlockState
         loading={list.loading && list.rows.length === 0}

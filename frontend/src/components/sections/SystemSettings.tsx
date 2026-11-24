@@ -161,8 +161,15 @@ export default function SystemSettings() {
       </div>
 
       {tab === "accounts" && <AccountsTab createTrigger={createTrigger} />}
-      {tab === "trace-requests" && canReadTraceRequests && <TraceAccessRequestsTab />}
-      {tab === "deletions" && <DeletionRequestsTab />}
+      {tab === "trace-requests" && canReadTraceRequests && (
+        <TraceAccessRequestsTab
+          onReviewed={refreshPendingCounts}
+          onPendingCountSync={setPendingTraceRequests}
+        />
+      )}
+      {tab === "deletions" && (
+        <DeletionRequestsTab onReviewed={refreshPendingCounts} />
+      )}
       {tab === "roles" && <RolesTab />}
       {tab === "alerts" && <SystemAlertsTab />}
       {tab === "audit" && <AuditLogTab />}

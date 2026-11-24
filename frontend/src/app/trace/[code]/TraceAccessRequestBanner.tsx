@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, getServerCalibratedDate } from "@/lib/api-client";
+import {
+  AUTH_EXPIRED_EVENT,
+  AUTH_LOGOUT_EVENT,
+  DATA_MUTATED_EVENT,
+  DATA_SYNC_CHANNEL,
+  getServerCalibratedDate,
+} from "@/lib/api-client";
 import { useBackLayer } from "@/lib/back-navigation";
 import { buildSignedSecurityHeaders } from "@/lib/request-security";
 import type { TraceLang } from "./trace-i18n";
@@ -15,6 +21,7 @@ interface SavedTraceReqSession {
   scannedCode: string;
   requestedTier: "enterprise" | "authority";
   status: "pending" | "approved" | "rejected" | "revoked" | "expired";
+  expiresAt?: string | null;
   reviewNote?: string | null;
   reviewedByName?: string | null;
 }
@@ -33,6 +40,7 @@ interface TraceAccessRequestBannerProps {
   defaultRequesterName?: string | null;
   externalOpenTrigger?: number;
   onGrantActivated: (passToken: string, grantedTier: "enterprise" | "authority") => void;
+  onDeviceBlocked?: (retryAfterSeconds: number, blockedUntil?: string | null) => void;
 }
 
 const COPY: Record<
@@ -50,9 +58,11 @@ const COPY: Record<
     upgradeDesc: string;
     pendingTitleFmt: (code: string) => string;
     pendingDesc: string;
+    sendAnotherBtn: string;
     rejectedTitleFmt: (code: string) => string;
     rejectedDescFmt: (note: string | null) => string;
     retryBtn: string;
+    warnStrikeFmt: (strike: number, maxStrikes: number, isApproved: boolean) => string;
     modalTitle: string;
     modalSub: string;
     nameLabel: string;
@@ -85,11 +95,19 @@ const COPY: Record<
     upgradeTitle: "Cần xem hồ sơ cấp cơ quan thanh tra?",
     upgradeDesc: "Gửi yêu cầu để Quản trị viên mở quyền xem toàn diện ngay trên trang này.",
     pendingTitleFmt: (code) => `Đang chờ duyệt (${code})`,
-    pendingDesc: "Trang sẽ tự động mở hồ sơ chi tiết ngay khi Quản trị viên phê duyệt.",
+    pendingDesc:
+      "Mỗi thiết bị gửi 1 yêu cầu mỗi lượt, hết hạn xem mới được gửi lại. Trang tự mở ngay khi được duyệt.",
+    sendAnotherBtn: "Gửi yêu cầu mới",
     rejectedTitleFmt: (code) => `Chưa được duyệt (${code})`,
     rejectedDescFmt: (note) =>
       note ? `Phản hồi: ${note}` : "Vui lòng kiểm tra lại thông tin và gửi lại yêu cầu.",
     retryBtn: "Gửi lại yêu cầu",
+    warnStrikeFmt: (strike, maxStrikes, isApproved) =>
+      strike <= 1
+        ? isApproved
+          ? `Thiết bị đang còn thời hạn xem hồ sơ, hết hạn mới được gửi lại. Nhắc nhở ${strike}/${maxStrikes} (quá ${maxStrikes} lần sẽ tạm khóa 5 phút).`
+          : `Thiết bị đã gửi yêu cầu và đang chờ duyệt. Nhắc nhở ${strike}/${maxStrikes} (quá ${maxStrikes} lần sẽ tạm khóa 5 phút).`
+        : `Nhắc nhở ${strike}/${maxStrikes}: Thiết bị đang có yêu cầu hiệu lực. Nếu gửi thêm 1 lần nữa sẽ tạm khóa 5 phút.`,
     modalTitle: "Yêu cầu quyền xem hồ sơ chi tiết",
     modalSub: "Hồ sơ sẽ tự động mở ngay khi Quản trị viên phê duyệt.",
     nameLabel: "Họ tên người đại diện",
@@ -121,11 +139,19 @@ const COPY: Record<
     upgradeTitle: "Need full regulatory inspection access?",
     upgradeDesc: "Send a request for Administrators to unlock the full dossier on this page.",
     pendingTitleFmt: (code) => `Awaiting approval (${code})`,
-    pendingDesc: "This page will automatically unlock the dossier once approved.",
+    pendingDesc:
+      "One request per device until viewing time expires. This page unlocks automatically once approved.",
+    sendAnotherBtn: "New Request",
     rejectedTitleFmt: (code) => `Request declined (${code})`,
     rejectedDescFmt: (note) =>
       note ? `Note: ${note}` : "Please check your details and submit again.",
     retryBtn: "Resubmit",
+    warnStrikeFmt: (strike, maxStrikes, isApproved) =>
+      strike <= 1
+        ? isApproved
+          ? `Your viewing pass is still active; you can only request again once it expires. Warning ${strike}/${maxStrikes} (${maxStrikes} attempts lock access for 5 minutes).`
+          : `A request from this device is already pending review. Warning ${strike}/${maxStrikes} (${maxStrikes} attempts lock access for 5 minutes).`
+        : `Warning ${strike}/${maxStrikes}: An active request already exists on this device. One more repeat attempt will pause access for 5 minutes.`,
     modalTitle: "Request Extended Dossier Access",
     modalSub: "The dossier unlocks automatically once approved by an administrator.",
     nameLabel: "Representative Name",
@@ -156,11 +182,18 @@ const COPY: Record<
     upgradeTitle: "需要查看监管稽核完整档案？",
     upgradeDesc: "向管理员发送实时申请，审批通过后本页将直接解锁完整档案。",
     pendingTitleFmt: (code) => `等待审批（${code}）`,
-    pendingDesc: "管理员批准后，当前页面将自动解锁详细档案。",
+    pendingDesc: "每台设备每次限提交 1 次申请，到期后方可重新申请。批准后本页将自动解锁。",
+    sendAnotherBtn: "新建申请",
     rejectedTitleFmt: (code) => `申请未通过（${code}）`,
     rejectedDescFmt: (note) =>
       note ? `回复：${note}` : "请核对单位与联系信息后重新提交。",
     retryBtn: "重新提交",
+    warnStrikeFmt: (strike, maxStrikes, isApproved) =>
+      strike <= 1
+        ? isApproved
+          ? `当前设备授权仍在有效期内，到期后方可重新申请。提醒 ${strike}/${maxStrikes}（满 ${maxStrikes} 次将暂停访问 5 分钟）。`
+          : `当前设备已有待审批申请，请勿重复提交。提醒 ${strike}/${maxStrikes}（满 ${maxStrikes} 次将暂停访问 5 分钟）。`
+        : `提醒 ${strike}/${maxStrikes}：当前设备已有有效申请，若再重复提交 1 次将暂停访问 5 分钟。`,
     modalTitle: "申请查看详细档案权限",
     modalSub: "管理员批准后，当前页面将自动解锁档案。",
     nameLabel: "代表人姓名",
@@ -181,20 +214,27 @@ const COPY: Record<
   },
 };
 
-function readSavedReq(scannedCode: string): SavedTraceReqSession | null {
+function readSavedReq(): SavedTraceReqSession | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(TRACE_REQ_SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SavedTraceReqSession;
-    if (
-      parsed &&
-      parsed.requestCode &&
-      (parsed.clientSecret || parsed.status !== "pending") &&
-      parsed.scannedCode?.toUpperCase() === scannedCode.toUpperCase()
-    ) {
-      return parsed;
+    if (!parsed || !parsed.requestCode || (!parsed.clientSecret && parsed.status === "pending")) {
+      return null;
     }
+    if (parsed.status === "approved" && parsed.expiresAt) {
+      const expMs = new Date(parsed.expiresAt).getTime();
+      if (!Number.isNaN(expMs) && expMs <= Date.now()) {
+        window.sessionStorage.removeItem(TRACE_REQ_SESSION_KEY);
+        return null;
+      }
+    }
+    if (parsed.status === "expired" || parsed.status === "revoked") {
+      window.sessionStorage.removeItem(TRACE_REQ_SESSION_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
     // ignore
   }
@@ -228,11 +268,10 @@ export default function TraceAccessRequestBanner({
   defaultRequesterName,
   externalOpenTrigger = 0,
   onGrantActivated,
+  onDeviceBlocked,
 }: TraceAccessRequestBannerProps) {
   const c = COPY[lang];
-  const [savedReq, setSavedReq] = useState<SavedTraceReqSession | null>(() =>
-    readSavedReq(scannedCode),
-  );
+  const [savedReq, setSavedReq] = useState<SavedTraceReqSession | null>(() => readSavedReq());
   const safeDefaultName =
     isAuthenticated && actualTier !== "authority" && defaultRequesterName
       ? defaultRequesterName
@@ -248,6 +287,8 @@ export default function TraceAccessRequestBanner({
   const [purpose, setPurpose] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formErrorIsWarn, setFormErrorIsWarn] = useState(false);
+  const [warningNotice, setWarningNotice] = useState<string | null>(null);
 
   const [prevIsAuthenticated, setPrevIsAuthenticated] = useState(isAuthenticated);
   if (prevIsAuthenticated !== isAuthenticated) {
@@ -259,6 +300,7 @@ export default function TraceAccessRequestBanner({
       setContactPhone("");
       setPurpose("");
       setFormError(null);
+      setFormErrorIsWarn(false);
       setModalOpen(false);
     }
   }
@@ -266,7 +308,8 @@ export default function TraceAccessRequestBanner({
   const [prevScannedCode, setPrevScannedCode] = useState(scannedCode);
   if (prevScannedCode !== scannedCode) {
     setPrevScannedCode(scannedCode);
-    setSavedReq(readSavedReq(scannedCode));
+    setSavedReq(readSavedReq());
+    setWarningNotice(null);
   }
 
   const [prevExternalTrigger, setPrevExternalTrigger] = useState(externalOpenTrigger);
@@ -274,6 +317,7 @@ export default function TraceAccessRequestBanner({
     setPrevExternalTrigger(externalOpenTrigger);
     if (externalOpenTrigger > 0) {
       setFormError(null);
+      setFormErrorIsWarn(false);
       if (!requesterName && safeDefaultName) {
         setRequesterName(safeDefaultName);
       }
@@ -303,6 +347,7 @@ export default function TraceAccessRequestBanner({
 
   const openRequestModal = () => {
     setFormError(null);
+    setFormErrorIsWarn(false);
     if (!isAuthenticated) {
       // Đảm bảo khách chưa đăng nhập không bao giờ bị điền sẵn họ tên từ phiên trước trên máy dùng chung
       if (defaultRequesterName && requesterName === defaultRequesterName) {
@@ -315,7 +360,7 @@ export default function TraceAccessRequestBanner({
   };
 
   const checkPendingStatus = useCallback(async () => {
-    const current = readSavedReq(scannedCode);
+    const current = readSavedReq();
     if (!current || current.status !== "pending") return;
     try {
       const res = await fetch(
@@ -326,11 +371,23 @@ export default function TraceAccessRequestBanner({
           cache: "no-store",
         },
       );
+      if (res.status === 429) {
+        const errBody = (await res.json().catch(() => null)) as {
+          code?: string;
+          retryAfterSeconds?: number;
+          blockedUntil?: string;
+        } | null;
+        if (errBody?.code === "TRACE_DEVICE_BLOCKED") {
+          onDeviceBlocked?.(errBody.retryAfterSeconds ?? 300, errBody.blockedUntil ?? null);
+        }
+        return;
+      }
       if (!res.ok) return;
       const body = (await res.json()) as {
         status: "pending" | "approved" | "rejected" | "revoked" | "expired";
         grantedTier?: "enterprise" | "authority" | null;
         grantedPassToken?: string | null;
+        expiresAt?: string | null;
         reviewNote?: string | null;
         reviewedByName?: string | null;
       };
@@ -340,15 +397,21 @@ export default function TraceAccessRequestBanner({
           ...current,
           clientSecret: "",
           status: "approved",
+          expiresAt: body.expiresAt ?? null,
           reviewNote: body.reviewNote,
           reviewedByName: body.reviewedByName,
         };
         writeSavedReq(nextState);
         setSavedReq(nextState);
+        setWarningNotice(null);
         onGrantActivated(
           body.grantedPassToken,
           body.grantedTier ?? current.requestedTier,
         );
+      } else if (body.status === "revoked" || body.status === "expired") {
+        writeSavedReq(null);
+        setSavedReq(null);
+        setWarningNotice(null);
       } else if (body.status !== "pending") {
         const nextState: SavedTraceReqSession = {
           ...current,
@@ -359,11 +422,12 @@ export default function TraceAccessRequestBanner({
         };
         writeSavedReq(nextState);
         setSavedReq(nextState);
+        setWarningNotice(null);
       }
     } catch {
       // ignore transient network glitches while waiting
     }
-  }, [onGrantActivated, scannedCode]);
+  }, [onDeviceBlocked, onGrantActivated]);
 
   useEffect(() => {
     if (!savedReq || savedReq.status !== "pending") return;
@@ -438,6 +502,7 @@ export default function TraceAccessRequestBanner({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setFormErrorIsWarn(false);
     setSubmitting(true);
     try {
       const bodyStr = JSON.stringify({
@@ -468,13 +533,43 @@ export default function TraceAccessRequestBanner({
           requestCode?: string;
           clientSecret?: string;
           status?: "pending";
+          error?: string;
+          code?: string;
+          details?: Array<{ message?: string }>;
+          retryAfterSeconds?: number;
+          blockedUntil?: string;
+          strike?: number;
+          maxStrikes?: number;
+          existingStatus?: "pending" | "approved";
           message?: string | string[];
         }
         | null;
+
+      if (payload?.code === "TRACE_DEVICE_BLOCKED") {
+        setModalOpen(false);
+        setWarningNotice(null);
+        onDeviceBlocked?.(payload.retryAfterSeconds ?? 300, payload.blockedUntil ?? null);
+        return;
+      }
+
+      if (payload?.code === "TRACE_REQUEST_WARNING") {
+        const strike = payload.strike ?? 1;
+        const maxStrikes = payload.maxStrikes ?? 3;
+        const warnMsg =
+          lang === "vi" && payload.error
+            ? payload.error
+            : c.warnStrikeFmt(strike, maxStrikes, payload.existingStatus === "approved");
+        setFormErrorIsWarn(true);
+        setFormError(warnMsg);
+        setWarningNotice(warnMsg);
+        return;
+      }
+
       if (!res.ok || !payload?.requestCode || !payload?.clientSecret) {
-        const errMsg = Array.isArray(payload?.message)
-          ? payload.message[0]
-          : payload?.message || c.defaultErr;
+        const detailMsg = payload?.details?.[0]?.message;
+        const legacyMsg = Array.isArray(payload?.message) ? payload?.message[0] : payload?.message;
+        const errMsg = detailMsg || payload?.error || legacyMsg || c.defaultErr;
+        setFormErrorIsWarn(false);
         setFormError(errMsg);
         return;
       }
@@ -487,9 +582,23 @@ export default function TraceAccessRequestBanner({
       };
       writeSavedReq(nextSession);
       setSavedReq(nextSession);
+      setWarningNotice(null);
       setPurpose("");
       setModalOpen(false);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(DATA_MUTATED_EVENT));
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const bc = new BroadcastChannel(DATA_SYNC_CHANNEL);
+            bc.postMessage({ ts: Date.now() });
+            bc.close();
+          } catch {
+            // ignore
+          }
+        }
+      }
     } catch {
+      setFormErrorIsWarn(false);
       setFormError(c.defaultErr);
     } finally {
       setSubmitting(false);
@@ -497,7 +606,9 @@ export default function TraceAccessRequestBanner({
   };
 
   const showPassInput = !fieldAuditPassActive && actualTier === "public" && !isAuthenticated;
-  const isApproved = savedReq?.status === "approved";
+  const isApprovedOnCurrentCode =
+    savedReq?.status === "approved" &&
+    savedReq.scannedCode?.toUpperCase() === scannedCode.toUpperCase();
 
   const renderRequestSection = () => {
     if (savedReq?.status === "pending") {
@@ -507,6 +618,20 @@ export default function TraceAccessRequestBanner({
             {c.pendingTitleFmt(savedReq.requestCode)}
           </strong>
           <p className="tr-uac-status-note">{c.pendingDesc}</p>
+          {warningNotice && (
+            <p className="tr-uac-warn-inline" role="alert">
+              {warningNotice}
+            </p>
+          )}
+          <div className="tr-uac-actions">
+            <button
+              type="button"
+              className="tr-uac-btn-outline"
+              onClick={openRequestModal}
+            >
+              {c.sendAnotherBtn}
+            </button>
+          </div>
         </div>
       );
     }
@@ -534,6 +659,11 @@ export default function TraceAccessRequestBanner({
     return (
       <>
         <span className="tr-uac-label">{c.noPassLabel}</span>
+        {warningNotice && (
+          <p className="tr-uac-warn-inline" role="alert">
+            {warningNotice}
+          </p>
+        )}
         <div className="tr-uac-actions">
           <button
             type="button"
@@ -554,7 +684,7 @@ export default function TraceAccessRequestBanner({
 
   return (
     <>
-      {!isApproved &&
+      {!isApprovedOnCurrentCode &&
         (showPassInput ? (
           <section className="tr-unified-access-card no-print" aria-label={c.cardTitle}>
             <div className="tr-uac-head">
@@ -655,7 +785,10 @@ export default function TraceAccessRequestBanner({
               onSubmit={(e) => void handleSubmit(e)}
             >
               {formError && (
-                <div className="tr-req-modal-error" role="alert">
+                <div
+                  className={`tr-req-modal-error${formErrorIsWarn ? " is-warn" : ""}`}
+                  role="alert"
+                >
                   {formError}
                 </div>
               )}

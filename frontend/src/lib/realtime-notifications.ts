@@ -129,9 +129,28 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
     return;
   }
 
+  if (link.includes("trace-requests")) {
+    refreshMountedApiQueries("/trace-requests");
+    refreshMountedApiQueries("/audit-log");
+    refreshMountedApiQueries("/dashboard");
+    return;
+  }
+
+  if (link.includes("deletions") || link.includes("deletion-requests")) {
+    refreshMountedApiQueries("/deletion-requests");
+    refreshMountedApiQueries("/households");
+    refreshMountedApiQueries("/accounts");
+    refreshMountedApiQueries("/audit-log");
+    refreshMountedApiQueries("/dashboard");
+    return;
+  }
+
   if (item.kind === "approval" || link.includes("approval")) {
     refreshMountedApiQueries("/approvals");
     refreshMountedApiQueries("/registrations");
+    refreshMountedApiQueries("/trace-requests");
+    refreshMountedApiQueries("/deletion-requests");
+    refreshMountedApiQueries("/audit-log");
     refreshMountedApiQueries("/dashboard");
     invalidateQueries(portalPath("approvals"), portalPath("overview"));
     return;
@@ -191,6 +210,9 @@ function handleStreamData(raw: string): void {
     const tagSet = new Set(parsed.tags);
     if (tagSet.has("dashboard")) {
       refreshMountedApiQueries("/dashboard");
+      refreshMountedApiQueries("/trace-requests");
+      refreshMountedApiQueries("/deletion-requests");
+      refreshMountedApiQueries("/audit-log");
       refreshMountedApiQueries("/journal");
       refreshMountedApiQueries("/spray");
       refreshMountedApiQueries("/violations");
@@ -200,6 +222,9 @@ function handleStreamData(raw: string): void {
       refreshMountedApiQueries("/testing");
       refreshMountedApiQueries("/schedule");
       notifyCountsChanged();
+    }
+    if (tagSet.has("auth")) {
+      refreshMountedApiQueries("/accounts");
     }
     if (tagSet.has("plots")) {
       refreshMountedApiQueries("/plots");

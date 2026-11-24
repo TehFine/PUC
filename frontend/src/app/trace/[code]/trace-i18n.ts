@@ -529,6 +529,10 @@ export interface TraceUiCopy {
     title: string;
     inputPlaceholder: string;
     searchBtn: string;
+    blockedTitle: string;
+    blockedDesc: string;
+    blockedTimerLabel: string;
+    blockedRetryBtn: string;
   };
   alerts: {
     revokedTitle: string;
@@ -771,6 +775,11 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       title: "Chưa tìm thấy thông tin",
       inputPlaceholder: "Nhập mã lô, mã thùng, tem trái, mã thửa hoặc mã hộ...",
       searchBtn: "Tìm kiếm",
+      blockedTitle: "Tạm khóa truy cập 5 phút",
+      blockedDesc:
+        "Thiết bị đã gửi lặp yêu cầu cấp quyền quá 3 lần khi đang có yêu cầu còn hiệu lực. Vui lòng chờ hết thời gian tạm khóa để vào lại trang truy xuất.",
+      blockedTimerLabel: "Tự động mở lại sau",
+      blockedRetryBtn: "Vào lại trang truy xuất",
     },
     alerts: {
       revokedTitle: "THÔNG BÁO THU HỒI LÔ HÀNG",
@@ -828,7 +837,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       nameLabel: "Tên vùng trồng",
       pucLabel: "Mã số vùng trồng (PUC)",
       linkedZonesSuffix: (count) => ` (kèm ${count} vùng liên kết)`,
-      adminLocationLabel: "Xã / Huyện / Tỉnh",
+      adminLocationLabel: "Xã / Tỉnh",
       statusRowLabel: "Trạng thái hiệu lực",
       validUntilFmt: (statusText, validUntil) => `${statusText} (Hiệu lực đến ${validUntil})`,
       coarseMapTitle: (pucCode) => `Bản đồ vệ tinh vùng trồng (${pucCode})`,
@@ -1033,6 +1042,11 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       title: "Record Not Found",
       inputPlaceholder: "Enter lot, carton, fruit tag, plot, or household code...",
       searchBtn: "Lookup",
+      blockedTitle: "Access Paused for 5 Minutes",
+      blockedDesc:
+        "This device submitted repeated access requests more than 3 times while an existing request was still active. Please wait for the cooldown to finish.",
+      blockedTimerLabel: "Resumes automatically in",
+      blockedRetryBtn: "Reopen Dossier",
     },
     alerts: {
       revokedTitle: "SHIPMENT LOT RECALL NOTICE",
@@ -1090,7 +1104,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       nameLabel: "Growing Zone Name",
       pucLabel: "Production Unit Code (PUC)",
       linkedZonesSuffix: (count) => ` (with ${count} linked zones)`,
-      adminLocationLabel: "Commune / District / Province",
+      adminLocationLabel: "Commune / Province",
       statusRowLabel: "Validity Status",
       validUntilFmt: (statusText, validUntil) => `${statusText} (Valid until ${validUntil})`,
       coarseMapTitle: (pucCode) => `Growing Zone Satellite Map (${pucCode})`,
@@ -1294,6 +1308,11 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       title: "未找到溯源记录",
       inputPlaceholder: "输入批次、包装箱、单果签、地块或农户编码...",
       searchBtn: "立即查询",
+      blockedTitle: "当前设备暂停访问 5 分钟",
+      blockedDesc:
+        "每台设备每次仅限提交 1 次申请，当前设备在有效期内重复提交已达 3 次，系统已临时锁定 5 分钟，倒计时结束后自动恢复。",
+      blockedTimerLabel: "自动解锁倒计时",
+      blockedRetryBtn: "重新进入溯源页",
     },
     alerts: {
       revokedTitle: "批次召回通知（停止流通）",
@@ -1351,7 +1370,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       nameLabel: "种植区名称",
       pucLabel: "果园注册编码 (PUC)",
       linkedZonesSuffix: (count) => `（含 ${count} 个联合注册片区）`,
-      adminLocationLabel: "所在乡 / 县 / 省",
+      adminLocationLabel: "所在乡 / 省",
       statusRowLabel: "资质有效状态",
       validUntilFmt: (statusText, validUntil) => `${statusText}（有效期至 ${validUntil}）`,
       coarseMapTitle: (pucCode) => `注册种植区卫星地图 (${pucCode})`,
@@ -1405,7 +1424,7 @@ export const TRACE_UI_COPY: Record<TraceLang, TraceUiCopy> = {
       externalVerifyBtn: "前往检测机构官网核验真伪",
     },
     governance: {
-      kicker: "越南多乐省乡级数字化溯源示范项目 - 居内乡人民政府督办",
+      kicker: "越南多乐省乡级数字化溯源示范项目 - Krông Búk 乡人民政府督办",
       portalLinkLabel: "访问多乐省政府门户",
       supervisoryLabel: "政府监督指导单位：",
       attestationTitle: "三方独立交叉背书机制（农户合作社 - 乡政府监管 - 独立实验室）",
@@ -1838,8 +1857,44 @@ function localizeGeoSegment(rawSeg: string, lang: "en" | "zh", isLastSegment = f
   return seg;
 }
 
+/**
+ * Chuẩn hóa địa danh hành chính sau sáp nhập:
+ * "Xã Cư Né, Huyện Krông Búk" / "Xã Cư Né" / "Huyện Krông Búk" -> "Xã Krông Búk",
+ * đồng thời giữ nguyên danh xưng pháp nhân "Hợp tác xã ... Cư Né".
+ */
+export function normalizeKrongBukAdminText(raw: string): string {
+  if (!raw || !raw.trim()) return raw;
+  let res = raw
+    .replace(/HỢP TÁC XÃ/g, "__PUC_HTX_UPPER__")
+    .replace(/Hợp Tác Xã/g, "__PUC_HTX_TITLE2__")
+    .replace(/Hợp tác xã/g, "__PUC_HTX_TITLE__")
+    .replace(/hợp tác xã/g, "__PUC_HTX_LOWER__");
+
+  res = res
+    .replace(/XÃ\s+CƯ\s+NÉ\s*(?:[-–,]|VÀ)\s*(?:HUYỆN\s+)?KR(?:Ô|O)NG\s+B(?:Ú|U)K/g, "XÃ KRÔNG BÚK")
+    .replace(/Xã\s+Cư\s+Né\s*(?:[-–,]|và)\s*(?:Huyện\s+|huyện\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "Xã Krông Búk")
+    .replace(/xã\s+Cư\s+Né\s*(?:[-–,]|và)\s*(?:huyện\s+|Huyện\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "xã Krông Búk")
+    .replace(/xã\s+cư\s+né\s*(?:[-–,]|và)\s*(?:huyện\s+)?kr(?:ô|o)ng\s+b(?:ú|u)k/gi, "xã Krông Búk")
+    .replace(/XÃ\s+CƯ\s+NÉ/g, "XÃ KRÔNG BÚK")
+    .replace(/Xã\s+Cư\s+Né/g, "Xã Krông Búk")
+    .replace(/xã\s+Cư\s+Né/g, "xã Krông Búk")
+    .replace(/xã\s+cư\s+né/gi, "xã Krông Búk")
+    .replace(/HUYỆN\s+KR(?:Ô|O)NG\s+B(?:Ú|U)K/g, "XÃ KRÔNG BÚK")
+    .replace(/Huyện\s+Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "Xã Krông Búk")
+    .replace(/huyện\s+Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "xã Krông Búk")
+    .replace(/Xã\s+Krong\s+Buk/g, "Xã Krông Búk")
+    .replace(/xã\s+Krong\s+Buk/g, "xã Krông Búk")
+    .replace(/(Xã\s+Krông\s+Búk)(?:\s*[-–,]\s*Xã\s+Krông\s+Búk)+/gi, "$1");
+
+  return res
+    .replace(/__PUC_HTX_UPPER__/g, "HỢP TÁC XÃ")
+    .replace(/__PUC_HTX_TITLE2__/g, "Hợp Tác Xã")
+    .replace(/__PUC_HTX_TITLE__/g, "Hợp tác xã")
+    .replace(/__PUC_HTX_LOWER__/g, "hợp tác xã");
+}
+
 export function localizeAddress(rawAddress: string, lang: TraceLang): string {
-  const trimmed = (rawAddress || "").trim();
+  const trimmed = normalizeKrongBukAdminText((rawAddress || "").trim());
   if (!trimmed || lang === "vi") return trimmed;
   const parts = trimmed
     .split(",")
@@ -1858,13 +1913,14 @@ export function localizeAddress(rawAddress: string, lang: TraceLang): string {
 }
 
 export function localizeAdminLocation(rawLoc: string, lang: TraceLang): string {
-  if (lang === "vi") return rawLoc;
-  if (!rawLoc || !rawLoc.trim()) {
+  const normalized = normalizeKrongBukAdminText((rawLoc || "").trim());
+  if (lang === "vi") return normalized || "Xã Krông Búk, Tỉnh Đắk Lắk";
+  if (!normalized) {
     return lang === "zh"
-      ? "Cư Né 乡, Krông Búk 县, Đắk Lắk 省, 越南"
-      : "Cư Né Commune, Krông Búk District, Đắk Lắk Province, Vietnam";
+      ? "Krông Búk 乡, Đắk Lắk 省, 越南"
+      : "Krông Búk Commune, Đắk Lắk Province, Vietnam";
   }
-  return localizeAddress(rawLoc, lang);
+  return localizeAddress(normalized, lang);
 }
 
 export function localizeCoopName(rawName: string, lang: TraceLang): string {
@@ -2064,10 +2120,11 @@ export function localizeGrowingZoneName(rawName: string, lang: TraceLang): strin
 }
 
 export function localizeGroupName(rawGroup: string, householdCount: number, lang: TraceLang): string {
-  if (lang === "vi") return rawGroup;
-  const cleaned = (rawGroup || "").replace(/\([^)]*\)/g, "").trim();
+  const normalizedGroup = normalizeKrongBukAdminText(rawGroup || "");
+  if (lang === "vi") return normalizedGroup;
+  const cleaned = normalizedGroup.replace(/\([^)]*\)/g, "").trim();
   const placeMatch = /(?:xã|thôn|buôn|HTX)\s+(.+)$/i.exec(cleaned);
-  const proper = placeMatch?.[1]?.trim() || "Cư Né";
+  const proper = placeMatch?.[1]?.trim() || "Krông Búk";
 
   if (householdCount > 1) {
     return lang === "zh"
@@ -2148,7 +2205,7 @@ export function localizeOwnerLabel(rawOwner: string, lang: TraceLang): string {
 }
 
 export function localizeAssessedBy(rawUnit: string, lang: TraceLang): string {
-  const trimmed = (rawUnit || "").trim();
+  const trimmed = normalizeKrongBukAdminText((rawUnit || "").trim());
   if (!trimmed || lang === "vi") return trimmed;
 
   const communeTeamMatch =
@@ -2164,7 +2221,7 @@ export function localizeAssessedBy(rawUnit: string, lang: TraceLang): string {
 }
 
 export function localizeVillageLabel(rawVillage: string, lang: TraceLang): string {
-  const trimmed = (rawVillage || "").trim();
+  const trimmed = normalizeKrongBukAdminText((rawVillage || "").trim());
   if (!trimmed) return "";
   if (lang === "vi") return trimmed.replace(/\s*[—–-]\s*/g, ", ");
 
