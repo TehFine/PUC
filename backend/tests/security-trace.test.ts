@@ -1120,3 +1120,452 @@ describe("HOUSEHOLD-TRACE & PHOTO-EVIDENCE: tra cứu mã hộ, ảnh profile, �
     }
   });
 });
+
+describe("BYPASS-DEFENSE: chống vượt rào phạm vi doanh nghiệp, ghép quyền tạm thời, dùng chéo khóa và lộ tệp nháp", () => {
+  it("chặn doanh nghiệp có hợp đồng khung vượt rào xem thửa/hộ đối thủ, chặn lộ biển số lạnh và chống dò tọa độ GPS 3 điểm", async () => {
+    const admin = await loggedIn("0901234567");
+    const ts = Date.now();
+    const entACode = `ENT-A-${ts}`;
+    const entBCode = `ENT-B-${ts}`;
+    const entAUser = `ent_a_${ts}`;
+    const entBUser = `ent_b_${ts}`;
+    let entAId = 0;
+    let entBId = 0;
+    const contractIds: number[] = [];
+
+    try {
+      const insEntA = await db.query<{ id: number }>(
+        `INSERT INTO enterprises (code, name, packhouse_code, status)
+         VALUES ($1, 'CSĐG Hợp Lệ A', 'PHC-SECA', 'active') RETURNING id`,
+        [entACode],
+      );
+      const insEntB = await db.query<{ id: number }>(
+        `INSERT INTO enterprises (code, name, packhouse_code, status)
+         VALUES ($1, 'CSĐG Đối Thủ B', 'PHC-SECB', 'active') RETURNING id`,
+        [entBCode],
+      );
+      entAId = Number(insEntA.rows[0].id);
+      entBId = Number(insEntB.rows[0].id);
+
+      const cA = await db.query<{ id: number }>(
+        `INSERT INTO contracts (code, enterprise_id, title, signed_on, valid_until, target_tons, status)
+         VALUES ($1, $2, 'Hợp đồng khung A', CURRENT_DATE, CURRENT_DATE + 180, 100, 'active') RETURNING id`,
+        [`HD-A-${ts}`, entAId],
+      );
+      const cB = await db.query<{ id: number }>(
+        `INSERT INTO contracts (code, enterprise_id, title, signed_on, valid_until, target_tons, status)
+         VALUES ($1, $2, 'Hợp đồng khung B', CURRENT_DATE, CURRENT_DATE + 180, 100, 'active') RETURNING id`,
+        [`HD-B-${ts}`, entBId],
+      );
+      contractIds.push(Number(cA.rows[0].id), Number(cB.rows[0].id));
+
+      expect(
+        (
+          await admin.post("/api/accounts").send({
+            fullName: "Đối tác A",
+            username: entAUser,
+            password: TEST_PASSWORD,
+            role: "enterprise",
+            enterpriseId: entAId,
+          })
+        ).status,
+      ).toBe(201);
+      expect(
+        (
+          await admin.post("/api/accounts").send({
+            fullName: "Đối tác B",
+            username: entBUser,
+            password: TEST_PASSWORD,
+            role: "enterprise",
+            enterpriseId: entBId,
+          })
+        ).status,
+      ).toBe(201);
+
+      await db.query(
+        `UPDATE harvest_lots
+         SET enterprise_id = $2,
+             transporter = 'Vận Tải Lạnh Nội Bộ A',
+             vehicle_plate = '47C-777.99',
+             temperature_c = 13.2
+         WHERE id = $1`,
+        [ids.lot, entAId],
+      );
+
+      const agentA = await loggedIn(entAUser);
+      const agentB = await loggedIn(entBUser);
+
+      // 1. Doanh nghiệp đối thủ B (dù có hợp đồng active trong bảng contracts) bị chặn scopeDenied trên cả thửa, mã hộ và verify-gps
+      const bPlot = await agentB.get(`/api/trace/${FX.hhA.plot}`);
+      expect(bPlot.status).toBe(200);
+      expect(bPlot.body.accessControl.scopeDenied).toBe(true);
+      expect(bPlot.body.accessControl.viewerTier).toBe("public");
+      expect(bPlot.body).not.toHaveProperty("enterpriseData");
+      expect(JSON.stringify(bPlot.body)).not.toContain("47C-777.99");
+
+      const bHh = await agentB.get(`/api/trace/${FX.hhA.code}`);
+      expect(bHh.status).toBe(200);
+      expect(bHh.body.accessControl.scopeDenied).toBe(true);
+      expect(bHh.body.accessControl.viewerTier).toBe("public");
+      expect(bHh.body).not.toHaveProperty("enterpriseData");
+
+      const bGps = await agentB
+        .post(`/api/trace/${FX.hhA.plot}/verify-gps`)
+        .send({ latitude: FX.centerLat, longitude: FX.centerLng, accuracyMeters: 8 });
+      expect(bGps.status).toBe(403);
+
+      // 2. Doanh nghiệp A thực sự thu mua lô được phép xem Cấp 2 của thửa nguồn, nhưng verify-gps che khoảng cách/tọa độ để chống dò tam giác đạc
+      const aPlot = await agentA.get(`/api/trace/${FX.hhA.plot}`);
+      expect(aPlot.status).toBe(200);
+      expect(aPlot.body.accessControl.scopeDenied).toBe(false);
+      expect(aPlot.body.accessControl.viewerTier).toBe("enterprise");
+      expect(aPlot.body.enterpriseData?.packingSpecs?.vehiclePlate).toBe("47C-777.99");
+
+      const aGps = await agentA
+        .post(`/api/trace/${FX.hhA.plot}/verify-gps`)
+        .send({ latitude: FX.centerLat, longitude: FX.centerLng, accuracyMeters: 8 });
+      expect(aGps.status).toBe(200);
+      expect(typeof aGps.body.verified).toBe("boolean");
+      expect(aGps.body.centerLat).toBeNull();
+      expect(aGps.body.centerLng).toBeNull();
+      expect(aGps.body.distanceMeters).toBeNull();
+      expect(aGps.body.insidePolygon).toBeNull();
+    } finally {
+      await db.query(
+        `UPDATE harvest_lots
+         SET enterprise_id = NULL, transporter = NULL, vehicle_plate = NULL, temperature_c = NULL
+         WHERE id = $1`,
+        [ids.lot],
+      );
+      await db.query("DELETE FROM users WHERE username = ANY($1::text[])", [[entAUser, entBUser]]);
+      if (contractIds.length > 0) {
+        await db.query("DELETE FROM contracts WHERE id = ANY($1::bigint[])", [contractIds]);
+      }
+      const entIds = [entAId, entBId].filter(Boolean);
+      if (entIds.length > 0) {
+        await db.query("DELETE FROM enterprises WHERE id = ANY($1::bigint[])", [entIds]);
+      }
+    }
+  });
+
+  it("chặn leo thang ghép quyền (cán bộ ngoài địa bàn + cấp quyền tạm thời), chặn hạ cấp ?view=enterprise lộ nhật ký thôn khác và cô lập scope=record", async () => {
+    const admin = await loggedIn("0901234567");
+    const villageOfficer = await loggedIn(USERS.villageOfficer);
+    const ts = Date.now();
+    const outRegionUsername = `insp_lamdong_${ts}`;
+    const privateSiblingPlot = "SEC-T1-P99-PRIVATE";
+    const lotPrefixEdgeCode = `LOT-2026-SAFE${String(ts).slice(-4)}`;
+    const reqCodes: string[] = [];
+    let lotPrefixId = 0;
+
+    try {
+      // 1. Cán bộ Thôn 1 truyền ?view=enterprise trên lô ghép 2 thôn -> tuyệt đối không lộ nhật ký Thôn 2
+      const downgradedOfficerLot = await villageOfficer.get(`/api/trace/${FX.lot}?view=enterprise`);
+      expect(downgradedOfficerLot.status).toBe(200);
+      expect(downgradedOfficerLot.body.accessControl.viewerTier).toBe("enterprise");
+      const tier2Text = JSON.stringify(downgradedOfficerLot.body.enterpriseData ?? {});
+      expect(tier2Text).toContain("Nhật ký hộ thôn một");
+      expect(tier2Text).not.toContain("Nhật ký hộ thôn hai");
+      expect(tier2Text).not.toContain(FX.hhB.code);
+
+      // 2. Tạo thanh tra ngoài địa bàn (Tỉnh Lâm Đồng) + cấp quyền tạm thời Cấp 3 trên FX.lot -> vẫn phải che SĐT gốc, ẩn tên chưa đồng ý, ẩn phiếu nháp và ẩn vi phạm nội bộ!
+      expect(
+        (
+          await admin.post("/api/accounts").send({
+            fullName: "Thanh tra Ngoài Vùng",
+            username: outRegionUsername,
+            password: TEST_PASSWORD,
+            role: "inspector",
+            assignedRegion: "Tỉnh Lâm Đồng",
+          })
+        ).status,
+      ).toBe(201);
+      const outInspector = await loggedIn(outRegionUsername);
+
+      const outBase = await outInspector.get(`/api/trace/${FX.lot}`);
+      expect(outBase.body.accessControl.scopeDenied).toBe(true);
+      expect(outBase.body.accessControl.viewerTier).toBe("public");
+
+      const grantReq = await outInspector.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.lot,
+        requesterName: "Thanh tra Lâm Đồng",
+        organization: "Chi cục Lâm Đồng",
+        contactPhone: "0966554433",
+        purpose: "Đối chiếu liên tỉnh lô sầu riêng",
+        requestedTier: "authority",
+      });
+      expect(grantReq.status).toBe(201);
+      reqCodes.push(grantReq.body.requestCode as string);
+
+      const grantId = Number(
+        (
+          await db.query<{ id: number }>("SELECT id FROM trace_access_requests WHERE request_code = $1", [
+            grantReq.body.requestCode,
+          ])
+        ).rows[0].id,
+      );
+      expect((await admin.post(`/api/trace-requests/${grantId}/approve`).send({ grantedTier: "authority" })).status).toBe(
+        200,
+      );
+
+      const elevatedOutInspector = await outInspector.get(`/api/trace/${FX.lot}`);
+      expect(elevatedOutInspector.status).toBe(200);
+      expect(elevatedOutInspector.body.accessControl.viewerTier).toBe("authority");
+      expect(elevatedOutInspector.body.accessControl.temporaryGrant?.scopeMode).toBe("record");
+      const elevatedPayload = JSON.stringify(elevatedOutInspector.body);
+      expect(elevatedPayload).not.toContain(FX.hhA.phone);
+      expect(elevatedPayload).not.toContain(FX.hhB.phone);
+      expect(elevatedPayload).not.toContain(FX.hhA.name);
+      expect(elevatedPayload).not.toContain(FX.hhB.name);
+      expect(elevatedPayload).not.toContain(FX.labDraft);
+      expect(elevatedOutInspector.body.authorityData.internalViolations).toEqual([]);
+
+      // Cấp quyền record của Lô KHÔNG mở khóa tem nông hộ độc lập
+      const stampAttempt = await outInspector.get("/api/trace/KB-H001-000001");
+      expect(stampAttempt.status).toBe(200);
+      expect(stampAttempt.body.accessControl.viewerTier).toBe("public");
+      expect(stampAttempt.body).not.toHaveProperty("authorityData");
+
+      // 3. Cán bộ Thôn 1 xin quyền tạm thời trên hộ Thôn 2 -> SĐT và tên hộ Thôn 2 vẫn được che như khách đoàn kiểm tra
+      const voGrantReq = await villageOfficer.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.hhB.code,
+        requesterName: "Cán bộ Thôn 1",
+        organization: "UBND Xã",
+        contactPhone: "0955443322",
+        purpose: "Xem đối chiếu chéo thôn 2",
+        requestedTier: "authority",
+      });
+      expect(voGrantReq.status).toBe(201);
+      reqCodes.push(voGrantReq.body.requestCode as string);
+      const voGrantId = Number(
+        (
+          await db.query<{ id: number }>("SELECT id FROM trace_access_requests WHERE request_code = $1", [
+            voGrantReq.body.requestCode,
+          ])
+        ).rows[0].id,
+      );
+      expect((await admin.post(`/api/trace-requests/${voGrantId}/approve`).send({ grantedTier: "authority" })).status).toBe(
+        200,
+      );
+
+      const voOnHhB = await villageOfficer.get(`/api/trace/${FX.hhB.code}`);
+      expect(voOnHhB.status).toBe(200);
+      expect(voOnHhB.body.accessControl.viewerTier).toBe("authority");
+      const voHhBSerialized = JSON.stringify(voOnHhB.body);
+      expect(voHhBSerialized).not.toContain(FX.hhB.phone);
+      expect(voHhBSerialized).not.toContain(FX.hhB.name);
+      expect(voOnHhB.body.authorityData.internalViolations).toEqual([]);
+
+      // 4. Cấp quyền mặc định giữ nguyên scope='record' trên 1 thửa P01 -> không tự mở khóa sang Mã hộ hay thửa P99 cùng chủ hộ; chặn tự duyệt
+      const adminSelfReq = await admin.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.hhA.plot,
+        requesterName: "Admin Tự Xin",
+        organization: "Nội bộ",
+        contactPhone: "0944332211",
+        purpose: "Thử tự phê duyệt",
+        requestedTier: "authority",
+      });
+      expect(adminSelfReq.status).toBe(201);
+      reqCodes.push(adminSelfReq.body.requestCode as string);
+      const adminSelfId = Number(
+        (
+          await db.query<{ id: number }>("SELECT id FROM trace_access_requests WHERE request_code = $1", [
+            adminSelfReq.body.requestCode,
+          ])
+        ).rows[0].id,
+      );
+      expect((await admin.post(`/api/trace-requests/${adminSelfId}/approve`).send({})).status).toBe(403);
+
+      await db.query(
+        `INSERT INTO plot_signboard_tokens (plot_code, household_id, village_name, area_ha, tree_count, center_lat, center_lng)
+         VALUES ($1, $2, 'Thôn 1', 0.9, 130, $3, $4)`,
+        [privateSiblingPlot, ids.hhA, FX.centerLat, FX.centerLng],
+      );
+
+      const plotOnlyReq = await request(app).post("/api/public/trace-access-requests").send({
+        scannedCode: FX.hhA.plot,
+        requesterName: "Đoàn Kiểm Thử 1 Thửa",
+        organization: "Đoàn Độc Lập",
+        contactPhone: "0933221100",
+        purpose: "Chỉ xin xem duy nhất thửa P01",
+        requestedTier: "authority",
+      });
+      expect(plotOnlyReq.status).toBe(201);
+      reqCodes.push(plotOnlyReq.body.requestCode as string);
+      const plotOnlyId = Number(
+        (
+          await db.query<{ id: number }>("SELECT id FROM trace_access_requests WHERE request_code = $1", [
+            plotOnlyReq.body.requestCode,
+          ])
+        ).rows[0].id,
+      );
+      const plotApproveRes = await admin.post(`/api/trace-requests/${plotOnlyId}/approve`).send({});
+      expect(plotApproveRes.status).toBe(200);
+      expect(plotApproveRes.body.scopeMode).toBe("record");
+
+      const plotStatusRes = await request(app)
+        .get(`/api/public/trace-access-requests/${plotOnlyReq.body.requestCode}/status`)
+        .set("x-trace-req-secret", plotOnlyReq.body.clientSecret as string);
+      const singlePlotPass = plotStatusRes.body.grantedPassToken as string;
+
+      const okOnP01 = await request(app).get(`/api/public/trace/${FX.hhA.plot}`).set("x-audit-pass", singlePlotPass);
+      expect(okOnP01.body.accessControl.viewerTier).toBe("authority");
+
+      const blockedOnHh = await request(app).get(`/api/public/trace/${FX.hhA.code}`).set("x-audit-pass", singlePlotPass);
+      expect(blockedOnHh.body.accessControl.viewerTier).toBe("public");
+      expect(blockedOnHh.body).not.toHaveProperty("authorityData");
+
+      const blockedOnP99 = await request(app)
+        .get(`/api/public/trace/${privateSiblingPlot}`)
+        .set("x-audit-pass", singlePlotPass);
+      expect(blockedOnP99.body.accessControl.viewerTier).toBe("public");
+      expect(blockedOnP99.body.fieldAuditData).toBeUndefined();
+
+      // 5. Chặn lạm dụng ?bg=1 ngay lượt gọi đầu tiên để né nhật ký kiểm toán & giữ nguyên mã bắt đầu bằng LOT-...
+      const insEdgeLot = await db.query<{ id: number }>(
+        `INSERT INTO harvest_lots (code, harvested_on, weight_tons, household_count, buyer, market, status)
+         VALUES ($1, '2026-06-01', 1.5, 0, 'Test Buyer', 'Nội địa', 'sampling') RETURNING id`,
+        [lotPrefixEdgeCode],
+      );
+      lotPrefixId = Number(insEdgeLot.rows[0].id);
+      const edgeLookup = await request(app).get(`/api/public/trace/${lotPrefixEdgeCode}`);
+      expect(edgeLookup.status).toBe(200);
+      expect(edgeLookup.body.lot.code).toBe(lotPrefixEdgeCode);
+
+      const inspector = await loggedIn(USERS.inspector);
+      const firstHitWithBg = await inspector.get(`/api/trace/${lotPrefixEdgeCode}?bg=1`);
+      expect(firstHitWithBg.status).toBe(200);
+      const logAfterFirstBg = await db.query<{ cnt: number }>(
+        "SELECT COUNT(*)::int AS cnt FROM trace_detail_access_logs WHERE lot_code = $1",
+        [lotPrefixEdgeCode],
+      );
+      expect(logAfterFirstBg.rows[0].cnt).toBe(1);
+
+      const secondHitWithBg = await inspector.get(`/api/trace/${lotPrefixEdgeCode}?bg=1`);
+      expect(secondHitWithBg.status).toBe(200);
+      const logAfterSecondBg = await db.query<{ cnt: number }>(
+        "SELECT COUNT(*)::int AS cnt FROM trace_detail_access_logs WHERE lot_code = $1",
+        [lotPrefixEdgeCode],
+      );
+      expect(logAfterSecondBg.rows[0].cnt).toBe(1);
+    } finally {
+      if (lotPrefixId) {
+        await db.query("DELETE FROM trace_detail_access_logs WHERE lot_code = $1", [lotPrefixEdgeCode]);
+        await db.query("DELETE FROM trace_scan_logs WHERE resolved_lot_code = $1", [lotPrefixEdgeCode]);
+        await db.query("DELETE FROM harvest_lots WHERE id = $1", [lotPrefixId]);
+      }
+      await db.query("DELETE FROM plot_signboard_tokens WHERE plot_code = $1", [privateSiblingPlot]);
+      if (reqCodes.length > 0) {
+        await db.query("DELETE FROM trace_access_requests WHERE request_code = ANY($1::text[])", [reqCodes]);
+      }
+      await db.query("DELETE FROM users WHERE username = $1", [outRegionUsername]);
+    }
+  });
+
+  it("chặn truy cập công khai ảnh nhật ký/hóa đơn chưa gắn bản ghi, ảnh đại diện chưa đồng ý và tệp nháp không gắn hộ giữa các cán bộ", async () => {
+    const admin = await loggedIn("0901234567");
+    const farmer = await loggedIn(FX.farmerUsername);
+    const htxOfficer1 = await loggedIn("0912345678");
+    const villageOfficer = await loggedIn(USERS.villageOfficer);
+    const officer2Username = `htx_off2_${Date.now()}`;
+    const createdAttachmentIds: number[] = [];
+
+    const tinyPng = Buffer.from(
+      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+      "hex",
+    );
+
+    try {
+      // 1. Ảnh purpose='journal' vừa tải lên nhưng chưa gắn vào nhật ký / khai báo hiện trường -> /api/public/files/:token chặn 404
+      const unlinkedJournalUp = await farmer
+        .post("/api/uploads")
+        .field("purpose", "journal")
+        .attach("file", tinyPng, "draft-invoice.png");
+      expect(unlinkedJournalUp.status).toBe(201);
+      createdAttachmentIds.push(Number(unlinkedJournalUp.body.id));
+      const unlinkedToken = (
+        await db.query<{ public_token: string }>("SELECT public_token FROM attachments WHERE id = $1", [
+          unlinkedJournalUp.body.id,
+        ])
+      ).rows[0].public_token;
+
+      expect((await request(app).get(`/api/public/files/${unlinkedToken}`)).status).toBe(404);
+      expect((await farmer.get(`/api/uploads/${unlinkedJournalUp.body.id}`)).status).toBe(200);
+
+      // 2. Ảnh đại diện hộ khi public_trace_consent = false -> chặn 404 đối với khách ẩn danh, nhưng chủ hộ và cán bộ đúng thôn vẫn xem được qua cookie phiên
+      const avatarUp = await farmer
+        .post("/api/uploads")
+        .field("purpose", "avatar")
+        .attach("file", tinyPng, "farmer-avatar.png");
+      expect(avatarUp.status).toBe(201);
+      createdAttachmentIds.push(Number(avatarUp.body.id));
+      const avatarTok = (
+        await db.query<{ public_token: string }>("SELECT public_token FROM attachments WHERE id = $1", [
+          avatarUp.body.id,
+        ])
+      ).rows[0].public_token;
+
+      await db.query("UPDATE households SET avatar_id = $2, public_trace_consent = false WHERE id = $1", [
+        ids.hhA,
+        avatarUp.body.id,
+      ]);
+
+      expect((await request(app).get(`/api/public/files/${avatarTok}`)).status).toBe(404);
+      const ownerAvatarRes = await farmer.get(`/api/public/files/${avatarTok}`);
+      expect(ownerAvatarRes.status).toBe(200);
+      expect(String(ownerAvatarRes.headers["cache-control"] || "")).toContain("private");
+      expect((await villageOfficer.get(`/api/public/files/${avatarTok}`)).status).toBe(200);
+
+      // 3. Tệp nháp household_id = NULL do cán bộ 1 tải lên nhưng chưa gắn phiếu -> cán bộ 2 không thể dò ID tuần tự
+      expect(
+        (
+          await admin.post("/api/accounts").send({
+            fullName: "Cán bộ HTX 2",
+            username: officer2Username,
+            password: TEST_PASSWORD,
+            role: "htx_officer",
+          })
+        ).status,
+      ).toBe(201);
+      const htxOfficer2 = await loggedIn(officer2Username);
+
+      const unlinkedApprovalUp = await htxOfficer1
+        .post("/api/uploads")
+        .field("purpose", "approval")
+        .attach("file", tinyPng, "staging-approval.png");
+      expect(unlinkedApprovalUp.status).toBe(201);
+      createdAttachmentIds.push(Number(unlinkedApprovalUp.body.id));
+      const unlinkedApprovalTok = (
+        await db.query<{ public_token: string }>("SELECT public_token FROM attachments WHERE id = $1", [
+          unlinkedApprovalUp.body.id,
+        ])
+      ).rows[0].public_token;
+
+      expect((await htxOfficer1.get(`/api/uploads/${unlinkedApprovalUp.body.id}`)).status).toBe(200);
+      expect((await htxOfficer2.get(`/api/uploads/${unlinkedApprovalUp.body.id}`)).status).toBe(404);
+      expect((await request(app).get(`/api/public/files/${unlinkedApprovalTok}`)).status).toBe(404);
+
+      const inspector = await loggedIn(USERS.inspector);
+      const unlinkedInspUp = await inspector
+        .post("/api/uploads")
+        .field("purpose", "inspection")
+        .attach("file", tinyPng, "staging-minute.png");
+      expect(unlinkedInspUp.status).toBe(201);
+      createdAttachmentIds.push(Number(unlinkedInspUp.body.id));
+      const unlinkedInspTok = (
+        await db.query<{ public_token: string }>("SELECT public_token FROM attachments WHERE id = $1", [
+          unlinkedInspUp.body.id,
+        ])
+      ).rows[0].public_token;
+      expect((await inspector.get(`/api/uploads/${unlinkedInspUp.body.id}`)).status).toBe(200);
+      expect((await htxOfficer2.get(`/api/uploads/${unlinkedInspUp.body.id}`)).status).toBe(404);
+      expect((await request(app).get(`/api/public/files/${unlinkedInspTok}`)).status).toBe(404);
+    } finally {
+      await db.query("UPDATE households SET avatar_id = NULL, public_trace_consent = false WHERE id = $1", [ids.hhA]);
+      if (createdAttachmentIds.length > 0) {
+        await db.query("DELETE FROM attachments WHERE id = ANY($1::bigint[])", [createdAttachmentIds]);
+      }
+      await db.query("DELETE FROM users WHERE username = $1", [officer2Username]);
+    }
+  });
+});

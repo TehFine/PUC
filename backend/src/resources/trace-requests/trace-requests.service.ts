@@ -57,10 +57,16 @@ function generateAlphaNumToken(len: number): string {
   return out;
 }
 
+const TRACE_PREFIX_STRIP_RE =
+  /^(?:mã\s*vùng|ma\s*vung|mã\s*thửa|ma\s*thua|mã\s*lô|ma\s*lo|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|thùng|thung|thửa|thua|lô|lo|hộ|ho|mã|ma|puc|phc|tem)(?:\s*[:#]\s*|\s+[-–]?\s*)/iu;
+const SECRET_FAIL_WINDOW_MS = 60_000;
+const SECRET_MAX_FAILS = process.env.NODE_ENV === "test" ? 30 : 12;
+
 function normalizeScannedLookup(raw: string): string {
   return raw
+    .slice(0, 256)
     .trim()
-    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|hộ|ho|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(TRACE_PREFIX_STRIP_RE, "")
     .replace(/\s+/g, "");
 }
 
@@ -111,11 +117,46 @@ interface RawTraceRequestRow extends Record<string, unknown> {
 
 @Injectable()
 export class TraceRequestsService {
+  private readonly failedSecretByIp = new Map<string, number[]>();
+
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
-  ) { }
+  ) {}
+
+  private checkSecretRateLimit(ip?: string): void {
+    const key = (ip || "local").trim() || "local";
+    const now = Date.now();
+    const prev = this.failedSecretByIp.get(key);
+    if (!prev) return;
+    const recent = prev.filter((ts) => now - ts < SECRET_FAIL_WINDOW_MS);
+    if (recent.length === 0) {
+      this.failedSecretByIp.delete(key);
+      return;
+    }
+    this.failedSecretByIp.set(key, recent);
+    if (recent.length >= SECRET_MAX_FAILS) {
+      const oldest = recent[0] ?? now;
+      const retryAfterSec = Math.max(1, Math.ceil((oldest + SECRET_FAIL_WINDOW_MS - now) / 1000));
+      throw new RateLimitException(
+        retryAfterSec,
+        "Quá nhiều lần đối chiếu khóa phiên yêu cầu không hợp lệ. Vui lòng thử lại sau ít phút.",
+      );
+    }
+  }
+
+  private recordFailedSecretAttempt(ip?: string): void {
+    const key = (ip || "local").trim() || "local";
+    const now = Date.now();
+    const recent = (this.failedSecretByIp.get(key) ?? []).filter((ts) => now - ts < SECRET_FAIL_WINDOW_MS);
+    recent.push(now);
+    if (!this.failedSecretByIp.has(key) && this.failedSecretByIp.size >= 4000) {
+      const oldestKey = this.failedSecretByIp.keys().next().value;
+      if (oldestKey !== undefined) this.failedSecretByIp.delete(oldestKey);
+    }
+    this.failedSecretByIp.set(key, recent);
+  }
 
   private hasTable(tableName: string): Promise<boolean> {
     return hasPublicTable(this.db, tableName);
@@ -212,7 +253,7 @@ export class TraceRequestsService {
         canonicalDisplayCode: fsRes.rows[0].serial_code,
         targetKind: "fruit",
         resolvedLotCode: null,
-        pucCode: pucCode || "VN-DLOR-0086",
+        pucCode: pucCode || null,
       };
     }
 
@@ -232,7 +273,7 @@ export class TraceRequestsService {
           canonicalDisplayCode: plRes.rows[0].code,
           targetKind: "plot",
           resolvedLotCode: null,
-          pucCode: plRes.rows[0].zone_code?.trim() || "VN-DLOR-0086",
+          pucCode: plRes.rows[0].zone_code?.trim() || null,
         };
       }
     }
@@ -251,7 +292,7 @@ export class TraceRequestsService {
           canonicalDisplayCode: sbRes.rows[0].plot_code,
           targetKind: "plot",
           resolvedLotCode: null,
-          pucCode: sbRes.rows[0].zone_code?.trim() || "VN-DLOR-0086",
+          pucCode: sbRes.rows[0].zone_code?.trim() || null,
         };
       }
     }
@@ -304,13 +345,15 @@ export class TraceRequestsService {
         if (sz.rows[0]?.zone_code) resolvedZone = sz.rows[0].zone_code.trim();
       }
       const derivedZone = hhRes.rows[0].code.replace(/-(?:H|T)\d+$/i, "");
+      const validDerived =
+        derivedZone && derivedZone !== hhRes.rows[0].code && /^(?:VN-|66-PUC-)/i.test(derivedZone)
+          ? derivedZone
+          : null;
       return {
         canonicalDisplayCode: hhRes.rows[0].code,
         targetKind: "plot",
         resolvedLotCode: null,
-        pucCode:
-          resolvedZone ||
-          (derivedZone && derivedZone !== hhRes.rows[0].code ? derivedZone : "VN-DLOR-0086"),
+        pucCode: resolvedZone || validDerived,
       };
     }
 
@@ -321,10 +364,10 @@ export class TraceRequestsService {
     lotId: number,
     hasPlots: boolean,
     hasSignboards: boolean,
-  ): Promise<string> {
+  ): Promise<string | null> {
     if (hasPlots) {
       const res = await this.db.query<{ zone_code: string | null }>(
-        `SELECT COALESCE(p.zone_code, 'VN-DLOR-0086') AS zone_code
+        `SELECT p.zone_code
          FROM harvest_contributions hc
          LEFT JOIN plots p ON (
            (hc.plot_code IS NOT NULL AND btrim(hc.plot_code) <> '' AND upper(p.code) = upper(hc.plot_code))
@@ -351,7 +394,7 @@ export class TraceRequestsService {
       );
       if (res.rows[0]?.zone_code) return res.rows[0].zone_code.trim();
     }
-    return "VN-DLOR-0086";
+    return null;
   }
 
   private async resolvePlotZoneCode(
@@ -463,6 +506,20 @@ export class TraceRequestsService {
         );
         saved = upd.rows[0]!;
       } else {
+        const pendingByUser = await this.db.query<{ cnt: number }>(
+          `SELECT COUNT(*)::int AS cnt
+           FROM trace_access_requests
+           WHERE status = 'pending'
+             AND created_at >= now() - interval '2 hours'
+             AND requester_user_id = $1`,
+          [ctx.user.id],
+        );
+        if ((pendingByUser.rows[0]?.cnt ?? 0) >= 8) {
+          throw new RateLimitException(
+            120,
+            "Tài khoản đang có nhiều yêu cầu chờ phê duyệt. Vui lòng đợi Ban quản trị xử lý.",
+          );
+        }
         const requestCode = generateRequestCode();
         const ins = await this.db.query<RawTraceRequestRow>(
           `INSERT INTO trace_access_requests (
@@ -497,20 +554,23 @@ export class TraceRequestsService {
         saved = ins.rows[0]!;
       }
     } else {
-      const pendingByIp = await this.db.query<{ cnt: number }>(
-        `SELECT COUNT(*)::int AS cnt
+      const pendingByIp = await this.db.query<{ same_code_cnt: number; total_ip_cnt: number }>(
+        `SELECT COUNT(*) FILTER (WHERE upper(scanned_code) = upper($1))::int AS same_code_cnt,
+                COUNT(*)::int AS total_ip_cnt
          FROM trace_access_requests
          WHERE status = 'pending'
            AND created_at >= now() - interval '2 hours'
-           AND upper(scanned_code) = upper($1)
            AND requester_user_id IS NULL
            AND COALESCE(ip, '') = COALESCE($2::text, '')`,
         [cleanScanned, ctx.ip ?? null],
       );
-      if ((pendingByIp.rows[0]?.cnt ?? 0) >= 4) {
+      if (
+        (pendingByIp.rows[0]?.same_code_cnt ?? 0) >= 4 ||
+        (pendingByIp.rows[0]?.total_ip_cnt ?? 0) >= 10
+      ) {
         throw new RateLimitException(
           120,
-          "Đã có nhiều yêu cầu đang chờ phê duyệt cho hồ sơ này. Vui lòng đợi Ban quản trị xử lý.",
+          "Đã có nhiều yêu cầu đang chờ phê duyệt từ kết nối này. Vui lòng đợi Ban quản trị xử lý.",
         );
       }
 
@@ -588,8 +648,9 @@ export class TraceRequestsService {
   /** Kiểm tra trạng thái phê duyệt theo thời gian thực cho đúng thiết bị hoặc tài khoản đã gửi yêu cầu. */
   async getPublicRequestStatus(
     requestCode: string,
-    ctx: { user?: AuthUser; clientSecret?: string },
+    ctx: { user?: AuthUser; ip?: string; clientSecret?: string },
   ) {
+    this.checkSecretRateLimit(ctx.ip);
     const cleanCode = requestCode.trim().toUpperCase();
     if (!cleanCode || cleanCode.length > 40) {
       throw notFound("Không tìm thấy yêu cầu cấp quyền.");
@@ -601,6 +662,7 @@ export class TraceRequestsService {
     );
     const row = res.rows[0];
     if (!row) {
+      this.recordFailedSecretAttempt(ctx.ip);
       throw notFound("Không tìm thấy yêu cầu cấp quyền.");
     }
 
@@ -622,6 +684,7 @@ export class TraceRequestsService {
     }
 
     if (!isOwnerUser && !hasValidSecret) {
+      this.recordFailedSecretAttempt(ctx.ip);
       throw forbidden("Bạn không có quyền truy cập trạng thái của yêu cầu này.");
     }
 
@@ -731,9 +794,20 @@ export class TraceRequestsService {
     if (existing.status !== "pending") {
       throw badRequest("Yêu cầu này đã được xử lý trước đó.");
     }
+    if (existing.requester_user_id !== null && Number(existing.requester_user_id) === Number(user.id)) {
+      throw forbidden("Không thể tự phê duyệt yêu cầu cấp quyền của chính tài khoản đang đăng nhập.");
+    }
 
     const grantedTier: TraceAccessTier = dto.grantedTier ?? existing.requested_tier;
-    const scopeMode: TraceAccessScopeMode = dto.scopeMode ?? "zone";
+    const scopeMode: TraceAccessScopeMode = dto.scopeMode ?? existing.scope_mode ?? "record";
+    if (
+      scopeMode === "coop" &&
+      user.role !== "admin" &&
+      user.role !== "htx_head" &&
+      user.role !== "htx_deputy"
+    ) {
+      throw forbidden("Chỉ Quản trị viên hoặc Ban giám đốc HTX mới được cấp quyền phạm vi toàn Hợp tác xã.");
+    }
     const durationHours = dto.durationHours && dto.durationHours > 0 ? dto.durationHours : 24;
     const grantedPassToken = generateAlphaNumToken(32);
     const reviewNote = dto.note?.trim() || null;

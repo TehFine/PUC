@@ -44,7 +44,7 @@ function extractAuditPass(req: Request, queryPass?: string): string | undefined 
   if (typeof raw === "string" && raw.trim()) {
     return raw.trim().slice(0, 80);
   }
-  if (process.env.NODE_ENV !== "production" && typeof queryPass === "string" && queryPass.trim()) {
+  if (process.env.NODE_ENV === "test" && typeof queryPass === "string" && queryPass.trim()) {
     return queryPass.trim().slice(0, 80);
   }
   return undefined;
@@ -197,7 +197,8 @@ export class PublicController {
 
   /** Luồng SSE thời gian thực thông báo ngay khi dữ liệu lô hàng, vùng trồng, kiểm nghiệm hoặc nhật ký thay đổi. */
   @Public()
-  @SkipThrottle()
+  @SkipThrottle({ burst: true })
+  @Throttle(RateLimitTier.PUBLIC_READ)
   @Get("trace-stream")
   streamTraceUpdates(@Ip() ip: string, @Req() req: Request, @Res() res: Response): void {
     res.status(200);
@@ -285,11 +286,15 @@ export class PublicController {
     @Req() req: Request,
   ) {
     const ua = req.headers["user-agent"];
+    const bodyPass =
+      typeof dto.auditPass === "string" && dto.auditPass.trim()
+        ? dto.auditPass.trim().slice(0, 80)
+        : undefined;
     return this.traceability.verifyLiveFieldGps(code, dto, {
       user,
       ip,
       userAgent: typeof ua === "string" ? ua : undefined,
-      auditPass: extractAuditPass(req, dto.auditPass || queryPass),
+      auditPass: extractAuditPass(req, queryPass) || bodyPass,
       countryCode: extractCountryCode(req),
     });
   }
@@ -343,11 +348,15 @@ export class AuthenticatedTraceController {
     @Req() req: Request,
   ) {
     const ua = req.headers["user-agent"];
+    const bodyPass =
+      typeof dto.auditPass === "string" && dto.auditPass.trim()
+        ? dto.auditPass.trim().slice(0, 80)
+        : undefined;
     return this.traceability.verifyLiveFieldGps(code, dto, {
       user,
       ip,
       userAgent: typeof ua === "string" ? ua : undefined,
-      auditPass: extractAuditPass(req, dto.auditPass || queryPass),
+      auditPass: extractAuditPass(req, queryPass) || bodyPass,
       countryCode: extractCountryCode(req),
     });
   }

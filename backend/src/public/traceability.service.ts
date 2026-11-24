@@ -51,11 +51,15 @@ function maskFarmerPhone(raw: unknown): string | null {
   return `${s.slice(0, 3)}${"*".repeat(Math.max(3, s.length - 5))}${s.slice(-2)}`;
 }
 
-/** Chuẩn hóa mã tra cứu người dùng nhập hoặc dán (bỏ tiền tố tiếng Việt phổ biến và khoảng trắng thừa). */
+const TRACE_PREFIX_STRIP_RE =
+  /^(?:mã\s*vùng|ma\s*vung|mã\s*thửa|ma\s*thua|mã\s*lô|ma\s*lo|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|thùng|thung|thửa|thua|lô|lo|hộ|ho|mã|ma|puc|phc|tem)(?:\s*[:#]\s*|\s+[-–]?\s*)/iu;
+
+/** Chuẩn hóa mã tra cứu người dùng nhập hoặc dán (bỏ tiền tố tiếng Việt phổ biến có dấu phân cách và khoảng trắng thừa). */
 function normalizeTraceLookupCode(raw: string): string {
   return raw
+    .slice(0, 256)
     .trim()
-    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|hộ|ho|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(TRACE_PREFIX_STRIP_RE, "")
     .replace(/\s+/g, "");
 }
 
@@ -190,7 +194,7 @@ function toIsoDateOnly(val: unknown): string | null {
 }
 
 export interface ResourceScopeTarget {
-  targetKind?: "lot" | "box" | "fruit" | "plot";
+  targetKind?: "lot" | "box" | "fruit" | "farmer_stamp" | "plot" | "household";
   enterpriseId: number | null;
   coopCode: string;
   villageIds: number[];
@@ -201,6 +205,7 @@ export interface EvaluatedTraceAccess {
   roleBaseTier: ViewerTier;
   actualTier: ViewerTier;
   viewerTier: ViewerTier;
+  staffInScope: boolean;
   scopeDenied: boolean;
   scopeDeniedMessage: string | null;
   scopeReason: string | null;
@@ -330,10 +335,13 @@ interface TraceStreamSubscriber {
 const MAX_TRACE_STREAMS_PER_IP = 12;
 const MAX_TOTAL_TRACE_STREAMS = 500;
 const TRACE_SYNC_DEBOUNCE_MS = 120;
+const BG_REFRESH_VERIFIED_TTL_MS = 15 * 60_000;
+const MAX_VERIFIED_BG_KEYS = 10_000;
 
 @Injectable()
 export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
   private readonly failedAuditPassByIp = new Map<string, number[]>();
+  private readonly recentLoggedAccesses = new Map<string, number>();
   private minutesColsCache: { hasHouseholdId: boolean; hasPlotCode: boolean } | null = null;
   private readonly traceSubscribers = new Set<TraceStreamSubscriber>();
   private unsubscribeCacheTags: (() => void) | null = null;
@@ -343,7 +351,45 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
-  ) { }
+  ) {}
+
+  /**
+   * Chỉ bỏ qua ghi nhật ký / tăng bộ đếm khi cùng tác nhân đã có ít nhất một lượt tra cứu đầy đủ
+   * trên chính mã hồ sơ và mức quyền đó trong vòng 15 phút (chặn lạm dụng `?bg=1` ở lượt gọi đầu tiên để né kiểm toán).
+   */
+  private isVerifiedBackgroundRefresh(
+    ctx: TraceRequestContext,
+    canonicalCode: string,
+    viewerTier: ViewerTier | "field_audit",
+    scopeDenied: boolean,
+  ): boolean {
+    const actorPart = ctx.user?.id
+      ? `u:${ctx.user.id}`
+      : ctx.auditPass?.trim()
+        ? `p:${createHash("sha256").update(ctx.auditPass.trim()).digest("hex").slice(0, 16)}`
+        : `ip:${(ctx.ip || "local").trim()}:${(ctx.userAgent || "").slice(0, 48)}`;
+    const key = `${actorPart}|${canonicalCode.trim().toUpperCase()}|${viewerTier}|${scopeDenied ? 1 : 0}`;
+    const now = Date.now();
+
+    if (ctx.isBackgroundRefresh) {
+      const exp = this.recentLoggedAccesses.get(key);
+      if (exp !== undefined && exp > now) {
+        return true;
+      }
+    }
+
+    if (!this.recentLoggedAccesses.has(key) && this.recentLoggedAccesses.size >= MAX_VERIFIED_BG_KEYS) {
+      for (const [k, exp] of this.recentLoggedAccesses) {
+        if (exp <= now) this.recentLoggedAccesses.delete(k);
+      }
+      if (this.recentLoggedAccesses.size >= MAX_VERIFIED_BG_KEYS) {
+        const oldest = this.recentLoggedAccesses.keys().next().value;
+        if (oldest !== undefined) this.recentLoggedAccesses.delete(oldest);
+      }
+    }
+    this.recentLoggedAccesses.set(key, now + BG_REFRESH_VERIFIED_TTL_MS);
+    return false;
+  }
 
   onModuleInit(): void {
     if (!this.db.cache) return;
@@ -523,6 +569,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         roleBaseTier: "public",
         actualTier: "public",
         viewerTier: "public",
+        staffInScope: false,
         scopeDenied: false,
         scopeDeniedMessage: null,
         scopeReason: null,
@@ -533,11 +580,13 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     const entityVi =
       kind === "plot"
         ? "thửa đất"
-        : kind === "box"
-          ? "thùng đóng gói"
-          : kind === "fruit"
-            ? "tem trái sầu riêng"
-            : "lô hàng";
+        : kind === "household"
+          ? "hồ sơ nông hộ"
+          : kind === "box"
+            ? "thùng đóng gói"
+            : kind === "fruit" || kind === "farmer_stamp"
+              ? "tem trái sầu riêng"
+              : "lô hàng";
 
     let inScope = false;
     let scopeReason = "";
@@ -552,10 +601,14 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     } else if (isCoopStaffRole(user.role)) {
       const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
       const lotCoop = (scope.coopCode || "HTX-CUNE").trim().toUpperCase();
-      inScope = userCoop === lotCoop;
+      const communeRule = user.assignedCommune?.trim() || "";
+      const communeOk = !communeRule || matchesJurisdiction(communeRule, scope.adminLocations);
+      inScope = userCoop === lotCoop && communeOk;
       scopeReason = inScope
         ? `Thuộc phạm vi Hợp tác xã (${lotCoop})`
-        : `Ngoài phạm vi Hợp tác xã quản lý (${userCoop})`;
+        : !communeOk
+          ? `Ngoài địa bàn xã được phân công (${communeRule})`
+          : `Ngoài phạm vi Hợp tác xã quản lý (${userCoop})`;
     } else if (user.role === "village_officer") {
       const hasVillageRule = user.villageId !== null && user.villageId !== undefined;
       const hasCommuneRule = Boolean(user.assignedCommune && user.assignedCommune.trim());
@@ -572,10 +625,12 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }
     } else if (user.role === "inspector") {
       const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
-      inScope = matchesJurisdiction(region, scope.adminLocations);
+      const communeRule = user.assignedCommune?.trim() || "";
+      const communeOk = !communeRule || matchesJurisdiction(communeRule, scope.adminLocations);
+      inScope = matchesJurisdiction(region, scope.adminLocations) && communeOk;
       scopeReason = inScope
         ? `Thuộc địa bàn được giao (${region})`
-        : `Ngoài địa bàn được giao (${region})`;
+        : `Ngoài địa bàn được giao (${communeRule || region})`;
     }
 
     if (!inScope) {
@@ -583,6 +638,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         roleBaseTier,
         actualTier: "public",
         viewerTier: "public",
+        staffInScope: false,
         scopeDenied: true,
         scopeDeniedMessage:
           kind === "lot"
@@ -604,6 +660,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       roleBaseTier,
       actualTier,
       viewerTier,
+      staffInScope: true,
       scopeDenied: false,
       scopeDeniedMessage: null,
       scopeReason,
@@ -630,25 +687,31 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** Quyền xem phiếu kiểm nghiệm nháp (chưa kiểm chứng) và vi phạm nội bộ theo ma trận quyền máy chủ. */
+  /** Quyền xem phiếu kiểm nghiệm nháp (chưa kiểm chứng) và vi phạm nội bộ theo đúng vai trò VÀ phạm vi địa bàn gốc trên máy chủ (cấp quyền tạm thời không bao giờ mở khóa dữ liệu nội bộ này). */
   private resolveSensitiveTracePermissions(
     viewerTier: ViewerTier,
-    user?: AuthUser,
+    user: AuthUser | undefined,
+    access: EvaluatedTraceAccess,
   ) {
-    const isAuthorityStaff = viewerTier === "authority" && user !== undefined && this.resolveRoleBaseTier(user) === "authority";
+    const isAuthorityStaffInScope =
+      viewerTier === "authority" &&
+      access.staffInScope &&
+      user !== undefined &&
+      this.resolveRoleBaseTier(user) === "authority";
     return {
-      canReadDraftLabs: isAuthorityStaff && can(user.role, "testing", "read"),
-      canReadViolations: isAuthorityStaff && can(user.role, "violations", "read"),
+      canReadDraftLabs: isAuthorityStaffInScope && can(user.role, "testing", "read"),
+      canReadViolations: isAuthorityStaffInScope && can(user.role, "violations", "read"),
     };
   }
 
-  /** Chỉ cán bộ nhà nước / ban quản trị đã xác thực phiên mới được xem SĐT gốc và họ tên hộ chưa đồng ý công khai. */
-  private isAuthenticatedAuthorityStaff(user?: AuthUser): boolean {
-    return Boolean(user && this.resolveRoleBaseTier(user) === "authority");
+  /** Chỉ cán bộ nhà nước / ban quản trị đã xác thực phiên VÀ thuộc đúng phạm vi quản lý gốc mới được xem SĐT gốc và họ tên hộ chưa đồng ý công khai. */
+  private isInScopeAuthorityStaff(user: AuthUser | undefined, access: EvaluatedTraceAccess): boolean {
+    return Boolean(user && access.staffInScope && this.resolveRoleBaseTier(user) === "authority");
   }
 
   /**
-   * Kiểm tra doanh nghiệp có thực sự phụ trách thửa đất / tem nông hộ trong vụ hiện hành hoặc hợp đồng hiệu lực hay không.
+   * Kiểm tra doanh nghiệp có thực sự nhận nguyên liệu từ thửa đất / nông hộ này trong các lô hàng không bị thu hồi hay không.
+   * Tuyệt đối không mở toàn bộ thửa đất trong CSDL chỉ vì doanh nghiệp có một hợp đồng khung chung.
    */
   private async resolveEnterprisePlotOrStampScope(params: {
     user?: AuthUser;
@@ -665,14 +728,13 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       return viewerEntId;
     }
 
-    const currentYearContrib = await this.db.query<{ matched: boolean }>(
+    const contribMatch = await this.db.query<{ matched: boolean }>(
       `SELECT EXISTS (
          SELECT 1
          FROM harvest_contributions hc
          JOIN harvest_lots hl ON hl.id = hc.lot_id
          WHERE hl.status <> 'revoked'
            AND hl.enterprise_id = $1
-           AND EXTRACT(YEAR FROM hl.harvested_on)::int = EXTRACT(YEAR FROM CURRENT_DATE)::int
            AND (
              ($2::text IS NOT NULL AND upper(btrim(COALESCE(hc.plot_code, ''))) = upper(btrim($2)))
              OR ($2::text IS NULL AND $3::bigint IS NOT NULL AND hc.household_id = $3)
@@ -681,24 +743,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
        ) AS matched`,
       [viewerEntId, params.plotCode, params.householdId],
     );
-    if (currentYearContrib.rows[0]?.matched) {
+    if (contribMatch.rows[0]?.matched) {
       return viewerEntId;
-    }
-
-    if (await this.hasTable("contracts")) {
-      const contractRes = await this.db.query<{ matched: boolean }>(
-        `SELECT EXISTS (
-           SELECT 1
-           FROM contracts c
-           WHERE c.enterprise_id = $1
-             AND c.status = 'active'
-             AND (c.valid_until IS NULL OR c.valid_until >= CURRENT_DATE)
-         ) AS matched`,
-        [viewerEntId],
-      );
-      if (contractRes.rows[0]?.matched) {
-        return viewerEntId;
-      }
     }
 
     return params.linkedLotEnterpriseId;
@@ -713,10 +759,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     ctx: TraceRequestContext,
     target: {
       scannedCode: string;
-      targetKind?: "lot" | "box" | "fruit" | "plot";
+      targetKind?: "lot" | "box" | "fruit" | "farmer_stamp" | "plot" | "household";
       canonicalCodes?: Array<string | null | undefined>;
       resolvedLotCode: string | null;
       pucCode: string;
+      coopCode?: string;
       distinctZoneCodes?: string[];
     },
     recordAccess = true,
@@ -760,7 +807,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
            ($1::text IS NOT NULL AND granted_pass_token = $1)
            OR ($2::bigint IS NOT NULL AND requester_user_id = $2)
          )
-       ORDER BY (CASE WHEN granted_tier = 'authority' THEN 0 ELSE 1 END), id DESC
+       ORDER BY (CASE WHEN $1::text IS NOT NULL AND granted_pass_token = $1 THEN 0 ELSE 1 END),
+                (CASE WHEN granted_tier = 'authority' THEN 0 ELSE 1 END),
+                id DESC
        LIMIT 8`,
       [rawToken, userId],
     );
@@ -768,7 +817,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     if (res.rows.length === 0) return null;
 
     const targetZones = (
-      target.distinctZoneCodes && target.distinctZoneCodes.length > 0
+      target.distinctZoneCodes !== undefined
         ? target.distinctZoneCodes
         : target.pucCode
           ? [target.pucCode]
@@ -784,6 +833,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }
     }
     const lotUpper = target.resolvedLotCode ? target.resolvedLotCode.trim().toUpperCase() : null;
+    const isLotUnitTarget =
+      target.targetKind === "lot" || target.targetKind === "box" || target.targetKind === "fruit";
+    const targetCoopUpper = (target.coopCode || "HTX-CUNE").trim().toUpperCase();
 
     for (const row of res.rows) {
       let matchedViaToken = false;
@@ -806,12 +858,12 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       const rowPucUpper = row.puc_code ? row.puc_code.trim().toUpperCase() : null;
       const directRecordMatch = candidateRecordCodes.has(rowScannedUpper);
       const lotRecordMatch =
-        target.targetKind !== "plot" &&
+        isLotUnitTarget &&
         row.target_kind === "lot" &&
         Boolean(lotUpper && rowLotUpper && lotUpper === rowLotUpper);
 
       if (row.scope_mode === "coop") {
-        scopeMatches = true;
+        scopeMatches = targetCoopUpper === "HTX-CUNE";
       } else if (row.scope_mode === "zone") {
         scopeMatches =
           directRecordMatch ||
@@ -824,7 +876,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       if (!scopeMatches) continue;
 
       const grantedTier: "enterprise" | "authority" = row.granted_tier ?? "enterprise";
-      if (recordAccess && !ctx.isBackgroundRefresh) {
+      const isBg = this.isVerifiedBackgroundRefresh(ctx, target.scannedCode, grantedTier, false);
+      if (recordAccess && !isBg) {
         await this.db.query(
           `UPDATE trace_access_requests
            SET access_count = access_count + 1,
@@ -895,6 +948,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       roleBaseTier: baseAccess.roleBaseTier,
       actualTier: elevatedActual,
       viewerTier,
+      staffInScope: baseAccess.staffInScope,
       scopeDenied: false,
       scopeDeniedMessage: null,
       scopeReason: `Được cấp quyền tạm thời theo mã phê duyệt ${grant.requestCode}`,
@@ -1291,7 +1345,12 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       .slice(0, 24);
 
     const viewerTier = params.access.viewerTier;
-    const isBgRefresh = Boolean(params.ctx.isBackgroundRefresh);
+    const isBgRefresh = this.isVerifiedBackgroundRefresh(
+      params.ctx,
+      params.canonicalKey,
+      viewerTier,
+      params.access.scopeDenied,
+    );
 
     const sideTasks: Promise<unknown>[] = [];
     if (!isBgRefresh && params.ctx.user && (viewerTier !== "public" || params.access.scopeDenied)) {
@@ -1593,7 +1652,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     if (row.allowed_zone_code && row.allowed_zone_code.trim()) {
       const allowedZone = row.allowed_zone_code.trim().toUpperCase();
       const zonesToCheck = (
-        distinctZoneCodes && distinctZoneCodes.length > 0
+        distinctZoneCodes !== undefined
           ? distinctZoneCodes
           : pucCode
             ? [pucCode]
@@ -1607,7 +1666,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    if (recordAccess && !ctx.isBackgroundRefresh) {
+    const isBg = this.isVerifiedBackgroundRefresh(ctx, scannedCode, "field_audit", false);
+    if (recordAccess && !isBg) {
       await this.db.query(
         `UPDATE field_audit_passes
          SET access_count = access_count + 1,
@@ -1656,6 +1716,15 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     plotCodes: string[],
     harvestedOnIso?: string | null,
   ) {
+    const cleanHhKey = [...new Set(householdIds.filter((id) => Number.isFinite(id) && id > 0))]
+      .sort((a, b) => a - b)
+      .join(",");
+    const cleanPlotKey = [...new Set(plotCodes.map((c) => c.trim().toUpperCase()).filter(Boolean))]
+      .sort()
+      .join(",");
+    const cacheKey = `trace:ledger:${cleanHhKey}|${cleanPlotKey}|${harvestedOnIso || ""}`;
+
+    const runCompute = async () => {
     let effectiveHouseholdIds = [...new Set(householdIds.filter((id) => Number.isFinite(id) && id > 0))];
     const cleanPlots = [...new Set(plotCodes.map((c) => c.trim().toUpperCase()).filter(Boolean))];
 
@@ -1958,6 +2027,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       massBalanceLockEnabled: true,
       phiViolatedBeforeHarvest,
     };
+    };
+
+    if (!this.db.cache) return runCompute();
+    return this.db.cache.getOrLoad(cacheKey, 45_000, ["trace"], runCompute);
   }
 
   /**
@@ -2482,6 +2555,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     householdIds: number[];
     plotCodes?: string[];
     restrictToPlotCodes?: boolean;
+    strictHouseholdScope?: boolean;
     canShowAllNames?: boolean;
     limit?: number;
   }) {
@@ -2489,11 +2563,15 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     const cleanPlots = [
       ...new Set((params.plotCodes ?? []).map((c) => c.trim().toUpperCase()).filter(Boolean)),
     ];
+    if (params.strictHouseholdScope && cleanHhIds.length === 0) {
+      return [];
+    }
     if (cleanHhIds.length === 0 && cleanPlots.length === 0) {
       return [];
     }
     const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
     const restrictPlots = Boolean(params.restrictToPlotCodes && cleanPlots.length > 0);
+    const strictHh = Boolean(params.strictHouseholdScope);
     const limit = params.limit ?? 20;
 
     const res = await this.db.query(
@@ -2545,7 +2623,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
          JOIN households h ON h.id = sr.household_id
          WHERE (
            (cardinality($1::bigint[]) > 0 AND sr.household_id = ANY($1::bigint[]))
-           OR (cardinality($2::text[]) > 0 AND upper(btrim(COALESCE(sr.plot_code, ''))) = ANY($2::text[]))
+           OR (NOT $6::boolean AND cardinality($2::text[]) > 0 AND upper(btrim(COALESCE(sr.plot_code, ''))) = ANY($2::text[]))
          )
          AND (
            NOT $4::boolean
@@ -2583,7 +2661,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
          JOIN households h ON h.id = je.household_id
          WHERE (
            (cardinality($1::bigint[]) > 0 AND je.household_id = ANY($1::bigint[]))
-           OR (cardinality($2::text[]) > 0 AND upper(btrim(COALESCE(je.plot_code, ''))) = ANY($2::text[]))
+           OR (NOT $6::boolean AND cardinality($2::text[]) > 0 AND upper(btrim(COALESCE(je.plot_code, ''))) = ANY($2::text[]))
          )
          AND (
            NOT $4::boolean
@@ -2593,7 +2671,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
        ) combined
        ORDER BY sort_date DESC, sort_id DESC
        LIMIT $5`,
-      [cleanHhIds, cleanPlots, Boolean(params.canShowAllNames), restrictPlots, limit],
+      [cleanHhIds, cleanPlots, Boolean(params.canShowAllNames), restrictPlots, limit, strictHh],
     );
 
     return normalizeEvidenceMediaRows(res.rows);
@@ -2764,7 +2842,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             // Bản ghi cũ có thể đã lưu họ tên chủ hộ: luôn hiển thị nhãn trung tính khi hộ chưa đồng ý công khai.
             `SELECT fc.checked_at,
                       CASE
-                        WHEN u.role = 'farmer'
+                        WHEN (u.role = 'farmer' OR (fc.user_id IS NOT NULL AND u.id IS NULL))
                              AND fc.audit_pass_id IS NULL
                              AND NOT (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
                           THEN $2::text
@@ -2859,6 +2937,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       plotCode: string;
       plotQrToken: string | null;
       zoneCode: string;
+      rawZoneCode: string | null;
       householdId: number | null;
       villageId: number | null;
       villageName: string | null;
@@ -2873,7 +2952,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         village_id: number | null;
         village: string | null;
       }>(
-        `SELECT p.code, COALESCE(p.qr_token, pst.qr_token) AS qr_token, p.zone_code, p.household_id, h.village_id, COALESCE(p.village, v.name) AS village
+        `SELECT p.code, COALESCE(p.qr_token, pst.qr_token) AS qr_token, COALESCE(p.zone_code, pst.zone_code) AS zone_code, p.household_id, h.village_id, COALESCE(p.village, v.name) AS village
          FROM plots p
          LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
          LEFT JOIN households h ON h.id = p.household_id
@@ -2884,10 +2963,12 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         [cleanCode],
       );
       if (pRes.rows[0]) {
+        const cleanZone = pRes.rows[0].zone_code?.trim() || null;
         resolvedPlot = {
           plotCode: pRes.rows[0].code,
           plotQrToken: pRes.rows[0].qr_token,
-          zoneCode: pRes.rows[0].zone_code || "VN-DLOR-0086",
+          zoneCode: cleanZone || "VN-DLOR-0086",
+          rawZoneCode: cleanZone,
           householdId: pRes.rows[0].household_id !== null ? Number(pRes.rows[0].household_id) : null,
           villageId: pRes.rows[0].village_id !== null ? Number(pRes.rows[0].village_id) : null,
           villageName: pRes.rows[0].village,
@@ -2914,10 +2995,12 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         [cleanCode],
       );
       if (sbRes.rows[0]) {
+        const cleanZone = sbRes.rows[0].zone_code?.trim() || null;
         resolvedPlot = {
           plotCode: sbRes.rows[0].plot_code,
           plotQrToken: sbRes.rows[0].qr_token,
-          zoneCode: sbRes.rows[0].zone_code || "VN-DLOR-0086",
+          zoneCode: cleanZone || "VN-DLOR-0086",
+          rawZoneCode: cleanZone,
           householdId: sbRes.rows[0].household_id !== null ? Number(sbRes.rows[0].household_id) : null,
           villageId: sbRes.rows[0].village_id !== null ? Number(sbRes.rows[0].village_id) : null,
           villageName: sbRes.rows[0].village_name,
@@ -2930,6 +3013,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     }
 
     const adminLocation = this.resolveAdminLocation(resolvedPlot.villageName, resolvedPlot.zoneCode);
+    const realZones = resolvedPlot.rawZoneCode ? [resolvedPlot.rawZoneCode] : [];
     const effectivePassCtx = { ...ctx, auditPass: dto.auditPass || ctx.auditPass };
     const tempGrant = await this.resolveApprovedAccessGrant(
       effectivePassCtx,
@@ -2939,18 +3023,20 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         canonicalCodes: [resolvedPlot.plotCode, resolvedPlot.plotQrToken],
         resolvedLotCode: null,
         pucCode: resolvedPlot.zoneCode,
+        distinctZoneCodes: realZones,
       },
       true,
     );
     const passCheck = tempGrant?.matchedViaToken
       ? null
       : await this.resolveFieldAuditPass(
-        effectivePassCtx,
-        resolvedPlot.zoneCode,
-        cleanCode,
-        null,
-        true,
-      );
+          effectivePassCtx,
+          resolvedPlot.zoneCode,
+          cleanCode,
+          null,
+          true,
+          realZones,
+        );
 
     let linkedEnterpriseId: number | null = null;
     let linkedCoopCode = "HTX-CUNE";
@@ -2995,16 +3081,18 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     });
     const isOwnerFarmer =
       ctx.user?.role === "farmer" &&
+      ctx.user.householdId !== null &&
+      ctx.user.householdId !== undefined &&
       resolvedPlot.householdId !== null &&
       Number(ctx.user.householdId) === Number(resolvedPlot.householdId);
     const canSeeExactPlotGis =
       Boolean(passCheck?.active) ||
       Boolean(tempGrant?.active) ||
-      (roleAccess.viewerTier === "authority" && !roleAccess.scopeDenied) ||
+      (roleAccess.viewerTier === "authority" && roleAccess.staffInScope) ||
       isOwnerFarmer;
     const authorized =
       canSeeExactPlotGis ||
-      (roleAccess.viewerTier !== "public" && !roleAccess.scopeDenied);
+      (roleAccess.viewerTier !== "public" && roleAccess.staffInScope);
 
     if (!authorized) {
       throw forbidden(
@@ -3069,8 +3157,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     return {
       verified: gps.verified,
-      insidePolygon: gps.insidePolygon,
-      distanceMeters: gps.distanceMeters,
+      insidePolygon: canSeeExactPlotGis ? gps.insidePolygon : null,
+      distanceMeters: canSeeExactPlotGis ? gps.distanceMeters : null,
       accuracyMeters: dto.accuracyMeters ?? null,
       plotCode: resolvedPlot.plotCode,
       zoneCode: resolvedPlot.zoneCode,
@@ -3841,16 +3929,18 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         ],
         resolvedLotCode: lotCode,
         pucCode: prelimPucCode,
+        coopCode: String(lotRow.coopCode || "HTX-CUNE"),
         distinctZoneCodes: candidateZones,
       },
       true,
     );
     const access = this.elevateAccessWithGrant(baseAccess, ctx, temporaryGrant);
     const viewerTier = access.viewerTier;
-    const isFullAuthorityStaff = this.isAuthenticatedAuthorityStaff(ctx.user);
+    const isFullAuthorityStaff = this.isInScopeAuthorityStaff(ctx.user, access);
     const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(
       viewerTier,
       ctx.user,
+      access,
     );
 
     const verifiedPlots = effectivePlots.filter((p) => p.status === "approved");
@@ -3966,7 +4056,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }),
       temporaryGrant?.matchedViaToken
         ? Promise.resolve(null)
-        : this.resolveFieldAuditPass(ctx, primaryPucCode, cleanCode, lotCode, true, distinctZoneCodes),
+        : this.resolveFieldAuditPass(ctx, primaryPucCode, cleanCode, lotCode, true, candidateZones),
       this.resolveCoarseZoneMap(hasPlots, primaryPucCode, adminLocation),
     ]);
 
@@ -4010,11 +4100,37 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       Number(lotRow.weightTons || 0) * 1000;
     const seasonYear = harvestedOn ? Number(harvestedOn.slice(0, 4)) || new Date().getFullYear() : new Date().getFullYear();
 
-    // Cán bộ xã/thôn: chỉ thấy hộ và thửa nguồn thuộc địa bàn được phân công, kể cả khi lô ghép nhiều thôn (trừ khi đã được duyệt cấp quyền đột xuất toàn diện).
+    // Cán bộ xã/thôn: chỉ thấy hộ và thửa nguồn thuộc địa bàn được phân công; nếu có thêm quyền tạm thời mở rộng thì các hộ ngoài thôn chỉ hiển thị ở mức bảo vệ PII của quyền tạm thời (che SĐT, ẩn tên/ảnh chưa đồng ý).
+    const staffOfficerFilter = this.buildOfficerHouseholdFilter(ctx.user);
+    const staffScopedHouseholdIds = staffOfficerFilter
+      ? [
+          ...new Set(
+            contribHouseholds
+              .filter((h) => {
+                const hid = Number(h.household_id);
+                const hhPlots = sourcePlots.filter(
+                  (p) =>
+                    Number(p.household_id) === hid ||
+                    (h.plot_code ? p.code.toUpperCase() === h.plot_code.toUpperCase() : false),
+                );
+                const adminLocations = [
+                  this.resolveAdminLocation(h.village_name, null),
+                  ...hhPlots.filter((p) => p.zone_code).map((p) => this.resolveAdminLocation(null, p.zone_code)),
+                ];
+                return staffOfficerFilter({
+                  villageId: h.village_id !== null ? Number(h.village_id) : null,
+                  adminLocations,
+                });
+              })
+              .map((h) => Number(h.household_id)),
+          ),
+        ]
+      : contribHouseholdIds;
+    const staffScopedHouseholdIdSet = new Set(staffScopedHouseholdIds);
     const officerFilter =
       temporaryGrant?.active && temporaryGrant.grantedTier === "authority"
         ? null
-        : this.buildOfficerHouseholdFilter(ctx.user);
+        : staffOfficerFilter;
     const scopedContribHouseholds = officerFilter
       ? contribHouseholds.filter((h) => {
         const hid = Number(h.household_id);
@@ -4090,7 +4206,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           resolvedPlot?.sheet_no || resolvedPlot?.parcel_no
             ? `Tờ ${resolvedPlot.sheet_no || "-"} / Thửa ${resolvedPlot.parcel_no || "-"}`
             : null;
-        const canShowRawFarmerPii = isFullAuthorityStaff;
+        const canShowRawFarmerPii =
+          isFullAuthorityStaff && (!staffOfficerFilter || staffScopedHouseholdIdSet.has(hid));
         const safeAuthorityName = canShowRawFarmerPii || isConsentedQualified
           ? h.household_name
           : `Hộ thành viên ${h.household_code}`;
@@ -4116,7 +4233,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (hasEnterpriseView && inOfficerScope) {
-        const isHtxOfficerInScope = ctx.user?.role === "htx_officer" && !access.scopeDenied;
+        const isHtxOfficerInScope = ctx.user?.role === "htx_officer" && access.staffInScope;
         const canShowEntIdentity = isConsentedQualified || isHtxOfficerInScope;
         return {
           index: idx + 1,
@@ -4356,7 +4473,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             return false;
           }
         }
-        if (viewerTier === "enterprise" && contribPlotCodeSet.size > 0 && !unpinnedContribHouseholdIdSet.has(hid)) {
+        if (lt.recordStatus !== "verified" && staffOfficerFilter && !staffScopedHouseholdIdSet.has(hid)) {
+          return false;
+        }
+        if (viewerTier !== "authority" && contribPlotCodeSet.size > 0 && !unpinnedContribHouseholdIdSet.has(hid)) {
           if (pUpper && !contribPlotCodeSet.has(pUpper)) {
             return false;
           }
@@ -4364,16 +4484,18 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         return true;
       });
 
+      const effectiveTier2PlotCodes = officerFilter ? scopedPlotCodes : contribPlotCodes;
+      const allVisiblePinnedToPlots =
+        effectiveTier2PlotCodes.length > 0 &&
+        visibleContribHouseholds.every((h) => Boolean(h.plot_code && h.plot_code.trim()));
       const tier2EvidenceLogs =
         viewerTier !== "authority"
           ? await this.queryTier2CultivationEvidence({
               householdIds: [...new Set(visibleContribHouseholds.map((h) => Number(h.household_id)))],
-              plotCodes: contribPlotCodes,
-              restrictToPlotCodes:
-                viewerTier === "enterprise" &&
-                contribPlotCodes.length > 0 &&
-                unpinnedContribHouseholdIds.length === 0,
-              canShowAllNames: ctx.user?.role === "htx_officer" && !access.scopeDenied,
+              plotCodes: effectiveTier2PlotCodes,
+              restrictToPlotCodes: allVisiblePinnedToPlots,
+              strictHouseholdScope: Boolean(officerFilter),
+              canShowAllNames: ctx.user?.role === "htx_officer" && access.staffInScope,
               limit: 20,
             })
           : undefined;
@@ -4430,6 +4552,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority") {
       const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+      const diaryPlotCodes = officerFilter ? scopedPlotCodes : contribPlotCodes;
+      const filterDiariesByPlot = diaryPlotCodes.length > 0;
+      const hasStaffSubScope = Boolean(staffOfficerFilter);
+      const violationHhIds = staffOfficerFilter ? staffScopedHouseholdIds : scopedHouseholdIds;
       const [diariesRes, minutesRows, violationRows] = await Promise.all([
         scopedHouseholdIds.length > 0
           ? this.db.query(
@@ -4442,12 +4568,14 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         ('Phun thuốc BVTV: ' || p.name) AS activity,
                         ('Hoạt chất: ' || p.active_ingredient || ' | Liều lượng: ' || sr.dose || ' | Cách ly PHI: ' || sr.isolation_days || ' ngày') AS detail,
                         CASE
-                          WHEN $2::boolean OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
+                          WHEN ($2::boolean AND (NOT $6::boolean OR sr.household_id = ANY($7::bigint[])))
+                               OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
                             THEN h.name
                           ELSE ('Hộ thành viên ' || h.code)
                         END AS recorder,
                         CASE
-                          WHEN $2::boolean OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
+                          WHEN ($2::boolean AND (NOT $6::boolean OR sr.household_id = ANY($7::bigint[])))
+                               OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
                             THEN h.name
                           ELSE ('Hộ thành viên ' || h.code)
                         END AS household_name,
@@ -4466,18 +4594,26 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                  JOIN pesticides p ON p.id = sr.pesticide_id
                  JOIN households h ON h.id = sr.household_id
                  WHERE sr.household_id = ANY($1::bigint[])
+                   AND (
+                     NOT $3::boolean
+                     OR sr.household_id = ANY($4::bigint[])
+                     OR COALESCE(btrim(sr.plot_code), '') = ''
+                     OR upper(btrim(sr.plot_code)) = ANY($5::text[])
+                   )
                  UNION ALL
                  SELECT je.entry_on,
                         je.plot_code,
                         je.activity,
                         je.detail,
                         CASE
-                          WHEN $2::boolean OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
+                          WHEN ($2::boolean AND (NOT $6::boolean OR je.household_id = ANY($7::bigint[])))
+                               OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
                             THEN je.recorder
                           ELSE 'Chủ hộ thành viên HTX'
                         END AS recorder,
                         CASE
-                          WHEN $2::boolean OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
+                          WHEN ($2::boolean AND (NOT $6::boolean OR je.household_id = ANY($7::bigint[])))
+                               OR (COALESCE(h.public_trace_consent, false) AND h.status = 'qualified')
                             THEN h.name
                           ELSE ('Hộ thành viên ' || h.code)
                         END AS household_name,
@@ -4495,10 +4631,24 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                  FROM journal_entries je
                  JOIN households h ON h.id = je.household_id
                  WHERE je.household_id = ANY($1::bigint[])
+                   AND (
+                     NOT $3::boolean
+                     OR je.household_id = ANY($4::bigint[])
+                     OR COALESCE(btrim(je.plot_code), '') = ''
+                     OR upper(btrim(je.plot_code)) = ANY($5::text[])
+                   )
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
                LIMIT 25`,
-            [scopedHouseholdIds, isFullAuthorityStaff],
+            [
+              scopedHouseholdIds,
+              isFullAuthorityStaff,
+              filterDiariesByPlot,
+              unpinnedContribHouseholdIds,
+              diaryPlotCodes,
+              hasStaffSubScope,
+              staffScopedHouseholdIds,
+            ],
           )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         // Biên bản kiểm tra chỉ trong phạm vi hộ/thửa nguồn được xem (không lấy bù biên bản của hộ khác).
@@ -4511,18 +4661,21 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           scopedPlotCodes,
           8,
         ),
-        canReadViolations ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 10) : Promise.resolve([]),
+        canReadViolations ? this.queryScopedViolations(violationHhIds, scopedPlotCodes, 10) : Promise.resolve([]),
       ]);
 
       authorityData = {
         sourceHouseholds: scopedContribHouseholds.map((h) => {
+          const hid = Number(h.household_id);
+          const canShowRawPiiForHh =
+            isFullAuthorityStaff && (!staffOfficerFilter || staffScopedHouseholdIdSet.has(hid));
           const isConsentedQualified = h.public_trace_consent === true && h.household_status === "qualified";
           return {
             householdCode: h.household_code,
-            householdName: isFullAuthorityStaff || isConsentedQualified ? h.household_name : `Hộ thành viên ${h.household_code}`,
-            avatarUrl: isFullAuthorityStaff || isConsentedQualified ? (h.avatar_url || null) : null,
+            householdName: canShowRawPiiForHh || isConsentedQualified ? h.household_name : `Hộ thành viên ${h.household_code}`,
+            avatarUrl: canShowRawPiiForHh || isConsentedQualified ? (h.avatar_url || null) : null,
             villageName: h.village_name,
-            phone: isFullAuthorityStaff ? h.phone : maskFarmerPhone(h.phone),
+            phone: canShowRawPiiForHh ? h.phone : maskFarmerPhone(h.phone),
             cccdMasked: h.cccd_masked,
             status: h.household_status,
             publicTraceConsent: h.public_trace_consent,
@@ -4744,9 +4897,16 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     ]);
 
     const derivedZone = String(raw.householdCode || "").replace(/-(?:H|T)\d+$/i, "");
-    const pucCode = String(
-      raw.zoneCode || (derivedZone && derivedZone !== raw.householdCode ? derivedZone : "VN-DLOR-0086"),
-    );
+    const validDerivedStampZone =
+      derivedZone && derivedZone !== raw.householdCode && /^(?:VN-|66-PUC-)/i.test(derivedZone)
+        ? derivedZone
+        : null;
+    const rawStampZone =
+      typeof raw.zoneCode === "string" && raw.zoneCode.trim()
+        ? raw.zoneCode.trim()
+        : validDerivedStampZone;
+    const pucCode = rawStampZone || "VN-DLOR-0086";
+    const stampRealZones = rawStampZone ? [rawStampZone] : [];
     const adminLocation = this.resolveAdminLocation(raw.villageName, pucCode);
     const linkedLot = latestLotRes.rows[0] ? camelRow<Record<string, unknown>>(latestLotRes.rows[0]) : null;
     const resolvedLinkedLotCode = linkedLot ? String(linkedLot.code) : null;
@@ -4758,10 +4918,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       pucCode,
     });
 
+    const stampCoopCode = linkedLot?.coopCode ? String(linkedLot.coopCode) : "HTX-CUNE";
     const baseAccess = this.evaluateAccessAndScope(ctx, {
-      targetKind: "fruit",
+      targetKind: "farmer_stamp",
       enterpriseId: effectiveEnterpriseId,
-      coopCode: linkedLot?.coopCode ? String(linkedLot.coopCode) : "HTX-CUNE",
+      coopCode: stampCoopCode,
       villageIds: raw.villageId !== null && raw.villageId !== undefined ? [Number(raw.villageId)] : [],
       adminLocations: [adminLocation],
     });
@@ -4769,22 +4930,25 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       ctx,
       {
         scannedCode: cleanCode,
-        targetKind: "fruit",
+        targetKind: "farmer_stamp",
         canonicalCodes: [
           raw.serialCode ? String(raw.serialCode) : null,
           raw.qrToken ? String(raw.qrToken) : null,
         ],
-        resolvedLotCode: resolvedLinkedLotCode,
+        resolvedLotCode: null,
         pucCode,
+        coopCode: stampCoopCode,
+        distinctZoneCodes: stampRealZones,
       },
       true,
     );
     const access = this.elevateAccessWithGrant(baseAccess, ctx, temporaryGrant);
     const viewerTier = access.viewerTier;
-    const isFullAuthorityStaff = this.isAuthenticatedAuthorityStaff(ctx.user);
+    const isFullAuthorityStaff = this.isInScopeAuthorityStaff(ctx.user, access);
     const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(
       viewerTier,
       ctx.user,
+      access,
     );
     const verifiedLabClause = canReadDraftLabs ? "" : "AND record_status = 'verified'";
 
@@ -4832,7 +4996,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }),
       temporaryGrant?.matchedViaToken
         ? Promise.resolve(null)
-        : this.resolveFieldAuditPass(ctx, pucCode, cleanCode, resolvedLinkedLotCode, true),
+        : this.resolveFieldAuditPass(ctx, pucCode, cleanCode, resolvedLinkedLotCode, true, stampRealZones),
     ]);
 
     const coarseMap = await this.resolveCoarseZoneMap(hasPlots, pucCode, adminLocation);
@@ -4918,11 +5082,22 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     // Dữ liệu Cấp 2 (Doanh nghiệp, Cán bộ HTX, Đoàn Thẩm định hoặc chính Chủ hộ đang xem tem của mình)
     const isStampOwnerFarmer =
-      ctx.user?.role === "farmer" && Number(ctx.user.householdId) === householdId;
+      ctx.user?.role === "farmer" &&
+      ctx.user.householdId !== null &&
+      ctx.user.householdId !== undefined &&
+      Number(ctx.user.householdId) === householdId;
+    const canSeeStampLinkedLotSpecs =
+      Boolean(linkedLot) &&
+      (ctx.user?.role !== "enterprise" ||
+        (linkedLot?.enterpriseId !== null &&
+          linkedLot?.enterpriseId !== undefined &&
+          Number(linkedLot.enterpriseId) === Number(ctx.user.enterpriseId)) ||
+        Boolean(temporaryGrant?.active) ||
+        Boolean(fieldAuditPass?.active));
     let enterpriseData: Record<string, unknown> | undefined;
     if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active || isStampOwnerFarmer) {
       const visibleStampLabs =
-        viewerTier === "enterprise" && stampPlotCode
+        viewerTier !== "authority" && stampPlotCode
           ? rawLabs.filter(
             (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === stampPlotCode.toUpperCase(),
           )
@@ -4932,9 +5107,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           ? await this.queryTier2CultivationEvidence({
               householdIds: [householdId],
               plotCodes: stampPlotCode ? [stampPlotCode] : [],
-              restrictToPlotCodes: viewerTier === "enterprise" && Boolean(stampPlotCode),
+              restrictToPlotCodes: Boolean(stampPlotCode),
               canShowAllNames:
-                isStampOwnerFarmer || (ctx.user?.role === "htx_officer" && !access.scopeDenied),
+                isStampOwnerFarmer || (ctx.user?.role === "htx_officer" && access.staffInScope),
               limit: 20,
             })
           : undefined;
@@ -4970,7 +5145,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           result: lt.result,
           scanUrl: lt.scanUrl,
         })),
-        packingSpecs: linkedLot
+        packingSpecs: linkedLot && canSeeStampLinkedLotSpecs
           ? {
               gradeAPct:
                 linkedLot.gradeAPct !== null && linkedLot.gradeAPct !== undefined
@@ -5006,20 +5181,28 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority") {
       const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+      const staffStampOfficerFilter = this.buildOfficerHouseholdFilter(ctx.user);
+      const stampInStaffScope =
+        !staffStampOfficerFilter ||
+        staffStampOfficerFilter({
+          villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
+          adminLocations: [adminLocation],
+        });
       const officerFilter =
         temporaryGrant?.active && temporaryGrant.grantedTier === "authority"
           ? null
-          : this.buildOfficerHouseholdFilter(ctx.user);
+          : staffStampOfficerFilter;
       const householdVisible =
         !officerFilter ||
         officerFilter({
           villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
           adminLocations: [adminLocation],
         });
+      const canShowStampRawPii = isFullAuthorityStaff && stampInStaffScope;
       const scopedHouseholdIds = householdVisible ? [householdId] : [];
       const scopedPlotCodes = householdVisible && stampPlotCode ? [stampPlotCode] : [];
       const safeStampHouseholdName =
-        isFullAuthorityStaff || hasConsent
+        canShowStampRawPii || hasConsent
           ? String(raw.householdName || "")
           : `Hộ thành viên ${String(raw.householdCode || "HTX")}`;
       const [diariesRes, minutesRows, violationRows] = await Promise.all([
@@ -5049,6 +5232,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                  FROM spray_records sr
                  JOIN pesticides p ON p.id = sr.pesticide_id
                  WHERE sr.household_id = $1
+                   AND ($4::text IS NULL OR COALESCE(btrim(sr.plot_code), '') = '' OR upper(btrim(sr.plot_code)) = upper(btrim($4)))
                  UNION ALL
                  SELECT je.entry_on,
                         je.plot_code,
@@ -5069,10 +5253,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         je.id AS sort_id
                  FROM journal_entries je
                  WHERE je.household_id = $1
+                   AND ($4::text IS NULL OR COALESCE(btrim(je.plot_code), '') = '' OR upper(btrim(je.plot_code)) = upper(btrim($4)))
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
                LIMIT 20`,
-            [householdId, safeStampHouseholdName, isFullAuthorityStaff || hasConsent],
+            [householdId, safeStampHouseholdName, canShowStampRawPii || hasConsent, stampPlotCode],
           )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         this.queryScopedInspectionMinutes(
@@ -5084,7 +5269,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           scopedPlotCodes,
           6,
         ),
-        canReadViolations ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 6) : Promise.resolve([]),
+        canReadViolations && stampInStaffScope
+          ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 6)
+          : Promise.resolve([]),
       ]);
 
       authorityData = {
@@ -5094,11 +5281,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               householdCode: String(raw.householdCode),
               householdName: safeStampHouseholdName,
               avatarUrl:
-                isFullAuthorityStaff || hasConsent
+                canShowStampRawPii || hasConsent
                   ? (typeof raw.avatarUrl === "string" && raw.avatarUrl ? raw.avatarUrl : null)
                   : null,
               villageName: String(raw.villageName || ""),
-              phone: isFullAuthorityStaff ? String(raw.householdPhone || "") : maskFarmerPhone(raw.householdPhone),
+              phone: canShowStampRawPii ? String(raw.householdPhone || "") : maskFarmerPhone(raw.householdPhone),
               cccdMasked: String(raw.cccdMasked || ""),
               status: String(raw.householdStatus || "qualified"),
               publicTraceConsent: Boolean(raw.publicTraceConsent),
@@ -5296,12 +5483,16 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       raw.householdStatus === "qualified";
 
     const derivedZone = String(raw.householdCode || "").replace(/-(?:H|T)\d+$/i, "");
-    const pucCode =
+    const validDerivedPlotZone =
+      derivedZone && derivedZone !== raw.householdCode && /^(?:VN-|66-PUC-)/i.test(derivedZone)
+        ? derivedZone
+        : null;
+    const rawPlotZone =
       typeof raw.zoneCode === "string" && raw.zoneCode.trim()
         ? raw.zoneCode.trim()
-        : derivedZone && derivedZone !== raw.householdCode
-          ? derivedZone
-          : "VN-DLOR-0086";
+        : validDerivedPlotZone;
+    const pucCode = rawPlotZone || "VN-DLOR-0086";
+    const plotRealZones = rawPlotZone ? [rawPlotZone] : [];
     const adminLocation = this.resolveAdminLocation(raw.village, pucCode);
 
     const [latestLotRes, latestMinute] = await Promise.all([
@@ -5340,10 +5531,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       linkedLotEnterpriseId: linkedLot?.enterpriseId ? Number(linkedLot.enterpriseId) : null,
       pucCode,
     });
+    const plotCoopCode = linkedLot?.coopCode ? String(linkedLot.coopCode) : "HTX-CUNE";
     const baseAccess = this.evaluateAccessAndScope(ctx, {
       targetKind: "plot",
       enterpriseId: effectiveEnterpriseId,
-      coopCode: linkedLot?.coopCode ? String(linkedLot.coopCode) : "HTX-CUNE",
+      coopCode: plotCoopCode,
       villageIds: raw.villageId !== null && raw.villageId !== undefined ? [Number(raw.villageId)] : [],
       adminLocations: [adminLocation],
     });
@@ -5353,17 +5545,20 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         scannedCode: cleanCode,
         targetKind: "plot",
         canonicalCodes: [plotCode, plotQrToken],
-        resolvedLotCode: resolvedLinkedLotCode,
+        resolvedLotCode: null,
         pucCode,
+        coopCode: plotCoopCode,
+        distinctZoneCodes: plotRealZones,
       },
       true,
     );
     const access = this.elevateAccessWithGrant(baseAccess, ctx, temporaryGrant);
     const viewerTier = access.viewerTier;
-    const isFullAuthorityStaff = this.isAuthenticatedAuthorityStaff(ctx.user);
+    const isFullAuthorityStaff = this.isInScopeAuthorityStaff(ctx.user, access);
     const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(
       viewerTier,
       ctx.user,
+      access,
     );
     const verifiedLabClause = canReadDraftLabs ? "" : "AND record_status = 'verified'";
 
@@ -5415,7 +5610,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }),
       temporaryGrant?.matchedViaToken
         ? Promise.resolve(null)
-        : this.resolveFieldAuditPass(ctx, pucCode, cleanCode, resolvedLinkedLotCode, true),
+        : this.resolveFieldAuditPass(ctx, pucCode, cleanCode, resolvedLinkedLotCode, true, plotRealZones),
     ]);
 
     const rawLabs = camelRows<{
@@ -5510,29 +5705,41 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     const isOwnerFarmer =
       ctx.user?.role === "farmer" &&
+      ctx.user.householdId !== null &&
+      ctx.user.householdId !== undefined &&
       plotHouseholdId !== null &&
       Number(ctx.user.householdId) === plotHouseholdId;
-    const isHtxOfficerInScope = ctx.user?.role === "htx_officer" && !access.scopeDenied;
+    const isHtxOfficerInScope = ctx.user?.role === "htx_officer" && access.staffInScope;
+    const staffPlotOfficerFilter = this.buildOfficerHouseholdFilter(ctx.user);
+    const plotInStaffScope =
+      !staffPlotOfficerFilter ||
+      staffPlotOfficerFilter({
+        villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
+        adminLocations: [adminLocation],
+      });
     const plotOfficerFilter =
       temporaryGrant?.active && temporaryGrant.grantedTier === "authority"
         ? null
-        : this.buildOfficerHouseholdFilter(ctx.user);
+        : staffPlotOfficerFilter;
     const plotHouseholdInOfficerScope =
       !plotOfficerFilter ||
       plotOfficerFilter({
         villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
         adminLocations: [adminLocation],
       });
+    const canShowPlotRawPii = isFullAuthorityStaff && plotInStaffScope;
     const canViewPlotFarmerIdentity =
       hasConsent ||
       isOwnerFarmer ||
       isHtxOfficerInScope ||
-      (isFullAuthorityStaff && plotHouseholdInOfficerScope && !access.scopeDenied);
+      canShowPlotRawPii;
+    const canSeePlotCadastral =
+      isOwnerFarmer || (viewerTier === "authority" && (canShowPlotRawPii || Boolean(temporaryGrant?.grantedTier === "authority" && temporaryGrant.active)));
 
     const canViewFieldAudit =
       Boolean(fieldAuditPass?.active) ||
       Boolean(temporaryGrant?.active) ||
-      (viewerTier === "authority" && !access.scopeDenied) ||
+      (viewerTier === "authority" && access.staffInScope) ||
       isOwnerFarmer;
 
     const fieldAuditPromise = canViewFieldAudit
@@ -5550,8 +5757,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 1,
           treeCount: raw.treeCount !== null && raw.treeCount !== undefined ? Number(raw.treeCount) : 150,
           status: String(raw.status || "approved"),
-          sheetNo: (raw.sheetNo as string | null) ?? null,
-          parcelNo: (raw.parcelNo as string | null) ?? null,
+          sheetNo: canSeePlotCadastral ? ((raw.sheetNo as string | null) ?? null) : null,
+          parcelNo: canSeePlotCadastral ? ((raw.parcelNo as string | null) ?? null) : null,
           centerLat: raw.lat !== null && raw.lat !== undefined ? Number(raw.lat) : null,
           centerLng: raw.lng !== null && raw.lng !== undefined ? Number(raw.lng) : null,
           geometryJson: (raw.geometryJson as string | null) ?? null,
@@ -5566,10 +5773,19 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       canSeePlotCodes: true,
     });
 
+    const canSeePlotLinkedLotSpecs =
+      Boolean(linkedLot) &&
+      (ctx.user?.role !== "enterprise" ||
+        (linkedLot?.enterpriseId !== null &&
+          linkedLot?.enterpriseId !== undefined &&
+          Number(linkedLot.enterpriseId) === Number(ctx.user.enterpriseId)) ||
+        Boolean(temporaryGrant?.active) ||
+        Boolean(fieldAuditPass?.active));
+
     let enterpriseData: Record<string, unknown> | undefined;
     if (TIER_RANK[viewerTier] >= TIER_RANK.enterprise || fieldAuditPass?.active || isOwnerFarmer) {
       const visiblePlotLabs =
-        viewerTier === "enterprise"
+        viewerTier !== "authority"
           ? rawLabs.filter(
             (lt) => !lt.plotCode || !lt.plotCode.trim() || lt.plotCode.trim().toUpperCase() === plotCode.toUpperCase(),
           )
@@ -5616,7 +5832,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           result: lt.result,
           scanUrl: lt.scanUrl,
         })),
-        packingSpecs: linkedLot
+        packingSpecs: linkedLot && canSeePlotLinkedLotSpecs
           ? {
               gradeAPct:
                 linkedLot.gradeAPct !== null && linkedLot.gradeAPct !== undefined
@@ -5658,7 +5874,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       // Cán bộ xã/thôn: nhật ký theo mã thửa chỉ lấy bản ghi của hộ thuộc địa bàn (không lấy bản ghi hộ khác trùng mã thửa).
       const restrictToScopedHouseholds = plotOfficerFilter !== null;
       const safePlotOwnerName =
-        isFullAuthorityStaff || hasConsent
+        canShowPlotRawPii || hasConsent
           ? String(raw.ownerName || "Chưa cập nhật")
           : `Hộ thành viên ${String(raw.householdCode || "HTX")}`;
       const [diariesRes, minutesRows, violationRows] = await Promise.all([
@@ -5715,7 +5931,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
                LIMIT 20`,
-            [plotCode, plotHouseholdId, safePlotOwnerName, restrictToScopedHouseholds, scopedHouseholdIds, isFullAuthorityStaff || hasConsent],
+            [plotCode, plotHouseholdId, safePlotOwnerName, restrictToScopedHouseholds, scopedHouseholdIds, canShowPlotRawPii || hasConsent],
           )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         this.queryScopedInspectionMinutes(
@@ -5727,7 +5943,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           scopedPlotCodes,
           6,
         ),
-        canReadViolations ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 6) : Promise.resolve([]),
+        canReadViolations && plotInStaffScope
+          ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 6)
+          : Promise.resolve([]),
       ]);
 
       return {
@@ -5737,11 +5955,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               householdCode: String(raw.householdCode || "Chưa gán mã hộ"),
               householdName: safePlotOwnerName,
               avatarUrl:
-                isFullAuthorityStaff || hasConsent
+                canShowPlotRawPii || hasConsent
                   ? (typeof raw.avatarUrl === "string" && raw.avatarUrl ? raw.avatarUrl : null)
                   : null,
               villageName: String(raw.village || ""),
-              phone: isFullAuthorityStaff ? String(raw.householdPhone || "") : maskFarmerPhone(raw.householdPhone),
+              phone: canShowPlotRawPii ? String(raw.householdPhone || "") : maskFarmerPhone(raw.householdPhone),
               cccdMasked: String(raw.cccdMasked || ""),
               status: String(raw.householdStatus || raw.status || "pending"),
               publicTraceConsent: Boolean(raw.publicTraceConsent),
@@ -6122,10 +6340,17 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       pucCode: primaryPucCode,
     });
 
+    const hhCoopCode = linkedLot?.coopCode ? String(linkedLot.coopCode) : "HTX-CUNE";
+    const validDerivedHhZone =
+      derivedZone && derivedZone !== householdCode && /^(?:VN-|66-PUC-)/i.test(derivedZone)
+        ? derivedZone
+        : null;
+    const hhRealZones =
+      distinctZones.length > 0 ? distinctZones : validDerivedHhZone ? [validDerivedHhZone] : [];
     const baseAccess = this.evaluateAccessAndScope(ctx, {
-      targetKind: "plot",
+      targetKind: "household",
       enterpriseId: effectiveEnterpriseId,
-      coopCode: linkedLot?.coopCode ? String(linkedLot.coopCode) : "HTX-CUNE",
+      coopCode: hhCoopCode,
       villageIds: raw.villageId !== null && raw.villageId !== undefined ? [Number(raw.villageId)] : [],
       adminLocations: [adminLocation],
     });
@@ -6133,20 +6358,22 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       ctx,
       {
         scannedCode: cleanCode,
-        targetKind: "plot",
-        canonicalCodes: [householdCode, ...hhPlotCodes],
-        resolvedLotCode: resolvedLinkedLotCode,
+        targetKind: "household",
+        canonicalCodes: [householdCode],
+        resolvedLotCode: null,
         pucCode: primaryPucCode,
-        distinctZoneCodes: distinctZones,
+        coopCode: hhCoopCode,
+        distinctZoneCodes: hhRealZones,
       },
       true,
     );
     const access = this.elevateAccessWithGrant(baseAccess, ctx, temporaryGrant);
     const viewerTier = access.viewerTier;
-    const isFullAuthorityStaff = this.isAuthenticatedAuthorityStaff(ctx.user);
+    const isFullAuthorityStaff = this.isInScopeAuthorityStaff(ctx.user, access);
     const { canReadDraftLabs, canReadViolations } = this.resolveSensitiveTracePermissions(
       viewerTier,
       ctx.user,
+      access,
     );
     const verifiedLabClause = canReadDraftLabs ? "" : "AND record_status = 'verified'";
 
@@ -6202,7 +6429,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             cleanCode,
             resolvedLinkedLotCode,
             true,
-            distinctZones,
+            hhRealZones,
           ),
     ]);
 
@@ -6234,28 +6461,38 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       : new Date().getFullYear();
 
     const isOwnerFarmer =
-      ctx.user?.role === "farmer" && Number(ctx.user.householdId) === householdId;
-    const isHtxOfficerInScope = ctx.user?.role === "htx_officer" && !access.scopeDenied;
+      ctx.user?.role === "farmer" &&
+      ctx.user.householdId !== null &&
+      ctx.user.householdId !== undefined &&
+      Number(ctx.user.householdId) === householdId;
+    const isHtxOfficerInScope = ctx.user?.role === "htx_officer" && access.staffInScope;
+    const staffHhOfficerFilter = this.buildOfficerHouseholdFilter(ctx.user);
+    const hhInStaffScope =
+      !staffHhOfficerFilter ||
+      staffHhOfficerFilter({
+        villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
+        adminLocations: [adminLocation],
+      });
     const officerFilter =
       temporaryGrant?.active && temporaryGrant.grantedTier === "authority"
         ? null
-        : this.buildOfficerHouseholdFilter(ctx.user);
+        : staffHhOfficerFilter;
     const householdVisibleToOfficer =
       !officerFilter ||
       officerFilter({
         villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
         adminLocations: [adminLocation],
       });
+    const canShowHhRawPii = isFullAuthorityStaff && hhInStaffScope;
     const canViewFarmerIdentity =
       hasConsent ||
       isOwnerFarmer ||
       isHtxOfficerInScope ||
-      (isFullAuthorityStaff && householdVisibleToOfficer && !access.scopeDenied);
+      canShowHhRawPii;
     const canSeePlotCodes =
       TIER_RANK[viewerTier] >= TIER_RANK.enterprise ||
       Boolean(fieldAuditPass?.active) ||
-      isOwnerFarmer ||
-      hasConsent;
+      isOwnerFarmer;
 
     const [integritySeal, massBalance, lastCareRes, communeLotContributions] = await Promise.all([
       this.computeLedgerIntegritySummary([householdId], hhPlotCodes, harvestedOn),
@@ -6382,7 +6619,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     if (viewerTier === "authority" && householdVisibleToOfficer) {
       const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
       const safeHhName =
-        isFullAuthorityStaff || hasConsent
+        canShowHhRawPii || hasConsent
           ? String(raw.name || "Chưa cập nhật")
           : `Hộ thành viên ${householdCode}`;
       const [diariesRes, minutesRows, violationRows] = await Promise.all([
@@ -6434,7 +6671,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
              ) combined
              ORDER BY entry_on DESC, sort_id DESC
              LIMIT 25`,
-          [householdId, safeHhName, isFullAuthorityStaff || hasConsent],
+          [householdId, safeHhName, canShowHhRawPii || hasConsent],
         ),
         this.queryScopedInspectionMinutes(
           `im.code, im.held_on, im.location, im.officer, im.result,
@@ -6445,7 +6682,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           hhPlotCodes,
           8,
         ),
-        canReadViolations ? this.queryScopedViolations([householdId], hhPlotCodes, 8) : Promise.resolve([]),
+        canReadViolations && hhInStaffScope
+          ? this.queryScopedViolations([householdId], hhPlotCodes, 8)
+          : Promise.resolve([]),
       ]);
 
       authorityData = {
@@ -6454,11 +6693,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             householdCode,
             householdName: safeHhName,
             avatarUrl:
-              isFullAuthorityStaff || hasConsent
+              canShowHhRawPii || hasConsent
                 ? (typeof raw.avatarUrl === "string" && raw.avatarUrl ? raw.avatarUrl : null)
                 : null,
             villageName,
-            phone: isFullAuthorityStaff ? String(raw.phone || "") : maskFarmerPhone(raw.phone),
+            phone: canShowHhRawPii ? String(raw.phone || "") : maskFarmerPhone(raw.phone),
             cccdMasked: String(raw.cccdMasked || ""),
             status: householdStatus,
             publicTraceConsent: Boolean(raw.publicTraceConsent),

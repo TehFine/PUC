@@ -23,7 +23,7 @@ function extractRequestSecret(req: Request, querySecret?: string): string | unde
   const headerVal = req.headers["x-trace-req-secret"];
   const raw = Array.isArray(headerVal) ? headerVal[0] : headerVal;
   if (typeof raw === "string" && raw.trim()) return raw.trim().slice(0, 80);
-  if (process.env.NODE_ENV !== "production" && typeof querySecret === "string" && querySecret.trim()) {
+  if (process.env.NODE_ENV === "test" && typeof querySecret === "string" && querySecret.trim()) {
     return querySecret.trim().slice(0, 80);
   }
   return undefined;
@@ -61,10 +61,12 @@ export class PublicTraceRequestsController {
     @Param("requestCode") requestCode: string,
     @Query("secret") querySecret: string | undefined,
     @OptionalCurrentUser() user: AuthUser | undefined,
+    @Ip() ip: string,
     @Req() req: Request,
   ) {
     return this.traceRequests.getPublicRequestStatus(requestCode, {
       user,
+      ip,
       clientSecret: extractRequestSecret(req, querySecret),
     });
   }
