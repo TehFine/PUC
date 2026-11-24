@@ -7,7 +7,7 @@ import { verifyOrderedChain, type VerifiableChainEntry } from "../common/crypto/
 import { forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
 import { camelRow, camelRows, formatDateIsoVn, publicAttachmentUrlSql } from "../common/sql/rows";
-import { hasPublicTable } from "../common/sql/schema-cache";
+import { hasPublicColumn, hasPublicTable } from "../common/sql/schema-cache";
 import { RateLimitException } from "../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../database/database.service";
 
@@ -52,7 +52,7 @@ function maskFarmerPhone(raw: unknown): string | null {
 }
 
 const TRACE_PREFIX_STRIP_RE =
-  /^(?:mã\s*vùng|ma\s*vung|mã\s*thửa|ma\s*thua|mã\s*lô|ma\s*lo|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|thùng|thung|thửa|thua|lô|lo|hộ|ho|mã|ma|puc|phc|tem)(?:\s*[:#]\s*|\s+[-–]?\s*)/iu;
+  /^(?:mã\s*sự\s*kiện|ma\s*su\s*kien|sự\s*kiện|su\s*kien|mã\s*vùng|ma\s*vung|mã\s*thửa|ma\s*thua|mã\s*lô|ma\s*lo|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|thùng|thung|thửa|thua|lô|lo|hộ|ho|mã|ma|puc|phc|tem)(?:\s*[:#]\s*|\s+[-–]?\s*)/iu;
 
 /** Chuẩn hóa mã tra cứu người dùng nhập hoặc dán (bỏ tiền tố tiếng Việt phổ biến có dấu phân cách và khoảng trắng thừa). */
 function normalizeTraceLookupCode(raw: string): string {
@@ -184,13 +184,25 @@ function toIsoDateOnly(val: unknown): string | null {
     return formatDateIsoVn(val);
   }
   const s = String(val).trim();
-  const m = /^(\d{4}-\d{2}-\d{2})/.exec(s);
-  if (m) return m[1];
+  const exactDate = /^(\d{4}-\d{2}-\d{2})$/.exec(s);
+  if (exactDate) return exactDate[1];
   const parsed = new Date(s);
   if (!Number.isNaN(parsed.getTime())) {
     return formatDateIsoVn(parsed);
   }
-  return null;
+  const prefixDate = /^(\d{4}-\d{2}-\d{2})/.exec(s);
+  return prefixDate ? prefixDate[1] : null;
+}
+
+function maxIsoDate(candidates: ReadonlyArray<unknown>): string | null {
+  let best: string | null = null;
+  for (const c of candidates) {
+    const iso = toIsoDateOnly(c);
+    if (iso && (!best || iso > best)) {
+      best = iso;
+    }
+  }
+  return best;
 }
 
 export interface ResourceScopeTarget {
@@ -1086,6 +1098,39 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     return [];
   }
 
+  /** Ngày phê duyệt hồ sơ gần nhất của hộ hoặc thửa đất trên bảng `approvals` (trạng thái `approved`). */
+  private async queryLatestApprovedOn(
+    householdId: number | null,
+    plotCode?: string | null,
+  ): Promise<string | null> {
+    const cleanPlot = plotCode ? plotCode.trim() : null;
+    if (!householdId && !cleanPlot) return null;
+    if (!(await this.hasTable("approvals"))) return null;
+
+    if (cleanPlot) {
+      const res = await this.db.query<{ approved_on: string | null }>(
+        `SELECT MAX(COALESCE((reviewed_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, submitted_on))::text AS approved_on
+         FROM approvals
+         WHERE status = 'approved'
+           AND (
+             upper(btrim(COALESCE(plot_code, ''))) = upper(btrim($2))
+             OR ($1::bigint IS NOT NULL AND household_id = $1 AND COALESCE(btrim(plot_code), '') = '')
+           )`,
+        [householdId, cleanPlot],
+      );
+      return toIsoDateOnly(res.rows[0]?.approved_on);
+    }
+
+    const res = await this.db.query<{ approved_on: string | null }>(
+      `SELECT MAX(COALESCE((reviewed_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, submitted_on))::text AS approved_on
+       FROM approvals
+       WHERE status = 'approved'
+         AND household_id = $1`,
+      [householdId],
+    );
+    return toIsoDateOnly(res.rows[0]?.approved_on);
+  }
+
   /** Lấy tọa độ khái quát cấp vùng trồng (làm tròn 2 chữ số thập phân ~1.1km, tuyệt đối không lộ tọa độ từng thửa). */
   private async resolveCoarseZoneMap(hasPlots: boolean, pucCode: string, adminLocation: string) {
     const loadCenter = async () => {
@@ -1169,19 +1214,39 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     pucNote: string | null;
     pucName: string | null;
     pucAdminLocation: string | null;
+    pucGaccCode: string | null;
+    pucMardApprovedOn: string | null;
+    pucGaccApprovedOn: string | null;
     packhouseStatus: PackhouseLiveStatus;
     packhouseStatusLabel: string;
     enterpriseName: string | null;
     enterpriseAddress: string | null;
     enterprisePackhouseCode: string | null;
+    packhouseGaccCode: string | null;
+    packhouseMardApprovedOn: string | null;
+    packhouseGaccApprovedOn: string | null;
   }> {
     let dbZoneStatus: ZoneLiveStatus = "active";
     let pucValidUntil = "2027-12-31";
     let pucNote: string | null = null;
     let pucName: string | null = null;
     let pucAdminLocation: string | null = null;
+    let pucGaccCode: string | null = null;
+    let pucMardApprovedOn: string | null = null;
+    let pucGaccApprovedOn: string | null = null;
 
-    const hasGrowingZones = await this.hasTable("growing_zones");
+    const [hasGrowingZones, hasZoneGacc, hasEntGacc] = await Promise.all([
+      this.hasTable("growing_zones"),
+      hasPublicColumn(this.db, "growing_zones", "gacc_code"),
+      hasPublicColumn(this.db, "enterprises", "gacc_code"),
+    ]);
+    const zoneGaccCols = hasZoneGacc
+      ? ", gacc_code, mard_approved_on, gacc_approved_on"
+      : ", NULL::text AS gacc_code, NULL::date AS mard_approved_on, NULL::date AS gacc_approved_on";
+    const entGaccCols = hasEntGacc
+      ? ", gacc_code, mard_approved_on, gacc_approved_on"
+      : ", NULL::text AS gacc_code, NULL::date AS mard_approved_on, NULL::date AS gacc_approved_on";
+
     const [zRes, eRes] = await Promise.all([
       hasGrowingZones
         ? this.db.query<{
@@ -1192,8 +1257,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             status: ZoneLiveStatus;
             valid_until: unknown;
             status_note: string | null;
+            gacc_code: string | null;
+            mard_approved_on: unknown;
+            gacc_approved_on: unknown;
           }>(
-            `SELECT name, commune, district, province, status, valid_until, status_note
+            `SELECT name, commune, district, province, status, valid_until, status_note${zoneGaccCols}
              FROM growing_zones
              WHERE upper(code) = upper($1)
              LIMIT 1`,
@@ -1206,8 +1274,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             name: string | null;
             address: string | null;
             packhouse_code: string | null;
+            gacc_code: string | null;
+            mard_approved_on: unknown;
+            gacc_approved_on: unknown;
           }>(
-            `SELECT status, name, address, packhouse_code FROM enterprises WHERE id = $1 LIMIT 1`,
+            `SELECT status, name, address, packhouse_code${entGaccCols} FROM enterprises WHERE id = $1 LIMIT 1`,
             [params.enterpriseId],
           )
         : params.packhouseCode
@@ -1216,8 +1287,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               name: string | null;
               address: string | null;
               packhouse_code: string | null;
+              gacc_code: string | null;
+              mard_approved_on: unknown;
+              gacc_approved_on: unknown;
             }>(
-              `SELECT status, name, address, packhouse_code
+              `SELECT status, name, address, packhouse_code${entGaccCols}
                FROM enterprises
                WHERE upper(btrim(COALESCE(packhouse_code, ''))) = upper(btrim($1))
                ORDER BY (status IN ('revoked', 'suspended', 'inactive')) DESC, id ASC
@@ -1232,6 +1306,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       pucValidUntil = toIsoDateOnly(zRes.rows[0].valid_until) || "2027-12-31";
       pucNote = zRes.rows[0].status_note ?? null;
       pucName = zRes.rows[0].name ? zRes.rows[0].name.trim() : null;
+      pucGaccCode = zRes.rows[0].gacc_code?.trim() || null;
+      pucMardApprovedOn = toIsoDateOnly(zRes.rows[0].mard_approved_on);
+      pucGaccApprovedOn = toIsoDateOnly(zRes.rows[0].gacc_approved_on);
       if (zRes.rows[0].commune && zRes.rows[0].province) {
         pucAdminLocation = [
           zRes.rows[0].commune.trim(),
@@ -1265,11 +1342,17 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     let enterpriseName: string | null = null;
     let enterpriseAddress: string | null = null;
     let enterprisePackhouseCode: string | null = null;
+    let packhouseGaccCode: string | null = null;
+    let packhouseMardApprovedOn: string | null = null;
+    let packhouseGaccApprovedOn: string | null = null;
     if (eRes?.rows[0]) {
       if (eRes.rows[0].status) packhouseStatus = eRes.rows[0].status;
       enterpriseName = eRes.rows[0].name?.trim() || null;
       enterpriseAddress = eRes.rows[0].address?.trim() || null;
       enterprisePackhouseCode = eRes.rows[0].packhouse_code?.trim() || null;
+      packhouseGaccCode = eRes.rows[0].gacc_code?.trim() || null;
+      packhouseMardApprovedOn = toIsoDateOnly(eRes.rows[0].mard_approved_on);
+      packhouseGaccApprovedOn = toIsoDateOnly(eRes.rows[0].gacc_approved_on);
     }
 
     const packhouseStatusLabel =
@@ -1288,11 +1371,17 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       pucNote,
       pucName,
       pucAdminLocation,
+      pucGaccCode,
+      pucMardApprovedOn,
+      pucGaccApprovedOn,
       packhouseStatus,
       packhouseStatusLabel,
       enterpriseName,
       enterpriseAddress,
       enterprisePackhouseCode,
+      packhouseGaccCode,
+      packhouseMardApprovedOn,
+      packhouseGaccApprovedOn,
     };
   }
 
@@ -1740,6 +1829,17 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       effectiveHouseholdIds = hhRes.rows.map((r) => Number(r.household_id)).filter((id) => id > 0);
     }
 
+    const [hasJournalVerifyCol, hasSprayVerifyCol] = await Promise.all([
+      hasPublicColumn(this.db, "journal_entries", "verification_status"),
+      hasPublicColumn(this.db, "spray_records", "verification_status"),
+    ]);
+    const jVerifySql = hasJournalVerifyCol
+      ? "COALESCE(verification_status, 'self_declared') AS verification_status"
+      : "'self_declared'::text AS verification_status";
+    const sVerifySql = hasSprayVerifyCol
+      ? "COALESCE(verification_status, 'self_declared') AS verification_status"
+      : "'self_declared'::text AS verification_status";
+
     const [journalRes, sprayRes, matchedMinutes] = await Promise.all([
       effectiveHouseholdIds.length > 0
         ? this.db.query<{
@@ -1754,6 +1854,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           prev_hash: string | null;
           record_hash: string | null;
           gps_verified: boolean;
+          verification_status: string;
         }>(
           `SELECT household_id,
                     to_char(entry_on, 'YYYY-MM-DD') AS entry_on_iso,
@@ -1765,7 +1866,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                     server_recorded_at,
                     prev_hash,
                     record_hash,
-                    gps_verified
+                    gps_verified,
+                    ${jVerifySql}
              FROM journal_entries
              WHERE household_id = ANY($1::bigint[])
              ORDER BY household_id ASC, id ASC`,
@@ -1786,6 +1888,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           server_recorded_at: Date | string;
           prev_hash: string | null;
           record_hash: string | null;
+          verification_status: string;
         }>(
           `SELECT household_id,
                     to_char(sprayed_on, 'YYYY-MM-DD') AS sprayed_on_iso,
@@ -1798,7 +1901,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                     entry_delay_hours::float8 AS entry_delay_hours,
                     server_recorded_at,
                     prev_hash,
-                    record_hash
+                    record_hash,
+                    ${sVerifySql}
              FROM spray_records
              WHERE household_id = ANY($1::bigint[])
              ORDER BY household_id ASC, id ASC`,
@@ -1838,6 +1942,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     const journalByHh = new Map<number, Array<VerifiableChainEntry & { entryDelayHours?: number }>>();
     let gpsVerifiedRecords = 0;
+    let verifiedDiaryRecords = 0;
+    let selfDeclaredDiaryRecords = 0;
     let latestTs = 0;
     let latestLedgerHash: string | null = null;
 
@@ -1852,6 +1958,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     for (const r of journalRes.rows) {
       if (r.gps_verified) gpsVerifiedRecords += 1;
+      if (r.verification_status === "verified") {
+        verifiedDiaryRecords += 1;
+      } else {
+        selfDeclaredDiaryRecords += 1;
+      }
       trackLatest(r.server_recorded_at, r.record_hash);
       const hid = Number(r.household_id);
       const arr = journalByHh.get(hid) ?? [];
@@ -1877,6 +1988,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     const sprayByHh = new Map<number, Array<VerifiableChainEntry & { entryDelayHours?: number }>>();
     let phiViolatedBeforeHarvest = false;
     for (const r of sprayRes.rows) {
+      if (r.verification_status === "verified") {
+        verifiedDiaryRecords += 1;
+      } else {
+        selfDeclaredDiaryRecords += 1;
+      }
       trackLatest(r.server_recorded_at, r.record_hash);
       if (harvestedOnIso) {
         if (r.mrl_status !== "pass") {
@@ -2020,6 +2136,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       onTimePct,
       avgDelayHours,
       gpsVerifiedRecords,
+      verifiedDiaryRecords,
+      selfDeclaredDiaryRecords,
       latestLedgerHash,
       farmerBackdateCapDays: 7,
       lateThresholdHours: 48,
@@ -2294,7 +2412,18 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     phytoCertNo: string | null;
   }) {
     const loadConfig = async () => {
-      let cfg = {
+      let cfg: {
+        programTitle: string;
+        directiveNo: string;
+        communeAuthority: string;
+        provincialAuthority: string;
+        officialPortalUrl: string;
+        officialDomain: string;
+        inspectionUnit: string;
+        coopLegalName: string;
+        coopTaxCode: string | null;
+        coopAddress: string;
+      } = {
         programTitle: "Mô hình điểm Truy xuất nguồn gốc Sầu riêng cấp Xã theo chỉ đạo của Tỉnh Đắk Lắk",
         directiveNo: "Đề án Chuyển đổi số Nông nghiệp & Chuẩn hóa Mã số Vùng trồng Xuất khẩu Tỉnh Đắk Lắk",
         communeAuthority: "Ủy ban Nhân dân Xã Cư Né - Huyện Krông Búk",
@@ -2302,18 +2431,25 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         officialPortalUrl: "https://daklak.gov.vn",
         officialDomain: "truyxuat.cune-krongbuk.gov.vn",
         inspectionUnit: "Tổ Giám sát Cộng đồng Xã Cư Né & Ban Kỹ thuật HTX Nông nghiệp Cư Né",
+        coopLegalName: DEFAULT_COOP_NAME,
+        coopTaxCode: null,
+        coopAddress: "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk",
       };
 
       if (await this.hasTable("commune_endorsement_config")) {
+        const hasCoopLegalCols = await hasPublicColumn(this.db, "commune_endorsement_config", "coop_legal_name");
+        const coopColsSql = hasCoopLegalCols
+          ? ", coop_legal_name, coop_tax_code, coop_address"
+          : ", NULL::text AS coop_legal_name, NULL::text AS coop_tax_code, NULL::text AS coop_address";
         const cfgRes = await this.db.query(
           `SELECT program_title, directive_no, commune_authority, provincial_authority,
-                  official_portal_url, official_domain, inspection_unit
+                  official_portal_url, official_domain, inspection_unit${coopColsSql}
            FROM commune_endorsement_config
            WHERE id = 1
            LIMIT 1`,
         );
         if (cfgRes.rows[0]) {
-          const c = camelRow<Record<string, string>>(cfgRes.rows[0]);
+          const c = camelRow<Record<string, string | null>>(cfgRes.rows[0]);
           cfg = {
             programTitle: c.programTitle || cfg.programTitle,
             directiveNo: c.directiveNo || cfg.directiveNo,
@@ -2322,6 +2458,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
             officialPortalUrl: c.officialPortalUrl || cfg.officialPortalUrl,
             officialDomain: c.officialDomain || cfg.officialDomain,
             inspectionUnit: c.inspectionUnit || cfg.inspectionUnit,
+            coopLegalName: c.coopLegalName?.trim() || cfg.coopLegalName,
+            coopTaxCode: c.coopTaxCode?.trim() || null,
+            coopAddress: c.coopAddress?.trim() || cfg.coopAddress,
           };
         }
       }
@@ -2557,6 +2696,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     restrictToPlotCodes?: boolean;
     strictHouseholdScope?: boolean;
     canShowAllNames?: boolean;
+    canShowVerifierPersonalName?: boolean;
     limit?: number;
   }) {
     const cleanHhIds = [...new Set(params.householdIds.filter((id) => Number.isFinite(id) && id > 0))];
@@ -2569,10 +2709,35 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     if (cleanHhIds.length === 0 && cleanPlots.length === 0) {
       return [];
     }
-    const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+    const [hasMilestoneTable, hasJournalVerifyCol, hasSprayVerifyCol] = await Promise.all([
+      this.hasTable("care_milestone_declarations"),
+      hasPublicColumn(this.db, "journal_entries", "verification_status"),
+      hasPublicColumn(this.db, "spray_records", "verification_status"),
+    ]);
     const restrictPlots = Boolean(params.restrictToPlotCodes && cleanPlots.length > 0);
     const strictHh = Boolean(params.strictHouseholdScope);
+    const showVerifierName = Boolean(params.canShowVerifierPersonalName);
     const limit = params.limit ?? 20;
+
+    const srVerifySql = hasSprayVerifyCol
+      ? `COALESCE(sr.verification_status, 'self_declared') AS verification_status,
+         sr.verified_at,
+         CASE
+           WHEN COALESCE(sr.verification_status, 'self_declared') = 'verified' THEN
+             CASE WHEN $7::boolean THEN COALESCE(NULLIF(btrim(sr.verified_by_name), ''), 'Ban Kỹ thuật HTX') ELSE 'Ban Kỹ thuật HTX' END
+           ELSE NULL
+         END AS verified_by_label`
+      : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_label`;
+
+    const jeVerifySql = hasJournalVerifyCol
+      ? `COALESCE(je.verification_status, 'self_declared') AS verification_status,
+         je.verified_at,
+         CASE
+           WHEN COALESCE(je.verification_status, 'self_declared') = 'verified' THEN
+             CASE WHEN $7::boolean THEN COALESCE(NULLIF(btrim(je.verified_by_name), ''), 'Ban Kỹ thuật HTX') ELSE 'Ban Kỹ thuật HTX' END
+           ELSE NULL
+         END AS verified_by_label`
+      : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_label`;
 
     const res = await this.db.query(
       `SELECT entry_on,
@@ -2590,6 +2755,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               record_hash,
               gps_verified,
               gps_distance_m::float8 AS gps_distance_m,
+              verification_status,
+              verified_at,
+              verified_by_label,
               photo_urls
        FROM (
          SELECT to_char(sr.sprayed_on, 'YYYY-MM-DD') AS entry_on,
@@ -2615,6 +2783,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                 sr.record_hash,
                 false AS gps_verified,
                 NULL::numeric AS gps_distance_m,
+                ${srVerifySql},
                 ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
                 sr.sprayed_on AS sort_date,
                 sr.id AS sort_id
@@ -2654,6 +2823,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                 je.record_hash,
                 je.gps_verified,
                 je.gps_distance_m,
+                ${jeVerifySql},
                 ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
                 je.entry_on AS sort_date,
                 je.id AS sort_id
@@ -2671,10 +2841,233 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
        ) combined
        ORDER BY sort_date DESC, sort_id DESC
        LIMIT $5`,
-      [cleanHhIds, cleanPlots, Boolean(params.canShowAllNames), restrictPlots, limit, strictHh],
+      [cleanHhIds, cleanPlots, Boolean(params.canShowAllNames), restrictPlots, limit, strictHh, showVerifierName],
     );
 
     return normalizeEvidenceMediaRows(res.rows);
+  }
+
+  /**
+   * Truy vấn Nhật ký kiểm toán thay đổi bất biến (`immutable_change_logs`) CHỈ dành cho Tầng 3 (`authority`)
+   * trong đúng phạm vi địa bàn quản lý:
+   * - Cán bộ thôn (`village_officer`) chỉ thấy lịch sử sửa/xóa của hộ thuộc chính thôn mình, không thấy bản ghi cấp lô thương mại.
+   * - Khử hoàn toàn mọi khóa nội bộ (`qr_token`, `buyer`, ID khóa ngoại, tọa độ riêng lẻ) trước khi trả về.
+   */
+  private async queryScopedImmutableChangeLogs(params: {
+    lotId?: number | null;
+    householdIds: number[];
+    plotCodes?: string[];
+    unpinnedHouseholdIds?: number[];
+    restrictHouseholdLogsToPlots?: boolean;
+    canShowActorPersonalName: boolean;
+    canReadDraftLabs: boolean;
+    limit?: number;
+  }) {
+    if (!(await this.hasTable("immutable_change_logs"))) {
+      return [];
+    }
+    const lotId = params.lotId && params.lotId > 0 ? Number(params.lotId) : null;
+    const cleanHhIds = [...new Set(params.householdIds.filter((id) => Number.isFinite(id) && id > 0))];
+    const cleanPlots = [...new Set((params.plotCodes ?? []).map((c) => c.trim().toUpperCase()).filter(Boolean))];
+    const cleanUnpinnedHh = [
+      ...new Set((params.unpinnedHouseholdIds ?? []).filter((id) => Number.isFinite(id) && id > 0)),
+    ];
+    if (lotId === null && cleanHhIds.length === 0) {
+      return [];
+    }
+
+    const restrictPlots = Boolean(params.restrictHouseholdLogsToPlots && cleanPlots.length > 0);
+    const limit = Math.min(40, Math.max(5, params.limit ?? 25));
+
+    const res = await this.db.query<{
+      id: number;
+      occurred_at: Date | string;
+      table_name: string;
+      record_id: number;
+      operation: "UPDATE" | "DELETE";
+      household_id: number | null;
+      lot_id: number | null;
+      plot_code: string | null;
+      actor_name: string | null;
+      actor_role: string | null;
+      changed_fields: string[] | null;
+      old_data: Record<string, unknown> | null;
+      new_data: Record<string, unknown> | null;
+      entry_hash: string;
+    }>(
+      `SELECT icl.id,
+              icl.occurred_at,
+              icl.table_name,
+              icl.record_id,
+              icl.operation,
+              icl.household_id,
+              icl.lot_id,
+              icl.plot_code,
+              icl.actor_name,
+              icl.actor_role,
+              icl.changed_fields,
+              icl.old_data,
+              icl.new_data,
+              icl.entry_hash
+       FROM immutable_change_logs icl
+       WHERE (
+         ($1::bigint IS NOT NULL AND icl.lot_id = $1)
+         OR (
+           cardinality($2::bigint[]) > 0
+           AND icl.household_id = ANY($2::bigint[])
+           AND (
+             NOT $3::boolean
+             OR icl.household_id = ANY($4::bigint[])
+             OR icl.plot_code IS NULL
+             OR btrim(icl.plot_code) = ''
+             OR upper(btrim(icl.plot_code)) = ANY($5::text[])
+           )
+         )
+       )
+       AND (
+         $6::boolean
+         OR icl.table_name <> 'lab_tests'
+         OR COALESCE(icl.new_data ->> 'record_status', icl.old_data ->> 'record_status', '') = 'verified'
+       )
+       ORDER BY icl.occurred_at DESC, icl.id DESC
+       LIMIT $7`,
+      [
+        lotId,
+        cleanHhIds,
+        restrictPlots,
+        cleanUnpinnedHh,
+        cleanPlots,
+        params.canReadDraftLabs,
+        limit,
+      ],
+    );
+
+    const strippedKeys = new Set([
+      "id",
+      "qr_token",
+      "buyer",
+      "coop_code",
+      "enterprise_id",
+      "contract_id",
+      "household_id",
+      "pesticide_id",
+      "lot_id",
+      "latitude",
+      "longitude",
+      "photo_id",
+      "photo_ids",
+      "scan_attachment_id",
+      "product_image_id",
+      "external_verify_url",
+      "prev_hash",
+      "record_hash",
+      "created_at",
+      "updated_at",
+      "server_recorded_at",
+      "entry_delay_hours",
+      "edit_count",
+      "updated_by_user_id",
+      "updated_by_name",
+      "updated_by_role",
+      "verified_by_user_id",
+      "created_by_user_id",
+      "household_count",
+      ...(params.canShowActorPersonalName ? [] : ["recorder", "verified_by_name", "assessed_by"]),
+    ]);
+
+    const tableLabels: Record<string, string> = {
+      harvest_lots: "Lô hàng xuất xưởng",
+      harvest_contributions: "Sản lượng hộ đóng góp",
+      journal_entries: "Nhật ký canh tác",
+      spray_records: "Nhật ký phun thuốc",
+      lab_tests: "Phiếu kiểm nghiệm",
+      plot_season_quotas: "Hạn ngạch đầu vụ",
+    };
+
+    const roleLabels: Record<string, string> = {
+      admin: "Quản trị viên HTX",
+      htx_head: "Trưởng HTX",
+      htx_deputy: "Phó HTX",
+      support_specialist: "Chuyên viên hệ thống",
+      htx_officer: "Cán bộ kỹ thuật HTX",
+      inspector: "Cán bộ kiểm tra",
+      village_officer: "Cán bộ thôn",
+      farmer: "Chủ hộ thành viên",
+    };
+
+    const sanitizeSnapshot = (raw: Record<string, unknown> | null): Record<string, unknown> | null => {
+      if (!raw || typeof raw !== "object") return null;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        if (strippedKeys.has(k)) continue;
+        out[k] = v;
+      }
+      return out;
+    };
+
+    const formatted: Array<{
+      id: number;
+      occurredAt: string;
+      tableName: string;
+      tableLabel: string;
+      recordId: number;
+      operation: "UPDATE" | "DELETE";
+      plotCode: string | null;
+      actorLabel: string;
+      actorRole: string | null;
+      changedFields: string[];
+      oldData: Record<string, unknown>;
+      newData: Record<string, unknown> | null;
+      entryHash: string;
+    }> = [];
+
+    for (const row of res.rows) {
+      const oldClean = sanitizeSnapshot(row.old_data) ?? {};
+      const newClean = row.operation === "DELETE" ? null : (sanitizeSnapshot(row.new_data) ?? {});
+      const changedFields =
+        row.operation === "DELETE"
+          ? Object.keys(oldClean).sort()
+          : [...new Set([...Object.keys(oldClean), ...Object.keys(newClean ?? {})])]
+              .filter((k) => JSON.stringify(oldClean[k] ?? null) !== JSON.stringify((newClean ?? {})[k] ?? null))
+              .sort();
+      if (changedFields.length === 0) continue;
+
+      const oldDiff: Record<string, unknown> = {};
+      const newDiff: Record<string, unknown> | null = row.operation === "DELETE" ? null : {};
+      for (const field of changedFields) {
+        oldDiff[field] = oldClean[field] ?? null;
+        if (newDiff && newClean) {
+          newDiff[field] = newClean[field] ?? null;
+        }
+      }
+
+      const roleText = row.actor_role ? (roleLabels[row.actor_role] || "Cán bộ quản lý") : "Hệ thống quản trị HTX";
+      const actorLabel = params.canShowActorPersonalName
+        ? row.actor_name?.trim()
+          ? row.actor_role && roleLabels[row.actor_role]
+            ? `${row.actor_name.trim()} (${roleLabels[row.actor_role]})`
+            : row.actor_name.trim()
+          : roleText
+        : roleText;
+
+      formatted.push({
+        id: Number(row.id),
+        occurredAt: new Date(row.occurred_at).toISOString(),
+        tableName: row.table_name,
+        tableLabel: tableLabels[row.table_name] || row.table_name,
+        recordId: Number(row.record_id),
+        operation: row.operation,
+        plotCode: row.plot_code?.trim() || null,
+        actorLabel,
+        actorRole: row.actor_role || null,
+        changedFields,
+        oldData: oldDiff,
+        newData: newDiff,
+        entryHash: row.entry_hash,
+      });
+    }
+
+    return formatted;
   }
 
   /**
@@ -2803,7 +3196,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                 OR ($2::bigint IS NOT NULL AND je.household_id = $2 AND (je.plot_code IS NULL OR btrim(je.plot_code) = ''))
            ) combined
            ORDER BY sort_date DESC, sort_id DESC
-           LIMIT 15`,
+           LIMIT 80`,
           [params.plotCode, params.householdId],
         ),
         this.queryScopedInspectionMinutes(
@@ -2818,7 +3211,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
            ${safeFieldPhotoUrlsSql("im.photo_ids", "im.photo_id", false)} AS photo_urls`,
           params.householdId ? [params.householdId] : [],
           [params.plotCode],
-          6,
+          40,
         ),
         params.householdId
           ? this.db.query(
@@ -2833,7 +3226,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                WHERE (upper(COALESCE(hc.plot_code, '')) = upper($1))
                   OR (hc.household_id = $2 AND hc.plot_code IS NULL)
                ORDER BY hl.harvested_on DESC, hl.id DESC
-               LIMIT 5`,
+               LIMIT 40`,
             [params.plotCode, params.householdId],
           )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
@@ -2856,7 +3249,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                LEFT JOIN households h ON h.id = u.household_id
                WHERE upper(fc.plot_code) = upper($1)
                ORDER BY fc.checked_at DESC
-               LIMIT 6`,
+               LIMIT 30`,
             [params.plotCode, NEUTRAL_FARMER_ACTOR_LABEL],
           )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
@@ -3170,6 +3563,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
   }
 
   private buildFiveStepTimeline(params: {
+    eventCodePrefix?: string | null;
     pucCode: string;
     pucStatus: ZoneLiveStatus;
     packhouseStatus: PackhouseLiveStatus;
@@ -3200,6 +3594,12 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     vehiclePlate?: string | null;
     temperatureC?: number | null;
   }) {
+    const cleanEvtPrefix = (params.eventCodePrefix || params.pucCode || "PUC")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, "-")
+      .replace(/-{2,}/g, "-")
+      .slice(0, 48);
     const isRevoked = params.lotStatus === "revoked";
     const isExported = params.lotStatus === "exported";
     const isDelivered = params.lotStatus === "delivered";
@@ -3261,6 +3661,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       {
         step: 1,
         key: "orchard",
+        eventCode: `EVT-${cleanEvtPrefix}-01-PUC`,
         title: "Vườn trồng",
         date: params.lastFarmCheckOn || addDaysIso(params.harvestedOn, -15),
         responsibleUnit: DEFAULT_COOP_NAME,
@@ -3272,6 +3673,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       {
         step: 2,
         key: "harvest",
+        eventCode: `EVT-${cleanEvtPrefix}-02-HARV`,
         title: "Thu hoạch",
         date: params.harvestedOn,
         responsibleUnit: "Tổ thu hoạch và Kỹ thuật HTX Cư Né",
@@ -3283,6 +3685,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       {
         step: 3,
         key: "packing",
+        eventCode: `EVT-${cleanEvtPrefix}-03-PACK`,
         title: "Đóng gói",
         date: params.packedOn,
         responsibleUnit: `${params.packhouseName} (${params.packhouseCode})`,
@@ -3296,6 +3699,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       {
         step: 4,
         key: "testing",
+        eventCode: `EVT-${cleanEvtPrefix}-04-LAB`,
         title: "Kiểm nghiệm",
         date: params.latestLabOn,
         responsibleUnit: params.latestLabName || "Phòng kiểm nghiệm độc lập chỉ định",
@@ -3316,6 +3720,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       {
         step: 5,
         key: "export",
+        eventCode: `EVT-${cleanEvtPrefix}-05-EXP`,
         title: "Xuất xưởng / Lưu thông",
         date: params.exportedOn,
         responsibleUnit: `${params.packhouseName} và Cơ quan Kiểm dịch thực vật`,
@@ -3354,12 +3759,13 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       this.hasTable("growing_zones"),
     ]);
 
-    // ─── NHÁNH A: QUÉT TOKEN NGẪU NHIÊN /t/:token HOẶC MÃ LÔ / MÃ THÙNG DỰ PHÒNG (CHUẨN QUỐC GIA ƯU TIÊN) ───
+    // ─── NHÁNH A: QUÉT TOKEN NGẪU NHIÊN /t/:token, MÃ SỰ KIỆN EVT-... HOẶC MÃ LÔ / MÃ THÙNG DỰ PHÒNG ───
     let scannedItem: Record<string, unknown> | null = null;
     let lotId: number | null = null;
+    let matchedEventCode: string | null = null;
 
     const itemRes = await this.db.query(
-      `SELECT lot_id, item_type, serial_code, qr_token, weight_kg::float8 AS weight_kg, grade, printed_at, status
+      `SELECT lot_id, item_type, serial_code, qr_token, weight_kg::float8 AS weight_kg, grade, printed_at, created_at, status
        FROM harvest_items
        WHERE qr_token = $1 OR upper(serial_code) = upper($1)
        ORDER BY (qr_token = $1) DESC
@@ -3374,6 +3780,37 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       scannedItem = publicItem;
     }
 
+    if (lotId === null && (await this.hasTable("supply_chain_events"))) {
+      const evRes = await this.db.query<{ lot_id: number; event_code: string }>(
+        `SELECT lot_id, event_code
+         FROM supply_chain_events
+         WHERE upper(event_code) = upper($1)
+         LIMIT 1`,
+        [cleanCode],
+      );
+      if (evRes.rows[0]) {
+        lotId = Number(evRes.rows[0].lot_id);
+        matchedEventCode = evRes.rows[0].event_code;
+      } else {
+        const evtPattern = /^EVT-(.+)-0[1-6]-(?:PUC|HARV|PACK|LAB|EXP|REV)$/i.exec(cleanCode);
+        if (evtPattern?.[1]) {
+          const fallbackEvLot = await this.db.query<{ id: number }>(
+            `SELECT id FROM harvest_lots WHERE upper(regexp_replace(btrim(code), '[^A-Za-z0-9_-]', '-', 'g')) = upper($1) LIMIT 1`,
+            [evtPattern[1]],
+          );
+          if (fallbackEvLot.rows[0]) {
+            lotId = Number(fallbackEvLot.rows[0].id);
+            matchedEventCode = cleanCode.toUpperCase();
+          }
+        }
+      }
+    }
+
+    const hasLotNd37Cols = await hasPublicColumn(this.db, "harvest_lots", "brand_name");
+    const lotNd37ColsSql = hasLotNd37Cols
+      ? `, l.brand_name, l.expiry_on, l.storage_condition, ${publicAttachmentUrlSql("l.product_image_id")} AS product_image_url`
+      : `, NULL::text AS brand_name, NULL::date AS expiry_on, NULL::text AS storage_condition, NULL::text AS product_image_url`;
+
     const lotRes = await this.db.query(
       `SELECT l.id, l.code, l.qr_token, l.enterprise_id, l.coop_code, l.variety, l.qr_code, l.harvested_on, l.packed_on, l.exported_on,
               l.weight_tons::float8 AS weight_tons, l.household_count, l.market, l.status, l.revoked_reason,
@@ -3382,7 +3819,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               l.phytosanitary_cert_no, l.phytosanitary_issued_on,
               l.grade_a_pct::float8 AS grade_a_pct, l.grade_b_pct::float8 AS grade_b_pct,
               l.grade_c_pct::float8 AS grade_c_pct, l.avg_brix::float8 AS avg_brix, l.treatment_method,
-              l.transporter, l.vehicle_plate, l.temperature_c::float8 AS temperature_c, l.departed_at, l.estimated_arrival
+              l.transporter, l.vehicle_plate, l.temperature_c::float8 AS temperature_c, l.departed_at, l.estimated_arrival,
+              l.created_at, l.updated_at${lotNd37ColsSql}
        FROM harvest_lots l
        LEFT JOIN enterprises e ON e.id = l.enterprise_id
        WHERE ${lotId ? "l.id = $1" : "l.qr_token = $1 OR upper(l.code) = upper($1) OR (l.qr_code IS NOT NULL AND btrim(l.qr_code) <> '' AND upper(btrim(l.qr_code)) = upper(btrim($1)))"}
@@ -3396,6 +3834,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         cleanCode,
         rawLotRow: lotRes.rows[0],
         scannedItem,
+        matchedEventCode,
         hasPlots,
         ctx,
       });
@@ -3405,6 +3844,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     const farmerStampSql = hasPlots
       ? `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.qr_token, fs.status,
                 fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
+                fs.created_at, fs.updated_at,
                 h.name AS household_name, h.status AS household_status, h.public_trace_consent,
                 h.code AS household_code, h.phone AS household_phone, h.village_id,
                 ${CCCD_MASKED_SQL} AS cccd_masked,
@@ -3425,6 +3865,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       : hasSignboards
         ? `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.qr_token, fs.status,
                   fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
+                  fs.created_at, fs.updated_at,
                   h.name AS household_name, h.status AS household_status, h.public_trace_consent,
                   h.code AS household_code, h.phone AS household_phone, h.village_id,
                   ${CCCD_MASKED_SQL} AS cccd_masked,
@@ -3442,6 +3883,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
            LIMIT 1`
         : `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.qr_token, fs.status,
                   fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
+                  fs.created_at, fs.updated_at,
                   h.name AS household_name, h.status AS household_status, h.public_trace_consent,
                   h.code AS household_code, h.phone AS household_phone, h.village_id,
                   ${CCCD_MASKED_SQL} AS cccd_masked,
@@ -3484,6 +3926,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                 COALESCE(p.area_ha, pst.area_ha, 1.0)::float8 AS area_ha,
                 COALESCE(p.tree_count, pst.tree_count, GREATEST(30, ROUND(COALESCE(p.area_ha, 1.0) * 150)::int)) AS tree_count,
                 p.status,
+                p.created_at,
                 p.updated_at,
                 h.code AS household_code,
                 h.status AS household_status,
@@ -3579,7 +4022,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               h.plot_count,
               COALESCE(h.area_ha, 0)::float8 AS area_ha,
               ${publicAttachmentUrlSql("h.avatar_id")} AS avatar_url,
-              h.created_at
+              h.created_at,
+              h.updated_at
        FROM households h
        LEFT JOIN villages v ON v.id = h.village_id
        WHERE upper(btrim(h.code)) = upper(btrim($1))
@@ -3643,6 +4087,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                   COALESCE(p.area_ha, pst.area_ha, 1.0)::float8 AS area_ha,
                   COALESCE(p.tree_count, pst.tree_count, GREATEST(30, ROUND(COALESCE(p.area_ha, 1.0) * 150)::int)) AS tree_count,
                   p.status,
+                  p.created_at,
                   p.updated_at,
                   h.code AS household_code,
                   h.status AS household_status,
@@ -3731,10 +4176,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     cleanCode: string;
     rawLotRow: Record<string, unknown>;
     scannedItem: Record<string, unknown> | null;
+    matchedEventCode?: string | null;
     hasPlots: boolean;
     ctx: TraceRequestContext;
   }) {
-    const { cleanCode, scannedItem, hasPlots, ctx } = params;
+    const { cleanCode, scannedItem, matchedEventCode, hasPlots, ctx } = params;
     const lotRow = camelRow<Record<string, unknown>>(params.rawLotRow);
     const internalLotId = Number(lotRow.id);
     const lotCode = String(lotRow.code);
@@ -3989,7 +4435,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
              ${verifiedLabClause}
              ORDER BY (CASE WHEN cardinality($2::text[]) > 0 AND upper(btrim(lt.plot_code)) = ANY($2::text[]) THEN 0 ELSE 1 END),
                       lt.sampled_on DESC, lt.id DESC
-             LIMIT 8`,
+             LIMIT 30`,
           [contribHouseholdIds, contribPlotCodes],
         )
         : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
@@ -4358,7 +4804,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         ? Number(lotRow.temperatureC)
         : null;
 
-    const timeline = this.buildFiveStepTimeline({
+    const rawTimeline = this.buildFiveStepTimeline({
+      eventCodePrefix: lotCode,
       pucCode: primaryPucCode,
       pucStatus,
       packhouseStatus: live.packhouseStatus,
@@ -4389,6 +4836,84 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       vehiclePlate: vehiclePlateVal,
       temperatureC: temperatureCVal,
     });
+
+    // Đồng bộ hoặc đọc mã sự kiện chuẩn TCVN 12850 / GS1 EPCIS từ bảng `supply_chain_events`; chỉ lộ `recordedByName` ở Cấp 3 nội bộ.
+    let timeline: Array<(typeof rawTimeline)[number] & { recordedByName?: string | null }> = rawTimeline;
+    if (await this.hasTable("supply_chain_events")) {
+      let evRows = (
+        await this.db.query<{
+          step_order: number;
+          event_code: string;
+          recorded_by_name: string | null;
+        }>(
+          `SELECT step_order, event_code, recorded_by_name
+           FROM supply_chain_events
+           WHERE lot_id = $1
+           ORDER BY step_order ASC`,
+          [internalLotId],
+        )
+      ).rows;
+
+      if (evRows.length === 0) {
+        const stepTypeMap: Record<number, string> = {
+          1: "farm_inspection",
+          2: "harvest",
+          3: "packing",
+          4: "lab_testing",
+          5: "export_release",
+        };
+        for (const st of rawTimeline) {
+          await this.db
+            .query(
+              `INSERT INTO supply_chain_events
+                 (event_code, lot_id, step_order, event_type, occurred_on, location_code, location_name, actor_unit, summary, status)
+               VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10)
+               ON CONFLICT DO NOTHING`,
+              [
+                st.eventCode,
+                internalLotId,
+                st.step,
+                stepTypeMap[st.step] || "harvest",
+                st.date,
+                st.step <= 2 ? primaryPucCode : packhouseCode,
+                st.step <= 2 ? adminLocation : packhouseName,
+                st.responsibleUnit,
+                st.detail,
+                st.status,
+              ],
+            )
+            .catch(() => undefined);
+        }
+        evRows = rawTimeline.map((st) => ({
+          step_order: st.step,
+          event_code: st.eventCode,
+          recorded_by_name: null,
+        }));
+      }
+
+      const evByStep = new Map(evRows.map((r) => [Number(r.step_order), r]));
+      timeline = rawTimeline.map((st) => {
+        const persisted = evByStep.get(st.step);
+        return {
+          ...st,
+          eventCode: persisted?.event_code || st.eventCode,
+          ...(isFullAuthorityStaff && !staffOfficerFilter && persisted?.recorded_by_name
+            ? { recordedByName: persisted.recorded_by_name }
+            : {}),
+        };
+      });
+    }
+
+    // Đối chiếu chéo ranh giới mã số vùng trồng (chống mượn mã PUC gán cho thửa ngoài vùng)
+    const mismatchedPlots = effectivePlots.filter((p) => {
+      const pz = (p.zone_code || primaryPucCode).trim().toUpperCase();
+      return pz !== primaryPucCode.trim().toUpperCase();
+    });
+    const publicZoneGeoCheck = {
+      allPlotsMatchZone: mismatchedPlots.length === 0,
+      checkedPlotCount: effectivePlots.length,
+      mismatchPlotCount: mismatchedPlots.length,
+    };
 
     // Kiểm tra tuân thủ cách ly PHI trên toàn bộ các hộ tham gia lô (tái sử dụng kết quả từ computeLedgerIntegritySummary, không truy vấn lặp)
     const complianceConfirmed =
@@ -4496,16 +5021,29 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               restrictToPlotCodes: allVisiblePinnedToPlots,
               strictHouseholdScope: Boolean(officerFilter),
               canShowAllNames: ctx.user?.role === "htx_officer" && access.staffInScope,
-              limit: 20,
+              canShowVerifierPersonalName: ctx.user?.role === "htx_officer" && access.staffInScope,
+              limit: 100,
             })
           : undefined;
+
+      const scopedEffectivePlots = effectivePlots.filter(isPlotInOfficerScope);
+      const scopedMismatchedPlots = scopedEffectivePlots.filter(
+        (p) => (p.zone_code || primaryPucCode).trim().toUpperCase() !== primaryPucCode.trim().toUpperCase(),
+      );
 
       enterpriseData = {
         sourceZones,
         totalSourceWeightKg: visibleTotalContribKg,
         massBalance: massBalance.enterpriseBreakdown,
+        zoneGeoCheck: {
+          primaryZoneCode: primaryPucCode,
+          allPlotsMatchZone: scopedMismatchedPlots.length === 0,
+          checkedPlotCount: scopedEffectivePlots.length,
+          mismatchPlotCount: scopedMismatchedPlots.length,
+          mismatchedPlotCodes: scopedMismatchedPlots.map((p) => p.code),
+        },
         ...(tier2EvidenceLogs ? { evidenceLogs: tier2EvidenceLogs } : {}),
-        fieldAuditSourcePlots: effectivePlots.filter(isPlotInOfficerScope).slice(0, 12).map((p) => ({
+        fieldAuditSourcePlots: scopedEffectivePlots.slice(0, 12).map((p) => ({
           plotCode: p.code,
           qrToken: p.qr_token,
           zoneCode: p.zone_code || primaryPucCode,
@@ -4551,17 +5089,48 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     // Dữ liệu Cấp 3 (Cơ quan quản lý: danh sách hộ/thửa nguồn kèm GIS, nhật ký canh tác & thuốc BVTV niêm phong SHA-256, biên bản kiểm tra)
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority") {
-      const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+      const [hasMilestoneTable, hasJournalVerifyCol, hasSprayVerifyCol] = await Promise.all([
+        this.hasTable("care_milestone_declarations"),
+        hasPublicColumn(this.db, "journal_entries", "verification_status"),
+        hasPublicColumn(this.db, "spray_records", "verification_status"),
+      ]);
       const diaryPlotCodes = officerFilter ? scopedPlotCodes : contribPlotCodes;
       const filterDiariesByPlot = diaryPlotCodes.length > 0;
       const hasStaffSubScope = Boolean(staffOfficerFilter);
       const violationHhIds = staffOfficerFilter ? staffScopedHouseholdIds : scopedHouseholdIds;
-      const [diariesRes, minutesRows, violationRows] = await Promise.all([
+      const srVerifyCols = hasSprayVerifyCol
+        ? `COALESCE(sr.verification_status, 'self_declared') AS verification_status,
+           sr.verified_at,
+           CASE
+             WHEN COALESCE(sr.verification_status, 'self_declared') = 'verified' THEN
+               CASE
+                 WHEN ($2::boolean AND (NOT $6::boolean OR sr.household_id = ANY($7::bigint[])))
+                   THEN COALESCE(NULLIF(btrim(sr.verified_by_name), ''), 'Ban Kỹ thuật HTX')
+                 ELSE 'Ban Kỹ thuật HTX'
+               END
+             ELSE NULL
+           END AS verified_by_name`
+        : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_name`;
+      const jeVerifyCols = hasJournalVerifyCol
+        ? `COALESCE(je.verification_status, 'self_declared') AS verification_status,
+           je.verified_at,
+           CASE
+             WHEN COALESCE(je.verification_status, 'self_declared') = 'verified' THEN
+               CASE
+                 WHEN ($2::boolean AND (NOT $6::boolean OR je.household_id = ANY($7::bigint[])))
+                   THEN COALESCE(NULLIF(btrim(je.verified_by_name), ''), 'Ban Kỹ thuật HTX')
+                 ELSE 'Ban Kỹ thuật HTX'
+               END
+             ELSE NULL
+           END AS verified_by_name`
+        : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_name`;
+      const [diariesRes, minutesRows, violationRows, immutableChangeLogs] = await Promise.all([
         scopedHouseholdIds.length > 0
           ? this.db.query(
             `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
-                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_urls
+                      gps_verified, gps_distance_m::float8 AS gps_distance_m,
+                      verification_status, verified_at, verified_by_name, photo_urls
                FROM (
                  SELECT sr.sprayed_on AS entry_on,
                         COALESCE(sr.plot_code, '') AS plot_code,
@@ -4588,6 +5157,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         sr.record_hash,
                         false AS gps_verified,
                         NULL::numeric AS gps_distance_m,
+                        ${srVerifyCols},
                         ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
                         sr.id AS sort_id
                  FROM spray_records sr
@@ -4626,6 +5196,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         je.record_hash,
                         je.gps_verified,
                         je.gps_distance_m,
+                        ${jeVerifyCols},
                         ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
                         je.id AS sort_id
                  FROM journal_entries je
@@ -4639,7 +5210,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                    )
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
-               LIMIT 25`,
+               LIMIT 120`,
             [
               scopedHouseholdIds,
               isFullAuthorityStaff,
@@ -4659,9 +5230,19 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
            ${safeFieldPhotoUrlsSql("im.photo_ids", "im.photo_id", false)} AS photo_urls`,
           scopedHouseholdIds,
           scopedPlotCodes,
-          8,
+          50,
         ),
-        canReadViolations ? this.queryScopedViolations(violationHhIds, scopedPlotCodes, 10) : Promise.resolve([]),
+        canReadViolations ? this.queryScopedViolations(violationHhIds, scopedPlotCodes, 50) : Promise.resolve([]),
+        this.queryScopedImmutableChangeLogs({
+          lotId: staffOfficerFilter ? null : internalLotId,
+          householdIds: staffOfficerFilter ? staffScopedHouseholdIds : scopedHouseholdIds,
+          plotCodes: diaryPlotCodes,
+          unpinnedHouseholdIds: unpinnedContribHouseholdIds,
+          restrictHouseholdLogsToPlots: filterDiariesByPlot,
+          canShowActorPersonalName: isFullAuthorityStaff && !staffOfficerFilter,
+          canReadDraftLabs,
+          limit: 80,
+        }),
       ]);
 
       authorityData = {
@@ -4708,10 +5289,22 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         cultivationDiaries: normalizeEvidenceMediaRows(diariesRes.rows),
         inspectionMinutes: normalizeEvidenceMediaRows(minutesRows),
         internalViolations: violationRows,
+        immutableChangeLogs,
       };
     }
 
     const publicLotStatus = isRevoked ? "revoked" : lotRow.status === "sampling" ? "pending" : "valid";
+    const dossierVerifiedOn =
+      publicLotStatus === "pending"
+        ? null
+        : isRevoked
+          ? maxIsoDate([lotRow.updatedAt, phytoIssuedOn, exportedOn, packedOn, harvestedOn]) ||
+            toIsoDateOnly(lotRow.createdAt)
+          : maxIsoDate([phytoIssuedOn, exportedOn, packedOn]) ||
+            harvestedOn ||
+            toIsoDateOnly(scannedItem?.printedAt) ||
+            toIsoDateOnly(lotRow.updatedAt) ||
+            toIsoDateOnly(lotRow.createdAt);
     const resolvedQrToken = String(scannedItem?.qrToken || lotRow.qrToken || "").trim() || null;
 
     return {
@@ -4737,6 +5330,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         lotIdentity: {
           productName: "Sầu riêng tươi nguyên trái (Durio zibethinus)",
           variety: varietyDisplay,
+          brandName: lotRow.brandName ? String(lotRow.brandName).trim() : null,
+          productImageUrl: lotRow.productImageUrl ? String(lotRow.productImageUrl).trim() : null,
+          expiryOn: toIsoDateOnly(lotRow.expiryOn),
+          storageCondition: lotRow.storageCondition ? String(lotRow.storageCondition).trim() : null,
+          matchedEventCode: matchedEventCode ?? null,
           lotCode,
           qrToken: resolvedQrToken,
           scannedCode: cleanCode,
@@ -4753,6 +5351,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           market: String(lotRow.market || "Xuất khẩu chính ngạch"),
           status: publicLotStatus,
           rawLotStatus: isRevoked ? "revoked" : rawLotStatus,
+          dossierVerifiedOn,
           avgBrix: avgBrixVal,
           gradeAPct: gradeAPctVal,
           treatmentMethod: treatmentMethodVal,
@@ -4777,6 +5376,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         growingZone: {
           name: live.pucName || "Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né",
           pucCode: primaryPucCode,
+          gaccCode: live.pucGaccCode,
+          mardApprovedOn: live.pucMardApprovedOn,
+          gaccApprovedOn: live.pucGaccApprovedOn,
+          geoCheck: publicZoneGeoCheck,
           additionalZoneCount: Math.max(0, distinctZoneCodes.length - 1),
           adminLocation,
           status: pucStatus,
@@ -4786,7 +5389,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           coarseMap,
         },
         producer: {
-          cooperativeName: DEFAULT_COOP_NAME,
+          cooperativeName: governance.governmentEndorsement.coopLegalName || DEFAULT_COOP_NAME,
+          coopLegalName: governance.governmentEndorsement.coopLegalName,
+          coopTaxCode: governance.governmentEndorsement.coopTaxCode,
+          coopAddress: governance.governmentEndorsement.coopAddress,
           groupName: `Liên tổ sản xuất sầu riêng VietGAP xã Cư Né (${participatingHouseholdCount} hộ thành viên liên kết)`,
           participatingHouseholdCount,
           consentedHouseholds: consentedHouseholdNames,
@@ -4805,6 +5411,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           name: packhouseName,
           code: packhouseCode,
           address: packhouseAddress,
+          gaccCode: live.packhouseGaccCode,
+          mardApprovedOn: live.packhouseMardApprovedOn,
+          gaccApprovedOn: live.packhouseGaccApprovedOn,
           status: live.packhouseStatus,
           statusLabel: live.packhouseStatusLabel,
         },
@@ -4850,7 +5459,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         integritySeal,
         massBalanceSummary: massBalance.publicSummary,
         governance,
-        verification,
+        verification: { ...verification, dossierVerifiedOn },
       },
       ...(enterpriseData ? { enterpriseData } : {}),
       ...(authorityData ? { authorityData } : {}),
@@ -4875,7 +5484,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     const [latestLotRes, latestMinute] = await Promise.all([
       this.db.query(
-        `SELECT hl.id, hl.code, hl.qr_token, hl.enterprise_id, hl.coop_code, hl.packed_on, hl.exported_on, hl.market, hl.status,
+        `SELECT hl.id, hl.code, hl.qr_token, hl.enterprise_id, hl.coop_code, hl.harvested_on, hl.packed_on, hl.exported_on, hl.market, hl.status,
                 hl.packhouse_code, COALESCE(hl.packhouse_name, e.name) AS packhouse_name,
                 COALESCE(hl.packhouse_address, e.address) AS packhouse_address,
                 hl.phytosanitary_cert_no, hl.phytosanitary_issued_on,
@@ -5180,7 +5789,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     // Dữ liệu Cấp 3 (Cơ quan quản lý)
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority") {
-      const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+      const [hasMilestoneTable, hasJournalVerifyCol, hasSprayVerifyCol] = await Promise.all([
+        this.hasTable("care_milestone_declarations"),
+        hasPublicColumn(this.db, "journal_entries", "verification_status"),
+        hasPublicColumn(this.db, "spray_records", "verification_status"),
+      ]);
       const staffStampOfficerFilter = this.buildOfficerHouseholdFilter(ctx.user);
       const stampInStaffScope =
         !staffStampOfficerFilter ||
@@ -5205,12 +5818,27 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         canShowStampRawPii || hasConsent
           ? String(raw.householdName || "")
           : `Hộ thành viên ${String(raw.householdCode || "HTX")}`;
-      const [diariesRes, minutesRows, violationRows] = await Promise.all([
+      const stampSrVerifyCols = hasSprayVerifyCol
+        ? `COALESCE(sr.verification_status, 'self_declared') AS verification_status,
+           sr.verified_at,
+           CASE WHEN COALESCE(sr.verification_status, 'self_declared') = 'verified'
+             THEN CASE WHEN $5::boolean THEN COALESCE(NULLIF(btrim(sr.verified_by_name), ''), 'Ban Kỹ thuật HTX') ELSE 'Ban Kỹ thuật HTX' END
+             ELSE NULL END AS verified_by_name`
+        : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_name`;
+      const stampJeVerifyCols = hasJournalVerifyCol
+        ? `COALESCE(je.verification_status, 'self_declared') AS verification_status,
+           je.verified_at,
+           CASE WHEN COALESCE(je.verification_status, 'self_declared') = 'verified'
+             THEN CASE WHEN $5::boolean THEN COALESCE(NULLIF(btrim(je.verified_by_name), ''), 'Ban Kỹ thuật HTX') ELSE 'Ban Kỹ thuật HTX' END
+             ELSE NULL END AS verified_by_name`
+        : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_name`;
+      const [diariesRes, minutesRows, violationRows, immutableChangeLogs] = await Promise.all([
         householdVisible
           ? this.db.query(
             `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
-                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_urls
+                      gps_verified, gps_distance_m::float8 AS gps_distance_m,
+                      verification_status, verified_at, verified_by_name, photo_urls
                FROM (
                  SELECT sr.sprayed_on AS entry_on,
                         COALESCE(sr.plot_code, '') AS plot_code,
@@ -5227,6 +5855,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         sr.record_hash,
                         false AS gps_verified,
                         NULL::numeric AS gps_distance_m,
+                        ${stampSrVerifyCols},
                         ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
                         sr.id AS sort_id
                  FROM spray_records sr
@@ -5249,6 +5878,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         je.record_hash,
                         je.gps_verified,
                         je.gps_distance_m,
+                        ${stampJeVerifyCols},
                         ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
                         je.id AS sort_id
                  FROM journal_entries je
@@ -5257,7 +5887,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
                LIMIT 20`,
-            [householdId, safeStampHouseholdName, canShowStampRawPii || hasConsent, stampPlotCode],
+            [householdId, safeStampHouseholdName, canShowStampRawPii || hasConsent, stampPlotCode, canShowStampRawPii],
           )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         this.queryScopedInspectionMinutes(
@@ -5271,6 +5901,16 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         ),
         canReadViolations && stampInStaffScope
           ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 6)
+          : Promise.resolve([]),
+        stampInStaffScope || Boolean(temporaryGrant?.active && temporaryGrant.grantedTier === "authority")
+          ? this.queryScopedImmutableChangeLogs({
+              householdIds: scopedHouseholdIds,
+              plotCodes: scopedPlotCodes,
+              restrictHouseholdLogsToPlots: Boolean(stampPlotCode),
+              canShowActorPersonalName: canShowStampRawPii,
+              canReadDraftLabs,
+              limit: 20,
+            })
           : Promise.resolve([]),
       ]);
 
@@ -5316,6 +5956,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         cultivationDiaries: normalizeEvidenceMediaRows(diariesRes.rows),
         inspectionMinutes: normalizeEvidenceMediaRows(minutesRows),
         internalViolations: violationRows,
+        immutableChangeLogs,
       };
     }
 
@@ -5333,6 +5974,21 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     };
 
     const publicStampStatus = isRevoked ? "revoked" : isDraftOrUnverified ? "unverified" : "valid";
+    const linkedLotVerifiedOn =
+      linkedLot && linkedLot.status !== "sampling"
+        ? maxIsoDate([linkedLot.phytosanitaryIssuedOn, linkedLot.exportedOn, linkedLot.packedOn])
+        : null;
+    const dossierVerifiedOn =
+      isDraftOrUnverified && !isRevoked
+        ? null
+        : isRevoked
+          ? maxIsoDate([raw.updatedAt, raw.activatedAt, linkedLotVerifiedOn, harvestedOn]) ||
+            toIsoDateOnly(raw.createdAt)
+          : linkedLotVerifiedOn ||
+            toIsoDateOnly(raw.activatedAt) ||
+            harvestedOn ||
+            toIsoDateOnly(raw.updatedAt) ||
+            toIsoDateOnly(raw.createdAt);
 
     return {
       verifiedAt: verification.verifiedAt,
@@ -5366,6 +6022,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           itemGrade: isDraftOrUnverified && viewerTier === "public" ? null : raw.grade ? String(raw.grade) : null,
           market: String(linkedLot?.market || "Dòng cao cấp & Xuất khẩu chính ngạch"),
           status: publicStampStatus,
+          dossierVerifiedOn,
           statusLabel: isRevoked
             ? "Tem đã thu hồi - Không lưu thông"
             : isDraftOrUnverified
@@ -5376,6 +6033,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         growingZone: {
           name: live.pucName || "Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né",
           pucCode,
+          gaccCode: live.pucGaccCode,
+          mardApprovedOn: live.pucMardApprovedOn,
+          gaccApprovedOn: live.pucGaccApprovedOn,
           additionalZoneCount: 0,
           adminLocation: live.pucAdminLocation || adminLocation,
           status: pucStatus,
@@ -5385,7 +6045,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           coarseMap,
         },
         producer: {
-          cooperativeName: DEFAULT_COOP_NAME,
+          cooperativeName: governance.governmentEndorsement.coopLegalName || DEFAULT_COOP_NAME,
+          coopLegalName: governance.governmentEndorsement.coopLegalName,
+          coopTaxCode: governance.governmentEndorsement.coopTaxCode,
+          coopAddress: governance.governmentEndorsement.coopAddress,
           groupName: "Nhóm vườn sầu riêng VietGAP HTX Cư Né",
           participatingHouseholdCount: 1,
           consentedHouseholds: hasConsent ? [String(raw.householdName)] : [],
@@ -5397,6 +6060,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           name: packhouseName,
           code: packhouseCode,
           address: packhouseAddress,
+          gaccCode: live.packhouseGaccCode,
+          mardApprovedOn: live.packhouseMardApprovedOn,
+          gaccApprovedOn: live.packhouseGaccApprovedOn,
           status: live.packhouseStatus,
           statusLabel: live.packhouseStatusLabel,
         },
@@ -5454,7 +6120,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         integritySeal,
         massBalanceSummary: massBalance.publicSummary,
         governance,
-        verification,
+        verification: { ...verification, dossierVerifiedOn },
       },
       ...(enterpriseData ? { enterpriseData } : {}),
       ...(authorityData ? { authorityData } : {}),
@@ -5640,7 +6306,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     const contribKg = linkedLot?.contributedKg ? Number(linkedLot.contributedKg) : 0;
     const seasonYear = harvestedOn ? Number(harvestedOn.slice(0, 4)) || new Date().getFullYear() : new Date().getFullYear();
 
-    const [integritySeal, massBalance, lastCareRes] = await Promise.all([
+    const [integritySeal, massBalance, lastCareRes, approvedOn] = await Promise.all([
       this.computeLedgerIntegritySummary(plotHouseholdId ? [plotHouseholdId] : [], [plotCode], harvestedOn),
       this.computeMassBalanceSummary({
         seasonYear,
@@ -5661,6 +6327,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
          ) AS last_care_on`,
         [plotHouseholdId, plotCode],
       ),
+      this.queryLatestApprovedOn(plotHouseholdId, plotCode),
     ]);
     const lastCareOn = toIsoDateOnly(lastCareRes.rows[0]?.last_care_on);
 
@@ -5867,7 +6534,11 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     let authorityData: Record<string, unknown> | undefined;
     const authorityPromise = (async () => {
       if (viewerTier !== "authority") return undefined;
-      const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+      const [hasMilestoneTable, hasJournalVerifyCol, hasSprayVerifyCol] = await Promise.all([
+        this.hasTable("care_milestone_declarations"),
+        hasPublicColumn(this.db, "journal_entries", "verification_status"),
+        hasPublicColumn(this.db, "spray_records", "verification_status"),
+      ]);
       const householdVisible = plotHouseholdInOfficerScope;
       const scopedHouseholdIds = householdVisible && plotHouseholdId ? [plotHouseholdId] : [];
       const scopedPlotCodes = householdVisible ? [plotCode] : [];
@@ -5877,12 +6548,27 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         canShowPlotRawPii || hasConsent
           ? String(raw.ownerName || "Chưa cập nhật")
           : `Hộ thành viên ${String(raw.householdCode || "HTX")}`;
-      const [diariesRes, minutesRows, violationRows] = await Promise.all([
+      const plotSrVerifyCols = hasSprayVerifyCol
+        ? `COALESCE(sr.verification_status, 'self_declared') AS verification_status,
+           sr.verified_at,
+           CASE WHEN COALESCE(sr.verification_status, 'self_declared') = 'verified'
+             THEN CASE WHEN $7::boolean THEN COALESCE(NULLIF(btrim(sr.verified_by_name), ''), 'Ban Kỹ thuật HTX') ELSE 'Ban Kỹ thuật HTX' END
+             ELSE NULL END AS verified_by_name`
+        : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_name`;
+      const plotJeVerifyCols = hasJournalVerifyCol
+        ? `COALESCE(je.verification_status, 'self_declared') AS verification_status,
+           je.verified_at,
+           CASE WHEN COALESCE(je.verification_status, 'self_declared') = 'verified'
+             THEN CASE WHEN $7::boolean THEN COALESCE(NULLIF(btrim(je.verified_by_name), ''), 'Ban Kỹ thuật HTX') ELSE 'Ban Kỹ thuật HTX' END
+             ELSE NULL END AS verified_by_name`
+        : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_name`;
+      const [diariesRes, minutesRows, violationRows, immutableChangeLogs] = await Promise.all([
         householdVisible
           ? this.db.query(
             `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                       server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
-                      gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_urls
+                      gps_verified, gps_distance_m::float8 AS gps_distance_m,
+                      verification_status, verified_at, verified_by_name, photo_urls
                FROM (
                  SELECT sr.sprayed_on AS entry_on,
                         COALESCE(sr.plot_code, $1::text) AS plot_code,
@@ -5899,6 +6585,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         sr.record_hash,
                         false AS gps_verified,
                         NULL::numeric AS gps_distance_m,
+                        ${plotSrVerifyCols},
                         ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
                         sr.id AS sort_id
                  FROM spray_records sr
@@ -5922,6 +6609,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                         je.record_hash,
                         je.gps_verified,
                         je.gps_distance_m,
+                        ${plotJeVerifyCols},
                         ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
                         je.id AS sort_id
                  FROM journal_entries je
@@ -5930,8 +6618,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                    AND (NOT $4::boolean OR je.household_id = ANY($5::bigint[]))
                ) combined
                ORDER BY entry_on DESC, sort_id DESC
-               LIMIT 20`,
-            [plotCode, plotHouseholdId, safePlotOwnerName, restrictToScopedHouseholds, scopedHouseholdIds, canShowPlotRawPii || hasConsent],
+               LIMIT 80`,
+            [plotCode, plotHouseholdId, safePlotOwnerName, restrictToScopedHouseholds, scopedHouseholdIds, canShowPlotRawPii || hasConsent, canShowPlotRawPii],
           )
           : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
         this.queryScopedInspectionMinutes(
@@ -5941,10 +6629,20 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
            ${safeFieldPhotoUrlsSql("im.photo_ids", "im.photo_id", false)} AS photo_urls`,
           scopedHouseholdIds,
           scopedPlotCodes,
-          6,
+          40,
         ),
         canReadViolations && plotInStaffScope
-          ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 6)
+          ? this.queryScopedViolations(scopedHouseholdIds, scopedPlotCodes, 30)
+          : Promise.resolve([]),
+        plotInStaffScope || Boolean(temporaryGrant?.active && temporaryGrant.grantedTier === "authority")
+          ? this.queryScopedImmutableChangeLogs({
+              householdIds: scopedHouseholdIds,
+              plotCodes: scopedPlotCodes,
+              restrictHouseholdLogsToPlots: true,
+              canShowActorPersonalName: canShowPlotRawPii,
+              canReadDraftLabs,
+              limit: 60,
+            })
           : Promise.resolve([]),
       ]);
 
@@ -5988,6 +6686,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         cultivationDiaries: normalizeEvidenceMediaRows(diariesRes.rows),
         inspectionMinutes: normalizeEvidenceMediaRows(minutesRows),
         internalViolations: violationRows,
+        immutableChangeLogs,
       };
     })();
 
@@ -5999,6 +6698,24 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     authorityData = resolvedAuthorityData;
 
     const publicPlotStatus = isSuspended ? "revoked" : isDraftOrUnverified ? "unverified" : "valid";
+    const verifiedPlotLabOn =
+      latestLab &&
+      latestLab.result === "pass" &&
+      latestLab.plotCode &&
+      latestLab.plotCode.trim().toUpperCase() === plotCode.trim().toUpperCase()
+        ? toIsoDateOnly(latestLab.sampledOn)
+        : null;
+    const dossierVerifiedOn =
+      isDraftOrUnverified && !isSuspended
+        ? null
+        : maxIsoDate([
+            approvedOn,
+            lastInspectionOn,
+            verifiedPlotLabOn,
+            massBalance.publicSummary?.assessedOn,
+          ]) ||
+          toIsoDateOnly(raw.updatedAt) ||
+          toIsoDateOnly(raw.createdAt);
     const resolvedQrToken = plotQrToken || (linkedLot?.qrToken ? String(linkedLot.qrToken) : null);
     const householdCodeVal = raw.householdCode ? String(raw.householdCode) : null;
     const farmerProfile: TraceFarmerProfile = {
@@ -6062,6 +6779,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           itemGrade: null,
           market: String(linkedLot?.market || "Xuất khẩu chính ngạch & Nội địa"),
           status: publicPlotStatus,
+          dossierVerifiedOn,
           statusLabel: isSuspended
             ? "Tạm dừng hiệu lực vùng nguyên liệu"
             : isDraftOrUnverified
@@ -6072,6 +6790,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         growingZone: {
           name: live.pucName || "Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né",
           pucCode,
+          gaccCode: live.pucGaccCode,
+          mardApprovedOn: live.pucMardApprovedOn,
+          gaccApprovedOn: live.pucGaccApprovedOn,
           additionalZoneCount: 0,
           adminLocation: live.pucAdminLocation || adminLocation,
           status: pucStatus,
@@ -6081,7 +6802,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           coarseMap,
         },
         producer: {
-          cooperativeName: DEFAULT_COOP_NAME,
+          cooperativeName: governance.governmentEndorsement.coopLegalName || DEFAULT_COOP_NAME,
+          coopLegalName: governance.governmentEndorsement.coopLegalName,
+          coopTaxCode: governance.governmentEndorsement.coopTaxCode,
+          coopAddress: governance.governmentEndorsement.coopAddress,
           groupName: `Nhóm vườn liên kết ${raw.village || "xã Cư Né"} - HTX Cư Né`,
           participatingHouseholdCount: 1,
           consentedHouseholds: hasConsent && raw.ownerName ? [String(raw.ownerName)] : [],
@@ -6094,6 +6818,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           name: packhouseName,
           code: packhouseCode,
           address: packhouseAddress,
+          gaccCode: live.packhouseGaccCode,
+          mardApprovedOn: live.packhouseMardApprovedOn,
+          gaccApprovedOn: live.packhouseGaccApprovedOn,
           status: live.packhouseStatus,
           statusLabel: live.packhouseStatusLabel,
         },
@@ -6151,7 +6878,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         integritySeal,
         massBalanceSummary: massBalance.publicSummary,
         governance,
-        verification,
+        verification: { ...verification, dossierVerifiedOn },
       },
       ...(fieldAuditData ? { fieldAuditData } : {}),
       ...(enterpriseData ? { enterpriseData } : {}),
@@ -6494,7 +7221,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       Boolean(fieldAuditPass?.active) ||
       isOwnerFarmer;
 
-    const [integritySeal, massBalance, lastCareRes, communeLotContributions] = await Promise.all([
+    const [integritySeal, massBalance, lastCareRes, communeLotContributions, approvedOn] = await Promise.all([
       this.computeLedgerIntegritySummary([householdId], hhPlotCodes, harvestedOn),
       this.computeMassBalanceSummary({
         seasonYear,
@@ -6517,6 +7244,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         viewerUser: ctx.user,
         canSeePlotCodes,
       }),
+      this.queryLatestApprovedOn(householdId, null),
     ]);
     const lastCareOn = toIsoDateOnly(lastCareRes.rows[0]?.last_care_on);
 
@@ -6617,16 +7345,35 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     let authorityData: Record<string, unknown> | undefined;
     if (viewerTier === "authority" && householdVisibleToOfficer) {
-      const hasMilestoneTable = await this.hasTable("care_milestone_declarations");
+      const [hasMilestoneTable, hasJournalVerifyCol, hasSprayVerifyCol] = await Promise.all([
+        this.hasTable("care_milestone_declarations"),
+        hasPublicColumn(this.db, "journal_entries", "verification_status"),
+        hasPublicColumn(this.db, "spray_records", "verification_status"),
+      ]);
       const safeHhName =
         canShowHhRawPii || hasConsent
           ? String(raw.name || "Chưa cập nhật")
           : `Hộ thành viên ${householdCode}`;
-      const [diariesRes, minutesRows, violationRows] = await Promise.all([
+      const hhSrVerifyCols = hasSprayVerifyCol
+        ? `COALESCE(sr.verification_status, 'self_declared') AS verification_status,
+           sr.verified_at,
+           CASE WHEN COALESCE(sr.verification_status, 'self_declared') = 'verified'
+             THEN CASE WHEN $4::boolean THEN COALESCE(NULLIF(btrim(sr.verified_by_name), ''), 'Ban Kỹ thuật HTX') ELSE 'Ban Kỹ thuật HTX' END
+             ELSE NULL END AS verified_by_name`
+        : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_name`;
+      const hhJeVerifyCols = hasJournalVerifyCol
+        ? `COALESCE(je.verification_status, 'self_declared') AS verification_status,
+           je.verified_at,
+           CASE WHEN COALESCE(je.verification_status, 'self_declared') = 'verified'
+             THEN CASE WHEN $4::boolean THEN COALESCE(NULLIF(btrim(je.verified_by_name), ''), 'Ban Kỹ thuật HTX') ELSE 'Ban Kỹ thuật HTX' END
+             ELSE NULL END AS verified_by_name`
+        : `'self_declared'::text AS verification_status, NULL::timestamptz AS verified_at, NULL::text AS verified_by_name`;
+      const [diariesRes, minutesRows, violationRows, immutableChangeLogs] = await Promise.all([
         this.db.query(
           `SELECT entry_on, plot_code, activity, detail, recorder, household_name, kind, mrl_status, isolation_days,
                     server_recorded_at, entry_delay_hours::float8 AS entry_delay_hours, is_late_entry, record_hash,
-                    gps_verified, gps_distance_m::float8 AS gps_distance_m, photo_urls
+                    gps_verified, gps_distance_m::float8 AS gps_distance_m,
+                    verification_status, verified_at, verified_by_name, photo_urls
              FROM (
                SELECT sr.sprayed_on AS entry_on,
                       COALESCE(sr.plot_code, '') AS plot_code,
@@ -6643,6 +7390,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                       sr.record_hash,
                       false AS gps_verified,
                       NULL::numeric AS gps_distance_m,
+                      ${hhSrVerifyCols},
                       ${safeFieldPhotoUrlsSql("sr.photo_ids", "sr.photo_id", hasMilestoneTable)} AS photo_urls,
                       sr.id AS sort_id
                FROM spray_records sr
@@ -6664,14 +7412,15 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                       je.record_hash,
                       je.gps_verified,
                       je.gps_distance_m,
+                      ${hhJeVerifyCols},
                       ${safeFieldPhotoUrlsSql("je.photo_ids", "je.photo_id", hasMilestoneTable)} AS photo_urls,
                       je.id AS sort_id
                FROM journal_entries je
                WHERE je.household_id = $1
              ) combined
              ORDER BY entry_on DESC, sort_id DESC
-             LIMIT 25`,
-          [householdId, safeHhName, canShowHhRawPii || hasConsent],
+             LIMIT 120`,
+          [householdId, safeHhName, canShowHhRawPii || hasConsent, canShowHhRawPii],
         ),
         this.queryScopedInspectionMinutes(
           `im.code, im.held_on, im.location, im.officer, im.result,
@@ -6680,10 +7429,20 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
            ${safeFieldPhotoUrlsSql("im.photo_ids", "im.photo_id", false)} AS photo_urls`,
           [householdId],
           hhPlotCodes,
-          8,
+          40,
         ),
         canReadViolations && hhInStaffScope
-          ? this.queryScopedViolations([householdId], hhPlotCodes, 8)
+          ? this.queryScopedViolations([householdId], hhPlotCodes, 30)
+          : Promise.resolve([]),
+        hhInStaffScope || Boolean(temporaryGrant?.active && temporaryGrant.grantedTier === "authority")
+          ? this.queryScopedImmutableChangeLogs({
+              householdIds: [householdId],
+              plotCodes: hhPlotCodes,
+              restrictHouseholdLogsToPlots: false,
+              canShowActorPersonalName: canShowHhRawPii,
+              canReadDraftLabs,
+              limit: 80,
+            })
           : Promise.resolve([]),
       ]);
 
@@ -6723,10 +7482,24 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         cultivationDiaries: normalizeEvidenceMediaRows(diariesRes.rows),
         inspectionMinutes: normalizeEvidenceMediaRows(minutesRows),
         internalViolations: violationRows,
+        immutableChangeLogs,
       };
     }
 
     const publicHhStatus = effectiveSuspended ? "revoked" : isDraftOrUnverified ? "unverified" : "valid";
+    const verifiedHhLabOn =
+      latestLab && latestLab.result === "pass" ? toIsoDateOnly(latestLab.sampledOn) : null;
+    const dossierVerifiedOn =
+      isDraftOrUnverified && !effectiveSuspended
+        ? null
+        : maxIsoDate([
+            approvedOn,
+            lastInspectionOn,
+            verifiedHhLabOn,
+            massBalance.publicSummary?.assessedOn,
+          ]) ||
+          toIsoDateOnly(raw.updatedAt) ||
+          toIsoDateOnly(raw.createdAt);
     const farmerProfile: TraceFarmerProfile = {
       displayName:
         canViewFarmerIdentity && raw.name
@@ -6798,6 +7571,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           itemGrade: null,
           market: String(linkedLot?.market || "Xuất khẩu chính ngạch & Nội địa"),
           status: publicHhStatus,
+          dossierVerifiedOn,
           statusLabel: effectiveSuspended
             ? "Tạm dừng liên kết thu hoạch để rà soát kỹ thuật"
             : isDraftOrUnverified
@@ -6810,6 +7584,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         growingZone: {
           name: live.pucName || "Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né",
           pucCode: primaryPucCode,
+          gaccCode: live.pucGaccCode,
+          mardApprovedOn: live.pucMardApprovedOn,
+          gaccApprovedOn: live.pucGaccApprovedOn,
           additionalZoneCount: Math.max(0, distinctZones.length - 1),
           adminLocation: live.pucAdminLocation || adminLocation,
           status: pucStatus,
@@ -6819,7 +7596,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           coarseMap,
         },
         producer: {
-          cooperativeName: DEFAULT_COOP_NAME,
+          cooperativeName: governance.governmentEndorsement.coopLegalName || DEFAULT_COOP_NAME,
+          coopLegalName: governance.governmentEndorsement.coopLegalName,
+          coopTaxCode: governance.governmentEndorsement.coopTaxCode,
+          coopAddress: governance.governmentEndorsement.coopAddress,
           groupName: `Nhóm hộ liên kết ${villageName} - HTX Cư Né`,
           participatingHouseholdCount: 1,
           consentedHouseholds: hasConsent && raw.name ? [String(raw.name)] : [],
@@ -6832,6 +7612,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           name: packhouseName,
           code: packhouseCode,
           address: packhouseAddress,
+          gaccCode: live.packhouseGaccCode,
+          mardApprovedOn: live.packhouseMardApprovedOn,
+          gaccApprovedOn: live.packhouseGaccApprovedOn,
           status: live.packhouseStatus,
           statusLabel: live.packhouseStatusLabel,
         },
@@ -6893,7 +7676,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         integritySeal,
         massBalanceSummary: massBalance.publicSummary,
         governance,
-        verification,
+        verification: { ...verification, dossierVerifiedOn },
       },
       ...(enterpriseData ? { enterpriseData } : {}),
       ...(authorityData ? { authorityData } : {}),

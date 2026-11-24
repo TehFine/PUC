@@ -31,7 +31,7 @@ function extractRequestSecret(req: Request, querySecret?: string): string | unde
 
 @Controller("public/trace-access-requests")
 export class PublicTraceRequestsController {
-  constructor(private readonly traceRequests: TraceRequestsService) {}
+  constructor(private readonly traceRequests: TraceRequestsService) { }
 
   @Public()
   @OptionalAuth()
@@ -74,7 +74,7 @@ export class PublicTraceRequestsController {
 
 @Controller("trace-requests")
 export class TraceRequestsController {
-  constructor(private readonly traceRequests: TraceRequestsService) {}
+  constructor(private readonly traceRequests: TraceRequestsService) { }
 
   @Get()
   @Authorize("trace-requests", "read")

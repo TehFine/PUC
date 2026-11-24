@@ -1568,4 +1568,696 @@ describe("BYPASS-DEFENSE: chống vượt rào phạm vi doanh nghiệp, ghép q
       await db.query("DELETE FROM users WHERE username = $1", [officer2Username]);
     }
   });
+
+  test("Ngày xác thực hồ sơ (dossierVerifiedOn): lấy đúng mốc nghiệm thu HTX/cơ sở thu mua hoặc biên bản thực địa, không nhảy theo ngày quét mã", async () => {
+    const packedLotCode = `LH-VERIFIED-${Date.now()}`;
+    try {
+      await db.query(
+        `INSERT INTO harvest_lots (code, harvested_on, packed_on, weight_tons, household_count, buyer, market, status)
+         VALUES ($1, '2024-07-10', '2024-07-12', 0.5, 1, 'Cơ sở thu mua kiểm thử', 'Trung Quốc', 'in_transit')`,
+        [packedLotCode],
+      );
+
+      // 1. Lô đã xuất khẩu (harvested_on = 2020-01-10 -> packed 2020-01-11 -> exported 2020-01-12)
+      const exportedLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(FX.lot)}`);
+      expect(exportedLotRes.status).toBe(200);
+      expect(exportedLotRes.body.publicData.lotIdentity.dossierVerifiedOn).toBe("2020-01-12");
+      expect(exportedLotRes.body.publicData.verification.dossierVerifiedOn).toBe("2020-01-12");
+      expect(exportedLotRes.body.publicData.verification.verifiedAt.slice(0, 10)).not.toBe("2020-01-12");
+
+      // 2. Lô đang vận chuyển đã nghiệm thu đóng gói tại cơ sở thu mua (packed_on = 2024-07-12)
+      const inTransitLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(packedLotCode)}`);
+      expect(inTransitLotRes.status).toBe(200);
+      expect(inTransitLotRes.body.publicData.lotIdentity.dossierVerifiedOn).toBe("2024-07-12");
+
+      // 3. Lô mới lập đang chờ lấy mẫu kiểm định trước xuất (status = 'sampling') -> chờ xác thực (null)
+      const samplingLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(FX.emptyLot)}`);
+      expect(samplingLotRes.status).toBe(200);
+      expect(samplingLotRes.body.publicData.lotIdentity.dossierVerifiedOn).toBeNull();
+
+      // 4. Hồ sơ thửa đất & nông hộ đã duyệt -> lấy đúng ngày biên bản kiểm tra thực địa (2020-01-06)
+      const plotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(FX.hhA.plot)}`);
+      expect(plotRes.status).toBe(200);
+      expect(plotRes.body.publicData.lotIdentity.dossierVerifiedOn).toBe("2020-01-06");
+
+      const hhRes = await request(app).get(`/api/public/trace/${encodeURIComponent(FX.hhA.code)}`);
+      expect(hhRes.status).toBe(200);
+      expect(hhRes.body.publicData.lotIdentity.dossierVerifiedOn).toBe("2020-01-06");
+    } finally {
+      await db.query("DELETE FROM harvest_lots WHERE code = $1", [packedLotCode]);
+    }
+  });
+});
+
+describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC, mã sự kiện trọng yếu, xác minh nhật ký và kiểm toán bất biến 3 tầng", () => {
+  it("phân quyền chặt chẽ ai được xem / ai được xác minh cho dữ liệu NĐ 37, GACC, ảnh sản phẩm lô, mã sự kiện EVT và nhật ký kiểm toán bất biến", async () => {
+    const admin = await loggedIn("0901234567");
+    const htxOfficer = await loggedIn("0912345678");
+    const inspector = await loggedIn(USERS.inspector);
+    const villageOfficer = await loggedIn(USERS.villageOfficer);
+    const farmer = await loggedIn(FX.farmerUsername);
+
+    const ts = Date.now();
+    const nd37LotCode = `LH-ND37-${ts}`;
+    const entOwnerCode = `ENT-ND37-OWN-${ts}`;
+    const entRivalCode = `ENT-ND37-RIV-${ts}`;
+    const entOwnerUser = `ent_nd37_own_${ts}`;
+    const entRivalUser = `ent_nd37_riv_${ts}`;
+    const outStaffUser = `insp_nd37_out_${ts}`;
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    const tinyPng = Buffer.from(
+      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+      "hex",
+    );
+
+    const origZoneRes = await db.query<{
+      code: string;
+      status: string;
+      gacc_code: string | null;
+      mard_approved_on: string | null;
+      gacc_approved_on: string | null;
+    }>(
+      `SELECT g.code, g.status, g.gacc_code, g.mard_approved_on::text, g.gacc_approved_on::text
+       FROM growing_zones g
+       LEFT JOIN plot_signboard_tokens pst
+         ON upper(pst.zone_code) = upper(g.code) AND pst.plot_code = $1
+       ORDER BY (pst.plot_code IS NOT NULL) DESC, CASE WHEN g.status = 'active' THEN 0 ELSE 1 END, g.code ASC
+       LIMIT 1`,
+      [FX.hhA.plot],
+    );
+    const primaryZone = origZoneRes.rows[0];
+    expect(primaryZone).toBeDefined();
+
+    const curEndorseGet = await admin.get("/api/harvest/endorsement-config");
+    expect(curEndorseGet.status).toBe(200);
+    const origEndorse = curEndorseGet.body as {
+      programTitle: string;
+      directiveNo: string;
+      communeAuthority: string;
+      provincialAuthority: string;
+      officialPortalUrl: string;
+      officialDomain: string;
+      inspectionUnit: string;
+      coopLegalName: string;
+      coopTaxCode: string | null;
+      coopAddress: string;
+    };
+
+    const htxOfficerNameRes = await db.query<{ full_name: string }>(
+      "SELECT full_name FROM users WHERE username = '0912345678'",
+    );
+    const htxOfficerFullName = htxOfficerNameRes.rows[0]?.full_name || "Cán bộ HTX";
+
+    let entOwnerId = 0;
+    let entRivalId = 0;
+    let nd37LotId = 0;
+    let journalAId = 0;
+    let journalBId = 0;
+    let sprayAId = 0;
+    const attachmentIds: number[] = [];
+    const reqCodes: string[] = [];
+
+    try {
+      // 1. Khởi tạo 2 doanh nghiệp (chủ lô & đối thủ) kèm mã đăng ký GACC trên doanh nghiệp chủ lô
+      const createEntOwner = await admin.post("/api/enterprises").send({
+        code: entOwnerCode,
+        name: "Công ty Xuất khẩu Sầu riêng Chính Ngạch",
+        packhouseCode: `VN-DLPH-ND37-${String(ts).slice(-4)}`,
+        gaccCode: "CVN240999888",
+        mardApprovedOn: "2025-05-10",
+        gaccApprovedOn: "2025-06-20",
+        address: "Quốc lộ 14, Huyện Krông Búk, Tỉnh Đắk Lắk",
+        status: "active",
+      });
+      expect(createEntOwner.status).toBe(201);
+      entOwnerId = Number(createEntOwner.body.id);
+
+      const createEntRival = await admin.post("/api/enterprises").send({
+        code: entRivalCode,
+        name: "Công ty Đối thủ Ngoài Lô",
+        packhouseCode: `VN-DLPH-RIV-${String(ts).slice(-4)}`,
+        status: "active",
+      });
+      expect(createEntRival.status).toBe(201);
+      entRivalId = Number(createEntRival.body.id);
+
+      expect(
+        (
+          await admin.post("/api/accounts").send({
+            fullName: "Đại diện Doanh nghiệp Chủ Lô",
+            username: entOwnerUser,
+            password: TEST_PASSWORD,
+            role: "enterprise",
+            enterpriseId: entOwnerId,
+          })
+        ).status,
+      ).toBe(201);
+      expect(
+        (
+          await admin.post("/api/accounts").send({
+            fullName: "Đại diện Doanh nghiệp Đối Thủ",
+            username: entRivalUser,
+            password: TEST_PASSWORD,
+            role: "enterprise",
+            enterpriseId: entRivalId,
+          })
+        ).status,
+      ).toBe(201);
+      expect(
+        (
+          await admin.post("/api/accounts").send({
+            fullName: "Thanh tra Ngoài Địa Bàn",
+            username: outStaffUser,
+            password: TEST_PASSWORD,
+            role: "inspector",
+            assignedRegion: "Tỉnh Lâm Đồng",
+          })
+        ).status,
+      ).toBe(201);
+
+      const entOwnerAgent = await loggedIn(entOwnerUser);
+      const entRivalAgent = await loggedIn(entRivalUser);
+      const outStaffAgent = await loggedIn(outStaffUser);
+
+      // 2. Cập nhật mã GACC cho vùng trồng & thông tin pháp nhân HTX
+      const patchZoneRes = await admin.patch(`/api/growing-zones/${encodeURIComponent(primaryZone.code)}`).send({
+        status: primaryZone.status as "active",
+        gaccCode: "CVN240111222",
+        mardApprovedOn: "2025-03-01",
+        gaccApprovedOn: "2025-04-15",
+      });
+      expect(patchZoneRes.status).toBe(200);
+      expect(patchZoneRes.body.gaccCode).toBe("CVN240111222");
+
+      const putEndorseRes = await admin.put("/api/harvest/endorsement-config").send({
+        programTitle: origEndorse.programTitle,
+        directiveNo: origEndorse.directiveNo,
+        communeAuthority: origEndorse.communeAuthority,
+        provincialAuthority: origEndorse.provincialAuthority,
+        officialPortalUrl: origEndorse.officialPortalUrl,
+        officialDomain: origEndorse.officialDomain,
+        inspectionUnit: origEndorse.inspectionUnit,
+        coopLegalName: "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né",
+        coopTaxCode: "6001778899",
+        coopAddress: "Thôn 1, Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk",
+      });
+      expect(putEndorseRes.status).toBe(200);
+      expect(putEndorseRes.body.coopTaxCode).toBe("6001778899");
+
+      // 3. Kiểm tra cô lập ảnh sản phẩm lô hàng (purpose='harvest'): chưa gắn vào harvest_lots.product_image_id phải 404
+      const lotPhotoUp = await htxOfficer
+        .post("/api/uploads")
+        .field("purpose", "harvest")
+        .attach("file", tinyPng, "lot-product-nd37.png");
+      expect(lotPhotoUp.status).toBe(201);
+      const lotPhotoId = Number(lotPhotoUp.body.id);
+      attachmentIds.push(lotPhotoId);
+
+      const unlinkedHarvestUp = await htxOfficer
+        .post("/api/uploads")
+        .field("purpose", "harvest")
+        .attach("file", tinyPng, "harvest-internal-draft.png");
+      expect(unlinkedHarvestUp.status).toBe(201);
+      const unlinkedHarvestId = Number(unlinkedHarvestUp.body.id);
+      attachmentIds.push(unlinkedHarvestId);
+
+      const tokRows = await db.query<{ id: number; public_token: string }>(
+        "SELECT id, public_token FROM attachments WHERE id = ANY($1::bigint[])",
+        [[lotPhotoId, unlinkedHarvestId]],
+      );
+      const lotPhotoToken = tokRows.rows.find((r) => Number(r.id) === lotPhotoId)!.public_token;
+      const unlinkedHarvestToken = tokRows.rows.find((r) => Number(r.id) === unlinkedHarvestId)!.public_token;
+
+      expect((await request(app).get(`/api/public/files/${lotPhotoToken}`)).status).toBe(404);
+      expect((await request(app).get(`/api/public/files/${unlinkedHarvestToken}`)).status).toBe(404);
+
+      // 4. Tạo lô hàng mới ở khâu lấy mẫu & nghiệm thu sang xuất khẩu kèm chuẩn NĐ 37 (ghi vết vào immutable_change_logs + sinh sự kiện EVT)
+      const createLotRes = await htxOfficer.post("/api/harvest").send({
+        code: nd37LotCode,
+        variety: "Monthong",
+        harvestedOn: "2026-08-10",
+        packedOn: "2026-08-11",
+        weightTons: 1.2,
+        enterpriseId: entOwnerId,
+        buyer: "Đối tác Nhập khẩu Bí Mật Thượng Hải",
+        market: "Trung Quốc (GACC)",
+        status: "sampling",
+      });
+      expect(createLotRes.status).toBe(201);
+      nd37LotId = Number(createLotRes.body.id);
+
+      // Gắn 2 hộ đóng góp từ Thôn 1 (hhA) và Thôn 2 (hhB) qua API để tự động đồng bộ sự kiện EVT
+      expect(
+        (
+          await htxOfficer.post(`/api/harvest/${nd37LotId}/contributions`).send({
+            householdId: ids.hhA,
+            plotCode: FX.hhA.plot,
+            weightKg: 500,
+          })
+        ).status,
+      ).toBe(201);
+      expect(
+        (
+          await htxOfficer.post(`/api/harvest/${nd37LotId}/contributions`).send({
+            householdId: ids.hhB,
+            plotCode: FX.hhB.plot,
+            weightKg: 700,
+          })
+        ).status,
+      ).toBe(201);
+
+      // Chặn cán bộ khác (admin) gắn chiếm dụng tệp staging chưa liên kết của htxOfficer (400)
+      expect(
+        (
+          await admin.patch(`/api/harvest/${nd37LotId}`).send({
+            productImageId: unlinkedHarvestId,
+          })
+        ).status,
+      ).toBe(400);
+
+      // Chính người tải lên (htxOfficer) gắn ảnh sản phẩm lô hàng thành công (lô vẫn đang ở trạng thái sampling trước xuất)
+      expect(
+        (
+          await htxOfficer.patch(`/api/harvest/${nd37LotId}`).send({
+            productImageId: lotPhotoId,
+          })
+        ).status,
+      ).toBe(200);
+
+      // Ảnh đã gắn với harvest_lots.product_image_id được mở công khai (200), còn ảnh harvest nháp vẫn 404!
+      expect((await request(app).get(`/api/public/files/${lotPhotoToken}`)).status).toBe(200);
+      expect((await request(app).get(`/api/public/files/${unlinkedHarvestToken}`)).status).toBe(404);
+
+      // 5. Tạo nhật ký chăm sóc & phun thuốc trước khi chốt xuất khẩu lô, kiểm tra RBAC xác minh và cơ chế tự hủy xác minh khi sửa nội dung
+      const createJournalARes = await htxOfficer.post("/api/journal").send({
+        entryOn: todayIso,
+        householdId: ids.hhA,
+        plotCode: FX.hhA.plot,
+        activity: "Bón phân hữu cơ vi sinh",
+        detail: "Bón 3kg/gốc quanh tán",
+      });
+      expect(createJournalARes.status).toBe(201);
+      journalAId = Number(createJournalARes.body.id);
+      expect(createJournalARes.body.verificationStatus).toBe("self_declared");
+
+      const createJournalBRes = await htxOfficer.post("/api/journal").send({
+        entryOn: todayIso,
+        householdId: ids.hhB,
+        plotCode: FX.hhB.plot,
+        activity: "Tưới nước nhỏ giọt",
+        detail: "Tưới ẩm đầu ngày",
+      });
+      expect(createJournalBRes.status).toBe(201);
+      journalBId = Number(createJournalBRes.body.id);
+
+      // Sửa nhật ký hộ B để tạo bản ghi immutable_change_logs thuộc Thôn 2
+      expect(
+        (
+          await admin.patch(`/api/journal/${journalBId}`).send({
+            detail: "Tưới ẩm đầu ngày 45 phút",
+          })
+        ).status,
+      ).toBe(200);
+
+      const pestRes = await db.query<{ id: number }>("SELECT id FROM pesticides WHERE status = 'allowed' LIMIT 1");
+      const pesticideId = Number(pestRes.rows[0].id);
+      const createSprayARes = await htxOfficer.post("/api/spray").send({
+        sprayedOn: "2026-07-01",
+        householdId: ids.hhA,
+        plotCode: FX.hhA.plot,
+        pesticideId,
+        dose: "20ml / bình 20L",
+        areaHa: 1.0,
+        isolationDays: 14,
+        lateReason: "Đối chiếu bổ sung sổ phun đầu vụ",
+      });
+      expect(createSprayARes.status).toBe(201);
+      sprayAId = Number(createSprayARes.body.id);
+      expect(createSprayARes.body.verificationStatus).toBe("self_declared");
+
+      // Chặn nông hộ, doanh nghiệp, cán bộ thôn và thanh tra ngoài địa bàn tự ý bấm xác minh nhật ký (403)
+      expect((await farmer.post(`/api/journal/${journalAId}/verify`).send({ verified: true })).status).toBe(403);
+      expect((await entOwnerAgent.post(`/api/journal/${journalAId}/verify`).send({ verified: true })).status).toBe(403);
+      expect((await villageOfficer.post(`/api/journal/${journalAId}/verify`).send({ verified: true })).status).toBe(
+        403,
+      );
+      expect((await outStaffAgent.post(`/api/journal/${journalAId}/verify`).send({ verified: true })).status).toBe(403);
+      expect((await farmer.post(`/api/spray/${sprayAId}/verify`).send({ verified: true })).status).toBe(403);
+      expect((await villageOfficer.post(`/api/spray/${sprayAId}/verify`).send({ verified: true })).status).toBe(403);
+
+      // Cán bộ kỹ thuật HTX trong phạm vi xác minh thành công (200)
+      const verifyJournalRes = await htxOfficer.post(`/api/journal/${journalAId}/verify`).send({ verified: true });
+      expect(verifyJournalRes.status).toBe(200);
+      expect(verifyJournalRes.body.verificationStatus).toBe("verified");
+      expect(verifyJournalRes.body.verifiedByName).toBeTruthy();
+
+      const verifySprayRes = await htxOfficer.post(`/api/spray/${sprayAId}/verify`).send({ verified: true });
+      expect(verifySprayRes.status).toBe(200);
+      expect(verifySprayRes.body.verificationStatus).toBe("verified");
+
+      // Nếu nội dung nhật ký bị sửa sau khi đã xác minh -> trigger tự động đưa về 'self_declared'
+      const editAfterVerifyRes = await htxOfficer.patch(`/api/journal/${journalAId}`).send({
+        detail: "Bón 3.5kg/gốc quanh tán sau mưa",
+      });
+      expect(editAfterVerifyRes.status).toBe(200);
+      expect(editAfterVerifyRes.body.verificationStatus).toBe("self_declared");
+      expect(editAfterVerifyRes.body.verifiedAt).toBeNull();
+
+      // Xác minh lại sau khi đã kiểm tra nội dung mới
+      const reVerifyRes = await htxOfficer.post(`/api/journal/${journalAId}/verify`).send({ verified: true });
+      expect(reVerifyRes.status).toBe(200);
+      expect(reVerifyRes.body.verificationStatus).toBe("verified");
+
+      // Nghiệm thu lô hàng sang trạng thái xuất khẩu qua API (kích hoạt trigger immutable_change_logs + bảo toàn productImageId)
+      const patchLotRes = await admin.patch(`/api/harvest/${nd37LotId}`).send({
+        brandName: "Cư Né Durian Select",
+        expiryOn: "2026-09-15",
+        storageCondition: "Bảo quản mát 13°C đến 15°C, độ ẩm 85% đến 90%",
+        productImageId: lotPhotoId,
+        exportedOn: "2026-08-12",
+        weightTons: 1.5,
+        status: "exported",
+      });
+      expect(patchLotRes.status).toBe(200);
+      expect(patchLotRes.body.brandName).toBe("Cư Né Durian Select");
+      expect(patchLotRes.body.productImageUrl).toContain(lotPhotoToken);
+
+      // 6. CẤP 1 (Công khai): thấy đủ trường NĐ 37, GACC, tổng đếm nhật ký đã xác minh & mã sự kiện EVT, KHÔNG lộ dữ liệu nội bộ
+      const pubLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(nd37LotCode)}`);
+      expect(pubLotRes.status).toBe(200);
+      const pubData = pubLotRes.body.publicData;
+      expect(pubData.lotIdentity.brandName).toBe("Cư Né Durian Select");
+      expect(pubData.lotIdentity.expiryOn).toBe("2026-09-15");
+      expect(pubData.lotIdentity.storageCondition).toContain("13°C");
+      expect(pubData.lotIdentity.productImageUrl).toContain(lotPhotoToken);
+      expect(pubData.growingZone.gaccCode).toBe("CVN240111222");
+      expect(pubData.growingZone.geoCheck?.checkedPlotCount).toBe(2);
+      expect(pubData.packhouse.gaccCode).toBe("CVN240999888");
+      expect(pubData.producer.coopTaxCode).toBe("6001778899");
+      expect(pubData.integritySeal.chainVerified).toBe(true);
+      expect(pubData.integritySeal.verifiedDiaryRecords).toBeGreaterThanOrEqual(2);
+      expect(typeof pubData.integritySeal.selfDeclaredDiaryRecords).toBe("number");
+
+      const expectedHarvestEvt = `EVT-${nd37LotCode}-02-HARV`;
+      const timelineSteps = pubData.timeline as Array<{
+        key: string;
+        eventCode: string;
+        recordedByName?: string | null;
+      }>;
+      expect(timelineSteps.find((s) => s.key === "harvest")?.eventCode).toBe(expectedHarvestEvt);
+      for (const st of timelineSteps) {
+        expect(st.eventCode).toMatch(/^EVT-/);
+        expect(st.recordedByName ?? null).toBeNull();
+      }
+      expect(pubLotRes.body).not.toHaveProperty("enterpriseData");
+      expect(pubLotRes.body).not.toHaveProperty("authorityData");
+      const pubSerialized = JSON.stringify(pubLotRes.body);
+      expect(pubSerialized).not.toContain("Đối tác Nhập khẩu Bí Mật Thượng Hải");
+      expect(pubSerialized).not.toContain(htxOfficerFullName);
+      expect(pubSerialized).not.toContain("immutableChangeLogs");
+
+      // Tra cứu trực tiếp bằng Mã sự kiện trọng yếu (EVT-...)
+      const evtLookupRes = await request(app).get(
+        `/api/public/trace/${encodeURIComponent(`Mã sự kiện: ${expectedHarvestEvt}`)}`,
+      );
+      expect(evtLookupRes.status).toBe(200);
+      expect(evtLookupRes.body.publicData.lotIdentity.lotCode).toBe(nd37LotCode);
+      expect(evtLookupRes.body.publicData.lotIdentity.matchedEventCode).toBe(expectedHarvestEvt);
+      expect(evtLookupRes.body).not.toHaveProperty("authorityData");
+
+      // 7. CẤP 2 (Doanh nghiệp chủ lô vs Doanh nghiệp đối thủ)
+      const rivalTrace = await entRivalAgent.get(`/api/trace/${encodeURIComponent(nd37LotCode)}`);
+      expect(rivalTrace.status).toBe(200);
+      expect(rivalTrace.body.accessControl.scopeDenied).toBe(true);
+      expect(rivalTrace.body.accessControl.viewerTier).toBe("public");
+      expect(rivalTrace.body).not.toHaveProperty("enterpriseData");
+
+      const ownerTrace = await entOwnerAgent.get(`/api/trace/${encodeURIComponent(nd37LotCode)}`);
+      expect(ownerTrace.status).toBe(200);
+      expect(ownerTrace.body.accessControl.viewerTier).toBe("enterprise");
+      expect(ownerTrace.body).not.toHaveProperty("authorityData");
+      expect(ownerTrace.body.enterpriseData.zoneGeoCheck?.checkedPlotCount).toBe(2);
+
+      const ownerEvidence = ownerTrace.body.enterpriseData.evidenceLogs as Array<{
+        activity: string;
+        verificationStatus: string;
+        verifiedByLabel: string | null;
+        verifiedByName?: string;
+      }>;
+      const verifiedEv = ownerEvidence.find((e) => e.activity === "Bón phân hữu cơ vi sinh")!;
+      expect(verifiedEv).toBeDefined();
+      expect(verifiedEv.verificationStatus).toBe("verified");
+      expect(verifiedEv.verifiedByLabel).toBe("Ban Kỹ thuật HTX");
+      expect(verifiedEv.verifiedByName).toBeUndefined();
+      // Doanh nghiệp bên ngoài KHÔNG được thấy họ tên cá nhân của cán bộ HTX hoặc nhật ký kiểm toán bất biến
+      const ownerSerialized = JSON.stringify(ownerTrace.body);
+      expect(ownerSerialized).not.toContain(htxOfficerFullName);
+      expect(ownerSerialized).not.toContain("immutableChangeLogs");
+      expect(ownerSerialized).not.toContain("Đối tác Nhập khẩu Bí Mật Thượng Hải");
+
+      // 8. CẤP 3 (Thanh tra trong địa bàn vs Cán bộ Thôn 1 vs Quyền tạm thời)
+      const inspTrace = await inspector.get(`/api/trace/${encodeURIComponent(nd37LotCode)}`);
+      expect(inspTrace.status).toBe(200);
+      expect(inspTrace.body.accessControl.viewerTier).toBe("authority");
+      const inspDiaries = inspTrace.body.authorityData.cultivationDiaries as Array<{
+        activity: string;
+        verificationStatus: string;
+        verifiedByName: string | null;
+      }>;
+      const inspVerifiedDiary = inspDiaries.find((d) => d.activity === "Bón phân hữu cơ vi sinh")!;
+      expect(inspVerifiedDiary.verificationStatus).toBe("verified");
+      expect(inspVerifiedDiary.verifiedByName).toBe(htxOfficerFullName);
+
+      const inspImmutable = inspTrace.body.authorityData.immutableChangeLogs as Array<{
+        id: number;
+        tableName: string;
+        recordId: number;
+        oldData: Record<string, unknown>;
+        newData: Record<string, unknown> | null;
+        entryHash: string;
+      }>;
+      expect(Array.isArray(inspImmutable)).toBe(true);
+      expect(inspImmutable.some((l) => l.tableName === "harvest_lots" && l.recordId === nd37LotId)).toBe(true);
+      expect(inspImmutable.some((l) => l.tableName === "journal_entries" && l.recordId === journalAId)).toBe(true);
+      expect(inspImmutable.some((l) => l.tableName === "journal_entries" && l.recordId === journalBId)).toBe(true);
+      const immSerialized = JSON.stringify(inspImmutable);
+      expect(immSerialized).not.toContain("Đối tác Nhập khẩu Bí Mật Thượng Hải");
+      expect(immSerialized).not.toContain("qr_token");
+      expect(immSerialized).not.toContain("enterprise_id");
+
+      // Cán bộ Thôn 1 xem lô ghép 2 thôn: CHỈ được thấy immutableChangeLogs của hộ Thôn 1 (journalAId), KHÔNG thấy cấp lô thương mại hay hộ Thôn 2 (journalBId)
+      const voTrace = await villageOfficer.get(`/api/trace/${encodeURIComponent(nd37LotCode)}`);
+      expect(voTrace.status).toBe(200);
+      expect(voTrace.body.accessControl.viewerTier).toBe("authority");
+      const voImmutable = voTrace.body.authorityData.immutableChangeLogs as Array<{
+        tableName: string;
+        recordId: number;
+      }>;
+      expect(voImmutable.some((l) => l.tableName === "journal_entries" && l.recordId === journalAId)).toBe(true);
+      expect(voImmutable.some((l) => l.tableName === "harvest_lots")).toBe(false);
+      expect(voImmutable.some((l) => l.recordId === journalBId)).toBe(false);
+
+      // Đoàn kiểm tra tạm thời (record grant): thấy được immutableChangeLogs nhưng tên cá nhân cán bộ được thay bằng chức danh
+      const tempReq = await outStaffAgent.post("/api/public/trace-access-requests").send({
+        scannedCode: nd37LotCode,
+        requesterName: "Đoàn Kiểm Tra Liên Tỉnh",
+        organization: "Cục Chất lượng, Chế biến và Phát triển thị trường",
+        contactPhone: "0988776655",
+        purpose: "Kiểm tra nhật ký bất biến theo Nghị định 37",
+        requestedTier: "authority",
+      });
+      expect(tempReq.status).toBe(201);
+      reqCodes.push(tempReq.body.requestCode as string);
+      const tempReqId = Number(
+        (
+          await db.query<{ id: number }>("SELECT id FROM trace_access_requests WHERE request_code = $1", [
+            tempReq.body.requestCode,
+          ])
+        ).rows[0].id,
+      );
+      expect((await admin.post(`/api/trace-requests/${tempReqId}/approve`).send({ grantedTier: "authority" })).status).toBe(
+        200,
+      );
+      const tempGrantTrace = await outStaffAgent.get(`/api/trace/${encodeURIComponent(nd37LotCode)}`);
+      expect(tempGrantTrace.status).toBe(200);
+      expect(tempGrantTrace.body.accessControl.viewerTier).toBe("authority");
+      const tempImm = tempGrantTrace.body.authorityData.immutableChangeLogs as Array<{ actorLabel: string }>;
+      expect(tempImm.length).toBeGreaterThan(0);
+      expect(JSON.stringify(tempImm)).not.toContain(htxOfficerFullName);
+
+      // 9. Khóa cứng cấp PostgreSQL: cấm tuyệt đối UPDATE và DELETE trên bảng immutable_change_logs
+      const sampleLogId = inspImmutable[0]!.id;
+      await expect(
+        db.query("UPDATE immutable_change_logs SET actor_name = 'Giả mạo' WHERE id = $1", [sampleLogId]),
+      ).rejects.toThrow(/immutable_change_logs/);
+      await expect(
+        db.query("DELETE FROM immutable_change_logs WHERE id = $1", [sampleLogId]),
+      ).rejects.toThrow(/immutable_change_logs/);
+    } finally {
+      if (reqCodes.length > 0) {
+        await db.query("DELETE FROM trace_access_requests WHERE request_code = ANY($1::text[])", [reqCodes]);
+      }
+      if (sprayAId) {
+        await db.query("DELETE FROM spray_records WHERE id = $1", [sprayAId]);
+      }
+      const jIds = [journalAId, journalBId].filter(Boolean);
+      if (jIds.length > 0) {
+        await db.query("DELETE FROM journal_entries WHERE id = ANY($1::bigint[])", [jIds]);
+      }
+      if (nd37LotId) {
+        await db.query("DELETE FROM trace_detail_access_logs WHERE lot_code = $1", [nd37LotCode]);
+        await db.query("DELETE FROM trace_scan_logs WHERE resolved_lot_code = $1", [nd37LotCode]);
+        await db.query("DELETE FROM harvest_lots WHERE id = $1", [nd37LotId]);
+      }
+      if (attachmentIds.length > 0) {
+        await db.query("DELETE FROM attachments WHERE id = ANY($1::bigint[])", [attachmentIds]);
+      }
+      await db.query("DELETE FROM users WHERE username = ANY($1::text[])", [
+        [entOwnerUser, entRivalUser, outStaffUser],
+      ]);
+      const eIds = [entOwnerId, entRivalId].filter(Boolean);
+      if (eIds.length > 0) {
+        await db.query("DELETE FROM enterprises WHERE id = ANY($1::bigint[])", [eIds]);
+      }
+      await db.query(
+        `UPDATE growing_zones
+         SET gacc_code = $2, mard_approved_on = $3::date, gacc_approved_on = $4::date
+         WHERE code = $1`,
+        [
+          primaryZone.code,
+          primaryZone.gacc_code,
+          primaryZone.mard_approved_on,
+          primaryZone.gacc_approved_on,
+        ],
+      );
+      if (origEndorse) {
+        await db.query(
+          `UPDATE commune_endorsement_config
+           SET coop_legal_name = $1, coop_tax_code = $2, coop_address = $3
+           WHERE id = 1`,
+          [origEndorse.coopLegalName, origEndorse.coopTaxCode, origEndorse.coopAddress],
+        );
+      }
+    }
+  });
+
+  it("cập nhật tức thời mọi số liệu trên hồ sơ A4 (xóa cache L1) và trả đủ danh sách lớn (>35 bản ghi) phục vụ phân trang nhiều tờ A4", async () => {
+    const admin = await loggedIn("0901234567");
+    const htxOfficer = await loggedIn("0912345678");
+    const inspector = await loggedIn(USERS.inspector);
+    const ts = Date.now();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const bulkLotCode = `DL-BULK-${String(ts).slice(-6)}`;
+    let bulkLotId = 0;
+    const bulkJournalIds: number[] = [];
+
+    try {
+      // 1. Tạo lô hàng mới kèm đóng góp ban đầu và đọc lần đầu để nạp vào bộ nhớ đệm L1 ("trace")
+      const createRes = await htxOfficer.post("/api/harvest").send({
+        code: bulkLotCode,
+        variety: "Monthong",
+        harvestedOn: "2026-07-02",
+        packedOn: "2026-07-03",
+        weightTons: 1.2,
+        buyer: "Công ty Thực phẩm Xuất khẩu A4",
+        market: "Trung Quốc (GACC)",
+        status: "sampling",
+        brandName: "Nhãn Cũ A4",
+        avgBrix: 25.5,
+        gradeAPct: 82,
+        gradeBPct: 14,
+        gradeCPct: 4,
+      });
+      expect(createRes.status).toBe(201);
+      bulkLotId = Number(createRes.body.id);
+
+      expect(
+        (
+          await htxOfficer.post(`/api/harvest/${bulkLotId}/contributions`).send({
+            householdId: ids.hhA,
+            plotCode: FX.hhA.plot,
+            weightKg: 600,
+          })
+        ).status,
+      ).toBe(201);
+
+      const pubInitial = await request(app).get(`/api/public/trace/${encodeURIComponent(bulkLotCode)}`);
+      expect(pubInitial.status).toBe(200);
+      expect(Number(pubInitial.body.publicData.lotIdentity.weightTons)).toBeCloseTo(1.2, 2);
+      expect(pubInitial.body.publicData.lotIdentity.brandName).toBe("Nhãn Cũ A4");
+      expect(Number(pubInitial.body.publicData.lotIdentity.avgBrix)).toBeCloseTo(25.5, 1);
+      expect(pubInitial.body.publicData.producer.participatingHouseholdCount).toBe(1);
+
+      // 2. Cập nhật số liệu lô hàng & bổ sung hộ đóng góp thứ 2 qua API -> phản ánh tức thời trên hồ sơ A4 không bị kẹt cache L1
+      expect(
+        (
+          await htxOfficer.post(`/api/harvest/${bulkLotId}/contributions`).send({
+            householdId: ids.hhB,
+            plotCode: FX.hhB.plot,
+            weightKg: 850,
+          })
+        ).status,
+      ).toBe(201);
+
+      const patchRes = await admin.patch(`/api/harvest/${bulkLotId}`).send({
+        weightTons: 1.45,
+        brandName: "Nhãn Mới Đắk Lắk A4",
+        avgBrix: 28.4,
+        gradeAPct: 91,
+        gradeBPct: 7,
+        gradeCPct: 2,
+        expiryOn: "2026-08-18",
+      });
+      expect(patchRes.status).toBe(200);
+
+      const pubAfterPatch = await request(app).get(`/api/public/trace/${encodeURIComponent(bulkLotCode)}`);
+      expect(pubAfterPatch.status).toBe(200);
+      expect(Number(pubAfterPatch.body.publicData.lotIdentity.weightTons)).toBeCloseTo(1.45, 2);
+      expect(pubAfterPatch.body.publicData.lotIdentity.brandName).toBe("Nhãn Mới Đắk Lắk A4");
+      expect(Number(pubAfterPatch.body.publicData.lotIdentity.avgBrix)).toBeCloseTo(28.4, 1);
+      expect(pubAfterPatch.body.publicData.lotIdentity.gradeAPct).toBe(91);
+      expect(pubAfterPatch.body.publicData.lotIdentity.expiryOn).toBe("2026-08-18");
+      expect(pubAfterPatch.body.publicData.producer.participatingHouseholdCount).toBe(2);
+
+      // 3. Tải lên đồng loạt 36 bản ghi nhật ký canh tác (vượt giới hạn 20/25 cũ) và kiểm tra hồ sơ Cấp 3 trả đủ cho phân trang A4
+      for (let idx = 1; idx <= 36; idx += 1) {
+        const jRes = await htxOfficer.post("/api/journal").send({
+          householdId: ids.hhA,
+          plotCode: FX.hhA.plot,
+          entryOn: todayIso,
+          activity: `Tưới nhỏ giọt và tỉa cành đợt ${String(idx).padStart(2, "0")}`,
+          detail: `Kiểm tra ẩm độ gốc lô A4 lượt ${idx}`,
+        });
+        expect(jRes.status).toBe(201);
+        bulkJournalIds.push(Number(jRes.body.id));
+      }
+
+      // Xác minh bản ghi mới nhất và kiểm tra bộ đếm trên tờ A4 tăng tức thời
+      const verifyLatest = await htxOfficer
+        .post(`/api/journal/${bulkJournalIds[bulkJournalIds.length - 1]}/verify`)
+        .send({ verified: true });
+      expect(verifyLatest.status).toBe(200);
+
+      const inspLotAfterBulk = await inspector.get(`/api/trace/${encodeURIComponent(bulkLotCode)}`);
+      expect(inspLotAfterBulk.status).toBe(200);
+      expect(inspLotAfterBulk.body.authorityData.cultivationDiaries.length).toBeGreaterThanOrEqual(36);
+      expect(inspLotAfterBulk.body.publicData.integritySeal.totalSealedRecords).toBeGreaterThanOrEqual(36);
+      expect(inspLotAfterBulk.body.publicData.integritySeal.verifiedDiaryRecords).toBeGreaterThanOrEqual(1);
+
+      const inspPlotAfterBulk = await inspector.get(`/api/trace/${encodeURIComponent(FX.hhA.plot)}`);
+      expect(inspPlotAfterBulk.status).toBe(200);
+      expect(inspPlotAfterBulk.body.authorityData.cultivationDiaries.length).toBeGreaterThanOrEqual(36);
+      expect(inspPlotAfterBulk.body.fieldAuditData.sealedLedger.length).toBeGreaterThanOrEqual(36);
+    } finally {
+      if (bulkJournalIds.length > 0) {
+        await db.query("DELETE FROM journal_entries WHERE id = ANY($1::bigint[])", [bulkJournalIds]);
+      }
+      if (bulkLotId) {
+        await db.query("DELETE FROM trace_detail_access_logs WHERE lot_code = $1", [bulkLotCode]);
+        await db.query("DELETE FROM trace_scan_logs WHERE resolved_lot_code = $1", [bulkLotCode]);
+        await db.query("DELETE FROM harvest_lots WHERE id = $1", [bulkLotId]);
+      }
+    }
+  });
 });

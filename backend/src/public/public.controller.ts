@@ -71,7 +71,7 @@ export class PublicController {
   constructor(
     private readonly db: DatabaseService,
     private readonly traceability: TraceabilityService,
-  ) {}
+  ) { }
 
   @Public()
   @Throttle(RateLimitTier.PUBLIC_READ)
@@ -306,7 +306,7 @@ export class PublicController {
  */
 @Controller("trace")
 export class AuthenticatedTraceController {
-  constructor(private readonly traceability: TraceabilityService) {}
+  constructor(private readonly traceability: TraceabilityService) { }
 
   @Throttle(RateLimitTier.AUTH_TRACE)
   @Get(":code")
