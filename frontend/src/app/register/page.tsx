@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AuthShell from "@/components/auth/AuthShell";
-import { homePathFor } from "@/lib/routes";
+import { homePathFor, INTRO_PATH } from "@/lib/routes";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -51,7 +51,7 @@ export default function RegisterPage() {
               <strong className="auth-timeline-title">Tuân thủ quy trình chuẩn 2026-2027 và ghi nhật ký</strong>
               <p className="auth-timeline-desc">
                 Áp dụng đúng khuyến nghị quy trình chăm sóc sầu riêng 2026-2027 của HTX và cập nhật nhật ký đầy đủ để được đảm bảo thu mua đúng giá.{" "}
-                <Link href="/#quy-trinh" className="auth-switch-btn" style={{ marginLeft: 0 }}>
+                <Link href={`${INTRO_PATH}#quy-trinh`} className="auth-switch-btn" style={{ marginLeft: 0 }}>
                   Xem quy trình 2026-2027
                 </Link>
               </p>

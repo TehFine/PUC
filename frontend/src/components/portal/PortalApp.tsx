@@ -46,6 +46,7 @@ import {
   pushUrlNavigation,
   readWorkspaceUrl,
   replaceUrlPreservingState,
+  resetOverlayHistoryOnRouteLeave,
   saveWorkspaceUrl,
   usePersistedState,
 } from "@/lib/back-navigation";
@@ -919,16 +920,22 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
     }
     const rawLink = (item.link || "").trim();
     if (item.kind === "system") {
-      setNotifOpen(false);
       if (rawLink.startsWith("/portal")) {
+        setNotifOpen(false);
         const target = resolveNotificationTarget(item);
         navigate(target.tab, target.action);
         return;
       }
       if (rawLink.startsWith("/#") || rawLink.startsWith("/gioi-thieu")) {
-        router.push(rawLink);
+        resetOverlayHistoryOnRouteLeave();
+        setNotifOpen(false);
+        const introTarget = rawLink.startsWith("/#")
+          ? `${INTRO_PATH}${rawLink.slice(1)}`
+          : rawLink;
+        router.push(introTarget);
         return;
       }
+      setNotifOpen(false);
       setSupportOpen(true);
       return;
     }
@@ -959,7 +966,13 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       <header className="pt-topbar">
         <div className="pt-topbar-inner">
           {/* Logo thương hiệu HTX Cư Né (hiển thị trên Desktop/Laptop) */}
-          <Link href={INTRO_PATH} className="pt-brand" aria-label="HTX Cư Né – về trang giới thiệu" title="Về trang giới thiệu">
+          <Link
+            href={INTRO_PATH}
+            className="pt-brand"
+            aria-label="HTX Cư Né - về trang giới thiệu"
+            title="Về trang giới thiệu"
+            onClick={() => resetOverlayHistoryOnRouteLeave()}
+          >
             <span className="pt-brand-mark" aria-hidden="true">
               <Image src="/newlogo.png" alt="" width={32} height={32} />
             </span>
@@ -1404,7 +1417,10 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
               <Link
                 href={INTRO_PATH}
                 className="pt-profile-intro-btn"
-                onClick={closeProfile}
+                onClick={() => {
+                  resetOverlayHistoryOnRouteLeave();
+                  closeProfile();
+                }}
                 title={t("Về trang giới thiệu HTX Cư Né")}
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">

@@ -8,6 +8,7 @@ import { ALLOWED_IMAGE_MIMES } from "@/components/portal/shared/media";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { ROLE_LABELS } from "@/constants/roles";
 import { api, errorMessage } from "@/lib/api-client";
+import { resetOverlayHistoryOnRouteLeave } from "@/lib/back-navigation";
 import type { Role } from "@/types/api";
 import { isSafeTraceCode, safeDecodeURIComponent } from "@/utils/url-safety";
 
@@ -441,6 +442,7 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
               href={fullDossierHref}
               className="btn btn-primary"
               onClick={() => {
+                resetOverlayHistoryOnRouteLeave();
                 stopCamera();
                 onClose();
               }}

@@ -100,6 +100,8 @@ let pendingReplaceUrl: string | null = null;
 let pendingPushUrl: string | null = null;
 let syncQueued = false;
 let listenerInstalled = false;
+let routeLeaveFromPath: string | null = null;
+let routeLeaveLockUntil = 0;
 
 function clearPendingGoBackWatchdog(): void {
   if (pendingGoBackWatchdog !== null) {
@@ -226,10 +228,43 @@ function handleWindowPopState(event: PopStateEvent): void {
   window.dispatchEvent(new CustomEvent(PUC_URL_SYNC_EVENT));
 }
 
+function handleDocumentLinkClickCapture(event: MouseEvent): void {
+  if (typeof window === "undefined") return;
+  if (event.defaultPrevented || event.button !== 0) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const anchor = target.closest("a[href]");
+  if (!(anchor instanceof HTMLAnchorElement)) return;
+  if (anchor.hasAttribute("download")) return;
+  const linkTarget = (anchor.getAttribute("target") || "").trim().toLowerCase();
+  if (linkTarget && linkTarget !== "_self") return;
+  const rawHref = (anchor.getAttribute("href") || "").trim();
+  if (
+    !rawHref ||
+    rawHref.startsWith("#") ||
+    rawHref.startsWith("javascript:") ||
+    rawHref.startsWith("mailto:") ||
+    rawHref.startsWith("tel:")
+  ) {
+    return;
+  }
+  try {
+    const nextUrl = new URL(anchor.href, window.location.origin);
+    if (nextUrl.origin !== window.location.origin) return;
+    if (nextUrl.pathname !== window.location.pathname) {
+      resetOverlayHistoryOnRouteLeave();
+    }
+  } catch {
+    // Bỏ qua nếu href không hợp lệ
+  }
+}
+
 function ensurePopStateListener(): void {
   if (listenerInstalled || typeof window === "undefined") return;
   listenerInstalled = true;
   window.addEventListener("popstate", handleWindowPopState, true);
+  document.addEventListener("click", handleDocumentLinkClickCapture, true);
 }
 
 function scheduleOverlaySync(): void {
@@ -240,6 +275,19 @@ function scheduleOverlaySync(): void {
     if (typeof window === "undefined") return;
 
     const currentPath = window.location.pathname;
+    if (routeLeaveFromPath !== null) {
+      if (currentPath !== routeLeaveFromPath || Date.now() >= routeLeaveLockUntil) {
+        routeLeaveFromPath = null;
+        routeLeaveLockUntil = 0;
+      } else {
+        // Đang trong quá trình chuyển route bất đồng bộ của Next.js (<Link> / router.push):
+        // tuyệt đối không gọi history.go(-delta) để tránh trình duyệt hủy ngang điều hướng.
+        overlayStack.length = 0;
+        pushedOverlayCount = 0;
+        return;
+      }
+    }
+
     for (let i = overlayStack.length - 1; i >= 0; i -= 1) {
       if (overlayStack[i].pathname !== currentPath) {
         overlayStack.splice(i, 1);
@@ -339,6 +387,8 @@ export function resetOverlayHistoryOnRouteLeave(): void {
   pendingPushUrl = null;
   clearPendingGoBackWatchdog();
   if (typeof window === "undefined") return;
+  routeLeaveFromPath = window.location.pathname;
+  routeLeaveLockUntil = Date.now() + 900;
   try {
     if (readCurrentOverlayDepth(window.history.state) > 0) {
       window.history.replaceState(

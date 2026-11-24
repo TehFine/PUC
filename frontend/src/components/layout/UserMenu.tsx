@@ -14,7 +14,7 @@ import { Field, Sheet } from "@/components/portal/ui";
 import { DetailArrowIcon } from "@/components/ui/DetailArrowIcon";
 import { ROLE_LABELS } from "@/constants/roles";
 import { errorMessage } from "@/lib/api-client";
-import { usePersistedState } from "@/lib/back-navigation";
+import { resetOverlayHistoryOnRouteLeave, usePersistedState } from "@/lib/back-navigation";
 import { INTRO_PATH } from "@/lib/routes";
 
 const QrScannerModal = dynamic(() => import("@/components/admin/harvest/QrScannerModal"), { ssr: false });
@@ -312,7 +312,10 @@ export default function UserMenu({
               <Link
                 href={INTRO_PATH}
                 className="pt-profile-intro-btn"
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  resetOverlayHistoryOnRouteLeave();
+                  setOpen(false);
+                }}
                 title="Về trang giới thiệu HTX Cư Né"
               >
                 <span className="pt-profile-action-icon" aria-hidden="true">

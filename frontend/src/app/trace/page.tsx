@@ -11,7 +11,7 @@ import { Search } from "@/components/ui/PublicIcon";
 import { ROLE_LABELS } from "@/constants/roles";
 import { AUTH_EXPIRED_EVENT, AUTH_LOGOUT_EVENT, api } from "@/lib/api-client";
 import { replaceUrlPreservingState } from "@/lib/back-navigation";
-import { homePathFor } from "@/lib/routes";
+import { homePathFor, INTRO_PATH } from "@/lib/routes";
 import { isSafeTraceCode, safeDecodeURIComponent } from "@/utils/url-safety";
 import { persistTraceLang, rememberTraceKindHint } from "./[code]/trace-i18n";
 import "@/components/landing/landing.css";
@@ -400,7 +400,7 @@ export default function TraceLookupPage() {
       {/* ─── Thanh điều hướng cố định đồng bộ Landing Page (Không viền bao chữ HTX Cư Né) ─── */}
       <header className="sw-trace-topbar">
         <div className="sw-trace-topbar-inner">
-          <Link href="/" className="sw-trace-brand">
+          <Link href={INTRO_PATH} className="sw-trace-brand">
             <Image src="/newlogo.png" alt="" width={22} height={22} className="eh-brand-logo" />
             <span>HTX Cư Né</span>
           </Link>
@@ -412,8 +412,8 @@ export default function TraceLookupPage() {
           </nav>
 
           <div className="sw-trace-top-actions">
-            <Link href="/" className="sw-trace-top-link">
-              Trang chủ
+            <Link href={INTRO_PATH} className="sw-trace-top-link">
+              Trang giới thiệu
             </Link>
             <span className="sw-trace-top-sep" aria-hidden="true" />
             {authenticated ? (

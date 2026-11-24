@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import DwellSlideshow, { type DwellSlide } from "@/components/landing/DwellSlideshow";
+import { INTRO_PATH } from "@/lib/routes";
 import "./auth.css";
 
 type Variant = "login" | "register" | "forgot";
@@ -161,7 +162,7 @@ export default function AuthShell({
       <header className="auth-topbar">
         <div className="auth-topbar-inner">
           <div className="auth-brand-group">
-            <Link href="/" className="auth-brand" aria-label="HTX Cư Né – về trang giới thiệu">
+            <Link href={INTRO_PATH} className="auth-brand" aria-label="HTX Cư Né - về trang giới thiệu">
               HTX Cư Né
             </Link>
             <span className="auth-brand-sep" aria-hidden="true" />
@@ -169,7 +170,7 @@ export default function AuthShell({
           </div>
 
           <nav className="auth-topbar-actions" aria-label="Điều hướng nhanh">
-            <Link href="/" className="auth-top-link">
+            <Link href={INTRO_PATH} className="auth-top-link">
               Trang giới thiệu
             </Link>
             <Link href="/trace" className="auth-top-link is-trace">
@@ -267,7 +268,7 @@ export default function AuthShell({
             </p>
           </div>
           <nav className="auth-foot-links" aria-label="Liên kết chân trang">
-            <Link href="/" className="auth-foot-link">
+            <Link href={INTRO_PATH} className="auth-foot-link">
               Trang giới thiệu
             </Link>
             <span className="auth-foot-dot" aria-hidden="true" />

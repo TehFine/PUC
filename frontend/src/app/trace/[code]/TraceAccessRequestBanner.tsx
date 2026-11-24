@@ -233,8 +233,13 @@ export default function TraceAccessRequestBanner({
   const [savedReq, setSavedReq] = useState<SavedTraceReqSession | null>(() =>
     readSavedReq(scannedCode),
   );
+  const safeDefaultName =
+    isAuthenticated && actualTier !== "authority" && defaultRequesterName
+      ? defaultRequesterName
+      : "";
+
   const [modalOpen, setModalOpen] = useState(false);
-  const [requesterName, setRequesterName] = useState(defaultRequesterName || "");
+  const [requesterName, setRequesterName] = useState(safeDefaultName);
   const [organization, setOrganization] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [requestedTier, setRequestedTier] = useState<"enterprise" | "authority">(
@@ -243,6 +248,20 @@ export default function TraceAccessRequestBanner({
   const [purpose, setPurpose] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const [prevIsAuthenticated, setPrevIsAuthenticated] = useState(isAuthenticated);
+  if (prevIsAuthenticated !== isAuthenticated) {
+    setPrevIsAuthenticated(isAuthenticated);
+    if (!isAuthenticated) {
+      // Khi phiên đăng nhập kết thúc hoặc bị thu hồi (ví dụ bấm F12), xóa sạch dữ liệu biểu mẫu của phiên cũ
+      setRequesterName("");
+      setOrganization("");
+      setContactPhone("");
+      setPurpose("");
+      setFormError(null);
+      setModalOpen(false);
+    }
+  }
 
   const [prevScannedCode, setPrevScannedCode] = useState(scannedCode);
   if (prevScannedCode !== scannedCode) {
@@ -255,8 +274,8 @@ export default function TraceAccessRequestBanner({
     setPrevExternalTrigger(externalOpenTrigger);
     if (externalOpenTrigger > 0) {
       setFormError(null);
-      if (!requesterName && defaultRequesterName) {
-        setRequesterName(defaultRequesterName);
+      if (!requesterName && safeDefaultName) {
+        setRequesterName(safeDefaultName);
       }
       setModalOpen(true);
     }
@@ -284,8 +303,13 @@ export default function TraceAccessRequestBanner({
 
   const openRequestModal = () => {
     setFormError(null);
-    if (!requesterName && defaultRequesterName) {
-      setRequesterName(defaultRequesterName);
+    if (!isAuthenticated) {
+      // Đảm bảo khách chưa đăng nhập không bao giờ bị điền sẵn họ tên từ phiên trước trên máy dùng chung
+      if (defaultRequesterName && requesterName === defaultRequesterName) {
+        setRequesterName("");
+      }
+    } else if (!requesterName && safeDefaultName) {
+      setRequesterName(safeDefaultName);
     }
     setModalOpen(true);
   };
@@ -384,15 +408,26 @@ export default function TraceAccessRequestBanner({
   }, [checkPendingStatus, savedReq]);
 
   useEffect(() => {
+    const clearSensitiveFormState = () => {
+      setRequesterName("");
+      setOrganization("");
+      setContactPhone("");
+      setPurpose("");
+      setFormError(null);
+      setModalOpen(false);
+    };
     const clearOnLogout = () => {
       writeSavedReq(null);
       setSavedReq(null);
+      clearSensitiveFormState();
     };
     window.addEventListener(AUTH_LOGOUT_EVENT, clearOnLogout);
     window.addEventListener(AUTH_EXPIRED_EVENT, clearOnLogout);
+    window.addEventListener("pagehide", clearSensitiveFormState);
     return () => {
       window.removeEventListener(AUTH_LOGOUT_EVENT, clearOnLogout);
       window.removeEventListener(AUTH_EXPIRED_EVENT, clearOnLogout);
+      window.removeEventListener("pagehide", clearSensitiveFormState);
     };
   }, []);
 
@@ -634,6 +669,9 @@ export default function TraceAccessRequestBanner({
                     minLength={2}
                     maxLength={120}
                     autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    spellCheck={false}
                     value={requesterName}
                     onChange={(e) => setRequesterName(e.target.value)}
                     placeholder={c.namePh}
@@ -666,6 +704,9 @@ export default function TraceAccessRequestBanner({
                   minLength={2}
                   maxLength={160}
                   autoComplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  spellCheck={false}
                   value={organization}
                   onChange={(e) => setOrganization(e.target.value)}
                   placeholder={c.orgPh}

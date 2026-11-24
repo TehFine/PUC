@@ -13,8 +13,10 @@ import {
   PUC_URL_SYNC_EVENT,
   pushUrlNavigation,
   replaceUrlPreservingState,
+  resetOverlayHistoryOnRouteLeave,
 } from "@/lib/back-navigation";
 import { reportRequestTime } from "@/lib/network";
+import { INTRO_PATH } from "@/lib/routes";
 import {
   isSafeExternalHttpsUrl,
   isSafeMediaUrl,
@@ -3045,17 +3047,29 @@ export default function TraceView() {
       {/* ─── Thanh đầu trang cố định Thụy Sĩ (Trên di động ẩn chữ HTX Cư Né, giữ đúng 2 nút ở 2 phía) ─── */}
       <header className="tr-topbar">
         <div className="tr-wrap tr-topbar-inner">
-          <Link href="/" className="tr-brand">
+          <Link
+            href={INTRO_PATH}
+            className="tr-brand"
+            onClick={() => resetOverlayHistoryOnRouteLeave()}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/newlogo.png" alt="" width={22} height={22} className="tr-brand-img" loading="lazy" decoding="async" />
             <span>{t.topbar.brand}</span>
           </Link>
 
           <div className="tr-topbar-actions">
-            <Link href="/trace" className="tr-top-btn">
+            <Link
+              href="/trace"
+              className="tr-top-btn"
+              onClick={() => resetOverlayHistoryOnRouteLeave()}
+            >
               {t.topbar.lookupOther}
             </Link>
-            <Link href="/" className="tr-top-btn is-solid">
+            <Link
+              href={INTRO_PATH}
+              className="tr-top-btn is-solid"
+              onClick={() => resetOverlayHistoryOnRouteLeave()}
+            >
               {t.topbar.home}
             </Link>
           </div>
@@ -3112,7 +3126,7 @@ export default function TraceView() {
               </button>
             </form>
             <div className="tr-error-actions">
-              <Link href="/" className="tr-home-btn">
+              <Link href={INTRO_PATH} className="tr-home-btn">
                 <ArrowLeft size={17} strokeWidth={2.3} aria-hidden="true" />
                 <span>{t.actions.home}</span>
               </Link>
@@ -5994,7 +6008,9 @@ export default function TraceView() {
               onAuditPassInputChange={setAuditPassInput}
               onApplyAuditPass={handleApplyAuditPass}
               switchingTier={switchingTier}
-              defaultRequesterName={ac.viewerName}
+              defaultRequesterName={
+                ac.isAuthenticated && ac.actualTier !== "authority" ? ac.viewerName : null
+              }
               externalOpenTrigger={openAccessReqCount}
               onGrantActivated={handleGrantActivated}
             />

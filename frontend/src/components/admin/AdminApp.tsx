@@ -28,6 +28,7 @@ import {
   pushUrlNavigation,
   readWorkspaceUrl,
   replaceUrlPreservingState,
+  resetOverlayHistoryOnRouteLeave,
   saveWorkspaceUrl,
 } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
@@ -383,6 +384,7 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
           className="header-home"
           aria-label="HTX Cư Né - về trang giới thiệu"
           title="Về trang giới thiệu"
+          onClick={() => resetOverlayHistoryOnRouteLeave()}
         >
           <span className="header-home-mark" aria-hidden="true" />
           <span className="header-brand" aria-hidden="true">
