@@ -35,6 +35,7 @@ const JOURNAL_COLUMNS = `j.id, j.entry_on, j.plot_code, j.activity, j.detail, j.
   GREATEST(0, ((j.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - j.entry_on))::int AS late_declaration_days,
   j.entry_delay_hours::float8 AS entry_delay_hours, j.is_late_entry, j.late_reason,
   j.record_hash, j.gps_verified, j.gps_distance_m::float8 AS gps_distance_m, j.capture_source,
+  j.verification_status, j.verified_at,
   j.updated_by_name, j.updated_by_role, j.updated_at, j.edit_count,
   (j.recorder = '${FARMER_RECORDER}' AND j.created_at > now() - interval '24 hours'
      AND EXISTS (SELECT 1 FROM attachments a WHERE a.id = j.photo_id AND a.household_id = j.household_id)) AS can_delete`;
@@ -250,12 +251,14 @@ export class JournalService {
       throw badRequest("Bản ghi sổ cái đã gắn với lô xuất khẩu, không thể chỉnh sửa/xóa.");
     }
 
-    const deleted = await this.db.query<{ id: number; activity: string; plot_code: string }>(
-      `DELETE FROM journal_entries j
-       WHERE j.id = $1 AND j.household_id = $2 AND j.recorder = $3 AND j.created_at > now() - interval '24 hours'
-         AND EXISTS (SELECT 1 FROM attachments a WHERE a.id = j.photo_id AND a.household_id = j.household_id)
-       RETURNING j.id, j.activity, j.plot_code`,
-      [id, householdId, FARMER_RECORDER],
+    const deleted = await this.db.withActorTransaction(user, (client) =>
+      client.query<{ id: number; activity: string; plot_code: string }>(
+        `DELETE FROM journal_entries j
+         WHERE j.id = $1 AND j.household_id = $2 AND j.recorder = $3 AND j.created_at > now() - interval '24 hours'
+           AND EXISTS (SELECT 1 FROM attachments a WHERE a.id = j.photo_id AND a.household_id = j.household_id)
+         RETURNING j.id, j.activity, j.plot_code`,
+        [id, householdId, FARMER_RECORDER],
+      ),
     );
     if (deleted.rowCount === 0) {
       throw forbidden("Chỉ xóa được nhật ký do hộ tự ghi trong vòng 24 giờ.");

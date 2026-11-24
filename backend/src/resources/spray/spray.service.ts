@@ -3,15 +3,25 @@ import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
-import { badRequest, forbidden } from "../../common/errors/app.exception";
+import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql, attachmentUrlsSql, nowClockVn, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { assertPlotOwned } from "../../portal/common/portal-context";
 import { UploadsService } from "../../uploads/uploads.service";
+import type { VerifySprayDto } from "./spray.dto";
 
 const SEALED_LEDGER_ERR =
   "Bản ghi sổ cái đã quá thời hạn 24 giờ niêm phong hoặc đã gắn với lô xuất khẩu, không thể chỉnh sửa/xóa.";
+
+const DIARY_VERIFIER_ROLES: ReadonlySet<string> = new Set([
+  "admin",
+  "htx_head",
+  "htx_deputy",
+  "support_specialist",
+  "htx_officer",
+  "inspector",
+]);
 
 const STAFF_ROLE_LABELS: Record<string, string> = {
   admin: "Quản trị viên",
@@ -57,6 +67,7 @@ export class SprayService extends BaseCrudService {
       GREATEST(0, ((t.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - t.sprayed_on))::int AS late_declaration_days,
       t.entry_delay_hours::float8 AS entry_delay_hours,
       t.is_late_entry, t.late_reason, t.record_hash,
+      t.verification_status, t.verified_by_user_id, t.verified_by_name, t.verified_at,
       t.recorded_by_role, t.updated_by_user_id, t.updated_by_name, t.updated_by_role, t.updated_at, t.edit_count`,
       from: `spray_records t JOIN households h ON h.id = t.household_id
       JOIN pesticides p ON p.id = t.pesticide_id`,
@@ -121,6 +132,10 @@ export class SprayService extends BaseCrudService {
     delete out.updatedByRole;
     delete out.updatedAt;
     delete out.editCount;
+    delete out.verificationStatus;
+    delete out.verifiedByUserId;
+    delete out.verifiedByName;
+    delete out.verifiedAt;
 
     if (typeof out.sprayedOn === "string" && out.sprayedOn > todayVn()) {
       throw badRequest("Ngày phun thuốc không được ở tương lai. Chỉ ghi nhận sau khi đã phun thực tế.");
@@ -256,12 +271,12 @@ export class SprayService extends BaseCrudService {
   protected override async afterWrite(id: number, input: Record<string, unknown>) {
     const editInfo = input._notifyHouseholdEdit as
       | {
-          householdId: number;
-          pesticideName: string;
-          plotCode: string | null;
-          actorName: string;
-          actorRole: string;
-        }
+        householdId: number;
+        pesticideName: string;
+        plotCode: string | null;
+        actorName: string;
+        actorRole: string;
+      }
       | undefined;
     if (editInfo) {
       const roleLabel = STAFF_ROLE_LABELS[editInfo.actorRole] ?? "Cán bộ";
@@ -276,15 +291,15 @@ export class SprayService extends BaseCrudService {
 
     const changeInfo = input._notifySprayChange as
       | {
-          method: "POST" | "PATCH";
-          householdId: number;
-          pesticideName: string;
-          plotCode: string | null;
-          isHazardous: boolean;
-          actorId: number;
-          actorName: string;
-          actorRole: string;
-        }
+        method: "POST" | "PATCH";
+        householdId: number;
+        pesticideName: string;
+        plotCode: string | null;
+        isHazardous: boolean;
+        actorId: number;
+        actorName: string;
+        actorRole: string;
+      }
       | undefined;
     let resolvedFarmerName: string | null = null;
     if (changeInfo) {
@@ -362,5 +377,59 @@ export class SprayService extends BaseCrudService {
       await assertHouseholdInScope(this.db, { householdId: rows[0].household_id }, user);
       await this.assertSprayEditable(rows[0]);
     }
+  }
+
+  /**
+   * Xác minh hoặc hủy xác minh nhật ký phun thuốc bởi Cán bộ kỹ thuật / Ban quản trị HTX / Thanh tra trong phạm vi.
+   */
+  async verifyRecord(id: number, dto: VerifySprayDto, user: AuthUser, ip?: string) {
+    if (!DIARY_VERIFIER_ROLES.has(user.role) || !isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Chỉ Ban Kỹ thuật HTX hoặc Cán bộ kiểm tra trong phạm vi mới có quyền xác minh nhật ký phun thuốc.");
+    }
+    const exRes = await this.db.query<{
+      id: number;
+      household_id: number;
+      plot_code: string | null;
+      pesticide_name: string;
+    }>(
+      `SELECT sr.id, sr.household_id, sr.plot_code, p.name AS pesticide_name
+       FROM spray_records sr
+       JOIN pesticides p ON p.id = sr.pesticide_id
+       WHERE sr.id = $1`,
+      [id],
+    );
+    const existing = exRes.rows[0];
+    if (!existing) throw notFound("Không tìm thấy bản ghi phun thuốc.");
+
+    await assertHouseholdInScope(this.db, { householdId: existing.household_id }, user);
+
+    const nextStatus = dto.verified ? "verified" : "self_declared";
+    const verifiedAt = dto.verified ? new Date().toISOString() : null;
+    await this.db.withActorTransaction(
+      user,
+      async (client) => {
+        await client.query(
+          `UPDATE spray_records
+           SET verification_status = $2,
+               verified_by_user_id = $3,
+               verified_by_name = $4,
+               verified_at = $5::timestamptz
+           WHERE id = $1`,
+          [id, nextStatus, dto.verified ? user.id : null, dto.verified ? user.fullName : null, verifiedAt],
+        );
+      },
+      { "puc.verifying_diary": "on" },
+    );
+
+    await this.audit.write(
+      { ip, user },
+      {
+        action: dto.verified ? "Xác minh nhật ký phun thuốc" : "Hủy xác minh nhật ký phun thuốc",
+        object: `${this.config.label} #${id}`,
+        detail: `${existing.pesticide_name}${existing.plot_code ? ` (thửa ${existing.plot_code})` : ""}`,
+      },
+    );
+
+    return this.findOne(id, user);
   }
 }

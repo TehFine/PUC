@@ -6,10 +6,12 @@ import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.
 import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
 import { generateQrToken } from "../../common/crypto/qr-token";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
-import { camelRow, camelRows, todayVn } from "../../common/sql/rows";
+import { camelRow, camelRows, publicAttachmentUrlSql, todayVn } from "../../common/sql/rows";
+import { hasPublicTable } from "../../common/sql/schema-cache";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { assertPlotOwned, plotsTableExists } from "../../portal/common/portal-context";
+import { UploadsService } from "../../uploads/uploads.service";
 import type {
   CreateFieldAuditPassDto,
   GenerateItemsDto,
@@ -173,6 +175,7 @@ export class HarvestService extends BaseCrudService {
     db: DatabaseService,
     audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly uploads: UploadsService,
   ) {
     super(db, audit, {
       resource: "harvest",
@@ -185,13 +188,16 @@ export class HarvestService extends BaseCrudService {
       COALESCE(t.packhouse_address, e.address) AS packhouse_address,
       t.phytosanitary_cert_no, t.phytosanitary_issued_on,
       t.grade_a_pct, t.grade_b_pct, t.grade_c_pct, t.avg_brix, t.treatment_method,
-      t.transporter, t.vehicle_plate, t.temperature_c, t.departed_at, t.estimated_arrival`,
+      t.transporter, t.vehicle_plate, t.temperature_c, t.departed_at, t.estimated_arrival,
+      t.brand_name, t.expiry_on, t.storage_condition, t.product_image_id,
+      ${publicAttachmentUrlSql("t.product_image_id")} AS product_image_url`,
       from: `harvest_lots t
              LEFT JOIN enterprises e ON e.id = t.enterprise_id
              LEFT JOIN contracts c ON c.id = t.contract_id`,
       orderBy: "t.harvested_on DESC, t.id DESC",
-      search: ["t.code", "t.buyer", "t.market", "e.name"],
+      search: ["t.code", "t.buyer", "t.market", "e.name", "t.brand_name"],
       filters: { status: "t.status", market: "t.market", enterpriseId: "t.enterprise_id" },
+      virtual: ["_actorUser"],
       scope: (user, params) => {
         if (user.role === "enterprise") {
           if (!user.enterpriseId) return "1 = 0";
@@ -350,6 +356,7 @@ export class HarvestService extends BaseCrudService {
         harvested_on: string;
         enterprise_id: number | null;
         contract_id: number | null;
+        product_image_id: number | null;
         grade_a_pct: number | null;
         grade_b_pct: number | null;
         grade_c_pct: number | null;
@@ -366,13 +373,14 @@ export class HarvestService extends BaseCrudService {
         harvested_on: string;
         enterprise_id: number | null;
         contract_id: number | null;
+        product_image_id: number | null;
         grade_a_pct: number | null;
         grade_b_pct: number | null;
         grade_c_pct: number | null;
         coop_code: string | null;
       }>(
         `SELECT id, code, status, weight_tons::float8 AS weight_tons, harvested_on::text AS harvested_on,
-                enterprise_id, contract_id,
+                enterprise_id, contract_id, product_image_id,
                 grade_a_pct::float8 AS grade_a_pct,
                 grade_b_pct::float8 AS grade_b_pct,
                 grade_c_pct::float8 AS grade_c_pct,
@@ -491,11 +499,368 @@ export class HarvestService extends BaseCrudService {
         }
       }
     }
+    const effectiveHarvestedOn =
+      typeof input.harvestedOn === "string" && input.harvestedOn.trim()
+        ? input.harvestedOn.trim().slice(0, 10)
+        : existing?.harvested_on
+          ? String(existing.harvested_on).slice(0, 10)
+          : null;
+    if (typeof input.expiryOn === "string" && input.expiryOn.trim() && effectiveHarvestedOn) {
+      if (input.expiryOn.trim().slice(0, 10) < effectiveHarvestedOn) {
+        throw badRequest("Hạn sử dụng không được trước ngày thu hoạch của lô hàng.");
+      }
+    }
+
+    if (input.productImageId !== undefined && input.productImageId !== null) {
+      const nextImgId = Number(input.productImageId);
+      const unchangedExistingImg =
+        existing?.product_image_id !== null &&
+        existing?.product_image_id !== undefined &&
+        Number(existing.product_image_id) === nextImgId;
+      if (!unchangedExistingImg) {
+        const media = await this.uploads.assertUsableDetailed(
+          [nextImgId],
+          context.user,
+          "harvest",
+          null,
+          { imagesOnly: true },
+        );
+        const att = media.ids[0] ? await this.uploads.find(media.ids[0]) : null;
+        if (!att || !att.mime_type.startsWith("image/")) {
+          throw badRequest("Ảnh đại diện sản phẩm của lô hàng phải là tệp hình ảnh hợp lệ.");
+        }
+        input.productImageId = att.id;
+      } else {
+        input.productImageId = nextImgId;
+      }
+    }
+
     if (context.method === "POST") {
       input.qrToken = generateQrToken(14);
       input.coopCode = (context.user.coopCode || "HTX-CUNE").trim().toUpperCase();
     }
+    input._actorUser = context.user;
     return input;
+  }
+
+  protected override async afterWrite(id: number, input: Record<string, unknown>) {
+    await this.syncLotSupplyChainEvents(id, input._actorUser as AuthUser | undefined);
+  }
+
+  /**
+   * Đồng bộ bảng Sự kiện theo dõi trọng yếu `supply_chain_events` (TCVN 12850 / GS1 EPCIS)
+   * gắn mã sự kiện độc lập (`EVT-<LOT_CODE>-01-PUC`..`05-EXP`) có thể tra cứu trực tiếp.
+   */
+  async syncLotSupplyChainEvents(lotId: number, actor?: AuthUser): Promise<void> {
+    if (!(await hasPublicTable(this.db, "supply_chain_events"))) return;
+    const lotRes = await this.db.query<{
+      id: number;
+      code: string;
+      status: string;
+      revoked_reason: string | null;
+      harvested_on: string | null;
+      packed_on: string | null;
+      exported_on: string | null;
+      departed_at: string | null;
+      market: string | null;
+      weight_tons: number | null;
+      household_count: number | null;
+      avg_brix: number | null;
+      grade_a_pct: number | null;
+      treatment_method: string | null;
+      packhouse_code: string | null;
+      packhouse_name: string | null;
+      phytosanitary_cert_no: string | null;
+      transporter: string | null;
+      vehicle_plate: string | null;
+      temperature_c: number | null;
+      enterprise_name: string | null;
+      enterprise_packhouse_code: string | null;
+    }>(
+      `SELECT l.id, l.code, l.status, l.revoked_reason,
+              l.harvested_on::text AS harvested_on,
+              l.packed_on::text AS packed_on,
+              l.exported_on::text AS exported_on,
+              l.departed_at::text AS departed_at,
+              l.market,
+              l.weight_tons::float8 AS weight_tons,
+              l.household_count,
+              l.avg_brix::float8 AS avg_brix,
+              l.grade_a_pct::float8 AS grade_a_pct,
+              l.treatment_method,
+              l.packhouse_code,
+              l.packhouse_name,
+              l.phytosanitary_cert_no,
+              l.transporter,
+              l.vehicle_plate,
+              l.temperature_c::float8 AS temperature_c,
+              e.name AS enterprise_name,
+              e.packhouse_code AS enterprise_packhouse_code
+       FROM harvest_lots l
+       LEFT JOIN enterprises e ON e.id = l.enterprise_id
+       WHERE l.id = $1
+       LIMIT 1`,
+      [lotId],
+    );
+    const lot = lotRes.rows[0];
+    if (!lot) return;
+
+    const pucCode = await this.resolveLotPrimaryPucCode(lotId);
+    const [contribStatsRes, labRes, minuteRes] = await Promise.all([
+      this.db.query<{ hh_count: number; total_kg: number }>(
+        `SELECT COUNT(DISTINCT household_id)::int AS hh_count,
+                COALESCE(SUM(weight_kg), 0)::float8 AS total_kg
+         FROM harvest_contributions
+         WHERE lot_id = $1`,
+        [lotId],
+      ),
+      this.db.query<{
+        code: string;
+        lab: string;
+        sampled_on: string | null;
+        result: string;
+      }>(
+        `SELECT lt.code, lt.lab, lt.sampled_on::text AS sampled_on, lt.result
+         FROM lab_tests lt
+         WHERE lt.record_status = 'verified'
+           AND EXISTS (
+             SELECT 1 FROM harvest_contributions hc
+             WHERE hc.lot_id = $1
+               AND (
+                 hc.household_id = lt.household_id
+                 OR (hc.plot_code <> '' AND upper(btrim(lt.plot_code)) = upper(btrim(hc.plot_code)))
+               )
+           )
+         ORDER BY lt.sampled_on DESC, lt.id DESC
+         LIMIT 1`,
+        [lotId],
+      ),
+      (await hasPublicTable(this.db, "inspection_minutes"))
+        ? this.db.query<{ code: string; held_on: string | null }>(
+            `SELECT im.code, im.held_on::text AS held_on
+             FROM inspection_minutes im
+             WHERE EXISTS (
+               SELECT 1 FROM harvest_contributions hc
+               WHERE hc.lot_id = $1
+                 AND (
+                   im.household_id = hc.household_id
+                   OR (hc.plot_code <> '' AND upper(btrim(COALESCE(im.plot_code, ''))) = upper(btrim(hc.plot_code)))
+                 )
+             )
+             ORDER BY im.held_on DESC, im.id DESC
+             LIMIT 1`,
+            [lotId],
+          )
+        : Promise.resolve({ rows: [] as Array<{ code: string; held_on: string | null }> }),
+    ]);
+
+    const lotCodeClean = lot.code
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, "-")
+      .replace(/-{2,}/g, "-")
+      .slice(0, 48);
+    const harvestedOn = lot.harvested_on ? lot.harvested_on.slice(0, 10) : null;
+    const hasProgressed =
+      lot.status === "in_transit" || lot.status === "delivered" || lot.status === "exported";
+    const packedOn =
+      (lot.packed_on ? lot.packed_on.slice(0, 10) : null) ||
+      (hasProgressed && harvestedOn ? addDaysIso(harvestedOn, 1) : null);
+    const departedText =
+      typeof lot.departed_at === "string"
+        ? lot.departed_at.trim()
+        : lot.departed_at
+          ? new Date(lot.departed_at as unknown as Date).toISOString()
+          : "";
+    const departedIso = /^\d{4}-\d{2}-\d{2}/.test(departedText) ? departedText.slice(0, 10) : null;
+    const exportedOn =
+      (lot.exported_on ? lot.exported_on.slice(0, 10) : null) ||
+      departedIso ||
+      ((lot.status === "exported" || lot.status === "delivered") && (packedOn || harvestedOn)
+        ? addDaysIso((packedOn || harvestedOn)!, 1)
+        : null);
+
+    const hhCount = Math.max(Number(lot.household_count || 0), Number(contribStatsRes.rows[0]?.hh_count || 0));
+    const weightTons =
+      Number(lot.weight_tons || 0) > 0
+        ? Number(lot.weight_tons)
+        : Number(contribStatsRes.rows[0]?.total_kg || 0) > 0
+          ? Number((Number(contribStatsRes.rows[0]!.total_kg) / 1000).toFixed(3))
+          : 0;
+    const packhouseCode = String(
+      lot.packhouse_code || lot.enterprise_packhouse_code || "VN-DLPH-0089",
+    );
+    const packhouseName = String(
+      lot.packhouse_name || lot.enterprise_name || "Cơ sở Đóng gói - Sơ chế Liên kết HTX Cư Né",
+    );
+    const latestLab = labRes.rows[0] ?? null;
+    const latestMinute = minuteRes.rows[0] ?? null;
+    const farmDate =
+      (latestMinute?.held_on ? latestMinute.held_on.slice(0, 10) : null) ||
+      (harvestedOn ? addDaysIso(harvestedOn, -15) : null);
+    const isRevoked = lot.status === "revoked";
+    const market = String(lot.market || "Xuất khẩu chính ngạch");
+
+    const events: Array<{
+      stepOrder: number;
+      eventType: "farm_inspection" | "harvest" | "packing" | "lab_testing" | "export_release" | "revocation";
+      suffix: string;
+      occurredOn: string | null;
+      locationCode: string | null;
+      locationName: string | null;
+      actorUnit: string;
+      summary: string;
+      evidenceRef: string | null;
+      status: "completed" | "current" | "upcoming" | "warning";
+    }> = [
+      {
+        stepOrder: 1,
+        eventType: "farm_inspection",
+        suffix: "01-PUC",
+        occurredOn: farmDate,
+        locationCode: pucCode,
+        locationName: resolveParcelAdminLocation(null, pucCode),
+        actorUnit: "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né",
+        summary: `Giám sát vùng trồng ${pucCode}${hhCount > 0 ? `, liên kết ${hhCount} hộ thành viên` : ""}`,
+        evidenceRef: latestMinute?.code || pucCode,
+        status: "completed",
+      },
+      {
+        stepOrder: 2,
+        eventType: "harvest",
+        suffix: "02-HARV",
+        occurredOn: harvestedOn,
+        locationCode: pucCode,
+        locationName: resolveParcelAdminLocation(null, pucCode),
+        actorUnit: "Tổ thu hoạch và Kỹ thuật HTX Cư Né",
+        summary: harvestedOn
+          ? `Thu hái và gom lô nguyên liệu tại vườn${weightTons > 0 ? ` (${weightTons} tấn)` : ""}`
+          : "Chưa ghi nhận mốc thu hoạch lô thương phẩm",
+        evidenceRef: lot.code,
+        status: harvestedOn ? "completed" : "upcoming",
+      },
+      {
+        stepOrder: 3,
+        eventType: "packing",
+        suffix: "03-PACK",
+        occurredOn: packedOn,
+        locationCode: packhouseCode,
+        locationName: packhouseName,
+        actorUnit: `${packhouseName} (${packhouseCode})`,
+        summary: packedOn
+          ? `${lot.treatment_method?.trim() || "Làm sạch, phân hạng trái thương phẩm, đóng thùng định danh lô"}`
+          : "Đang chờ tiếp nhận sơ chế và đóng thùng tại cơ sở đóng gói",
+        evidenceRef: packhouseCode,
+        status: packedOn ? "completed" : harvestedOn ? "current" : "upcoming",
+      },
+      {
+        stepOrder: 4,
+        eventType: "lab_testing",
+        suffix: "04-LAB",
+        occurredOn: latestLab?.sampled_on ? latestLab.sampled_on.slice(0, 10) : null,
+        locationCode: latestLab?.code || null,
+        locationName: latestLab?.lab || "Phòng kiểm nghiệm độc lập chỉ định",
+        actorUnit: latestLab?.lab || "Phòng kiểm nghiệm độc lập chỉ định",
+        summary: latestLab
+          ? latestLab.result === "pass"
+            ? `Phiếu ${latestLab.code} đạt chuẩn an toàn thực phẩm`
+            : `Phiếu ${latestLab.code} phát hiện chỉ tiêu không đạt`
+          : "Đang chờ cập nhật phiếu kết quả phân tích mẫu của lô",
+        evidenceRef: latestLab?.code || null,
+        status:
+          latestLab?.result === "fail"
+            ? "warning"
+            : latestLab?.result === "pass"
+              ? "completed"
+              : packedOn
+                ? "current"
+                : "upcoming",
+      },
+      {
+        stepOrder: 5,
+        eventType: "export_release",
+        suffix: "05-EXP",
+        occurredOn: exportedOn,
+        locationCode: packhouseCode,
+        locationName: market,
+        actorUnit: `${packhouseName} và Cơ quan Kiểm dịch thực vật`,
+        summary: isRevoked
+          ? lot.revoked_reason?.trim() || "Lô hàng đã thu hồi và ngừng lưu thông"
+          : lot.status === "exported"
+            ? `Hoàn tất kiểm dịch và thông quan xuất khẩu phục vụ thị trường: ${market}`
+            : lot.status === "delivered"
+              ? `Đã bàn giao lô hàng hợp lệ phục vụ thị trường: ${market}`
+              : lot.status === "in_transit"
+                ? `Đang vận chuyển lưu thông phục vụ thị trường: ${market}`
+                : "Đang hoàn tất thủ tục kiểm định trước khi xuất xưởng",
+        evidenceRef: lot.phytosanitary_cert_no || null,
+        status: isRevoked
+          ? "warning"
+          : lot.status === "exported" || lot.status === "delivered"
+            ? "completed"
+            : lot.status === "in_transit"
+              ? "current"
+              : "upcoming",
+      },
+    ];
+
+    if (isRevoked) {
+      events.push({
+        stepOrder: 6,
+        eventType: "revocation",
+        suffix: "06-REV",
+        occurredOn: todayVn(),
+        locationCode: lot.code,
+        locationName: packhouseName,
+        actorUnit: "Ban Quản trị Hợp tác xã Cư Né",
+        summary: lot.revoked_reason?.trim() || "Thu hồi lô hàng theo quyết định kiểm soát chất lượng",
+        evidenceRef: lot.code,
+        status: "warning",
+      });
+    } else {
+      await this.db.query(
+        "DELETE FROM supply_chain_events WHERE lot_id = $1 AND event_type = 'revocation'",
+        [lotId],
+      );
+    }
+
+    for (const ev of events) {
+      const eventCode = `EVT-${lotCodeClean}-${ev.suffix}`;
+      await this.db.query(
+        `INSERT INTO supply_chain_events
+           (event_code, lot_id, step_order, event_type, occurred_on, location_code, location_name,
+            actor_unit, recorded_by_user_id, recorded_by_name, summary, evidence_ref, status)
+         VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11, $12, $13)
+         ON CONFLICT (lot_id, event_type) DO UPDATE
+           SET event_code = EXCLUDED.event_code,
+               step_order = EXCLUDED.step_order,
+               occurred_on = EXCLUDED.occurred_on,
+               location_code = EXCLUDED.location_code,
+               location_name = EXCLUDED.location_name,
+               actor_unit = EXCLUDED.actor_unit,
+               recorded_by_user_id = COALESCE(EXCLUDED.recorded_by_user_id, supply_chain_events.recorded_by_user_id),
+               recorded_by_name = COALESCE(EXCLUDED.recorded_by_name, supply_chain_events.recorded_by_name),
+               summary = EXCLUDED.summary,
+               evidence_ref = EXCLUDED.evidence_ref,
+               status = EXCLUDED.status,
+               updated_at = now()`,
+        [
+          eventCode,
+          lotId,
+          ev.stepOrder,
+          ev.eventType,
+          ev.occurredOn,
+          ev.locationCode,
+          ev.locationName,
+          ev.actorUnit,
+          actor?.id ?? null,
+          actor?.fullName ?? null,
+          ev.summary,
+          ev.evidenceRef,
+          ev.status,
+        ],
+      );
+    }
   }
 
   protected override async guardDelete(id: number, user: AuthUser) {
@@ -570,6 +935,12 @@ export class HarvestService extends BaseCrudService {
     const client = await this.db.pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query(
+        `SELECT set_config('puc.actor_user_id', $1, true),
+                set_config('puc.actor_name', $2, true),
+                set_config('puc.actor_role', $3, true)`,
+        [String(user.id), user.fullName || "", user.role || ""],
+      );
       const lotRes = await client.query<{
         id: number;
         code: string;
@@ -705,6 +1076,12 @@ export class HarvestService extends BaseCrudService {
     const client = await this.db.pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query(
+        `SELECT set_config('puc.actor_user_id', $1, true),
+                set_config('puc.actor_name', $2, true),
+                set_config('puc.actor_role', $3, true)`,
+        [String(user.id), user.fullName || "", user.role || ""],
+      );
 
       const lot = await client.query<{
         id: number;
@@ -971,6 +1348,8 @@ export class HarvestService extends BaseCrudService {
       client.release();
     }
 
+    await this.syncLotSupplyChainEvents(lotId, user);
+
     await this.audit.write(
       { ip, user },
       {
@@ -1029,9 +1408,11 @@ export class HarvestService extends BaseCrudService {
       await assertHouseholdInScope(this.db, { householdId: contribCheck.rows[0].household_id }, user);
     }
 
-    const deleted = await this.db.query(
-      "DELETE FROM harvest_contributions WHERE id = $1 AND lot_id = $2 RETURNING id",
-      [contributionId, lotId],
+    const deleted = await this.db.withActorTransaction(user, (client) =>
+      client.query("DELETE FROM harvest_contributions WHERE id = $1 AND lot_id = $2 RETURNING id", [
+        contributionId,
+        lotId,
+      ]),
     );
     if (deleted.rowCount === 0) throw notFound("Không tìm thấy đóng góp này.");
 
@@ -1041,6 +1422,8 @@ export class HarvestService extends BaseCrudService {
        WHERE id = $1`,
       [lotId],
     );
+
+    await this.syncLotSupplyChainEvents(lotId, user);
 
     await this.audit.write(
       { ip, user },
@@ -1457,9 +1840,13 @@ export class HarvestService extends BaseCrudService {
       status: string;
       status_note: string | null;
       valid_until: string | null;
+      gacc_code: string | null;
+      mard_approved_on: string | null;
+      gacc_approved_on: string | null;
       updated_at: string;
     }>(
-      `SELECT code, name, commune, district, province, status, status_note, valid_until, updated_at
+      `SELECT code, name, commune, district, province, status, status_note, valid_until,
+              gacc_code, mard_approved_on, gacc_approved_on, updated_at
        FROM growing_zones
        ORDER BY code ASC`,
     );
@@ -1485,12 +1872,27 @@ export class HarvestService extends BaseCrudService {
       throw forbidden("Bạn không có quyền cập nhật trạng thái mã số vùng trồng ngoài phạm vi đơn vị.");
     }
 
-    const existingZone = await this.db.query<{ commune: string; district: string; province: string }>(
-      "SELECT commune, district, province FROM growing_zones WHERE upper(code) = upper($1) LIMIT 1",
+    const existingZone = await this.db.query<{
+      commune: string;
+      district: string;
+      province: string;
+      gacc_code: string | null;
+      mard_approved_on: string | null;
+      gacc_approved_on: string | null;
+      valid_until: string | null;
+    }>(
+      `SELECT commune, district, province, gacc_code,
+              mard_approved_on::text AS mard_approved_on,
+              gacc_approved_on::text AS gacc_approved_on,
+              valid_until::text AS valid_until
+       FROM growing_zones
+       WHERE upper(code) = upper($1)
+       LIMIT 1`,
       [cleanCode],
     );
-    const zoneLoc = existingZone.rows[0]
-      ? `${existingZone.rows[0].commune}, ${existingZone.rows[0].district}, ${existingZone.rows[0].province}`
+    const curZone = existingZone.rows[0];
+    const zoneLoc = curZone
+      ? `${curZone.commune}, ${curZone.district}, ${curZone.province}`
       : resolveParcelAdminLocation(null, cleanCode);
     if (user.role === "inspector" && !matchesJurisdiction((user.assignedRegion || "Tỉnh Đắk Lắk").trim(), [zoneLoc])) {
       throw forbidden("Mã số vùng trồng không thuộc địa bàn quản lý của bạn.");
@@ -1499,15 +1901,33 @@ export class HarvestService extends BaseCrudService {
       throw forbidden("Mã số vùng trồng không thuộc xã quản lý của bạn.");
     }
 
+    const nextGaccCode =
+      dto.gaccCode !== undefined
+        ? dto.gaccCode && dto.gaccCode.trim()
+          ? dto.gaccCode.trim()
+          : null
+        : (curZone?.gacc_code ?? null);
+    const nextMardApprovedOn =
+      dto.mardApprovedOn !== undefined ? (dto.mardApprovedOn || null) : (curZone?.mard_approved_on?.slice(0, 10) ?? null);
+    const nextGaccApprovedOn =
+      dto.gaccApprovedOn !== undefined ? (dto.gaccApprovedOn || null) : (curZone?.gacc_approved_on?.slice(0, 10) ?? null);
+    const nextValidUntil =
+      dto.validUntil !== undefined ? (dto.validUntil || null) : (curZone?.valid_until?.slice(0, 10) ?? "2027-12-31");
+
     const updated = await this.db.query(
-      `INSERT INTO growing_zones (code, name, status, status_note)
-       VALUES ($1, 'Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né', $2, $3)
+      `INSERT INTO growing_zones (code, name, status, status_note, gacc_code, mard_approved_on, gacc_approved_on, valid_until)
+       VALUES ($1, 'Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né', $2, $3, $4, $5::date, $6::date, $7::date)
        ON CONFLICT (code) DO UPDATE
        SET status = EXCLUDED.status,
            status_note = EXCLUDED.status_note,
+           gacc_code = EXCLUDED.gacc_code,
+           mard_approved_on = EXCLUDED.mard_approved_on,
+           gacc_approved_on = EXCLUDED.gacc_approved_on,
+           valid_until = EXCLUDED.valid_until,
            updated_at = now()
-       RETURNING code, name, commune, district, province, status, status_note, valid_until, updated_at`,
-      [cleanCode, dto.status, dto.statusNote ?? null],
+       RETURNING code, name, commune, district, province, status, status_note, valid_until,
+                 gacc_code, mard_approved_on, gacc_approved_on, updated_at`,
+      [cleanCode, dto.status, dto.statusNote ?? null, nextGaccCode, nextMardApprovedOn, nextGaccApprovedOn, nextValidUntil],
     );
 
     await this.audit.write(
@@ -2209,34 +2629,36 @@ export class HarvestService extends BaseCrudService {
       dto.assessedBy && dto.assessedBy.trim() ? dto.assessedBy.trim() : `Tổ Giám sát Kỹ thuật UBND Xã (${user.fullName})`;
     const assessedOn = dto.assessedOn && dto.assessedOn.trim() ? dto.assessedOn.trim() : todayVn();
 
-    const { rows } = await this.db.query(
-      `INSERT INTO plot_season_quotas
-         (season_year, household_id, plot_code, zone_code, area_ha, tree_count, max_quota_kg, assessed_by, assessed_on, note)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10)
-       ON CONFLICT (season_year, plot_code) DO UPDATE
-         SET zone_code = EXCLUDED.zone_code,
-             area_ha = EXCLUDED.area_ha,
-             tree_count = EXCLUDED.tree_count,
-             max_quota_kg = EXCLUDED.max_quota_kg,
-             assessed_by = EXCLUDED.assessed_by,
-             assessed_on = EXCLUDED.assessed_on,
-             note = EXCLUDED.note,
-             updated_at = now()
-         WHERE plot_season_quotas.household_id = EXCLUDED.household_id
-       RETURNING id, season_year, household_id, plot_code, zone_code, area_ha::float8 AS area_ha,
-                 tree_count, max_quota_kg::float8 AS max_quota_kg, assessed_by, assessed_on::text AS assessed_on, note`,
-      [
-        dto.seasonYear,
-        dto.householdId,
-        cleanPlotCode,
-        zoneCode,
-        dto.areaHa,
-        dto.treeCount,
-        dto.maxQuotaKg,
-        assessedBy,
-        assessedOn,
-        dto.note ?? null,
-      ],
+    const { rows } = await this.db.withActorTransaction(user, (client) =>
+      client.query(
+        `INSERT INTO plot_season_quotas
+           (season_year, household_id, plot_code, zone_code, area_ha, tree_count, max_quota_kg, assessed_by, assessed_on, note)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10)
+         ON CONFLICT (season_year, plot_code) DO UPDATE
+           SET zone_code = EXCLUDED.zone_code,
+               area_ha = EXCLUDED.area_ha,
+               tree_count = EXCLUDED.tree_count,
+               max_quota_kg = EXCLUDED.max_quota_kg,
+               assessed_by = EXCLUDED.assessed_by,
+               assessed_on = EXCLUDED.assessed_on,
+               note = EXCLUDED.note,
+               updated_at = now()
+           WHERE plot_season_quotas.household_id = EXCLUDED.household_id
+         RETURNING id, season_year, household_id, plot_code, zone_code, area_ha::float8 AS area_ha,
+                   tree_count, max_quota_kg::float8 AS max_quota_kg, assessed_by, assessed_on::text AS assessed_on, note`,
+        [
+          dto.seasonYear,
+          dto.householdId,
+          cleanPlotCode,
+          zoneCode,
+          dto.areaHa,
+          dto.treeCount,
+          dto.maxQuotaKg,
+          assessedBy,
+          assessedOn,
+          dto.note ?? null,
+        ],
+      ),
     );
     if (!rows[0]) {
       throw badRequest(
@@ -2516,7 +2938,8 @@ export class HarvestService extends BaseCrudService {
     }
     const { rows } = await this.db.query(
       `SELECT program_title, directive_no, commune_authority, provincial_authority,
-              official_portal_url, official_domain, inspection_unit, updated_at
+              official_portal_url, official_domain, inspection_unit,
+              coop_legal_name, coop_tax_code, coop_address, updated_at
        FROM commune_endorsement_config
        WHERE id = 1`,
     );
@@ -2529,6 +2952,9 @@ export class HarvestService extends BaseCrudService {
         officialPortalUrl: "https://daklak.gov.vn",
         officialDomain: "truyxuat.cune-krongbuk.gov.vn",
         inspectionUnit: "Tổ Giám sát Cộng đồng Xã Cư Né & Ban Kỹ thuật HTX Nông nghiệp Cư Né",
+        coopLegalName: "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né",
+        coopTaxCode: null,
+        coopAddress: "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk",
       };
     }
     return camelRow(rows[0]);
@@ -2543,10 +2969,35 @@ export class HarvestService extends BaseCrudService {
       throw badRequest("Đường dẫn Cổng thông tin chính thức của Tỉnh/Xã phải bắt đầu bằng https:// hợp lệ.");
     }
 
+    const curCfg = await this.db.query<{
+      coop_legal_name: string | null;
+      coop_tax_code: string | null;
+      coop_address: string | null;
+    }>("SELECT coop_legal_name, coop_tax_code, coop_address FROM commune_endorsement_config WHERE id = 1");
+    const prev = curCfg.rows[0];
+    const coopLegalName =
+      dto.coopLegalName !== undefined
+        ? dto.coopLegalName && dto.coopLegalName.trim()
+          ? dto.coopLegalName.trim()
+          : "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né"
+        : prev?.coop_legal_name || "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né";
+    const coopTaxCode =
+      dto.coopTaxCode !== undefined
+        ? dto.coopTaxCode && dto.coopTaxCode.trim()
+          ? dto.coopTaxCode.trim()
+          : null
+        : (prev?.coop_tax_code ?? null);
+    const coopAddress =
+      dto.coopAddress !== undefined
+        ? dto.coopAddress && dto.coopAddress.trim()
+          ? dto.coopAddress.trim()
+          : "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk"
+        : prev?.coop_address || "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+
     const { rows } = await this.db.query(
       `INSERT INTO commune_endorsement_config
-         (id, program_title, directive_no, commune_authority, provincial_authority, official_portal_url, official_domain, inspection_unit, updated_at)
-       VALUES (1, $1, $2, $3, $4, $5, $6, $7, now())
+         (id, program_title, directive_no, commune_authority, provincial_authority, official_portal_url, official_domain, inspection_unit, coop_legal_name, coop_tax_code, coop_address, updated_at)
+       VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
        ON CONFLICT (id) DO UPDATE
          SET program_title = EXCLUDED.program_title,
              directive_no = EXCLUDED.directive_no,
@@ -2555,9 +3006,13 @@ export class HarvestService extends BaseCrudService {
              official_portal_url = EXCLUDED.official_portal_url,
              official_domain = EXCLUDED.official_domain,
              inspection_unit = EXCLUDED.inspection_unit,
+             coop_legal_name = EXCLUDED.coop_legal_name,
+             coop_tax_code = EXCLUDED.coop_tax_code,
+             coop_address = EXCLUDED.coop_address,
              updated_at = now()
        RETURNING program_title, directive_no, commune_authority, provincial_authority,
-                 official_portal_url, official_domain, inspection_unit, updated_at`,
+                 official_portal_url, official_domain, inspection_unit,
+                 coop_legal_name, coop_tax_code, coop_address, updated_at`,
       [
         dto.programTitle.trim(),
         dto.directiveNo.trim(),
@@ -2566,6 +3021,9 @@ export class HarvestService extends BaseCrudService {
         dto.officialPortalUrl.trim(),
         dto.officialDomain.trim(),
         dto.inspectionUnit.trim(),
+        coopLegalName,
+        coopTaxCode,
+        coopAddress,
       ],
     );
 

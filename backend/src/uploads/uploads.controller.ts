@@ -191,7 +191,7 @@ async function streamAttachment(
 
 @Controller()
 export class UploadsController {
-  constructor(private readonly uploads: UploadsService) {}
+  constructor(private readonly uploads: UploadsService) { }
 
   /** Tải một tệp lên (multipart/form-data: `file`, `purpose`). Trả về `{ id, url }` để gắn vào bản ghi nghiệp vụ. */
   @Post("uploads")

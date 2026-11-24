@@ -46,3 +46,8 @@ export class CreateJournalDto {
 }
 
 export class UpdateJournalDto extends PartialType(CreateJournalDto) {}
+
+export class VerifyJournalDto {
+  @IsBoolean()
+  verified!: boolean;
+}

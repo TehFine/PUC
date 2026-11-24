@@ -72,6 +72,7 @@ const SPRAY_COLUMNS = `s.id, s.sprayed_on, s.plot_code, s.pesticide_id, p.name A
   to_char(s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS declared_on,
   GREATEST(0, ((s.server_recorded_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - s.sprayed_on))::int AS late_declaration_days,
   s.entry_delay_hours::float8 AS entry_delay_hours, s.is_late_entry, s.late_reason, s.record_hash,
+  s.verification_status, s.verified_at,
   s.recorded_by_role, s.updated_by_name, s.updated_by_role, s.updated_at, s.edit_count,
   (${SPRAY_DELETABLE_SQL}) AS can_delete`;
 
@@ -248,15 +249,17 @@ export class SprayService {
    */
   async remove(id: number, user: AuthUser, context: ClientContext) {
     const householdId = householdIdOf(user);
-    const deleted = await this.db.query<{ id: number; pesticide: string; plot_code: string | null }>(
-      `DELETE FROM spray_records s
-       USING pesticides p
-       WHERE s.id = $1
-         AND s.household_id = $2
-         AND p.id = s.pesticide_id
-         AND ${SPRAY_DELETABLE_SQL}
-       RETURNING s.id, p.name AS pesticide, s.plot_code`,
-      [id, householdId],
+    const deleted = await this.db.withActorTransaction(user, (client) =>
+      client.query<{ id: number; pesticide: string; plot_code: string | null }>(
+        `DELETE FROM spray_records s
+         USING pesticides p
+         WHERE s.id = $1
+           AND s.household_id = $2
+           AND p.id = s.pesticide_id
+           AND ${SPRAY_DELETABLE_SQL}
+         RETURNING s.id, p.name AS pesticide, s.plot_code`,
+        [id, householdId],
+      ),
     );
     if (deleted.rowCount === 0) {
       const exists = await this.db.query<{ status: string; farmer_created: boolean; within_24h: boolean }>(

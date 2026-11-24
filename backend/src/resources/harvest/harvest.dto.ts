@@ -1,5 +1,5 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { IsIn, IsInt, IsNumber, IsPositive, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsNumber, IsOptional, IsPositive, Max, Min } from "class-validator";
 import {
   Count,
   IsoDate,
@@ -116,6 +116,20 @@ export class CreateHarvestLotDto {
 
   @OptionalText(50)
   estimatedArrival?: string;
+
+  @OptionalText(160)
+  brandName?: string | null;
+
+  @OptionalIsoDate()
+  expiryOn?: string | null;
+
+  @OptionalText(240)
+  storageCondition?: string | null;
+
+  @IsOptional()
+  @RecordId()
+  @Max(Number.MAX_SAFE_INTEGER)
+  productImageId?: number | null;
 }
 
 export class UpdateHarvestLotDto extends PartialType(CreateHarvestLotDto) {}
@@ -159,6 +173,18 @@ export class UpdateGrowingZoneStatusDto {
 
   @OptionalText(300)
   statusNote?: string | null;
+
+  @OptionalText(60)
+  gaccCode?: string | null;
+
+  @OptionalIsoDate()
+  mardApprovedOn?: string | null;
+
+  @OptionalIsoDate()
+  gaccApprovedOn?: string | null;
+
+  @OptionalIsoDate()
+  validUntil?: string | null;
 }
 
 export class NotifyHarvestPlanDto {
@@ -262,4 +288,13 @@ export class UpdateEndorsementConfigDto {
 
   @Text(200)
   inspectionUnit!: string;
+
+  @OptionalText(200)
+  coopLegalName?: string | null;
+
+  @OptionalText(40)
+  coopTaxCode?: string | null;
+
+  @OptionalText(300)
+  coopAddress?: string | null;
 }

@@ -1,6 +1,6 @@
 import { PartialType } from "@nestjs/mapped-types";
 import { Type } from "class-transformer";
-import { ArrayMaxSize, IsArray, IsIn, IsInt, IsOptional, Max, Min } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, Max, Min } from "class-validator";
 import { Count, IsoDate, NonNegative, OptionalField, OptionalText, RecordId, Text } from "../../common/validation/fields";
 
 export class CreateSprayDto {
@@ -59,3 +59,8 @@ export class CreateSprayDto {
 }
 
 export class UpdateSprayDto extends PartialType(CreateSprayDto) {}
+
+export class VerifySprayDto {
+  @IsBoolean()
+  verified!: boolean;
+}

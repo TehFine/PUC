@@ -51,7 +51,7 @@ const FARMER_PURPOSES: ReadonlySet<UploadPurpose> = new Set([
 /** Mục đích trả về URL công khai mặc định qua `/api/public/files/<public_token>` khi mới tải lên. */
 export const PUBLIC_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["news", "catalog", "avatar", "lab", "inspection"]);
 /** Mục đích tuyệt đối không bao giờ phục vụ qua `/api/public/files/:token` dù có token. */
-const STRICT_INTERNAL_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["approval", "violation", "harvest", "stamp"]);
+const STRICT_INTERNAL_PURPOSES: ReadonlySet<UploadPurpose> = new Set(["approval", "violation", "stamp"]);
 
 const PURPOSE_RESOURCE: Partial<Record<UploadPurpose, ResourceKey>> = {
   journal: "journal",
@@ -667,6 +667,26 @@ export class UploadsService implements OnModuleInit {
       if (!attachment) return { attachment: null, publicEligible: false };
       if (STRICT_INTERNAL_PURPOSES.has(attachment.purpose)) {
         return { attachment: null, publicEligible: false };
+      }
+
+      if (attachment.purpose === "harvest") {
+        if (!attachment.mime_type.startsWith("image/")) {
+          return { attachment: null, publicEligible: false };
+        }
+        const hasLotProductCol = await hasPublicColumn(this.db, "harvest_lots", "product_image_id");
+        if (!hasLotProductCol) {
+          return { attachment: null, publicEligible: false };
+        }
+        const lotImgCheck = await this.db.query<{ is_lot_product: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM harvest_lots hl WHERE hl.product_image_id = $1
+           ) AS is_lot_product`,
+          [attachment.id],
+        );
+        if (!lotImgCheck.rows[0]?.is_lot_product) {
+          return { attachment: null, publicEligible: false };
+        }
+        return { attachment, publicEligible: true };
       }
 
       if (attachment.purpose === "lab") {

@@ -29,10 +29,11 @@ export class EnterprisesService extends BaseCrudService {
       resource: "enterprises",
       label: "Doanh nghiệp liên kết",
       table: "enterprises",
-      fields: `t.id, t.code, t.name, t.tax_code, t.representative, t.phone, t.address, t.packhouse_code, t.status, t.created_at`,
+      fields: `t.id, t.code, t.name, t.tax_code, t.representative, t.phone, t.address, t.packhouse_code,
+      t.gacc_code, t.mard_approved_on, t.gacc_approved_on, t.status, t.created_at`,
       from: `enterprises t`,
       orderBy: "t.id",
-      search: ["t.name", "t.code", "t.representative", "t.packhouse_code"],
+      search: ["t.name", "t.code", "t.representative", "t.packhouse_code", "t.gacc_code"],
       filters: { status: "t.status" },
       scope: enterpriseSelfScope("t.id"),
     });

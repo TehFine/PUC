@@ -1,6 +1,6 @@
 import { PartialType } from "@nestjs/mapped-types";
 import { IsIn } from "class-validator";
-import { OptionalField, OptionalText, Text } from "../../common/validation/fields";
+import { OptionalField, OptionalIsoDate, OptionalText, Text } from "../../common/validation/fields";
 
 export class CreateEnterpriseDto {
   @Text(40)
@@ -24,9 +24,18 @@ export class CreateEnterpriseDto {
   @OptionalText(50)
   packhouseCode?: string | null;
 
+  @OptionalText(60)
+  gaccCode?: string | null;
+
+  @OptionalIsoDate()
+  mardApprovedOn?: string | null;
+
+  @OptionalIsoDate()
+  gaccApprovedOn?: string | null;
+
   @OptionalField()
   @IsIn(["active", "suspended", "revoked", "inactive"])
   status?: "active" | "suspended" | "revoked" | "inactive";
 }
 
-export class UpdateEnterpriseDto extends PartialType(CreateEnterpriseDto) {}
+export class UpdateEnterpriseDto extends PartialType(CreateEnterpriseDto) { }
