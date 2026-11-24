@@ -9,7 +9,7 @@ import {
 } from "../../common/throttler/app-throttler.guard";
 import type { AppConfig } from "../../config/configuration";
 import { type IntegrityStrikeCode, SecurityDefenseService } from "../security-defense.service";
-import { ACCESS_COOKIE, CSRF_COOKIE, TokensService, type VerifiedAccessToken } from "../tokens.service";
+import { ACCESS_COOKIE, TokensService, type VerifiedAccessToken } from "../tokens.service";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const MAX_CLOCK_SKEW_MS = 120_000; // Cửa sổ thời gian 2 phút chống phát lại gói tin cũ
@@ -131,14 +131,16 @@ export class RequestIntegrityGuard implements CanActivate {
       return true;
     }
 
+    const canonicalPath = (req.originalUrl || req.url || "").split("#")[0] || "/";
+    const cleanRoutePath = canonicalPath.split("?")[0] || "/";
+
     const contentType = String(req.headers["content-type"] || "").toLowerCase();
-    if (contentType.startsWith("multipart/form-data")) {
+    if (contentType.startsWith("multipart/form-data") && method === "POST" && cleanRoutePath === "/api/uploads") {
       return true;
     }
 
     // Các bản nhập GeoJSON > 1 MB tại /api/plots/import không lưu rawBody vào RAM để bảo vệ bộ nhớ
-    const canonicalPath = (req.originalUrl || req.url || "").split("#")[0] || "/";
-    if (canonicalPath.startsWith("/api/plots/import") && req.rawBody === undefined) {
+    if (cleanRoutePath === "/api/plots/import" && req.rawBody === undefined) {
       return true;
     }
 
@@ -156,7 +158,6 @@ export class RequestIntegrityGuard implements CanActivate {
 
     const cookies = (req.cookies ?? {}) as Record<string, unknown>;
     const rawAccessToken = typeof cookies[ACCESS_COOKIE] === "string" ? cookies[ACCESS_COOKIE] : null;
-    const rawCsrfCookie = typeof cookies[CSRF_COOKIE] === "string" ? cookies[CSRF_COOKIE] : null;
     const reqWithToken = req as RequestWithVerifiedToken & { rawBody?: string };
     let verified = reqWithToken[VERIFIED_TOKEN_CACHE_KEY];
     if (verified === undefined) {
@@ -227,33 +228,31 @@ export class RequestIntegrityGuard implements CanActivate {
     let scopePrefix = "anon";
     if (verified) {
       scopePrefix = `sid:${verified.sessionId}`;
-      if (rawCsrfCookie || sigRaw) {
-        if (!sigRaw || !HEX64_RE.test(sigRaw)) {
-          return this.rejectWithStrike(
-            req,
-            res,
-            canonicalPath,
-            method,
-            verified,
-            "SIGNATURE_REQUIRED",
-            "Thiếu chữ ký bảo mật của phiên đăng nhập.",
-          );
-        }
-        const expectedKey = this.tokens.deriveCsrfSigningKey(verified.userId, verified.sessionId);
-        const expectedSig = createHmac("sha256", expectedKey)
-          .update(expectedPayloadHash, "utf8")
-          .digest("hex");
-        if (!safeHexEqual(sigRaw, expectedSig)) {
-          return this.rejectWithStrike(
-            req,
-            res,
-            canonicalPath,
-            method,
-            verified,
-            "INVALID_SIGNATURE",
-            "Chữ ký bảo mật của phiên đăng nhập không hợp lệ.",
-          );
-        }
+      if (!sigRaw || !HEX64_RE.test(sigRaw)) {
+        return this.rejectWithStrike(
+          req,
+          res,
+          canonicalPath,
+          method,
+          verified,
+          "SIGNATURE_REQUIRED",
+          "Thiếu chữ ký bảo mật của phiên đăng nhập.",
+        );
+      }
+      const expectedKey = this.tokens.deriveCsrfSigningKey(verified.userId, verified.sessionId);
+      const expectedSig = createHmac("sha256", expectedKey)
+        .update(expectedPayloadHash, "utf8")
+        .digest("hex");
+      if (!safeHexEqual(sigRaw, expectedSig)) {
+        return this.rejectWithStrike(
+          req,
+          res,
+          canonicalPath,
+          method,
+          verified,
+          "INVALID_SIGNATURE",
+          "Chữ ký bảo mật của phiên đăng nhập không hợp lệ.",
+        );
       }
     }
 

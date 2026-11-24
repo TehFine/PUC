@@ -440,6 +440,35 @@ describe("4. Chống bắt gói tin phát lại (Anti-Replay) & chống giả m�
       expect(dupRes.status).toBe(409);
       expect(dupRes.body.code).toBe("CONFLICT");
       expect(String(dupRes.body.code)).not.toContain("DB_");
+
+      // 4.10. Giả mạo Content-Type: multipart/form-data trên endpoint JSON để lách chữ ký -> bị chặn 403 INTEGRITY_REQUIRED
+      defense.clearState();
+      const spoofedMultipartRes = await agent
+        .post("/api/villages")
+        .field("name", `${VILLAGE_PREFIX}MultipartBypass`);
+      expect(spoofedMultipartRes.status).toBe(403);
+      expect(spoofedMultipartRes.body.code).toBe("INTEGRITY_REQUIRED");
+
+      // 4.11. Bóc bỏ đồng thời cả cookie htx_csrf lẫn header X-PUC-Signature (chỉ giữ htx_access + SHA-256 trần) -> vẫn bị chặn 403 SIGNATURE_REQUIRED
+      defense.clearState();
+      const rawAccessOnly = extractCookieValue(setCookies, "htx_access")!;
+      cookieRef.cookie = "";
+      const strippedCsrfBody = JSON.stringify({ name: `${VILLAGE_PREFIX}StrippedBothCsrfAndSig` });
+      const unkeyedHeaders = feSec.buildSignedSecurityHeaders(
+        "POST",
+        "/api/villages",
+        strippedCsrfBody,
+        Date.now(),
+      );
+      expect(unkeyedHeaders["X-PUC-Signature"]).toBeUndefined();
+      const strippedBothRes = await request(app)
+        .post("/api/villages")
+        .set("Cookie", `htx_access=${encodeURIComponent(rawAccessOnly)}`)
+        .set("Content-Type", "application/json")
+        .set(unkeyedHeaders)
+        .send(strippedCsrfBody);
+      expect(strippedBothRes.status).toBe(403);
+      expect(strippedBothRes.body.code).toBe("SIGNATURE_REQUIRED");
     } finally {
       delete process.env.ANTI_REPLAY_ENFORCE;
     }
