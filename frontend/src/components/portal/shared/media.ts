@@ -171,7 +171,9 @@ export async function compressImage(file: File): Promise<Blob> {
         }
       }
 
-      if (blob.size >= file.size && ALLOWED_IMAGE_MIMES.has(file.type)) {
+      // Luôn ưu tiên trả về blob đã đi qua Canvas để bóc sạch EXIF ngay từ phía trình duyệt,
+      // trừ trường hợp hiếm gặp ảnh đầu ra phình quá 64 KB so với ảnh nhỏ ban đầu.
+      if (blob.size > file.size + 64 * 1024 && ALLOWED_IMAGE_MIMES.has(file.type)) {
         return file;
       }
       return blob;
