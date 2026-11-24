@@ -22,7 +22,7 @@ export function inferTraceKindFromCode(rawCode: string | null | undefined): Trac
   ) {
     return "fruit";
   }
-  if (/^(?:LH|LOT)-/i.test(cleaned)) {
+  if (/^(?:LH|LOT|EVT)-/i.test(cleaned)) {
     return "lot";
   }
   if (/^[A-Za-z0-9_-]+-H\d{2,5}$/i.test(cleaned) || /^HO-[A-Za-z0-9_-]+$/i.test(cleaned)) {

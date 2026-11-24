@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { TraceLang } from "./trace-i18n";
 
 const A4_SHEET_WIDTH_PX = 820;
@@ -8,13 +8,104 @@ const A4_SHEET_HEIGHT_PX = 1160; // Chuẩn tỷ lệ ISO A4 210 : 297 (820 * 29
 const A4_PAD_TOP_PX = 44;
 const A4_PAD_BOTTOM_PX = 36;
 const A4_INNER_HEIGHT_PX = A4_SHEET_HEIGHT_PX - A4_PAD_TOP_PX - A4_PAD_BOTTOM_PX; // 1080px
-const A4_HEADER_GAP_PX = 24;
-const A4_SECTION_GAP_PX = 30;
-const A4_FOOTER_GAP_PX = 24;
+const A4_SAFETY_BUFFER_PX = 8; // Đệm an toàn chống sai số sub-pixel làm chạm chân trang
+const A4_HEADER_GAP_PX = 22;
+const A4_SECTION_GAP_PX = 22;
+const A4_FOOTER_GAP_PX = 22;
 
-export interface A4DossierSectionItem {
+export interface A4DossierTableRowItem {
   key: string;
-  content: ReactNode;
+  node: ReactNode;
+}
+
+export interface A4DossierTableSpec {
+  sectionClassName?: string;
+  ariaLabel?: string;
+  title: string;
+  partTitleFmt?: (part: number, totalParts: number) => string;
+  metaRight?: ReactNode;
+  metaRightClassName?: string;
+  tableClassName?: string;
+  thead?: ReactNode;
+  rows: A4DossierTableRowItem[];
+}
+
+export type A4DossierSectionItem =
+  | {
+      key: string;
+      kind?: "block";
+      content: ReactNode;
+    }
+  | {
+      key: string;
+      kind: "table";
+      table: A4DossierTableSpec;
+    };
+
+type PageRenderSlot =
+  | {
+      kind: "block";
+      secIdx: number;
+    }
+  | {
+      kind: "table-slice";
+      secIdx: number;
+      startRow: number;
+      endRow: number;
+      partIndex: number;
+      totalParts: number;
+    };
+
+function measureBoxHeight(el: HTMLElement | null): number {
+  if (!el) return 0;
+  const rectH = el.getBoundingClientRect().height;
+  return rectH > 0 ? Math.ceil(rectH) : el.offsetHeight;
+}
+
+function buildInitialSlots(sections: readonly A4DossierSectionItem[]): PageRenderSlot[] {
+  const slots: PageRenderSlot[] = [];
+  sections.forEach((sec, secIdx) => {
+    if (sec.kind === "table") {
+      if (sec.table.rows.length > 0) {
+        slots.push({
+          kind: "table-slice",
+          secIdx,
+          startRow: 0,
+          endRow: sec.table.rows.length,
+          partIndex: 0,
+          totalParts: 1,
+        });
+      }
+    } else {
+      slots.push({ kind: "block", secIdx });
+    }
+  });
+  return slots;
+}
+
+function arePagesEqual(a: readonly PageRenderSlot[][], b: readonly PageRenderSlot[][]): boolean {
+  if (a.length !== b.length) return false;
+  for (let p = 0; p < a.length; p += 1) {
+    const pgA = a[p]!;
+    const pgB = b[p]!;
+    if (pgA.length !== pgB.length) return false;
+    for (let s = 0; s < pgA.length; s += 1) {
+      const x = pgA[s]!;
+      const y = pgB[s]!;
+      if (x.kind !== y.kind || x.secIdx !== y.secIdx) return false;
+      if (x.kind === "table-slice" && y.kind === "table-slice") {
+        if (
+          x.startRow !== y.startRow ||
+          x.endRow !== y.endRow ||
+          x.partIndex !== y.partIndex ||
+          x.totalParts !== y.totalParts
+        ) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
 }
 
 export function splitCoopHeaderLines(
@@ -59,12 +150,11 @@ export const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
   const lastFooterRef = useRef<HTMLDivElement>(null);
   const midFooterRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const recomputeFnRef = useRef<() => void>(() => {});
 
   const sectionCount = sections.length;
   const [scale, setScale] = useState<number>(1);
-  const [pages, setPages] = useState<number[][]>(() => [
-    Array.from({ length: sectionCount }, (_, idx) => idx),
-  ]);
+  const [pages, setPages] = useState<PageRenderSlot[][]>(() => [buildInitialSlots(sections)]);
 
   useLayoutEffect(() => {
     const deck = deckRef.current;
@@ -84,67 +174,174 @@ export const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
     };
 
     const recomputePages = () => {
-      const hFull = fullHeaderRef.current?.offsetHeight ?? 48;
-      const hCont = contHeaderRef.current?.offsetHeight ?? 32;
-      const hLastFoot = lastFooterRef.current?.offsetHeight ?? 78;
-      const hMidFoot = midFooterRef.current?.offsetHeight ?? 34;
+      const hFull = measureBoxHeight(fullHeaderRef.current) || 56;
+      const hCont = measureBoxHeight(contHeaderRef.current) || 34;
+      const hLastFoot = measureBoxHeight(lastFooterRef.current) || 34;
+      const hMidFoot = measureBoxHeight(midFooterRef.current) || 34;
+      const reservedFoot = Math.max(hLastFoot, hMidFoot);
 
-      const heights = Array.from(
-        { length: sectionCount },
-        (_, idx) => sectionRefs.current[idx]?.offsetHeight ?? 0,
-      );
-      if (hFull === 0 || heights.length === 0 || heights.every((h) => h === 0)) return;
+      type MeasuredSection =
+        | { kind: "empty" }
+        | { kind: "block"; secIdx: number; height: number }
+        | {
+            kind: "table";
+            secIdx: number;
+            totalHeight: number;
+            chromeHeight: number;
+            rowHeights: number[];
+          };
 
-      const sumAll =
-        heights.reduce((acc, h) => acc + h, 0) +
-        Math.max(0, heights.length - 1) * A4_SECTION_GAP_PX;
-      const singlePageTotal =
-        hFull + A4_HEADER_GAP_PX + sumAll + A4_FOOTER_GAP_PX + hLastFoot;
+      let hasAnyMeasured = false;
+      const measured: MeasuredSection[] = sections.map((sec, idx) => {
+        const wrapper = sectionRefs.current[idx] ?? null;
+        if (!wrapper) return { kind: "empty" };
+        if (sec.kind === "table") {
+          if (sec.table.rows.length === 0) return { kind: "empty" };
+          const wrapperRectH = wrapper.getBoundingClientRect().height;
+          const totalH = wrapperRectH > 0 ? Math.ceil(wrapperRectH) : wrapper.offsetHeight;
+          if (totalH > 0) hasAnyMeasured = true;
+          const tbody = wrapper.querySelector<HTMLTableSectionElement>(
+            'tbody[data-measure-tbody="1"]',
+          );
+          const tbodyRectH = tbody ? tbody.getBoundingClientRect().height : 0;
+          const trList = tbody ? (Array.from(tbody.children) as HTMLElement[]) : [];
+          const rowHeights = sec.table.rows.map((_, rIdx) => {
+            const trEl = trList[rIdx] ?? null;
+            return Math.max(24, measureBoxHeight(trEl) || 38);
+          });
+          const sumRows = rowHeights.reduce((acc, h) => acc + h, 0);
+          const rawChrome =
+            wrapperRectH > 0 && tbodyRectH > 0 && wrapperRectH >= tbodyRectH
+              ? Math.ceil(wrapperRectH - tbodyRectH)
+              : totalH > sumRows
+                ? totalH - sumRows
+                : sec.table.thead
+                  ? 58
+                  : 30;
+          return {
+            kind: "table",
+            secIdx: idx,
+            totalHeight: totalH || rawChrome + sumRows,
+            chromeHeight: Math.max(sec.table.thead ? 44 : 26, rawChrome + 2),
+            rowHeights,
+          };
+        }
 
-      let nextPages: number[][];
-      if (singlePageTotal <= A4_INNER_HEIGHT_PX) {
-        nextPages = [heights.map((_, i) => i)];
-      } else {
-        nextPages = [];
-        let curPage: number[] = [];
-        let usedH = 0;
-        const reservedFoot = Math.max(hLastFoot, hMidFoot);
+        const blockH = measureBoxHeight(wrapper);
+        if (blockH > 0) hasAnyMeasured = true;
+        return { kind: "block", secIdx: idx, height: blockH };
+      });
 
-        for (let i = 0; i < heights.length; i += 1) {
-          const isFirstPage = nextPages.length === 0;
-          const headerH = isFirstPage ? hFull : hCont;
-          const budget =
-            A4_INNER_HEIGHT_PX - headerH - A4_HEADER_GAP_PX - A4_FOOTER_GAP_PX - reservedFoot;
-          const addH = (curPage.length > 0 ? A4_SECTION_GAP_PX : 0) + heights[i];
+      if (!hasAnyMeasured) return;
 
-          if (curPage.length > 0 && usedH + addH > budget) {
-            nextPages.push(curPage);
-            curPage = [i];
-            usedH = heights[i];
+      const pageBudgetFor = (pageIndex: number) => {
+        const headerH = pageIndex === 0 ? hFull : hCont;
+        return Math.max(
+          260,
+          A4_INNER_HEIGHT_PX -
+            A4_SAFETY_BUFFER_PX -
+            headerH -
+            A4_HEADER_GAP_PX -
+            A4_FOOTER_GAP_PX -
+            reservedFoot,
+        );
+      };
+
+      const rawPages: PageRenderSlot[][] = [];
+      let curPage: PageRenderSlot[] = [];
+      let usedH = 0;
+
+      const flushPage = () => {
+        if (curPage.length > 0) {
+          rawPages.push(curPage);
+          curPage = [];
+          usedH = 0;
+        }
+      };
+
+      for (const item of measured) {
+        if (item.kind === "empty") continue;
+
+        if (item.kind === "block") {
+          const curBudget = pageBudgetFor(rawPages.length);
+          const gap = curPage.length > 0 ? A4_SECTION_GAP_PX : 0;
+          if (curPage.length > 0 && usedH + gap + item.height > curBudget) {
+            flushPage();
+            curPage.push({ kind: "block", secIdx: item.secIdx });
+            usedH = item.height;
           } else {
-            curPage.push(i);
-            usedH += addH;
+            curPage.push({ kind: "block", secIdx: item.secIdx });
+            usedH += gap + item.height;
+          }
+          continue;
+        }
+
+        // Mục dạng bảng: tự động ngắt dòng vừa khít từng tờ A4, lặp lại tiêu đề cột ở trang tiếp theo
+        const totalRows = item.rowHeights.length;
+        let rowCursor = 0;
+        const createdSlices: Array<Extract<PageRenderSlot, { kind: "table-slice" }>> = [];
+
+        while (rowCursor < totalRows) {
+          let curBudget = pageBudgetFor(rawPages.length);
+          let gap = curPage.length > 0 ? A4_SECTION_GAP_PX : 0;
+          let avail = curBudget - usedH - gap;
+          const firstRowNeed = item.chromeHeight + item.rowHeights[rowCursor]!;
+
+          if (curPage.length > 0 && firstRowNeed > avail) {
+            flushPage();
+            curBudget = pageBudgetFor(rawPages.length);
+            gap = 0;
+            avail = curBudget;
+          }
+
+          let sliceEnd = rowCursor + 1;
+          let sliceHeight = item.chromeHeight + item.rowHeights[rowCursor]!;
+
+          while (sliceEnd < totalRows) {
+            const nextRowH = item.rowHeights[sliceEnd]!;
+            if (sliceHeight + nextRowH > avail) {
+              break;
+            }
+            sliceHeight += nextRowH;
+            sliceEnd += 1;
+          }
+
+          const sliceSlot: Extract<PageRenderSlot, { kind: "table-slice" }> = {
+            kind: "table-slice",
+            secIdx: item.secIdx,
+            startRow: rowCursor,
+            endRow: sliceEnd,
+            partIndex: createdSlices.length,
+            totalParts: 1,
+          };
+          createdSlices.push(sliceSlot);
+          curPage.push(sliceSlot);
+          usedH += gap + sliceHeight;
+          rowCursor = sliceEnd;
+
+          if (rowCursor < totalRows) {
+            flushPage();
           }
         }
-        if (curPage.length > 0) {
-          nextPages.push(curPage);
+
+        if (createdSlices.length > 1) {
+          for (const sl of createdSlices) {
+            sl.totalParts = createdSlices.length;
+          }
         }
       }
 
-      setPages((prev) => {
-        if (
-          prev.length === nextPages.length &&
-          prev.every(
-            (pg, pIdx) =>
-              pg.length === nextPages[pIdx]?.length &&
-              pg.every((v, iIdx) => v === nextPages[pIdx]?.[iIdx]),
-          )
-        ) {
-          return prev;
-        }
-        return nextPages;
-      });
+      if (curPage.length > 0) {
+        rawPages.push(curPage);
+      }
+      if (rawPages.length === 0) {
+        rawPages.push(buildInitialSlots(sections));
+      }
+
+      setPages((prev) => (arePagesEqual(prev, rawPages) ? prev : rawPages));
     };
+
+    recomputeFnRef.current = recomputePages;
 
     const onBeforePrint = () => {
       printing = true;
@@ -188,7 +385,48 @@ export const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
       window.removeEventListener("beforeprint", onBeforePrint);
       window.removeEventListener("afterprint", onAfterPrint);
     };
-  }, [measureKey, sectionCount]);
+  }, [measureKey, sectionCount, sections]);
+
+  const renderTableSlice = (
+    sec: Extract<A4DossierSectionItem, { kind: "table" }>,
+    startRow: number,
+    endRow: number,
+    partIndex: number,
+    totalParts: number,
+  ) => {
+    const { table } = sec;
+    const headerTitle =
+      totalParts > 1 && table.partTitleFmt
+        ? table.partTitleFmt(partIndex + 1, totalParts)
+        : table.title;
+    const sliceRows = table.rows.slice(startRow, endRow);
+
+    return (
+      <section
+        className={table.sectionClassName || "tr-doc-ledger tr-doc-ext-block"}
+        aria-label={table.ariaLabel}
+      >
+        <div className="tr-doc-meta-strip">
+          <span className="tr-doc-meta-left">{headerTitle}</span>
+          {table.metaRight ? (
+            <strong className={table.metaRightClassName || "tr-doc-meta-right"}>
+              {table.metaRight}
+            </strong>
+          ) : null}
+        </div>
+        <div className="tr-doc-table-wrap">
+          <table className={table.tableClassName || "tr-doc-table"}>
+            {table.thead ? <thead>{table.thead}</thead> : null}
+            <tbody>
+              {sliceRows.map((row) => (
+                <Fragment key={row.key}>{row.node}</Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    );
+  };
 
   return (
     <div
@@ -196,20 +434,39 @@ export const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
       className="tr-doc-a4-deck"
       style={{ "--a4-scale": String(scale) } as React.CSSProperties}
     >
-      {pages.map((sectionIndices, pageIdx) => (
+      {pages.map((pageSlots, pageIdx) => (
         <div key={`a4-sheet-${pageIdx}`} className="tr-doc-a4-page-frame">
           <article className="tr-doc-sheet" data-status={status}>
             {pageIdx === 0 ? headerFull : headerContinuation}
 
             <div className="tr-doc-page-body">
-              {sectionIndices.map((secIdx) => {
-                const sec = sections[secIdx];
+              {pageSlots.map((slot) => {
+                const sec = sections[slot.secIdx];
                 if (!sec) return null;
-                return (
-                  <div key={sec.key} className="tr-doc-page-block">
-                    {sec.content}
-                  </div>
-                );
+                if (slot.kind === "table-slice" && sec.kind === "table") {
+                  return (
+                    <div
+                      key={`${sec.key}-slice-${slot.startRow}-${slot.endRow}`}
+                      className="tr-doc-page-block"
+                    >
+                      {renderTableSlice(
+                        sec,
+                        slot.startRow,
+                        slot.endRow,
+                        slot.partIndex,
+                        slot.totalParts,
+                      )}
+                    </div>
+                  );
+                }
+                if (sec.kind !== "table") {
+                  return (
+                    <div key={sec.key} className="tr-doc-page-block">
+                      {sec.content}
+                    </div>
+                  );
+                }
+                return null;
               })}
             </div>
 
@@ -218,8 +475,13 @@ export const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
         </div>
       ))}
 
-      {/* Khung đo kích thước ẩn chuẩn chiều rộng lòng tờ A4 (716px) để tự động ngắt trang chính xác */}
-      <div ref={sandboxRef} className="tr-doc-measure-sandbox no-print" aria-hidden="true">
+      {/* Khung đo kích thước ẩn chuẩn chiều rộng lòng tờ A4 (716px) để tự động cắt trang theo từng dòng */}
+      <div
+        ref={sandboxRef}
+        className="tr-doc-measure-sandbox no-print"
+        aria-hidden="true"
+        onLoadCapture={() => recomputeFnRef.current()}
+      >
         <div ref={fullHeaderRef} className="tr-doc-measure-item">
           {headerFull}
         </div>
@@ -240,7 +502,32 @@ export const PaginatedA4Dossier = memo(function PaginatedA4Dossier({
             }}
             className="tr-doc-measure-item"
           >
-            {sec.content}
+            {sec.kind === "table" ? (
+              <section className={sec.table.sectionClassName || "tr-doc-ledger tr-doc-ext-block"}>
+                <div className="tr-doc-meta-strip">
+                  <span className="tr-doc-meta-left">
+                    {sec.table.partTitleFmt ? sec.table.partTitleFmt(1, 2) : sec.table.title}
+                  </span>
+                  {sec.table.metaRight ? (
+                    <strong className={sec.table.metaRightClassName || "tr-doc-meta-right"}>
+                      {sec.table.metaRight}
+                    </strong>
+                  ) : null}
+                </div>
+                <div className="tr-doc-table-wrap">
+                  <table className={sec.table.tableClassName || "tr-doc-table"}>
+                    {sec.table.thead ? <thead>{sec.table.thead}</thead> : null}
+                    <tbody data-measure-tbody="1">
+                      {sec.table.rows.map((row) => (
+                        <Fragment key={row.key}>{row.node}</Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : (
+              sec.content
+            )}
           </div>
         ))}
       </div>

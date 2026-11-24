@@ -13,6 +13,19 @@
   --tr-subtle: #8d8d88;
   --tr-surface: #ffffff;
   --tr-surface-alt: #fafaf8;
+  --tr-a4-shadow:
+    0 20px 48px -8px rgba(15, 23, 42, 0.14),
+    0 8px 20px -4px rgba(15, 23, 42, 0.08),
+    0 2px 6px rgba(15, 23, 42, 0.05);
+  --tr-card-shadow:
+    0 10px 28px -6px rgba(15, 23, 42, 0.1),
+    0 3px 10px -2px rgba(15, 23, 42, 0.06);
+  --tr-btn-shadow:
+    0 4px 12px -2px rgba(15, 23, 42, 0.11),
+    0 1px 4px rgba(15, 23, 42, 0.07);
+  --tr-btn-shadow-hover:
+    0 8px 20px -3px rgba(15, 23, 42, 0.16),
+    0 3px 7px rgba(15, 23, 42, 0.09);
 
   min-height: 100vh;
   min-height: 100dvh;
@@ -37,6 +50,7 @@
 .tr-root textarea,
 .tr-root a {
   font-family: inherit;
+  outline: none;
 }
 
 .tr-root input::placeholder,
@@ -45,11 +59,25 @@
   color: var(--tr-subtle);
 }
 
+.tr-root button:focus,
 .tr-root button:focus-visible,
+.tr-root button:active,
+.tr-root a:focus,
 .tr-root a:focus-visible,
-.tr-root input:focus-visible {
-  outline: 1.5px solid var(--tr-ink);
-  outline-offset: 2px;
+.tr-root a:active,
+.tr-root input:focus,
+.tr-root input:focus-visible,
+.tr-root select:focus,
+.tr-root select:focus-visible,
+.tr-root textarea:focus,
+.tr-root textarea:focus-visible,
+.tr-doc-a4-page-frame,
+.tr-doc-a4-page-frame:focus,
+.tr-doc-a4-page-frame:focus-visible,
+.tr-doc-sheet,
+.tr-doc-sheet:focus,
+.tr-doc-sheet:focus-visible {
+  outline: none !important;
 }
 
 /* ─── Khung nội dung chuẩn kiến trúc ─── */
@@ -151,32 +179,33 @@
   justify-content: center;
   height: 36px;
   padding: 0 16px;
-  border: 1px solid var(--tr-line-strong);
+  border: none;
+  outline: none;
   border-radius: 0;
-  background: #ffffff;
+  background: #f4f4f1;
   color: var(--tr-ink);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: -0.01em;
   text-decoration: none;
   white-space: nowrap;
-  transition: background-color 0.16s ease, border-color 0.16s ease;
+  box-shadow: var(--tr-btn-shadow);
+  transition: background-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
 }
 
 .tr-top-btn:hover {
-  background: #f5f5f2;
-  border-color: var(--tr-ink);
+  background: #eaeae5;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-top-btn.is-solid {
   background: var(--tr-ink);
-  border-color: var(--tr-ink);
   color: #ffffff;
 }
 
 .tr-top-btn.is-solid:hover {
   background: #2b2b29;
-  border-color: #2b2b29;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 @media screen and (max-width: 960px) {
@@ -801,8 +830,11 @@
   line-height: 1.2;
   white-space: nowrap;
   text-decoration: none;
+  border: none;
+  outline: none;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .tr-home-btn svg,
@@ -816,27 +848,25 @@
 
 .tr-home-btn,
 .tr-print-btn {
-  background: #ffffff;
+  background: #f4f4f1;
   color: var(--tr-ink);
-  border: 1px solid var(--tr-line-strong);
 }
 
 .tr-home-btn:hover,
 .tr-print-btn:hover {
-  background: #f5f5f2;
-  border-color: var(--tr-ink);
+  background: #eaeae5;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-share-btn {
   grid-column: 1 / -1;
   background: var(--tr-ink);
   color: #ffffff;
-  border: 1px solid var(--tr-ink);
 }
 
 .tr-share-btn:hover {
   background: #2b2b29;
-  border-color: #2b2b29;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 @media (min-width: 540px) {
@@ -941,6 +971,8 @@
 .tr-error-card {
   text-align: center;
   padding: 40px 24px;
+  border: none;
+  box-shadow: var(--tr-card-shadow);
 }
 
 .tr-error-title {
@@ -1009,13 +1041,16 @@
   color: #ffffff;
   font-size: 14px;
   font-weight: 500;
-  border: 1px solid var(--tr-ink);
+  border: none;
+  outline: none;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
-  transition: background-color 0.16s ease;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .tr-search-btn:hover {
   background: #2b2b29;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-error-actions {
@@ -1687,18 +1722,20 @@
   border-radius: 0;
   background: var(--tr-ink);
   color: #ffffff;
-  border: 1px solid var(--tr-ink);
+  border: none;
+  outline: none;
+  box-shadow: var(--tr-btn-shadow);
   font-size: 13.5px;
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.25;
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .tr-puc-gis-btn:hover {
   background: #2b2b29;
-  border-color: #2b2b29;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-puc-gis-pin {
@@ -2287,7 +2324,16 @@ html[data-perf="lite"] .tr-print-btn,
 html[data-perf="lite"] .tr-share-btn,
 html[data-perf="lite"] .tr-puc-gis-btn,
 html[data-perf="lite"] .tr-search-input,
-html[data-perf="lite"] .tr-search-btn {
+html[data-perf="lite"] .tr-search-btn,
+html[data-perf="lite"] .tr-doc-act-btn,
+html[data-perf="lite"] .tr-lang-btn,
+html[data-perf="lite"] .tr-tier-btn,
+html[data-perf="lite"] .tr-tier-sub-action-btn,
+html[data-perf="lite"] .tr-uac-btn-solid,
+html[data-perf="lite"] .tr-uac-btn-outline,
+html[data-perf="lite"] .tr-req-btn-primary,
+html[data-perf="lite"] .tr-req-btn-secondary,
+html[data-perf="lite"] .tr-req-modal-close {
   transition: none !important;
 }
 
@@ -2438,8 +2484,9 @@ html[data-perf="lite"] .tr-search-btn {
   flex-wrap: wrap;
   padding: 14px 24px;
   background: #ffffff;
-  border: 1px solid var(--tr-ink);
+  border: none;
   border-radius: 0;
+  box-shadow: var(--tr-card-shadow);
 }
 
 .tr-tier-bar-info {
@@ -2476,15 +2523,17 @@ html[data-perf="lite"] .tr-search-btn {
   display: inline-flex;
   align-items: stretch;
   flex-shrink: 0;
-  border: 1px solid var(--tr-line-strong);
-  background: var(--tr-surface-alt);
+  border: none;
+  outline: none;
+  background: #f4f4f1;
+  box-shadow: var(--tr-btn-shadow);
 }
 
 .tr-tier-btn {
   height: 36px;
   padding: 0 14px;
   border: none;
-  border-right: 1px solid var(--tr-line-strong);
+  outline: none;
   background: transparent;
   color: var(--tr-muted);
   font-size: 12.5px;
@@ -2494,12 +2543,8 @@ html[data-perf="lite"] .tr-search-btn {
   transition: background-color 0.14s ease, color 0.14s ease;
 }
 
-.tr-tier-btn:last-child {
-  border-right: none;
-}
-
 .tr-tier-btn:hover:not(:disabled) {
-  background: #f1f1ed;
+  background: #eaeae5;
   color: var(--tr-ink);
 }
 
@@ -2546,8 +2591,9 @@ html[data-perf="lite"] .tr-search-btn {
 .tr-alert-banner {
   padding: 16px 24px;
   border-radius: 0;
-  border: 1px solid var(--tr-line);
+  border: none;
   background: #ffffff;
+  box-shadow: var(--tr-card-shadow);
 }
 
 @media (max-width: 640px) {
@@ -2906,20 +2952,22 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-coarse-map-reset {
   height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--tr-line-strong);
+  padding: 0 12px;
+  border: none;
+  outline: none;
   border-radius: 0;
-  background: #ffffff;
+  background: #f4f4f1;
   color: var(--tr-ink);
   font-size: 11.5px;
   font-weight: 600;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
-  transition: background-color 150ms ease, border-color 150ms ease;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
 }
 
 .tr-coarse-map-reset:hover {
-  background: #f5f5f2;
-  border-color: var(--tr-ink);
+  background: #eaeae5;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-coarse-map-canvas,
@@ -2949,12 +2997,15 @@ html[data-perf="lite"] .tr-search-btn {
 }
 
 .tr-coarse-map-canvas.is-satellite-live .leaflet-control-zoom {
-  border: 1px solid #121212;
+  border: none !important;
+  outline: none !important;
   border-radius: 0;
-  box-shadow: none;
+  box-shadow: var(--tr-btn-shadow) !important;
 }
 
 .tr-coarse-map-canvas.is-satellite-live .leaflet-control-zoom a {
+  border: none !important;
+  outline: none !important;
   border-radius: 0 !important;
   color: #121212;
   font-weight: 700;
@@ -3126,17 +3177,20 @@ html[data-perf="lite"] .tr-search-btn {
   width: 100%;
   min-height: 40px;
   padding: 8px 14px;
-  border: 1px solid var(--tr-ink);
-  background: #ffffff;
+  border: none;
+  outline: none;
+  background: #f4f4f1;
   color: var(--tr-ink);
   font-size: 13px;
   font-weight: 500;
   text-decoration: none;
-  transition: background-color 0.15s ease;
+  box-shadow: var(--tr-btn-shadow);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-scan-doc-btn:hover {
-  background: var(--tr-surface-alt);
+  background: #eaeae5;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-scan-doc-muted {
@@ -3344,18 +3398,22 @@ html[data-perf="lite"] .tr-search-btn {
   gap: 6px;
   height: 36px;
   padding: 0 12px;
-  border: 1px solid var(--tr-ink);
-  background: #ffffff;
+  border: none;
+  outline: none;
+  background: #f4f4f1;
   color: var(--tr-ink);
   font-size: 12.5px;
   font-weight: 500;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-auth-gis-btn:hover {
   background: var(--tr-ink);
   color: #ffffff;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 /* ─── Biên bản kiểm tra & Vi phạm nội bộ ─── */
@@ -3431,19 +3489,23 @@ html[data-perf="lite"] .tr-search-btn {
   justify-content: center;
   height: 36px;
   padding: 0 14px;
-  border: 1px solid #9a6b16;
+  border: none;
+  outline: none;
   background: #ffffff;
   color: #78500d;
   font-size: 12.5px;
   font-weight: 600;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-scope-switch-btn:hover {
   background: #78500d;
   color: #ffffff;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 @media (max-width: 640px) {
@@ -3491,7 +3553,8 @@ html[data-perf="lite"] .tr-search-btn {
   flex-wrap: wrap;
   padding: 12px 16px;
   background: #ffffff;
-  border: 1px solid var(--tr-line);
+  border: none;
+  box-shadow: var(--tr-card-shadow);
 }
 
 .tr-auth-hint-text {
@@ -3516,18 +3579,21 @@ html[data-perf="lite"] .tr-search-btn {
   flex-shrink: 0;
   height: 36px;
   padding: 0 14px;
-  border: 1px solid var(--tr-line-strong);
-  background: var(--tr-surface-alt);
+  border: none;
+  outline: none;
+  background: #f4f4f1;
   color: var(--tr-ink);
   font-size: 12.5px;
   font-weight: 500;
   text-decoration: none;
   white-space: nowrap;
+  box-shadow: var(--tr-btn-shadow);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-auth-hint-link:hover {
-  border-color: var(--tr-ink);
-  background: #ffffff;
+  background: #eaeae5;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 /* ─── Dải chuyển ngôn ngữ VI / EN / 简体中文 & Nút đăng nhập đối tác ngang hàng ─── */
@@ -3544,17 +3610,19 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-lang-switch {
   display: inline-flex;
-  border: 1px solid var(--tr-line-strong);
+  border: none;
+  outline: none;
   background: #ffffff;
+  box-shadow: var(--tr-btn-shadow);
   flex-shrink: 0;
   box-sizing: border-box;
 }
 
 .tr-lang-btn {
   height: 34px;
-  padding: 0 13px;
+  padding: 0 14px;
   border: none;
-  border-right: 1px solid var(--tr-line-strong);
+  outline: none;
   background: transparent;
   color: var(--tr-muted);
   font-size: 12px;
@@ -3562,10 +3630,6 @@ html[data-perf="lite"] .tr-search-btn {
   cursor: pointer;
   white-space: nowrap;
   transition: background-color 0.14s ease, color 0.14s ease;
-}
-
-.tr-lang-btn:last-child {
-  border-right: none;
 }
 
 .tr-lang-btn:hover {
@@ -3634,9 +3698,9 @@ html[data-perf="lite"] .tr-search-btn {
   flex-wrap: wrap;
   padding: 12px 16px;
   background: #f3f8f4;
-  border: 1px solid var(--tr-line);
+  border: none;
   border-radius: 0;
-  box-shadow: none;
+  box-shadow: var(--tr-card-shadow);
 }
 
 .tr-pass-banner-main {
@@ -3670,19 +3734,23 @@ html[data-perf="lite"] .tr-search-btn {
   flex-shrink: 0;
   height: 36px;
   padding: 0 14px;
-  border: 1px solid #1c4e30;
+  border: none;
+  outline: none;
   border-radius: 0;
   background: #ffffff;
   color: #1c4e30;
   font-size: 12.5px;
   font-weight: 600;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-pass-exit-btn:hover {
   background: #1c4e30;
   color: #ffffff;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 /* 2. Bảo chứng Chính quyền Xã / Tỉnh & Ma trận Xác thực Độc lập 3 Bên */
@@ -3762,19 +3830,23 @@ html[data-perf="lite"] .tr-search-btn {
   gap: 8px;
   height: 36px;
   padding: 0 14px;
-  border: 1px solid var(--tr-ink);
+  border: none;
+  outline: none;
   border-radius: 0;
-  background: #fafaf8;
+  background: #f4f4f1;
   color: var(--tr-ink);
   font-size: 12.5px;
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
+  box-shadow: var(--tr-btn-shadow);
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-gov-portal-btn:hover {
   background: var(--tr-ink);
   color: #ffffff;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-attestation-wrap {
@@ -3989,18 +4061,22 @@ html[data-perf="lite"] .tr-search-btn {
   width: 100%;
   min-height: 36px;
   padding: 6px 12px;
-  border: 1px solid #1c4e30;
+  border: none;
+  outline: none;
   border-radius: 0;
   background: #f4f9f5;
   color: #1c4e30;
   font-size: 12.5px;
   font-weight: 600;
   text-decoration: none;
+  box-shadow: var(--tr-btn-shadow);
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-ext-verify-btn:hover {
   background: #1c4e30;
   color: #ffffff;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-lab-code-stack {
@@ -4193,11 +4269,10 @@ html[data-perf="lite"] .tr-search-btn {
   aspect-ratio: 820 / 1160;
   overflow: hidden;
   background: #ffffff;
+  border: none;
+  outline: none;
   border-radius: 0;
-  box-shadow:
-    0 0 0 1px rgba(18, 18, 18, 0.1),
-    0 12px 32px rgba(15, 23, 42, 0.08),
-    0 2px 6px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--tr-a4-shadow);
   touch-action: pan-x pan-y pinch-zoom;
 }
 
@@ -4234,11 +4309,11 @@ html[data-perf="lite"] .tr-search-btn {
 }
 
 .tr-doc-page-body {
-  margin-top: 24px;
-  margin-bottom: 24px;
+  margin-top: 22px;
+  margin-bottom: 22px;
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 22px;
   min-height: 0;
 }
 
@@ -4431,6 +4506,73 @@ html[data-perf="lite"] .tr-search-btn {
   font-variant-numeric: tabular-nums;
 }
 
+.tr-doc-party-code-sub {
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #3f3f3b;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-doc-party-code-sub.is-warn {
+  color: #9a6712;
+}
+
+.tr-doc-event-code {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #575752;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-doc-table tbody tr.is-matched-event td {
+  background: #f5f7f3;
+}
+
+/* Bảng Nhật ký kiểm toán thay đổi bất biến (Cấp 3 Cơ quan thẩm quyền - 716px) */
+.tr-doc-table.is-auth-immutable th.col-audit-time,
+.tr-doc-table.is-auth-immutable td.col-audit-time {
+  width: 114px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-doc-table.is-auth-immutable th.col-audit-actor,
+.tr-doc-table.is-auth-immutable td.col-audit-actor {
+  width: 166px;
+}
+
+.tr-doc-table.is-auth-immutable th.col-audit-diff,
+.tr-doc-table.is-auth-immutable td.col-audit-diff {
+  width: 326px;
+}
+
+.tr-doc-table.is-auth-immutable th.col-audit-hash,
+.tr-doc-table.is-auth-immutable td.col-audit-hash {
+  width: 110px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-doc-table.is-auth-immutable tbody td {
+  padding: 10.5px 8px;
+}
+
+.tr-doc-diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tr-doc-diff-line {
+  display: block;
+  font-size: 11.5px;
+  color: #2c2c2a;
+  line-height: 1.42;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Thẻ chân dung nông hộ trên tờ A4 (Bảng cắm vườn & Hồ sơ Nông hộ) */
 .tr-doc-farmer-card {
   display: grid;
@@ -4475,13 +4617,11 @@ html[data-perf="lite"] .tr-search-btn {
 .tr-doc-farmer-avatar-fallback {
   width: 100%;
   height: 100%;
-  background: repeating-linear-gradient(
-    -45deg,
-    #f3f3f0,
-    #f3f3f0 2.5px,
-    #ffffff 2.5px,
-    #ffffff 6px
-  );
+  background: repeating-linear-gradient(-45deg,
+      #f3f3f0,
+      #f3f3f0 2.5px,
+      #ffffff 2.5px,
+      #ffffff 6px);
   border: 1px solid #ecece8;
   display: flex;
   flex-direction: column;
@@ -4587,7 +4727,10 @@ html[data-perf="lite"] .tr-search-btn {
 }
 
 .tr-doc-meta-right {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  max-width: 56%;
+  text-align: right;
+  overflow-wrap: break-word;
   font-size: 11.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -4689,7 +4832,8 @@ html[data-perf="lite"] .tr-search-btn {
 }
 
 .tr-doc-table td.col-status {
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.36;
   font-weight: 700;
   color: #18181b;
 }
@@ -4716,6 +4860,9 @@ html[data-perf="lite"] .tr-search-btn {
   margin-top: 2px;
   font-size: 10.5px;
   font-weight: 500;
+  line-height: 1.34;
+  white-space: normal;
+  overflow-wrap: break-word;
   color: #6b6b66;
 }
 
@@ -5048,8 +5195,9 @@ html[data-perf="lite"] .tr-search-btn {
   align-items: center;
   justify-content: center;
   height: 36px;
-  padding: 0 14px;
-  border: 1px solid #cfcfc9;
+  padding: 0 15px;
+  border: none;
+  outline: none;
   border-radius: 0;
   background: #ffffff;
   color: #18181b;
@@ -5057,14 +5205,15 @@ html[data-perf="lite"] .tr-search-btn {
   font-weight: 500;
   text-decoration: none;
   white-space: nowrap;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.tr-doc-act-btn:hover {
+.tr-doc-act-btn:hover:not(:disabled) {
   background: #18181b;
-  border-color: #18181b;
   color: #ffffff;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-doc-external-map {
@@ -5072,6 +5221,7 @@ html[data-perf="lite"] .tr-search-btn {
   border: none;
   border-radius: 0;
   padding: 0;
+  box-shadow: var(--tr-card-shadow);
 }
 
 @media (max-width: 640px) {
@@ -5210,26 +5360,27 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-tier-sub-action-btn {
   height: 36px;
-  padding: 0 13px;
-  border: 1px solid var(--tr-line-strong);
+  padding: 0 14px;
+  border: none;
+  outline: none;
   border-radius: 0;
-  background: #ffffff;
+  background: #f4f4f1;
   color: var(--tr-ink);
   font-size: 12.5px;
   font-weight: 500;
   font-family: inherit;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-tier-sub-action-btn:hover {
-  border-color: var(--tr-ink);
-  background: #f5f5f2;
+  background: #eaeae5;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-tier-sub-action-btn.is-primary {
-  border-color: var(--tr-ink);
   background: var(--tr-ink);
   color: #ffffff;
   font-weight: 600;
@@ -5237,15 +5388,16 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-tier-sub-action-btn.is-primary:hover {
   background: #1c4e30;
-  border-color: #1c4e30;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-unified-access-card {
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border: 1px solid var(--tr-line-strong);
+  border: none;
   border-radius: 0;
+  box-shadow: var(--tr-card-shadow);
 }
 
 .tr-uac-head {
@@ -5343,6 +5495,7 @@ html[data-perf="lite"] .tr-search-btn {
   justify-content: center;
   height: 38px;
   padding: 0 15px;
+  border: none;
   border-radius: 0;
   outline: none;
   font-family: inherit;
@@ -5350,20 +5503,20 @@ html[data-perf="lite"] .tr-search-btn {
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-uac-btn-solid {
   flex-shrink: 0;
-  border: 1px solid var(--tr-ink);
   background: var(--tr-ink);
   color: #ffffff;
 }
 
 .tr-uac-btn-solid:hover:not(:disabled) {
   background: #1c4e30;
-  border-color: #1c4e30;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-uac-btn-solid:disabled {
@@ -5372,18 +5525,17 @@ html[data-perf="lite"] .tr-search-btn {
 }
 
 .tr-uac-btn-outline {
-  border: 1px solid var(--tr-line-strong);
-  background: #ffffff;
+  background: #f4f4f1;
   color: var(--tr-ink);
 }
 
 .tr-uac-btn-outline.is-strong {
-  border-color: var(--tr-ink);
+  background: #ecece7;
 }
 
 .tr-uac-btn-outline:hover {
-  border-color: var(--tr-ink);
-  background: #f6f6f3;
+  background: #e3e3dc;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-uac-status {
@@ -5453,9 +5605,10 @@ html[data-perf="lite"] .tr-search-btn {
   max-height: calc(100vh - 32px);
   overflow-y: auto;
   background: #ffffff;
-  border: 1px solid var(--tr-ink);
+  border: none;
+  outline: none;
   border-radius: 0;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 22px 52px rgba(15, 23, 42, 0.2), 0 6px 18px rgba(15, 23, 42, 0.1);
 }
 
 .tr-req-modal-head {
@@ -5489,18 +5642,21 @@ html[data-perf="lite"] .tr-search-btn {
   right: 16px;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--tr-line-strong);
+  border: none;
+  outline: none;
   border-radius: 0;
-  background: #ffffff;
+  background: #f4f4f1;
   color: var(--tr-ink);
   font-size: 18px;
   line-height: 1;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-req-modal-close:hover:not(:disabled) {
-  border-color: var(--tr-ink);
-  background: #f5f5f2;
+  background: #e6e6e0;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-req-modal-form {
@@ -5583,34 +5739,36 @@ html[data-perf="lite"] .tr-search-btn {
 .tr-req-btn-primary {
   height: 38px;
   padding: 0 16px;
+  border: none;
+  outline: none;
   border-radius: 0;
   font-size: 13px;
   font-weight: 600;
   font-family: inherit;
+  box-shadow: var(--tr-btn-shadow);
   cursor: pointer;
   white-space: nowrap;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-req-btn-secondary {
-  border: 1px solid var(--tr-line-strong);
-  background: #ffffff;
+  background: #f4f4f1;
   color: var(--tr-ink);
 }
 
 .tr-req-btn-secondary:hover:not(:disabled) {
-  border-color: var(--tr-ink);
-  background: #f5f5f2;
+  background: #e6e6e0;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-req-btn-primary {
-  border: 1px solid var(--tr-ink);
   background: var(--tr-ink);
   color: #ffffff;
 }
 
 .tr-req-btn-primary:hover:not(:disabled) {
   background: #1c4e30;
-  border-color: #1c4e30;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-req-btn-primary:disabled,
@@ -5780,7 +5938,7 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-doc-table.is-ent-zones th.col-area-name,
 .tr-doc-table.is-ent-zones td.col-area-name {
-  width: 194px;
+  width: 196px;
 }
 
 .tr-doc-table.is-ent-zones th.col-scale,
@@ -5969,22 +6127,26 @@ html[data-perf="lite"] .tr-search-btn {
 .tr-doc-gis-btn {
   flex-shrink: 0;
   height: 22px;
-  padding: 0 7px;
-  border: 1px solid #14372f;
+  padding: 0 8px;
+  border: none;
+  outline: none;
   border-radius: 0;
-  background: #ffffff;
+  background: #eff4f1;
   color: #14372f;
   font-size: 10px;
   font-weight: 700;
   font-family: inherit;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.06);
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tr-doc-gis-btn:hover {
   background: #14372f;
   color: #ffffff;
+  box-shadow: 0 4px 9px rgba(15, 23, 42, 0.18);
 }
 
 /* Nhật ký canh tác (716px - 4 cột cân đối) */
@@ -5995,17 +6157,19 @@ html[data-perf="lite"] .tr-search-btn {
 
 .tr-doc-table.is-auth-diary th.col-hh-plot,
 .tr-doc-table.is-auth-diary td.col-hh-plot {
-  width: 164px;
+  width: 160px;
 }
 
 .tr-doc-table.is-auth-diary th.col-act,
 .tr-doc-table.is-auth-diary td.col-act {
-  width: 348px;
+  width: 332px;
 }
 
 .tr-doc-table.is-auth-diary th.col-status,
 .tr-doc-table.is-auth-diary td.col-status {
-  width: 112px;
+  width: 132px;
+  white-space: normal;
+  line-height: 1.36;
 }
 
 .tr-doc-sub-btn {
@@ -6268,15 +6432,14 @@ html[data-perf="lite"] .tr-search-btn {
 /* Thanh công cụ đối chiếu GPS thực địa đặt ngoài khung tờ A4 */
 .tr-doc-act-btn.is-audit-primary {
   background: #14372f;
-  border-color: #14372f;
   color: #ffffff;
   font-weight: 600;
 }
 
 .tr-doc-act-btn.is-audit-primary:hover:not(:disabled) {
   background: #121212;
-  border-color: #121212;
   color: #ffffff;
+  box-shadow: var(--tr-btn-shadow-hover);
 }
 
 .tr-doc-act-btn:disabled {
@@ -6288,9 +6451,10 @@ html[data-perf="lite"] .tr-search-btn {
   font-size: 12px;
   line-height: 1.45;
   padding: 7px 12px;
-  border: 1px solid #d4d4d2;
+  border: none;
   background: #ffffff;
   color: #18181b;
+  box-shadow: var(--tr-btn-shadow);
   font-variant-numeric: tabular-nums;
 }
 
@@ -6305,6 +6469,10 @@ html[data-perf="lite"] .tr-search-btn {
 }
 
 @media print {
+  .tr-doc-gis-btn {
+    box-shadow: none !important;
+  }
+
   .tr-doc-external-audit {
     margin-top: 0 !important;
     break-before: page !important;
