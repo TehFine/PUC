@@ -492,14 +492,18 @@ export default function DwellSlideshow({
             : {}),
         } as CSSProperties;
 
-        const isPriorityHero = idx === 0 && priorityFirst;
+        const isTriptychTile = !isDesktopViewport && useTriptych && idx < 3;
+        const isPriorityHero =
+          priorityFirst && (idx === 0 || (!isDesktopViewport && useTriptych && idx === 2));
+        const isEagerAboveFold = isPriorityHero || (priorityFirst && isTriptychTile);
+        const isVisiblyShown = isActive || isTriptychTile;
 
         return (
           <span
             key={slide.src}
             className={`sw-dwell-layer${isActive ? " is-active" : ""}${isLeaving ? " is-leaving" : ""}`}
             style={styleVars}
-            aria-hidden={!isActive}
+            aria-hidden={!isVisiblyShown}
           >
             <Image
               ref={(img) => {
@@ -513,7 +517,7 @@ export default function DwellSlideshow({
               quality={isPriorityHero ? 75 : perfTier === "lite" ? 62 : 75}
               priority={isPriorityHero}
               fetchPriority={isPriorityHero ? "high" : "auto"}
-              loading={isPriorityHero ? undefined : "lazy"}
+              loading={isEagerAboveFold ? undefined : "lazy"}
               decoding="async"
               sizes={effectiveSizes}
               className="sw-dwell-img"

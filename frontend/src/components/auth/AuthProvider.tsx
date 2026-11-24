@@ -78,6 +78,36 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_SYNC_CHANNEL = "puc-auth-sync";
 const PENDING_LOGOUT_STORAGE_KEY = "puc:pending-server-logout:v1";
+/**
+ * Cờ đánh dấu 1 byte ("1", tuyệt đối không chứa PII hay token) cho biết trình duyệt này từng đăng nhập thành công
+ * và chưa đăng xuất, để trên các trang công khai (`/`, `/gioi-thieu`, `/trace`) khách vãng lai chưa từng đăng nhập
+ * không phải tốn 1 vòng gọi `/api/auth/me` (tránh lỗi 401 trên Console và rút ngắn tải trang đầu).
+ */
+const AUTH_SESSION_HINT_KEY = "puc:has-auth-session-hint:v1";
+
+function setAuthSessionHint(active: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (active) {
+      window.localStorage.setItem(AUTH_SESSION_HINT_KEY, "1");
+    } else {
+      window.localStorage.removeItem(AUTH_SESSION_HINT_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function hasLikelyAuthSessionOnDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (/(?:^|;\s*)htx_csrf=/.test(document.cookie || "")) return true;
+    if (window.localStorage.getItem(AUTH_SESSION_HINT_KEY) === "1") return true;
+  } catch {
+    // ignore
+  }
+  return Boolean(loadOfflineAuthSession());
+}
 
 function markPendingServerLogout(): void {
   if (typeof window === "undefined") return;
@@ -192,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         clearOfflineAuthSession();
       }
+      setAuthSessionHint(true);
       setSession(result);
       setStatus("authenticated");
       attachOfflineSyncEngine(nextUserId);
@@ -222,6 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       currentUserIdRef.current = null;
       setAuthScopeUser(null);
+      setAuthSessionHint(false);
       clearApiClientCaches();
       clearOfflineAuthSession();
       purgeServiceWorkerAuthShell();
@@ -332,6 +364,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     } else if (isDeviceOfflineNow() && applyLocalFallbackIfValid()) {
       // Thiết bị đang mất mạng hoàn toàn ngoài rẫy: vào thẳng Cổng hộ dân trong 0ms không bắt chờ mạng.
+    } else if (
+      typeof window !== "undefined" &&
+      !isProtectedPath(window.location.pathname) &&
+      !hasLikelyAuthSessionOnDevice()
+    ) {
+      // Khách vãng lai trên trang công khai chưa có cookie phiên hay gợi ý đăng nhập: xác nhận ngay không bắn /auth/me thừa.
+      fastFallbackTimer = setTimeout(() => {
+        if (active && currentUserIdRef.current === null) {
+          setStatus("anonymous");
+        }
+      }, 0);
     } else {
       // Nếu có phiên ngoại tuyến hợp lệ nhưng sóng 1 vạch ngoài rẫy làm /auth/me treo lâu hơn 2,4 giây:
       // mở giao diện tạm từ phiên cục bộ để bà con chụp ảnh ngay, trong khi /auth/me vẫn chạy nền đối chiếu

@@ -260,12 +260,16 @@ function attachGlobalListeners() {
   document.addEventListener("visibilitychange", revalidateOnFocus);
 }
 
-export function usePublic<T>(path: string): State<T> {
+export function usePublic<T>(path: string, initialData: T | null = null): State<T> {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
       attachGlobalListeners();
       listeners.add(onStoreChange);
       const entry = ensureEntry(path);
+      if (initialData !== null && entry.state.data === null && entry.updatedAt === 0) {
+        entry.state = { data: initialData, error: false, loading: false };
+        entry.updatedAt = Date.now();
+      }
       if (Date.now() - entry.updatedAt >= MOUNT_FRESH_MS) {
         void revalidate(path).catch(() => undefined);
       }
@@ -273,11 +277,24 @@ export function usePublic<T>(path: string): State<T> {
         listeners.delete(onStoreChange);
       };
     },
-    [path],
+    [initialData, path],
   );
 
-  const getSnapshot = useCallback(() => ensureEntry(path).state as State<T>, [path]);
-  const getServerSnapshot = useCallback(() => SERVER_SNAPSHOT as State<T>, []);
+  const getSnapshot = useCallback((): State<T> => {
+    const entry = ensureEntry(path);
+    if (entry.state.data === null && initialData !== null && !entry.state.error) {
+      return { data: initialData, error: false, loading: false };
+    }
+    return entry.state as State<T>;
+  }, [initialData, path]);
+
+  const getServerSnapshot = useCallback(
+    (): State<T> =>
+      initialData !== null
+        ? { data: initialData, error: false, loading: false }
+        : (SERVER_SNAPSHOT as State<T>),
+    [initialData],
+  );
 
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

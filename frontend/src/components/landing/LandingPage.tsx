@@ -3,6 +3,7 @@ import AutoEnter from "./AutoEnter";
 import DwellSlideshow, { type DwellSlide } from "./DwellSlideshow";
 import EditorialHero from "./EditorialHero";
 import LandingFooter from "./LandingFooter";
+import type { PublicOverview } from "./use-public";
 import "./landing.css";
 import "./swiss-landing.css";
 
@@ -223,12 +224,18 @@ function MobileSpreadNote({ prose }: { prose: string }) {
  * - Danh mục thuốc BVTV & Khuyến cáo trình bày dạng dải thẻ hình vuông cuộn ngang tối giản.
  * - Chân trang 4 cột tối giản đồng trục với khoảng nghỉ thoáng mắt phía trên.
  */
-export default function LandingPage({ autoEnter = false }: { autoEnter?: boolean }) {
+export default function LandingPage({
+  autoEnter = false,
+  initialOverview = null,
+}: {
+  autoEnter?: boolean;
+  initialOverview?: PublicOverview | null;
+}) {
   return (
     <div className="lp sw-page" id="top">
       {autoEnter && <AutoEnter />}
 
-      <EditorialHero />
+      <EditorialHero initialOverview={initialOverview} />
 
       <main>
         {/* ─── 01. HỆ THỐNG VÙNG TRỒNG (1 Ảnh = 1 Ô nội dung bên cạnh + Khoảng trắng thoáng) ─── */}

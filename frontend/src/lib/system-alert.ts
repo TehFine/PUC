@@ -83,9 +83,9 @@ export function reportServerFailure(
 
   const cleanDetail =
     detail &&
-    detail !== "Không xử lý được yêu cầu. Vui lòng thử lại." &&
-    detail.length <= 80 &&
-    !/\b50\d\b|internal|exception|sql|postgres/i.test(detail)
+      detail !== "Không xử lý được yêu cầu. Vui lòng thử lại." &&
+      detail.length <= 80 &&
+      !/\b50\d\b|internal|exception|sql|postgres/i.test(detail)
       ? detail
       : null;
 
@@ -284,7 +284,15 @@ function startMonitorIfNeeded() {
   window.addEventListener("error", onWindowError);
   window.addEventListener("unhandledrejection", onUnhandledRejection);
 
-  void checkSystemHealth();
+  const isWorkspacePath =
+    window.location.pathname.startsWith("/admin") ||
+    window.location.pathname.startsWith("/portal");
+  const initialDelayMs = isWorkspacePath ? 250 : 2800;
+  pollTimer = setTimeout(() => {
+    if (typeof document === "undefined" || document.visibilityState !== "hidden") {
+      void checkSystemHealth();
+    }
+  }, initialDelayMs);
 
   return () => {
     monitorMounted = false;

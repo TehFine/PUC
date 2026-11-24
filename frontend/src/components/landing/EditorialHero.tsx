@@ -7,6 +7,7 @@ import { ROLE_LABELS } from "@/constants/roles";
 import {
   consumeBackLayerForInPageTarget,
   replaceUrlPreservingState,
+  resetOverlayHistoryOnRouteLeave,
   useBackLayer,
 } from "@/lib/back-navigation";
 import { homePathFor } from "@/lib/routes";
@@ -185,7 +186,6 @@ const HeroGridSection = memo(function HeroGridSection({
       <div className="eh-cell-media is-bottom-right">
         <DwellSlideshow
           slides={HERO_BOTTOM_RIGHT_SLIDES}
-          priorityFirst
           mobileCollage={false}
           staggerMs={650}
           sizes="(max-width: 768px) 46vw, (max-width: 960px) 100vw, 50vw"
@@ -206,9 +206,14 @@ function computeSectionScrollTop(sectionId: string): number | null {
   return Math.max(0, Math.min(Math.round(rawY), maxY));
 }
 
-export default function EditorialHero() {
+export default function EditorialHero({
+  initialOverview = null,
+}: {
+  initialOverview?: PublicOverview | null;
+} = {}) {
   const { status, session, logout } = useAuth();
-  const { data } = usePublic<PublicOverview>("overview");
+  const { data: liveOverview } = usePublic<PublicOverview>("overview", initialOverview);
+  const data = liveOverview ?? initialOverview;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const unlockScrollRef = useRef<(() => void) | null>(null);
@@ -339,7 +344,7 @@ export default function EditorialHero() {
   const dismissDrawerForRouteChange = useCallback(() => {
     cancelPendingScrollAlign();
     releaseMenuScrollLock();
-    consumeBackLayerForInPageTarget();
+    resetOverlayHistoryOnRouteLeave();
     setMenuOpen(false);
   }, [cancelPendingScrollAlign, releaseMenuScrollLock]);
 

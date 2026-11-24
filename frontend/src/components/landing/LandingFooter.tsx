@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ArrowRight } from "@/components/ui/PublicIcon";
-import { homePathFor } from "@/lib/routes";
+import { homePathFor, INTRO_PATH } from "@/lib/routes";
 import { isSafeTraceCode, safeDecodeURIComponent } from "@/utils/url-safety";
 
 export default function LandingFooter({ fromTrace = false }: { fromTrace?: boolean }) {
@@ -99,7 +99,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
             </li>
             <li>
               {fromTrace ? (
-                <Link href="/" className="sw-ft-link">
+                <Link href={INTRO_PATH} className="sw-ft-link">
                   <span>Trang giới thiệu</span>
                 </Link>
               ) : (
@@ -110,7 +110,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
             </li>
             <li>
               {fromTrace ? (
-                <Link href="/#he-thong" className="sw-ft-link">
+                <Link href={`${INTRO_PATH}#he-thong`} className="sw-ft-link">
                   <span>Chuỗi canh tác</span>
                 </Link>
               ) : (
@@ -121,7 +121,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
             </li>
             <li>
               {fromTrace ? (
-                <Link href="/#phap-ly" className="sw-ft-link">
+                <Link href={`${INTRO_PATH}#phap-ly`} className="sw-ft-link">
                   <span>Giấy chứng nhận ĐKHTX</span>
                 </Link>
               ) : (
@@ -132,7 +132,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
             </li>
             <li>
               {fromTrace ? (
-                <Link href="/#tap-huan" className="sw-ft-link">
+                <Link href={`${INTRO_PATH}#tap-huan`} className="sw-ft-link">
                   <span>Tập huấn và Bản tin</span>
                 </Link>
               ) : (
@@ -143,7 +143,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
             </li>
             <li>
               {fromTrace ? (
-                <Link href="/#tra-cuu" className="sw-ft-link">
+                <Link href={`${INTRO_PATH}#tra-cuu`} className="sw-ft-link">
                   <span>Thuốc BVTV và Khuyến cáo</span>
                 </Link>
               ) : (
@@ -162,7 +162,11 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
             Dành cho các nhà vườn canh tác sầu riêng tại xã Cư Né và huyện Krông Búk mong muốn tham gia mã số vùng trồng xuất khẩu chính ngạch. Hộ thành viên được hỗ trợ đo đạc bản đồ số thửa vườn, hướng dẫn ghi nhật ký điện tử, tập huấn VietGAP định kỳ và kiểm nghiệm an toàn dư lượng trước mỗi vụ thu hoạch.
           </p>
           <Link href={authenticated ? workspaceHref : "/register"} className="sw-ft-cta">
-            {authenticated ? "Mở cổng hộ thành viên" : "Đăng ký hộ thành viên"}
+            {authenticated
+              ? session?.user.role === "farmer"
+                ? "Mở cổng hộ thành viên"
+                : "Về khu quản trị"
+              : "Đăng ký hộ thành viên"}
           </Link>
         </div>
 
@@ -170,7 +174,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
         <div className="sw-ft-col">
           <h3 className="sw-ft-heading">Về HTX Cư Né</h3>
           <p className="sw-ft-prose">
-            HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né (Mã số ĐKHTX: 4007E00008) vận hành nền tảng quản lý vùng trồng số hóa tại thủ phủ sầu riêng Krông Búk, tỉnh Đắk Lắk. Chúng tôi lấy sự minh bạch từ gốc làm nền tảng phát triển bền vững, chuẩn hóa từng khâu canh tác theo VietGAP và Nghị định thư GACC nhằm nâng tầm giá trị trái sầu riêng Tây Nguyên.
+            Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né (HTX Cư Né, tên giao dịch HTX Cune, mã số ĐKHTX: 4007E00008, trụ sở tại Km 67, Thôn Ea Plai, xã Cư Né) vận hành nền tảng quản lý vùng trồng sầu riêng số hóa tại huyện Krông Búk, tỉnh Đắk Lắk. Chúng tôi chuẩn hóa từng khâu canh tác theo VietGAP và Nghị định thư GACC nhằm nâng tầm giá trị trái sầu riêng Cư Né và vùng nguyên liệu Krông Búk.
           </p>
         </div>
       </div>
