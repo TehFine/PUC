@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   ADMIN_SYSTEM_TAB_EVENT,
@@ -96,16 +96,23 @@ export default function SystemSettings() {
     return () => window.removeEventListener(ADMIN_SYSTEM_TAB_EVENT, handler);
   }, [selectTab]);
 
-  const tabs: { id: Tab; label: string }[] = [
+  const tabBarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const bar = tabBarRef.current;
+    if (!bar) return;
+    const activeBtn = bar.querySelector<HTMLElement>(".tab-btn.active");
+    activeBtn?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [tab]);
+
+  const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "accounts", label: "Tài khoản" },
     ...(canReadTraceRequests
       ? [
         {
           id: "trace-requests" as const,
-          label:
-            pendingTraceRequests > 0
-              ? `Cấp quyền QR (${pendingTraceRequests})`
-              : "Cấp quyền QR",
+          label: "Cấp quyền QR",
+          badge: pendingTraceRequests,
         },
       ]
       : []),
@@ -113,10 +120,8 @@ export default function SystemSettings() {
       ? [
         {
           id: "deletions" as const,
-          label:
-            pendingDeletions > 0
-              ? `Duyệt xóa (${pendingDeletions})`
-              : "Duyệt xóa",
+          label: "Duyệt xóa",
+          badge: pendingDeletions,
         },
       ]
       : []),
@@ -141,7 +146,7 @@ export default function SystemSettings() {
         </div>
       )}
 
-      <div className="tab-bar">
+      <div className="tab-bar" ref={tabBarRef}>
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -149,7 +154,8 @@ export default function SystemSettings() {
             className={`tab-btn ${tab === t.id ? "active" : ""}`}
             onClick={() => selectTab(t.id)}
           >
-            {t.label}
+            <span>{t.label}</span>
+            {t.badge && t.badge > 0 ? <span className="tab-badge">{t.badge}</span> : null}
           </button>
         ))}
       </div>

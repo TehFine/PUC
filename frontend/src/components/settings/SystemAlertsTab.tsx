@@ -265,16 +265,16 @@ export default function SystemAlertsTab() {
       {/* Biểu mẫu soạn và phát thông báo đặt ngay trên đầu cho Trưởng HTX, Phó HTX và Quản trị viên */}
       {canCreateAlert && (
       <form className="card" autoComplete="off" onSubmit={handleSubmit} style={{ padding: "20px", display: "grid", gap: 14 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div className="sys-alert-compose-head">
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#14372f" }}>
             Soạn thông báo
           </h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <div className="sys-alert-tpl-list">
             {TEMPLATES.map((tpl) => (
               <button
                 key={tpl.label}
                 type="button"
-                className="btn btn-sm"
+                className="btn sys-alert-tpl-btn"
                 onClick={() => {
                   setSeverity(tpl.severity);
                   setAudience(tpl.audience);

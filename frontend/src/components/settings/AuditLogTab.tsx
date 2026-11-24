@@ -113,13 +113,13 @@ export default function AuditLogTab() {
   }, [list.rows]);
 
   return (
-    <>
-      <div className="filter-bar">
-        <div style={{ flex: 1, minWidth: 200 }}>
+    <div className="audit-log-view">
+      <div className="filter-bar audit-log-filter-bar">
+        <div className="audit-log-search-wrap">
           <input
             type="text"
             className="filter-input"
-            placeholder="Tìm theo người dùng, đối tượng, chi tiết..."
+            placeholder="Tìm người dùng, thao tác, đối tượng..."
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
@@ -137,12 +137,12 @@ export default function AuditLogTab() {
           }}
         >
           <option value="">Mọi hành động</option>
+          <option value="Đăng nhập">Đăng nhập</option>
           <option value="Tạo mới">Tạo mới</option>
           <option value="Cập nhật">Cập nhật</option>
+          <option value="Phê duyệt">Phê duyệt</option>
+          <option value="Thu hồi">Thu hồi</option>
           <option value="Xóa">Xóa</option>
-          <option value="Duyệt hồ sơ">Duyệt hồ sơ</option>
-          <option value="Ghi nhật ký">Ghi nhật ký</option>
-          <option value="Xuất báo cáo">Xuất báo cáo</option>
           <option value="Cảnh báo">Cảnh báo</option>
         </select>
       </div>
@@ -171,31 +171,32 @@ export default function AuditLogTab() {
                 <ul className="admin-diary-day-card" role="list">
                   {group.items.map((log) => {
                     const timeStr = formatTimeShort(log.occurredAt);
+                    const actorLabel = log.userName || "Hệ thống";
                     const summaryTarget = log.object || formatSafeAuditDetail(log.detail);
                     const subText =
-                      timeStr && summaryTarget && summaryTarget !== "-"
-                        ? `${timeStr}, ${summaryTarget}`
-                        : timeStr || (summaryTarget !== "-" ? summaryTarget : "");
+                      summaryTarget && summaryTarget !== "-"
+                        ? `${actorLabel}, ${summaryTarget}`
+                        : actorLabel;
 
                     return (
                       <li key={log.id}>
                         <button
                           type="button"
-                          className="admin-diary-row"
+                          className="admin-diary-row audit-log-row"
                           onClick={() => setViewingLog(log)}
                         >
                           <span className="admin-audit-row-main">
-                            <strong className="admin-diary-hh">{log.userName || "Hệ thống"}</strong>
-                            {subText && <span className="admin-audit-row-sub">{subText}</span>}
-                          </span>
-                          <span className="admin-diary-right">
-                            <span
-                              className="admin-diary-plot"
+                            <strong
+                              className="audit-log-action-title"
                               style={{ color: resolveActionTone(log.action) }}
                             >
                               {log.action}
-                            </span>
-                            <DetailArrowIcon className="admin-diary-arrow" size={20} />
+                            </strong>
+                            <span className="admin-audit-row-sub">{subText}</span>
+                          </span>
+                          <span className="audit-log-row-right">
+                            {timeStr && <span className="audit-log-time">{timeStr}</span>}
+                            <DetailArrowIcon className="admin-diary-arrow" size={18} />
                           </span>
                         </button>
                       </li>
@@ -228,18 +229,18 @@ export default function AuditLogTab() {
             </ModalDismissButton>
           }
         >
-          <div className="admin-detail-list-card">
+          <div className="admin-detail-list-card audit-log-detail-card">
             <div className="admin-detail-list-row">
               <span className="admin-detail-list-label">Thời gian</span>
               <div
                 className="admin-detail-list-value"
-                style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}
+                style={{ fontVariantNumeric: "tabular-nums" }}
               >
                 {formatFullAuditTime(viewingLog.occurredAt)}
               </div>
             </div>
             <div className="admin-detail-list-row">
-              <span className="admin-detail-list-label">Người dùng</span>
+              <span className="admin-detail-list-label">Người thực hiện</span>
               <div className="admin-detail-list-value" style={{ fontWeight: 600 }}>
                 {viewingLog.userName || "Hệ thống"}
               </div>
@@ -266,7 +267,7 @@ export default function AuditLogTab() {
               <span className="admin-detail-list-label">Địa chỉ IP</span>
               <div
                 className="admin-detail-list-value"
-                style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums" }}
+                style={{ fontVariantNumeric: "tabular-nums" }}
               >
                 {viewingLog.ip || "-"}
               </div>
@@ -278,6 +279,6 @@ export default function AuditLogTab() {
           </div>
         </Modal>
       )}
-    </>
+    </div>
   );
 }
