@@ -7,7 +7,6 @@ import "./auth.css";
 type Variant = "login" | "register" | "forgot";
 
 interface AsideSpec {
-  indexLabel: string;
   subLabel: string;
   kicker: string;
   slides: readonly DwellSlide[];
@@ -20,7 +19,6 @@ interface AsideSpec {
 
 const ASIDE: Record<Variant, AsideSpec> = {
   login: {
-    indexLabel: "01 / Cổng thành viên",
     subLabel: "Nhật ký số - Mã vùng PUC",
     kicker: "Cổng thành viên",
     slides: [
@@ -56,7 +54,6 @@ const ASIDE: Record<Variant, AsideSpec> = {
     lead: "Ghi nhật ký canh tác điện tử, tra cứu mã vùng trồng và theo dõi kết quả kiểm nghiệm trước thu hoạch.",
   },
   register: {
-    indexLabel: "02 / Hồ sơ vùng trồng",
     subLabel: "Thẩm định - Cấp mã thửa",
     kicker: "Đăng ký thành viên",
     slides: [
@@ -92,7 +89,6 @@ const ASIDE: Record<Variant, AsideSpec> = {
     lead: "Cán bộ HTX thẩm định ranh giới thửa đất tại thực địa và thiết lập hồ sơ chuẩn xác trước khi bàn giao tài khoản.",
   },
   forgot: {
-    indexLabel: "03 / Bảo mật tài khoản",
     subLabel: "Xác minh CCCD - Phê duyệt",
     kicker: "Khôi phục tài khoản",
     slides: [
@@ -207,7 +203,6 @@ export default function AuthShell({
             </div>
 
             <div className="auth-aside-sheet">
-              <span className="auth-aside-index">{aside.indexLabel}</span>
               <h2 className="auth-aside-heading">{aside.heading}</h2>
               <p className="auth-aside-lead">{aside.lead}</p>
             </div>
@@ -258,9 +253,19 @@ export default function AuthShell({
       {/* ─── Chân trang tối giản màu nền đá #f3f2ee đồng bộ Landing Page ─── */}
       <footer className="auth-foot">
         <div className="auth-foot-inner">
-          <p className="auth-foot-copy">
-            © 2026 HTX Nông nghiệp Cư Né - Krông Búk, Đắk Lắk
-          </p>
+          <div className="auth-foot-meta">
+            <p className="auth-foot-copy">
+              © 2026 HTX Nông nghiệp Cư Né - Krông Búk, Đắk Lắk
+            </p>
+            <span className="auth-foot-meta-sep" aria-hidden="true" />
+            <p className="auth-foot-credit">
+              <span>Thiết kế và phát triển: Đặng Văn Thế</span>
+              <span className="auth-foot-credit-sep" aria-hidden="true" />
+              <a href="tel:0366663778" className="auth-foot-credit-tel">
+                0366 663 778
+              </a>
+            </p>
+          </div>
           <nav className="auth-foot-links" aria-label="Liên kết chân trang">
             <Link href="/" className="auth-foot-link">
               Trang giới thiệu
@@ -269,10 +274,6 @@ export default function AuthShell({
             <Link href="/trace" className="auth-foot-link">
               Tra cứu QR
             </Link>
-            <span className="auth-foot-dot" aria-hidden="true" />
-            <a href="tel:0366663778" className="auth-foot-link">
-              Hỗ trợ: 0366 663 778
-            </a>
           </nav>
         </div>
       </footer>

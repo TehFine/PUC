@@ -73,7 +73,7 @@ export default function BroadcastNoticeModal({
   return (
     <Modal
       variant="modal"
-      width={700}
+      width={920}
       className="broadcast-notice-modal"
       title="Soạn thông báo"
       onClose={sendMut.pending ? () => undefined : onClose}

@@ -12637,19 +12637,66 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 @media screen and (min-width: 760px) {
   .modal-overlay.pt-sheet-backdrop.is-confirm-overlay > .modal.pt-sheet.broadcast-notice-modal {
-    width: min(700px, calc(100vw - 40px)) !important;
-    max-width: min(700px, calc(100vw - 40px)) !important;
+    width: min(920px, calc(100vw - 48px)) !important;
+    max-width: min(920px, calc(100vw - 48px)) !important;
+    max-height: calc(100dvh - 48px) !important;
     border-radius: 8px !important;
     border: 1px solid #d4d4d2 !important;
-    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16) !important;
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18) !important;
   }
 
   .modal.pt-sheet.broadcast-notice-modal .modal-header {
-    padding: 18px 26px !important;
+    padding: 20px 32px !important;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .modal-header h2 {
+    font-size: 20px !important;
   }
 
   .modal.pt-sheet.broadcast-notice-modal .modal-body {
-    padding: 20px 26px 22px !important;
+    padding: 24px 32px 28px !important;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .broadcast-tpl-section {
+    margin-bottom: 20px;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .broadcast-tpl-label,
+  .modal.pt-sheet.broadcast-notice-modal .form-group > label {
+    font-size: 14.5px;
+    margin-bottom: 8px;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .broadcast-tpl-grid {
+    gap: 12px;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .broadcast-tpl-btn {
+    min-height: 44px;
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .form-group {
+    margin-bottom: 18px;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal input.form-input {
+    min-height: 48px !important;
+    padding: 11px 16px !important;
+    font-size: 15.5px !important;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal textarea.form-input {
+    min-height: min(240px, 34dvh) !important;
+    padding: 14px 16px !important;
+    font-size: 15.5px !important;
+    line-height: 1.62 !important;
+  }
+
+  .modal.pt-sheet.broadcast-notice-modal .modal-footer > .btn {
+    min-height: 54px !important;
+    font-size: 15.5px !important;
   }
 }
 

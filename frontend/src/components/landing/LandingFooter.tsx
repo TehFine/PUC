@@ -79,7 +79,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
           </form>
 
           <p className="sw-ft-copy">
-            © 2026 Bản quyền thuộc HTX Nông nghiệp Cư Né
+            Tra cứu nhanh mã lô hàng, mã vùng trồng và tem truy xuất QR.
           </p>
         </div>
 
@@ -173,6 +173,19 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
             HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né (Mã số ĐKHTX: 4007E00008) vận hành nền tảng quản lý vùng trồng số hóa tại thủ phủ sầu riêng Krông Búk, tỉnh Đắk Lắk. Chúng tôi lấy sự minh bạch từ gốc làm nền tảng phát triển bền vững, chuẩn hóa từng khâu canh tác theo VietGAP và Nghị định thư GACC nhằm nâng tầm giá trị trái sầu riêng Tây Nguyên.
           </p>
         </div>
+      </div>
+
+      <div className="sw-ft-colophon">
+        <p className="sw-ft-colophon-copy">
+          © 2026 Bản quyền thuộc HTX Nông nghiệp Cư Né - Krông Búk, Đắk Lắk
+        </p>
+        <p className="sw-ft-colophon-credit">
+          <span>Thiết kế và phát triển: Đặng Văn Thế</span>
+          <span className="sw-ft-colophon-sep" aria-hidden="true" />
+          <a href="tel:0366663778" className="sw-ft-colophon-tel">
+            0366 663 778
+          </a>
+        </p>
       </div>
     </footer>
   );
