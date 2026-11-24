@@ -1,6 +1,15 @@
 const CAMEL_KEY_CACHE = new Map<string, string>();
 const MAX_CAMEL_KEY_CACHE = 1024;
 const VN_ISO_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+const VN_DATETIME_PARTS_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
 
 /** Chuyển khóa snake_case (cột SQL) sang camelCase (JSON trả về client), có ghi nhớ tên cột để giảm cấp phát chuỗi. */
 export const toCamel = (key: string): string => {
@@ -31,6 +40,27 @@ export const formatDateIsoVn = (date: Date): string => VN_ISO_DATE_FORMATTER.for
 
 /** Ngày hôm nay theo giờ Việt Nam, dạng YYYY-MM-DD. */
 export const todayVn = () => VN_ISO_DATE_FORMATTER.format(new Date());
+
+/** Thời điểm hiện tại theo giờ Việt Nam (`HH:mm`, `dd/MM/yyyy` và `dd/MM/yyyy HH:mm`). */
+export function nowClockVn(date: Date = new Date()): {
+  hm: string;
+  dmy: string;
+  dmyHm: string;
+} {
+  const parts = VN_DATETIME_PARTS_FORMATTER.formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "00";
+  const dd = pick("day");
+  const mm = pick("month");
+  const yyyy = pick("year");
+  const hh = pick("hour");
+  const mi = pick("minute");
+  return {
+    hm: `${hh}:${mi}`,
+    dmy: `${dd}/${mm}/${yyyy}`,
+    dmyHm: `${dd}/${mm}/${yyyy} ${hh}:${mi}`,
+  };
+}
 
 /** Đường dẫn tải tệp đính kèm riêng tư (dùng trong cột SELECT: `attachmentUrlSql('j.photo_id')`). */
 export const attachmentUrlSql = (column: string) =>

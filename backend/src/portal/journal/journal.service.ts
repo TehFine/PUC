@@ -3,7 +3,7 @@ import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../../common/geo/plot-proximity";
-import { attachmentUrlSql, attachmentUrlsSql, camelRow, camelRows, todayVn } from "../../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql, camelRow, camelRows, nowClockVn, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
@@ -192,10 +192,15 @@ export class JournalService {
     );
     const farmerName = shortFarmerName(hhRes.rows[0]?.name, user.fullName);
     const [ey, em, ed] = entryOn.split("-");
+    const clock = nowClockVn();
+    const timeNote =
+      entryOn === today
+        ? `${ed}/${em}/${ey} ${clock.hm}`
+        : `làm ${ed}/${em}/${ey}, cập nhật ${clock.dmyHm}`;
     await this.notifications.notifyOversightForHousehold(householdId, {
       kind: "protocol",
       title: `${farmerName} mới cập nhật nhật ký canh tác`,
-      body: `${dto.activity}, thửa ${plotCode} (${ed}/${em}/${ey})`,
+      body: `${dto.activity}, thửa ${plotCode} (${timeNote})`,
       link: ADMIN_LINKS.journal,
     });
 

@@ -13,6 +13,7 @@ export function formatDate(value: string | null | undefined): string {
 /** ISO timestamp → "14/10/2024 16:45" (giờ địa phương); rỗng → "—". */
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDate(value);
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return `${formatDate(value)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;

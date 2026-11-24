@@ -5,7 +5,7 @@ import { can, isCoopStaffRole } from "../auth/permissions";
 import { isStaffInCuneCoopScope } from "../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
-import { attachmentUrlSql, attachmentUrlsSql, camelRows, todayVn } from "../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql, camelRows, nowClockVn, todayVn } from "../common/sql/rows";
 import { hasPublicTable } from "../common/sql/schema-cache";
 import { DatabaseService } from "../database/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -1138,10 +1138,15 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
       ]);
     } else if (txResult.nextPlanStatus !== "completed") {
       const shortName = (plan.household_name || "").trim().replace(/^hộ\s+/i, "").trim() || plan.household_name;
+      const clock = nowClockVn();
+      const timeNote =
+        performedOn === today
+          ? `${formatIsoVn(performedOn)} ${clock.hm}`
+          : `làm ${formatIsoVn(performedOn)}, cập nhật ${clock.dmyHm}`;
       await this.notifications.notifyOversightForHousehold(householdId, {
         kind: "protocol",
         title: `${shortName} mới cập nhật nhật ký canh tác`,
-        body: `${stageLabel}, thửa ${plotCode} (${formatIsoVn(performedOn)})`,
+        body: `${stageLabel}, thửa ${plotCode} (${timeNote})`,
         link: ADMIN_PROTOCOL_LINK,
       });
     }

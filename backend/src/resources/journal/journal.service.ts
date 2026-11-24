@@ -4,7 +4,7 @@ import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest, forbidden } from "../../common/errors/app.exception";
-import { attachmentUrlSql, attachmentUrlsSql, todayVn } from "../../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql, nowClockVn, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { assertPlotOwned } from "../../portal/common/portal-context";
@@ -225,12 +225,12 @@ export class JournalService extends BaseCrudService {
   protected override async afterWrite(_id: number, input: Record<string, unknown>) {
     const editInfo = input._notifyHouseholdEdit as
       | {
-          householdId: number;
-          activity: string;
-          plotCode: string | null;
-          actorName: string;
-          actorRole: string;
-        }
+        householdId: number;
+        activity: string;
+        plotCode: string | null;
+        actorName: string;
+        actorRole: string;
+      }
       | undefined;
     if (editInfo) {
       const roleLabel = STAFF_ROLE_LABELS[editInfo.actorRole] ?? "Cán bộ";
@@ -245,14 +245,14 @@ export class JournalService extends BaseCrudService {
 
     const changeInfo = input._notifyJournalChange as
       | {
-          method: "POST" | "PATCH";
-          householdId: number;
-          activity: string;
-          plotCode: string | null;
-          actorId: number;
-          actorName: string;
-          actorRole: string;
-        }
+        method: "POST" | "PATCH";
+        householdId: number;
+        activity: string;
+        plotCode: string | null;
+        actorId: number;
+        actorName: string;
+        actorRole: string;
+      }
       | undefined;
     if (!changeInfo) return;
 
@@ -275,6 +275,7 @@ export class JournalService extends BaseCrudService {
       });
     }
 
+    const clock = nowClockVn();
     await this.notifications.notifyOversightForHousehold(
       changeInfo.householdId,
       {
@@ -282,8 +283,8 @@ export class JournalService extends BaseCrudService {
         title: `${farmerName} mới cập nhật nhật ký canh tác`,
         body:
           changeInfo.actorRole === "farmer"
-            ? `${changeInfo.activity}${shortPlot}`
-            : `${changeInfo.activity}${shortPlot} (${roleLabel} ${changeInfo.actorName})`,
+            ? `${changeInfo.activity}${shortPlot} (${clock.dmyHm})`
+            : `${changeInfo.activity}${shortPlot} (${roleLabel} ${changeInfo.actorName}, ${clock.dmyHm})`,
         link: "/admin?section=journal",
       },
       { excludeUserId: changeInfo.actorId },

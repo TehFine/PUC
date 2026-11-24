@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
-import { attachmentUrlSql, attachmentUrlsSql, camelRow, camelRows, todayVn } from "../../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql, camelRow, camelRows, nowClockVn, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
@@ -83,7 +83,7 @@ export class SprayService {
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
     private readonly uploads: UploadsService,
-  ) {}
+  ) { }
 
   async list(user: AuthUser) {
     const { rows } = await this.db.query(
@@ -210,6 +210,11 @@ export class SprayService {
     );
     const farmerName = shortFarmerName(hhRes.rows[0]?.name, user.fullName);
     const [syFmt, smFmt, sdFmt] = sprayedOn.split("-");
+    const clock = nowClockVn();
+    const sprayTimeNote =
+      sprayedOn === today
+        ? `${sdFmt}/${smFmt}/${syFmt} ${clock.hm}`
+        : `phun ${sdFmt}/${smFmt}/${syFmt}, cập nhật ${clock.dmyHm}`;
 
     if (pesticide.status === "banned" || pesticide.status === "restricted") {
       await this.notifications.notifyOversightForHousehold(householdId, {
@@ -218,14 +223,14 @@ export class SprayService {
           pesticide.status === "banned"
             ? `Cảnh báo: ${farmerName} khai báo thuốc cấm`
             : `Lưu ý: ${farmerName} phun thuốc hạn chế`,
-        body: `${pesticide.name}${plotCode ? `, thửa ${plotCode}` : ""}, liều ${dto.dose} (${sdFmt}/${smFmt}/${syFmt})`,
+        body: `${pesticide.name}${plotCode ? `, thửa ${plotCode}` : ""}, liều ${dto.dose} (${sprayTimeNote})`,
         link: `${ADMIN_LINKS.journal}&sub=spray`,
       });
     } else {
       await this.notifications.notifyOversightForHousehold(householdId, {
         kind: "protocol",
         title: `${farmerName} mới cập nhật nhật ký canh tác`,
-        body: `Phun thuốc ${pesticide.name}${plotCode ? `, thửa ${plotCode}` : ""} (${sdFmt}/${smFmt}/${syFmt})`,
+        body: `Phun thuốc ${pesticide.name}${plotCode ? `, thửa ${plotCode}` : ""} (${sprayTimeNote})`,
         link: `${ADMIN_LINKS.journal}&sub=spray`,
       });
     }

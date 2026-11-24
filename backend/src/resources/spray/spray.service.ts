@@ -4,7 +4,7 @@ import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
 import { assertHouseholdInScope, isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
 import { badRequest, forbidden } from "../../common/errors/app.exception";
-import { attachmentUrlSql, attachmentUrlsSql, todayVn } from "../../common/sql/rows";
+import { attachmentUrlSql, attachmentUrlsSql, nowClockVn, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { assertPlotOwned } from "../../portal/common/portal-context";
@@ -309,6 +309,7 @@ export class SprayService extends BaseCrudService {
       }
 
       if (!input._notifyAlert) {
+        const clock = nowClockVn();
         await this.notifications.notifyOversightForHousehold(
           changeInfo.householdId,
           {
@@ -316,8 +317,8 @@ export class SprayService extends BaseCrudService {
             title: `${farmerName} mới cập nhật nhật ký canh tác`,
             body:
               changeInfo.actorRole === "farmer"
-                ? `Phun thuốc ${changeInfo.pesticideName}${shortPlot}`
-                : `Phun thuốc ${changeInfo.pesticideName}${shortPlot} (${roleLabel} ${changeInfo.actorName})`,
+                ? `Phun thuốc ${changeInfo.pesticideName}${shortPlot} (${clock.dmyHm})`
+                : `Phun thuốc ${changeInfo.pesticideName}${shortPlot} (${roleLabel} ${changeInfo.actorName}, ${clock.dmyHm})`,
             link: "/admin?section=journal&sub=spray",
           },
           { excludeUserId: changeInfo.actorId },

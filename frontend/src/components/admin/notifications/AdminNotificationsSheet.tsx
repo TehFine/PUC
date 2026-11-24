@@ -19,7 +19,23 @@ import { lazyChunk } from "@/lib/lazy-chunk";
 import type { Tone } from "@/lib/portal-labels";
 import { isRealtimeStreamConnected, useRealtimeNotifications } from "@/lib/realtime-notifications";
 import type { NotificationItem, NotificationList } from "@/types/notifications";
-import { formatDate } from "@/utils/format";
+import { formatDate, formatDateTime } from "@/utils/format";
+
+function enrichDiaryNotificationBody(item: NotificationItem): string | null {
+  if (!item.body) return null;
+  if (item.kind !== "protocol" && !item.title.includes("nhật ký")) {
+    return item.body;
+  }
+  const trailingDateOnly = /^(.*)\((\d{2}\/\d{2}\/\d{4})\)$/.exec(item.body.trim());
+  if (!trailingDateOnly) return item.body;
+  const dt = formatDateTime(item.createdAt);
+  if (!/\d{2}:\d{2}$/.test(dt)) return item.body;
+  const createdDate = formatDate(item.createdAt);
+  const [, prefix, workDate] = trailingDateOnly;
+  return workDate === createdDate
+    ? `${prefix}(${dt})`
+    : `${prefix}(làm ${workDate}, cập nhật ${dt})`;
+}
 
 const BroadcastNoticeModal = dynamic(
   () => lazyChunk(() => import("@/components/admin/households/BroadcastNoticeModal")),
@@ -309,15 +325,15 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
                           {meta.label}
                         </span>
                         <span style={{ fontSize: 11.5, color: "#60736c", fontVariantNumeric: "tabular-nums" }}>
-                          {formatDate(item.createdAt)}
+                          {formatDateTime(item.createdAt)}
                         </span>
                       </div>
                       <strong style={{ fontSize: 13.5, color: "#14372f", lineHeight: 1.4 }}>
                         {item.title}
                       </strong>
                       {item.body && (
-                        <p style={{ margin: 0, fontSize: 12.5, color: "#435951", lineHeight: 1.45 }}>
-                          {item.body}
+                        <p style={{ margin: 0, fontSize: 12.5, color: "#435951", lineHeight: 1.45, fontVariantNumeric: "tabular-nums" }}>
+                          {enrichDiaryNotificationBody(item)}
                         </p>
                       )}
                     </button>
