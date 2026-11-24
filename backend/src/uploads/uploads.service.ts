@@ -21,7 +21,7 @@ import type { AuthUser } from "../auth/auth-user";
 import { can, type ResourceKey } from "../auth/permissions";
 import { isStaffInCuneCoopScope, isStaffInParcelScope } from "../common/crud/village-scope";
 import { badRequest, forbidden, notFound } from "../common/errors/app.exception";
-import { hasPublicTable } from "../common/sql/schema-cache";
+import { hasPublicColumn, hasPublicTable } from "../common/sql/schema-cache";
 import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
 
@@ -656,16 +656,18 @@ export class UploadsService implements OnModuleInit {
    * - Bản scan kiểm nghiệm chỉ phục vụ khi đã gắn với ít nhất một phiếu `lab_tests.record_status = 'verified'`
    *   (chặn cả bản nháp lẫn tệp vừa tải lên chưa gắn phiếu).
    */
-  async findPublicByToken(token: string): Promise<AttachmentRow | null> {
+  async findPublicByToken(token: string, user?: AuthUser): Promise<AttachmentRow | null> {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
-    const queryPublic = async (): Promise<AttachmentRow | null> => {
+    const queryPublic = async (): Promise<{ attachment: AttachmentRow | null; publicEligible: boolean }> => {
       const { rows } = await this.db.query<AttachmentRow>(
         `SELECT ${ATTACHMENT_META_COLUMNS} FROM attachments WHERE public_token = $1 LIMIT 1`,
         [token],
       );
       const attachment = rows[0];
-      if (!attachment) return null;
-      if (STRICT_INTERNAL_PURPOSES.has(attachment.purpose)) return null;
+      if (!attachment) return { attachment: null, publicEligible: false };
+      if (STRICT_INTERNAL_PURPOSES.has(attachment.purpose)) {
+        return { attachment: null, publicEligible: false };
+      }
 
       if (attachment.purpose === "lab") {
         const labCheck = await this.db.query<{ has_verified: boolean }>(
@@ -675,28 +677,101 @@ export class UploadsService implements OnModuleInit {
           [attachment.id],
         );
         if (!labCheck.rows[0]?.has_verified) {
-          return null;
+          return { attachment: null, publicEligible: false };
         }
+        return { attachment, publicEligible: true };
       }
 
-      if (attachment.purpose === "journal" && (await hasPublicTable(this.db, "care_milestone_declarations"))) {
-        const invCheck = await this.db.query<{ is_invoice: boolean }>(
-          `SELECT EXISTS (
-             SELECT 1 FROM care_milestone_declarations cmd
-             WHERE cmd.invoice_photo_id = $1 OR $1::bigint = ANY(cmd.invoice_photo_ids)
-           ) AS is_invoice`,
+      if (attachment.purpose === "journal") {
+        const [hasMilestones, hasMilestoneFieldIds] = await Promise.all([
+          hasPublicTable(this.db, "care_milestone_declarations"),
+          hasPublicColumn(this.db, "care_milestone_declarations", "field_photo_ids"),
+        ]);
+        if (hasMilestones) {
+          const invCheck = await this.db.query<{ is_invoice: boolean }>(
+            `SELECT EXISTS (
+               SELECT 1 FROM care_milestone_declarations cmd
+               WHERE cmd.invoice_photo_id = $1 OR $1::bigint = ANY(cmd.invoice_photo_ids)
+             ) AS is_invoice`,
+            [attachment.id],
+          );
+          if (invCheck.rows[0]?.is_invoice) {
+            return { attachment: null, publicEligible: false };
+          }
+        }
+        const milestoneFieldClause = hasMilestones
+          ? hasMilestoneFieldIds
+            ? `OR EXISTS (SELECT 1 FROM care_milestone_declarations cmd WHERE cmd.field_photo_id = $1 OR $1::bigint = ANY(cmd.field_photo_ids))`
+            : `OR EXISTS (SELECT 1 FROM care_milestone_declarations cmd WHERE cmd.field_photo_id = $1)`
+          : "";
+        const linkedJournalCheck = await this.db.query<{ is_linked: boolean }>(
+          `SELECT (
+             EXISTS (SELECT 1 FROM journal_entries je WHERE je.photo_id = $1 OR $1::bigint = ANY(je.photo_ids))
+             OR EXISTS (SELECT 1 FROM spray_records sr WHERE sr.photo_id = $1 OR $1::bigint = ANY(sr.photo_ids))
+             ${milestoneFieldClause}
+           ) AS is_linked`,
           [attachment.id],
         );
-        if (invCheck.rows[0]?.is_invoice) {
-          return null;
+        if (!linkedJournalCheck.rows[0]?.is_linked) {
+          return { attachment: null, publicEligible: false };
         }
+        return { attachment, publicEligible: true };
       }
 
-      return attachment;
+      if (attachment.purpose === "inspection") {
+        const hasMinutePhotoIds = await hasPublicColumn(this.db, "inspection_minutes", "photo_ids");
+        const inspCheck = await this.db.query<{ is_linked: boolean }>(
+          hasMinutePhotoIds
+            ? `SELECT EXISTS (
+                 SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1 OR $1::bigint = ANY(im.photo_ids)
+               ) AS is_linked`
+            : `SELECT EXISTS (
+                 SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1
+               ) AS is_linked`,
+          [attachment.id],
+        );
+        if (!inspCheck.rows[0]?.is_linked) {
+          return { attachment: null, publicEligible: false };
+        }
+        return { attachment, publicEligible: true };
+      }
+
+      if (attachment.purpose === "avatar") {
+        const avatarCheck = await this.db.query<{ is_current: boolean; is_consented: boolean }>(
+          `SELECT EXISTS (SELECT 1 FROM households h WHERE h.avatar_id = $1) AS is_current,
+                  EXISTS (
+                    SELECT 1 FROM households h
+                    WHERE h.avatar_id = $1
+                      AND COALESCE(h.public_trace_consent, false) = true
+                      AND h.status = 'qualified'
+                  ) AS is_consented`,
+          [attachment.id],
+        );
+        if (!avatarCheck.rows[0]?.is_current) {
+          return { attachment: null, publicEligible: false };
+        }
+        return {
+          attachment,
+          publicEligible: Boolean(avatarCheck.rows[0]?.is_consented),
+        };
+      }
+
+      return { attachment, publicEligible: true };
     };
 
-    if (!this.db.cache) return queryPublic();
-    return this.db.cache.getOrLoad(`uploads:pub:${token}`, 60_000, ["uploads", "portal"], queryPublic);
+    const resolved = this.db.cache
+      ? await this.db.cache.getOrLoad(`uploads:pub:${token}`, 60_000, ["uploads", "portal", "trace"], queryPublic)
+      : await queryPublic();
+
+    if (!resolved.attachment) return null;
+    if (resolved.publicEligible) return resolved.attachment;
+    if (!user) return null;
+    try {
+      await this.assertReadable(resolved.attachment, user);
+      return resolved.attachment;
+    } catch {
+      return null;
+    }
   }
 
   /** Quyền xem tệp trên `/api/uploads/:id`: hộ dân cùng hộ; cán bộ đúng phân quyền & phạm vi địa bàn. */
@@ -743,6 +818,28 @@ export class UploadsService implements OnModuleInit {
       if (user.role === "village_officer" || !isStaffInCuneCoopScope(user, false)) {
         throw notFound("Không tìm thấy tệp đính kèm.");
       }
+      if (user.role === "admin" || user.role === "htx_head" || user.role === "htx_deputy") {
+        return;
+      }
+      const [hasMinutePhotoIds, hasApprovalAtts] = await Promise.all([
+        hasPublicColumn(this.db, "inspection_minutes", "photo_ids"),
+        hasPublicTable(this.db, "approval_attachments"),
+      ]);
+      const linkedCheck = await this.db.query<{ linked: boolean }>(
+        `SELECT (
+           EXISTS (SELECT 1 FROM lab_tests lt WHERE lt.scan_attachment_id = $1)
+           OR ${
+             hasMinutePhotoIds
+               ? "EXISTS (SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1 OR $1::bigint = ANY(im.photo_ids))"
+               : "EXISTS (SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1)"
+           }
+           ${hasApprovalAtts ? "OR EXISTS (SELECT 1 FROM approval_attachments aa WHERE aa.attachment_id = $1)" : ""}
+         ) AS linked`,
+        [attachment.id],
+      );
+      if (!linkedCheck.rows[0]?.linked) {
+        throw notFound("Không tìm thấy tệp đính kèm.");
+      }
       return;
     }
 
@@ -785,9 +882,10 @@ export class UploadsService implements OnModuleInit {
              SELECT 1
              FROM harvest_contributions hc
              JOIN harvest_lots hl ON hl.id = hc.lot_id
-             WHERE hc.household_id = d.household_id
+             WHERE hl.status <> 'revoked'
+               AND hc.household_id = d.household_id
                AND hl.enterprise_id = $2
-               AND (btrim(hc.plot_code) = '' OR upper(btrim(hc.plot_code)) = upper(btrim(d.plot_code)))
+               AND (btrim(COALESCE(hc.plot_code, '')) = '' OR upper(btrim(hc.plot_code)) = upper(btrim(d.plot_code)))
            )
          LIMIT 1`,
         [attachment.id, enterpriseId],
@@ -804,7 +902,15 @@ export class UploadsService implements OnModuleInit {
              SELECT 1
              FROM harvest_contributions hc
              JOIN harvest_lots hl ON hl.id = hc.lot_id
-             WHERE hc.household_id = lt.household_id AND hl.enterprise_id = $2
+             WHERE hl.status <> 'revoked'
+               AND hc.household_id = lt.household_id
+               AND hl.enterprise_id = $2
+               AND (
+                 lt.plot_code IS NULL
+                 OR btrim(lt.plot_code) = ''
+                 OR btrim(COALESCE(hc.plot_code, '')) = ''
+                 OR upper(btrim(hc.plot_code)) = upper(btrim(lt.plot_code))
+               )
            )
          LIMIT 1`,
         [attachment.id, enterpriseId],

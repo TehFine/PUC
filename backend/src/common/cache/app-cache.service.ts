@@ -53,12 +53,12 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
 
   news_articles: ["news"],
 
-  approvals: ["dashboard", "portal"],
+  approvals: ["dashboard", "portal", "uploads"],
   inspection_schedule: ["dashboard", "portal"],
   inspection_minutes: ["dashboard", "portal", "uploads", "trace"],
-  journal_entries: ["dashboard", "portal", "trace"],
+  journal_entries: ["dashboard", "portal", "uploads", "trace"],
   violations: ["dashboard", "portal", "trace"],
-  spray_records: ["dashboard", "portal", "trace"],
+  spray_records: ["dashboard", "portal", "uploads", "trace"],
   lab_tests: ["dashboard", "portal", "uploads", "trace"],
 
   harvest_lots: ["dashboard", "portal", "uploads", "trace"],

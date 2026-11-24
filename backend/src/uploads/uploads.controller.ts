@@ -24,7 +24,7 @@ import type { Request, Response } from "express";
 import { memoryStorage } from "multer";
 import { finalize, type Observable } from "rxjs";
 import type { AuthUser } from "../auth/auth-user";
-import { CurrentUser, Public } from "../auth/auth.decorators";
+import { CurrentUser, OptionalAuth, OptionalCurrentUser, Public } from "../auth/auth.decorators";
 import { AppException, badRequest, notFound } from "../common/errors/app.exception";
 import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
 import { RateLimitTier } from "../common/throttler/rate-limit.policy";
@@ -261,24 +261,27 @@ export class UploadsController {
 
   /** Tệp công khai truy cập bằng token ngẫu nhiên 20 ký tự (chống dò quét ID tuần tự và chặn bản nháp). */
   @Public()
+  @OptionalAuth()
   @SkipThrottle({ burst: true })
   @Throttle(RateLimitTier.PUBLIC_MEDIA_READ)
   @Get(["public/files/:token", "public/files/:token/:mediaHint"])
   async publicFile(
     @Param("token") token: string,
     @Param("mediaHint") mediaHint: string | undefined,
+    @OptionalCurrentUser() user: AuthUser | undefined,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     if (mediaHint !== undefined && !/^[A-Za-z0-9._-]{1,40}$/.test(mediaHint)) {
       throw notFound();
     }
-    const attachment = await this.uploads.findPublicByToken(token);
+    const attachment = await this.uploads.findPublicByToken(token, user);
     if (!attachment) throw notFound();
-    if (attachment.purpose === "lab") {
-      res.setHeader("Cache-Control", "private, no-cache");
-    } else {
+    if (attachment.purpose === "news" || attachment.purpose === "catalog") {
       res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+    } else {
+      res.setHeader("Cache-Control", "private, no-cache");
+      res.setHeader("Vary", "Cookie");
     }
     return streamAttachment(this.uploads, attachment, req, res);
   }

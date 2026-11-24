@@ -1,6 +1,7 @@
 import type { DatabaseService } from "../../database/database.service";
 
 const tableCacheByDb = new WeakMap<object, Map<string, Promise<boolean>>>();
+const columnCacheByDb = new WeakMap<object, Map<string, Promise<boolean>>>();
 
 /**
  * Kiểm tra sự tồn tại của bảng trong schema `public` với bộ nhớ đệm theo từng thực thể `DatabaseService`.
@@ -25,6 +26,46 @@ export function hasPublicTable(db: Pick<DatabaseService, "query">, tableName: st
     });
 
   map.set(clean, pending);
+  return pending;
+}
+
+/**
+ * Kiểm tra sự tồn tại của cột trong bảng thuộc schema `public` với bộ nhớ đệm theo từng thực thể `DatabaseService`.
+ */
+export function hasPublicColumn(
+  db: Pick<DatabaseService, "query">,
+  tableName: string,
+  columnName: string,
+): Promise<boolean> {
+  let map = columnCacheByDb.get(db);
+  if (!map) {
+    map = new Map<string, Promise<boolean>>();
+    columnCacheByDb.set(db, map);
+  }
+  const cleanTable = tableName.trim().toLowerCase();
+  const cleanCol = columnName.trim().toLowerCase();
+  const key = `${cleanTable}.${cleanCol}`;
+  const cached = map.get(key);
+  if (cached) return cached;
+
+  const pending = db
+    .query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = $1
+           AND column_name = $2
+       ) AS exists`,
+      [cleanTable, cleanCol],
+    )
+    .then((res) => Boolean(res.rows[0]?.exists))
+    .catch((err) => {
+      map?.delete(key);
+      throw err;
+    });
+
+  map.set(key, pending);
   return pending;
 }
 
