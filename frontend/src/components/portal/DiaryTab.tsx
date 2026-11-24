@@ -43,6 +43,12 @@ import {
 import { RadialPngIcon } from "./RadialIcons";
 import type { PortalAction } from "./PortalSearch";
 import { EmptyState, Field, Sheet, StateBlock, useSheetClose } from "./ui";
+import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
+import {
+  openPrintProgressWindow,
+  renderPrintableReportAsync,
+  type ReportDataPayload,
+} from "@/utils/report-pdf";
 
 function canDeleteEntry(entry: PortalJournalEntry): boolean {
   if (typeof entry.canDelete === "boolean") return entry.canDelete;
@@ -1589,12 +1595,179 @@ function formatDiaryDayHeading(isoDate: string): string {
   return formatDate(isoDate);
 }
 
+function FarmerLogbookExportSheet({ onClose }: { onClose: () => void }) {
+  const sheetClose = useSheetClose();
+  const closeSheet = sheetClose ?? onClose;
+  const [from, setFrom] = usePersistedState<string>("portal:diary:export-from", "");
+  const [to, setTo] = usePersistedState<string>("portal:diary:export-to", todayIso());
+  const [includePhotos, setIncludePhotos] = usePersistedState<boolean>(
+    "portal:diary:export-photos",
+    true,
+  );
+  const [includeInvoices, setIncludeInvoices] = usePersistedState<boolean>(
+    "portal:diary:export-invoices",
+    false,
+  );
+  const [busyMode, setBusyMode] = useState<"PDF" | "CSV" | null>(null);
+  const [photoProgress, setPhotoProgress] = useState<{ done: number; total: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const runExport = async (mode: "PDF" | "CSV") => {
+    if (from && to && from > to) {
+      setError("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
+      return;
+    }
+    setError(null);
+    setPhotoProgress(null);
+    setBusyMode(mode);
+
+    const docSpec = {
+      title: "Sổ nhật ký canh tác",
+      docTitle: "Sổ nhật ký canh tác điện tử nông hộ (VietGAP / GACC)",
+      desc: "Hồ sơ ghi chép chăm sóc vườn, sử dụng thuốc BVTV và hình ảnh minh chứng thực địa.",
+    };
+    const popupWin = mode === "PDF" ? openPrintProgressWindow(docSpec.docTitle) : null;
+
+    try {
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      params.set("includePhotos", mode === "PDF" && includePhotos ? "1" : "0");
+      if (mode === "PDF" && includePhotos && includeInvoices) {
+        params.set("includeInvoices", "1");
+      }
+
+      const data = await api.get<ReportDataPayload>(`/portal/logbook-report?${params.toString()}`);
+
+      if (mode === "PDF") {
+        const totalPhotos = data.evidencePhotos?.length ?? 0;
+        if (totalPhotos > 0) {
+          setPhotoProgress({ done: 0, total: totalPhotos });
+        }
+        await renderPrintableReportAsync(
+          popupWin,
+          docSpec,
+          data,
+          {
+            from,
+            to,
+            villageName: data.householdMeta?.villageName,
+          },
+          (done, total) => setPhotoProgress({ done, total }),
+        );
+        toast.success(`Đã mở bản in sổ nhật ký (${data.total} mục ghi).`);
+        closeSheet();
+      } else {
+        const code = data.householdMeta?.code?.toLowerCase() || "nong-ho";
+        const blob = buildUtf8CsvBlob(data.headers, data.rows);
+        triggerBlobDownload(blob, `so-nhat-ky-${code}-${to || todayIso()}.csv`);
+        toast.success(`Đã tải bảng nhật ký CSV (${data.total} mục ghi).`);
+        closeSheet();
+      }
+    } catch (err) {
+      if (popupWin && !popupWin.closed) popupWin.close();
+      const msg = errorMessage(err, "Không xuất được sổ nhật ký canh tác.");
+      setError(msg);
+    } finally {
+      setBusyMode(null);
+      setPhotoProgress(null);
+    }
+  };
+
+  const pdfLabel =
+    busyMode === "PDF"
+      ? photoProgress && photoProgress.total > 0
+        ? `Đang chuẩn bị ảnh (${photoProgress.done}/${photoProgress.total})...`
+        : "Đang tạo PDF..."
+      : "Xuất sổ PDF chuẩn A4";
+
+  return (
+    <div className="pt-logbook-export-sheet">
+      <p className="pt-logbook-export-intro">
+        Tạo sổ nhật ký canh tác chuẩn khổ giấy A4 của gia đình kèm hình ảnh chụp tại vườn để lưu trữ hoặc xuất trình khi đoàn kiểm tra đối chiếu.
+      </p>
+
+      <div className="pt-logbook-date-grid">
+        <Field label="Từ ngày (để trống = đầu vụ)" htmlFor="pt-logbook-export-from">
+          <input
+            id="pt-logbook-export-from"
+            type="date"
+            className="pt-input"
+            value={from}
+            max={to || todayIso()}
+            onChange={(e) => setFrom(e.target.value)}
+            disabled={busyMode !== null}
+          />
+        </Field>
+        <Field label="Đến ngày" htmlFor="pt-logbook-export-to">
+          <input
+            id="pt-logbook-export-to"
+            type="date"
+            className="pt-input"
+            value={to}
+            max={todayIso()}
+            onChange={(e) => setTo(e.target.value)}
+            disabled={busyMode !== null}
+          />
+        </Field>
+      </div>
+
+      <div className="pt-logbook-check-group">
+        <label className="pt-logbook-check-row">
+          <input
+            type="checkbox"
+            checked={includePhotos}
+            onChange={(e) => setIncludePhotos(e.target.checked)}
+            disabled={busyMode !== null}
+          />
+          <span>Đính kèm phụ lục hình ảnh chụp tại vườn (tự động nén gọn cho điện thoại)</span>
+        </label>
+        {includePhotos && (
+          <label className="pt-logbook-check-row">
+            <input
+              type="checkbox"
+              checked={includeInvoices}
+              onChange={(e) => setIncludeInvoices(e.target.checked)}
+              disabled={busyMode !== null}
+            />
+            <span>Bao gồm ảnh hóa đơn vật tư của gia đình (nếu có)</span>
+          </label>
+        )}
+      </div>
+
+      <InlineError message={error} />
+
+      <div className="pt-logbook-export-actions">
+        <button
+          type="button"
+          className="pt-btn pt-btn-ghost"
+          onClick={() => void runExport("CSV")}
+          disabled={busyMode !== null}
+        >
+          {busyMode === "CSV" ? "Đang tải..." : "Tải bảng CSV"}
+        </button>
+        <BusyButton
+          type="button"
+          className="pt-btn pt-btn-primary"
+          busy={busyMode === "PDF"}
+          disabled={busyMode !== null}
+          busyLabel={pdfLabel}
+          onClick={() => void runExport("PDF")}
+        >
+          {pdfLabel}
+        </BusyButton>
+      </div>
+    </div>
+  );
+}
+
 export default function DiaryTab({ initialAction }: { initialAction?: PortalAction } = {}) {
   const sync = useOfflineSyncState();
   const journal = usePortal<PortalList<PortalJournalEntry>>("journal");
   const spray = usePortal<PortalList<PortalSprayRecord>>("spray");
   const plots = usePortal<PortalPlots>("plots");
   const [persistedFormOpen, setPersistedFormOpen] = usePersistedState("portal:diary:form-open", false);
+  const [exportSheetOpen, setExportSheetOpen] = usePersistedState("portal:diary:export-open", false);
   const [persistedFormActivity, setPersistedFormActivity] = usePersistedState<string | null>(
     "portal:diary:form-activity",
     null,
@@ -1686,17 +1859,27 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
           <h2 id="diary-heading" className="pt-plots-title">
             Nhật ký canh tác
           </h2>
-          <button
-            type="button"
-            className="pt-diary-create-btn"
-            onClick={() => {
-              setFormInitialActivity(undefined);
-              setFormOpen(true);
-            }}
-            title="Ghi công việc chăm sóc hoặc phun thuốc mới"
-          >
-            Ghi nhật ký
-          </button>
+          <div className="pt-diary-header-actions">
+            <button
+              type="button"
+              className="pt-diary-export-btn"
+              onClick={() => setExportSheetOpen(true)}
+              title="Xuất sổ nhật ký canh tác PDF chuẩn A4 hoặc tải CSV"
+            >
+              Xuất sổ PDF
+            </button>
+            <button
+              type="button"
+              className="pt-diary-create-btn"
+              onClick={() => {
+                setFormInitialActivity(undefined);
+                setFormOpen(true);
+              }}
+              title="Ghi công việc chăm sóc hoặc phun thuốc mới"
+            >
+              Ghi nhật ký
+            </button>
+          </div>
         </div>
 
         <OfflinePendingDiaryCards kinds={["portal-journal", "portal-spray"]} />
@@ -1869,6 +2052,16 @@ export default function DiaryTab({ initialAction }: { initialAction?: PortalActi
             onClose={() => setSelectedSpray(null)}
             onDeleted={() => setSelectedSpray(null)}
           />
+        </Sheet>
+      )}
+
+      {exportSheetOpen && (
+        <Sheet
+          title="Xuất sổ nhật ký canh tác"
+          className="pt-diary-sheet"
+          onClose={() => setExportSheetOpen(false)}
+        >
+          <FarmerLogbookExportSheet onClose={() => setExportSheetOpen(false)} />
         </Sheet>
       )}
     </div>

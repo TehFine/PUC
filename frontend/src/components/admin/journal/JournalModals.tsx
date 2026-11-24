@@ -239,13 +239,13 @@ export function JournalFormModal({
       payload: media.hasFiles ? { ...payload, hasPhoto: true } : payload,
       mediaGroups: media.hasFiles
         ? [
-            {
-              slotKey: "photos",
-              purpose: "journal",
-              items: media.items,
-              binding: { arrayField: "photoIds", primaryField: "photoId" },
-            },
-          ]
+          {
+            slotKey: "photos",
+            purpose: "journal",
+            items: media.items,
+            binding: { arrayField: "photoIds", primaryField: "photoId" },
+          },
+        ]
         : [],
       onProgress: media.setUploadProgress,
     });

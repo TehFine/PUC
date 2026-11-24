@@ -5057,7 +5057,48 @@ input[type="date"].filter-select {
 }
 
 .report-filter-field.report-filter-village .filter-select {
-  min-width: 196px;
+  min-width: 176px;
+}
+
+.report-filter-field.report-filter-household .filter-select {
+  min-width: 210px;
+  max-width: 270px;
+}
+
+.report-photo-options {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f7f7f5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-photo-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.report-photo-check input[type="checkbox"] {
+  margin-top: 2px;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  accent-color: #14372f;
+  cursor: pointer;
+}
+
+.report-photo-mode-hint {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .report-filter-label {
@@ -8717,7 +8758,8 @@ code {
     min-width: 0;
   }
 
-  .report-filter-field.report-filter-village {
+  .report-filter-field.report-filter-village,
+  .report-filter-field.report-filter-household {
     grid-column: 1 / -1;
   }
 
@@ -12355,6 +12397,7 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 }
 
 @media screen and (min-width: 760px) and (pointer: fine) {
+
   .modal:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .modal-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select),
   .pt-sheet:not(.is-drawer):not(.modal-confirm-sheet):not(.pt-visual-picker-sheet):not(.pt-search-sheet) .pt-sheet-body:has(textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) {
     padding-bottom: 22px !important;
@@ -12591,7 +12634,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     padding: 0 !important;
   }
 
-  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay:not([data-kb-open="true"]) > .modal.pt-sheet.broadcast-notice-modal {
+  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay:not([data-kb-open="true"])>.modal.pt-sheet.broadcast-notice-modal {
     width: 100% !important;
     max-width: 100% !important;
     height: 100vh !important;
@@ -12615,7 +12658,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     pointer-events: none;
   }
 
-  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay[data-kb-open="true"] > .modal.pt-sheet.broadcast-notice-modal {
+  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay[data-kb-open="true"]>.modal.pt-sheet.broadcast-notice-modal {
     width: 100% !important;
     max-width: 100% !important;
     height: var(--vv-height, 100dvh) !important;
@@ -12636,7 +12679,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 
 @media screen and (min-width: 760px) {
-  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay > .modal.pt-sheet.broadcast-notice-modal {
+  .modal-overlay.pt-sheet-backdrop.is-confirm-overlay>.modal.pt-sheet.broadcast-notice-modal {
     width: min(920px, calc(100vw - 48px)) !important;
     max-width: min(920px, calc(100vw - 48px)) !important;
     max-height: calc(100dvh - 48px) !important;
@@ -12662,7 +12705,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   }
 
   .modal.pt-sheet.broadcast-notice-modal .broadcast-tpl-label,
-  .modal.pt-sheet.broadcast-notice-modal .form-group > label {
+  .modal.pt-sheet.broadcast-notice-modal .form-group>label {
     font-size: 14.5px;
     margin-bottom: 8px;
   }
@@ -12694,7 +12737,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     line-height: 1.62 !important;
   }
 
-  .modal.pt-sheet.broadcast-notice-modal .modal-footer > .btn {
+  .modal.pt-sheet.broadcast-notice-modal .modal-footer>.btn {
     min-height: 54px !important;
     font-size: 15.5px !important;
   }

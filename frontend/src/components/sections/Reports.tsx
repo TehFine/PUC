@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { todayIso } from "@/components/admin/catalog/form-utils";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
@@ -10,17 +10,15 @@ import { isCoopStaffRole } from "@/constants/roles";
 import { useApiList } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
 import { usePersistedRecordSelection, usePersistedState } from "@/lib/back-navigation";
+import type { HouseholdDto } from "@/types/api";
 import type { VillageRecord } from "@/types/catalog";
 import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
-
-type ReportBackendType =
-  | "households"
-  | "journal"
-  | "spray"
-  | "lab-tests"
-  | "violations"
-  | "harvest"
-  | "training-registrations";
+import {
+  openPrintProgressWindow,
+  renderPrintableReportAsync,
+  type ReportBackendType,
+  type ReportDataPayload,
+} from "@/utils/report-pdf";
 
 interface ReportSpec {
   id: string;
@@ -31,50 +29,56 @@ interface ReportSpec {
   docTitle: string;
   desc: string;
   formats: string[];
-}
-
-interface ReportDataPayload {
-  type: ReportBackendType;
-  filename: string;
-  headers: string[];
-  rows: string[][];
-  total: number;
+  supportsPhotoAppendix?: boolean;
 }
 
 const REPORTS: ReportSpec[] = [
   {
-    id: "households",
+    id: "household-logbook",
     index: "01",
+    category: "Hồ sơ hộ dân",
+    type: "household-logbook",
+    title: "Sổ nhật ký hộ dân",
+    docTitle: "Sổ nhật ký canh tác điện tử nông hộ (VietGAP / GACC)",
+    desc: "Tổng hợp sổ nhật ký theo hộ kèm phụ lục ảnh thực địa chuẩn A4.",
+    formats: ["Xuất CSV", "In / PDF"],
+    supportsPhotoAppendix: true,
+  },
+  {
+    id: "households",
+    index: "02",
     category: "Vùng trồng",
     type: "households",
     title: "Hộ vùng trồng",
     docTitle: "Báo cáo danh sách hộ vùng trồng (VietGAP / GACC)",
-    desc: "Danh sách chủ hộ, số thửa và diện tích.",
+    desc: "Danh sách chủ hộ, số thửa, diện tích và đường dẫn hồ sơ số.",
     formats: ["Xuất CSV", "In / PDF"],
   },
   {
     id: "journal",
-    index: "02",
+    index: "03",
     category: "Canh tác",
     type: "journal",
     title: "Nhật ký canh tác",
     docTitle: "Báo cáo nhật ký canh tác điện tử",
-    desc: "Lịch sử chăm sóc, bón phân và tưới nước.",
+    desc: "Lịch sử chăm sóc, bón phân, tưới nước và trạng thái xác minh.",
     formats: ["Xuất CSV", "In / PDF"],
+    supportsPhotoAppendix: true,
   },
   {
     id: "spray",
-    index: "03",
+    index: "04",
     category: "Bảo vệ thực vật",
     type: "spray",
     title: "Nhật ký phun thuốc",
     docTitle: "Báo cáo nhật ký phun thuốc BVTV",
-    desc: "Thuốc sử dụng, liều pha và ngày cách ly.",
+    desc: "Thuốc sử dụng, liều pha, ngày cách ly và minh chứng tại vườn.",
     formats: ["Xuất CSV", "In / PDF"],
+    supportsPhotoAppendix: true,
   },
   {
     id: "lab-tests",
-    index: "04",
+    index: "05",
     category: "An toàn mẫu",
     type: "lab-tests",
     title: "Kiểm nghiệm mẫu",
@@ -84,17 +88,18 @@ const REPORTS: ReportSpec[] = [
   },
   {
     id: "violations",
-    index: "05",
+    index: "06",
     category: "Giám sát",
     type: "violations",
     title: "Vi phạm quy trình",
     docTitle: "Báo cáo vi phạm và kết quả khắc phục",
-    desc: "Cảnh báo sai phạm và kết quả khắc phục.",
+    desc: "Cảnh báo sai phạm, phản hồi hộ dân và ảnh khắc phục.",
     formats: ["Xuất CSV", "In / PDF"],
+    supportsPhotoAppendix: true,
   },
   {
     id: "harvest",
-    index: "06",
+    index: "07",
     category: "Truy xuất",
     type: "harvest",
     title: "Lô hàng xuất khẩu",
@@ -104,7 +109,7 @@ const REPORTS: ReportSpec[] = [
   },
   {
     id: "training-registrations",
-    index: "07",
+    index: "08",
     category: "Đào tạo",
     type: "training-registrations",
     title: "Điểm danh tập huấn",
@@ -114,346 +119,12 @@ const REPORTS: ReportSpec[] = [
   },
 ];
 
-function escapeHtml(text: unknown): string {
-  return String(text ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function formatIsoToVn(iso: string): string {
-  if (!iso) return "";
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
-}
-
-function collectSelfHostedFontCss(): string {
-  if (typeof document === "undefined" || typeof window === "undefined") return "";
-  const origin = window.location.origin;
-  const rulesOut: string[] = [];
-  for (const sheet of Array.from(document.styleSheets)) {
-    let cssRules: CSSRuleList;
-    try {
-      cssRules = sheet.cssRules;
-    } catch {
-      continue;
-    }
-    for (const rule of Array.from(cssRules)) {
-      if (!(rule instanceof CSSFontFaceRule)) continue;
-      let text = rule.cssText.replace(/font-family:\s*['"]?[^;'"]+['"]?/i, 'font-family: "Bai Jamjuree"');
-      text = text.replace(/url\(\s*(['"]?)(\/[^)'"]+)\1\s*\)/g, `url("${origin}$2")`);
-      rulesOut.push(text);
-    }
-  }
-  return rulesOut.join("\n");
-}
-
-function buildPrintableReportHtml(
-  report: ReportSpec,
-  data: ReportDataPayload,
-  meta: { from: string; to: string; villageName: string },
-): string {
-  const fontFaceCss = collectSelfHostedFontCss();
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const year = now.getFullYear();
-
-  const dateRangeLabel =
-    meta.from && meta.to
-      ? `Từ ngày ${formatIsoToVn(meta.from)} đến ngày ${formatIsoToVn(meta.to)}`
-      : meta.from
-        ? `Từ ngày ${formatIsoToVn(meta.from)} đến nay`
-        : meta.to
-          ? `Tính đến ngày ${formatIsoToVn(meta.to)}`
-          : "Toàn bộ thời gian";
-
-  const theadHtml = data.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
-  const tbodyHtml =
-    data.rows.length === 0
-      ? `<tr><td colspan="${data.headers.length + 1}" style="text-align:center;padding:24px;color:#64748b;">Không có dữ liệu phù hợp trong khoảng lọc đã chọn.</td></tr>`
-      : data.rows
-          .map(
-            (row, idx) =>
-              `<tr><td style="text-align:center;font-weight:600;">${idx + 1}</td>${row
-                .map((cell) => `<td>${escapeHtml(cell || "—")}</td>`)
-                .join("")}</tr>`,
-          )
-          .join("");
-
-  return `<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(report.docTitle)} - HTX Cư Né</title>
-  <style>
-    ${fontFaceCss}
-    @page { size: A4 landscape; margin: 14mm; }
-    * {
-      box-sizing: border-box;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    body {
-      font-family: "Bai Jamjuree", Arial, Helvetica, sans-serif;
-      color: #0f172a;
-      margin: 0;
-      padding: 20px 24px;
-      background: #fff;
-      font-size: 13px;
-      line-height: 1.45;
-    }
-    .print-toolbar {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px dashed #cbd5e1;
-      font-family: "Bai Jamjuree", Arial, Helvetica, sans-serif;
-    }
-    .print-btn {
-      padding: 8px 16px;
-      border-radius: 8px;
-      border: 1px solid #14372f;
-      background: #14372f;
-      color: #fff;
-      font-weight: 600;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .print-btn.secondary {
-      background: #fff;
-      color: #14372f;
-    }
-    .doc-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 20px;
-      margin-bottom: 18px;
-    }
-    .doc-org, .doc-nation {
-      text-align: center;
-    }
-    .doc-org strong, .doc-nation strong {
-      display: block;
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.02em;
-    }
-    .doc-org span, .doc-nation span {
-      display: inline-block;
-      font-size: 12.5px;
-      font-weight: 700;
-      padding-bottom: 3px;
-      border-bottom: 1px solid #0f172a;
-      margin-top: 2px;
-    }
-    .doc-title-wrap {
-      text-align: center;
-      margin: 14px 0 16px;
-    }
-    .doc-title {
-      font-size: 19px;
-      font-weight: 700;
-      text-transform: uppercase;
-      margin: 0 0 6px;
-      color: #14372f;
-    }
-    .doc-meta {
-      font-size: 13px;
-      color: #334155;
-      margin: 2px 0;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 12px;
-      font-family: "Bai Jamjuree", Arial, Helvetica, sans-serif;
-      font-size: 12px;
-    }
-    thead {
-      display: table-header-group;
-    }
-    tr {
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
-    th, td {
-      border: 1px solid #475569;
-      padding: 7px 8px;
-      text-align: left;
-      vertical-align: top;
-      word-break: break-word;
-    }
-    th {
-      background: #f1f5f9;
-      color: #0f172a;
-      font-weight: 700;
-      text-align: center;
-    }
-    tbody tr:nth-child(even) {
-      background: #f8fafc;
-    }
-    .doc-summary {
-      margin-top: 10px;
-      font-size: 13px;
-      font-weight: 700;
-    }
-    .doc-Validations {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 26px;
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
-    .sig-box {
-      width: 42%;
-      text-align: center;
-    }
-    .sig-date {
-      font-style: italic;
-      font-size: 12.5px;
-      margin-bottom: 4px;
-    }
-    .sig-role {
-      font-weight: 700;
-      text-transform: uppercase;
-      font-size: 13px;
-    }
-    .sig-note {
-      font-style: italic;
-      font-size: 12px;
-      color: #475569;
-      margin-bottom: 64px;
-    }
-    @media print {
-      .print-toolbar { display: none !important; }
-      body { padding: 0; }
-    }
-  </style>
-</head>
-<body>
-  <div class="print-toolbar">
-    <button type="button" id="report-btn-print" class="print-btn">In báo cáo / Lưu PDF</button>
-    <button type="button" id="report-btn-close" class="print-btn secondary">Đóng cửa sổ</button>
-  </div>
-  <div class="doc-header">
-    <div class="doc-org">
-      <strong>HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ</strong>
-      <span>HỆ THỐNG QUẢN LÝ VÙNG TRỒNG PUC</span>
-    </div>
-    <div class="doc-nation">
-      <strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong>
-      <span>Độc lập - Tự do - Hạnh phúc</span>
-    </div>
-  </div>
-  <div class="doc-title-wrap">
-    <h1 class="doc-title">${escapeHtml(report.docTitle)}</h1>
-    <div class="doc-meta"><strong>Phạm vi khu vực:</strong> ${escapeHtml(meta.villageName)} &nbsp;|&nbsp; <strong>Kỳ báo cáo:</strong> ${escapeHtml(dateRangeLabel)}</div>
-    <div class="doc-meta">${escapeHtml(report.desc)}</div>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:42px;">STT</th>
-        ${theadHtml}
-      </tr>
-    </thead>
-    <tbody>
-      ${tbodyHtml}
-    </tbody>
-  </table>
-  <div class="doc-summary">Tổng số bản ghi: ${Number(data.total) || 0}</div>
-  <div class="doc-Validations">
-    <div class="sig-box">
-      <div class="sig-date">&nbsp;</div>
-      <div class="sig-role">Người lập biểu</div>
-      <div class="sig-note">(Ký, ghi rõ họ tên)</div>
-    </div>
-    <div class="sig-box">
-      <div class="sig-date">Cư Né, ngày ${day} tháng ${month} năm ${year}</div>
-      <div class="sig-role">TM. Ban Giám Đốc HTX Cư Né</div>
-      <div class="sig-note">(Ký tên, đóng dấu)</div>
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-/** Dự phòng in qua iframe ẩn khi trình duyệt di động hoặc WebView chặn mở cửa sổ mới. */
-function printHtmlViaHiddenIframe(html: string): void {
-  const iframe = document.createElement("iframe");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-  iframe.setAttribute("aria-hidden", "true");
-  document.body.appendChild(iframe);
-
-  const cleanup = () => {
-    setTimeout(() => {
-      iframe.remove();
-    }, 60_000);
-  };
-
-  iframe.onload = () => {
-    try {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-    } finally {
-      cleanup();
-    }
-  };
-
-  const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
-  if (doc) {
-    doc.open();
-    doc.write(html);
-    doc.close();
-  } else {
-    iframe.remove();
-  }
-}
-
-function renderPrintableReport(
-  win: Window | null,
-  report: ReportSpec,
-  data: ReportDataPayload,
-  meta: { from: string; to: string; villageName: string },
-): void {
-  const html = buildPrintableReportHtml(report, data, meta);
-  if (win && !win.closed) {
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.document.getElementById("report-btn-print")?.addEventListener("click", () => {
-      win.focus();
-      win.print();
-    });
-    win.document.getElementById("report-btn-close")?.addEventListener("click", () => {
-      win.close();
-    });
-    setTimeout(() => {
-      if (!win.closed) {
-        win.focus();
-        win.print();
-      }
-    }, 250);
-    return;
-  }
-  printHtmlViaHiddenIframe(html);
-}
-
 export default function Reports() {
   const { session } = useAuth();
   const canExportAudit = isCoopStaffRole(session?.user.role);
-  const villages = useApiList<VillageRecord>("villages");
+  const villages = useApiList<VillageRecord>(session ? "villages" : null);
+  const households = useApiList<HouseholdDto>(session ? "households" : null);
+
   const [selectedReport, setSelectedReport] = usePersistedRecordSelection(
     "admin:reports:selected",
     REPORTS,
@@ -462,21 +133,56 @@ export default function Reports() {
   const [from, setFrom] = usePersistedState<string>("admin:reports:from", "");
   const [to, setTo] = usePersistedState<string>("admin:reports:to", todayIso());
   const [villageId, setVillageId] = usePersistedState<string>("admin:reports:village", "");
+  const [householdId, setHouseholdId] = usePersistedState<string>("admin:reports:household", "");
+  const [includePhotos, setIncludePhotos] = usePersistedState<boolean>(
+    "admin:reports:include-photos",
+    true,
+  );
+  const [includeInvoices, setIncludeInvoices] = usePersistedState<boolean>(
+    "admin:reports:include-invoices",
+    false,
+  );
   const [format, setFormat] = usePersistedState<"CSV" | "PDF">(
     "admin:reports:format",
     "CSV",
     (v): v is "CSV" | "PDF" => v === "CSV" || v === "PDF",
   );
   const [downloading, setDownloading] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState<{ done: number; total: number } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewData, setPreviewData] = useState<ReportDataPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const filteredHouseholds = useMemo(() => {
+    if (!villageId) return households.rows;
+    return households.rows.filter((h) => String(h.villageId) === villageId);
+  }, [households.rows, villageId]);
+
+  const effectiveHouseholdId = useMemo(() => {
+    if (!householdId) return "";
+    if (households.loading && households.rows.length === 0) return householdId;
+    return filteredHouseholds.some((h) => String(h.id) === householdId) ? householdId : "";
+  }, [householdId, filteredHouseholds, households.loading, households.rows.length]);
+
+  const handleVillageChange = (nextVillageId: string) => {
+    setVillageId(nextVillageId);
+    if (
+      nextVillageId &&
+      householdId &&
+      !households.rows.some(
+        (h) => String(h.id) === householdId && String(h.villageId) === nextVillageId,
+      )
+    ) {
+      setHouseholdId("");
+    }
+  };
 
   const buildQueryString = (extra?: Record<string, string>) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (villageId) params.set("villageId", villageId);
+    if (effectiveHouseholdId) params.set("householdId", effectiveHouseholdId);
     if (extra) {
       for (const [k, v] of Object.entries(extra)) {
         params.set(k, v);
@@ -491,7 +197,7 @@ export default function Reports() {
 
   const previewKey =
     selectedReport && !dateRangeError
-      ? `${selectedReport.type}|${from}|${to}|${villageId}`
+      ? `${selectedReport.type}|${from}|${to}|${villageId}|${effectiveHouseholdId}`
       : null;
   const [trackedPreviewKey, setTrackedPreviewKey] = useState<string | null>(previewKey);
   if (trackedPreviewKey !== previewKey) {
@@ -501,7 +207,7 @@ export default function Reports() {
     setError(null);
   }
 
-  // Tự động tải dữ liệu xem trước khi mở modal hoặc đổi bộ lọc
+  // Tự động tải dữ liệu xem trước khi mở hộp thoại hoặc đổi bộ lọc (gắn preview=1 để không sinh nhật ký xuất thừa)
   useEffect(() => {
     if (!selectedReport || dateRangeError) return;
     let active = true;
@@ -509,7 +215,9 @@ export default function Reports() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (villageId) params.set("villageId", villageId);
+    if (effectiveHouseholdId) params.set("householdId", effectiveHouseholdId);
     params.set("format", "json");
+    params.set("preview", "1");
 
     api
       .get<ReportDataPayload>(`/reports/${selectedReport.type}?${params.toString()}`)
@@ -529,7 +237,7 @@ export default function Reports() {
     return () => {
       active = false;
     };
-  }, [selectedReport, from, to, villageId, dateRangeError]);
+  }, [selectedReport, from, to, villageId, effectiveHouseholdId, dateRangeError]);
 
   const handleExport = async (report: ReportSpec, targetFormat: "CSV" | "PDF") => {
     if (from && to && from > to) {
@@ -537,13 +245,30 @@ export default function Reports() {
       return;
     }
     setError(null);
+    setPhotoProgress(null);
     setDownloading(true);
-    // Mở cửa sổ in đồng bộ ngay trong sự kiện click để trình duyệt Safari / Mobile không chặn popup
-    const popupWin = targetFormat === "PDF" ? window.open("", "_blank", "width=1080,height=800") : null;
+
+    const popupWin = targetFormat === "PDF" ? openPrintProgressWindow(report.docTitle) : null;
     try {
-      const exportParams: Record<string, string> = canExportAudit
-        ? { format: "json", audit: "1" }
-        : { format: "json" };
+      const exportParams: Record<string, string> = {
+        format: "json",
+        export: "1",
+      };
+      if (canExportAudit) {
+        exportParams.audit = "1";
+      }
+      const wantPhotos =
+        targetFormat === "PDF" &&
+        Boolean(effectiveHouseholdId) &&
+        Boolean(report.supportsPhotoAppendix) &&
+        includePhotos;
+      if (wantPhotos) {
+        exportParams.includePhotos = "1";
+        if (canExportAudit && report.type === "household-logbook" && includeInvoices) {
+          exportParams.includeInvoices = "1";
+        }
+      }
+
       const data = await api.get<ReportDataPayload>(
         `/reports/${report.type}${buildQueryString(exportParams)}`,
       );
@@ -552,16 +277,28 @@ export default function Reports() {
         villages.rows.find((v) => String(v.id) === villageId)?.name || "Tất cả thôn / tổ";
 
       if (targetFormat === "PDF") {
-        renderPrintableReport(popupWin, report, data, {
-          from,
-          to,
-          villageName: selectedVillageName,
-        });
-        toast.success(`Đã mở bản in / PDF cho "${report.title}" (${data.total} bản ghi).`);
+        const totalPhotos = data.evidencePhotos?.length ?? 0;
+        if (totalPhotos > 0) {
+          setPhotoProgress({ done: 0, total: totalPhotos });
+        }
+        await renderPrintableReportAsync(
+          popupWin,
+          report,
+          data,
+          {
+            from,
+            to,
+            villageName: selectedVillageName,
+          },
+          (done, total) => setPhotoProgress({ done, total }),
+        );
+        const photoNote = totalPhotos > 0 ? `, kèm ${totalPhotos} ảnh minh chứng` : "";
+        toast.success(`Đã mở bản in PDF "${report.title}" (${data.total} bản ghi${photoNote}).`);
         setSelectedReport(null);
       } else {
+        const hhSuffix = data.householdMeta ? `-${data.householdMeta.code.toLowerCase()}` : "";
         const blob = buildUtf8CsvBlob(data.headers, data.rows);
-        triggerBlobDownload(blob, `bao-cao-${report.type}-${to || todayIso()}.csv`);
+        triggerBlobDownload(blob, `bao-cao-${report.type}${hhSuffix}-${to || todayIso()}.csv`);
 
         toast.success(`Đã tải xuống CSV "${report.title}" (${data.total} bản ghi).`);
         setSelectedReport(null);
@@ -573,7 +310,27 @@ export default function Reports() {
       toast.error(msg);
     } finally {
       setDownloading(false);
+      setPhotoProgress(null);
     }
+  };
+
+  const householdOptions = useMemo(
+    () =>
+      filteredHouseholds.map((h) => ({
+        value: String(h.id),
+        label: `${h.name} (${h.code})`,
+      })),
+    [filteredHouseholds],
+  );
+
+  const exportButtonLabel = () => {
+    if (downloading) {
+      if (photoProgress && photoProgress.total > 0) {
+        return `Đang chuẩn bị ảnh (${photoProgress.done}/${photoProgress.total})...`;
+      }
+      return "Đang xuất...";
+    }
+    return format === "PDF" ? "Xuất PDF" : "Tải CSV";
   };
 
   return (
@@ -582,15 +339,29 @@ export default function Reports() {
       <div className="filter-bar report-filter-bar">
         <label className="report-filter-field">
           <span className="report-filter-label">Từ ngày</span>
-          <input type="date" className="filter-select" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <input
+            type="date"
+            className="filter-select"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
         </label>
         <label className="report-filter-field">
           <span className="report-filter-label">Đến ngày</span>
-          <input type="date" className="filter-select" value={to} onChange={(e) => setTo(e.target.value)} />
+          <input
+            type="date"
+            className="filter-select"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
         </label>
         <label className="report-filter-field report-filter-village">
           <span className="report-filter-label">Thôn / Tổ</span>
-          <select className="filter-select" value={villageId} onChange={(e) => setVillageId(e.target.value)}>
+          <select
+            className="filter-select"
+            value={villageId}
+            onChange={(e) => handleVillageChange(e.target.value)}
+          >
             <option value="">Tất cả thôn / tổ</option>
             {villages.rows.map((v) => (
               <option key={v.id} value={String(v.id)}>
@@ -599,8 +370,23 @@ export default function Reports() {
             ))}
           </select>
         </label>
+        <label className="report-filter-field report-filter-household">
+          <span className="report-filter-label">Nông hộ</span>
+          <select
+            className="filter-select"
+            value={effectiveHouseholdId}
+            onChange={(e) => setHouseholdId(e.target.value)}
+          >
+            <option value="">Tất cả nông hộ (Tổng hợp)</option>
+            {filteredHouseholds.map((h) => (
+              <option key={h.id} value={String(h.id)}>
+                {h.name} ({h.code})
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="report-filter-meta">
-          {(from || villageId) && (
+          {(from || villageId || effectiveHouseholdId) && (
             <button
               type="button"
               className="report-reset-btn"
@@ -608,12 +394,15 @@ export default function Reports() {
                 setFrom("");
                 setTo(todayIso());
                 setVillageId("");
+                setHouseholdId("");
               }}
             >
               Đặt lại
             </button>
           )}
-          <span className="report-filter-count">{String(REPORTS.length).padStart(2, "0")} biểu mẫu</span>
+          <span className="report-filter-count">
+            {String(REPORTS.length).padStart(2, "0")} biểu mẫu
+          </span>
         </div>
       </div>
 
@@ -626,14 +415,14 @@ export default function Reports() {
             className="report-card"
             onClick={() => {
               setError(null);
-              setFormat("CSV");
+              setFormat(r.type === "household-logbook" && effectiveHouseholdId ? "PDF" : "CSV");
               setSelectedReport(r);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 setError(null);
-                setFormat("CSV");
+                setFormat(r.type === "household-logbook" && effectiveHouseholdId ? "PDF" : "CSV");
                 setSelectedReport(r);
               }
             }}
@@ -691,29 +480,42 @@ export default function Reports() {
                 disabled={downloading || previewLoading}
                 onClick={() => void handleExport(selectedReport, format)}
               >
-                {downloading
-                  ? "Đang xuất..."
-                  : format === "PDF"
-                    ? "Xuất PDF"
-                    : "Tải CSV"}
+                {exportButtonLabel()}
               </button>
             </>
           }
         >
-          <p style={{ marginTop: 0, marginBottom: 12, fontSize: 13, lineHeight: 1.45, color: "var(--text-secondary)" }}>
+          <p
+            style={{
+              marginTop: 0,
+              marginBottom: 12,
+              fontSize: 13,
+              lineHeight: 1.45,
+              color: "var(--text-secondary)",
+            }}
+          >
             {selectedReport.desc}
           </p>
           <FormGrid>
             <TextField label="Từ ngày" type="date" value={from} onChange={setFrom} />
             <TextField label="Đến ngày" type="date" value={to} onChange={setTo} />
           </FormGrid>
-          <SelectField
-            label="Thôn / Tổ"
-            value={villageId}
-            onChange={setVillageId}
-            placeholder="Tất cả thôn / tổ"
-            options={villages.rows.map((v) => ({ value: String(v.id), label: v.name }))}
-          />
+          <FormGrid>
+            <SelectField
+              label="Thôn / Tổ"
+              value={villageId}
+              onChange={handleVillageChange}
+              placeholder="Tất cả thôn / tổ"
+              options={villages.rows.map((v) => ({ value: String(v.id), label: v.name }))}
+            />
+            <SelectField
+              label="Phạm vi nông hộ"
+              value={effectiveHouseholdId}
+              onChange={setHouseholdId}
+              placeholder="Tất cả nông hộ (Báo cáo tổng hợp)"
+              options={householdOptions}
+            />
+          </FormGrid>
           <div className="form-group">
             <label>Định dạng xuất</label>
             <div className="format-btns">
@@ -730,6 +532,41 @@ export default function Reports() {
             </div>
           </div>
 
+          {format === "PDF" && selectedReport.supportsPhotoAppendix && (
+            <div className="report-photo-options">
+              {effectiveHouseholdId ? (
+                <>
+                  <label className="report-photo-check">
+                    <input
+                      type="checkbox"
+                      checked={includePhotos}
+                      onChange={(e) => setIncludePhotos(e.target.checked)}
+                    />
+                    <span>
+                      Đính kèm phụ lục hình ảnh minh chứng thực địa (Phần II trên khổ giấy A4, tự động nén tối ưu dung lượng)
+                    </span>
+                  </label>
+                  {canExportAudit && selectedReport.type === "household-logbook" && includePhotos && (
+                    <label className="report-photo-check">
+                      <input
+                        type="checkbox"
+                        checked={includeInvoices}
+                        onChange={(e) => setIncludeInvoices(e.target.checked)}
+                      />
+                      <span>
+                        Bao gồm ảnh chứng từ, hóa đơn vật tư lưu nội bộ HTX (chỉ dành cho kiểm toán nội bộ)
+                      </span>
+                    </label>
+                  )}
+                </>
+              ) : (
+                <div className="report-photo-mode-hint">
+                  Đang ở chế độ tổng hợp nhiều hộ: tệp PDF giữ bố cục bảng gọn nhẹ kèm đường dẫn hồ sơ số của từng hộ. Chọn một nông hộ cụ thể ở ô Phạm vi nông hộ để xuất kèm phụ lục hình ảnh thực địa.
+                </div>
+              )}
+            </div>
+          )}
+
           <div
             style={{
               marginTop: 12,
@@ -744,30 +581,57 @@ export default function Reports() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
+                gap: 8,
                 padding: "8px 12px",
                 borderBottom: "1px solid var(--border)",
                 fontSize: 12.5,
                 fontWeight: 600,
                 color: "var(--ink)",
                 background: "#f1f5f3",
+                fontVariantNumeric: "tabular-nums",
               }}
             >
-              <span>Xem trước dữ liệu báo cáo</span>
               <span>
-                {previewLoading ? "Đang tải…" : `Tổng cộng: ${previewData?.total ?? 0} bản ghi`}
+                {previewData?.householdMeta
+                  ? `Xem trước hồ sơ hộ ${previewData.householdMeta.name} (${previewData.householdMeta.code})`
+                  : "Xem trước dữ liệu báo cáo"}
+              </span>
+              <span>
+                {previewLoading ? "Đang tải..." : `Tổng cộng: ${previewData?.total ?? 0} bản ghi`}
               </span>
             </div>
             <div style={{ overflowX: "auto" }}>
               {previewLoading ? (
-                <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--text-muted)" }}>
-                  Đang tổng hợp dữ liệu báo cáo…
+                <div
+                  style={{
+                    padding: 20,
+                    textAlign: "center",
+                    fontSize: 12.5,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Đang tổng hợp dữ liệu báo cáo...
                 </div>
               ) : !previewData || previewData.rows.length === 0 ? (
-                <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--text-muted)" }}>
-                  Chưa có bản ghi nào trong khoảng thời gian / thôn đã chọn.
+                <div
+                  style={{
+                    padding: 20,
+                    textAlign: "center",
+                    fontSize: 12.5,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Chưa có bản ghi nào trong khoảng thời gian và phạm vi đã chọn.
                 </div>
               ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: 12,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
                   <thead>
                     <tr>
                       {previewData.headers.map((h) => (
@@ -801,8 +665,9 @@ export default function Reports() {
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                             }}
+                            title={cell}
                           >
-                            {cell || "—"}
+                            {cell || "-"}
                           </td>
                         ))}
                       </tr>
@@ -811,9 +676,23 @@ export default function Reports() {
                 </table>
               )}
             </div>
+            {previewData && previewData.total > 8 && (
+              <div
+                style={{
+                  padding: "6px 12px",
+                  fontSize: 11.5,
+                  color: "var(--text-muted)",
+                  borderTop: "1px solid var(--border)",
+                  background: "#fff",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                Hiển thị 8 dòng đầu tiên trên tổng số {previewData.total} bản ghi sẽ được xuất.
+              </div>
+            )}
           </div>
 
-          <FormError message={dateRangeError || error} />
+          <FormError message={dateRangeError ?? error} />
         </Modal>
       )}
     </>
