@@ -46,14 +46,14 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   villages: ["auth", "catalog", "plots", "dashboard", "portal", "public-overview", "trace"],
   households: ["auth", "catalog", "plots", "dashboard", "portal", "public-overview", "trace", "uploads"],
   pesticides: ["catalog", "portal", "trace"],
-  fertilizers: ["catalog", "portal"],
-  varieties: ["catalog", "portal"],
+  fertilizers: ["catalog", "portal", "trace"],
+  varieties: ["catalog", "portal", "trace"],
   training_courses: ["catalog", "dashboard", "portal"],
   training_registrations: ["dashboard", "portal"],
 
   news_articles: ["news"],
 
-  approvals: ["dashboard", "portal", "uploads"],
+  approvals: ["dashboard", "portal", "uploads", "trace"],
   inspection_schedule: ["dashboard", "portal"],
   inspection_minutes: ["dashboard", "portal", "uploads", "trace"],
   journal_entries: ["dashboard", "portal", "uploads", "trace"],
@@ -65,6 +65,7 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   harvest_items: ["dashboard", "trace"],
   harvest_contributions: ["dashboard", "portal", "uploads", "trace"],
   harvest_declarations: ["dashboard", "portal", "uploads", "trace"],
+  supply_chain_events: ["dashboard", "trace"],
   farmer_stamp_allocations: ["dashboard", "portal", "trace"],
   farmer_stamps: ["dashboard", "portal", "trace"],
   enterprises: ["auth", "uploads", "dashboard", "trace"],
@@ -74,11 +75,12 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   trace_access_requests: ["dashboard"],
   member_deletion_requests: ["dashboard"],
   commune_endorsement_config: ["trace"],
+  immutable_change_logs: ["trace"],
 
   notifications: ["portal"],
   system_alerts: [],
-  plot_care_plans: ["portal"],
-  care_milestone_declarations: ["portal", "uploads"],
+  plot_care_plans: ["portal", "trace"],
+  care_milestone_declarations: ["portal", "uploads", "trace"],
   care_protocol_alert_logs: ["portal"],
 
   // Các bảng ghi log truy vết độc lập không làm thay đổi kết quả đọc của các bộ đệm trên:

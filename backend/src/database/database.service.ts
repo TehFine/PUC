@@ -129,6 +129,44 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
+   * Thực thi khối lệnh SQL trong một giao dịch có gắn sẵn định danh người thao tác (`puc.actor_*`)
+   * để trigger nhật ký kiểm toán bất biến (`immutable_change_logs`) ghi nhận chính xác người sửa/xóa.
+   */
+  async withActorTransaction<T>(
+    actor: { id?: number | null; fullName?: string | null; role?: string | null } | undefined,
+    fn: (client: PoolClient) => Promise<T>,
+    localSettings?: Record<string, string>,
+  ): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `SELECT set_config('puc.actor_user_id', $1, true),
+                set_config('puc.actor_name', $2, true),
+                set_config('puc.actor_role', $3, true)`,
+        [
+          actor?.id !== null && actor?.id !== undefined ? String(actor.id) : "",
+          actor?.fullName ? String(actor.fullName).trim() : "",
+          actor?.role ? String(actor.role).trim() : "",
+        ],
+      );
+      if (localSettings) {
+        for (const [k, v] of Object.entries(localSettings)) {
+          await client.query("SELECT set_config($1, $2, true)", [k, v]);
+        }
+      }
+      const out = await fn(client);
+      await client.query("COMMIT");
+      return out;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Dừng khởi động ngay nếu không kết nối được CSDL; tự động chạy migration lược đồ còn thiếu
    * (kể cả trên Render Free Tier nơi không có SSH Shell chạy tay `db:migrate`), nhưng tuyệt đối
    * không tự seed dữ liệu mẫu trên môi trường production.

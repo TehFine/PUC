@@ -180,10 +180,12 @@ export abstract class BaseCrudService {
     if (entries.length === 0) throw badRequest("Không có trường nào để cập nhật.");
 
     const assignments = entries.map(([key], index) => `${toSnake(key)} = $${index + 1}`);
-    await this.db.query(
-      `UPDATE ${this.config.table} SET ${assignments.join(", ")} WHERE id = $${entries.length + 1}`,
-      [...entries.map(([, value]) => value), id],
-    );
+    await this.db.withActorTransaction(user, async (client) => {
+      await client.query(
+        `UPDATE ${this.config.table} SET ${assignments.join(", ")} WHERE id = $${entries.length + 1}`,
+        [...entries.map(([, value]) => value), id],
+      );
+    });
     await this.afterWrite(id, input);
 
     const summaryDetail =
@@ -205,7 +207,9 @@ export abstract class BaseCrudService {
     if (!(await this.loadOne(id, user))) throw notFound();
     await this.guardDelete(id, user);
 
-    await this.db.query(`DELETE FROM ${this.config.table} WHERE id = $1`, [id]);
+    await this.db.withActorTransaction(user, async (client) => {
+      await client.query(`DELETE FROM ${this.config.table} WHERE id = $1`, [id]);
+    });
     await this.audit.write({ ip, user }, { action: "Xóa", object: `${this.config.label} #${id}` });
     return { ok: true };
   }
