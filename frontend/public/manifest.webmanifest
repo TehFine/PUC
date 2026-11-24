@@ -1,7 +1,7 @@
 {
-  "name": "HTX Cư Né - Cổng Vùng Trồng Sầu Riêng",
+  "name": "HTX Cư Né - Vùng Trồng Sầu Riêng Krông Búk, Đắk Lắk",
   "short_name": "HTX Cư Né",
-  "description": "Ghi nhật ký canh tác, chụp ảnh hiện trường ngoài rẫy ngoại tuyến và truy xuất nguồn gốc vùng trồng sầu riêng HTX Cư Né",
+  "description": "Hệ thống quản lý mã vùng trồng sầu riêng Cư Né, ghi nhật ký canh tác điện tử và truy xuất nguồn gốc QR xuất khẩu của Hợp tác xã Cư Né tại huyện Krông Búk, tỉnh Đắk Lắk.",
   "start_url": "/portal",
   "scope": "/",
   "display": "standalone",
@@ -10,7 +10,13 @@
   "lang": "vi",
   "icons": [
     {
-      "src": "/newlogo.png",
+      "src": "/icon-48.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
@@ -23,4 +29,3 @@
     }
   ]
 }
-

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 export const metadata: Metadata = {
   title: "Đăng nhập",
   description: "Đăng nhập bằng số điện thoại để ghi nhật ký vườn và xem mã vùng trồng của HTX Cư Né.",
+  robots: { index: false, follow: false },
 };
 
 export default function LoginLayout({ children }: { children: ReactNode }) {

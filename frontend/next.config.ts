@@ -105,13 +105,28 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/:folder(diseases|pesticides|fertilizers|varieties|training|landing|stages|fonts|icons)/:path*",
+        source: "/:folder(diseases|pesticides|fertilizers|varieties|training|stages|fonts|icons)/:path*",
         headers: immutableAssetHeaders,
+      },
+      {
+        source: "/landing/:path*",
+        headers: [
+          ...immutableAssetHeaders.filter((h) => h.key !== "Cross-Origin-Resource-Policy"),
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+        ],
       },
       {
         source: "/:asset([^/]+\\.(?:png|svg|webp|ico))",
         headers: [
           ...securityHeaders,
+          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        source: "/:brand(favicon\\.ico|icon\\.png|icon-48\\.png|icon-192\\.png|apple-touch-icon\\.png|newlogo\\.png)",
+        headers: [
+          ...securityHeaders.filter((h) => h.key !== "Cross-Origin-Resource-Policy"),
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
           { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
         ],
       },

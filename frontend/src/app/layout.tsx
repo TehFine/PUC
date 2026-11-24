@@ -8,6 +8,7 @@ import SystemAlertBanner from "@/components/ui/SystemAlertBanner";
 import { Toaster } from "@/components/ui/Toast";
 import { KeyboardScrollGuard } from "@/lib/keyboard-scroll";
 import { PERF_BOOTSTRAP_SCRIPT } from "@/lib/perf-bootstrap";
+import { COOP_BRAND, CORE_SEO_KEYWORDS, SITE_URL } from "@/lib/seo";
 
 const baiJamjuree = Bai_Jamjuree({
   subsets: ["latin", "vietnamese"],
@@ -18,17 +19,57 @@ const baiJamjuree = Bai_Jamjuree({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  applicationName: COOP_BRAND.shortName,
   title: {
-    default: "HTX Cư Né - Quản lý vùng trồng sầu riêng",
+    default: "HTX Cư Né - Sầu riêng Cư Né, Krông Búk, Đắk Lắk chuẩn xuất khẩu",
     template: "%s - HTX Cư Né",
   },
   description:
-    "Hệ thống quản lý mã vùng trồng sầu riêng của Hợp tác xã Cư Né, Đắk Lắk",
+    "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né (HTX Cư Né - HTX Cune): vùng trồng sầu riêng Cư Né tại huyện Krông Búk, tỉnh Đắk Lắk. Quản lý mã số vùng trồng VietGAP, nhật ký canh tác và truy xuất nguồn gốc QR xuất khẩu chính ngạch.",
+  keywords: CORE_SEO_KEYWORDS,
+  authors: [{ name: COOP_BRAND.legalName, url: SITE_URL }],
+  creator: COOP_BRAND.legalName,
+  publisher: COOP_BRAND.legalName,
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48", type: "image/x-icon" },
+      { url: "/icon-48.png", sizes: "48x48", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/newlogo.png", sizes: "512x512", type: "image/png" },
+    ],
+    shortcut: ["/favicon.ico"],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "HTX Cư Né",
+    title: COOP_BRAND.shortName,
+  },
+  openGraph: {
+    type: "website",
+    locale: "vi_VN",
+    url: SITE_URL,
+    siteName: COOP_BRAND.shortName,
+    title: "HTX Cư Né - Sầu riêng Cư Né, Krông Búk, Đắk Lắk chuẩn xuất khẩu",
+    description:
+      "Vùng trồng sầu riêng liên kết Hợp tác xã Cư Né tại huyện Krông Búk, tỉnh Đắk Lắk: chuẩn hóa mã số vùng trồng, nhật ký canh tác, kiểm nghiệm an toàn và truy xuất nguồn gốc QR xuất khẩu chính ngạch.",
+    images: [
+      {
+        url: "/landing/real-hero-cune.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Vùng trồng sầu riêng Hợp tác xã Cư Né tại huyện Krông Búk, tỉnh Đắk Lắk",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "HTX Cư Né - Sầu riêng Cư Né, Krông Búk, Đắk Lắk",
+    description:
+      "Hệ thống quản lý vùng trồng, nhật ký canh tác và truy xuất nguồn gốc QR sầu riêng xuất khẩu của Hợp tác xã Cư Né (Krông Búk, Đắk Lắk).",
+    images: ["/landing/real-hero-cune.jpg"],
   },
 };
 

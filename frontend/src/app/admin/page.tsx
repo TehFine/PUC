@@ -1,8 +1,14 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import AdminApp from "@/components/admin/AdminApp";
 import { resolveValidAdminRoute, type SectionId } from "@/lib/route-validation";
 
 export type { SectionId };
+
+export const metadata: Metadata = {
+  title: "Khu quản trị vùng trồng",
+  robots: { index: false, follow: false },
+};
 
 export default async function AdminPage({
   searchParams,
