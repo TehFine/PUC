@@ -228,20 +228,17 @@ export default function DeletionRequestsTab({
                     }}
                   >
                     <span className="admin-audit-row-main">
-                      <strong className="admin-diary-hh">
-                        {r.targetName}{" "}
-                        <span style={{ fontWeight: 500, color: "#5f6d66", fontVariantNumeric: "tabular-nums" }}>
-                          ({r.targetCode})
-                        </span>
-                      </strong>
+                      <strong className="admin-diary-hh">{r.targetName}</strong>
                       <span className="admin-audit-row-sub">
-                        {kindText}, đề nghị bởi {r.requestedByName} ({requesterRoleText}) lúc{" "}
-                        {formatDateTimeVn(r.createdAt)}
+                        {r.targetCode}, bởi {r.requestedByName} ({requesterRoleText})
                       </span>
                     </span>
                     <span className="admin-diary-right admin-hh-right">
-                      <span className="admin-hh-area" style={{ color: st.color }}>
-                        {st.label}
+                      <span className="admin-diary-meta-stack">
+                        <span className="admin-hh-area" style={{ color: st.color }}>
+                          {st.label}
+                        </span>
+                        <span className="admin-diary-verify-sub">{kindText}</span>
                       </span>
                       <DetailArrowIcon className="admin-diary-arrow" size={20} />
                     </span>

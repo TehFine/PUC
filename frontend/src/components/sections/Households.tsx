@@ -234,6 +234,12 @@ export default function Households() {
             {list.rows.map((h) => {
               const zc = getZoneColor(h.code);
               const areaLabel = formatAreaLabel(h.villageName, h.villageId);
+              const areaParts = areaLabel
+                .split(",")
+                .map((part) => part.trim())
+                .filter(Boolean);
+              const primaryArea = areaParts[0] || areaLabel;
+              const subArea = areaParts.length > 1 ? areaParts.slice(1).join(", ") : "";
               const pendingDel = pendingReqByHhId.get(Number(h.id));
               return (
                 <li key={h.id}>
@@ -242,17 +248,22 @@ export default function Households() {
                     className="admin-diary-row admin-hh-row"
                     onClick={() => setViewing(h)}
                   >
-                    <strong className="admin-diary-hh">
-                      {h.name}
+                    <span className="admin-audit-row-main">
+                      <strong className="admin-diary-hh">{h.name}</strong>
                       {pendingDel ? (
-                        <span style={{ fontWeight: 500, fontSize: 12, color: "#9a6712", marginLeft: 6 }}>
-                          (Chờ Phó HTX duyệt xóa)
+                        <span className="admin-audit-row-sub" style={{ color: "#9a6712" }}>
+                          Chờ Phó HTX duyệt xóa
                         </span>
                       ) : null}
-                    </strong>
+                    </span>
                     <span className="admin-diary-right admin-hh-right">
-                      <span className="admin-hh-area" style={{ color: zc.text }}>
-                        {areaLabel}
+                      <span className="admin-diary-meta-stack">
+                        <span className="admin-hh-area" style={{ color: zc.text }}>
+                          {primaryArea}
+                        </span>
+                        {subArea ? (
+                          <span className="admin-diary-verify-sub">{subArea}</span>
+                        ) : null}
                       </span>
                       <DetailArrowIcon className="admin-diary-arrow" size={20} />
                     </span>

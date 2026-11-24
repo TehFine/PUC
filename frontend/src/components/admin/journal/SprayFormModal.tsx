@@ -75,7 +75,7 @@ export function SprayDetailModal({
               onClick={() => void handleToggleVerify()}
               disabled={verifying}
             >
-              {verifying ? "Đang xử lý…" : isVerified ? "Hủy xác minh" : "Xác minh nhật ký"}
+              {verifying ? "Đang lưu…" : isVerified ? "Bỏ xác nhận" : "Xác nhận"}
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={onClose}>

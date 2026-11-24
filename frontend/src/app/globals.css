@@ -6314,8 +6314,18 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
   gap: 6px;
   text-align: center;
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+@media (max-width: 640px) {
+  .modal-footer:not(:has(> div)):has(> :nth-child(4))> :is(button, a, .btn) {
+    padding: 0 6px !important;
+    font-size: 13.5px !important;
+    letter-spacing: -0.015em;
+  }
 }
 
 .modal-footer:not(:has(> div))> :is(button, a, .btn)+ :is(button, a, .btn) {
@@ -12354,14 +12364,36 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   flex-shrink: 0;
 }
 
+.admin-diary-meta-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  text-align: right;
+}
+
 .admin-diary-plot {
-  font-family: var(--font-num-stack);
+  font-family: inherit;
   font-size: 13.5px;
   font-weight: 600;
   color: #256b45;
-  line-height: 1.3;
+  line-height: 1.28;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.admin-diary-verify-sub {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #5f6d66;
+  line-height: 1.28;
+  white-space: nowrap;
+}
+
+.admin-diary-verify-sub.is-verified {
+  color: #15803d;
+  font-weight: 600;
 }
 
 .admin-diary-arrow {
@@ -12404,15 +12436,23 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
   }
 
   .admin-diary-row {
-    padding: 13px 14px;
+    padding: 12px 14px;
+    gap: 10px;
   }
 
   .admin-diary-hh {
-    font-size: 14.5px;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .admin-diary-plot {
-    font-size: 13px;
+    font-size: 12.5px;
+  }
+
+  .admin-diary-verify-sub {
+    font-size: 11px;
   }
 
   .admin-diary-pagination>.table-footer {
@@ -12450,13 +12490,13 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 
 .admin-hh-right {
   min-width: 0;
-  max-width: 55%;
+  max-width: 48%;
 }
 
 .admin-hh-area {
   font-size: 13.5px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.3;
   text-align: right;
   overflow-wrap: break-word;
 }
@@ -12476,14 +12516,15 @@ body.pt-body .pt-multi-media-field label.pt-multi-media-btn.is-gray:hover:not(.i
 @media (max-width: 680px) {
   .admin-diary-row.admin-hh-row {
     padding: 13px 2px;
+    gap: 10px;
   }
 
   .admin-hh-right {
-    max-width: 52%;
+    max-width: 42%;
   }
 
   .admin-hh-area {
-    font-size: 13px;
+    font-size: 12.5px;
   }
 
   .admin-hh-pagination>.table-footer {

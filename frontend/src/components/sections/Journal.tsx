@@ -385,14 +385,17 @@ export default function Journal() {
                             >
                               <strong className="admin-diary-hh">{j.householdName}</strong>
                               <span className="admin-diary-right">
-                                <span
-                                  className={`badge ${j.verificationStatus === "verified" ? "badge-green" : "badge-gray"}`}
-                                  style={{ fontSize: 11 }}
-                                >
-                                  {j.verificationStatus === "verified" ? "HTX đã xác minh" : "Tự khai báo"}
-                                </span>
-                                <span className="admin-diary-plot" style={{ color: zc.text }}>
-                                  Thửa {j.plotCode}
+                                <span className="admin-diary-meta-stack">
+                                  <span className="admin-diary-plot" style={{ color: zc.text }}>
+                                    Thửa {j.plotCode}
+                                  </span>
+                                  <span
+                                    className={`admin-diary-verify-sub ${
+                                      j.verificationStatus === "verified" ? "is-verified" : ""
+                                    }`}
+                                  >
+                                    {j.verificationStatus === "verified" ? "HTX đã xác minh" : "Tự khai báo"}
+                                  </span>
                                 </span>
                                 <DetailArrowIcon className="admin-diary-arrow" size={20} />
                               </span>
@@ -627,17 +630,20 @@ export default function Journal() {
                             >
                               <strong className="admin-diary-hh">{s.householdName}</strong>
                               <span className="admin-diary-right">
-                                <span
-                                  className={`badge ${s.verificationStatus === "verified" ? "badge-green" : "badge-gray"}`}
-                                  style={{ fontSize: 11 }}
-                                >
-                                  {s.verificationStatus === "verified" ? "HTX đã xác minh" : "Tự khai báo"}
-                                </span>
-                                <span
-                                  className="admin-diary-plot"
-                                  style={zc ? { color: zc.text } : undefined}
-                                >
-                                  {s.plotCode ? `Thửa ${s.plotCode}` : "Toàn vườn"}
+                                <span className="admin-diary-meta-stack">
+                                  <span
+                                    className="admin-diary-plot"
+                                    style={zc ? { color: zc.text } : undefined}
+                                  >
+                                    {s.plotCode ? `Thửa ${s.plotCode}` : "Toàn vườn"}
+                                  </span>
+                                  <span
+                                    className={`admin-diary-verify-sub ${
+                                      s.verificationStatus === "verified" ? "is-verified" : ""
+                                    }`}
+                                  >
+                                    {s.verificationStatus === "verified" ? "HTX đã xác minh" : "Tự khai báo"}
+                                  </span>
                                 </span>
                                 <DetailArrowIcon className="admin-diary-arrow" size={20} />
                               </span>
