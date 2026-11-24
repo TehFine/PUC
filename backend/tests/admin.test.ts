@@ -1208,7 +1208,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
       code: "DN-PHC-LIVE01",
       name: "CSĐG Xuất Khẩu Cư Né 01",
       packhouseCode: "VN-DLPH-9901",
-      address: "Xã Cư Né, Krông Búk, Đắk Lắk",
+      address: "Xã Krông Búk, Tỉnh Đắk Lắk",
       status: "active",
     });
     expect(entCreated.status).toBe(201);
@@ -1801,7 +1801,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
       areaHa: 1.2,
       treeCount: 160,
       maxQuotaKg: 5000,
-      assessedBy: "Tổ Giám sát Kỹ thuật UBND Xã Cư Né",
+      assessedBy: "Tổ Giám sát Kỹ thuật UBND Xã Krông Búk",
       assessedOn: "2026-03-15",
     });
     expect(upsertQuotaRes.status).toBe(200);
@@ -1862,7 +1862,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
       allowedZoneCode: plotSignboard!.zoneCode,
       defaultLang: "zh",
       durationHours: 48,
-      note: "Thẩm định thực địa vùng trồng mẫu xã Cư Né",
+      note: "Thẩm định thực địa vùng trồng mẫu xã Krông Búk",
     });
     expect(passCreated.status).toBe(201);
     const passToken = passCreated.body.passToken as string;
@@ -1967,7 +1967,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     const geoMinute = await inspector.post("/api/minutes").send({
       code: "BB-GEO-2026-01",
       heldOn: todayVnIso,
-      location: "Thôn 1 - Xã Cư Né",
+      location: "Thôn 1 - Xã Krông Búk",
       plotCode: "TH1-001",
       officer: "KS. Trần Quốc Bảo",
       result: "pass",
@@ -1986,7 +1986,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
       (
         await htx.put("/api/harvest/endorsement-config").send({
           programTitle: "Mô hình điểm Truy xuất nguồn gốc Sầu riêng xuất khẩu cấp Xã",
-          communeAuthority: "UBND Xã Cư Né - Huyện Krông Búk",
+          communeAuthority: "UBND Xã Krông Búk",
           provincialAuthority: "UBND Tỉnh Đắk Lắk - Sở Nông nghiệp & Môi trường",
           officialPortalUrl: "http://daklak.gov.vn/khong-https",
         })
@@ -1996,11 +1996,11 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     const endorseUpdated = await htx.put("/api/harvest/endorsement-config").send({
       programTitle: "Mô hình điểm Truy xuất nguồn gốc Sầu riêng xuất khẩu cấp Xã",
       directiveNo: "Kế hoạch thí điểm chuyển đổi số nông nghiệp Tỉnh Đắk Lắk 2026",
-      communeAuthority: "UBND Xã Cư Né - Huyện Krông Búk",
+      communeAuthority: "UBND Xã Krông Búk",
       provincialAuthority: "UBND Tỉnh Đắk Lắk - Sở Nông nghiệp & Môi trường",
       officialPortalUrl: "https://daklak.gov.vn/chuyen-doi-so-sau-rieng-cu-ne",
       officialDomain: "daklak.gov.vn",
-      inspectionUnit: "Tổ Giám sát Kỹ thuật Cộng đồng Xã Cư Né",
+      inspectionUnit: "Tổ Giám sát Kỹ thuật Cộng đồng Xã Krông Búk",
     });
     expect(endorseUpdated.status).toBe(200);
 
@@ -2501,6 +2501,15 @@ describe("báo cáo 2 chế độ và sổ nhật ký điện tử kèm phụ l�
       expect(cutoffDateRes.status).toBe(200);
       expect(cutoffDateRes.body.mode).toBe("household_detail");
       expect(cutoffDateRes.body.total).toBeGreaterThan(0);
+      expect(typeof cutoffDateRes.body.householdMeta?.zoneAddress).toBe("string");
+
+      const hhListRes = await htx.get("/api/households?pageSize=500");
+      expect(hhListRes.status).toBe(200);
+      const hh1 = (hhListRes.body.data as Array<{ id: number; diaryCount?: number }>).find(
+        (h) => Number(h.id) === 1,
+      );
+      expect(hh1).toBeDefined();
+      expect(Number(hh1?.diaryCount)).toBeGreaterThanOrEqual(1);
 
       // 6. Nông hộ không có quyền xuất sổ báo cáo PDF/CSV (chức năng chỉ dành cho Quản trị viên & Cán bộ)
       expect((await farmerAn.get("/api/reports/household-logbook?format=json&householdId=1")).status).toBe(403);

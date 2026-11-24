@@ -263,6 +263,7 @@ export interface ReportHouseholdMeta {
   statusLabel: string;
   pucCode: string;
   zoneName: string;
+  zoneAddress: string;
   gaccCode: string | null;
   coopLegalName: string;
   coopAddress: string;
@@ -616,9 +617,18 @@ export class ReportsService {
       statusLabel: PLOT_STATUS_VN[String(p.status)] ?? String(p.status || "Đủ điều kiện"),
     }));
 
+    const codeDerivedZone = hh.code.replace(/-(?:H|T)\d+$/i, "");
+    const validDerivedZone =
+      codeDerivedZone &&
+      codeDerivedZone !== hh.code &&
+      /^(?:VN-|66-PUC-)/i.test(codeDerivedZone)
+        ? codeDerivedZone
+        : null;
+
     const inferredPucCode =
       plots.find((p) => p.zoneCode && p.zoneCode.trim())?.zoneCode?.trim() ||
       tokenRes.rows[0]?.zone_code?.trim() ||
+      validDerivedZone ||
       (/^66-PUC-SR0001-/i.test(hh.code) ? "66-PUC-SR0001-00728" : "VN-DLOR-0086");
 
     let zoneName = "Vùng trồng sầu riêng liên kết HTX Nông nghiệp Cư Né";
@@ -645,7 +655,12 @@ export class ReportsService {
     const coopLegalName =
       coopRes.rows[0]?.coop_legal_name?.trim() || "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né";
     const coopAddress =
-      coopRes.rows[0]?.coop_address?.trim() || "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+      coopRes.rows[0]?.coop_address?.trim() || "Xã Krông Búk, Tỉnh Đắk Lắk";
+    const isEaKhalZone =
+      /^66-PUC-SR0001-/i.test(inferredPucCode) ||
+      /ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(hh.village_name ?? "") ||
+      /ea\s*kh[aă]l/i.test(zoneName);
+    const zoneAddress = isEaKhalZone ? "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk" : coopAddress;
 
     return {
       id: Number(hh.id),
@@ -661,6 +676,7 @@ export class ReportsService {
       statusLabel: HOUSEHOLD_STATUS_VN[String(hh.status)] ?? hh.status,
       pucCode: inferredPucCode,
       zoneName,
+      zoneAddress,
       gaccCode,
       coopLegalName,
       coopAddress,
@@ -736,10 +752,10 @@ export class ReportsService {
           : "";
         const tokenSelect = hasSignboards ? "sb.qr_token" : "NULL::text AS qr_token";
         const { rows } = await this.db.query(
-          `SELECT h.code, h.name, ${cccdSelectExpr}, h.phone, v.name AS village_name,
+          `SELECT h.code, h.name, ${cccdSelectExpr}, h.phone, COALESCE(v.name, 'Chưa phân thôn') AS village_name,
                   h.plot_count, h.area_ha, h.status, ${tokenSelect}
            FROM households h
-           JOIN villages v ON v.id = h.village_id
+           LEFT JOIN villages v ON v.id = h.village_id
            ${tokenJoin}
            ${where}
            ORDER BY h.id
@@ -784,12 +800,12 @@ export class ReportsService {
         );
         const { rows } = await this.db.query(
           `SELECT j.id, j.entry_on, h.code AS household_code, h.name AS household_name,
-                  v.name AS village_name, j.plot_code, j.activity, j.detail, j.recorder,
+                  COALESCE(v.name, 'Chưa phân thôn') AS village_name, j.plot_code, j.activity, j.detail, j.recorder,
                   j.photo_id, j.photo_ids, j.gps_verified,
                   j.verification_status, j.verified_by_name
            FROM journal_entries j
            JOIN households h ON h.id = j.household_id
-           JOIN villages v ON v.id = h.village_id
+           LEFT JOIN villages v ON v.id = h.village_id
            ${where}
            ORDER BY ${filter.householdId ? "j.entry_on ASC, j.id ASC" : "j.entry_on DESC, j.id DESC"}
            LIMIT ${rowLimit}`,
@@ -909,14 +925,15 @@ export class ReportsService {
         );
         const { rows } = await this.db.query(
           `SELECT s.id, s.sprayed_on, h.code AS household_code, h.name AS household_name,
-                  v.name AS village_name, s.plot_code, p.name AS pesticide_name,
+                  COALESCE(v.name, 'Chưa phân thôn') AS village_name, s.plot_code,
+                  COALESCE(p.name, 'Thuốc BVTV') AS pesticide_name,
                   p.active_ingredient, s.dose, s.area_ha, s.isolation_days, s.mrl_status,
                   s.photo_id, s.photo_ids, ${sprayGpsSelect},
                   s.verification_status, s.verified_by_name
            FROM spray_records s
            JOIN households h ON h.id = s.household_id
-           JOIN villages v ON v.id = h.village_id
-           JOIN pesticides p ON p.id = s.pesticide_id
+           LEFT JOIN villages v ON v.id = h.village_id
+           LEFT JOIN pesticides p ON p.id = s.pesticide_id
            ${where}
            ORDER BY ${filter.householdId ? "s.sprayed_on ASC, s.id ASC" : "s.sprayed_on DESC, s.id DESC"}
            LIMIT ${rowLimit}`,
@@ -1041,11 +1058,11 @@ export class ReportsService {
         );
         const { rows } = await this.db.query(
           `SELECT lt.code, lt.sampled_on, h.code AS household_code, h.name AS household_name,
-                  v.name AS village_name, lt.plot_code, lt.cd_mg_kg, lt.yellow_o_positive,
+                  COALESCE(v.name, 'Chưa phân thôn') AS village_name, lt.plot_code, lt.cd_mg_kg, lt.yellow_o_positive,
                   lt.residue_mg_kg, lt.chlorpyrifos_mg_kg, lt.result, lt.lab
            FROM lab_tests lt
            JOIN households h ON h.id = lt.household_id
-           JOIN villages v ON v.id = h.village_id
+           LEFT JOIN villages v ON v.id = h.village_id
            ${where}
            ORDER BY lt.sampled_on DESC, lt.id DESC
            LIMIT ${rowLimit}`,
@@ -1286,11 +1303,11 @@ export class ReportsService {
         );
         const { rows } = await this.db.query(
           `SELECT tc.title, tc.held_on, h.code AS household_code, h.name AS household_name,
-                  h.phone, v.name AS village_name, tr.status, tr.registered_at
+                  h.phone, COALESCE(v.name, 'Chưa phân thôn') AS village_name, tr.status, tr.registered_at
            FROM training_registrations tr
            JOIN training_courses tc ON tc.id = tr.course_id
            JOIN households h ON h.id = tr.household_id
-           JOIN villages v ON v.id = h.village_id
+           LEFT JOIN villages v ON v.id = h.village_id
            ${where}
            ORDER BY tc.held_on DESC NULLS LAST, tr.id ASC
            LIMIT ${rowLimit}`,
@@ -1350,27 +1367,49 @@ export class ReportsService {
 
     const jDateConds: string[] = [];
     const sDateConds: string[] = [];
+    const mDateConds: string[] = ["m.journal_entry_id IS NULL", "m.spray_record_id IS NULL"];
     if (filter.from) {
       params.push(filter.from);
       jDateConds.push(`j.entry_on >= $${params.length}::date`);
       sDateConds.push(`s.sprayed_on >= $${params.length}::date`);
+      mDateConds.push(`m.performed_on >= $${params.length}::date`);
     }
     if (filter.to) {
       params.push(filter.to);
       jDateConds.push(`j.entry_on <= $${params.length}::date`);
       sDateConds.push(`s.sprayed_on <= $${params.length}::date`);
+      mDateConds.push(`m.performed_on <= $${params.length}::date`);
     }
 
     const jWhere = jDateConds.length ? `WHERE ${jDateConds.join(" AND ")}` : "";
     const sWhere = sDateConds.length ? `WHERE ${sDateConds.join(" AND ")}` : "";
+    const mWhere = `WHERE ${mDateConds.join(" AND ")}`;
     const hhWhere = hhConds.length ? `WHERE ${hhConds.join(" AND ")}` : "";
-    const [hasSignboards, hasSprayGps] = await Promise.all([
+    const [hasSignboards, hasSprayGps, hasMilestones] = await Promise.all([
       hasPublicTable(this.db, "plot_signboard_tokens"),
       hasPublicColumn(this.db, "spray_records", "gps_verified"),
+      hasPublicTable(this.db, "care_milestone_declarations"),
     ]);
     const sprayGpsAggExpr = hasSprayGps
       ? "COUNT(*) FILTER (WHERE s.gps_verified = true)::int AS spray_gps_cnt,"
       : "0::int AS spray_gps_cnt,";
+    const mAggCte = hasMilestones
+      ? `, m_agg AS (
+           SELECT m.household_id,
+                  COUNT(*)::int AS milestone_cnt,
+                  COUNT(*) FILTER (WHERE m.compliance_status = 'compliant')::int AS milestone_verified_cnt,
+                  COUNT(*) FILTER (WHERE m.gps_verified = true)::int AS milestone_gps_cnt,
+                  SUM(
+                    GREATEST(
+                      COALESCE(cardinality(m.field_photo_ids), 0),
+                      CASE WHEN m.field_photo_id IS NOT NULL THEN 1 ELSE 0 END
+                    )
+                  )::int AS milestone_media_cnt
+             FROM care_milestone_declarations m
+             ${mWhere}
+            GROUP BY m.household_id
+         )`
+      : "";
 
     const { rows } = await this.db.query<{
       code: string;
@@ -1419,11 +1458,12 @@ export class ReportsService {
            ${sWhere}
           GROUP BY s.household_id
        )
-       SELECT h.code, h.name, v.name AS village_name, h.plot_count, h.area_ha::float8 AS area_ha, h.status,
-              COALESCE(j_agg.journal_cnt, 0) AS journal_cnt,
-              COALESCE(j_agg.journal_verified_cnt, 0) AS journal_verified_cnt,
-              COALESCE(j_agg.journal_gps_cnt, 0) AS journal_gps_cnt,
-              COALESCE(j_agg.journal_media_cnt, 0) AS journal_media_cnt,
+       ${mAggCte}
+       SELECT h.code, h.name, COALESCE(v.name, 'Chưa phân thôn') AS village_name, h.plot_count, h.area_ha::float8 AS area_ha, h.status,
+              (COALESCE(j_agg.journal_cnt, 0) + ${hasMilestones ? "COALESCE(m_agg.milestone_cnt, 0)" : "0"})::int AS journal_cnt,
+              (COALESCE(j_agg.journal_verified_cnt, 0) + ${hasMilestones ? "COALESCE(m_agg.milestone_verified_cnt, 0)" : "0"})::int AS journal_verified_cnt,
+              (COALESCE(j_agg.journal_gps_cnt, 0) + ${hasMilestones ? "COALESCE(m_agg.milestone_gps_cnt, 0)" : "0"})::int AS journal_gps_cnt,
+              (COALESCE(j_agg.journal_media_cnt, 0) + ${hasMilestones ? "COALESCE(m_agg.milestone_media_cnt, 0)" : "0"})::int AS journal_media_cnt,
               COALESCE(s_agg.spray_cnt, 0) AS spray_cnt,
               COALESCE(s_agg.spray_verified_cnt, 0) AS spray_verified_cnt,
               COALESCE(s_agg.spray_gps_cnt, 0) AS spray_gps_cnt,
@@ -1434,9 +1474,10 @@ export class ReportsService {
                   : `NULL::text AS qr_token`
               }
          FROM households h
-         JOIN villages v ON v.id = h.village_id
+         LEFT JOIN villages v ON v.id = h.village_id
          LEFT JOIN j_agg ON j_agg.household_id = h.id
          LEFT JOIN s_agg ON s_agg.household_id = h.id
+         ${hasMilestones ? "LEFT JOIN m_agg ON m_agg.household_id = h.id" : ""}
          ${hhWhere}
         ORDER BY h.id ASC
         LIMIT ${rowLimit}`,
@@ -1564,12 +1605,12 @@ export class ReportsService {
         jParams,
       ),
       this.db.query(
-        `SELECT s.id, s.sprayed_on, s.plot_code, p.name AS pesticide_name,
+        `SELECT s.id, s.sprayed_on, s.plot_code, COALESCE(p.name, 'Thuốc BVTV') AS pesticide_name,
                 p.active_ingredient, s.dose, s.area_ha, s.isolation_days, s.mrl_status,
                 s.note, s.photo_id, s.photo_ids, ${sprayGpsSelect},
                 s.verification_status, s.verified_by_name, s.created_at
            FROM spray_records s
-           JOIN pesticides p ON p.id = s.pesticide_id
+           LEFT JOIN pesticides p ON p.id = s.pesticide_id
           WHERE ${sConds.join(" AND ")}
           ORDER BY s.sprayed_on ASC, s.id ASC
           LIMIT ${rowLimit}`,

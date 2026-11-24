@@ -15,6 +15,7 @@ import {
 } from "../../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { publicAttachmentUrlSql } from "../../common/sql/rows";
+import { hasPublicTable } from "../../common/sql/schema-cache";
 import { hasPlotsTable, syncHouseholdAndVillageStats } from "../../common/sql/stats-sync";
 import { DatabaseService } from "../../database/database.service";
 import { DeletionRequestsService } from "../deletion-requests/deletion-requests.service";
@@ -135,14 +136,125 @@ export class HouseholdsService extends BaseCrudService {
     return input;
   }
 
+  private async enrichHouseholdsWithDiaryAndPlots<T extends Record<string, unknown>>(
+    rows: T[],
+  ): Promise<T[]> {
+    if (rows.length === 0) return rows;
+    const ids = rows
+      .map((r) => Number(r.id))
+      .filter((n) => Number.isInteger(n) && n > 0);
+    if (ids.length === 0) return rows;
+
+    const [hasPlots, hasSignboards, hasMilestones] = await Promise.all([
+      hasPlotsTable(this.db),
+      hasPublicTable(this.db, "plot_signboard_tokens"),
+      hasPublicTable(this.db, "care_milestone_declarations"),
+    ]);
+
+    const milestoneCte = hasMilestones
+      ? `, m_agg AS (
+           SELECT household_id, COUNT(*)::int AS cnt
+             FROM care_milestone_declarations
+            WHERE household_id = ANY($1::bigint[])
+              AND journal_entry_id IS NULL
+              AND spray_record_id IS NULL
+            GROUP BY household_id
+         )`
+      : "";
+    const milestoneSelect = hasMilestones ? "COALESCE(m_agg.cnt, 0)" : "0";
+
+    const plotCte = hasPlots
+      ? `, p_agg AS (
+           SELECT household_id, string_agg(code, ', ' ORDER BY code) AS plot_codes
+             FROM plots
+            WHERE household_id = ANY($1::bigint[])
+            GROUP BY household_id
+         )`
+      : "";
+    const sbCte = hasSignboards
+      ? `, sb_agg AS (
+           SELECT household_id, string_agg(plot_code, ', ' ORDER BY plot_code) AS plot_codes
+             FROM plot_signboard_tokens
+            WHERE household_id = ANY($1::bigint[])
+            GROUP BY household_id
+         )`
+      : "";
+    const plotSelect =
+      hasPlots && hasSignboards
+        ? "COALESCE(p_agg.plot_codes, sb_agg.plot_codes)"
+        : hasPlots
+          ? "p_agg.plot_codes"
+          : hasSignboards
+            ? "sb_agg.plot_codes"
+            : "NULL::text";
+
+    const statsRes = await this.db.query<{
+      hh_id: number;
+      diary_count: number;
+      plot_codes: string | null;
+    }>(
+      `WITH u_ids AS (
+         SELECT DISTINCT unnest($1::bigint[]) AS hh_id
+       ),
+       j_agg AS (
+         SELECT household_id, COUNT(*)::int AS cnt
+           FROM journal_entries
+          WHERE household_id = ANY($1::bigint[])
+          GROUP BY household_id
+       ),
+       s_agg AS (
+         SELECT household_id, COUNT(*)::int AS cnt
+           FROM spray_records
+          WHERE household_id = ANY($1::bigint[])
+          GROUP BY household_id
+       )
+       ${milestoneCte}
+       ${plotCte}
+       ${sbCte}
+       SELECT u_ids.hh_id,
+              (COALESCE(j_agg.cnt, 0) + COALESCE(s_agg.cnt, 0) + ${milestoneSelect})::int AS diary_count,
+              ${plotSelect} AS plot_codes
+         FROM u_ids
+         LEFT JOIN j_agg ON j_agg.household_id = u_ids.hh_id
+         LEFT JOIN s_agg ON s_agg.household_id = u_ids.hh_id
+         ${hasMilestones ? "LEFT JOIN m_agg ON m_agg.household_id = u_ids.hh_id" : ""}
+         ${hasPlots ? "LEFT JOIN p_agg ON p_agg.household_id = u_ids.hh_id" : ""}
+         ${hasSignboards ? "LEFT JOIN sb_agg ON sb_agg.household_id = u_ids.hh_id" : ""}`,
+      [ids],
+    );
+
+    const map = new Map<number, { diaryCount: number; plotCodesSummary: string | null }>();
+    for (const r of statsRes.rows) {
+      map.set(Number(r.hh_id), {
+        diaryCount: Number(r.diary_count) || 0,
+        plotCodesSummary: r.plot_codes || null,
+      });
+    }
+
+    return rows.map((row) => {
+      const info = map.get(Number(row.id));
+      return {
+        ...row,
+        diaryCount: info?.diaryCount ?? 0,
+        plotCodesSummary: info?.plotCodesSummary ?? null,
+      };
+    });
+  }
+
   override async list(user: AuthUser, query: ListQueryDto & Record<string, unknown>) {
     const result = await super.list(user, query);
     const forceMask = query?.full === "0" || query?.full === false;
-    return { ...result, data: result.data.map((row) => redact(row, user, forceMask)) };
+    const enriched = await this.enrichHouseholdsWithDiaryAndPlots(
+      result.data.map((row) => redact(row, user, forceMask)),
+    );
+    return { ...result, data: enriched };
   }
 
   override async findOne(id: number, user: AuthUser) {
-    return redact(await super.findOne(id, user), user);
+    const row = redact(await super.findOne(id, user), user);
+    if (!row) return row;
+    const [enriched] = await this.enrichHouseholdsWithDiaryAndPlots([row]);
+    return enriched ?? row;
   }
 
   override async create(dto: object, user: AuthUser, ip?: string) {
