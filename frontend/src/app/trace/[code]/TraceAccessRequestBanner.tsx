@@ -91,8 +91,7 @@ const COPY: Record<
       note ? `Phản hồi: ${note}` : "Vui lòng kiểm tra lại thông tin và gửi lại yêu cầu.",
     retryBtn: "Gửi lại yêu cầu",
     modalTitle: "Yêu cầu quyền xem hồ sơ chi tiết",
-    modalSub:
-      "Quản trị viên HTX sẽ nhận thông báo ngay và trang này tự động mở hồ sơ khi được duyệt.",
+    modalSub: "Hồ sơ sẽ tự động mở ngay khi Quản trị viên phê duyệt.",
     nameLabel: "Họ tên người đại diện",
     namePh: "Nhập họ tên trưởng đoàn hoặc cán bộ...",
     orgLabel: "Đơn vị công tác",
@@ -128,8 +127,7 @@ const COPY: Record<
       note ? `Note: ${note}` : "Please check your details and submit again.",
     retryBtn: "Resubmit",
     modalTitle: "Request Extended Dossier Access",
-    modalSub:
-      "Administrators are notified immediately and this page unlocks automatically upon approval.",
+    modalSub: "The dossier unlocks automatically once approved by an administrator.",
     nameLabel: "Representative Name",
     namePh: "Enter delegation lead or inspector name...",
     orgLabel: "Organization / Agency",
@@ -164,7 +162,7 @@ const COPY: Record<
       note ? `回复：${note}` : "请核对单位与联系信息后重新提交。",
     retryBtn: "重新提交",
     modalTitle: "申请查看详细档案权限",
-    modalSub: "提交后将实时通知合作社管理员，批准后本页自动生效。",
+    modalSub: "管理员批准后，当前页面将自动解锁档案。",
     nameLabel: "代表人姓名",
     namePh: "请输入考察团负责人或抽检人员姓名...",
     orgLabel: "所属单位",
@@ -192,7 +190,7 @@ function readSavedReq(scannedCode: string): SavedTraceReqSession | null {
     if (
       parsed &&
       parsed.requestCode &&
-      parsed.clientSecret &&
+      (parsed.clientSecret || parsed.status !== "pending") &&
       parsed.scannedCode?.toUpperCase() === scannedCode.toUpperCase()
     ) {
       return parsed;
@@ -316,6 +314,7 @@ export default function TraceAccessRequestBanner({
       if (body.status === "approved" && body.grantedPassToken) {
         const nextState: SavedTraceReqSession = {
           ...current,
+          clientSecret: "",
           status: "approved",
           reviewNote: body.reviewNote,
           reviewedByName: body.reviewedByName,
@@ -329,6 +328,7 @@ export default function TraceAccessRequestBanner({
       } else if (body.status !== "pending") {
         const nextState: SavedTraceReqSession = {
           ...current,
+          clientSecret: "",
           status: body.status,
           reviewNote: body.reviewNote,
           reviewedByName: body.reviewedByName,
@@ -599,12 +599,10 @@ export default function TraceAccessRequestBanner({
         >
           <div className="tr-req-modal-panel">
             <div className="tr-req-modal-head">
-              <div>
-                <h2 id="tr-req-modal-heading" className="tr-req-modal-title">
-                  {c.modalTitle}
-                </h2>
-                <p className="tr-req-modal-sub">{c.modalSub}</p>
-              </div>
+              <h2 id="tr-req-modal-heading" className="tr-req-modal-title">
+                {c.modalTitle}
+              </h2>
+              <p className="tr-req-modal-sub">{c.modalSub}</p>
               <button
                 type="button"
                 className="tr-req-modal-close"
@@ -650,6 +648,9 @@ export default function TraceAccessRequestBanner({
                     minLength={8}
                     maxLength={20}
                     autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    spellCheck={false}
                     value={contactPhone}
                     onChange={(e) => setContactPhone(e.target.value)}
                     placeholder={c.phonePh}

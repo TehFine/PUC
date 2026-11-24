@@ -1908,10 +1908,13 @@ function extractPreservedUrlSuffix(rawUrl: string): string {
   }
 }
 
+const TRACE_LOOKUP_PREFIX_RE =
+  /^(?:mã\s*vùng|ma\s*vung|mã\s*thửa|ma\s*thua|mã\s*lô|ma\s*lo|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|thùng|thung|thửa|thua|lô|lo|hộ|ho|mã|ma|puc|phc|tem)(?:\s*[:#]\s*|\s+[-–]?\s*)/iu;
+
 function normalizeLookupCandidate(raw: string): string {
-  return safeDecodeURIComponent(raw)
+  return safeDecodeURIComponent(raw.slice(0, 256))
     .trim()
-    .replace(/^(?:thửa|thua|lô|lo|mã\s*lô|ma\s*lo|mã\s*thửa|ma\s*thua|mã\s*vùng|ma\s*vung|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|hộ|ho|mã|ma|puc|phc|tem|thùng|thung)\s*[:#-]?\s*/iu, "")
+    .replace(TRACE_LOOKUP_PREFIX_RE, "")
     .replace(/\s+/g, "");
 }
 
@@ -2069,7 +2072,14 @@ export default function TraceView() {
     scrubAuditPassFromBrowserUrl();
 
     const onAuthEnded = () => {
+      try {
+        window.sessionStorage.removeItem(AUDIT_PASS_SESSION_KEY);
+        window.sessionStorage.removeItem("puc_trace_access_req_v1");
+      } catch {
+        // Bỏ qua nếu trình duyệt chặn sessionStorage
+      }
       setAuditPass(null);
+      setAuditPassInput("");
       setSelectedView(null);
       setGisModalPlot(null);
     };
@@ -2270,6 +2280,15 @@ export default function TraceView() {
           setData(payload);
           setErrorKind(null);
           const passInfo = payload.accessControl?.fieldAuditPass;
+          const tempGrantInfo = payload.accessControl?.temporaryGrant;
+          if (auditPass && !passInfo?.active && !tempGrantInfo?.active) {
+            try {
+              window.sessionStorage.removeItem(AUDIT_PASS_SESSION_KEY);
+            } catch {
+              // Bỏ qua nếu không xóa được sessionStorage
+            }
+            setAuditPass(null);
+          }
           if (passInfo?.active && passInfo.defaultLang) {
             try {
               const hasManualLang = Boolean(window.localStorage.getItem("puc_trace_lang"));
@@ -2361,6 +2380,18 @@ export default function TraceView() {
         .then((res) => (res.ok ? (res.json() as Promise<TraceData>) : null))
         .then((nextPayload) => {
           if (disposed || !nextPayload) return;
+          if (
+            auditPass &&
+            !nextPayload.accessControl?.fieldAuditPass?.active &&
+            !nextPayload.accessControl?.temporaryGrant?.active
+          ) {
+            try {
+              window.sessionStorage.removeItem(AUDIT_PASS_SESSION_KEY);
+            } catch {
+              // Bỏ qua nếu không xóa được sessionStorage
+            }
+            setAuditPass(null);
+          }
           const nextSig = buildStableTraceSignature(nextPayload);
           setData((prev) => {
             if (!forceApplyTimestamp && prev) {
@@ -2739,15 +2770,6 @@ export default function TraceView() {
               简体中文
             </button>
           </div>
-
-          {!loading && data && pub && ac && !ac.isAuthenticated && (
-            <div className="tr-partner-auth-bar">
-              <span className="tr-partner-auth-label">{t.authHint.audienceLabel}</span>
-              <Link href={loginWithNextHref} className="tr-partner-login-btn">
-                <span>{t.authHint.actionLabel}</span>
-              </Link>
-            </div>
-          )}
         </div>
 
         {loading ? (

@@ -18,6 +18,7 @@ export async function generateMetadata({
       index: false,
       follow: false,
     },
+    referrer: "no-referrer",
     openGraph: {
       title: "Xác thực nguồn gốc sầu riêng - HTX Cư Né",
       description:

@@ -105,7 +105,7 @@ export interface FieldAuditLinkedLot {
 export interface FieldAuditCheckinItem {
   checkedAt: string;
   actorLabel: string;
-  insidePolygon: boolean;
+  insidePolygon: boolean | null;
   distanceMeters: number | null;
   verified: boolean;
 }
@@ -122,7 +122,7 @@ export interface FieldAuditDataPayload {
 
 interface GpsVerifyApiResponse {
   verified: boolean;
-  insidePolygon: boolean;
+  insidePolygon: boolean | null;
   distanceMeters: number | null;
   accuracyMeters: number | null;
   plotCode: string;
@@ -468,7 +468,7 @@ export default function FieldAuditGpsCheckCard({
   );
 
   useEffect(() => {
-    preconnectMapTileOrigins();
+    preconnectMapTileOrigins({ chinaSafe: true });
   }, []);
 
   const svgProjection = useMemo(() => {
@@ -690,7 +690,8 @@ export default function FieldAuditGpsCheckCard({
 
   const coopDisplay = localizeCoopName(coopName, lang);
   const coopLines = splitCoopHeaderLines(coopDisplay, lang);
-  const isDemoPass = auditPass?.toUpperCase() === "AUDIT-2026-CN01";
+  const isDemoPass =
+    process.env.NODE_ENV !== "production" && auditPass?.toUpperCase() === "AUDIT-2026-CN01";
 
   const checkinChunks = chunkItems(checkins, 5);
   const linkedLotChunks = chunkItems(data.linkedLots, 5);

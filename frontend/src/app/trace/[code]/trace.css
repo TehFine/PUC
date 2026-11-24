@@ -3412,54 +3412,6 @@ html[data-perf="lite"] .tr-search-btn {
 }
 
 /* ─── Nút nhỏ đăng nhập đối tác / cơ quan quản lý & Thông báo ngoài phạm vi (Mục 5) ─── */
-.tr-partner-login-strip {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: -4px;
-}
-
-.tr-partner-auth-bar {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.tr-partner-auth-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--tr-muted);
-  line-height: 1.35;
-}
-
-.tr-partner-login-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 34px;
-  min-height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--tr-ink);
-  border-radius: 0;
-  background: #ffffff;
-  color: var(--tr-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-  box-sizing: border-box;
-  transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
-}
-
-.tr-partner-login-btn:hover {
-  border-color: var(--tr-ink);
-  color: #ffffff;
-  background: var(--tr-ink);
-}
-
 .tr-scope-denied-banner {
   display: flex;
   align-items: center;
@@ -3495,10 +3447,6 @@ html[data-perf="lite"] .tr-search-btn {
 }
 
 @media (max-width: 640px) {
-  .tr-partner-login-strip {
-    justify-content: stretch;
-  }
-
   .tr-scope-denied-banner {
     flex-direction: column;
     align-items: stretch;
@@ -3650,30 +3598,6 @@ html[data-perf="lite"] .tr-search-btn {
     flex: 1 1 0;
     height: 36px;
     padding: 0 8px;
-    text-align: center;
-  }
-
-  .tr-partner-auth-bar {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    flex-wrap: nowrap;
-  }
-
-  .tr-partner-auth-label {
-    min-width: 0;
-    flex: 1 1 auto;
-  }
-
-  .tr-partner-login-btn {
-    width: auto;
-    flex-shrink: 0;
-    height: 36px;
-    min-height: 36px;
-    padding: 0 14px;
-    justify-content: center;
     text-align: center;
   }
 
@@ -5535,31 +5459,34 @@ html[data-perf="lite"] .tr-search-btn {
 }
 
 .tr-req-modal-head {
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 22px 14px;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 18px 52px 14px;
   border-bottom: 1px solid var(--tr-line);
 }
 
 .tr-req-modal-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 16.5px;
   font-weight: 700;
   color: var(--tr-ink);
   line-height: 1.32;
 }
 
 .tr-req-modal-sub {
-  margin: 5px 0 0;
+  margin: 4px 0 0;
   font-size: 12.5px;
   color: var(--tr-muted);
-  line-height: 1.48;
+  line-height: 1.45;
 }
 
 .tr-req-modal-close {
-  flex-shrink: 0;
+  position: absolute;
+  top: 15px;
+  right: 16px;
   width: 32px;
   height: 32px;
   border: 1px solid var(--tr-line-strong);
@@ -5778,7 +5705,12 @@ html[data-perf="lite"] .tr-search-btn {
   }
 
   .tr-req-modal-head {
-    padding: 15px 16px 12px;
+    padding: 15px 46px 12px;
+  }
+
+  .tr-req-modal-close {
+    top: 13px;
+    right: 14px;
   }
 
   .tr-req-modal-form {

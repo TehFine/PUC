@@ -88,7 +88,27 @@ export function resolveSafeNextPath(raw: string | null | undefined, origin?: str
   if (BLOCKED_NEXT_PREFIXES.some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`))) {
     return null;
   }
-  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+
+  // Tuyệt đối không chuyển tiếp các khóa tạm thời hoặc bí mật phiên trên chuỗi truy vấn / neo URL
+  for (const sensitiveKey of ["auditPass", "auditpass", "secret", "pass", "token"]) {
+    parsed.searchParams.delete(sensitiveKey);
+  }
+  let safeHash = parsed.hash;
+  if (safeHash) {
+    const hashParams = new URLSearchParams(safeHash.replace(/^#/, ""));
+    let mutatedHash = false;
+    for (const sensitiveKey of ["auditPass", "auditpass", "secret", "pass", "token"]) {
+      if (hashParams.has(sensitiveKey)) {
+        hashParams.delete(sensitiveKey);
+        mutatedHash = true;
+      }
+    }
+    if (mutatedHash) {
+      const rest = hashParams.toString();
+      safeHash = rest ? `#${rest}` : "";
+    }
+  }
+  return `${parsed.pathname}${parsed.search}${safeHash}`;
 }
 
 const MAX_TRACE_CODE_LENGTH = 128;

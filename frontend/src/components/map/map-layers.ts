@@ -461,19 +461,30 @@ export function getHiDpiScaleParam(forceLowRes = false): string {
   return "&scale=2";
 }
 
-export function preconnectMapTileOrigins(): void {
-  if (preconnected || typeof document === "undefined") return;
-  preconnected = true;
-  const origins = [
-    "https://services.arcgisonline.com",
-    "https://server.arcgisonline.com",
-    "https://a.basemaps.cartocdn.com",
-    "https://b.basemaps.cartocdn.com",
-    "https://mt0.google.com",
-    "https://mt1.google.com",
-    "https://mt2.google.com",
-    "https://mt3.google.com",
-  ];
+export function preconnectMapTileOrigins(options?: { chinaSafe?: boolean }): void {
+  if (typeof document === "undefined") return;
+  const chinaSafe = Boolean(options?.chinaSafe);
+  if (preconnected && !chinaSafe) return;
+  if (!chinaSafe) {
+    preconnected = true;
+  }
+  const origins = chinaSafe
+    ? [
+        "https://services.arcgisonline.com",
+        "https://server.arcgisonline.com",
+        "https://a.basemaps.cartocdn.com",
+        "https://b.basemaps.cartocdn.com",
+      ]
+    : [
+        "https://services.arcgisonline.com",
+        "https://server.arcgisonline.com",
+        "https://a.basemaps.cartocdn.com",
+        "https://b.basemaps.cartocdn.com",
+        "https://mt0.google.com",
+        "https://mt1.google.com",
+        "https://mt2.google.com",
+        "https://mt3.google.com",
+      ];
   const head = document.head;
   if (!head) return;
   for (const href of origins) {
@@ -489,10 +500,15 @@ export function preconnectMapTileOrigins(): void {
 /**
  * Nạp trước và giải mã sẵn mảnh vệ tinh quanh tọa độ mục tiêu vào kho RAM trình duyệt.
  */
-export function warmSatelliteTilesAt(lat: number, lng: number, zoom = 17): void {
+export function warmSatelliteTilesAt(
+  lat: number,
+  lng: number,
+  zoom = 17,
+  options?: { chinaSafe?: boolean },
+): void {
   if (typeof window === "undefined" || isDataSaverNetwork()) return;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-  preconnectMapTileOrigins();
+  preconnectMapTileOrigins(options);
 
   // 1. Mảnh Esri World Imagery (256px, CDN ~30ms)
   const zEsri = Math.max(10, Math.min(18, Math.round(zoom)));
@@ -933,6 +949,7 @@ export function createLatestSatelliteLayer(
   lowEnd = false,
   targetMax: number = MAX_MAP_ZOOM,
   keepBufferOverride?: number,
+  options?: { chinaSafe?: boolean },
 ): Leaflet.Layer {
   if (CUSTOM_SATELLITE_URL) {
     return enhanceSeamlessTileLayer(
@@ -955,6 +972,10 @@ export function createLatestSatelliteLayer(
       },
     ),
   );
+
+  if (options?.chinaSafe) {
+    return esriImagery;
+  }
 
   const { scaleParam, tileOpts } = buildGoogle512TileOptions(lowEnd, targetMax, keepBufferOverride);
   const vnHybridLabels = enhanceSeamlessTileLayer(

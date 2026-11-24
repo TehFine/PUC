@@ -79,8 +79,8 @@ export default function CoarseZoneOverviewMap({
     let cancelled = false;
     let resizeObserver: ResizeObserver | null = null;
 
-    preconnectMapTileOrigins();
-    warmSatelliteTilesAt(safeLat, safeLng, initialZoom);
+    preconnectMapTileOrigins({ chinaSafe: true });
+    warmSatelliteTilesAt(safeLat, safeLng, initialZoom, { chinaSafe: true });
 
     void loadLeaflet().then((mod) => {
       if (cancelled || !containerRef.current) return;
@@ -100,7 +100,7 @@ export default function CoarseZoneOverviewMap({
 
       L.control.zoom({ position: "bottomright" }).addTo(map);
 
-      const satLayer = createLatestSatelliteLayer(L, lowEnd, 19, 2);
+      const satLayer = createLatestSatelliteLayer(L, lowEnd, 19, 2, { chinaSafe: true });
       satLayer.addTo(map);
 
       L.circle([safeLat, safeLng], {
