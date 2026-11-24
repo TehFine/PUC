@@ -24,10 +24,10 @@ const LEGAL_PAGES: readonly LegalPageItem[] = [
     pageLabel: "Trang 01",
     shortTitle: "Thông tin pháp nhân và ngành nghề",
     title: "Giấy chứng nhận đăng ký hợp tác xã (Mặt trước)",
-    subtitle: "Mã số 4007E00008 do UBND Huyện Krông Búk cấp",
+    subtitle: "Mã số 4007E00008 đăng ký pháp nhân tại xã Krông Búk",
     src: "/landing/cune-coop-cert-front.jpg",
     alt: "Mặt trước Giấy chứng nhận đăng ký Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né, mã số 4007E00008",
-    lead: "Xác nhận tư cách pháp nhân chính thức của Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né tại xã Cư Né, huyện Krông Búk, tỉnh Đắk Lắk cùng danh mục 10 ngành nghề đăng ký hoạt động.",
+    lead: "Xác nhận tư cách pháp nhân chính thức của Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né tại xã Krông Búk, tỉnh Đắk Lắk cùng danh mục 10 ngành nghề đăng ký hoạt động.",
     details: [
       { label: "Mã số hợp tác xã", value: "4007E00008" },
       { label: "Đăng ký lần đầu", value: "27/10/2004" },
@@ -35,7 +35,7 @@ const LEGAL_PAGES: readonly LegalPageItem[] = [
       { label: "Tên viết tắt", value: "Hợp tác xã KDTH Cư Né" },
       {
         label: "Trụ sở chính",
-        value: "Km 67, Thôn Ea Plai, xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk",
+        value: "Km 67, Thôn Ea Plai, Xã Krông Búk, Tỉnh Đắk Lắk",
       },
       { label: "Điện thoại trụ sở", value: "0982.576.648" },
     ],
@@ -53,18 +53,18 @@ const LEGAL_PAGES: readonly LegalPageItem[] = [
     title: "Giấy chứng nhận đăng ký hợp tác xã (Mặt sau)",
     subtitle: "Xác nhận vốn điều lệ, người đại diện và con dấu cơ quan đăng ký",
     src: "/landing/cune-coop-cert-back.jpg",
-    alt: "Mặt sau Giấy chứng nhận đăng ký Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né có dấu đỏ của Phòng Tài chính - Kế hoạch huyện Krông Búk",
-    lead: "Công bố quy mô vốn điều lệ 1,2 tỷ đồng, thông tin người đại diện theo pháp luật và chữ ký, con dấu xác nhận của Phòng Tài chính - Kế hoạch thuộc UBND huyện Krông Búk.",
+    alt: "Mặt sau Giấy chứng nhận đăng ký Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né có dấu đỏ của cơ quan đăng ký kinh doanh tại Krông Búk",
+    lead: "Công bố quy mô vốn điều lệ 1,2 tỷ đồng, thông tin người đại diện theo pháp luật cùng chữ ký, con dấu xác nhận của cơ quan đăng ký kinh doanh tại Krông Búk.",
     details: [
       { label: "Vốn điều lệ", value: "1.200.000.000 đồng (Một tỷ hai trăm triệu đồng)" },
       { label: "Người đại diện pháp luật", value: "Ông Trần Đăng Sáu" },
       { label: "Chức danh", value: "Chủ tịch hội đồng quản trị kiêm Giám đốc" },
-      { label: "Cơ quan cấp phép", value: "Phòng Tài chính - Kế hoạch UBND Huyện Krông Búk" },
+      { label: "Địa bàn quản lý", value: "UBND Xã Krông Búk, Tỉnh Đắk Lắk" },
       { label: "Người ký xác nhận", value: "Phó Trưởng phòng Trần Hữu Xuân" },
       { label: "Bảo mật dữ liệu cá nhân", value: "Đã ẩn số CCCD và ngày sinh cá nhân" },
     ],
     highlights: [
-      "Đầy đủ chữ ký và con dấu đỏ pháp lý của Phòng Tài chính - Kế hoạch huyện Krông Búk",
+      "Đầy đủ chữ ký và con dấu đỏ pháp lý của cơ quan đăng ký kinh doanh",
       "Minh bạch năng lực vốn điều lệ phục vụ liên kết tiêu thụ và xuất khẩu chính ngạch",
       "Thông tin định danh cá nhân (số CCCD, ngày sinh, ngày cấp) đã được che bảo mật theo quy định",
     ],
@@ -77,7 +77,7 @@ const LEGAL_SUMMARY_SPECS = [
   { label: "Thay đổi lần 05", value: "25/07/2023" },
   { label: "Vốn điều lệ", value: "1.200.000.000 VNĐ" },
   { label: "Đại diện pháp luật", value: "Ông Trần Đăng Sáu" },
-  { label: "Cơ quan cấp", value: "UBND Huyện Krông Búk" },
+  { label: "Địa bàn hành chính", value: "Xã Krông Búk, Đắk Lắk" },
 ] as const;
 
 export default function CoopLegalSection() {
@@ -145,7 +145,7 @@ export default function CoopLegalSection() {
               Xem giấy chứng nhận
             </button>
           </div>
-          <span className="sw-micro">Xã Cư Né, Krông Búk, Đắk Lắk</span>
+          <span className="sw-micro">Xã Krông Búk, Tỉnh Đắk Lắk</span>
         </div>
 
         {/* Cột 2 & Cột 3: Hai mặt Giấy chứng nhận đăng ký HTX */}
@@ -191,7 +191,7 @@ export default function CoopLegalSection() {
               </div>
             ))}
           </dl>
-          <span className="sw-micro">Trụ sở: Km 67, Thôn Ea Plai, xã Cư Né</span>
+          <span className="sw-micro">Trụ sở: Km 67, Thôn Ea Plai, xã Krông Búk</span>
         </div>
       </div>
 

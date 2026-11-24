@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     absolute: "HTX Cư Né - Sầu riêng Cư Né, Krông Búk, Đắk Lắk chuẩn xuất khẩu",
   },
   description:
-    "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né (HTX Cư Né - HTX Cune): vùng trồng sầu riêng Cư Né tại huyện Krông Búk, tỉnh Đắk Lắk. Quản lý bản đồ số thửa vườn, mã số vùng trồng VietGAP, nhật ký canh tác, kiểm nghiệm an toàn và truy xuất nguồn gốc QR xuất khẩu chính ngạch.",
+    "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né (HTX Cư Né - HTX Cune): vùng trồng sầu riêng Cư Né tại xã Krông Búk, tỉnh Đắk Lắk. Quản lý bản đồ số thửa vườn, mã số vùng trồng VietGAP, nhật ký canh tác, kiểm nghiệm an toàn và truy xuất nguồn gốc QR xuất khẩu chính ngạch.",
   keywords: CORE_SEO_KEYWORDS,
   alternates: {
     canonical: "/",
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "HTX Cư Né - Sầu riêng Cư Né, Krông Búk, Đắk Lắk chuẩn xuất khẩu",
     description:
-      "Khám phá vùng trồng sầu riêng liên kết Hợp tác xã Cư Né tại huyện Krông Búk, tỉnh Đắk Lắk: mã số vùng trồng định danh, nhật ký mùa vụ điện tử và tem QR xuất khẩu chính ngạch.",
+      "Khám phá vùng trồng sầu riêng liên kết Hợp tác xã Cư Né tại xã Krông Búk, tỉnh Đắk Lắk: mã số vùng trồng định danh, nhật ký mùa vụ điện tử và tem QR xuất khẩu chính ngạch.",
     url: "/",
     type: "website",
     locale: "vi_VN",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
         url: "/landing/real-hero-cune.jpg",
         width: 1200,
         height: 630,
-        alt: "Sầu riêng vùng trồng Hợp tác xã Cư Né tại huyện Krông Búk, tỉnh Đắk Lắk",
+        alt: "Sầu riêng vùng trồng Hợp tác xã Cư Né tại xã Krông Búk, tỉnh Đắk Lắk",
       },
     ],
   },

@@ -31,7 +31,7 @@ const HERO_TOP_LEFT_SLIDES: readonly DwellSlide[] = [
   },
   {
     src: "/landing/durian-landscape-real.jpg",
-    alt: "Toàn cảnh vùng đồi sầu riêng đất đỏ bazan Cư Né, huyện Krông Búk, tỉnh Đắk Lắk trong sương sớm",
+    alt: "Toàn cảnh vùng đồi sầu riêng đất đỏ bazan Cư Né, xã Krông Búk, tỉnh Đắk Lắk trong sương sớm",
     objectPosition: "center 52%",
     desktopOnly: true,
   },

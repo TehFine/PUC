@@ -63,7 +63,7 @@ export default function PlotQuotasModal({
   const [areaHa, setAreaHa] = useState("1.0");
   const [treeCount, setTreeCount] = useState("150");
   const [maxQuotaKg, setMaxQuotaKg] = useState("18000");
-  const [assessedBy, setAssessedBy] = useState("Tổ Giám sát Cộng đồng Xã Cư Né & Ban Kỹ thuật HTX");
+  const [assessedBy, setAssessedBy] = useState("Tổ Giám sát Cộng đồng Xã Krông Búk & Ban Kỹ thuật HTX");
   const [assessedOn, setAssessedOn] = useState(todayIso());
   const [note, setNote] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
@@ -77,7 +77,7 @@ export default function PlotQuotasModal({
       setAreaHa("1.0");
       setTreeCount("150");
       setMaxQuotaKg("18000");
-      setAssessedBy("Tổ Giám sát Cộng đồng Xã Cư Né & Ban Kỹ thuật HTX");
+      setAssessedBy("Tổ Giám sát Cộng đồng Xã Krông Búk & Ban Kỹ thuật HTX");
       setAssessedOn(todayIso());
       setNote("");
     } else {
@@ -87,7 +87,7 @@ export default function PlotQuotasModal({
       setAreaHa(numberText(target.areaHa));
       setTreeCount(String(target.treeCount));
       setMaxQuotaKg(numberText(target.maxQuotaKg));
-      setAssessedBy(target.assessedBy || "Tổ Giám sát Cộng đồng Xã Cư Né & Ban Kỹ thuật HTX");
+      setAssessedBy(target.assessedBy || "Tổ Giám sát Cộng đồng Xã Krông Búk & Ban Kỹ thuật HTX");
       setAssessedOn(dateText(target.assessedOn) || todayIso());
       setNote(target.note ?? "");
     }

@@ -46,7 +46,7 @@ export const NEWS_ARTICLES: NewsArticle[] = [
     image: "/landing/news-field-visit.jpg",
     imageAlt: "Đoàn cán bộ và ban giám đốc HTX cùng bà con kiểm tra cây sầu riêng tại vườn Krông Búk",
     content: {
-      lead: "Đoàn công tác Chi cục Trồng trọt & Bảo vệ Thực vật tỉnh Đắk Lắk phối hợp cùng Phòng Nông nghiệp huyện Krông Búk đã có chuyến thăm và làm việc tại các vườn sầu riêng thành viên HTX Nông nghiệp Cư Né.",
+      lead: "Đoàn công tác Chi cục Trồng trọt & Bảo vệ Thực vật tỉnh Đắk Lắk phối hợp cùng UBND xã Krông Búk đã có chuyến thăm và làm việc tại các vườn sầu riêng thành viên HTX Nông nghiệp Cư Né.",
       sections: [
         {
           heading: "Kiểm tra thực địa và đánh giá vùng trồng xuất khẩu",

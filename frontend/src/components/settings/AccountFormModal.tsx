@@ -36,7 +36,7 @@ export default function AccountFormModal({
   const [villageId, setVillageId] = useState(str(initial?.villageId));
   const [householdId, setHouseholdId] = useState(str(initial?.householdId));
   const [enterpriseId, setEnterpriseId] = useState(str(initial?.enterpriseId));
-  const [assignedCommune, setAssignedCommune] = useState(initial?.assignedCommune ?? "Xã Cư Né");
+  const [assignedCommune, setAssignedCommune] = useState(initial?.assignedCommune ?? "Xã Krông Búk");
   const [assignedRegion, setAssignedRegion] = useState(initial?.assignedRegion ?? "Tỉnh Đắk Lắk");
   const [coopCode, setCoopCode] = useState(initial?.coopCode ?? "HTX-CUNE");
   const [showPassword, setShowPassword] = useState(false);
@@ -193,7 +193,7 @@ export default function AccountFormModal({
             value={assignedCommune}
             onChange={setAssignedCommune}
             maxLength={120}
-            placeholder="VD: Xã Cư Né"
+            placeholder="VD: Xã Krông Búk"
           />
         )}
         {role === "inspector" && (
@@ -202,7 +202,7 @@ export default function AccountFormModal({
             value={assignedRegion}
             onChange={setAssignedRegion}
             maxLength={120}
-            placeholder="VD: Tỉnh Đắk Lắk hoặc Huyện Krông Búk"
+            placeholder="VD: Tỉnh Đắk Lắk hoặc Xã Krông Búk"
           />
         )}
         {isCoopStaffRole(role) && (

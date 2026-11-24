@@ -161,7 +161,7 @@ export default function PlotsTable({
                               code: props.code,
                               sheet: props.sheet || null,
                               parcel: props.parcel || null,
-                              village: props.village || "Xã Cư Né",
+                              village: props.village || "Xã Krông Búk",
                               zoneCode: props.zone || "VN-DLOR-0086",
                               variety: props.variety || "Ri6 / Dona",
                               plantedYear: props.year ?? null,

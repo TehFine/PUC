@@ -22,8 +22,8 @@ export const COOP_BRAND = {
   registrationCode: "4007E00008",
   foundingDate: "2004-10-27",
   telephone: "+84982576648",
-  streetAddress: "Km 67, Thôn Ea Plai, Xã Cư Né",
-  district: "Huyện Krông Búk",
+  streetAddress: "Km 67, Thôn Ea Plai",
+  district: "Xã Krông Búk",
   province: "Tỉnh Đắk Lắk",
   country: "VN",
   alternateNames: [
@@ -120,7 +120,7 @@ export function buildHomeStructuredDataJson(): string {
           `${SITE_URL}/newlogo.png`,
         ],
         description:
-          "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né (HTX Cư Né - HTX Cune) quản lý vùng trồng sầu riêng liên kết chuẩn VietGAP, nhật ký canh tác điện tử, kiểm nghiệm an toàn và truy xuất nguồn gốc QR xuất khẩu chính ngạch tại xã Cư Né, huyện Krông Búk, tỉnh Đắk Lắk.",
+          "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né (HTX Cư Né - HTX Cune) quản lý vùng trồng sầu riêng liên kết chuẩn VietGAP, nhật ký canh tác điện tử, kiểm nghiệm an toàn và truy xuất nguồn gốc QR xuất khẩu chính ngạch tại xã Krông Búk, tỉnh Đắk Lắk.",
         address: {
           "@type": "PostalAddress",
           streetAddress: COOP_BRAND.streetAddress,
@@ -134,9 +134,8 @@ export function buildHomeStructuredDataJson(): string {
           longitude: 108.215,
         },
         areaServed: [
-          { "@type": "AdministrativeArea", name: "Xã Cư Né" },
-          { "@type": "AdministrativeArea", name: "Huyện Krông Búk" },
-          { "@type": "AdministrativeArea", name: "Huyện Ea H'Leo" },
+          { "@type": "AdministrativeArea", name: "Xã Krông Búk" },
+          { "@type": "AdministrativeArea", name: "Xã Ea Khăl" },
           { "@type": "AdministrativeArea", name: "Tỉnh Đắk Lắk" },
           { "@type": "Country", name: "Việt Nam" },
         ],

@@ -72,7 +72,7 @@ const ASIDE: Record<Variant, AsideSpec> = {
       },
       {
         src: "/landing/real-puc-orchard-vertical.jpg",
-        alt: "Vườn sầu riêng trưởng thành canh tác chuẩn mực trên nền đất đỏ bazan tại xã Cư Né, Đắk Lắk",
+        alt: "Vườn sầu riêng trưởng thành canh tác chuẩn mực trên nền đất đỏ bazan tại xã Krông Búk, Đắk Lắk",
         objectPosition: "center 44%",
         mobileObjectPosition: "center 46%",
       },

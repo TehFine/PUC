@@ -76,7 +76,7 @@ export default function UserMenu({
         ? `Doanh nghiệp liên kết (#${enterpriseId})`
         : "Chưa gắn doanh nghiệp"
       : role === "village_officer"
-        ? assignedCommune || "Xã Cư Né"
+        ? assignedCommune || "Xã Krông Búk"
         : role === "inspector"
           ? assignedRegion || "Tỉnh Đắk Lắk"
           : `${coopCode || "HTX-CUNE"} (HTX Cư Né, Đắk Lắk)`;

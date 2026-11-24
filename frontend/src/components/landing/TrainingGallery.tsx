@@ -29,9 +29,9 @@ export const TRAINING_ITEMS: TrainingItem[] = [
     category: "policy",
     categoryLabel: "Chỉ đạo & Chính sách",
     title: "Thí điểm truy xuất nguồn gốc",
-    shortNote: "Hội trường huyện Krông Búk\nGắn mã vùng trồng xuất khẩu",
-    speaker: "Sở Nông nghiệp & Môi trường phối hợp UBND huyện & HTX Cư Né",
-    location: "Hội trường huyện Krông Búk",
+    shortNote: "Hội trường xã Krông Búk\nGắn mã vùng trồng xuất khẩu",
+    speaker: "Sở Nông nghiệp và Môi trường phối hợp UBND xã Krông Búk và HTX Cư Né",
+    location: "Hội trường xã Krông Búk",
     date: "Đợt 1 - Vụ mùa xuất khẩu",
     description:
       "Triển khai mô hình quản lý số hóa, giám sát chuỗi giá trị và gắn mã số vùng trồng phục vụ kiểm dịch xuất khẩu chính ngạch cho các hộ trồng sầu riêng.",
@@ -51,7 +51,7 @@ export const TRAINING_ITEMS: TrainingItem[] = [
     title: "Quy chuẩn kiểm nghiệm & kiểm dịch",
     shortNote: "Cơ quan Bảo vệ Thực vật\nKiểm soát dư lượng MRL",
     speaker: "Cơ quan Bảo vệ Thực vật & Kiểm nghiệm chuyên ngành",
-    location: "Hội trường huyện Krông Búk",
+    location: "Hội trường xã Krông Búk",
     date: "Chuyên đề pháp lý & kiểm dịch",
     description:
       "Hướng dẫn chi tiết quy chuẩn kiểm tra mã vùng trồng, giới hạn dư lượng thuốc bảo vệ thực vật (MRL) và quy định an toàn thực phẩm trước khi thu hoạch.",

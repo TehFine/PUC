@@ -163,7 +163,7 @@ const PUC_VERTICAL_SLIDES: readonly DwellSlide[] = [
   },
   {
     src: "/landing/cune-puc-plot-vertical.jpg",
-    alt: "Cán bộ kỹ thuật HTX và nông hộ xã Cư Né đối chiếu hồ sơ thửa vườn bên trụ định danh mã QR tại đầu lô vườn sầu riêng đất đỏ bazan",
+    alt: "Cán bộ kỹ thuật HTX và nông hộ xã Krông Búk đối chiếu hồ sơ thửa vườn bên trụ định danh mã QR tại đầu lô vườn sầu riêng đất đỏ bazan",
     objectPosition: "center 46%",
     desktopOnly: true,
   },
@@ -401,11 +401,11 @@ export default function LandingPage({
                 <h3 className="sw-caption-title">Mã số vùng trồng</h3>
                 <p className="sw-caption-meta">
                   <span>Hồ sơ vùng - Thửa vườn</span>
-                  <span>Xã Cư Né, Krông Búk, Đắk Lắk</span>
+                  <span>Xã Krông Búk, Tỉnh Đắk Lắk</span>
                   <span>Định danh riêng từng nông hộ</span>
                 </p>
               </div>
-              <MobileSpreadNote prose="Vùng trồng xã Cư Né, huyện Krông Búk được chuẩn hóa canh tác trên đất đỏ bazan và gắn mã định danh riêng từng nông hộ." />
+              <MobileSpreadNote prose="Vùng trồng tại xã Krông Búk được chuẩn hóa canh tác trên đất đỏ bazan và gắn mã định danh riêng từng nông hộ." />
             </div>
 
             {/* Hàng 1 – Cột 3 & 4: Ảnh tem QR thực tế lồng ghép ảnh lô sầu riêng nghệ thuật */}

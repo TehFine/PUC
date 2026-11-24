@@ -614,7 +614,7 @@ export default function FieldAuditPassesModal({
             value={coopAddress}
             onChange={setCoopAddress}
             maxLength={300}
-            placeholder="Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk"
+            placeholder="Xã Krông Búk, Tỉnh Đắk Lắk"
           />
 
           <FormError message={saveEndorsement.error} />

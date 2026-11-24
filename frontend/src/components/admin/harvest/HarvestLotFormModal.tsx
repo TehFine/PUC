@@ -192,7 +192,7 @@ export default function HarvestLotFormModal({
         />
         <TextField label="Mã số cơ sở đóng gói (PHC)" value={packhouseCode} onChange={setPackhouseCode} maxLength={50} />
         <TextField label="Tên cơ sở đóng gói hiển thị QR" value={packhouseName} onChange={setPackhouseName} maxLength={200} placeholder="Mặc định theo CSĐG liên kết" />
-        <TextField label="Địa chỉ cơ sở đóng gói" value={packhouseAddress} onChange={setPackhouseAddress} maxLength={250} placeholder="Xã, huyện, tỉnh" />
+        <TextField label="Địa chỉ cơ sở đóng gói" value={packhouseAddress} onChange={setPackhouseAddress} maxLength={250} placeholder="Xã, tỉnh" />
         <TextField label="Số giấy chứng nhận kiểm dịch thực vật" value={phytosanitaryCertNo} onChange={setPhytosanitaryCertNo} maxLength={80} placeholder="VD: KDTV-VN-2026-0128" />
         <TextField label="Ngày cấp giấy kiểm dịch" type="date" value={phytosanitaryIssuedOn} onChange={setPhytosanitaryIssuedOn} />
         <NumberField label="Tỷ lệ hạng A (%)" value={gradeAPct} onChange={setGradeAPct} min={0} max={100} />

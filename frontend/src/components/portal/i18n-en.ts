@@ -184,7 +184,7 @@ const EXACT_EN_MAP: Record<string, string> = {
   "Địa bàn": "Location",
   "Xã Krông Búk": "Krong Buk Commune",
   ", Krông Búk": ", Krong Buk",
-  "Xã Cư Né": "Cu Ne Commune",
+  "Xã Krông Búk, Tỉnh Đắk Lắk": "Krong Buk Commune, Dak Lak Province",
   "Xã Ea Khăl": "Ea Khal Commune",
   "Xã Ea Khăl, Đắk Lắk": "Ea Khal Commune, Dak Lak",
   "Trưởng thôn": "Village head",
@@ -457,8 +457,10 @@ const EXACT_EN_MAP: Record<string, string> = {
   "Bà con in biển này ra khổ A4 hoặc tải ảnh sắc nét gửi tiệm in ép plastic chống nước cắm tại đầu lô đất.":
     "Print on A4 or download the high-resolution PNG for waterproof lamination at the plot entrance.",
   "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM": "SOCIALIST REPUBLIC OF VIETNAM",
-  "UBND XÃ CƯ NÉ - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK":
-    "CU NE COMMUNE PEOPLE'S COMMITTEE - DAK LAK PILOT TRACEABILITY MODEL",
+  "UBND XÃ KRÔNG BÚK - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK":
+    "KRONG BUK COMMUNE PEOPLE'S COMMITTEE - DAK LAK PILOT TRACEABILITY MODEL",
+  "HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - XÃ KRÔNG BÚK, ĐẮK LẮK":
+    "CU NE GENERAL AGRICULTURAL SERVICE COOPERATIVE - KRONG BUK COMMUNE, DAK LAK",
   "HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - KRÔNG BÚK, ĐẮK LẮK":
     "CU NE GENERAL AGRICULTURAL SERVICE COOPERATIVE - KRONG BUK, DAK LAK",
   "HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ – ĐẮK LẮK":
@@ -470,8 +472,8 @@ const EXACT_EN_MAP: Record<string, string> = {
   "Theo biên bản thẩm định đầu vụ": "Per pre-season field audit record",
   "VietGAP và GACC": "VietGAP and GACC",
   "VietGAP & Nghị định thư GACC": "VietGAP and GACC Export Protocol",
-  "Liên thông dữ liệu vùng trồng Xã Cư Né - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)":
-    "Cu Ne Commune Planting Area Data Portal - Field Audit Ready (VI / 中文 / EN)",
+  "Liên thông dữ liệu vùng trồng Xã Krông Búk - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)":
+    "Krong Buk Commune Planting Area Data Portal - Field Audit Ready (VI / 中文 / EN)",
   "NGHIÊM CẤM TỰ Ý DI DỜI BIỂN ĐỊNH DANH THỬA VƯỜN":
     "UNAUTHORIZED REMOVAL OR ALTERATION OF THIS SIGNBOARD IS STRICTLY PROHIBITED",
   "NGHIÊM CẤM TỰ Ý THAY ĐỔI BIỂN CẮM RANH GIỚI VÙNG TRỒNG":
@@ -839,11 +841,11 @@ const EXACT_EN_MAP: Record<string, string> = {
   "ĐỐI CHIẾU BẢN SCAN LAB": "VERIFIED AGAINST LAB SCAN",
   "HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC":
     "PUC PLANTING AREA MANAGEMENT AND TRACEABILITY SYSTEM",
-  "HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - HUYỆN KRÔNG BÚK, TỈNH ĐẮK LẮK":
-    "CU NE AGRICULTURAL COOPERATIVE - KRONG BUK DISTRICT, DAK LAK PROVINCE",
-  "HTX Nông nghiệp Cư Né - Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk":
-    "Cu Ne Agricultural Cooperative - Cu Ne Commune, Krong Buk, Dak Lak",
-  "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk": "Cu Ne Commune, Krong Buk District, Dak Lak Province",
+  "HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - XÃ KRÔNG BÚK, TỈNH ĐẮK LẮK":
+    "CU NE AGRICULTURAL COOPERATIVE - KRONG BUK COMMUNE, DAK LAK PROVINCE",
+  "HTX Nông nghiệp Cư Né - Xã Krông Búk, Tỉnh Đắk Lắk":
+    "Cu Ne Agricultural Cooperative - Krong Buk Commune, Dak Lak",
+  "Xã Krông Búk, Đắk Lắk": "Krong Buk Commune, Dak Lak",
   "Số hồ sơ:": "Dossier No.:",
   "Mã hồ sơ:": "Dossier ID:",
   "PHIẾU TRÍCH XUẤT KẾT QUẢ KIỂM NGHIỆM": "LABORATORY TEST RESULT EXTRACT",
@@ -1204,7 +1206,7 @@ const PATTERN_EN_RULES: Array<[RegExp, (...args: string[]) => string]> = [
   [/^Tỉnh\s+(.+)$/i, (_, name) => `${translateViToEn(name.trim())} Province`],
   [/^(?:Hợp tác xã|HTX)\s+(.+)$/i, (_, name) => `${translateViToEn(name.trim())} Cooperative`],
   [/^(.+),\s*Xã Ea Khăl,\s*Đắk Lắk$/i, (_, village) => `${translateViToEn(village.trim())}, Ea Khal Commune, Dak Lak`],
-  [/^(.+),\s*Xã Cư Né,\s*Đắk Lắk$/i, (_, village) => `${translateViToEn(village.trim())}, Cu Ne Commune, Dak Lak`],
+  [/^(.+),\s*Xã Krông Búk,\s*Đắk Lắk$/i, (_, village) => `${translateViToEn(village.trim())}, Krong Buk Commune, Dak Lak`],
   [/^(.+),\s*Xã Krông Búk$/i, (_, village) => `${translateViToEn(village.trim())}, Krong Buk Commune`],
   [/^Trưởng thôn:\s*(.+)$/i, (_, leader) => `Village head: ${leader.trim()}`],
   [/^Chủ hộ:\s*(.+)$/i, (_, owner) => `Owner: ${owner.trim()}`],

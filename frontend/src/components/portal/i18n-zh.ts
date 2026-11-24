@@ -1640,20 +1640,22 @@ const EXACT_MAP: Record<string, string> = {
   "nhật ký": "条日志",
   "Không khởi tạo được bộ vẽ ảnh.": "无法初始化图像绘制器。",
   "Không xuất được tệp ảnh PNG.": "无法导出 PNG 图片文件。",
-  "UBND XÃ CƯ NÉ - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK":
-    "居内乡人民委员会 - 多乐省农产品溯源示范点",
+  "UBND XÃ KRÔNG BÚK - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK":
+    "克容布乡人民委员会 - 多乐省农产品溯源示范点",
+  "HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - XÃ KRÔNG BÚK, ĐẮK LẮK":
+    "多乐省克容布乡居内综合经营服务合作社",
   "HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - KRÔNG BÚK, ĐẮK LẮK":
-    "多乐省克容布县居内综合经营服务合作社",
+    "多乐省克容布乡居内综合经营服务合作社",
   "BIỂN ĐỊNH DANH THỬA VƯỜN SẦU RIÊNG": "榴莲果园地块溯源标识牌",
   "Theo biên bản thẩm định đầu vụ": "依据季初实地核定记录",
-  "Liên thông dữ liệu vùng trồng Xã Cư Né - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)":
-    "居内乡种植区数据互通平台 - 支持实地核查证 (VI / 中文 / EN)",
+  "Liên thông dữ liệu vùng trồng Xã Krông Búk - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)":
+    "克容布乡种植区数据互通平台 - 支持实地核查证 (VI / 中文 / EN)",
   "NGHIÊM CẤM TỰ Ý DI DỜI BIỂN ĐỊNH DANH THỬA VƯỜN": "严禁擅自移动果园地块标识牌",
   "VietGAP và GACC": "VietGAP 与 GACC",
   "Ảnh vệ tinh Maxar Vivid cập nhật mới nhất": "最新更新的 Maxar Vivid 卫星影像",
   "Ảnh vệ tinh Google hỗ trợ phóng sâu tới Z22": "支持放大至 Z22 级的 Google 卫星影像",
   "Chuyển chế độ xem bản đồ giao thông chi tiết": "切换至详细道路地图视图",
-  "Xã Cư Né": "居内乡 (Cư Né)",
+  "Xã Krông Búk, Đắk Lắk": "多乐省克容布乡 (Krông Búk, Đắk Lắk)",
   "Xã Ea Khăl": "伊卡乡 (Ea Khăl)",
   "Xã Ea Khăl, Đắk Lắk": "多乐省伊卡乡 (Ea Khăl, Đắk Lắk)",
   "Khảo sát thực địa": "实地测绘核查",
@@ -1661,8 +1663,8 @@ const EXACT_MAP: Record<string, string> = {
   "BẢN TRÍCH XUẤT HỆ THỐNG": "系统提取件",
   "ĐỐI CHIẾU BẢN SCAN LAB": "核对实验室扫描原件",
   "HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC": "PUC 种植区管理与溯源系统",
-  "HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - HUYỆN KRÔNG BÚK, TỈNH ĐẮK LẮK":
-    "多乐省克容布县居内农业合作社",
+  "HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - XÃ KRÔNG BÚK, TỈNH ĐẮK LẮK":
+    "多乐省克容布乡居内农业合作社",
   "Chuẩn ISO/IEC 17025": "ISO/IEC 17025 标准",
   "Số hồ sơ:": "档案编号：",
   "Mã hồ sơ:": "档案编码：",
@@ -1672,7 +1674,7 @@ const EXACT_MAP: Record<string, string> = {
   "Tên chủ hộ sản xuất:": "生产户主姓名：",
   "Mã số vùng trồng (PUC) và Thửa:": "注册果园代码 (PUC) 与地块：",
   "Mã vùng trồng và Thửa:": "注册果园代码与地块：",
-  "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk": "多乐省克容布县居内乡",
+  "Xã Krông Búk, Tỉnh Đắk Lắk": "多乐省克容布乡",
   "Đơn vị quản lý gửi mẫu:": "送检管理单位：",
   "Ban Kiểm soát Kỹ thuật HTX Nông nghiệp Cư Né": "居内农业合作社技术品控委员会",
   "Mã nhận diện mẫu thử:": "样品识别编码：",
@@ -1689,8 +1691,8 @@ const EXACT_MAP: Record<string, string> = {
   "Ngày lấy mẫu kiểm định:": "检验采样日期：",
   "Mã đối chiếu phòng Lab:": "实验室核对编号：",
   "Đối chiếu theo số phiếu gốc": "按原始检测报告编号核对",
-  "HTX Nông nghiệp Cư Né - Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk":
-    "居内农业合作社 - 多乐省克容布县居内乡",
+  "HTX Nông nghiệp Cư Né - Xã Krông Búk, Tỉnh Đắk Lắk":
+    "居内农业合作社 - 多乐省克容布乡",
   "Độ chín và sinh lý mẫu quả:": "样品果实成熟度与生理指标：",
   "Ngoại quan vỏ và cuống quả:": "果壳与果柄外观：",
   "Đồng bộ nhật ký điện tử vùng trồng PUC": "已同步 PUC 种植区电子农事日志",
@@ -1931,7 +1933,7 @@ const PATTERN_RULES: Array<[RegExp, (...args: string[]) => string]> = [
   [/^Chưa đọc\s*\((\d+)\)$/i, (_, n) => `未读 (${n})`],
   [/^Đã đọc\s*\((\d+)\)$/i, (_, n) => `已读 (${n})`],
   [/^(.+),\s*Xã Ea Khăl,\s*Đắk Lắk$/i, (_, village) => `多乐省伊卡乡 - ${translateViToZh(village.trim())}`],
-  [/^(.+),\s*Xã Cư Né,\s*Đắk Lắk$/i, (_, village) => `多乐省居内乡 - ${translateViToZh(village.trim())}`],
+  [/^(.+),\s*Xã Krông Búk,\s*Đắk Lắk$/i, (_, village) => `多乐省克容布乡 - ${translateViToZh(village.trim())}`],
   [/^\(được phép thu hái từ ngày\s+(.+)\)$/i, (_, date) => `（自 ${date.trim()} 起允许采收）`],
   [/^Đang trong thời gian cách ly PHI\s*\(còn\s+(\d+)\s+ngày\)$/i, (_, d) => `处于安全间隔期 PHI（剩余 ${d} 天）`],
   [/^Tuyệt đối chưa thu hái hoặc kích hoạt tem quả trên thửa này trước ngày\s+(.+)\.$/i, (_, d) =>

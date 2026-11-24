@@ -102,11 +102,11 @@ async function renderSignboardPngBlob(
     ctx.textAlign = "center";
     ctx.fillStyle = "#b91c1c";
     ctx.font = `700 22px ${fontStack}`;
-    ctx.fillText("UBND XÃ CƯ NÉ - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK", W / 2, 112);
+    ctx.fillText("UBND XÃ KRÔNG BÚK - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK", W / 2, 112);
 
     ctx.fillStyle = "#14532d";
     ctx.font = `800 27px ${fontStack}`;
-    ctx.fillText("HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - KRÔNG BÚK, ĐẮK LẮK", W / 2, 152);
+    ctx.fillText("HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - XÃ KRÔNG BÚK, ĐẮK LẮK", W / 2, 152);
 
     ctx.fillStyle = "#0f172a";
     ctx.font = `800 38px ${fontStack}`;
@@ -189,7 +189,7 @@ async function renderSignboardPngBlob(
     ctx.fillStyle = "#475569";
     ctx.font = `600 18px ${fontStack}`;
     ctx.fillText(
-      "Liên thông dữ liệu vùng trồng Xã Cư Né - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)",
+      "Liên thông dữ liệu vùng trồng Xã Krông Búk - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)",
       innerX,
       footerLineY + 44,
     );
@@ -458,8 +458,8 @@ function printSignboardViaIsolatedSheet(
   <div class="print-stage">
     <div class="plate">
       <div class="p-top">
-        <div class="p-flag">UBND XÃ CƯ NÉ - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK</div>
-        <div class="p-org">HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - KRÔNG BÚK, ĐẮK LẮK</div>
+        <div class="p-flag">UBND XÃ KRÔNG BÚK - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK</div>
+        <div class="p-org">HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - XÃ KRÔNG BÚK, ĐẮK LẮK</div>
         <div class="p-title">BIỂN ĐỊNH DANH THỬA VƯỜN SẦU RIÊNG</div>
         <div class="p-sub">榴莲注册果园地块标识牌 / REGISTERED DURIAN PARCEL SIGNBOARD</div>
       </div>
@@ -482,7 +482,7 @@ function printSignboardViaIsolatedSheet(
       </div>
 
       <div class="p-bottom">
-        <span>Liên thông dữ liệu vùng trồng Xã Cư Né - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)</span>
+        <span>Liên thông dữ liệu vùng trồng Xã Krông Búk - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)</span>
         <span class="p-warn">NGHIÊM CẤM TỰ Ý DI DỜI BIỂN ĐỊNH DANH THỬA VƯỜN</span>
       </div>
     </div>
@@ -700,10 +700,10 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
           <div className="garden-signboard-plate">
             <div className="plate-top">
               <div className="plate-flag">
-                UBND XÃ CƯ NÉ - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK
+                UBND XÃ KRÔNG BÚK - MÔ HÌNH ĐIỂM TRUY XUẤT NGUỒN GỐC TỈNH ĐẮK LẮK
               </div>
               <div className="plate-org">
-                HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - KRÔNG BÚK, ĐẮK LẮK
+                HTX KINH DOANH - DỊCH VỤ TỔNG HỢP CƯ NÉ - XÃ KRÔNG BÚK, ĐẮK LẮK
               </div>
               <div className="plate-main-title">BIỂN ĐỊNH DANH THỬA VƯỜN SẦU RIÊNG</div>
               <div
@@ -796,7 +796,7 @@ export default function GardenSignboardModal({ plot, householdName, onClose }: P
 
             <div className="plate-bottom">
               <span>
-                Liên thông dữ liệu vùng trồng Xã Cư Né - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)
+                Liên thông dữ liệu vùng trồng Xã Krông Búk - Hỗ trợ Thẻ Đoàn Thẩm định Thực địa (VI / 中文 / EN)
               </span>
               <span className="protect-warning">
                 NGHIÊM CẤM TỰ Ý DI DỜI BIỂN ĐỊNH DANH THỬA VƯỜN

@@ -701,7 +701,7 @@ export default function TraceLookupPage() {
 
                         <div className="sw-trace-card-foot">
                           <span className="sw-trace-card-date">
-                            {pl.villageName || "Xã Cư Né"}
+                            {pl.villageName || "Xã Krông Búk"}
                           </span>
                           <span className="sw-trace-card-cta">Xem bảng thửa vườn</span>
                         </div>

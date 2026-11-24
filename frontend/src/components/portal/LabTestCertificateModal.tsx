@@ -473,7 +473,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
               <div className="cert-org-col">
                 <div className="cert-org-text">
                   <div className="cert-ministry">HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC</div>
-                  <div className="cert-center-name">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - HUYỆN KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
+                  <div className="cert-center-name">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - XÃ KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
                   <div className="cert-lab-branch">
                     Đơn vị thử nghiệm thực hiện: {test.lab}, {test.labAccreditationCode || "Chuẩn ISO/IEC 17025"}
                   </div>
@@ -531,7 +531,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
                 <div className="cert-info-row">
                   <span className="cert-lbl">Địa chỉ canh tác:</span>
-                  <span className="cert-val">Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk</span>
+                  <span className="cert-val">Xã Krông Búk, Tỉnh Đắk Lắk</span>
                 </div>
                 <div className="cert-info-row">
                   <span className="cert-lbl">Đối tượng mẫu thử:</span>
@@ -736,7 +736,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
             {/* 7. CHÂN TRANG HỆ THỐNG */}
             <div className="cert-footer-row">
               <div>
-                Đơn vị quản lý hồ sơ: <strong>HTX Nông nghiệp Cư Né - Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk</strong>
+                Đơn vị quản lý hồ sơ: <strong>HTX Nông nghiệp Cư Né - Xã Krông Búk, Tỉnh Đắk Lắk</strong>
               </div>
               <div className="cert-security-hash">
                 <span>Mã hồ sơ: </span>
@@ -773,7 +773,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                     <div className="cert-m-org">
                       <div className="cert-m-org-text">
                         <div className="cert-m-ministry">HỆ THỐNG QUẢN LÝ VÙNG TRỒNG VÀ TRUY XUẤT NGUỒN GỐC PUC</div>
-                        <div className="cert-m-center">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - HUYỆN KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
+                        <div className="cert-m-center">HỢP TÁC XÃ NÔNG NGHIỆP CƯ NÉ - XÃ KRÔNG BÚK, TỈNH ĐẮK LẮK</div>
                         <div className="cert-m-branch">
                           Đơn vị thử nghiệm thực hiện: {test.lab}, {test.labAccreditationCode || "Chuẩn ISO/IEC 17025"}
                         </div>
@@ -830,7 +830,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
 
                   <div className="cert-m-info-item">
                     <span className="cert-m-lbl">Địa chỉ canh tác:</span>
-                    <span className="cert-m-val">Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk</span>
+                    <span className="cert-m-val">Xã Krông Búk, Tỉnh Đắk Lắk</span>
                   </div>
                   <div className="cert-m-info-item">
                     <span className="cert-m-lbl">Đối tượng mẫu thử:</span>
@@ -1067,7 +1067,7 @@ export default function LabTestCertificateModal({ test, onClose }: Props) {
                 {/* Chân trang hệ thống Trang 2 */}
                 <div className="cert-m-footer">
                   <div>
-                    HTX Nông nghiệp Cư Né - Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk
+                    HTX Nông nghiệp Cư Né - Xã Krông Búk, Tỉnh Đắk Lắk
                   </div>
 
                   <div className="cert-m-hash">

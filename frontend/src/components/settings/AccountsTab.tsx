@@ -38,7 +38,7 @@ function formatAccountScope(a: AccountRecord): string {
     if (a.villageName && a.assignedCommune) {
       return cleanScopeText(`${a.villageName}, ${a.assignedCommune}`);
     }
-    return cleanScopeText(a.villageName || a.assignedCommune || "Xã Cư Né");
+    return cleanScopeText(a.villageName || a.assignedCommune || "Xã Krông Búk");
   }
   if (a.role === "inspector") {
     return cleanScopeText(a.assignedRegion || "Tỉnh Đắk Lắk");

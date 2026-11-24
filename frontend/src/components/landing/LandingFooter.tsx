@@ -159,7 +159,7 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
         <div className="sw-ft-col">
           <h3 className="sw-ft-heading">Liên kết vùng trồng</h3>
           <p className="sw-ft-prose">
-            Dành cho các nhà vườn canh tác sầu riêng tại xã Cư Né và huyện Krông Búk mong muốn tham gia mã số vùng trồng xuất khẩu chính ngạch. Hộ thành viên được hỗ trợ đo đạc bản đồ số thửa vườn, hướng dẫn ghi nhật ký điện tử, tập huấn VietGAP định kỳ và kiểm nghiệm an toàn dư lượng trước mỗi vụ thu hoạch.
+            Dành cho các nhà vườn canh tác sầu riêng tại xã Krông Búk mong muốn tham gia mã số vùng trồng xuất khẩu chính ngạch. Hộ thành viên được hỗ trợ đo đạc bản đồ số thửa vườn, hướng dẫn ghi nhật ký điện tử, tập huấn VietGAP định kỳ và kiểm nghiệm an toàn dư lượng trước mỗi vụ thu hoạch.
           </p>
           <Link href={authenticated ? workspaceHref : "/register"} className="sw-ft-cta">
             {authenticated
@@ -174,14 +174,14 @@ export default function LandingFooter({ fromTrace = false }: { fromTrace?: boole
         <div className="sw-ft-col">
           <h3 className="sw-ft-heading">Về HTX Cư Né</h3>
           <p className="sw-ft-prose">
-            Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né (HTX Cư Né, tên giao dịch HTX Cune, mã số ĐKHTX: 4007E00008, trụ sở tại Km 67, Thôn Ea Plai, xã Cư Né) vận hành nền tảng quản lý vùng trồng sầu riêng số hóa tại huyện Krông Búk, tỉnh Đắk Lắk. Chúng tôi chuẩn hóa từng khâu canh tác theo VietGAP và Nghị định thư GACC nhằm nâng tầm giá trị trái sầu riêng Cư Né và vùng nguyên liệu Krông Búk.
+            Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né (HTX Cư Né, tên giao dịch HTX Cune, mã số ĐKHTX: 4007E00008, trụ sở tại Km 67, Thôn Ea Plai, xã Krông Búk) vận hành nền tảng quản lý vùng trồng sầu riêng số hóa tại xã Krông Búk, tỉnh Đắk Lắk. Chúng tôi chuẩn hóa từng khâu canh tác theo VietGAP và Nghị định thư GACC nhằm nâng tầm giá trị trái sầu riêng Cư Né và vùng nguyên liệu xã Krông Búk.
           </p>
         </div>
       </div>
 
       <div className="sw-ft-colophon">
         <p className="sw-ft-colophon-copy">
-          © 2026 Bản quyền thuộc HTX Nông nghiệp Cư Né - Krông Búk, Đắk Lắk
+          © 2026 Bản quyền thuộc HTX Nông nghiệp Cư Né - Xã Krông Búk, Đắk Lắk
         </p>
         <p className="sw-ft-colophon-credit">
           <span>Thiết kế và phát triển: Đặng Văn Thế</span>
