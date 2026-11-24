@@ -80,7 +80,7 @@ export const harvestData = [
 ];
 
 export const trainingCourses = [
-  { title: "VietGAP Cơ Bản", date: "15/11/2024", location: "UBND xã Krong Buk", trainer: "KS. Nguyễn Minh Tuấn", enrolled: 45, capacity: 60, completed: false, progress: 75 },
+  { title: "VietGAP Cơ Bản", date: "15/11/2024", location: "UBND xã Krông Búk", trainer: "KS. Nguyễn Minh Tuấn", enrolled: 45, capacity: 60, completed: false, progress: 75 },
   { title: "Tiêu Chuẩn GACC – Xuất Khẩu Trung Quốc", date: "22/11/2024", location: "Hội trường HTX", trainer: "Chuyên gia từ BVTV", enrolled: 38, capacity: 50, completed: false, progress: 76 },
   { title: "Nhận Diện & Phòng Trừ Sâu Bệnh", date: "01/12/2024", location: "Thực địa Thôn 3", trainer: "KS. Trần Thị Lan Anh", enrolled: 52, capacity: 60, completed: false, progress: 87 },
   { title: "Hướng Dẫn Dùng Phần Mềm Quản Lý", date: "10/12/2024", location: "Hội trường HTX", trainer: "Kỹ sư hệ thống", enrolled: 30, capacity: 80, completed: false, progress: 37 },

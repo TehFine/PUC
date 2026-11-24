@@ -53,11 +53,11 @@ export class CreateAccountDto {
   @RecordId()
   enterpriseId?: number | null;
 
-  /** Xã được phân công quản lý (cho cán bộ xã, ví dụ: Xã Cư Né). */
+  /** Xã được phân công quản lý (cho cán bộ xã, ví dụ: Xã Krông Búk). */
   @OptionalText(120)
   assignedCommune?: string | null;
 
-  /** Địa bàn hành chính được giao (cho Chi cục / Thanh tra, ví dụ: Tỉnh Đắk Lắk, Huyện Krông Búk). */
+  /** Địa bàn hành chính được giao (cho Chi cục / Thanh tra, ví dụ: Tỉnh Đắk Lắk, Xã Krông Búk). */
   @OptionalText(120)
   assignedRegion?: string | null;
 

@@ -40,7 +40,7 @@ const DEFAULT_ZONE_CENTER = { lat: 13.13, lng: 108.19 };
 const DEFAULT_COOP_NAME = "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né";
 const DEFAULT_PACKHOUSE_NAME = "Cơ sở Đóng gói - Sơ chế Liên kết HTX Cư Né";
 const DEFAULT_PACKHOUSE_CODE = "VN-DLPH-0089";
-const DEFAULT_PACKHOUSE_ADDRESS = "Km 19, Quốc lộ 14, Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+const DEFAULT_PACKHOUSE_ADDRESS = "Km 19, Quốc lộ 14, Xã Krông Búk, Tỉnh Đắk Lắk";
 
 /** Che CCCD thống nhất: chỉ giữ 2 số cuối (ví dụ `**********89`), NULL khi hộ chưa khai CCCD. */
 const CCCD_MASKED_SQL =
@@ -229,6 +229,42 @@ export interface EvaluatedTraceAccess {
   scopeReason: string | null;
 }
 
+/**
+ * Chuẩn hóa địa danh hành chính sau sáp nhập:
+ * "Xã Cư Né, Huyện Krông Búk" / "Xã Cư Né" / "Huyện Krông Búk" -> "Xã Krông Búk",
+ * đồng thời giữ nguyên danh xưng pháp nhân "Hợp tác xã ... Cư Né".
+ */
+function normalizeKrongBukAdminText(val: string): string {
+  if (!val || !val.trim()) return val;
+  let res = val
+    .replace(/HỢP TÁC XÃ/g, "__PUC_HTX_UPPER__")
+    .replace(/Hợp Tác Xã/g, "__PUC_HTX_TITLE2__")
+    .replace(/Hợp tác xã/g, "__PUC_HTX_TITLE__")
+    .replace(/hợp tác xã/g, "__PUC_HTX_LOWER__");
+
+  res = res
+    .replace(/XÃ\s+CƯ\s+NÉ\s*(?:[-–,]|VÀ)\s*(?:HUYỆN\s+)?KR(?:Ô|O)NG\s+B(?:Ú|U)K/g, "XÃ KRÔNG BÚK")
+    .replace(/Xã\s+Cư\s+Né\s*(?:[-–,]|và)\s*(?:Huyện\s+|huyện\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "Xã Krông Búk")
+    .replace(/xã\s+Cư\s+Né\s*(?:[-–,]|và)\s*(?:huyện\s+|Huyện\s+)?Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "xã Krông Búk")
+    .replace(/xã\s+cư\s+né\s*(?:[-–,]|và)\s*(?:huyện\s+)?kr(?:ô|o)ng\s+b(?:ú|u)k/gi, "xã Krông Búk")
+    .replace(/XÃ\s+CƯ\s+NÉ/g, "XÃ KRÔNG BÚK")
+    .replace(/Xã\s+Cư\s+Né/g, "Xã Krông Búk")
+    .replace(/xã\s+Cư\s+Né/g, "xã Krông Búk")
+    .replace(/xã\s+cư\s+né/gi, "xã Krông Búk")
+    .replace(/HUYỆN\s+KR(?:Ô|O)NG\s+B(?:Ú|U)K/g, "XÃ KRÔNG BÚK")
+    .replace(/Huyện\s+Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "Xã Krông Búk")
+    .replace(/huyện\s+Kr(?:ô|o)ng\s+B(?:ú|u)k/g, "xã Krông Búk")
+    .replace(/Xã\s+Krong\s+Buk/g, "Xã Krông Búk")
+    .replace(/xã\s+Krong\s+Buk/g, "xã Krông Búk")
+    .replace(/(Xã\s+Krông\s+Búk)(?:\s*[-–,]\s*Xã\s+Krông\s+Búk)+/gi, "$1");
+
+  return res
+    .replace(/__PUC_HTX_UPPER__/g, "HỢP TÁC XÃ")
+    .replace(/__PUC_HTX_TITLE2__/g, "Hợp Tác Xã")
+    .replace(/__PUC_HTX_TITLE__/g, "Hợp tác xã")
+    .replace(/__PUC_HTX_LOWER__/g, "hợp tác xã");
+}
+
 function normGeoText(val: string): string {
   return val
     .normalize("NFD")
@@ -255,6 +291,15 @@ function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boo
       .split(",")
       .map((s) => normGeoText(s))
       .filter(Boolean);
+    const hasKrongBukCommune = segments.some((s) => s === "xa krong buk" || s === "krong buk");
+    if (
+      hasKrongBukCommune &&
+      (target === "xa cu ne" ||
+        target === "huyen krong buk" ||
+        (!targetHasPrefix && (targetStripped === "cu ne" || targetStripped === "krong buk")))
+    ) {
+      return true;
+    }
     for (const seg of segments) {
       if (seg === target) return true;
       if (!targetHasPrefix) {
@@ -1012,14 +1057,14 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     return rows[0] ?? null;
   }
 
-  /** Chuẩn hóa địa danh hành chính cấp xã/huyện/tỉnh (không bao giờ lộ địa chỉ nhà riêng của hộ). */
+  /** Chuẩn hóa địa danh hành chính cấp xã/tỉnh (không bao giờ lộ địa chỉ nhà riêng của hộ). */
   resolveAdminLocation(village?: unknown, zoneCode?: unknown): string {
     const v = typeof village === "string" ? village.trim() : "";
     const z = typeof zoneCode === "string" ? zoneCode.trim() : "";
     if (/ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(v) || /^66-PUC-SR0001-/i.test(z)) {
       return "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
     }
-    return "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+    return "Xã Krông Búk, Tỉnh Đắk Lắk";
   }
 
   private hasTable(tableName: string): Promise<boolean> {
@@ -1324,13 +1369,15 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       pucMardApprovedOn = toIsoDateOnly(zRes.rows[0].mard_approved_on);
       pucGaccApprovedOn = toIsoDateOnly(zRes.rows[0].gacc_approved_on);
       if (zRes.rows[0].commune && zRes.rows[0].province) {
-        pucAdminLocation = [
-          zRes.rows[0].commune.trim(),
-          zRes.rows[0].district?.trim(),
-          zRes.rows[0].province.trim(),
-        ]
-          .filter(Boolean)
-          .join(", ");
+        pucAdminLocation = normalizeKrongBukAdminText(
+          [
+            zRes.rows[0].commune.trim(),
+            zRes.rows[0].district?.trim(),
+            zRes.rows[0].province.trim(),
+          ]
+            .filter(Boolean)
+            .join(", "),
+        );
       }
     }
 
@@ -1362,7 +1409,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     if (eRes?.rows[0]) {
       if (eRes.rows[0].status) packhouseStatus = eRes.rows[0].status;
       enterpriseName = eRes.rows[0].name?.trim() || null;
-      enterpriseAddress = eRes.rows[0].address?.trim() || null;
+      enterpriseAddress = eRes.rows[0].address?.trim()
+        ? normalizeKrongBukAdminText(eRes.rows[0].address.trim())
+        : null;
       enterprisePackhouseCode = eRes.rows[0].packhouse_code?.trim() || null;
       packhouseGaccCode = eRes.rows[0].gacc_code?.trim() || null;
       packhouseMardApprovedOn = toIsoDateOnly(eRes.rows[0].mard_approved_on);
@@ -1650,7 +1699,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           `SELECT pst.plot_code,
                     pst.qr_token,
                     pst.zone_code,
-                    COALESCE(pst.village_name, v.name, 'Xã Cư Né') AS village_name,
+                    COALESCE(pst.village_name, v.name, 'Xã Krông Búk') AS village_name,
                     COALESCE(pst.variety, 'Monthong (Dona) & Ri6') AS variety,
                     pst.area_ha::float8 AS area_ha,
                     pst.tree_count,
@@ -2326,7 +2375,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       zoneMaxQuotaKg > 0 ? Number(((cumulativeUsedKg / zoneMaxQuotaKg) * 100).toFixed(1)) : 0;
     const withinQuota = zoneMaxQuotaKg <= 0 ? true : cumulativeUsedKg <= zoneMaxQuotaKg;
     const firstRow = qRes.rows[0];
-    const assessedBy = firstRow?.assessed_by || "Tổ Giám sát Kỹ thuật UBND Xã Cư Né";
+    const assessedBy = normalizeKrongBukAdminText(
+      firstRow?.assessed_by || "Tổ Giám sát Kỹ thuật UBND Xã Krông Búk",
+    );
     const assessedOn = toIsoDateOnly(firstRow?.assessed_on);
 
     const publicSummary = {
@@ -2440,14 +2491,14 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       } = {
         programTitle: "Mô hình điểm Truy xuất nguồn gốc Sầu riêng cấp Xã theo chỉ đạo của Tỉnh Đắk Lắk",
         directiveNo: "Đề án Chuyển đổi số Nông nghiệp & Chuẩn hóa Mã số Vùng trồng Xuất khẩu Tỉnh Đắk Lắk",
-        communeAuthority: "Ủy ban Nhân dân Xã Cư Né - Huyện Krông Búk",
+        communeAuthority: "Ủy ban Nhân dân Xã Krông Búk",
         provincialAuthority: "Ủy ban Nhân dân Tỉnh Đắk Lắk - Sở Nông nghiệp và Môi trường",
         officialPortalUrl: "https://daklak.gov.vn",
         officialDomain: "truyxuat.cune-krongbuk.gov.vn",
-        inspectionUnit: "Tổ Giám sát Cộng đồng Xã Cư Né & Ban Kỹ thuật HTX Nông nghiệp Cư Né",
+        inspectionUnit: "Tổ Giám sát Cộng đồng Xã Krông Búk & Ban Kỹ thuật HTX Nông nghiệp Cư Né",
         coopLegalName: DEFAULT_COOP_NAME,
         coopTaxCode: null,
-        coopAddress: "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk",
+        coopAddress: "Xã Krông Búk, Tỉnh Đắk Lắk",
       };
 
       if (await this.hasTable("commune_endorsement_config")) {
@@ -2467,14 +2518,14 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           cfg = {
             programTitle: c.programTitle || cfg.programTitle,
             directiveNo: c.directiveNo || cfg.directiveNo,
-            communeAuthority: c.communeAuthority || cfg.communeAuthority,
+            communeAuthority: normalizeKrongBukAdminText(c.communeAuthority || cfg.communeAuthority),
             provincialAuthority: c.provincialAuthority || cfg.provincialAuthority,
             officialPortalUrl: c.officialPortalUrl || cfg.officialPortalUrl,
             officialDomain: c.officialDomain || cfg.officialDomain,
-            inspectionUnit: c.inspectionUnit || cfg.inspectionUnit,
+            inspectionUnit: normalizeKrongBukAdminText(c.inspectionUnit || cfg.inspectionUnit),
             coopLegalName: c.coopLegalName?.trim() || cfg.coopLegalName,
             coopTaxCode: c.coopTaxCode?.trim() || null,
-            coopAddress: c.coopAddress?.trim() || cfg.coopAddress,
+            coopAddress: normalizeKrongBukAdminText(c.coopAddress?.trim() || cfg.coopAddress),
           };
         }
       }
@@ -3303,7 +3354,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           remainingKg: exactPlotQuota.remainingKg,
           utilizationPct: exactPlotQuota.utilizationPct,
           withinQuota: exactPlotQuota.withinQuota,
-          assessedBy: plotQuotaSummary?.assessedBy ?? "Tổ Giám sát Kỹ thuật UBND Xã Cư Né",
+          assessedBy: plotQuotaSummary?.assessedBy ?? "Tổ Giám sát Kỹ thuật UBND Xã Krông Búk",
           assessedOn: exactPlotQuota.assessedOn,
         }
         : null,
@@ -4566,8 +4617,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     const packhouseCode = String(
       lotRow.packhouseCode || live.enterprisePackhouseCode || lotRow.enterprisePackhouseCode || DEFAULT_PACKHOUSE_CODE,
     );
-    const packhouseAddress = String(
-      lotRow.packhouseAddress || live.enterpriseAddress || lotRow.enterpriseAddress || DEFAULT_PACKHOUSE_ADDRESS,
+    const packhouseAddress = normalizeKrongBukAdminText(
+      String(
+        lotRow.packhouseAddress || live.enterpriseAddress || lotRow.enterpriseAddress || DEFAULT_PACKHOUSE_ADDRESS,
+      ),
     );
     const pucStatus = live.pucStatus;
     const hasRealtimeSuspension =
@@ -5480,7 +5533,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           coopLegalName: governance.governmentEndorsement.coopLegalName,
           coopTaxCode: governance.governmentEndorsement.coopTaxCode,
           coopAddress: governance.governmentEndorsement.coopAddress,
-          groupName: `Liên tổ sản xuất sầu riêng VietGAP xã Cư Né (${participatingHouseholdCount} hộ thành viên liên kết)`,
+          groupName: `Liên tổ sản xuất sầu riêng VietGAP xã Krông Búk (${participatingHouseholdCount} hộ thành viên liên kết)`,
           participatingHouseholdCount,
           consentedHouseholds: consentedHouseholdNames,
           dossierContributorsTier: hasAuthorityView
@@ -5663,7 +5716,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     const packhouseName = String(linkedLot?.packhouseName || DEFAULT_PACKHOUSE_NAME);
     const packhouseCode = String(linkedLot?.packhouseCode || DEFAULT_PACKHOUSE_CODE);
-    const packhouseAddress = String(linkedLot?.packhouseAddress || DEFAULT_PACKHOUSE_ADDRESS);
+    const packhouseAddress = normalizeKrongBukAdminText(
+      String(linkedLot?.packhouseAddress || DEFAULT_PACKHOUSE_ADDRESS),
+    );
 
     const live = await this.resolveLiveZoneAndPackhouseStatus({
       pucCode,
@@ -5813,7 +5868,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         sourceZones: [
           {
             zoneCode: pucCode,
-            villageName: String(raw.villageName || "Xã Cư Né"),
+            villageName: normalizeKrongBukAdminText(String(raw.villageName || "Xã Krông Búk")),
             householdCount: 1,
             areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
             weightKg: stampWeightKg ?? 0,
@@ -6317,7 +6372,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     const packhouseName = String(linkedLot?.packhouseName || DEFAULT_PACKHOUSE_NAME);
     const packhouseCode = String(linkedLot?.packhouseCode || DEFAULT_PACKHOUSE_CODE);
-    const packhouseAddress = String(linkedLot?.packhouseAddress || DEFAULT_PACKHOUSE_ADDRESS);
+    const packhouseAddress = normalizeKrongBukAdminText(
+      String(linkedLot?.packhouseAddress || DEFAULT_PACKHOUSE_ADDRESS),
+    );
 
     const [labTestsRes, live, coarseMap] = await Promise.all([
       this.db.query(
@@ -6504,7 +6561,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           householdCode: raw.householdCode ? String(raw.householdCode) : null,
           consentedOwnerName: canViewPlotFarmerIdentity && raw.ownerName ? String(raw.ownerName) : null,
           zoneCode: pucCode,
-          villageName: String(raw.village || "Xã Cư Né"),
+          villageName: normalizeKrongBukAdminText(String(raw.village || "Xã Krông Búk")),
           adminLocation,
           variety: String(raw.variety || "Ri6 & Monthong (Dona)"),
           plantedYear: raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
@@ -6558,7 +6615,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         sourceZones: [
           {
             zoneCode: pucCode,
-            villageName: String(raw.village || "Xã Cư Né"),
+            villageName: normalizeKrongBukAdminText(String(raw.village || "Xã Krông Búk")),
             householdCount: 1,
             areaHa: raw.areaHa !== null && raw.areaHa !== undefined ? Number(raw.areaHa) : 0,
             weightKg: contribKg,
@@ -6818,7 +6875,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           ? raw.avatarUrl
           : null,
       householdCode: householdCodeVal,
-      villageName: String(raw.village || "Xã Cư Né"),
+      villageName: normalizeKrongBukAdminText(String(raw.village || "Xã Krông Búk")),
       adminLocation: live.pucAdminLocation || adminLocation,
       cooperativeName: DEFAULT_COOP_NAME,
       plotCount: 1,
@@ -6838,7 +6895,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         plotCode,
         qrToken: plotQrToken,
         zoneCode: pucCode,
-        villageName: String(raw.village || "Xã Cư Né"),
+        villageName: normalizeKrongBukAdminText(String(raw.village || "Xã Krông Búk")),
         variety: String(raw.variety || "Ri6 & Monthong (Dona)"),
         plantedYear:
           raw.plantedYear !== null && raw.plantedYear !== undefined ? Number(raw.plantedYear) : null,
@@ -6893,7 +6950,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
           coopLegalName: governance.governmentEndorsement.coopLegalName,
           coopTaxCode: governance.governmentEndorsement.coopTaxCode,
           coopAddress: governance.governmentEndorsement.coopAddress,
-          groupName: `Nhóm vườn liên kết ${raw.village || "xã Cư Né"} - HTX Cư Né`,
+          groupName: `Nhóm vườn liên kết ${normalizeKrongBukAdminText(String(raw.village || "xã Krông Búk"))} - HTX Cư Né`,
           participatingHouseholdCount: 1,
           consentedHouseholds: hasConsent && raw.ownerName ? [String(raw.ownerName)] : [],
           consentNote:
@@ -7106,7 +7163,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     const primaryPucCode =
       distinctZones[0] ||
       (derivedZone && derivedZone !== householdCode ? derivedZone : "VN-DLOR-0086");
-    const villageName = String(raw.villageName || "Xã Cư Né");
+    const villageName = normalizeKrongBukAdminText(String(raw.villageName || "Xã Krông Búk"));
     const adminLocation = this.resolveAdminLocation(villageName, primaryPucCode);
     const varietiesDisplay =
       [...new Set(hhPlots.map((p) => (p.variety ? p.variety.trim() : "")).filter(Boolean))].join(", ") ||
@@ -7193,7 +7250,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     const packhouseName = String(linkedLot?.packhouseName || DEFAULT_PACKHOUSE_NAME);
     const packhouseCode = String(linkedLot?.packhouseCode || DEFAULT_PACKHOUSE_CODE);
-    const packhouseAddress = String(linkedLot?.packhouseAddress || DEFAULT_PACKHOUSE_ADDRESS);
+    const packhouseAddress = normalizeKrongBukAdminText(
+      String(linkedLot?.packhouseAddress || DEFAULT_PACKHOUSE_ADDRESS),
+    );
 
     const [labTestsRes, live, coarseMap] = await Promise.all([
       this.db.query(

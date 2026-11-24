@@ -48,7 +48,7 @@ function resolveMilestoneOffsetDays(stage: string | null, variety: string | null
   return 30;
 }
 
-const CUNE_ADMIN_LOCATION = "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+const CUNE_ADMIN_LOCATION = "Xã Krông Búk, Tỉnh Đắk Lắk";
 const EAKHAL_ADMIN_LOCATION = "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
 
 function normGeoText(val: string): string {
@@ -2733,7 +2733,7 @@ export class HarvestService extends BaseCrudService {
               h.code AS household_code,
               COALESCE(h.name, 'Hộ thành viên HTX Cư Né') AS household_name,
               h.village_id,
-              COALESCE(pst.village_name, v.name, 'Xã Cư Né') AS village_name,
+              COALESCE(pst.village_name, v.name, 'Xã Krông Búk') AS village_name,
               pst.zone_code,
               pst.variety,
               pst.planted_year,
@@ -2947,14 +2947,14 @@ export class HarvestService extends BaseCrudService {
       return {
         programTitle: "Mô hình điểm Truy xuất nguồn gốc Sầu riêng cấp Xã theo chỉ đạo của Tỉnh Đắk Lắk",
         directiveNo: "Đề án Chuyển đổi số Nông nghiệp & Chuẩn hóa Mã số Vùng trồng Xuất khẩu Tỉnh Đắk Lắk",
-        communeAuthority: "Ủy ban Nhân dân Xã Cư Né - Huyện Krông Búk",
+        communeAuthority: "Ủy ban Nhân dân Xã Krông Búk",
         provincialAuthority: "Ủy ban Nhân dân Tỉnh Đắk Lắk - Sở Nông nghiệp và Môi trường",
         officialPortalUrl: "https://daklak.gov.vn",
         officialDomain: "truyxuat.cune-krongbuk.gov.vn",
-        inspectionUnit: "Tổ Giám sát Cộng đồng Xã Cư Né & Ban Kỹ thuật HTX Nông nghiệp Cư Né",
+        inspectionUnit: "Tổ Giám sát Cộng đồng Xã Krông Búk & Ban Kỹ thuật HTX Nông nghiệp Cư Né",
         coopLegalName: "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né",
         coopTaxCode: null,
-        coopAddress: "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk",
+        coopAddress: "Xã Krông Búk, Tỉnh Đắk Lắk",
       };
     }
     return camelRow(rows[0]);
@@ -2991,8 +2991,8 @@ export class HarvestService extends BaseCrudService {
       dto.coopAddress !== undefined
         ? dto.coopAddress && dto.coopAddress.trim()
           ? dto.coopAddress.trim()
-          : "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk"
-        : prev?.coop_address || "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+          : "Xã Krông Búk, Tỉnh Đắk Lắk"
+        : prev?.coop_address || "Xã Krông Búk, Tỉnh Đắk Lắk";
 
     const { rows } = await this.db.query(
       `INSERT INTO commune_endorsement_config

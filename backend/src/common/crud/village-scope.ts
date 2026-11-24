@@ -3,7 +3,7 @@ import { isCoopStaffRole } from "../../auth/permissions";
 import { DatabaseService } from "../../database/database.service";
 import { badRequest, forbidden } from "../errors/app.exception";
 
-export const CUNE_ADMIN_LOCATION = "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+export const CUNE_ADMIN_LOCATION = "Xã Krông Búk, Tỉnh Đắk Lắk";
 export const EAKHAL_ADMIN_LOCATION = "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
 
 const EAKHAL_VILLAGE_SQL_REGEX = "ea\\s*kh[aă]l|ea\\s*k''?s[oô]";
@@ -34,6 +34,15 @@ export function matchesJurisdiction(assignedRaw: string, adminLocations: string[
       .split(",")
       .map((s) => normGeoText(s))
       .filter(Boolean);
+    const hasKrongBukCommune = segments.some((s) => s === "xa krong buk" || s === "krong buk");
+    if (
+      hasKrongBukCommune &&
+      (target === "xa cu ne" ||
+        target === "huyen krong buk" ||
+        (!targetHasPrefix && (targetStripped === "cu ne" || targetStripped === "krong buk")))
+    ) {
+      return true;
+    }
     for (const seg of segments) {
       if (seg === target) return true;
       if (!targetHasPrefix) {
@@ -136,7 +145,7 @@ export function isStaffInParcelScope(
  * Trả về điều kiện lọc SQL trên cột `village_id` (`column`) theo đầy đủ phạm vi:
  * - `htx_officer` / `admin`: phải thuộc `HTX-CUNE` (ngoài HTX trả về `1 = 0`) và khớp `assignedCommune` nếu có.
  * - `inspector`: phải khớp `assignedRegion` (mặc định `Tỉnh Đắk Lắk`) và `assignedCommune` nếu có.
- * - `village_officer`: lọc theo `villageId` và/hoặc `assignedCommune` (ví dụ `Xã Ea Khăl` hoặc `Xã Cư Né`).
+ * - `village_officer`: lọc theo `villageId` và/hoặc `assignedCommune` (ví dụ `Xã Ea Khăl` hoặc `Xã Krông Búk`).
  * - `enterprise` / `farmer`: trả `null` để các service có nhánh xử lý riêng tự quyết định.
  */
 export const villageScope = (column: string) => (user: AuthUser, params: unknown[]): string | null => {

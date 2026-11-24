@@ -781,7 +781,7 @@ describe("SEC-16: niêm phong sổ cái 24 giờ trên biên bản, phiếu ki�
     const minuteRes = await inspector.post("/api/minutes").send({
       code: `BB-SEC16-${Date.now()}`,
       heldOn: todayVn(),
-      location: "Thôn 1, Xã Cư Né",
+      location: "Thôn 1, Xã Krông Búk",
       officer: "KS. Thanh Tra SEC16",
       result: "pass",
       householdId: 1,

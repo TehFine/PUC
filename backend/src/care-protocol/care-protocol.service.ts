@@ -71,6 +71,15 @@ function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boo
       .split(",")
       .map((s) => normGeoText(s))
       .filter(Boolean);
+    const hasKrongBukCommune = segments.some((s) => s === "xa krong buk" || s === "krong buk");
+    if (
+      hasKrongBukCommune &&
+      (target === "xa cu ne" ||
+        target === "huyen krong buk" ||
+        (!targetHasPrefix && (targetStripped === "cu ne" || targetStripped === "krong buk")))
+    ) {
+      return true;
+    }
     for (const seg of segments) {
       if (seg === target) return true;
       if (!targetHasPrefix) {
@@ -88,7 +97,7 @@ function resolveHouseholdAdminLocation(villageName?: string | null, plotCode?: s
   if (/ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(v) || /^66-PUC-SR0001-/i.test(p)) {
     return "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
   }
-  return "Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk";
+  return "Xã Krông Búk, Tỉnh Đắk Lắk";
 }
 
 function isStaffInPlanScope(

@@ -12,7 +12,7 @@ export async function seedSupplyChain(pool: Pool, options?: { log?: (msg: string
       await client.query(`
         INSERT INTO enterprises (code, name, tax_code, representative, phone, address, packhouse_code, status)
         VALUES
-          ('DN-VINHPHAT', 'Công ty TNHH Nông sản Vĩnh Phát', '6001289456', 'Trần Vĩnh Phát', '0913456789', 'Km 19, QL14, Xã Cư Né, Huyện Krông Búk, Đắk Lắk', 'VN-DLPH-0089', 'active'),
+          ('DN-VINHPHAT', 'Công ty TNHH Nông sản Vĩnh Phát', '6001289456', 'Trần Vĩnh Phát', '0913456789', 'Km 19, QL14, Xã Krông Búk, Đắk Lắk', 'VN-DLPH-0089', 'active'),
           ('DN-RONGDO', 'Công ty CP Xuất Nhập Khẩu Rồng Đỏ', '0309876543', 'Lê Hoàng Dung', '0908765432', 'Tòa nhà Landmark, 720A Điện Biên Phủ, P.22, Bình Thạnh, TP.HCM', 'VN-DLPH-0112', 'active'),
           ('DN-TAYNGUYEN', 'Công ty TNHH Nông Sản Tây Nguyên Xanh', '6001345678', 'Nguyễn Văn Tây', '0982345678', 'Số 45 Lê Duẩn, Phường Tân Thành, TP. Buôn Ma Thuột, Đắk Lắk', 'VN-DLPH-0155', 'active')
         ON CONFLICT (code) DO NOTHING;
@@ -270,7 +270,7 @@ export async function seedSupplyChain(pool: Pool, options?: { log?: (msg: string
           GREATEST(0.4, COALESCE(pst.area_ha, 1.2)),
           GREATEST(50, COALESCE(pst.tree_count, 160)),
           GREATEST(14000, ROUND(GREATEST(0.4, COALESCE(pst.area_ha, 1.2)) * 16500, 1)),
-          'Tổ Giám sát Kỹ thuật UBND Xã Cư Né',
+          'Tổ Giám sát Kỹ thuật UBND Xã Krông Búk',
           make_date(yr.season_year, 5, 10),
           'Thẩm định sản lượng trần đầu vụ theo diện tích GIS & đếm trái thực địa'
         FROM plot_signboard_tokens pst
@@ -296,7 +296,7 @@ export async function seedSupplyChain(pool: Pool, options?: { log?: (msg: string
               'zh',
               now() + interval '72 hours',
               'active',
-              'UBND Xã Cư Né & Ban Quản trị HTX',
+              'UBND Xã Krông Búk & Ban Quản trị HTX',
               'Thẻ khách mời kiểm tra thực địa ngẫu nhiên tại vườn (ẩn CCCD & SĐT cá nhân nông hộ)'
             )
           ON CONFLICT (code) DO NOTHING
