@@ -2344,3 +2344,167 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     await db.query("DELETE FROM users WHERE id = $1", [deputyAcc.body.id]);
   });
 });
+
+describe("báo cáo 2 chế độ và sổ nhật ký điện tử kèm phụ lục ảnh (VietGAP / GACC)", () => {
+  it("tách biệt chế độ tổng hợp nhiều hộ với sổ chi tiết 1 hộ, lọc video khỏi thẻ ảnh PDF và kiểm soát quyền hóa đơn", async () => {
+    const [htx, inspector, farmerAn] = await Promise.all([
+      loggedIn(USERS.htx),
+      loggedIn(USERS.inspector),
+      loggedIn(USERS.farmerAn),
+    ]);
+
+    const stamp = Date.now();
+    let imgFieldId = 0;
+    let videoFieldId = 0;
+    let imgInvoiceId = 0;
+    let journalId = 0;
+    let planId = 0;
+    let milestoneId = 0;
+
+    try {
+      const attFieldRes = await db.query<{ id: number }>(
+        `INSERT INTO attachments (household_id, purpose, storage_key, original_name, mime_type, size_bytes)
+         VALUES (1, 'journal', $1, 'anh-vuon.jpg', 'image/jpeg', 2048)
+         RETURNING id`,
+        [`test/report-field-${stamp}.jpg`],
+      );
+      imgFieldId = Number(attFieldRes.rows[0].id);
+
+      const attVideoRes = await db.query<{ id: number }>(
+        `INSERT INTO attachments (household_id, purpose, storage_key, original_name, mime_type, size_bytes)
+         VALUES (1, 'journal', $1, 'quay-vuon.mp4', 'video/mp4', 8192)
+         RETURNING id`,
+        [`test/report-video-${stamp}.mp4`],
+      );
+      videoFieldId = Number(attVideoRes.rows[0].id);
+
+      const attInvRes = await db.query<{ id: number }>(
+        `INSERT INTO attachments (household_id, purpose, storage_key, original_name, mime_type, size_bytes)
+         VALUES (1, 'journal', $1, 'hoa-don-phan-bon.png', 'image/png', 4096)
+         RETURNING id`,
+        [`test/report-invoice-${stamp}.png`],
+      );
+      imgInvoiceId = Number(attInvRes.rows[0].id);
+
+      const jRes = await db.query<{ id: number }>(
+        `INSERT INTO journal_entries
+           (household_id, entry_on, plot_code, activity, detail, recorder, has_photo, photo_id, photo_ids, gps_verified, verification_status, verified_by_name)
+         VALUES
+           (1, '2026-05-12', 'KB-T1-01', 'Bón phân hữu cơ', 'Bón 5kg phân vi sinh quanh tán', 'Chủ hộ', true, $1, ARRAY[$1::bigint, $2::bigint], true, 'verified', 'Cán bộ HTX')
+         RETURNING id`,
+        [imgFieldId, videoFieldId],
+      );
+      journalId = Number(jRes.rows[0].id);
+
+      const pRes = await db.query<{ id: number }>(
+        `INSERT INTO plot_care_plans (household_id, plot_code, season, current_milestone_code, status)
+         VALUES (1, $1, '2026-2027', 'cb-rua-vuon', 'active')
+         RETURNING id`,
+        [`PLOT-RPT-${stamp}`],
+      );
+      planId = Number(pRes.rows[0].id);
+
+      const mRes = await db.query<{ id: number }>(
+        `INSERT INTO care_milestone_declarations
+           (plan_id, household_id, plot_code, stage_code, milestone_code, performed_on,
+            expected_tree_state, actual_tree_state, actual_dosage,
+            field_photo_id, field_photo_ids, invoice_photo_id, invoice_photo_ids,
+            journal_entry_id, gps_verified, compliance_status)
+         VALUES
+           ($1, 1, 'KB-T1-01', 'chuan-bi', 'cb-rua-vuon', '2026-05-12',
+            'Lá già', 'Lá già khỏe', '5kg/gốc',
+            $2, ARRAY[$2::bigint], $3, ARRAY[$3::bigint],
+            $4, true, 'compliant')
+         RETURNING id`,
+        [planId, imgFieldId, imgInvoiceId, journalId],
+      );
+      milestoneId = Number(mRes.rows[0].id);
+
+      // 1. Chế độ 1 (nhiều hộ, không truyền householdId): luôn giữ mảng ảnh rỗng để chống phình tệp PDF
+      const summaryRes = await htx.get(
+        "/api/reports/household-logbook?format=json&export=1&includePhotos=1&from=2026-01-01&to=2026-12-31",
+      );
+      expect(summaryRes.status).toBe(200);
+      expect(summaryRes.body.mode).toBe("summary");
+      expect(summaryRes.body.householdMeta).toBeNull();
+      expect(summaryRes.body.evidencePhotos).toEqual([]);
+      expect(summaryRes.body.rows.length).toBeGreaterThan(0);
+
+      // 2. Chế độ 2 (1 hộ cụ thể, chưa bật hóa đơn): nhúng ảnh thực địa MC-xx, loại video khỏi thẻ ảnh PDF, ẩn hóa đơn
+      const detailNoInv = await htx.get(
+        "/api/reports/household-logbook?format=json&export=1&householdId=1&includePhotos=1&from=2026-05-01&to=2026-05-31",
+      );
+      expect(detailNoInv.status).toBe(200);
+      expect(detailNoInv.body.mode).toBe("household_detail");
+      expect(detailNoInv.body.householdMeta?.id).toBe(1);
+      expect(String(detailNoInv.body.householdMeta?.cccd)).toMatch(/^\*{10}/);
+
+      const photoIdsNoInv = (detailNoInv.body.evidencePhotos as Array<{ attachmentId: number; refCode: string }>).map(
+        (p) => p.attachmentId,
+      );
+      expect(photoIdsNoInv).toContain(imgFieldId);
+      expect(photoIdsNoInv).not.toContain(videoFieldId);
+      expect(photoIdsNoInv).not.toContain(imgInvoiceId);
+      expect(detailNoInv.body.summaryStats.videoCount).toBeGreaterThanOrEqual(1);
+
+      // 3. Cán bộ HTX bật includeInvoices=1 và audit=1 -> nhận cả ảnh hóa đơn HD-xx và CCCD đầy đủ
+      const detailWithInv = await htx.get(
+        "/api/reports/household-logbook?format=json&export=1&audit=1&householdId=1&includePhotos=1&includeInvoices=1&from=2026-05-01&to=2026-05-31",
+      );
+      expect(detailWithInv.status).toBe(200);
+      expect(String(detailWithInv.body.householdMeta?.cccd)).not.toMatch(/^\*{10}/);
+      const invPhoto = (
+        detailWithInv.body.evidencePhotos as Array<{ attachmentId: number; refCode: string; category: string }>
+      ).find((p) => p.attachmentId === imgInvoiceId);
+      expect(invPhoto).toBeDefined();
+      expect(invPhoto?.category).toBe("invoice");
+      expect(invPhoto?.refCode.startsWith("HD-")).toBe(true);
+
+      // 4. Kiểm tra viên (không thuộc ban điều hành/cán bộ HTX) bị chặn xuất hóa đơn nội bộ (403)
+      const inspectorTryInv = await inspector.get(
+        "/api/reports/household-logbook?format=json&export=1&householdId=1&includePhotos=1&includeInvoices=1",
+      );
+      expect(inspectorTryInv.status).toBe(403);
+
+      // Nhưng kiểm tra viên vẫn được phép xuất sổ nhật ký kèm ảnh hiện trường canh tác
+      const inspectorFieldOk = await inspector.get(
+        "/api/reports/household-logbook?format=json&export=1&householdId=1&includePhotos=1&from=2026-05-01&to=2026-05-31",
+      );
+      expect(inspectorFieldOk.status).toBe(200);
+      expect(
+        (inspectorFieldOk.body.evidencePhotos as Array<{ attachmentId: number }>).some(
+          (p) => p.attachmentId === imgFieldId,
+        ),
+      ).toBe(true);
+
+      // 5. Cổng nông hộ (/api/portal/logbook-report): chỉ trả về đúng hộ của nông dân đang đăng nhập dù giả mạo householdId=2
+      const farmerOwnRes = await farmerAn.get(
+        "/api/portal/logbook-report?includePhotos=1&householdId=2&from=2026-05-01&to=2026-05-31",
+      );
+      expect(farmerOwnRes.status).toBe(200);
+      expect(farmerOwnRes.body.householdMeta?.id).toBe(1);
+      expect(String(farmerOwnRes.body.householdMeta?.cccd)).toMatch(/^\*{10}/);
+      expect(
+        (farmerOwnRes.body.evidencePhotos as Array<{ attachmentId: number }>).some(
+          (p) => p.attachmentId === imgFieldId,
+        ),
+      ).toBe(true);
+
+      // Cán bộ không được gọi sang endpoint riêng của Cổng nông hộ
+      expect((await htx.get("/api/portal/logbook-report")).status).toBe(403);
+    } finally {
+      if (milestoneId) await db.query("DELETE FROM care_milestone_declarations WHERE id = $1", [milestoneId]);
+      if (planId) await db.query("DELETE FROM plot_care_plans WHERE id = $1", [planId]);
+      if (journalId) {
+        await db.query("DELETE FROM supply_chain_events WHERE source_table = 'journal_entries' AND source_id = $1", [
+          journalId,
+        ]).catch(() => undefined);
+        await db.query("DELETE FROM journal_entries WHERE id = $1", [journalId]);
+      }
+      const createdAtts = [imgFieldId, videoFieldId, imgInvoiceId].filter((id) => id > 0);
+      if (createdAtts.length > 0) {
+        await db.query("DELETE FROM attachments WHERE id = ANY($1::bigint[])", [createdAtts]);
+      }
+    }
+  });
+});
