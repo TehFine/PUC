@@ -2278,18 +2278,18 @@ body.pt-body {
   }
 
   .pt-hero-shell {
-    --spec-col: 44%;
+    --spec-col: 35%;
     padding: 0 0 4px;
     border-radius: 0;
   }
 
   .pt-spec-rows {
-    --spec-val-size: 16.5px;
+    --spec-val-size: 16px;
   }
 
   .pt-spec-row {
     padding: 14px 0;
-    column-gap: 12px;
+    column-gap: 10px;
     row-gap: 7px;
   }
 
@@ -3039,14 +3039,17 @@ body.pt-body {
 }
 
 .pt-diary-header:has(.pt-diary-create-btn) {
-  flex-wrap: nowrap;
-  margin-bottom: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 2px;
 }
 
 .pt-diary-create-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  align-self: flex-end;
   margin-left: auto;
   min-height: 38px;
   padding: 9px 16px;
@@ -3246,9 +3249,14 @@ body.pt-body {
     gap: 12px;
   }
 
+  .pt-diary-header:has(.pt-diary-create-btn) {
+    gap: 8px;
+    margin-bottom: 0;
+  }
+
   .pt-diary-create-btn {
     min-height: 36px;
-    padding: 8px 12px;
+    padding: 8px 14px;
     font-size: 13px;
   }
 
