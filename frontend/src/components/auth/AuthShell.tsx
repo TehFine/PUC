@@ -198,6 +198,7 @@ export default function AuthShell({
             <div className="auth-media">
               <DwellSlideshow
                 slides={aside.slides}
+                eagerFirst
                 sizes="(max-width: 960px) 1px, 52vw"
                 mobileCollage={false}
               />

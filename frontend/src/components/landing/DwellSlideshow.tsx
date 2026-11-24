@@ -28,6 +28,8 @@ interface DwellSlideshowProps {
   sizes: string;
   /** Chỉ đặt true cho khung ảnh LCP đầu tiên trên trang */
   priorityFirst?: boolean;
+  /** Tải ngay ảnh đầu tiên với loading="eager" cho khung ảnh nằm trong tầm nhìn đầu trang */
+  eagerFirst?: boolean;
   /** Bật bố cục ghép 3 ảnh sang trọng trên màn hình di động (mặc định: true khi có >= 3 ảnh) */
   mobileCollage?: boolean;
   /** Độ trễ lệch nhịp giữa các khung nằm gần nhau (ms) để chuyển cảnh tự nhiên */
@@ -266,6 +268,7 @@ export default function DwellSlideshow({
   slides,
   sizes,
   priorityFirst = false,
+  eagerFirst = false,
   mobileCollage = true,
   staggerMs = 0,
   intervalMs = DEFAULT_INTERVAL_MS,
@@ -495,7 +498,10 @@ export default function DwellSlideshow({
         const isTriptychTile = !isDesktopViewport && useTriptych && idx < 3;
         const isPriorityHero =
           priorityFirst && (idx === 0 || (!isDesktopViewport && useTriptych && idx === 2));
-        const isEagerAboveFold = isPriorityHero || (priorityFirst && isTriptychTile);
+        const isEagerAboveFold =
+          isPriorityHero ||
+          (priorityFirst && isTriptychTile) ||
+          (eagerFirst && idx === 0);
         const isVisiblyShown = isActive || isTriptychTile;
 
         return (
@@ -517,7 +523,7 @@ export default function DwellSlideshow({
               quality={isPriorityHero ? 75 : perfTier === "lite" ? 62 : 75}
               priority={isPriorityHero}
               fetchPriority={isPriorityHero ? "high" : "auto"}
-              loading={isEagerAboveFold ? undefined : "lazy"}
+              loading={isPriorityHero ? undefined : isEagerAboveFold ? "eager" : "lazy"}
               decoding="async"
               sizes={effectiveSizes}
               className="sw-dwell-img"

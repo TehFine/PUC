@@ -186,6 +186,7 @@ const HeroGridSection = memo(function HeroGridSection({
       <div className="eh-cell-media is-bottom-right">
         <DwellSlideshow
           slides={HERO_BOTTOM_RIGHT_SLIDES}
+          eagerFirst
           mobileCollage={false}
           staggerMs={650}
           sizes="(max-width: 768px) 46vw, (max-width: 960px) 100vw, 50vw"
