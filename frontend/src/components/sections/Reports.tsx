@@ -122,8 +122,8 @@ const REPORTS: ReportSpec[] = [
 export default function Reports() {
   const { session } = useAuth();
   const canExportAudit = isCoopStaffRole(session?.user.role);
-  const villages = useApiList<VillageRecord>(session ? "villages" : null);
-  const households = useApiList<HouseholdDto>(session ? "households" : null);
+  const villages = useApiList<VillageRecord>(session ? "villages" : null, { pageSize: 500 });
+  const households = useApiList<HouseholdDto>(session ? "households" : null, { pageSize: 500 });
 
   const [selectedReport, setSelectedReport] = usePersistedRecordSelection(
     "admin:reports:selected",
@@ -131,7 +131,7 @@ export default function Reports() {
     (r) => r.id,
   );
   const [from, setFrom] = usePersistedState<string>("admin:reports:from", "");
-  const [to, setTo] = usePersistedState<string>("admin:reports:to", todayIso());
+  const [to, setTo] = usePersistedState<string>("admin:reports:to-v2", "");
   const [villageId, setVillageId] = usePersistedState<string>("admin:reports:village", "");
   const [householdId, setHouseholdId] = usePersistedState<string>("admin:reports:household", "");
   const [includePhotos, setIncludePhotos] = usePersistedState<boolean>(
@@ -314,14 +314,30 @@ export default function Reports() {
     }
   };
 
-  const householdOptions = useMemo(
-    () =>
-      filteredHouseholds.map((h) => ({
+  const householdOptions = useMemo(() => {
+    const isDiaryReport =
+      selectedReport?.type === "household-logbook" ||
+      selectedReport?.type === "journal" ||
+      selectedReport?.type === "spray";
+    const ordered = isDiaryReport
+      ? [...filteredHouseholds].sort((a, b) => {
+          const aCnt = a.diaryCount ?? 0;
+          const bCnt = b.diaryCount ?? 0;
+          if ((aCnt > 0) !== (bCnt > 0)) return bCnt > 0 ? 1 : -1;
+          if (bCnt !== aCnt) return bCnt - aCnt;
+          return a.id - b.id;
+        })
+      : filteredHouseholds;
+    return ordered.map((h) => {
+      const plotPart = h.plotCodesSummary ? `, Thửa ${h.plotCodesSummary}` : "";
+      const countPart =
+        h.diaryCount !== undefined ? ` (${h.diaryCount} bản ghi)` : "";
+      return {
         value: String(h.id),
-        label: `${h.name} (${h.code})`,
-      })),
-    [filteredHouseholds],
-  );
+        label: `${h.name}${plotPart}${countPart} - ${h.code}`,
+      };
+    });
+  }, [filteredHouseholds, selectedReport?.type]);
 
   const exportButtonLabel = () => {
     if (downloading) {

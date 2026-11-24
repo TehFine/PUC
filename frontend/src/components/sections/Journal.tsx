@@ -226,6 +226,7 @@ export default function Journal() {
   );
   const [deletingJournal, setDeletingJournal] = useState<JournalRow | null>(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportTargetHouseholdId, setExportTargetHouseholdId] = useState<string>("");
 
   // Modals for Violations
   const [viewingViolation, setViewingViolation] = usePersistedRecordSelection(
@@ -278,13 +279,43 @@ export default function Journal() {
     [sprayList.rows],
   );
 
+  const openExportModalFromCurrentFilter = () => {
+    if (jHouseholdId) {
+      setExportTargetHouseholdId(jHouseholdId);
+      setExportModalOpen(true);
+      return;
+    }
+    if (activeTab === "journal" && jSearch.trim() && journalList.rows.length > 0) {
+      const distinctHhIds = Array.from(
+        new Set(journalList.rows.map((r) => r.householdId).filter((id) => Number(id) > 0)),
+      );
+      if (distinctHhIds.length === 1) {
+        setExportTargetHouseholdId(String(distinctHhIds[0]));
+        setExportModalOpen(true);
+        return;
+      }
+    }
+    if (activeTab === "spray" && sSearch.trim() && sprayList.rows.length > 0) {
+      const distinctHhIds = Array.from(
+        new Set(sprayList.rows.map((r) => r.householdId).filter((id) => Number(id) > 0)),
+      );
+      if (distinctHhIds.length === 1) {
+        setExportTargetHouseholdId(String(distinctHhIds[0]));
+        setExportModalOpen(true);
+        return;
+      }
+    }
+    setExportTargetHouseholdId("");
+    setExportModalOpen(true);
+  };
+
   return (
     <>
       {(canExportReports || (canReadViolations && canCreateViolation)) && (
         <div className="page-header">
           <div className="header-actions">
             {canExportReports && (
-              <button type="button" className="btn btn-outline" onClick={() => setExportModalOpen(true)}>
+              <button type="button" className="btn btn-outline" onClick={openExportModalFromCurrentFilter}>
                 Xuất sổ PDF
               </button>
             )}
@@ -669,6 +700,16 @@ export default function Journal() {
           canVerify={canVerifyDiary}
           onVerified={() => void journalList.refresh()}
           onClose={() => setViewingJournal(null)}
+          onExportHousehold={
+            canExportReports && viewingJournal.householdId
+              ? () => {
+                const hhId = String(viewingJournal.householdId);
+                setViewingJournal(null);
+                setExportTargetHouseholdId(hhId);
+                setExportModalOpen(true);
+              }
+              : undefined
+          }
           onEdit={
             canUpdateJournal
               ? () => {
@@ -696,6 +737,16 @@ export default function Journal() {
           canVerify={canVerifyDiary}
           onVerified={() => void sprayList.refresh()}
           onClose={() => setViewingSpray(null)}
+          onExportHousehold={
+            canExportReports && viewingSpray.householdId
+              ? () => {
+                const hhId = String(viewingSpray.householdId);
+                setViewingSpray(null);
+                setExportTargetHouseholdId(hhId);
+                setExportModalOpen(true);
+              }
+              : undefined
+          }
           onEdit={
             canUpdateSpray
               ? () => {
@@ -751,8 +802,12 @@ export default function Journal() {
       {exportModalOpen && (
         <HouseholdLogbookExportModal
           householdOptions={householdOptions}
-          initialHouseholdId={jHouseholdId}
-          onClose={() => setExportModalOpen(false)}
+          households={households}
+          initialHouseholdId={exportTargetHouseholdId || jHouseholdId}
+          onClose={() => {
+            setExportModalOpen(false);
+            setExportTargetHouseholdId("");
+          }}
         />
       )}
 

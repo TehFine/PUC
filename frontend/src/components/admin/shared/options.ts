@@ -6,11 +6,25 @@ import type { Option } from "@/components/ui/form/fields";
 import type { PesticideDto, VillageDto } from "@/types/api";
 import type { HouseholdRow } from "@/types/households";
 
+function cleanAdminLabelDash(raw: string | null | undefined): string {
+  return String(raw || "")
+    .replace(/\s*[–—]\s*/g, ", ")
+    .trim();
+}
+
 /** Danh sách hộ (tối đa 500, đã giới hạn theo thôn ở backend) làm lựa chọn cho các biểu mẫu. */
 export function useHouseholdOptions(enabled = true) {
   const { rows, loading, error } = useApiList<HouseholdRow>(enabled ? "households" : null, { pageSize: 500 });
   const options = useMemo<Option[]>(
-    () => rows.map((h) => ({ value: String(h.id), label: `${h.name} - ${h.code}${h.villageName ? ` - ${h.villageName}` : ""}` })),
+    () =>
+      rows.map((h) => {
+        const plotPart = h.plotCodesSummary ? `, Thửa ${h.plotCodesSummary}` : "";
+        const villagePart = h.villageName ? ` - ${cleanAdminLabelDash(h.villageName)}` : "";
+        return {
+          value: String(h.id),
+          label: `${h.name}${plotPart} (${h.code})${villagePart}`,
+        };
+      }),
     [rows],
   );
   return { households: rows, options, loading, error };

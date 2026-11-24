@@ -24,6 +24,7 @@ export function SprayDetailModal({
   onClose,
   onEdit,
   onDelete,
+  onExportHousehold,
 }: {
   record: SprayRow;
   canVerify?: boolean;
@@ -31,6 +32,7 @@ export function SprayDetailModal({
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onExportHousehold?: () => void;
 }) {
   const mrl = badgeOf(MRL_STATUS, record.mrlStatus);
   const hasMedia = Boolean(record.photoUrls?.length || record.photoUrl);
@@ -76,6 +78,16 @@ export function SprayDetailModal({
               disabled={verifying}
             >
               {verifying ? "Đang lưu…" : isVerified ? "Bỏ xác nhận" : "Xác nhận"}
+            </button>
+          )}
+          {onExportHousehold && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={onExportHousehold}
+              disabled={verifying}
+            >
+              Xuất sổ hộ này
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={onClose}>

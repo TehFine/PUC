@@ -92,6 +92,8 @@ export interface HouseholdDto {
   areaHa: number;
   status: "qualified" | "improve" | "pending" | "violation";
   publicTraceConsent?: boolean;
+  diaryCount?: number;
+  plotCodesSummary?: string | null;
 }
 
 export interface ApprovalDto {

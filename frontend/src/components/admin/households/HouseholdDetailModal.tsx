@@ -13,6 +13,7 @@ import { formatVn } from "@/components/admin/shared/form-utils";
 import { badgeOf, HOUSEHOLD_STATUS, LAB_RESULT, SEVERITY, VIOLATION_STATUS } from "@/components/admin/shared/labels";
 import { getZoneColor } from "@/components/zones/zone-data";
 import { HouseholdLogbookExportModal } from "@/components/admin/journal/JournalModals";
+import { useHouseholdOptions } from "@/components/admin/shared/options";
 import { formatDate, formatDiaryEditor } from "@/utils/format";
 import { formatCoords, plotCenterCoords } from "@/utils/plot-utils";
 import type { HouseholdRow } from "@/types/households";
@@ -43,6 +44,7 @@ export default function HouseholdDetailModal({
   const canExportReports = can("reports", "read");
   const [tab, setTab] = useState<DetailTab>("plots");
   const [exportLogbookOpen, setExportLogbookOpen] = useState(false);
+  const { households: exportHouseholds, options: exportHouseholdOptions } = useHouseholdOptions(exportLogbookOpen);
   const [previewMedia, setPreviewMedia] = useState<{
     urls: string[];
     title: string;
@@ -464,9 +466,12 @@ export default function HouseholdDetailModal({
 
       {exportLogbookOpen && (
         <HouseholdLogbookExportModal
-          householdOptions={[
-            { value: String(household.id), label: `${household.name} (${household.code})` },
-          ]}
+          householdOptions={
+            exportHouseholdOptions.length > 0
+              ? exportHouseholdOptions
+              : [{ value: String(household.id), label: `${household.name} (${household.code})` }]
+          }
+          households={exportHouseholds.length > 0 ? exportHouseholds : [household]}
           initialHouseholdId={String(household.id)}
           onClose={() => setExportLogbookOpen(false)}
         />

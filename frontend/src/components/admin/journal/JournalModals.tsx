@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Modal, FormError } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
@@ -19,6 +19,7 @@ import {
   renderPrintableReportAsync,
   type ReportDataPayload,
 } from "@/utils/report-pdf";
+import type { HouseholdRow } from "@/types/households";
 import type { JournalRow } from "@/types/journal";
 
 export function JournalDetailModal({
@@ -28,6 +29,7 @@ export function JournalDetailModal({
   onClose,
   onEdit,
   onDelete,
+  onExportHousehold,
 }: {
   entry: JournalRow;
   canVerify?: boolean;
@@ -35,6 +37,7 @@ export function JournalDetailModal({
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onExportHousehold?: () => void;
 }) {
   const hasMedia = Boolean(entry.photoUrls?.length || entry.photoUrl);
   const [verifying, setVerifying] = useState(false);
@@ -79,6 +82,16 @@ export function JournalDetailModal({
               disabled={verifying}
             >
               {verifying ? "Đang lưu…" : isVerified ? "Bỏ xác nhận" : "Xác nhận"}
+            </button>
+          )}
+          {onExportHousehold && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={onExportHousehold}
+              disabled={verifying}
+            >
+              Xuất sổ hộ này
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={onClose}>
@@ -419,12 +432,31 @@ export function JournalFormModal({
   );
 }
 
+function normalizePersonKey(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanVillageLabel(raw: string | null | undefined): string {
+  return String(raw || "")
+    .replace(/\s*[–—]\s*/g, ", ")
+    .trim();
+}
+
 export function HouseholdLogbookExportModal({
   householdOptions,
+  households,
   initialHouseholdId = "",
   onClose,
 }: {
   householdOptions: Option[];
+  households?: HouseholdRow[];
   initialHouseholdId?: string;
   onClose: () => void;
 }) {
@@ -433,6 +465,7 @@ export function HouseholdLogbookExportModal({
   const [householdId, setHouseholdId] = useState(
     initialHouseholdId || (householdOptions.length === 1 ? householdOptions[0].value : ""),
   );
+  const [hhQuery, setHhQuery] = useState("");
   const [timeScope, setTimeScope] = useState<"all" | "range">("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState(todayIso());
@@ -441,6 +474,60 @@ export function HouseholdLogbookExportModal({
   const [busyMode, setBusyMode] = useState<"PDF" | "CSV" | null>(null);
   const [photoProgress, setPhotoProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const sortedExportOptions = useMemo<Option[]>(() => {
+    if (!households || households.length === 0) {
+      return householdOptions;
+    }
+    const qNorm = normalizePersonKey(hhQuery);
+    const list = [...households]
+      .sort((a, b) => {
+        const aCnt = a.diaryCount ?? 0;
+        const bCnt = b.diaryCount ?? 0;
+        if ((aCnt > 0) !== (bCnt > 0)) return bCnt > 0 ? 1 : -1;
+        if (bCnt !== aCnt) return bCnt - aCnt;
+        return a.id - b.id;
+      })
+      .filter((h) => {
+        if (!qNorm) return true;
+        if (String(h.id) === householdId) return true;
+        const hay = normalizePersonKey(
+          `${h.name} ${h.code} ${h.plotCodesSummary ?? ""} ${h.villageName ?? ""} ${h.phone ?? ""}`,
+        );
+        return hay.includes(qNorm);
+      });
+
+    return list.map((h) => {
+      const cnt = h.diaryCount ?? 0;
+      const plotText = h.plotCodesSummary ? `, Thửa ${h.plotCodesSummary}` : "";
+      const villageText = h.villageName ? `, ${cleanVillageLabel(h.villageName)}` : "";
+      const countText = cnt > 0 ? `${cnt} bản ghi` : "0 bản ghi";
+      return {
+        value: String(h.id),
+        label: `${h.name}${plotText} (${countText}) - ${h.code}${villageText}`,
+      };
+    });
+  }, [householdOptions, households, hhQuery, householdId]);
+
+  const selectedHousehold = useMemo(
+    () => households?.find((h) => String(h.id) === householdId) ?? null,
+    [households, householdId],
+  );
+
+  const sameNameAlternativeWithLogs = useMemo(() => {
+    if (!selectedHousehold || !households || (selectedHousehold.diaryCount ?? 0) > 0) {
+      return null;
+    }
+    const targetName = normalizePersonKey(selectedHousehold.name);
+    return (
+      households.find(
+        (h) =>
+          h.id !== selectedHousehold.id &&
+          normalizePersonKey(h.name) === targetName &&
+          (h.diaryCount ?? 0) > 0,
+      ) ?? null
+    );
+  }, [households, selectedHousehold]);
 
   const effectiveFrom = timeScope === "range" ? from : "";
   const effectiveTo = timeScope === "range" ? to : "";
@@ -562,13 +649,100 @@ export function HouseholdLogbookExportModal({
         Xuất sổ nhật ký canh tác và phun thuốc chuẩn khổ A4 cho từng nông hộ (hoặc bảng tổng hợp toàn vùng) để kiểm tra, lưu trữ và phục vụ đoàn thẩm định.
       </p>
 
+      {(households?.length ?? householdOptions.length) > 5 && (
+        <TextField
+          label="Tìm nhanh nông hộ hoặc mã thửa"
+          value={hhQuery}
+          onChange={(val) => {
+            setHhQuery(val);
+            const qNorm = normalizePersonKey(val);
+            if (qNorm && households) {
+              const matches = households.filter((h) =>
+                normalizePersonKey(
+                  `${h.name} ${h.code} ${h.plotCodesSummary ?? ""} ${h.villageName ?? ""}`,
+                ).includes(qNorm),
+              );
+              const withLogs = matches.filter((h) => (h.diaryCount ?? 0) > 0);
+              if (withLogs.length === 1) {
+                setHouseholdId(String(withLogs[0].id));
+              } else if (matches.length === 1) {
+                setHouseholdId(String(matches[0].id));
+              }
+            }
+          }}
+          placeholder="Nhập tên hộ, mã thửa (VD: EK12-01) hoặc mã hộ..."
+          disabled={busyMode !== null}
+        />
+      )}
+
       <SelectField
         label="Nông hộ cần xuất sổ"
         value={householdId}
         onChange={setHouseholdId}
         placeholder="Tất cả hộ nông dân (Bảng tổng hợp toàn vùng)"
-        options={householdOptions}
+        options={sortedExportOptions}
       />
+
+      {selectedHousehold && (
+        <div
+          style={{
+            marginTop: -4,
+            marginBottom: 12,
+            padding: "9px 12px",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            background: (selectedHousehold.diaryCount ?? 0) > 0 ? "#f7f9f7" : "#fdf8ee",
+            color: (selectedHousehold.diaryCount ?? 0) > 0 ? "var(--ink)" : "#9a6712",
+            fontSize: 12.5,
+            lineHeight: 1.48,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {(selectedHousehold.diaryCount ?? 0) > 0 ? (
+            <span>
+              Hộ đang chọn{" "}
+              <strong>
+                {selectedHousehold.name}
+                {selectedHousehold.plotCodesSummary ? ` (Thửa ${selectedHousehold.plotCodesSummary})` : ""}
+              </strong>{" "}
+              hiện có <strong>{selectedHousehold.diaryCount} bản ghi</strong> nhật ký.
+            </span>
+          ) : sameNameAlternativeWithLogs ? (
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <span>
+                Hộ <strong>{selectedHousehold.name}</strong> tại{" "}
+                {selectedHousehold.plotCodesSummary
+                  ? `Thửa ${selectedHousehold.plotCodesSummary} (${cleanVillageLabel(selectedHousehold.villageName)})`
+                  : cleanVillageLabel(selectedHousehold.villageName)}{" "}
+                chưa có nhật ký. Phát hiện hộ trùng tên tại{" "}
+                <strong>
+                  {sameNameAlternativeWithLogs.plotCodesSummary
+                    ? `Thửa ${sameNameAlternativeWithLogs.plotCodesSummary}`
+                    : sameNameAlternativeWithLogs.code}
+                </strong>{" "}
+                đang có <strong>{sameNameAlternativeWithLogs.diaryCount} bản ghi</strong>.
+              </span>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: 30, padding: "0 10px", fontSize: 12 }}
+                onClick={() => setHouseholdId(String(sameNameAlternativeWithLogs.id))}
+              >
+                Chọn hộ có {sameNameAlternativeWithLogs.diaryCount} bản ghi
+              </button>
+            </div>
+          ) : (
+            <span>
+              Hộ đang chọn{" "}
+              <strong>
+                {selectedHousehold.name}
+                {selectedHousehold.plotCodesSummary ? ` (Thửa ${selectedHousehold.plotCodesSummary})` : ""}
+              </strong>{" "}
+              hiện có <strong>0 bản ghi</strong> nhật ký trên hệ thống.
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="form-group">
         <label>Phạm vi thời gian</label>
