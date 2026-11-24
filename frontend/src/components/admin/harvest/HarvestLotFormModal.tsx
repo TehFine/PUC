@@ -3,6 +3,7 @@
 import { useState } from "react";
 import FormModal from "@/components/admin/catalog/FormModal";
 import { compact, dateInput, str, todayIso, toNumber, toText } from "@/components/admin/catalog/form-utils";
+import { MultiPhotoField, StoredMediaGallery, useMultiPhotoPicker } from "@/components/portal/shared/controls";
 import { FormGrid, NumberField, SelectField, TextField } from "@/components/ui/form/fields";
 import { toast } from "@/components/ui/Toast";
 import { useMutation } from "@/hooks/use-api";
@@ -55,6 +56,11 @@ export default function HarvestLotFormModal({
   const [transporter, setTransporter] = useState(initial?.transporter ?? "");
   const [vehiclePlate, setVehiclePlate] = useState(initial?.vehiclePlate ?? "");
   const [temperatureC, setTemperatureC] = useState(str(initial?.temperatureC));
+  const [brandName, setBrandName] = useState(initial?.brandName ?? "");
+  const [expiryOn, setExpiryOn] = useState(dateInput(initial?.expiryOn));
+  const [storageCondition, setStorageCondition] = useState(initial?.storageCondition ?? "");
+  const [clearExistingImage, setClearExistingImage] = useState(false);
+  const productImagePicker = useMultiPhotoPicker("harvest", { maxFiles: 1, allowVideo: false });
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handleEnterpriseChange = (val: string) => {
@@ -70,31 +76,53 @@ export default function HarvestLotFormModal({
 
   const { run, pending, error } = useMutation(async () => {
     const wTons = toNumber(weightTons) ?? 0;
-    const body = compact({
-      code: code.trim(),
-      variety: toText(variety),
-      harvestedOn,
-      packedOn: toText(packedOn),
-      exportedOn: toText(exportedOn),
-      weightTons: wTons,
-      buyer: buyer.trim(),
-      market: market.trim(),
-      status,
-      revokedReason: status === "revoked" ? toText(revokedReason) : undefined,
-      qrCode: toText(qrCode) ?? code.trim(),
-      enterpriseId: toNumber(enterpriseId),
-      contractId: toNumber(contractId),
-      packhouseCode: toText(packhouseCode),
-      packhouseName: toText(packhouseName),
-      packhouseAddress: toText(packhouseAddress),
-      phytosanitaryCertNo: toText(phytosanitaryCertNo),
-      phytosanitaryIssuedOn: toText(phytosanitaryIssuedOn),
-      gradeAPct: toNumber(gradeAPct),
-      avgBrix: toNumber(avgBrix),
-      transporter: toText(transporter),
-      vehiclePlate: toText(vehiclePlate),
-      temperatureC: toNumber(temperatureC),
-    });
+    let uploadedProductImageId: number | null | undefined;
+    if (productImagePicker.hasFiles) {
+      const ids = await productImagePicker.ensureUploadedAll();
+      uploadedProductImageId = ids[0];
+    } else if (initial && clearExistingImage) {
+      uploadedProductImageId = null;
+    }
+
+    const body: Record<string, unknown> = {
+      ...compact({
+        code: code.trim(),
+        variety: toText(variety),
+        harvestedOn,
+        packedOn: toText(packedOn),
+        exportedOn: toText(exportedOn),
+        weightTons: wTons,
+        buyer: buyer.trim(),
+        market: market.trim(),
+        status,
+        revokedReason: status === "revoked" ? toText(revokedReason) : undefined,
+        qrCode: toText(qrCode) ?? code.trim(),
+        enterpriseId: toNumber(enterpriseId),
+        contractId: toNumber(contractId),
+        packhouseCode: toText(packhouseCode),
+        packhouseName: toText(packhouseName),
+        packhouseAddress: toText(packhouseAddress),
+        phytosanitaryCertNo: toText(phytosanitaryCertNo),
+        phytosanitaryIssuedOn: toText(phytosanitaryIssuedOn),
+        gradeAPct: toNumber(gradeAPct),
+        avgBrix: toNumber(avgBrix),
+        transporter: toText(transporter),
+        vehiclePlate: toText(vehiclePlate),
+        temperatureC: toNumber(temperatureC),
+      }),
+      ...(initial
+        ? {
+            brandName: toText(brandName) ?? null,
+            expiryOn: toText(expiryOn) ?? null,
+            storageCondition: toText(storageCondition) ?? null,
+          }
+        : compact({
+            brandName: toText(brandName),
+            expiryOn: toText(expiryOn),
+            storageCondition: toText(storageCondition),
+          })),
+      ...(uploadedProductImageId !== undefined ? { productImageId: uploadedProductImageId } : {}),
+    };
     return initial ? api.patch(`/harvest/${initial.id}`, body) : api.post("/harvest", body);
   });
 
@@ -105,6 +133,9 @@ export default function HarvestLotFormModal({
     }
     if (wTons === undefined || Number.isNaN(wTons) || wTons <= 0) {
       return setLocalError("Khối lượng lô (tấn) phải lớn hơn 0.");
+    }
+    if (expiryOn && harvestedOn && expiryOn < harvestedOn) {
+      return setLocalError("Hạn sử dụng không được trước ngày thu hoạch của lô hàng.");
     }
     setLocalError(null);
     if ((await run()) !== undefined) {
@@ -169,7 +200,61 @@ export default function HarvestLotFormModal({
         <TextField label="Đơn vị vận chuyển" value={transporter} onChange={setTransporter} maxLength={200} />
         <TextField label="Biển số xe lạnh" value={vehiclePlate} onChange={setVehiclePlate} maxLength={50} />
         <NumberField label="Nhiệt độ bảo quản (°C)" value={temperatureC} onChange={setTemperatureC} step={0.5} />
+        <TextField
+          label="Thương hiệu / Nhãn hiệu sản phẩm (NĐ 37)"
+          value={brandName}
+          onChange={setBrandName}
+          maxLength={160}
+          placeholder="VD: Sầu riêng Cư Né VietGAP"
+        />
+        <TextField
+          label="Hạn sử dụng tốt nhất đến ngày"
+          type="date"
+          value={expiryOn}
+          onChange={setExpiryOn}
+        />
+        <TextField
+          label="Điều kiện bảo quản khuyến nghị"
+          value={storageCondition}
+          onChange={setStorageCondition}
+          maxLength={240}
+          placeholder="VD: Bảo quản mát 12 - 15°C, độ ẩm 85 - 90%"
+        />
       </FormGrid>
+
+      {initial?.productImageUrl && !clearExistingImage && !productImagePicker.hasFiles && (
+        <div style={{ marginTop: 10, marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>
+              Ảnh đại diện sản phẩm đang hiển thị trên QR
+            </span>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => setClearExistingImage(true)}
+            >
+              Gỡ ảnh hiện tại
+            </button>
+          </div>
+          <StoredMediaGallery
+            urls={[initial.productImageUrl]}
+            altPrefix={`Ảnh sản phẩm lô ${initial.code}`}
+            compact
+          />
+        </div>
+      )}
+
+      <div style={{ marginTop: 8 }}>
+        <MultiPhotoField
+          id="harvest-lot-product-image"
+          label="Ảnh sản phẩm thực tế của lô hàng (công khai theo Điều 23 NĐ 37/2026)"
+          picker={productImagePicker}
+          description="Chọn 1 ảnh chụp thực tế sản phẩm hoặc thùng đóng gói của lô để người tiêu dùng đối chiếu."
+          cameraLabel="Chụp ảnh lô"
+          galleryLabel="Chọn ảnh sản phẩm"
+          disabled={pending}
+        />
+      </div>
       {status === "revoked" && (
         <TextField
           label="Lý do thu hồi lô hàng (hiển thị cảnh báo khi quét QR)"

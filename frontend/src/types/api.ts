@@ -442,5 +442,8 @@ export interface EndorsementConfigDto {
   officialPortalUrl: string;
   officialDomain: string;
   inspectionUnit: string;
+  coopLegalName?: string;
+  coopTaxCode?: string | null;
+  coopAddress?: string;
   updatedAt?: string;
 }

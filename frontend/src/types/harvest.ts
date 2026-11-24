@@ -37,6 +37,11 @@ export interface HarvestLotRecord {
   temperatureC: number | null;
   departedAt: string | null;
   estimatedArrival: string | null;
+  brandName?: string | null;
+  expiryOn?: string | null;
+  storageCondition?: string | null;
+  productImageId?: number | null;
+  productImageUrl?: string | null;
 }
 
 /** Thân yêu cầu POST/PATCH /harvest (CreateHarvestLotDto). */
@@ -69,6 +74,10 @@ export interface HarvestLotInput {
   temperatureC?: number;
   departedAt?: string;
   estimatedArrival?: string;
+  brandName?: string | null;
+  expiryOn?: string | null;
+  storageCondition?: string | null;
+  productImageId?: number | null;
 }
 
 export interface HarvestContributionRecord {
@@ -197,6 +206,9 @@ export interface EnterpriseRecord {
   phone: string | null;
   address: string | null;
   packhouseCode: string | null;
+  gaccCode?: string | null;
+  mardApprovedOn?: string | null;
+  gaccApprovedOn?: string | null;
   status: EnterpriseStatus;
   createdAt?: string;
 }

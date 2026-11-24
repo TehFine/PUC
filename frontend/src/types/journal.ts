@@ -21,6 +21,10 @@ export interface JournalRow {
   isLateEntry?: boolean;
   lateReason?: string | null;
   recordHash?: string | null;
+  verificationStatus?: "self_declared" | "verified";
+  verifiedByUserId?: number | null;
+  verifiedByName?: string | null;
+  verifiedAt?: string | null;
   updatedByUserId?: number | null;
   updatedByName?: string | null;
   updatedByRole?: string | null;
@@ -79,6 +83,10 @@ export interface SprayRow {
   lateReason?: string | null;
   recordHash?: string | null;
   recordedByRole?: string | null;
+  verificationStatus?: "self_declared" | "verified";
+  verifiedByUserId?: number | null;
+  verifiedByName?: string | null;
+  verifiedAt?: string | null;
   updatedByUserId?: number | null;
   updatedByName?: string | null;
   updatedByRole?: string | null;

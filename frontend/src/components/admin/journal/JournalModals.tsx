@@ -6,7 +6,7 @@ import { Modal, FormError } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { CheckboxField, FormGrid, SelectField, TextAreaField, TextField, type Option } from "@/components/ui/form/fields";
 import { useMutation } from "@/hooks/use-api";
-import { api } from "@/lib/api-client";
+import { api, errorMessage } from "@/lib/api-client";
 import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
@@ -16,16 +16,35 @@ import type { JournalRow } from "@/types/journal";
 
 export function JournalDetailModal({
   entry,
+  canVerify,
+  onVerified,
   onClose,
   onEdit,
   onDelete,
 }: {
   entry: JournalRow;
+  canVerify?: boolean;
+  onVerified?: () => void;
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
   const hasMedia = Boolean(entry.photoUrls?.length || entry.photoUrl);
+  const [verifying, setVerifying] = useState(false);
+  const isVerified = entry.verificationStatus === "verified";
+
+  const handleToggleVerify = async () => {
+    setVerifying(true);
+    try {
+      await api.post(`/journal/${entry.id}/verify`, { verified: !isVerified });
+      toast.success(!isVerified ? "Đã xác minh bản ghi nhật ký canh tác." : "Đã chuyển về trạng thái tự khai báo.");
+      onVerified?.();
+    } catch (err) {
+      toast.error(errorMessage(err, "Không thể cập nhật trạng thái xác minh nhật ký."));
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   return (
     <Modal
@@ -35,13 +54,23 @@ export function JournalDetailModal({
       footer={
         <>
           {onDelete && (
-            <button type="button" className="btn btn-danger" onClick={onDelete}>
+            <button type="button" className="btn btn-danger" onClick={onDelete} disabled={verifying}>
               Xóa
             </button>
           )}
           {onEdit && (
-            <button type="button" className="btn btn-outline" onClick={onEdit}>
+            <button type="button" className="btn btn-outline" onClick={onEdit} disabled={verifying}>
               Sửa
+            </button>
+          )}
+          {canVerify && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => void handleToggleVerify()}
+              disabled={verifying}
+            >
+              {verifying ? "Đang xử lý…" : isVerified ? "Hủy xác minh" : "Xác minh nhật ký"}
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={onClose}>
@@ -51,6 +80,20 @@ export function JournalDetailModal({
       }
     >
       <div className="admin-detail-list-card">
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Trạng thái kiểm chứng</span>
+          <div className={`admin-detail-list-value ${isVerified ? "is-ok" : ""}`}>
+            {isVerified ? (
+              <>
+                HTX đã xác minh
+                {entry.verifiedByName ? ` (${entry.verifiedByName})` : ""}
+                {entry.verifiedAt ? `, ${formatDateTime(entry.verifiedAt)}` : ""}
+              </>
+            ) : (
+              "Nông hộ tự khai báo (chờ HTX xác minh)"
+            )}
+          </div>
+        </div>
         <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Ngày thực hiện tại vườn</span>
           <div className="admin-detail-list-value">{formatDate(entry.entryOn)}</div>

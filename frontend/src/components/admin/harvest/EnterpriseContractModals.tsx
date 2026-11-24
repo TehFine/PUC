@@ -24,21 +24,37 @@ export function EnterpriseFormModal({
   const [representative, setRepresentative] = useState(initial?.representative ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [packhouseCode, setPackhouseCode] = useState(initial?.packhouseCode ?? "VN-DLPH-0089");
+  const [gaccCode, setGaccCode] = useState(initial?.gaccCode ?? "");
+  const [mardApprovedOn, setMardApprovedOn] = useState(dateInput(initial?.mardApprovedOn));
+  const [gaccApprovedOn, setGaccApprovedOn] = useState(dateInput(initial?.gaccApprovedOn));
   const [address, setAddress] = useState(initial?.address ?? "");
   const [status, setStatus] = useState<EnterpriseStatus>(initial?.status ?? "active");
   const [localError, setLocalError] = useState<string | null>(null);
 
   const { run, pending, error } = useMutation(async () => {
-    const body = compact({
-      code: code.trim(),
-      name: name.trim(),
-      taxCode: toText(taxCode),
-      representative: toText(representative),
-      phone: toText(phone),
-      packhouseCode: toText(packhouseCode),
-      address: toText(address),
-      status,
-    });
+    const body: Record<string, unknown> = {
+      ...compact({
+        code: code.trim(),
+        name: name.trim(),
+        taxCode: toText(taxCode),
+        representative: toText(representative),
+        phone: toText(phone),
+        packhouseCode: toText(packhouseCode),
+        address: toText(address),
+        status,
+      }),
+      ...(initial
+        ? {
+            gaccCode: toText(gaccCode) ?? null,
+            mardApprovedOn: toText(mardApprovedOn) ?? null,
+            gaccApprovedOn: toText(gaccApprovedOn) ?? null,
+          }
+        : compact({
+            gaccCode: toText(gaccCode),
+            mardApprovedOn: toText(mardApprovedOn),
+            gaccApprovedOn: toText(gaccApprovedOn),
+          })),
+    };
     return initial ? api.patch(`/enterprises/${initial.id}`, body) : api.post("/enterprises", body);
   });
 
@@ -69,6 +85,15 @@ export function EnterpriseFormModal({
         <TextField label="Người đại diện" value={representative} onChange={setRepresentative} maxLength={100} />
         <TextField label="Điện thoại" type="tel" value={phone} onChange={setPhone} maxLength={30} />
         <TextField label="Mã cơ sở đóng gói (PHC)" value={packhouseCode} onChange={setPackhouseCode} maxLength={50} />
+        <TextField
+          label="Mã Hải quan Trung Quốc (GACC)"
+          value={gaccCode}
+          onChange={setGaccCode}
+          maxLength={60}
+          placeholder="Nhập mã GACC đã được phê duyệt (nếu có)"
+        />
+        <TextField label="Ngày MARD phê duyệt" type="date" value={mardApprovedOn} onChange={setMardApprovedOn} />
+        <TextField label="Ngày GACC phê duyệt" type="date" value={gaccApprovedOn} onChange={setGaccApprovedOn} />
         <SelectField
           label="Trạng thái hiệu lực (kiểm tra thời gian thực khi quét QR)"
           value={status}

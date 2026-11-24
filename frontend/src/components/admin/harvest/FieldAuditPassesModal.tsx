@@ -154,6 +154,9 @@ export default function FieldAuditPassesModal({
     endorseDraft.officialPortalUrl ?? endorseApi.data?.officialPortalUrl ?? "";
   const officialDomain = endorseDraft.officialDomain ?? endorseApi.data?.officialDomain ?? "";
   const inspectionUnit = endorseDraft.inspectionUnit ?? endorseApi.data?.inspectionUnit ?? "";
+  const coopLegalName = endorseDraft.coopLegalName ?? endorseApi.data?.coopLegalName ?? "";
+  const coopTaxCode = endorseDraft.coopTaxCode ?? endorseApi.data?.coopTaxCode ?? "";
+  const coopAddress = endorseDraft.coopAddress ?? endorseApi.data?.coopAddress ?? "";
 
   const setProgramTitle = (value: string) =>
     setEndorseDraft((prev) => ({ ...prev, programTitle: value }));
@@ -169,6 +172,12 @@ export default function FieldAuditPassesModal({
     setEndorseDraft((prev) => ({ ...prev, officialDomain: value }));
   const setInspectionUnit = (value: string) =>
     setEndorseDraft((prev) => ({ ...prev, inspectionUnit: value }));
+  const setCoopLegalName = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, coopLegalName: value }));
+  const setCoopTaxCode = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, coopTaxCode: value }));
+  const setCoopAddress = (value: string) =>
+    setEndorseDraft((prev) => ({ ...prev, coopAddress: value }));
 
   const saveEndorsement = useMutation(async (payload: Record<string, unknown>) => {
     return api.put<EndorsementConfigDto>("/harvest/endorsement-config", payload);
@@ -210,6 +219,9 @@ export default function FieldAuditPassesModal({
       officialPortalUrl: officialPortalUrl.trim(),
       officialDomain: officialDomain.trim(),
       inspectionUnit: inspectionUnit.trim(),
+      coopLegalName: coopLegalName.trim() || null,
+      coopTaxCode: coopTaxCode.trim() || null,
+      coopAddress: coopAddress.trim() || null,
     });
     if (!updated) return;
     toast.success("Đã cập nhật thông tin bảo chứng Cổng thông tin Tỉnh và UBND Xã trên toàn bộ mã QR.");
@@ -580,6 +592,29 @@ export default function FieldAuditPassesModal({
             onChange={setInspectionUnit}
             maxLength={200}
             error={endorseErrors.inspectionUnit}
+          />
+          <FormGrid>
+            <TextField
+              label="Tên pháp nhân Hợp tác xã sản xuất (Điều 23 NĐ 37)"
+              value={coopLegalName}
+              onChange={setCoopLegalName}
+              maxLength={200}
+              placeholder="Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né"
+            />
+            <TextField
+              label="Mã số thuế / Mã số đăng ký HTX"
+              value={coopTaxCode}
+              onChange={setCoopTaxCode}
+              maxLength={40}
+              placeholder="Nhập mã số thuế pháp nhân (nếu có)"
+            />
+          </FormGrid>
+          <TextField
+            label="Địa chỉ trụ sở pháp nhân đơn vị sản xuất"
+            value={coopAddress}
+            onChange={setCoopAddress}
+            maxLength={300}
+            placeholder="Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk"
           />
 
           <FormError message={saveEndorsement.error} />

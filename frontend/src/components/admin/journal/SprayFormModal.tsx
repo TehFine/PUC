@@ -5,7 +5,7 @@ import { Modal, FormError } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { FormGrid, NumberField, SelectField, TextAreaField, TextField, type Option } from "@/components/ui/form/fields";
 import { useMutation } from "@/hooks/use-api";
-import { api } from "@/lib/api-client";
+import { api, errorMessage } from "@/lib/api-client";
 import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, numberText, parseNumber, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
@@ -19,17 +19,36 @@ const MRL_OPTIONS = optionsOf(MRL_STATUS);
 
 export function SprayDetailModal({
   record,
+  canVerify,
+  onVerified,
   onClose,
   onEdit,
   onDelete,
 }: {
   record: SprayRow;
+  canVerify?: boolean;
+  onVerified?: () => void;
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
   const mrl = badgeOf(MRL_STATUS, record.mrlStatus);
   const hasMedia = Boolean(record.photoUrls?.length || record.photoUrl);
+  const [verifying, setVerifying] = useState(false);
+  const isVerified = record.verificationStatus === "verified";
+
+  const handleToggleVerify = async () => {
+    setVerifying(true);
+    try {
+      await api.post(`/spray/${record.id}/verify`, { verified: !isVerified });
+      toast.success(!isVerified ? "Đã xác minh bản ghi phun thuốc." : "Đã chuyển về trạng thái tự khai báo.");
+      onVerified?.();
+    } catch (err) {
+      toast.error(errorMessage(err, "Không thể cập nhật trạng thái xác minh nhật ký phun thuốc."));
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   return (
     <Modal
@@ -39,13 +58,23 @@ export function SprayDetailModal({
       footer={
         <>
           {onDelete && (
-            <button type="button" className="btn btn-danger" onClick={onDelete}>
+            <button type="button" className="btn btn-danger" onClick={onDelete} disabled={verifying}>
               Xóa
             </button>
           )}
           {onEdit && (
-            <button type="button" className="btn btn-outline" onClick={onEdit}>
+            <button type="button" className="btn btn-outline" onClick={onEdit} disabled={verifying}>
               Sửa
+            </button>
+          )}
+          {canVerify && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => void handleToggleVerify()}
+              disabled={verifying}
+            >
+              {verifying ? "Đang xử lý…" : isVerified ? "Hủy xác minh" : "Xác minh nhật ký"}
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={onClose}>
@@ -55,6 +84,20 @@ export function SprayDetailModal({
       }
     >
       <div className="admin-detail-list-card">
+        <div className="admin-detail-list-row">
+          <span className="admin-detail-list-label">Trạng thái kiểm chứng</span>
+          <div className={`admin-detail-list-value ${isVerified ? "is-ok" : ""}`}>
+            {isVerified ? (
+              <>
+                HTX đã xác minh
+                {record.verifiedByName ? ` (${record.verifiedByName})` : ""}
+                {record.verifiedAt ? `, ${formatDateTime(record.verifiedAt)}` : ""}
+              </>
+            ) : (
+              "Nông hộ tự khai báo (chờ HTX xác minh)"
+            )}
+          </div>
+        </div>
         <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Ngày phun tại vườn</span>
           <div className="admin-detail-list-value">{formatDate(record.sprayedOn)}</div>

@@ -4,8 +4,10 @@ import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
-import { formatVn } from "@/components/admin/catalog/form-utils";
+import FormModal from "@/components/admin/catalog/FormModal";
+import { dateInput, formatVn, toText } from "@/components/admin/catalog/form-utils";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
+import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
 import { ContractFormModal, EnterpriseFormModal } from "@/components/admin/harvest/EnterpriseContractModals";
 import HarvestLotFormModal, { LOT_STATUS_LABELS } from "@/components/admin/harvest/HarvestLotFormModal";
@@ -49,6 +51,9 @@ interface GrowingZoneRow {
   status: "active" | "suspended" | "revoked" | "pending";
   statusNote?: string | null;
   validUntil?: string | null;
+  gaccCode?: string | null;
+  mardApprovedOn?: string | null;
+  gaccApprovedOn?: string | null;
 }
 
 const ENTERPRISE_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
@@ -210,6 +215,8 @@ export default function Harvest() {
     tab === "enterprises" && canReadEnterprises ? "/growing-zones" : null,
   );
   const zoneRows = growingZones.data?.data ?? [];
+  const [editingZone, setEditingZone] = useState<GrowingZoneRow | null>(null);
+  const [zoneSaving, setZoneSaving] = useState(false);
 
   const handleZoneStatusChange = async (code: string, nextStatus: GrowingZoneRow["status"]) => {
     try {
@@ -218,6 +225,35 @@ export default function Harvest() {
       await growingZones.refresh();
     } catch (err) {
       toast.error(errorMessage(err, "Không thể cập nhật trạng thái mã vùng trồng."));
+    }
+  };
+
+  const handleSaveZoneMetadata = async (payload: {
+    code: string;
+    status: GrowingZoneRow["status"];
+    statusNote: string | null;
+    gaccCode: string | null;
+    mardApprovedOn: string | null;
+    gaccApprovedOn: string | null;
+    validUntil: string | null;
+  }) => {
+    setZoneSaving(true);
+    try {
+      await api.patch(`/growing-zones/${encodeURIComponent(payload.code)}`, {
+        status: payload.status,
+        statusNote: payload.statusNote,
+        gaccCode: payload.gaccCode,
+        mardApprovedOn: payload.mardApprovedOn,
+        gaccApprovedOn: payload.gaccApprovedOn,
+        validUntil: payload.validUntil,
+      });
+      toast.success(`Đã cập nhật hồ sơ mã vùng trồng ${payload.code}.`);
+      setEditingZone(null);
+      await growingZones.refresh();
+    } catch (err) {
+      toast.error(errorMessage(err, "Không thể cập nhật hồ sơ mã vùng trồng."));
+    } finally {
+      setZoneSaving(false);
     }
   };
 
@@ -852,35 +888,43 @@ export default function Harvest() {
                 <thead>
                   <tr>
                     <th>Mã số vùng trồng (PUC)</th>
+                    <th>Mã đăng ký GACC</th>
                     <th>Tên vùng</th>
                     <th>Địa bàn hành chính</th>
                     <th>Hiệu lực đến</th>
                     <th>Trạng thái thời gian thực</th>
-                    {canUpdateHarvest && <th>Điều chỉnh trạng thái</th>}
+                    {canUpdateHarvest && <th>Thao tác</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {growingZones.loading ? (
                     <tr>
-                      <td colSpan={canUpdateHarvest ? 6 : 5} className="empty-state">
+                      <td colSpan={canUpdateHarvest ? 7 : 6} className="empty-state">
                         Đang tải danh sách mã vùng trồng…
                       </td>
                     </tr>
                   ) : zoneRows.length === 0 ? (
                     <tr>
-                      <td colSpan={canUpdateHarvest ? 6 : 5} className="empty-state">
+                      <td colSpan={canUpdateHarvest ? 7 : 6} className="empty-state">
                         Chưa có dữ liệu mã số vùng trồng.
                       </td>
                     </tr>
                   ) : (
                     zoneRows.map((z) => (
                       <tr key={z.code}>
-                        <td style={{ fontFamily: "var(--font-num-stack)", fontWeight: 700, color: "#166534" }}>{z.code}</td>
+                        <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "#166534" }}>{z.code}</td>
+                        <td style={{ fontFamily: "var(--font-num-stack)", fontVariantNumeric: "tabular-nums", fontSize: 12.5 }}>
+                          {z.gaccCode ? (
+                            <strong>{z.gaccCode}</strong>
+                          ) : (
+                            <span style={{ color: "var(--text-muted)" }}>Chưa cập nhật</span>
+                          )}
+                        </td>
                         <td style={{ fontWeight: 600 }}>{z.name}</td>
                         <td style={{ fontSize: 12.5 }}>
                           {z.commune}, {z.district}, {z.province}
                         </td>
-                        <td>{z.validUntil ? String(z.validUntil).slice(0, 10) : "2027-12-31"}</td>
+                        <td style={{ fontVariantNumeric: "tabular-nums" }}>{z.validUntil ? String(z.validUntil).slice(0, 10) : "2027-12-31"}</td>
                         <td>
                           <span
                             className={`badge ${z.status === "active"
@@ -903,19 +947,28 @@ export default function Harvest() {
                         </td>
                         {canUpdateHarvest && (
                           <td>
-                            <select
-                              className="filter-select"
-                              style={{ minWidth: 165 }}
-                              value={z.status}
-                              onChange={(ev) =>
-                                void handleZoneStatusChange(z.code, ev.target.value as GrowingZoneRow["status"])
-                              }
-                            >
-                              <option value="active">Còn hiệu lực</option>
-                              <option value="suspended">Tạm dừng hiệu lực</option>
-                              <option value="revoked">Đã thu hồi mã vùng</option>
-                              <option value="pending">Đang thẩm định</option>
-                            </select>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                              <select
+                                className="filter-select"
+                                style={{ minWidth: 155 }}
+                                value={z.status}
+                                onChange={(ev) =>
+                                  void handleZoneStatusChange(z.code, ev.target.value as GrowingZoneRow["status"])
+                                }
+                              >
+                                <option value="active">Còn hiệu lực</option>
+                                <option value="suspended">Tạm dừng hiệu lực</option>
+                                <option value="revoked">Đã thu hồi mã vùng</option>
+                                <option value="pending">Đang thẩm định</option>
+                              </select>
+                              <button
+                                type="button"
+                                className="btn btn-outline btn-sm"
+                                onClick={() => setEditingZone(z)}
+                              >
+                                Mã GACC
+                              </button>
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -983,7 +1036,12 @@ export default function Harvest() {
                             fontVariantNumeric: "tabular-nums",
                           }}
                         >
-                          {e.packhouseCode || "VN-DLPH-0089"}
+                          <div>{e.packhouseCode || "VN-DLPH-0089"}</div>
+                          {e.gaccCode && (
+                            <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>
+                              GACC: {e.gaccCode}
+                            </div>
+                          )}
                         </td>
                         <td style={{ fontSize: 12, color: "#475569", maxWidth: 260 }}>{e.address || "—"}</td>
                         <td>
@@ -1180,6 +1238,89 @@ export default function Harvest() {
           onClose={() => setViewingFieldPasses(false)}
         />
       )}
+      {editingZone && (
+        <GrowingZoneEditModal
+          zone={editingZone}
+          pending={zoneSaving}
+          onClose={() => {
+            if (!zoneSaving) setEditingZone(null);
+          }}
+          onSave={handleSaveZoneMetadata}
+        />
+      )}
     </>
+  );
+}
+
+function GrowingZoneEditModal({
+  zone,
+  pending,
+  onClose,
+  onSave,
+}: {
+  zone: GrowingZoneRow;
+  pending: boolean;
+  onClose: () => void;
+  onSave: (payload: {
+    code: string;
+    status: GrowingZoneRow["status"];
+    statusNote: string | null;
+    gaccCode: string | null;
+    mardApprovedOn: string | null;
+    gaccApprovedOn: string | null;
+    validUntil: string | null;
+  }) => Promise<void>;
+}) {
+  const [status, setStatus] = useState<GrowingZoneRow["status"]>(zone.status);
+  const [gaccCode, setGaccCode] = useState(zone.gaccCode ?? "");
+  const [mardApprovedOn, setMardApprovedOn] = useState(dateInput(zone.mardApprovedOn));
+  const [gaccApprovedOn, setGaccApprovedOn] = useState(dateInput(zone.gaccApprovedOn));
+  const [validUntil, setValidUntil] = useState(dateInput(zone.validUntil) || "2027-12-31");
+  const [statusNote, setStatusNote] = useState(zone.statusNote ?? "");
+
+  return (
+    <FormModal
+      title={`Hồ sơ mã vùng trồng: ${zone.code}`}
+      onClose={onClose}
+      onSubmit={() =>
+        void onSave({
+          code: zone.code,
+          status,
+          statusNote: toText(statusNote) ?? null,
+          gaccCode: toText(gaccCode) ?? null,
+          mardApprovedOn: toText(mardApprovedOn) ?? null,
+          gaccApprovedOn: toText(gaccApprovedOn) ?? null,
+          validUntil: toText(validUntil) ?? null,
+        })
+      }
+      pending={pending}
+      error={null}
+      width={560}
+    >
+      <FormGrid>
+        <SelectField
+          label="Trạng thái hiệu lực vùng trồng"
+          value={status}
+          onChange={(v) => setStatus(v as GrowingZoneRow["status"])}
+          options={[
+            { value: "active", label: "Còn hiệu lực" },
+            { value: "suspended", label: "Tạm dừng hiệu lực" },
+            { value: "revoked", label: "Đã thu hồi mã vùng" },
+            { value: "pending", label: "Đang thẩm định" },
+          ]}
+        />
+        <TextField
+          label="Mã đăng ký Hải quan Trung Quốc (GACC)"
+          value={gaccCode}
+          onChange={setGaccCode}
+          maxLength={60}
+          placeholder="Nhập mã GACC được phê duyệt (nếu có)"
+        />
+        <TextField label="Ngày MARD phê duyệt" type="date" value={mardApprovedOn} onChange={setMardApprovedOn} />
+        <TextField label="Ngày GACC phê duyệt" type="date" value={gaccApprovedOn} onChange={setGaccApprovedOn} />
+        <TextField label="Hiệu lực đến ngày" type="date" value={validUntil} onChange={setValidUntil} />
+        <TextField label="Ghi chú trạng thái" value={statusNote} onChange={setStatusNote} maxLength={300} />
+      </FormGrid>
+    </FormModal>
   );
 }

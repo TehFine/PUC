@@ -97,6 +97,7 @@ function groupDiaryRowsByDay<T>(
 export default function Journal() {
   const { can } = useAuth();
   const canReadViolations = can("violations", "read");
+  const canVerifyDiary = can("approvals", "read");
 
   const canUpdateJournal = can("journal", "update");
   const canDeleteJournal = can("journal", "delete");
@@ -371,6 +372,12 @@ export default function Journal() {
                             >
                               <strong className="admin-diary-hh">{j.householdName}</strong>
                               <span className="admin-diary-right">
+                                <span
+                                  className={`badge ${j.verificationStatus === "verified" ? "badge-green" : "badge-gray"}`}
+                                  style={{ fontSize: 11 }}
+                                >
+                                  {j.verificationStatus === "verified" ? "HTX đã xác minh" : "Tự khai báo"}
+                                </span>
                                 <span className="admin-diary-plot" style={{ color: zc.text }}>
                                   Thửa {j.plotCode}
                                 </span>
@@ -608,6 +615,12 @@ export default function Journal() {
                               <strong className="admin-diary-hh">{s.householdName}</strong>
                               <span className="admin-diary-right">
                                 <span
+                                  className={`badge ${s.verificationStatus === "verified" ? "badge-green" : "badge-gray"}`}
+                                  style={{ fontSize: 11 }}
+                                >
+                                  {s.verificationStatus === "verified" ? "HTX đã xác minh" : "Tự khai báo"}
+                                </span>
+                                <span
                                   className="admin-diary-plot"
                                   style={zc ? { color: zc.text } : undefined}
                                 >
@@ -634,6 +647,8 @@ export default function Journal() {
       {viewingJournal && (
         <JournalDetailModal
           entry={viewingJournal}
+          canVerify={canVerifyDiary}
+          onVerified={() => void journalList.refresh()}
           onClose={() => setViewingJournal(null)}
           onEdit={
             canUpdateJournal
@@ -659,6 +674,8 @@ export default function Journal() {
       {viewingSpray && (
         <SprayDetailModal
           record={viewingSpray}
+          canVerify={canVerifyDiary}
+          onVerified={() => void sprayList.refresh()}
           onClose={() => setViewingSpray(null)}
           onEdit={
             canUpdateSpray
