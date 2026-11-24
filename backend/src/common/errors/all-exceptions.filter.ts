@@ -36,6 +36,12 @@ interface ErrorBody {
   code?: string;
   details?: unknown;
   retryAfterSeconds?: number;
+  blockedUntil?: string;
+  strike?: number;
+  maxStrikes?: number;
+  existingStatus?: string;
+  requestCode?: string;
+  expiresAt?: string | null;
 }
 
 /** Chuẩn hóa mọi lỗi về dạng `{ error, code, details? }` mà frontend đang dùng. */
@@ -94,7 +100,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return { status: exception.getStatus(), body: { error: INTERNAL_ERROR_MESSAGE, code: "INTERNAL" } };
     }
     if (exception instanceof AppException) {
-      return { status: exception.getStatus(), body: { error: exception.message, code: exception.code } };
+      return {
+        status: exception.getStatus(),
+        body: {
+          error: exception.message,
+          code: exception.code,
+          ...(exception.meta ?? {}),
+        },
+      };
     }
     if (exception instanceof RateLimitException) {
       return {

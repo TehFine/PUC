@@ -14,6 +14,7 @@ import { IdempotencyModule } from "./common/idempotency/idempotency.module";
 import { AppValidationPipe } from "./common/pipes/validation.pipes";
 import { AppThrottlerGuard } from "./common/throttler/app-throttler.guard";
 import { RateLimitModule } from "./common/throttler/rate-limit.module";
+import { TraceDeviceModule } from "./common/trace-device/trace-device.module";
 import { configuration } from "./config/configuration";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health/health.controller";
@@ -38,6 +39,7 @@ import { CareProtocolModule } from "./care-protocol/care-protocol.module";
     UploadsModule,
     NotificationsModule,
     AuthModule,
+    TraceDeviceModule,
     PlotsModule,
     PortalModule,
     CareProtocolModule,

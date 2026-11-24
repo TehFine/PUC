@@ -1696,7 +1696,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
         gaccCode: "CVN240999888",
         mardApprovedOn: "2025-05-10",
         gaccApprovedOn: "2025-06-20",
-        address: "Quốc lộ 14, Huyện Krông Búk, Tỉnh Đắk Lắk",
+        address: "Quốc lộ 14, Xã Krông Búk, Tỉnh Đắk Lắk",
         status: "active",
       });
       expect(createEntOwner.status).toBe(201);
@@ -1769,7 +1769,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
         inspectionUnit: origEndorse.inspectionUnit,
         coopLegalName: "Hợp tác xã Kinh doanh - Dịch vụ Tổng hợp Cư Né",
         coopTaxCode: "6001778899",
-        coopAddress: "Thôn 1, Xã Cư Né, Huyện Krông Búk, Tỉnh Đắk Lắk",
+        coopAddress: "Thôn 1, Xã Krông Búk, Tỉnh Đắk Lắk",
       });
       expect(putEndorseRes.status).toBe(200);
       expect(putEndorseRes.body.coopTaxCode).toBe("6001778899");
@@ -2280,8 +2280,8 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
 
     const jpegBodyTail = Buffer.from(
       "ffdb004300" +
-        "08".repeat(64) +
-        "ffc0000b080001000101011100ffc40014000100000000000000000000000000000000ffc40014100100000000000000000000000000000000ffda0008010100003f003fffd9",
+      "08".repeat(64) +
+      "ffc0000b080001000101011100ffc40014000100000000000000000000000000000000ffc40014100100000000000000000000000000000000ffda0008010100003f003fffd9",
       "hex",
     );
 
@@ -2483,6 +2483,196 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
       if (createdAttachmentIds.length > 0) {
         await db.query("DELETE FROM attachments WHERE id = ANY($1::bigint[])", [createdAttachmentIds]);
       }
+    }
+  });
+
+  it("chặn mỗi thiết bị chỉ gửi 1 yêu cầu cho tới khi hết hạn xem, cảnh báo lần 1-2, khóa tạm 5 phút ở lần 3 và cô lập xã trên trace-requests", async () => {
+    const admin = await loggedIn("0901234567");
+    const { TraceDeviceGuardService } = await import("../src/common/trace-device/trace-device-guard.service");
+    const deviceGuard = nest.get(TraceDeviceGuardService);
+
+    const deviceA = request.agent(app);
+    const deviceB = request.agent(app);
+    const createdReqCodes: string[] = [];
+    const eaKhalSpecUser = `spec_eakhal_${Date.now()}`;
+
+    try {
+      // 1. Thiết bị A quét QR lần đầu -> nhận cookie định danh thiết bị ký HMAC (htx_trace_did)
+      const initialScanA = await deviceA.get(`/api/public/trace/${FX.lot}`);
+      expect(initialScanA.status).toBe(200);
+      const setCookiesA = initialScanA.headers["set-cookie"];
+      expect(JSON.stringify(setCookiesA || [])).toContain("htx_trace_did=");
+
+      // 2. Thiết bị A gửi yêu cầu cấp quyền lần đầu -> thành công 201 (pending)
+      const firstReqA = await deviceA.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.lot,
+        requesterName: "Đoàn Kiểm Tra Thiết Bị A",
+        organization: "Chi cục Kiểm định Chất lượng",
+        contactPhone: "0911222333",
+        purpose: "Kiểm tra hồ sơ truy xuất lô hàng lần đầu",
+        requestedTier: "authority",
+      });
+      expect(firstReqA.status).toBe(201);
+      const reqCodeA = firstReqA.body.requestCode as string;
+      const secretA = firstReqA.body.clientSecret as string;
+      createdReqCodes.push(reqCodeA);
+
+      // 3. Cố tình gửi lặp lần 1 (khi đang chờ duyệt) -> cảnh báo 1/3 (429 TRACE_REQUEST_WARNING)
+      const warn1 = await deviceA.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.hhA.plot,
+        requesterName: "Đoàn Kiểm Tra Thiết Bị A",
+        organization: "Chi cục Kiểm định Chất lượng",
+        contactPhone: "0911222333",
+        purpose: "Cố tình gửi thêm yêu cầu thứ 2 khi chưa hết hạn",
+        requestedTier: "authority",
+      });
+      expect(warn1.status).toBe(429);
+      expect(warn1.body.code).toBe("TRACE_REQUEST_WARNING");
+      expect(warn1.body.strike).toBe(1);
+      expect(warn1.body.maxStrikes).toBe(3);
+      expect(String(warn1.body.error)).toContain("1/3");
+
+      // 4. Cố tình gửi lặp lần 2 -> cảnh báo 2/3
+      const warn2 = await deviceA.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.lot,
+        requesterName: "Đoàn Kiểm Tra Thiết Bị A",
+        organization: "Chi cục Kiểm định Chất lượng",
+        contactPhone: "0911222333",
+        purpose: "Cố tình gửi lặp lần 2",
+        requestedTier: "authority",
+      });
+      expect(warn2.status).toBe(429);
+      expect(warn2.body.code).toBe("TRACE_REQUEST_WARNING");
+      expect(warn2.body.strike).toBe(2);
+      expect(String(warn2.body.error)).toContain("2/3");
+
+      // 5. Cố tình gửi lặp lần 3 -> khóa thiết bị A trong 5 phút (300 giây) trên toàn bộ trang truy xuất QR
+      const blocked3 = await deviceA.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.lot,
+        requesterName: "Đoàn Kiểm Tra Thiết Bị A",
+        organization: "Chi cục Kiểm định Chất lượng",
+        contactPhone: "0911222333",
+        purpose: "Cố tình gửi lặp lần 3",
+        requestedTier: "authority",
+      });
+      expect(blocked3.status).toBe(429);
+      expect(blocked3.body.code).toBe("TRACE_DEVICE_BLOCKED");
+      expect(blocked3.body.strike).toBe(3);
+      expect(blocked3.body.retryAfterSeconds).toBeGreaterThanOrEqual(295);
+      expect(blocked3.body.retryAfterSeconds).toBeLessThanOrEqual(300);
+
+      // Thiết bị A bị chặn truy cập vào hồ sơ QR, GPS và trạng thái yêu cầu trong suốt 5 phút tạm khóa
+      const traceWhileBlocked = await deviceA.get(`/api/public/trace/${FX.lot}`);
+      expect(traceWhileBlocked.status).toBe(429);
+      expect(traceWhileBlocked.body.code).toBe("TRACE_DEVICE_BLOCKED");
+
+      const gpsWhileBlocked = await deviceA
+        .post(`/api/public/trace/${FX.hhA.plot}/verify-gps`)
+        .send({ latitude: FX.centerLat, longitude: FX.centerLng, accuracyMeters: 5 });
+      expect(gpsWhileBlocked.status).toBe(429);
+      expect(gpsWhileBlocked.body.code).toBe("TRACE_DEVICE_BLOCKED");
+
+      const statusWhileBlocked = await deviceA
+        .get(`/api/public/trace-access-requests/${reqCodeA}/status`)
+        .set("x-trace-req-secret", secretA);
+      expect(statusWhileBlocked.status).toBe(429);
+
+      // 6. Thiết bị B (điện thoại khác cùng mạng Wi-Fi / NAT IP) vẫn quét QR và gửi 1 yêu cầu hợp lệ bình thường
+      const scanB = await deviceB.get(`/api/public/trace/${FX.lot}`);
+      expect(scanB.status).toBe(200);
+      const reqB1 = await deviceB.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.lot,
+        requesterName: "Đoàn Kiểm Tra Thiết Bị B",
+        organization: "Đơn vị Độc lập Cùng Wi-Fi",
+        contactPhone: "0944555666",
+        purpose: "Kiểm tra độc lập trên thiết bị khác",
+        requestedTier: "enterprise",
+      });
+      expect(reqB1.status).toBe(201);
+      const reqCodeB1 = reqB1.body.requestCode as string;
+      createdReqCodes.push(reqCodeB1);
+
+      // Duyệt yêu cầu của Thiết bị B (còn hạn xem) -> Thiết bị B chưa hết thời gian xem nên gửi tiếp sẽ bị nhắc nhở 1/3
+      const reqBRow = await db.query<{ id: number }>(
+        "SELECT id FROM trace_access_requests WHERE request_code = $1",
+        [reqCodeB1],
+      );
+      const reqBId = Number(reqBRow.rows[0].id);
+      expect((await admin.post(`/api/trace-requests/${reqBId}/approve`).send({ durationHours: 2 })).status).toBe(200);
+
+      const warnBWhileActive = await deviceB.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.hhA.plot,
+        requesterName: "Đoàn Kiểm Tra Thiết Bị B",
+        organization: "Đơn vị Độc lập Cùng Wi-Fi",
+        contactPhone: "0944555666",
+        purpose: "Xin thêm khi thời hạn xem trước đó vẫn còn",
+        requestedTier: "authority",
+      });
+      expect(warnBWhileActive.status).toBe(429);
+      expect(warnBWhileActive.body.code).toBe("TRACE_REQUEST_WARNING");
+      expect(warnBWhileActive.body.existingStatus).toBe("approved");
+      expect(warnBWhileActive.body.strike).toBe(1);
+
+      // Khi hết thời gian xem (expires_at <= now()) -> Thiết bị B được phép gửi yêu cầu mới hợp lệ ngay!
+      await db.query(
+        "UPDATE trace_access_requests SET expires_at = now() - interval '1 minute' WHERE id = $1",
+        [reqBId],
+      );
+      const reqB2AfterExpiry = await deviceB.post("/api/public/trace-access-requests").send({
+        scannedCode: FX.hhA.plot,
+        requesterName: "Đoàn Kiểm Tra Thiết Bị B",
+        organization: "Đơn vị Độc lập Cùng Wi-Fi",
+        contactPhone: "0944555666",
+        purpose: "Yêu cầu lại hợp lệ sau khi hết thời gian xem",
+        requestedTier: "authority",
+      });
+      expect(reqB2AfterExpiry.status).toBe(201);
+      createdReqCodes.push(reqB2AfterExpiry.body.requestCode as string);
+
+      // 7. Khi hết 5 phút tạm khóa -> Thiết bị A tự động được vào lại trang truy xuất QR bình thường
+      await deviceGuard.expireActiveBlocksForTest();
+      const traceAfterUnlockA = await deviceA.get(`/api/public/trace/${FX.lot}`);
+      expect(traceAfterUnlockA.status).toBe(200);
+
+      // 8. Chống dò mã yêu cầu (403 đồng nhất thay vì 404) & cô lập phạm vi xã trên /api/trace-requests
+      const probeNonExistent = await deviceB
+        .get("/api/public/trace-access-requests/YCCQ-2099-ZZZZZZ/status")
+        .set("x-trace-req-secret", "random-invalid-secret-probe");
+      expect(probeNonExistent.status).toBe(403);
+
+      expect(
+        (
+          await admin.post("/api/accounts").send({
+            fullName: "Chuyên viên Hỗ trợ Xã Ea Khăl",
+            username: eaKhalSpecUser,
+            password: TEST_PASSWORD,
+            role: "support_specialist",
+            assignedCommune: "Xã Ea Khăl",
+          })
+        ).status,
+      ).toBe(201);
+      const eaKhalSpec = await loggedIn(eaKhalSpecUser);
+
+      // Yêu cầu reqCodeA thuộc Xã Krông Búk -> chuyên viên Xã Ea Khăl không thấy trong danh sách và bị chặn 403 khi duyệt/từ chối
+      const scopedList = await eaKhalSpec.get("/api/trace-requests");
+      expect(scopedList.status).toBe(200);
+      const visibleCodes = (scopedList.body.data as Array<{ requestCode: string }>).map((r) => r.requestCode);
+      expect(visibleCodes).not.toContain(reqCodeA);
+
+      const reqARow = await db.query<{ id: number }>(
+        "SELECT id FROM trace_access_requests WHERE request_code = $1",
+        [reqCodeA],
+      );
+      const reqAId = Number(reqARow.rows[0].id);
+      expect((await eaKhalSpec.post(`/api/trace-requests/${reqAId}/approve`).send({})).status).toBe(403);
+      expect((await eaKhalSpec.post(`/api/trace-requests/${reqAId}/reject`).send({})).status).toBe(403);
+    } finally {
+      await deviceGuard.expireActiveBlocksForTest();
+      await db.query("DELETE FROM trace_device_guards");
+      if (createdReqCodes.length > 0) {
+        await db.query("DELETE FROM trace_access_requests WHERE request_code = ANY($1::text[])", [createdReqCodes]);
+      }
+      await db.query("DELETE FROM users WHERE username = $1", [eaKhalSpecUser]);
     }
   });
 });

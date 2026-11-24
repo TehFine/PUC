@@ -1,11 +1,22 @@
 import { HttpException } from "@nestjs/common";
 
+export interface AppExceptionMeta {
+  retryAfterSeconds?: number;
+  blockedUntil?: string;
+  strike?: number;
+  maxStrikes?: number;
+  existingStatus?: string;
+  requestCode?: string;
+  expiresAt?: string | null;
+}
+
 /** Lỗi nghiệp vụ có mã máy đọc được (`code`) để frontend xử lý. */
 export class AppException extends HttpException {
   constructor(
     status: number,
     message: string,
     public readonly code?: string,
+    public readonly meta?: AppExceptionMeta,
   ) {
     super(message, status);
   }

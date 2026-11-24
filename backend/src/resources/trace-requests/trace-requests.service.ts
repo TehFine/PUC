@@ -1,13 +1,21 @@
 import { Injectable } from "@nestjs/common";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { Request } from "express";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
 import { MANAGEMENT_ROLES } from "../../auth/permissions";
-import { isStaffInCuneCoopScope } from "../../common/crud/village-scope";
+import {
+  CUNE_ADMIN_LOCATION,
+  EAKHAL_ADMIN_LOCATION,
+  isStaffInCuneCoopScope,
+  matchesJurisdiction,
+  resolveParcelAdminLocation,
+} from "../../common/crud/village-scope";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { camelRow } from "../../common/sql/rows";
-import { hasPublicTable } from "../../common/sql/schema-cache";
+import { hasPublicColumn, hasPublicTable } from "../../common/sql/schema-cache";
 import { RateLimitException } from "../../common/throttler/rate-limit.policy";
+import { TraceDeviceGuardService } from "../../common/trace-device/trace-device-guard.service";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import type {
@@ -58,9 +66,20 @@ function generateAlphaNumToken(len: number): string {
 }
 
 const TRACE_PREFIX_STRIP_RE =
-  /^(?:mã\s*vùng|ma\s*vung|mã\s*thửa|ma\s*thua|mã\s*lô|ma\s*lo|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|thùng|thung|thửa|thua|lô|lo|hộ|ho|mã|ma|puc|phc|tem)(?:\s*[:#]\s*|\s+[-–]?\s*)/iu;
+  /^(?:mã\s*sự\s*kiện|ma\s*su\s*kien|sự\s*kiện|su\s*kien|mã\s*vùng|ma\s*vung|mã\s*thửa|ma\s*thua|mã\s*lô|ma\s*lo|mã\s*hộ|ma\s*ho|nông\s*hộ|nong\s*ho|thùng|thung|thửa|thua|lô|lo|hộ|ho|mã|ma|puc|phc|tem)(?:\s*[:#]\s*|\s+[-–]?\s*)/iu;
 const SECRET_FAIL_WINDOW_MS = 60_000;
 const SECRET_MAX_FAILS = process.env.NODE_ENV === "test" ? 30 : 12;
+const DUMMY_SECRET_HASH = hashSecret("puc-dummy-nonexistent-request-secret-constant");
+const REQUEST_CODE_SYNTAX_RE = /^YCCQ-\d{4}-[A-Z0-9]{4,12}$/;
+
+function resolveRequestAdminLocation(pucCode?: string | null, scannedCode?: string | null): string {
+  const z = (pucCode || "").trim();
+  const s = (scannedCode || "").trim();
+  if (/^66-PUC-SR0001-/i.test(z) || /^(?:66-PUC-SR0001-|EK\d)/i.test(s)) {
+    return EAKHAL_ADMIN_LOCATION;
+  }
+  return resolveParcelAdminLocation(null, z || s);
+}
 
 function normalizeScannedLookup(raw: string): string {
   return raw
@@ -110,6 +129,7 @@ interface RawTraceRequestRow extends Record<string, unknown> {
   reviewed_at: Date | string | null;
   ip: string | null;
   user_agent: string | null;
+  device_fingerprint?: string | null;
   access_count: number;
   last_accessed_at: Date | string | null;
   created_at: Date | string;
@@ -123,7 +143,33 @@ export class TraceRequestsService {
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly deviceGuard: TraceDeviceGuardService,
   ) {}
+
+  private isRequestInReviewerScope(
+    user: AuthUser,
+    row: Pick<RawTraceRequestRow, "puc_code" | "scanned_code">,
+  ): boolean {
+    if (!isStaffInCuneCoopScope(user, true)) return false;
+    const commune = user.assignedCommune?.trim() || "";
+    if (commune) {
+      const targetLoc = resolveRequestAdminLocation(row.puc_code, row.scanned_code);
+      if (!matchesJurisdiction(commune, [targetLoc])) return false;
+    }
+    return true;
+  }
+
+  private buildReviewerCommuneSqlFilter(alias: string, user: AuthUser): string | null {
+    const commune = user.assignedCommune?.trim() || "";
+    if (!commune) return null;
+    const inCune = matchesJurisdiction(commune, [CUNE_ADMIN_LOCATION]);
+    const inEaKhal = matchesJurisdiction(commune, [EAKHAL_ADMIN_LOCATION]);
+    if (!inCune && !inEaKhal) return "1 = 0";
+    const eaKhalExpr = `(COALESCE(${alias}.puc_code, '') ~* '^66-PUC-SR0001-' OR ${alias}.scanned_code ~* '^(?:66-PUC-SR0001-|EK\\d)')`;
+    if (inEaKhal && !inCune) return eaKhalExpr;
+    if (inCune && !inEaKhal) return `NOT ${eaKhalExpr}`;
+    return null;
+  }
 
   private checkSecretRateLimit(ip?: string): void {
     const key = (ip || "local").trim() || "local";
@@ -208,7 +254,29 @@ export class TraceRequestsService {
       };
     }
 
-    // 2. Lô hàng (harvest_lots)
+    // 2. Sự kiện chuỗi cung ứng (EVT-...) hoặc Lô hàng (harvest_lots)
+    if (await this.hasTable("supply_chain_events")) {
+      const evRes = await this.db.query<{ lot_id: number }>(
+        `SELECT lot_id FROM supply_chain_events WHERE upper(event_code) = upper($1) LIMIT 1`,
+        [clean],
+      );
+      if (evRes.rows[0]) {
+        const lotId = Number(evRes.rows[0].lot_id);
+        const [evLot, pucCode] = await Promise.all([
+          this.db.query<{ code: string }>("SELECT code FROM harvest_lots WHERE id = $1 LIMIT 1", [lotId]),
+          this.resolveLotPrimaryPuc(lotId, hasPlots, hasSignboards),
+        ]);
+        if (evLot.rows[0]) {
+          return {
+            canonicalDisplayCode: evLot.rows[0].code,
+            targetKind: "lot",
+            resolvedLotCode: evLot.rows[0].code,
+            pucCode,
+          };
+        }
+      }
+    }
+
     const lotRes = await this.db.query<{ id: number; code: string }>(
       `SELECT id, code
        FROM harvest_lots
@@ -431,10 +499,12 @@ export class TraceRequestsService {
     const {
       request_secret_hash: _omitSecret,
       granted_pass_token: _omitToken,
+      device_fingerprint: _omitDeviceFp,
       ...rest
     } = row;
     void _omitSecret;
     void _omitToken;
+    void _omitDeviceFp;
     return {
       ...camelRow(rest),
       requesterRoleLabel: row.requester_role
@@ -452,8 +522,12 @@ export class TraceRequestsService {
   /** Khách / Đoàn công tác / Tài khoản bị hạn chế gửi yêu cầu cấp quyền xem hồ sơ đánh giá đột xuất ngay sau khi quét QR. */
   async createPublicRequest(
     dto: CreateTraceAccessRequestDto,
-    ctx: { user?: AuthUser; ip?: string; userAgent?: string },
+    ctx: { user?: AuthUser; ip?: string; userAgent?: string; req?: Request },
   ) {
+    const device = ctx.req
+      ? await this.deviceGuard.assertNotBlocked(ctx.req, ctx.req.res, ctx.user)
+      : null;
+
     const cleanScanned = normalizeScannedLookup(dto.scannedCode);
     const target = await this.resolveScannedTarget(cleanScanned);
     const requestedTier: TraceAccessTier = dto.requestedTier ?? "enterprise";
@@ -463,65 +537,121 @@ export class TraceRequestsService {
     const purpose = dto.purpose.trim();
     const clientSecret = generateAlphaNumToken(32);
     const secretHash = hashSecret(clientSecret);
+    const hasDeviceFpCol = await hasPublicColumn(this.db, "trace_access_requests", "device_fingerprint");
 
-    let saved: RawTraceRequestRow;
-    let shouldNotifyAdmin = true;
+    // Chính sách mỗi thiết bị chỉ được gửi 1 yêu cầu tại một thời điểm;
+    // chỉ khi hết thời hạn xem (hoặc đã từ chối/thu hồi) mới được gửi yêu cầu mới.
+    if (device) {
+      const cookieMatchKey = device.hadValidCookie && hasDeviceFpCol ? device.cookieKey : null;
+      const userMatchId = ctx.user?.id ? Number(ctx.user.id) : null;
+      const useIpUaFallback =
+        !device.hadValidCookie && !ctx.user?.id && device.strictCookieLess;
 
-    // Chỉ gộp bản ghi pending khi chính tài khoản đang đăng nhập gửi lại; khách ẩn danh luôn tạo mã độc lập
-    // để người khác cùng mạng NAT không thể ghi đè `request_secret_hash` hoặc nâng cấp quyền ngầm.
-    if (ctx.user?.id) {
-      const existingPending = await this.db.query<RawTraceRequestRow>(
-        `SELECT *
+      if (cookieMatchKey || userMatchId !== null || useIpUaFallback) {
+        const activeExistingRes = await this.db.query<RawTraceRequestRow>(
+          `SELECT *
+           FROM trace_access_requests
+           WHERE (
+             (status = 'pending' AND created_at >= now() - interval '24 hours')
+             OR (status = 'approved' AND expires_at > now())
+           )
+           AND (
+             ($1::text IS NOT NULL AND ${hasDeviceFpCol ? "device_fingerprint = $1" : "false"})
+             OR ($2::bigint IS NOT NULL AND requester_user_id = $2)
+             OR (
+               $3::boolean = true
+               AND requester_user_id IS NULL
+               AND COALESCE(ip, '') = COALESCE($4::text, '')
+               AND COALESCE(user_agent, '') = COALESCE($5::text, '')
+             )
+           )
+           ORDER BY (CASE WHEN status = 'approved' THEN 0 ELSE 1 END), id DESC
+           LIMIT 1`,
+          [
+            cookieMatchKey,
+            userMatchId,
+            useIpUaFallback,
+            ctx.ip ?? null,
+            device.userAgent ?? null,
+          ],
+        );
+
+        const activeRow = activeExistingRes.rows[0];
+        if (activeRow && (activeRow.status === "pending" || activeRow.status === "approved")) {
+          return this.deviceGuard.recordDuplicateAttemptAndThrow({
+            device,
+            user: ctx.user,
+            existingStatus: activeRow.status,
+            requestCode: activeRow.request_code,
+            expiresAt: activeRow.expires_at,
+            scannedCode: target.canonicalDisplayCode,
+          });
+        }
+      }
+
+      await this.deviceGuard.resetDeviceStrikes(device);
+    }
+
+    // Chốt chặn bổ sung theo IP cho lưu lượng ẩn danh chống botnet phân tán không giữ cookie
+    if (!ctx.user?.id) {
+      const pendingByIp = await this.db.query<{ same_code_cnt: number; total_ip_cnt: number }>(
+        `SELECT COUNT(*) FILTER (WHERE upper(scanned_code) = upper($1))::int AS same_code_cnt,
+                COUNT(*)::int AS total_ip_cnt
          FROM trace_access_requests
          WHERE status = 'pending'
            AND created_at >= now() - interval '2 hours'
-           AND upper(scanned_code) = upper($1)
-           AND requester_user_id = $2
-         ORDER BY id DESC
-         LIMIT 1`,
-        [cleanScanned, ctx.user.id],
+           AND requester_user_id IS NULL
+           AND COALESCE(ip, '') = COALESCE($2::text, '')`,
+        [cleanScanned, ctx.ip ?? null],
       );
-      if (existingPending.rows[0]) {
-        const prevTier = existingPending.rows[0].requested_tier;
-        shouldNotifyAdmin = prevTier !== requestedTier;
-        const upd = await this.db.query<RawTraceRequestRow>(
-          `UPDATE trace_access_requests
-           SET request_secret_hash = $2,
-               requester_name = $3,
-               organization = $4,
-               contact_phone = $5,
-               purpose = $6,
-               requested_tier = $7
-           WHERE id = $1
+      if (
+        (pendingByIp.rows[0]?.same_code_cnt ?? 0) >= 6 ||
+        (pendingByIp.rows[0]?.total_ip_cnt ?? 0) >= 12
+      ) {
+        throw new RateLimitException(
+          120,
+          "Đã có nhiều yêu cầu đang chờ phê duyệt từ kết nối này. Vui lòng đợi Ban quản trị xử lý.",
+        );
+      }
+    }
+
+    const requestCode = generateRequestCode();
+    const deviceFpToStore = device ? device.cookieKey : null;
+    const uaToStore = ctx.userAgent ? ctx.userAgent.trim().slice(0, 250) : null;
+
+    const ins = hasDeviceFpCol
+      ? await this.db.query<RawTraceRequestRow>(
+          `INSERT INTO trace_access_requests (
+             request_code, request_secret_hash,
+             requester_user_id, requester_username, requester_role,
+             requester_name, organization, contact_phone, purpose,
+             scanned_code, target_kind, resolved_lot_code, puc_code,
+             requested_tier, scope_mode, duration_hours, status,
+             ip, user_agent, device_fingerprint
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'record', 24, 'pending', $15, $16, $17)
            RETURNING *`,
           [
-            existingPending.rows[0].id,
+            requestCode,
             secretHash,
+            ctx.user?.id ?? null,
+            ctx.user?.username ?? null,
+            ctx.user?.role ?? null,
             requesterName,
             organization,
             contactPhone,
             purpose,
+            cleanScanned,
+            target.targetKind,
+            target.resolvedLotCode,
+            target.pucCode,
             requestedTier,
+            ctx.ip ?? null,
+            uaToStore,
+            deviceFpToStore,
           ],
-        );
-        saved = upd.rows[0]!;
-      } else {
-        const pendingByUser = await this.db.query<{ cnt: number }>(
-          `SELECT COUNT(*)::int AS cnt
-           FROM trace_access_requests
-           WHERE status = 'pending'
-             AND created_at >= now() - interval '2 hours'
-             AND requester_user_id = $1`,
-          [ctx.user.id],
-        );
-        if ((pendingByUser.rows[0]?.cnt ?? 0) >= 8) {
-          throw new RateLimitException(
-            120,
-            "Tài khoản đang có nhiều yêu cầu chờ phê duyệt. Vui lòng đợi Ban quản trị xử lý.",
-          );
-        }
-        const requestCode = generateRequestCode();
-        const ins = await this.db.query<RawTraceRequestRow>(
+        )
+      : await this.db.query<RawTraceRequestRow>(
           `INSERT INTO trace_access_requests (
              request_code, request_secret_hash,
              requester_user_id, requester_username, requester_role,
@@ -535,9 +665,9 @@ export class TraceRequestsService {
           [
             requestCode,
             secretHash,
-            ctx.user.id,
-            ctx.user.username,
-            ctx.user.role,
+            ctx.user?.id ?? null,
+            ctx.user?.username ?? null,
+            ctx.user?.role ?? null,
             requesterName,
             organization,
             contactPhone,
@@ -548,62 +678,10 @@ export class TraceRequestsService {
             target.pucCode,
             requestedTier,
             ctx.ip ?? null,
-            ctx.userAgent ? ctx.userAgent.slice(0, 250) : null,
+            uaToStore,
           ],
         );
-        saved = ins.rows[0]!;
-      }
-    } else {
-      const pendingByIp = await this.db.query<{ same_code_cnt: number; total_ip_cnt: number }>(
-        `SELECT COUNT(*) FILTER (WHERE upper(scanned_code) = upper($1))::int AS same_code_cnt,
-                COUNT(*)::int AS total_ip_cnt
-         FROM trace_access_requests
-         WHERE status = 'pending'
-           AND created_at >= now() - interval '2 hours'
-           AND requester_user_id IS NULL
-           AND COALESCE(ip, '') = COALESCE($2::text, '')`,
-        [cleanScanned, ctx.ip ?? null],
-      );
-      if (
-        (pendingByIp.rows[0]?.same_code_cnt ?? 0) >= 4 ||
-        (pendingByIp.rows[0]?.total_ip_cnt ?? 0) >= 10
-      ) {
-        throw new RateLimitException(
-          120,
-          "Đã có nhiều yêu cầu đang chờ phê duyệt từ kết nối này. Vui lòng đợi Ban quản trị xử lý.",
-        );
-      }
-
-      const requestCode = generateRequestCode();
-      const ins = await this.db.query<RawTraceRequestRow>(
-        `INSERT INTO trace_access_requests (
-           request_code, request_secret_hash,
-           requester_user_id, requester_username, requester_role,
-           requester_name, organization, contact_phone, purpose,
-           scanned_code, target_kind, resolved_lot_code, puc_code,
-           requested_tier, scope_mode, duration_hours, status,
-           ip, user_agent
-         )
-         VALUES ($1, $2, NULL, NULL, NULL, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'record', 24, 'pending', $12, $13)
-         RETURNING *`,
-        [
-          requestCode,
-          secretHash,
-          requesterName,
-          organization,
-          contactPhone,
-          purpose,
-          cleanScanned,
-          target.targetKind,
-          target.resolvedLotCode,
-          target.pucCode,
-          requestedTier,
-          ctx.ip ?? null,
-          ctx.userAgent ? ctx.userAgent.slice(0, 250) : null,
-        ],
-      );
-      saved = ins.rows[0]!;
-    }
+    const saved = ins.rows[0]!;
 
     const kindLabel = TARGET_KIND_VN[saved.target_kind] || "Hồ sơ";
     const displayRef = target.canonicalDisplayCode;
@@ -611,27 +689,25 @@ export class TraceRequestsService {
       ? ` [Tài khoản: ${ctx.user.fullName} - ${ROLE_LABELS_VN[ctx.user.role] || ctx.user.role}]`
       : " [Khách quét QR tại hiện trường]";
 
-    if (shouldNotifyAdmin) {
-      await this.notifications.notifyRoles(
-        [...MANAGEMENT_ROLES],
-        {
-          kind: "approval",
-          title: `Yêu cầu cấp quyền xem hồ sơ QR (${saved.request_code})`,
-          body: `${requesterName} (${organization}, SĐT: ${contactPhone})${roleTag} đề nghị mở ${TIER_LABELS_VN[requestedTier]} cho ${kindLabel} ${displayRef}. Nội dung: ${purpose}`,
-          link: `/admin?section=system&sub=trace-requests&id=${saved.id}`,
-        },
-        ctx.user ? { excludeUserId: ctx.user.id } : undefined,
-      );
+    await this.notifications.notifyRoles(
+      [...MANAGEMENT_ROLES],
+      {
+        kind: "approval",
+        title: `Yêu cầu cấp quyền xem hồ sơ QR (${saved.request_code})`,
+        body: `${requesterName} (${organization}, SĐT: ${contactPhone})${roleTag} đề nghị mở ${TIER_LABELS_VN[requestedTier]} cho ${kindLabel} ${displayRef}. Nội dung: ${purpose}`,
+        link: `/admin?section=system&sub=trace-requests&id=${saved.id}`,
+      },
+      ctx.user ? { excludeUserId: ctx.user.id } : undefined,
+    );
 
-      await this.audit.write(
-        { ip: ctx.ip, user: ctx.user },
-        {
-          action: "Gửi yêu cầu cấp quyền truy xuất đột xuất",
-          object: saved.request_code,
-          detail: `${requesterName} (${organization}) - ${kindLabel} ${displayRef} - Đề nghị: ${TIER_LABELS_VN[requestedTier]}`,
-        },
-      );
-    }
+    await this.audit.write(
+      { ip: ctx.ip, user: ctx.user },
+      {
+        action: "Gửi yêu cầu cấp quyền truy xuất đột xuất",
+        object: saved.request_code,
+        detail: `${requesterName} (${organization}) - ${kindLabel} ${displayRef} - Đề nghị: ${TIER_LABELS_VN[requestedTier]}`,
+      },
+    );
 
     return {
       requestCode: saved.request_code,
@@ -648,11 +724,14 @@ export class TraceRequestsService {
   /** Kiểm tra trạng thái phê duyệt theo thời gian thực cho đúng thiết bị hoặc tài khoản đã gửi yêu cầu. */
   async getPublicRequestStatus(
     requestCode: string,
-    ctx: { user?: AuthUser; ip?: string; clientSecret?: string },
+    ctx: { user?: AuthUser; ip?: string; clientSecret?: string; req?: Request },
   ) {
+    if (ctx.req) {
+      await this.deviceGuard.assertNotBlocked(ctx.req, ctx.req.res, ctx.user);
+    }
     this.checkSecretRateLimit(ctx.ip);
     const cleanCode = requestCode.trim().toUpperCase();
-    if (!cleanCode || cleanCode.length > 40) {
+    if (!cleanCode || !REQUEST_CODE_SYNTAX_RE.test(cleanCode)) {
       throw notFound("Không tìm thấy yêu cầu cấp quyền.");
     }
 
@@ -662,8 +741,13 @@ export class TraceRequestsService {
     );
     const row = res.rows[0];
     if (!row) {
+      const dummyCandidate = Buffer.from(hashSecret(ctx.clientSecret?.trim() || "invalid"), "utf8");
+      const dummyStored = Buffer.from(DUMMY_SECRET_HASH, "utf8");
+      if (dummyCandidate.length === dummyStored.length) {
+        timingSafeEqual(dummyCandidate, dummyStored);
+      }
       this.recordFailedSecretAttempt(ctx.ip);
-      throw notFound("Không tìm thấy yêu cầu cấp quyền.");
+      throw forbidden("Bạn không có quyền truy cập trạng thái của yêu cầu này.");
     }
 
     const isOwnerUser =
@@ -720,6 +804,10 @@ export class TraceRequestsService {
 
     const params: unknown[] = [];
     const conds: string[] = [];
+    const communeCond = this.buildReviewerCommuneSqlFilter("r", user);
+    if (communeCond) {
+      conds.push(communeCond);
+    }
 
     if (query.status === "active") {
       conds.push(`r.status = 'approved' AND r.expires_at > now()`);
@@ -744,6 +832,7 @@ export class TraceRequestsService {
     }
 
     const whereSql = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
+    const statsWhereSql = communeCond ? `WHERE ${communeCond}` : "";
 
     const [rowsRes, countRes, statsRes] = await Promise.all([
       this.db.query<RawTraceRequestRow>(
@@ -759,9 +848,10 @@ export class TraceRequestsService {
         params,
       ),
       this.db.query<{ pending_count: number; active_count: number }>(
-        `SELECT COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_count,
-                COUNT(*) FILTER (WHERE status = 'approved' AND expires_at > now())::int AS active_count
-         FROM trace_access_requests`,
+        `SELECT COUNT(*) FILTER (WHERE r.status = 'pending')::int AS pending_count,
+                COUNT(*) FILTER (WHERE r.status = 'approved' AND r.expires_at > now())::int AS active_count
+         FROM trace_access_requests r
+         ${statsWhereSql}`,
       ),
     ]);
 
@@ -791,6 +881,9 @@ export class TraceRequestsService {
     );
     const existing = existingRes.rows[0];
     if (!existing) throw notFound("Không tìm thấy yêu cầu cấp quyền.");
+    if (!this.isRequestInReviewerScope(user, existing)) {
+      throw forbidden("Yêu cầu này nằm ngoài địa bàn xã được phân công quản lý của bạn.");
+    }
     if (existing.status !== "pending") {
       throw badRequest("Yêu cầu này đã được xử lý trước đó.");
     }
@@ -807,6 +900,21 @@ export class TraceRequestsService {
       user.role !== "htx_deputy"
     ) {
       throw forbidden("Chỉ Quản trị viên hoặc Ban giám đốc HTX mới được cấp quyền phạm vi toàn Hợp tác xã.");
+    }
+    if (
+      scopeMode === "coop" &&
+      user.assignedCommune?.trim() &&
+      !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])
+    ) {
+      throw forbidden("Tài khoản giới hạn theo địa bàn xã không được cấp quyền phạm vi toàn Hợp tác xã.");
+    }
+    if (
+      scopeMode === "zone" &&
+      !existing.puc_code &&
+      user.assignedCommune?.trim() &&
+      !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])
+    ) {
+      throw forbidden("Không xác định được mã vùng trồng thuộc xã quản lý để mở quyền theo vùng.");
     }
     const durationHours = dto.durationHours && dto.durationHours > 0 ? dto.durationHours : 24;
     const grantedPassToken = generateAlphaNumToken(32);
@@ -888,6 +996,15 @@ export class TraceRequestsService {
     if (!isStaffInCuneCoopScope(user, true)) {
       throw forbidden("Bạn không có quyền từ chối yêu cầu cấp quyền ngoài phạm vi đơn vị.");
     }
+    const existingRes = await this.db.query<RawTraceRequestRow>(
+      "SELECT * FROM trace_access_requests WHERE id = $1 LIMIT 1",
+      [id],
+    );
+    const existing = existingRes.rows[0];
+    if (!existing) throw notFound("Không tìm thấy yêu cầu cấp quyền.");
+    if (!this.isRequestInReviewerScope(user, existing)) {
+      throw forbidden("Yêu cầu này nằm ngoài địa bàn xã được phân công quản lý của bạn.");
+    }
     const reviewNote = dto.note?.trim() || null;
     const upd = await this.db.query<RawTraceRequestRow>(
       `UPDATE trace_access_requests
@@ -937,6 +1054,15 @@ export class TraceRequestsService {
   ) {
     if (!isStaffInCuneCoopScope(user, true)) {
       throw forbidden("Bạn không có quyền thu hồi yêu cầu cấp quyền ngoài phạm vi đơn vị.");
+    }
+    const existingRes = await this.db.query<RawTraceRequestRow>(
+      "SELECT * FROM trace_access_requests WHERE id = $1 LIMIT 1",
+      [id],
+    );
+    const existing = existingRes.rows[0];
+    if (!existing) throw notFound("Không tìm thấy yêu cầu cấp quyền.");
+    if (!this.isRequestInReviewerScope(user, existing)) {
+      throw forbidden("Yêu cầu này nằm ngoài địa bàn xã được phân công quản lý của bạn.");
     }
     const note = dto.note?.trim() || null;
     const upd = await this.db.query<RawTraceRequestRow>(

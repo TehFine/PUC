@@ -49,6 +49,7 @@ export class PublicTraceRequestsController {
       user,
       ip,
       userAgent: typeof ua === "string" ? ua : undefined,
+      req,
     });
   }
 
@@ -68,6 +69,7 @@ export class PublicTraceRequestsController {
       user,
       ip,
       clientSecret: extractRequestSecret(req, querySecret),
+      req,
     });
   }
 }

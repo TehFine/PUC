@@ -87,6 +87,7 @@ const TABLE_TO_TAGS: Record<string, readonly CacheTag[]> = {
   audit_logs: [],
   trace_scan_logs: [],
   trace_detail_access_logs: [],
+  trace_device_guards: [],
   field_gps_checkins: [],
   api_idempotency_keys: [],
   schema_migrations: [],

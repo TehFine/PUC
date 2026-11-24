@@ -9,6 +9,7 @@ import { notFound } from "../common/errors/app.exception";
 import { camelRow, camelRows } from "../common/sql/rows";
 import { querySystemScaleOverview } from "../common/sql/stats-sync";
 import { RateLimitTier } from "../common/throttler/rate-limit.policy";
+import { TraceDeviceGuardService } from "../common/trace-device/trace-device-guard.service";
 import { DatabaseService } from "../database/database.service";
 import { TraceabilityService } from "./traceability.service";
 
@@ -71,6 +72,7 @@ export class PublicController {
   constructor(
     private readonly db: DatabaseService,
     private readonly traceability: TraceabilityService,
+    private readonly deviceGuard: TraceDeviceGuardService,
   ) { }
 
   @Public()
@@ -257,6 +259,7 @@ export class PublicController {
     @Ip() ip: string,
     @Req() req: Request,
   ) {
+    await this.deviceGuard.assertNotBlocked(req, req.res, user);
     const ua = req.headers["user-agent"];
     return this.traceability.trace(code, {
       user,
@@ -285,6 +288,7 @@ export class PublicController {
     @Ip() ip: string,
     @Req() req: Request,
   ) {
+    await this.deviceGuard.assertNotBlocked(req, req.res, user);
     const ua = req.headers["user-agent"];
     const bodyPass =
       typeof dto.auditPass === "string" && dto.auditPass.trim()
@@ -306,7 +310,10 @@ export class PublicController {
  */
 @Controller("trace")
 export class AuthenticatedTraceController {
-  constructor(private readonly traceability: TraceabilityService) { }
+  constructor(
+    private readonly traceability: TraceabilityService,
+    private readonly deviceGuard: TraceDeviceGuardService,
+  ) { }
 
   @Throttle(RateLimitTier.AUTH_TRACE)
   @Get(":code")
@@ -322,6 +329,7 @@ export class AuthenticatedTraceController {
     @Ip() ip: string,
     @Req() req: Request,
   ) {
+    await this.deviceGuard.assertNotBlocked(req, req.res, user);
     const ua = req.headers["user-agent"];
     return this.traceability.trace(code, {
       user,
@@ -347,6 +355,7 @@ export class AuthenticatedTraceController {
     @Ip() ip: string,
     @Req() req: Request,
   ) {
+    await this.deviceGuard.assertNotBlocked(req, req.res, user);
     const ua = req.headers["user-agent"];
     const bodyPass =
       typeof dto.auditPass === "string" && dto.auditPass.trim()
