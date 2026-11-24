@@ -69,7 +69,7 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  width?: number;
+  width?: number | string;
   variant?: "drawer" | "modal";
   closeOnBackdrop?: boolean;
   hideCloseButton?: boolean;
@@ -221,8 +221,10 @@ export function Modal({
           tabIndex={-1}
           style={
             {
-              "--modal-max-w": `${width}px`,
-              ...(width ? { "--drawer-w": `${width}px` } : {}),
+              "--modal-max-w": typeof width === "string" ? width : `${width}px`,
+              ...(width
+                ? { "--drawer-w": typeof width === "string" ? width : `${width}px` }
+                : {}),
             } as CSSProperties
           }
         >

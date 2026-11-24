@@ -54,7 +54,8 @@ export function SprayDetailModal({
     <Modal
       title={`Nhật ký phun thuốc: ${record.householdName}`}
       onClose={onClose}
-      width={580}
+      width="clamp(620px, 50vw, 980px)"
+      className="admin-diary-drawer"
       footer={
         <>
           {onDelete && (
@@ -83,7 +84,31 @@ export function SprayDetailModal({
         </>
       }
     >
-      <div className="admin-detail-list-card">
+      <div className="admin-diary-media-lead">
+        <div className="admin-diary-section-label">Minh chứng hiện trường</div>
+        {hasMedia ? (
+          <StoredMediaGallery
+            urls={record.photoUrls}
+            fallbackUrl={record.photoUrl}
+            altPrefix={`Hiện trường phun thuốc ${record.pesticideName}`}
+            eager
+          />
+        ) : (
+          <div className="admin-diary-empty-media">
+            Chưa đính kèm hình ảnh hoặc video hiện trường.
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div className="admin-diary-section-label">Nguồn gốc vật tư và ghi chú</div>
+        <div className="admin-diary-note-box">
+          <div>{record.source ? `Đại lý cung cấp: ${record.source}` : "Chưa ghi nhận đại lý cung cấp."}</div>
+          {record.note && <div style={{ marginTop: 6 }}>Ghi chú: {record.note}</div>}
+        </div>
+      </div>
+
+      <div className="admin-detail-list-card" style={{ marginBottom: 0 }}>
         <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Trạng thái kiểm chứng</span>
           <div className={`admin-detail-list-value ${isVerified ? "is-ok" : ""}`}>
@@ -172,29 +197,6 @@ export function SprayDetailModal({
           </>
         )}
       </div>
-
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
-          Nguồn gốc vật tư và ghi chú
-        </div>
-        <div style={{ padding: "10px 12px", borderRadius: 6, border: "1px solid #e5e7eb", background: "var(--bg-input)", fontSize: 13.5 }}>
-          <div>{record.source ? `Đại lý cung cấp: ${record.source}` : "Chưa ghi nhận đại lý cung cấp."}</div>
-          {record.note && <div style={{ marginTop: 6 }}>Ghi chú: {record.note}</div>}
-        </div>
-      </div>
-
-      {hasMedia && (
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>
-            Minh chứng hiện trường
-          </div>
-          <StoredMediaGallery
-            urls={record.photoUrls}
-            fallbackUrl={record.photoUrl}
-            altPrefix={`Hiện trường phun thuốc ${record.pesticideName}`}
-          />
-        </div>
-      )}
     </Modal>
   );
 }
@@ -333,7 +335,8 @@ export default function SprayFormModal({
     <Modal
       title={isEdit ? "Sửa nhật ký phun thuốc" : "Ghi nhật ký phun thuốc"}
       onClose={save.pending ? () => undefined : onClose}
-      width={560}
+      width="clamp(620px, 50vw, 980px)"
+      className="admin-diary-drawer"
       footer={
         <>
           <button type="button" className="btn btn-outline" onClick={onClose} disabled={save.pending}>

@@ -1683,12 +1683,14 @@ export function StoredMediaGallery({
   altPrefix,
   caption,
   compact = false,
+  eager = false,
 }: {
   urls?: string[] | null;
   fallbackUrl?: string | null;
   altPrefix: string;
   caption?: string;
   compact?: boolean;
+  eager?: boolean;
 }) {
   const safeUrls = useMemo(() => {
     const raw = urls && urls.length > 0 ? urls : fallbackUrl ? [fallbackUrl] : [];
@@ -1886,7 +1888,7 @@ export function StoredMediaGallery({
               src={mediaItems[0].url}
               alt={`${altPrefix} 1`}
               className="pt-detail-photo-img"
-              loading="lazy"
+              loading={eager ? "eager" : "lazy"}
               decoding="async"
               onError={() => setBrokenImages((prev) => ({ ...prev, [mediaItems[0].url]: true }))}
             />

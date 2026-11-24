@@ -496,10 +496,36 @@ export default function Reports() {
           >
             {selectedReport.desc}
           </p>
-          <FormGrid>
-            <TextField label="Từ ngày" type="date" value={from} onChange={setFrom} />
-            <TextField label="Đến ngày" type="date" value={to} onChange={setTo} />
-          </FormGrid>
+          <div className="form-group">
+            <label>Phạm vi thời gian</label>
+            <div className="format-btns">
+              <button
+                type="button"
+                className={`fmt-btn ${!from && !to ? "active" : ""}`}
+                onClick={() => {
+                  setFrom("");
+                  setTo("");
+                }}
+              >
+                Toàn bộ lịch sử
+              </button>
+              <button
+                type="button"
+                className={`fmt-btn ${Boolean(from || to) ? "active" : ""}`}
+                onClick={() => {
+                  if (!from && !to) setTo(todayIso());
+                }}
+              >
+                Tính đến thời điểm
+              </button>
+            </div>
+          </div>
+          {(from || to) && (
+            <FormGrid>
+              <TextField label="Từ ngày (để trống = từ đầu)" type="date" value={from} onChange={setFrom} />
+              <TextField label="Tính đến ngày" type="date" value={to} onChange={setTo} />
+            </FormGrid>
+          )}
           <FormGrid>
             <SelectField
               label="Thôn / Tổ"

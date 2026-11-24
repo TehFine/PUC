@@ -24,7 +24,7 @@ export default function FormModal({
   pending: boolean;
   error?: string | null;
   submitLabel?: string;
-  width?: number;
+  width?: number | string;
   extraActions?: ReactNode;
   children: ReactNode;
 }) {

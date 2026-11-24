@@ -5,13 +5,20 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { Modal, FormError } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { CheckboxField, FormGrid, SelectField, TextAreaField, TextField, type Option } from "@/components/ui/form/fields";
+import { isCoopStaffRole } from "@/constants/roles";
 import { useMutation } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
 import { submitFieldRecordWithOfflineQueue } from "@/lib/offline-sync";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { dateText, hasErrors, requireFields, textOrNull, todayIso } from "@/components/admin/shared/form-utils";
 import { MultiPhotoField, StoredMediaGallery, useMultiPhotoPicker } from "@/components/portal/shared/controls";
+import { buildUtf8CsvBlob, triggerBlobDownload } from "@/utils/download";
 import { formatDate, formatDateTime, formatDiaryEditor } from "@/utils/format";
+import {
+  openPrintProgressWindow,
+  renderPrintableReportAsync,
+  type ReportDataPayload,
+} from "@/utils/report-pdf";
 import type { JournalRow } from "@/types/journal";
 
 export function JournalDetailModal({
@@ -50,7 +57,8 @@ export function JournalDetailModal({
     <Modal
       title="Nhật ký canh tác"
       onClose={onClose}
-      width={580}
+      width="clamp(620px, 50vw, 980px)"
+      className="admin-diary-drawer"
       footer={
         <>
           {onDelete && (
@@ -79,7 +87,34 @@ export function JournalDetailModal({
         </>
       }
     >
-      <div className="admin-detail-list-card">
+      <div className="admin-diary-media-lead">
+        <div className="admin-diary-section-label">Minh chứng hiện trường</div>
+        {hasMedia ? (
+          <StoredMediaGallery
+            urls={entry.photoUrls}
+            fallbackUrl={entry.photoUrl}
+            altPrefix={`Hiện trường nhật ký ${entry.plotCode}`}
+            eager
+          />
+        ) : entry.hasPhoto ? (
+          <div className="admin-diary-empty-media">
+            Đã xác nhận có ảnh hiện trường lưu tại hồ sơ hộ.
+          </div>
+        ) : (
+          <div className="admin-diary-empty-media">
+            Chưa đính kèm hình ảnh hoặc video hiện trường.
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div className="admin-diary-section-label">Chi tiết công việc</div>
+        <div className="admin-diary-note-box">
+          {entry.detail || "Không có mô tả chi tiết."}
+        </div>
+      </div>
+
+      <div className="admin-detail-list-card" style={{ marginBottom: 0 }}>
         <div className="admin-detail-list-row">
           <span className="admin-detail-list-label">Trạng thái kiểm chứng</span>
           <div className={`admin-detail-list-value ${isVerified ? "is-ok" : ""}`}>
@@ -156,34 +191,6 @@ export function JournalDetailModal({
           </div>
         )}
       </div>
-
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>
-          Chi tiết công việc
-        </div>
-        <div style={{ padding: "10px 12px", borderRadius: 6, border: "1px solid #e5e7eb", background: "var(--bg-input)", fontSize: 13.5 }}>
-          {entry.detail || "Không có mô tả chi tiết."}
-        </div>
-      </div>
-
-      {(hasMedia || entry.hasPhoto) && (
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>
-            Minh chứng hiện trường
-          </div>
-          {hasMedia ? (
-            <StoredMediaGallery
-              urls={entry.photoUrls}
-              fallbackUrl={entry.photoUrl}
-              altPrefix={`Hiện trường nhật ký ${entry.plotCode}`}
-            />
-          ) : (
-            <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-              Đã xác nhận có ảnh hiện trường lưu tại hồ sơ hộ.
-            </div>
-          )}
-        </div>
-      )}
     </Modal>
   );
 }
@@ -297,7 +304,8 @@ export function JournalFormModal({
     <Modal
       title={isEdit ? "Sửa nhật ký canh tác" : "Ghi nhật ký canh tác"}
       onClose={save.pending ? () => undefined : onClose}
-      width={560}
+      width="clamp(620px, 50vw, 980px)"
+      className="admin-diary-drawer"
       footer={
         <>
           <button type="button" className="btn btn-outline" onClick={onClose} disabled={save.pending}>
@@ -407,6 +415,243 @@ export function JournalFormModal({
 
         <FormError message={save.error} />
       </form>
+    </Modal>
+  );
+}
+
+export function HouseholdLogbookExportModal({
+  householdOptions,
+  initialHouseholdId = "",
+  onClose,
+}: {
+  householdOptions: Option[];
+  initialHouseholdId?: string;
+  onClose: () => void;
+}) {
+  const { session } = useAuth();
+  const canExportAudit = isCoopStaffRole(session?.user.role);
+  const [householdId, setHouseholdId] = useState(
+    initialHouseholdId || (householdOptions.length === 1 ? householdOptions[0].value : ""),
+  );
+  const [timeScope, setTimeScope] = useState<"all" | "range">("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState(todayIso());
+  const [includePhotos, setIncludePhotos] = useState(true);
+  const [includeInvoices, setIncludeInvoices] = useState(false);
+  const [busyMode, setBusyMode] = useState<"PDF" | "CSV" | null>(null);
+  const [photoProgress, setPhotoProgress] = useState<{ done: number; total: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const effectiveFrom = timeScope === "range" ? from : "";
+  const effectiveTo = timeScope === "range" ? to : "";
+
+  const handleExport = async (mode: "PDF" | "CSV") => {
+    if (effectiveFrom && effectiveTo && effectiveFrom > effectiveTo) {
+      setError("Ngày bắt đầu không được lớn hơn ngày kết thúc.");
+      return;
+    }
+    setError(null);
+    setPhotoProgress(null);
+    setBusyMode(mode);
+
+    const docSpec = {
+      title: "Sổ nhật ký hộ dân",
+      docTitle: "Sổ nhật ký canh tác điện tử nông hộ (VietGAP / GACC)",
+      desc: "Tổng hợp sổ nhật ký theo hộ kèm phụ lục ảnh thực địa chuẩn A4.",
+    };
+    const popupWin = mode === "PDF" ? openPrintProgressWindow(docSpec.docTitle) : null;
+
+    try {
+      const params = new URLSearchParams();
+      params.set("format", "json");
+      params.set("export", "1");
+      if (canExportAudit) {
+        params.set("audit", "1");
+      }
+      if (effectiveFrom) params.set("from", effectiveFrom);
+      if (effectiveTo) params.set("to", effectiveTo);
+      if (householdId) params.set("householdId", householdId);
+
+      const wantPhotos = mode === "PDF" && Boolean(householdId) && includePhotos;
+      if (wantPhotos) {
+        params.set("includePhotos", "1");
+        if (canExportAudit && includeInvoices) {
+          params.set("includeInvoices", "1");
+        }
+      }
+
+      const data = await api.get<ReportDataPayload>(
+        `/reports/household-logbook?${params.toString()}`,
+      );
+
+      if (mode === "PDF") {
+        const totalPhotos = data.evidencePhotos?.length ?? 0;
+        if (totalPhotos > 0) {
+          setPhotoProgress({ done: 0, total: totalPhotos });
+        }
+        await renderPrintableReportAsync(
+          popupWin,
+          docSpec,
+          data,
+          {
+            from: effectiveFrom,
+            to: effectiveTo,
+            villageName: data.householdMeta?.villageName || "Tất cả thôn / tổ",
+          },
+          (done, total) => setPhotoProgress({ done, total }),
+        );
+        const photoNote = totalPhotos > 0 ? `, kèm ${totalPhotos} ảnh minh chứng` : "";
+        toast.success(`Đã mở bản in sổ nhật ký (${data.total} bản ghi${photoNote}).`);
+        onClose();
+      } else {
+        const hhSuffix = data.householdMeta ? `-${data.householdMeta.code.toLowerCase()}` : "";
+        const dateSuffix = effectiveTo || todayIso();
+        const blob = buildUtf8CsvBlob(data.headers, data.rows);
+        triggerBlobDownload(blob, `so-nhat-ky${hhSuffix}-${dateSuffix}.csv`);
+        toast.success(`Đã tải xuống CSV sổ nhật ký (${data.total} bản ghi).`);
+        onClose();
+      }
+    } catch (err) {
+      if (popupWin && !popupWin.closed) popupWin.close();
+      const msg = errorMessage(err, "Không xuất được sổ nhật ký canh tác.");
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setBusyMode(null);
+      setPhotoProgress(null);
+    }
+  };
+
+  const pdfBtnLabel =
+    busyMode === "PDF"
+      ? photoProgress && photoProgress.total > 0
+        ? `Đang chuẩn bị ảnh (${photoProgress.done}/${photoProgress.total})…`
+        : "Đang tạo PDF…"
+      : "Xuất sổ PDF";
+
+  return (
+    <Modal
+      title="Xuất sổ nhật ký hộ dân"
+      onClose={busyMode ? () => undefined : onClose}
+      width={620}
+      footer={
+        <>
+          <button type="button" className="btn btn-outline" onClick={onClose} disabled={busyMode !== null}>
+            Hủy
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => void handleExport("CSV")}
+            disabled={busyMode !== null}
+          >
+            {busyMode === "CSV" ? "Đang tải…" : "Tải CSV"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void handleExport("PDF")}
+            disabled={busyMode !== null}
+          >
+            {pdfBtnLabel}
+          </button>
+        </>
+      }
+    >
+      <p style={{ marginTop: 0, marginBottom: 14, fontSize: 13, lineHeight: 1.5, color: "var(--text-secondary)" }}>
+        Xuất sổ nhật ký canh tác và phun thuốc chuẩn khổ A4 cho từng nông hộ (hoặc bảng tổng hợp toàn vùng) để kiểm tra, lưu trữ và phục vụ đoàn thẩm định.
+      </p>
+
+      <SelectField
+        label="Nông hộ cần xuất sổ"
+        value={householdId}
+        onChange={setHouseholdId}
+        placeholder="Tất cả hộ nông dân (Bảng tổng hợp toàn vùng)"
+        options={householdOptions}
+      />
+
+      <div className="form-group">
+        <label>Phạm vi thời gian</label>
+        <div className="format-btns">
+          <button
+            type="button"
+            className={`fmt-btn ${timeScope === "all" ? "active" : ""}`}
+            onClick={() => setTimeScope("all")}
+            disabled={busyMode !== null}
+          >
+            Toàn bộ lịch sử nhật ký
+          </button>
+          <button
+            type="button"
+            className={`fmt-btn ${timeScope === "range" ? "active" : ""}`}
+            onClick={() => {
+              setTimeScope("range");
+              if (!to) setTo(todayIso());
+            }}
+            disabled={busyMode !== null}
+          >
+            Tính đến thời điểm chỉ định
+          </button>
+        </div>
+      </div>
+
+      {timeScope === "range" && (
+        <FormGrid>
+          <TextField
+            label="Từ ngày (để trống = từ đầu lịch sử)"
+            type="date"
+            max={to || todayIso()}
+            value={from}
+            onChange={setFrom}
+            disabled={busyMode !== null}
+          />
+          <TextField
+            label="Tính đến ngày"
+            type="date"
+            max={todayIso()}
+            value={to}
+            onChange={setTo}
+            disabled={busyMode !== null}
+          />
+        </FormGrid>
+      )}
+
+      <div className="report-photo-options" style={{ marginTop: 4 }}>
+        {householdId ? (
+          <>
+            <label className="report-photo-check">
+              <input
+                type="checkbox"
+                checked={includePhotos}
+                onChange={(e) => setIncludePhotos(e.target.checked)}
+                disabled={busyMode !== null}
+              />
+              <span>
+                Đính kèm phụ lục hình ảnh minh chứng thực địa trên khổ giấy A4 (tự động nén tối ưu dung lượng)
+              </span>
+            </label>
+            {canExportAudit && includePhotos && (
+              <label className="report-photo-check">
+                <input
+                  type="checkbox"
+                  checked={includeInvoices}
+                  onChange={(e) => setIncludeInvoices(e.target.checked)}
+                  disabled={busyMode !== null}
+                />
+                <span>
+                  Bao gồm ảnh chứng từ, hóa đơn vật tư lưu nội bộ HTX (dành cho kiểm toán nội bộ)
+                </span>
+              </label>
+            )}
+          </>
+        ) : (
+          <div className="report-photo-mode-hint">
+            Đang chọn tất cả hộ: tệp PDF xuất bảng tổng hợp gọn nhẹ kèm đường dẫn hồ sơ số. Chọn một nông hộ cụ thể để xuất chi tiết toàn bộ lịch sử nhật ký kèm phụ lục ảnh thực địa.
+          </div>
+        )}
+      </div>
+
+      <FormError message={error} />
     </Modal>
   );
 }

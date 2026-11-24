@@ -12,6 +12,7 @@ import { requestEditPlotShape } from "@/components/admin/shared/counts-events";
 import { formatVn } from "@/components/admin/shared/form-utils";
 import { badgeOf, HOUSEHOLD_STATUS, LAB_RESULT, SEVERITY, VIOLATION_STATUS } from "@/components/admin/shared/labels";
 import { getZoneColor } from "@/components/zones/zone-data";
+import { HouseholdLogbookExportModal } from "@/components/admin/journal/JournalModals";
 import { formatDate, formatDiaryEditor } from "@/utils/format";
 import { formatCoords, plotCenterCoords } from "@/utils/plot-utils";
 import type { HouseholdRow } from "@/types/households";
@@ -39,7 +40,9 @@ export default function HouseholdDetailModal({
 }) {
   const { can } = useAuth();
   const canReadViolations = can("violations", "read");
+  const canExportReports = can("reports", "read");
   const [tab, setTab] = useState<DetailTab>("plots");
+  const [exportLogbookOpen, setExportLogbookOpen] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<{
     urls: string[];
     title: string;
@@ -238,7 +241,19 @@ export default function HouseholdDetailModal({
       )}
 
       {tab === "journal" && (
-        <div className="table-wrap">
+        <>
+          {canExportReports && (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setExportLogbookOpen(true)}
+              >
+                Xuất sổ PDF hộ này
+              </button>
+            </div>
+          )}
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -304,7 +319,8 @@ export default function HouseholdDetailModal({
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {tab === "violations" && canReadViolations && (
@@ -443,6 +459,16 @@ export default function HouseholdDetailModal({
           title={previewMedia.title}
           subtitle={previewMedia.subtitle}
           onClose={() => setPreviewMedia(null)}
+        />
+      )}
+
+      {exportLogbookOpen && (
+        <HouseholdLogbookExportModal
+          householdOptions={[
+            { value: String(household.id), label: `${household.name} (${household.code})` },
+          ]}
+          initialHouseholdId={String(household.id)}
+          onClose={() => setExportLogbookOpen(false)}
         />
       )}
     </Modal>

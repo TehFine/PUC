@@ -4871,6 +4871,47 @@ input[type="date"].filter-select {
   color: #9a6712;
 }
 
+.admin-diary-media-lead {
+  margin-bottom: 16px;
+}
+
+.admin-diary-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.admin-diary-empty-media {
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid #d4d4d2;
+  background: #ffffff;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.admin-diary-note-box {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #d4d4d2;
+  background: #ffffff;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.admin-diary-drawer .admin-diary-media-lead .pt-detail-photo-img {
+  height: 230px;
+}
+
+@media (min-width: 760px) {
+  .modal.pt-sheet.is-drawer.admin-diary-drawer .admin-diary-media-lead .pt-detail-photo-img {
+    height: clamp(290px, 40dvh, 430px);
+  }
+}
+
 .admin-detail-list-value.is-code {
   font-family: var(--font-num-stack);
   font-weight: 700;

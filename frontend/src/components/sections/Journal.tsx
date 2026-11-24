@@ -26,7 +26,11 @@ import { badgeOf, MRL_STATUS, optionsOf, SEVERITY, VIOLATION_STATUS } from "@/co
 import { useHouseholdOptions, usePesticideOptions } from "@/components/admin/shared/options";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
 import { getZoneColor } from "@/components/zones/zone-data";
-import { JournalDetailModal, JournalFormModal } from "@/components/admin/journal/JournalModals";
+import {
+  HouseholdLogbookExportModal,
+  JournalDetailModal,
+  JournalFormModal,
+} from "@/components/admin/journal/JournalModals";
 import SprayFormModal, { SprayDetailModal } from "@/components/admin/journal/SprayFormModal";
 import {
   ViolationDetailModal,
@@ -98,6 +102,7 @@ export default function Journal() {
   const { can } = useAuth();
   const canReadViolations = can("violations", "read");
   const canVerifyDiary = can("approvals", "read");
+  const canExportReports = can("reports", "read");
 
   const canUpdateJournal = can("journal", "update");
   const canDeleteJournal = can("journal", "delete");
@@ -220,6 +225,7 @@ export default function Journal() {
     journalList.loading,
   );
   const [deletingJournal, setDeletingJournal] = useState<JournalRow | null>(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   // Modals for Violations
   const [viewingViolation, setViewingViolation] = usePersistedRecordSelection(
@@ -274,12 +280,19 @@ export default function Journal() {
 
   return (
     <>
-      {canReadViolations && canCreateViolation && (
+      {(canExportReports || (canReadViolations && canCreateViolation)) && (
         <div className="page-header">
           <div className="header-actions">
-            <button type="button" className="btn btn-primary" onClick={() => setEditingViolation("new")}>
-              Ghi nhận vi phạm
-            </button>
+            {canExportReports && (
+              <button type="button" className="btn btn-outline" onClick={() => setExportModalOpen(true)}>
+                Xuất sổ PDF
+              </button>
+            )}
+            {canReadViolations && canCreateViolation && (
+              <button type="button" className="btn btn-primary" onClick={() => setEditingViolation("new")}>
+                Ghi nhận vi phạm
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -726,6 +739,14 @@ export default function Journal() {
             void journalList.refresh();
             void refreshSummary();
           }}
+        />
+      )}
+
+      {exportModalOpen && (
+        <HouseholdLogbookExportModal
+          householdOptions={householdOptions}
+          initialHouseholdId={jHouseholdId}
+          onClose={() => setExportModalOpen(false)}
         />
       )}
 
