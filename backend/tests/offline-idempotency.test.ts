@@ -14,7 +14,7 @@ import { DatabaseService } from "../src/database/database.service";
 import { TEST_PASSWORD } from "./constants";
 
 const TINY_PNG = Buffer.from(
-  "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+  "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000c49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
   "hex",
 );
 
@@ -137,6 +137,12 @@ describe("Đồng bộ vùng sóng yếu & Chống ghi trùng bằng X-Idempoten
     const chunkType = Buffer.from("tEXt", "ascii");
     // Tính CRC32 chuẩn của PNG cho tEXt chunk (hoặc dùng JPEG hợp lệ có phần đệm APP0/COM ở trước EOI)
     // Dùng JPEG tối giản hợp lệ kèm comment duy nhất để detectType luôn nhận image/jpeg
+    const baseJpegTail = Buffer.from(
+      "ffdb004300" +
+        "08".repeat(64) +
+        "ffc0000b080001000101011100ffc40014000100000000000000000000000000000000ffc40014100100000000000000000000000000000000ffda0008010100003f003fffd9",
+      "hex",
+    );
     const uniqueComment = Buffer.from(`PUC-ORCHARD-${Date.now()}`, "ascii");
     const comLen = Buffer.alloc(2);
     comLen.writeUInt16BE(uniqueComment.length + 2, 0);
@@ -146,7 +152,7 @@ describe("Đồng bộ vùng sóng yếu & Chống ghi trùng bằng X-Idempoten
       Buffer.from([0xff, 0xfe]),
       comLen,
       uniqueComment,
-      Buffer.from([0xff, 0xd9]),
+      baseJpegTail,
     ]);
     void chunkData;
     void chunkType;

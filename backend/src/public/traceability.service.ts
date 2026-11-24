@@ -1,14 +1,20 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { can, isCoopStaffRole } from "../auth/permissions";
 import { verifyOrderedChain, type VerifiableChainEntry } from "../common/crypto/integrity-chain";
+import {
+  rewritePublicFileUrlWithTicket,
+  type MediaTicketAuthBinding,
+} from "../common/crypto/media-ticket";
 import { forbidden, notFound } from "../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../common/geo/plot-proximity";
 import { camelRow, camelRows, formatDateIsoVn, publicAttachmentUrlSql } from "../common/sql/rows";
 import { hasPublicColumn, hasPublicTable } from "../common/sql/schema-cache";
 import { RateLimitException } from "../common/throttler/rate-limit.policy";
+import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
 
 const UNIFORM_AUDIT_PASS_ERR =
@@ -360,10 +366,18 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
   private traceSyncTimer: ReturnType<typeof setTimeout> | null = null;
   private traceEpoch = 0;
 
+  private readonly mediaTicketSecret: string;
+
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
-  ) {}
+    @Optional() config?: ConfigService<AppConfig, true>,
+  ) {
+    this.mediaTicketSecret =
+      config?.get("jwt", { infer: true })?.accessSecret ||
+      process.env.JWT_ACCESS_SECRET ||
+      "puc-fallback-dev-media-ticket-secret-min-32-chars";
+  }
 
   /**
    * Chỉ bỏ qua ghi nhật ký / tăng bộ đếm khi cùng tác nhân đã có ít nhất một lượt tra cứu đầy đủ
@@ -3746,8 +3760,81 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     ];
   }
 
+  private rewriteNestedMediaUrls<T>(node: T, binding: MediaTicketAuthBinding, nowMs: number): T {
+    if (typeof node === "string") {
+      if (node.startsWith("/api/public/files/")) {
+        return rewritePublicFileUrlWithTicket(node, binding, this.mediaTicketSecret, nowMs) as unknown as T;
+      }
+      return node;
+    }
+    if (Array.isArray(node)) {
+      return node.map((item) => this.rewriteNestedMediaUrls(item, binding, nowMs)) as unknown as T;
+    }
+    if (node && typeof node === "object" && !(node instanceof Date)) {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+        out[k] = this.rewriteNestedMediaUrls(v, binding, nowMs);
+      }
+      return out as T;
+    }
+    return node;
+  }
+
+  private signRestrictedTraceMediaUrls<T extends Record<string, unknown>>(
+    payload: T,
+    ctx: TraceRequestContext,
+  ): T {
+    const ac = payload.accessControl as
+      | {
+          fieldAuditPass?: ResolvedFieldAuditPass | null;
+          temporaryGrant?: (ResolvedTemporaryTraceGrant & { expiresAt?: string | null }) | null;
+        }
+      | undefined;
+
+    let binding: MediaTicketAuthBinding | null = null;
+    if (ac?.fieldAuditPass?.active && ac.fieldAuditPass.id) {
+      const expMs = ac.fieldAuditPass.expiresAt
+        ? new Date(ac.fieldAuditPass.expiresAt).getTime()
+        : NaN;
+      binding = {
+        kind: "pass",
+        id: Number(ac.fieldAuditPass.id),
+        maxExpSec: Number.isFinite(expMs) ? Math.floor(expMs / 1000) : null,
+      };
+    } else if (ac?.temporaryGrant?.active && ac.temporaryGrant.id) {
+      const expMs = ac.temporaryGrant.expiresAt
+        ? new Date(ac.temporaryGrant.expiresAt).getTime()
+        : NaN;
+      binding = {
+        kind: "grant",
+        id: Number(ac.temporaryGrant.id),
+        maxExpSec: Number.isFinite(expMs) ? Math.floor(expMs / 1000) : null,
+      };
+    } else if (ctx.user?.id) {
+      binding = {
+        kind: "user",
+        id: Number(ctx.user.id),
+      };
+    }
+
+    if (!binding) return payload;
+    const nowMs = Date.now();
+    const signed: Record<string, unknown> = { ...payload };
+    for (const tierKey of ["enterpriseData", "authorityData", "fieldAuditData"] as const) {
+      if (signed[tierKey]) {
+        signed[tierKey] = this.rewriteNestedMediaUrls(signed[tierKey], binding, nowMs);
+      }
+    }
+    return signed as T;
+  }
+
   /** Tra cứu hồ sơ truy xuất QR 3 cấp độ: Công khai (Mục 1), Doanh nghiệp (Cấp 2), Cơ quan quản lý (Cấp 3) theo đúng Vai trò + Phạm vi. */
   async trace(rawCode: string, ctx: TraceRequestContext) {
+    const result = await this.traceInternal(rawCode, ctx);
+    return this.signRestrictedTraceMediaUrls(result, ctx);
+  }
+
+  private async traceInternal(rawCode: string, ctx: TraceRequestContext) {
     const cleanCode = normalizeTraceLookupCode(rawCode);
     if (!cleanCode || cleanCode.length > 128 || !/^[A-Za-z0-9._/-]+$/.test(cleanCode)) {
       throw notFound(`Không tìm thấy hồ sơ truy xuất cho mã "${cleanCode.slice(0, 80)}". Vui lòng kiểm tra lại mã thửa, mã lô hoặc tem QR.`);

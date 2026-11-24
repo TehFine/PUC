@@ -421,7 +421,16 @@ describe("cổng hộ dân (/api/portal)", () => {
     const upload = await an
       .post("/api/uploads")
       .field("purpose", "journal")
-      .attach("file", Buffer.from([0xff, 0xd8, 0xff, 0xd9]), "field.jpg");
+      .attach(
+        "file",
+        Buffer.from(
+          "ffd8ffdb004300" +
+            "08".repeat(64) +
+            "ffc0000b080001000101011100ffc40014000100000000000000000000000000000000ffc40014100100000000000000000000000000000000ffda0008010100003f003fffd9",
+          "hex",
+        ),
+        "field.jpg",
+      );
     expect(upload.status).toBe(201);
     const photoId = upload.body.id as number;
 

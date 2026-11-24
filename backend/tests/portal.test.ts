@@ -22,7 +22,12 @@ const USERS = {
   farmerBinh: "0912234567", // Hộ Trần Thị Bình
 };
 
-const TINY_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+const TINY_JPEG = Buffer.from(
+  "ffd8ffdb004300" +
+    "08".repeat(64) +
+    "ffc0000b080001000101011100ffc40014000100000000000000000000000000000000ffc40014100100000000000000000000000000000000ffda0008010100003f003fffd9",
+  "hex",
+);
 const TINY_PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF", "ascii");
 
 let nest: INestApplication;

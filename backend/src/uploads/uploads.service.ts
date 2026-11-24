@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Optional } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHash, randomUUID } from "node:crypto";
 import { constants as fsConstants, type ReadStream } from "node:fs";
@@ -19,11 +19,17 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../auth/auth-user";
 import { can, type ResourceKey } from "../auth/permissions";
+import {
+  isSignedTraceMediaToken,
+  verifyTraceMediaToken,
+  type VerifiedMediaTicket,
+} from "../common/crypto/media-ticket";
 import { isStaffInCuneCoopScope, isStaffInParcelScope } from "../common/crud/village-scope";
-import { badRequest, forbidden, notFound } from "../common/errors/app.exception";
+import { AppException, badRequest, forbidden, notFound } from "../common/errors/app.exception";
 import { hasPublicColumn, hasPublicTable } from "../common/sql/schema-cache";
 import type { AppConfig } from "../config/configuration";
 import { DatabaseService } from "../database/database.service";
+import { MAX_IMAGE_UPLOAD_BYTES, sanitizeAndValidateImageBuffer } from "./image-security";
 
 export const UPLOAD_PURPOSES = [
   "journal",
@@ -86,6 +92,8 @@ const VIDEO_PURPOSES: ReadonlySet<UploadPurpose> = new Set([
   "inspection",
 ]);
 const DEFAULT_MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+const MAX_VIDEO_DB_INLINE_BYTES = 2 * 1024 * 1024;
+const ORPHAN_SWEEP_INTERVAL_MS = 6 * 3600_000;
 const ATTACHMENT_META_COLUMNS =
   "id, public_token, owner_user_id, household_id, purpose, storage_key, original_name, mime_type, size_bytes";
 
@@ -236,10 +244,12 @@ export interface UploadedFileInput {
  * Các nghiệp vụ khác chỉ lưu `attachments.id` và gọi `assertUsable` trước khi gắn tệp vào bản ghi.
  */
 @Injectable()
-export class UploadsService implements OnModuleInit {
+export class UploadsService implements OnModuleInit, OnModuleDestroy {
   private readonly root: string;
   private readonly maxBytes: number;
+  private readonly jwtSecret: string;
   private readonly rehydrating = new Map<number, Promise<boolean>>();
+  private orphanTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly db: DatabaseService,
@@ -249,6 +259,7 @@ export class UploadsService implements OnModuleInit {
     const uploads = config.get("uploads", { infer: true });
     this.root = resolve(uploads.dir);
     this.maxBytes = uploads.maxBytes;
+    this.jwtSecret = config.get("jwt", { infer: true }).accessSecret;
   }
 
   async onModuleInit() {
@@ -256,12 +267,24 @@ export class UploadsService implements OnModuleInit {
     await this.ensureMultiPhotoSchema().catch(() => undefined);
     if (process.env.NODE_ENV !== "test") {
       void this.syncStructuredStorageInBackground().catch(() => undefined);
+      this.orphanTimer = setInterval(() => {
+        void this.cleanupExpiredOrphanAttachments(48).catch(() => undefined);
+      }, ORPHAN_SWEEP_INTERVAL_MS);
+      this.orphanTimer.unref?.();
+    }
+  }
+
+  onModuleDestroy() {
+    if (this.orphanTimer) {
+      clearInterval(this.orphanTimer);
+      this.orphanTimer = null;
     }
   }
 
   private async syncStructuredStorageInBackground(): Promise<void> {
     await this.backfillLocalFilesToDb().catch(() => undefined);
     await this.organizeLegacyAttachments().catch(() => undefined);
+    await this.cleanupExpiredOrphanAttachments(48).catch(() => undefined);
   }
 
   /**
@@ -364,8 +387,9 @@ export class UploadsService implements OnModuleInit {
     const params: unknown[] = [user.id, purpose, normalizedSha];
     let sizeClause = "";
     if (typeof sizeBytes === "number" && Number.isInteger(sizeBytes) && sizeBytes > 0) {
-      params.push(sizeBytes);
-      sizeClause = ` AND size_bytes = $${params.length}`;
+      // Sau khi máy chủ bóc EXIF, dung lượng lưu trữ có thể nhỏ hơn hoặc bằng kích thước gốc trên trình duyệt (+ tối đa 36 byte cờ xoay)
+      params.push(sizeBytes + 64);
+      sizeClause = ` AND size_bytes <= $${params.length}`;
     }
 
     let householdClause: string;
@@ -384,19 +408,26 @@ export class UploadsService implements OnModuleInit {
       public_token: string;
       mime_type: string;
       size_bytes: number;
+      storage_key: string;
+      has_db_data: boolean;
     }>(
-      `SELECT id, public_token, mime_type, size_bytes
+      `SELECT id, public_token, mime_type, size_bytes, storage_key, (file_data IS NOT NULL) AS has_db_data
        FROM attachments
        WHERE owner_user_id = $1
          AND purpose = $2
          AND sha256_hex = $3${sizeClause}${householdClause}
-         AND file_data IS NOT NULL
        ORDER BY id DESC
        LIMIT 1`,
       params,
     );
     const existing = rows[0];
     if (!existing) return { found: false };
+    if (!existing.has_db_data) {
+      const diskExists = await access(this.pathOf(existing.storage_key))
+        .then(() => true)
+        .catch(() => false);
+      if (!diskExists) return { found: false };
+    }
 
     const id = Number(existing.id);
     return {
@@ -407,6 +438,27 @@ export class UploadsService implements OnModuleInit {
       sizeBytes: Number(existing.size_bytes),
       sha256: normalizedSha,
     };
+  }
+
+  private async assertUserHourlyUploadQuota(userId: number): Promise<void> {
+    const maxCount = process.env.NODE_ENV === "test" ? 600 : 150;
+    const maxBytesHour = (process.env.NODE_ENV === "test" ? 800 : 200) * 1024 * 1024;
+    const { rows } = await this.db.query<{ cnt: number; total_bytes: string }>(
+      `SELECT COUNT(*)::int AS cnt, COALESCE(SUM(size_bytes), 0)::text AS total_bytes
+         FROM attachments
+        WHERE owner_user_id = $1
+          AND created_at > now() - interval '1 hour'`,
+      [userId],
+    );
+    const cnt = Number(rows[0]?.cnt ?? 0);
+    const bytes = Number(rows[0]?.total_bytes ?? 0);
+    if (cnt >= maxCount || bytes >= maxBytesHour) {
+      throw new AppException(
+        429,
+        "Tài khoản đã đạt giới hạn tải tệp trong giờ qua. Vui lòng lưu bản ghi hiện tại hoặc thử lại sau ít phút.",
+        "UPLOAD_QUOTA_EXCEEDED",
+      );
+    }
   }
 
   async save(
@@ -430,15 +482,22 @@ export class UploadsService implements OnModuleInit {
     }
 
     // Kích thước thật lấy từ bộ đệm đã nhận (không tin trường `size` do tầng trung gian hoặc client cung cấp).
-    const actualBytes = file.buffer.byteLength;
+    const rawIncomingBytes = file.buffer.byteLength;
     const type = detectType(file.buffer);
     if (!type) {
-      if (actualBytes > this.maxBytes) throw badRequest(`Tệp vượt quá ${Math.round(this.maxBytes / 1024 / 1024)} MB.`);
+      if (rawIncomingBytes > this.maxBytes) {
+        throw badRequest(`Tệp vượt quá ${Math.round(this.maxBytes / 1024 / 1024)} MB.`);
+      }
       throw badRequest("Chỉ chấp nhận ảnh JPG, PNG, WEBP, video MP4/WEBM hoặc tệp PDF.");
     }
     const isVideo = type.mime.startsWith("video/");
-    const limitBytes = isVideo ? Math.max(this.maxBytes, DEFAULT_MAX_VIDEO_BYTES) : this.maxBytes;
-    if (actualBytes > limitBytes) {
+    const isImage = type.mime.startsWith("image/");
+    const limitBytes = isVideo
+      ? Math.max(this.maxBytes, DEFAULT_MAX_VIDEO_BYTES)
+      : isImage
+        ? Math.min(this.maxBytes, MAX_IMAGE_UPLOAD_BYTES)
+        : this.maxBytes;
+    if (rawIncomingBytes > limitBytes) {
       throw badRequest(`Tệp vượt quá ${Math.round(limitBytes / 1024 / 1024)} MB.`);
     }
     if (type.mime === "application/pdf" && purpose !== "approval" && purpose !== "lab") {
@@ -446,12 +505,12 @@ export class UploadsService implements OnModuleInit {
     }
     if (isVideo && !VIDEO_PURPOSES.has(purpose)) throw badRequest("Mục này chỉ nhận tệp ảnh.");
 
-    const sha256Hex = createHash("sha256").update(file.buffer).digest("hex");
+    const rawSha256Hex = createHash("sha256").update(file.buffer).digest("hex");
     if (normalizedExpectedSha) {
-      if (normalizedExpectedSha !== sha256Hex) {
+      if (normalizedExpectedSha !== rawSha256Hex) {
         throw badRequest("Dữ liệu tệp tải lên bị gián đoạn do mạng yếu. Hệ thống sẽ tự động tải lại.");
       }
-      const existing = await this.findOwnedByHash(user, purpose, sha256Hex, actualBytes);
+      const existing = await this.findOwnedByHash(user, purpose, rawSha256Hex, rawIncomingBytes);
       if (existing.found) {
         return {
           id: existing.id,
@@ -463,6 +522,18 @@ export class UploadsService implements OnModuleInit {
         };
       }
     }
+
+    await this.assertUserHourlyUploadQuota(user.id);
+
+    // Chặn cứng Pixel Bomb và bóc sạch 100% EXIF GPS nhà riêng / số sê-ri thiết bị khỏi mọi tệp ảnh trước khi ghi đĩa & CSDL
+    const cleanBuffer = isImage
+      ? sanitizeAndValidateImageBuffer(file.buffer, type.mime).buffer
+      : file.buffer;
+    const actualBytes = cleanBuffer.byteLength;
+    const storeInlineInDb =
+      !isVideo ||
+      actualBytes <= MAX_VIDEO_DB_INLINE_BYTES ||
+      process.env.UPLOAD_STORE_VIDEO_IN_DB === "true";
 
     const now = new Date();
     const initialHouseholdId = user.role === "farmer" ? user.householdId : null;
@@ -478,14 +549,14 @@ export class UploadsService implements OnModuleInit {
     });
     const path = this.pathOf(key);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, file.buffer, { flag: "wx" });
+    await writeFile(path, cleanBuffer, { flag: "wx" });
 
     try {
       const safeOriginalName = file.originalname
         ? file.originalname
-            .normalize("NFC")
-            .replace(/[\u0000-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g, "")
-            .slice(0, 200)
+          .normalize("NFC")
+          .replace(/[\u0000-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g, "")
+          .slice(0, 200)
         : null;
       const { rows } = await this.db.query<{ id: number; public_token: string }>(
         `INSERT INTO attachments (owner_user_id, household_id, purpose, storage_key, original_name, mime_type, size_bytes, file_data, sha256_hex)
@@ -498,8 +569,8 @@ export class UploadsService implements OnModuleInit {
           safeOriginalName,
           type.mime,
           actualBytes,
-          file.buffer,
-          sha256Hex,
+          storeInlineInDb ? cleanBuffer : null,
+          rawSha256Hex,
         ],
       );
       const id = Number(rows[0].id);
@@ -510,7 +581,7 @@ export class UploadsService implements OnModuleInit {
         purpose,
         mimeType: type.mime,
         sizeBytes: actualBytes,
-        sha256: sha256Hex,
+        sha256: rawSha256Hex,
         originalName: safeOriginalName,
         hhIdentity,
         uploadedByUserId: user.id,
@@ -533,7 +604,7 @@ export class UploadsService implements OnModuleInit {
         url: this.urlOf(id, purpose, publicToken),
         mimeType: type.mime,
         sizeBytes: actualBytes,
-        sha256: sha256Hex,
+        sha256: rawSha256Hex,
       };
     } catch (error) {
       await unlink(path).catch(() => undefined);
@@ -648,34 +719,89 @@ export class UploadsService implements OnModuleInit {
     return this.db.cache?.get<number>(`uploads:disk-size:${attachmentId}`);
   }
 
+  private async isTicketBindingStillActive(ticket: VerifiedMediaTicket): Promise<boolean> {
+    if (ticket.bindingKind === "pass") {
+      if (!(await hasPublicTable(this.db, "field_audit_passes"))) return false;
+      const res = await this.db.query<{ ok: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM field_audit_passes
+           WHERE id = $1 AND status = 'active' AND expires_at > now()
+         ) AS ok`,
+        [ticket.bindingId],
+      );
+      return Boolean(res.rows[0]?.ok);
+    }
+    if (ticket.bindingKind === "grant") {
+      if (!(await hasPublicTable(this.db, "trace_access_requests"))) return false;
+      const res = await this.db.query<{ ok: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM trace_access_requests
+           WHERE id = $1 AND status = 'approved' AND (expires_at IS NULL OR expires_at > now())
+         ) AS ok`,
+        [ticket.bindingId],
+      );
+      return Boolean(res.rows[0]?.ok);
+    }
+    if (ticket.bindingKind === "user") {
+      const hasLockedUntil = await hasPublicColumn(this.db, "users", "locked_until");
+      const lockClause = hasLockedUntil
+        ? "AND (locked_until IS NULL OR locked_until <= now())"
+        : "";
+      const res = await this.db.query<{ ok: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM users WHERE id = $1 ${lockClause}
+         ) AS ok`,
+        [ticket.bindingId],
+      );
+      return Boolean(res.rows[0]?.ok);
+    }
+    return false;
+  }
+
   /**
    * Tra cứu tệp phục vụ qua `/api/public/files/:token`:
-   * - Bắt buộc khớp chính xác `public_token` ngẫu nhiên (không bao giờ cho phép dò theo ID số tuần tự).
-   * - Chặn hoàn toàn tệp hồ sơ phê duyệt, khiếu nại vi phạm, ảnh khai báo thu hoạch và ảnh kích hoạt tem
-   *   (`approval`, `violation`, `harvest`, `stamp`).
-   * - Bản scan kiểm nghiệm chỉ phục vụ khi đã gắn với ít nhất một phiếu `lab_tests.record_status = 'verified'`
-   *   (chặn cả bản nháp lẫn tệp vừa tải lên chưa gắn phiếu).
+   * - Ảnh `journal` và `inspection` của hộ dân KHÔNG còn mở tự do qua `public_token` trần:
+   *   bắt buộc phải đi kèm vé ký số ngắn hạn (`st1.<payload>.<hmac>`) còn hiệu lực (tự động bị thu hồi ngay lập tức
+   *   khi thẻ thẩm định `field_audit_passes` hoặc quyền truy xuất `trace_access_requests` hết hạn/bị thu hồi),
+   *   HOẶC người gọi đang có phiên đăng nhập hợp lệ đúng phạm vi hộ/thôn (`assertReadable`).
+   * - Chặn hoàn toàn tệp hồ sơ phê duyệt, khiếu nại vi phạm, ảnh khai báo thu hoạch nháp, hóa đơn vật tư và tem (`approval`, `violation`, `stamp`).
    */
   async findPublicByToken(token: string, user?: AuthUser): Promise<AttachmentRow | null> {
-    if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
-    const queryPublic = async (): Promise<{ attachment: AttachmentRow | null; publicEligible: boolean }> => {
+    let lookupToken = token;
+    let verifiedTicket: VerifiedMediaTicket | null = null;
+
+    if (isSignedTraceMediaToken(token)) {
+      verifiedTicket = verifyTraceMediaToken(token, this.jwtSecret);
+      if (!verifiedTicket) return null;
+      const active = await this.isTicketBindingStillActive(verifiedTicket);
+      if (!active) return null;
+      lookupToken = verifiedTicket.publicToken;
+    } else if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) {
+      return null;
+    }
+
+    const queryPublic = async (): Promise<{
+      attachment: AttachmentRow | null;
+      publicEligible: boolean;
+      traceTicketEligible: boolean;
+    }> => {
       const { rows } = await this.db.query<AttachmentRow>(
         `SELECT ${ATTACHMENT_META_COLUMNS} FROM attachments WHERE public_token = $1 LIMIT 1`,
-        [token],
+        [lookupToken],
       );
       const attachment = rows[0];
-      if (!attachment) return { attachment: null, publicEligible: false };
+      if (!attachment) return { attachment: null, publicEligible: false, traceTicketEligible: false };
       if (STRICT_INTERNAL_PURPOSES.has(attachment.purpose)) {
-        return { attachment: null, publicEligible: false };
+        return { attachment: null, publicEligible: false, traceTicketEligible: false };
       }
 
       if (attachment.purpose === "harvest") {
         if (!attachment.mime_type.startsWith("image/")) {
-          return { attachment: null, publicEligible: false };
+          return { attachment: null, publicEligible: false, traceTicketEligible: false };
         }
         const hasLotProductCol = await hasPublicColumn(this.db, "harvest_lots", "product_image_id");
         if (!hasLotProductCol) {
-          return { attachment: null, publicEligible: false };
+          return { attachment: null, publicEligible: false, traceTicketEligible: false };
         }
         const lotImgCheck = await this.db.query<{ is_lot_product: boolean }>(
           `SELECT EXISTS (
@@ -684,9 +810,9 @@ export class UploadsService implements OnModuleInit {
           [attachment.id],
         );
         if (!lotImgCheck.rows[0]?.is_lot_product) {
-          return { attachment: null, publicEligible: false };
+          return { attachment: null, publicEligible: false, traceTicketEligible: false };
         }
-        return { attachment, publicEligible: true };
+        return { attachment, publicEligible: true, traceTicketEligible: true };
       }
 
       if (attachment.purpose === "lab") {
@@ -697,9 +823,9 @@ export class UploadsService implements OnModuleInit {
           [attachment.id],
         );
         if (!labCheck.rows[0]?.has_verified) {
-          return { attachment: null, publicEligible: false };
+          return { attachment: null, publicEligible: false, traceTicketEligible: false };
         }
-        return { attachment, publicEligible: true };
+        return { attachment, publicEligible: true, traceTicketEligible: true };
       }
 
       if (attachment.purpose === "journal") {
@@ -716,7 +842,7 @@ export class UploadsService implements OnModuleInit {
             [attachment.id],
           );
           if (invCheck.rows[0]?.is_invoice) {
-            return { attachment: null, publicEligible: false };
+            return { attachment: null, publicEligible: false, traceTicketEligible: false };
           }
         }
         const milestoneFieldClause = hasMilestones
@@ -733,9 +859,10 @@ export class UploadsService implements OnModuleInit {
           [attachment.id],
         );
         if (!linkedJournalCheck.rows[0]?.is_linked) {
-          return { attachment: null, publicEligible: false };
+          return { attachment: null, publicEligible: false, traceTicketEligible: false };
         }
-        return { attachment, publicEligible: true };
+        // Không mở công khai vô điều kiện cho token trần: chỉ cho phép qua vé ký số ngắn hạn hoặc phiên đăng nhập hợp lệ
+        return { attachment, publicEligible: false, traceTicketEligible: true };
       }
 
       if (attachment.purpose === "inspection") {
@@ -751,9 +878,9 @@ export class UploadsService implements OnModuleInit {
           [attachment.id],
         );
         if (!inspCheck.rows[0]?.is_linked) {
-          return { attachment: null, publicEligible: false };
+          return { attachment: null, publicEligible: false, traceTicketEligible: false };
         }
-        return { attachment, publicEligible: true };
+        return { attachment, publicEligible: false, traceTicketEligible: true };
       }
 
       if (attachment.purpose === "avatar") {
@@ -768,23 +895,28 @@ export class UploadsService implements OnModuleInit {
           [attachment.id],
         );
         if (!avatarCheck.rows[0]?.is_current) {
-          return { attachment: null, publicEligible: false };
+          return { attachment: null, publicEligible: false, traceTicketEligible: false };
         }
+        const consented = Boolean(avatarCheck.rows[0]?.is_consented);
         return {
           attachment,
-          publicEligible: Boolean(avatarCheck.rows[0]?.is_consented),
+          publicEligible: consented,
+          traceTicketEligible: true,
         };
       }
 
-      return { attachment, publicEligible: true };
+      return { attachment, publicEligible: true, traceTicketEligible: true };
     };
 
     const resolved = this.db.cache
-      ? await this.db.cache.getOrLoad(`uploads:pub:${token}`, 60_000, ["uploads", "portal", "trace"], queryPublic)
+      ? await this.db.cache.getOrLoad(`uploads:pub:${lookupToken}`, 60_000, ["uploads", "portal", "trace"], queryPublic)
       : await queryPublic();
 
     if (!resolved.attachment) return null;
     if (resolved.publicEligible) return resolved.attachment;
+    if (verifiedTicket && resolved.traceTicketEligible) {
+      return resolved.attachment;
+    }
     if (!user) return null;
     try {
       await this.assertReadable(resolved.attachment, user);
@@ -792,6 +924,109 @@ export class UploadsService implements OnModuleInit {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Dọn dẹp an toàn các tệp nháp mồ côi đã tải lên quá `maxAgeHours` giờ nhưng người dùng hủy biểu mẫu
+   * chưa gắn vào bất kỳ bản ghi nghiệp vụ nào (tránh tích tụ rác làm đầy ổ cứng hoặc CSDL theo thời gian).
+   */
+  async cleanupExpiredOrphanAttachments(maxAgeHours = 48): Promise<number> {
+    const safeHours = Math.max(1, Math.floor(maxAgeHours));
+    const [
+      hasMilestones,
+      hasApprovalAtts,
+      hasNews,
+      hasFertilizers,
+      hasVarieties,
+      hasLotProdImg,
+    ] = await Promise.all([
+      hasPublicTable(this.db, "care_milestone_declarations"),
+      hasPublicTable(this.db, "approval_attachments"),
+      hasPublicTable(this.db, "news_articles"),
+      hasPublicTable(this.db, "fertilizers"),
+      hasPublicTable(this.db, "varieties"),
+      hasPublicColumn(this.db, "harvest_lots", "product_image_id"),
+    ]);
+
+    const extraChecks: string[] = [];
+    if (hasMilestones) {
+      extraChecks.push(
+        `AND NOT EXISTS (
+           SELECT 1 FROM care_milestone_declarations cmd
+           WHERE cmd.field_photo_id = a.id
+              OR cmd.invoice_photo_id = a.id
+              OR a.id = ANY(cmd.field_photo_ids)
+              OR a.id = ANY(cmd.invoice_photo_ids)
+         )`,
+      );
+    }
+    if (hasApprovalAtts) {
+      extraChecks.push(
+        `AND NOT EXISTS (SELECT 1 FROM approval_attachments aa WHERE aa.attachment_id = a.id)`,
+      );
+    }
+    if (hasLotProdImg) {
+      extraChecks.push(
+        `AND NOT EXISTS (SELECT 1 FROM harvest_lots hl WHERE hl.product_image_id = a.id)`,
+      );
+    }
+    if (hasNews) {
+      extraChecks.push(
+        `AND NOT EXISTS (
+           SELECT 1 FROM news_articles na
+           WHERE na.image_url LIKE '%' || a.public_token || '%'
+              OR na.image_url = '/api/uploads/' || a.id::text
+         )`,
+      );
+    }
+    if (hasFertilizers) {
+      extraChecks.push(
+        `AND NOT EXISTS (
+           SELECT 1 FROM fertilizers fz
+           WHERE fz.image_url LIKE '%' || a.public_token || '%'
+              OR fz.image_url = '/api/uploads/' || a.id::text
+         )`,
+      );
+    }
+    if (hasVarieties) {
+      extraChecks.push(
+        `AND NOT EXISTS (
+           SELECT 1 FROM varieties vr
+           WHERE vr.image_url LIKE '%' || a.public_token || '%'
+              OR vr.image_url = '/api/uploads/' || a.id::text
+         )`,
+      );
+    }
+
+    const { rows } = await this.db.query<{ id: number; storage_key: string }>(
+      `DELETE FROM attachments a
+        WHERE a.created_at < now() - ($1::int * interval '1 hour')
+          AND NOT EXISTS (SELECT 1 FROM journal_entries je WHERE je.photo_id = a.id OR a.id = ANY(je.photo_ids))
+          AND NOT EXISTS (SELECT 1 FROM spray_records sr WHERE sr.photo_id = a.id OR a.id = ANY(sr.photo_ids))
+          AND NOT EXISTS (SELECT 1 FROM violations vl WHERE vl.farmer_response_photo_id = a.id OR a.id = ANY(vl.farmer_response_photo_ids))
+          AND NOT EXISTS (SELECT 1 FROM harvest_declarations hd WHERE hd.photo_id = a.id)
+          AND NOT EXISTS (SELECT 1 FROM farmer_stamps fs WHERE fs.photo_id = a.id)
+          AND NOT EXISTS (SELECT 1 FROM lab_tests lt WHERE lt.scan_attachment_id = a.id)
+          AND NOT EXISTS (SELECT 1 FROM inspection_minutes im WHERE im.photo_id = a.id OR a.id = ANY(im.photo_ids))
+          AND NOT EXISTS (SELECT 1 FROM households hh WHERE hh.avatar_id = a.id)
+          ${extraChecks.join("\n          ")}
+          AND a.id IN (
+            SELECT a2.id FROM attachments a2
+            WHERE a2.created_at < now() - ($1::int * interval '1 hour')
+            ORDER BY a2.id ASC
+            LIMIT 100
+          )
+        RETURNING a.id, a.storage_key`,
+      [safeHours],
+    );
+
+    for (const r of rows) {
+      await unlink(this.pathOf(r.storage_key)).catch(() => undefined);
+    }
+    if (rows.length > 0) {
+      this.db.cache?.invalidateTags(["uploads"]);
+    }
+    return rows.length;
   }
 
   /** Quyền xem tệp trên `/api/uploads/:id`: hộ dân cùng hộ; cán bộ đúng phân quyền & phạm vi địa bàn. */
@@ -848,11 +1083,10 @@ export class UploadsService implements OnModuleInit {
       const linkedCheck = await this.db.query<{ linked: boolean }>(
         `SELECT (
            EXISTS (SELECT 1 FROM lab_tests lt WHERE lt.scan_attachment_id = $1)
-           OR ${
-             hasMinutePhotoIds
-               ? "EXISTS (SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1 OR $1::bigint = ANY(im.photo_ids))"
-               : "EXISTS (SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1)"
-           }
+           OR ${hasMinutePhotoIds
+          ? "EXISTS (SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1 OR $1::bigint = ANY(im.photo_ids))"
+          : "EXISTS (SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1)"
+        }
            ${hasApprovalAtts ? "OR EXISTS (SELECT 1 FROM approval_attachments aa WHERE aa.attachment_id = $1)" : ""}
          ) AS linked`,
         [attachment.id],

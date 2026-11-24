@@ -280,7 +280,7 @@ export class UploadsController {
     if (attachment.purpose === "news" || attachment.purpose === "catalog") {
       res.setHeader("Cache-Control", "public, max-age=604800, immutable");
     } else {
-      res.setHeader("Cache-Control", "private, no-cache");
+      res.setHeader("Cache-Control", "private, no-store, max-age=0");
       res.setHeader("Vary", "Cookie");
     }
     return streamAttachment(this.uploads, attachment, req, res);

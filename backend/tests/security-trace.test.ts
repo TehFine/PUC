@@ -7,6 +7,7 @@ import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { DatabaseService } from "../src/database/database.service";
+import { UploadsService } from "../src/uploads/uploads.service";
 import { TEST_PASSWORD } from "./constants";
 
 /**
@@ -836,7 +837,7 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
 
       // 6. ETag tải tệp không lộ public_token & chặn truy cập công khai ảnh hóa đơn mua vật tư nông hộ
       const tinyPng = Buffer.from(
-        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000c49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
         "hex",
       );
       const upInvoice = await farmer.post("/api/uploads").field("purpose", "journal").attach("file", tinyPng, "invoice.png");
@@ -879,10 +880,18 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
           [planId, ids.hhA, FX.hhA.plot, Number(upField.body.id), Number(upInvoice.body.id), [Number(upInvoice.body.id)]],
         );
         try {
-          const pubFieldOk = await request(app).get(`/api/public/files/${fieldAttRow.public_token}`);
-          expect(pubFieldOk.status).toBe(200);
+          // Khách ẩn danh cầm public_token trần không thể tải trộm ảnh hiện trường của hộ dân (404)
+          const pubFieldAnon = await request(app).get(`/api/public/files/${fieldAttRow.public_token}`);
+          expect(pubFieldAnon.status).toBe(404);
+          // Chủ hộ đăng nhập đúng phạm vi xem được ảnh hiện trường (200 + private, no-store)
+          const ownerFieldOk = await farmer.get(`/api/public/files/${fieldAttRow.public_token}`);
+          expect(ownerFieldOk.status).toBe(200);
+          expect(String(ownerFieldOk.headers["cache-control"] || "")).toContain("no-store");
+          // Ảnh hóa đơn vật tư bị khóa tuyệt đối trên /api/public/files/:token kể cả khi đã đăng nhập
           const pubInvoiceAttempt = await request(app).get(`/api/public/files/${attRow.public_token}`);
           expect(pubInvoiceAttempt.status).toBe(404);
+          const ownerInvoicePubAttempt = await farmer.get(`/api/public/files/${attRow.public_token}`);
+          expect(ownerInvoicePubAttempt.status).toBe(404);
         } finally {
           await db.query("DELETE FROM plot_care_plans WHERE id = $1", [planId]);
         }
@@ -925,7 +934,7 @@ describe("HOUSEHOLD-TRACE & PHOTO-EVIDENCE: tra cứu mã hộ, ảnh profile, �
     const villageOfficer = await loggedIn(USERS.villageOfficer);
 
     const tinyPng = Buffer.from(
-      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000c49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
       "hex",
     );
 
@@ -1471,7 +1480,7 @@ describe("BYPASS-DEFENSE: chống vượt rào phạm vi doanh nghiệp, ghép q
     const createdAttachmentIds: number[] = [];
 
     const tinyPng = Buffer.from(
-      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000c49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
       "hex",
     );
 
@@ -1627,7 +1636,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
     const todayIso = new Date().toISOString().slice(0, 10);
 
     const tinyPng = Buffer.from(
-      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+      "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000c49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
       "hex",
     );
 
@@ -2257,6 +2266,222 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
         await db.query("DELETE FROM trace_detail_access_logs WHERE lot_code = $1", [bulkLotCode]);
         await db.query("DELETE FROM trace_scan_logs WHERE resolved_lot_code = $1", [bulkLotCode]);
         await db.query("DELETE FROM harvest_lots WHERE id = $1", [bulkLotId]);
+      }
+    }
+  });
+
+  it("bảo vệ dữ liệu ảnh hộ dân: khử sạch EXIF/GPS/XMP, chặn Pixel Bomb, khóa vé ký số st1 thu hồi tức thời và dọn tệp nháp mồ côi", async () => {
+    const admin = await loggedIn("0901234567");
+    const farmer = await loggedIn(FX.farmerUsername);
+    const uploadsSvc = nest.get(UploadsService);
+    const createdAttachmentIds: number[] = [];
+    let createdJournalId = 0;
+    let passId = 0;
+
+    const jpegBodyTail = Buffer.from(
+      "ffdb004300" +
+        "08".repeat(64) +
+        "ffc0000b080001000101011100ffc40014000100000000000000000000000000000000ffc40014100100000000000000000000000000000000ffda0008010100003f003fffd9",
+      "hex",
+    );
+
+    // 1. Tạo tệp JPEG có phân đoạn APP1 EXIF chứa Orientation=6 + chuỗi GPS nhà riêng / số sê-ri máy + COM nhạy cảm
+    const secretExifLeak = Buffer.from(
+      "GPS-HOME-12.893412-108.234567-iPhone15Pro-Serial998877-HoNguyenVanA",
+      "ascii",
+    );
+    const tiffHeaderAndIfd = Buffer.alloc(26 + secretExifLeak.length);
+    tiffHeaderAndIfd.write("MM", 0, "ascii");
+    tiffHeaderAndIfd.writeUInt16BE(0x002a, 2);
+    tiffHeaderAndIfd.writeUInt32BE(8, 4); // IFD0 tại offset 8
+    tiffHeaderAndIfd.writeUInt16BE(1, 8); // 1 entry (Orientation = 6)
+    tiffHeaderAndIfd.writeUInt16BE(0x0112, 10);
+    tiffHeaderAndIfd.writeUInt16BE(3, 12);
+    tiffHeaderAndIfd.writeUInt32BE(1, 14);
+    tiffHeaderAndIfd.writeUInt16BE(6, 18);
+    tiffHeaderAndIfd.writeUInt32BE(0, 22);
+    secretExifLeak.copy(tiffHeaderAndIfd, 26);
+
+    const app1Payload = Buffer.concat([Buffer.from("Exif\0\0", "ascii"), tiffHeaderAndIfd]);
+    const app1Seg = Buffer.alloc(4 + app1Payload.length);
+    app1Seg[0] = 0xff;
+    app1Seg[1] = 0xe1;
+    app1Seg.writeUInt16BE(2 + app1Payload.length, 2);
+    app1Payload.copy(app1Seg, 4);
+
+    const comSecret = Buffer.from("SecretHomeAddressComment123", "ascii");
+    const comSeg = Buffer.alloc(4 + comSecret.length);
+    comSeg[0] = 0xff;
+    comSeg[1] = 0xfe;
+    comSeg.writeUInt16BE(2 + comSecret.length, 2);
+    comSecret.copy(comSeg, 4);
+
+    const exifJpeg = Buffer.concat([Buffer.from([0xff, 0xd8]), app1Seg, comSeg, jpegBodyTail]);
+
+    try {
+      const upExifJpeg = await farmer
+        .post("/api/uploads")
+        .field("purpose", "journal")
+        .attach("file", exifJpeg, "anh-vuon-co-gps.jpg");
+      expect(upExifJpeg.status).toBe(201);
+      const exifAttId = Number(upExifJpeg.body.id);
+      createdAttachmentIds.push(exifAttId);
+
+      const dlCleanJpeg = await farmer.get(`/api/uploads/${exifAttId}`).buffer(true);
+      expect(dlCleanJpeg.status).toBe(200);
+      const savedJpegBuf = Buffer.from(dlCleanJpeg.body as Buffer);
+      expect(savedJpegBuf[0]).toBe(0xff);
+      expect(savedJpegBuf[1]).toBe(0xd8);
+      expect(savedJpegBuf.includes(Buffer.from("GPS-HOME-12.893412", "ascii"))).toBe(false);
+      expect(savedJpegBuf.includes(Buffer.from("Serial998877", "ascii"))).toBe(false);
+      expect(savedJpegBuf.includes(Buffer.from("SecretHomeAddressComment123", "ascii"))).toBe(false);
+      // Cờ xoay Orientation=6 tối giản (36 byte) vẫn được giữ lại để ảnh chụp dọc không bị nằm ngang
+      expect(savedJpegBuf[2]).toBe(0xff);
+      expect(savedJpegBuf[3]).toBe(0xe1);
+      expect(savedJpegBuf.readUInt16BE(4)).toBe(34);
+
+      // Cột file_data trong PostgreSQL cũng lưu đúng bản sạch đã bóc EXIF
+      const dbDataRow = await db.query<{ file_data: Buffer }>(
+        "SELECT file_data FROM attachments WHERE id = $1",
+        [exifAttId],
+      );
+      expect(dbDataRow.rows[0].file_data.includes(Buffer.from("Serial998877", "ascii"))).toBe(false);
+
+      // 2. Bóc sạch chunk tEXt/eXIf trong PNG và chặn cứng Pixel Bomb (PNG 12000x12000 & JPEG 10000x10000)
+      const basePng = Buffer.from(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000c49444154789c6360f8cf00000101010018dd8db00000000049454e44ae426082",
+        "hex",
+      );
+      const pngSecretPayload = Buffer.from("Author\0ChuHoBiMat999", "ascii");
+      const pngTextChunk = Buffer.alloc(12 + pngSecretPayload.length);
+      pngTextChunk.writeUInt32BE(pngSecretPayload.length, 0);
+      pngTextChunk.write("tEXt", 4, "ascii");
+      pngSecretPayload.copy(pngTextChunk, 8);
+      const pngWithMeta = Buffer.concat([
+        basePng.subarray(0, basePng.length - 12),
+        pngTextChunk,
+        basePng.subarray(basePng.length - 12),
+      ]);
+
+      const upPngMeta = await farmer
+        .post("/api/uploads")
+        .field("purpose", "journal")
+        .attach("file", pngWithMeta, "anh-co-text.png");
+      expect(upPngMeta.status).toBe(201);
+      const pngMetaId = Number(upPngMeta.body.id);
+      createdAttachmentIds.push(pngMetaId);
+
+      const dlCleanPng = await farmer.get(`/api/uploads/${pngMetaId}`).buffer(true);
+      expect(dlCleanPng.status).toBe(200);
+      expect(Buffer.from(dlCleanPng.body as Buffer).includes(Buffer.from("ChuHoBiMat999", "ascii"))).toBe(false);
+
+      // Pixel Bomb PNG (12000 x 12000 = 144 MP) -> bị chặn 400 ngay tại cổng tải lên
+      const bombPng = Buffer.from(basePng);
+      bombPng.writeUInt32BE(12_000, 16);
+      bombPng.writeUInt32BE(12_000, 20);
+      const resBombPng = await farmer
+        .post("/api/uploads")
+        .field("purpose", "journal")
+        .attach("file", bombPng, "pixel-bomb.png");
+      expect(resBombPng.status).toBe(400);
+
+      // Pixel Bomb JPEG (10000 x 10000 = 100 MP) -> bị chặn 400
+      const bombJpeg = Buffer.concat([Buffer.from([0xff, 0xd8]), jpegBodyTail]);
+      const sofOffset = bombJpeg.indexOf(Buffer.from([0xff, 0xc0]));
+      bombJpeg.writeUInt16BE(10_000, sofOffset + 5);
+      bombJpeg.writeUInt16BE(10_000, sofOffset + 7);
+      const resBombJpeg = await farmer
+        .post("/api/uploads")
+        .field("purpose", "journal")
+        .attach("file", bombJpeg, "pixel-bomb.jpg");
+      expect(resBombJpeg.status).toBe(400);
+
+      // 3. Vé ký số ngắn hạn (st1.) cho ảnh nhật ký hộ dân & thu hồi tức thời khi khóa thẻ thẩm định
+      const todayIso = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+      const jCreate = await farmer.post("/api/portal/journal").send({
+        entryOn: todayIso,
+        plotCode: FX.hhA.plot,
+        activity: "Tỉa cành thông tán chống nấm",
+        detail: "Kiểm tra khóa vé ảnh hộ dân",
+        photoId: exifAttId,
+      });
+      expect(jCreate.status).toBe(201);
+      createdJournalId = Number(jCreate.body.id);
+
+      const bareTokenRow = await db.query<{ public_token: string }>(
+        "SELECT public_token FROM attachments WHERE id = $1",
+        [exifAttId],
+      );
+      const barePubToken = bareTokenRow.rows[0].public_token;
+
+      // Khách ẩn danh gọi thẳng bare public_token bị từ chối 404
+      expect((await request(app).get(`/api/public/files/${barePubToken}`)).status).toBe(404);
+
+      const passCreate = await admin.post("/api/field-audit-passes").send({
+        delegationName: "Đoàn Kiểm Tra Bảo Mật Ảnh Hộ Dân",
+        organization: "Chi cục Trồng trọt & BVTV",
+        durationHours: 4,
+      });
+      expect(passCreate.status).toBe(201);
+      passId = Number(passCreate.body.id);
+      const passToken = passCreate.body.passToken as string;
+
+      const auditTraceRes = await request(app)
+        .get(`/api/public/trace/${encodeURIComponent(FX.hhA.plot)}`)
+        .set("x-audit-pass", passToken);
+      expect(auditTraceRes.status).toBe(200);
+
+      const evidenceLogs = auditTraceRes.body.enterpriseData?.evidenceLogs as Array<{
+        activity: string;
+        detail: string | null;
+        photoUrl: string | null;
+      }>;
+      expect(Array.isArray(evidenceLogs)).toBe(true);
+      const targetDiary = evidenceLogs.find((d) => d.detail === "Kiểm tra khóa vé ảnh hộ dân");
+      expect(targetDiary?.photoUrl).toMatch(/^\/api\/public\/files\/st1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+      const signedPhotoUrl = targetDiary!.photoUrl!;
+      expect(signedPhotoUrl).not.toContain(barePubToken);
+
+      // Xem ảnh bằng vé ký số hợp lệ -> 200 OK kèm Cache-Control: private, no-store, max-age=0
+      const okTicketFetch = await request(app).get(signedPhotoUrl);
+      expect(okTicketFetch.status).toBe(200);
+      expect(String(okTicketFetch.headers["cache-control"] || "")).toContain("no-store");
+
+      // Giả mạo chữ ký HMAC 1 ký tự -> từ chối 404
+      const lastChar = signedPhotoUrl.slice(-1) === "A" ? "B" : "A";
+      const tamperedUrl = signedPhotoUrl.slice(0, -1) + lastChar;
+      expect((await request(app).get(tamperedUrl)).status).toBe(404);
+
+      // Thu hồi thẻ thẩm định -> đường dẫn ảnh đã sao chép trước đó lập tức bị khóa 404 ngay tức thì!
+      const revokeRes = await admin.patch(`/api/field-audit-passes/${passId}/revoke`);
+      expect(revokeRes.status).toBe(200);
+      expect((await request(app).get(signedPhotoUrl)).status).toBe(404);
+
+      // 4. Dọn dẹp tệp nháp mồ côi quá 48 giờ nhưng giữ nguyên tuyệt đối tệp đã gắn nhật ký
+      await db.query(
+        "UPDATE attachments SET created_at = now() - interval '72 hours' WHERE id = ANY($1::bigint[])",
+        [[pngMetaId, exifAttId]],
+      );
+      const sweptCount = await uploadsSvc.cleanupExpiredOrphanAttachments(48);
+      expect(sweptCount).toBeGreaterThanOrEqual(1);
+
+      const remainCheck = await db.query<{ id: number }>(
+        "SELECT id FROM attachments WHERE id = ANY($1::bigint[])",
+        [[pngMetaId, exifAttId]],
+      );
+      const remainIds = remainCheck.rows.map((r) => Number(r.id));
+      // pngMetaId chưa gắn bản ghi nên đã được dọn sạch; exifAttId đã gắn vào journal_entries nên được giữ nguyên!
+      expect(remainIds).not.toContain(pngMetaId);
+      expect(remainIds).toContain(exifAttId);
+    } finally {
+      if (passId) {
+        await db.query("DELETE FROM field_audit_passes WHERE id = $1", [passId]);
+      }
+      if (createdJournalId) {
+        await db.query("DELETE FROM journal_entries WHERE id = $1", [createdJournalId]);
+      }
+      if (createdAttachmentIds.length > 0) {
+        await db.query("DELETE FROM attachments WHERE id = ANY($1::bigint[])", [createdAttachmentIds]);
       }
     }
   });

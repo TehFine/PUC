@@ -736,7 +736,12 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     const villageOfficer = await loggedIn(USERS.villageOfficer);
     const inspector = await loggedIn(USERS.inspector);
     const htx = await loggedIn(USERS.htx);
-    const tinyJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const tinyJpeg = Buffer.from(
+      "ffd8ffdb004300" +
+        "08".repeat(64) +
+        "ffc0000b080001000101011100ffc40014000100000000000000000000000000000000ffc40014100100000000000000000000000000000000ffda0008010100003f003fffd9",
+      "hex",
+    );
 
     // Cán bộ thôn không được tải ảnh bản tin/danh mục công khai hoặc vi phạm
     expect(
@@ -1667,7 +1672,12 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     const farmerAn = await loggedIn(USERS.farmerAn);
     const entCheck = await loggedIn("ent_vinhphat_scope", "EnterprisePassword123");
 
-    const tinyJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const tinyJpeg = Buffer.from(
+      "ffd8ffdb004300" +
+        "08".repeat(64) +
+        "ffc0000b080001000101011100ffc40014000100000000000000000000000000000000ffc40014100100000000000000000000000000000000ffda0008010100003f003fffd9",
+      "hex",
+    );
     const isoDaysOffset = (offsetDays: number) => {
       const vnNow = new Date(Date.now() + 7 * 3600 * 1000 + offsetDays * 86400 * 1000);
       return vnNow.toISOString().slice(0, 10);
