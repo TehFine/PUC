@@ -2487,21 +2487,24 @@ describe("báo cáo 2 chế độ và sổ nhật ký điện tử kèm phụ l�
         ),
       ).toBe(true);
 
-      // 5. Cổng nông hộ (/api/portal/logbook-report): chỉ trả về đúng hộ của nông dân đang đăng nhập dù giả mạo householdId=2
-      const farmerOwnRes = await farmerAn.get(
-        "/api/portal/logbook-report?includePhotos=1&householdId=2&from=2026-05-01&to=2026-05-31",
+      // 5. Quản trị viên / Cán bộ HTX xuất 1 lần toàn bộ lịch sử nhật ký của hộ (bỏ trống from & to) hoặc tính đến 1 mốc thời điểm (chỉ truyền to)
+      const fullHistoryRes = await htx.get(
+        "/api/reports/household-logbook?format=json&export=1&householdId=1&includePhotos=1",
       );
-      expect(farmerOwnRes.status).toBe(200);
-      expect(farmerOwnRes.body.householdMeta?.id).toBe(1);
-      expect(String(farmerOwnRes.body.householdMeta?.cccd)).toMatch(/^\*{10}/);
-      expect(
-        (farmerOwnRes.body.evidencePhotos as Array<{ attachmentId: number }>).some(
-          (p) => p.attachmentId === imgFieldId,
-        ),
-      ).toBe(true);
+      expect(fullHistoryRes.status).toBe(200);
+      expect(fullHistoryRes.body.mode).toBe("household_detail");
+      expect(fullHistoryRes.body.total).toBeGreaterThanOrEqual(detailNoInv.body.total);
 
-      // Cán bộ không được gọi sang endpoint riêng của Cổng nông hộ
-      expect((await htx.get("/api/portal/logbook-report")).status).toBe(403);
+      const cutoffDateRes = await htx.get(
+        "/api/reports/household-logbook?format=json&export=1&householdId=1&to=2026-05-31",
+      );
+      expect(cutoffDateRes.status).toBe(200);
+      expect(cutoffDateRes.body.mode).toBe("household_detail");
+      expect(cutoffDateRes.body.total).toBeGreaterThan(0);
+
+      // 6. Nông hộ không có quyền xuất sổ báo cáo PDF/CSV (chức năng chỉ dành cho Quản trị viên & Cán bộ)
+      expect((await farmerAn.get("/api/reports/household-logbook?format=json&householdId=1")).status).toBe(403);
+      expect((await farmerAn.get("/api/portal/logbook-report")).status).toBe(404);
     } finally {
       if (milestoneId) await db.query("DELETE FROM care_milestone_declarations WHERE id = $1", [milestoneId]);
       if (planId) await db.query("DELETE FROM plot_care_plans WHERE id = $1", [planId]);

@@ -10,7 +10,6 @@ import { badRequest, forbidden, notFound } from "../../common/errors/app.excepti
 import { hasPublicColumn, hasPublicTable } from "../../common/sql/schema-cache";
 import { RateLimitTier } from "../../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../../database/database.service";
-import { householdIdOf } from "../../portal/common/portal-context";
 
 function maskReportCccd(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -424,71 +423,6 @@ export class ReportsService {
       rows: stringRows,
       total,
       mode: householdMeta ? "household_detail" : "summary",
-      householdMeta,
-      evidencePhotos: built.evidencePhotos,
-      truncatedPhotoCount: built.truncatedPhotoCount,
-      summaryStats: built.summaryStats,
-    };
-  }
-
-  /**
-   * Dành riêng cho nông hộ đăng nhập Cổng hộ dân (`/api/portal/logbook-report`):
-   * tự xuất Sổ nhật ký canh tác điện tử chuẩn VietGAP / GACC của chính hộ mình (kèm phụ lục ảnh thực địa).
-   */
-  async getFarmerOwnLogbookReport(
-    rawQuery: Record<string, unknown>,
-    user: AuthUser,
-    ip?: string,
-  ): Promise<ReportDataPayload> {
-    const householdId = householdIdOf(user);
-    const filter = this.parseDateOnlyFilter(rawQuery);
-    const isPreview = parseBoolParam(rawQuery.preview);
-    const includePhotos =
-      rawQuery.includePhotos === undefined ? true : parseBoolParam(rawQuery.includePhotos);
-    const includeInvoices = parseBoolParam(rawQuery.includeInvoices);
-
-    const householdMeta = await this.fetchHouseholdMetaById(householdId, false);
-    if (!householdMeta) {
-      throw notFound("Không tìm thấy hồ sơ hộ canh tác.");
-    }
-
-    const effectiveFilter: ReportFilter = {
-      ...filter,
-      householdId,
-      includePhotos: includePhotos && !isPreview,
-      includeInvoices: includePhotos && includeInvoices && !isPreview,
-    };
-
-    const rowLimit = isPreview ? PREVIEW_EXPORT_ROWS : MAX_EXPORT_ROWS;
-    const built = await this.buildHouseholdLogbookDetail(effectiveFilter, rowLimit);
-
-    if (!isPreview) {
-      await this.audit.write(
-        { ip, user },
-        {
-          action: "Xuất sổ nhật ký canh tác",
-          object: "Sổ nhật ký canh tác hộ dân",
-          detail: describeReportFilter(
-            { ...filter, householdId, includePhotos, includeInvoices },
-            householdMeta.code,
-          ),
-        },
-      );
-    }
-
-    const total = built.rows.length;
-    const exposedRows = isPreview ? built.rows.slice(0, PREVIEW_EXPORT_ROWS) : built.rows;
-    const stringRows = exposedRows.map((row) =>
-      row.map((cell) => (cell === null || cell === undefined ? "" : String(cell))),
-    );
-
-    return {
-      type: "household-logbook",
-      filename: `so-nhat-ky-${householdMeta.code.toLowerCase()}.csv`,
-      headers: built.headers,
-      rows: stringRows,
-      total,
-      mode: "household_detail",
       householdMeta,
       evidencePhotos: built.evidencePhotos,
       truncatedPhotoCount: built.truncatedPhotoCount,
