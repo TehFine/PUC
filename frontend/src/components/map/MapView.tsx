@@ -1987,8 +1987,8 @@ export default function MapView({
       setMessage({
         tone: "ok",
         text: data.persisted
-          ? "Đã lưu thửa đất vào PostGIS."
-          : "Đã lưu tạm trong phiên này. Cấu hình DATABASE_URL để lưu lâu dài.",
+          ? "Đã lưu thông tin ranh giới thửa đất."
+          : "Đã lưu tạm ranh giới thửa đất trong phiên hiện tại.",
       });
       onChanged?.();
     } catch (error) {
@@ -2016,8 +2016,8 @@ export default function MapView({
       setMessage({
         tone: "ok",
         text: data.persisted
-          ? "Đã lưu kết quả đo vào PostGIS."
-          : "Đã lưu kết quả đo tạm trong phiên này. Cấu hình DATABASE_URL để lưu lâu dài.",
+          ? "Đã lưu kết quả đo đạc thực địa."
+          : "Đã lưu tạm kết quả đo đạc trong phiên hiện tại.",
       });
       onChanged?.();
     } catch (error) {
@@ -2054,7 +2054,7 @@ export default function MapView({
 
       setMessage({
         tone: "ok",
-        text: `Đã nhập ${data.imported ?? 0} thửa từ ${file.name}${data.persisted ? " vào PostGIS." : " (lưu tạm trong phiên này)."
+        text: `Đã nhập ${data.imported ?? 0} thửa từ ${file.name}${data.persisted ? " thành công." : " (lưu tạm trong phiên hiện tại)."
           }`,
       });
       onChanged?.();

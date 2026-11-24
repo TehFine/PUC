@@ -57,9 +57,6 @@ export default function PlotsTable({
     <div className="card zones-list-card">
       <div className="card-header">
         <span>Danh sách thửa đất</span>
-        <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>
-          {summary.persisted > 0 ? `${summary.persisted} thửa từ PostGIS` : "Đang dùng dữ liệu mẫu"}
-        </span>
       </div>
       <div className="table-wrap zones-table">
         <table>
@@ -216,7 +213,6 @@ export default function PlotsTable({
         <span>
           {features.length} thửa - {formatHa(summary.totalArea)}
         </span>
-        <span>Nguồn: PostGIS khi có DATABASE_URL, ngược lại dùng dữ liệu mẫu</span>
       </div>
 
       {signboardTarget && (
