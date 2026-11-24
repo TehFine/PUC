@@ -144,15 +144,6 @@ interface Props {
   formatDateTime: (dateStr: string | null | undefined, lang: TraceLang) => string;
 }
 
-function chunkItems<T>(items: readonly T[], size: number): T[][] {
-  if (items.length === 0) return [];
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    out.push(items.slice(i, i + size));
-  }
-  return out;
-}
-
 function extractMediaUrls(urls?: string[] | null, single?: string | null): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -463,9 +454,15 @@ export default function FieldAuditGpsCheckCard({
   const [liveResult, setLiveResult] = useState<
     (GpsVerifyApiResponse & { userLat: number; userLng: number }) | null
   >(null);
-  const [checkins, setCheckins] = useState<FieldAuditCheckinItem[]>(
-    () => data.recentGpsCheckins ?? [],
-  );
+  const [localCheckins, setLocalCheckins] = useState<FieldAuditCheckinItem[]>([]);
+
+  const checkins = useMemo(() => {
+    const serverList = data.recentGpsCheckins ?? [];
+    if (localCheckins.length === 0) return serverList;
+    const seen = new Set(serverList.map((c) => c.checkedAt));
+    const freshLocal = localCheckins.filter((c) => !seen.has(c.checkedAt));
+    return [...freshLocal, ...serverList].slice(0, 30);
+  }, [data.recentGpsCheckins, localCheckins]);
 
   useEffect(() => {
     preconnectMapTileOrigins({ chinaSafe: true });
@@ -527,9 +524,9 @@ export default function FieldAuditGpsCheckCard({
 
     const vertices = rings[0]
       ? rings[0].slice(0, -1).map(([lng, lat]) => {
-          const [x, y] = project(lng, lat);
-          return { x, y, lng, lat };
-        })
+        const [x, y] = project(lng, lat);
+        return { x, y, lng, lat };
+      })
       : [];
 
     const cLng = plotProfile.centerLng ?? midLng;
@@ -640,7 +637,7 @@ export default function FieldAuditGpsCheckCard({
         userLng: longitude,
       });
 
-      setCheckins((prev) => [
+      setLocalCheckins((prev) => [
         {
           checkedAt: body.checkedAt,
           actorLabel: body.actorLabel,
@@ -648,7 +645,7 @@ export default function FieldAuditGpsCheckCard({
           distanceMeters: body.distanceMeters,
           verified: body.verified,
         },
-        ...prev.slice(0, 5),
+        ...prev.slice(0, 29),
       ]);
     } catch {
       setGpsError(f.gpsPermissionErr);
@@ -693,21 +690,27 @@ export default function FieldAuditGpsCheckCard({
   const isDemoPass =
     process.env.NODE_ENV !== "production" && auditPass?.toUpperCase() === "AUDIT-2026-CN01";
 
-  const checkinChunks = chunkItems(checkins, 5);
-  const linkedLotChunks = chunkItems(data.linkedLots, 5);
-  const ledgerChunks = chunkItems(data.sealedLedger, 6);
-  const minuteChunks = chunkItems(data.inspectionHistory, 5);
-
   const measureKey = [
     "field-audit-a4",
     plotProfile.plotCode,
+    plotProfile.zoneCode,
+    plotProfile.areaHa,
+    plotProfile.treeCount,
+    plotProfile.status,
     lang,
-    Boolean(quota && quota.maxQuotaKg > 0),
-    Boolean(liveResult),
+    phiSafety.safeToHarvestToday ? "phi-ok" : `phi-lock:${phiSafety.activeIsolationUntil || ""}`,
+    quota
+      ? `${quota.seasonYear}:${quota.usedKg}:${quota.maxQuotaKg}:${quota.withinQuota}`
+      : "no-quota",
+    liveResult ? `${liveResult.checkedAt}:${liveResult.verified}` : "no-live",
     checkins.length,
+    checkins[0]?.checkedAt || "",
     data.linkedLots.length,
+    data.linkedLots.map((l) => `${l.lotCode}:${l.contributedKg}`).join(","),
     data.sealedLedger.length,
+    data.sealedLedger[0]?.recordHash || data.sealedLedger[0]?.entryOn || "",
     data.inspectionHistory.length,
+    data.inspectionHistory[0]?.code || "",
   ].join("|");
 
   const headerFullNode = (
@@ -777,26 +780,26 @@ export default function FieldAuditGpsCheckCard({
     },
     ...(plotProfile.sheetNo || plotProfile.parcelNo
       ? [
-          {
-            label: acopy.rowSheetParcel,
-            value:
-              lang === "zh"
-                ? `第 ${plotProfile.sheetNo || "-"} 图 / 第 ${plotProfile.parcelNo || "-"} 号`
-                : lang === "en"
-                  ? `Sheet ${plotProfile.sheetNo || "-"} / Parcel ${plotProfile.parcelNo || "-"}`
-                  : `Tờ ${plotProfile.sheetNo || "-"} / Thửa ${plotProfile.parcelNo || "-"}`,
-          },
-        ]
+        {
+          label: acopy.rowSheetParcel,
+          value:
+            lang === "zh"
+              ? `第 ${plotProfile.sheetNo || "-"} 图 / 第 ${plotProfile.parcelNo || "-"} 号`
+              : lang === "en"
+                ? `Sheet ${plotProfile.sheetNo || "-"} / Parcel ${plotProfile.parcelNo || "-"}`
+                : `Tờ ${plotProfile.sheetNo || "-"} / Thửa ${plotProfile.parcelNo || "-"}`,
+        },
+      ]
       : []),
     {
       label: acopy.rowPhiStatus,
       value: phiSafety.safeToHarvestToday
         ? f.phiSafeBadge
         : f.phiLockedFmt(
-            phiSafety.activeIsolationUntil
-              ? formatDate(phiSafety.activeIsolationUntil, lang)
-              : null,
-          ),
+          phiSafety.activeIsolationUntil
+            ? formatDate(phiSafety.activeIsolationUntil, lang)
+            : null,
+        ),
       tone: phiSafety.safeToHarvestToday ? "is-ok" : "is-danger",
     },
   ];
@@ -1045,293 +1048,288 @@ export default function FieldAuditGpsCheckCard({
     ),
   };
 
+  const linkedLotsTitle =
+    lang === "zh"
+      ? "本果园地块关联出口批次"
+      : lang === "en"
+        ? "EXPORT LOTS SOURCED FROM THIS PARCEL"
+        : "CÁC LÔ HÀNG XUẤT KHẨU CÓ NGUỒN TỪ THỬA NÀY";
+
   const sections: A4DossierSectionItem[] = [
     {
       key: "audit-specs",
-      content: (
-        <section className="tr-doc-ledger tr-doc-ext-block" aria-label={acopy.specsSectionHeading}>
-          <div className="tr-doc-meta-strip">
-            <span className="tr-doc-meta-left">{acopy.specsSectionHeading}</span>
-            <strong className="tr-doc-meta-right">{plotProfile.plotCode}</strong>
-          </div>
-
-          <div className="tr-doc-table-wrap">
-            <table className="tr-doc-table is-audit-specs">
-              <tbody>
-                {specRows.map((sr) => (
-                  <tr key={sr.label}>
-                    <td className="col-audit-k">{sr.label}</td>
-                    <td className={`col-audit-v${sr.tone ? ` ${sr.tone}` : ""}`}>
-                      {sr.href ? (
+      kind: "table",
+      table: {
+        sectionClassName: "tr-doc-ledger tr-doc-ext-block",
+        ariaLabel: acopy.specsSectionHeading,
+        title: acopy.specsSectionHeading,
+        partTitleFmt: (part, total) =>
+          `${acopy.specsSectionHeading}${acopy.partSuffixFmt(part, total)}`,
+        metaRight: plotProfile.plotCode,
+        tableClassName: "tr-doc-table is-audit-specs",
+        rows: specRows.map((sr) => ({
+          key: sr.label,
+          node: (
+            <tr>
+              <td className="col-audit-k">{sr.label}</td>
+              <td className={`col-audit-v${sr.tone ? ` ${sr.tone}` : ""}`}>
+                {sr.href ? (
+                  <Link
+                    href={sr.href}
+                    className="tr-doc-code-link"
+                    onClick={() =>
+                      rememberTraceKindHint(plotProfile.householdRefCode, "household")
+                    }
+                  >
+                    {sr.value}
+                  </Link>
+                ) : (
+                  sr.value
+                )}
+              </td>
+            </tr>
+          ),
+        })),
+      },
+    },
+    satelliteMapSection,
+    ...(checkins.length > 0
+      ? [
+        {
+          key: "audit-checkins",
+          kind: "table",
+          table: {
+            sectionClassName: "tr-doc-ledger tr-doc-ext-block",
+            title: f.recentCheckinsTitle,
+            partTitleFmt: (part, total) =>
+              `${f.recentCheckinsTitle}${acopy.partSuffixFmt(part, total)}`,
+            tableClassName: "tr-doc-table is-audit-checkins",
+            thead: (
+              <tr>
+                <th className="col-no">{acopy.colNo}</th>
+                <th className="col-actor">{acopy.colActor}</th>
+                <th className="col-time">{acopy.colCheckTime}</th>
+                <th className="col-pos">{acopy.colPosition}</th>
+              </tr>
+            ),
+            rows: checkins.map((ck, idx) => {
+              const rowNo = idx + 1;
+              return {
+                key: `${ck.checkedAt}-${rowNo}`,
+                node: (
+                  <tr>
+                    <td className="col-no">{String(rowNo).padStart(2, "0")}.</td>
+                    <td className="col-actor">
+                      <strong className="tr-doc-item-title">{ck.actorLabel}</strong>
+                    </td>
+                    <td className="col-time is-tabular">
+                      {formatDateTime(ck.checkedAt, lang)}
+                    </td>
+                    <td className={`col-pos is-tabular ${ck.verified ? "is-ok" : "is-warn"}`}>
+                      {ck.insidePolygon
+                        ? acopy.insideParcelText
+                        : ck.distanceMeters !== null
+                          ? `${Math.round(ck.distanceMeters)} m`
+                          : "-"}
+                    </td>
+                  </tr>
+                ),
+              };
+            }),
+          },
+        } satisfies A4DossierSectionItem,
+      ]
+      : []),
+    ...(data.linkedLots.length > 0
+      ? [
+        {
+          key: "audit-lots",
+          kind: "table",
+          table: {
+            sectionClassName: "tr-doc-ledger tr-doc-ext-block",
+            title: linkedLotsTitle,
+            partTitleFmt: (part, total) =>
+              `${linkedLotsTitle}${acopy.partSuffixFmt(part, total)}`,
+            tableClassName: "tr-doc-table is-audit-lots",
+            thead: (
+              <tr>
+                <th className="col-no">{acopy.colNo}</th>
+                <th className="col-lot">{acopy.colLotCode}</th>
+                <th className="col-mkt">{acopy.colMarket}</th>
+                <th className="col-date">{acopy.colDate}</th>
+                <th className="col-wt">{acopy.colWeight}</th>
+              </tr>
+            ),
+            rows: data.linkedLots.map((lot, idx) => {
+              const rowNo = idx + 1;
+              const href =
+                lot.qrToken && isSafeTraceCode(lot.qrToken)
+                  ? `/t/${encodeURIComponent(lot.qrToken)}`
+                  : isSafeTraceCode(lot.lotCode)
+                    ? `/trace/${encodeURIComponent(lot.lotCode)}`
+                    : null;
+              return {
+                key: `${lot.lotCode}-${rowNo}`,
+                node: (
+                  <tr>
+                    <td className="col-no">{String(rowNo).padStart(2, "0")}.</td>
+                    <td className="col-lot is-tabular">
+                      {href ? (
                         <Link
-                          href={sr.href}
-                          className="tr-doc-code-link"
-                          onClick={() =>
-                            rememberTraceKindHint(plotProfile.householdRefCode, "household")
-                          }
+                          href={href}
+                          className="tr-doc-inline-link"
+                          onClick={() => {
+                            rememberTraceKindHint(lot.lotCode, "lot");
+                            rememberTraceKindHint(lot.qrToken, "lot");
+                          }}
                         >
-                          {sr.value}
+                          {lot.lotCode}
                         </Link>
                       ) : (
-                        sr.value
+                        <strong>{lot.lotCode}</strong>
+                      )}
+                    </td>
+                    <td className="col-mkt">{localizeMarket(lot.market, lang)}</td>
+                    <td className="col-date is-tabular">{formatDate(lot.harvestedOn, lang)}</td>
+                    <td className="col-wt is-tabular">
+                      <strong>{formatTraceNumber(lot.contributedKg, lang)} kg</strong>
+                    </td>
+                  </tr>
+                ),
+              };
+            }),
+          },
+        } satisfies A4DossierSectionItem,
+      ]
+      : []),
+    ...(data.sealedLedger.length > 0
+      ? [
+        {
+          key: "audit-ledger",
+          kind: "table",
+          table: {
+            sectionClassName: "tr-doc-ledger tr-doc-ext-block",
+            title: f.sealedDiaryTitle.toUpperCase(),
+            partTitleFmt: (part, total) =>
+              `${f.sealedDiaryTitle.toUpperCase()}${acopy.partSuffixFmt(part, total)}`,
+            tableClassName: "tr-doc-table is-audit-ledger",
+            thead: (
+              <tr>
+                <th className="col-no">{acopy.colNo}</th>
+                <th className="col-date">{acopy.colDate}</th>
+                <th className="col-act">{acopy.colActivity}</th>
+                <th className="col-status">{acopy.colStatus}</th>
+              </tr>
+            ),
+            rows: data.sealedLedger.map((entry, idx) => {
+              const rowNo = idx + 1;
+              const mediaUrls = extractMediaUrls(entry.photoUrls, entry.photoUrl);
+              const cleanDetail = sanitizeAuditDetail(entry.detail);
+              return {
+                key: `${entry.entryOn}-${rowNo}`,
+                node: (
+                  <tr>
+                    <td className="col-no">{String(rowNo).padStart(2, "0")}.</td>
+                    <td className="col-date is-tabular">{formatDate(entry.entryOn, lang)}</td>
+                    <td className="col-act">
+                      <strong className="tr-doc-item-title">{entry.activity}</strong>
+                      {cleanDetail && (
+                        <span className="tr-doc-item-sub is-tabular">{cleanDetail}</span>
+                      )}
+                      {mediaUrls.length > 0 && (
+                        <button
+                          type="button"
+                          className="tr-doc-sub-btn no-print"
+                          onClick={() =>
+                            setAuditPreviewMedia({
+                              urls: mediaUrls,
+                              title: plotProfile.ownerLabel || plotProfile.plotCode,
+                              subtitle: `${formatDate(entry.entryOn, lang)}, ${entry.activity}`,
+                            })
+                          }
+                        >
+                          {acopy.viewPhotosFmt(mediaUrls.length)}
+                        </button>
+                      )}
+                    </td>
+                    <td className={`col-status ${entry.isLateEntry ? "is-warn" : "is-ok"}`}>
+                      <span>{entry.isLateEntry ? f.lateTag : f.onTimeTag}</span>
+                      {entry.gpsVerified && (
+                        <span className="tr-doc-status-sub">{f.gpsVerifiedTag}</span>
                       )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ),
-    },
-    ...checkinChunks.map((ckChunk, cIdx): A4DossierSectionItem => ({
-      key: `audit-checkins-${cIdx}`,
-      content: (
-        <section className="tr-doc-ledger tr-doc-ext-block">
-          <div className="tr-doc-meta-strip">
-            <span className="tr-doc-meta-left">
-              {f.recentCheckinsTitle}
-              {checkinChunks.length > 1 ? acopy.partSuffixFmt(cIdx + 1, checkinChunks.length) : ""}
-            </span>
-          </div>
-          <div className="tr-doc-table-wrap">
-            <table className="tr-doc-table is-audit-checkins">
-              <thead>
-                <tr>
-                  <th className="col-no">{acopy.colNo}</th>
-                  <th className="col-actor">{acopy.colActor}</th>
-                  <th className="col-time">{acopy.colCheckTime}</th>
-                  <th className="col-pos">{acopy.colPosition}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ckChunk.map((ck, idx) => {
-                  const rowNo = cIdx * 5 + idx + 1;
-                  return (
-                    <tr key={`${ck.checkedAt}-${rowNo}`}>
-                      <td className="col-no">{String(rowNo).padStart(2, "0")}.</td>
-                      <td className="col-actor">
-                        <strong className="tr-doc-item-title">{ck.actorLabel}</strong>
-                      </td>
-                      <td className="col-time is-tabular">
-                        {formatDateTime(ck.checkedAt, lang)}
-                      </td>
-                      <td className={`col-pos is-tabular ${ck.verified ? "is-ok" : "is-warn"}`}>
-                        {ck.insidePolygon
-                          ? acopy.insideParcelText
-                          : ck.distanceMeters !== null
-                            ? `${Math.round(ck.distanceMeters)} m`
-                            : "-"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ),
-    })),
-    ...linkedLotChunks.map((lotChunk, lIdx): A4DossierSectionItem => ({
-      key: `audit-lots-${lIdx}`,
-      content: (
-        <section className="tr-doc-ledger tr-doc-ext-block">
-          <div className="tr-doc-meta-strip">
-            <span className="tr-doc-meta-left">
-              {lang === "zh"
-                ? "本果园地块关联出口批次"
-                : lang === "en"
-                  ? "EXPORT LOTS SOURCED FROM THIS PARCEL"
-                  : "CÁC LÔ HÀNG XUẤT KHẨU CÓ NGUỒN TỪ THỬA NÀY"}
-              {linkedLotChunks.length > 1
-                ? acopy.partSuffixFmt(lIdx + 1, linkedLotChunks.length)
-                : ""}
-            </span>
-          </div>
-          <div className="tr-doc-table-wrap">
-            <table className="tr-doc-table is-audit-lots">
-              <thead>
-                <tr>
-                  <th className="col-no">{acopy.colNo}</th>
-                  <th className="col-lot">{acopy.colLotCode}</th>
-                  <th className="col-mkt">{acopy.colMarket}</th>
-                  <th className="col-date">{acopy.colDate}</th>
-                  <th className="col-wt">{acopy.colWeight}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lotChunk.map((lot, idx) => {
-                  const rowNo = lIdx * 5 + idx + 1;
-                  const href =
-                    lot.qrToken && isSafeTraceCode(lot.qrToken)
-                      ? `/t/${encodeURIComponent(lot.qrToken)}`
-                      : isSafeTraceCode(lot.lotCode)
-                        ? `/trace/${encodeURIComponent(lot.lotCode)}`
-                        : null;
-                  return (
-                    <tr key={`${lot.lotCode}-${rowNo}`}>
-                      <td className="col-no">{String(rowNo).padStart(2, "0")}.</td>
-                      <td className="col-lot is-tabular">
-                        {href ? (
-                          <Link
-                            href={href}
-                            className="tr-doc-inline-link"
-                            onClick={() => {
-                              rememberTraceKindHint(lot.lotCode, "lot");
-                              rememberTraceKindHint(lot.qrToken, "lot");
-                            }}
-                          >
-                            {lot.lotCode}
-                          </Link>
-                        ) : (
-                          <strong>{lot.lotCode}</strong>
-                        )}
-                      </td>
-                      <td className="col-mkt">{localizeMarket(lot.market, lang)}</td>
-                      <td className="col-date is-tabular">{formatDate(lot.harvestedOn, lang)}</td>
-                      <td className="col-wt is-tabular">
-                        <strong>{formatTraceNumber(lot.contributedKg, lang)} kg</strong>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ),
-    })),
-    ...ledgerChunks.map((lgChunk, lgIdx): A4DossierSectionItem => ({
-      key: `audit-ledger-${lgIdx}`,
-      content: (
-        <section className="tr-doc-ledger tr-doc-ext-block">
-          <div className="tr-doc-meta-strip">
-            <span className="tr-doc-meta-left">
-              {f.sealedDiaryTitle.toUpperCase()}
-              {ledgerChunks.length > 1 ? acopy.partSuffixFmt(lgIdx + 1, ledgerChunks.length) : ""}
-            </span>
-          </div>
-          <div className="tr-doc-table-wrap">
-            <table className="tr-doc-table is-audit-ledger">
-              <thead>
-                <tr>
-                  <th className="col-no">{acopy.colNo}</th>
-                  <th className="col-date">{acopy.colDate}</th>
-                  <th className="col-act">{acopy.colActivity}</th>
-                  <th className="col-status">{acopy.colStatus}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lgChunk.map((entry, idx) => {
-                  const rowNo = lgIdx * 6 + idx + 1;
-                  const mediaUrls = extractMediaUrls(entry.photoUrls, entry.photoUrl);
-                  const cleanDetail = sanitizeAuditDetail(entry.detail);
-                  return (
-                    <tr key={`${entry.entryOn}-${rowNo}`}>
-                      <td className="col-no">{String(rowNo).padStart(2, "0")}.</td>
-                      <td className="col-date is-tabular">{formatDate(entry.entryOn, lang)}</td>
-                      <td className="col-act">
-                        <strong className="tr-doc-item-title">{entry.activity}</strong>
-                        {cleanDetail && (
-                          <span className="tr-doc-item-sub is-tabular">{cleanDetail}</span>
-                        )}
-                        {mediaUrls.length > 0 && (
-                          <button
-                            type="button"
-                            className="tr-doc-sub-btn no-print"
-                            onClick={() =>
-                              setAuditPreviewMedia({
-                                urls: mediaUrls,
-                                title: plotProfile.ownerLabel || plotProfile.plotCode,
-                                subtitle: `${formatDate(entry.entryOn, lang)}, ${entry.activity}`,
-                              })
-                            }
-                          >
-                            {acopy.viewPhotosFmt(mediaUrls.length)}
-                          </button>
-                        )}
-                      </td>
-                      <td className={`col-status ${entry.isLateEntry ? "is-warn" : "is-ok"}`}>
-                        <span>{entry.isLateEntry ? f.lateTag : f.onTimeTag}</span>
-                        {entry.gpsVerified && (
-                          <span className="tr-doc-status-sub">{f.gpsVerifiedTag}</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ),
-    })),
-    ...minuteChunks.map((mChunk, mIdx): A4DossierSectionItem => ({
-      key: `audit-minutes-${mIdx}`,
-      content: (
-        <section className="tr-doc-ledger tr-doc-ext-block">
-          <div className="tr-doc-meta-strip">
-            <span className="tr-doc-meta-left">
-              {f.sealedMinutesTitle.toUpperCase()}
-              {minuteChunks.length > 1 ? acopy.partSuffixFmt(mIdx + 1, minuteChunks.length) : ""}
-            </span>
-          </div>
-          <div className="tr-doc-table-wrap">
-            <table className="tr-doc-table is-audit-minutes">
-              <thead>
-                <tr>
-                  <th className="col-min-code">{acopy.colMinuteCode}</th>
-                  <th className="col-date">{acopy.colDate}</th>
-                  <th className="col-inspector">{acopy.colInspector}</th>
-                  <th className="col-status">{acopy.colResult}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mChunk.map((m) => {
-                  const mediaUrls = extractMediaUrls(m.photoUrls, m.photoUrl);
-                  const isFail =
-                    m.result === "fail" || m.result.toLowerCase().includes("không đạt");
-                  return (
-                    <tr key={m.code}>
-                      <td className="col-min-code is-tabular">
-                        <strong>{m.code}</strong>
-                      </td>
-                      <td className="col-date is-tabular">{formatDate(m.heldOn, lang)}</td>
-                      <td className="col-inspector">
-                        <strong className="tr-doc-item-title">{m.officer}</strong>
-                        {m.location && <span className="tr-doc-item-sub">{m.location}</span>}
-                        {mediaUrls.length > 0 && (
-                          <button
-                            type="button"
-                            className="tr-doc-sub-btn no-print"
-                            onClick={() =>
-                              setAuditPreviewMedia({
-                                urls: mediaUrls,
-                                title: m.code,
-                                subtitle: m.location || undefined,
-                              })
-                            }
-                          >
-                            {acopy.viewPhotosFmt(mediaUrls.length)}
-                          </button>
-                        )}
-                      </td>
-                      <td className={`col-status ${isFail ? "is-danger" : "is-ok"}`}>
-                        <span>{m.result === "pass" ? acopy.minutePassText : m.result}</span>
-                        {m.gpsVerified && (
-                          <span className="tr-doc-status-sub">{f.gpsVerifiedTag}</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ),
-    })),
-    satelliteMapSection,
+                ),
+              };
+            }),
+          },
+        } satisfies A4DossierSectionItem,
+      ]
+      : []),
+    ...(data.inspectionHistory.length > 0
+      ? [
+        {
+          key: "audit-minutes",
+          kind: "table",
+          table: {
+            sectionClassName: "tr-doc-ledger tr-doc-ext-block",
+            title: f.sealedMinutesTitle.toUpperCase(),
+            partTitleFmt: (part, total) =>
+              `${f.sealedMinutesTitle.toUpperCase()}${acopy.partSuffixFmt(part, total)}`,
+            tableClassName: "tr-doc-table is-audit-minutes",
+            thead: (
+              <tr>
+                <th className="col-min-code">{acopy.colMinuteCode}</th>
+                <th className="col-date">{acopy.colDate}</th>
+                <th className="col-inspector">{acopy.colInspector}</th>
+                <th className="col-status">{acopy.colResult}</th>
+              </tr>
+            ),
+            rows: data.inspectionHistory.map((m) => {
+              const mediaUrls = extractMediaUrls(m.photoUrls, m.photoUrl);
+              const isFail =
+                m.result === "fail" || m.result.toLowerCase().includes("không đạt");
+              return {
+                key: m.code,
+                node: (
+                  <tr>
+                    <td className="col-min-code is-tabular">
+                      <strong>{m.code}</strong>
+                    </td>
+                    <td className="col-date is-tabular">{formatDate(m.heldOn, lang)}</td>
+                    <td className="col-inspector">
+                      <strong className="tr-doc-item-title">{m.officer}</strong>
+                      {m.location && <span className="tr-doc-item-sub">{m.location}</span>}
+                      {mediaUrls.length > 0 && (
+                        <button
+                          type="button"
+                          className="tr-doc-sub-btn no-print"
+                          onClick={() =>
+                            setAuditPreviewMedia({
+                              urls: mediaUrls,
+                              title: m.code,
+                              subtitle: m.location || undefined,
+                            })
+                          }
+                        >
+                          {acopy.viewPhotosFmt(mediaUrls.length)}
+                        </button>
+                      )}
+                    </td>
+                    <td className={`col-status ${isFail ? "is-danger" : "is-ok"}`}>
+                      <span>{m.result === "pass" ? acopy.minutePassText : m.result}</span>
+                      {m.gpsVerified && (
+                        <span className="tr-doc-status-sub">{f.gpsVerifiedTag}</span>
+                      )}
+                    </td>
+                  </tr>
+                ),
+              };
+            }),
+          },
+        } satisfies A4DossierSectionItem,
+      ]
+      : []),
   ];
 
   const renderFooter = (pageIdx: number, totalPages: number) => {
