@@ -6,6 +6,7 @@ import { ADMIN_PRIVILEGED_ROLES, isAdminPrivilegedRole } from "../../auth/permis
 import { assertHouseholdInScope, isStaffInCuneCoopScope } from "../../common/crud/village-scope";
 import { AppException, badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { camelRows } from "../../common/sql/rows";
+import { hasPublicColumn, hasPublicTable } from "../../common/sql/schema-cache";
 import { hasPlotsTable, syncHouseholdAndVillageStats } from "../../common/sql/stats-sync";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -134,8 +135,14 @@ export class DeletionRequestsService {
   }
 
   private async assertHouseholdHasNoHistory(householdId: number, runner?: PoolClient): Promise<boolean> {
-    const hasPlots = await hasPlotsTable(this.db);
+    const [hasPlots, hasMilestones] = await Promise.all([
+      hasPlotsTable(this.db),
+      hasPublicTable(this.db, "care_milestone_declarations"),
+    ]);
     const plotsCheckSql = hasPlots ? "OR EXISTS (SELECT 1 FROM plots WHERE household_id = $1)" : "";
+    const milestonesCheckSql = hasMilestones
+      ? "OR EXISTS (SELECT 1 FROM care_milestone_declarations WHERE household_id = $1)"
+      : "";
     const sql = `SELECT (
       EXISTS (SELECT 1 FROM lab_tests WHERE household_id = $1)
       OR EXISTS (SELECT 1 FROM spray_records WHERE household_id = $1)
@@ -143,14 +150,17 @@ export class DeletionRequestsService {
       OR EXISTS (SELECT 1 FROM farmer_stamps WHERE household_id = $1)
       OR EXISTS (SELECT 1 FROM farmer_stamp_allocations WHERE household_id = $1)
       OR EXISTS (SELECT 1 FROM harvest_contributions WHERE household_id = $1)
+      OR EXISTS (SELECT 1 FROM harvest_declarations WHERE household_id = $1)
+      OR EXISTS (SELECT 1 FROM approvals WHERE household_id = $1)
       OR EXISTS (SELECT 1 FROM violations WHERE household_id = $1)
       ${plotsCheckSql}
+      ${milestonesCheckSql}
     ) AS has_history`;
     const historyCheck = runner
       ? await runner.query<{ has_history: boolean }>(sql, [householdId])
       : await this.db.query<{ has_history: boolean }>(sql, [householdId]);
     if (historyCheck.rows[0]?.has_history) {
-      throw badRequest("Hộ dân đã có lịch sử canh tác, kiểm nghiệm hoặc tem truy xuất nên không thể xóa.");
+      throw badRequest("Hộ dân đã có lịch sử canh tác, hồ sơ, kiểm nghiệm hoặc tem truy xuất nên không thể xóa.");
     }
     return hasPlots;
   }
@@ -260,12 +270,39 @@ export class DeletionRequestsService {
           "DELETION_ALREADY_PENDING",
         );
       }
+      const pendingRow = existingPending.rows[0] as RawDeletionRequestRow;
+      const pendingLink = `/admin?section=system&sub=deletions&id=${pendingRow.id}`;
+      const missingDeputyRes = await this.db.query<{ id: number }>(
+        `SELECT u.id
+         FROM users u
+         WHERE u.role = 'htx_deputy'
+           AND u.status = 'active'
+           AND u.id <> $1
+           AND NOT EXISTS (
+             SELECT 1 FROM notifications n
+             WHERE n.user_id = u.id AND n.link = $2 AND n.read_at IS NULL
+           )`,
+        [user.id, pendingLink],
+      );
+      if (missingDeputyRes.rows.length > 0) {
+        const targetKindLabel = dto.targetType === "account" ? "tài khoản" : "hộ thành viên";
+        const actorRoleLabel = ROLE_LABELS_VN[user.role] ?? user.role;
+        await this.notifications.notifyUsers(
+          missingDeputyRes.rows.map((r) => Number(r.id)),
+          {
+            kind: "approval",
+            title: `Yêu cầu xóa ${targetKindLabel}: ${targetName} (${targetCode})`,
+            body: `${actorRoleLabel} ${user.fullName} đề nghị xóa khỏi hệ thống.${cleanReason ? ` Lý do: ${cleanReason}` : " Vui lòng kiểm tra và phê duyệt."}`,
+            link: pendingLink,
+          },
+        );
+      }
       return {
         ok: true as const,
         pendingApproval: true as const,
         alreadyPending: true as const,
         message: "Yêu cầu xóa đang chờ Phó HTX phê duyệt.",
-        request: camelRows([existingPending.rows[0]])[0],
+        request: camelRows([pendingRow])[0],
       };
     }
 
@@ -327,16 +364,28 @@ export class DeletionRequestsService {
     }
     const cleanNote = typeof dto.note === "string" && dto.note.trim() ? dto.note.trim() : null;
 
+    const [hasCreatedByCol, hasCredResetCol] = await Promise.all([
+      hasPublicColumn(this.db, "users", "created_by"),
+      hasPublicColumn(this.db, "users", "credential_reset_by"),
+    ]);
+
     const client = await this.db.pool.connect();
     let reqRow: RawDeletionRequestRow | undefined;
     let updatedReqRow: RawDeletionRequestRow | undefined;
     let oldVillageIdForSync: number | undefined;
     let hasPlotsForSync = false;
+    let resolvedNotifUserIds: number[] = [];
 
     try {
       await client.query("SELECT pg_advisory_lock($1)", [ADMIN_MUTATION_ADVISORY_LOCK]);
       await client.query("BEGIN");
       try {
+        await client.query(
+          `SELECT set_config('puc.actor_user_id', $1, true),
+                  set_config('puc.actor_name', $2, true),
+                  set_config('puc.actor_role', $3, true)`,
+          [String(user.id), user.fullName, user.role],
+        );
         const lockRes = await client.query<RawDeletionRequestRow>(
           `SELECT * FROM member_deletion_requests WHERE id = $1 FOR UPDATE`,
           [requestId],
@@ -348,6 +397,49 @@ export class DeletionRequestsService {
         }
         if (Number(reqRow.requested_by) === Number(user.id)) {
           throw forbidden("Người khởi tạo yêu cầu không được tự phê duyệt yêu cầu của chính mình.");
+        }
+
+        if (hasCreatedByCol || hasCredResetCol) {
+          const cols = [
+            "created_at",
+            hasCreatedByCol ? "created_by" : "NULL::bigint AS created_by",
+            hasCredResetCol ? "credential_reset_by" : "NULL::bigint AS credential_reset_by",
+            hasCredResetCol ? "credential_reset_at" : "NULL::timestamptz AS credential_reset_at",
+          ].join(", ");
+          const reviewerProv = await client.query<{
+            created_at: Date | string;
+            created_by: number | null;
+            credential_reset_by: number | null;
+            credential_reset_at: Date | string | null;
+          }>(`SELECT ${cols} FROM users WHERE id = $1`, [user.id]);
+          const prov = reviewerProv.rows[0];
+          if (prov) {
+            const reqCreatedMs = new Date(reqRow.created_at).getTime();
+            const depCreatedMs = new Date(prov.created_at).getTime();
+            if (
+              prov.created_by !== null &&
+              Number(prov.created_by) === Number(reqRow.requested_by) &&
+              Number.isFinite(reqCreatedMs) &&
+              Number.isFinite(depCreatedMs) &&
+              depCreatedMs >= reqCreatedMs
+            ) {
+              throw forbidden(
+                "Tài khoản Phó HTX được khởi tạo bởi chính người gửi yêu cầu sau thời điểm lập yêu cầu xóa không được phép phê duyệt yêu cầu này.",
+              );
+            }
+            if (
+              prov.credential_reset_by !== null &&
+              Number(prov.credential_reset_by) === Number(reqRow.requested_by) &&
+              prov.credential_reset_at
+            ) {
+              const resetMs = new Date(prov.credential_reset_at).getTime();
+              if (!Number.isFinite(reqCreatedMs) || !Number.isFinite(resetMs) || resetMs >= reqCreatedMs) {
+                throw forbidden(
+                  "Tài khoản Phó HTX vừa được người gửi yêu cầu đặt lại thông tin xác thực; vui lòng để Phó HTX tự đổi mật khẩu cá nhân trước khi phê duyệt.",
+                );
+              }
+            }
+          }
         }
 
         const targetId = Number(reqRow.target_id);
@@ -404,7 +496,7 @@ export class DeletionRequestsService {
 
           if (linkedUserIds.length > 0) {
             await client.query(
-              "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ANY($1::bigint[]) AND revoked_at IS NULL",
+              "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = ANY($1::bigint[]) AND revoked_at IS NULL",
               [linkedUserIds],
             );
             await client.query(
@@ -427,12 +519,14 @@ export class DeletionRequestsService {
           updatedReqRow = upd.rows[0];
         }
 
-        await client.query(
+        const resolvedNotifs = await client.query<{ user_id: number }>(
           `UPDATE notifications
            SET read_at = now()
-           WHERE link = $1 AND read_at IS NULL`,
+           WHERE link = $1 AND read_at IS NULL
+           RETURNING user_id`,
           [`/admin?section=system&sub=deletions&id=${requestId}`],
         );
+        resolvedNotifUserIds = resolvedNotifs.rows.map((r) => Number(r.user_id));
 
         await client.query("COMMIT");
       } catch (err) {
@@ -444,13 +538,17 @@ export class DeletionRequestsService {
       client.release();
     }
 
+    if (resolvedNotifUserIds.length > 0) {
+      this.notifications.emitSyncToUsers(resolvedNotifUserIds);
+    }
+
     if (reqRow?.target_type === "household") {
       await syncHouseholdAndVillageStats(this.db, {
         forceZeroVillageIds: oldVillageIdForSync ? [oldVillageIdForSync] : [],
         hasPlots: hasPlotsForSync,
       });
     }
-    this.db.cache?.invalidateTags(["dashboard", "plots"]);
+    this.db.cache?.invalidateTags(["dashboard", "plots", "auth"], true);
 
     const targetKindLabel = reqRow.target_type === "account" ? "tài khoản" : "hộ thành viên";
 
@@ -510,10 +608,7 @@ export class DeletionRequestsService {
       throw badRequest("Yêu cầu xóa này đã được xử lý trước đó.");
     }
 
-    await this.db.query(
-      `UPDATE notifications SET read_at = now() WHERE link = $1 AND read_at IS NULL`,
-      [`/admin?section=system&sub=deletions&id=${requestId}`],
-    );
+    await this.notifications.resolveByLink(`/admin?section=system&sub=deletions&id=${requestId}`);
 
     const targetKindLabel = reqRow.target_type === "account" ? "tài khoản" : "hộ thành viên";
 
@@ -541,6 +636,9 @@ export class DeletionRequestsService {
 
   /** Người tạo yêu cầu (hoặc Quản trị viên) thu hồi yêu cầu xóa khi Phó HTX chưa xử lý. */
   async cancel(requestId: number, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, true)) {
+      throw forbidden("Bạn không có quyền thao tác yêu cầu xóa ngoài phạm vi đơn vị.");
+    }
     const existing = await this.db.query<RawDeletionRequestRow>(
       "SELECT * FROM member_deletion_requests WHERE id = $1",
       [requestId],
@@ -566,9 +664,19 @@ export class DeletionRequestsService {
       throw badRequest("Yêu cầu xóa này đã được xử lý trước đó.");
     }
 
-    await this.db.query(
-      `UPDATE notifications SET read_at = now() WHERE link = $1 AND read_at IS NULL`,
-      [`/admin?section=system&sub=deletions&id=${requestId}`],
+    await this.notifications.resolveByLink(`/admin?section=system&sub=deletions&id=${requestId}`);
+
+    const targetKindLabel = reqRow.target_type === "account" ? "tài khoản" : "hộ thành viên";
+    const actorRoleLabel = ROLE_LABELS_VN[user.role] ?? user.role;
+    await this.notifications.notifyRoles(
+      ["htx_deputy"],
+      {
+        kind: "approval",
+        title: `Đã thu hồi yêu cầu xóa ${targetKindLabel}: ${reqRow.target_name} (${reqRow.target_code})`,
+        body: `${actorRoleLabel} ${user.fullName} đã thu hồi yêu cầu xóa đang chờ phê duyệt.`,
+        link: "/admin?section=system&sub=deletions",
+      },
+      { excludeUserId: user.id },
     );
 
     await this.audit.write(

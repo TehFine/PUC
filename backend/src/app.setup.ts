@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto";
 import { ConfigService } from "@nestjs/config";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import cookieParser from "cookie-parser";
 import { json, type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
 import { can, type Role } from "./auth/permissions";
-import { SecurityDefenseService } from "./auth/security-defense.service";
+import { isSessionAgentCompatible, SecurityDefenseService } from "./auth/security-defense.service";
 import { ACCESS_COOKIE, TokensService } from "./auth/tokens.service";
 import { apiCompressionMiddleware } from "./common/http/compression.middleware";
 import { createSecurityShieldMiddleware } from "./common/http/security-shield.middleware";
@@ -130,8 +131,33 @@ export function configureApp(app: NestExpressApplication): void {
 
   // Nhập GeoJSON địa chính có thể lớn (giới hạn 10 MB) nhưng chỉ mở bộ đệm 10 MB cho đúng phương thức POST,
   // qua kiểm tra nguồn gửi CSRF, có phiên JWT `sid` đang hoạt động thuộc vai trò có quyền tạo thửa (`plots:create`)
-  // và nằm trong ngưỡng tần suất an toàn trước khi đọc luồng JSON 10 MB vào bộ nhớ.
-  const plotsImportJson = json({ limit: "10mb" });
+  // và tính sẵn mã băm SHA-256 trên luồng byte gốc để RequestIntegrityGuard đối chiếu chữ ký mà không nhân đôi 10 MB vào RAM.
+  const plotsImportJson = json({
+    limit: "10mb",
+    inflate: false,
+    verify: (
+      req: Request & { precomputedPayloadHash?: string },
+      _res: Response,
+      buf: Buffer,
+    ) => {
+      const tsHeader = req.headers["x-puc-timestamp"];
+      const nonceHeader = req.headers["x-puc-nonce"];
+      const tsRaw = (Array.isArray(tsHeader) ? tsHeader[0] : tsHeader)?.trim() ?? "";
+      const nonceRaw = (Array.isArray(nonceHeader) ? nonceHeader[0] : nonceHeader)?.trim() ?? "";
+      if (tsRaw && nonceRaw) {
+        const method = (req.method || "POST").toUpperCase();
+        const canonicalPath = (req.originalUrl || req.url || "").split("#")[0] || "/";
+        const hasher = createHash("sha256");
+        hasher.update(`${method}\n${canonicalPath}\n${tsRaw}\n${nonceRaw}\n`, "utf8");
+        if (buf && buf.length > 0) {
+          hasher.update(buf);
+        }
+        req.precomputedPayloadHash = hasher.digest("hex");
+      } else {
+        req.precomputedPayloadHash = "";
+      }
+    },
+  });
   let tokens: TokensService | null = null;
   let db: DatabaseService | null = null;
   try {
@@ -198,22 +224,27 @@ export function configureApp(app: NestExpressApplication): void {
           status: string;
           token_version: number;
           session_active: boolean;
+          session_ua: string | null;
         }>(
           `SELECT u.role, u.status, u.token_version,
                   EXISTS (
                     SELECT 1 FROM refresh_tokens rt
                     WHERE rt.id = $2::bigint AND rt.user_id = u.id AND rt.revoked_at IS NULL AND rt.expires_at > now()
-                  ) AS session_active
+                  ) AS session_active,
+                  (SELECT rt.user_agent FROM refresh_tokens rt WHERE rt.id = $2::bigint AND rt.user_id = u.id LIMIT 1) AS session_ua
            FROM users u
            WHERE u.id = $1`,
           [verified.userId, verified.sessionId],
         );
         const actor = rows[0];
+        const reqUaRaw = req.headers["user-agent"];
+        const reqUa = Array.isArray(reqUaRaw) ? reqUaRaw[0] : reqUaRaw;
         if (
           !actor ||
           actor.status !== "active" ||
           actor.token_version !== verified.tokenVersion ||
           !actor.session_active ||
+          !isSessionAgentCompatible(actor.session_ua, reqUa) ||
           !can(actor.role, "plots", "create")
         ) {
           next();
@@ -242,6 +273,7 @@ export function configureApp(app: NestExpressApplication): void {
   app.use(
     json({
       limit: "1mb",
+      inflate: false,
       verify: (req: Request & { rawBody?: string }, _res: Response, buf: Buffer) => {
         req.rawBody = buf && buf.length > 0 ? buf.toString("utf8") : "";
       },

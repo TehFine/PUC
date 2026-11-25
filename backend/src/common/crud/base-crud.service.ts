@@ -158,11 +158,14 @@ export abstract class BaseCrudService {
     if (entries.length === 0) throw badRequest("Không có dữ liệu để lưu.");
     const columns = entries.map(([key]) => toSnake(key));
     const placeholders = entries.map((_, index) => `$${index + 1}`);
-    const { rows } = await this.db.query<{ id: number }>(
-      `INSERT INTO ${this.config.table} (${columns.join(", ")}) VALUES (${placeholders.join(", ")}) RETURNING id`,
-      entries.map(([, value]) => value),
-    );
-    const id = rows[0].id;
+    const id = await this.db.withActorTransaction(user, async (client) => {
+      const { rows } = await client.query<{ id: number }>(
+        `INSERT INTO ${this.config.table} (${columns.join(", ")}) VALUES (${placeholders.join(", ")}) RETURNING id`,
+        entries.map(([, value]) => value),
+      );
+      return rows[0].id;
+    });
+    this.db.cache?.onSqlMutation(`INSERT INTO ${this.config.table}`);
     await this.afterWrite(id, input);
 
     await this.audit.write(

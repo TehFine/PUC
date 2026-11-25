@@ -77,7 +77,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (this.recentInternalErrors.length >= 3 && now - this.lastInternalAlertAt >= 30 * 60_000) {
       this.lastInternalAlertAt = now;
       this.recentInternalErrors = [];
-      void this.notifications.notifyRoles(["admin", "htx_head", "support_specialist", "htx_officer"], {
+      void this.notifications.notifyRoles(["admin", "htx_head", "support_specialist"], {
         kind: "system",
         title: "[KHẨN] Phát hiện sự cố lỗi máy chủ nội bộ (500)",
         body: "Hệ thống vừa ghi nhận nhiều lỗi xử lý 500 liên tiếp. Vui lòng kiểm tra trạng thái dịch vụ trong Quản trị hệ thống.",
@@ -147,8 +147,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
         localizedMsg = "Số lượng tệp tải lên vượt quá giới hạn cho phép.";
       } else if (/multipart:\s*boundary not found/i.test(rawMsg)) {
         localizedMsg = "Định dạng dữ liệu biểu mẫu tải lên không hợp lệ.";
+      } else if (/^[A-Za-z0-9\s.,:'"()/_-]+$/.test(rawMsg)) {
+        // Không lộ thông điệp mặc định bằng tiếng Anh của framework/middleware ra màn hình người dùng cuối
+        localizedMsg =
+          status === 401
+            ? "Chưa đăng nhập hoặc phiên đã hết hạn."
+            : status === 403
+              ? "Không có quyền thực hiện thao tác này."
+              : "Dữ liệu yêu cầu không hợp lệ.";
       }
-      return { status, body: { error: localizedMsg, code: STATUS_CODES[status] ?? "ERROR" } };
+      return { status, body: { error: localizedMsg || "Yêu cầu không hợp lệ.", code: STATUS_CODES[status] ?? "ERROR" } };
     }
 
     if ((exception as { name?: string })?.name === "MulterError") {

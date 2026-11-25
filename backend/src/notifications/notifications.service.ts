@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
-import { can, isCoopStaffRole, type Role } from "../auth/permissions";
+import { can, type Role } from "../auth/permissions";
 import type { CacheTag } from "../common/cache/app-cache.service";
 import { isStaffInCuneCoopScope, isStaffInParcelScope, villageScope } from "../common/crud/village-scope";
 import { camelRows } from "../common/sql/rows";
@@ -42,6 +42,8 @@ export type RealtimeStreamEvent =
 
 interface ActiveStreamSub {
   role: Role;
+  sessionId?: number | null;
+  onEvict?: () => void;
   send: (event: RealtimeStreamEvent) => void;
 }
 
@@ -54,12 +56,14 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NotificationsService.name);
   private readonly lastSyncedAt = new Map<number, number>();
   private readonly streamsByUser = new Map<number, Set<ActiveStreamSub>>();
+  private totalActiveStreams = 0;
   private unsubscribeCacheTags: (() => void) | null = null;
   private pendingDataSyncTags = new Set<CacheTag>();
   private dataSyncTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly SYNC_THROTTLE_MS = 15_000;
   private static readonly MAX_STREAMS_PER_USER = 6;
-  private static readonly DATA_SYNC_DEBOUNCE_MS = 100;
+  private static readonly MAX_TOTAL_STREAMS = 2_000;
+  private static readonly DATA_SYNC_DEBOUNCE_MS = 40;
 
   constructor(private readonly db: DatabaseService) {}
 
@@ -68,7 +72,14 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     this.unsubscribeCacheTags = this.db.cache.onTagsInvalidated((tags) => {
       let hasLiveTag = false;
       for (const tag of tags) {
-        if (tag === "dashboard" || tag === "plots" || tag === "catalog" || tag === "news") {
+        if (
+          tag === "dashboard" ||
+          tag === "auth" ||
+          tag === "plots" ||
+          tag === "catalog" ||
+          tag === "news" ||
+          tag === "portal"
+        ) {
           this.pendingDataSyncTags.add(tag);
           hasLiveTag = true;
         }
@@ -80,7 +91,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         if (this.pendingDataSyncTags.size === 0) return;
         const batch = Array.from(this.pendingDataSyncTags);
         this.pendingDataSyncTags.clear();
-        this.emitStaffDataSync(batch);
+        this.emitDataSync(batch);
       }, NotificationsService.DATA_SYNC_DEBOUNCE_MS);
       this.dataSyncTimer.unref?.();
     });
@@ -96,11 +107,29 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     this.pendingDataSyncTags.clear();
   }
 
-  private emitStaffDataSync(tags: CacheTag[]): void {
-    const event: RealtimeStreamEvent = { type: "data-sync", tags };
+  private emitDataSync(tags: CacheTag[]): void {
+    const staffTags = tags.filter((t) => t !== "portal");
+    const enterpriseTags = tags.filter((t) => t === "dashboard" || t === "catalog");
+    const farmerTags = tags.filter(
+      (t) => t === "portal" || t === "plots" || t === "catalog" || t === "news",
+    );
+    const staffEvent: RealtimeStreamEvent | null =
+      staffTags.length > 0 ? { type: "data-sync", tags: staffTags } : null;
+    const enterpriseEvent: RealtimeStreamEvent | null =
+      enterpriseTags.length > 0 ? { type: "data-sync", tags: enterpriseTags } : null;
+    const farmerEvent: RealtimeStreamEvent | null =
+      farmerTags.length > 0 ? { type: "data-sync", tags: farmerTags } : null;
+    if (!staffEvent && !enterpriseEvent && !farmerEvent) return;
+
     for (const subs of this.streamsByUser.values()) {
       for (const sub of subs) {
-        if (sub.role === "farmer") continue;
+        const event =
+          sub.role === "farmer"
+            ? farmerEvent
+            : sub.role === "enterprise"
+              ? enterpriseEvent
+              : staffEvent;
+        if (!event) continue;
         try {
           sub.send(event);
         } catch {
@@ -115,6 +144,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     userId: number,
     role: Role,
     send: (event: RealtimeStreamEvent) => void,
+    options?: { sessionId?: number | null; onEvict?: () => void },
   ): () => void {
     let bucket = this.streamsByUser.get(userId);
     if (!bucket) {
@@ -123,19 +153,79 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     }
     if (bucket.size >= NotificationsService.MAX_STREAMS_PER_USER) {
       const oldest = bucket.values().next().value;
-      if (oldest) bucket.delete(oldest);
+      if (oldest) {
+        bucket.delete(oldest);
+        this.totalActiveStreams = Math.max(0, this.totalActiveStreams - 1);
+        try {
+          oldest.onEvict?.();
+        } catch {
+          // Bỏ qua lỗi đóng socket cũ
+        }
+      }
     }
-    const entry: ActiveStreamSub = { role, send };
+    if (this.totalActiveStreams >= NotificationsService.MAX_TOTAL_STREAMS) {
+      for (const [uid, candidateBucket] of this.streamsByUser) {
+        const oldestGlobal = candidateBucket.values().next().value;
+        if (oldestGlobal) {
+          candidateBucket.delete(oldestGlobal);
+          this.totalActiveStreams = Math.max(0, this.totalActiveStreams - 1);
+          if (candidateBucket.size === 0) this.streamsByUser.delete(uid);
+          try {
+            oldestGlobal.onEvict?.();
+          } catch {
+            // Bỏ qua lỗi đóng socket cũ
+          }
+          break;
+        }
+      }
+    }
+    const entry: ActiveStreamSub = {
+      role,
+      sessionId: options?.sessionId ?? null,
+      onEvict: options?.onEvict,
+      send,
+    };
     bucket.add(entry);
+    this.totalActiveStreams += 1;
 
     return () => {
       const current = this.streamsByUser.get(userId);
-      if (!current) return;
+      if (!current || !current.has(entry)) return;
       current.delete(entry);
+      this.totalActiveStreams = Math.max(0, this.totalActiveStreams - 1);
       if (current.size === 0) {
         this.streamsByUser.delete(userId);
       }
     };
+  }
+
+  /** Ngắt ngay lập tức mọi luồng SSE đang mở của người dùng (khi thu hồi phiên, đổi mật khẩu, khóa tài khoản). */
+  disconnectUserStreams(userId: number, options?: { onlySessionId?: number | null; exceptSessionId?: number | null }): void {
+    const bucket = this.streamsByUser.get(Number(userId));
+    if (!bucket || bucket.size === 0) return;
+    const toClose: ActiveStreamSub[] = [];
+    for (const sub of bucket) {
+      if (options?.onlySessionId !== undefined && options.onlySessionId !== null) {
+        if (sub.sessionId !== options.onlySessionId) continue;
+      }
+      if (options?.exceptSessionId !== undefined && options.exceptSessionId !== null) {
+        if (sub.sessionId === options.exceptSessionId) continue;
+      }
+      toClose.push(sub);
+    }
+    for (const sub of toClose) {
+      if (bucket.delete(sub)) {
+        this.totalActiveStreams = Math.max(0, this.totalActiveStreams - 1);
+      }
+      try {
+        sub.onEvict?.();
+      } catch {
+        // Bỏ qua nếu luồng đã đóng
+      }
+    }
+    if (bucket.size === 0) {
+      this.streamsByUser.delete(Number(userId));
+    }
   }
 
   /** Đẩy sự kiện cảnh báo / thông báo hệ thống thời gian thực tới các luồng đang mở thuộc nhóm đối tượng nhận. */
@@ -146,7 +236,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         const matches =
           audience === "all" ||
           (audience === "farmer" && sub.role === "farmer") ||
-          (audience === "staff" && sub.role !== "farmer");
+          (audience === "staff" && sub.role !== "farmer" && sub.role !== "enterprise");
         if (!matches) continue;
         try {
           sub.send(event);
@@ -260,7 +350,17 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       "inspector",
     ];
     const requiredResource =
-      input.kind === "approval" ? "approvals" : input.kind === "violation" ? "violations" : null;
+      input.kind === "approval"
+        ? "approvals"
+        : input.kind === "violation"
+          ? "violations"
+          : input.kind === "harvest"
+            ? "harvest"
+            : input.kind === "protocol"
+              ? "journal"
+              : input.kind === "lab"
+                ? "testing"
+                : null;
     const allowedGlobalRoles = requiredResource
       ? globalCandidateRoles.filter((r) => can(r, requiredResource, "read"))
       : globalCandidateRoles;
@@ -315,27 +415,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
             assignedRegion: u.assigned_region,
             coopCode: u.coop_code || "HTX-CUNE",
           };
-          // Ban điều hành, quản trị viên, cán bộ kỹ thuật HTX và kiểm tra viên thuộc HTX-CUNE / Đắk Lắk
-          // giám sát toàn bộ vùng trồng liên kết (bao gồm cả Cư Né và Ea Khăl).
-          if (isCoopStaffRole(u.role) || u.role === "inspector") {
-            return isStaffInCuneCoopScope(staffUser, true);
-          }
-          if (u.role === "village_officer") {
-            if (!isStaffInCuneCoopScope(staffUser, true)) return false;
-            if (u.village_id !== null) {
-              if (hh.village_id !== null) {
-                return Number(u.village_id) === Number(hh.village_id);
-              }
-              const officerVillage = (u.village_name || "").trim().toLowerCase();
-              const targetVillage = (hh.village_name || "").trim().toLowerCase();
-              return Boolean(officerVillage && targetVillage && officerVillage === targetVillage);
-            }
-            return isStaffInParcelScope(
-              staffUser,
-              { villageId: hh.village_id, villageName: hh.village_name },
-              u.village_name,
-            );
-          }
+          // Áp dụng đồng nhất kiểm tra địa bàn phụ trách (xã/thôn/vùng) cho mọi vai trò cán bộ và thanh tra:
+          // Ban điều hành trung tâm (assigned_commune IS NULL) nhận toàn bộ Cư Né + Ea Khăl, còn cán bộ gắn xã nào chỉ nhận xã đó.
           return isStaffInParcelScope(
             staffUser,
             { villageId: hh.village_id, villageName: hh.village_name },
@@ -354,6 +435,63 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Gửi thông báo tới các vai trò cán bộ phụ trách đúng phạm vi thôn/xã cho trước (ví dụ duyệt đăng ký mới theo thôn). */
+  async notifyRolesForVillage(
+    roles: Role[],
+    village: { villageId: number | null; villageName: string | null },
+    input: NotificationInput,
+    options?: { excludeUserId?: number },
+  ): Promise<void> {
+    if (roles.length === 0) return;
+    if (!village.villageId && !village.villageName) {
+      await this.notifyRoles(roles, input, options);
+      return;
+    }
+    try {
+      const { rows } = await this.db.query<{
+        id: number;
+        role: Role;
+        village_id: number | null;
+        village_name: string | null;
+        assigned_commune: string | null;
+        assigned_region: string | null;
+        coop_code: string | null;
+      }>(
+        `SELECT u.id, u.role, u.village_id, v.name AS village_name,
+                u.assigned_commune, u.assigned_region, u.coop_code
+         FROM users u
+         LEFT JOIN villages v ON v.id = u.village_id
+         WHERE u.role = ANY($1::text[]) AND u.status = 'active'`,
+        [roles],
+      );
+      const excludedId = options?.excludeUserId;
+      const recipientIds = rows
+        .filter((u) => {
+          if (excludedId !== undefined && Number(u.id) === Number(excludedId)) return false;
+          const staffUser: AuthUser = {
+            id: Number(u.id),
+            fullName: "",
+            username: "",
+            role: u.role,
+            villageId: u.village_id !== null ? Number(u.village_id) : null,
+            householdId: null,
+            assignedCommune: u.assigned_commune,
+            assignedRegion: u.assigned_region,
+            coopCode: u.coop_code || "HTX-CUNE",
+          };
+          return isStaffInParcelScope(staffUser, village, u.village_name);
+        })
+        .map((u) => Number(u.id));
+      if (recipientIds.length === 0) return;
+      await this.insert(
+        `SELECT unnest($5::bigint[]) AS id`,
+        [input.kind, input.title, input.body ?? null, input.link ?? null, recipientIds],
+      );
+    } catch (error) {
+      this.logger.error(`Không gửi được thông báo theo thôn: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   /** Gửi tới tất cả hộ dân có tài khoản (ví dụ lịch kiểm tra, khóa tập huấn mới). */
   async notifyAllFarmers(input: NotificationInput): Promise<void> {
     await this.notifyRoles(["farmer"], input);
@@ -367,21 +505,39 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** Tự động đánh dấu đã đọc các thông báo hệ thống gắn với một mã sự cố khi sự cố đã khắc phục. */
-  async resolveByLink(link: string): Promise<void> {
+  /** Đẩy sự kiện đồng bộ danh sách thông báo tức thì tới tập người dùng vừa có thay đổi trạng thái đọc / thu hồi. */
+  emitSyncToUsers(userIds: Iterable<number>): void {
+    const seen = new Set<number>();
+    for (const rawId of userIds) {
+      const uid = Number(rawId);
+      if (!Number.isFinite(uid) || uid <= 0 || seen.has(uid)) continue;
+      seen.add(uid);
+      this.lastSyncedAt.delete(uid);
+      this.emitToUser(uid, { type: "notifications-sync" });
+    }
+  }
+
+  /** Tự động đánh dấu đã đọc các thông báo chờ xử lý gắn với một hoặc nhiều đường dẫn liên kết và đồng bộ SSE tức thì. */
+  async resolveByLinks(links: string[]): Promise<void> {
+    const cleanLinks = Array.from(new Set(links.map((l) => l.trim()).filter(Boolean)));
+    if (cleanLinks.length === 0) return;
     try {
       this.lastSyncedAt.clear();
       const res = await this.db.query<{ user_id: number }>(
-        "UPDATE notifications SET read_at = now() WHERE link = $1 AND read_at IS NULL RETURNING user_id",
-        [link],
+        "UPDATE notifications SET read_at = now() WHERE link = ANY($1::text[]) AND read_at IS NULL RETURNING user_id",
+        [cleanLinks],
       );
-      const uniqueUsers = new Set(res.rows.map((r) => Number(r.user_id)));
-      for (const uid of uniqueUsers) {
-        this.emitToUser(uid, { type: "notifications-sync" });
-      }
+      this.emitSyncToUsers(res.rows.map((r) => Number(r.user_id)));
     } catch (error) {
-      this.logger.error(`Không cập nhật được trạng thái thông báo sự cố: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Không cập nhật được trạng thái thông báo: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
+  }
+
+  /** Tự động đánh dấu đã đọc các thông báo hệ thống gắn với một mã sự cố / yêu cầu khi đã xử lý xong. */
+  async resolveByLink(link: string): Promise<void> {
+    await this.resolveByLinks([link]);
   }
 
   async list(userOrId: AuthUser | number, limit = 50) {
@@ -394,13 +550,20 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         await this.syncStaffNotifications(userOrId);
         const clauses: string[] = [];
         if (!can(userOrId.role, "approvals", "read")) {
-          clauses.push(`kind <> 'approval' AND COALESCE(link, '') NOT LIKE '/admin?section=approval%'`);
+          clauses.push(
+            `COALESCE(link, '') NOT LIKE '/admin?section=approval%' AND (kind <> 'approval' OR COALESCE(link, '') LIKE '/trace/%')`,
+          );
         }
         if (!can(userOrId.role, "violations", "read")) {
           clauses.push(`kind <> 'violation' AND COALESCE(link, '') NOT LIKE '%violationId=%'`);
         }
         if (!can(userOrId.role, "registrations", "read")) {
-          clauses.push(`COALESCE(link, '') NOT LIKE '/admin?section=registrations%'`);
+          clauses.push(
+            `COALESCE(link, '') NOT LIKE '/admin?section=registrations%' AND COALESCE(link, '') NOT LIKE '/admin?section=approval&sub=registrations%'`,
+          );
+        }
+        if (!can(userOrId.role, "harvest", "read")) {
+          clauses.push(`kind <> 'harvest' AND COALESCE(link, '') NOT LIKE '/admin?section=harvest%'`);
         }
         if (clauses.length > 0) {
           rbacFilterSql = ` AND ${clauses.join(" AND ")}`;

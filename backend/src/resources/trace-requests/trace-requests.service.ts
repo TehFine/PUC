@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { AuditService } from "../../audit/audit.service";
 import type { AuthUser } from "../../auth/auth-user";
@@ -57,10 +57,9 @@ function hashSecret(raw: string): string {
 
 function generateAlphaNumToken(len: number): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-  const bytes = randomBytes(len);
   let out = "";
   for (let i = 0; i < len; i += 1) {
-    out += alphabet[bytes[i]! % alphabet.length];
+    out += alphabet[randomInt(0, alphabet.length)];
   }
   return out;
 }
@@ -92,10 +91,9 @@ function normalizeScannedLookup(raw: string): string {
 function generateRequestCode(): string {
   const year = new Date().getFullYear();
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const bytes = randomBytes(6);
   let suffix = "";
   for (let i = 0; i < 6; i += 1) {
-    suffix += alphabet[bytes[i]! % alphabet.length];
+    suffix += alphabet[randomInt(0, alphabet.length)];
   }
   return `YCCQ-${year}-${suffix}`;
 }
@@ -208,8 +206,15 @@ export class TraceRequestsService {
     return hasPublicTable(this.db, tableName);
   }
 
-  /** Xác định mã quét thuộc loại hồ sơ nào (lô, thùng, tem trái hay thửa đất) và mã PUC liên kết. */
-  private async resolveScannedTarget(rawCode: string): Promise<{
+  /**
+   * Xác định mã quét thuộc loại hồ sơ nào (lô, thùng, tem trái hay thửa đất) và mã PUC liên kết.
+   * Với người gửi chưa đăng nhập (`allowHumanCodeLookup = false`), chỉ cho phép tra cứu bằng `qr_token` ngẫu nhiên
+   * để chặn dò quét tuần tự theo mã lô / mã thửa / mã hộ.
+   */
+  private async resolveScannedTarget(
+    rawCode: string,
+    allowHumanCodeLookup = false,
+  ): Promise<{
     canonicalDisplayCode: string;
     targetKind: "lot" | "box" | "fruit" | "plot";
     resolvedLotCode: string | null;
@@ -231,11 +236,16 @@ export class TraceRequestsService {
       item_type: string;
       serial_code: string;
     }>(
-      `SELECT lot_id, item_type, serial_code
-       FROM harvest_items
-       WHERE qr_token = $1 OR upper(serial_code) = upper($1)
-       ORDER BY (qr_token = $1) DESC
-       LIMIT 1`,
+      allowHumanCodeLookup
+        ? `SELECT lot_id, item_type, serial_code
+           FROM harvest_items
+           WHERE qr_token = $1 OR upper(serial_code) = upper($1)
+           ORDER BY (qr_token = $1) DESC
+           LIMIT 1`
+        : `SELECT lot_id, item_type, serial_code
+           FROM harvest_items
+           WHERE qr_token = $1
+           LIMIT 1`,
       [clean],
     );
 
@@ -255,7 +265,7 @@ export class TraceRequestsService {
     }
 
     // 2. Sự kiện chuỗi cung ứng (EVT-...) hoặc Lô hàng (harvest_lots)
-    if (await this.hasTable("supply_chain_events")) {
+    if (allowHumanCodeLookup && (await this.hasTable("supply_chain_events"))) {
       const evRes = await this.db.query<{ lot_id: number }>(
         `SELECT lot_id FROM supply_chain_events WHERE upper(event_code) = upper($1) LIMIT 1`,
         [clean],
@@ -278,13 +288,18 @@ export class TraceRequestsService {
     }
 
     const lotRes = await this.db.query<{ id: number; code: string }>(
-      `SELECT id, code
-       FROM harvest_lots
-       WHERE qr_token = $1
-          OR upper(code) = upper($1)
-          OR (qr_code IS NOT NULL AND btrim(qr_code) <> '' AND upper(btrim(qr_code)) = upper(btrim($1)))
-       ORDER BY (qr_token = $1) DESC, id DESC
-       LIMIT 1`,
+      allowHumanCodeLookup
+        ? `SELECT id, code
+           FROM harvest_lots
+           WHERE qr_token = $1
+              OR upper(code) = upper($1)
+              OR (qr_code IS NOT NULL AND btrim(qr_code) <> '' AND upper(btrim(qr_code)) = upper(btrim($1)))
+           ORDER BY (qr_token = $1) DESC, id DESC
+           LIMIT 1`
+        : `SELECT id, code
+           FROM harvest_lots
+           WHERE qr_token = $1
+           LIMIT 1`,
       [clean],
     );
     if (lotRes.rows[0]) {
@@ -307,11 +322,16 @@ export class TraceRequestsService {
       plot_code: string | null;
       serial_code: string;
     }>(
-      `SELECT household_id, plot_code, serial_code
-       FROM farmer_stamps
-       WHERE qr_token = $1 OR upper(serial_code) = upper($1)
-       ORDER BY (qr_token = $1) DESC
-       LIMIT 1`,
+      allowHumanCodeLookup
+        ? `SELECT household_id, plot_code, serial_code
+           FROM farmer_stamps
+           WHERE qr_token = $1 OR upper(serial_code) = upper($1)
+           ORDER BY (qr_token = $1) DESC
+           LIMIT 1`
+        : `SELECT household_id, plot_code, serial_code
+           FROM farmer_stamps
+           WHERE qr_token = $1
+           LIMIT 1`,
       [clean],
     );
     if (fsRes.rows[0]) {
@@ -328,12 +348,18 @@ export class TraceRequestsService {
     // 4. Bảng QR Thửa đất (plots / plot_signboard_tokens)
     if (hasPlots) {
       const plRes = await this.db.query<{ code: string; zone_code: string | null }>(
-        `SELECT p.code, COALESCE(p.zone_code, pst.zone_code) AS zone_code
-         FROM plots p
-         LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
-         WHERE p.qr_token = $1 OR pst.qr_token = $1 OR upper(p.code) = upper($1)
-         ORDER BY (p.qr_token = $1 OR pst.qr_token = $1) DESC
-         LIMIT 1`,
+        allowHumanCodeLookup
+          ? `SELECT p.code, COALESCE(p.zone_code, pst.zone_code) AS zone_code
+             FROM plots p
+             LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
+             WHERE p.qr_token = $1 OR pst.qr_token = $1 OR upper(p.code) = upper($1)
+             ORDER BY (p.qr_token = $1 OR pst.qr_token = $1) DESC
+             LIMIT 1`
+          : `SELECT p.code, COALESCE(p.zone_code, pst.zone_code) AS zone_code
+             FROM plots p
+             LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
+             WHERE p.qr_token = $1 OR pst.qr_token = $1
+             LIMIT 1`,
         [clean],
       );
       if (plRes.rows[0]) {
@@ -348,11 +374,16 @@ export class TraceRequestsService {
 
     if (hasSignboards) {
       const sbRes = await this.db.query<{ plot_code: string; zone_code: string | null }>(
-        `SELECT plot_code, zone_code
-         FROM plot_signboard_tokens
-         WHERE qr_token = $1 OR upper(plot_code) = upper($1)
-         ORDER BY (qr_token = $1) DESC
-         LIMIT 1`,
+        allowHumanCodeLookup
+          ? `SELECT plot_code, zone_code
+             FROM plot_signboard_tokens
+             WHERE qr_token = $1 OR upper(plot_code) = upper($1)
+             ORDER BY (qr_token = $1) DESC
+             LIMIT 1`
+          : `SELECT plot_code, zone_code
+             FROM plot_signboard_tokens
+             WHERE qr_token = $1
+             LIMIT 1`,
         [clean],
       );
       if (sbRes.rows[0]) {
@@ -365,67 +396,68 @@ export class TraceRequestsService {
       }
     }
 
-    // 5. Mã số vùng trồng PUC (growing_zones)
-    if (hasGrowingZones) {
-      const gzRes = await this.db.query<{ code: string }>(
-        `SELECT code FROM growing_zones WHERE upper(code) = upper($1) LIMIT 1`,
+    // 5 & 6. Mã số vùng trồng PUC / Mã hộ định danh nội bộ chỉ cho phép khi đã đăng nhập
+    if (allowHumanCodeLookup) {
+      if (hasGrowingZones) {
+        const gzRes = await this.db.query<{ code: string }>(
+          `SELECT code FROM growing_zones WHERE upper(code) = upper($1) LIMIT 1`,
+          [clean],
+        );
+        if (gzRes.rows[0]) {
+          return {
+            canonicalDisplayCode: gzRes.rows[0].code,
+            targetKind: "plot",
+            resolvedLotCode: null,
+            pucCode: gzRes.rows[0].code.trim(),
+          };
+        }
+      }
+
+      const hhRes = await this.db.query<{ id: number; code: string }>(
+        `SELECT id, code
+         FROM households
+         WHERE upper(btrim(code)) = upper(btrim($1))
+         LIMIT 1`,
         [clean],
       );
-      if (gzRes.rows[0]) {
+      if (hhRes.rows[0]) {
+        const hhId = Number(hhRes.rows[0].id);
+        let resolvedZone: string | null = null;
+        if (hasPlots) {
+          const pz = await this.db.query<{ zone_code: string | null }>(
+            `SELECT zone_code FROM plots
+             WHERE household_id = $1 AND zone_code IS NOT NULL AND btrim(zone_code) <> ''
+             ORDER BY (status = 'approved') DESC, id ASC
+             LIMIT 1`,
+            [hhId],
+          );
+          if (pz.rows[0]?.zone_code) resolvedZone = pz.rows[0].zone_code.trim();
+        }
+        if (!resolvedZone && hasSignboards) {
+          const sz = await this.db.query<{ zone_code: string | null }>(
+            `SELECT zone_code FROM plot_signboard_tokens
+             WHERE household_id = $1 AND zone_code IS NOT NULL AND btrim(zone_code) <> ''
+             ORDER BY plot_code ASC
+             LIMIT 1`,
+            [hhId],
+          );
+          if (sz.rows[0]?.zone_code) resolvedZone = sz.rows[0].zone_code.trim();
+        }
+        const derivedZone = hhRes.rows[0].code.replace(/-(?:H|T)\d+$/i, "");
+        const validDerived =
+          derivedZone && derivedZone !== hhRes.rows[0].code && /^(?:VN-|66-PUC-)/i.test(derivedZone)
+            ? derivedZone
+            : null;
         return {
-          canonicalDisplayCode: gzRes.rows[0].code,
+          canonicalDisplayCode: hhRes.rows[0].code,
           targetKind: "plot",
           resolvedLotCode: null,
-          pucCode: gzRes.rows[0].code.trim(),
+          pucCode: resolvedZone || validDerived,
         };
       }
     }
 
-    // 6. Mã định danh nông hộ (households.code)
-    const hhRes = await this.db.query<{ id: number; code: string }>(
-      `SELECT id, code
-       FROM households
-       WHERE upper(btrim(code)) = upper(btrim($1))
-       LIMIT 1`,
-      [clean],
-    );
-    if (hhRes.rows[0]) {
-      const hhId = Number(hhRes.rows[0].id);
-      let resolvedZone: string | null = null;
-      if (hasPlots) {
-        const pz = await this.db.query<{ zone_code: string | null }>(
-          `SELECT zone_code FROM plots
-           WHERE household_id = $1 AND zone_code IS NOT NULL AND btrim(zone_code) <> ''
-           ORDER BY (status = 'approved') DESC, id ASC
-           LIMIT 1`,
-          [hhId],
-        );
-        if (pz.rows[0]?.zone_code) resolvedZone = pz.rows[0].zone_code.trim();
-      }
-      if (!resolvedZone && hasSignboards) {
-        const sz = await this.db.query<{ zone_code: string | null }>(
-          `SELECT zone_code FROM plot_signboard_tokens
-           WHERE household_id = $1 AND zone_code IS NOT NULL AND btrim(zone_code) <> ''
-           ORDER BY plot_code ASC
-           LIMIT 1`,
-          [hhId],
-        );
-        if (sz.rows[0]?.zone_code) resolvedZone = sz.rows[0].zone_code.trim();
-      }
-      const derivedZone = hhRes.rows[0].code.replace(/-(?:H|T)\d+$/i, "");
-      const validDerived =
-        derivedZone && derivedZone !== hhRes.rows[0].code && /^(?:VN-|66-PUC-)/i.test(derivedZone)
-          ? derivedZone
-          : null;
-      return {
-        canonicalDisplayCode: hhRes.rows[0].code,
-        targetKind: "plot",
-        resolvedLotCode: null,
-        pucCode: resolvedZone || validDerived,
-      };
-    }
-
-    throw notFound("Không tìm thấy hồ sơ truy xuất tương ứng với mã vừa quét.");
+    throw notFound("Không tìm thấy hồ sơ truy xuất tương ứng với mã QR vừa quét.");
   }
 
   private async resolveLotPrimaryPuc(
@@ -529,7 +561,7 @@ export class TraceRequestsService {
       : null;
 
     const cleanScanned = normalizeScannedLookup(dto.scannedCode);
-    const target = await this.resolveScannedTarget(cleanScanned);
+    const target = await this.resolveScannedTarget(cleanScanned, Boolean(ctx.user));
     const requestedTier: TraceAccessTier = dto.requestedTier ?? "enterprise";
     const requesterName = dto.requesterName.trim();
     const organization = dto.organization.trim();
@@ -950,6 +982,7 @@ export class TraceRequestsService {
     const updated = upd.rows[0];
     if (!updated) throw badRequest("Yêu cầu đã được người quản trị khác xử lý.");
     this.db.cache?.invalidateTags(["trace"], true);
+    await this.notifications.resolveByLink(`/admin?section=system&sub=trace-requests&id=${updated.id}`);
 
     const kindLabel = TARGET_KIND_VN[updated.target_kind] || "Hồ sơ";
     const targetRef = updated.resolved_lot_code || updated.scanned_code;
@@ -1023,6 +1056,7 @@ export class TraceRequestsService {
       throw badRequest("Không tìm thấy yêu cầu đang chờ duyệt tương ứng.");
     }
     this.db.cache?.invalidateTags(["trace"], true);
+    await this.notifications.resolveByLink(`/admin?section=system&sub=trace-requests&id=${updated.id}`);
 
     if (updated.requester_user_id) {
       await this.notifications.notifyUsers([Number(updated.requester_user_id)], {

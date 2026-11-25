@@ -182,11 +182,13 @@ export class AuthController {
     return this.auth.disableTwoFactor(user, dto, ip);
   }
 
+  @Throttle(RateLimitTier.AUTH_SESSION)
   @Get("sessions")
   listSessions(@CurrentUser() user: AuthUser) {
     return this.auth.listSessions(user);
   }
 
+  @Throttle(RateLimitTier.AUTH_SESSION)
   @Delete("sessions/:id")
   async revokeSession(
     @CurrentUser() user: AuthUser,
@@ -201,6 +203,7 @@ export class AuthController {
     return result;
   }
 
+  @Throttle(RateLimitTier.AUTH_SESSION)
   @Post("sessions/revoke-others")
   @HttpCode(200)
   revokeOtherSessions(@CurrentUser() user: AuthUser, @Ip() ip: string) {

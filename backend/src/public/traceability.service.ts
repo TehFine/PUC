@@ -404,6 +404,7 @@ const MAX_VERIFIED_BG_KEYS = 10_000;
 @Injectable()
 export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
   private readonly failedAuditPassByIp = new Map<string, number[]>();
+  private readonly grantFingerprints = new Map<number, Set<string>>();
   private readonly recentLoggedAccesses = new Map<string, number>();
   private minutesColsCache: { hasHouseholdId: boolean; hasPlotCode: boolean } | null = null;
   private readonly traceSubscribers = new Set<TraceStreamSubscriber>();
@@ -914,7 +915,21 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         const a = Buffer.from(rawToken, "utf8");
         const b = Buffer.from(row.granted_pass_token, "utf8");
         if (a.length === b.length && timingSafeEqual(a, b)) {
-          matchedViaToken = true;
+          const grantId = Number(row.id);
+          const fpKey = `${(ctx.ip || "local").trim().toLowerCase()}|${(ctx.userAgent || "").trim().slice(0, 80).toLowerCase()}`;
+          let seenFps = this.grantFingerprints.get(grantId);
+          if (!seenFps) {
+            if (this.grantFingerprints.size >= 5_000) {
+              const oldest = this.grantFingerprints.keys().next().value;
+              if (oldest !== undefined) this.grantFingerprints.delete(oldest);
+            }
+            seenFps = new Set<string>();
+            this.grantFingerprints.set(grantId, seenFps);
+          }
+          if (seenFps.has(fpKey) || seenFps.size < 4) {
+            seenFps.add(fpKey);
+            matchedViaToken = true;
+          }
         }
       }
       const matchedViaUser =
@@ -1654,6 +1669,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                 hl.status
          FROM harvest_lots hl
          LEFT JOIN enterprises e ON e.id = hl.enterprise_id
+         WHERE hl.qr_token IS NOT NULL
          ORDER BY hl.harvested_on DESC, hl.id DESC
          LIMIT 6`,
         [DEFAULT_PACKHOUSE_NAME],
@@ -1669,7 +1685,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                 $1::text AS producer_label
          FROM harvest_items hi
          JOIN harvest_lots hl ON hl.id = hi.lot_id
-         WHERE hi.item_type = 'box' AND hi.status <> 'recalled'
+         WHERE hi.item_type = 'box' AND hi.status <> 'recalled' AND hi.qr_token IS NOT NULL
          ORDER BY hi.id DESC
          LIMIT 4`,
         [DEFAULT_COOP_NAME],
@@ -1689,7 +1705,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
                 END AS producer_label
          FROM farmer_stamps fs
          JOIN households h ON h.id = fs.household_id
-         WHERE fs.status = 'activated'
+         WHERE fs.status = 'activated' AND fs.qr_token IS NOT NULL
          ORDER BY fs.activated_at DESC NULLS LAST, fs.id DESC
          LIMIT 3`,
         [DEFAULT_COOP_NAME],
@@ -1717,6 +1733,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
              FROM plot_signboard_tokens pst
              LEFT JOIN households h ON h.id = pst.household_id
              LEFT JOIN villages v ON v.id = h.village_id
+             WHERE pst.qr_token IS NOT NULL
              ORDER BY pst.plot_code ASC
              LIMIT 6`,
           [DEFAULT_COOP_NAME],
@@ -3374,6 +3391,57 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Kiểm tra nhanh xem người gọi có đang mang Thẻ Đoàn Thẩm định hoặc Khóa Cấp quyền Tạm thời còn hiệu lực hay không,
+   * làm điều kiện mở phép tra cứu mã nội bộ (trong phạm vi của thẻ) trên `/api/public/trace/:code`.
+   */
+  private async hasActiveAuditPassToken(ctx: TraceRequestContext): Promise<boolean> {
+    const rawPass = ctx.auditPass?.trim();
+    if (!rawPass) return false;
+    this.checkAuditPassRateLimit(ctx.ip);
+    if (rawPass.length < 12 || rawPass.length > 80) {
+      return false;
+    }
+    const inputBuf = Buffer.from(rawPass, "utf8");
+    const [hasFieldPasses, hasTraceReqs] = await Promise.all([
+      this.hasTable("field_audit_passes"),
+      this.hasTable("trace_access_requests"),
+    ]);
+    if (hasFieldPasses) {
+      const fpRes = await this.db.query<{ pass_token: string }>(
+        `SELECT pass_token
+         FROM field_audit_passes
+         WHERE pass_token = $1 AND status = 'active' AND expires_at > now()
+         LIMIT 1`,
+        [rawPass],
+      );
+      const token = fpRes.rows[0]?.pass_token;
+      if (token) {
+        const storedBuf = Buffer.from(token, "utf8");
+        if (storedBuf.length === inputBuf.length && timingSafeEqual(storedBuf, inputBuf)) {
+          return true;
+        }
+      }
+    }
+    if (hasTraceReqs) {
+      const trRes = await this.db.query<{ granted_pass_token: string }>(
+        `SELECT granted_pass_token
+         FROM trace_access_requests
+         WHERE granted_pass_token = $1 AND status = 'approved' AND expires_at > now()
+         LIMIT 1`,
+        [rawPass],
+      );
+      const token = trRes.rows[0]?.granted_pass_token;
+      if (token) {
+        const storedBuf = Buffer.from(token, "utf8");
+        if (storedBuf.length === inputBuf.length && timingSafeEqual(storedBuf, inputBuf)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * Đối chứng trực tiếp tọa độ GPS điện thoại của Đoàn thẩm định / Cán bộ với ranh giới đa giác GIS của thửa đất.
    */
   async verifyLiveFieldGps(
@@ -3385,6 +3453,10 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     if (!cleanCode || cleanCode.length > 128 || !/^[A-Za-z0-9._/-]+$/.test(cleanCode)) {
       throw notFound("Không tìm thấy thửa đất cần đối chứng GPS.");
     }
+
+    const effectivePassCtx = { ...ctx, auditPass: dto.auditPass || ctx.auditPass };
+    const allowHumanCodeLookup =
+      Boolean(ctx.user) || (await this.hasActiveAuditPassToken(effectivePassCtx));
 
     const [hasPlots, hasSignboards] = await Promise.all([
       this.hasTable("plots"),
@@ -3410,14 +3482,22 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         village_id: number | null;
         village: string | null;
       }>(
-        `SELECT p.code, COALESCE(p.qr_token, pst.qr_token) AS qr_token, COALESCE(p.zone_code, pst.zone_code) AS zone_code, p.household_id, h.village_id, COALESCE(p.village, v.name) AS village
-         FROM plots p
-         LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
-         LEFT JOIN households h ON h.id = p.household_id
-         LEFT JOIN villages v ON v.id = h.village_id
-         WHERE p.qr_token = $1 OR pst.qr_token = $1 OR upper(p.code) = upper($1)
-         ORDER BY (p.qr_token = $1 OR pst.qr_token = $1) DESC
-         LIMIT 1`,
+        allowHumanCodeLookup
+          ? `SELECT p.code, COALESCE(p.qr_token, pst.qr_token) AS qr_token, COALESCE(p.zone_code, pst.zone_code) AS zone_code, p.household_id, h.village_id, COALESCE(p.village, v.name) AS village
+             FROM plots p
+             LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
+             LEFT JOIN households h ON h.id = p.household_id
+             LEFT JOIN villages v ON v.id = h.village_id
+             WHERE p.qr_token = $1 OR pst.qr_token = $1 OR upper(p.code) = upper($1)
+             ORDER BY (p.qr_token = $1 OR pst.qr_token = $1) DESC
+             LIMIT 1`
+          : `SELECT p.code, COALESCE(p.qr_token, pst.qr_token) AS qr_token, COALESCE(p.zone_code, pst.zone_code) AS zone_code, p.household_id, h.village_id, COALESCE(p.village, v.name) AS village
+             FROM plots p
+             LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
+             LEFT JOIN households h ON h.id = p.household_id
+             LEFT JOIN villages v ON v.id = h.village_id
+             WHERE p.qr_token = $1 OR pst.qr_token = $1
+             LIMIT 1`,
         [cleanCode],
       );
       if (pRes.rows[0]) {
@@ -3443,13 +3523,20 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         village_id: number | null;
         village_name: string | null;
       }>(
-        `SELECT pst.plot_code, pst.qr_token, pst.zone_code, pst.household_id, h.village_id, COALESCE(pst.village_name, v.name) AS village_name
-         FROM plot_signboard_tokens pst
-         LEFT JOIN households h ON h.id = pst.household_id
-         LEFT JOIN villages v ON v.id = h.village_id
-         WHERE pst.qr_token = $1 OR upper(pst.plot_code) = upper($1)
-         ORDER BY (pst.qr_token = $1) DESC
-         LIMIT 1`,
+        allowHumanCodeLookup
+          ? `SELECT pst.plot_code, pst.qr_token, pst.zone_code, pst.household_id, h.village_id, COALESCE(pst.village_name, v.name) AS village_name
+             FROM plot_signboard_tokens pst
+             LEFT JOIN households h ON h.id = pst.household_id
+             LEFT JOIN villages v ON v.id = h.village_id
+             WHERE pst.qr_token = $1 OR upper(pst.plot_code) = upper($1)
+             ORDER BY (pst.qr_token = $1) DESC
+             LIMIT 1`
+          : `SELECT pst.plot_code, pst.qr_token, pst.zone_code, pst.household_id, h.village_id, COALESCE(pst.village_name, v.name) AS village_name
+             FROM plot_signboard_tokens pst
+             LEFT JOIN households h ON h.id = pst.household_id
+             LEFT JOIN villages v ON v.id = h.village_id
+             WHERE pst.qr_token = $1
+             LIMIT 1`,
         [cleanCode],
       );
       if (sbRes.rows[0]) {
@@ -3467,12 +3554,14 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (!resolvedPlot) {
+      if (effectivePassCtx.auditPass?.trim() && !allowHumanCodeLookup) {
+        this.recordFailedAuditPassAttempt(ctx.ip);
+      }
       throw notFound("Không tìm thấy hồ sơ thửa đất tương ứng để đối chứng tọa độ GPS.");
     }
 
     const adminLocation = this.resolveAdminLocation(resolvedPlot.villageName, resolvedPlot.zoneCode);
     const realZones = resolvedPlot.rawZoneCode ? [resolvedPlot.rawZoneCode] : [];
-    const effectivePassCtx = { ...ctx, auditPass: dto.auditPass || ctx.auditPass };
     const tempGrant = await this.resolveApprovedAccessGrant(
       effectivePassCtx,
       {
@@ -3888,8 +3977,13 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
   private async traceInternal(rawCode: string, ctx: TraceRequestContext) {
     const cleanCode = normalizeTraceLookupCode(rawCode);
     if (!cleanCode || cleanCode.length > 128 || !/^[A-Za-z0-9._/-]+$/.test(cleanCode)) {
-      throw notFound(`Không tìm thấy hồ sơ truy xuất cho mã "${cleanCode.slice(0, 80)}". Vui lòng kiểm tra lại mã thửa, mã lô hoặc tem QR.`);
+      throw notFound("Không tìm thấy hồ sơ truy xuất. Vui lòng quét trực tiếp tem mã QR trên sản phẩm hoặc bảng QR đầu thửa vườn.");
     }
+
+    // Chính sách chống dò quét tuần tự: khách chưa đăng nhập và không mang thẻ thẩm định còn hiệu lực
+    // CHỈ được mở hồ sơ bằng mã qr_token ngẫu nhiên; mọi mã định danh tuần tự (mã lô, mã thùng, mã thửa, mã hộ, mã vùng) đều bị chặn.
+    const allowHumanCodeLookup =
+      Boolean(ctx.user) || (await this.hasActiveAuditPassToken(ctx));
 
     const [hasPlots, hasSignboards, hasGrowingZones] = await Promise.all([
       this.hasTable("plots"),
@@ -3897,17 +3991,22 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       this.hasTable("growing_zones"),
     ]);
 
-    // ─── NHÁNH A: QUÉT TOKEN NGẪU NHIÊN /t/:token, MÃ SỰ KIỆN EVT-... HOẶC MÃ LÔ / MÃ THÙNG DỰ PHÒNG ───
+    // ─── NHÁNH A: QUÉT TOKEN NGẪU NHIÊN /t/:token (VÀ MÃ SỰ KIỆN / MÃ LÔ / MÃ THÙNG CHO PHIÊN ĐÃ XÁC THỰC) ───
     let scannedItem: Record<string, unknown> | null = null;
     let lotId: number | null = null;
     let matchedEventCode: string | null = null;
 
     const itemRes = await this.db.query(
-      `SELECT lot_id, item_type, serial_code, qr_token, weight_kg::float8 AS weight_kg, grade, printed_at, created_at, status
-       FROM harvest_items
-       WHERE qr_token = $1 OR upper(serial_code) = upper($1)
-       ORDER BY (qr_token = $1) DESC
-       LIMIT 1`,
+      allowHumanCodeLookup
+        ? `SELECT lot_id, item_type, serial_code, qr_token, weight_kg::float8 AS weight_kg, grade, printed_at, created_at, status
+           FROM harvest_items
+           WHERE qr_token = $1 OR upper(serial_code) = upper($1)
+           ORDER BY (qr_token = $1) DESC
+           LIMIT 1`
+        : `SELECT lot_id, item_type, serial_code, qr_token, weight_kg::float8 AS weight_kg, grade, printed_at, created_at, status
+           FROM harvest_items
+           WHERE qr_token = $1
+           LIMIT 1`,
       [cleanCode],
     );
     if (itemRes.rowCount && itemRes.rows[0]) {
@@ -3918,7 +4017,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       scannedItem = publicItem;
     }
 
-    if (lotId === null && (await this.hasTable("supply_chain_events"))) {
+    if (allowHumanCodeLookup && lotId === null && (await this.hasTable("supply_chain_events"))) {
       const evRes = await this.db.query<{ lot_id: number; event_code: string }>(
         `SELECT lot_id, event_code
          FROM supply_chain_events
@@ -3949,6 +4048,17 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       ? `, l.brand_name, l.expiry_on, l.storage_condition, ${publicAttachmentUrlSql("l.product_image_id")} AS product_image_url`
       : `, NULL::text AS brand_name, NULL::date AS expiry_on, NULL::text AS storage_condition, NULL::text AS product_image_url`;
 
+    const lotWhereSql = lotId
+      ? "l.id = $1"
+      : allowHumanCodeLookup
+        ? "l.qr_token = $1 OR upper(l.code) = upper($1) OR (l.qr_code IS NOT NULL AND btrim(l.qr_code) <> '' AND upper(btrim(l.qr_code)) = upper(btrim($1)))"
+        : "l.qr_token = $1";
+    const lotOrderSql = lotId
+      ? "l.id ASC"
+      : allowHumanCodeLookup
+        ? "(l.qr_token = $1) DESC, l.id DESC"
+        : "l.id DESC";
+
     const lotRes = await this.db.query(
       `SELECT l.id, l.code, l.qr_token, l.enterprise_id, l.coop_code, l.variety, l.qr_code, l.harvested_on, l.packed_on, l.exported_on,
               l.weight_tons::float8 AS weight_tons, l.household_count, l.market, l.status, l.revoked_reason,
@@ -3961,8 +4071,8 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
               l.created_at, l.updated_at${lotNd37ColsSql}
        FROM harvest_lots l
        LEFT JOIN enterprises e ON e.id = l.enterprise_id
-       WHERE ${lotId ? "l.id = $1" : "l.qr_token = $1 OR upper(l.code) = upper($1) OR (l.qr_code IS NOT NULL AND btrim(l.qr_code) <> '' AND upper(btrim(l.qr_code)) = upper(btrim($1)))"}
-       ORDER BY ${lotId ? "l.id ASC" : "(l.qr_token = $1) DESC, l.id DESC"}
+       WHERE ${lotWhereSql}
+       ORDER BY ${lotOrderSql}
        LIMIT 1`,
       [lotId ?? cleanCode],
     );
@@ -3979,6 +4089,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     }
 
     // ─── NHÁNH B: QUÉT TEM NÔNG HỘ DÒNG CAO CẤP / THƯƠNG HIỆU RIÊNG (farmer_stamps) ───
+    const stampWhereSql = allowHumanCodeLookup
+      ? "WHERE fs.qr_token = $1 OR upper(fs.serial_code) = upper($1) ORDER BY (fs.qr_token = $1) DESC"
+      : "WHERE fs.qr_token = $1";
     const farmerStampSql = hasPlots
       ? `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.qr_token, fs.status,
                 fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
@@ -3997,8 +4110,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
          JOIN households h ON h.id = fs.household_id
          JOIN villages v ON v.id = h.village_id
          LEFT JOIN plots p ON upper(p.code) = upper(fs.plot_code)
-         WHERE fs.qr_token = $1 OR upper(fs.serial_code) = upper($1)
-         ORDER BY (fs.qr_token = $1) DESC
+         ${stampWhereSql}
          LIMIT 1`
       : hasSignboards
         ? `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.qr_token, fs.status,
@@ -4016,8 +4128,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
            JOIN households h ON h.id = fs.household_id
            JOIN villages v ON v.id = h.village_id
            LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(fs.plot_code)
-           WHERE fs.qr_token = $1 OR upper(fs.serial_code) = upper($1)
-           ORDER BY (fs.qr_token = $1) DESC
+           ${stampWhereSql}
            LIMIT 1`
         : `SELECT fs.household_id, fs.plot_code, fs.serial_code, fs.qr_token, fs.status,
                   fs.activated_at, fs.fruit_weight_kg::float8 AS fruit_weight_kg, fs.grade, fs.harvest_date,
@@ -4033,8 +4144,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
            FROM farmer_stamps fs
            JOIN households h ON h.id = fs.household_id
            JOIN villages v ON v.id = h.village_id
-           WHERE fs.qr_token = $1 OR upper(fs.serial_code) = upper($1)
-           ORDER BY (fs.qr_token = $1) DESC
+           ${stampWhereSql}
            LIMIT 1`;
 
     const farmerStampRes = await this.db.query(farmerStampSql, [cleanCode]);
@@ -4049,6 +4159,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
 
     // ─── NHÁNH C: QUÉT BẢNG QR THỬA ĐẤT / BIỂN VƯỜN (plots + plot_signboard_tokens) ───
     if (hasPlots) {
+      const plotWhereSql = allowHumanCodeLookup
+        ? "WHERE p.qr_token = $1 OR pst.qr_token = $1 OR upper(p.code) = upper($1) ORDER BY (p.qr_token = $1 OR pst.qr_token = $1) DESC"
+        : "WHERE p.qr_token = $1 OR pst.qr_token = $1";
       const plotRes = await this.db.query(
         `SELECT COALESCE(p.household_id, pst.household_id) AS household_id,
                 p.code,
@@ -4080,8 +4193,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
          LEFT JOIN plot_signboard_tokens pst ON upper(pst.plot_code) = upper(p.code)
          LEFT JOIN households h ON h.id = COALESCE(p.household_id, pst.household_id)
          LEFT JOIN villages v ON v.id = h.village_id
-         WHERE p.qr_token = $1 OR pst.qr_token = $1 OR upper(p.code) = upper($1)
-         ORDER BY (p.qr_token = $1 OR pst.qr_token = $1) DESC
+         ${plotWhereSql}
          LIMIT 1`,
         [cleanCode],
       );
@@ -4097,6 +4209,9 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (hasSignboards) {
+      const sbWhereSql = allowHumanCodeLookup
+        ? "WHERE pst.qr_token = $1 OR upper(pst.plot_code) = upper($1) ORDER BY (pst.qr_token = $1) DESC"
+        : "WHERE pst.qr_token = $1";
       const sbPlotRes = await this.db.query(
         `SELECT pst.household_id,
                 pst.plot_code AS code,
@@ -4130,8 +4245,7 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
          FROM plot_signboard_tokens pst
          LEFT JOIN households h ON h.id = pst.household_id
          LEFT JOIN villages v ON v.id = h.village_id
-         WHERE pst.qr_token = $1 OR upper(pst.plot_code) = upper($1)
-         ORDER BY (pst.qr_token = $1) DESC
+         ${sbWhereSql}
          LIMIT 1`,
         [cleanCode],
       );
@@ -4146,7 +4260,14 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // ─── NHÁNH D: TRA CỨU TRỰC TIẾP THEO MÃ ĐỊNH DANH NÔNG HỘ (households.code) ───
+    if (!allowHumanCodeLookup) {
+      if (ctx.auditPass?.trim()) {
+        this.recordFailedAuditPassAttempt(ctx.ip);
+      }
+      throw notFound("Không tìm thấy hồ sơ truy xuất. Vui lòng quét trực tiếp tem mã QR trên sản phẩm hoặc bảng QR đầu thửa vườn.");
+    }
+
+    // ─── NHÁNH D: TRA CỨU TRỰC TIẾP THEO MÃ ĐỊNH DANH NÔNG HỘ (CHỈ CHO PHIÊN ĐÃ XÁC THỰC / CÓ THẺ THẨM ĐỊNH) ───
     const hhLookupRes = await this.db.query(
       `SELECT h.id,
               h.code,
@@ -6538,11 +6659,12 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
         adminLocations: [adminLocation],
       });
-    const canShowPlotRawPii = isFullAuthorityStaff && plotInStaffScope;
+    const isExplicitPublicView = ctx.requestedView?.trim().toLowerCase() === "public";
+    const canShowPlotRawPii = viewerTier !== "public" && isFullAuthorityStaff && plotInStaffScope;
     const canViewPlotFarmerIdentity =
       hasConsent ||
-      isOwnerFarmer ||
-      isHtxOfficerInScope ||
+      (!isExplicitPublicView && isOwnerFarmer) ||
+      (viewerTier !== "public" && isHtxOfficerInScope) ||
       canShowPlotRawPii;
     const canSeePlotCadastral =
       isOwnerFarmer || (viewerTier === "authority" && (canShowPlotRawPii || Boolean(temporaryGrant?.grantedTier === "authority" && temporaryGrant.active)));
@@ -7356,11 +7478,12 @@ export class TraceabilityService implements OnModuleInit, OnModuleDestroy {
         villageId: raw.villageId !== null && raw.villageId !== undefined ? Number(raw.villageId) : null,
         adminLocations: [adminLocation],
       });
-    const canShowHhRawPii = isFullAuthorityStaff && hhInStaffScope;
+    const isExplicitPublicHhView = ctx.requestedView?.trim().toLowerCase() === "public";
+    const canShowHhRawPii = viewerTier !== "public" && isFullAuthorityStaff && hhInStaffScope;
     const canViewFarmerIdentity =
       hasConsent ||
-      isOwnerFarmer ||
-      isHtxOfficerInScope ||
+      (!isExplicitPublicHhView && isOwnerFarmer) ||
+      (viewerTier !== "public" && isHtxOfficerInScope) ||
       canShowHhRawPii;
     const canSeePlotCodes =
       TIER_RANK[viewerTier] >= TIER_RANK.enterprise ||

@@ -29,7 +29,6 @@ const STAFF_ROLES = [
   "htx_officer",
   "inspector",
   "village_officer",
-  "enterprise",
 ];
 
 const COOP_EXECUTIVE_MIRROR_ROLES = ["htx_head", "htx_deputy", "admin"];

@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Request, Response } from "express";
@@ -52,10 +52,9 @@ function readUserAgent(req: Request): string | undefined {
 }
 
 function generateDeviceId(len = 24): string {
-  const bytes = randomBytes(len);
   let out = "";
   for (let i = 0; i < len; i += 1) {
-    out += DEVICE_ID_ALPHABET[bytes[i]! % DEVICE_ID_ALPHABET.length];
+    out += DEVICE_ID_ALPHABET[randomInt(0, DEVICE_ID_ALPHABET.length)];
   }
   return out;
 }
@@ -94,6 +93,7 @@ export class TraceDeviceGuardService {
   private readonly cookieSecure: boolean;
   private readonly isTest: boolean;
   private readonly guardMap = new Map<string, DeviceGuardMemoryEntry>();
+  private readonly cookieBlocksByIpUa = new Map<string, number[]>();
   private readonly lastAlertAt = new Map<string, number>();
   private hydratedFromDb = false;
 
@@ -117,6 +117,7 @@ export class TraceDeviceGuardService {
         rec.blockedUntil = past;
       }
     }
+    this.cookieBlocksByIpUa.clear();
     if (await hasPublicTable(this.db, "trace_device_guards")) {
       await this.db.query(
         "UPDATE trace_device_guards SET blocked_until = now() - interval '1 second' WHERE blocked_until IS NOT NULL",
@@ -287,7 +288,7 @@ export class TraceDeviceGuardService {
     if (device.userKey) {
       keysToCheck.push(device.userKey);
     }
-    if (!device.hadValidCookie && !device.userKey && device.strictCookieLess) {
+    if (!device.userKey && (device.strictCookieLess || this.guardMap.has(device.ipUaKey))) {
       keysToCheck.push(device.ipUaKey);
     }
 
@@ -408,6 +409,19 @@ export class TraceDeviceGuardService {
     }
     if (!device.hadValidCookie && device.strictCookieLess) {
       keysToLock.add(device.ipUaKey);
+    } else if (!device.userKey) {
+      const recentCookieBlocks = (this.cookieBlocksByIpUa.get(device.ipUaKey) ?? []).filter(
+        (ts) => now - ts <= TRACE_DEVICE_STRIKE_WINDOW_MS,
+      );
+      recentCookieBlocks.push(now);
+      if (this.cookieBlocksByIpUa.size >= MAX_MEMORY_ENTRIES && !this.cookieBlocksByIpUa.has(device.ipUaKey)) {
+        const oldest = this.cookieBlocksByIpUa.keys().next().value;
+        if (oldest !== undefined) this.cookieBlocksByIpUa.delete(oldest);
+      }
+      this.cookieBlocksByIpUa.set(device.ipUaKey, recentCookieBlocks);
+      if (recentCookieBlocks.length >= 3) {
+        keysToLock.add(device.ipUaKey);
+      }
     }
 
     for (const k of keysToLock) {

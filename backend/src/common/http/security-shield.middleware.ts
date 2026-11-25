@@ -19,7 +19,10 @@ export function createSecurityShieldMiddleware(defense?: SecurityDefenseService 
     const ua = Array.isArray(rawUa) ? rawUa.join(" ") : rawUa || "";
 
     if (defense) {
-      const retrySec = defense.getQuarantineRemainingSec(req.ip, ua);
+      const rawCookie = req.headers.cookie;
+      const cookieStr = Array.isArray(rawCookie) ? rawCookie.join("; ") : rawCookie || "";
+      const hasAuthCookie = /(?:^|;\s*)htx_access=[^;\s]{16,}/.test(cookieStr);
+      const retrySec = defense.getQuarantineRemainingSec(req.ip, ua, hasAuthCookie);
       if (retrySec > 0) {
         res.setHeader("Cache-Control", "no-store");
         res.setHeader("Retry-After", String(retrySec));
@@ -36,6 +39,39 @@ export function createSecurityShieldMiddleware(defense?: SecurityDefenseService 
       res.status(403).json({
         error: "Yêu cầu bị từ chối bởi chính sách bảo mật hệ thống.",
         code: "FORBIDDEN",
+      });
+      return;
+    }
+
+    // Phòng thủ lớp sâu chống CVE-2026-105482 (NUL byte cắt cụt tên miền) & CVE-2026-105483 (chữ số Unicode fullwidth lách kiểm tra Host/IP)
+    const rawHost = req.headers.host;
+    const hostStr = Array.isArray(rawHost) ? rawHost.join(",") : rawHost || "";
+    if (hostStr && (hostStr.includes("\0") || /[^\x20-\x7e]/.test(hostStr))) {
+      res.setHeader("Cache-Control", "no-store");
+      res.status(400).json({
+        error: "Định danh máy chủ đích (Host) không hợp lệ.",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
+    // Phòng thủ lớp sâu chống CVE-2026-111497 ("Node2Shell" - tràn bộ đệm bộ giải mã Brotli C trong node:zlib)
+    // Trình duyệt chuẩn không bao giờ nén thân yêu cầu (request body) bằng Content-Encoding: br; chặn ngay trước khi body-parser chạm luồng byte.
+    const rawContentEncoding = req.headers["content-encoding"];
+    const contentEncodings = Array.isArray(rawContentEncoding)
+      ? rawContentEncoding
+      : rawContentEncoding !== undefined
+        ? [rawContentEncoding]
+        : [];
+    const hasBlockedEncoding = contentEncodings.some((enc) => {
+      const normalized = enc.trim().toLowerCase();
+      return normalized !== "" && normalized !== "identity";
+    });
+    if (hasBlockedEncoding) {
+      res.setHeader("Cache-Control", "no-store");
+      res.status(415).json({
+        error: "Hệ thống không chấp nhận thân yêu cầu HTTP nén (Content-Encoding).",
+        code: "UNSUPPORTED_CONTENT_ENCODING",
       });
       return;
     }

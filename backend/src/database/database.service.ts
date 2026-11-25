@@ -182,18 +182,17 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
         const ran = await migrate(this.pool, {
           skip: (name) => !hasPostgis && name === "002_plots.sql",
           log: (msg) => this.logger.log(msg),
-          // Trên production, migration lỗi được báo ở mức error (không ghi nhận đã áp dụng, tạm dừng các file sau).
           warn: (msg) => (this.isProduction ? this.logger.error(msg) : this.logger.warn(msg)),
-          continueOnError: this.isProduction,
+          continueOnError: false,
         });
         if (!this.isProduction && ran.length > 0) {
           await seedSupplyChain(this.pool).catch(() => undefined);
         }
       } catch (err) {
-        if (!this.isProduction) throw err;
         this.logger.error(
-          `Lỗi khi chạy tự động migration trên production: ${err instanceof Error ? err.message : String(err)}`,
+          `Lỗi khi chạy tự động migration CSDL: ${err instanceof Error ? err.message : String(err)}`,
         );
+        throw err;
       }
     }
   }

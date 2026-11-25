@@ -664,7 +664,10 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
     }>(
       `UPDATE attachments
        SET household_id = COALESCE(household_id, $4)
-       WHERE id = ANY($1::bigint[]) AND owner_user_id = $2 AND purpose = $3
+       WHERE id = ANY($1::bigint[])
+         AND owner_user_id = $2
+         AND purpose = $3
+         AND (household_id IS NULL OR household_id IS NOT DISTINCT FROM $4::bigint)
        RETURNING id, mime_type, household_id, storage_key, original_name, size_bytes, sha256_hex, created_at, owner_user_id`,
       [unique, user.id, purpose, targetHouseholdId],
     );
@@ -743,13 +746,28 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
       return Boolean(res.rows[0]?.ok);
     }
     if (ticket.bindingKind === "user") {
-      const hasLockedUntil = await hasPublicColumn(this.db, "users", "locked_until");
+      const [hasLockedUntil, hasEnterprises, hasRefreshTokens] = await Promise.all([
+        hasPublicColumn(this.db, "users", "locked_until"),
+        hasPublicTable(this.db, "enterprises"),
+        hasPublicTable(this.db, "refresh_tokens"),
+      ]);
       const lockClause = hasLockedUntil
-        ? "AND (locked_until IS NULL OR locked_until <= now())"
+        ? "AND (u.locked_until IS NULL OR u.locked_until <= now())"
+        : "";
+      const entClause = hasEnterprises
+        ? "AND (u.role <> 'enterprise' OR u.enterprise_id IS NULL OR EXISTS (SELECT 1 FROM enterprises e WHERE e.id = u.enterprise_id AND e.status = 'active'))"
+        : "";
+      const sessionClause = hasRefreshTokens
+        ? "AND EXISTS (SELECT 1 FROM refresh_tokens rt WHERE rt.user_id = u.id AND rt.revoked_at IS NULL AND rt.expires_at > now())"
         : "";
       const res = await this.db.query<{ ok: boolean }>(
         `SELECT EXISTS (
-           SELECT 1 FROM users WHERE id = $1 ${lockClause}
+           SELECT 1 FROM users u
+           WHERE u.id = $1
+             AND u.status = 'active'
+             ${lockClause}
+             ${entClause}
+             ${sessionClause}
          ) AS ok`,
         [ticket.bindingId],
       );
@@ -905,11 +923,31 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
         };
       }
 
+      if (attachment.purpose === "news") {
+        const hasNews = await hasPublicTable(this.db, "news_articles");
+        if (!hasNews) {
+          return { attachment, publicEligible: false, traceTicketEligible: false };
+        }
+        const pubNews = await this.db.query<{ is_published: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM news_articles na
+             WHERE na.status = 'published'
+               AND position($1 in COALESCE(na.image_url, '')) > 0
+           ) AS is_published`,
+          [attachment.public_token],
+        );
+        return {
+          attachment,
+          publicEligible: Boolean(pubNews.rows[0]?.is_published),
+          traceTicketEligible: false,
+        };
+      }
+
       return { attachment, publicEligible: true, traceTicketEligible: true };
     };
 
     const resolved = this.db.cache
-      ? await this.db.cache.getOrLoad(`uploads:pub:${lookupToken}`, 60_000, ["uploads", "portal", "trace"], queryPublic)
+      ? await this.db.cache.getOrLoad(`uploads:pub:${lookupToken}`, 60_000, ["uploads", "portal", "trace", "news"], queryPublic)
       : await queryPublic();
 
     if (!resolved.attachment) return null;
@@ -1031,8 +1069,12 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
 
   /** Quyền xem tệp trên `/api/uploads/:id`: hộ dân cùng hộ; cán bộ đúng phân quyền & phạm vi địa bàn. */
   async assertReadable(attachment: AttachmentRow, user: AuthUser | undefined) {
-    if (attachment.purpose === "news" || attachment.purpose === "catalog") return;
+    if (attachment.purpose === "catalog") return;
     if (!user) throw notFound("Không tìm thấy tệp đính kèm.");
+    if (attachment.purpose === "news") {
+      if (isStaffInCuneCoopScope(user, false) && can(user.role, "news", "read")) return;
+      throw notFound("Không tìm thấy tệp đính kèm.");
+    }
     if (user.role === "farmer") {
       if (
         (attachment.household_id !== null &&
@@ -1070,28 +1112,42 @@ export class UploadsService implements OnModuleInit, OnModuleDestroy {
       if (attachment.owner_user_id !== null && Number(attachment.owner_user_id) === Number(user.id)) {
         return;
       }
-      if (user.role === "village_officer" || !isStaffInCuneCoopScope(user, false)) {
+      if (user.role === "village_officer" || !isStaffInCuneCoopScope(user, true)) {
         throw notFound("Không tìm thấy tệp đính kèm.");
       }
-      if (user.role === "admin" || user.role === "htx_head" || user.role === "htx_deputy") {
+      const isCentralCune = isStaffInCuneCoopScope(user, false);
+      if (isCentralCune && (user.role === "admin" || user.role === "htx_head" || user.role === "htx_deputy")) {
         return;
       }
       const [hasMinutePhotoIds, hasApprovalAtts] = await Promise.all([
         hasPublicColumn(this.db, "inspection_minutes", "photo_ids"),
         hasPublicTable(this.db, "approval_attachments"),
       ]);
-      const linkedCheck = await this.db.query<{ linked: boolean }>(
-        `SELECT (
-           EXISTS (SELECT 1 FROM lab_tests lt WHERE lt.scan_attachment_id = $1)
-           OR ${hasMinutePhotoIds
-          ? "EXISTS (SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1 OR $1::bigint = ANY(im.photo_ids))"
-          : "EXISTS (SELECT 1 FROM inspection_minutes im WHERE im.photo_id = $1)"
-        }
-           ${hasApprovalAtts ? "OR EXISTS (SELECT 1 FROM approval_attachments aa WHERE aa.attachment_id = $1)" : ""}
-         ) AS linked`,
+      if (isCentralCune) {
+        const centralCheck = await this.db.query<{ linked: boolean }>(
+          `SELECT (
+             EXISTS (SELECT 1 FROM lab_tests lt WHERE lt.scan_attachment_id = $1)
+             ${hasApprovalAtts ? "OR EXISTS (SELECT 1 FROM approval_attachments aa WHERE aa.attachment_id = $1)" : ""}
+           ) AS linked`,
+          [attachment.id],
+        );
+        if (centralCheck.rows[0]?.linked) return;
+      }
+      const minutesRes = await this.db.query<{ village_id: number | null; village_name: string | null }>(
+        `SELECT im.village_id, v.name AS village_name
+         FROM inspection_minutes im
+         LEFT JOIN villages v ON v.id = im.village_id
+         WHERE ${
+           hasMinutePhotoIds
+             ? "(im.photo_id = $1 OR $1::bigint = ANY(im.photo_ids))"
+             : "im.photo_id = $1"
+         }`,
         [attachment.id],
       );
-      if (!linkedCheck.rows[0]?.linked) {
+      const allowedByMinutes = minutesRes.rows.some((im) =>
+        isStaffInParcelScope(user, { villageId: im.village_id, villageName: im.village_name }, null),
+      );
+      if (!allowedByMinutes) {
         throw notFound("Không tìm thấy tệp đính kèm.");
       }
       return;

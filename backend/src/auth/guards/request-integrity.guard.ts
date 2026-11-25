@@ -12,9 +12,11 @@ import { type IntegrityStrikeCode, SecurityDefenseService } from "../security-de
 import { ACCESS_COOKIE, TokensService, type VerifiedAccessToken } from "../tokens.service";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const MAX_CLOCK_SKEW_MS = 120_000; // Cửa sổ thời gian 2 phút chống phát lại gói tin cũ
-const NONCE_TTL_MS = 150_000;
-const MAX_NONCE_CACHE_SIZE = 25_000;
+const MAX_PAST_CLOCK_SKEW_MS = 120_000; // Cho phép lệch quá khứ 2 phút trên mạng rẫy chập chờn
+const MAX_FUTURE_CLOCK_SKEW_MS = 60_000; // Giới hạn lệch tương lai tối đa 60 giây
+const NONCE_RETENTION_BUFFER_MS = MAX_PAST_CLOCK_SKEW_MS + MAX_FUTURE_CLOCK_SKEW_MS + 30_000; // >= 210 giây, phủ kín toàn bộ cửa sổ hợp lệ
+const MAX_SESSION_NONCE_CACHE_SIZE = 25_000;
+const MAX_ANON_NONCE_CACHE_SIZE = 10_000;
 const NONCE_FORMAT_RE = /^[A-Za-z0-9_-]{16,64}$/;
 const HEX64_RE = /^[0-9a-f]{64}$/i;
 
@@ -49,7 +51,8 @@ function safeHexEqual(hexA: string, hexB: string): boolean {
 @Injectable()
 export class RequestIntegrityGuard implements CanActivate {
   private readonly isTest: boolean;
-  private readonly seenNonces = new Map<string, number>();
+  private readonly seenSessionNonces = new Map<string, number>();
+  private readonly seenAnonNonces = new Map<string, number>();
 
   constructor(
     config: ConfigService<AppConfig, true>,
@@ -59,25 +62,33 @@ export class RequestIntegrityGuard implements CanActivate {
     this.isTest = config.get("nodeEnv", { infer: true }) === "test";
   }
 
-  private consumeNonce(nonceKey: string, now: number): boolean {
-    const existingExp = this.seenNonces.get(nonceKey);
+  private consumeNonce(
+    nonceKey: string,
+    isAuthenticatedSession: boolean,
+    now: number,
+    tsMs: number,
+  ): boolean {
+    const store = isAuthenticatedSession ? this.seenSessionNonces : this.seenAnonNonces;
+    const maxCap = isAuthenticatedSession ? MAX_SESSION_NONCE_CACHE_SIZE : MAX_ANON_NONCE_CACHE_SIZE;
+    const existingExp = store.get(nonceKey);
     if (existingExp !== undefined && existingExp > now) {
       return false;
     }
 
-    if (this.seenNonces.size >= MAX_NONCE_CACHE_SIZE) {
-      for (const [k, exp] of this.seenNonces) {
+    if (store.size >= maxCap) {
+      for (const [k, exp] of store) {
         if (exp <= now) {
-          this.seenNonces.delete(k);
+          store.delete(k);
         }
       }
-      if (this.seenNonces.size >= MAX_NONCE_CACHE_SIZE) {
-        const oldest = this.seenNonces.keys().next().value;
-        if (oldest !== undefined) this.seenNonces.delete(oldest);
+      if (store.size >= maxCap) {
+        const oldest = store.keys().next().value;
+        if (oldest !== undefined) store.delete(oldest);
       }
     }
 
-    this.seenNonces.set(nonceKey, now + NONCE_TTL_MS);
+    const expiresAt = Math.max(now, tsMs) + NONCE_RETENTION_BUFFER_MS;
+    store.set(nonceKey, expiresAt);
     return true;
   }
 
@@ -112,11 +123,16 @@ export class RequestIntegrityGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<Request & { rawBody?: string }>();
+    const req = context
+      .switchToHttp()
+      .getRequest<Request & { rawBody?: string; precomputedPayloadHash?: string }>();
     const res = context.switchToHttp().getResponse<Response>();
     const ua = readSingleHeader(req, "user-agent");
+    const cookies = (req.cookies ?? {}) as Record<string, unknown>;
+    const rawAccessToken = typeof cookies[ACCESS_COOKIE] === "string" ? cookies[ACCESS_COOKIE] : null;
+    const hasAuthCookie = Boolean(rawAccessToken && rawAccessToken.length >= 16);
 
-    const retrySec = this.defense.getQuarantineRemainingSec(req.ip, ua);
+    const retrySec = this.defense.getQuarantineRemainingSec(req.ip, ua, hasAuthCookie);
     if (retrySec > 0) {
       res.setHeader("Retry-After", String(retrySec));
       throw new AppException(
@@ -135,14 +151,8 @@ export class RequestIntegrityGuard implements CanActivate {
     const cleanRoutePath = canonicalPath.split("?")[0] || "/";
 
     const contentType = String(req.headers["content-type"] || "").toLowerCase();
-    if (contentType.startsWith("multipart/form-data") && method === "POST" && cleanRoutePath === "/api/uploads") {
-      return true;
-    }
-
-    // Các bản nhập GeoJSON > 1 MB tại /api/plots/import không lưu rawBody vào RAM để bảo vệ bộ nhớ
-    if (cleanRoutePath === "/api/plots/import" && req.rawBody === undefined) {
-      return true;
-    }
+    const isMultipartUpload =
+      contentType.startsWith("multipart/form-data") && method === "POST" && cleanRoutePath === "/api/uploads";
 
     const tsRaw = readSingleHeader(req, "x-puc-timestamp");
     const nonceRaw = readSingleHeader(req, "x-puc-nonce");
@@ -156,9 +166,10 @@ export class RequestIntegrityGuard implements CanActivate {
       return true;
     }
 
-    const cookies = (req.cookies ?? {}) as Record<string, unknown>;
-    const rawAccessToken = typeof cookies[ACCESS_COOKIE] === "string" ? cookies[ACCESS_COOKIE] : null;
-    const reqWithToken = req as RequestWithVerifiedToken & { rawBody?: string };
+    const reqWithToken = req as RequestWithVerifiedToken & {
+      rawBody?: string;
+      precomputedPayloadHash?: string;
+    };
     let verified = reqWithToken[VERIFIED_TOKEN_CACHE_KEY];
     if (verified === undefined) {
       verified =
@@ -194,8 +205,12 @@ export class RequestIntegrityGuard implements CanActivate {
 
     const now = Date.now();
     const tsMs = Number(tsRaw);
-    if (!Number.isFinite(tsMs) || Math.abs(now - tsMs) > MAX_CLOCK_SKEW_MS) {
-      // Lệch đồng hồ thiết bị > 120s không bị tính điểm phá hoại để tránh khóa nhầm máy nông dân vừa mở lại mạng
+    if (
+      !Number.isFinite(tsMs) ||
+      now - tsMs > MAX_PAST_CLOCK_SKEW_MS ||
+      tsMs - now > MAX_FUTURE_CLOCK_SKEW_MS
+    ) {
+      // Lệch đồng hồ thiết bị quá ngưỡng không bị tính điểm phá hoại để tránh khóa nhầm máy nông dân vừa mở lại mạng
       throw new AppException(
         403,
         "Yêu cầu API đã hết hạn hiệu lực thời gian thực. Vui lòng thử lại.",
@@ -203,15 +218,24 @@ export class RequestIntegrityGuard implements CanActivate {
       );
     }
 
-    const rawBodyText =
-      typeof req.rawBody === "string"
-        ? req.rawBody
-        : req.body && typeof req.body === "object" && Object.keys(req.body as object).length > 0
-          ? JSON.stringify(req.body)
-          : "";
-
-    const canonicalPayload = `${method}\n${canonicalPath}\n${tsRaw}\n${nonceRaw}\n${rawBodyText}`;
-    const expectedPayloadHash = createHash("sha256").update(canonicalPayload, "utf8").digest("hex");
+    let expectedPayloadHash: string;
+    if (typeof req.precomputedPayloadHash === "string" && req.precomputedPayloadHash.length === 64) {
+      expectedPayloadHash = req.precomputedPayloadHash;
+    } else if (isMultipartUpload) {
+      const uploadSha = readSingleHeader(req, "x-upload-sha256");
+      const multipartToken = uploadSha ? `multipart:${uploadSha.toLowerCase()}` : "multipart";
+      const canonicalPayload = `${method}\n${canonicalPath}\n${tsRaw}\n${nonceRaw}\n${multipartToken}`;
+      expectedPayloadHash = createHash("sha256").update(canonicalPayload, "utf8").digest("hex");
+    } else {
+      const rawBodyText =
+        typeof req.rawBody === "string"
+          ? req.rawBody
+          : req.body && typeof req.body === "object" && Object.keys(req.body as object).length > 0
+            ? JSON.stringify(req.body)
+            : "";
+      const canonicalPayload = `${method}\n${canonicalPath}\n${tsRaw}\n${nonceRaw}\n${rawBodyText}`;
+      expectedPayloadHash = createHash("sha256").update(canonicalPayload, "utf8").digest("hex");
+    }
 
     if (!safeHexEqual(hashRaw, expectedPayloadHash)) {
       return this.rejectWithStrike(
@@ -226,37 +250,40 @@ export class RequestIntegrityGuard implements CanActivate {
     }
 
     let scopePrefix = "anon";
+    const isLogoutEndpoint = method === "POST" && cleanRoutePath === "/api/auth/logout";
     if (verified) {
       scopePrefix = `sid:${verified.sessionId}`;
-      if (!sigRaw || !HEX64_RE.test(sigRaw)) {
-        return this.rejectWithStrike(
-          req,
-          res,
-          canonicalPath,
-          method,
-          verified,
-          "SIGNATURE_REQUIRED",
-          "Thiếu chữ ký bảo mật của phiên đăng nhập.",
-        );
-      }
-      const expectedKey = this.tokens.deriveCsrfSigningKey(verified.userId, verified.sessionId);
-      const expectedSig = createHmac("sha256", expectedKey)
-        .update(expectedPayloadHash, "utf8")
-        .digest("hex");
-      if (!safeHexEqual(sigRaw, expectedSig)) {
-        return this.rejectWithStrike(
-          req,
-          res,
-          canonicalPath,
-          method,
-          verified,
-          "INVALID_SIGNATURE",
-          "Chữ ký bảo mật của phiên đăng nhập không hợp lệ.",
-        );
+      if (!isLogoutEndpoint || sigRaw) {
+        if (!sigRaw || !HEX64_RE.test(sigRaw)) {
+          return this.rejectWithStrike(
+            req,
+            res,
+            canonicalPath,
+            method,
+            verified,
+            "SIGNATURE_REQUIRED",
+            "Thiếu chữ ký bảo mật của phiên đăng nhập.",
+          );
+        }
+        const expectedKey = this.tokens.deriveCsrfSigningKey(verified.userId, verified.sessionId);
+        const expectedSig = createHmac("sha256", expectedKey)
+          .update(expectedPayloadHash, "utf8")
+          .digest("hex");
+        if (!safeHexEqual(sigRaw, expectedSig)) {
+          return this.rejectWithStrike(
+            req,
+            res,
+            canonicalPath,
+            method,
+            verified,
+            "INVALID_SIGNATURE",
+            "Chữ ký bảo mật của phiên đăng nhập không hợp lệ.",
+          );
+        }
       }
     }
 
-    if (!this.consumeNonce(`${scopePrefix}:${nonceRaw}`, now)) {
+    if (!this.consumeNonce(`${scopePrefix}:${nonceRaw}`, Boolean(verified), now, tsMs)) {
       return this.rejectWithStrike(
         req,
         res,

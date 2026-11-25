@@ -6,7 +6,7 @@ import { badRequest, forbidden } from "../errors/app.exception";
 export const CUNE_ADMIN_LOCATION = "Xã Krông Búk, Tỉnh Đắk Lắk";
 export const EAKHAL_ADMIN_LOCATION = "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
 
-const EAKHAL_VILLAGE_SQL_REGEX = "ea\\s*kh[aă]l|ea\\s*k''?s[oô]";
+export const EAKHAL_VILLAGE_SQL_REGEX = "ea\\s*kh[aă]l|ea\\s*k''?s[oô]";
 
 function normGeoText(val: string): string {
   return val
@@ -158,20 +158,19 @@ export const villageScope = (column: string) => (user: AuthUser, params: unknown
     if (userCoop !== "HTX-CUNE") return "1 = 0";
   }
 
+  const clauses: string[] = [];
+
   if (user.role === "inspector") {
     const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
     const regionInCune = matchesJurisdiction(region, [CUNE_ADMIN_LOCATION]);
     const regionInEaKhal = matchesJurisdiction(region, [EAKHAL_ADMIN_LOCATION]);
     if (!regionInCune && !regionInEaKhal) return "1 = 0";
     if (regionInEaKhal && !regionInCune) {
-      return `${column} IN (SELECT v_sc.id FROM villages v_sc WHERE v_sc.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}')`;
-    }
-    if (regionInCune && !regionInEaKhal) {
-      return `(${column} IS NULL OR ${column} NOT IN (SELECT v_sc.id FROM villages v_sc WHERE v_sc.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}'))`;
+      clauses.push(`${column} IN (SELECT v_sc.id FROM villages v_sc WHERE v_sc.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}')`);
+    } else if (regionInCune && !regionInEaKhal) {
+      clauses.push(`(${column} IS NULL OR ${column} NOT IN (SELECT v_sc.id FROM villages v_sc WHERE v_sc.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}'))`);
     }
   }
-
-  const clauses: string[] = [];
 
   if (user.role === "village_officer") {
     const hasVillage = user.villageId !== null && user.villageId !== undefined;

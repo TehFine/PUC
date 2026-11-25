@@ -78,7 +78,9 @@ export function computeSessionAgentFingerprint(rawUa: string | null | undefined)
   }
 
   let browser = "other-ua";
-  if (lower.includes("edg/") || lower.includes("edgios/") || lower.includes("edga/")) {
+  if (lower.includes("; wv)") || lower.includes("webview")) {
+    browser = "webview";
+  } else if (lower.includes("edg/") || lower.includes("edgios/") || lower.includes("edga/")) {
     browser = "edge";
   } else if (lower.includes("opr/") || lower.includes("opera")) {
     browser = "opera";
@@ -94,13 +96,6 @@ export function computeSessionAgentFingerprint(rawUa: string | null | undefined)
     browser = "chrome";
   } else if (lower.includes("safari/")) {
     browser = "safari";
-  } else if (lower.includes("; wv)") || lower.includes("webview")) {
-    browser = "webview";
-  } else {
-    const firstToken = lower.split(/[\s/]+/)[0]?.replace(/[^a-z0-9_-]/g, "").slice(0, 24);
-    if (firstToken) {
-      browser = `custom:${firstToken}`;
-    }
   }
 
   return `${os}:${browser}`;
@@ -217,16 +212,29 @@ export class SecurityDefenseService {
     return true;
   }
 
-  getQuarantineRemainingSec(ip: string | undefined, rawUa: string | undefined): number {
-    const key = this.clientKeyOf(ip, rawUa);
-    const rec = this.quarantinedClients.get(key);
-    if (!rec) return 0;
+  getQuarantineRemainingSec(
+    ip: string | undefined,
+    rawUa: string | undefined,
+    hasAuthCookie = false,
+  ): number {
+    const cleanIp = normalizeIp(ip);
+    const baseKey = this.clientKeyOf(ip, rawUa);
+    const candidateKeys = hasAuthCookie
+      ? [`auth:${baseKey}`, `ip:${cleanIp}`]
+      : [`anon:${baseKey}`, `auth:${baseKey}`, `ip:${cleanIp}`];
     const now = Date.now();
-    if (rec.until <= now) {
-      this.quarantinedClients.delete(key);
-      return 0;
+    let maxRemaining = 0;
+    for (const key of candidateKeys) {
+      const rec = this.quarantinedClients.get(key);
+      if (!rec) continue;
+      if (rec.until <= now) {
+        this.quarantinedClients.delete(key);
+        continue;
+      }
+      const rem = Math.max(1, Math.ceil((rec.until - now) / 1000));
+      if (rem > maxRemaining) maxRemaining = rem;
     }
-    return Math.max(1, Math.ceil((rec.until - now) / 1000));
+    return maxRemaining;
   }
 
   /**
@@ -248,21 +256,29 @@ export class SecurityDefenseService {
     this.pruneMaps(now);
 
     const weight = weightForStrike(params.code);
+    const cleanIp = normalizeIp(params.ip);
     const clientKey = this.clientKeyOf(params.ip, params.userAgent);
-    const clientBucket = this.bumpStrike(`cli:${clientKey}`, weight, now);
+    const scopedClientKey = params.sessionId !== undefined ? `auth:${clientKey}` : `anon:${clientKey}`;
+    const clientBucket = this.bumpStrike(`cli:${scopedClientKey}`, weight, now);
+    const ipBucket = this.bumpStrike(`ip:${cleanIp}`, weight, now);
     const sessionBucket =
       params.sessionId !== undefined
         ? this.bumpStrike(`sid:${params.sessionId}`, weight, now)
         : null;
 
+    const ipTriggered = ipBucket.score >= STRIKE_THRESHOLD * 2;
     const maxScore = Math.max(clientBucket.score, sessionBucket?.score ?? 0);
-    if (maxScore < STRIKE_THRESHOLD) {
+    if (maxScore < STRIKE_THRESHOLD && !ipTriggered) {
       return { lockedDown: false, retryAfterSec: 0 };
     }
 
     const until = now + QUARANTINE_TTL_MS;
-    this.quarantinedClients.set(clientKey, { until, reason: params.code });
-    this.strikes.delete(`cli:${clientKey}`);
+    this.quarantinedClients.set(scopedClientKey, { until, reason: params.code });
+    this.strikes.delete(`cli:${scopedClientKey}`);
+    if (ipTriggered) {
+      this.quarantinedClients.set(`ip:${cleanIp}`, { until, reason: params.code });
+      this.strikes.delete(`ip:${cleanIp}`);
+    }
     if (params.sessionId !== undefined) {
       this.strikes.delete(`sid:${params.sessionId}`);
     }
@@ -285,6 +301,7 @@ export class SecurityDefenseService {
            WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
           [params.sessionId, params.userId],
         );
+        this.notifications.disconnectUserStreams(params.userId, { onlySessionId: params.sessionId });
         const uRes = await this.db.query<{ full_name: string; username: string }>(
           "SELECT full_name, username FROM users WHERE id = $1",
           [params.userId],
@@ -365,6 +382,7 @@ export class SecurityDefenseService {
             [params.userId],
           ),
         ]);
+        this.notifications.disconnectUserStreams(params.userId);
       } else {
         await this.db.query(
           `UPDATE refresh_tokens
@@ -372,6 +390,7 @@ export class SecurityDefenseService {
            WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
           [params.sessionId, params.userId],
         );
+        this.notifications.disconnectUserStreams(params.userId, { onlySessionId: params.sessionId });
       }
     } catch (error) {
       this.logger.error(

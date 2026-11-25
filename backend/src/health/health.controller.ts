@@ -3,6 +3,7 @@ import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
 import type { AuthUser } from "../auth/auth-user";
 import { CurrentUser, OptionalAuth, Public } from "../auth/auth.decorators";
+import { isManagementRole } from "../auth/permissions";
 import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import { DatabaseService } from "../database/database.service";
 import { SystemAlertsService } from "../notifications/system-alerts.service";
@@ -29,7 +30,7 @@ export class HealthController {
         rawAlert &&
         (rawAlert.audience === "all" ||
           (rawAlert.audience === "farmer" && user?.role === "farmer") ||
-          (rawAlert.audience === "staff" && Boolean(user && user.role !== "farmer")));
+          (rawAlert.audience === "staff" && Boolean(user && user.role !== "farmer" && user.role !== "enterprise")));
 
       const alert = visible
         ? {
@@ -49,7 +50,7 @@ export class HealthController {
       return {
         status: "ok",
         database: "up",
-        dbLatencyMs: user && user.role !== "farmer" ? dbLatencyMs : null,
+        dbLatencyMs: user && isManagementRole(user.role) ? dbLatencyMs : null,
         checkedAt,
         alert,
       };
