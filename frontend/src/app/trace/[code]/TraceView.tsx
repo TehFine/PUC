@@ -6139,6 +6139,7 @@ export default function TraceView() {
         <PlotMapModal
           plot={gisModalPlot.plot}
           householdName={gisModalPlot.householdName}
+          chinaSafe
           onClose={() => setGisModalPlot(null)}
         />
       )}

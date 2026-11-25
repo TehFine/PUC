@@ -30,6 +30,10 @@ function isValidPublicOverview(val: unknown): val is PublicOverview {
 export async function fetchServerPublicOverview(): Promise<PublicOverview | null> {
   try {
     const res = await fetch(`${resolveBackendBaseUrl()}/api/public/overview`, {
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+      },
       next: { revalidate: 30 },
       signal: AbortSignal.timeout(1200),
     });

@@ -1,3 +1,10 @@
+import { isSafeMediaUrl } from "@/utils/url-safety";
+
+function sanitizeTracePath(rawPath: string | null | undefined): string {
+  const clean = typeof rawPath === "string" ? rawPath.trim() : "";
+  return /^\/(?:t|trace)\/[A-Za-z0-9._%-]{1,120}$/.test(clean) ? clean : "/trace";
+}
+
 export type ReportBackendType =
   | "household-logbook"
   | "households"
@@ -311,7 +318,18 @@ async function prepareEvidencePhotos(
       const index = cursor;
       cursor += 1;
       const item = photos[index];
-      const fullUrl = item.url.startsWith("http") ? item.url : `${origin}${item.url}`;
+      const safePath = isSafeMediaUrl(item.url) ? item.url.trim() : null;
+      if (!safePath || !safePath.startsWith("/")) {
+        results[index] = {
+          ...item,
+          resolvedSrc: "",
+          failed: true,
+        };
+        completed += 1;
+        onProgress?.(completed, photos.length);
+        continue;
+      }
+      const fullUrl = `${origin}${safePath}`;
       let resolvedSrc = fullUrl;
       let failed = false;
       try {
@@ -677,7 +695,7 @@ function buildCultivationLogbookDossierHtml(
   const leftSigRole = isHouseholdDetail ? "Đại diện Nông hộ canh tác" : "Người lập biểu";
   const leftSigName = hh ? escapeHtml(hh.name) : "";
   const docFullLabel = `${report.docTitle}${hh ? ` - ${hh.code}` : ""} - HTX Cư Né`;
-  const fullTraceUrl = hh ? `${origin}${hh.tracePath}` : "";
+  const fullTraceUrl = hh ? `${origin}${sanitizeTracePath(hh.tracePath)}` : "";
 
   const closingBlockHtml = `
     <section class="dos-attest-grid${hh ? "" : " is-two-cols"}">
@@ -1623,7 +1641,8 @@ function buildPrintableReportHtml(
 
   let householdProfileHtml = "";
   if (hh) {
-    const fullTraceUrl = `${origin}${hh.tracePath}`;
+    const safeTracePath = sanitizeTracePath(hh.tracePath);
+    const fullTraceUrl = `${origin}${safeTracePath}`;
     const plotsLine =
       hh.plots.length > 0
         ? hh.plots
@@ -1657,7 +1676,7 @@ function buildPrintableReportHtml(
             : `<div class="hh-qr-placeholder">QR HỒ SƠ SỐ</div>`
         }
         <div class="hh-qr-caption">Hồ sơ truy xuất trực tuyến</div>
-        <a href="${escapeHtml(fullTraceUrl)}" target="_blank" rel="noopener noreferrer" class="hh-qr-path">${escapeHtml(hh.tracePath)}</a>
+        <a href="${escapeHtml(fullTraceUrl)}" target="_blank" rel="noopener noreferrer" class="hh-qr-path">${escapeHtml(safeTracePath)}</a>
       </div>
     </section>`;
   }
@@ -2455,7 +2474,7 @@ export async function renderPrintableReportAsync(
       onPhotoProgress?.(done, total);
     }),
     data.householdMeta
-      ? buildQrDataUrl(`${origin}${data.householdMeta.tracePath}`)
+      ? buildQrDataUrl(`${origin}${sanitizeTracePath(data.householdMeta.tracePath)}`)
       : Promise.resolve(null),
   ]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, FormError } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { CheckboxField, FormGrid, NumberField, SelectField, TextField, type Option } from "@/components/ui/form/fields";
@@ -35,6 +35,15 @@ export default function HouseholdFormModal({
   const [status, setStatus] = useState<HouseholdStatus>(initial?.status ?? "pending");
   const [publicTraceConsent, setPublicTraceConsent] = useState(Boolean(initial?.publicTraceConsent));
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
+
+  useEffect(() => {
+    const wipe = () => setCccd("");
+    window.addEventListener("pagehide", wipe);
+    return () => {
+      window.removeEventListener("pagehide", wipe);
+      wipe();
+    };
+  }, []);
 
   const save = useMutation(async (payload: Partial<HouseholdInput>) => {
     if (initial) {
@@ -86,7 +95,7 @@ export default function HouseholdFormModal({
       plotCount: parsedPlots ?? 0,
       areaHa: parsedArea ?? 0,
       status,
-      publicTraceConsent,
+      ...(publicTraceConsent === false ? { publicTraceConsent: false } : {}),
     };
     if (shouldSendCccd) {
       payload.cccd = trimmedCccd;
@@ -117,7 +126,7 @@ export default function HouseholdFormModal({
         </>
       }
     >
-      <form id="household-form" onSubmit={(e) => void submit(e)} noValidate>
+      <form id="household-form" autoComplete="off" data-form-type="other" onSubmit={(e) => void submit(e)} noValidate>
         <FormGrid>
           <TextField
             label="Mã vùng trồng / Mã hộ"
@@ -203,11 +212,13 @@ export default function HouseholdFormModal({
           />
         </FormGrid>
 
-        <CheckboxField
-          label="Đồng ý hiển thị tên chủ hộ trên trang quét mã QR công khai (mặc định chỉ hiện tên HTX Cư Né)"
-          checked={publicTraceConsent}
-          onChange={setPublicTraceConsent}
-        />
+        {initial?.publicTraceConsent ? (
+          <CheckboxField
+            label="Giữ xác nhận của chủ hộ đồng ý hiển thị họ tên trên hồ sơ QR công khai (bỏ chọn nếu chủ hộ yêu cầu thu hồi)"
+            checked={publicTraceConsent}
+            onChange={setPublicTraceConsent}
+          />
+        ) : null}
 
         <FormError message={save.error} />
       </form>

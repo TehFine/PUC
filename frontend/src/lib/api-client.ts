@@ -158,6 +158,7 @@ function setMemoryEtagEntry(cacheKey: string, etag: string, data: unknown): void
 export const AUTH_SCOPE_CHANGED_EVENT = "auth:scope-changed";
 
 let authScopeUserId: number | null = null;
+let authScopeUserRole: string | null = null;
 
 function etagCacheKey(path: string): string {
   return `${authScopeUserId ?? "anon"}:${path}`;
@@ -166,6 +167,7 @@ function etagCacheKey(path: string): string {
 if (typeof window !== "undefined") {
   const clearOnAuthEnd = () => {
     authScopeUserId = null;
+    authScopeUserRole = null;
     clearMemoryEtagCache();
   };
   window.addEventListener(AUTH_LOGOUT_EVENT, clearOnAuthEnd);
@@ -175,6 +177,11 @@ if (typeof window !== "undefined") {
 /** Tài khoản đang hoạt động trong tab hiện tại (dùng để gắn chủ sở hữu cho dữ liệu lưu đệm). */
 export function getAuthScopeUserId(): number | null {
   return authScopeUserId;
+}
+
+/** Vai trò tài khoản đang hoạt động trong tab hiện tại (dùng để chỉ lưu bản chụp ngoại tuyến cho vai trò nông hộ). */
+export function getAuthScopeUserRole(): string | null {
+  return authScopeUserRole;
 }
 
 /** Xóa toàn bộ bộ nhớ đệm phía client (ETag, useApi, usePortal) khi đăng nhập mới hoặc đổi tài khoản. */
@@ -197,13 +204,15 @@ export function getAuthScopeUser(): number | null {
   return authScopeUserId;
 }
 
-export function setAuthScopeUser(userId: number | null | undefined): void {
+export function setAuthScopeUser(userId: number | null | undefined, role?: string | null): void {
   const next = typeof userId === "number" && Number.isInteger(userId) && userId > 0 ? userId : null;
-  if (next === authScopeUserId) return;
+  const nextRole = next !== null && typeof role === "string" && role.trim() ? role.trim() : null;
+  if (next === authScopeUserId && nextRole === authScopeUserRole) return;
   const previous = authScopeUserId;
   authScopeUserId = next;
+  authScopeUserRole = next === null ? null : (nextRole ?? authScopeUserRole);
   clearMemoryEtagCache();
-  if (typeof window !== "undefined" && previous !== null) {
+  if (typeof window !== "undefined" && previous !== null && previous !== next) {
     window.dispatchEvent(new CustomEvent(AUTH_SCOPE_CHANGED_EVENT, { detail: { previous, next } }));
   }
 }
@@ -229,7 +238,17 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     if (isMutating) {
       const isMultipart = typeof FormData !== "undefined" && init?.body instanceof FormData;
       if (isMultipart) {
-        headers = { "X-Requested-With": "XMLHttpRequest", ...rawHeaders };
+        const uploadSha = rawHeaders?.["X-Upload-Sha256"];
+        const multipartToken = uploadSha ? `multipart:${uploadSha.toLowerCase()}` : "multipart";
+        headers = {
+          ...buildSignedSecurityHeaders(
+            method,
+            `/api${path}`,
+            multipartToken,
+            getServerCalibratedDate().getTime(),
+          ),
+          ...rawHeaders,
+        };
       } else {
         const bodyText = typeof init?.body === "string" ? init.body : undefined;
         headers = {

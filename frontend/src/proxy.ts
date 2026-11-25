@@ -8,8 +8,19 @@ import { buildContentSecurityPolicy } from "./lib/csp";
  * Môi trường phát triển giữ CSP tĩnh trong `next.config.ts` (cần `'unsafe-eval'` cho Fast Refresh).
  */
 export function proxy(request: NextRequest) {
+  const hostHeader = request.headers.get("host") ?? "";
+  if (hostHeader && (hostHeader.includes("\0") || /[^\x20-\x7e]/.test(hostHeader))) {
+    return new NextResponse("Yêu cầu không hợp lệ.", { status: 400 });
+  }
+  const contentEncoding = (request.headers.get("content-encoding") ?? "").trim().toLowerCase();
+  if (contentEncoding !== "" && contentEncoding !== "identity") {
+    return new NextResponse("Không hỗ trợ nén thân yêu cầu HTTP.", { status: 415 });
+  }
+
   if (process.env.NODE_ENV === "development") {
-    return NextResponse.next();
+    const devHeaders = new Headers(request.headers);
+    devHeaders.delete("x-nonce");
+    return NextResponse.next({ request: { headers: devHeaders } });
   }
 
   const nonce = btoa(crypto.randomUUID());
@@ -38,8 +49,8 @@ export const config = {
     /*
      * Áp cho mọi trang giao diện (kể cả đường dẫn động /trace/*, /t/* chứa dấu chấm hoặc trang 404), chỉ bỏ qua:
      * - /api/* (proxy sang backend, đã có helmet)
-     * - tệp tĩnh đã băm của Next.js, ảnh tối ưu, Service Worker, manifest và tệp tĩnh thực sự trong public/
+     * - tệp tĩnh đã băm của Next.js, ảnh tối ưu, Service Worker, manifest và đúng các thư mục/tệp tĩnh thực sự trong public/
      */
-    "/((?!api/|_next/static/|_next/image/|favicon\\.ico$|sw\\.js$|manifest\\.webmanifest$|robots\\.txt$|sitemap\\.xml$|[^/]+\\.(?:png|svg|webp|ico|jpg|jpeg|avif|woff2?)$|(?:diseases|pesticides|fertilizers|varieties|training|landing|stages|fonts|icons)/.+\\.(?:png|svg|webp|ico|jpg|jpeg|avif|woff2?)$).*)",
+    "/((?!api/|_next/static/|_next/image/|favicon\\.ico$|sw\\.js$|manifest\\.webmanifest$|robots\\.txt$|sitemap\\.xml$|(?:icon-48|icon-192|apple-touch-icon|newlogo)\\.(?:png|svg|webp|ico)$|(?:diseases|pesticides|fertilizers|varieties|training|landing|stages|fonts|icons)/.+\\.(?:png|svg|webp|ico|jpg|jpeg|avif|woff2?)$).*)",
   ],
 };

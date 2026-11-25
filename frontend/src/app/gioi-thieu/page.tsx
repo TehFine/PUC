@@ -18,7 +18,8 @@ export default async function IntroPage() {
     headers(),
     fetchServerPublicOverview(),
   ]);
-  const nonce = headerList.get("x-nonce") ?? undefined;
+  const rawNonce = headerList.get("x-nonce") ?? undefined;
+  const nonce = rawNonce && /^[A-Za-z0-9+/=_-]{16,128}$/.test(rawNonce) ? rawNonce : undefined;
   const jsonLd = buildHomeStructuredDataJson();
 
   return (

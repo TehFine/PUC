@@ -87,7 +87,8 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   // Đọc nonce CSP theo từng request (do src/proxy.ts cấp) để Next.js dựng động và khớp đồng thời cả nonce lẫn mã băm SHA-256.
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const rawNonce = (await headers()).get("x-nonce") ?? undefined;
+  const nonce = rawNonce && /^[A-Za-z0-9+/=_-]{16,128}$/.test(rawNonce) ? rawNonce : undefined;
   return (
     <html lang="vi" className={baiJamjuree.variable} data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>

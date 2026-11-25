@@ -317,12 +317,18 @@ export default function TraceLookupPage() {
     };
   }, []);
 
+  const canUseInternalCodes = authenticated || auditSessionReady;
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!code.trim()) return;
     const targetHref = resolveTraceInputHref(code);
     if (!targetHref) {
-      setInputError("Mã tra cứu không hợp lệ. Vui lòng nhập mã lô hàng, mã thùng, tem trái, mã thửa đất hoặc mã hộ.");
+      setInputError(
+        canUseInternalCodes
+          ? "Mã tra cứu không hợp lệ. Vui lòng nhập mã token QR, mã lô hàng, mã thùng, tem trái hoặc mã thửa đất."
+          : "Mã tra cứu không hợp lệ. Vui lòng quét trực tiếp tem QR hoặc dán đường dẫn / mã token ngẫu nhiên trên tem.",
+      );
       return;
     }
     setInputError(null);
@@ -450,7 +456,9 @@ export default function TraceLookupPage() {
                   Tra cứu nguồn gốc mã QR
                 </h1>
                 <p className="sw-trace-lead">
-                  Nhập mã lô hàng, mã thùng đóng gói, tem trái, mã thửa đất hoặc mã hộ thành viên để đối chiếu hồ sơ vùng trồng, nhật ký canh tác và phiếu kiểm nghiệm.
+                  {canUseInternalCodes
+                    ? "Quét mã QR hoặc nhập mã token ngẫu nhiên, mã lô hàng, mã thùng đóng gói, tem trái, mã thửa đất để đối chiếu hồ sơ vùng trồng, nhật ký canh tác và phiếu kiểm nghiệm."
+                    : "Quét trực tiếp tem mã QR trên sản phẩm, bảng QR đầu thửa vườn hoặc dán mã token ngẫu nhiên trên tem để đối chiếu hồ sơ vùng trồng và phiếu kiểm nghiệm."}
                 </p>
 
                 <form onSubmit={handleSubmit} className="sw-trace-form" role="search">
@@ -463,8 +471,16 @@ export default function TraceLookupPage() {
                         setCode(e.target.value);
                         if (inputError) setInputError(null);
                       }}
-                      placeholder="Nhập mã lô, mã thùng, tem trái, mã thửa hoặc mã hộ..."
-                      aria-label="Mã lô hàng, mã thùng đóng gói, tem trái, mã thửa đất hoặc mã hộ"
+                      placeholder={
+                        canUseInternalCodes
+                          ? "Nhập mã token QR, mã lô, mã thùng hoặc mã thửa..."
+                          : "Dán đường dẫn hoặc mã token QR ngẫu nhiên trên tem..."
+                      }
+                      aria-label={
+                        canUseInternalCodes
+                          ? "Mã token QR, mã lô hàng, mã thùng đóng gói, tem trái hoặc mã thửa đất"
+                          : "Đường dẫn hoặc mã token QR ngẫu nhiên trên tem truy xuất"
+                      }
                       className="sw-trace-input"
                       autoComplete="off"
                       spellCheck={false}

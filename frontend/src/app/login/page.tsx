@@ -195,11 +195,15 @@ export default function LoginPage() {
     const onPageHide = () => {
       setPassword("");
       setOtpCode("");
+      setMfaChallenge(null);
       form?.reset();
     };
     window.addEventListener("pagehide", onPageHide);
     return () => {
       window.removeEventListener("pagehide", onPageHide);
+      setPassword("");
+      setOtpCode("");
+      setMfaChallenge(null);
       form?.reset();
     };
   }, []);
@@ -416,6 +420,8 @@ export default function LoginPage() {
         <form
           className={`auth-form${isBusy ? " is-processing" : ""}`}
           onSubmit={onVerifyOtpSubmit}
+          autoComplete="off"
+          data-form-type="other"
           noValidate
           aria-busy={isBusy}
         >

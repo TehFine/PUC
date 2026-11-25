@@ -19,6 +19,7 @@ import {
   apiRequest,
   errorMessage,
   getAuthScopeUserId,
+  getAuthScopeUserRole,
   getServerCalibratedDate,
   notifyDataMutated,
   type UploadPurpose,
@@ -38,25 +39,21 @@ const MAX_READ_SNAPSHOTS = 90;
 const MAX_DRAFT_AGE_MS = 7 * 24 * 60 * 60_000;
 const MAX_TOTAL_DRAFTS = 24;
 /**
- * Các bảng dữ liệu nhạy cảm cấp quản trị (CCCD, SĐT, tài khoản, nhật ký kiểm toán, hồ sơ đăng ký, báo cáo, hợp đồng)
- * tuyệt đối không lưu bản chụp đọc ngoại tuyến xuống IndexedDB.
+ * Danh sách trắng (allowlist) duy nhất các đường dẫn dữ liệu canh tác tại vườn được phép lưu bản chụp đọc ngoại tuyến
+ * trên thiết bị của nông hộ; mọi phân hệ quản trị, thanh tra, đối tác, CCCD/SĐT, tài khoản đều bị loại trừ tuyệt đối.
  */
-const SENSITIVE_SNAPSHOT_PREFIXES = [
-  "/households",
-  "/accounts",
-  "/audit-log",
-  "/registrations",
-  "/reports",
-  "/contracts",
-  "/portal/profile",
-  "/field-audit-passes",
-  "/trace-requests",
-  "/deletion-requests",
-  "/violations",
-  "/minutes",
-  "/approvals",
-  "/system-alerts",
-  "/auth",
+const FARMER_SAFE_SNAPSHOT_PREFIXES = [
+  "/portal/home",
+  "/portal/journal",
+  "/portal/spray",
+  "/portal/harvest",
+  "/portal/stamps",
+  "/portal/requests",
+  "/portal/training",
+  "/care-protocol",
+  "/public/catalog",
+  "/public/news",
+  "/public/villages",
 ];
 /** Chỉ cho phép giả lập mạng qua `?net=` khi chạy môi trường phát triển. */
 const ALLOW_NET_SIMULATION = process.env.NODE_ENV === "development";
@@ -294,20 +291,20 @@ function idbTxDone(tx: IDBTransaction): Promise<void> {
 
 /* ──────────────────────────── Lưu đệm đọc ngoại tuyến (cho danh sách thửa / thuốc / lộ trình) ──────────────────────────── */
 
-/** Bảng nhạy cảm cấp quản trị không bao giờ được lưu/đọc bản chụp ngoại tuyến. */
+/** Chỉ các đường dẫn thuộc danh sách trắng dành riêng cho nông hộ đi vườn mới được phép lưu/đọc bản chụp ngoại tuyến. */
 export function isOfflineSnapshotAllowed(path: string): boolean {
   const normalized = (path.split(/[?#]/, 1)[0] ?? "").trim().replace(/\/+/g, "/").toLowerCase();
   if (!normalized.startsWith("/")) return false;
-  return !SENSITIVE_SNAPSHOT_PREFIXES.some(
+  return FARMER_SAFE_SNAPSHOT_PREFIXES.some(
     (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
   );
 }
 
 /**
- * Bản chụp đọc gắn với tài khoản đang hoạt động trong TAB hiện tại (không đọc localStorage dùng chung giữa các tab,
- * tránh lưu dữ liệu tài khoản A dưới khóa của tài khoản B vừa đăng nhập ở tab khác).
+ * Bản chụp đọc chỉ gắn với tài khoản NÔNG HỘ đang hoạt động trong TAB hiện tại (không lưu IndexedDB cho quản trị/cán bộ/đối tác).
  */
 function snapshotScopeUserId(): number | null {
+  if (getAuthScopeUserRole() !== "farmer") return null;
   return getAuthScopeUserId();
 }
 
@@ -368,6 +365,9 @@ export async function loadOfflineReadSnapshot<T>(path: string): Promise<T | null
       | ReadSnapshotRecord
       | undefined;
     if (!rec || rec.userId !== userId || snapshotScopeUserId() !== userId) return null;
+    if (typeof rec.savedAt !== "number" || Date.now() - rec.savedAt > AUTH_SNAPSHOT_MAX_AGE_MS) {
+      return null;
+    }
     return rec.data as T;
   } catch {
     return null;
@@ -1649,7 +1649,12 @@ if (typeof window !== "undefined") {
     void clearAllOfflineReadSnapshots();
     void purgeUserWorkingDraftsOnLogout(prevUid);
   };
-  const onScopeChanged = () => {
+  const onScopeChanged = (ev: Event) => {
+    const detail = (ev as CustomEvent<{ previous?: number | null; next?: number | null }>).detail;
+    if (detail?.previous && detail.previous !== detail.next) {
+      void clearAllOfflineReadSnapshots();
+      void purgeUserWorkingDraftsOnLogout(detail.previous);
+    }
     if (activeSyncUserId !== getAuthScopeUserId()) {
       resetSyncStateForAuthChange();
     }

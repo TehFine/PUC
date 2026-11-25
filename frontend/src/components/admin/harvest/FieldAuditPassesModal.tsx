@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ListStatusRow from "@/components/admin/catalog/ListStatusRow";
 import { hasErrors, requireFields } from "@/components/admin/shared/form-utils";
 import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/Toast";
 import { FormGrid, NumberField, SelectField, TextField, type Option } from "@/components/ui/form/fields";
 import { useApi, useMutation } from "@/hooks/use-api";
 import { api, errorMessage } from "@/lib/api-client";
+import { copySensitiveWithAutoClear } from "@/lib/request-security";
 import type { EndorsementConfigDto, FieldAuditPassDto } from "@/types/api";
 import { isSafeExternalHttpsUrl } from "@/utils/url-safety";
 
@@ -31,6 +32,15 @@ export default function FieldAuditPassesModal({
   const [createdSecret, setCreatedSecret] = useState<
     (FieldAuditPassDto & { passToken: string }) | null
   >(null);
+
+  useEffect(() => {
+    const wipeSecret = () => setCreatedSecret(null);
+    window.addEventListener("pagehide", wipeSecret);
+    return () => {
+      window.removeEventListener("pagehide", wipeSecret);
+      wipeSecret();
+    };
+  }, []);
 
   // ─── Tab 1: Thẻ Đoàn Thẩm định Thực địa ───
   const passesApi = useApi<{ data?: FieldAuditPassDto[] }>("/field-audit-passes");
@@ -122,16 +132,15 @@ export default function FieldAuditPassesModal({
       ? `Mã thẻ đoàn thẩm định thực địa: ${pass.code}\nĐường dẫn tra cứu và đối chứng GPS tại vườn: ${buildInviteUrl(secretToken, pass.defaultLang)}`
       : `Mã thẻ đoàn thẩm định thực địa: ${pass.code} (${pass.delegationName})`;
 
-    try {
-      await navigator.clipboard.writeText(textToCopy);
+    if (await copySensitiveWithAutoClear(textToCopy)) {
       setCopiedId(pass.id);
       toast.success(
         secretToken
-          ? `Đã sao chép đường dẫn mời một lần của thẻ ${pass.code}.`
+          ? `Đã sao chép đường dẫn mời một lần của thẻ ${pass.code} (tự xóa bộ nhớ tạm sau 45 giây).`
           : `Đã sao chép mã định danh thẻ ${pass.code}.`,
       );
       setTimeout(() => setCopiedId(null), 2200);
-    } catch {
+    } else {
       toast.error("Không thể sao chép tự động trên trình duyệt này.");
     }
   };

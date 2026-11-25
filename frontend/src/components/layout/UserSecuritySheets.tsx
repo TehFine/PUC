@@ -55,6 +55,24 @@ export function TwoFactorSecuritySheet({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const wipeSensitiveState = useCallback(() => {
+    setSetupData(null);
+    setQrDataUrl("");
+    setOtpInput("");
+    setEnablePassword("");
+    setDisablePassword("");
+    setDisableOtp("");
+    setBackupCodes(null);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("pagehide", wipeSensitiveState);
+    return () => {
+      window.removeEventListener("pagehide", wipeSensitiveState);
+      wipeSensitiveState();
+    };
+  }, [wipeSensitiveState]);
+
   const startSetup = async () => {
     setBusy(true);
     setErr(null);
@@ -112,24 +130,22 @@ export function TwoFactorSecuritySheet({
   const handleDisable = async (e: FormEvent) => {
     e.preventDefault();
     const cleanDisableOtp = disableOtp.replace(/[\s-]/g, "").toUpperCase();
-    if (!disablePassword.trim() && !cleanDisableOtp) {
-      setErr("Vui lòng nhập mật khẩu hiện tại, mã OTP 6 chữ số hoặc mã dự phòng 8 ký tự để tắt xác thực 2 lớp.");
+    if (!disablePassword.trim()) {
+      setErr("Vui lòng nhập mật khẩu hiện tại để xác nhận tắt xác thực 2 lớp.");
       return;
     }
-    if (!disablePassword.trim() && !/^(?:[0-9]{6}|[0-9A-Z]{8})$/.test(cleanDisableOtp)) {
-      setErr("Mã xác nhận phải gồm 6 chữ số OTP hoặc 8 ký tự mã dự phòng.");
+    if (!/^(?:[0-9]{6}|[0-9A-Z]{8})$/.test(cleanDisableOtp)) {
+      setErr("Vui lòng nhập kèm mã OTP 6 chữ số hoặc mã dự phòng 8 ký tự.");
       return;
     }
     setBusy(true);
     setErr(null);
     try {
       await api.post("/auth/2fa/disable", {
-        ...(disablePassword.trim() ? { currentPassword: disablePassword } : {}),
-        ...(cleanDisableOtp ? { code: cleanDisableOtp } : {}),
+        currentPassword: disablePassword,
+        code: cleanDisableOtp,
       });
-      setDisablePassword("");
-      setDisableOtp("");
-      setBackupCodes(null);
+      wipeSensitiveState();
       await onChanged();
       toast.success("Đã tắt xác thực 2 lớp.");
       onClose();
@@ -245,7 +261,7 @@ export function TwoFactorSecuritySheet({
         )}
 
         {!enabled && setupData && (
-          <form onSubmit={(e) => void handleEnable(e)} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <form autoComplete="off" data-form-type="other" onSubmit={(e) => void handleEnable(e)} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ textAlign: "center", padding: "12px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8 }}>
               {qrDataUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -352,7 +368,7 @@ export function TwoFactorSecuritySheet({
 
         {enabled && !backupCodes && (
           <form autoComplete="off" data-form-type="other" onSubmit={(e) => void handleDisable(e)} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <Field label="Mật khẩu hiện tại (để xác nhận tắt 2FA)" htmlFor="um-2fa-disable-pw">
+            <Field label="Mật khẩu hiện tại" htmlFor="um-2fa-disable-pw">
               <input
                 id="um-2fa-disable-pw"
                 type="password"
@@ -364,10 +380,14 @@ export function TwoFactorSecuritySheet({
                 data-1p-ignore="true"
                 placeholder="Nhập mật khẩu hiện tại"
                 value={disablePassword}
-                onChange={(e) => setDisablePassword(e.target.value)}
+                onChange={(e) => {
+                  setDisablePassword(e.target.value);
+                  if (err) setErr(null);
+                }}
+                required
               />
             </Field>
-            <Field label="Hoặc mã OTP 6 chữ số / mã dự phòng 8 ký tự" htmlFor="um-2fa-disable-code">
+            <Field label="Mã OTP 6 chữ số hoặc mã dự phòng 8 ký tự" htmlFor="um-2fa-disable-code">
               <input
                 id="um-2fa-disable-code"
                 type="text"
@@ -386,6 +406,7 @@ export function TwoFactorSecuritySheet({
                   if (err) setErr(null);
                 }}
                 style={{ fontVariantNumeric: "tabular-nums" }}
+                required
               />
             </Field>
 

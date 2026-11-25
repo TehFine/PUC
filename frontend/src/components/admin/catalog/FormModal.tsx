@@ -56,7 +56,7 @@ export default function FormModal({
         </>
       }
     >
-      <form id={formId} onSubmit={handleSubmit} noValidate>
+      <form id={formId} autoComplete="off" data-form-type="other" onSubmit={handleSubmit} noValidate>
         {children}
       </form>
       <FormError message={error} />

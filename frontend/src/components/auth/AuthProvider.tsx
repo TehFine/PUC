@@ -200,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userChanged = prevUserId !== nextUserId;
 
       currentUserIdRef.current = nextUserId;
-      setAuthScopeUser(nextUserId);
+      setAuthScopeUser(nextUserId, result.user.role);
       if (userChanged) {
         clearApiClientCaches();
         if (prevUserId !== null) {

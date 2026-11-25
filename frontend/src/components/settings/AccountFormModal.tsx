@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FormModal from "@/components/admin/catalog/FormModal";
 import { str } from "@/components/admin/catalog/form-utils";
 import { FormGrid, SelectField, TextField } from "@/components/ui/form/fields";
@@ -41,6 +41,15 @@ export default function AccountFormModal({
   const [coopCode, setCoopCode] = useState(initial?.coopCode ?? "HTX-CUNE");
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const wipe = () => setPassword("");
+    window.addEventListener("pagehide", wipe);
+    return () => {
+      window.removeEventListener("pagehide", wipe);
+      wipe();
+    };
+  }, []);
 
   const { run, pending, error } = useMutation(async () => {
     const body: Record<string, unknown> = {

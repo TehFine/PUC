@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
 import { api } from "@/lib/api-client";
@@ -65,6 +65,18 @@ export default function HouseholdAccountModal({
     password: string;
     email: string | null;
   } | null>(null);
+
+  useEffect(() => {
+    const wipe = () => {
+      setPassword("");
+      setIssuedResult(null);
+    };
+    window.addEventListener("pagehide", wipe);
+    return () => {
+      window.removeEventListener("pagehide", wipe);
+      wipe();
+    };
+  }, []);
 
   const submit = async () => {
     const cleanUser = username.trim();
