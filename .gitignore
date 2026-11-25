@@ -44,6 +44,7 @@ backups/
 /backend/uploads/
 
 # Nhật ký và tệp hệ thống
+.deploying
 *.log
 npm-debug.log*
 .DS_Store
