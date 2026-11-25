@@ -74,26 +74,6 @@ export function JournalDetailModal({
               Sửa
             </button>
           )}
-          {canVerify && (
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={() => void handleToggleVerify()}
-              disabled={verifying}
-            >
-              {verifying ? "Đang lưu…" : isVerified ? "Bỏ xác nhận" : "Xác nhận"}
-            </button>
-          )}
-          {onExportHousehold && (
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={onExportHousehold}
-              disabled={verifying}
-            >
-              Xuất sổ hộ này
-            </button>
-          )}
           <button type="button" className="btn btn-primary" onClick={onClose}>
             Đóng
           </button>
@@ -204,6 +184,31 @@ export function JournalDetailModal({
           </div>
         )}
       </div>
+
+      {(canVerify || onExportHousehold) && (
+        <div className="diary-detail-sec-actions">
+          {canVerify && (
+            <button
+              type="button"
+              className={`btn ${isVerified ? "btn-outline" : "btn-primary"} account-detail-sec-btn`}
+              onClick={() => void handleToggleVerify()}
+              disabled={verifying}
+            >
+              {verifying ? "Đang lưu…" : isVerified ? "Bỏ xác nhận" : "Xác nhận"}
+            </button>
+          )}
+          {onExportHousehold && (
+            <button
+              type="button"
+              className="btn btn-outline account-detail-sec-btn"
+              onClick={onExportHousehold}
+              disabled={verifying}
+            >
+              Xuất sổ PDF
+            </button>
+          )}
+        </div>
+      )}
     </Modal>
   );
 }

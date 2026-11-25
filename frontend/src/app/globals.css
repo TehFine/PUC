@@ -4352,7 +4352,7 @@ input[type="date"].filter-select {
   padding: 6px 18px;
 }
 
-.zone-source-list + .zone-source-list {
+.zone-source-list+.zone-source-list {
   border-top: 1px solid var(--border);
 }
 
@@ -13146,8 +13146,8 @@ html[data-perf="lite"] .admin-notif-card {
     font-size: 12px;
   }
 
-  .admin-diary-pagination > .table-footer,
-  .admin-hh-pagination > .table-footer {
+  .admin-diary-pagination>.table-footer,
+  .admin-hh-pagination>.table-footer {
     flex-direction: column;
     align-items: center;
     justify-content: center;
