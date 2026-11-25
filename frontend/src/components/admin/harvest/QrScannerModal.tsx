@@ -475,20 +475,19 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
       {!result && (
         <>
           {mode === "camera" ? (
-            <div
-              style={{
-                position: "relative",
-                borderRadius: 8,
-                overflow: "hidden",
-                background: "#0f172a",
-                minHeight: 260,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                border: "1px solid var(--border)",
-              }}
-            >
-              {effectiveCameraError ? (
+            effectiveCameraError ? (
+              <div
+                style={{
+                  position: "relative",
+                  borderRadius: 8,
+                  overflow: "hidden",
+                  background: "#0f172a",
+                  minHeight: 240,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
                 <div
                   style={{
                     padding: "28px 20px",
@@ -532,48 +531,68 @@ export default function QrScannerModal({ onClose }: { onClose: () => void }) {
                     </button>
                   </div>
                 </div>
-              ) : (
-                <>
-                  <video
-                    ref={videoRef}
-                    playsInline
-                    muted
-                    autoPlay
-                    style={{ width: "100%", maxHeight: 340, objectFit: "cover", display: "block" }}
-                  />
-                  <div
-                    aria-hidden="true"
-                    style={{
-                      position: "absolute",
-                      width: 190,
-                      height: 190,
-                      border: "2px solid rgba(74, 222, 128, 0.9)",
-                      borderRadius: 8,
-                      boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.34)",
-                      pointerEvents: "none",
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: 10,
-                      left: 12,
-                      right: 12,
-                      textAlign: "center",
-                      fontSize: 12,
-                      color: "#f8fafc",
-                      background: "rgba(15, 23, 42, 0.72)",
-                      padding: "5px 10px",
-                      borderRadius: 6,
-                    }}
-                  >
-                    {cameraReady
-                      ? "Đưa mã QR vào khung để tự động nhận diện"
-                      : "Đang khởi tạo máy ảnh..."}
-                  </div>
-                </>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  height: "clamp(290px, 58vw, 340px)",
+                  borderRadius: 8,
+                  overflow: "hidden",
+                  background: "#0f172a",
+                }}
+              >
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  autoPlay
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    objectPosition: "center",
+                    display: "block",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: "50%",
+                    width: 186,
+                    height: 186,
+                    transform: "translate(-50%, calc(-50% - 10px))",
+                    border: "2px solid rgba(74, 222, 128, 0.9)",
+                    borderRadius: 8,
+                    boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.32)",
+                    pointerEvents: "none",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 10,
+                    left: 12,
+                    right: 12,
+                    textAlign: "center",
+                    fontSize: 12,
+                    color: "#f8fafc",
+                    background: "rgba(15, 23, 42, 0.72)",
+                    padding: "5px 10px",
+                    borderRadius: 6,
+                  }}
+                >
+                  {cameraReady
+                    ? "Đưa mã QR vào khung để tự động nhận diện"
+                    : "Đang khởi tạo máy ảnh..."}
+                </div>
+              </div>
+            )
           ) : (
             <form
               onSubmit={handleManualSubmit}
