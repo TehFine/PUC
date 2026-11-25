@@ -2719,6 +2719,76 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
       const reqAId = Number(reqARow.rows[0].id);
       expect((await eaKhalSpec.post(`/api/trace-requests/${reqAId}/approve`).send({})).status).toBe(403);
       expect((await eaKhalSpec.post(`/api/trace-requests/${reqAId}/reject`).send({})).status).toBe(403);
+
+      // 9. Kiểm tra hợp lệ nghiêm ngặt các trường nhập liệu: SĐT đúng 10 chữ số bắt đầu bằng 0, chặn chuỗi rỗng/ký tự rác/HTML
+      const deviceValidCheck = request.agent(app);
+      const baseValidPayload = {
+        scannedCode: qrTokens.lot,
+        requesterName: "Trưởng đoàn Kiểm định",
+        organization: "Chi cục Kiểm định Nông lâm sản",
+        contactPhone: "0912345678",
+        purpose: "Kiểm tra thực địa chất lượng lô sầu riêng",
+        requestedTier: "enterprise",
+      };
+
+      for (const badPhone of [
+        "091234567",    // 9 chữ số
+        "09123456789",  // 11 chữ số
+        "1912345678",   // không bắt đầu bằng 0
+        "0000000000",   // toàn số 0
+        "09123abcde",   // chứa chữ cái
+        "........",     // ký tự chấm từng lọt regex cũ
+      ]) {
+        const resPhone = await deviceValidCheck
+          .post("/api/public/trace-access-requests")
+          .send({ ...baseValidPayload, contactPhone: badPhone });
+        expect(resPhone.status).toBe(400);
+      }
+
+      for (const badField of [
+        { requesterName: "     " },
+        { requesterName: "123456" },
+        { requesterName: "<script>alert(1)</script>" },
+        { organization: "   " },
+        { organization: "12345" },
+        { organization: "<img src=x onerror=1>" },
+        { purpose: "       " },
+        { purpose: "1234567" },
+        { purpose: "Kiểm tra <script>alert(1)</script>" },
+      ]) {
+        const resBad = await deviceValidCheck
+          .post("/api/public/trace-access-requests")
+          .send({ ...baseValidPayload, ...badField });
+        expect(resBad.status).toBe(400);
+      }
+
+      // Chặn thẻ HTML hoặc durationHours ngoài biên khi Quản trị viên phê duyệt / từ chối
+      expect(
+        (
+          await admin
+            .post(`/api/trace-requests/${reqAId}/approve`)
+            .send({ durationHours: 999, note: "Ghi chú hợp lệ" })
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await admin
+            .post(`/api/trace-requests/${reqAId}/reject`)
+            .send({ note: "<script>alert(1)</script>" })
+        ).status,
+      ).toBe(400);
+
+      // Cho phép SĐT 10 chữ số có dấu cách phân tách ("0912 345 678" -> chuẩn hóa lưu "0912345678")
+      const spacedPhoneRes = await deviceValidCheck
+        .post("/api/public/trace-access-requests")
+        .send({ ...baseValidPayload, contactPhone: "0912 345 678" });
+      expect(spacedPhoneRes.status).toBe(201);
+      createdReqCodes.push(spacedPhoneRes.body.requestCode as string);
+      const savedPhoneRow = await db.query<{ contact_phone: string }>(
+        "SELECT contact_phone FROM trace_access_requests WHERE request_code = $1",
+        [spacedPhoneRes.body.requestCode],
+      );
+      expect(savedPhoneRow.rows[0]?.contact_phone).toBe("0912345678");
     } finally {
       await deviceGuard.expireActiveBlocksForTest();
       await db.query("DELETE FROM trace_device_guards");
