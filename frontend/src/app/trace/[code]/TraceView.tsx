@@ -3202,6 +3202,19 @@ export default function TraceView() {
               <span className="tr-block-countdown-label">{t.errorState.blockedTimerLabel}</span>
               <strong className="tr-block-countdown-value">{blockedCountdownText}</strong>
             </div>
+            <div className="tr-req-modal-contact tr-blocked-contact">
+              <span className="tr-uac-contact-text">
+                {lang === "zh"
+                  ? "联系合作社社长："
+                  : lang === "en"
+                    ? "Contact Cooperative Head:"
+                    : "Liên hệ Trưởng Hợp tác xã:"}{" "}
+                <strong>Trần Đặng Sáu</strong>,
+              </span>
+              <a href="tel:0982576648" className="tr-uac-contact-tel">
+                0982576648
+              </a>
+            </div>
             <div className="tr-error-actions">
               {blockedRemainingSec <= 0 && code ? (
                 <button

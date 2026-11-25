@@ -79,6 +79,11 @@ const COPY: Record<
     cancelBtn: string;
     submitBtn: string;
     submittingBtn: string;
+    headContactLabel: string;
+    errInvalidName: string;
+    errInvalidPhone: string;
+    errInvalidOrg: string;
+    errInvalidPurpose: string;
     defaultErr: string;
   }
 > = {
@@ -115,7 +120,7 @@ const COPY: Record<
     orgLabel: "Đơn vị công tác",
     orgPh: "Tên đoàn kiểm tra, cơ quan hoặc công ty...",
     phoneLabel: "Số điện thoại liên hệ",
-    phonePh: "Nhập số điện thoại đối chiếu...",
+    phonePh: "Nhập số điện thoại 10 chữ số (VD: 0912345678)...",
     tierLabel: "Mức hồ sơ cần mở",
     tierOptEnterprise: "Hồ sơ Đối tác và Kiểm tra tại vườn",
     tierOptAuthority: "Hồ sơ Thanh tra cơ quan quản lý",
@@ -124,6 +129,11 @@ const COPY: Record<
     cancelBtn: "Hủy",
     submitBtn: "Gửi yêu cầu",
     submittingBtn: "Đang gửi...",
+    headContactLabel: "Liên hệ Trưởng Hợp tác xã:",
+    errInvalidName: "Vui lòng nhập họ tên người đại diện hợp lệ (ít nhất 2 chữ cái, không chứa ký tự lạ).",
+    errInvalidPhone: "Số điện thoại liên hệ phải gồm đúng 10 chữ số và bắt đầu bằng số 0.",
+    errInvalidOrg: "Vui lòng nhập tên đơn vị công tác rõ ràng (ít nhất 2 chữ cái, không chứa ký tự lạ).",
+    errInvalidPurpose: "Vui lòng nêu rõ lý do làm việc bằng chữ (tối thiểu 5 ký tự, không chứa thẻ HTML).",
     defaultErr: "Chưa thể gửi yêu cầu lúc này. Vui lòng kiểm tra thông tin và thử lại.",
   },
   en: {
@@ -159,7 +169,7 @@ const COPY: Record<
     orgLabel: "Organization / Agency",
     orgPh: "Inspection team, company, or authority...",
     phoneLabel: "Contact Phone",
-    phonePh: "Direct phone number...",
+    phonePh: "10-digit phone number (starting with 0)...",
     tierLabel: "Requested Dossier Scope",
     tierOptEnterprise: "Partner Assessment & Orchard Audit",
     tierOptAuthority: "Regulatory Inspection Dossier",
@@ -168,6 +178,11 @@ const COPY: Record<
     cancelBtn: "Cancel",
     submitBtn: "Send Request",
     submittingBtn: "Sending...",
+    headContactLabel: "Contact Cooperative Head:",
+    errInvalidName: "Please enter a valid representative name (at least 2 letters, no special symbols).",
+    errInvalidPhone: "Contact phone must be exactly 10 digits and start with 0.",
+    errInvalidOrg: "Please enter a valid organization or agency name.",
+    errInvalidPurpose: "Please state a clear inspection purpose (at least 5 characters, no HTML tags).",
     defaultErr: "Unable to submit request. Please check all fields and retry.",
   },
   zh: {
@@ -201,7 +216,7 @@ const COPY: Record<
     orgLabel: "所属单位",
     orgPh: "考察团、采购企业或监管部门名称...",
     phoneLabel: "联系电话",
-    phonePh: "请输入联系电话...",
+    phonePh: "请输入 10 位手机号码（以 0 开头）...",
     tierLabel: "申请查看范围",
     tierOptEnterprise: "合作方评估与果园核查档案",
     tierOptAuthority: "监管部门全面稽核档案",
@@ -210,6 +225,11 @@ const COPY: Record<
     cancelBtn: "取消",
     submitBtn: "提交申请",
     submittingBtn: "正在提交...",
+    headContactLabel: "联系合作社社长：",
+    errInvalidName: "请输入有效的代表人姓名（至少包含 2 个文字，不含特殊符号）。",
+    errInvalidPhone: "联系电话必须为以 0 开头的 10 位数字。",
+    errInvalidOrg: "请输入有效的所属单位名称（不含特殊符号）。",
+    errInvalidPurpose: "请简要填写明确的核查事由（至少 5 个字符，不含 HTML 标签）。",
     defaultErr: "暂时无法提交申请，请检查填写内容后重试。",
   },
 };
@@ -503,14 +523,58 @@ export default function TraceAccessRequestBanner({
     e.preventDefault();
     setFormError(null);
     setFormErrorIsWarn(false);
+
+    const countLetters = (val: string) =>
+      (val.match(/[A-Za-z\u00C0-\u024F\u1E00-\u1EFF\u3400-\u9FFF]/g) ?? []).length;
+
+    const cleanName = requesterName.trim().replace(/\s+/g, " ");
+    const cleanPhone = contactPhone.trim().replace(/[\s.-]/g, "");
+    const cleanOrg = organization.trim().replace(/\s+/g, " ");
+    const cleanPurpose = purpose.trim().replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n");
+
+    if (
+      cleanName.length < 2 ||
+      cleanName.length > 120 ||
+      countLetters(cleanName) < 2 ||
+      /[^A-Za-z0-9\u00C0-\u024F\u1E00-\u1EFF\u3400-\u9FFF\s,.'’()-]/.test(cleanName)
+    ) {
+      setFormError(c.errInvalidName);
+      return;
+    }
+
+    if (!/^0(?!0{9})[0-9]{9}$/.test(cleanPhone)) {
+      setFormError(c.errInvalidPhone);
+      return;
+    }
+
+    if (
+      cleanOrg.length < 2 ||
+      cleanOrg.length > 160 ||
+      countLetters(cleanOrg) < 2 ||
+      /[^A-Za-z0-9\u00C0-\u024F\u1E00-\u1EFF\u3400-\u9FFF\s,.\-/()&'’"“”]/.test(cleanOrg)
+    ) {
+      setFormError(c.errInvalidOrg);
+      return;
+    }
+
+    if (
+      cleanPurpose.length < 5 ||
+      cleanPurpose.length > 500 ||
+      countLetters(cleanPurpose) < 3 ||
+      /[\u0000-\u0008\u000B\u000C\u000E-\u001F<>]/.test(cleanPurpose)
+    ) {
+      setFormError(c.errInvalidPurpose);
+      return;
+    }
+
     setSubmitting(true);
     try {
       const bodyStr = JSON.stringify({
-        scannedCode,
-        requesterName: requesterName.trim(),
-        organization: organization.trim(),
-        contactPhone: contactPhone.trim(),
-        purpose: purpose.trim(),
+        scannedCode: scannedCode.trim(),
+        requesterName: cleanName,
+        organization: cleanOrg,
+        contactPhone: cleanPhone,
+        purpose: cleanPurpose,
         requestedTier,
       });
       const res = await fetch("/api/public/trace-access-requests", {
@@ -703,8 +767,9 @@ export default function TraceAccessRequestBanner({
                   <input
                     type="text"
                     className="tr-uac-input"
+                    maxLength={80}
                     value={auditPassInput}
-                    onChange={(e) => onAuditPassInputChange(e.target.value)}
+                    onChange={(e) => onAuditPassInputChange(e.target.value.replace(/\s+/g, "").slice(0, 80))}
                     placeholder={c.passPlaceholder}
                     autoComplete="off"
                     data-lpignore="true"
@@ -722,6 +787,15 @@ export default function TraceAccessRequestBanner({
               </div>
 
               <div className="tr-uac-col">{renderRequestSection()}</div>
+            </div>
+
+            <div className="tr-uac-contact">
+              <span className="tr-uac-contact-text">
+                {c.headContactLabel} <strong>Trần Đặng Sáu</strong>,
+              </span>
+              <a href="tel:0982576648" className="tr-uac-contact-tel">
+                0982576648
+              </a>
             </div>
           </section>
         ) : (
@@ -747,6 +821,15 @@ export default function TraceAccessRequestBanner({
                 </button>
               </div>
             )}
+
+            <div className="tr-uac-contact">
+              <span className="tr-uac-contact-text">
+                {c.headContactLabel} <strong>Trần Đặng Sáu</strong>,
+              </span>
+              <a href="tel:0982576648" className="tr-uac-contact-tel">
+                0982576648
+              </a>
+            </div>
           </section>
         ))}
 
@@ -806,7 +889,10 @@ export default function TraceAccessRequestBanner({
                     data-1p-ignore="true"
                     spellCheck={false}
                     value={requesterName}
-                    onChange={(e) => setRequesterName(e.target.value)}
+                    onChange={(e) => {
+                      setRequesterName(e.target.value);
+                      if (formError) setFormError(null);
+                    }}
                     placeholder={c.namePh}
                   />
                 </label>
@@ -815,15 +901,21 @@ export default function TraceAccessRequestBanner({
                   <span>{c.phoneLabel}</span>
                   <input
                     type="tel"
+                    inputMode="numeric"
+                    pattern="0[0-9]{9}"
                     required
-                    minLength={8}
-                    maxLength={20}
+                    minLength={10}
+                    maxLength={10}
                     autoComplete="off"
                     data-lpignore="true"
                     data-1p-ignore="true"
                     spellCheck={false}
+                    style={{ fontVariantNumeric: "tabular-nums" }}
                     value={contactPhone}
-                    onChange={(e) => setContactPhone(e.target.value)}
+                    onChange={(e) => {
+                      setContactPhone(e.target.value.replace(/\D/g, "").slice(0, 10));
+                      if (formError) setFormError(null);
+                    }}
                     placeholder={c.phonePh}
                   />
                 </label>
@@ -841,7 +933,10 @@ export default function TraceAccessRequestBanner({
                   data-1p-ignore="true"
                   spellCheck={false}
                   value={organization}
-                  onChange={(e) => setOrganization(e.target.value)}
+                  onChange={(e) => {
+                    setOrganization(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
                   placeholder={c.orgPh}
                 />
               </label>
@@ -870,7 +965,10 @@ export default function TraceAccessRequestBanner({
                   rows={3}
                   autoComplete="off"
                   value={purpose}
-                  onChange={(e) => setPurpose(e.target.value)}
+                  onChange={(e) => {
+                    setPurpose(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
                   placeholder={c.purposePh}
                 />
               </label>
@@ -891,6 +989,15 @@ export default function TraceAccessRequestBanner({
                 >
                   {submitting ? c.submittingBtn : c.submitBtn}
                 </button>
+              </div>
+
+              <div className="tr-req-modal-contact">
+                <span className="tr-uac-contact-text">
+                  {c.headContactLabel} <strong>Trần Đặng Sáu</strong>,
+                </span>
+                <a href="tel:0982576648" className="tr-uac-contact-tel">
+                  0982576648
+                </a>
               </div>
             </form>
           </div>

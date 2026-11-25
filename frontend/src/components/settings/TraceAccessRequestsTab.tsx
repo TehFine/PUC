@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { useDebounced } from "@/components/admin/shared/use-debounced";
 import BlockState from "@/components/admin/shared/BlockState";
 import {
@@ -88,6 +89,14 @@ export default function TraceAccessRequestsTab({
   onReviewed?: () => void;
   onPendingCountSync?: (count: number) => void;
 }) {
+  const { session } = useAuth();
+  const currentUser = session?.user;
+  const canGrantCoopScope =
+    (currentUser?.role === "admin" ||
+      currentUser?.role === "htx_head" ||
+      currentUser?.role === "htx_deputy") &&
+    !currentUser?.assignedCommune?.trim();
+
   const [q, setQ] = useState("");
   const debouncedQ = useDebounced(q);
   const [statusFilter, setStatusFilter] = usePersistedState("admin:tracereq:status", "");
@@ -135,6 +144,7 @@ export default function TraceAccessRequestsTab({
   const [scopeMode, setScopeMode] = useState<TraceAccessScopeMode>("zone");
   const [durationHours, setDurationHours] = useState<string>("24");
   const [reviewNote, setReviewNote] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [confirmingRevoke, setConfirmingRevoke] = useState(false);
 
   useEffect(() => {
@@ -167,23 +177,45 @@ export default function TraceAccessRequestsTab({
     setViewingSnapshot(row);
     setPendingTargetId(null);
     setGrantedTier(row.grantedTier ?? row.requestedTier ?? "enterprise");
-    setScopeMode(row.scopeMode ?? "zone");
+    const defaultScope: TraceAccessScopeMode =
+      row.scopeMode === "coop" && !canGrantCoopScope
+        ? row.pucCode
+          ? "zone"
+          : "record"
+        : row.scopeMode ?? (row.pucCode ? "zone" : "record");
+    setScopeMode(defaultScope);
     setDurationHours(String(row.durationHours || 24));
     setReviewNote("");
+    setNoteError(null);
     setConfirmingRevoke(false);
   };
 
   const closeDetailModal = () => {
     setViewingSnapshot(null);
     setPendingTargetId(null);
+    setNoteError(null);
     setConfirmingRevoke(false);
   };
 
+  const validateReviewNote = (raw: string): string | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (trimmed.length > 400) {
+      return "Ghi chú phản hồi không vượt quá 400 ký tự.";
+    }
+    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F<>]/.test(trimmed)) {
+      return "Ghi chú phản hồi không được chứa thẻ HTML hoặc ký tự điều khiển.";
+    }
+    return null;
+  };
+
   const approveMut = useMutation(async (req: TraceAccessRequestRecord) => {
+    const parsedHours = Math.round(Number(durationHours));
+    const safeHours = Number.isFinite(parsedHours) && parsedHours >= 1 && parsedHours <= 336 ? parsedHours : 24;
     return api.post(`/trace-requests/${req.id}/approve`, {
       grantedTier,
       scopeMode,
-      durationHours: Number(durationHours) || 24,
+      durationHours: safeHours,
       note: reviewNote.trim() || null,
     });
   });
@@ -201,12 +233,13 @@ export default function TraceAccessRequestsTab({
   });
 
   const anyPendingAction = approveMut.pending || rejectMut.pending || revokeMut.pending;
-  const activeError = approveMut.error || rejectMut.error || revokeMut.error;
+  const activeError = noteError || approveMut.error || rejectMut.error || revokeMut.error;
 
   const afterAction = (msg: string) => {
     toast.success(msg);
     closeDetailModal();
     setReviewNote("");
+    setNoteError(null);
     notifyCountsChanged();
     invalidateQueries(NOTIFICATIONS_PATH);
     void list.refresh();
@@ -214,6 +247,12 @@ export default function TraceAccessRequestsTab({
   };
 
   const handleApprove = async (req: TraceAccessRequestRecord) => {
+    const err = validateReviewNote(reviewNote);
+    if (err) {
+      setNoteError(err);
+      return;
+    }
+    setNoteError(null);
     const res = await approveMut.run(req);
     if (res) {
       afterAction(`Đã mở quyền xem hồ sơ cho đoàn ${req.organization}.`);
@@ -221,6 +260,12 @@ export default function TraceAccessRequestsTab({
   };
 
   const handleReject = async (req: TraceAccessRequestRecord) => {
+    const err = validateReviewNote(reviewNote);
+    if (err) {
+      setNoteError(err);
+      return;
+    }
+    setNoteError(null);
     const res = await rejectMut.run(req);
     if (res) {
       afterAction(`Đã từ chối yêu cầu ${req.requestCode}.`);
@@ -228,6 +273,12 @@ export default function TraceAccessRequestsTab({
   };
 
   const handleRevoke = async (req: TraceAccessRequestRecord) => {
+    const err = validateReviewNote(reviewNote);
+    if (err) {
+      setNoteError(err);
+      return;
+    }
+    setNoteError(null);
     const res = await revokeMut.run(req);
     if (res) {
       afterAction(`Đã thu hồi quyền của mã ${req.requestCode}.`);
@@ -472,7 +523,9 @@ export default function TraceAccessRequestsTab({
               </div>
               <div className="admin-detail-list-row">
                 <span className="admin-detail-list-label">Số điện thoại</span>
-                <div className="admin-detail-list-value">{viewing.contactPhone}</div>
+                <div className="admin-detail-list-value" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {viewing.contactPhone}
+                </div>
               </div>
               {viewing.requesterRoleLabel && (
                 <div className="admin-detail-list-row">
@@ -518,9 +571,13 @@ export default function TraceAccessRequestsTab({
                     value={scopeMode}
                     onChange={(val) => setScopeMode(val as TraceAccessScopeMode)}
                     options={[
-                      { value: "zone", label: "Toàn vùng trồng PUC" },
+                      ...(viewing.pucCode || !currentUser?.assignedCommune?.trim()
+                        ? [{ value: "zone", label: "Toàn vùng trồng PUC" }]
+                        : []),
                       { value: "record", label: "Chỉ hồ sơ vừa quét" },
-                      { value: "coop", label: "Toàn bộ lô và thửa HTX" },
+                      ...(canGrantCoopScope
+                        ? [{ value: "coop", label: "Toàn bộ lô và thửa HTX" }]
+                        : []),
                     ]}
                   />
 
@@ -541,9 +598,13 @@ export default function TraceAccessRequestsTab({
                 <TextAreaField
                   label="Ghi chú phản hồi (tùy chọn)"
                   rows={2}
+                  maxLength={400}
                   placeholder="Nhập ghi chú phê duyệt hoặc lý do từ chối..."
                   value={reviewNote}
-                  onChange={setReviewNote}
+                  onChange={(val) => {
+                    setReviewNote(val);
+                    if (noteError) setNoteError(null);
+                  }}
                 />
               </div>
             ) : (
@@ -595,9 +656,13 @@ export default function TraceAccessRequestsTab({
                 <TextAreaField
                   label="Lý do thu hồi sớm (tùy chọn)"
                   rows={2}
+                  maxLength={400}
                   placeholder="Nhập ghi chú nếu kết thúc buổi làm việc sớm..."
                   value={reviewNote}
-                  onChange={setReviewNote}
+                  onChange={(val) => {
+                    setReviewNote(val);
+                    if (noteError) setNoteError(null);
+                  }}
                 />
               </div>
             )}
