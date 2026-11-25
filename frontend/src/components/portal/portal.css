@@ -5738,7 +5738,8 @@ body.pt-body {
   }
 
   .pt-pest-section .pt-pest-card {
-    height: 98px;
+    min-height: 0;
+    height: auto;
   }
 
   .pt-pest-card-img-wrap {

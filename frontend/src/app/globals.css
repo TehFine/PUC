@@ -9751,8 +9751,27 @@ code {
   box-sizing: border-box;
 }
 
+#section-catalog .pt-pest-section .pt-pest-card {
+  align-items: center;
+  min-height: 0;
+  height: auto;
+  padding: 14px 18px;
+  gap: 16px;
+}
+
 #section-catalog .pt-pest-section .pt-pest-card-img-wrap {
+  width: 72px;
+  height: 72px;
   padding: 0;
+}
+
+#section-catalog .pt-pest-section .pt-pest-card-content {
+  gap: 4px;
+}
+
+#section-catalog .pt-pest-section .pt-widget-item-arrow {
+  flex-shrink: 0;
+  align-self: center;
 }
 
 #section-catalog .pt-pest-card-img {
@@ -10016,10 +10035,23 @@ code {
     --cat-left-bleed: 14px;
   }
 
+  #section-catalog .pt-pest-section .pt-pest-card {
+    align-items: center;
+    min-height: 0;
+    height: auto;
+    padding: 12px 14px;
+    gap: 12px;
+  }
+
   #section-catalog .pt-pest-card-img-wrap {
     width: 64px !important;
     height: 64px !important;
     border-radius: 6px !important;
+  }
+
+  #section-catalog .pt-pest-section .pt-pest-card-img-wrap {
+    width: 60px !important;
+    height: 60px !important;
   }
 
   #section-catalog .pt-pest-card:has(.admin-catalog-actions)> :is(.pt-pest-card-img-wrap, .admin-catalog-index-box) {
@@ -10038,10 +10070,13 @@ code {
   }
 
   #section-catalog .pt-pest-card-name {
-    flex: 1 1 0;
-    min-width: 0;
     font-size: 15px;
     line-height: 1.32;
+  }
+
+  #section-catalog .pt-pest-card-top-row .pt-pest-card-name {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   #section-catalog .pt-pest-mini-status {
