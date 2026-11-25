@@ -10,6 +10,8 @@ export interface DashboardCounts {
   pendingApprovals?: number;
   pendingRegistrations?: number;
   pendingDeclarations?: number;
+  pendingDeletions?: number;
+  pendingTraceRequests?: number;
   labTests?: number;
   labTestsPassed?: number;
   journalLast30Days?: number;

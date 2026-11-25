@@ -26,6 +26,7 @@ import { toast } from "@/components/ui/Toast";
 import {
   invalidateQueries,
   NOTIFICATIONS_PATH,
+  optimisticMarkNotificationRead,
   portalPath,
   useSharedQuery,
   warmPortalEssentialOfflineCache,
@@ -650,7 +651,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
       const now = Date.now();
       if (now - lastTriggerAt < 3_000) return;
       lastTriggerAt = now;
-      invalidateQueries(NOTIFICATIONS_PATH);
+      invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
     };
     const pollMs = isLowEndDevice() ? 90_000 : 60_000;
     const interval = window.setInterval(() => {
@@ -910,12 +911,11 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         if (item._readKey) rememberLocalReadKeys([item._readKey]);
       } else {
         rememberLocalReadKeys([`api:${item.id}`]);
-        try {
-          await api.post(`/notifications/${item.id}/read`);
-          invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
-        } catch {
-          // Ignore read error and still navigate
-        }
+        optimisticMarkNotificationRead(item.id);
+        void api
+          .post(`/notifications/${item.id}/read`)
+          .then(() => invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview")))
+          .catch(() => invalidateQueries(NOTIFICATIONS_PATH));
       }
     }
     const rawLink = (item.link || "").trim();
@@ -951,6 +951,7 @@ function PortalAppContent({ initialTab }: { initialTab: PortalTabId }) {
         rememberLocalReadKeys(fallbackNotifItems.map((n) => n._readKey));
       } else {
         rememberLocalReadKeys(apiNotifItems.map((n) => `api:${n.id}`));
+        optimisticMarkNotificationRead();
         await api.post("/notifications/read-all");
         invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
       }

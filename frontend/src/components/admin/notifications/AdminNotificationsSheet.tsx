@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { Bell } from "@/components/ui/PublicIcon";
@@ -8,13 +9,19 @@ import {
   notifyCountsChanged,
   requestAdminNavigate,
   requestApprovalTab,
+  requestHarvestTab,
   requestJournalTab,
   requestSystemTab,
 } from "@/components/admin/shared/counts-events";
 import { EmptyState, Sheet } from "@/components/portal/ui";
-import { invalidateQueries, NOTIFICATIONS_PATH, useSharedQuery } from "@/hooks/use-portal";
+import {
+  invalidateQueries,
+  NOTIFICATIONS_PATH,
+  optimisticMarkNotificationRead,
+  useSharedQuery,
+} from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
-import { usePersistedState } from "@/lib/back-navigation";
+import { resetOverlayHistoryOnRouteLeave, usePersistedState } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
 import type { Tone } from "@/lib/portal-labels";
 import { isRealtimeStreamConnected, useRealtimeNotifications } from "@/lib/realtime-notifications";
@@ -59,8 +66,20 @@ function kindMeta(item: NotificationItem): { label: string; tone: Tone } {
   if (link.includes("sub=alerts") || link.startsWith("#system-alert-")) {
     return { label: "Thông báo Ban điều hành", tone: "blue" };
   }
+  if (link.includes("sub=registrations") || link.includes("section=registrations")) {
+    return { label: "Tài khoản chờ duyệt", tone: "gold" };
+  }
+  if (link.includes("sub=stamps")) {
+    return { label: "Tem truy xuất QR", tone: "green" };
+  }
+  if (link.includes("section=households")) {
+    return { label: "Hồ sơ nông hộ", tone: "blue" };
+  }
   if (link.includes("section=news")) {
     return { label: "Bản tin HTX", tone: "green" };
+  }
+  if (item.kind === "training") {
+    return { label: "Tập huấn kỹ thuật", tone: "green" };
   }
   if (item.kind === "violation") return { label: "Cảnh báo vi phạm", tone: "red" };
   if (item.kind === "protocol") {
@@ -78,9 +97,17 @@ function kindMeta(item: NotificationItem): { label: string; tone: Tone } {
   return { label: "Hệ thống", tone: "gray" };
 }
 
-function navigateAdminNotification(item: NotificationItem) {
+function navigateAdminNotification(
+  item: NotificationItem,
+  pushRoute: (href: string) => void,
+) {
   const rawLink = item.link || "";
   const link = rawLink.toLowerCase();
+  if (rawLink.startsWith("/trace/")) {
+    resetOverlayHistoryOnRouteLeave();
+    pushRoute(rawLink);
+    return;
+  }
   if (
     link.includes("sub=trace-requests") ||
     link.includes("sub=deletions") ||
@@ -100,8 +127,16 @@ function navigateAdminNotification(item: NotificationItem) {
     }
     return;
   }
+  if (link.includes("section=households")) {
+    requestAdminNavigate("households");
+    return;
+  }
   if (link.includes("section=news")) {
     requestAdminNavigate("news");
+    return;
+  }
+  if (item.kind === "training" || link.includes("section=catalog")) {
+    requestAdminNavigate("catalog");
     return;
   }
   if (link.includes("sub=spray") || link.includes("section=spray")) {
@@ -116,13 +151,22 @@ function navigateAdminNotification(item: NotificationItem) {
     requestJournalTab("violations");
     return;
   }
-  if (link.includes("section=approval") || item.kind === "approval") {
+  if (
+    link.includes("section=registrations") ||
+    link.includes("section=schedule") ||
+    link.includes("section=approval") ||
+    item.kind === "approval"
+  ) {
     if (link.includes("registration")) requestApprovalTab("registrations");
+    else if (link.includes("schedule")) requestApprovalTab("schedule");
+    else if (link.includes("minutes")) requestApprovalTab("minutes");
     else requestApprovalTab("pending");
     return;
   }
   if (link.includes("section=harvest") || item.kind === "harvest") {
-    requestAdminNavigate("harvest");
+    if (link.includes("sub=stamps")) requestHarvestTab("stamps");
+    else if (link.includes("sub=plans")) requestHarvestTab("plans");
+    else requestAdminNavigate("harvest");
     return;
   }
   if (link.includes("section=testing") || item.kind === "lab") {
@@ -137,6 +181,7 @@ function navigateAdminNotification(item: NotificationItem) {
 }
 
 export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
+  const router = useRouter();
   const { can } = useAuth();
   const canBroadcastNotice = can("system-alerts", "create");
   const [open, setOpen] = usePersistedState("admin:notif:open", false);
@@ -183,26 +228,29 @@ export function AdminNotificationBell({ enabled }: { enabled: boolean }) {
   if (!enabled) return null;
 
   const handleSelect = async (item: NotificationItem) => {
+    setOpen(false);
+    navigateAdminNotification(item, (href) => router.push(href));
     if (!item.readAt) {
+      optimisticMarkNotificationRead(item.id);
       try {
         await api.post(`/notifications/${item.id}/read`);
         invalidateQueries(NOTIFICATIONS_PATH);
         notifyCountsChanged();
       } catch {
-        // ignore read error
+        invalidateQueries(NOTIFICATIONS_PATH);
       }
     }
-    setOpen(false);
-    navigateAdminNotification(item);
   };
 
   const handleMarkAll = async () => {
     setMarkingAll(true);
+    optimisticMarkNotificationRead();
     try {
       await api.post("/notifications/read-all");
       invalidateQueries(NOTIFICATIONS_PATH);
+      notifyCountsChanged();
     } catch {
-      // ignore
+      invalidateQueries(NOTIFICATIONS_PATH);
     } finally {
       setMarkingAll(false);
     }

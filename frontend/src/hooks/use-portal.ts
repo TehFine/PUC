@@ -17,6 +17,7 @@ import {
   saveOfflineReadSnapshot,
 } from "@/lib/offline-sync";
 import type { ListResponse } from "@/types/api";
+import type { NotificationItem, NotificationList } from "@/types/notifications";
 
 /*
  * Bộ nhớ đệm dùng chung cho cổng hộ dân.
@@ -39,9 +40,25 @@ const EMPTY_ARRAY: never[] = [];
 
 const cache = new Map<string, SharedCacheEntry>();
 const inflight = new Map<string, Promise<unknown>>();
+const keyEpoch = new Map<string, number>();
 const listeners = new Map<string, Set<Listener>>();
+const cacheSyncListeners = new Map<string, Set<Listener>>();
 const authResetListeners = new Set<(mode: "logout" | "scope") => void>();
 let portalAuthEpoch = 0;
+
+function getKeyEpoch(cacheKey: string): number {
+  return keyEpoch.get(cacheKey) ?? 0;
+}
+
+function bumpKeyEpoch(cacheKey: string): number {
+  const next = getKeyEpoch(cacheKey) + 1;
+  if (keyEpoch.size >= MAX_CACHE_ENTRIES * 4 && !keyEpoch.has(cacheKey)) {
+    const oldest = keyEpoch.keys().next().value;
+    if (oldest !== undefined) keyEpoch.delete(oldest);
+  }
+  keyEpoch.set(cacheKey, next);
+  return next;
+}
 
 function scopedPortalKey(key: string): string {
   return `${getAuthScopeUserId() ?? "anon"}:${key}`;
@@ -69,10 +86,15 @@ function fetchShared<T>(key: string): Promise<T> {
   const running = inflight.get(cacheKey);
   if (running) return running as Promise<T>;
   const requestEpoch = portalAuthEpoch;
+  const startGen = getKeyEpoch(cacheKey);
   const request = api
     .get<T>(key)
     .then((result) => {
-      if (requestEpoch === portalAuthEpoch && scopedPortalKey(key) === cacheKey) {
+      if (
+        requestEpoch === portalAuthEpoch &&
+        scopedPortalKey(key) === cacheKey &&
+        getKeyEpoch(cacheKey) === startGen
+      ) {
         setCacheEntry(cacheKey, result);
         void saveOfflineReadSnapshot(key, result);
       }
@@ -81,7 +103,12 @@ function fetchShared<T>(key: string): Promise<T> {
     .catch(async (err) => {
       if (isTransientNetworkError(err)) {
         const snapshot = await loadOfflineReadSnapshot<T>(key);
-        if (snapshot !== null && requestEpoch === portalAuthEpoch && scopedPortalKey(key) === cacheKey) {
+        if (
+          snapshot !== null &&
+          requestEpoch === portalAuthEpoch &&
+          scopedPortalKey(key) === cacheKey &&
+          getKeyEpoch(cacheKey) === startGen
+        ) {
           setCacheEntry(cacheKey, snapshot, 0);
           return snapshot;
         }
@@ -107,10 +134,26 @@ function subscribe(key: string, listener: Listener) {
   };
 }
 
-/** Yêu cầu mọi nơi đang dùng các khóa (đường dẫn API đầy đủ) tải lại. Giữ nguyên request đang bay để chống gọi trùng lặp khi focus và visibilitychange nổ sát nhau. */
+function subscribeCacheSync(key: string, listener: Listener) {
+  const set = cacheSyncListeners.get(key) ?? new Set<Listener>();
+  cacheSyncListeners.set(key, set);
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+    if (set.size === 0) cacheSyncListeners.delete(key);
+  };
+}
+
+function emitCacheSync(key: string) {
+  cacheSyncListeners.get(key)?.forEach((listener) => listener());
+}
+
+/** Yêu cầu mọi nơi đang dùng các khóa (đường dẫn API đầy đủ) tải lại tức thì, hủy hiệu lực request cũ đang bay để dữ liệu trước thay đổi không ghi đè dữ liệu mới. */
 export function invalidateQueries(...keys: string[]) {
   for (const key of new Set(keys)) {
     const cacheKey = scopedPortalKey(key);
+    bumpKeyEpoch(cacheKey);
+    inflight.delete(cacheKey);
     const existing = cache.get(cacheKey);
     if (existing) existing.timestamp = 0;
     const set = listeners.get(key);
@@ -143,6 +186,47 @@ export type PortalKey =
 export const portalPath = (key: PortalKey) => `/portal/${key}`;
 export const NOTIFICATIONS_PATH = "/notifications";
 
+/** Chèn tức thì (0ms) thông báo vừa nhận qua SSE vào đầu bộ nhớ đệm để thẻ thông báo đang mở hiển thị ngay lập tức không cần đợi vòng HTTP. */
+export function prependRealtimeNotification(item: NotificationItem): void {
+  if (getAuthScopeUserId() === null) return;
+  const cacheKey = scopedPortalKey(NOTIFICATIONS_PATH);
+  bumpKeyEpoch(cacheKey);
+  inflight.delete(cacheKey);
+  const current = cache.get(cacheKey)?.data as NotificationList | undefined;
+  const existingItems = Array.isArray(current?.data) ? current.data : [];
+  if (existingItems.some((n) => Number(n.id) === Number(item.id))) {
+    return;
+  }
+  const merged = [item, ...existingItems].slice(0, 50);
+  const unreadCount = current
+    ? Math.max(merged.filter((n) => !n.readAt).length, (current.unread ?? 0) + (item.readAt ? 0 : 1))
+    : item.readAt
+      ? 0
+      : 1;
+  setCacheEntry(cacheKey, { data: merged, unread: unreadCount } satisfies NotificationList, 0);
+  emitCacheSync(NOTIFICATIONS_PATH);
+}
+
+/** Đánh dấu đã đọc tức thì trên bộ nhớ đệm thông báo trước khi đối chiếu nền với máy chủ. */
+export function optimisticMarkNotificationRead(id?: number): void {
+  if (getAuthScopeUserId() === null) return;
+  const cacheKey = scopedPortalKey(NOTIFICATIONS_PATH);
+  const current = cache.get(cacheKey)?.data as NotificationList | undefined;
+  if (!current || !Array.isArray(current.data)) return;
+  bumpKeyEpoch(cacheKey);
+  inflight.delete(cacheKey);
+  const nowIso = new Date().toISOString();
+  const nextData = current.data.map((n) => {
+    if (id === undefined || Number(n.id) === Number(id)) {
+      return n.readAt ? n : { ...n, readAt: nowIso };
+    }
+    return n;
+  });
+  const nextUnread = id === undefined ? 0 : nextData.filter((n) => !n.readAt).length;
+  setCacheEntry(cacheKey, { data: nextData, unread: nextUnread } satisfies NotificationList, 0);
+  emitCacheSync(NOTIFICATIONS_PATH);
+}
+
 /** Làm mới các danh sách portal vừa bị thay đổi, LUÔN kèm `overview` (thống kê/nhắc việc) và thông báo. */
 export function refreshPortal(...keys: PortalKey[]) {
   invalidateQueries(...[...keys, "overview" as const].map(portalPath), NOTIFICATIONS_PATH);
@@ -159,6 +243,7 @@ export function clearPortalQueryCache(mode: "logout" | "scope" = "scope"): void 
   portalAuthEpoch += 1;
   cache.clear();
   inflight.clear();
+  keyEpoch.clear();
   for (const listener of authResetListeners) {
     listener(mode);
   }
@@ -198,11 +283,14 @@ export function useSharedQuery<T>(key: string | null) {
     async (silent: boolean) => {
       if (!key) return;
       const expectedCacheKey = scopedPortalKey(key);
+      const callGen = getKeyEpoch(expectedCacheKey);
       if (!silent) setLoading(true);
       setError(null);
       try {
         const result = await fetchShared<T>(key);
-        if (scopedPortalKey(key) !== expectedCacheKey) return;
+        if (scopedPortalKey(key) !== expectedCacheKey || getKeyEpoch(expectedCacheKey) !== callGen) {
+          return;
+        }
         setData((prev) =>
           key === NOTIFICATIONS_PATH && prev !== null && JSON.stringify(prev) === JSON.stringify(result)
             ? prev
@@ -237,9 +325,10 @@ export function useSharedQuery<T>(key: string | null) {
       });
     }
     if (!isFresh) {
+      const mountGen = getKeyEpoch(cacheKey);
       fetchShared<T>(key)
         .then((result) => {
-          if (!active || scopedPortalKey(key) !== cacheKey) return;
+          if (!active || scopedPortalKey(key) !== cacheKey || getKeyEpoch(cacheKey) !== mountGen) return;
           setData((prev) =>
             key === NOTIFICATIONS_PATH && prev !== null && JSON.stringify(prev) === JSON.stringify(result)
               ? prev
@@ -258,9 +347,18 @@ export function useSharedQuery<T>(key: string | null) {
     const unsubscribe = subscribe(key, () => {
       void load(true);
     });
+    const unsubscribeSync = subscribeCacheSync(key, () => {
+      const synced = cache.get(scopedPortalKey(key));
+      if (synced !== undefined) {
+        setData(synced.data as T);
+        setLoading(false);
+        setError(null);
+      }
+    });
     return () => {
       active = false;
       unsubscribe();
+      unsubscribeSync();
     };
   }, [key, cacheKey, load]);
 
@@ -284,6 +382,7 @@ export function useSharedQuery<T>(key: string | null) {
   const refresh = useCallback(async () => {
     if (!key) return;
     const currentCacheKey = scopedPortalKey(key);
+    bumpKeyEpoch(currentCacheKey);
     const existing = cache.get(currentCacheKey);
     if (existing) existing.timestamp = 0;
     inflight.delete(currentCacheKey);

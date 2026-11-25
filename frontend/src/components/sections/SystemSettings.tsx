@@ -168,7 +168,10 @@ export default function SystemSettings() {
         />
       )}
       {tab === "deletions" && (
-        <DeletionRequestsTab onReviewed={refreshPendingCounts} />
+        <DeletionRequestsTab
+          onReviewed={refreshPendingCounts}
+          onPendingCountSync={setPendingDeletions}
+        />
       )}
       {tab === "roles" && <RolesTab />}
       {tab === "alerts" && <SystemAlertsTab />}

@@ -48,8 +48,10 @@ function formatDateTimeVn(isoOrRaw: string | null | undefined): string {
 
 export default function DeletionRequestsTab({
   onReviewed,
+  onPendingCountSync,
 }: {
   onReviewed?: () => void;
+  onPendingCountSync?: (count: number) => void;
 }) {
   const { session } = useAuth();
   const user = session?.user;
@@ -61,13 +63,19 @@ export default function DeletionRequestsTab({
   const [targetTypeFilter, setTargetTypeFilter] = usePersistedState("admin:delreq:type", "");
   const [page, setPage] = usePersistedState("admin:delreq:page", 1);
 
-  const list = useApiList<DeletionRequestRecord>("deletion-requests", {
+  const list = useApiList<DeletionRequestRecord, { pendingCount?: number }>("deletion-requests", {
     q: debouncedQ || undefined,
     status: statusFilter || undefined,
     targetType: targetTypeFilter || undefined,
     page,
     pageSize: PAGE_SIZE,
   });
+
+  useEffect(() => {
+    if (typeof list.raw?.pendingCount === "number") {
+      onPendingCountSync?.(list.raw.pendingCount);
+    }
+  }, [list.raw?.pendingCount, onPendingCountSync]);
 
   const [viewingSnapshot, setViewingSnapshot] = useState<DeletionRequestRecord | null>(null);
   const [pendingTargetId, setPendingTargetId] = useState<number | null>(() => {

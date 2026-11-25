@@ -12,6 +12,7 @@ import {
   requestAdminNavigate,
   requestApprovalTab,
   requestJournalTab,
+  requestSystemTab,
 } from "@/components/admin/shared/counts-events";
 import { formatVn, percent } from "@/components/admin/shared/form-utils";
 import { badgeOf, SCHEDULE_KIND } from "@/components/admin/shared/labels";
@@ -195,6 +196,8 @@ export default function Dashboard() {
   const openViolations = counts.openViolations ?? 0;
   const pendingRegistrations = counts.pendingRegistrations ?? 0;
   const pendingDeclarations = counts.pendingDeclarations ?? 0;
+  const pendingDeletions = counts.pendingDeletions ?? 0;
+  const pendingTraceRequests = counts.pendingTraceRequests ?? 0;
   const harvestTons = counts.harvestTons ?? summary?.harvest?.tons ?? 0;
   const harvestLots = summary?.harvest?.lots ?? 0;
   const labTotal = counts.labTests ?? summary?.labTests?.total ?? 0;
@@ -259,6 +262,22 @@ export default function Dashboard() {
     const recentOpenViolations = (summary?.recentViolations ?? []).filter((v) => v.status !== "resolved");
     const pendingApprovals = summary?.pendingApprovals ?? [];
     const items: ActionQueueItem[] = [];
+    if (pendingDeletions > 0) {
+      items.push({
+        key: "del",
+        title: "Yêu cầu duyệt xóa thành viên",
+        subtitle: `${formatVn(pendingDeletions)} yêu cầu chờ Phó HTX phê duyệt`,
+        tone: "danger",
+      });
+    }
+    if (pendingTraceRequests > 0) {
+      items.push({
+        key: "trace",
+        title: "Yêu cầu cấp quyền truy xuất QR",
+        subtitle: `${formatVn(pendingTraceRequests)} yêu cầu thực địa đang chờ duyệt`,
+        tone: "warn",
+      });
+    }
     if (pendingRegistrations > 0) {
       items.push({
         key: "reg",
@@ -292,7 +311,14 @@ export default function Dashboard() {
       });
     }
     return items.slice(0, 4);
-  }, [pendingRegistrations, pendingDeclarations, summary?.pendingApprovals, summary?.recentViolations]);
+  }, [
+    pendingDeletions,
+    pendingTraceRequests,
+    pendingRegistrations,
+    pendingDeclarations,
+    summary?.pendingApprovals,
+    summary?.recentViolations,
+  ]);
 
   return (
     <>
@@ -413,10 +439,32 @@ export default function Dashboard() {
                 <button
                   type="button"
                   className="dash-bento-footer-btn"
-                  onClick={() => requestAdminNavigate("approval")}
+                  onClick={() =>
+                    pendingRegistrations > 0 && (counts.pendingApprovals ?? 0) === 0
+                      ? requestApprovalTab("registrations")
+                      : requestAdminNavigate("approval")
+                  }
                 >
                   Hồ sơ
                 </button>
+                {pendingDeletions > 0 && (
+                  <button
+                    type="button"
+                    className="dash-bento-footer-btn"
+                    onClick={() => requestSystemTab("deletions")}
+                  >
+                    Duyệt xóa
+                  </button>
+                )}
+                {pendingTraceRequests > 0 && (
+                  <button
+                    type="button"
+                    className="dash-bento-footer-btn"
+                    onClick={() => requestSystemTab("trace-requests")}
+                  >
+                    Cấp quyền QR
+                  </button>
+                )}
                 {pendingDeclarations > 0 && (
                   <button
                     type="button"

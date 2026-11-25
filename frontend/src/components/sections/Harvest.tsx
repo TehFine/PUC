@@ -1,7 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ADMIN_HARVEST_TAB_EVENT,
+  consumePendingHarvestTab,
+} from "@/components/admin/shared/counts-events";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ConfirmAction from "@/components/admin/catalog/ConfirmAction";
 import FormModal from "@/components/admin/catalog/FormModal";
@@ -104,8 +108,10 @@ export default function Harvest() {
     raw === "contracts" ||
     raw === "enterprises";
 
-  const [tab, setTab] = useState<HarvestTab>(() =>
-    readInitialUrlSubTab("sub", "lots", isHarvestTab, ADMIN_LAST_URL_KEY),
+  const [tab, setTab] = useState<HarvestTab>(
+    () =>
+      consumePendingHarvestTab() ??
+      readInitialUrlSubTab("sub", "lots", isHarvestTab, ADMIN_LAST_URL_KEY),
   );
   const selectTab = useUrlSubTab<HarvestTab>(
     "sub",
@@ -114,6 +120,18 @@ export default function Harvest() {
     "lots",
     isHarvestTab,
   );
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const storedTab = consumePendingHarvestTab();
+      const nextTab = (event as CustomEvent<string>).detail ?? storedTab;
+      if (nextTab && isHarvestTab(nextTab)) {
+        selectTab(nextTab);
+      }
+    };
+    window.addEventListener(ADMIN_HARVEST_TAB_EVENT, handler);
+    return () => window.removeEventListener(ADMIN_HARVEST_TAB_EVENT, handler);
+  }, [selectTab]);
 
   // 1. Lô thu hoạch
   const [lotQ, setLotQ] = useState("");

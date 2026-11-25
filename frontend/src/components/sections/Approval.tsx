@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useApiList } from "@/hooks/use-api";
-import { api } from "@/lib/api-client";
+import { refreshMountedApiQueries, useApi, useApiList } from "@/hooks/use-api";
 import {
   ADMIN_LAST_URL_KEY,
   readInitialUrlSubTab,
@@ -13,7 +12,11 @@ import {
   useUrlSubTab,
 } from "@/lib/back-navigation";
 import BlockState from "@/components/admin/shared/BlockState";
-import { ADMIN_APPROVAL_TAB_EVENT, consumePendingApprovalTab } from "@/components/admin/shared/counts-events";
+import {
+  ADMIN_APPROVAL_TAB_EVENT,
+  consumePendingApprovalTab,
+  onCountsChanged,
+} from "@/components/admin/shared/counts-events";
 import DeleteDialog from "@/components/admin/shared/DeleteDialog";
 import Pagination from "@/components/admin/shared/Pagination";
 import TabBar, { type TabItem } from "@/components/admin/shared/TabBar";
@@ -34,6 +37,7 @@ import ScheduleFormModal from "@/components/admin/approvals/ScheduleFormModal";
 import Registrations from "@/components/sections/Registrations";
 import { formatDate } from "@/utils/format";
 import type { ApprovalRow, MinuteRow, ScheduleRow } from "@/types/approvals";
+import type { DashboardSummary } from "@/types/dashboard";
 
 type Tab = "pending" | "registrations" | "schedule" | "minutes";
 const PAGE_SIZE = 25;
@@ -71,7 +75,17 @@ export default function Approval() {
     "pending",
     isApprovalTab,
   );
-  const [regCount, setRegCount] = useState<number>(0);
+  const registrationsSummary = useApi<{
+    data: unknown[];
+    passwordResets?: unknown[];
+    total?: number;
+  }>(canReadRegistrations ? "/registrations" : null);
+  const dashSummary = useApi<DashboardSummary>("/dashboard/summary");
+  const pendingApprovalCount = dashSummary.data?.counts?.pendingApprovals ?? 0;
+  const regCount = registrationsSummary.data
+    ? (registrationsSummary.data.total ??
+      registrationsSummary.data.data.length + (registrationsSummary.data.passwordResets?.length ?? 0))
+    : 0;
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -86,20 +100,12 @@ export default function Approval() {
   }, [selectTab]);
 
   useEffect(() => {
-    if (!canReadRegistrations) return;
-    let active = true;
-    api
-      .get<{ data: unknown[]; total?: number }>("/registrations")
-      .then((res) => {
-        if (active) setRegCount(res.total ?? res.data.length);
-      })
-      .catch(() => {
-        // ignore
-      });
-    return () => {
-      active = false;
-    };
-  }, [canReadRegistrations]);
+    return onCountsChanged(() => {
+      refreshMountedApiQueries("/registrations");
+      refreshMountedApiQueries("/approvals");
+      refreshMountedApiQueries("/dashboard");
+    });
+  }, []);
 
   // Filters & pagination for Approvals
   const [appSearch, setAppSearch] = useState("");
@@ -183,13 +189,14 @@ export default function Approval() {
   const [deletingMinute, setDeletingMinute] = useState<MinuteRow | null>(null);
 
   const tabs: TabItem<Tab>[] = [
-    { id: "pending", label: "Hồ sơ chờ duyệt", badge: approvals.total },
+    { id: "pending", label: "Hồ sơ chờ duyệt", badge: approvals.total, pendingBadge: pendingApprovalCount },
     ...(canReadRegistrations
       ? [
           {
             id: "registrations" as const,
-            label: regCount > 0 ? `Cấp lại mật khẩu (${regCount})` : "Cấp lại mật khẩu",
+            label: "Cấp lại mật khẩu",
             badge: regCount,
+            pendingBadge: regCount,
           },
         ]
       : []),
@@ -360,7 +367,7 @@ export default function Approval() {
         </>
       )}
 
-      {tab === "registrations" && canReadRegistrations && <Registrations onCountChange={setRegCount} />}
+      {tab === "registrations" && canReadRegistrations && <Registrations />}
 
       {tab === "schedule" && (
         <>

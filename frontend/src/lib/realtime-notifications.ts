@@ -4,7 +4,13 @@ import { useEffect } from "react";
 import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
 import { toast } from "@/components/ui/Toast";
 import { refreshMountedApiQueries } from "@/hooks/use-api";
-import { invalidateQueries, NOTIFICATIONS_PATH, portalPath } from "@/hooks/use-portal";
+import {
+  invalidateQueries,
+  NOTIFICATIONS_PATH,
+  portalPath,
+  prependRealtimeNotification,
+  type PortalKey,
+} from "@/hooks/use-portal";
 import {
   AUTH_EXPIRED_EVENT,
   AUTH_LOGOUT_EVENT,
@@ -31,11 +37,31 @@ type RealtimeStreamMessage =
 
 const STREAM_URL = "/api/notifications/stream";
 const SEEN_IDS_CAP = 120;
+const ALL_PORTAL_PATHS: string[] = (
+  [
+    "overview",
+    "profile",
+    "plots",
+    "care-protocol",
+    "journal",
+    "spray",
+    "lab-tests",
+    "schedule",
+    "violations",
+    "harvest",
+    "harvest-notices",
+    "harvest-declarations",
+    "stamps",
+    "approvals",
+    "training",
+  ] satisfies PortalKey[]
+).map(portalPath);
 
 let subscriberCount = 0;
 let eventSource: EventSource | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
+let hasOpenedOnce = false;
 let lifecycleBound = false;
 const toastedIds = new Set<number>();
 
@@ -80,6 +106,7 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
     refreshMountedApiQueries("/journal");
     refreshMountedApiQueries("/spray");
     refreshMountedApiQueries("/violations");
+    refreshMountedApiQueries("/care-protocol");
     refreshMountedApiQueries("/dashboard");
     invalidateQueries(
       portalPath("journal"),
@@ -104,8 +131,14 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
     return;
   }
 
-  if (item.kind === "schedule" || item.kind === "lab" || link.includes("inspection")) {
+  if (
+    item.kind === "schedule" ||
+    item.kind === "lab" ||
+    link.includes("inspection") ||
+    link.includes("minutes")
+  ) {
     refreshMountedApiQueries("/schedule");
+    refreshMountedApiQueries("/minutes");
     refreshMountedApiQueries("/testing");
     refreshMountedApiQueries("/dashboard");
     invalidateQueries(
@@ -118,10 +151,12 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
 
   if (item.kind === "harvest" || link.includes("harvest") || link.includes("stamp")) {
     refreshMountedApiQueries("/harvest");
+    refreshMountedApiQueries("/stamp-allocations");
     refreshMountedApiQueries("/stamps");
     refreshMountedApiQueries("/dashboard");
     invalidateQueries(
       portalPath("harvest"),
+      portalPath("harvest-notices"),
       portalPath("harvest-declarations"),
       portalPath("stamps"),
       portalPath("overview"),
@@ -129,7 +164,7 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
     return;
   }
 
-  if (link.includes("trace-requests")) {
+  if (link.includes("trace-requests") || link.startsWith("/trace/")) {
     refreshMountedApiQueries("/trace-requests");
     refreshMountedApiQueries("/audit-log");
     refreshMountedApiQueries("/dashboard");
@@ -145,11 +180,21 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
     return;
   }
 
-  if (item.kind === "approval" || link.includes("approval")) {
+  if (link.includes("households") || link.includes("plot")) {
+    refreshMountedApiQueries("/households");
+    refreshMountedApiQueries("/plots");
+    refreshMountedApiQueries("/accounts");
+    refreshMountedApiQueries("/dashboard");
+    invalidateQueries(portalPath("profile"), portalPath("plots"), portalPath("overview"));
+    return;
+  }
+
+  if (item.kind === "approval" || link.includes("approval") || link.includes("registration")) {
     refreshMountedApiQueries("/approvals");
     refreshMountedApiQueries("/registrations");
     refreshMountedApiQueries("/trace-requests");
     refreshMountedApiQueries("/deletion-requests");
+    refreshMountedApiQueries("/accounts");
     refreshMountedApiQueries("/audit-log");
     refreshMountedApiQueries("/dashboard");
     invalidateQueries(portalPath("approvals"), portalPath("overview"));
@@ -158,9 +203,15 @@ function syncRelatedLiveQueries(item: RealtimeNotificationPayload): void {
 
   if (item.kind === "system") {
     refreshMountedApiQueries("/system-alerts");
+    refreshMountedApiQueries("/households");
+    refreshMountedApiQueries("/accounts");
+    refreshMountedApiQueries("/registrations");
     refreshMountedApiQueries("/news");
+    refreshMountedApiQueries("/dashboard");
     invalidateQueries(
       portalPath("overview"),
+      portalPath("profile"),
+      portalPath("plots"),
       "/pesticides?pageSize=500",
       "/fertilizers?pageSize=500",
       "/varieties?pageSize=500",
@@ -182,6 +233,7 @@ function handleStreamData(raw: string): void {
   if (!parsed || typeof parsed !== "object") return;
 
   if (parsed.type === "notification" && parsed.item) {
+    prependRealtimeNotification(parsed.item);
     syncRelatedLiveQueries(parsed.item);
     if (
       typeof document !== "undefined" &&
@@ -194,14 +246,14 @@ function handleStreamData(raw: string): void {
   }
 
   if (parsed.type === "notifications-sync") {
-    invalidateQueries(NOTIFICATIONS_PATH);
+    invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
     notifyCountsChanged();
     return;
   }
 
   if (parsed.type === "system-alert") {
     notifySystemAlertsChanged();
-    invalidateQueries(NOTIFICATIONS_PATH);
+    invalidateQueries(NOTIFICATIONS_PATH, portalPath("overview"));
     refreshMountedApiQueries("/system-alerts");
     return;
   }
@@ -216,18 +268,31 @@ function handleStreamData(raw: string): void {
       refreshMountedApiQueries("/journal");
       refreshMountedApiQueries("/spray");
       refreshMountedApiQueries("/violations");
+      refreshMountedApiQueries("/care-protocol");
       refreshMountedApiQueries("/approvals");
       refreshMountedApiQueries("/registrations");
       refreshMountedApiQueries("/harvest");
+      refreshMountedApiQueries("/stamp-allocations");
       refreshMountedApiQueries("/testing");
       refreshMountedApiQueries("/schedule");
+      refreshMountedApiQueries("/minutes");
+      refreshMountedApiQueries("/households");
+      refreshMountedApiQueries("/contracts");
+      refreshMountedApiQueries("/enterprises");
+      refreshMountedApiQueries("/reports");
+      refreshMountedApiQueries("/system-alerts");
       notifyCountsChanged();
     }
     if (tagSet.has("auth")) {
       refreshMountedApiQueries("/accounts");
+      refreshMountedApiQueries("/registrations");
+      refreshMountedApiQueries("/deletion-requests");
+      notifyCountsChanged();
     }
     if (tagSet.has("plots")) {
       refreshMountedApiQueries("/plots");
+      refreshMountedApiQueries("/households");
+      invalidateQueries(portalPath("plots"), portalPath("overview"), portalPath("profile"));
     }
     if (tagSet.has("catalog")) {
       refreshMountedApiQueries("/households");
@@ -236,9 +301,20 @@ function handleStreamData(raw: string): void {
       refreshMountedApiQueries("/fertilizers");
       refreshMountedApiQueries("/varieties");
       refreshMountedApiQueries("/training");
+      invalidateQueries(
+        "/pesticides?pageSize=500",
+        "/fertilizers?pageSize=500",
+        "/varieties?pageSize=500",
+        portalPath("training"),
+        portalPath("overview"),
+        portalPath("profile"),
+      );
     }
     if (tagSet.has("news")) {
       refreshMountedApiQueries("/news");
+    }
+    if (tagSet.has("portal")) {
+      invalidateQueries(...ALL_PORTAL_PATHS);
     }
   }
 }
@@ -246,7 +322,7 @@ function handleStreamData(raw: string): void {
 function scheduleReconnect(): void {
   if (subscriberCount <= 0 || reconnectTimer !== null || typeof window === "undefined") return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-  const delay = Math.min(15_000, 1_500 * 2 ** Math.min(reconnectAttempt, 3));
+  const delay = Math.min(12_000, 800 * 2 ** Math.min(reconnectAttempt, 3));
   reconnectAttempt += 1;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
@@ -265,7 +341,14 @@ function connectStreamIfNeeded(): void {
     eventSource = es;
 
     es.onopen = () => {
+      const wasReconnect = hasOpenedOnce || reconnectAttempt > 0;
+      hasOpenedOnce = true;
       reconnectAttempt = 0;
+      invalidateQueries(NOTIFICATIONS_PATH);
+      notifyCountsChanged();
+      if (wasReconnect) {
+        refreshMountedApiQueries();
+      }
     };
 
     es.onmessage = (event) => {
@@ -293,6 +376,7 @@ function ensureLifecycleListeners(): void {
   const onResetAuth = () => {
     toastedIds.clear();
     reconnectAttempt = 0;
+    hasOpenedOnce = false;
     closeActiveStream();
     if (subscriberCount > 0) {
       connectStreamIfNeeded();
@@ -313,8 +397,15 @@ function ensureLifecycleListeners(): void {
     }
   };
 
-  window.addEventListener(AUTH_LOGOUT_EVENT, closeActiveStream);
-  window.addEventListener(AUTH_EXPIRED_EVENT, closeActiveStream);
+  const onLogoutOrExpired = () => {
+    toastedIds.clear();
+    reconnectAttempt = 0;
+    hasOpenedOnce = false;
+    closeActiveStream();
+  };
+
+  window.addEventListener(AUTH_LOGOUT_EVENT, onLogoutOrExpired);
+  window.addEventListener(AUTH_EXPIRED_EVENT, onLogoutOrExpired);
   window.addEventListener(AUTH_SCOPE_CHANGED_EVENT, onResetAuth);
   window.addEventListener("online", onOnline);
   document.addEventListener("visibilitychange", onVisibility);

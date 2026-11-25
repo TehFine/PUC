@@ -36,6 +36,7 @@ interface Props {
   householdName: string;
   onClose: () => void;
   onOpenSignboard?: (plot: PortalPlot) => void;
+  chinaSafe?: boolean;
 }
 
 type LayerMode = "satellite" | "satellite-google" | "streets";
@@ -65,7 +66,7 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
-export default function PlotMapModal({ plot, householdName, onClose, onOpenSignboard }: Props) {
+export default function PlotMapModal({ plot, householdName, onClose, onOpenSignboard, chinaSafe = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
   const streetLayerRef = useRef<Leaflet.Layer | null>(null);
@@ -362,7 +363,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
     let readyRaf: number | null = null;
     let smoothZoom: SmoothMapZoomHandle | null = null;
 
-    preconnectMapTileOrigins();
+    preconnectMapTileOrigins({ chinaSafe });
     void fetchSatelliteCaptureInfo(lat, lng).then((info) => {
       if (!disposed && info?.dateLabel) {
         setImageryDateLabel(info.dateLabel);
@@ -449,24 +450,28 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
         smoothZoom = attachSmoothMapZoom(L, map);
         L.control.scale({ imperial: false, metric: true, position: "bottomleft" }).addTo(map);
 
-        // 1. Lớp vệ tinh mới nhất (Esri Maxar Vivid cập nhật mới nhất + nhãn đường tiếng Việt)
-        const satellite = createLatestSatelliteLayer(L, lowEnd, MAX_MAP_ZOOM);
+        // 1. Lớp vệ tinh mới nhất (Esri Maxar Vivid cập nhật mới nhất; ở chế độ chinaSafe chỉ nạp ảnh vệ tinh thực tế không phụ thuộc Google)
+        const satellite = createLatestSatelliteLayer(L, lowEnd, MAX_MAP_ZOOM, undefined, { chinaSafe });
         satLayerRef.current = satellite;
 
-        // 2. Lớp vệ tinh Google Hybrid 512px (phóng sâu tới Z22 soi rõ tán cây)
-        const satelliteGoogle = createGoogleSatelliteLayer(L, lowEnd, MAX_MAP_ZOOM);
-        satGoogleLayerRef.current = satelliteGoogle;
-
-        // 3. Lớp bản đồ địa hình và giao thông tiếng Việt
-        const streets = createGoogleStreetsLayer(L, lowEnd, MAX_MAP_ZOOM);
-        streetLayerRef.current = streets;
-
-        if (layerModeRef.current === "satellite") {
+        if (chinaSafe) {
+          satGoogleLayerRef.current = null;
+          streetLayerRef.current = null;
           satellite.addTo(map);
-        } else if (layerModeRef.current === "satellite-google") {
-          satelliteGoogle.addTo(map);
         } else {
-          streets.addTo(map);
+          const satelliteGoogle = createGoogleSatelliteLayer(L, lowEnd, MAX_MAP_ZOOM);
+          satGoogleLayerRef.current = satelliteGoogle;
+
+          const streets = createGoogleStreetsLayer(L, lowEnd, MAX_MAP_ZOOM);
+          streetLayerRef.current = streets;
+
+          if (layerModeRef.current === "satellite") {
+            satellite.addTo(map);
+          } else if (layerModeRef.current === "satellite-google") {
+            satelliteGoogle.addTo(map);
+          } else {
+            streets.addTo(map);
+          }
         }
 
         const dimensionGroup = L.layerGroup().addTo(map);
@@ -607,7 +612,7 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
       satGoogleLayerRef.current = null;
       polygonLayerRef.current = null;
     };
-  }, [mounted, lat, lng, plot.code, plot.geometryJson, plot.areaHa, plot.variety, householdName]);
+  }, [mounted, lat, lng, plot.code, plot.geometryJson, plot.areaHa, plot.variety, householdName, chinaSafe]);
 
   // Đổi lớp bản đồ mượt mà: gắn lớp mới trước rồi mới gỡ lớp cũ sau 180ms để không chớp nền tối
   const switchLayer = (mode: LayerMode) => {
@@ -702,32 +707,34 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
 
         {/* Cụm công cụ điều khiển nổi góc phải */}
         <div className="pt-mapmodal-top-actions">
-          <div className="pt-mapmodal-layer-pill">
-            <button
-              type="button"
-              className={`pt-mapmodal-pill-btn ${layerMode === "satellite" ? "is-active" : ""}`}
-              onClick={() => switchLayer("satellite")}
-              title="Ảnh vệ tinh Maxar Vivid cập nhật mới nhất"
-            >
-              Vệ tinh mới
-            </button>
-            <button
-              type="button"
-              className={`pt-mapmodal-pill-btn ${layerMode === "satellite-google" ? "is-active" : ""}`}
-              onClick={() => switchLayer("satellite-google")}
-              title="Ảnh vệ tinh Google hỗ trợ phóng sâu tới Z22"
-            >
-              Google HD
-            </button>
-            <button
-              type="button"
-              className={`pt-mapmodal-pill-btn ${layerMode === "streets" ? "is-active" : ""}`}
-              onClick={() => switchLayer("streets")}
-              title="Chuyển chế độ xem bản đồ giao thông chi tiết"
-            >
-              Bản đồ
-            </button>
-          </div>
+          {!chinaSafe && (
+            <div className="pt-mapmodal-layer-pill">
+              <button
+                type="button"
+                className={`pt-mapmodal-pill-btn ${layerMode === "satellite" ? "is-active" : ""}`}
+                onClick={() => switchLayer("satellite")}
+                title="Ảnh vệ tinh Maxar Vivid cập nhật mới nhất"
+              >
+                Vệ tinh mới
+              </button>
+              <button
+                type="button"
+                className={`pt-mapmodal-pill-btn ${layerMode === "satellite-google" ? "is-active" : ""}`}
+                onClick={() => switchLayer("satellite-google")}
+                title="Ảnh vệ tinh Google hỗ trợ phóng sâu tới Z22"
+              >
+                Google HD
+              </button>
+              <button
+                type="button"
+                className={`pt-mapmodal-pill-btn ${layerMode === "streets" ? "is-active" : ""}`}
+                onClick={() => switchLayer("streets")}
+                title="Chuyển chế độ xem bản đồ giao thông chi tiết"
+              >
+                Bản đồ
+              </button>
+            </div>
+          )}
 
           <button
             type="button"
@@ -877,30 +884,34 @@ export default function PlotMapModal({ plot, householdName, onClose, onOpenSignb
               </div>
 
               {/* Các nút tác vụ dưới đáy popup */}
-              <div className="pt-mapmodal-popup-actions">
-                <a
-                  href={`https://www.google.com/maps?q=${lat},${lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="pt-mapmodal-popup-action-btn pt-mapmodal-action-gmaps"
-                  title="Mở ứng dụng Google Maps để nhận chỉ đường tới tận thửa đất"
-                >
-                  <ExternalLink size={15} strokeWidth={2.2} />
-                  <span>Chỉ đường Google Maps</span>
-                </a>
+              {(!chinaSafe || onOpenSignboard) && (
+                <div className="pt-mapmodal-popup-actions">
+                  {!chinaSafe && (
+                    <a
+                      href={`https://www.google.com/maps?q=${lat},${lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="pt-mapmodal-popup-action-btn pt-mapmodal-action-gmaps"
+                      title="Mở ứng dụng Google Maps để nhận chỉ đường tới tận thửa đất"
+                    >
+                      <ExternalLink size={15} strokeWidth={2.2} />
+                      <span>Chỉ đường Google Maps</span>
+                    </a>
+                  )}
 
-                {onOpenSignboard && (
-                  <button
-                    type="button"
-                    className="pt-mapmodal-popup-action-btn pt-mapmodal-action-qr"
-                    onClick={() => onOpenSignboard(plot)}
-                    title="Xem và in biển cắm vườn"
-                  >
-                    <QrCode size={15} strokeWidth={2.2} />
-                    <span>Biển cắm vườn</span>
-                  </button>
-                )}
-              </div>
+                  {onOpenSignboard && (
+                    <button
+                      type="button"
+                      className="pt-mapmodal-popup-action-btn pt-mapmodal-action-qr"
+                      onClick={() => onOpenSignboard(plot)}
+                      title="Xem và in biển cắm vườn"
+                    >
+                      <QrCode size={15} strokeWidth={2.2} />
+                      <span>Biển cắm vườn</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

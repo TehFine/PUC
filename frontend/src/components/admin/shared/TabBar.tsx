@@ -4,6 +4,7 @@ export interface TabItem<T extends string> {
   id: T;
   label: string;
   badge?: number | null;
+  pendingBadge?: number | null;
 }
 
 /** Thanh tab dùng class `.tab-bar` / `.tab-btn`. */
@@ -18,7 +19,7 @@ export default function TabBar<T extends string>({
 }) {
   return (
     <div className="tab-bar" role="tablist">
-      {tabs.map(({ id, label }) => (
+      {tabs.map(({ id, label, pendingBadge }) => (
         <button
           key={id}
           type="button"
@@ -27,7 +28,8 @@ export default function TabBar<T extends string>({
           className={`tab-btn ${active === id ? "active" : ""}`}
           onClick={() => onChange(id)}
         >
-          {label}
+          <span>{label}</span>
+          {pendingBadge && pendingBadge > 0 ? <span className="tab-badge">{pendingBadge}</span> : null}
         </button>
       ))}
     </div>

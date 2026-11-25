@@ -32,6 +32,7 @@ import {
   saveWorkspaceUrl,
 } from "@/lib/back-navigation";
 import { lazyChunk } from "@/lib/lazy-chunk";
+import { useRealtimeNotifications } from "@/lib/realtime-notifications";
 import { resolveValidAdminRoute, type SectionId } from "@/lib/route-validation";
 import { INTRO_PATH } from "@/lib/routes";
 import "@/components/portal/portal.css";
@@ -152,6 +153,7 @@ export default function AdminApp({ initialSection }: { initialSection: SectionId
   const lastNonZonesRef = useRef<SectionId>(lastNonZones);
   const activeUserId = session?.user.id ?? null;
   const isFarmer = session?.user.role === "farmer";
+  useRealtimeNotifications(status === "authenticated" && !isFarmer);
 
   useEffect(() => {
     activeRef.current = active;

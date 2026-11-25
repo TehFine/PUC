@@ -26,8 +26,11 @@ function resolveStorageKeyForPathname(pathname: string): string | null {
 export function saveWorkspaceUrl(storageKey: string, url: string, userId?: number | null): void {
   if (typeof window === "undefined") return;
   try {
+    const activeScopeUser = getAuthScopeUser();
     let resolvedUserId: number | null =
-      typeof userId === "number" && Number.isInteger(userId) && userId > 0 ? userId : null;
+      typeof userId === "number" && Number.isInteger(userId) && userId > 0
+        ? userId
+        : activeScopeUser;
     if (resolvedUserId === null) {
       const existingRaw = window.sessionStorage.getItem(storageKey);
       if (existingRaw) {
@@ -50,17 +53,22 @@ export function readWorkspaceUrl(storageKey: string, expectedUserId?: number | n
     const raw = window.sessionStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredWorkspaceRoute>;
-    if (!parsed || typeof parsed.url !== "string" || !parsed.url.startsWith("/")) return null;
-    if (
-      typeof expectedUserId === "number" &&
-      Number.isInteger(expectedUserId) &&
-      expectedUserId > 0 &&
-      typeof parsed.userId === "number" &&
-      Number.isInteger(parsed.userId) &&
-      parsed.userId > 0 &&
-      parsed.userId !== expectedUserId
-    ) {
+    if (!parsed || typeof parsed.url !== "string" || !parsed.url.startsWith("/") || parsed.url.startsWith("//")) {
       return null;
+    }
+    const targetUserId =
+      typeof expectedUserId === "number" && Number.isInteger(expectedUserId) && expectedUserId > 0
+        ? expectedUserId
+        : getAuthScopeUser();
+    if (targetUserId !== null) {
+      if (
+        typeof parsed.userId !== "number" ||
+        !Number.isInteger(parsed.userId) ||
+        parsed.userId <= 0 ||
+        parsed.userId !== targetUserId
+      ) {
+        return null;
+      }
     }
     return parsed.url;
   } catch {

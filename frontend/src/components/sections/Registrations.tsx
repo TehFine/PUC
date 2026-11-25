@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { notifyCountsChanged } from "@/components/admin/shared/counts-events";
+import { notifyCountsChanged, onCountsChanged } from "@/components/admin/shared/counts-events";
 import TableState from "@/components/admin/shared/TableState";
 import { ROLE_LABELS } from "@/components/settings/settings-data";
 import { ConfirmDialog, FormError, Modal } from "@/components/ui/Modal";
 import { toast } from "@/components/ui/Toast";
+import { refreshMountedApiQueries, useApi } from "@/hooks/use-api";
+import { invalidateQueries, NOTIFICATIONS_PATH } from "@/hooks/use-portal";
 import { api } from "@/lib/api-client";
 import { copySensitiveWithAutoClear } from "@/lib/request-security";
 import type { Role } from "@/types/api";
@@ -54,10 +56,6 @@ export default function Registrations({
 }: {
   onCountChange?: (count: number) => void;
 }) {
-  const [rows, setRows] = useState<Registration[]>([]);
-  const [passwordResets, setPasswordResets] = useState<PasswordResetRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [resetBusyId, setResetBusyId] = useState<number | null>(null);
 
@@ -68,47 +66,39 @@ export default function Registrations({
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await api.get<{
-        data: Registration[];
-        passwordResets?: PasswordResetRequest[];
-        total?: number;
-      }>("/registrations");
-      const nextResets = result.passwordResets ?? [];
-      setRows(result.data);
-      setPasswordResets(nextResets);
-      onCountChange?.(result.total ?? result.data.length + nextResets.length);
-      setError(null);
-    } catch (err) {
-      setError(messageOf(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [onCountChange]);
+  const {
+    data: regPayload,
+    loading,
+    error,
+    refresh: refreshRegistrations,
+  } = useApi<{
+    data: Registration[];
+    passwordResets?: PasswordResetRequest[];
+    total?: number;
+  }>("/registrations");
+
+  const rows = useMemo(() => regPayload?.data ?? [], [regPayload?.data]);
+  const passwordResets = useMemo(
+    () => regPayload?.passwordResets ?? [],
+    [regPayload?.passwordResets],
+  );
 
   useEffect(() => {
-    let active = true;
-    api
-      .get<{
-        data: Registration[];
-        passwordResets?: PasswordResetRequest[];
-        total?: number;
-      }>("/registrations")
-      .then((result) => {
-        if (!active) return;
-        const nextResets = result.passwordResets ?? [];
-        setRows(result.data);
-        setPasswordResets(nextResets);
-        onCountChange?.(result.total ?? result.data.length + nextResets.length);
-      })
-      .catch((err) => active && setError(messageOf(err)))
-      .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
-    };
-  }, [onCountChange]);
+    if (!regPayload) return;
+    const nextResets = regPayload.passwordResets ?? [];
+    onCountChange?.(regPayload.total ?? regPayload.data.length + nextResets.length);
+  }, [regPayload, onCountChange]);
+
+  useEffect(() => {
+    return onCountsChanged(() => {
+      refreshMountedApiQueries("/registrations");
+    });
+  }, []);
+
+  const load = useCallback(async () => {
+    invalidateQueries(NOTIFICATIONS_PATH);
+    await refreshRegistrations();
+  }, [refreshRegistrations]);
 
   useEffect(() => {
     if (!target) return;
@@ -277,7 +267,7 @@ export default function Registrations({
           }}
         >
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--green-900)" }}>
-            Yêu cầu cấp lại mật khẩu chờ duyệt ({filteredResets.length})
+            Yêu cầu cấp lại mật khẩu chờ duyệt
           </h3>
         </div>
         <div className="table-wrap">
@@ -363,7 +353,7 @@ export default function Registrations({
             }}
           >
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--green-900)" }}>
-              Hồ sơ đăng ký tài khoản chờ gắn hộ ({filteredRows.length})
+              Hồ sơ đăng ký tài khoản chờ gắn hộ
             </h3>
           </div>
           <div className="table-wrap">

@@ -253,12 +253,48 @@ export function consumePendingTraceRequestId(): number | null {
   return null;
 }
 
+export type AdminHarvestTabId = "lots" | "plans" | "stamps" | "contracts" | "enterprises";
+const HARVEST_TAB_STORAGE_KEY = "puc:pending-harvest-tab";
+export const ADMIN_HARVEST_TAB_EVENT = "admin:harvest-tab";
+
+export function requestHarvestTab(tab: AdminHarvestTabId): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(HARVEST_TAB_STORAGE_KEY, tab);
+  } catch {
+    // ignore storage errors
+  }
+  requestAdminNavigate("harvest");
+  window.dispatchEvent(new CustomEvent<AdminHarvestTabId>(ADMIN_HARVEST_TAB_EVENT, { detail: tab }));
+}
+
+export function consumePendingHarvestTab(): AdminHarvestTabId | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const tab = window.sessionStorage.getItem(HARVEST_TAB_STORAGE_KEY);
+    if (
+      tab === "lots" ||
+      tab === "plans" ||
+      tab === "stamps" ||
+      tab === "contracts" ||
+      tab === "enterprises"
+    ) {
+      window.sessionStorage.removeItem(HARVEST_TAB_STORAGE_KEY);
+      return tab;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}
+
 if (typeof window !== "undefined") {
   const clearAllPendingIntents = () => {
     try {
       window.sessionStorage.removeItem(EDIT_PLOT_STORAGE_KEY);
       window.sessionStorage.removeItem(APPROVAL_TAB_STORAGE_KEY);
       window.sessionStorage.removeItem(JOURNAL_TAB_STORAGE_KEY);
+      window.sessionStorage.removeItem(HARVEST_TAB_STORAGE_KEY);
       window.sessionStorage.removeItem(SYSTEM_TAB_STORAGE_KEY);
       window.sessionStorage.removeItem(DELETION_REQ_ID_STORAGE_KEY);
       window.sessionStorage.removeItem(TRACE_REQ_ID_STORAGE_KEY);
