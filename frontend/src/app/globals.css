@@ -4983,7 +4983,7 @@ input[type="date"].filter-select {
 }
 
 .trace-req-view .trace-req-filter-bar,
-.trace-req-view > .card,
+.trace-req-view>.card,
 .trace-req-list-card {
   background: #ffffff;
   border: none !important;
@@ -5003,7 +5003,8 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 4px 12px 2px;
+  margin-top: 8px;
+  padding: 10px 16px 6px;
   background: transparent;
   border: none;
   box-shadow: none;
@@ -5014,7 +5015,7 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
   font-weight: 700;
   color: #14372f;
   line-height: 1.35;
-  margin-bottom: 3px;
+  margin-bottom: 5px;
 }
 
 .trace-req-intro-desc {
@@ -5050,7 +5051,7 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
   background-color: #ffffff;
 }
 
-.trace-req-view > .empty-state {
+.trace-req-view>.empty-state {
   margin: 0;
   padding: 28px 16px;
   font-size: 13.5px;
@@ -5064,11 +5065,11 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
   padding: 2px 14px;
 }
 
-.trace-req-list > li {
+.trace-req-list>li {
   border-bottom: 1px solid rgba(20, 55, 47, 0.08);
 }
 
-.trace-req-list > li:last-child {
+.trace-req-list>li:last-child {
   border-bottom: none;
 }
 
@@ -5197,7 +5198,8 @@ html[data-perf="lite"] :is(.trace-req-view .trace-req-filter-bar, .trace-req-vie
 
 @media (max-width: 640px) {
   .trace-req-intro {
-    padding: 2px 8px;
+    margin-top: 6px;
+    padding: 10px 12px 6px;
   }
 
   .trace-req-intro-title {
@@ -12985,7 +12987,7 @@ html[data-perf="lite"] .admin-notif-card {
 }
 
 .audit-log-view .audit-log-filter-bar,
-.audit-log-view > .card {
+.audit-log-view>.card {
   margin-bottom: 0;
   border: none !important;
   outline: none !important;
@@ -13070,11 +13072,14 @@ html[data-perf="lite"] .admin-notif-card {
 
 @media (max-width: 680px) {
   .audit-log-view .audit-log-filter-bar {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     padding: 12px;
+  }
+
+  .audit-log-search-wrap {
+    flex: none;
   }
 
   .audit-log-search-wrap,
