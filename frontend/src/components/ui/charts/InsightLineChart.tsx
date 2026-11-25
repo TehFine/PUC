@@ -246,12 +246,19 @@ export default function InsightLineChart({
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const wrapRef = useRef<HTMLDivElement>(null);
   const cachedLeftRef = useRef<number | null>(null);
+  const touchModeRef = useRef<"idle" | "undecided" | "scrub" | "scroll">("idle");
+  const geomRef = useRef<{ plotLeft: number; stepX: number; n: number }>({
+    plotLeft: 0,
+    stepX: 0,
+    n: 0,
+  });
   const prevValuesByDateRef = useRef<Map<string, number> | null>(null);
   const prevLengthRef = useRef<number>(data.length);
 
   const [width, setWidth] = useState(0);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [liveFocusIdx, setLiveFocusIdx] = useState<number | null>(null);
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   useIsomorphicLayoutEffect(() => {
     const el = wrapRef.current;
@@ -390,6 +397,87 @@ export default function InsightLineChart({
     return visible;
   }, [n, stepX, isMobile]);
 
+  useIsomorphicLayoutEffect(() => {
+    geomRef.current = { plotLeft, stepX, n };
+  }, [plotLeft, stepX, n]);
+
+  // Hỗ trợ cảm ứng vuốt ngang mượt mà qua từng ngày trên điện thoại / máy tính bảng mà vẫn giữ cuộn dọc tự nhiên
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    let startX = 0;
+    let startY = 0;
+
+    const applyClientX = (clientX: number, forceMeasure = false) => {
+      const { plotLeft: pLeft, stepX: sX, n: count } = geomRef.current;
+      if (count <= 1 || sX <= 0) return;
+      if (forceMeasure || cachedLeftRef.current === null) {
+        cachedLeftRef.current = el.getBoundingClientRect().left;
+      }
+      const relX = clientX - cachedLeftRef.current - pLeft;
+      const nextIdx = Math.round(relX / sX);
+      const clamped = Math.min(Math.max(nextIdx, 0), count - 1);
+      setHoverIdx((prev) => (prev === clamped ? prev : clamped));
+    };
+
+    const onTouchStart = (ev: TouchEvent) => {
+      if (ev.touches.length !== 1) {
+        touchModeRef.current = "idle";
+        setIsScrubbing(false);
+        return;
+      }
+      const t = ev.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      touchModeRef.current = "undecided";
+      applyClientX(t.clientX, true);
+    };
+
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length !== 1 || touchModeRef.current === "idle" || touchModeRef.current === "scroll") {
+        return;
+      }
+      const t = ev.touches[0];
+      const absX = Math.abs(t.clientX - startX);
+      const absY = Math.abs(t.clientY - startY);
+
+      if (touchModeRef.current === "undecided") {
+        if (absX >= 5 && absX >= absY * 0.75) {
+          touchModeRef.current = "scrub";
+          setIsScrubbing(true);
+        } else if (absY > 9 && absY > absX * 1.25) {
+          touchModeRef.current = "scroll";
+          setIsScrubbing(false);
+          return;
+        }
+      }
+
+      if (touchModeRef.current === "scrub") {
+        if (ev.cancelable) ev.preventDefault();
+        applyClientX(t.clientX);
+      } else if (absX >= absY) {
+        applyClientX(t.clientX);
+      }
+    };
+
+    const endTouch = () => {
+      touchModeRef.current = "idle";
+      cachedLeftRef.current = null;
+      setIsScrubbing(false);
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", endTouch, { passive: true });
+    el.addEventListener("touchcancel", endTouch, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", endTouch);
+      el.removeEventListener("touchcancel", endTouch);
+    };
+  }, []);
+
   if (n === 0) {
     return null;
   }
@@ -401,7 +489,7 @@ export default function InsightLineChart({
 
   const sprayCnt = Number(activeData?.sprayCount) || 0;
   const journalCnt = Number(activeData?.journalCount) || 0;
-  const calloutHeader = n > 8 && activeData?.label ? `${activeData.label} - ${metricLabel}` : metricLabel;
+  const calloutHeader = activeData?.label ? `${activeData.label} - ${metricLabel}` : metricLabel;
   const calloutSub =
     sprayCnt > 0 && journalCnt > 0
       ? `${journalCnt} canh tác, ${sprayCnt} phun thuốc`
@@ -412,7 +500,10 @@ export default function InsightLineChart({
   // Neo hộp chú thích phía trên đường cong nhưng không bao giờ che khuất điểm dữ liệu thực
   const secondGridFromTopY = plotTop + plotHeight / INTERVAL_COUNT;
   const pinY = Math.max(plotTop + 12, Math.min(secondGridFromTopY, activePoint.y - 24));
-  const flipCalloutLeft = width > 0 && activePoint.x + (calloutSub ? 176 : 148) > width;
+  const estCalloutWidth = calloutSub ? (isMobile ? 162 : 176) : isMobile ? 138 : 154;
+  const canFitRight = width <= 0 || activePoint.x + 13 + estCalloutWidth <= width - 2;
+  const canFitLeft = activePoint.x - 13 - estCalloutWidth >= 2;
+  const flipCalloutLeft = !canFitRight && (canFitLeft || activePoint.x > width * 0.5);
 
   const selectAtClientX = (el: HTMLDivElement, clientX: number, forceMeasure = false) => {
     if (n <= 1 || stepX <= 0) return;
@@ -425,13 +516,27 @@ export default function InsightLineChart({
     setHoverIdx((prev) => (prev === clamped ? prev : clamped));
   };
 
+  const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") {
+      if (touchModeRef.current === "idle") {
+        selectAtClientX(e.currentTarget, e.clientX, true);
+      }
+      return;
+    }
+    cachedLeftRef.current = e.currentTarget.getBoundingClientRect().left;
+  };
+
   const handlePointerEnter = (e: PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "touch") return;
     cachedLeftRef.current = e.currentTarget.getBoundingClientRect().left;
   };
 
   const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "touch") return;
+    if (e.pointerType === "touch") {
+      if (touchModeRef.current === "scroll") return;
+      selectAtClientX(e.currentTarget, e.clientX);
+      return;
+    }
     selectAtClientX(e.currentTarget, e.clientX);
   };
 
@@ -455,16 +560,21 @@ export default function InsightLineChart({
   return (
     <div
       ref={wrapRef}
-      className={`dash-insight-stage${isMorphing ? " is-morphing" : ""}`}
+      className={`dash-insight-stage${isMorphing ? " is-morphing" : ""}${isScrubbing ? " is-scrubbing" : ""}`}
       style={{ minHeight: svgHeight }}
       role="img"
       aria-label={`${ariaLabel}: ngày ${activeData?.label ?? ""}, ${formattedVal} ${metricLabel.toLowerCase()}`}
       tabIndex={0}
+      onPointerDown={handlePointerDown}
       onPointerEnter={handlePointerEnter}
       onPointerMove={handlePointerMove}
       onPointerLeave={(e) => {
         cachedLeftRef.current = null;
         if (e.pointerType !== "touch") setHoverIdx(null);
+      }}
+      onPointerCancel={() => {
+        cachedLeftRef.current = null;
+        setIsScrubbing(false);
       }}
       onClick={handleClick}
       onBlur={() => setHoverIdx(null)}
