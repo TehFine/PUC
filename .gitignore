@@ -14,6 +14,9 @@ credentials*.json
 service-account*.json
 Data_PUC/
 data_PUC/
+*.docx
+*.xlsx
+*.bak
 
 # Thư mục làm việc cục bộ, không thuộc mã nguồn
 uiux/

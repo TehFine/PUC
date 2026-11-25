@@ -37,20 +37,28 @@ jobs:
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
           GITHUB_TOKEN: ${{ github.token }}
           REPO_SLUG: ${{ github.repository }}
         run: |
           set -euo pipefail
+          umask 077
           SERVER_PORT="${SERVER_PORT:-24700}"
           SERVER_USER="${SERVER_USER:-deploy}"
-          trap 'rm -f ~/.ssh/deploy_key' EXIT
+          trap 'rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts' EXIT
 
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -T 10 -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          if [ ! -s ~/.ssh/known_hosts ]; then
-            ssh-keyscan -T 10 -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          if [ -n "${SERVER_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$SERVER_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            chmod 600 ~/.ssh/known_hosts
+          else
+            echo "::warning::Chưa khai báo SERVER_KNOWN_HOSTS trong GitHub Secrets; tạm thời quét khóa máy chủ cho lần kết nối này."
+            ssh-keyscan -T 10 -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+            if [ ! -s ~/.ssh/known_hosts ]; then
+              ssh-keyscan -T 10 -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            fi
           fi
 
           GIT_AUTH_B64="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
@@ -79,8 +87,9 @@ jobs:
                 GIT_CONFIG_KEY_1 GIT_CONFIG_VALUE_1 \
                 GIT_CONFIG_KEY_2 GIT_CONFIG_VALUE_2 GIT_AUTH_B64
 
-          echo "[deploy] Biên dịch và khởi động lại Docker Compose..."
-          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --remove-orphans
+          echo "[deploy] Biên dịch (luôn kéo bản vá mới nhất của base image Node/Nginx/PostGIS) và khởi động lại Docker Compose..."
+          docker compose --env-file .env.prod -f docker-compose.prod.yml build --pull
+          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --remove-orphans
           docker compose --env-file .env.prod -f docker-compose.prod.yml restart nginx
           docker image prune -f
 

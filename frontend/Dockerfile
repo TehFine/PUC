@@ -1,5 +1,5 @@
 # Stage 1: Build Next.js Frontend
-FROM node:22-bookworm-slim AS builder
+FROM node:22.23.5-bookworm-slim AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -15,10 +15,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # Stage 2: Production Runner
-FROM node:22-bookworm-slim AS runner
+FROM node:22.23.5-bookworm-slim AS runner
 WORKDIR /app
 
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--disable-proto=delete"
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV API_URL=http://backend:4000
@@ -29,7 +32,6 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/next.config.ts ./next.config.ts
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/src ./src
 COPY --from=builder /app/.next ./.next
 
 RUN chown -R node:node /app/.next

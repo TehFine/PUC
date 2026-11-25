@@ -2,6 +2,10 @@
 set -eu
 
 DOMAIN="${SSL_DOMAIN:-htxcune.com}"
+if ! printf '%s' "$DOMAIN" | grep -qE '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'; then
+  echo "[puc-nginx] SSL_DOMAIN không hợp lệ: ${DOMAIN}" >&2
+  exit 1
+fi
 CERT_FILE="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
 KEY_FILE="/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
 

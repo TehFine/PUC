@@ -1,5 +1,5 @@
 # Stage 1: Build NestJS Backend
-FROM node:22-bookworm-slim AS builder
+FROM node:22.23.5-bookworm-slim AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -12,10 +12,13 @@ COPY db ./db
 RUN npm run build && npm prune --omit=dev
 
 # Stage 2: Production Runner
-FROM node:22-bookworm-slim AS runner
+FROM node:22.23.5-bookworm-slim AS runner
 WORKDIR /app
 
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--disable-proto=delete"
 ENV PORT=4000
 
 COPY --from=builder /app/package.json ./package.json

@@ -7,11 +7,31 @@ map $http_accept $puc_img_accept {
     "~*image/webp"   "image/webp,*/*";
 }
 
-# Khối nội bộ cho lệnh kiểm tra sức khỏe từ máy chủ cục bộ (127.0.0.1) trong GitHub Actions
+# Chặn sớm header Content-Encoding nén (đặc biệt là br/Brotli - CVE-2026-111497 Node2Shell) ngay tại tầng C của Nginx
+map $http_content_encoding $puc_blocked_content_encoding {
+    ""                  0;
+    "~*^\s*identity\s*$" 0;
+    default             1;
+}
+
+# Chỉ chuyển tiếp gzip (loại bỏ br) xuống upstream Node.js
+map $http_accept_encoding $puc_upstream_accept_encoding {
+    "~*\bgzip\b"        "gzip";
+    default             "";
+}
+
+# Khối nội bộ cho lệnh kiểm tra sức khỏe từ máy chủ cục bộ / mạng cầu nối Docker trong GitHub Actions
 server {
     listen 80;
     server_name 127.0.0.1 localhost;
     server_tokens off;
+
+    allow 127.0.0.1;
+    allow ::1;
+    allow 172.16.0.0/12;
+    allow 10.0.0.0/8;
+    allow 192.168.0.0/16;
+    deny all;
 
     proxy_buffer_size 32k;
     proxy_buffers 8 32k;
@@ -55,7 +75,7 @@ server {
     }
 
     location / {
-        return 301 https://$host$request_uri;
+        return 301 https://__SSL_DOMAIN__$request_uri;
     }
 }
 
@@ -64,8 +84,10 @@ server {
     listen 443 ssl default_server;
     listen [::]:443 ssl default_server;
     http2 on;
-    server_name _;
+    server_name __SSL_DOMAIN__ www.__SSL_DOMAIN__;
     server_tokens off;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     ssl_certificate /etc/letsencrypt/live/__SSL_DOMAIN__/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/__SSL_DOMAIN__/privkey.pem;
@@ -76,6 +98,10 @@ server {
     ssl_session_tickets off;
 
     client_max_body_size 25M;
+
+    if ($puc_blocked_content_encoding) {
+        return 415;
+    }
 
     gzip on;
     gzip_vary on;
@@ -118,12 +144,13 @@ server {
         proxy_read_timeout 3600s;
     }
 
-    # Chuyển thẳng mọi yêu cầu API sang container NestJS Backend
+    # Chuyển thẳng mọi yêu cầu API sang container NestJS Backend (thuần HTTP/1.1, cô lập hoàn toàn HTTP/2 & TLS CVE của Node.js)
     location /api/ {
         set $backend_upstream http://backend:4000;
         proxy_pass $backend_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+        proxy_set_header Accept-Encoding $puc_upstream_accept_encoding;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;

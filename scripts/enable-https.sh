@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -105,11 +106,11 @@ DB_PASS_CUR="$(read_env_val POSTGRES_PASSWORD)"
 upsert_env_val "CORS_ORIGIN" "https://${DOMAIN},https://www.${DOMAIN}"
 upsert_env_val "COOKIE_SECURE" "true"
 
-if printf '%s' "$DB_PASS_CUR" | grep -qiE 'htx_dev_password|change-?me'; then
-  echo "Lưu ý: POSTGRES_PASSWORD đang chứa chuỗi mẫu nên giữ BACKEND_NODE_ENV=development (vẫn bật COOKIE_SECURE=true và HTTPS)."
-else
-  upsert_env_val "BACKEND_NODE_ENV" "production"
+if [ -z "$DB_PASS_CUR" ] || printf '%s' "$DB_PASS_CUR" | grep -qiE 'htx_dev_password|change-?me|example|Thay_Bang'; then
+  echo "[LỖI] POSTGRES_PASSWORD trong .env.prod đang để mặc định hoặc chuỗi mẫu không an toàn. Hãy đặt mật khẩu mạnh trước khi bật Production." >&2
+  exit 1
 fi
+upsert_env_val "BACKEND_NODE_ENV" "production"
 
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d backend certbot
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --force-recreate nginx
