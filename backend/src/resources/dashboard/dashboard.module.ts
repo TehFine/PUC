@@ -2,8 +2,15 @@ import { Controller, Get, Injectable, Module } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { can, isAdminPrivilegedRole, isCoopStaffRole } from "../../auth/permissions";
-import { isStaffInCuneCoopScope, villageScope } from "../../common/crud/village-scope";
+import {
+  CUNE_ADMIN_LOCATION,
+  EAKHAL_ADMIN_LOCATION,
+  isStaffInCuneCoopScope,
+  matchesJurisdiction,
+  villageScope,
+} from "../../common/crud/village-scope";
 import { camelRow, camelRows } from "../../common/sql/rows";
+import { hasPublicTable } from "../../common/sql/schema-cache";
 import { DatabaseService } from "../../database/database.service";
 import { INSPECTION_ROLES } from "../../portal/common/admin-links";
 import { TODAY_VN_SQL } from "../shared/state";
@@ -57,6 +64,8 @@ export class DashboardService {
     const canReadTraining = can(user.role, "training", "read");
     const canReadSchedule = can(user.role, "schedule", "read");
     const canReadDeclarations = can(user.role, "harvest-declarations", "read");
+    const canReadDeletionRequests = can(user.role, "deletion-requests", "read");
+    const canReadTraceRequests = can(user.role, "trace-requests", "read");
     // Lịch đột xuất chỉ hiển thị cho vai trò lập và thực hiện kiểm tra.
     const canSeeSuddenSchedule = INSPECTION_ROLES.includes(user.role);
     const isEnterprise = user.role === "enterprise";
@@ -90,7 +99,15 @@ export class DashboardService {
     }
     const isAdmin = isAdminPrivilegedRole(user.role);
 
-    const hasPlots = await this.hasPlotsTable();
+    const [hasPlots, hasDelReqTable, hasTraceReqTable] = await Promise.all([
+      this.hasPlotsTable(),
+      canReadDeletionRequests && inCoopScope
+        ? hasPublicTable(this.db, "member_deletion_requests")
+        : Promise.resolve(false),
+      canReadTraceRequests && inCoopScope
+        ? hasPublicTable(this.db, "trace_access_requests")
+        : Promise.resolve(false),
+    ]);
 
     const householdsCountExpr = !canReadHouseholds
       ? "0"
@@ -353,6 +370,23 @@ export class DashboardService {
          ${pendingApprovalsExpr} AS pending_approvals,
          ${pendingRegistrationsExpr} AS pending_registrations,
          ${canReadDeclarations ? "(SELECT count(*)::int FROM harvest_declarations hd JOIN hh ON hh.id = hd.household_id WHERE hd.status = 'submitted')" : "0"} AS pending_declarations,
+         ${hasDelReqTable ? "(SELECT count(*)::int FROM member_deletion_requests WHERE status = 'pending')" : "0"} AS pending_deletions,
+         ${
+           hasTraceReqTable
+             ? (() => {
+                 const commune = user.assignedCommune?.trim() || "";
+                 if (!commune) {
+                   return "(SELECT count(*)::int FROM trace_access_requests r WHERE r.status = 'pending')";
+                 }
+                 const inCune = matchesJurisdiction(commune, [CUNE_ADMIN_LOCATION]);
+                 const inEaKhal = matchesJurisdiction(commune, [EAKHAL_ADMIN_LOCATION]);
+                 if (!inCune && !inEaKhal) return "0";
+                 const eaKhalExpr = `(COALESCE(r.puc_code, '') ~* '^66-PUC-SR0001-' OR r.scanned_code ~* '^(?:66-PUC-SR0001-|EK\\d)')`;
+                 const cond = inEaKhal && !inCune ? `AND ${eaKhalExpr}` : inCune && !inEaKhal ? `AND NOT ${eaKhalExpr}` : "";
+                 return `(SELECT count(*)::int FROM trace_access_requests r WHERE r.status = 'pending' ${cond})`;
+               })()
+             : "0"
+         } AS pending_trace_requests,
          ${labTestsExpr} AS lab_tests,
          ${labTestsPassedExpr} AS lab_tests_passed,
          ${harvestTonsExpr} AS harvest_tons,
@@ -667,6 +701,8 @@ export class DashboardService {
       pendingApprovals: number;
       pendingRegistrations: number;
       pendingDeclarations: number;
+      pendingDeletions: number;
+      pendingTraceRequests: number;
       labTests: number;
       labTestsPassed: number;
       harvestTons: number;

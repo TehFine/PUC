@@ -47,7 +47,7 @@ export class ViolationsService extends BaseCrudService {
       search: ["t.title", "t.household_label", "t.plot_code"],
       filters: { severity: "t.severity", status: "t.status", householdId: "t.household_id" },
       scope: villageScope("h.village_id"),
-      virtual: ["_method", "_notifyResolved"],
+      virtual: ["_method", "_actorId", "_notifyResolved"],
     });
   }
 
@@ -194,20 +194,39 @@ export class ViolationsService extends BaseCrudService {
     if (context.method === "POST" && !out.householdLabel) {
       throw badRequest("Phải chọn hộ nông dân hoặc nhập nhãn hộ.");
     }
+    out._actorId = context.user.id;
     return out;
   }
 
-  protected override async afterWrite(_id: number, input: Record<string, unknown>) {
+  protected override async afterWrite(id: number, input: Record<string, unknown>) {
     if (input._method === "POST" && input.householdId) {
-      await this.notifications.notifyHousehold(Number(input.householdId), {
-        kind: "violation",
-        title: `Cảnh báo vi phạm: ${String(input.title)}`,
-        body: input.description ? String(input.description) : null,
-        link: "/portal?tab=diary",
-      });
+      const hhId = Number(input.householdId);
+      const actorId = typeof input._actorId === "number" ? input._actorId : undefined;
+      await Promise.all([
+        this.notifications.notifyHousehold(hhId, {
+          kind: "violation",
+          title: `Cảnh báo vi phạm: ${String(input.title)}`,
+          body: input.description ? String(input.description) : null,
+          link: `/portal?tab=diary&violationId=${id}`,
+        }),
+        this.notifications.notifyOversightForHousehold(
+          hhId,
+          {
+            kind: "violation",
+            title: `Cảnh báo vi phạm: ${String(input.title)}`,
+            body: `${String(input.householdLabel ?? "")}${input.plotCode ? ` - Thửa ${String(input.plotCode)}` : ""}${input.description ? ` - ${String(input.description)}` : ""}`,
+            link: `/admin?section=journal&violationId=${id}`,
+          },
+          actorId !== undefined ? { excludeUserId: actorId } : undefined,
+        ),
+      ]);
     }
     const resolved = input._notifyResolved as { householdId: number; title: string; notes: string } | undefined;
     if (resolved?.householdId) {
+      await this.notifications.resolveByLinks([
+        `/admin?section=journal&violationId=${id}`,
+        `/portal?tab=diary&violationId=${id}`,
+      ]);
       await this.notifications.notifyHousehold(resolved.householdId, {
         kind: "violation",
         title: `Vi phạm đã được xác nhận khắc phục: ${resolved.title}`,
@@ -253,6 +272,10 @@ export class ViolationsService extends BaseCrudService {
       await assertExists(this.db, "violations", id, "Vi phạm đã đóng hồ sơ xử lý, không thể chỉnh sửa hoặc xóa.");
     }
     const row = rows[0];
+    await this.notifications.resolveByLinks([
+      `/admin?section=journal&violationId=${id}`,
+      `/portal?tab=diary&violationId=${id}`,
+    ]);
     await this.audit.write(
       { ip, user },
       { action: "Đóng vi phạm", object: `${this.config.label} #${id}`, detail: dto.resolutionNotes },

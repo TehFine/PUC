@@ -1,16 +1,21 @@
 import type { FeatureCollection, Polygon } from "geojson";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth-user";
 import { isManagementRole } from "../auth/permissions";
 import {
   assertHouseholdInScope,
+  CUNE_ADMIN_LOCATION,
+  EAKHAL_ADMIN_LOCATION,
+  EAKHAL_VILLAGE_SQL_REGEX,
   isStaffInCuneCoopScope,
   isStaffInParcelScope,
+  matchesJurisdiction,
 } from "../common/crud/village-scope";
 import { AppException, badRequest, forbidden } from "../common/errors/app.exception";
 import { hasPublicTable } from "../common/sql/schema-cache";
 import { hasPlotsTable, resolvePlotHouseholdId, syncHouseholdAndVillageStats } from "../common/sql/stats-sync";
 import { DatabaseService } from "../database/database.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import type {
   CreatedPlot,
   ImportResult,
@@ -264,7 +269,10 @@ function toProperties(input: CreatePlotInput, geometry: Polygon): PlotProperties
 
 @Injectable()
 export class PlotsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {}
 
   private hasPlotsTable(): Promise<boolean> {
     return hasPlotsTable(this.db);
@@ -614,6 +622,15 @@ export class PlotsService {
         householdIds: linkedHouseholdId ? [linkedHouseholdId] : [],
         hasPlots: true,
       });
+      this.db.cache?.invalidateTags(["plots", "dashboard", "portal", "trace"], true);
+      if (linkedHouseholdId) {
+        await this.notifications?.notifyHousehold(linkedHouseholdId, {
+          kind: "system",
+          title: `Gắn mới thửa đất ${rows[0].code}`,
+          body: `Thửa đất ${rows[0].code} (${properties.areaHa} ha) đã được cập nhật vào hồ sơ canh tác của gia đình.`,
+          link: `/portal?tab=plots&plot=${encodeURIComponent(rows[0].code)}`,
+        });
+      }
 
       return { feature: rowToFeature(rows[0]), persisted: true };
     } catch (error) {
@@ -728,6 +745,18 @@ export class PlotsService {
       }
 
       await client.query("COMMIT");
+      this.db.cache?.invalidateTags(["plots", "dashboard", "portal", "trace"], true);
+      const updatedHouseholdId = exRow.household_id != null ? Number(exRow.household_id) : null;
+      if (updatedHouseholdId) {
+        await this.notifications?.notifyHousehold(updatedHouseholdId, {
+          kind: "system",
+          title: `Cập nhật ranh giới thửa đất ${rows[0].code}`,
+          body: updateArea
+            ? `Ranh giới và diện tích thửa đất ${rows[0].code} (${asNumber(rows[0].area_ha)} ha) vừa được cập nhật.`
+            : `Ranh giới bản đồ thửa đất ${rows[0].code} vừa được cập nhật.`,
+          link: `/portal?tab=plots&plot=${encodeURIComponent(rows[0].code)}`,
+        });
+      }
       return { feature: rowToFeature(rows[0]), persisted: true };
     } catch (error) {
       await client.query("ROLLBACK");
@@ -802,6 +831,25 @@ export class PlotsService {
     const uniqueFeatures = Array.from(byCode.values());
     const BATCH_SIZE = 200;
 
+    const communeRaw = user?.assignedCommune?.trim() || "";
+    const inCune = communeRaw ? matchesJurisdiction(communeRaw, [CUNE_ADMIN_LOCATION]) : true;
+    const inEaKhal = communeRaw ? matchesJurisdiction(communeRaw, [EAKHAL_ADMIN_LOCATION]) : true;
+    if (communeRaw && !inCune && !inEaKhal) {
+      throw forbidden("Bạn không có quyền nhập dữ liệu địa chính ngoài phạm vi quản lý.");
+    }
+    const existingCommuneGuardSql =
+      communeRaw && inEaKhal && !inCune
+        ? `AND (COALESCE(plots.village, '') ~* '${EAKHAL_VILLAGE_SQL_REGEX}' OR COALESCE(plots.zone_code, '') ~* '^66-PUC-SR0001-' OR plots.code ~* '^66-PUC-SR0001-')`
+        : communeRaw && inCune && !inEaKhal
+          ? `AND COALESCE(plots.village, '') !~* '${EAKHAL_VILLAGE_SQL_REGEX}' AND COALESCE(plots.zone_code, '') !~* '^66-PUC-SR0001-' AND plots.code !~* '^66-PUC-SR0001-'`
+          : "";
+    const autoLinkCommuneSql =
+      communeRaw && inEaKhal && !inCune
+        ? `AND v.name ~* '${EAKHAL_VILLAGE_SQL_REGEX}'`
+        : communeRaw && inCune && !inEaKhal
+          ? `AND v.name !~* '${EAKHAL_VILLAGE_SQL_REGEX}'`
+          : "";
+
     const pool = this.db.pool;
     const client = await pool.connect();
     try {
@@ -874,6 +922,7 @@ export class PlotsService {
             WHERE plots.source NOT IN ('measured')
               AND plots.status NOT IN ('approved', 'violation')
               AND $13::boolean
+              ${existingCommuneGuardSql}
             RETURNING code
           `,
           [
@@ -898,7 +947,7 @@ export class PlotsService {
       }
 
       if (savedCodes.length > 0) {
-        // Tự gắn household_id khi tên chủ thửa trùng duy nhất trong cùng thôn (hoặc trên toàn HTX khi thửa chưa khai thôn), đồng thời đồng bộ tên thôn.
+        // Tự gắn household_id khi tên chủ thửa trùng duy nhất trong cùng thôn (hoặc trong phạm vi xã của cán bộ khi thửa chưa khai thôn), đồng thời đồng bộ tên thôn.
         await client.query(
           `UPDATE plots p
            SET household_id = m.household_id,
@@ -911,6 +960,7 @@ export class PlotsService {
              WHERE p0.code = ANY($1::text[])
                AND p0.household_id IS NULL
                AND btrim(COALESCE(p0.owner_name, '')) <> ''
+               ${autoLinkCommuneSql}
                AND (
                  (
                    btrim(COALESCE(p0.village, '')) <> ''
@@ -928,7 +978,9 @@ export class PlotsService {
                    AND (
                      SELECT count(*)
                      FROM households h3
+                     JOIN villages v3 ON v3.id = h3.village_id
                      WHERE lower(btrim(h3.name)) = lower(btrim(p0.owner_name))
+                       ${autoLinkCommuneSql.replace(/\bv\.name\b/g, "v3.name")}
                    ) = 1
                  )
                )
@@ -951,6 +1003,7 @@ export class PlotsService {
       }
 
       await client.query("COMMIT");
+      this.db.cache?.invalidateTags(["plots", "dashboard", "portal", "trace"], true);
       return { imported: savedCodes.length, persisted: true };
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1069,6 +1122,7 @@ export class PlotsService {
     );
 
     const row = rows[0];
+    this.db.cache?.invalidateTags(["plots", "dashboard"], true);
     return {
       measurement: {
         id: String(row.id),

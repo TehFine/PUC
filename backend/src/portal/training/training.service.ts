@@ -4,6 +4,8 @@ import type { AuthUser } from "../../auth/auth-user";
 import { badRequest, notFound } from "../../common/errors/app.exception";
 import { camelRow, camelRows } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
+import { NotificationsService } from "../../notifications/notifications.service";
+import { ADMIN_LINKS, HTX_ROLES } from "../common/admin-links";
 import { type ClientContext, householdIdOf, TODAY_VN_SQL, withTransaction } from "../common/portal-context";
 
 const TRAINING_COLUMNS = `c.id, c.title, c.held_on,
@@ -18,6 +20,7 @@ export class TrainingService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(user: AuthUser) {
@@ -93,6 +96,12 @@ export class TrainingService {
       { ip: context.ip, user },
       { action: "Hộ đăng ký tập huấn", object: `Lớp tập huấn #${course.id}`, detail: course.title },
     );
+    await this.notifications.notifyRoles(HTX_ROLES, {
+      kind: "training",
+      title: `Hộ ${user.fullName} đăng ký lớp tập huấn`,
+      body: course.title,
+      link: ADMIN_LINKS.approval,
+    });
 
     return this.findOne(id, householdId);
   }
@@ -150,6 +159,12 @@ export class TrainingService {
       { ip: context.ip, user },
       { action: "Hộ hủy đăng ký tập huấn", object: `Lớp tập huấn #${course.id}`, detail: course.title },
     );
+    await this.notifications.notifyRoles(HTX_ROLES, {
+      kind: "training",
+      title: `Hộ ${user.fullName} hủy đăng ký lớp tập huấn`,
+      body: course.title,
+      link: ADMIN_LINKS.approval,
+    });
 
     return this.findOne(id, householdId);
   }

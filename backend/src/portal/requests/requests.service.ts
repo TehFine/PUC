@@ -7,7 +7,7 @@ import { camelRow, camelRows, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
-import { ADMIN_LINKS, HTX_ROLES } from "../common/admin-links";
+import { ADMIN_LINKS } from "../common/admin-links";
 import { assertPlotOwned, type ClientContext, householdIdOf, withTransaction } from "../common/portal-context";
 import type { CreatePortalApprovalDto } from "./requests.dto";
 
@@ -83,11 +83,11 @@ export class RequestsService {
       { ip: context.ip, user },
       { action: "Hộ gửi hồ sơ", object: code, detail: dto.requestType },
     );
-    await this.notifications.notifyRoles(HTX_ROLES, {
+    await this.notifications.notifyOversightForHousehold(householdId, {
       kind: "approval",
       title: `Hộ ${household.name} gửi hồ sơ "${dto.requestType}"`,
       body: dto.note ? dto.note.slice(0, 200) : `Mã hồ sơ: ${code}`,
-      link: ADMIN_LINKS.approval,
+      link: `${ADMIN_LINKS.approval}&id=${id}`,
     });
 
     const { rows } = await this.db.query(`SELECT ${APPROVAL_COLUMNS} FROM approvals ap WHERE ap.id = $1`, [id]);
@@ -96,11 +96,11 @@ export class RequestsService {
 
   async cancel(id: number, user: AuthUser, context: ClientContext) {
     const householdId = householdIdOf(user);
-    const updated = await this.db.query<{ id: number; code: string; request_type: string }>(
+    const updated = await this.db.query<{ id: number; code: string; request_type: string; applicant_name: string }>(
       `UPDATE approvals
        SET status = 'cancelled'
        WHERE id = $1 AND household_id = $2 AND status = 'pending'
-       RETURNING id, code, request_type`,
+       RETURNING id, code, request_type, applicant_name`,
       [id, householdId],
     );
     if (updated.rowCount === 0) {
@@ -112,10 +112,17 @@ export class RequestsService {
       throw badRequest("Chỉ hủy được hồ sơ đang ở trạng thái chờ duyệt.");
     }
     const row = updated.rows[0];
+    await this.notifications.resolveByLink(`${ADMIN_LINKS.approval}&id=${id}`);
     await this.audit.write(
       { ip: context.ip, user },
       { action: "Hộ hủy hồ sơ", object: row.code, detail: row.request_type },
     );
+    await this.notifications.notifyOversightForHousehold(householdId, {
+      kind: "approval",
+      title: `Hộ ${row.applicant_name || user.fullName} đã thu hồi hồ sơ ${row.code}`,
+      body: row.request_type,
+      link: ADMIN_LINKS.approval,
+    });
     const { rows } = await this.db.query(`SELECT ${APPROVAL_COLUMNS} FROM approvals ap WHERE ap.id = $1`, [id]);
     return camelRow(rows[0]);
   }

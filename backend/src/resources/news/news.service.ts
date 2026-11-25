@@ -2,7 +2,8 @@ import { Injectable, Optional } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
-import { badRequest, notFound } from "../../common/errors/app.exception";
+import { isStaffInCuneCoopScope } from "../../common/crud/village-scope";
+import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -137,6 +138,9 @@ export class NewsService extends BaseCrudService {
   }
 
   protected override async prepare(input: Record<string, unknown>, context: WriteContext) {
+    if (!isStaffInCuneCoopScope(context.user, false)) {
+      throw forbidden("Chỉ Ban điều hành hoặc Cán bộ trung tâm HTX Cư Né mới được soạn và cập nhật bản tin toàn HTX.");
+    }
     const out: Record<string, unknown> = { ...input };
 
     let prevStatus: string | null = null;
@@ -215,7 +219,17 @@ export class NewsService extends BaseCrudService {
     ]);
   }
 
+  override async remove(id: number, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, false)) {
+      throw forbidden("Chỉ Ban điều hành hoặc Cán bộ trung tâm HTX Cư Né mới được xóa bản tin.");
+    }
+    return super.remove(id, user, ip);
+  }
+
   async publish(id: number, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, false)) {
+      throw forbidden("Chỉ Ban điều hành hoặc Cán bộ trung tâm HTX Cư Né mới được xuất bản bản tin.");
+    }
     const { rows } = await this.db.query<{ id: number; title: string; excerpt: string; was_published: boolean }>(
       `UPDATE news_articles
        SET status = 'published', published_on = COALESCE(published_on, ${TODAY_VN_SQL})
@@ -255,6 +269,9 @@ export class NewsService extends BaseCrudService {
   }
 
   async unpublish(id: number, user: AuthUser, ip?: string) {
+    if (!isStaffInCuneCoopScope(user, false)) {
+      throw forbidden("Chỉ Ban điều hành hoặc Cán bộ trung tâm HTX Cư Né mới được gỡ xuất bản bản tin.");
+    }
     const { rows } = await this.db.query<{ id: number; title: string }>(
       `UPDATE news_articles
        SET status = 'draft'

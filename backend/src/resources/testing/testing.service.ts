@@ -71,7 +71,7 @@ export class TestingService extends BaseCrudService {
         }
         return villageScope("h.village_id")(user, params);
       },
-      virtual: ["_method"],
+      virtual: ["_method", "_notifyVerified"],
     });
   }
 
@@ -280,6 +280,21 @@ export class TestingService extends BaseCrudService {
         out.scanAttachmentId = validId ?? null;
       }
     }
+    const becameVerifiedOnPatch =
+      context.method === "PATCH" &&
+      existing !== undefined &&
+      existing.record_status === "draft" &&
+      effRecordStatus === "verified" &&
+      effHouseholdId > 0;
+    if (becameVerifiedOnPatch && existing) {
+      out._notifyVerified = {
+        householdId: effHouseholdId,
+        code: String(out.code ?? existing.code),
+        plotCode: effPlotCode || existing.plot_code,
+        lab: String(out.lab ?? existing.lab),
+        result: effResult,
+      };
+    }
     return { ...out, _method: context.method };
   }
 
@@ -298,6 +313,19 @@ export class TestingService extends BaseCrudService {
         kind: "lab",
         title: `Kết quả kiểm nghiệm mẫu ${String(input.code)}: ${passed ? "Đạt" : "Không đạt"}`,
         body: `Thửa ${String(input.plotCode)}, đơn vị ${String(input.lab)}`,
+        link: "/portal?tab=inspection",
+      });
+      return;
+    }
+    const verifiedPatch = input._notifyVerified as
+      | { householdId: number; code: string; plotCode: string; lab: string; result: string }
+      | undefined;
+    if (verifiedPatch) {
+      const passed = verifiedPatch.result === "pass";
+      await this.notifications.notifyHousehold(verifiedPatch.householdId, {
+        kind: "lab",
+        title: `Kết quả kiểm nghiệm mẫu ${verifiedPatch.code}: ${passed ? "Đạt" : "Không đạt"}`,
+        body: `Thửa ${verifiedPatch.plotCode}, đơn vị ${verifiedPatch.lab}`,
         link: "/portal?tab=inspection",
       });
     }

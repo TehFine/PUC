@@ -1,6 +1,9 @@
 import { Body, Controller, HttpCode, Post } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { ArrayMaxSize, IsArray, IsIn, IsString, MaxLength } from "class-validator";
-import { Authorize } from "../../auth/auth.decorators";
+import type { AuthUser } from "../../auth/auth-user";
+import { Authorize, CurrentUser } from "../../auth/auth.decorators";
+import { RateLimitTier } from "../../common/throttler/rate-limit.policy";
 import { PortalTranslateService, type SupportedTranslateTarget } from "./translate.service";
 
 export class TranslateBatchDto {
@@ -21,9 +24,10 @@ export class PortalTranslateController {
 
   @Post("translate")
   @HttpCode(200)
+  @Throttle(RateLimitTier.ACCOUNT_ISSUE)
   @Authorize("portal", "read")
-  translate(@Body() dto: TranslateBatchDto) {
-    return this.service.translateBatch(dto.target, dto.texts);
+  translate(@Body() dto: TranslateBatchDto, @CurrentUser() user: AuthUser) {
+    return this.service.translateBatch(dto.target, dto.texts, user.id);
   }
 }
 

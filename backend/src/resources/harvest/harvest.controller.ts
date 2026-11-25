@@ -1,8 +1,10 @@
 import { Body, Controller, Delete, Get, Ip, Param, Patch, Post, Put, Query } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import type { AuthUser } from "../../auth/auth-user";
 import { Authorize, CurrentUser } from "../../auth/auth.decorators";
 import { CrudController } from "../../common/crud/crud-controller.factory";
 import { ParseRecordIdPipe, strictPipe } from "../../common/pipes/validation.pipes";
+import { RateLimitTier } from "../../common/throttler/rate-limit.policy";
 import {
   CreateFieldAuditPassDto,
   CreateHarvestLotDto,
@@ -222,6 +224,7 @@ export class HarvestController extends CrudController(
     return { data: await this.harvestService.getItems(id, user) };
   }
 
+  @Throttle(RateLimitTier.BULK_MUTATION)
   @Post(":id/generate-items")
   @Authorize("harvest", "update")
   async generateItems(

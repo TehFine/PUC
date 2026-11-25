@@ -66,7 +66,10 @@ export class PlotsController {
     if (!collection || collection.type !== "FeatureCollection") {
       throw new PlotInputError("Tệp phải là GeoJSON FeatureCollection.");
     }
-    const sourceRef = wrapped?.sourceRef;
+    const sourceRef = typeof wrapped?.sourceRef === "string" ? wrapped.sourceRef.slice(0, 240) : undefined;
+    if (!Array.isArray(collection.features)) {
+      throw new PlotInputError("Tệp phải là GeoJSON FeatureCollection.");
+    }
     const result = await this.plots.importCadastral(collection, sourceRef, user);
     await this.audit.write(
       { ip, user },

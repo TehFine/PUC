@@ -6,7 +6,7 @@ import { attachmentUrlSql, camelRow, camelRows, todayVn } from "../../common/sql
 import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
-import { ADMIN_LINKS, HTX_ROLES } from "../common/admin-links";
+import { ADMIN_LINKS } from "../common/admin-links";
 import {
   assertPlotNotInIsolation,
   assertPlotOwned,
@@ -95,9 +95,9 @@ export class HarvestService {
     const hasPlots = await plotsTableExists(this.db);
     const [photoId] = await this.uploads.assertUsable(dto.photoId ? [dto.photoId] : [], user, "harvest");
 
-    const id = await withTransaction(this.db, async (client) => {
-      const hhRes = await client.query<{ id: number; status: string }>(
-        "SELECT id, status FROM households WHERE id = $1 FOR UPDATE",
+    const { id, householdName } = await withTransaction(this.db, async (client) => {
+      const hhRes = await client.query<{ id: number; name: string; status: string }>(
+        "SELECT id, name, status FROM households WHERE id = $1 FOR UPDATE",
         [householdId],
       );
       const hhRow = hhRes.rows[0];
@@ -157,18 +157,18 @@ export class HarvestService {
           photoId ?? null,
         ],
       );
-      return inserted.rows[0].id;
+      return { id: inserted.rows[0].id, householdName: hhRow.name || user.fullName };
     });
 
     await this.audit.write(
       { ip: context.ip, user },
       { action: "Nông hộ khai báo thu hái", object: plotCode, detail: `Sản lượng ${dto.weightKg} kg, ngày ${harvestedOn}` },
     );
-    await this.notifications.notifyRoles(HTX_ROLES, {
+    await this.notifications.notifyOversightForHousehold(householdId, {
       kind: "harvest",
-      title: `Hộ ${user.fullName} khai báo thu hái ${dto.weightKg} kg`,
+      title: `Hộ ${householdName} khai báo thu hái ${dto.weightKg} kg`,
       body: `Thửa ${plotCode}, ngày ${harvestedOn}.`,
-      link: ADMIN_LINKS.harvest,
+      link: `${ADMIN_LINKS.harvest}&id=${id}`,
     });
 
     const { rows } = await this.db.query(`SELECT ${DECLARATION_COLUMNS} FROM harvest_declarations d WHERE d.id = $1`, [id]);
@@ -192,10 +192,17 @@ export class HarvestService {
       throw badRequest("Chỉ xóa được khai báo đang ở trạng thái chờ xác nhận.");
     }
     const row = deleted.rows[0];
+    await this.notifications.resolveByLink(`${ADMIN_LINKS.harvest}&id=${row.id}`);
     await this.audit.write(
       { ip: context.ip, user },
       { action: "Nông hộ xóa khai báo thu hái", object: `Khai báo thu hái #${row.id}`, detail: `${row.plot_code} – ${row.weight_kg} kg` },
     );
+    await this.notifications.notifyOversightForHousehold(householdId, {
+      kind: "harvest",
+      title: `Hộ ${user.fullName} đã rút khai báo thu hái`,
+      body: `Thửa ${row.plot_code}, sản lượng ${row.weight_kg} kg.`,
+      link: ADMIN_LINKS.harvest,
+    });
     return { ok: true };
   }
 }

@@ -9,7 +9,7 @@ import { attachmentUrlSql, attachmentUrlsSql, camelRows, nowClockVn, todayVn } f
 import { hasPublicTable } from "../common/sql/schema-cache";
 import { DatabaseService } from "../database/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { ADMIN_LINKS, INSPECTION_ROLES } from "../portal/common/admin-links";
+import { ADMIN_LINKS } from "../portal/common/admin-links";
 import {
   assertPlotOwned,
   type ClientContext,
@@ -576,6 +576,19 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
       link: `${PORTAL_PROTOCOL_LINK}&plotCode=${encodeURIComponent(plotCode)}`,
     });
 
+    if (!notifyFarmerByAdmin) {
+      await this.notifications.notifyOversightForHousehold(
+        householdId,
+        {
+          kind: "protocol",
+          title: `Hộ ${actor.fullName} vừa cập nhật lộ trình chăm sóc Thửa ${plotCode}`,
+          body: `Giai đoạn ${targetSpec.stageOrder} ${targetSpec.stageName} - ${targetSpec.dayLabel} (${targetSpec.treeState}), hạn ${formatIsoVn(dueOn)}.`,
+          link: ADMIN_PROTOCOL_LINK,
+        },
+        { excludeUserId: actor.id },
+      );
+    }
+
     await this.audit.write(
       { ip, user: actor },
       {
@@ -1113,12 +1126,16 @@ export class CareProtocolService implements OnModuleInit, OnModuleDestroy {
     // 7. Gửi cảnh báo tức thời tới CẢ Hộ nông dân VÀ Quản trị viên HTX nếu phát hiện sai lệch hoặc trễ hạn
     if (pesticideInfo && (pesticideInfo.status === "banned" || pesticideInfo.status === "restricted")) {
       const pestLabel = pesticideInfo.status === "banned" ? "cấm sử dụng" : "hạn chế sử dụng";
-      await this.notifications.notifyRoles(INSPECTION_ROLES, {
-        kind: "violation",
-        title: `Cảnh báo thuốc BVTV ${pestLabel}: ${pesticideInfo.name}`,
-        body: `Hộ ${plan.household_name} khai báo mốc ${stageLabel} tại Thửa ${plotCode} có sử dụng ${pesticideInfo.name}.`,
-        link: "/admin?section=spray",
-      });
+      await this.notifications.notifyOversightForHousehold(
+        householdId,
+        {
+          kind: "violation",
+          title: `Cảnh báo thuốc BVTV ${pestLabel}: ${pesticideInfo.name}`,
+          body: `Hộ ${plan.household_name} khai báo mốc ${stageLabel} tại Thửa ${plotCode} có sử dụng ${pesticideInfo.name}.`,
+          link: "/admin?section=spray",
+        },
+        { excludeUserId: user.id },
+      );
     }
 
     if (compliance.complianceStatus !== "compliant") {

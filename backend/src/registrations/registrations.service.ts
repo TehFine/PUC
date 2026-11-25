@@ -7,6 +7,7 @@ import { AuditService } from "../audit/audit.service";
 import { isStaffInCuneCoopScope, isStaffInParcelScope, villageScope } from "../common/crud/village-scope";
 import { AppException, forbidden, notFound } from "../common/errors/app.exception";
 import { DatabaseService } from "../database/database.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 const OUT_OF_SCOPE_MSG = "Bạn không có quyền xử lý hồ sơ ngoài phạm vi quản lý.";
 
@@ -57,6 +58,7 @@ export class RegistrationsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private async resolveOfficerVillageName(user?: AuthUser): Promise<string | null> {
@@ -259,7 +261,14 @@ export class RegistrationsService {
         [id, householdId],
       );
       if (!rows[0]) throw notFound("Không có đăng ký nào đang chờ duyệt với mã này.");
+      await this.notifications.resolveByLink(`/admin?section=approval&sub=registrations&id=${id}`);
       await this.audit.write({ ip, user }, { action: "Duyệt đăng ký tài khoản", object: rows[0].username, detail: `Gắn vào hộ #${householdId}` });
+      await this.notifications.notifyUsers([id], {
+        kind: "system",
+        title: "Tài khoản cổng hộ dân đã được kích hoạt",
+        body: "HTX Cư Né đã phê duyệt và liên kết tài khoản của bạn với hồ sơ hộ canh tác.",
+        link: "/portal?tab=home",
+      });
       return { id, status: "active", householdId };
     } catch (error) {
       const { code, constraint } = error as { code?: string; constraint?: string };
@@ -302,6 +311,7 @@ export class RegistrationsService {
       [id],
     );
     if (!rows[0]) throw notFound("Không có đăng ký nào đang chờ duyệt với mã này.");
+    await this.notifications.resolveByLink(`/admin?section=approval&sub=registrations&id=${id}`);
     await this.audit.write({ ip, user }, { action: "Từ chối đăng ký tài khoản", object: rows[0].username });
     return { ok: true };
   }
@@ -310,9 +320,19 @@ export class RegistrationsService {
     if (!isStaffInCuneCoopScope(user, true)) {
       throw forbidden(OUT_OF_SCOPE_MSG);
     }
-    const officerVillageName = await this.resolveOfficerVillageName(user);
+    const [officerVillageName, hasCredResetCol] = await Promise.all([
+      this.resolveOfficerVillageName(user),
+      this.db
+        .query<{ ok: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'credential_reset_by'
+           ) AS ok`,
+        )
+        .then((r) => Boolean(r.rows[0]?.ok))
+        .catch(() => false),
+    ]);
     const temporaryPassword = generateTemporaryPassword(10);
-    const temporaryPasswordHash = await bcrypt.hash(temporaryPassword, 12);
 
     const client = await this.db.pool.connect();
     let targetUserId = 0;
@@ -348,8 +368,9 @@ export class RegistrationsService {
         village_id: number | null;
         household_id: number | null;
         coop_code: string | null;
+        assigned_commune: string | null;
       }>(
-        `SELECT username, role, status, village_id, household_id, coop_code
+        `SELECT username, role, status, village_id, household_id, coop_code, assigned_commune
          FROM users
          WHERE id = $1
          FOR UPDATE`,
@@ -398,9 +419,37 @@ export class RegistrationsService {
             throw forbidden(OUT_OF_SCOPE_MSG);
           }
         }
+        if (user.role !== "admin" && user.assignedCommune?.trim()) {
+          if (targetUser.village_id !== null) {
+            const vRes = await client.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [
+              targetUser.village_id,
+            ]);
+            if (
+              !isStaffInParcelScope(
+                user,
+                { villageId: targetUser.village_id, villageName: vRes.rows[0]?.name ?? null },
+                officerVillageName,
+              )
+            ) {
+              throw forbidden(OUT_OF_SCOPE_MSG);
+            }
+          } else if (
+            !targetUser.assigned_commune ||
+            targetUser.assigned_commune.trim().toLowerCase() !== user.assignedCommune.trim().toLowerCase()
+          ) {
+            throw forbidden(OUT_OF_SCOPE_MSG);
+          }
+        }
       }
 
+      const temporaryPasswordHash = await bcrypt.hash(temporaryPassword, 12);
       const canUnlockLocked = isAdminPrivilegedRole(user.role);
+      const credResetClause = hasCredResetCol
+        ? ", credential_reset_by = $4, credential_reset_at = now()"
+        : "";
+      const updateUserParams = hasCredResetCol
+        ? [temporaryPasswordHash, req.user_id, canUnlockLocked, user.id]
+        : [temporaryPasswordHash, req.user_id, canUnlockLocked];
       await client.query(
         `UPDATE users
          SET password_hash = $1,
@@ -411,12 +460,12 @@ export class RegistrationsService {
              locked_until = NULL,
              cccd_reset_failed_count = 0,
              cccd_reset_locked_until = NULL,
-             status = CASE WHEN $3::boolean AND status = 'locked' THEN 'active' ELSE status END
+             status = CASE WHEN $3::boolean AND status = 'locked' THEN 'active' ELSE status END${credResetClause}
          WHERE id = $2`,
-        [temporaryPasswordHash, req.user_id, canUnlockLocked],
+        updateUserParams,
       );
       await client.query(
-        "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+        "UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = 'security' WHERE user_id = $1 AND revoked_at IS NULL",
         [req.user_id],
       );
       await client.query(
@@ -438,6 +487,7 @@ export class RegistrationsService {
       client.release();
     }
 
+    await this.notifications.resolveByLink(`/admin?section=registrations&id=${id}`);
     await this.audit.write(
       { ip, user },
       {
@@ -503,6 +553,7 @@ export class RegistrationsService {
       [id, user.id, isAdmin],
     );
     if (!rows[0]) throw notFound("Không có yêu cầu cấp lại mật khẩu nào đang chờ duyệt với mã này.");
+    await this.notifications.resolveByLink(`/admin?section=registrations&id=${id}`);
     await this.audit.write(
       { ip, user },
       {

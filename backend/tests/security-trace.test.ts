@@ -52,6 +52,12 @@ const ids: { hhA: number; hhB: number; lot: number; emptyLot: number; farmerUser
   emptyLot: 0,
   farmerUser: 0,
 };
+const qrTokens: { lot: string; emptyLot: string; plotA: string; plotB: string } = {
+  lot: "",
+  emptyLot: "",
+  plotA: "",
+  plotB: "",
+};
 
 async function loggedIn(username: string, password = TEST_PASSWORD) {
   const agent = request.agent(app);
@@ -93,26 +99,31 @@ beforeAll(async () => {
     [ids.hhA, FX.hhA.plot, "Thôn 1"],
     [ids.hhB, FX.hhB.plot, "Thôn 2"],
   ] as const) {
-    await db.query(
+    const sbIns = await db.query<{ qr_token: string }>(
       `INSERT INTO plot_signboard_tokens (plot_code, household_id, village_name, area_ha, tree_count, center_lat, center_lng)
-       VALUES ($1, $2, $3, 1.2, 180, $4, $5)`,
+       VALUES ($1, $2, $3, 1.2, 180, $4, $5)
+       RETURNING qr_token`,
       [plot, hid, vname, FX.centerLat, FX.centerLng],
     );
+    if (plot === FX.hhA.plot) qrTokens.plotA = sbIns.rows[0].qr_token;
+    if (plot === FX.hhB.plot) qrTokens.plotB = sbIns.rows[0].qr_token;
   }
 
   // Lô ghép nguyên liệu 2 thôn và lô mới tạo chưa có hộ đóng góp
-  const lotRes = await db.query<{ id: number }>(
+  const lotRes = await db.query<{ id: number; qr_token: string }>(
     `INSERT INTO harvest_lots (code, harvested_on, weight_tons, household_count, buyer, market, status)
-     VALUES ($1, '2020-01-10', 0.3, 2, 'Bên mua kiểm thử', 'Trung Quốc', 'exported') RETURNING id`,
+     VALUES ($1, '2020-01-10', 0.3, 2, 'Bên mua kiểm thử', 'Trung Quốc', 'exported') RETURNING id, qr_token`,
     [FX.lot],
   );
   ids.lot = Number(lotRes.rows[0].id);
-  const emptyRes = await db.query<{ id: number }>(
+  qrTokens.lot = lotRes.rows[0].qr_token;
+  const emptyRes = await db.query<{ id: number; qr_token: string }>(
     `INSERT INTO harvest_lots (code, harvested_on, weight_tons, household_count, buyer, market, status)
-     VALUES ($1, '2020-01-11', 0.1, 0, 'Bên mua kiểm thử', 'Trung Quốc', 'sampling') RETURNING id`,
+     VALUES ($1, '2020-01-11', 0.1, 0, 'Bên mua kiểm thử', 'Trung Quốc', 'sampling') RETURNING id, qr_token`,
     [FX.emptyLot],
   );
   ids.emptyLot = Number(emptyRes.rows[0].id);
+  qrTokens.emptyLot = emptyRes.rows[0].qr_token;
   await db.query(
     `INSERT INTO harvest_contributions (lot_id, household_id, plot_code, weight_kg)
      VALUES ($1, $2, $3, 100), ($1, $4, $5, 200)`,
@@ -302,8 +313,9 @@ describe("SEC-03: cán bộ thôn chỉ xem dữ liệu Cấp 3 của hộ trong
 });
 
 describe("SEC-09: biên bản và phiếu kiểm nghiệm chỉ trong phạm vi nguồn của lô/thửa", () => {
-  it("trang công khai không lấy bù biên bản của hộ khác vào mốc kiểm tra", async () => {
-    const res = await request(app).get(`/api/public/trace/${FX.lot}`);
+  it("trang công khai chỉ mở qua qr_token ngẫu nhiên và không lấy bù biên bản của hộ khác vào mốc kiểm tra", async () => {
+    expect((await request(app).get(`/api/public/trace/${FX.lot}`)).status).toBe(404);
+    const res = await request(app).get(`/api/public/trace/${qrTokens.lot}`);
     expect(res.status).toBe(200);
     const body = res.body as TraceBody;
     expect(body.accessControl.viewerTier).toBe("public");
@@ -313,7 +325,8 @@ describe("SEC-09: biên bản và phiếu kiểm nghiệm chỉ trong phạm vi 
   });
 
   it("lô chưa có hộ đóng góp: danh sách kiểm nghiệm và biên bản đều rỗng", async () => {
-    const pub = await request(app).get(`/api/public/trace/${FX.emptyLot}`);
+    expect((await request(app).get(`/api/public/trace/${FX.emptyLot}`)).status).toBe(404);
+    const pub = await request(app).get(`/api/public/trace/${qrTokens.emptyLot}`);
     expect(pub.status).toBe(200);
     expect((pub.body as TraceBody).publicData.labTests).toEqual([]);
     expect(communeMinuteCode(pub.body as TraceBody)).not.toBe(FX.minuteForeign);
@@ -394,7 +407,7 @@ describe("SEC-17: nhật ký đối chứng GPS không lộ họ tên chủ hộ
 
 describe("LIVE-TRACE: cập nhật dữ liệu lô hàng thời gian thực và làm mới ngầm không tăng lượt quét", () => {
   it("phản ánh ngay thông số lô mới cập nhật, phát sự kiện SSE và giữ nguyên bộ đếm quét khi bg=1", async () => {
-    const initialRes = await request(app).get(`/api/public/trace/${FX.lot}`);
+    const initialRes = await request(app).get(`/api/public/trace/${qrTokens.lot}`);
     expect(initialRes.status).toBe(200);
     const scansBefore = Number(initialRes.body.publicData.verification.totalScans);
 
@@ -440,7 +453,7 @@ describe("LIVE-TRACE: cập nhật dữ liệu lô hàng thời gian thực và 
       await new Promise((resolve) => setTimeout(resolve, 200));
       expect(receivedEvents.some((e) => e.type === "trace-updated")).toBe(true);
 
-      const bgRes = await request(app).get(`/api/public/trace/${FX.lot}?bg=1`);
+      const bgRes = await request(app).get(`/api/public/trace/${qrTokens.lot}?bg=1`);
       expect(bgRes.status).toBe(200);
       expect(Number(bgRes.body.publicData.verification.totalScans)).toBe(scansBefore);
       expect(bgRes.body.publicData.lotIdentity.weightTons).toBe(18.5);
@@ -483,8 +496,8 @@ describe("DOSSIER-CONTRIB: bảng kê hộ đóng góp trên hồ sơ lô hàng 
   it("che thông tin cá nhân ở chế độ công khai, giới hạn theo thôn cho cán bộ thôn và mở đầy đủ cho thanh tra", async () => {
     await db.query("UPDATE households SET public_trace_consent = true WHERE id = $1", [ids.hhA]);
     try {
-      // 1. Người tiêu dùng công khai: thấy đủ 2 hộ góp lô kèm mã hộ tra cứu kỹ thuật và tỷ trọng %, chỉ hiện tên hộ đã đồng ý (hhA), ẩn hoàn toàn tên hhB, mã thửa, kg, SĐT, CCCD
-      const pubRes = await request(app).get(`/api/public/trace/${FX.lot}`);
+      // 1. Người tiêu dùng công khai (qua qr_token): thấy đủ 2 hộ góp lô kèm mã hộ tra cứu kỹ thuật và tỷ trọng %, chỉ hiện tên hộ đã đồng ý (hhA), ẩn hoàn toàn tên hhB, mã thửa, kg, SĐT, CCCD
+      const pubRes = await request(app).get(`/api/public/trace/${qrTokens.lot}`);
       expect(pubRes.status).toBe(200);
       const pubRows = pubRes.body.publicData.producer.dossierContributors as Array<Record<string, unknown>>;
       expect(pubRes.body.publicData.producer.dossierContributorsTier).toBe("public");
@@ -554,12 +567,24 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
       expect(farmerTrace.body.accessControl.viewerName).toBe(FX.hhA.name);
       expect(farmerTrace.body.accessControl.actualTier).toBe("public");
 
-      // 2. Đoàn thanh tra đột xuất gửi yêu cầu cấp quyền trên trang vừa quét
+      // 2. Đoàn thanh tra đột xuất gửi yêu cầu cấp quyền trên trang QR vừa quét (chặn dò mã lô tuần tự khi chưa đăng nhập)
       await db.query("DELETE FROM trace_access_requests WHERE contact_phone = '0988776655'");
+      expect(
+        (
+          await request(app).post("/api/public/trace-access-requests").send({
+            scannedCode: FX.lot,
+            requesterName: "Trưởng đoàn Nguyễn Thanh Tùng",
+            organization: "Đoàn kiểm tra đột xuất Chi cục TT và BVTV",
+            contactPhone: "0988776655",
+            purpose: "Thử dò mã lô tuần tự không qua QR",
+            requestedTier: "authority",
+          })
+        ).status,
+      ).toBe(404);
       const createRes = await request(app)
         .post("/api/public/trace-access-requests")
         .send({
-          scannedCode: FX.lot,
+          scannedCode: qrTokens.lot,
           requesterName: "Trưởng đoàn Nguyễn Thanh Tùng",
           organization: "Đoàn kiểm tra đột xuất Chi cục TT và BVTV",
           contactPhone: "0988776655",
@@ -633,7 +658,7 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
       expect(passToken.length).toBeGreaterThan(10);
 
       const unlockedTrace = await request(app)
-        .get(`/api/public/trace/${FX.lot}?bg=1`)
+        .get(`/api/public/trace/${qrTokens.lot}?bg=1`)
         .set("x-audit-pass", passToken);
       expect(unlockedTrace.status).toBe(200);
       expect(unlockedTrace.body.accessControl.actualTier).toBe("authority");
@@ -663,7 +688,7 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
       expect(revokeRes.body.status).toBe("revoked");
 
       const afterRevoke = await request(app)
-        .get(`/api/public/trace/${FX.lot}?bg=1`)
+        .get(`/api/public/trace/${qrTokens.lot}?bg=1`)
         .set("x-audit-pass", passToken);
       expect(afterRevoke.status).toBe(200);
       expect(afterRevoke.body.accessControl.actualTier).toBe("public");
@@ -698,10 +723,10 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
     let extOfficerUsername = "";
 
     try {
-      // 1. Hai khách ẩn danh cùng IP gửi yêu cầu cho cùng mã -> không ghi đè clientSecret của người đầu tiên
+      // 1. Hai khách ẩn danh cùng IP gửi yêu cầu cho cùng mã QR -> không ghi đè clientSecret của người đầu tiên
       await db.query("DELETE FROM trace_access_requests WHERE contact_phone = '0977665544'");
       const req1 = await request(app).post("/api/public/trace-access-requests").send({
-        scannedCode: FX.lot,
+        scannedCode: qrTokens.lot,
         requesterName: "Đoàn 1",
         organization: "Chi cục Kiểm tra 1",
         contactPhone: "0977665544",
@@ -712,7 +737,7 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
       createdReqCodes.push(req1.body.requestCode as string);
 
       const req2 = await request(app).post("/api/public/trace-access-requests").send({
-        scannedCode: FX.lot,
+        scannedCode: qrTokens.lot,
         requesterName: "Đoàn 2 Giả Mạo",
         organization: "Đơn vị khác cùng mạng",
         contactPhone: "0977665544",
@@ -819,12 +844,15 @@ describe("TRACE-ACCESS-REQ: cấp quyền xem hồ sơ đánh giá đột xuất
       );
       expect(countAfterBg).toBe(1);
 
-      // 5. Chuẩn hóa tra cứu tiền tố tiếng Việt ("Thửa ...", "Lô: ..."), mã vùng PUC và khối lượng tem mẫu
-      const prefixedPlot = await request(app).get(`/api/public/trace/${encodeURIComponent(`Thửa ${FX.hhA.plot}`)}`);
+      // 5. Chặn dò mã tuần tự khi chưa đăng nhập (404), nhưng vẫn chuẩn hóa tra cứu tiền tố tiếng Việt ("Thửa ...", "Lô: ..."), mã vùng PUC trên kênh PWA đã xác thực
+      expect((await request(app).get(`/api/public/trace/${encodeURIComponent(`Thửa ${FX.hhA.plot}`)}`)).status).toBe(404);
+      expect((await request(app).get(`/api/public/trace/${encodeURIComponent(`Lô: ${FX.lot}`)}`)).status).toBe(404);
+      expect((await request(app).get("/api/public/trace/VN-DLOR-0086")).status).toBe(404);
+      const prefixedPlot = await inspector.get(`/api/trace/${encodeURIComponent(`Thửa ${FX.hhA.plot}`)}`);
       expect(prefixedPlot.status).toBe(200);
-      const prefixedLot = await request(app).get(`/api/public/trace/${encodeURIComponent(`Lô: ${FX.lot}`)}`);
+      const prefixedLot = await inspector.get(`/api/trace/${encodeURIComponent(`Lô: ${FX.lot}`)}`);
       expect(prefixedLot.status).toBe(200);
-      const pucLookup = await request(app).get("/api/public/trace/VN-DLOR-0086");
+      const pucLookup = await inspector.get("/api/trace/VN-DLOR-0086");
       expect(pucLookup.status).toBe(200);
       const samplesRes = await request(app).get("/api/public/trace-samples");
       expect(samplesRes.status).toBe(200);
@@ -1020,9 +1048,10 @@ describe("HOUSEHOLD-TRACE & PHOTO-EVIDENCE: tra cứu mã hộ, ảnh profile, �
 
     let hhReqCode = "";
     try {
-      // 1. Cấp 1 công khai khi hộ CHƯA đồng ý: tra cứu Mã hộ (kể cả tiền tố "Mã hộ:") ẩn ảnh profile, họ tên, SĐT, CCCD, ảnh nhật ký, nhưng hiện chính xác lịch sử đóng góp lô xã
-      const pubHhUnconsented = await request(app).get(
-        `/api/public/trace/${encodeURIComponent(`Mã hộ: ${FX.hhA.code}`)}`,
+      // 1. Chặn dò mã hộ ẩn danh (404); ở Cấp 1 công khai (?view=public hoặc quét qr_token bảng thửa) khi hộ CHƯA đồng ý: ẩn ảnh profile, họ tên, SĐT, CCCD, ảnh nhật ký, nhưng hiện chính xác lịch sử đóng góp lô xã
+      expect((await request(app).get(`/api/public/trace/${encodeURIComponent(`Mã hộ: ${FX.hhA.code}`)}`)).status).toBe(404);
+      const pubHhUnconsented = await htxOfficer.get(
+        `/api/trace/${encodeURIComponent(`Mã hộ: ${FX.hhA.code}`)}?view=public`,
       );
       expect(pubHhUnconsented.status).toBe(200);
       expect(pubHhUnconsented.body.isHouseholdDossier).toBe(true);
@@ -1042,16 +1071,17 @@ describe("HOUSEHOLD-TRACE & PHOTO-EVIDENCE: tra cứu mã hộ, ảnh profile, �
       expect(rawPubText).not.toContain(avatarToken);
       expect(rawPubText).not.toContain(invoiceToken);
 
-      // Tương tự khi quét Bảng cắm ở vườn ở Cấp 1 khi hộ chưa đồng ý
-      const pubPlotUnconsented = await request(app).get(`/api/public/trace/${FX.hhA.plot}`);
+      // Tương tự khi quét Bảng cắm ở vườn bằng qr_token ở Cấp 1 khi hộ chưa đồng ý
+      expect((await request(app).get(`/api/public/trace/${FX.hhA.plot}`)).status).toBe(404);
+      const pubPlotUnconsented = await request(app).get(`/api/public/trace/${qrTokens.plotA}`);
       expect(pubPlotUnconsented.status).toBe(200);
       expect(pubPlotUnconsented.body.isPlotSignboard).toBe(true);
       expect(pubPlotUnconsented.body.farmerProfile.avatarUrl).toBeNull();
       expect(pubPlotUnconsented.body.communeLotContributions.totalContributedKg).toBe(100);
 
-      // 2. Cấp 1 công khai khi hộ ĐÃ đồng ý: hiện ảnh profile thật và tên chủ hộ trên tờ A4 của Mã hộ & Bảng cắm vườn, vẫn ẩn SĐT/CCCD/nhật ký nội bộ
+      // 2. Cấp 1 công khai khi hộ ĐÃ đồng ý: hiện ảnh profile thật và tên chủ hộ trên tờ A4 của Bảng cắm vườn, vẫn ẩn SĐT/CCCD/nhật ký nội bộ
       await db.query("UPDATE households SET public_trace_consent = true WHERE id = $1", [ids.hhA]);
-      const pubHhConsented = await request(app).get(`/api/public/trace/${FX.hhA.code}`);
+      const pubHhConsented = await request(app).get(`/api/public/trace/${qrTokens.plotA}`);
       expect(pubHhConsented.status).toBe(200);
       expect(pubHhConsented.body.farmerProfile.isAnonymized).toBe(false);
       expect(pubHhConsented.body.farmerProfile.displayName).toBe(FX.hhA.name);
@@ -1100,11 +1130,23 @@ describe("HOUSEHOLD-TRACE & PHOTO-EVIDENCE: tra cứu mã hộ, ảnh profile, �
       expect(offOtherVillage.body.accessControl.viewerTier).toBe("public");
       expect(offOtherVillage.body).not.toHaveProperty("authorityData");
 
-      // 5. Đoàn thanh tra đột xuất có thể gửi yêu cầu cấp quyền trực tiếp trên hồ sơ Mã hộ
+      // 5. Đoàn thanh tra đột xuất có thể gửi yêu cầu cấp quyền trực tiếp trên Bảng QR Thửa Vườn (chặn dò Mã hộ tuần tự ẩn danh)
+      expect(
+        (
+          await request(app).post("/api/public/trace-access-requests").send({
+            scannedCode: FX.hhA.code,
+            requesterName: "Đoàn Thanh tra Nông hộ",
+            organization: "Chi cục Trồng trọt và BVTV",
+            contactPhone: "0977112233",
+            purpose: "Thử dò mã hộ ẩn danh",
+            requestedTier: "authority",
+          })
+        ).status,
+      ).toBe(404);
       const reqOnHh = await request(app)
         .post("/api/public/trace-access-requests")
         .send({
-          scannedCode: FX.hhA.code,
+          scannedCode: qrTokens.plotA,
           requesterName: "Đoàn Thanh tra Nông hộ",
           organization: "Chi cục Trồng trọt và BVTV",
           contactPhone: "0977112233",
@@ -1392,7 +1434,7 @@ describe("BYPASS-DEFENSE: chống vượt rào phạm vi doanh nghiệp, ghép q
       );
 
       const plotOnlyReq = await request(app).post("/api/public/trace-access-requests").send({
-        scannedCode: FX.hhA.plot,
+        scannedCode: qrTokens.plotA,
         requesterName: "Đoàn Kiểm Thử 1 Thửa",
         organization: "Đoàn Độc Lập",
         contactPhone: "0933221100",
@@ -1431,13 +1473,14 @@ describe("BYPASS-DEFENSE: chống vượt rào phạm vi doanh nghiệp, ghép q
       expect(blockedOnP99.body.fieldAuditData).toBeUndefined();
 
       // 5. Chặn lạm dụng ?bg=1 ngay lượt gọi đầu tiên để né nhật ký kiểm toán & giữ nguyên mã bắt đầu bằng LOT-...
-      const insEdgeLot = await db.query<{ id: number }>(
+      const insEdgeLot = await db.query<{ id: number; qr_token: string }>(
         `INSERT INTO harvest_lots (code, harvested_on, weight_tons, household_count, buyer, market, status)
-         VALUES ($1, '2026-06-01', 1.5, 0, 'Test Buyer', 'Nội địa', 'sampling') RETURNING id`,
+         VALUES ($1, '2026-06-01', 1.5, 0, 'Test Buyer', 'Nội địa', 'sampling') RETURNING id, qr_token`,
         [lotPrefixEdgeCode],
       );
       lotPrefixId = Number(insEdgeLot.rows[0].id);
-      const edgeLookup = await request(app).get(`/api/public/trace/${lotPrefixEdgeCode}`);
+      expect((await request(app).get(`/api/public/trace/${lotPrefixEdgeCode}`)).status).toBe(404);
+      const edgeLookup = await request(app).get(`/api/public/trace/${insEdgeLot.rows[0].qr_token}`);
       expect(edgeLookup.status).toBe(200);
       expect(edgeLookup.body.lot.code).toBe(lotPrefixEdgeCode);
 
@@ -1581,35 +1624,38 @@ describe("BYPASS-DEFENSE: chống vượt rào phạm vi doanh nghiệp, ghép q
   test("Ngày xác thực hồ sơ (dossierVerifiedOn): lấy đúng mốc nghiệm thu HTX/cơ sở thu mua hoặc biên bản thực địa, không nhảy theo ngày quét mã", async () => {
     const packedLotCode = `LH-VERIFIED-${Date.now()}`;
     try {
-      await db.query(
+      const packedLotIns = await db.query<{ qr_token: string }>(
         `INSERT INTO harvest_lots (code, harvested_on, packed_on, weight_tons, household_count, buyer, market, status)
-         VALUES ($1, '2024-07-10', '2024-07-12', 0.5, 1, 'Cơ sở thu mua kiểm thử', 'Trung Quốc', 'in_transit')`,
+         VALUES ($1, '2024-07-10', '2024-07-12', 0.5, 1, 'Cơ sở thu mua kiểm thử', 'Trung Quốc', 'in_transit')
+         RETURNING qr_token`,
         [packedLotCode],
       );
+      const packedLotQrToken = packedLotIns.rows[0].qr_token;
+      const inspector = await loggedIn(USERS.inspector);
 
       // 1. Lô đã xuất khẩu (harvested_on = 2020-01-10 -> packed 2020-01-11 -> exported 2020-01-12)
-      const exportedLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(FX.lot)}`);
+      const exportedLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(qrTokens.lot)}`);
       expect(exportedLotRes.status).toBe(200);
       expect(exportedLotRes.body.publicData.lotIdentity.dossierVerifiedOn).toBe("2020-01-12");
       expect(exportedLotRes.body.publicData.verification.dossierVerifiedOn).toBe("2020-01-12");
       expect(exportedLotRes.body.publicData.verification.verifiedAt.slice(0, 10)).not.toBe("2020-01-12");
 
       // 2. Lô đang vận chuyển đã nghiệm thu đóng gói tại cơ sở thu mua (packed_on = 2024-07-12)
-      const inTransitLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(packedLotCode)}`);
+      const inTransitLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(packedLotQrToken)}`);
       expect(inTransitLotRes.status).toBe(200);
       expect(inTransitLotRes.body.publicData.lotIdentity.dossierVerifiedOn).toBe("2024-07-12");
 
       // 3. Lô mới lập đang chờ lấy mẫu kiểm định trước xuất (status = 'sampling') -> chờ xác thực (null)
-      const samplingLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(FX.emptyLot)}`);
+      const samplingLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(qrTokens.emptyLot)}`);
       expect(samplingLotRes.status).toBe(200);
       expect(samplingLotRes.body.publicData.lotIdentity.dossierVerifiedOn).toBeNull();
 
       // 4. Hồ sơ thửa đất & nông hộ đã duyệt -> lấy đúng ngày biên bản kiểm tra thực địa (2020-01-06)
-      const plotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(FX.hhA.plot)}`);
+      const plotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(qrTokens.plotA)}`);
       expect(plotRes.status).toBe(200);
       expect(plotRes.body.publicData.lotIdentity.dossierVerifiedOn).toBe("2020-01-06");
 
-      const hhRes = await request(app).get(`/api/public/trace/${encodeURIComponent(FX.hhA.code)}`);
+      const hhRes = await inspector.get(`/api/trace/${encodeURIComponent(FX.hhA.code)}?view=public`);
       expect(hhRes.status).toBe(200);
       expect(hhRes.body.publicData.lotIdentity.dossierVerifiedOn).toBe("2020-01-06");
     } finally {
@@ -1952,8 +1998,9 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
       expect(patchLotRes.body.brandName).toBe("Cư Né Durian Select");
       expect(patchLotRes.body.productImageUrl).toContain(lotPhotoToken);
 
-      // 6. CẤP 1 (Công khai): thấy đủ trường NĐ 37, GACC, tổng đếm nhật ký đã xác minh & mã sự kiện EVT, KHÔNG lộ dữ liệu nội bộ
-      const pubLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(nd37LotCode)}`);
+      // 6. CẤP 1 (Công khai qua qr_token): thấy đủ trường NĐ 37, GACC, tổng đếm nhật ký đã xác minh & mã sự kiện EVT, KHÔNG lộ dữ liệu nội bộ; chặn dò theo mã lô tuần tự
+      expect((await request(app).get(`/api/public/trace/${encodeURIComponent(nd37LotCode)}`)).status).toBe(404);
+      const pubLotRes = await request(app).get(`/api/public/trace/${encodeURIComponent(patchLotRes.body.qrToken as string)}`);
       expect(pubLotRes.status).toBe(200);
       const pubData = pubLotRes.body.publicData;
       expect(pubData.lotIdentity.brandName).toBe("Cư Né Durian Select");
@@ -1986,9 +2033,12 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
       expect(pubSerialized).not.toContain(htxOfficerFullName);
       expect(pubSerialized).not.toContain("immutableChangeLogs");
 
-      // Tra cứu trực tiếp bằng Mã sự kiện trọng yếu (EVT-...)
-      const evtLookupRes = await request(app).get(
-        `/api/public/trace/${encodeURIComponent(`Mã sự kiện: ${expectedHarvestEvt}`)}`,
+      // Tra cứu trực tiếp bằng Mã sự kiện trọng yếu (EVT-...): chặn dò ẩn danh (404), mở trên kênh PWA đã xác thực
+      expect(
+        (await request(app).get(`/api/public/trace/${encodeURIComponent(`Mã sự kiện: ${expectedHarvestEvt}`)}`)).status,
+      ).toBe(404);
+      const evtLookupRes = await inspector.get(
+        `/api/trace/${encodeURIComponent(`Mã sự kiện: ${expectedHarvestEvt}`)}?view=public`,
       );
       expect(evtLookupRes.status).toBe(200);
       expect(evtLookupRes.body.publicData.lotIdentity.lotCode).toBe(nd37LotCode);
@@ -2191,7 +2241,10 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
         ).status,
       ).toBe(201);
 
-      const pubInitial = await request(app).get(`/api/public/trace/${encodeURIComponent(bulkLotCode)}`);
+      const bulkLotQrToken = (
+        await db.query<{ qr_token: string }>("SELECT qr_token FROM harvest_lots WHERE id = $1", [bulkLotId])
+      ).rows[0].qr_token;
+      const pubInitial = await request(app).get(`/api/public/trace/${encodeURIComponent(bulkLotQrToken)}`);
       expect(pubInitial.status).toBe(200);
       expect(Number(pubInitial.body.publicData.lotIdentity.weightTons)).toBeCloseTo(1.2, 2);
       expect(pubInitial.body.publicData.lotIdentity.brandName).toBe("Nhãn Cũ A4");
@@ -2220,7 +2273,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
       });
       expect(patchRes.status).toBe(200);
 
-      const pubAfterPatch = await request(app).get(`/api/public/trace/${encodeURIComponent(bulkLotCode)}`);
+      const pubAfterPatch = await request(app).get(`/api/public/trace/${encodeURIComponent(bulkLotQrToken)}`);
       expect(pubAfterPatch.status).toBe(200);
       expect(Number(pubAfterPatch.body.publicData.lotIdentity.weightTons)).toBeCloseTo(1.45, 2);
       expect(pubAfterPatch.body.publicData.lotIdentity.brandName).toBe("Nhãn Mới Đắk Lắk A4");
@@ -2498,14 +2551,14 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
 
     try {
       // 1. Thiết bị A quét QR lần đầu -> nhận cookie định danh thiết bị ký HMAC (htx_trace_did)
-      const initialScanA = await deviceA.get(`/api/public/trace/${FX.lot}`);
+      const initialScanA = await deviceA.get(`/api/public/trace/${qrTokens.lot}`);
       expect(initialScanA.status).toBe(200);
       const setCookiesA = initialScanA.headers["set-cookie"];
       expect(JSON.stringify(setCookiesA || [])).toContain("htx_trace_did=");
 
       // 2. Thiết bị A gửi yêu cầu cấp quyền lần đầu -> thành công 201 (pending)
       const firstReqA = await deviceA.post("/api/public/trace-access-requests").send({
-        scannedCode: FX.lot,
+        scannedCode: qrTokens.lot,
         requesterName: "Đoàn Kiểm Tra Thiết Bị A",
         organization: "Chi cục Kiểm định Chất lượng",
         contactPhone: "0911222333",
@@ -2519,7 +2572,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
 
       // 3. Cố tình gửi lặp lần 1 (khi đang chờ duyệt) -> cảnh báo 1/3 (429 TRACE_REQUEST_WARNING)
       const warn1 = await deviceA.post("/api/public/trace-access-requests").send({
-        scannedCode: FX.hhA.plot,
+        scannedCode: qrTokens.plotA,
         requesterName: "Đoàn Kiểm Tra Thiết Bị A",
         organization: "Chi cục Kiểm định Chất lượng",
         contactPhone: "0911222333",
@@ -2534,7 +2587,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
 
       // 4. Cố tình gửi lặp lần 2 -> cảnh báo 2/3
       const warn2 = await deviceA.post("/api/public/trace-access-requests").send({
-        scannedCode: FX.lot,
+        scannedCode: qrTokens.lot,
         requesterName: "Đoàn Kiểm Tra Thiết Bị A",
         organization: "Chi cục Kiểm định Chất lượng",
         contactPhone: "0911222333",
@@ -2548,7 +2601,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
 
       // 5. Cố tình gửi lặp lần 3 -> khóa thiết bị A trong 5 phút (300 giây) trên toàn bộ trang truy xuất QR
       const blocked3 = await deviceA.post("/api/public/trace-access-requests").send({
-        scannedCode: FX.lot,
+        scannedCode: qrTokens.lot,
         requesterName: "Đoàn Kiểm Tra Thiết Bị A",
         organization: "Chi cục Kiểm định Chất lượng",
         contactPhone: "0911222333",
@@ -2562,12 +2615,12 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
       expect(blocked3.body.retryAfterSeconds).toBeLessThanOrEqual(300);
 
       // Thiết bị A bị chặn truy cập vào hồ sơ QR, GPS và trạng thái yêu cầu trong suốt 5 phút tạm khóa
-      const traceWhileBlocked = await deviceA.get(`/api/public/trace/${FX.lot}`);
+      const traceWhileBlocked = await deviceA.get(`/api/public/trace/${qrTokens.lot}`);
       expect(traceWhileBlocked.status).toBe(429);
       expect(traceWhileBlocked.body.code).toBe("TRACE_DEVICE_BLOCKED");
 
       const gpsWhileBlocked = await deviceA
-        .post(`/api/public/trace/${FX.hhA.plot}/verify-gps`)
+        .post(`/api/public/trace/${qrTokens.plotA}/verify-gps`)
         .send({ latitude: FX.centerLat, longitude: FX.centerLng, accuracyMeters: 5 });
       expect(gpsWhileBlocked.status).toBe(429);
       expect(gpsWhileBlocked.body.code).toBe("TRACE_DEVICE_BLOCKED");
@@ -2578,10 +2631,10 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
       expect(statusWhileBlocked.status).toBe(429);
 
       // 6. Thiết bị B (điện thoại khác cùng mạng Wi-Fi / NAT IP) vẫn quét QR và gửi 1 yêu cầu hợp lệ bình thường
-      const scanB = await deviceB.get(`/api/public/trace/${FX.lot}`);
+      const scanB = await deviceB.get(`/api/public/trace/${qrTokens.lot}`);
       expect(scanB.status).toBe(200);
       const reqB1 = await deviceB.post("/api/public/trace-access-requests").send({
-        scannedCode: FX.lot,
+        scannedCode: qrTokens.lot,
         requesterName: "Đoàn Kiểm Tra Thiết Bị B",
         organization: "Đơn vị Độc lập Cùng Wi-Fi",
         contactPhone: "0944555666",
@@ -2601,7 +2654,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
       expect((await admin.post(`/api/trace-requests/${reqBId}/approve`).send({ durationHours: 2 })).status).toBe(200);
 
       const warnBWhileActive = await deviceB.post("/api/public/trace-access-requests").send({
-        scannedCode: FX.hhA.plot,
+        scannedCode: qrTokens.plotA,
         requesterName: "Đoàn Kiểm Tra Thiết Bị B",
         organization: "Đơn vị Độc lập Cùng Wi-Fi",
         contactPhone: "0944555666",
@@ -2619,7 +2672,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
         [reqBId],
       );
       const reqB2AfterExpiry = await deviceB.post("/api/public/trace-access-requests").send({
-        scannedCode: FX.hhA.plot,
+        scannedCode: qrTokens.plotA,
         requesterName: "Đoàn Kiểm Tra Thiết Bị B",
         organization: "Đơn vị Độc lập Cùng Wi-Fi",
         contactPhone: "0944555666",
@@ -2631,7 +2684,7 @@ describe("ND37-GACC-EVENTS-IMMUTABLE-RBAC: chuẩn Nghị định 37/2026, GACC,
 
       // 7. Khi hết 5 phút tạm khóa -> Thiết bị A tự động được vào lại trang truy xuất QR bình thường
       await deviceGuard.expireActiveBlocksForTest();
-      const traceAfterUnlockA = await deviceA.get(`/api/public/trace/${FX.lot}`);
+      const traceAfterUnlockA = await deviceA.get(`/api/public/trace/${qrTokens.lot}`);
       expect(traceAfterUnlockA.status).toBe(200);
 
       // 8. Chống dò mã yêu cầu (403 đồng nhất thay vì 404) & cô lập phạm vi xã trên /api/trace-requests

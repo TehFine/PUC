@@ -8,7 +8,7 @@ import { DatabaseService } from "../../database/database.service";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { hasJournalSince, isJournalViolationSql, lastJournalOnSql } from "../../resources/shared/violation-evidence";
-import { ADMIN_LINKS, INSPECTION_ROLES } from "../common/admin-links";
+import { ADMIN_LINKS } from "../common/admin-links";
 import { assertPlotOwned, type ClientContext, conflict, householdIdOf } from "../common/portal-context";
 import type { CreatePortalJournalDto, ViolationResponseDto } from "./journal.dto";
 
@@ -371,12 +371,16 @@ export class JournalService {
       { ip: context.ip, user },
       { action: "Hộ phản hồi vi phạm", object: `Vi phạm #${violation.id}`, detail: dto.note.slice(0, 200) },
     );
-    await this.notifications.notifyRoles(INSPECTION_ROLES, {
-      kind: "violation",
-      title: `Hộ ${user.fullName} đã phản hồi vi phạm`,
-      body: `${violation.title}: ${dto.note.slice(0, 200)}`,
-      link: ADMIN_LINKS.violations,
-    });
+    await this.notifications.notifyOversightForHousehold(
+      householdId,
+      {
+        kind: "violation",
+        title: `Hộ ${user.fullName} đã phản hồi vi phạm`,
+        body: `${violation.title}: ${dto.note.slice(0, 200)}`,
+        link: ADMIN_LINKS.violations,
+      },
+      { excludeUserId: user.id },
+    );
 
     const { rows } = await this.db.query(`SELECT ${VIOLATION_COLUMNS} FROM violations v WHERE v.id = $1`, [id]);
     return camelRow(rows[0]);

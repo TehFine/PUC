@@ -44,7 +44,7 @@ export class ApprovalsService extends BaseCrudService {
       search: ["t.code", "t.applicant_name", "t.request_type", "t.plot_code"],
       filters: { status: "t.status", priority: "t.priority", householdId: "t.household_id" },
       scope: villageScope("h.village_id"),
-      virtual: ["_notifyReview"],
+      virtual: ["_notifyReview", "_notifyPendingCreate"],
     });
   }
 
@@ -157,6 +157,7 @@ export class ApprovalsService extends BaseCrudService {
     }
     const row = rows[0];
     const action = status === "approved" ? "Duyệt hồ sơ" : "Từ chối hồ sơ";
+    await this.notifications.resolveByLink(`/admin?section=approval&id=${id}`);
     await this.audit.write({ ip, user }, { action, object: `${this.config.label} #${id}`, detail: note ?? row.code });
     await this.notifications.notifyHousehold(row.household_id, {
       kind: "approval",
@@ -254,11 +255,48 @@ export class ApprovalsService extends BaseCrudService {
       }
       out.reviewedBy = context.user.id;
       out.reviewedAt = new Date();
+    } else if (context.method === "POST") {
+      out._notifyPendingCreate = {
+        actorId: context.user.id,
+        householdId: out.householdId !== undefined && out.householdId !== null ? Number(out.householdId) : null,
+        code: String(out.code ?? ""),
+        applicantName: String(out.applicantName ?? ""),
+        requestType: String(out.requestType ?? ""),
+      };
     }
     return out;
   }
 
-  protected override async afterWrite(_id: number, input: Record<string, unknown>) {
+  protected override async afterWrite(id: number, input: Record<string, unknown>) {
+    const pendingCreate = input._notifyPendingCreate as
+      | {
+          actorId: number;
+          householdId: number | null;
+          code: string;
+          applicantName: string;
+          requestType: string;
+        }
+      | undefined;
+    if (pendingCreate) {
+      const payload = {
+        kind: "approval" as const,
+        title: `Hồ sơ chờ duyệt: ${pendingCreate.code} – ${pendingCreate.applicantName}`,
+        body: pendingCreate.requestType,
+        link: `/admin?section=approval&id=${id}`,
+      };
+      if (pendingCreate.householdId) {
+        await this.notifications.notifyOversightForHousehold(pendingCreate.householdId, payload, {
+          excludeUserId: pendingCreate.actorId,
+        });
+      } else {
+        await this.notifications.notifyRoles(
+          ["admin", "htx_head", "htx_deputy", "support_specialist", "htx_officer", "inspector"],
+          payload,
+          { excludeUserId: pendingCreate.actorId },
+        );
+      }
+    }
+
     const notify = input._notifyReview as
       | {
         householdId: number | null;
@@ -268,13 +306,21 @@ export class ApprovalsService extends BaseCrudService {
         reviewNote: string | null;
       }
       | undefined;
-    if (!notify || !notify.householdId) return;
+    if (!notify) return;
+    await this.notifications.resolveByLink(`/admin?section=approval&id=${id}`);
+    if (!notify.householdId) return;
     await this.notifications.notifyHousehold(notify.householdId, {
       kind: "approval",
       title: notify.status === "approved" ? `Hồ sơ ${notify.code} đã được duyệt` : `Hồ sơ ${notify.code} bị từ chối`,
       body: notify.reviewNote ?? notify.requestType,
       link: "/portal?tab=home",
     });
+  }
+
+  override async remove(id: number, user: AuthUser, ip?: string) {
+    const res = await super.remove(id, user, ip);
+    await this.notifications.resolveByLink(`/admin?section=approval&id=${id}`);
+    return res;
   }
 
   protected override async guardDelete(id: number, user: AuthUser) {

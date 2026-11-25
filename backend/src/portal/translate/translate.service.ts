@@ -48,7 +48,24 @@ function shouldSkipAutoTranslate(trimmed: string): boolean {
 export class PortalTranslateService {
   private readonly cache = new Map<string, string>();
   private readonly inflight = new Map<string, Promise<string | null>>();
+  private readonly userCooldownUntil = new Map<number, number>();
+  private upstreamConsecutiveFailures = 0;
   private cooldownUntil = 0;
+
+  private setUserCooldown(userId: number | undefined, durationMs: number): void {
+    if (!userId) return;
+    if (this.userCooldownUntil.size >= 2_000) {
+      const now = Date.now();
+      for (const [uid, exp] of this.userCooldownUntil) {
+        if (exp <= now) this.userCooldownUntil.delete(uid);
+      }
+      if (this.userCooldownUntil.size >= 2_000) {
+        const oldest = this.userCooldownUntil.keys().next().value;
+        if (oldest !== undefined) this.userCooldownUntil.delete(oldest);
+      }
+    }
+    this.userCooldownUntil.set(userId, Date.now() + durationMs);
+  }
 
   private getCached(key: string): string | undefined {
     const hit = this.cache.get(key);
@@ -72,8 +89,13 @@ export class PortalTranslateService {
     this.cache.set(key, value);
   }
 
-  private async fetchSingleUpstream(text: string, target: SupportedTranslateTarget): Promise<string | null> {
+  private async fetchSingleUpstream(
+    text: string,
+    target: SupportedTranslateTarget,
+    userId?: number,
+  ): Promise<string | null> {
     if (Date.now() < this.cooldownUntil) return null;
+    if (userId && (this.userCooldownUntil.get(userId) ?? 0) > Date.now()) return null;
     const tl = target === "zh" ? "zh-CN" : "en";
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
     try {
@@ -83,15 +105,23 @@ export class PortalTranslateService {
           : undefined;
       const res = await fetch(url, {
         method: "GET",
-        headers: { Accept: "application/json" },
+        headers: {
+          Accept: "application/json",
+          "Accept-Encoding": "gzip, deflate",
+        },
         signal,
       });
       if (!res.ok) {
         if (res.status === 429 || res.status >= 500) {
-          this.cooldownUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+          this.setUserCooldown(userId, 60_000);
+          this.upstreamConsecutiveFailures += 1;
+          if (this.upstreamConsecutiveFailures >= 6) {
+            this.cooldownUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+          }
         }
         return null;
       }
+      this.upstreamConsecutiveFailures = 0;
       const data: unknown = await res.json();
       if (Array.isArray(data) && Array.isArray(data[0])) {
         const joined = data[0]
@@ -104,12 +134,20 @@ export class PortalTranslateService {
       }
       return null;
     } catch {
-      this.cooldownUntil = Date.now() + 30_000;
+      this.setUserCooldown(userId, 15_000);
+      this.upstreamConsecutiveFailures += 1;
+      if (this.upstreamConsecutiveFailures >= 6) {
+        this.cooldownUntil = Date.now() + 30_000;
+      }
       return null;
     }
   }
 
-  private translateOneWithDedup(trimmed: string, target: SupportedTranslateTarget): Promise<string | null> {
+  private translateOneWithDedup(
+    trimmed: string,
+    target: SupportedTranslateTarget,
+    userId?: number,
+  ): Promise<string | null> {
     const cacheKey = `${target}\u0000${trimmed}`;
     const hit = this.getCached(cacheKey);
     if (hit !== undefined) return Promise.resolve(hit);
@@ -117,7 +155,7 @@ export class PortalTranslateService {
     const existing = this.inflight.get(cacheKey);
     if (existing) return existing;
 
-    const promise = this.fetchSingleUpstream(trimmed, target)
+    const promise = this.fetchSingleUpstream(trimmed, target, userId)
       .then((translated) => {
         if (translated) {
           this.setCached(cacheKey, translated);
@@ -135,6 +173,7 @@ export class PortalTranslateService {
   async translateBatch(
     target: SupportedTranslateTarget,
     texts: string[],
+    userId?: number,
   ): Promise<{ translations: Record<string, string> }> {
     const translations: Record<string, string> = {};
     const misses: string[] = [];
@@ -156,7 +195,8 @@ export class PortalTranslateService {
       }
     }
 
-    if (misses.length === 0 || Date.now() < this.cooldownUntil) {
+    const now = Date.now();
+    if (misses.length === 0 || now < this.cooldownUntil || (userId && (this.userCooldownUntil.get(userId) ?? 0) > now)) {
       return { translations };
     }
 
@@ -168,7 +208,7 @@ export class PortalTranslateService {
         cursor += 1;
         const item = misses[index];
         if (!item) continue;
-        const translated = await this.translateOneWithDedup(item, target);
+        const translated = await this.translateOneWithDedup(item, target, userId);
         if (translated) {
           translations[item] = translated;
         }

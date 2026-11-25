@@ -352,6 +352,14 @@ export class StampsService extends BaseCrudService {
         detail: rows[0].allocation_code,
       },
     );
+    if (existing.rows[0]?.household_id) {
+      await this.notifications.notifyHousehold(existing.rows[0].household_id, {
+        kind: "harvest",
+        title: `Đợt tem ${rows[0].allocation_code} đã bị thu hồi`,
+        body: "HTX đã thu hồi dải tem này. Vui lòng kiểm tra mục Thu hoạch hoặc liên hệ cán bộ HTX.",
+        link: "/portal?tab=stamps",
+      });
+    }
     return this.findOne(id, user);
   }
 

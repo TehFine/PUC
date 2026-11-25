@@ -354,16 +354,17 @@ export class ReportsService {
     }
 
     const filter = this.parseFilter(rawQuery, user);
+    const isPreview = parseBoolParam(rawQuery.preview);
+    const effectiveUnmaskedAudit = wantUnmaskedAudit && !isPreview;
     let householdMeta: ReportHouseholdMeta | null = null;
     if (filter.householdId !== undefined) {
       householdMeta = await this.loadHouseholdMetaAndAssertScope(
         filter.householdId,
         user,
-        wantUnmaskedAudit && isCoopStaffRole(user.role),
+        effectiveUnmaskedAudit && isCoopStaffRole(user.role),
       );
     }
 
-    const isPreview = parseBoolParam(rawQuery.preview);
     const isExplicitExport = recordAudit || wantUnmaskedAudit || parseBoolParam(rawQuery.export);
     const isFullExport = isExplicitExport && !isPreview;
     const rowLimit = isFullExport ? MAX_EXPORT_ROWS : PREVIEW_EXPORT_ROWS;
@@ -381,14 +382,14 @@ export class ReportsService {
       type as ReportType,
       effectiveFilter,
       user,
-      wantUnmaskedAudit,
+      effectiveUnmaskedAudit,
       rowLimit,
     );
 
     const reportLabel = REPORT_LABELS_VN[type as ReportType] ?? "Báo cáo tổng hợp";
     const filterSummary = describeReportFilter(filter, householdMeta?.code);
 
-    if (wantUnmaskedAudit && !isPreview) {
+    if (effectiveUnmaskedAudit) {
       await this.audit.write(
         { ip, user },
         {

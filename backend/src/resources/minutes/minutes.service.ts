@@ -12,6 +12,7 @@ import { badRequest, forbidden } from "../../common/errors/app.exception";
 import { verifyPlotGpsProximity } from "../../common/geo/plot-proximity";
 import { publicAttachmentUrlSql, publicAttachmentUrlsSql } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
+import { NotificationsService } from "../../notifications/notifications.service";
 import { assertPlotOwned } from "../../portal/common/portal-context";
 import { UploadsService } from "../../uploads/uploads.service";
 
@@ -30,6 +31,7 @@ export class MinutesService extends BaseCrudService {
     db: DatabaseService,
     audit: AuditService,
     private readonly uploads: UploadsService,
+    private readonly notifications: NotificationsService,
   ) {
     super(db, audit, {
       resource: "minutes",
@@ -48,6 +50,7 @@ export class MinutesService extends BaseCrudService {
       search: ["t.code", "t.location", "t.officer", "t.plot_code"],
       filters: { result: "t.result", plotCode: "t.plot_code", villageId: "t.village_id" },
       scope: villageScope("t.village_id"),
+      virtual: ["_method"],
     });
   }
 
@@ -160,6 +163,11 @@ export class MinutesService extends BaseCrudService {
         }
       | undefined;
 
+    const officerVillageName =
+      context.user.role === "village_officer" && context.user.villageId
+        ? (await this.db.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [context.user.villageId])).rows[0]?.name ?? null
+        : null;
+
     if (context.method === "PATCH" && context.id !== undefined) {
       const ex = await this.db.query<{
         household_id: number | null;
@@ -180,6 +188,19 @@ export class MinutesService extends BaseCrudService {
       if (existing) {
         if (existing.household_id !== null) {
           await assertHouseholdInScope(this.db, { householdId: existing.household_id }, context.user);
+        } else if (existing.village_id !== null) {
+          const exVil = await this.db.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [
+            existing.village_id,
+          ]);
+          if (
+            !isStaffInParcelScope(
+              context.user,
+              { villageId: existing.village_id, villageName: exVil.rows[0]?.name ?? null },
+              officerVillageName,
+            )
+          ) {
+            throw forbidden("Biên bản kiểm tra này nằm ngoài địa bàn quản lý của bạn.");
+          }
         }
         await this.assertMinuteEditable(existing);
       }
@@ -208,11 +229,6 @@ export class MinutesService extends BaseCrudService {
           ? out.location.trim()
           : ""
         : existing?.location ?? "";
-
-    const officerVillageName =
-      context.user.role === "village_officer" && context.user.villageId
-        ? (await this.db.query<{ name: string }>("SELECT name FROM villages WHERE id = $1", [context.user.villageId])).rows[0]?.name ?? null
-        : null;
 
     let resolvedVillageId: number | null | undefined;
 
@@ -344,9 +360,21 @@ export class MinutesService extends BaseCrudService {
       if (out.villageId === null) {
         out.villageId = null;
       } else {
-        const vCheck = await this.db.query("SELECT 1 FROM villages WHERE id = $1", [Number(out.villageId)]);
-        if ((vCheck.rowCount ?? 0) === 0) {
+        const vCheck = await this.db.query<{ id: number; name: string }>(
+          "SELECT id, name FROM villages WHERE id = $1",
+          [Number(out.villageId)],
+        );
+        if ((vCheck.rowCount ?? 0) === 0 || !vCheck.rows[0]) {
           throw badRequest("Thôn đã chọn không tồn tại.");
+        }
+        if (
+          !isStaffInParcelScope(
+            context.user,
+            { villageId: vCheck.rows[0].id, villageName: vCheck.rows[0].name },
+            officerVillageName,
+          )
+        ) {
+          throw forbidden("Thôn được chọn nằm ngoài địa bàn quản lý của bạn.");
         }
         out.villageId = Number(out.villageId);
       }
@@ -402,6 +430,23 @@ export class MinutesService extends BaseCrudService {
       }
     }
 
-    return out;
+    return { ...out, _method: context.method };
+  }
+
+  protected override async afterWrite(_id: number, input: Record<string, unknown>) {
+    if (input._method === "POST" && input.householdId) {
+      const resLabel =
+        input.result === "pass"
+          ? "Đạt yêu cầu"
+          : input.result === "fail"
+            ? "Chưa đạt"
+            : "Cần khắc phục";
+      await this.notifications.notifyHousehold(Number(input.householdId), {
+        kind: "schedule",
+        title: `Biên bản kiểm tra thực địa ${String(input.code)}: ${resLabel}`,
+        body: `${input.plotCode ? `Thửa ${String(input.plotCode)} - ` : ""}Cán bộ kiểm tra: ${String(input.officer ?? "")}`,
+        link: "/portal?tab=inspection",
+      });
+    }
   }
 }

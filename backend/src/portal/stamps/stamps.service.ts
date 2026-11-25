@@ -4,6 +4,7 @@ import type { AuthUser } from "../../auth/auth-user";
 import { badRequest, notFound } from "../../common/errors/app.exception";
 import { attachmentUrlSql, camelRow, camelRows, todayVn } from "../../common/sql/rows";
 import { DatabaseService } from "../../database/database.service";
+import { NotificationsService } from "../../notifications/notifications.service";
 import { UploadsService } from "../../uploads/uploads.service";
 import { assertPlotNotInIsolation, assertPlotOwned, type ClientContext, householdIdOf, plotsTableExists } from "../common/portal-context";
 import type { ActivatePortalStampDto } from "./stamps.dto";
@@ -18,6 +19,7 @@ export class StampsService {
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly uploads: UploadsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async stamps(user: AuthUser) {
@@ -72,13 +74,17 @@ export class StampsService {
     const householdId = householdIdOf(user);
     const cleanSerial = dto.serialCode.trim();
 
-    const hhRes = await this.db.query<{ status: string }>("SELECT status FROM households WHERE id = $1", [householdId]);
+    const hhRes = await this.db.query<{ name: string; status: string }>(
+      "SELECT name, status FROM households WHERE id = $1",
+      [householdId],
+    );
     if (hhRes.rows[0]?.status === "violation") {
       throw badRequest("Hộ đang có vi phạm chưa khắc phục, tạm khóa kích hoạt tem truy xuất.");
     }
     if (hhRes.rows[0]?.status === "pending") {
       throw badRequest("Hộ nông dân hoặc thửa đất đang chờ phê duyệt hồ sơ, chưa thể khai báo thu hoạch / kích hoạt tem.");
     }
+    const farmerName = (hhRes.rows[0]?.name || user.fullName || "").trim();
 
     const cleanPlotCode = await assertPlotOwned(this.db, householdId, dto.plotCode);
     const hasPlots = await plotsTableExists(this.db);
@@ -149,6 +155,12 @@ export class StampsService {
         detail: `Thửa ${cleanPlotCode}, khối lượng ${dto.fruitWeightKg} kg, hạng ${dto.grade}`,
       },
     );
+    await this.notifications.notifyOversightForHousehold(householdId, {
+      kind: "harvest",
+      title: `Hộ ${farmerName} vừa kích hoạt tem quả ${String(row.serial_code)}`,
+      body: `Thửa ${cleanPlotCode}, khối lượng ${dto.fruitWeightKg} kg, phân loại ${dto.grade}.`,
+      link: "/admin?section=harvest&sub=stamps",
+    });
 
     return camelRow(row);
   }

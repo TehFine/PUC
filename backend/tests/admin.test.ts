@@ -59,8 +59,17 @@ describe("vá bảo mật đăng nhập và truy xuất công khai", () => {
     }
   });
 
-  it("/api/public/trace hoạt động khi không có bảng plots và che thông tin nhạy cảm", async () => {
-    const stampTrace = await request(app).get("/api/public/trace/KB-H001-000001");
+  it("/api/public/trace chỉ cho phép mở bằng qr_token ngẫu nhiên (chặn dò mã tuần tự) và che thông tin nhạy cảm", async () => {
+    expect((await request(app).get("/api/public/trace/KB-H001-000001")).status).toBe(404);
+    expect((await request(app).get("/api/public/trace/LH-2024-038-Q0001")).status).toBe(404);
+    expect((await request(app).get("/api/public/trace/LH-2024-038")).status).toBe(404);
+
+    const [stampRow, itemRow] = await Promise.all([
+      db.query<{ qr_token: string }>("SELECT qr_token FROM farmer_stamps WHERE serial_code = 'KB-H001-000001' LIMIT 1"),
+      db.query<{ qr_token: string }>("SELECT qr_token FROM harvest_items WHERE serial_code = 'LH-2024-038-Q0001' LIMIT 1"),
+    ]);
+
+    const stampTrace = await request(app).get(`/api/public/trace/${stampRow.rows[0].qr_token}`);
     expect(stampTrace.status).toBe(200);
     expect(stampTrace.body.isFarmerStamp).toBe(true);
     expect(stampTrace.body.farmerStamp).not.toHaveProperty("householdCccd");
@@ -70,7 +79,7 @@ describe("vá bảo mật đăng nhập và truy xuất công khai", () => {
     expect(stampTrace.body.farmerStamp).not.toHaveProperty("householdId");
     expect(stampTrace.body.lot).not.toHaveProperty("id");
 
-    const itemTrace = await request(app).get("/api/public/trace/LH-2024-038-Q0001");
+    const itemTrace = await request(app).get(`/api/public/trace/${itemRow.rows[0].qr_token}`);
     expect(itemTrace.status).toBe(200);
     expect(itemTrace.body.item.serialCode).toBe("LH-2024-038-Q0001");
     expect(itemTrace.body.item).not.toHaveProperty("id");
@@ -1072,8 +1081,12 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     const inspector = await loggedIn(USERS.inspector);
     const farmerAn = await loggedIn(USERS.farmerAn);
 
-    // 1. Cấp 1 (Công khai): không lộ buyer, hợp đồng, tọa độ/thửa, nhật ký thuốc, vi phạm hay tên hộ chưa đồng ý; chặn leo thang qua ?view=authority
-    const pubRes = await request(app).get("/api/public/trace/LH-2024-038?view=authority");
+    // 1. Cấp 1 (Công khai): không lộ buyer, hợp đồng, tọa độ/thửa, nhật ký thuốc, vi phạm hay tên hộ chưa đồng ý; chặn leo thang qua ?view=authority và chặn dò mã lô tuần tự
+    expect((await request(app).get("/api/public/trace/LH-2024-038?view=authority")).status).toBe(404);
+    const lot38Token = (
+      await db.query<{ qr_token: string }>("SELECT qr_token FROM harvest_lots WHERE code = 'LH-2024-038' LIMIT 1")
+    ).rows[0].qr_token;
+    const pubRes = await request(app).get(`/api/public/trace/${lot38Token}?view=authority`);
     expect(pubRes.status).toBe(200);
     expect(pubRes.body.accessControl.viewerTier).toBe("public");
     expect(pubRes.body.publicData.timeline).toHaveLength(5);
@@ -1090,7 +1103,7 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     expect(consentOn.status).toBe(200);
     expect(consentOn.body.publicTraceConsent).toBe(true);
 
-    const pubAfterConsent = await request(app).get("/api/public/trace/LH-2024-038");
+    const pubAfterConsent = await request(app).get(`/api/public/trace/${lot38Token}`);
     expect(pubAfterConsent.body.publicData.producer.consentedHouseholds).toContain("Nguyễn Văn An");
 
     const consentOff = await farmerAn.patch("/api/portal/profile/trace-consent").send({ publicTraceConsent: false });
@@ -1190,7 +1203,8 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     });
     expect(lotCreated.status).toBe(201);
 
-    const revokedTrace = await request(app).get("/api/public/trace/LH-REVOKE-2026");
+    expect((await request(app).get("/api/public/trace/LH-REVOKE-2026")).status).toBe(404);
+    const revokedTrace = await request(app).get(`/api/public/trace/${lotCreated.body.qrToken}`);
     expect(revokedTrace.status).toBe(200);
     expect(revokedTrace.body.publicData.lotIdentity.status).toBe("revoked");
     expect(revokedTrace.body.publicData.verification.isAbnormal).toBe(true);
@@ -1412,10 +1426,14 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
   it("Một mã QR duy nhất với phân quyền theo phạm vi máy chủ (RBAC kèm Scope), API PWA /api/trace/:code, 2FA OTP, đăng xuất từ xa và nhật ký minh bạch", async () => {
     const admin = await loggedIn(USERS.admin);
 
-    // 1. API quét trong PWA (/api/trace/:code) bắt buộc phải đăng nhập; khách quét chưa đăng nhập dùng /api/public/trace/:code
+    // 1. API quét trong PWA (/api/trace/:code) bắt buộc phải đăng nhập; khách quét chưa đăng nhập dùng /api/public/trace/:qrToken
     expect((await request(app).get("/api/trace/LH-2024-038")).status).toBe(401);
+    expect((await request(app).get("/api/public/trace/LH-2024-038?view=authority")).status).toBe(404);
+    const seedLotToken = (
+      await db.query<{ qr_token: string }>("SELECT qr_token FROM harvest_lots WHERE code = 'LH-2024-038' LIMIT 1")
+    ).rows[0].qr_token;
     const spoofAttempt = await request(app)
-      .get("/api/public/trace/LH-2024-038?view=authority")
+      .get(`/api/public/trace/${seedLotToken}?view=authority`)
       .set("X-Forwarded-For", "127.0.0.1")
       .set("User-Agent", "PUC-Authority-Internal-Scanner/9.0")
       .set("CF-IPCountry", "VN");
@@ -1738,8 +1756,11 @@ describe("kiểm thử bảo mật theo bộ kỹ năng Anthropic-Cybersecurity-
     expect(validLateJournal.body.gpsVerified).toBe(true);
     expect(validLateJournal.body.recordHash).toMatch(/^[0-9a-f]{64}$/);
 
-    // Kiểm tra niêm phong chuỗi băm SHA-256 trên trang QR công khai
-    const traceIntegrityRes = await request(app).get("/api/public/trace/LH-2024-038");
+    // Kiểm tra niêm phong chuỗi băm SHA-256 trên trang QR công khai (qua qr_token ngẫu nhiên)
+    const lot38Qr = (
+      await db.query<{ qr_token: string }>("SELECT qr_token FROM harvest_lots WHERE code = 'LH-2024-038' LIMIT 1")
+    ).rows[0].qr_token;
+    const traceIntegrityRes = await request(app).get(`/api/public/trace/${lot38Qr}`);
     expect(traceIntegrityRes.status).toBe(200);
     expect(traceIntegrityRes.body.publicData.integritySeal.hashAlgorithm).toBe("SHA-256");
     expect(traceIntegrityRes.body.publicData.integritySeal.chainVerified).toBe(true);

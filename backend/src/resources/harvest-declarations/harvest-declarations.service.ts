@@ -77,6 +77,7 @@ export class HarvestDeclarationsService extends BaseCrudService {
     }
     const row = rows[0];
     const action = status === "confirmed" ? "Xác nhận khai báo thu hoạch" : "Từ chối khai báo thu hoạch";
+    await this.notifications.resolveByLink(`/admin?section=harvest&id=${id}`);
     await this.audit.write(
       { ip, user },
       { action, object: `${this.config.label} #${id}`, detail: note ?? `Thửa ${row.plot_code}` },

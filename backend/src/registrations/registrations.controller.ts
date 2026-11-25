@@ -1,7 +1,9 @@
 import { Body, Controller, Get, HttpCode, Ip, Param, Post, Query } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import type { AuthUser } from "../auth/auth-user";
 import { Authorize, CurrentUser } from "../auth/auth.decorators";
 import { ParseRecordIdPipe } from "../common/pipes/validation.pipes";
+import { RateLimitTier } from "../common/throttler/rate-limit.policy";
 import { ApproveRegistrationDto } from "./registrations.dto";
 import { RegistrationsService } from "./registrations.service";
 
@@ -22,6 +24,7 @@ export class RegistrationsController {
     return this.service.availableHouseholds(typeof q === "string" ? q.slice(0, 100) : undefined, user);
   }
 
+  @Throttle(RateLimitTier.ACCOUNT_ISSUE)
   @Post(":id/approve")
   @HttpCode(200)
   @Authorize("registrations", "update")
@@ -34,6 +37,7 @@ export class RegistrationsController {
     return this.service.approve(id, dto.householdId, user, ip);
   }
 
+  @Throttle(RateLimitTier.ACCOUNT_ISSUE)
   @Post(":id/reject")
   @HttpCode(200)
   @Authorize("registrations", "delete")
@@ -47,6 +51,7 @@ export class RegistrationsController {
     return this.service.listPasswordResets(user);
   }
 
+  @Throttle(RateLimitTier.ACCOUNT_ISSUE)
   @Post("password-resets/:id/approve")
   @HttpCode(200)
   @Authorize("registrations", "update")
@@ -54,6 +59,7 @@ export class RegistrationsController {
     return this.service.approvePasswordReset(id, user, ip);
   }
 
+  @Throttle(RateLimitTier.ACCOUNT_ISSUE)
   @Post("password-resets/:id/reject")
   @HttpCode(200)
   @Authorize("registrations", "delete")

@@ -85,7 +85,7 @@ export class ScheduleService extends BaseCrudService {
       | undefined;
     if (suddenAlert) {
       // Đợt kiểm tra chuyển sang đột xuất: thu hồi thông báo lịch đã gửi cho hộ dân để không lộ trước ngày giờ kiểm tra.
-      await this.db.query(
+      const revokedRes = await this.db.query<{ user_id: number }>(
         `DELETE FROM notifications n
          USING users u
          WHERE u.id = n.user_id
@@ -95,9 +95,13 @@ export class ScheduleService extends BaseCrudService {
              n.link = '/portal?tab=inspection&scheduleId=' || $1::text
              OR n.title = 'Lịch kiểm tra mới: ' || $2
              OR n.title = 'Lịch kiểm tra: ' || $2
-           )`,
+           )
+         RETURNING n.user_id`,
         [String(id), suddenAlert.previousTitle],
       );
+      if (revokedRes.rows.length > 0) {
+        this.notifications.emitSyncToUsers(revokedRes.rows.map((r) => Number(r.user_id)));
+      }
       await this.notifications.notifyRoles(INSPECTION_ROLES, {
         kind: "schedule",
         title: `Lịch kiểm tra đột xuất: ${suddenAlert.title}`,

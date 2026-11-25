@@ -1,9 +1,18 @@
 import { Injectable } from "@nestjs/common";
 import type { AuthUser } from "../../auth/auth-user";
-import { can, isCoopStaffRole } from "../../auth/permissions";
+import { can, isCoopStaffRole, isManagementRole } from "../../auth/permissions";
 import { AuditService } from "../../audit/audit.service";
 import { BaseCrudService, type WriteContext } from "../../common/crud/base-crud.service";
-import { assertHouseholdInScope, villageScope } from "../../common/crud/village-scope";
+import {
+  assertHouseholdInScope,
+  CUNE_ADMIN_LOCATION,
+  EAKHAL_ADMIN_LOCATION,
+  isStaffInCuneCoopScope,
+  isStaffInParcelScope,
+  matchesJurisdiction,
+  resolveParcelAdminLocation,
+  villageScope,
+} from "../../common/crud/village-scope";
 import { generateQrToken } from "../../common/crypto/qr-token";
 import { badRequest, forbidden, notFound } from "../../common/errors/app.exception";
 import { camelRow, camelRows, publicAttachmentUrlSql, todayVn } from "../../common/sql/rows";
@@ -46,127 +55,6 @@ function resolveMilestoneOffsetDays(stage: string | null, variety: string | null
   if (stage === "pollination") return isRi6 ? 100 : isMusang ? 105 : 120;
   if (stage === "flowering") return isRi6 ? 130 : isMusang ? 135 : 150;
   return 30;
-}
-
-const CUNE_ADMIN_LOCATION = "Xã Krông Búk, Tỉnh Đắk Lắk";
-const EAKHAL_ADMIN_LOCATION = "Xã Ea Khăl, Huyện Ea H'Leo, Tỉnh Đắk Lắk";
-
-function normGeoText(val: string): string {
-  return val
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const ADMIN_LEVEL_PREFIX_RE = /^(?:xa|phuong|thi tran|huyen|quan|thi xa|thanh pho|tp\.?|tinh)\s+/;
-
-function matchesJurisdiction(assignedRaw: string, adminLocations: string[]): boolean {
-  const target = normGeoText(assignedRaw);
-  if (!target) return false;
-  if (target === "*" || target === "toan quoc") return true;
-
-  const targetHasPrefix = ADMIN_LEVEL_PREFIX_RE.test(target);
-  const targetStripped = target.replace(ADMIN_LEVEL_PREFIX_RE, "").trim();
-
-  for (const loc of adminLocations) {
-    const segments = loc
-      .split(",")
-      .map((s) => normGeoText(s))
-      .filter(Boolean);
-    for (const seg of segments) {
-      if (seg === target) return true;
-      if (!targetHasPrefix) {
-        const segStripped = seg.replace(ADMIN_LEVEL_PREFIX_RE, "").trim();
-        if (segStripped === targetStripped) return true;
-      }
-    }
-  }
-  return false;
-}
-
-function resolveParcelAdminLocation(villageName?: string | null, zoneOrPlotCode?: string | null): string {
-  const v = (villageName || "").trim();
-  const z = (zoneOrPlotCode || "").trim();
-  if (/ea\s*kh[aă]l|ea\s*k'?s[oô]/i.test(v) || /^66-PUC-SR0001-/i.test(z)) {
-    return EAKHAL_ADMIN_LOCATION;
-  }
-  return CUNE_ADMIN_LOCATION;
-}
-
-function normVillageKey(val?: string | null): string {
-  return (val || "").replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-function isStaffInParcelScope(
-  user: AuthUser | undefined,
-  row: {
-    villageId?: number | null;
-    villageName?: string | null;
-    zoneCode?: string | null;
-    plotCode?: string | null;
-  },
-  officerVillageName?: string | null,
-): boolean {
-  if (!user) return true;
-  if (user.role === "enterprise") return false;
-  if (isCoopStaffRole(user.role)) {
-    const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
-    if (userCoop !== "HTX-CUNE") return false;
-  }
-  const locations = [resolveParcelAdminLocation(row.villageName, row.zoneCode || row.plotCode)];
-  if (user.role === "village_officer") {
-    const hasVillage = user.villageId !== null && user.villageId !== undefined;
-    const hasCommune = Boolean(user.assignedCommune && user.assignedCommune.trim());
-    if (!hasVillage && !hasCommune) return false;
-    if (hasVillage) {
-      if (row.villageId !== null && row.villageId !== undefined) {
-        if (Number(row.villageId) !== Number(user.villageId)) return false;
-      } else {
-        const expectedVillage = normVillageKey(officerVillageName);
-        const actualVillage = normVillageKey(row.villageName);
-        if (!expectedVillage || !actualVillage || expectedVillage !== actualVillage) {
-          return false;
-        }
-      }
-    }
-    if (hasCommune && !matchesJurisdiction(user.assignedCommune!, locations)) return false;
-    return true;
-  }
-  if (user.role === "inspector") {
-    const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
-    if (!matchesJurisdiction(region, locations)) return false;
-  }
-  if (user.assignedCommune && user.assignedCommune.trim()) {
-    if (!matchesJurisdiction(user.assignedCommune, locations)) return false;
-  }
-  return true;
-}
-
-function isStaffInCuneCoopScope(user: AuthUser | undefined, allowEaKhal = false): boolean {
-  if (!user) return true;
-  if (user.role === "enterprise") return false;
-  if (isCoopStaffRole(user.role)) {
-    const userCoop = (user.coopCode || "HTX-CUNE").trim().toUpperCase();
-    if (userCoop !== "HTX-CUNE") return false;
-  }
-  const allowedLocations = allowEaKhal ? [CUNE_ADMIN_LOCATION, EAKHAL_ADMIN_LOCATION] : [CUNE_ADMIN_LOCATION];
-  if (user.role === "inspector") {
-    const region = (user.assignedRegion || "Tỉnh Đắk Lắk").trim();
-    if (!matchesJurisdiction(region, allowedLocations)) return false;
-  }
-  if (user.role === "village_officer") {
-    const hasVillage = user.villageId !== null && user.villageId !== undefined;
-    const hasCommune = Boolean(user.assignedCommune && user.assignedCommune.trim());
-    if (!hasVillage && !hasCommune) return false;
-  }
-  if (user.assignedCommune && user.assignedCommune.trim()) {
-    if (!matchesJurisdiction(user.assignedCommune, allowedLocations)) return false;
-  }
-  return true;
 }
 
 @Injectable()
@@ -2419,7 +2307,7 @@ export class HarvestService extends BaseCrudService {
     values.push(safeLimit);
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    const { rows } = await this.db.query(
+    const { rows } = await this.db.query<Record<string, unknown>>(
       `SELECT id, viewed_at, user_id, username, full_name, user_role, viewer_tier,
               scanned_code, lot_code, scope_granted, scope_reason, ip
        FROM trace_detail_access_logs
@@ -2428,7 +2316,24 @@ export class HarvestService extends BaseCrudService {
        LIMIT $${values.length}`,
       values,
     );
-    return { data: camelRows(rows) };
+    const canSeeRawClientMeta = !user || isManagementRole(user.role);
+    const sanitized = rows
+      .filter((r) => canSeeRawClientMeta || r.lot_code !== null)
+      .map((r) => {
+        if (canSeeRawClientMeta) return r;
+        const rawIp = typeof r.ip === "string" ? r.ip.trim() : "";
+        const maskedIp = rawIp.includes(".")
+          ? `${rawIp.split(".").slice(0, 3).join(".")}.***`
+          : rawIp.includes(":")
+            ? `${rawIp.split(":").slice(0, 3).join(":")}:*`
+            : null;
+        return {
+          ...r,
+          ip: maskedIp,
+          username: typeof r.username === "string" && r.username.length > 4 ? `******${r.username.slice(-4)}` : null,
+        };
+      });
+    return { data: camelRows(sanitized) };
   }
 
   /** Danh sách hạn ngạch sản lượng đầu vụ từng thửa và mức sử dụng thực tế (Mass-Balance). */
@@ -2842,15 +2747,17 @@ export class HarvestService extends BaseCrudService {
     const zoneCode = dto.allowedZoneCode && dto.allowedZoneCode.trim() ? dto.allowedZoneCode.trim().toUpperCase() : null;
     const defaultLang = dto.defaultLang ?? "zh";
 
+    if (!isManagementRole(user.role) && !zoneCode) {
+      throw forbidden("Cán bộ kỹ thuật khi cấp thẻ đoàn thẩm định bắt buộc phải chỉ định cụ thể mã vùng trồng (allowedZoneCode).");
+    }
+
     if (user.assignedCommune && user.assignedCommune.trim()) {
-      if (!zoneCode && !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])) {
-        throw forbidden("Tài khoản cấp xã chỉ được cấp thẻ giới hạn trong mã vùng trồng thuộc xã quản lý.");
+      if (!zoneCode) {
+        throw forbidden("Tài khoản gắn xã phân công bắt buộc chỉ định mã vùng trồng thuộc xã quản lý khi cấp thẻ đoàn thẩm định.");
       }
-      if (zoneCode) {
-        const zoneLoc = resolveParcelAdminLocation(null, zoneCode);
-        if (!matchesJurisdiction(user.assignedCommune, [zoneLoc])) {
-          throw forbidden("Mã vùng trồng không thuộc xã quản lý của bạn.");
-        }
+      const zoneLoc = resolveParcelAdminLocation(null, zoneCode);
+      if (!matchesJurisdiction(user.assignedCommune, [zoneLoc])) {
+        throw forbidden("Mã vùng trồng không thuộc xã quản lý của bạn.");
       }
     }
 
@@ -2893,16 +2800,20 @@ export class HarvestService extends BaseCrudService {
     if (!isStaffInCuneCoopScope(user, true)) {
       throw forbidden("Bạn không có quyền thu hồi thẻ đoàn thẩm định ngoài phạm vi đơn vị.");
     }
+    const checkRes = await this.db.query<{
+      allowed_zone_code: string | null;
+      issued_by_user_id: number | null;
+    }>("SELECT allowed_zone_code, issued_by_user_id FROM field_audit_passes WHERE id = $1", [id]);
+    if (!checkRes.rows[0]) throw notFound("Không tìm thấy thẻ thẩm định thực địa.");
+
     if (
-      user.assignedCommune &&
-      user.assignedCommune.trim() &&
-      !matchesJurisdiction(user.assignedCommune, [CUNE_ADMIN_LOCATION])
+      !isManagementRole(user.role) &&
+      Number(checkRes.rows[0].issued_by_user_id ?? 0) !== Number(user.id)
     ) {
-      const checkRes = await this.db.query<{ allowed_zone_code: string | null }>(
-        "SELECT allowed_zone_code FROM field_audit_passes WHERE id = $1",
-        [id],
-      );
-      if (!checkRes.rows[0]) throw notFound("Không tìm thấy thẻ thẩm định thực địa.");
+      throw forbidden("Cán bộ kỹ thuật chỉ được thu hồi thẻ thẩm định thực địa do chính mình cấp.");
+    }
+
+    if (user.assignedCommune && user.assignedCommune.trim()) {
       const zoneCode = checkRes.rows[0].allowed_zone_code;
       if (!zoneCode || !matchesJurisdiction(user.assignedCommune, [resolveParcelAdminLocation(null, zoneCode)])) {
         throw forbidden("Bạn không có quyền thu hồi thẻ thẩm định thuộc địa bàn khác.");
