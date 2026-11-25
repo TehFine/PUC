@@ -368,146 +368,7 @@
   min-height: clamp(440px, 42vw, 600px);
 }
 
-/* ─── 01 / Hồ sơ xác thực: Lưới hồ sơ mẫu 4 cột chuẩn Thụy Sĩ ─── */
-.sw-trace-dossier-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  width: auto;
-  margin: 0 var(--sw-edge-x);
-  border-bottom: none;
-}
-
-.lp.sw-page .sw-trace-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 22px;
-  min-height: 236px;
-  padding: clamp(22px, 2.3vw, 32px) var(--sw-pad-x);
-  background: #ffffff;
-  border-right: 1px solid var(--sw-line);
-  border-bottom: 1px solid var(--sw-line);
-  transition: background-color 0.18s ease;
-  contain: layout style;
-}
-
-.lp.sw-page .sw-trace-card:nth-child(4n + 1) {
-  padding-left: 0;
-}
-
-.lp.sw-page .sw-trace-card:nth-child(4n) {
-  padding-right: 0;
-  border-right: none;
-}
-
-/* Tránh nhân đôi đường kẻ đáy với khung ngoài */
-.sw-trace-dossier-grid {
-  border-bottom: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .lp.sw-page .sw-trace-card:hover {
-    background: #fafaf8;
-  }
-
-  .lp.sw-page .sw-trace-card:hover .sw-trace-card-cta {
-    color: var(--sw-ink);
-    transform: translateX(2px);
-  }
-}
-
-.sw-trace-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.sw-trace-card-kind {
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--sw-subtle);
-  white-space: nowrap;
-}
-
-.sw-trace-card-main {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-
-.lp.sw-page .sw-trace-card-code {
-  margin: 0;
-  font-family: var(--font-num-stack, var(--font-inter), sans-serif);
-  font-variant-numeric: tabular-nums;
-  font-size: clamp(16.5px, 1.35vw, 19px);
-  font-weight: 500;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
-  color: var(--sw-ink);
-  word-break: break-word;
-}
-
-.sw-trace-card-owner {
-  font-size: 14.5px;
-  font-weight: 500;
-  line-height: 1.4;
-  color: #262624;
-}
-
-.sw-trace-card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  line-height: 1.5;
-  font-variant-numeric: tabular-nums;
-  color: var(--sw-muted);
-}
-
-.sw-trace-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 14px;
-  border-top: 1px solid var(--sw-line);
-}
-
-.sw-trace-card-date {
-  min-width: 0;
-  font-family: var(--font-num-stack, var(--font-inter), sans-serif);
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  color: var(--sw-subtle);
-}
-
-.sw-trace-card-cta {
-  margin-left: auto;
-  flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: #454542;
-  white-space: nowrap;
-  transition: color 0.16s ease, transform 0.16s ease;
-}
-
-/* Trạng thái đang tải / danh sách trống */
-.sw-trace-state {
-  grid-column: 1 / -1;
-  padding: 52px var(--sw-pad-x);
-  text-align: center;
-  font-size: 14.5px;
-  color: var(--sw-muted);
-  border-bottom: 1px solid var(--sw-line);
-  background: #ffffff;
-}
-
-/* ─── 02 / Minh bạch: Ba lớp đối chiếu + Khung ảnh kiểm nghiệm vuông ─── */
+/* ─── 01 / Minh bạch: Ba lớp đối chiếu + Khung ảnh kiểm nghiệm vuông ─── */
 .sw-trace-pillars > .sw-col-1 {
   padding-left: 0;
 }
@@ -515,31 +376,6 @@
 .sw-trace-purity-media {
   aspect-ratio: 1 / 1;
   min-height: var(--sw-row-h);
-}
-
-/* ─── Đáp ứng Màn hình Laptop vừa / Tablet ngang (<= 1180px) ─── */
-@media (max-width: 1180px) {
-  .sw-trace-dossier-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .lp.sw-page .sw-trace-card:nth-child(4n + 1) {
-    padding-left: var(--sw-pad-x);
-  }
-
-  .lp.sw-page .sw-trace-card:nth-child(4n) {
-    padding-right: var(--sw-pad-x);
-    border-right: 1px solid var(--sw-line);
-  }
-
-  .lp.sw-page .sw-trace-card:nth-child(2n + 1) {
-    padding-left: 0;
-  }
-
-  .lp.sw-page .sw-trace-card:nth-child(2n) {
-    padding-right: 0;
-    border-right: none;
-  }
 }
 
 /* ─── Đáp ứng Tablet dọc (<= 960px) ─── */
@@ -743,39 +579,7 @@
     border: none !important;
   }
 
-  /* Lưới hồ sơ mẫu trên di động: xếp dọc gọn gàng, ngăn bằng đường mảnh */
-  .sw-trace-dossier-grid {
-    grid-template-columns: 1fr;
-    width: auto;
-    margin: 12px var(--sw-pad-x) 0;
-    border-top: 1px solid #e2e2de;
-  }
-
-  .lp.sw-page .sw-trace-card,
-  .lp.sw-page .sw-trace-card:nth-child(2n + 1),
-  .lp.sw-page .sw-trace-card:nth-child(2n) {
-    min-height: 0;
-    padding: 22px 0;
-    gap: 12px;
-    border-right: none !important;
-    border-bottom: 1px solid #e2e2de;
-  }
-
-  .lp.sw-page .sw-trace-card:hover {
-    background: #ffffff;
-  }
-
-  .sw-trace-card-foot {
-    padding-top: 8px;
-    border-top: none;
-  }
-
-  .sw-trace-state {
-    padding: 36px 0;
-    border-bottom: 1px solid #e2e2de;
-  }
-
-  /* 02 / Minh bạch trên di động: Ảnh đặt trên, 3 mục cô đọng căn giữa đồng bộ Landing Page */
+  /* 01 / Minh bạch trên di động: Ảnh đặt trên, 3 mục cô đọng căn giữa đồng bộ Landing Page */
   .sw-trace-pillars {
     display: flex !important;
     flex-direction: column;
@@ -828,97 +632,9 @@
   }
 }
 
-html[data-perf="lite"] .sw-trace-card,
-html[data-perf="lite"] .sw-trace-card-cta,
 html[data-perf="lite"] .sw-trace-chip,
 html[data-perf="lite"] .sw-trace-submit,
 html[data-perf="lite"] .sw-trace-form {
   transition: none !important;
-}
-
-/* ─── Dải Trải nghiệm Đoàn Thẩm định Thực địa Tại Vườn (Đối tác & Đoàn Tỉnh) ─── */
-.sw-field-audit-callout {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px 24px;
-  flex-wrap: wrap;
-  margin: 0 var(--sw-edge-x);
-  padding: 20px 24px;
-  background: #f6f8f5;
-  border-bottom: 1px solid var(--sw-line);
-}
-
-.sw-field-audit-copy {
-  flex: 1 1 440px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.sw-field-audit-kicker {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #1c4e30;
-}
-
-.sw-field-audit-desc {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--sw-ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.sw-field-audit-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.lp.sw-page .sw-field-audit-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 38px;
-  padding: 0 16px;
-  border: 1px solid var(--sw-ink);
-  border-radius: 0;
-  background: #ffffff;
-  color: var(--sw-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.lp.sw-page .sw-field-audit-btn.is-primary {
-  background: #1c4e30;
-  border-color: #1c4e30;
-  color: #ffffff;
-}
-
-.lp.sw-page .sw-field-audit-btn:hover {
-  background: var(--sw-ink);
-  border-color: var(--sw-ink);
-  color: #ffffff;
-}
-
-@media (max-width: 768px) {
-  .sw-field-audit-callout {
-    margin: 12px var(--sw-pad-x) 0;
-    padding: 16px;
-    border: 1px solid var(--sw-line);
-  }
-
-  .sw-field-audit-actions,
-  .lp.sw-page .sw-field-audit-btn {
-    width: 100%;
-  }
 }
 

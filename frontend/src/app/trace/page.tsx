@@ -19,39 +19,19 @@ import "@/components/landing/swiss-landing.css";
 import "./swiss-trace.css";
 
 interface SampleLot {
-  sampleType?: "lot";
   code: string;
   qrToken?: string | null;
-  variety?: string | null;
-  harvestedOn: string | null;
-  weightKg: number | null;
-  packhouseCode?: string | null;
-  producerLabel?: string | null;
-  market: string | null;
-  status: string | null;
 }
 
 interface SampleStamp {
   unitType?: "box" | "fruit";
   code: string;
   qrToken?: string | null;
-  weightKg: number | null;
-  grade: string | null;
-  issuedAt: string | null;
-  lotCode: string | null;
-  producerLabel: string;
 }
 
 interface SamplePlot {
   plotCode: string;
   qrToken?: string | null;
-  zoneCode: string;
-  villageName?: string | null;
-  variety?: string | null;
-  areaHa?: number | null;
-  treeCount?: number | null;
-  maxQuotaKg?: number | null;
-  producerLabel?: string | null;
 }
 
 function extractPreservedUrlSuffix(rawUrl: string): string {
@@ -129,8 +109,6 @@ interface TraceSamplesResponse {
   plots?: SamplePlot[];
 }
 
-type SampleTab = "all" | "lots" | "plots" | "stamps";
-
 let cachedTraceSamples: TraceSamplesResponse | null = null;
 
 const TRACE_HERO_SLIDES: readonly DwellSlide[] = [
@@ -181,25 +159,6 @@ const TRACE_PURITY_SLIDES: readonly DwellSlide[] = [
   },
 ];
 
-function formatViDate(dateStr: string | null | undefined): string | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "Asia/Ho_Chi_Minh",
-  });
-}
-
-function formatLotScaleLine(lot: SampleLot): string | null {
-  if (lot.weightKg !== null && lot.weightKg !== undefined && Number(lot.weightKg) > 0) {
-    return `Sản lượng: ${Number(lot.weightKg).toLocaleString("vi-VN")} kg`;
-  }
-  return null;
-}
-
 function extractAuditPassFromLocation(): string | null {
   if (typeof window === "undefined") return null;
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -234,8 +193,6 @@ export default function TraceLookupPage() {
   const [code, setCode] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
   const [samples, setSamples] = useState<TraceSamplesResponse | null>(() => cachedTraceSamples);
-  const [loading, setLoading] = useState<boolean>(() => cachedTraceSamples === null);
-  const [tab, setTab] = useState<SampleTab>("all");
   const auditSessionReady = useSyncExternalStore(subscribeAuditPassSession, readAuditSessionReady, () => false);
 
   const authenticated = status === "authenticated";
@@ -283,10 +240,7 @@ export default function TraceLookupPage() {
           cachedTraceSamples = res;
           if (active) setSamples(res);
         })
-        .catch(() => { })
-        .finally(() => {
-          if (active && !silent) setLoading(false);
-        });
+        .catch(() => { });
     };
 
     loadSamples(Boolean(cachedTraceSamples));
@@ -394,13 +348,6 @@ export default function TraceLookupPage() {
     return picked.slice(0, 4);
   }, [lots, plots, stamps]);
 
-  const showLots = tab === "all" || tab === "lots";
-  const showPlots = tab === "all" || tab === "plots";
-  const showStamps = tab === "all" || tab === "stamps";
-  const visibleLots = tab === "all" ? lots.slice(0, 4) : lots;
-  const visiblePlots = tab === "all" ? plots.slice(0, 2) : plots;
-  const visibleStamps = tab === "all" ? stamps.slice(0, 2) : stamps;
-
   return (
     <div className="lp sw-page sw-trace-page" id="top">
       {/* ─── Thanh điều hướng cố định đồng bộ Landing Page (Không viền bao chữ HTX Cư Né) ─── */}
@@ -413,7 +360,6 @@ export default function TraceLookupPage() {
 
           <nav className="sw-trace-nav" aria-label="Điều hướng cổng truy xuất">
             <a href="#tra-cuu-ma">Tra cứu mã</a>
-            <a href="#ho-so-mau">Hồ sơ mẫu</a>
             <a href="#tieu-chuan">Ba cấp truy xuất</a>
           </nav>
 
@@ -522,6 +468,24 @@ export default function TraceLookupPage() {
                   </p>
                 )}
 
+                {auditSessionReady && (
+                  <p
+                    role="status"
+                    style={{
+                      margin: 0,
+                      padding: "9px 12px",
+                      borderRadius: 0,
+                      border: "1px solid #d4d4d2",
+                      background: "#f6f8f5",
+                      color: "#14372f",
+                      fontSize: 13,
+                      lineHeight: 1.48,
+                    }}
+                  >
+                    Phiên Thẩm định Thực địa đã kích hoạt. Quý đoàn có thể nhập mã hoặc quét trực tiếp Bảng QR đầu thửa vườn.
+                  </p>
+                )}
+
                 {quickSamples.length > 0 && (
                   <div className="sw-trace-quick" aria-label="Mã mẫu tra cứu nhanh">
                     <span className="sw-trace-quick-label">Mã mẫu:</span>
@@ -554,235 +518,12 @@ export default function TraceLookupPage() {
           </div>
         </section>
 
-        {/* ─── 01. HỒ SƠ XÁC THỰC GẦN ĐÂY ─── */}
-        <section id="ho-so-mau" className="sw-section" aria-labelledby="hosomau-title">
-          <header className="sw-grid sw-sec-head">
-            <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
-            <div className="sw-cell sw-col-2-3 sw-head-main">
-              <span className="sw-sec-index">01 / Hồ sơ xác thực</span>
-              <h2 id="hosomau-title" className="sw-sec-title">
-                Lô xuất xưởng, Thửa đất và Tem định danh gần đây
-              </h2>
-            </div>
-            <div className="sw-cell sw-col-4 sw-empty-cell" aria-hidden="true" />
-          </header>
-
-          <div className="sw-catalog-tabbar">
-            <div className="sw-simple-tabs" role="tablist" aria-label="Phân loại hồ sơ mẫu">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === "all"}
-                className={`sw-tab-pill ${tab === "all" ? "is-active" : ""}`}
-                onClick={() => setTab("all")}
-              >
-                Tất cả
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === "lots"}
-                className={`sw-tab-pill ${tab === "lots" ? "is-active" : ""}`}
-                onClick={() => setTab("lots")}
-              >
-                Lô xuất xưởng
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === "plots"}
-                className={`sw-tab-pill ${tab === "plots" ? "is-active" : ""}`}
-                onClick={() => setTab("plots")}
-              >
-                Bảng QR Thửa đất
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === "stamps"}
-                className={`sw-tab-pill ${tab === "stamps" ? "is-active" : ""}`}
-                onClick={() => setTab("stamps")}
-              >
-                Thùng và Tem mẫu
-              </button>
-            </div>
-          </div>
-
-          {auditSessionReady && (
-            <div className="sw-field-audit-callout" role="status">
-              <div className="sw-field-audit-copy">
-                <span className="sw-field-audit-kicker">
-                  Phiên Thẩm định Thực địa đã kích hoạt trên trình duyệt này
-                </span>
-                <p className="sw-field-audit-desc">
-                  Thẻ đoàn công tác đã sẵn sàng. Quý đoàn có thể chọn bất kỳ thửa vườn hoặc lô hàng bên dưới, hoặc quét trực tiếp Bảng QR đầu thửa vườn để đối chiếu vị trí thực tế tại vườn.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="sw-trace-dossier-grid">
-            {loading ? (
-              <div className="sw-trace-state">Đang tải danh sách hồ sơ truy xuất mẫu...</div>
-            ) : (showLots ? visibleLots.length : 0) +
-              (showPlots ? visiblePlots.length : 0) +
-              (showStamps ? visibleStamps.length : 0) ===
-              0 ? (
-              <div className="sw-trace-state">
-                Chưa có hồ sơ mẫu trong mục này. Quý khách có thể nhập trực tiếp mã lô hàng, mã thùng, tem trái hoặc mã thửa đất ở khung tra cứu phía trên.
-              </div>
-            ) : (
-              <>
-                {showLots &&
-                  visibleLots.map((lot) => {
-                    const scaleLine = formatLotScaleLine(lot);
-                    const isRevoked = lot.status === "revoked";
-                    const dateLabel = formatViDate(lot.harvestedOn);
-                    const footLabel = dateLabel ? `Thu hoạch ${dateLabel}` : "Hồ sơ lô hàng";
-                    const cardHref = lot.qrToken
-                      ? `/t/${encodeURIComponent(lot.qrToken)}`
-                      : `/trace/${encodeURIComponent(lot.code)}`;
-                    return (
-                      <Link
-                        key={`lot-${lot.code}`}
-                        href={cardHref}
-                        className="sw-trace-card"
-                      >
-                        <div className="sw-trace-card-top">
-                          <span className="sw-trace-card-kind">
-                            {isRevoked ? "Lô đã thu hồi" : "Lô hàng xuất xưởng"}
-                          </span>
-                        </div>
-
-                        <div className="sw-trace-card-main">
-                          <h3 className="sw-trace-card-code">{lot.code}</h3>
-                          <span className="sw-trace-card-owner">
-                            {lot.producerLabel || "HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né"}
-                          </span>
-                          <div className="sw-trace-card-meta">
-                            <span>
-                              Giống: {lot.variety || "Ri6 & Monthong"}
-                              {scaleLine ? ` - ${scaleLine}` : ""}
-                            </span>
-                            <span>
-                              Mã CSĐG: {lot.packhouseCode || "VN-DLPH-0089"} ({lot.market || "Xuất khẩu"})
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="sw-trace-card-foot">
-                          <span className="sw-trace-card-date">{footLabel}</span>
-                          <span className="sw-trace-card-cta">Xem hồ sơ lô</span>
-                        </div>
-                      </Link>
-                    );
-                  })}
-
-                {showPlots &&
-                  visiblePlots.map((pl) => {
-                    const cardHref = pl.qrToken
-                      ? `/t/${encodeURIComponent(pl.qrToken)}`
-                      : `/trace/${encodeURIComponent(pl.plotCode)}`;
-                    const areaText =
-                      pl.areaHa !== null && pl.areaHa !== undefined
-                        ? `${Number(pl.areaHa).toLocaleString("vi-VN")} ha`
-                        : "Đã đo đạc GIS";
-                    const treesText =
-                      pl.treeCount !== null && pl.treeCount !== undefined && Number(pl.treeCount) > 0
-                        ? ` (${Number(pl.treeCount).toLocaleString("vi-VN")} cây)`
-                        : "";
-                    return (
-                      <Link
-                        key={`plot-${pl.plotCode}`}
-                        href={cardHref}
-                        className="sw-trace-card"
-                      >
-                        <div className="sw-trace-card-top">
-                          <span className="sw-trace-card-kind">Bảng QR Thửa đất tại vườn</span>
-                        </div>
-
-                        <div className="sw-trace-card-main">
-                          <h3 className="sw-trace-card-code">Thửa {pl.plotCode}</h3>
-                          <span className="sw-trace-card-owner">
-                            {pl.producerLabel || "HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né"}
-                          </span>
-                          <div className="sw-trace-card-meta">
-                            <span>Mã vùng PUC: {pl.zoneCode}</span>
-                            <span>
-                              Quy mô: {areaText}
-                              {treesText}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="sw-trace-card-foot">
-                          <span className="sw-trace-card-date">
-                            {pl.villageName || "Xã Krông Búk"}
-                          </span>
-                          <span className="sw-trace-card-cta">Xem bảng thửa vườn</span>
-                        </div>
-                      </Link>
-                    );
-                  })}
-
-                {showStamps &&
-                  visibleStamps.map((stamp) => {
-                    const dateLabel = formatViDate(stamp.issuedAt);
-                    const isBox = stamp.unitType === "box";
-                    const stampScaleLine =
-                      stamp.weightKg !== null && stamp.weightKg !== undefined
-                        ? `Khối lượng: ${Number(stamp.weightKg).toLocaleString("vi-VN")} kg${isBox ? " / Thùng" : " / Quả"}`
-                        : `Phân hạng: Hạng ${stamp.grade || "A"}`;
-                    const cardHref = stamp.qrToken
-                      ? `/t/${encodeURIComponent(stamp.qrToken)}`
-                      : `/trace/${encodeURIComponent(stamp.code)}`;
-                    return (
-                      <Link
-                        key={`stamp-${stamp.code}`}
-                        href={cardHref}
-                        className="sw-trace-card"
-                      >
-                        <div className="sw-trace-card-top">
-                          <span className="sw-trace-card-kind">
-                            {isBox ? "Thùng đóng gói định danh lô" : "Tem quả - Dòng cao cấp"}
-                          </span>
-                        </div>
-
-                        <div className="sw-trace-card-main">
-                          <h3 className="sw-trace-card-code">{stamp.code}</h3>
-                          <span className="sw-trace-card-owner">
-                            {stamp.producerLabel || "HTX Kinh doanh - Dịch vụ Tổng hợp Cư Né"}
-                          </span>
-                          <div className="sw-trace-card-meta">
-                            <span>{stampScaleLine}</span>
-                            <span>
-                              {stamp.lotCode
-                                ? `Thuộc lô: ${stamp.lotCode}`
-                                : "Thương hiệu riêng HTX Cư Né"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="sw-trace-card-foot">
-                          <span className="sw-trace-card-date">
-                            {dateLabel ? `Ngày ${dateLabel}` : "Định danh điện tử"}
-                          </span>
-                          <span className="sw-trace-card-cta">Kiểm tra mã</span>
-                        </div>
-                      </Link>
-                    );
-                  })}
-              </>
-            )}
-          </div>
-        </section>
-
-        {/* ─── 02. BA CẤP ĐỘ PHÂN QUYỀN TRUY XUẤT TRÊN CÙNG MÃ QR ─── */}
+        {/* ─── 01. BA CẤP ĐỘ PHÂN QUYỀN TRUY XUẤT TRÊN CÙNG MÃ QR ─── */}
         <section id="tieu-chuan" className="sw-section" aria-labelledby="tieuchuan-title">
           <header className="sw-grid sw-sec-head">
             <div className="sw-cell sw-col-1 sw-empty-cell" aria-hidden="true" />
             <div className="sw-cell sw-col-2-3 sw-head-main">
-              <span className="sw-sec-index">02 / Phân quyền bảo mật</span>
+              <span className="sw-sec-index">01 / Phân quyền bảo mật</span>
               <h2 id="tieuchuan-title" className="sw-sec-title">
                 Ba cấp độ khi quét cùng một mã QR
               </h2>
