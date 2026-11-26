@@ -39,6 +39,7 @@ Hệ thống giúp Hợp tác xã (HTX) Krông Búk, Đắk Lắk quản lý **m
 - **Thiết kế cho điện thoại:** giao diện tối ưu cho màn hình nhỏ, chữ và nút lớn dễ bấm cho người lớn tuổi.
 - **Chịu được mạng yếu:** tự nhận biết mạng chậm hoặc mất mạng, hiện khung chờ (skeleton) thay vì màn hình trắng, tự thử lại khi tải lỗi.
 - **Đăng nhập, đăng ký chia đôi màn hình:** bên giới thiệu, bên biểu mẫu; trên điện thoại có nền ảnh vườn sầu riêng tự chuyển.
+- **Ghi nhật ký ngoại tuyến và chống gian lận hiện trường:** hỗ trợ nông hộ chụp ảnh trực tiếp tại vườn không có sóng 4G/WiFi, tự khóa vệ tinh GPS 60 giây, quét bảng QR cắm tại thửa, kẹp mốc thời gian máy chủ 2 đầu và tự động đồng bộ kèm chấm điểm độ tin cậy 3 mức khi có mạng trở lại. Xem chi tiết tại [docs/KIEN_TRUC_NHAT_KY_OFFLINE_MINH_BACH.md](docs/KIEN_TRUC_NHAT_KY_OFFLINE_MINH_BACH.md).
 - **Bảo mật:** token trong cookie `httpOnly`, khóa tạm khi đăng nhập sai nhiều lần, chống CSRF, giới hạn tần suất, quyền đọc lại từ CSDL ở mỗi yêu cầu. Chi tiết tại [backend/README.md](backend/README.md).
 
 ## Công nghệ
@@ -81,5 +82,6 @@ Kiểm thử backend: `cd backend && npm test`.
 
 ## Tài liệu chi tiết
 
+- [docs/KIEN_TRUC_NHAT_KY_OFFLINE_MINH_BACH.md](docs/KIEN_TRUC_NHAT_KY_OFFLINE_MINH_BACH.md): kiến trúc ghi nhật ký canh tác ngoại tuyến không sóng 4G, 7 lớp chống gian lận hiện trường và phân tầng độ tin cậy.
 - [backend/README.md](backend/README.md): API, phân quyền, bảo mật, cách thêm nhóm dữ liệu mới.
 - [frontend/README.md](frontend/README.md): ghi chú về ứng dụng Next.js.
